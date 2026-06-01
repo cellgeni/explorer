@@ -6,6 +6,7 @@ import {
   selectionToSql,
 } from '../data/gex'
 import { createDuckDbClient } from '../data/duckdb'
+import { readCellsOverview } from '../data/hyparquetCells'
 import { openTiff } from '../tiff/loader'
 import type { CellId } from '../data/cellid'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
@@ -17,6 +18,7 @@ import type {
   TranscriptDuckDbConnection,
   TranscriptScope,
 } from '../data/gex'
+import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type {
   Annotation,
   DatasetMeta,
@@ -33,6 +35,10 @@ export interface XeniumDatasetOptions {
   readonly openTiff?: (url: string, signal?: AbortSignal) => Promise<TiffPyramidLoader>
   readonly matrixReader?: (url: string, ids: readonly CellId[]) => Promise<GexResult>
   readonly transcriptReader?: typeof gexFromTranscriptsParquet
+  readonly overviewReader?: (
+    url: string,
+    limit?: number,
+  ) => Promise<readonly CellOverviewPoint[]>
 }
 
 export interface DuckDbClientLike {
@@ -65,6 +71,10 @@ export class XeniumDataset implements SpatialDataset {
     ids: readonly CellId[],
   ) => Promise<GexResult>
   private readonly transcriptReader: typeof gexFromTranscriptsParquet
+  private readonly overviewReader: (
+    url: string,
+    limit?: number,
+  ) => Promise<readonly CellOverviewPoint[]>
   private duckClientPromise: Promise<DuckDbClientLike> | null = null
   private metaPromise: Promise<DatasetMeta> | null = null
 
@@ -74,6 +84,14 @@ export class XeniumDataset implements SpatialDataset {
     this.tiffOpener = options.openTiff ?? openTiff
     this.matrixReader = options.matrixReader ?? gexFromCellFeatureMatrixZarr
     this.transcriptReader = options.transcriptReader ?? gexFromTranscriptsParquet
+    this.overviewReader =
+      options.overviewReader ??
+      ((url, limit) =>
+        readCellsOverview({
+          url,
+          fetcher: this.fetcher,
+          ...(limit === undefined ? {} : { limit }),
+        }))
     this.duckFactory =
       options.createDuckDbClient ??
       (() => {
@@ -145,6 +163,10 @@ ORDER BY b.cell_id
 
   matrix(ids: readonly CellId[]): Promise<GexResult> {
     return this.matrixReader(this.urlFor('cell_feature_matrix.zarr.zip'), ids)
+  }
+
+  overviewCells(limit?: number): Promise<readonly CellOverviewPoint[]> {
+    return this.overviewReader(this.urlFor('cells.parquet'), limit)
   }
 
   annotations(): Promise<readonly Annotation[]> {

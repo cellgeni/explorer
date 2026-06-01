@@ -153,10 +153,23 @@ describe('XeniumDataset', () => {
         cells: new Map(),
       }),
     )
+    const overviewReader = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(1), y: micrometers(2) },
+        transcriptCount: 3,
+      },
+    ])
     const openTiff = vi.fn(async () => ({}) as TiffPyramidLoader)
-    const dataset = makeDataset(conn, { matrixReader, transcriptReader, openTiff })
+    const dataset = makeDataset(conn, {
+      matrixReader,
+      transcriptReader,
+      overviewReader,
+      openTiff,
+    })
 
     await dataset.matrix([cellId])
+    await dataset.overviewCells(500)
     await dataset.transcripts(
       {
         kind: 'circle',
@@ -172,6 +185,10 @@ describe('XeniumDataset', () => {
     expect(matrixReader).toHaveBeenCalledWith(
       'https://example.test/xenium/cell_feature_matrix.zarr.zip',
       [cellId],
+    )
+    expect(overviewReader).toHaveBeenCalledWith(
+      'https://example.test/xenium/cells.parquet',
+      500,
     )
     expect(transcriptReader).toHaveBeenCalledWith(
       conn,
