@@ -1,9 +1,15 @@
-import type { DisplayWindow } from '../codecs/jpeg2000'
+import type { DisplayWindow, RgbaRenderOptions } from '../codecs/jpeg2000'
+
+export interface TileDecodeOptions extends RgbaRenderOptions {
+  readonly displayWindow?: DisplayWindow
+}
 
 export interface TileDecodeRequest {
   readonly id: number
   readonly bytes: ArrayBuffer
   readonly displayWindow?: DisplayWindow
+  readonly color?: readonly [number, number, number]
+  readonly alphaFromIntensity?: boolean
 }
 
 export type TileDecodeResponse = TileDecodeSuccess | TileDecodeFailure

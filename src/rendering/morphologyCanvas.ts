@@ -69,27 +69,12 @@ export function drawMorphologyTileChannels(
     return
   }
 
-  const scratch = document.createElement('canvas')
-  const scratchContext = scratch.getContext('2d')
-
-  if (scratchContext === null) {
-    return
-  }
-
   for (const batch of batches) {
     context.globalAlpha = batch.opacity
     context.globalCompositeOperation = 'lighter'
 
     for (const tile of batch.tiles) {
-      drawTintedReadyTile({
-        color: batch.color,
-        context,
-        scratch,
-        scratchContext,
-        tile,
-        viewState,
-        viewport,
-      })
+      drawReadyTile(context, tile, viewState, viewport)
     }
   }
 
@@ -185,69 +170,6 @@ function drawReadyTile(
   )
 }
 
-function drawTintedReadyTile(options: {
-  readonly color: readonly [number, number, number]
-  readonly context: CanvasRenderingContext2D
-  readonly scratch: HTMLCanvasElement
-  readonly scratchContext: CanvasRenderingContext2D
-  readonly tile: ReadyTile
-  readonly viewState: OverviewViewState
-  readonly viewport: CssViewportSize
-}): void {
-  const target = tileTargetRect(options.tile, options.viewState, options.viewport)
-
-  if (target === null) {
-    return
-  }
-
-  if (
-    options.scratch.width !== options.tile.sourceWidth ||
-    options.scratch.height !== options.tile.sourceHeight
-  ) {
-    options.scratch.width = options.tile.sourceWidth
-    options.scratch.height = options.tile.sourceHeight
-  }
-
-  options.scratchContext.globalCompositeOperation = 'source-over'
-  options.scratchContext.clearRect(
-    0,
-    0,
-    options.tile.sourceWidth,
-    options.tile.sourceHeight,
-  )
-  options.scratchContext.drawImage(
-    options.tile.image,
-    0,
-    0,
-    options.tile.sourceWidth,
-    options.tile.sourceHeight,
-    0,
-    0,
-    options.tile.sourceWidth,
-    options.tile.sourceHeight,
-  )
-  options.scratchContext.globalCompositeOperation = 'source-in'
-  options.scratchContext.fillStyle = rgbCss(options.color)
-  options.scratchContext.fillRect(
-    0,
-    0,
-    options.tile.sourceWidth,
-    options.tile.sourceHeight,
-  )
-  options.scratchContext.globalCompositeOperation = 'source-over'
-  options.context.drawImage(
-    options.scratch,
-    0,
-    0,
-    options.tile.sourceWidth,
-    options.tile.sourceHeight,
-    target.x,
-    target.y,
-    target.width,
-    target.height,
-  )
-}
-
 function tileTargetRect(
   tile: ReadyTile,
   viewState: OverviewViewState,
@@ -281,10 +203,6 @@ function tileTargetRect(
     width,
     height,
   }
-}
-
-function rgbCss(color: readonly [number, number, number]): string {
-  return `rgb(${color[0]}, ${color[1]}, ${color[2]})`
 }
 
 function isWhite(color: readonly [number, number, number] | undefined): boolean {

@@ -40,10 +40,16 @@ describe('TileDecodeWorkerPool', () => {
   it('dispatches decode requests and resolves transferred bitmaps', async () => {
     const { pool, workers } = makePool({ size: 1 })
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap
-    const promise = pool.decode(new Uint8Array([1, 2, 3]), { lo: 0, hi: 100 })
+    const promise = pool.decode(new Uint8Array([1, 2, 3]), {
+      displayWindow: { lo: 0, hi: 100 },
+      color: [80, 160, 240],
+      alphaFromIntensity: true,
+    })
     const request = workers[0]?.posted[0]
 
     expect(request?.displayWindow).toEqual({ lo: 0, hi: 100 })
+    expect(request?.color).toEqual([80, 160, 240])
+    expect(request?.alphaFromIntensity).toBe(true)
     expect(request?.bytes.byteLength).toBe(3)
 
     workers[0]?.resolve({

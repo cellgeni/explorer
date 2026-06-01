@@ -17,6 +17,12 @@ async function decodeTile(request: TileDecodeRequest): Promise<void> {
       decoded.width,
       decoded.height,
       request.displayWindow,
+      {
+        ...(request.color === undefined ? {} : { color: request.color }),
+        ...(request.alphaFromIntensity === undefined
+          ? {}
+          : { alphaFromIntensity: request.alphaFromIntensity }),
+      },
     )
     const imageDataArray: Uint8ClampedArray<ArrayBuffer> = new Uint8ClampedArray(
       rgba.rgba,

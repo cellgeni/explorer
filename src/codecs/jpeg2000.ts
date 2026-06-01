@@ -14,6 +14,11 @@ export interface DisplayWindow {
   readonly hi: number
 }
 
+export interface RgbaRenderOptions {
+  readonly color?: readonly [number, number, number]
+  readonly alphaFromIntensity?: boolean
+}
+
 export interface RgbaTile {
   readonly rgba: Uint8ClampedArray
   readonly lo: number
@@ -56,6 +61,7 @@ export function normaliseToRgba(
   width: number,
   height: number,
   displayWindow?: DisplayWindow,
+  options: RgbaRenderOptions = {},
 ): RgbaTile {
   const window = displayWindow ?? percentileWindow(pixels)
   const range = Math.max(1, window.hi - window.lo)
@@ -63,13 +69,21 @@ export function normaliseToRgba(
 
   for (let index = 0; index < pixels.length; index += 1) {
     const pixel = pixels[index] ?? 0
-    const value = Math.round(((pixel - window.lo) / range) * 255)
+    const value = clampByte(Math.round(((pixel - window.lo) / range) * 255))
     const offset = index * 4
 
-    rgba[offset] = value
-    rgba[offset + 1] = value
-    rgba[offset + 2] = value
-    rgba[offset + 3] = 255
+    if (options.color === undefined) {
+      rgba[offset] = value
+      rgba[offset + 1] = value
+      rgba[offset + 2] = value
+      rgba[offset + 3] = 255
+      continue
+    }
+
+    rgba[offset] = Math.round((options.color[0] * value) / 255)
+    rgba[offset + 1] = Math.round((options.color[1] * value) / 255)
+    rgba[offset + 2] = Math.round((options.color[2] * value) / 255)
+    rgba[offset + 3] = options.alphaFromIntensity === true ? value : 255
   }
 
   return {
@@ -108,4 +122,8 @@ function percentileWindow(pixels: Jpeg2000Pixels): DisplayWindow {
     lo,
     hi: hi === lo ? lo + 1 : hi,
   }
+}
+
+function clampByte(value: number): number {
+  return Math.max(0, Math.min(255, value))
 }

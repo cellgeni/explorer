@@ -32,14 +32,18 @@ describe('TileCache', () => {
   it('loads, caches, and returns ready tiles', async () => {
     const source = new FakeTileSource()
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap
+    const decodeTile = vi.fn(async () => ({
+      bitmap,
+      width: 2,
+      height: 1,
+      lo: 0,
+      hi: 100,
+    }))
     const cache = new TileCache({
-      decodeTile: async () => ({
-        bitmap,
-        width: 2,
-        height: 1,
-        lo: 0,
-        hi: 100,
-      }),
+      displayWindow: { lo: 5, hi: 95 },
+      color: [80, 160, 240],
+      alphaFromIntensity: true,
+      decodeTile,
     })
 
     await expect(cache.request(source, 0, 1, 2)).resolves.toMatchObject({
@@ -48,6 +52,11 @@ describe('TileCache', () => {
     await cache.request(source, 0, 1, 2)
 
     expect(source.fetches).toEqual(['0:1:2'])
+    expect(decodeTile).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]), {
+      displayWindow: { lo: 5, hi: 95 },
+      color: [80, 160, 240],
+      alphaFromIntensity: true,
+    })
     expect(cache.readyTiles(bounds)).toEqual([
       {
         id: '0:1:2',
@@ -58,6 +67,47 @@ describe('TileCache', () => {
         sourceHeight: imagePixels(1),
       },
     ])
+  })
+
+  it('keeps configured decode options after clearing cached tiles', async () => {
+    const source = new FakeTileSource()
+    const firstBitmap = { close: vi.fn() } as unknown as ImageBitmap
+    const secondBitmap = { close: vi.fn() } as unknown as ImageBitmap
+    const bitmaps = [firstBitmap, secondBitmap]
+    const decodeTile = vi.fn(async () => ({
+      bitmap: nextBitmap(),
+      width: 2,
+      height: 1,
+      lo: 0,
+      hi: 100,
+    }))
+    const cache = new TileCache({
+      displayWindow: { lo: 10, hi: 90 },
+      color: [255, 0, 128],
+      alphaFromIntensity: true,
+      decodeTile,
+    })
+
+    await cache.request(source, 0, 0, 0)
+    cache.clear()
+    await cache.request(source, 0, 0, 0)
+
+    expect(firstBitmap.close).toHaveBeenCalledOnce()
+    expect(decodeTile).toHaveBeenNthCalledWith(2, new Uint8Array([1, 2, 3]), {
+      displayWindow: { lo: 10, hi: 90 },
+      color: [255, 0, 128],
+      alphaFromIntensity: true,
+    })
+
+    function nextBitmap(): ImageBitmap {
+      const bitmap = bitmaps.shift()
+
+      if (bitmap === undefined) {
+        throw new Error('No test bitmap available.')
+      }
+
+      return bitmap
+    }
   })
 
   it('filters ready tiles by active pyramid level', async () => {

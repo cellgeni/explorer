@@ -265,6 +265,8 @@ function prepareChannelRequest(options: {
     record = {
       cache: new TileCache({
         maxTiles: Math.max(24, Math.floor(96 / Math.max(1, options.cacheRecords.size))),
+        color: options.channel.color,
+        alphaFromIntensity: true,
         ...(options.channel.contrast === undefined
           ? {}
           : { displayWindow: options.channel.contrast }),

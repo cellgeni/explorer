@@ -191,6 +191,9 @@ done. This file records execution-level additions requested after work began.
       composited, and the UI exposes per-channel on/off, RGB color, and min/max
       contrast controls. This preserves the current custom J2K/decode pipeline
       and avoids a renderer architecture change.
+- [x] Fixed multi-channel tinting so decoded grayscale intensity modulates both
+      channel color and alpha. This prevents enabled channels from filling each
+      tile with a solid color while preserving additive compositing.
 
 ## Requested Analysis Features
 

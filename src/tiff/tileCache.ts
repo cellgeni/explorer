@@ -22,6 +22,8 @@ export interface TileSourceSize {
 export interface TileCacheOptions {
   readonly maxTiles?: number
   readonly displayWindow?: DisplayWindow
+  readonly color?: readonly [number, number, number]
+  readonly alphaFromIntensity?: boolean
   readonly decodeTile?: TileBitmapDecoder
   readonly onError?: (error: Error) => void
 }
@@ -65,13 +67,19 @@ export class TileCache {
   private readonly maxTiles: number
   private readonly decodeTile: TileBitmapDecoder
   private readonly onError: (error: Error) => void
+  private readonly initialDisplayWindow: DisplayWindow | undefined
   private displayWindow: DisplayWindow | undefined
+  private readonly color: readonly [number, number, number] | undefined
+  private readonly alphaFromIntensity: boolean | undefined
 
   constructor(options: TileCacheOptions) {
     this.maxTiles = options.maxTiles ?? 150
     this.decodeTile = options.decodeTile ?? createWorkerTileDecoder()
     this.onError = options.onError ?? noop
+    this.initialDisplayWindow = options.displayWindow
     this.displayWindow = options.displayWindow
+    this.color = options.color
+    this.alphaFromIntensity = options.alphaFromIntensity
   }
 
   key(level: number, col: number, row: number): string {
@@ -161,7 +169,7 @@ export class TileCache {
 
     this.cache.clear()
     this.order.splice(0)
-    this.displayWindow = undefined
+    this.displayWindow = this.initialDisplayWindow
   }
 
   private async load(
@@ -178,7 +186,7 @@ export class TileCache {
       throwIfAborted(signal)
       const bytes = await loader.fetchTileBytes(level, col, row, signal)
       throwIfAborted(signal)
-      const decoded = await this.decodeTile(bytes, this.displayWindow)
+      const decoded = await this.decodeTile(bytes, this.decodeOptions())
 
       if (signal?.aborted) {
         decoded.bitmap.close()
@@ -268,6 +276,16 @@ export class TileCache {
   private isCurrentLoading(key: string, signal: AbortSignal | undefined): boolean {
     const entry = this.cache.get(key)
     return entry?.state === 'loading' && entry.signal === signal
+  }
+
+  private decodeOptions(): Parameters<TileBitmapDecoder>[1] {
+    return {
+      ...(this.displayWindow === undefined ? {} : { displayWindow: this.displayWindow }),
+      ...(this.color === undefined ? {} : { color: this.color }),
+      ...(this.alphaFromIntensity === undefined
+        ? {}
+        : { alphaFromIntensity: this.alphaFromIntensity }),
+    }
   }
 }
 

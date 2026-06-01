@@ -1,5 +1,5 @@
-import type { DisplayWindow } from '../codecs/jpeg2000'
 import type {
+  TileDecodeOptions,
   TileDecodeRequest,
   TileDecodeResponse,
   WorkerDecodedTile,
@@ -7,7 +7,7 @@ import type {
 
 export type TileBitmapDecoder = (
   bytes: Uint8Array,
-  displayWindow?: DisplayWindow,
+  options?: TileDecodeOptions,
 ) => Promise<WorkerDecodedTile>
 
 export interface DecodeWorkerLike {
@@ -43,7 +43,7 @@ export class TileDecodeWorkerPool {
     this.workerFactory = options.workerFactory ?? createDefaultDecodeWorker
   }
 
-  decode(bytes: Uint8Array, displayWindow?: DisplayWindow): Promise<WorkerDecodedTile> {
+  decode(bytes: Uint8Array, options?: TileDecodeOptions): Promise<WorkerDecodedTile> {
     const id = this.nextRequestId
     this.nextRequestId += 1
     const workerIndex = this.workerIndexForNextRequest()
@@ -58,10 +58,17 @@ export class TileDecodeWorkerPool {
     return new Promise((resolve, reject) => {
       this.inFlightByWorker[workerIndex] = (this.inFlightByWorker[workerIndex] ?? 0) + 1
       this.pending.set(id, { resolve, reject, workerIndex })
-      const request: TileDecodeRequest =
-        displayWindow === undefined
-          ? { id, bytes: payload }
-          : { id, bytes: payload, displayWindow }
+      const request: TileDecodeRequest = {
+        id,
+        bytes: payload,
+        ...(options?.displayWindow === undefined
+          ? {}
+          : { displayWindow: options.displayWindow }),
+        ...(options?.color === undefined ? {} : { color: options.color }),
+        ...(options?.alphaFromIntensity === undefined
+          ? {}
+          : { alphaFromIntensity: options.alphaFromIntensity }),
+      }
 
       try {
         worker.postMessage(request, [payload])
@@ -174,7 +181,7 @@ export class TileDecodeWorkerPool {
 export function createWorkerTileDecoder(
   pool = new TileDecodeWorkerPool(),
 ): TileBitmapDecoder {
-  return (bytes, displayWindow) => pool.decode(bytes, displayWindow)
+  return (bytes, options) => pool.decode(bytes, options)
 }
 
 function createDefaultDecodeWorker(): DecodeWorkerLike {
