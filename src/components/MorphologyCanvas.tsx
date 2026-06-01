@@ -7,9 +7,12 @@ import {
 import { TileCache } from '../tiff/tileCache'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
+import type { TileCacheEntry } from '../tiff/tileCache'
 import type { OverviewViewState } from '../rendering/deckLayers'
+import type { TileIndex } from '../data/coords'
 
-const MAX_INITIAL_TILE_REQUESTS = 24
+const MAX_INITIAL_TILE_REQUESTS = 48
+const MAX_CONCURRENT_TILE_REQUESTS = 4
 
 export interface MorphologyCanvasProps {
   readonly loader?: TiffPyramidLoader | null
@@ -97,6 +100,7 @@ export function MorphologyCanvas({
       bbox,
       (tile) => loader.tileBounds(level, tile.col, tile.row),
     )
+    const abortController = new AbortController()
     let cancelled = false
 
     const drawReadyTiles = () => {
@@ -109,17 +113,63 @@ export function MorphologyCanvas({
     }
 
     drawReadyTiles()
-
-    for (const tile of tiles) {
-      void cache.request(loader, level, tile.col, tile.row).then(drawReadyTiles)
-    }
+    void requestTilesInPriorityOrder({
+      cache,
+      level,
+      loader,
+      onTileSettled: drawReadyTiles,
+      signal: abortController.signal,
+      tiles,
+    })
 
     return () => {
       cancelled = true
+      abortController.abort()
     }
   }, [loader, onTileError, viewState, viewport])
 
   return <canvas ref={canvasRef} className="morphology-canvas" aria-hidden="true" />
+}
+
+interface RequestTilesOptions {
+  readonly cache: TileCache
+  readonly level: number
+  readonly loader: TiffPyramidLoader
+  readonly onTileSettled: () => void
+  readonly signal: AbortSignal
+  readonly tiles: readonly TileIndex[]
+}
+
+async function requestTilesInPriorityOrder(options: RequestTilesOptions): Promise<void> {
+  const queue = [...options.tiles]
+  const workerCount = Math.min(MAX_CONCURRENT_TILE_REQUESTS, queue.length)
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (!options.signal.aborted) {
+      const tile = queue.shift()
+
+      if (tile === undefined) {
+        return
+      }
+
+      const entry = await options.cache.request(
+        options.loader,
+        options.level,
+        tile.col,
+        tile.row,
+        options.signal,
+      )
+
+      if (!isAbortEntry(entry)) {
+        options.onTileSettled()
+      }
+    }
+  })
+
+  await Promise.allSettled(workers)
+}
+
+function isAbortEntry(entry: TileCacheEntry): boolean {
+  return entry.state === 'error' && entry.error.name === 'AbortError'
 }
 
 function syncCanvasBackingStore(

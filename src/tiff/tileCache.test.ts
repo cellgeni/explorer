@@ -110,4 +110,84 @@ describe('TileCache', () => {
     expect(onError).toHaveBeenCalledOnce()
     expect(onError.mock.calls[0]?.[0].message).toBe('decode failed')
   })
+
+  it('drops aborted loading tiles without reporting a cache error', async () => {
+    const source = new AbortableTileSource()
+    const onError = vi.fn()
+    const cache = new TileCache({ onError })
+    const abortController = new AbortController()
+    const promise = cache.request(source, 0, 1, 2, abortController.signal)
+
+    expect(cache.get(0, 1, 2)).toMatchObject({ state: 'loading' })
+
+    abortController.abort()
+
+    await expect(promise).resolves.toMatchObject({
+      state: 'error',
+      error: expect.objectContaining({ name: 'AbortError' }),
+    })
+    expect(cache.get(0, 1, 2)).toBeUndefined()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('closes decoded bitmaps when a tile is aborted after decode', async () => {
+    const source = new FakeTileSource()
+    const bitmap = { close: vi.fn() } as unknown as ImageBitmap
+    const abortController = new AbortController()
+    const cache = new TileCache({
+      decodeTile: async () => {
+        abortController.abort()
+        return {
+          bitmap,
+          width: 2,
+          height: 1,
+          lo: 0,
+          hi: 100,
+        }
+      },
+    })
+
+    await expect(
+      cache.request(source, 0, 1, 2, abortController.signal),
+    ).resolves.toMatchObject({
+      state: 'error',
+      error: expect.objectContaining({ name: 'AbortError' }),
+    })
+
+    expect(bitmap.close).toHaveBeenCalledOnce()
+    expect(cache.get(0, 1, 2)).toBeUndefined()
+  })
 })
+
+class AbortableTileSource extends FakeTileSource {
+  override async fetchTileBytes(
+    _level: number,
+    _col: number,
+    _row: number,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(abortError())
+        return
+      }
+
+      const timeout = window.setTimeout(() => resolve(new Uint8Array([1, 2, 3])), 10_000)
+
+      signal?.addEventListener(
+        'abort',
+        () => {
+          window.clearTimeout(timeout)
+          reject(abortError())
+        },
+        { once: true },
+      )
+    })
+  }
+}
+
+function abortError(): Error {
+  const error = new Error('aborted')
+  error.name = 'AbortError'
+  return error
+}

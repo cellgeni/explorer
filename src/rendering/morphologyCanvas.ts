@@ -79,8 +79,8 @@ export function selectCenteredTiles(
   bbox: BBox,
   tileBounds: (tile: TileIndex) => BBox,
 ): readonly TileIndex[] {
-  if (tiles.length <= maxTiles) {
-    return tiles
+  if (maxTiles <= 0) {
+    return []
   }
 
   const centerX = (bbox.minX + bbox.maxX) / 2

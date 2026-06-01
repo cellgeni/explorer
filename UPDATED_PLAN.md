@@ -142,6 +142,9 @@ done. This file records execution-level additions requested after work began.
 - [x] Fixed `.zchunkstore` overview alignment by tracking the true source pixel
       size of edge/overview tiles and cropping padded JPEG-2000 tile bitmaps
       before scaling them into the morphology canvas.
+- [x] Optimized morphology tile loading: JPEG-2000 decode workers are now lazy
+      and capped, visible tiles are requested center-first, and stale viewport
+      tile fetches are aborted without leaving cached error entries.
 
 ## Requested Analysis Features
 

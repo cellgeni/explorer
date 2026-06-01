@@ -120,4 +120,31 @@ describe('morphology canvas projection', () => {
       { col: 3, row: 0 },
     ])
   })
+
+  it('keeps all selected tiles center-prioritized even when under the cap', () => {
+    const tiles = [0, 1, 2].map((col) => ({ col, row: 0 }))
+
+    expect(
+      selectCenteredTiles(
+        tiles,
+        3,
+        {
+          minX: micrometers(0),
+          maxX: micrometers(30),
+          minY: micrometers(0),
+          maxY: micrometers(10),
+        },
+        (tile) => ({
+          minX: micrometers(tile.col * 10),
+          maxX: micrometers((tile.col + 1) * 10),
+          minY: micrometers(0),
+          maxY: micrometers(10),
+        }),
+      ),
+    ).toEqual([
+      { col: 1, row: 0 },
+      { col: 0, row: 0 },
+      { col: 2, row: 0 },
+    ])
+  })
 })

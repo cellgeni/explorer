@@ -65,6 +65,27 @@ describe('TileDecodeWorkerPool', () => {
     })
   })
 
+  it('creates workers lazily and reuses idle workers before scaling up', async () => {
+    const { pool, workers } = makePool({ size: 3 })
+
+    expect(workers).toHaveLength(0)
+
+    const first = pool.decode(new Uint8Array([1]))
+    expect(workers).toHaveLength(1)
+    resolveLast(workers[0])
+    await first
+
+    const second = pool.decode(new Uint8Array([2]))
+    expect(workers).toHaveLength(1)
+
+    const third = pool.decode(new Uint8Array([3]))
+    expect(workers).toHaveLength(2)
+
+    resolveLast(workers[0])
+    resolveLast(workers[1])
+    await Promise.all([second, third])
+  })
+
   it('rejects pending work when the pool terminates', async () => {
     const { pool, workers } = makePool({ size: 1 })
     const promise = pool.decode(new Uint8Array([1]))
@@ -75,3 +96,21 @@ describe('TileDecodeWorkerPool', () => {
     expect(workers[0]?.terminate).toHaveBeenCalledTimes(1)
   })
 })
+
+function resolveLast(worker: FakeWorker | undefined): void {
+  const request = worker?.posted.at(-1)
+
+  if (worker === undefined || request === undefined) {
+    throw new Error('Expected test worker request.')
+  }
+
+  worker.resolve({
+    id: request.id,
+    ok: true,
+    bitmap: { close: vi.fn() } as unknown as ImageBitmap,
+    width: 2,
+    height: 1,
+    lo: 0,
+    hi: 100,
+  })
+}

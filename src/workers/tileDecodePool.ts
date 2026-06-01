@@ -27,56 +27,49 @@ export interface TileDecodeWorkerPoolOptions {
 interface PendingDecode {
   readonly resolve: (tile: WorkerDecodedTile) => void
   readonly reject: (error: Error) => void
+  readonly workerIndex: number
 }
 
 export class TileDecodeWorkerPool {
-  private readonly workers: readonly DecodeWorkerLike[]
+  private readonly workers: DecodeWorkerLike[] = []
+  private readonly inFlightByWorker: number[] = []
+  private readonly size: number
+  private readonly workerFactory: DecodeWorkerFactory
   private readonly pending = new Map<number, PendingDecode>()
   private nextRequestId = 1
-  private nextWorkerIndex = 0
 
   constructor(options: TileDecodeWorkerPoolOptions = {}) {
-    const size = Math.max(
-      1,
-      options.size ?? Math.max(1, navigator.hardwareConcurrency ?? 2),
-    )
-    const workerFactory = options.workerFactory ?? createDefaultDecodeWorker
-    const workers: DecodeWorkerLike[] = []
-
-    for (let index = 0; index < size; index += 1) {
-      const worker = workerFactory()
-      worker.onmessage = (event) => {
-        this.handleMessage(event.data)
-      }
-      worker.onerror = (event) => {
-        this.rejectAll(new Error(event.message || 'Tile decode worker failed.'))
-      }
-      workers.push(worker)
-    }
-
-    this.workers = workers
+    this.size = Math.max(1, options.size ?? defaultWorkerPoolSize())
+    this.workerFactory = options.workerFactory ?? createDefaultDecodeWorker
   }
 
   decode(bytes: Uint8Array, displayWindow?: DisplayWindow): Promise<WorkerDecodedTile> {
     const id = this.nextRequestId
     this.nextRequestId += 1
-    const worker = this.workers[this.nextWorkerIndex]
+    const workerIndex = this.workerIndexForNextRequest()
+    const worker = this.workers[workerIndex]
 
     if (worker === undefined) {
       return Promise.reject(new Error('No tile decode workers are available.'))
     }
 
-    this.nextWorkerIndex = (this.nextWorkerIndex + 1) % this.workers.length
     const payload = copyToTransferableBuffer(bytes)
 
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
+      this.inFlightByWorker[workerIndex] = (this.inFlightByWorker[workerIndex] ?? 0) + 1
+      this.pending.set(id, { resolve, reject, workerIndex })
       const request: TileDecodeRequest =
         displayWindow === undefined
           ? { id, bytes: payload }
           : { id, bytes: payload, displayWindow }
 
-      worker.postMessage(request, [payload])
+      try {
+        worker.postMessage(request, [payload])
+      } catch (cause) {
+        this.pending.delete(id)
+        this.decrementWorker(workerIndex)
+        reject(cause instanceof Error ? cause : new Error(String(cause)))
+      }
     })
   }
 
@@ -86,6 +79,9 @@ export class TileDecodeWorkerPool {
     for (const worker of this.workers) {
       worker.terminate()
     }
+
+    this.workers.splice(0)
+    this.inFlightByWorker.splice(0)
   }
 
   private handleMessage(response: TileDecodeResponse): void {
@@ -96,6 +92,7 @@ export class TileDecodeWorkerPool {
     }
 
     this.pending.delete(response.id)
+    this.decrementWorker(pending.workerIndex)
 
     if (response.ok) {
       pending.resolve({
@@ -117,6 +114,60 @@ export class TileDecodeWorkerPool {
     }
 
     this.pending.clear()
+    this.inFlightByWorker.fill(0)
+  }
+
+  private workerIndexForNextRequest(): number {
+    if (this.workers.length === 0) {
+      return this.createWorker()
+    }
+
+    const availableIndex = this.inFlightByWorker.findIndex((count) => count === 0)
+
+    if (availableIndex >= 0) {
+      return availableIndex
+    }
+
+    if (this.workers.length < this.size) {
+      return this.createWorker()
+    }
+
+    let selectedIndex = 0
+    let selectedCount = this.inFlightByWorker[0] ?? 0
+
+    for (let index = 1; index < this.inFlightByWorker.length; index += 1) {
+      const count = this.inFlightByWorker[index] ?? 0
+
+      if (count < selectedCount) {
+        selectedIndex = index
+        selectedCount = count
+      }
+    }
+
+    return selectedIndex
+  }
+
+  private createWorker(): number {
+    const worker = this.workerFactory()
+    const index = this.workers.length
+
+    worker.onmessage = (event) => {
+      this.handleMessage(event.data)
+    }
+    worker.onerror = (event) => {
+      this.rejectAll(new Error(event.message || 'Tile decode worker failed.'))
+    }
+
+    this.workers.push(worker)
+    this.inFlightByWorker.push(0)
+    return index
+  }
+
+  private decrementWorker(workerIndex: number): void {
+    this.inFlightByWorker[workerIndex] = Math.max(
+      0,
+      (this.inFlightByWorker[workerIndex] ?? 0) - 1,
+    )
   }
 }
 
@@ -130,6 +181,10 @@ function createDefaultDecodeWorker(): DecodeWorkerLike {
   return new Worker(new URL('./tileDecode.worker.ts', import.meta.url), {
     type: 'module',
   })
+}
+
+function defaultWorkerPoolSize(): number {
+  return Math.min(4, Math.max(1, navigator.hardwareConcurrency ?? 2))
 }
 
 function copyToTransferableBuffer(bytes: Uint8Array): ArrayBuffer {

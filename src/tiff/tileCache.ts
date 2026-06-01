@@ -31,6 +31,7 @@ export interface TileLoadingEntry {
   readonly state: 'loading'
   readonly bounds: BBox
   readonly promise: Promise<TileCacheEntry>
+  readonly signal?: AbortSignal
 }
 
 export interface TileReadyEntry {
@@ -88,8 +89,21 @@ export class TileCache {
     const existing = this.cache.get(key)
 
     if (existing !== undefined) {
-      this.touch(key)
-      return existing.state === 'loading' ? existing.promise : existing
+      if (existing.state === 'loading' && existing.signal?.aborted) {
+        this.cache.delete(key)
+        this.removeFromOrder(key)
+      } else {
+        this.touch(key)
+        return existing.state === 'loading' ? existing.promise : existing
+      }
+    }
+
+    if (signal?.aborted) {
+      return {
+        state: 'error',
+        bounds: loader.tileBounds(level, col, row),
+        error: abortError(signal),
+      }
     }
 
     const bounds = loader.tileBounds(level, col, row)
@@ -99,6 +113,7 @@ export class TileCache {
       state: 'loading',
       bounds,
       promise,
+      ...(signal === undefined ? {} : { signal }),
     }
 
     this.cache.set(key, entry)
@@ -151,12 +166,19 @@ export class TileCache {
     signal?: AbortSignal,
   ): Promise<TileCacheEntry> {
     try {
+      throwIfAborted(signal)
       const bytes = await loader.fetchTileBytes(level, col, row, signal)
+      throwIfAborted(signal)
       const decoded = await this.decodeTile(bytes, this.displayWindow)
+
+      if (signal?.aborted) {
+        decoded.bitmap.close()
+        throw abortError(signal)
+      }
 
       this.displayWindow ??= { lo: decoded.lo, hi: decoded.hi }
 
-      if (!this.cache.has(key)) {
+      if (!this.isCurrentLoading(key, signal)) {
         decoded.bitmap.close()
         return {
           state: 'error',
@@ -179,6 +201,16 @@ export class TileCache {
       return ready
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause))
+
+      if (isAbortError(error)) {
+        if (this.isCurrentLoading(key, signal)) {
+          this.cache.delete(key)
+          this.removeFromOrder(key)
+        }
+
+        return { state: 'error', bounds, error }
+      }
+
       const failed: TileErrorEntry = {
         state: 'error',
         bounds,
@@ -192,13 +224,17 @@ export class TileCache {
   }
 
   private touch(key: string): void {
+    this.removeFromOrder(key)
+
+    this.order.push(key)
+  }
+
+  private removeFromOrder(key: string): void {
     const index = this.order.indexOf(key)
 
     if (index >= 0) {
       this.order.splice(index, 1)
     }
-
-    this.order.push(key)
   }
 
   private evict(): void {
@@ -218,6 +254,11 @@ export class TileCache {
       this.cache.delete(oldest)
     }
   }
+
+  private isCurrentLoading(key: string, signal: AbortSignal | undefined): boolean {
+    const entry = this.cache.get(key)
+    return entry?.state === 'loading' && entry.signal === signal
+  }
 }
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
@@ -225,3 +266,23 @@ function bboxesOverlap(a: BBox, b: BBox): boolean {
 }
 
 function noop(): void {}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw abortError(signal)
+  }
+}
+
+function abortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason
+  }
+
+  const error = new Error('Tile request aborted.')
+  error.name = 'AbortError'
+  return error
+}
+
+function isAbortError(error: Error): boolean {
+  return error.name === 'AbortError'
+}
