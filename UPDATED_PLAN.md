@@ -113,7 +113,7 @@ done. This file records execution-level additions requested after work began.
 
 - [x] S3/CORS playbook (§4); fail loudly if Range unsupported.
 - [x] Range-read `cell_boundaries.parquet` (remove full-download path).
-- [ ] OPFS/IndexedDB cache for tiles + Parquet footers; persist the LRU.
+- [x] OPFS/IndexedDB cache for tiles + Parquet footers; persist the LRU.
 - [ ] `AbortController` cancellation per viewport version (extend existing
       versioning to all fetches).
 - [ ] Read `experiment.xenium` manifest to know which files exist (replace
@@ -148,6 +148,10 @@ done. This file records execution-level additions requested after work began.
 - [x] Fixed viewport-edge morphology artifacts by drawing only ready tiles from
       the active pyramid level and requesting a small offscreen tile margin
       around the visible viewport.
+- [x] Added an IndexedDB-backed persistent byte-range cache with LRU eviction.
+      TIFF tile byte ranges are cached by URL/range before JPEG-2000 decode, and
+      hyparquet footer-like slices are cached for warm metadata reads without
+      caching large column pages.
 
 ## Requested Analysis Features
 

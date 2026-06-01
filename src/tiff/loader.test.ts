@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { imagePixels, micrometers } from '../data/coords'
 import {
+  byteRangeCacheRecordId,
+  TIFF_TILE_CACHE_NAMESPACE,
+} from '../data/persistentByteRangeCache'
+import {
   parsePhysicalSizeMicrometersPerPixel,
   readNumberArrayTag,
   readOptionalStringTag,
@@ -9,6 +13,10 @@ import {
 } from './loader'
 import type { TiffChunk, TiffLevelMeta } from './loader'
 import type { UnitsDescriptor } from '../data/coords'
+import type {
+  ByteRangeCacheKey,
+  PersistentByteRangeCache,
+} from '../data/persistentByteRangeCache'
 
 const units: UnitsDescriptor = {
   dataUnit: 'micrometer',
@@ -124,6 +132,48 @@ describe('TiffPyramidLoader', () => {
     })
   })
 
+  it('reuses persistent cached tile byte ranges', async () => {
+    const chunks = new Map<string, TiffChunk>([['0/1/2', { offset: 10, length: 4 }]])
+    const levels = new Map<number, TiffLevelMeta>([
+      [0, { width: imagePixels(300), height: imagePixels(200), nCols: 3, nRows: 2 }],
+    ])
+    const byteRangeCache = new MemoryByteRangeCache()
+    const fetches: RequestInit[] = []
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/image.ome.tif',
+      chunkIndex: chunks,
+      levelMeta: levels,
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 1,
+      imageWidth: imagePixels(300),
+      imageHeight: imagePixels(200),
+      byteRangeCache,
+      fetcher: async (_input, init) => {
+        fetches.push(init ?? {})
+        return new Response(new Uint8Array([1, 2, 3, 4]), { status: 206 })
+      },
+    })
+
+    await expect(loader.fetchTileBytes(0, 2, 1)).resolves.toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    )
+    await expect(loader.fetchTileBytes(0, 2, 1)).resolves.toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    )
+
+    expect(fetches).toHaveLength(1)
+    expect(byteRangeCache.keys()).toEqual([
+      byteRangeCacheRecordId({
+        namespace: TIFF_TILE_CACHE_NAMESPACE,
+        url: 'https://example.test/image.ome.tif',
+        start: 10,
+        end: 14,
+      }),
+    ])
+  })
+
   it('selects intermediate pyramid levels by source pixel screen size', () => {
     const levels = new Map<number, TiffLevelMeta>([
       [0, { width: imagePixels(800), height: imagePixels(800), nCols: 8, nRows: 8 }],
@@ -150,3 +200,28 @@ describe('TiffPyramidLoader', () => {
     expect(loader.bestLevel(2)).toBe(0)
   })
 })
+
+class MemoryByteRangeCache implements PersistentByteRangeCache {
+  private readonly cache = new Map<string, ArrayBuffer>()
+
+  async read(key: ByteRangeCacheKey): Promise<ArrayBuffer | null> {
+    return this.cache.get(byteRangeCacheRecordId(key)) ?? null
+  }
+
+  async write(key: ByteRangeCacheKey, bytes: Uint8Array | ArrayBuffer): Promise<void> {
+    this.cache.set(byteRangeCacheRecordId(key), copyToArrayBuffer(bytes))
+  }
+
+  keys(): readonly string[] {
+    return [...this.cache.keys()]
+  }
+}
+
+function copyToArrayBuffer(bytes: Uint8Array | ArrayBuffer): ArrayBuffer {
+  const source =
+    bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes, 0, bytes.byteLength)
+  const copy = new Uint8Array(source.byteLength)
+
+  copy.set(source)
+  return copy.buffer
+}

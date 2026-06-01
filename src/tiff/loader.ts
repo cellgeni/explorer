@@ -2,6 +2,11 @@ import { fromUrl } from 'geotiff'
 import type { GeoTIFF } from 'geotiff'
 import type { ImageFileDirectory } from 'geotiff'
 import {
+  defaultPersistentByteRangeCache,
+  fetchByteRangeWithCache,
+  TIFF_TILE_CACHE_NAMESPACE,
+} from '../data/persistentByteRangeCache'
+import {
   imagePixels,
   micrometers,
   tileBounds as coordsTileBounds,
@@ -17,6 +22,7 @@ import type {
   UnitsDescriptor,
 } from '../data/coords'
 import type { TileSourceSize } from './tileCache'
+import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 
 export interface TiffChunk {
   readonly offset: number
@@ -41,6 +47,7 @@ export interface TiffPyramidLoaderOptions {
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
   readonly fetcher?: typeof fetch
+  readonly byteRangeCache?: PersistentByteRangeCache | null
 }
 
 export function parsePhysicalSizeMicrometersPerPixel(
@@ -154,6 +161,7 @@ export class TiffPyramidLoader {
   private readonly chunks: ReadonlyMap<string, TiffChunk>
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly fetcher: typeof fetch
+  private readonly byteRangeCache: PersistentByteRangeCache | null
 
   constructor(options: TiffPyramidLoaderOptions) {
     this.url = options.url
@@ -166,6 +174,10 @@ export class TiffPyramidLoader {
     this.imageWidth = options.imageWidth
     this.imageHeight = options.imageHeight
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+    this.byteRangeCache =
+      options.byteRangeCache === undefined
+        ? defaultPersistentByteRangeCache()
+        : options.byteRangeCache
   }
 
   bestLevel(deckScale: number): number {
@@ -215,25 +227,38 @@ export class TiffPyramidLoader {
       throw new Error(`No TIFF chunk for level=${level} row=${row} col=${col}.`)
     }
 
-    const requestInit: RequestInit = {
-      headers: {
-        Range: `bytes=${chunk.offset}-${chunk.offset + chunk.length - 1}`,
+    const start = chunk.offset
+    const end = chunk.offset + chunk.length
+
+    return fetchByteRangeWithCache({
+      cache: this.byteRangeCache,
+      namespace: TIFF_TILE_CACHE_NAMESPACE,
+      url: this.url,
+      start,
+      end,
+      ...(signal === undefined ? {} : { signal }),
+      fetchRange: async (rangeSignal) => {
+        const requestInit: RequestInit = {
+          headers: {
+            Range: `bytes=${start}-${end - 1}`,
+          },
+        }
+
+        if (rangeSignal !== undefined) {
+          requestInit.signal = rangeSignal
+        }
+
+        const response = await this.fetcher(this.url, requestInit)
+
+        if (response.status !== 206) {
+          throw new Error(
+            `Expected HTTP 206 for TIFF Range request, received ${response.status}.`,
+          )
+        }
+
+        return new Uint8Array(await response.arrayBuffer())
       },
-    }
-
-    if (signal !== undefined) {
-      requestInit.signal = signal
-    }
-
-    const response = await this.fetcher(this.url, requestInit)
-
-    if (response.status !== 206) {
-      throw new Error(
-        `Expected HTTP 206 for TIFF Range request, received ${response.status}.`,
-      )
-    }
-
-    return new Uint8Array(await response.arrayBuffer())
+    })
   }
 
   private gridForLevel(level: number): TileGrid {

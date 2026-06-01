@@ -1,9 +1,14 @@
 import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet'
 import { asCellId } from './cellid'
 import { micrometers } from './coords'
+import {
+  cacheFooterByteRanges,
+  defaultPersistentByteRangeCache,
+} from './persistentByteRangeCache'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
 import type { CellId } from './cellid'
 import type { DataPoint } from './coords'
+import type { PersistentByteRangeCache } from './persistentByteRangeCache'
 
 export const CELL_OVERVIEW_COLUMNS = [
   'cell_id',
@@ -48,6 +53,7 @@ export interface ReadCellsOverviewOptions {
   readonly includeCellIds?: boolean
   readonly fetcher?: typeof fetch
   readonly readObjects?: HyparquetObjectReader
+  readonly byteRangeCache?: PersistentByteRangeCache | null
 }
 
 export async function readCellsOverview(
@@ -75,10 +81,19 @@ async function fileFromUrl(options: ReadCellsOverviewOptions): Promise<AsyncBuff
     throw new Error('readCellsOverview requires either url or file.')
   }
 
-  return asyncBufferFromUrl({
+  const file = await asyncBufferFromUrl({
     url: options.url,
     ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
   })
+  const byteRangeCache =
+    options.byteRangeCache === undefined
+      ? defaultPersistentByteRangeCache()
+      : options.byteRangeCache
+
+  return cacheFooterByteRanges(file, {
+    cache: byteRangeCache,
+    url: options.url,
+  }) as AsyncBuffer
 }
 
 async function readHyparquetObjects(
