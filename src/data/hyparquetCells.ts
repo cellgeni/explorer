@@ -10,12 +10,21 @@ export const CELL_OVERVIEW_COLUMNS = [
   'x_centroid',
   'y_centroid',
   'transcript_counts',
+  'cell_area',
+] as const
+
+export const CELL_OVERVIEW_POINT_COLUMNS = [
+  'x_centroid',
+  'y_centroid',
+  'transcript_counts',
+  'cell_area',
 ] as const
 
 export interface CellOverviewPoint {
-  readonly cellId: CellId
+  readonly cellId?: CellId
   readonly position: DataPoint
   readonly transcriptCount: number
+  readonly cellArea?: number
 }
 
 export interface HyparquetReadObjectsOptions {
@@ -36,6 +45,7 @@ export interface ReadCellsOverviewOptions {
   readonly limit?: number
   readonly compressors?: Compressors
   readonly loadCompressors?: () => Promise<Compressors>
+  readonly includeCellIds?: boolean
   readonly fetcher?: typeof fetch
   readonly readObjects?: HyparquetObjectReader
 }
@@ -47,9 +57,11 @@ export async function readCellsOverview(
   const readObjects = options.readObjects ?? readHyparquetObjects
   const compressors =
     options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
+  const columns =
+    options.includeCellIds === false ? CELL_OVERVIEW_POINT_COLUMNS : CELL_OVERVIEW_COLUMNS
   const rows = await readObjects({
     file,
-    columns: CELL_OVERVIEW_COLUMNS,
+    columns,
     rowFormat: 'object',
     compressors,
     ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
@@ -84,17 +96,18 @@ async function readHyparquetObjects(
 function parseCellOverviewRow(row: Record<string, unknown>): CellOverviewPoint {
   const cellId = row.cell_id
 
-  if (typeof cellId !== 'string') {
+  if (cellId !== undefined && typeof cellId !== 'string') {
     throw new Error('Expected cells.parquet cell_id to be a string.')
   }
 
   return {
-    cellId: asCellId(cellId),
+    ...(cellId === undefined ? {} : { cellId: asCellId(cellId) }),
     position: {
       x: micrometers(readNumericValue(row, 'x_centroid')),
       y: micrometers(readNumericValue(row, 'y_centroid')),
     },
     transcriptCount: readNumericValue(row, 'transcript_counts'),
+    ...readOptionalNumericProperty(row, 'cell_area', 'cellArea'),
   }
 }
 
@@ -115,4 +128,26 @@ function readNumericValue(row: Record<string, unknown>, key: string): number {
   }
 
   throw new Error(`Expected cells.parquet ${key} to be numeric.`)
+}
+
+function readOptionalNumericProperty(
+  row: Record<string, unknown>,
+  parquetKey: string,
+  outputKey: 'cellArea',
+): { readonly cellArea: number } | Record<string, never> {
+  const value = row[parquetKey]
+
+  if (value === undefined || value === null) {
+    return {}
+  }
+
+  if (typeof value === 'number') {
+    return { [outputKey]: value }
+  }
+
+  if (typeof value === 'bigint') {
+    return { [outputKey]: Number(value) }
+  }
+
+  throw new Error(`Expected cells.parquet ${parquetKey} to be numeric.`)
 }

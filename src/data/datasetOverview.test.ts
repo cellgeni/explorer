@@ -48,4 +48,24 @@ describe('dataset overview loader', () => {
       },
     ])
   })
+
+  it('passes through the optimized no-cell-id overview option', async () => {
+    const calls: ReadCellsOverviewOptions[] = []
+
+    await loadDatasetOverview('https://example.test/xenium/', {
+      includeCellIds: false,
+      limit: null,
+      readCells: async (options) => {
+        calls.push(options)
+        return []
+      },
+    })
+
+    expect(calls).toEqual([
+      {
+        url: 'https://example.test/xenium/cells.parquet',
+        includeCellIds: false,
+      },
+    ])
+  })
 })

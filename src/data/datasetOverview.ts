@@ -9,6 +9,7 @@ export type CellsOverviewReader = (
 
 export interface LoadDatasetOverviewOptions {
   readonly limit?: number | null
+  readonly includeCellIds?: boolean
   readonly readCells?: CellsOverviewReader
 }
 
@@ -22,6 +23,9 @@ export async function loadDatasetOverview(
 
   return readCells({
     url: cellsParquetUrl(baseUrl),
+    ...(options.includeCellIds === undefined
+      ? {}
+      : { includeCellIds: options.includeCellIds }),
     ...(limit === undefined ? {} : { limit }),
   })
 }

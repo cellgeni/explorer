@@ -136,6 +136,8 @@ describe('XeniumDataset', () => {
     expect(conn.statements[0]?.params).toContain(
       'https://example.test/xenium/cell_boundaries.parquet',
     )
+    expect(conn.preparedSql[0]).toContain('ORDER BY b.cell_id, b.file_row_number')
+    expect(conn.preparedSql[0]).toContain('b.vertex_x BETWEEN')
   })
 
   it('delegates matrix, transcripts, and pyramid image loading', async () => {

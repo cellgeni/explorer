@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
-import { DEFAULT_OVERVIEW_CELL_LIMIT } from './data/datasetOverview'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
 import type { TiffPyramidLoader } from './tiff/loader'
 
@@ -29,7 +28,6 @@ describe('App', () => {
     }
 
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'All cells' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
     expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(500)
   })
@@ -69,7 +67,8 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(loadDatasetOverview).toHaveBeenCalledWith(DEMO_DATASET_URL, {
-        limit: DEFAULT_OVERVIEW_CELL_LIMIT,
+        includeCellIds: false,
+        limit: null,
       })
     })
     expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
@@ -101,7 +100,8 @@ describe('App', () => {
 
     await waitFor(() => {
       expect(loadDatasetOverview).toHaveBeenCalledWith(DEMO_DATASET_URL, {
-        limit: DEFAULT_OVERVIEW_CELL_LIMIT,
+        includeCellIds: false,
+        limit: null,
       })
     })
     await waitFor(() => {
@@ -111,7 +111,7 @@ describe('App', () => {
     expect(screen.getByTestId('deckgl')).toBeInTheDocument()
   })
 
-  it('requests all overview cells when the option is selected', async () => {
+  it('requests all overview cells by default without cell IDs', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -121,11 +121,11 @@ describe('App', () => {
     ])
 
     render(<App loadDatasetOverview={loadDatasetOverview} />)
-    fireEvent.click(screen.getByRole('checkbox', { name: 'All cells' }))
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {
       expect(loadDatasetOverview).toHaveBeenCalledWith(DEMO_DATASET_URL, {
+        includeCellIds: false,
         limit: null,
       })
     })

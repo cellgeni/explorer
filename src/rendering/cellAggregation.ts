@@ -17,6 +17,7 @@ interface CellBin {
   sumX: number
   sumY: number
   maxRadiusPixels: number
+  maxRadiusMicrometers: number | undefined
   maxAlpha: number
 }
 
@@ -96,6 +97,7 @@ function aggregateCellsIntoBins(
         sumX: x,
         sumY: deckY,
         maxRadiusPixels: cell.radiusPixels,
+        maxRadiusMicrometers: cell.radiusMicrometers,
         maxAlpha: alpha,
       })
       continue
@@ -105,6 +107,10 @@ function aggregateCellsIntoBins(
     bin.sumX += x
     bin.sumY += deckY
     bin.maxRadiusPixels = Math.max(bin.maxRadiusPixels, cell.radiusPixels)
+    bin.maxRadiusMicrometers = maxOptionalNumber(
+      bin.maxRadiusMicrometers,
+      cell.radiusMicrometers,
+    )
     bin.maxAlpha = Math.max(bin.maxAlpha, alpha)
   }
 
@@ -116,6 +122,9 @@ function aggregateCellsIntoBins(
       id: `cell-bin:${bin.key}`,
       position: [bin.sumX / bin.count, bin.sumY / bin.count, 0],
       radiusPixels: Math.min(10, Math.max(bin.maxRadiusPixels, 2 + countScale)),
+      ...(bin.maxRadiusMicrometers === undefined
+        ? {}
+        : { radiusMicrometers: bin.maxRadiusMicrometers }),
       fillColor: [215, 63, 124, Math.min(235, bin.maxAlpha + bin.count * 2)],
       cellCount: bin.count,
     })
@@ -128,4 +137,19 @@ function readColorAlpha(cell: OverviewCellDatum): number {
   const alpha = cell.fillColor[3]
 
   return typeof alpha === 'number' ? alpha : 220
+}
+
+function maxOptionalNumber(
+  first: number | undefined,
+  second: number | undefined,
+): number | undefined {
+  if (first === undefined) {
+    return second
+  }
+
+  if (second === undefined) {
+    return first
+  }
+
+  return Math.max(first, second)
 }

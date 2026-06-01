@@ -65,6 +65,7 @@ describe('deck layer factory', () => {
         cellId: intToCellId(1, 1),
         position: { x: micrometers(10), y: micrometers(20) },
         transcriptCount: 25,
+        cellArea: Math.PI * 16,
       },
     ])
 
@@ -74,6 +75,7 @@ describe('deck layer factory', () => {
 
     expect(datum.position).toEqual([10, -20, 0])
     expect(datum.radiusPixels).toBe(5)
+    expect(datum.radiusMicrometers).toBe(4)
     expect(createOverviewViewState([datum]).target).toEqual([10, -20, 0])
   })
 

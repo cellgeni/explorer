@@ -58,6 +58,8 @@ const DEFAULT_XENIUM_UNITS: UnitsDescriptor = {
   imageYAxis: 'down',
 }
 
+const BOUNDARY_FETCH_MARGIN_MICROMETERS = 150
+
 export class XeniumDataset implements SpatialDataset {
   private readonly baseUrl: string
   private readonly fetcher: typeof fetch
@@ -110,34 +112,38 @@ export class XeniumDataset implements SpatialDataset {
 
   async elements(bbox: BBox): Promise<ElementBatch> {
     const conn = await this.conn()
-    const margin = (bbox.maxX - bbox.minX) * 0.05
-    const x0 = bbox.minX - margin
-    const x1 = bbox.maxX + margin
-    const y0 = bbox.minY - margin
-    const y1 = bbox.maxY + margin
+    const margin = Math.max(
+      (bbox.maxX - bbox.minX) * 0.05,
+      BOUNDARY_FETCH_MARGIN_MICROMETERS,
+    )
+    const vertexX0 = bbox.minX - margin
+    const vertexX1 = bbox.maxX + margin
+    const vertexY0 = bbox.minY - margin
+    const vertexY1 = bbox.maxY + margin
     const stmt = await conn.prepare(`
+WITH viewport_cells AS (
+  SELECT cell_id FROM read_parquet( ? )
+  WHERE x_centroid BETWEEN ? AND ?
+    AND y_centroid BETWEEN ? AND ?
+)
 SELECT b.cell_id, b.vertex_x AS x, b.vertex_y AS y
 FROM read_parquet( ? ) AS b
 WHERE b.vertex_x BETWEEN ? AND ?
   AND b.vertex_y BETWEEN ? AND ?
-  AND b.cell_id IN (
-    SELECT cell_id FROM read_parquet( ? )
-    WHERE x_centroid BETWEEN ? AND ?
-      AND y_centroid BETWEEN ? AND ?
-  )
-ORDER BY b.cell_id
+  AND b.cell_id IN (SELECT cell_id FROM viewport_cells)
+ORDER BY b.cell_id, b.file_row_number
 `)
     const result = await stmt.query(
-      this.urlFor('cell_boundaries.parquet'),
-      x0,
-      x1,
-      y0,
-      y1,
       this.urlFor('cells.parquet'),
-      x0,
-      x1,
-      y0,
-      y1,
+      bbox.minX,
+      bbox.maxX,
+      bbox.minY,
+      bbox.maxY,
+      this.urlFor('cell_boundaries.parquet'),
+      vertexX0,
+      vertexX1,
+      vertexY0,
+      vertexY1,
     )
     const verticesByCell = new Map<CellId, DataPoint[]>()
 

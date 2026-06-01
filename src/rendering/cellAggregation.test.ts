@@ -18,12 +18,14 @@ const cells: readonly OverviewCellDatum[] = [
     id: 'cell-1',
     position: [0, 0, 0],
     radiusPixels: 3,
+    radiusMicrometers: 4,
     fillColor: [215, 63, 124, 180],
   },
   {
     id: 'cell-2',
     position: [5, -5, 0],
     radiusPixels: 4,
+    radiusMicrometers: 6,
     fillColor: [215, 63, 124, 190],
   },
   {
@@ -42,6 +44,7 @@ describe('overview cell aggregation', () => {
     expect(aggregatedCells[0]).toMatchObject({
       id: 'cell-bin:0:0',
       position: [2.5, -2.5, 0],
+      radiusMicrometers: 6,
       cellCount: 2,
     })
     expect(aggregatedCells[1]).toMatchObject({

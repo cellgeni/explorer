@@ -58,9 +58,10 @@ done. This file records execution-level additions requested after work began.
       `Load Dataset` path loads overview cells only and does not start OME-TIFF
       metadata, range, or JPEG-2000 decode work unless `Morphology image` is
       selected.
-- [x] Overview cell loading keeps the fast 50,000-cell first-paint path by
-      default after a full-read smoke check exceeded 60 seconds. `All cells` is
-      now an explicit opt-in that removes the hyparquet row limit.
+- [x] Overview cell loading now requests all centroid points by default while
+      skipping the expensive `cell_id` string column for overview-only drawing.
+      The app reads `cell_area` and uses an area-derived radius for cell point
+      size while keeping zoom-aware grouping for dense views.
 - [x] True cell segmentation can now render as deck.gl polygons. The viewer
       debounces viewport changes and loads `cell_boundaries.parquet` only when
       the viewport is close enough or has no more than 500 visible overview
@@ -78,6 +79,14 @@ done. This file records execution-level additions requested after work began.
 - [x] Cell boundaries now load only when the visible overview-cell count is below
       the configured threshold. The UI exposes `Boundary limit`, defaulting to
       500 cells, so the cutoff can be tuned without code changes.
+- [x] Boundary polygon queries now order vertices by DuckDB's `file_row_number`
+      and use a minimum 150 µm fetch margin around the viewport. This fixes
+      misordered or viewport-clipped rings being stitched into long triangle
+      artifacts at intermediate zooms while preserving Parquet row-group
+      pruning on boundary vertices.
+- [x] Live smoke check on `http://127.0.0.1:5173/` loaded all 1,414,155 demo
+      centroids by default in roughly 5 seconds with no morphology or boundary
+      network requests at the top overview.
 
 ## Boundary Simplification Decision
 

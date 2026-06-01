@@ -3,10 +3,7 @@ import { useCallback, useId, useMemo, useRef, useState } from 'react'
 import { ViewerCore } from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import { loadDatasetBoundaryElements as defaultLoadBoundaryElements } from './data/datasetBoundaries'
-import {
-  DEFAULT_OVERVIEW_CELL_LIMIT,
-  loadDatasetOverview as defaultLoadDatasetOverview,
-} from './data/datasetOverview'
+import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
 import { loadMorphologyImage as defaultLoadMorphologyImage } from './data/morphologyImage'
 import {
   BOUNDARY_VIEWPORT_CELL_LIMIT,
@@ -29,7 +26,7 @@ const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
-  options?: { readonly limit?: number | null },
+  options?: { readonly limit?: number | null; readonly includeCellIds?: boolean },
 ) => Promise<readonly CellOverviewPoint[]>
 
 export type MorphologyImageLoader = (baseUrl: string) => Promise<MorphologyImage>
@@ -68,7 +65,6 @@ export function App({
   loadBoundaryElements = defaultLoadBoundaryElements,
 }: AppProps) {
   const datasetInputId = useId()
-  const allCellsInputId = useId()
   const morphologyInputId = useId()
   const boundaryLimitInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
@@ -83,7 +79,6 @@ export function App({
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
   const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
   const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
-  const [shouldLoadAllCells, setShouldLoadAllCells] = useState(false)
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(false)
   const [boundaryCellLimit, setBoundaryCellLimit] = useState(BOUNDARY_VIEWPORT_CELL_LIMIT)
   const loadRequestId = useRef(0)
@@ -169,7 +164,6 @@ export function App({
 
     const formData = new FormData(event.currentTarget)
     const datasetUrl = formData.get('datasetUrl')
-    const loadAllCells = formData.get('loadAllCells') === 'on'
     const loadImage = formData.get('loadMorphologyImage') === 'on'
 
     if (typeof datasetUrl === 'string' && datasetUrl.trim().length > 0) {
@@ -191,7 +185,8 @@ export function App({
 
       try {
         const cells = await loadDatasetOverview(requestedUrl, {
-          limit: loadAllCells ? null : DEFAULT_OVERVIEW_CELL_LIMIT,
+          includeCellIds: false,
+          limit: null,
         })
 
         if (loadRequestId.current !== requestId) {
@@ -273,18 +268,6 @@ export function App({
             defaultValue={datasetUrl}
             placeholder="https://bucket.example/output…"
           />
-          <label className="dataset-toggle" htmlFor={allCellsInputId}>
-            <input
-              id={allCellsInputId}
-              name="loadAllCells"
-              type="checkbox"
-              checked={shouldLoadAllCells}
-              onChange={(event) => {
-                setShouldLoadAllCells(event.currentTarget.checked)
-              }}
-            />
-            <span>All cells</span>
-          </label>
           <label className="dataset-toggle" htmlFor={morphologyInputId}>
             <input
               id={morphologyInputId}

@@ -8,6 +8,7 @@ export interface OverviewCellDatum {
   readonly id: string
   readonly position: Position
   readonly radiusPixels: number
+  readonly radiusMicrometers?: number
   readonly fillColor: Color
   readonly cellCount?: number
 }
@@ -49,10 +50,11 @@ export function createOverviewLayers(
       id: 'cells-overview-scatter',
       data: cells,
       pickable: true,
-      radiusUnits: 'pixels',
-      radiusMinPixels: 2,
+      radiusUnits: 'common',
+      radiusMinPixels: 1.25,
+      radiusMaxPixels: 8,
       getPosition: (cell) => cell.position,
-      getRadius: (cell) => cell.radiusPixels,
+      getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
       getFillColor: (cell) => cell.fillColor,
     }),
   ]
@@ -85,21 +87,32 @@ export function overviewCellsToLayerData(
     return []
   }
 
-  const maxTranscriptCount = Math.max(
-    ...cells.map((cell) => Math.max(cell.transcriptCount, 0)),
-    1,
-  )
+  let maxTranscriptCount = 1
 
-  return cells.map((cell) => {
+  for (const cell of cells) {
+    maxTranscriptCount = Math.max(maxTranscriptCount, cell.transcriptCount)
+  }
+
+  return cells.map((cell, index) => {
     const intensity = Math.sqrt(Math.max(cell.transcriptCount, 0) / maxTranscriptCount)
+    const radiusMicrometers = cellAreaToRadiusMicrometers(cell.cellArea)
 
     return {
-      id: cell.cellId,
+      id: cell.cellId ?? `overview-cell-${index}`,
       position: [cell.position.x, -cell.position.y, 0],
       radiusPixels: 2 + intensity * 3,
+      ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
       fillColor: [215, 63, 124, 150 + Math.round(intensity * 90)],
     }
   })
+}
+
+function cellAreaToRadiusMicrometers(cellArea: number | undefined): number | undefined {
+  if (cellArea === undefined || !Number.isFinite(cellArea) || cellArea <= 0) {
+    return undefined
+  }
+
+  return Math.sqrt(cellArea / Math.PI)
 }
 
 export function boundaryElementsToLayerData(

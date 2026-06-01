@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { intToCellId } from './cellid'
 import { micrometers } from './coords'
-import { CELL_OVERVIEW_COLUMNS, readCellsOverview } from './hyparquetCells'
+import {
+  CELL_OVERVIEW_COLUMNS,
+  CELL_OVERVIEW_POINT_COLUMNS,
+  readCellsOverview,
+} from './hyparquetCells'
 import type { AsyncBuffer } from 'hyparquet'
 import type { HyparquetReadObjectsOptions } from './hyparquetCells'
 
@@ -26,6 +30,7 @@ describe('readCellsOverview', () => {
             x_centroid: 10,
             y_centroid: 20n,
             transcript_counts: 7n,
+            cell_area: 314,
           },
         ]
       },
@@ -43,6 +48,35 @@ describe('readCellsOverview', () => {
         cellId,
         position: { x: micrometers(10), y: micrometers(20) },
         transcriptCount: 7,
+        cellArea: 314,
+      },
+    ])
+  })
+
+  it('can skip cell IDs for fast all-cell centroid rendering', async () => {
+    const calls: HyparquetReadObjectsOptions[] = []
+    const rows = await readCellsOverview({
+      file: fakeFile,
+      includeCellIds: false,
+      readObjects: async (options) => {
+        calls.push(options)
+        return [
+          {
+            x_centroid: 10,
+            y_centroid: 20,
+            transcript_counts: 7,
+            cell_area: 314,
+          },
+        ]
+      },
+    })
+
+    expect(calls[0]?.columns).toEqual(CELL_OVERVIEW_POINT_COLUMNS)
+    expect(rows).toEqual([
+      {
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 7,
+        cellArea: 314,
       },
     ])
   })
