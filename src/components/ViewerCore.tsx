@@ -7,8 +7,8 @@ import {
   spatialOverviewView,
 } from '../rendering/deckLayers'
 import { aggregateOverviewCells, overviewCellsInBbox } from '../rendering/cellAggregation'
+import { hexCellBoundariesForVisibleCells } from '../rendering/hexCellBoundaries'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
-import { roughCellBoundariesForVisibleCells } from '../rendering/roughCellBoundaries'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
@@ -28,7 +28,7 @@ export interface ViewerCoreProps {
   readonly errorMessage?: string
   readonly imageErrorMessage?: string
   readonly boundaryErrorMessage?: string
-  readonly roughBoundaryMaxVisibleCells?: number
+  readonly hexBoundaryMaxVisibleCells?: number
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
 }
@@ -49,7 +49,7 @@ export function ViewerCore({
   errorMessage,
   imageErrorMessage,
   boundaryErrorMessage,
-  roughBoundaryMaxVisibleCells = 0,
+  hexBoundaryMaxVisibleCells = 0,
   onImageTileError,
   onViewportChange,
 }: ViewerCoreProps) {
@@ -69,7 +69,7 @@ export function ViewerCore({
       {...(errorMessage === undefined ? {} : { errorMessage })}
       {...(imageErrorMessage === undefined ? {} : { imageErrorMessage })}
       {...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage })}
-      roughBoundaryMaxVisibleCells={roughBoundaryMaxVisibleCells}
+      hexBoundaryMaxVisibleCells={hexBoundaryMaxVisibleCells}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
     />
@@ -87,7 +87,7 @@ interface ViewerSurfaceProps {
   readonly errorMessage?: string
   readonly imageErrorMessage?: string
   readonly boundaryErrorMessage?: string
-  readonly roughBoundaryMaxVisibleCells: number
+  readonly hexBoundaryMaxVisibleCells: number
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
 }
@@ -103,7 +103,7 @@ function ViewerSurface({
   errorMessage,
   imageErrorMessage,
   boundaryErrorMessage,
-  roughBoundaryMaxVisibleCells,
+  hexBoundaryMaxVisibleCells,
   onImageTileError,
   onViewportChange,
 }: ViewerSurfaceProps) {
@@ -128,16 +128,16 @@ function ViewerSurface({
     () => aggregateOverviewCells(visibleCells, viewState),
     [visibleCells, viewState],
   )
-  const roughBoundaries = useMemo(
+  const hexBoundaries = useMemo(
     () =>
-      roughCellBoundariesForVisibleCells(visibleCells, {
-        maxCells: roughBoundaryMaxVisibleCells,
+      hexCellBoundariesForVisibleCells(visibleCells, {
+        maxCells: hexBoundaryMaxVisibleCells,
       }),
-    [roughBoundaryMaxVisibleCells, visibleCells],
+    [hexBoundaryMaxVisibleCells, visibleCells],
   )
   const layers = useMemo(
-    () => createOverviewLayers(displayCells, boundaries, roughBoundaries),
-    [boundaries, displayCells, roughBoundaries],
+    () => createOverviewLayers(displayCells, boundaries, hexBoundaries),
+    [boundaries, displayCells, hexBoundaries],
   )
   const hasCells = cells.length > 0
   const visibleCellCount = visibleCells.length

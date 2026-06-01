@@ -44,7 +44,7 @@ export const bundledDeckVersion = deckVersion
 export function createOverviewLayers(
   cells: readonly OverviewCellDatum[],
   boundaries: readonly CellBoundaryDatum[] = [],
-  roughBoundaries: readonly CellBoundaryDatum[] = [],
+  hexBoundaries: readonly CellBoundaryDatum[] = [],
 ): LayersList {
   const layers: LayersList = [
     new ScatterplotLayer<OverviewCellDatum>({
@@ -60,11 +60,11 @@ export function createOverviewLayers(
     }),
   ]
 
-  if (roughBoundaries.length > 0 && boundaries.length === 0) {
+  if (hexBoundaries.length > 0 && boundaries.length === 0) {
     layers.push(
       new PolygonLayer<CellBoundaryDatum>({
-        id: 'cell-boundary-rough-polygons',
-        data: roughBoundaries,
+        id: 'cell-boundary-hexagons',
+        data: hexBoundaries,
         pickable: false,
         stroked: true,
         filled: true,

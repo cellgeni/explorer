@@ -14,7 +14,7 @@ import {
 import { boundaryElementsToLayerData } from './rendering/deckLayers'
 import { overviewCellsToLayerData } from './rendering/deckLayers'
 import { bundledDeckVersion } from './rendering/deckLayers'
-import { roughBoundaryCellLimit } from './rendering/roughCellBoundaries'
+import { hexBoundaryCellLimit } from './rendering/hexCellBoundaries'
 import { useViewerStore } from './store/viewerStore'
 import type { BBox } from './data/coords'
 import type { CellOverviewPoint } from './data/hyparquetCells'
@@ -91,8 +91,8 @@ export function App({
     () => boundaryElementsToLayerData(boundaryElements),
     [boundaryElements],
   )
-  const roughBoundaryMaxVisibleCells = useMemo(
-    () => roughBoundaryCellLimit(boundaryCellLimit),
+  const hexBoundaryMaxVisibleCells = useMemo(
+    () => hexBoundaryCellLimit(boundaryCellLimit),
     [boundaryCellLimit],
   )
   const handleImageTileError = useCallback((error: Error) => {
@@ -341,7 +341,7 @@ export function App({
           status={loadState.status}
           imageStatus={morphologyState.status}
           boundaryStatus={boundaryState.status}
-          roughBoundaryMaxVisibleCells={roughBoundaryMaxVisibleCells}
+          hexBoundaryMaxVisibleCells={hexBoundaryMaxVisibleCells}
           onImageTileError={handleImageTileError}
           onViewportChange={handleViewportChange}
           {...(loadState.status === 'error' ? { errorMessage: loadState.message } : {})}

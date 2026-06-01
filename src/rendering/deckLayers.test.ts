@@ -59,10 +59,10 @@ describe('deck layer factory', () => {
     expect(layers[1]).toBeInstanceOf(PolygonLayer)
   })
 
-  it('adds rough polygon boundaries only when true boundary data is absent', () => {
-    const roughBoundaries: readonly CellBoundaryDatum[] = [
+  it('adds hexagon boundaries only when true boundary data is absent', () => {
+    const hexBoundaries: readonly CellBoundaryDatum[] = [
       {
-        id: 'rough-cell-1',
+        id: 'hex-cell-1',
         polygon: [
           [0, -5, 0],
           [5, 0, 0],
@@ -74,15 +74,11 @@ describe('deck layer factory', () => {
       },
     ]
 
-    const roughLayers = createOverviewLayers(fixtureCells, [], roughBoundaries)
-    const trueLayers = createOverviewLayers(
-      fixtureCells,
-      roughBoundaries,
-      roughBoundaries,
-    )
+    const hexLayers = createOverviewLayers(fixtureCells, [], hexBoundaries)
+    const trueLayers = createOverviewLayers(fixtureCells, hexBoundaries, hexBoundaries)
 
-    expect(roughLayers).toHaveLength(2)
-    expect(roughLayers[1]).toBeInstanceOf(PolygonLayer)
+    expect(hexLayers).toHaveLength(2)
+    expect(hexLayers[1]).toBeInstanceOf(PolygonLayer)
     expect(trueLayers).toHaveLength(2)
     expect(trueLayers[1]).toBeInstanceOf(PolygonLayer)
 
