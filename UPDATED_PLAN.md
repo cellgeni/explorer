@@ -139,6 +139,9 @@ done. This file records execution-level additions requested after work began.
 - [x] Live browser smoke verified the manifest path: `.zchunkstore` returned
       HTTP 200, the first morphology tile fetched with HTTP 206 from the
       OME-TIFF byte range, and the canvas rendered non-transparent image pixels.
+- [x] Fixed `.zchunkstore` overview alignment by tracking the true source pixel
+      size of edge/overview tiles and cropping padded JPEG-2000 tile bitmaps
+      before scaling them into the morphology canvas.
 
 ## Requested Analysis Features
 

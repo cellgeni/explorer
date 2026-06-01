@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { micrometers } from '../data/coords'
+import { imagePixels, micrometers } from '../data/coords'
 import { TileCache } from './tileCache'
 import type { BBox } from '../data/coords'
 import type { TileSource } from './tileCache'
@@ -16,6 +16,10 @@ class FakeTileSource implements TileSource {
 
   tileBounds(): BBox {
     return bounds
+  }
+
+  tileSourceSize() {
+    return { width: imagePixels(2), height: imagePixels(1) }
   }
 
   async fetchTileBytes(level: number, col: number, row: number): Promise<Uint8Array> {
@@ -44,7 +48,15 @@ describe('TileCache', () => {
     await cache.request(source, 0, 1, 2)
 
     expect(source.fetches).toEqual(['0:1:2'])
-    expect(cache.readyTiles(bounds)).toEqual([{ id: '0:1:2', image: bitmap, bounds }])
+    expect(cache.readyTiles(bounds)).toEqual([
+      {
+        id: '0:1:2',
+        image: bitmap,
+        bounds,
+        sourceWidth: imagePixels(2),
+        sourceHeight: imagePixels(1),
+      },
+    ])
   })
 
   it('evicts least recently used ready bitmaps', async () => {

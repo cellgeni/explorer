@@ -59,7 +59,17 @@ export function drawMorphologyTiles(
       continue
     }
 
-    context.drawImage(tile.image, topLeft.x, topLeft.y, width, height)
+    context.drawImage(
+      tile.image,
+      0,
+      0,
+      tile.sourceWidth,
+      tile.sourceHeight,
+      topLeft.x,
+      topLeft.y,
+      width,
+      height,
+    )
   }
 }
 

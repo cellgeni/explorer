@@ -16,6 +16,7 @@ import type {
   TileIndex,
   UnitsDescriptor,
 } from '../data/coords'
+import type { TileSourceSize } from './tileCache'
 
 export interface TiffChunk {
   readonly offset: number
@@ -185,6 +186,18 @@ export class TiffPyramidLoader {
     return coordsTileBounds(level, col, row, this.gridForLevel(level), this.units)
   }
 
+  tileSourceSize(level: number, col: number, row: number): TileSourceSize {
+    const meta = this.levelMetaFor(level)
+    const width = imagePixels(
+      Math.max(1, Math.min(this.tileWidth, meta.width - col * this.tileWidth)),
+    )
+    const height = imagePixels(
+      Math.max(1, Math.min(this.tileHeight, meta.height - row * this.tileHeight)),
+    )
+
+    return { width, height }
+  }
+
   async fetchTileBytes(
     level: number,
     col: number,
@@ -219,11 +232,7 @@ export class TiffPyramidLoader {
   }
 
   private gridForLevel(level: number): TileGrid {
-    const meta = this.levels.get(level)
-
-    if (meta === undefined) {
-      throw new Error(`No TIFF metadata for level ${level}.`)
-    }
+    const meta = this.levelMetaFor(level)
 
     return {
       fullImageWidth: this.imageWidth,
@@ -233,6 +242,16 @@ export class TiffPyramidLoader {
       tileWidth: this.tileWidth,
       tileHeight: this.tileHeight,
     }
+  }
+
+  private levelMetaFor(level: number): TiffLevelMeta {
+    const meta = this.levels.get(level)
+
+    if (meta === undefined) {
+      throw new Error(`No TIFF metadata for level ${level}.`)
+    }
+
+    return meta
   }
 }
 

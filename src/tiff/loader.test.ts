@@ -89,11 +89,38 @@ describe('TiffPyramidLoader', () => {
       minY: micrometers(100),
       maxY: micrometers(200),
     })
+    expect(loader.tileSourceSize(0, 2, 1)).toEqual({
+      width: imagePixels(100),
+      height: imagePixels(100),
+    })
     await expect(loader.fetchTileBytes(0, 2, 1)).resolves.toEqual(
       new Uint8Array([1, 2, 3, 4]),
     )
 
     expect(requests).toHaveLength(0)
     expect(mutableRequests[0]?.headers).toEqual({ Range: 'bytes=10-13' })
+  })
+
+  it('reports cropped source dimensions for edge tiles', () => {
+    const chunks = new Map<string, TiffChunk>([['0/1/2', { offset: 10, length: 4 }]])
+    const levels = new Map<number, TiffLevelMeta>([
+      [0, { width: imagePixels(260), height: imagePixels(180), nCols: 3, nRows: 2 }],
+    ])
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/image.ome.tif',
+      chunkIndex: chunks,
+      levelMeta: levels,
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 1,
+      imageWidth: imagePixels(260),
+      imageHeight: imagePixels(180),
+    })
+
+    expect(loader.tileSourceSize(0, 2, 1)).toEqual({
+      width: imagePixels(60),
+      height: imagePixels(80),
+    })
   })
 })

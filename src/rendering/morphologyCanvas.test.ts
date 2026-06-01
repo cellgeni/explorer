@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { micrometers } from '../data/coords'
+import { imagePixels, micrometers } from '../data/coords'
 import {
   drawMorphologyTiles,
   morphologyViewportBbox,
@@ -41,11 +41,58 @@ describe('morphology canvas projection', () => {
         minY: micrometers(180),
         maxY: micrometers(220),
       },
+      sourceWidth: imagePixels(40),
+      sourceHeight: imagePixels(40),
     }
 
     drawMorphologyTiles(context, [tile], viewState, { width: 200, height: 100 })
 
-    expect(drawImage).toHaveBeenCalledWith(image, 80, 30, 40, 40)
+    expect(drawImage).toHaveBeenCalledWith(image, 0, 0, 40, 40, 80, 30, 40, 40)
+  })
+
+  it('crops padded partial tiles to their real source dimensions', () => {
+    const image = {} as ImageBitmap
+    const drawImage = vi.fn()
+    const context = {
+      clearRect: vi.fn(),
+      drawImage,
+    } as unknown as CanvasRenderingContext2D
+    const tile: ReadyTile = {
+      id: '8:0:0',
+      image,
+      bounds: {
+        minX: micrometers(0),
+        maxX: micrometers(10900),
+        minY: micrometers(0),
+        maxY: micrometers(18700),
+      },
+      sourceWidth: imagePixels(200),
+      sourceHeight: imagePixels(345),
+    }
+
+    drawMorphologyTiles(
+      context,
+      [tile],
+      {
+        target: [5450, -9350, 0],
+        zoom: -5,
+        minZoom: -10,
+        maxZoom: 10,
+      },
+      { width: 400, height: 700 },
+    )
+
+    expect(drawImage).toHaveBeenCalledWith(
+      image,
+      0,
+      0,
+      200,
+      345,
+      expect.any(Number),
+      expect.any(Number),
+      expect.any(Number),
+      expect.any(Number),
+    )
   })
 
   it('selects center-nearest tiles before viewport edge tiles', () => {

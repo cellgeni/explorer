@@ -1,16 +1,22 @@
 import { createWorkerTileDecoder } from '../workers/tileDecodePool'
 import type { DisplayWindow } from '../codecs/jpeg2000'
-import type { BBox } from '../data/coords'
+import type { BBox, ImagePixels } from '../data/coords'
 import type { TileBitmapDecoder } from '../workers/tileDecodePool'
 
 export interface TileSource {
   tileBounds(level: number, col: number, row: number): BBox
+  tileSourceSize(level: number, col: number, row: number): TileSourceSize
   fetchTileBytes(
     level: number,
     col: number,
     row: number,
     signal?: AbortSignal,
   ): Promise<Uint8Array>
+}
+
+export interface TileSourceSize {
+  readonly width: ImagePixels
+  readonly height: ImagePixels
 }
 
 export interface TileCacheOptions {
@@ -31,6 +37,8 @@ export interface TileReadyEntry {
   readonly state: 'ready'
   readonly bounds: BBox
   readonly bitmap: ImageBitmap
+  readonly sourceWidth: ImagePixels
+  readonly sourceHeight: ImagePixels
 }
 
 export interface TileErrorEntry {
@@ -43,6 +51,8 @@ export interface ReadyTile {
   readonly id: string
   readonly image: ImageBitmap
   readonly bounds: BBox
+  readonly sourceWidth: ImagePixels
+  readonly sourceHeight: ImagePixels
 }
 
 export class TileCache {
@@ -83,7 +93,8 @@ export class TileCache {
     }
 
     const bounds = loader.tileBounds(level, col, row)
-    const promise = this.load(loader, level, col, row, key, bounds, signal)
+    const sourceSize = loader.tileSourceSize(level, col, row)
+    const promise = this.load(loader, level, col, row, key, bounds, sourceSize, signal)
     const entry: TileLoadingEntry = {
       state: 'loading',
       bounds,
@@ -105,7 +116,13 @@ export class TileCache {
         continue
       }
 
-      ready.push({ id, image: entry.bitmap, bounds: entry.bounds })
+      ready.push({
+        id,
+        image: entry.bitmap,
+        bounds: entry.bounds,
+        sourceWidth: entry.sourceWidth,
+        sourceHeight: entry.sourceHeight,
+      })
     }
 
     return ready
@@ -130,6 +147,7 @@ export class TileCache {
     row: number,
     key: string,
     bounds: BBox,
+    sourceSize: TileSourceSize,
     signal?: AbortSignal,
   ): Promise<TileCacheEntry> {
     try {
@@ -151,6 +169,8 @@ export class TileCache {
         state: 'ready',
         bounds,
         bitmap: decoded.bitmap,
+        sourceWidth: sourceSize.width,
+        sourceHeight: sourceSize.height,
       }
 
       this.cache.set(key, ready)
