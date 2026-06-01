@@ -58,7 +58,8 @@ const DEFAULT_XENIUM_UNITS: UnitsDescriptor = {
   imageYAxis: 'down',
 }
 
-const BOUNDARY_FETCH_MARGIN_MICROMETERS = 150
+const BOUNDARY_VERTEX_FETCH_MARGIN_MICROMETERS = 150
+const BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS = 75
 
 export class XeniumDataset implements SpatialDataset {
   private readonly baseUrl: string
@@ -114,8 +115,12 @@ export class XeniumDataset implements SpatialDataset {
     const conn = await this.conn()
     const margin = Math.max(
       (bbox.maxX - bbox.minX) * 0.05,
-      BOUNDARY_FETCH_MARGIN_MICROMETERS,
+      BOUNDARY_VERTEX_FETCH_MARGIN_MICROMETERS,
     )
+    const centroidX0 = bbox.minX - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
+    const centroidX1 = bbox.maxX + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
+    const centroidY0 = bbox.minY - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
+    const centroidY1 = bbox.maxY + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
     const vertexX0 = bbox.minX - margin
     const vertexX1 = bbox.maxX + margin
     const vertexY0 = bbox.minY - margin
@@ -135,10 +140,10 @@ ORDER BY b.cell_id, b.file_row_number
 `)
     const result = await stmt.query(
       this.urlFor('cells.parquet'),
-      bbox.minX,
-      bbox.maxX,
-      bbox.minY,
-      bbox.maxY,
+      centroidX0,
+      centroidX1,
+      centroidY0,
+      centroidY1,
       this.urlFor('cell_boundaries.parquet'),
       vertexX0,
       vertexX1,

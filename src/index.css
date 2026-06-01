@@ -70,11 +70,11 @@ input:focus-visible {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 292px) minmax(0, 1fr);
   min-height: 100vh;
-  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
-    max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
-  gap: 18px;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  gap: 12px;
 }
 
 .control-rail,
@@ -87,32 +87,32 @@ input:focus-visible {
 .control-rail {
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  padding: 24px;
+  gap: 16px;
+  padding: 16px;
   border-radius: 8px;
 }
 
 .brand-lockup {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
 }
 
 .brand-mark {
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
   border: 2px solid #171511;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 32% 34%, #d73f7c 0 5px, transparent 6px),
-    radial-gradient(circle at 64% 68%, #206653 0 6px, transparent 7px), #f0c84b;
+    radial-gradient(circle at 32% 34%, #d73f7c 0 4px, transparent 5px),
+    radial-gradient(circle at 64% 68%, #206653 0 5px, transparent 6px), #f0c84b;
 }
 
 .eyebrow {
-  margin: 0 0 4px;
+  margin: 0 0 3px;
   color: #7b4d1d;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -126,23 +126,23 @@ h2 {
 }
 
 h1 {
-  font-size: clamp(1.65rem, 7vw, 2.35rem);
+  font-size: clamp(1.25rem, 4vw, 1.7rem);
 }
 
 h2 {
-  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  font-size: clamp(1rem, 2.4vw, 1.35rem);
 }
 
 .dataset-form {
   display: grid;
-  gap: 10px;
+  gap: 7px;
 }
 
 .dataset-form label,
 .layer-section h2,
 .layer-section p {
   color: #2f2b22;
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -155,38 +155,40 @@ h2 {
 .dataset-form input {
   width: 100%;
   min-width: 0;
-  padding: 12px 14px;
+  padding: 8px 10px;
   border: 1px solid rgba(23, 21, 17, 0.22);
   border-radius: 6px;
   background: #fffdf7;
   color: #171511;
+  font-size: 0.82rem;
 }
 
 .dataset-form .dataset-toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: #2f2b22;
   cursor: pointer;
-  font-size: 0.86rem;
+  font-size: 0.78rem;
   font-weight: 800;
   text-transform: none;
 }
 
 .dataset-toggle input {
-  width: 18px;
-  min-width: 18px;
-  height: 18px;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
   padding: 0;
   border-radius: 4px;
   accent-color: #206653;
 }
 
 .dataset-form button {
-  min-height: 42px;
+  min-height: 34px;
   border-radius: 6px;
   background: #171511;
   color: #fffdf7;
+  font-size: 0.82rem;
   font-weight: 800;
   cursor: pointer;
   transition:
@@ -210,12 +212,12 @@ h2 {
 
 .layer-section {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .layer-section ul {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   padding: 0;
   margin: 0;
   list-style: none;
@@ -224,18 +226,19 @@ h2 {
 .layer-section li {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  padding: 10px 0;
+  padding: 7px 0;
   border-top: 1px solid rgba(23, 21, 17, 0.12);
   color: #2f2b22;
+  font-size: 0.82rem;
   font-weight: 700;
   text-transform: capitalize;
 }
 
 .layer-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex: 0 0 auto;
 }
@@ -254,7 +257,7 @@ h2 {
 
 .viewer-region {
   display: grid;
-  grid-template-rows: auto minmax(360px, 1fr);
+  grid-template-rows: auto minmax(320px, 1fr);
   min-width: 0;
   border-radius: 8px;
   overflow: hidden;
@@ -263,9 +266,9 @@ h2 {
 .viewer-toolbar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 16px;
+  gap: 12px;
   align-items: end;
-  padding: 18px 22px;
+  padding: 12px 16px;
   border-bottom: 1px solid rgba(23, 21, 17, 0.12);
   background: rgba(255, 252, 243, 0.88);
 }
@@ -274,7 +277,7 @@ h2 {
   min-width: 0;
   margin: 0;
   color: #5d5548;
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -366,16 +369,16 @@ h2 {
 .viewport-message {
   position: absolute;
   z-index: 3;
-  left: 18px;
-  bottom: 18px;
+  left: 12px;
+  bottom: 12px;
   max-width: min(420px, calc(100% - 36px));
-  padding: 10px 12px;
+  padding: 8px 10px;
   margin: 0;
   border: 1px solid rgba(246, 242, 232, 0.18);
   border-radius: 6px;
   background: rgba(23, 21, 17, 0.86);
   color: #fffdf7;
-  font-size: 0.86rem;
+  font-size: 0.78rem;
   font-weight: 700;
   overflow-wrap: anywhere;
 }

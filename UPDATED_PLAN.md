@@ -91,6 +91,13 @@ done. This file records execution-level additions requested after work began.
       true-boundary limit. With the default 500-cell true-boundary limit, the
       viewer renders six-point centroid/area hexagons for up to 3,000
       visible cells, then switches to true segmentation below 500 visible cells.
+- [x] Full boundary loading now expands the candidate centroid window by 75
+      micrometers and keeps a minimum 150 micrometer vertex fetch margin around
+      the viewport. This keeps partially visible edge cells from disappearing
+      when their centroids sit just outside the current viewport.
+- [x] The app chrome is more compact: the sidebar, toolbar, form controls,
+      status text, and layer list use tighter spacing and smaller type while
+      preserving visible focus states and labelled controls.
 
 ## Boundary Simplification Decision
 

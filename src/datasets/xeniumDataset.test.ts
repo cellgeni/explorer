@@ -136,6 +136,18 @@ describe('XeniumDataset', () => {
     expect(conn.statements[0]?.params).toContain(
       'https://example.test/xenium/cell_boundaries.parquet',
     )
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/cells.parquet',
+      micrometers(-75),
+      micrometers(85),
+      micrometers(-75),
+      micrometers(85),
+      'https://example.test/xenium/cell_boundaries.parquet',
+      micrometers(-150),
+      micrometers(160),
+      micrometers(-150),
+      micrometers(160),
+    ])
     expect(conn.preparedSql[0]).toContain('ORDER BY b.cell_id, b.file_row_number')
     expect(conn.preparedSql[0]).toContain('b.vertex_x BETWEEN')
   })
