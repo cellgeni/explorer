@@ -30,7 +30,7 @@ done. This file records execution-level additions requested after work began.
 
 - [x] `coords.ts`
 - [x] `cellid.ts`
-- [ ] `duckdb.ts`
+- [x] `duckdb.ts`
 - [ ] `gex.ts`
 - [ ] `tiff/loader.ts`
 - [ ] `tiff/tileCache.ts`
