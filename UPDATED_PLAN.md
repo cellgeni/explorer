@@ -118,7 +118,7 @@ done. This file records execution-level additions requested after work began.
       versioning to all fetches).
 - [x] Read `experiment.xenium` manifest to know which files exist (replace
       HEAD-guessing in `loadMorphologyImage`).
-- [ ] Structured error states surfaced to UI.
+- [x] Structured error states surfaced to UI.
 - [x] Use the dataset `.zchunkstore` image chunk index when present, falling
       back to GeoTIFF metadata parsing when it is missing or unsupported.
 
@@ -162,6 +162,10 @@ done. This file records execution-level additions requested after work began.
       parsing. Image loading now reads the manifest once, opens only declared
       TIFF paths, prefers MIP/focus/full-resolution paths in that order when
       available, and shares the same selector through the dataset image API.
+- [x] Added structured UI load errors with source, code, title, message, action,
+      and optional detail fields. Dataset overview, gene panel, morphology image,
+      image tile, boundary, and gene-expression failures now feed a compact
+      alert section and the existing viewer/status messages.
 
 ## Requested Analysis Features
 

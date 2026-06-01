@@ -332,6 +332,77 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.error-summary {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(215, 63, 124, 0.38);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: rgba(215, 63, 124, 0.08);
+}
+
+.error-summary h2 {
+  margin: 0;
+  color: #7f2048;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.error-summary ul {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.error-summary li {
+  display: grid;
+  gap: 3px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(215, 63, 124, 0.2);
+}
+
+.error-summary li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.error-summary-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: baseline;
+}
+
+.error-summary strong,
+.error-summary span,
+.error-summary p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.error-summary strong {
+  color: #7f2048;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.error-summary span {
+  color: #171511;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.error-summary p {
+  color: #5d2a38;
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
 .cell-info-list {
   display: grid;
   gap: 5px;

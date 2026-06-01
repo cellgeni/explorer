@@ -172,6 +172,53 @@ describe('App', () => {
     expect(screen.getByTestId('deckgl')).toBeInTheDocument()
   })
 
+  it('surfaces structured dataset load errors', async () => {
+    const loadDatasetOverview = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    const loadGenePanel = vi.fn(async () => [])
+
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const alert = await screen.findByRole('alert', { name: 'Load issues' })
+
+    expect(alert).toHaveTextContent('Dataset overview')
+    expect(alert).toHaveTextContent('Network request failed')
+    expect(alert).toHaveTextContent('Check dataset URL, CORS, and network access.')
+    expect(
+      await screen.findByText(/Load failed - Network request failed/),
+    ).toBeInTheDocument()
+  })
+
+  it('surfaces structured gene panel errors without failing the overview', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => {
+      throw new Error('Unable to load gene_panel.json: HTTP 404.')
+    })
+
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+
+    const alert = await screen.findByRole('alert', { name: 'Load issues' })
+
+    expect(alert).toHaveTextContent('Gene panel')
+    expect(alert).toHaveTextContent('HTTP 404 response')
+    expect(alert).toHaveTextContent('Check the dataset URL and object permissions.')
+  })
+
   it('requests all overview cells by default without cell IDs', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {

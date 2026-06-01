@@ -73,25 +73,41 @@ type DatasetLoadState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
   | { readonly status: 'ready'; readonly url: string; readonly cellCount: number }
-  | { readonly status: 'error'; readonly url: string; readonly message: string }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
 
 type MorphologyLoadState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
   | { readonly status: 'ready'; readonly url: string }
-  | { readonly status: 'error'; readonly url: string; readonly message: string }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
 
 type BoundaryLoadState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
   | { readonly status: 'ready'; readonly url: string; readonly cellCount: number }
-  | { readonly status: 'error'; readonly url: string; readonly message: string }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
 
 type GenePanelState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
   | { readonly status: 'ready'; readonly url: string; readonly genes: readonly string[] }
-  | { readonly status: 'error'; readonly url: string; readonly message: string }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
 
 type GeneExpressionState =
   | { readonly status: 'idle' }
@@ -107,7 +123,36 @@ type GeneExpressionState =
       readonly genes: readonly string[]
       readonly cellCount: number
     }
-  | { readonly status: 'error'; readonly url: string; readonly message: string }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
+
+type LoadErrorCode =
+  | 'network'
+  | 'http'
+  | 'range-not-supported'
+  | 'manifest'
+  | 'decode'
+  | 'unknown'
+
+type LoadErrorSource =
+  | 'Dataset overview'
+  | 'Morphology image'
+  | 'Image tiles'
+  | 'Cell boundaries'
+  | 'Gene panel'
+  | 'Gene expression'
+
+interface StructuredLoadError {
+  readonly source: LoadErrorSource
+  readonly code: LoadErrorCode
+  readonly title: string
+  readonly message: string
+  readonly action: string
+  readonly detail?: string
+}
 
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader
@@ -201,6 +246,17 @@ export function App({
   )
   const genePanelCopy = genePanelStatusCopy(genePanelState)
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
+  const activeErrors = useMemo(
+    () =>
+      [
+        loadState.status === 'error' ? loadState.error : null,
+        morphologyState.status === 'error' ? morphologyState.error : null,
+        boundaryState.status === 'error' ? boundaryState.error : null,
+        genePanelState.status === 'error' ? genePanelState.error : null,
+        geneExpressionState.status === 'error' ? geneExpressionState.error : null,
+      ].filter(isStructuredLoadError),
+    [boundaryState, geneExpressionState, genePanelState, loadState, morphologyState],
+  )
   const handleImageTileError = useCallback((error: Error) => {
     setMorphologyState((current) => {
       if (current.status !== 'ready') {
@@ -210,7 +266,7 @@ export function App({
       return {
         status: 'error',
         url: current.url,
-        message: readErrorMessage(error),
+        error: createStructuredLoadError('Image tiles', error),
       }
     })
   }, [])
@@ -270,7 +326,7 @@ export function App({
               setBoundaryState({
                 status: 'error',
                 url: loadState.url,
-                message: readErrorMessage(error),
+                error: createStructuredLoadError('Cell boundaries', error),
               })
             })
             .finally(() => {
@@ -351,7 +407,7 @@ export function App({
           setGeneExpressionState({
             status: 'error',
             url: loadState.url,
-            message: readErrorMessage(error),
+            error: createStructuredLoadError('Gene expression', error),
           })
         })
         .finally(() => {
@@ -441,7 +497,7 @@ export function App({
           setGenePanelState({
             status: 'error',
             url: requestedUrl,
-            message: readErrorMessage(error),
+            error: createStructuredLoadError('Gene panel', error),
           })
         })
 
@@ -491,7 +547,7 @@ export function App({
             setMorphologyState({
               status: 'error',
               url: requestedUrl,
-              message: readErrorMessage(error),
+              error: createStructuredLoadError('Morphology image', error),
             })
           })
       } catch (error) {
@@ -506,7 +562,7 @@ export function App({
         setLoadState({
           status: 'error',
           url: requestedUrl,
-          message: readErrorMessage(error),
+          error: createStructuredLoadError('Dataset overview', error),
         })
         setMorphologyState({ status: 'idle' })
         setGenePanelState({ status: 'idle' })
@@ -581,6 +637,8 @@ export function App({
             {isLoading ? 'Loading…' : 'Load Dataset'}
           </button>
         </form>
+
+        <ErrorSummary errors={activeErrors} />
 
         <section className="layer-section" aria-labelledby="layer-heading">
           <h2 id="layer-heading">Layer Stack</h2>
@@ -764,12 +822,14 @@ export function App({
           onCellClick={(cell) => {
             setSelectedCell(cell)
           }}
-          {...(loadState.status === 'error' ? { errorMessage: loadState.message } : {})}
+          {...(loadState.status === 'error'
+            ? { errorMessage: formatStructuredError(loadState.error) }
+            : {})}
           {...(morphologyState.status === 'error'
-            ? { imageErrorMessage: morphologyState.message }
+            ? { imageErrorMessage: formatStructuredError(morphologyState.error) }
             : {})}
           {...(boundaryState.status === 'error'
-            ? { boundaryErrorMessage: boundaryState.message }
+            ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
             : {})}
         />
       </section>
@@ -794,7 +854,7 @@ function datasetStatusCopy(
   }
 
   if (loadState.status === 'error') {
-    return { label: `Load failed - ${loadState.message}`, url: loadState.url }
+    return { label: `Load failed - ${loadState.error.title}`, url: loadState.url }
   }
 
   return { label: 'Queued dataset', url: queuedUrl }
@@ -831,7 +891,7 @@ function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): str
   }
 
   if (geneExpressionState.status === 'error') {
-    return `Expression failed - ${geneExpressionState.message}`
+    return `Expression failed - ${geneExpressionState.error.title}`
   }
 
   return 'Expression: none'
@@ -900,6 +960,31 @@ function CellInfoPanel({ cell }: { readonly cell: OverviewCellDatum | null }) {
   )
 }
 
+function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadError[] }) {
+  if (errors.length === 0) {
+    return null
+  }
+
+  return (
+    <section className="error-summary" role="alert" aria-label="Load issues">
+      <h2>Issues</h2>
+      <ul>
+        {errors.map((error) => (
+          <li key={`${error.source}:${error.code}:${error.message}`}>
+            <div className="error-summary-heading">
+              <strong>{error.source}</strong>
+              <span>{error.title}</span>
+            </div>
+            <p>{error.message}</p>
+            <p>{error.action}</p>
+            {error.detail === undefined ? null : <p>{error.detail}</p>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function formatOptionalNumber(value: number | undefined): string {
   return value === undefined ? 'None' : formatNumber(value)
 }
@@ -917,6 +1002,128 @@ function abortActiveRequest(ref: { current: AbortController | null }): void {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
+}
+
+function isStructuredLoadError(
+  error: StructuredLoadError | null,
+): error is StructuredLoadError {
+  return error !== null
+}
+
+function formatStructuredError(error: StructuredLoadError): string {
+  return `${error.title}: ${error.message}`
+}
+
+function createStructuredLoadError(
+  source: LoadErrorSource,
+  error: unknown,
+): StructuredLoadError {
+  const message = readErrorMessage(error)
+  const normalizedMessage = message.toLowerCase()
+  const detail = readErrorDetail(error)
+
+  if (
+    normalizedMessage.includes('cannot be range-read') ||
+    normalizedMessage.includes('expected http 206')
+  ) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'range-not-supported',
+        title: 'Byte-range requests blocked',
+        message,
+        action: 'Configure the host to return HTTP 206 for Range requests.',
+      },
+      detail,
+    )
+  }
+
+  const httpStatus = /\bhttp\s+(\d{3})\b/i.exec(message)?.[1]
+
+  if (httpStatus !== undefined) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'http',
+        title: `HTTP ${httpStatus} response`,
+        message,
+        action: 'Check the dataset URL and object permissions.',
+      },
+      detail,
+    )
+  }
+
+  if (
+    error instanceof TypeError ||
+    normalizedMessage.includes('failed to fetch') ||
+    normalizedMessage.includes('networkerror')
+  ) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'network',
+        title: 'Network request failed',
+        message,
+        action: 'Check dataset URL, CORS, and network access.',
+      },
+      detail,
+    )
+  }
+
+  if (
+    normalizedMessage.includes('experiment.xenium') ||
+    normalizedMessage.includes('no supported xenium ome-tiff')
+  ) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'manifest',
+        title: 'Dataset manifest is incomplete',
+        message,
+        action: 'Verify experiment.xenium lists the files needed by this layer.',
+      },
+      detail,
+    )
+  }
+
+  if (normalizedMessage.includes('decode') || normalizedMessage.includes('tile')) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'decode',
+        title: 'Image tile decode failed',
+        message,
+        action: 'Retry at this zoom level or disable the morphology image layer.',
+      },
+      detail,
+    )
+  }
+
+  return withOptionalDetail(
+    {
+      source,
+      code: 'unknown',
+      title: 'Unexpected load error',
+      message,
+      action: 'Retry the request after checking the dataset URL.',
+    },
+    detail,
+  )
+}
+
+function withOptionalDetail(
+  error: Omit<StructuredLoadError, 'detail'>,
+  detail: string | undefined,
+): StructuredLoadError {
+  return detail === undefined ? error : { ...error, detail }
+}
+
+function readErrorDetail(error: unknown): string | undefined {
+  if (!(error instanceof Error) || error.name === 'Error') {
+    return undefined
+  }
+
+  return error.name
 }
 
 function readErrorMessage(error: unknown): string {
