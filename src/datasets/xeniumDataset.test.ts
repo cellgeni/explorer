@@ -61,10 +61,10 @@ function makeDataset(
     fetcher: async () =>
       new Response(
         JSON.stringify({
-          payload: {
-            instrument: {
-              micrometers_per_pixel: 0.5,
-            },
+          pixel_size: 0.5,
+          images: {
+            morphology_filepath: 'morphology.ome.tif',
+            morphology_focus_filepath: 'morphology_focus/morphology_focus_0000.ome.tif',
           },
         }),
       ),
@@ -213,7 +213,7 @@ describe('XeniumDataset', () => {
       25,
     )
     expect(openTiff).toHaveBeenCalledWith(
-      'https://example.test/xenium/morphology_mip.ome.tif',
+      'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
     )
   })
 

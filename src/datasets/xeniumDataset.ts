@@ -7,6 +7,7 @@ import {
 } from '../data/gex'
 import { createDuckDbClient } from '../data/duckdb'
 import { readCellsOverview } from '../data/hyparquetCells'
+import { loadMorphologyImage } from '../data/morphologyImage'
 import { openTiff } from '../tiff/loader'
 import type { CellId } from '../data/cellid'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
@@ -273,10 +274,14 @@ ORDER BY b.cell_id, b.file_row_number
   }
 
   async image(): Promise<ImageSource | null> {
-    const loader = await this.tiffOpener(this.urlFor('morphology_mip.ome.tif'))
+    const image = await loadMorphologyImage(this.baseUrl, {
+      fetcher: this.fetcher,
+      openImage: this.tiffOpener,
+    })
+
     return {
       kind: 'pyramid',
-      loader,
+      loader: image.loader,
     }
   }
 

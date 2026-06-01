@@ -116,7 +116,7 @@ done. This file records execution-level additions requested after work began.
 - [x] OPFS/IndexedDB cache for tiles + Parquet footers; persist the LRU.
 - [x] `AbortController` cancellation per viewport version (extend existing
       versioning to all fetches).
-- [ ] Read `experiment.xenium` manifest to know which files exist (replace
+- [x] Read `experiment.xenium` manifest to know which files exist (replace
       HEAD-guessing in `loadMorphologyImage`).
 - [ ] Structured error states surfaced to UI.
 - [x] Use the dataset `.zchunkstore` image chunk index when present, falling
@@ -158,6 +158,10 @@ done. This file records execution-level additions requested after work began.
       range probes now receive abort signals; DuckDB/Zarr stages that do not
       expose abortable fetch internals are guarded between awaits so stale
       viewport requests stop before updating UI state.
+- [x] Replaced morphology image `HEAD` probing with `experiment.xenium` manifest
+      parsing. Image loading now reads the manifest once, opens only declared
+      TIFF paths, prefers MIP/focus/full-resolution paths in that order when
+      available, and shares the same selector through the dataset image API.
 
 ## Requested Analysis Features
 
