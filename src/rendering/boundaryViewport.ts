@@ -2,7 +2,8 @@ import type { BBox } from '../data/coords'
 import type { OverviewViewState } from './deckLayers'
 
 export const BOUNDARY_VIEWPORT_CELL_LIMIT = 500
-export const BOUNDARY_MIN_ZOOM = -1
+export const MIN_BOUNDARY_VIEWPORT_CELL_LIMIT = 1
+export const MAX_BOUNDARY_VIEWPORT_CELL_LIMIT = 5_000
 
 export interface BoundaryViewportCandidate {
   readonly bbox: BBox
@@ -10,16 +11,29 @@ export interface BoundaryViewportCandidate {
   readonly viewState: OverviewViewState
 }
 
+export interface BoundaryViewportOptions {
+  readonly cellLimit?: number
+}
+
 export function shouldLoadBoundaryPolygons(
   candidate: BoundaryViewportCandidate,
+  options: BoundaryViewportOptions = {},
 ): boolean {
   if (candidate.visibleCellCount <= 0) {
     return false
   }
 
-  return (
-    candidate.visibleCellCount <= BOUNDARY_VIEWPORT_CELL_LIMIT ||
-    candidate.viewState.zoom >= BOUNDARY_MIN_ZOOM
+  return candidate.visibleCellCount < normalizeBoundaryCellLimit(options.cellLimit)
+}
+
+export function normalizeBoundaryCellLimit(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return BOUNDARY_VIEWPORT_CELL_LIMIT
+  }
+
+  return Math.max(
+    MIN_BOUNDARY_VIEWPORT_CELL_LIMIT,
+    Math.min(MAX_BOUNDARY_VIEWPORT_CELL_LIMIT, Math.round(value)),
   )
 }
 

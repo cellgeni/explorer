@@ -6,6 +6,7 @@ import {
   createOverviewViewState,
   spatialOverviewView,
 } from '../rendering/deckLayers'
+import { aggregateOverviewCells } from '../rendering/cellAggregation'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
@@ -101,15 +102,31 @@ function ViewerSurface({
   onViewportChange,
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
-  const layers = useMemo(
-    () => createOverviewLayers(cells, boundaries),
-    [boundaries, cells],
-  )
   const [viewState, setViewState] = useState<OverviewViewState>(initialViewState)
   const [viewport, setViewport] = useState<CssViewportSize>({
     width: 0,
     height: 0,
   })
+  const viewportBbox = useMemo(() => {
+    if (viewport.width <= 0 || viewport.height <= 0) {
+      return null
+    }
+
+    return morphologyViewportBbox(viewState, viewport)
+  }, [viewState, viewport])
+  const displayCells = useMemo(
+    () =>
+      aggregateOverviewCells(
+        cells,
+        viewState,
+        viewportBbox === null ? {} : { bbox: viewportBbox },
+      ),
+    [cells, viewState, viewportBbox],
+  )
+  const layers = useMemo(
+    () => createOverviewLayers(displayCells, boundaries),
+    [boundaries, displayCells],
+  )
   const hasCells = cells.length > 0
   const viewportMessage = readViewportMessage(status, imageStatus, boundaryStatus, {
     ...(errorMessage === undefined ? {} : { errorMessage }),
@@ -152,21 +169,14 @@ function ViewerSurface({
   }, [])
 
   useEffect(() => {
-    if (
-      onViewportChange === undefined ||
-      !hasCells ||
-      viewport.width <= 0 ||
-      viewport.height <= 0
-    ) {
+    if (onViewportChange === undefined || !hasCells || viewportBbox === null) {
       return
     }
 
     const timeout = window.setTimeout(() => {
-      const bbox = morphologyViewportBbox(viewState, viewport)
-
       onViewportChange({
-        bbox,
-        visibleCellCount: countVisibleCells(cells, bbox),
+        bbox: viewportBbox,
+        visibleCellCount: countVisibleCells(cells, viewportBbox),
         viewState,
       })
     }, 180)
@@ -174,7 +184,7 @@ function ViewerSurface({
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [cells, hasCells, onViewportChange, viewState, viewport])
+  }, [cells, hasCells, onViewportChange, viewState, viewportBbox])
 
   return (
     <div
@@ -233,7 +243,7 @@ function readViewportMessage(
   },
 ): { readonly kind: 'info' | 'error'; readonly text: string } | null {
   if (status === 'loading') {
-    return { kind: 'info', text: 'Loading overview cells...' }
+    return { kind: 'info', text: 'Loading overview cells…' }
   }
 
   if (status === 'error') {
@@ -244,7 +254,7 @@ function readViewportMessage(
   }
 
   if (imageStatus === 'loading') {
-    return { kind: 'info', text: 'Reading OME-TIFF image...' }
+    return { kind: 'info', text: 'Reading OME-TIFF image…' }
   }
 
   if (imageStatus === 'error') {
@@ -255,7 +265,7 @@ function readViewportMessage(
   }
 
   if (boundaryStatus === 'loading') {
-    return { kind: 'info', text: 'Loading cell boundaries...' }
+    return { kind: 'info', text: 'Loading cell boundaries…' }
   }
 
   if (boundaryStatus === 'error') {

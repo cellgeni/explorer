@@ -9,7 +9,9 @@ import {
 } from './data/datasetOverview'
 import { loadMorphologyImage as defaultLoadMorphologyImage } from './data/morphologyImage'
 import {
+  BOUNDARY_VIEWPORT_CELL_LIMIT,
   boundaryViewportKey,
+  normalizeBoundaryCellLimit,
   shouldLoadBoundaryPolygons,
 } from './rendering/boundaryViewport'
 import { boundaryElementsToLayerData } from './rendering/deckLayers'
@@ -68,6 +70,7 @@ export function App({
   const datasetInputId = useId()
   const allCellsInputId = useId()
   const morphologyInputId = useId()
+  const boundaryLimitInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const [loadState, setLoadState] = useState<DatasetLoadState>({ status: 'idle' })
@@ -82,6 +85,7 @@ export function App({
   const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
   const [shouldLoadAllCells, setShouldLoadAllCells] = useState(false)
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(false)
+  const [boundaryCellLimit, setBoundaryCellLimit] = useState(BOUNDARY_VIEWPORT_CELL_LIMIT)
   const loadRequestId = useRef(0)
   const boundaryRequestId = useRef(0)
   const boundaryViewportKeyRef = useRef<string | null>(null)
@@ -110,7 +114,7 @@ export function App({
         return
       }
 
-      if (!shouldLoadBoundaryPolygons(detail)) {
+      if (!shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })) {
         boundaryRequestId.current += 1
         boundaryViewportKeyRef.current = null
         setBoundaryElements((current) => (current.length === 0 ? current : []))
@@ -157,7 +161,7 @@ export function App({
           })
         })
     },
-    [loadBoundaryElements, loadState],
+    [boundaryCellLimit, loadBoundaryElements, loadState],
   )
 
   async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
@@ -293,8 +297,25 @@ export function App({
             />
             <span>Morphology image</span>
           </label>
+          <label htmlFor={boundaryLimitInputId}>Boundary limit</label>
+          <input
+            id={boundaryLimitInputId}
+            name="boundaryCellLimit"
+            type="number"
+            inputMode="numeric"
+            min="1"
+            max="5000"
+            step="1"
+            autoComplete="off"
+            value={boundaryCellLimit}
+            onChange={(event) => {
+              setBoundaryCellLimit(
+                normalizeBoundaryCellLimit(event.currentTarget.valueAsNumber),
+              )
+            }}
+          />
           <button type="submit" disabled={isLoading}>
-            {isLoading ? 'Loading...' : 'Load Dataset'}
+            {isLoading ? 'Loading…' : 'Load Dataset'}
           </button>
         </form>
 

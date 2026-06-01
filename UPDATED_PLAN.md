@@ -70,3 +70,18 @@ done. This file records execution-level additions requested after work began.
       DuckDB now uses the non-threaded MVP/EH worker bundles because the COI
       pthread bundle failed to load DuckDB extensions (`spatial`/`parquet`) in
       the browser with a shared-memory mismatch.
+- [x] Overview cell rendering is now zoom-aware. The app keeps the existing fast
+      centroid load path, bins cells into representative points at low zoom, and
+      expands back to individual points once the bin size is cell-scale. When the
+      viewport is known, point rendering is clipped to the current viewport so
+      close zooms do not push off-screen cells through deck.gl.
+- [x] Cell boundaries now load only when the visible overview-cell count is below
+      the configured threshold. The UI exposes `Boundary limit`, defaulting to
+      500 cells, so the cutoff can be tuned without code changes.
+
+## Boundary Simplification Decision
+
+- [x] Do not add a client-side "less than 5 points" simplified-boundary mode yet.
+      It would not reduce network or DuckDB work because the app would still have
+      to fetch the full boundary vertices first. Revisit this only if a separate
+      precomputed simplified-boundary parquet/geometry pyramid is added.

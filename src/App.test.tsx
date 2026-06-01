@@ -31,6 +31,19 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'All cells' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
+    expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(500)
+  })
+
+  it('lets the user configure the boundary polygon visible-cell limit', () => {
+    render(<App />)
+
+    const boundaryLimitInput = screen.getByRole('spinbutton', {
+      name: 'Boundary limit',
+    })
+
+    fireEvent.change(boundaryLimitInput, { target: { value: '750' } })
+
+    expect(boundaryLimitInput).toHaveValue(750)
   })
 
   it('loads overview cells without morphology image by default', async () => {

@@ -9,6 +9,7 @@ export interface OverviewCellDatum {
   readonly position: Position
   readonly radiusPixels: number
   readonly fillColor: Color
+  readonly cellCount?: number
 }
 
 export interface OverviewViewState {

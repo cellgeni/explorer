@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers } from '../data/coords'
-import { boundaryViewportKey, shouldLoadBoundaryPolygons } from './boundaryViewport'
+import {
+  boundaryViewportKey,
+  normalizeBoundaryCellLimit,
+  shouldLoadBoundaryPolygons,
+} from './boundaryViewport'
 import type { BoundaryViewportCandidate } from './boundaryViewport'
 
 const candidate: BoundaryViewportCandidate = {
@@ -20,19 +24,32 @@ const candidate: BoundaryViewportCandidate = {
 }
 
 describe('boundary viewport trigger', () => {
-  it('loads polygons for sparse or close viewport candidates', () => {
-    expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 500 })).toBe(true)
+  it('loads polygons only below the configured visible-cell limit', () => {
+    expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 499 })).toBe(true)
+    expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 500 })).toBe(
+      false,
+    )
     expect(
-      shouldLoadBoundaryPolygons({
-        ...candidate,
-        viewState: { ...candidate.viewState, zoom: -1 },
-      }),
+      shouldLoadBoundaryPolygons(
+        { ...candidate, visibleCellCount: 750 },
+        {
+          cellLimit: 800,
+        },
+      ),
     ).toBe(true)
   })
 
   it('skips polygons for dense overview candidates and empty viewports', () => {
     expect(shouldLoadBoundaryPolygons(candidate)).toBe(false)
     expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 0 })).toBe(false)
+  })
+
+  it('normalizes the configurable cell limit', () => {
+    expect(normalizeBoundaryCellLimit(undefined)).toBe(500)
+    expect(normalizeBoundaryCellLimit(Number.NaN)).toBe(500)
+    expect(normalizeBoundaryCellLimit(12.6)).toBe(13)
+    expect(normalizeBoundaryCellLimit(-4)).toBe(1)
+    expect(normalizeBoundaryCellLimit(20_000)).toBe(5_000)
   })
 
   it('quantizes bbox values into a stable request key', () => {
