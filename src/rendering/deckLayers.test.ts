@@ -10,6 +10,7 @@ import {
   geneExpressionCellsToLayerData,
   overviewCellsToLayerData,
   spatialOverviewView,
+  styleGeneExpressionCellsByScale,
 } from './deckLayers'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
 
@@ -159,6 +160,61 @@ describe('deck layer factory', () => {
       expressionCount: 4,
       expressionGenes: ['Gad1'],
       transcriptCount: 11,
+    })
+  })
+
+  it('colors expression cells with the selected scale', () => {
+    const [goldDatum] = geneExpressionCellsToLayerData(
+      [
+        {
+          id: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          count: 4,
+        },
+      ],
+      ['Gad1'],
+      'gold',
+    )
+    const [viridisDatum] = geneExpressionCellsToLayerData(
+      [
+        {
+          id: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          count: 4,
+        },
+      ],
+      ['Gad1'],
+      'viridis',
+    )
+
+    expect(goldDatum?.fillColor).toEqual([255, 221, 99, 245])
+    expect(viridisDatum?.fillColor).toEqual([253, 231, 37, 245])
+    expect(goldDatum?.fillColor).not.toEqual(viridisDatum?.fillColor)
+  })
+
+  it('restyles existing expression layer data without changing positions', () => {
+    const [datum] = geneExpressionCellsToLayerData(
+      [
+        {
+          id: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          count: 4,
+        },
+      ],
+      ['Gad1'],
+      'gold',
+    )
+
+    if (datum === undefined) {
+      throw new Error('Expected expression layer datum.')
+    }
+
+    const [restyled] = styleGeneExpressionCellsByScale([datum], 'magma')
+
+    expect(restyled).toMatchObject({
+      id: datum.id,
+      position: datum.position,
+      fillColor: [252, 223, 116, 245],
     })
   })
 

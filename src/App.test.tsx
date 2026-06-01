@@ -34,6 +34,7 @@ describe('App', () => {
     expect(screen.getByRole('slider', { name: 'Gene opacity' })).toHaveValue('100')
     expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument()
     expect(screen.getByLabelText('Gene selection')).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Gene scale' })).toHaveValue('gold')
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
@@ -67,6 +68,18 @@ describe('App', () => {
     fireEvent.change(boundaryLimitInput, { target: { value: '750' } })
 
     expect(boundaryLimitInput).toHaveValue(750)
+  })
+
+  it('lets the user configure the gene expression color scale', () => {
+    render(<App />)
+
+    const geneScaleInput = screen.getByRole('combobox', {
+      name: 'Gene scale',
+    })
+
+    fireEvent.change(geneScaleInput, { target: { value: 'viridis' } })
+
+    expect(geneScaleInput).toHaveValue('viridis')
   })
 
   it('loads overview cells without morphology image by default', async () => {

@@ -13,10 +13,16 @@ import {
   normalizeBoundaryCellLimit,
   shouldLoadBoundaryPolygons,
 } from './rendering/boundaryViewport'
-import { boundaryElementsToLayerData } from './rendering/deckLayers'
-import { geneExpressionCellsToLayerData } from './rendering/deckLayers'
-import { overviewCellsToLayerData } from './rendering/deckLayers'
-import { bundledDeckVersion } from './rendering/deckLayers'
+import {
+  boundaryElementsToLayerData,
+  DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
+  GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
+  geneExpressionCellsToLayerData,
+  isGeneExpressionColorScale,
+  overviewCellsToLayerData,
+  styleGeneExpressionCellsByScale,
+  bundledDeckVersion,
+} from './rendering/deckLayers'
 import { styleOverviewCellsByObservation } from './rendering/cellStyling'
 import { hexBoundaryCellLimit } from './rendering/hexCellBoundaries'
 import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
@@ -27,6 +33,7 @@ import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage } from './data/morphologyImage'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { ElementBatch, SpatialElement } from './datasets/spatialDataset'
+import type { GeneExpressionColorScale } from './rendering/deckLayers'
 import type { OverviewCellDatum } from './rendering/deckLayers'
 import type { ViewerViewportDetail } from './components/ViewerCore'
 
@@ -111,6 +118,7 @@ export function App({
   const imageOpacityInputId = useId()
   const geneOpacityInputId = useId()
   const geneSearchInputId = useId()
+  const geneScaleInputId = useId()
   const observationModeInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
@@ -138,6 +146,8 @@ export function App({
   const [imageLayerOpacity, setImageLayerOpacity] = useState(1)
   const [geneLayerOpacity, setGeneLayerOpacity] = useState(1)
   const [geneSearch, setGeneSearch] = useState('')
+  const [geneExpressionColorScale, setGeneExpressionColorScale] =
+    useState<GeneExpressionColorScale>(DEFAULT_GENE_EXPRESSION_COLOR_SCALE)
   const [selectedGenes, setSelectedGenes] = useState<readonly string[]>([])
   const [observationColorMode, setObservationColorMode] =
     useState<ObservationColorMode>('transcript-count')
@@ -153,6 +163,10 @@ export function App({
   const styledOverviewCells = useMemo(
     () => styleOverviewCellsByObservation(overviewCells, observationColorMode),
     [observationColorMode, overviewCells],
+  )
+  const styledGeneExpressionCells = useMemo(
+    () => styleGeneExpressionCellsByScale(geneExpressionCells, geneExpressionColorScale),
+    [geneExpressionCells, geneExpressionColorScale],
   )
   const boundaryLayerData = useMemo(
     () => boundaryElementsToLayerData(boundaryElements),
@@ -603,6 +617,31 @@ export function App({
             ))}
           </div>
 
+          <label htmlFor={geneScaleInputId}>Gene scale</label>
+          <div className="gene-scale-control">
+            <select
+              id={geneScaleInputId}
+              value={geneExpressionColorScale}
+              onChange={(event) => {
+                const nextScale = event.currentTarget.value
+
+                if (isGeneExpressionColorScale(nextScale)) {
+                  setGeneExpressionColorScale(nextScale)
+                }
+              }}
+            >
+              {GENE_EXPRESSION_COLOR_SCALE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span
+              className={`gene-scale-preview gene-scale-preview-${geneExpressionColorScale}`}
+              aria-hidden="true"
+            />
+          </div>
+
           <label htmlFor={observationModeInputId}>Cell color</label>
           <select
             id={observationModeInputId}
@@ -639,7 +678,7 @@ export function App({
 
         <ViewerCore
           cells={styledOverviewCells}
-          expressionCells={geneExpressionCells}
+          expressionCells={styledGeneExpressionCells}
           boundaries={boundaryLayerData}
           imageLoader={morphologyImage?.loader ?? null}
           imageOpacity={imageLayerOpacity}

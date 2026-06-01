@@ -284,6 +284,47 @@ h2 {
   padding-right: 2px;
 }
 
+.gene-scale-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px;
+  gap: 6px;
+  align-items: center;
+}
+
+.gene-scale-preview {
+  height: 32px;
+  border: 1px solid rgba(23, 21, 17, 0.22);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 253, 247, 0.4);
+}
+
+.gene-scale-preview-gold {
+  background: linear-gradient(
+    90deg,
+    rgba(111, 63, 53, 0.82),
+    rgba(221, 127, 75, 0.9),
+    rgba(255, 221, 99, 0.96)
+  );
+}
+
+.gene-scale-preview-magma {
+  background: linear-gradient(
+    90deg,
+    rgba(45, 15, 71, 0.82),
+    rgba(195, 60, 105, 0.9),
+    rgba(252, 223, 116, 0.96)
+  );
+}
+
+.gene-scale-preview-viridis {
+  background: linear-gradient(
+    90deg,
+    rgba(68, 1, 84, 0.82),
+    rgba(33, 145, 140, 0.9),
+    rgba(253, 231, 37, 0.96)
+  );
+}
+
 .analysis-status,
 .cell-info-empty {
   margin: 0;

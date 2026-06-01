@@ -181,3 +181,6 @@ unless the phase order is explicitly changed.
 - [x] Added compact image-layer and gene-expression-layer opacity controls to the
       layer stack. The image slider controls the morphology canvas opacity; the
       gene slider controls the deck.gl gene-expression overlay opacity.
+- [x] Added selectable gene-expression color scales. Switching scales restyles
+      the current expression overlay from loaded per-cell counts without
+      refetching the expression matrix.

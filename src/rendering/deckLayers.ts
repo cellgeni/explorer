@@ -37,6 +37,45 @@ export interface OverviewLayerOptions {
   readonly geneExpressionOpacity?: number
 }
 
+export type GeneExpressionColorScale = 'gold' | 'magma' | 'viridis'
+
+export interface GeneExpressionColorScaleOption {
+  readonly id: GeneExpressionColorScale
+  readonly label: string
+}
+
+type ColorStop = readonly [number, number, number, number]
+
+export const DEFAULT_GENE_EXPRESSION_COLOR_SCALE: GeneExpressionColorScale = 'gold'
+
+export const GENE_EXPRESSION_COLOR_SCALE_OPTIONS: readonly GeneExpressionColorScaleOption[] =
+  [
+    { id: 'gold', label: 'Gold' },
+    { id: 'magma', label: 'Magma' },
+    { id: 'viridis', label: 'Viridis' },
+  ]
+
+const GENE_EXPRESSION_COLOR_STOPS: Record<
+  GeneExpressionColorScale,
+  readonly [ColorStop, ColorStop, ColorStop]
+> = {
+  gold: [
+    [111, 63, 53, 130],
+    [221, 127, 75, 196],
+    [255, 221, 99, 245],
+  ],
+  magma: [
+    [45, 15, 71, 130],
+    [195, 60, 105, 205],
+    [252, 223, 116, 245],
+  ],
+  viridis: [
+    [68, 1, 84, 130],
+    [33, 145, 140, 205],
+    [253, 231, 37, 245],
+  ],
+}
+
 const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
   target: [0, 0, 0],
   zoom: -4,
@@ -167,6 +206,7 @@ export function overviewCellsToLayerData(
 export function geneExpressionCellsToLayerData(
   cells: readonly GeneExpressionCell[],
   genes: readonly string[],
+  colorScale: GeneExpressionColorScale = DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
 ): readonly OverviewCellDatum[] {
   if (cells.length === 0) {
     return []
@@ -178,7 +218,7 @@ export function geneExpressionCellsToLayerData(
     maxCount = Math.max(maxCount, cell.count)
   }
 
-  return cells.map((cell) => {
+  const layerData = cells.map((cell): OverviewCellDatum => {
     const intensity = Math.sqrt(Math.max(cell.count, 0) / maxCount)
     const radiusMicrometers = cellAreaToRadiusMicrometers(cell.cellArea)
 
@@ -187,12 +227,7 @@ export function geneExpressionCellsToLayerData(
       position: [cell.position.x, -cell.position.y, 0],
       radiusPixels: 4 + intensity * 6,
       ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
-      fillColor: [
-        240,
-        Math.round(200 - intensity * 72),
-        Math.round(75 + intensity * 86),
-        155 + Math.round(intensity * 90),
-      ],
+      fillColor: geneExpressionColor(colorScale, intensity),
       expressionCount: cell.count,
       expressionGenes: genes,
       ...(cell.transcriptCount === undefined
@@ -201,6 +236,63 @@ export function geneExpressionCellsToLayerData(
       ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
     }
   })
+
+  return styleGeneExpressionCellsByScale(layerData, colorScale)
+}
+
+export function styleGeneExpressionCellsByScale(
+  cells: readonly OverviewCellDatum[],
+  colorScale: GeneExpressionColorScale,
+): readonly OverviewCellDatum[] {
+  if (cells.length === 0) {
+    return cells
+  }
+
+  let maxExpressionCount = 1
+
+  for (const cell of cells) {
+    maxExpressionCount = Math.max(maxExpressionCount, cell.expressionCount ?? 0)
+  }
+
+  return cells.map((cell) => {
+    const intensity = Math.sqrt(
+      Math.max(cell.expressionCount ?? 0, 0) / maxExpressionCount,
+    )
+
+    return {
+      ...cell,
+      fillColor: geneExpressionColor(colorScale, intensity),
+    }
+  })
+}
+
+export function isGeneExpressionColorScale(
+  value: string,
+): value is GeneExpressionColorScale {
+  return GENE_EXPRESSION_COLOR_SCALE_OPTIONS.some((option) => option.id === value)
+}
+
+function geneExpressionColor(
+  colorScale: GeneExpressionColorScale,
+  intensity: number,
+): Color {
+  const [lowStop, middleStop, highStop] = GENE_EXPRESSION_COLOR_STOPS[colorScale]
+  const normalizedIntensity = Math.min(1, Math.max(0, intensity))
+  const startStop = normalizedIntensity <= 0.5 ? lowStop : middleStop
+  const endStop = normalizedIntensity <= 0.5 ? middleStop : highStop
+  const t =
+    normalizedIntensity <= 0.5 ? normalizedIntensity * 2 : (normalizedIntensity - 0.5) * 2
+
+  return [
+    interpolateColorChannel(startStop[0], endStop[0], t),
+    interpolateColorChannel(startStop[1], endStop[1], t),
+    interpolateColorChannel(startStop[2], endStop[2], t),
+    interpolateColorChannel(startStop[3], endStop[3], t),
+  ]
+}
+
+function interpolateColorChannel(start: number, end: number, t: number): number {
+  return Math.round(start + (end - start) * t)
 }
 
 function cellAreaToRadiusMicrometers(cellArea: number | undefined): number | undefined {
