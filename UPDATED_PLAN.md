@@ -54,3 +54,7 @@ done. This file records execution-level additions requested after work began.
       of being silently swallowed.
 - [x] Live smoke check on `http://127.0.0.1:5173/` loaded 50,000 overview cells
       and verified the morphology canvas had non-transparent decoded pixels.
+- [x] Morphology image loading is now opt-in from the dataset form. The default
+      `Load Dataset` path loads overview cells only and does not start OME-TIFF
+      metadata, range, or JPEG-2000 decode work unless `Morphology image` is
+      selected.

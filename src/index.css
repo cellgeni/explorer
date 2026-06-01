@@ -162,6 +162,26 @@ h2 {
   color: #171511;
 }
 
+.dataset-form .morphology-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #2f2b22;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.morphology-toggle input {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: #206653;
+}
+
 .dataset-form button {
   min-height: 42px;
   border-radius: 6px;

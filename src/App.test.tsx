@@ -28,9 +28,10 @@ describe('App', () => {
     }
 
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
   })
 
-  it('loads overview cells when the dataset form is submitted', async () => {
+  it('loads overview cells without morphology image by default', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -49,6 +50,36 @@ describe('App', () => {
         loadMorphologyImage={loadMorphologyImage}
       />,
     )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    await waitFor(() => {
+      expect(loadDatasetOverview).toHaveBeenCalledWith(DEMO_DATASET_URL)
+    })
+    expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+    expect(loadMorphologyImage).not.toHaveBeenCalled()
+    expect(screen.getByTestId('deckgl')).toBeInTheDocument()
+  })
+
+  it('loads morphology image when the option is selected', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadMorphologyImage = vi.fn(async () => ({
+      url: `${DEMO_DATASET_URL}/morphology_focus/morphology_focus_0000.ome.tif`,
+      loader: {} as TiffPyramidLoader,
+    }))
+
+    render(
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadMorphologyImage={loadMorphologyImage}
+      />,
+    )
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Morphology image' }))
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {

@@ -41,6 +41,7 @@ export function App({
   loadMorphologyImage = defaultLoadMorphologyImage,
 }: AppProps) {
   const datasetInputId = useId()
+  const morphologyInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const [loadState, setLoadState] = useState<DatasetLoadState>({ status: 'idle' })
@@ -49,6 +50,7 @@ export function App({
   })
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
   const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
+  const [shouldLoadMorphology, setShouldLoadMorphology] = useState(false)
   const loadRequestId = useRef(0)
   const isLoading = loadState.status === 'loading'
   const statusCopy = datasetStatusCopy(loadState, datasetUrl)
@@ -71,6 +73,7 @@ export function App({
 
     const formData = new FormData(event.currentTarget)
     const datasetUrl = formData.get('datasetUrl')
+    const loadImage = formData.get('loadMorphologyImage') === 'on'
 
     if (typeof datasetUrl === 'string' && datasetUrl.trim().length > 0) {
       const requestedUrl = datasetUrl.trim()
@@ -81,7 +84,9 @@ export function App({
       setOverviewCells([])
       setMorphologyImage(null)
       setLoadState({ status: 'loading', url: requestedUrl })
-      setMorphologyState({ status: 'loading', url: requestedUrl })
+      setMorphologyState(
+        loadImage ? { status: 'loading', url: requestedUrl } : { status: 'idle' },
+      )
 
       try {
         const cells = await loadDatasetOverview(requestedUrl)
@@ -96,6 +101,11 @@ export function App({
           url: requestedUrl,
           cellCount: cells.length,
         })
+
+        if (!loadImage) {
+          return
+        }
+
         void loadMorphologyImage(requestedUrl)
           .then((image) => {
             if (loadRequestId.current !== requestId) {
@@ -160,6 +170,18 @@ export function App({
             defaultValue={datasetUrl}
             placeholder="https://bucket.example/output…"
           />
+          <label className="morphology-toggle" htmlFor={morphologyInputId}>
+            <input
+              id={morphologyInputId}
+              name="loadMorphologyImage"
+              type="checkbox"
+              checked={shouldLoadMorphology}
+              onChange={(event) => {
+                setShouldLoadMorphology(event.currentTarget.checked)
+              }}
+            />
+            <span>Morphology image</span>
+          </label>
           <button type="submit" disabled={isLoading}>
             {isLoading ? 'Loading...' : 'Load Dataset'}
           </button>
