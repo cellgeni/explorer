@@ -212,6 +212,21 @@ export class TiffPyramidLoader {
     return tilesForBbox(level, bbox, this.gridForLevel(level), this.units)
   }
 
+  tilesForLevel(level: number): readonly TileIndex[] {
+    const grid = this.gridForLevel(level)
+    const tiles: TileIndex[] = []
+    const nCols = Math.ceil(grid.imageWidth / grid.tileWidth)
+    const nRows = Math.ceil(grid.imageHeight / grid.tileHeight)
+
+    for (let row = 0; row < nRows; row += 1) {
+      for (let col = 0; col < nCols; col += 1) {
+        tiles.push({ col, row })
+      }
+    }
+
+    return tiles
+  }
+
   tileBounds(level: number, col: number, row: number): BBox {
     return coordsTileBounds(level, col, row, this.gridForLevel(level), this.units)
   }

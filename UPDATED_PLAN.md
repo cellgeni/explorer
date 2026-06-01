@@ -193,6 +193,10 @@ done. This file records execution-level additions requested after work began.
       now expose channel id, index, name, focus-file name, purpose, RGB display
       color, and default contrast range from the OME pixel type; the real demo
       reports DAPI, ATP1A1/CD45/E-Cadherin, 18S, and alphaSMA/Vimentin.
+- [x] Added per-channel `Auto` contrast controls. Auto contrast samples the
+      coarsest pyramid level for that channel, crops padded edge tiles, computes
+      robust percentiles, and writes the resulting min/max into the existing
+      channel contrast inputs.
 - [x] Implemented multi-channel morphology through the existing Canvas2D image
       underlay rather than introducing Viv in this slice. Each OME channel gets
       an independent TIFF loader/cache, decoded tiles are tinted and additively

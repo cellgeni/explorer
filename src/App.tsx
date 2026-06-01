@@ -28,6 +28,7 @@ import { hexBoundaryCellLimit } from './rendering/hexCellBoundaries'
 import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { BBox } from './data/coords'
+import type { ChannelAutoContrast } from './data/morphologyContrast'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
 import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
@@ -69,6 +70,10 @@ export type GeneExpressionLoader = (
   genes: readonly string[],
   options?: { readonly signal?: AbortSignal },
 ) => Promise<GeneExpressionBatch>
+export type AutoChannelContrastLoader = (
+  channel: MorphologyImageChannel,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<ChannelAutoContrast>
 
 type DatasetLoadState =
   | { readonly status: 'idle' }
@@ -170,6 +175,7 @@ export interface AppProps {
   readonly loadBoundaryElements?: BoundaryElementsLoader
   readonly loadGenePanel?: GenePanelLoader
   readonly loadGeneExpression?: GeneExpressionLoader
+  readonly computeAutoChannelContrast?: AutoChannelContrastLoader
 }
 
 export function App({
@@ -178,6 +184,7 @@ export function App({
   loadBoundaryElements = defaultLoadBoundaryElements,
   loadGenePanel = defaultLoadGenePanel,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
+  computeAutoChannelContrast = defaultComputeAutoChannelContrast,
 }: AppProps) {
   const datasetInputId = useId()
   const morphologyInputId = useId()
@@ -210,6 +217,9 @@ export function App({
   const [morphologyChannelSettings, setMorphologyChannelSettings] = useState<
     readonly MorphologyChannelSetting[]
   >([])
+  const [autoContrastChannelIds, setAutoContrastChannelIds] = useState<readonly string[]>(
+    [],
+  )
   const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(false)
   const [boundaryCellLimit, setBoundaryCellLimit] = useState(BOUNDARY_VIEWPORT_CELL_LIMIT)
@@ -499,6 +509,7 @@ export function App({
       setGeneExpressionCells([])
       setMorphologyImage(null)
       setMorphologyChannelSettings([])
+      setAutoContrastChannelIds([])
       setBoundaryElements([])
       setSelectedCell(null)
       setLoadState({ status: 'loading', url: requestedUrl })
@@ -625,6 +636,50 @@ export function App({
     )
   }
 
+  function handleAutoContrast(channel: MorphologyImageChannel) {
+    const channelId = channel.info.id
+
+    if (autoContrastChannelIds.includes(channelId)) {
+      return
+    }
+
+    const requestId = loadRequestId.current
+    const signal = datasetAbortRef.current?.signal
+    setAutoContrastChannelIds((current) =>
+      current.includes(channelId) ? current : [...current, channelId],
+    )
+
+    void computeAutoChannelContrast(channel, signal === undefined ? {} : { signal })
+      .then((contrast) => {
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
+        updateMorphologyChannel(channelId, {
+          contrastMin: contrast.min,
+          contrastMax: contrast.max,
+        })
+      })
+      .catch((error) => {
+        if (isAbortError(error) || loadRequestId.current !== requestId) {
+          return
+        }
+
+        setMorphologyState({
+          status: 'error',
+          url: channel.loader.url,
+          error: createStructuredLoadError('Image tiles', error),
+        })
+      })
+      .finally(() => {
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
+        setAutoContrastChannelIds((current) => current.filter((id) => id !== channelId))
+      })
+  }
+
   return (
     <main className="app-shell">
       <a className="skip-link" href="#viewer-heading">
@@ -743,6 +798,8 @@ export function App({
           <MorphologyChannelControls
             channels={morphologyImage?.channelLoaders ?? []}
             settings={morphologyChannelSettings}
+            autoContrastChannelIds={autoContrastChannelIds}
+            onAutoContrast={handleAutoContrast}
             onUpdate={updateMorphologyChannel}
           />
         </section>
@@ -913,6 +970,14 @@ function datasetStatusCopy(
   return { label: 'Queued dataset', url: queuedUrl }
 }
 
+async function defaultComputeAutoChannelContrast(
+  channel: MorphologyImageChannel,
+  options: { readonly signal?: AbortSignal } = {},
+): Promise<ChannelAutoContrast> {
+  const morphologyContrast = await import('./data/morphologyContrast')
+  return morphologyContrast.computeChannelAutoContrast(channel.loader, options)
+}
+
 function genePanelStatusCopy(genePanelState: GenePanelState): string {
   if (genePanelState.status === 'loading') {
     return 'Loading'
@@ -1014,11 +1079,15 @@ function CellInfoPanel({ cell }: { readonly cell: OverviewCellDatum | null }) {
 }
 
 function MorphologyChannelControls({
+  autoContrastChannelIds,
   channels,
+  onAutoContrast,
   settings,
   onUpdate,
 }: {
+  readonly autoContrastChannelIds: readonly string[]
   readonly channels: readonly MorphologyImageChannel[]
+  readonly onAutoContrast: (channel: MorphologyImageChannel) => void
   readonly settings: readonly MorphologyChannelSetting[]
   readonly onUpdate: (
     id: string,
@@ -1036,6 +1105,7 @@ function MorphologyChannelControls({
         const color = setting?.color ?? channel.info.color
         const contrastMin = setting?.contrastMin ?? channel.info.contrast.min
         const contrastMax = setting?.contrastMax ?? channel.info.contrast.max
+        const isAutoContrastLoading = autoContrastChannelIds.includes(channel.info.id)
 
         return (
           <div className="channel-control" key={channel.info.id}>
@@ -1058,6 +1128,17 @@ function MorphologyChannelControls({
                 onUpdate(channel.info.id, { color: hexToRgb(event.currentTarget.value) })
               }}
             />
+            <button
+              className="channel-auto-button"
+              type="button"
+              aria-label={`${channel.info.name} auto contrast`}
+              disabled={isAutoContrastLoading}
+              onClick={() => {
+                onAutoContrast(channel)
+              }}
+            >
+              {isAutoContrastLoading ? '...' : 'Auto'}
+            </button>
             <div className="channel-contrast">
               <input
                 type="number"

@@ -164,12 +164,14 @@ describe('App', () => {
       ],
     }))
     const loadGenePanel = vi.fn(async () => [])
+    const computeAutoChannelContrast = vi.fn(async () => ({ min: 12, max: 345 }))
 
     render(
       <App
         loadDatasetOverview={loadDatasetOverview}
         loadMorphologyImage={loadMorphologyImage}
         loadGenePanel={loadGenePanel}
+        computeAutoChannelContrast={computeAutoChannelContrast}
       />,
     )
     fireEvent.click(screen.getByRole('checkbox', { name: 'Morphology image' }))
@@ -197,6 +199,19 @@ describe('App', () => {
     expect(await screen.findByRole('checkbox', { name: 'DAPI' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Boundary' })).not.toBeChecked()
     expect(screen.getByLabelText('DAPI color')).toHaveValue('#5890ff')
+
+    fireEvent.click(screen.getByRole('button', { name: 'DAPI auto contrast' }))
+
+    await waitFor(() => {
+      expect(computeAutoChannelContrast).toHaveBeenCalledWith(
+        { info: dapiChannel, loader: dapiLoader },
+        expect.objectContaining({
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+    })
+    expect(screen.getByLabelText('DAPI minimum')).toHaveValue(12)
+    expect(screen.getByLabelText('DAPI maximum')).toHaveValue(345)
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Boundary' }))
 

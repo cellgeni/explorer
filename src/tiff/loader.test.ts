@@ -132,6 +132,32 @@ describe('TiffPyramidLoader', () => {
     })
   })
 
+  it('enumerates all tiles for a pyramid level, including partial edges', () => {
+    const levels = new Map<number, TiffLevelMeta>([
+      [0, { width: imagePixels(260), height: imagePixels(180), nCols: 3, nRows: 2 }],
+    ])
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/image.ome.tif',
+      chunkIndex: new Map<string, TiffChunk>(),
+      levelMeta: levels,
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 1,
+      imageWidth: imagePixels(260),
+      imageHeight: imagePixels(180),
+    })
+
+    expect(loader.tilesForLevel(0)).toEqual([
+      { col: 0, row: 0 },
+      { col: 1, row: 0 },
+      { col: 2, row: 0 },
+      { col: 0, row: 1 },
+      { col: 1, row: 1 },
+      { col: 2, row: 1 },
+    ])
+  })
+
   it('reuses persistent cached tile byte ranges', async () => {
     const chunks = new Map<string, TiffChunk>([['0/1/2', { offset: 10, length: 4 }]])
     const levels = new Map<number, TiffLevelMeta>([
