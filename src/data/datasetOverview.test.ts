@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_OVERVIEW_CELL_LIMIT,
   cellsParquetUrl,
@@ -13,6 +13,22 @@ describe('dataset overview loader', () => {
     )
   })
 
+  it('validates Range support before reading cells.parquet', async () => {
+    const validateRangeSupport = vi.fn(async () => undefined)
+    const readCells = vi.fn(async () => [])
+
+    await loadDatasetOverview('https://example.test/xenium/', {
+      readCells,
+      validateRangeSupport,
+    })
+
+    expect(validateRangeSupport).toHaveBeenCalledWith(
+      'https://example.test/xenium/cells.parquet',
+      { label: 'cells.parquet' },
+    )
+    expect(readCells).toHaveBeenCalled()
+  })
+
   it('uses the default first-paint cell limit', async () => {
     const calls: ReadCellsOverviewOptions[] = []
 
@@ -21,6 +37,7 @@ describe('dataset overview loader', () => {
         calls.push(options)
         return []
       },
+      validateRangeSupport: async () => undefined,
     })
 
     expect(calls).toEqual([
@@ -40,6 +57,7 @@ describe('dataset overview loader', () => {
         calls.push(options)
         return []
       },
+      validateRangeSupport: async () => undefined,
     })
 
     expect(calls).toEqual([
@@ -59,6 +77,7 @@ describe('dataset overview loader', () => {
         calls.push(options)
         return []
       },
+      validateRangeSupport: async () => undefined,
     })
 
     expect(calls).toEqual([

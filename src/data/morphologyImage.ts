@@ -1,4 +1,5 @@
 import { openTiff } from '../tiff/loader'
+import { datasetFileUrl } from './datasetFiles'
 import type { TiffPyramidLoader } from '../tiff/loader'
 
 export const XENIUM_MORPHOLOGY_CANDIDATES = [
@@ -40,10 +41,6 @@ export async function loadMorphologyImage(
   }
 
   throw new Error('No supported Xenium OME-TIFF image was found.')
-}
-
-export function datasetFileUrl(baseUrl: string, path: string): string {
-  return `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
 }
 
 async function imageExists(url: string, fetcher: typeof fetch): Promise<boolean> {

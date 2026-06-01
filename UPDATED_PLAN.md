@@ -108,3 +108,26 @@ done. This file records execution-level additions requested after work began.
 - [x] The intermediate hexagon-boundary mode is not a simplified true boundary. It
       is generated locally from centroids and `cell_area`, so it adds no
       boundary-Parquet I/O and remains cheap enough for roughly 3,000 cells.
+
+## Phase 2 Running TODO
+
+- [x] S3/CORS playbook (§4); fail loudly if Range unsupported.
+- [x] Range-read `cell_boundaries.parquet` (remove full-download path).
+- [ ] OPFS/IndexedDB cache for tiles + Parquet footers; persist the LRU.
+- [ ] `AbortController` cancellation per viewport version (extend existing
+      versioning to all fetches).
+- [ ] Read `experiment.xenium` manifest to know which files exist (replace
+      HEAD-guessing in `loadMorphologyImage`).
+- [ ] Structured error states surfaced to UI.
+
+## Phase 2 Notes
+
+- [x] Added `docs/s3-cors-playbook.md` with the required CORS policy, object
+      serving rules, and a manual one-byte Range check.
+- [x] Added a browser Range probe that requires HTTP 206 plus an exposed
+      `Content-Range` header before reading `cells.parquet` or
+      `cell_boundaries.parquet`, so S3/CORS misconfiguration stops with an
+      actionable UI error instead of a downstream parser failure.
+- [x] Rechecked the boundary path for the Phase 2 range-read task: the app uses
+      DuckDB `read_parquet(?)` against the remote `cell_boundaries.parquet` URL
+      and no longer has a full-download boundary path in `src/`.

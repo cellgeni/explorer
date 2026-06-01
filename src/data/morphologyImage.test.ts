@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { datasetFileUrl, loadMorphologyImage } from './morphologyImage'
+import { datasetFileUrl } from './datasetFiles'
+import { loadMorphologyImage } from './morphologyImage'
 import type { TiffPyramidLoader } from '../tiff/loader'
 
 describe('morphology image loader', () => {

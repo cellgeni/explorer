@@ -22,13 +22,19 @@ describe('dataset boundary loader', () => {
       image: vi.fn(),
     }
     const getDataset = vi.fn(() => dataset)
+    const validateRangeSupport = vi.fn(async () => undefined)
 
     await expect(
       loadDatasetBoundaryElements('https://example.test/xenium/', bbox, {
         getDataset,
+        validateRangeSupport,
       }),
     ).resolves.toEqual({ elements })
 
+    expect(validateRangeSupport).toHaveBeenCalledWith(
+      'https://example.test/xenium/cell_boundaries.parquet',
+      { label: 'cell_boundaries.parquet' },
+    )
     expect(getDataset).toHaveBeenCalledWith('https://example.test/xenium/')
     expect(dataset.elements).toHaveBeenCalledWith(bbox)
   })
