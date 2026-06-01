@@ -54,6 +54,7 @@ export interface ReadCellsOverviewOptions {
   readonly fetcher?: typeof fetch
   readonly readObjects?: HyparquetObjectReader
   readonly byteRangeCache?: PersistentByteRangeCache | null
+  readonly signal?: AbortSignal
 }
 
 export async function readCellsOverview(
@@ -84,6 +85,7 @@ async function fileFromUrl(options: ReadCellsOverviewOptions): Promise<AsyncBuff
   const file = await asyncBufferFromUrl({
     url: options.url,
     ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
+    ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
   })
   const byteRangeCache =
     options.byteRangeCache === undefined

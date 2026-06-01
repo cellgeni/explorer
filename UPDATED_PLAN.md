@@ -114,7 +114,7 @@ done. This file records execution-level additions requested after work began.
 - [x] S3/CORS playbook (§4); fail loudly if Range unsupported.
 - [x] Range-read `cell_boundaries.parquet` (remove full-download path).
 - [x] OPFS/IndexedDB cache for tiles + Parquet footers; persist the LRU.
-- [ ] `AbortController` cancellation per viewport version (extend existing
+- [x] `AbortController` cancellation per viewport version (extend existing
       versioning to all fetches).
 - [ ] Read `experiment.xenium` manifest to know which files exist (replace
       HEAD-guessing in `loadMorphologyImage`).
@@ -152,6 +152,12 @@ done. This file records execution-level additions requested after work began.
       TIFF tile byte ranges are cached by URL/range before JPEG-2000 decode, and
       hyparquet footer-like slices are cached for warm metadata reads without
       caching large column pages.
+- [x] Extended request-version cancellation with `AbortController`s. Dataset
+      loads, gene panels, morphology candidate checks, TIFF opening, Range
+      probes, hyparquet overview reads, boundary range probes, and expression
+      range probes now receive abort signals; DuckDB/Zarr stages that do not
+      expose abortable fetch internals are guarded between awaits so stale
+      viewport requests stop before updating UI state.
 
 ## Requested Analysis Features
 

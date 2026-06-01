@@ -15,8 +15,9 @@ export interface MorphologyImage {
 
 export interface LoadMorphologyImageOptions {
   readonly fetcher?: typeof fetch
-  readonly openImage?: (url: string) => Promise<TiffPyramidLoader>
+  readonly openImage?: (url: string, signal?: AbortSignal) => Promise<TiffPyramidLoader>
   readonly candidates?: readonly string[]
+  readonly signal?: AbortSignal
 }
 
 export async function loadMorphologyImage(
@@ -30,24 +31,38 @@ export async function loadMorphologyImage(
   for (const candidate of candidates) {
     const url = datasetFileUrl(baseUrl, candidate)
 
-    if (!(await imageExists(url, fetcher))) {
+    if (!(await imageExists(url, fetcher, options.signal))) {
       continue
     }
 
     return {
       url,
-      loader: await openImage(url),
+      loader:
+        options.signal === undefined
+          ? await openImage(url)
+          : await openImage(url, options.signal),
     }
   }
 
   throw new Error('No supported Xenium OME-TIFF image was found.')
 }
 
-async function imageExists(url: string, fetcher: typeof fetch): Promise<boolean> {
+async function imageExists(
+  url: string,
+  fetcher: typeof fetch,
+  signal: AbortSignal | undefined,
+): Promise<boolean> {
   try {
-    const response = await fetcher(url, { method: 'HEAD' })
+    const response = await fetcher(url, {
+      method: 'HEAD',
+      ...(signal === undefined ? {} : { signal }),
+    })
     return response.ok
-  } catch {
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === 'AbortError') {
+      throw cause
+    }
+
     return false
   }
 }

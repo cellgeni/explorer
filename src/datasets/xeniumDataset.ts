@@ -67,6 +67,7 @@ export interface GeneExpressionBatch {
 
 export interface GeneExpressionQueryOptions {
   readonly limit?: number
+  readonly signal?: AbortSignal
 }
 
 interface ViewportCell {
@@ -222,7 +223,9 @@ ORDER BY b.cell_id, b.file_row_number
     }
 
     const limit = options.limit ?? 5_000
+    throwIfAborted(options.signal)
     const viewportCells = await this.cellsForBbox(bbox, limit)
+    throwIfAborted(options.signal)
 
     if (viewportCells.length === 0) {
       return {
@@ -233,6 +236,7 @@ ORDER BY b.cell_id, b.file_row_number
     }
 
     const matrix = await this.matrix(viewportCells.map((cell) => cell.id))
+    throwIfAborted(options.signal)
     const selectedGeneSet = new Set(selectedGenes)
     const cells: GeneExpressionCell[] = []
     let maxCount = 0
@@ -422,6 +426,22 @@ LIMIT ?
   private urlFor(path: string): string {
     return `${this.baseUrl}/${path}`
   }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw abortError(signal)
+  }
+}
+
+function abortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason
+  }
+
+  const error = new Error('Xenium dataset request aborted.')
+  error.name = 'AbortError'
+  return error
 }
 
 function normalizeBaseUrl(baseUrl: string): string {

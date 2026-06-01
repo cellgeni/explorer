@@ -42,19 +42,31 @@ const GENE_EXPRESSION_VIEWPORT_CELL_LIMIT = 5_000
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
-  options?: { readonly limit?: number | null; readonly includeCellIds?: boolean },
+  options?: {
+    readonly limit?: number | null
+    readonly includeCellIds?: boolean
+    readonly signal?: AbortSignal
+  },
 ) => Promise<readonly CellOverviewPoint[]>
 
-export type MorphologyImageLoader = (baseUrl: string) => Promise<MorphologyImage>
+export type MorphologyImageLoader = (
+  baseUrl: string,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<MorphologyImage>
 export type BoundaryElementsLoader = (
   baseUrl: string,
   bbox: BBox,
+  options?: { readonly signal?: AbortSignal },
 ) => Promise<ElementBatch>
-export type GenePanelLoader = (baseUrl: string) => Promise<readonly string[]>
+export type GenePanelLoader = (
+  baseUrl: string,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<readonly string[]>
 export type GeneExpressionLoader = (
   baseUrl: string,
   bbox: BBox,
   genes: readonly string[],
+  options?: { readonly signal?: AbortSignal },
 ) => Promise<GeneExpressionBatch>
 
 type DatasetLoadState =
@@ -155,6 +167,9 @@ export function App({
   const loadRequestId = useRef(0)
   const boundaryRequestId = useRef(0)
   const geneExpressionRequestId = useRef(0)
+  const datasetAbortRef = useRef<AbortController | null>(null)
+  const boundaryAbortRef = useRef<AbortController | null>(null)
+  const geneExpressionAbortRef = useRef<AbortController | null>(null)
   const boundaryViewportKeyRef = useRef<string | null>(null)
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
@@ -208,6 +223,7 @@ export function App({
       lastViewportDetailRef.current = detail
 
       if (!shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })) {
+        abortActiveRequest(boundaryAbortRef)
         boundaryRequestId.current += 1
         boundaryViewportKeyRef.current = null
         setBoundaryElements((current) => (current.length === 0 ? current : []))
@@ -218,12 +234,17 @@ export function App({
         const requestKey = boundaryViewportKey(loadState.url, detail.bbox)
 
         if (requestKey !== boundaryViewportKeyRef.current) {
+          abortActiveRequest(boundaryAbortRef)
           const requestId = boundaryRequestId.current + 1
+          const abortController = new AbortController()
           boundaryRequestId.current = requestId
+          boundaryAbortRef.current = abortController
           boundaryViewportKeyRef.current = requestKey
           setBoundaryState({ status: 'loading', url: loadState.url })
 
-          void loadBoundaryElements(loadState.url, detail.bbox)
+          void loadBoundaryElements(loadState.url, detail.bbox, {
+            signal: abortController.signal,
+          })
             .then((batch) => {
               if (boundaryRequestId.current !== requestId) {
                 return
@@ -237,6 +258,10 @@ export function App({
               })
             })
             .catch((error) => {
+              if (isAbortError(error)) {
+                return
+              }
+
               if (boundaryRequestId.current !== requestId) {
                 return
               }
@@ -248,10 +273,16 @@ export function App({
                 message: readErrorMessage(error),
               })
             })
+            .finally(() => {
+              if (boundaryAbortRef.current === abortController) {
+                boundaryAbortRef.current = null
+              }
+            })
         }
       }
 
       if (selectedGenes.length === 0) {
+        abortActiveRequest(geneExpressionAbortRef)
         geneExpressionRequestId.current += 1
         geneExpressionViewportKeyRef.current = null
         setGeneExpressionCells((current) => (current.length === 0 ? current : []))
@@ -262,6 +293,7 @@ export function App({
       }
 
       if (detail.visibleCellCount > GENE_EXPRESSION_VIEWPORT_CELL_LIMIT) {
+        abortActiveRequest(geneExpressionAbortRef)
         geneExpressionRequestId.current += 1
         geneExpressionViewportKeyRef.current = null
         setGeneExpressionCells((current) => (current.length === 0 ? current : []))
@@ -279,7 +311,10 @@ export function App({
       }
 
       const expressionRequestId = geneExpressionRequestId.current + 1
+      abortActiveRequest(geneExpressionAbortRef)
+      const expressionAbortController = new AbortController()
       geneExpressionRequestId.current = expressionRequestId
+      geneExpressionAbortRef.current = expressionAbortController
       geneExpressionViewportKeyRef.current = expressionKey
       setGeneExpressionState({
         status: 'loading',
@@ -287,7 +322,9 @@ export function App({
         genes: selectedGenes,
       })
 
-      void loadGeneExpression(loadState.url, detail.bbox, selectedGenes)
+      void loadGeneExpression(loadState.url, detail.bbox, selectedGenes, {
+        signal: expressionAbortController.signal,
+      })
         .then((batch) => {
           if (geneExpressionRequestId.current !== expressionRequestId) {
             return
@@ -302,6 +339,10 @@ export function App({
           })
         })
         .catch((error) => {
+          if (isAbortError(error)) {
+            return
+          }
+
           if (geneExpressionRequestId.current !== expressionRequestId) {
             return
           }
@@ -312,6 +353,11 @@ export function App({
             url: loadState.url,
             message: readErrorMessage(error),
           })
+        })
+        .finally(() => {
+          if (geneExpressionAbortRef.current === expressionAbortController) {
+            geneExpressionAbortRef.current = null
+          }
         })
     },
     [
@@ -331,6 +377,14 @@ export function App({
     }
   }, [handleViewportChange])
 
+  useEffect(() => {
+    return () => {
+      abortActiveRequest(datasetAbortRef)
+      abortActiveRequest(boundaryAbortRef)
+      abortActiveRequest(geneExpressionAbortRef)
+    }
+  }, [])
+
   async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -341,7 +395,12 @@ export function App({
     if (typeof datasetUrl === 'string' && datasetUrl.trim().length > 0) {
       const requestedUrl = datasetUrl.trim()
       const requestId = loadRequestId.current + 1
+      abortActiveRequest(datasetAbortRef)
+      abortActiveRequest(boundaryAbortRef)
+      abortActiveRequest(geneExpressionAbortRef)
+      const abortController = new AbortController()
       loadRequestId.current = requestId
+      datasetAbortRef.current = abortController
 
       setDatasetUrl(requestedUrl)
       setOverviewCells([])
@@ -362,7 +421,7 @@ export function App({
       geneExpressionViewportKeyRef.current = null
       lastViewportDetailRef.current = null
 
-      void loadGenePanel(requestedUrl)
+      void loadGenePanel(requestedUrl, { signal: abortController.signal })
         .then((genes) => {
           if (loadRequestId.current !== requestId) {
             return
@@ -371,6 +430,10 @@ export function App({
           setGenePanelState({ status: 'ready', url: requestedUrl, genes })
         })
         .catch((error) => {
+          if (isAbortError(error)) {
+            return
+          }
+
           if (loadRequestId.current !== requestId) {
             return
           }
@@ -386,6 +449,7 @@ export function App({
         const cells = await loadDatasetOverview(requestedUrl, {
           includeCellIds: false,
           limit: null,
+          signal: abortController.signal,
         })
 
         if (loadRequestId.current !== requestId) {
@@ -403,7 +467,7 @@ export function App({
           return
         }
 
-        void loadMorphologyImage(requestedUrl)
+        void loadMorphologyImage(requestedUrl, { signal: abortController.signal })
           .then((image) => {
             if (loadRequestId.current !== requestId) {
               return
@@ -416,6 +480,10 @@ export function App({
             })
           })
           .catch((error) => {
+            if (isAbortError(error)) {
+              return
+            }
+
             if (loadRequestId.current !== requestId) {
               return
             }
@@ -427,6 +495,10 @@ export function App({
             })
           })
       } catch (error) {
+        if (isAbortError(error)) {
+          return
+        }
+
         if (loadRequestId.current !== requestId) {
           return
         }
@@ -836,6 +908,15 @@ function formatNumber(value: number | undefined): string {
   return value === undefined
     ? '0'
     : value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
+
+function abortActiveRequest(ref: { current: AbortController | null }): void {
+  ref.current?.abort()
+  ref.current = null
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 function readErrorMessage(error: unknown): string {

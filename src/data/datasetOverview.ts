@@ -20,6 +20,7 @@ export interface LoadDatasetOverviewOptions {
   readonly includeCellIds?: boolean
   readonly readCells?: CellsOverviewReader
   readonly validateRangeSupport?: DatasetRangeValidator
+  readonly signal?: AbortSignal
 }
 
 export async function loadDatasetOverview(
@@ -32,7 +33,10 @@ export async function loadDatasetOverview(
   const limit =
     options.limit === null ? undefined : (options.limit ?? DEFAULT_OVERVIEW_CELL_LIMIT)
 
-  await validateRangeSupport(url, { label: 'cells.parquet' })
+  await validateRangeSupport(url, {
+    label: 'cells.parquet',
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
 
   return readCells({
     url,
@@ -40,6 +44,7 @@ export async function loadDatasetOverview(
       ? {}
       : { includeCellIds: options.includeCellIds }),
     ...(limit === undefined ? {} : { limit }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
 }
 

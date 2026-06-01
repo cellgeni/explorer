@@ -3,6 +3,7 @@ export type RangeSupportFetcher = typeof fetch
 export interface AssertHttpRangeSupportOptions {
   readonly fetcher?: RangeSupportFetcher
   readonly label?: string
+  readonly signal?: AbortSignal
 }
 
 const RANGE_PROBE_HEADER = 'bytes=0-0'
@@ -20,8 +21,13 @@ export async function assertHttpRangeSupport(
       headers: {
         Range: RANGE_PROBE_HEADER,
       },
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
   } catch (cause) {
+    if (isAbortError(cause)) {
+      throw cause
+    }
+
     throw new Error(
       `${readTargetLabel(options.label)} cannot be range-read. The Range probe failed before an HTTP response was available. Confirm CORS allows GET and the Range request header for ${url}.`,
       { cause },
@@ -45,4 +51,8 @@ export async function assertHttpRangeSupport(
 
 function readTargetLabel(label: string | undefined): string {
   return label ?? 'Dataset file'
+}
+
+function isAbortError(cause: unknown): boolean {
+  return cause instanceof Error && cause.name === 'AbortError'
 }

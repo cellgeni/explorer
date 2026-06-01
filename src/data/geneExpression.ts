@@ -10,6 +10,7 @@ import type { DatasetRangeValidator } from './datasetOverview'
 
 export interface LoadDatasetGeneExpressionOptions extends GeneExpressionQueryOptions {
   readonly validateRangeSupport?: DatasetRangeValidator
+  readonly signal?: AbortSignal
 }
 
 export async function loadDatasetGeneExpression(
@@ -30,11 +31,31 @@ export async function loadDatasetGeneExpression(
 
   await validateRangeSupport(datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip'), {
     label: 'cell_feature_matrix.zarr.zip',
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
+  throwIfAborted(options.signal)
 
   const dataset = await cachedXeniumDataset(baseUrl)
+  throwIfAborted(options.signal)
 
   return dataset.geneExpression(bbox, genes, {
     ...(options.limit === undefined ? {} : { limit: options.limit }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw abortError(signal)
+  }
+}
+
+function abortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason
+  }
+
+  const error = new Error('Gene expression request aborted.')
+  error.name = 'AbortError'
+  return error
 }

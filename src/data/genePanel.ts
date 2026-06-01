@@ -3,6 +3,7 @@ import { datasetFileUrl } from './datasetFiles'
 
 export interface LoadGenePanelOptions {
   readonly fetcher?: typeof fetch
+  readonly signal?: AbortSignal
 }
 
 const GENE_NAME_KEYS = ['gene_name', 'gene', 'feature_name', 'symbol', 'target'] as const
@@ -15,7 +16,10 @@ export async function loadGenePanel(
 ): Promise<readonly string[]> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
   const url = datasetFileUrl(baseUrl, 'gene_panel.json')
-  const response = await fetcher(url)
+  const response =
+    options.signal === undefined
+      ? await fetcher(url)
+      : await fetcher(url, { signal: options.signal })
 
   if (!response.ok) {
     throw new Error(`Unable to load gene_panel.json: HTTP ${response.status}.`)

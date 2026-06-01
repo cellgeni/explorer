@@ -106,14 +106,23 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {
-      expect(loadDatasetOverview).toHaveBeenCalledWith(DEMO_DATASET_URL, {
-        includeCellIds: false,
-        limit: null,
-      })
+      expect(loadDatasetOverview).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.objectContaining({
+          includeCellIds: false,
+          limit: null,
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
     })
     expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
     expect(loadMorphologyImage).not.toHaveBeenCalled()
-    expect(loadGenePanel).toHaveBeenCalledWith(DEMO_DATASET_URL)
+    expect(loadGenePanel).toHaveBeenCalledWith(
+      DEMO_DATASET_URL,
+      expect.objectContaining({
+        signal: expect.any(AbortSignal) as AbortSignal,
+      }),
+    )
     expect(screen.getByTestId('deckgl')).toBeInTheDocument()
   })
 
@@ -142,13 +151,22 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {
-      expect(loadDatasetOverview).toHaveBeenCalledWith(DEMO_DATASET_URL, {
-        includeCellIds: false,
-        limit: null,
-      })
+      expect(loadDatasetOverview).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.objectContaining({
+          includeCellIds: false,
+          limit: null,
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
     })
     await waitFor(() => {
-      expect(loadMorphologyImage).toHaveBeenCalledWith(DEMO_DATASET_URL)
+      expect(loadMorphologyImage).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
     })
     expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
     expect(screen.getByTestId('deckgl')).toBeInTheDocument()
@@ -170,10 +188,14 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {
-      expect(loadDatasetOverview).toHaveBeenCalledWith(DEMO_DATASET_URL, {
-        includeCellIds: false,
-        limit: null,
-      })
+      expect(loadDatasetOverview).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.objectContaining({
+          includeCellIds: false,
+          limit: null,
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
     })
   })
 
