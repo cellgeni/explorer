@@ -32,7 +32,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -42,7 +43,8 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 3px solid #d73f7c;
   outline-offset: 3px;
 }
@@ -133,14 +135,19 @@ h2 {
   font-size: clamp(1rem, 2.4vw, 1.35rem);
 }
 
-.dataset-form {
+.dataset-form,
+.analysis-section {
   display: grid;
   gap: 7px;
 }
 
 .dataset-form label,
+.analysis-section label,
 .layer-section h2,
-.layer-section p {
+.layer-section p,
+.analysis-section h2,
+.analysis-section p,
+.section-heading-row span {
   color: #2f2b22;
   font-size: 0.68rem;
   font-weight: 800;
@@ -152,7 +159,9 @@ h2 {
   color: #7b4d1d;
 }
 
-.dataset-form input {
+.dataset-form input,
+.analysis-section input,
+.analysis-section select {
   width: 100%;
   min-width: 0;
   padding: 8px 10px;
@@ -161,6 +170,14 @@ h2 {
   background: #fffdf7;
   color: #171511;
   font-size: 0.82rem;
+}
+
+.analysis-section select {
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, #2f2b22 50%) calc(100% - 14px) 50% / 5px 5px
+      no-repeat,
+    #fffdf7;
 }
 
 .dataset-form .dataset-toggle {
@@ -213,6 +230,98 @@ h2 {
 .layer-section {
   display: grid;
   gap: 8px;
+}
+
+.analysis-section {
+  padding-top: 2px;
+}
+
+.section-heading-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.section-heading-row span {
+  color: #7b4d1d;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.gene-chip-row,
+.gene-option-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.gene-chip,
+.gene-option-list button {
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid rgba(23, 21, 17, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.86);
+  color: #2f2b22;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.gene-chip,
+.gene-option-list button.selected {
+  border-color: rgba(215, 63, 124, 0.66);
+  background: rgba(215, 63, 124, 0.12);
+  color: #7f2048;
+}
+
+.gene-option-list {
+  max-height: 96px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.analysis-status,
+.cell-info-empty {
+  margin: 0;
+  color: #7b4d1d;
+  overflow-wrap: anywhere;
+}
+
+.cell-info-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.cell-info-list div {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.cell-info-list dt,
+.cell-info-list dd {
+  min-width: 0;
+  margin: 0;
+  color: #2f2b22;
+  font-size: 0.75rem;
+}
+
+.cell-info-list dt {
+  color: #7b4d1d;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.cell-info-list dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .layer-section ul {

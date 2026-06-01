@@ -2,6 +2,7 @@ import type { Color, LayersList, Position } from '@deck.gl/core'
 import { OrthographicView, VERSION as deckVersion } from '@deck.gl/core'
 import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
+import type { GeneExpressionCell } from '../datasets/xeniumDataset'
 import type { SpatialElement } from '../datasets/spatialDataset'
 
 export interface OverviewCellDatum {
@@ -11,6 +12,10 @@ export interface OverviewCellDatum {
   readonly radiusMicrometers?: number
   readonly fillColor: Color
   readonly cellCount?: number
+  readonly transcriptCount?: number
+  readonly cellArea?: number
+  readonly expressionCount?: number
+  readonly expressionGenes?: readonly string[]
 }
 
 export interface OverviewViewState {
@@ -45,6 +50,7 @@ export function createOverviewLayers(
   cells: readonly OverviewCellDatum[],
   boundaries: readonly CellBoundaryDatum[] = [],
   hexBoundaries: readonly CellBoundaryDatum[] = [],
+  expressionCells: readonly OverviewCellDatum[] = [],
 ): LayersList {
   const layers: LayersList = [
     new ScatterplotLayer<OverviewCellDatum>({
@@ -59,6 +65,26 @@ export function createOverviewLayers(
       getFillColor: (cell) => cell.fillColor,
     }),
   ]
+
+  if (expressionCells.length > 0) {
+    layers.push(
+      new ScatterplotLayer<OverviewCellDatum>({
+        id: 'gene-expression-scatter',
+        data: expressionCells,
+        pickable: true,
+        radiusUnits: 'common',
+        radiusMinPixels: 3,
+        radiusMaxPixels: 18,
+        stroked: true,
+        lineWidthMinPixels: 1,
+        getPosition: (cell) => cell.position,
+        getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
+        getFillColor: (cell) => cell.fillColor,
+        getLineColor: [255, 253, 247, 230],
+        getLineWidth: 1,
+      }),
+    )
+  }
 
   if (hexBoundaries.length > 0 && boundaries.length === 0) {
     layers.push(
@@ -122,6 +148,47 @@ export function overviewCellsToLayerData(
       radiusPixels: 2 + intensity * 3,
       ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
       fillColor: [215, 63, 124, 150 + Math.round(intensity * 90)],
+      transcriptCount: cell.transcriptCount,
+      ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
+    }
+  })
+}
+
+export function geneExpressionCellsToLayerData(
+  cells: readonly GeneExpressionCell[],
+  genes: readonly string[],
+): readonly OverviewCellDatum[] {
+  if (cells.length === 0) {
+    return []
+  }
+
+  let maxCount = 1
+
+  for (const cell of cells) {
+    maxCount = Math.max(maxCount, cell.count)
+  }
+
+  return cells.map((cell) => {
+    const intensity = Math.sqrt(Math.max(cell.count, 0) / maxCount)
+    const radiusMicrometers = cellAreaToRadiusMicrometers(cell.cellArea)
+
+    return {
+      id: cell.id,
+      position: [cell.position.x, -cell.position.y, 0],
+      radiusPixels: 4 + intensity * 6,
+      ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
+      fillColor: [
+        240,
+        Math.round(200 - intensity * 72),
+        Math.round(75 + intensity * 86),
+        155 + Math.round(intensity * 90),
+      ],
+      expressionCount: cell.count,
+      expressionGenes: genes,
+      ...(cell.transcriptCount === undefined
+        ? {}
+        : { transcriptCount: cell.transcriptCount }),
+      ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
     }
   })
 }

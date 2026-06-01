@@ -20,6 +20,7 @@ export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface ViewerCoreProps {
   readonly cells?: readonly OverviewCellDatum[]
+  readonly expressionCells?: readonly OverviewCellDatum[]
   readonly boundaries?: readonly CellBoundaryDatum[]
   readonly imageLoader?: TiffPyramidLoader | null
   readonly status?: ViewerLoadStatus
@@ -31,6 +32,7 @@ export interface ViewerCoreProps {
   readonly hexBoundaryMaxVisibleCells?: number
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
+  readonly onCellClick?: (cell: OverviewCellDatum) => void
 }
 
 export interface ViewerViewportDetail {
@@ -41,6 +43,7 @@ export interface ViewerViewportDetail {
 
 export function ViewerCore({
   cells = [],
+  expressionCells = [],
   boundaries = [],
   imageLoader = null,
   status = 'idle',
@@ -52,6 +55,7 @@ export function ViewerCore({
   hexBoundaryMaxVisibleCells = 0,
   onImageTileError,
   onViewportChange,
+  onCellClick,
 }: ViewerCoreProps) {
   const fittedViewState = useMemo(() => createOverviewViewState(cells), [cells])
   const resetKey = viewStateKey(fittedViewState)
@@ -60,6 +64,7 @@ export function ViewerCore({
     <ViewerSurface
       key={resetKey}
       cells={cells}
+      expressionCells={expressionCells}
       boundaries={boundaries}
       imageLoader={imageLoader}
       initialViewState={fittedViewState}
@@ -72,12 +77,14 @@ export function ViewerCore({
       hexBoundaryMaxVisibleCells={hexBoundaryMaxVisibleCells}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
+      {...(onCellClick === undefined ? {} : { onCellClick })}
     />
   )
 }
 
 interface ViewerSurfaceProps {
   readonly cells: readonly OverviewCellDatum[]
+  readonly expressionCells: readonly OverviewCellDatum[]
   readonly boundaries: readonly CellBoundaryDatum[]
   readonly imageLoader: TiffPyramidLoader | null
   readonly initialViewState: OverviewViewState
@@ -90,10 +97,12 @@ interface ViewerSurfaceProps {
   readonly hexBoundaryMaxVisibleCells: number
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
+  readonly onCellClick?: (cell: OverviewCellDatum) => void
 }
 
 function ViewerSurface({
   cells,
+  expressionCells,
   boundaries,
   imageLoader,
   initialViewState,
@@ -106,6 +115,7 @@ function ViewerSurface({
   hexBoundaryMaxVisibleCells,
   onImageTileError,
   onViewportChange,
+  onCellClick,
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
   const [viewState, setViewState] = useState<OverviewViewState>(initialViewState)
@@ -136,8 +146,8 @@ function ViewerSurface({
     [hexBoundaryMaxVisibleCells, visibleCells],
   )
   const layers = useMemo(
-    () => createOverviewLayers(displayCells, boundaries, hexBoundaries),
-    [boundaries, displayCells, hexBoundaries],
+    () => createOverviewLayers(displayCells, boundaries, hexBoundaries, expressionCells),
+    [boundaries, displayCells, expressionCells, hexBoundaries],
   )
   const hasCells = cells.length > 0
   const visibleCellCount = visibleCells.length
@@ -151,6 +161,16 @@ function ViewerSurface({
       setViewState(normaliseViewState(nextViewState))
     },
     [],
+  )
+  const handleDeckClick = useCallback(
+    (info: { readonly object?: unknown }) => {
+      if (onCellClick === undefined || !isOverviewCellDatum(info.object)) {
+        return
+      }
+
+      onCellClick(info.object)
+    },
+    [onCellClick],
   )
 
   useEffect(() => {
@@ -218,6 +238,7 @@ function ViewerSurface({
             views={spatialOverviewView}
             viewState={viewState}
             onViewStateChange={handleViewStateChange}
+            onClick={handleDeckClick}
             controller
             layers={layers}
           />
@@ -309,4 +330,18 @@ function normaliseViewState(viewState: {
 
 function viewStateKey(viewState: OverviewViewState): string {
   return `${viewState.target.join(':')}:${viewState.zoom}`
+}
+
+function isOverviewCellDatum(value: unknown): value is OverviewCellDatum {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const candidate = value as Partial<OverviewCellDatum>
+
+  return (
+    typeof candidate.id === 'string' &&
+    Array.isArray(candidate.position) &&
+    typeof candidate.radiusPixels === 'number'
+  )
 }

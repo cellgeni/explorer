@@ -19,6 +19,11 @@ interface CellBin {
   maxRadiusPixels: number
   maxRadiusMicrometers: number | undefined
   maxAlpha: number
+  sumRed: number
+  sumGreen: number
+  sumBlue: number
+  maxTranscriptCount: number | undefined
+  maxCellArea: number | undefined
 }
 
 export function aggregateOverviewCells(
@@ -90,6 +95,9 @@ function aggregateCellsIntoBins(
     const key = `${Math.floor(x / binSize)}:${Math.floor(rawY / binSize)}`
     const bin = bins.get(key)
     const alpha = readColorAlpha(cell)
+    const red = readColorChannel(cell, 0)
+    const green = readColorChannel(cell, 1)
+    const blue = readColorChannel(cell, 2)
 
     if (bin === undefined) {
       bins.set(key, {
@@ -100,6 +108,11 @@ function aggregateCellsIntoBins(
         maxRadiusPixels: cell.radiusPixels,
         maxRadiusMicrometers: cell.radiusMicrometers,
         maxAlpha: alpha,
+        sumRed: red,
+        sumGreen: green,
+        sumBlue: blue,
+        maxTranscriptCount: cell.transcriptCount,
+        maxCellArea: cell.cellArea,
       })
       continue
     }
@@ -113,6 +126,14 @@ function aggregateCellsIntoBins(
       cell.radiusMicrometers,
     )
     bin.maxAlpha = Math.max(bin.maxAlpha, alpha)
+    bin.sumRed += red
+    bin.sumGreen += green
+    bin.sumBlue += blue
+    bin.maxTranscriptCount = maxOptionalNumber(
+      bin.maxTranscriptCount,
+      cell.transcriptCount,
+    )
+    bin.maxCellArea = maxOptionalNumber(bin.maxCellArea, cell.cellArea)
   }
 
   const aggregatedCells: OverviewCellDatum[] = []
@@ -126,12 +147,27 @@ function aggregateCellsIntoBins(
       ...(bin.maxRadiusMicrometers === undefined
         ? {}
         : { radiusMicrometers: bin.maxRadiusMicrometers }),
-      fillColor: [215, 63, 124, Math.min(235, bin.maxAlpha + bin.count * 2)],
+      fillColor: [
+        Math.round(bin.sumRed / bin.count),
+        Math.round(bin.sumGreen / bin.count),
+        Math.round(bin.sumBlue / bin.count),
+        Math.min(235, bin.maxAlpha + bin.count * 2),
+      ],
       cellCount: bin.count,
+      ...(bin.maxTranscriptCount === undefined
+        ? {}
+        : { transcriptCount: bin.maxTranscriptCount }),
+      ...(bin.maxCellArea === undefined ? {} : { cellArea: bin.maxCellArea }),
     })
   }
 
   return aggregatedCells
+}
+
+function readColorChannel(cell: OverviewCellDatum, channel: 0 | 1 | 2): number {
+  const value = cell.fillColor[channel]
+
+  return typeof value === 'number' ? value : 0
 }
 
 function readColorAlpha(cell: OverviewCellDatum): number {

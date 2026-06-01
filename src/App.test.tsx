@@ -30,6 +30,12 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
     expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(500)
+    expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Gene selection')).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+      'transcript-count',
+    )
+    expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
   })
 
   it('lets the user configure the boundary polygon visible-cell limit', () => {
@@ -56,11 +62,13 @@ describe('App', () => {
       url: `${DEMO_DATASET_URL}/morphology_focus/morphology_focus_0000.ome.tif`,
       loader: {} as TiffPyramidLoader,
     }))
+    const loadGenePanel = vi.fn(async () => [])
 
     render(
       <App
         loadDatasetOverview={loadDatasetOverview}
         loadMorphologyImage={loadMorphologyImage}
+        loadGenePanel={loadGenePanel}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
@@ -73,6 +81,7 @@ describe('App', () => {
     })
     expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
     expect(loadMorphologyImage).not.toHaveBeenCalled()
+    expect(loadGenePanel).toHaveBeenCalledWith(DEMO_DATASET_URL)
     expect(screen.getByTestId('deckgl')).toBeInTheDocument()
   })
 
@@ -88,11 +97,13 @@ describe('App', () => {
       url: `${DEMO_DATASET_URL}/morphology_focus/morphology_focus_0000.ome.tif`,
       loader: {} as TiffPyramidLoader,
     }))
+    const loadGenePanel = vi.fn(async () => [])
 
     render(
       <App
         loadDatasetOverview={loadDatasetOverview}
         loadMorphologyImage={loadMorphologyImage}
+        loadGenePanel={loadGenePanel}
       />,
     )
     fireEvent.click(screen.getByRole('checkbox', { name: 'Morphology image' }))
@@ -119,8 +130,11 @@ describe('App', () => {
         transcriptCount: 8,
       },
     ])
+    const loadGenePanel = vi.fn(async () => [])
 
-    render(<App loadDatasetOverview={loadDatasetOverview} />)
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {
@@ -129,5 +143,31 @@ describe('App', () => {
         limit: null,
       })
     })
+  })
+
+  it('loads gene options and lets the user select genes', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1', 'Slc17a7'])
+
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    expect(await screen.findByText('3 genes')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Gene selection'), {
+      target: { value: 'gad' },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Gad1' }))
+
+    expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Gad1')
   })
 })

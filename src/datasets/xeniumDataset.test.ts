@@ -216,4 +216,71 @@ describe('XeniumDataset', () => {
       'https://example.test/xenium/morphology_mip.ome.tif',
     )
   })
+
+  it('loads viewport-scoped expression counts for selected genes', async () => {
+    const cellId = intToCellId(1, 1)
+    const conn = new FakeConnection([
+      [
+        {
+          cell_id: cellId,
+          x_centroid: 2,
+          y_centroid: 3,
+          transcript_counts: 25,
+          cell_area: 40,
+        },
+      ],
+    ])
+    const matrixReader = vi.fn(
+      async (_url: string, ids: readonly CellId[]): Promise<GexResult> => ({
+        geneNames: ['Actb', 'Gad1', 'Slc17a7'],
+        cells: new Map(
+          ids.map((id) => [
+            id,
+            { geneNames: ['Actb', 'Gad1', 'Slc17a7'], counts: [7, 2, 3] },
+          ]),
+        ),
+      }),
+    )
+    const dataset = makeDataset(conn, { matrixReader })
+
+    await expect(
+      dataset.geneExpression(
+        {
+          minX: micrometers(0),
+          maxX: micrometers(10),
+          minY: micrometers(0),
+          maxY: micrometers(20),
+        },
+        ['Slc17a7', 'Gad1', 'Gad1'],
+        { limit: 100 },
+      ),
+    ).resolves.toEqual({
+      genes: ['Gad1', 'Slc17a7'],
+      maxCount: 5,
+      cells: [
+        {
+          id: cellId,
+          position: { x: micrometers(2), y: micrometers(3) },
+          transcriptCount: 25,
+          cellArea: 40,
+          count: 5,
+        },
+      ],
+    })
+
+    expect(conn.preparedSql[0]).toContain('SELECT cell_id')
+    expect(conn.preparedSql[0]).toContain('ORDER BY file_row_number')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/cells.parquet',
+      micrometers(0),
+      micrometers(10),
+      micrometers(0),
+      micrometers(20),
+      100,
+    ])
+    expect(matrixReader).toHaveBeenCalledWith(
+      'https://example.test/xenium/cell_feature_matrix.zarr.zip',
+      [cellId],
+    )
+  })
 })

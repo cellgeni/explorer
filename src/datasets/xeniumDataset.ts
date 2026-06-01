@@ -13,6 +13,7 @@ import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type {
   DuckDbPreparedStatementLike,
+  GexCell,
   GexResult,
   Selection,
   TranscriptDuckDbConnection,
@@ -48,6 +49,31 @@ export interface DuckDbClientLike {
 
 export interface XeniumDuckDbConnection extends TranscriptDuckDbConnection {
   prepare(sql: string): Promise<DuckDbPreparedStatementLike>
+}
+
+export interface GeneExpressionCell {
+  readonly id: CellId
+  readonly position: DataPoint
+  readonly count: number
+  readonly transcriptCount?: number
+  readonly cellArea?: number
+}
+
+export interface GeneExpressionBatch {
+  readonly cells: readonly GeneExpressionCell[]
+  readonly genes: readonly string[]
+  readonly maxCount: number
+}
+
+export interface GeneExpressionQueryOptions {
+  readonly limit?: number
+}
+
+interface ViewportCell {
+  readonly id: CellId
+  readonly position: DataPoint
+  readonly transcriptCount?: number
+  readonly cellArea?: number
 }
 
 const DEFAULT_XENIUM_UNITS: UnitsDescriptor = {
@@ -180,6 +206,64 @@ ORDER BY b.cell_id, b.file_row_number
     return this.overviewReader(this.urlFor('cells.parquet'), limit)
   }
 
+  async geneExpression(
+    bbox: BBox,
+    genes: readonly string[],
+    options: GeneExpressionQueryOptions = {},
+  ): Promise<GeneExpressionBatch> {
+    const selectedGenes = normalizeGeneList(genes)
+
+    if (selectedGenes.length === 0) {
+      return {
+        cells: [],
+        genes: [],
+        maxCount: 0,
+      }
+    }
+
+    const limit = options.limit ?? 5_000
+    const viewportCells = await this.cellsForBbox(bbox, limit)
+
+    if (viewportCells.length === 0) {
+      return {
+        cells: [],
+        genes: selectedGenes,
+        maxCount: 0,
+      }
+    }
+
+    const matrix = await this.matrix(viewportCells.map((cell) => cell.id))
+    const selectedGeneSet = new Set(selectedGenes)
+    const cells: GeneExpressionCell[] = []
+    let maxCount = 0
+
+    for (const cell of viewportCells) {
+      const expression = matrix.cells.get(cell.id)
+
+      if (expression === undefined) {
+        continue
+      }
+
+      const count = selectedGeneCount(expression, selectedGeneSet)
+
+      if (count <= 0) {
+        continue
+      }
+
+      cells.push({
+        ...cell,
+        count,
+      })
+      maxCount = Math.max(maxCount, count)
+    }
+
+    return {
+      cells,
+      genes: selectedGenes,
+      maxCount,
+    }
+  }
+
   annotations(): Promise<readonly Annotation[]> {
     return Promise.resolve([])
   }
@@ -301,6 +385,35 @@ ORDER BY file_row_number
     })
   }
 
+  private async cellsForBbox(
+    bbox: BBox,
+    limit: number,
+  ): Promise<readonly ViewportCell[]> {
+    const conn = await this.conn()
+    const stmt = await conn.prepare(`
+SELECT cell_id,
+       x_centroid,
+       y_centroid,
+       transcript_counts,
+       cell_area
+FROM read_parquet( ? )
+WHERE x_centroid BETWEEN ? AND ?
+  AND y_centroid BETWEEN ? AND ?
+ORDER BY file_row_number
+LIMIT ?
+`)
+    const result = await stmt.query(
+      this.urlFor('cells.parquet'),
+      bbox.minX,
+      bbox.maxX,
+      bbox.minY,
+      bbox.maxY,
+      limit,
+    )
+
+    return result.toArray().map(parseViewportCellRow)
+  }
+
   private async conn(): Promise<XeniumDuckDbConnection> {
     this.duckClientPromise ??= this.duckFactory()
     return (await this.duckClientPromise).conn
@@ -341,6 +454,53 @@ function parseBoundaryRow(row: Record<string, unknown>): {
       y: micrometers(readNumericRowValue(row, 'y')),
     },
   }
+}
+
+function parseViewportCellRow(row: Record<string, unknown>): ViewportCell {
+  const cellId = row.cell_id
+
+  if (typeof cellId !== 'string') {
+    throw new Error('Expected viewport cell row cell_id to be a string.')
+  }
+
+  return {
+    id: asCellId(cellId),
+    position: {
+      x: micrometers(readNumericRowValue(row, 'x_centroid')),
+      y: micrometers(readNumericRowValue(row, 'y_centroid')),
+    },
+    transcriptCount: readNumericRowValue(row, 'transcript_counts'),
+    cellArea: readNumericRowValue(row, 'cell_area'),
+  }
+}
+
+function selectedGeneCount(cell: GexCell, selectedGeneSet: ReadonlySet<string>): number {
+  let count = 0
+
+  for (let index = 0; index < cell.geneNames.length; index += 1) {
+    const gene = cell.geneNames[index]
+    const geneCount = cell.counts[index]
+
+    if (gene !== undefined && geneCount !== undefined && selectedGeneSet.has(gene)) {
+      count += geneCount
+    }
+  }
+
+  return count
+}
+
+function normalizeGeneList(genes: readonly string[]): readonly string[] {
+  const uniqueGenes = new Set<string>()
+
+  for (const gene of genes) {
+    const normalized = gene.trim()
+
+    if (normalized.length > 0) {
+      uniqueGenes.add(normalized)
+    }
+  }
+
+  return [...uniqueGenes].sort((a, b) => a.localeCompare(b))
 }
 
 function readNumericRowValue(row: Record<string, unknown>, key: string): number {

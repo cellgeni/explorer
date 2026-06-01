@@ -138,15 +138,26 @@ These are product requirements requested after Phase 2 started. They align with
 Phase 4 in `PLAN.md`; do not implement them before Phase 2 and Phase 3 are done
 unless the phase order is explicitly changed.
 
-- [ ] Gene selection: search/pick genes from `gene_panel.json`, keep selected
+- [x] Gene selection: search/pick genes from `gene_panel.json`, keep selected
       genes as URL/shareable state later, and avoid loading expression matrices
       until a gene or region workflow needs them.
-- [ ] Gene expression highlighting: color cells by selected gene expression,
+- [x] Gene expression highlighting: color cells by selected gene expression,
       using low-zoom density/binning when needed and per-cell counts at close
       zoom or within a selected ROI.
-- [ ] Cell highlighting by observations: support coloring by loaded cell-level
+- [x] Cell highlighting by observations: support coloring by loaded cell-level
       observations such as `transcript_counts`, `cell_area`, `nucleus_area`, and
       later imported annotation labels.
-- [ ] Cell information visualization: show selected/hovered cell metadata,
+- [x] Cell information visualization: show selected/hovered cell metadata,
       observations, expression summaries for selected genes, and links between
       spatial, boundary, and future embedding views.
+
+## Analysis Feature Notes
+
+- [x] The user explicitly asked to make gene selection/expression visible before
+      Phase 4, overriding the phase-order default for this narrow first slice.
+- [x] Gene expression highlighting uses `cell_feature_matrix.zarr.zip` through
+      `XeniumDataset.matrix()` after collecting viewport cell IDs from
+      `cells.parquet`. Do not use `transcripts.parquet` for per-cell expression
+      highlighting. The H5 feature-matrix backend remains a later Phase 4 task.
+- [x] Expression loading is viewport-scoped and capped at 5,000 visible cells for
+      now to avoid whole-slide feature-matrix work on million-cell datasets.

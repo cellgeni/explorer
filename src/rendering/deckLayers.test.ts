@@ -7,6 +7,7 @@ import {
   boundaryElementsToLayerData,
   createOverviewLayers,
   createOverviewViewState,
+  geneExpressionCellsToLayerData,
   overviewCellsToLayerData,
   spatialOverviewView,
 } from './deckLayers'
@@ -91,6 +92,30 @@ describe('deck layer factory', () => {
     expect(trueBoundaryLayer.id).toBe('cell-boundary-polygons')
   })
 
+  it('adds a gene expression overlay layer', () => {
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-2',
+        position: [12, -24, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 5,
+      },
+    ]
+    const layers = createOverviewLayers(fixtureCells, [], [], expressionCells)
+
+    expect(layers).toHaveLength(2)
+    expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
+
+    const expressionLayer = layers[1]
+
+    if (!(expressionLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected expression layer to be a ScatterplotLayer.')
+    }
+
+    expect(expressionLayer.id).toBe('gene-expression-scatter')
+  })
+
   it('converts Xenium overview cells into deck.gl coordinates', () => {
     const [datum] = overviewCellsToLayerData([
       {
@@ -109,6 +134,29 @@ describe('deck layer factory', () => {
     expect(datum.radiusPixels).toBe(5)
     expect(datum.radiusMicrometers).toBe(4)
     expect(createOverviewViewState([datum]).target).toEqual([10, -20, 0])
+  })
+
+  it('converts expression cells into deck.gl overlay coordinates', () => {
+    const [datum] = geneExpressionCellsToLayerData(
+      [
+        {
+          id: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          count: 4,
+          transcriptCount: 11,
+          cellArea: Math.PI * 9,
+        },
+      ],
+      ['Gad1'],
+    )
+
+    expect(datum).toMatchObject({
+      position: [10, -20, 0],
+      radiusMicrometers: 3,
+      expressionCount: 4,
+      expressionGenes: ['Gad1'],
+      transcriptCount: 11,
+    })
   })
 
   it('converts polygon elements into deck.gl boundary coordinates', () => {
