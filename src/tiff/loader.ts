@@ -169,13 +169,18 @@ export class TiffPyramidLoader {
   }
 
   bestLevel(deckScale: number): number {
+    const maxSourcePixelScreenSize = 1.5
+
     for (let level = this.numLevels - 1; level >= 0; level -= 1) {
-      if ((this.tileWidth * deckScale) / 2 ** level >= 128) {
+      const sourcePixelScreenSize =
+        this.units.micrometersPerPixel * 2 ** level * deckScale
+
+      if (sourcePixelScreenSize <= maxSourcePixelScreenSize) {
         return level
       }
     }
 
-    return this.numLevels - 1
+    return 0
   }
 
   tilesForBbox(level: number, bbox: BBox): readonly TileIndex[] {

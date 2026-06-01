@@ -123,4 +123,30 @@ describe('TiffPyramidLoader', () => {
       height: imagePixels(80),
     })
   })
+
+  it('selects intermediate pyramid levels by source pixel screen size', () => {
+    const levels = new Map<number, TiffLevelMeta>([
+      [0, { width: imagePixels(800), height: imagePixels(800), nCols: 8, nRows: 8 }],
+      [1, { width: imagePixels(400), height: imagePixels(400), nCols: 4, nRows: 4 }],
+      [2, { width: imagePixels(200), height: imagePixels(200), nCols: 2, nRows: 2 }],
+      [3, { width: imagePixels(100), height: imagePixels(100), nCols: 1, nRows: 1 }],
+    ])
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/image.ome.tif',
+      chunkIndex: new Map<string, TiffChunk>(),
+      levelMeta: levels,
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 4,
+      imageWidth: imagePixels(800),
+      imageHeight: imagePixels(800),
+    })
+
+    expect(loader.bestLevel(0.1)).toBe(3)
+    expect(loader.bestLevel(0.2)).toBe(2)
+    expect(loader.bestLevel(0.4)).toBe(1)
+    expect(loader.bestLevel(0.8)).toBe(0)
+    expect(loader.bestLevel(2)).toBe(0)
+  })
 })

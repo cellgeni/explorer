@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { micrometers, scaleFromZoom, type BBox, type TileIndex } from '../data/coords'
 import {
   drawMorphologyTiles,
   morphologyViewportBbox,
@@ -9,10 +10,10 @@ import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { TileCacheEntry } from '../tiff/tileCache'
 import type { OverviewViewState } from '../rendering/deckLayers'
-import type { TileIndex } from '../data/coords'
 
-const MAX_INITIAL_TILE_REQUESTS = 48
+const MAX_INITIAL_TILE_REQUESTS = 96
 const MAX_CONCURRENT_TILE_REQUESTS = 4
+const PREFETCH_SCREEN_MARGIN_PIXELS = 256
 
 export interface MorphologyCanvasProps {
   readonly loader?: TiffPyramidLoader | null
@@ -94,8 +95,13 @@ export function MorphologyCanvas({
     }))
     const bbox = morphologyViewportBbox(viewState, viewport)
     const level = loader.bestLevel(2 ** viewState.zoom)
+    const tileRequestBbox = expandBboxByScreenPixels(
+      bbox,
+      viewState.zoom,
+      PREFETCH_SCREEN_MARGIN_PIXELS,
+    )
     const tiles = selectCenteredTiles(
-      loader.tilesForBbox(level, bbox),
+      loader.tilesForBbox(level, tileRequestBbox),
       MAX_INITIAL_TILE_REQUESTS,
       bbox,
       (tile) => loader.tileBounds(level, tile.col, tile.row),
@@ -109,7 +115,7 @@ export function MorphologyCanvas({
       }
 
       syncCanvasBackingStore(canvas, context, viewport)
-      drawMorphologyTiles(context, cache.readyTiles(bbox), viewState, viewport)
+      drawMorphologyTiles(context, cache.readyTiles(bbox, level), viewState, viewport)
     }
 
     drawReadyTiles()
@@ -170,6 +176,17 @@ async function requestTilesInPriorityOrder(options: RequestTilesOptions): Promis
 
 function isAbortEntry(entry: TileCacheEntry): boolean {
   return entry.state === 'error' && entry.error.name === 'AbortError'
+}
+
+function expandBboxByScreenPixels(bbox: BBox, zoom: number, screenPixels: number): BBox {
+  const margin = screenPixels / scaleFromZoom(zoom)
+
+  return {
+    minX: micrometers(Math.max(0, bbox.minX - margin)),
+    maxX: micrometers(bbox.maxX + margin),
+    minY: micrometers(Math.max(0, bbox.minY - margin)),
+    maxY: micrometers(bbox.maxY + margin),
+  }
 }
 
 function syncCanvasBackingStore(

@@ -34,6 +34,7 @@ describe('morphology canvas projection', () => {
     } as unknown as CanvasRenderingContext2D
     const tile: ReadyTile = {
       id: '0:0:0',
+      level: 0,
       image,
       bounds: {
         minX: micrometers(80),
@@ -59,6 +60,7 @@ describe('morphology canvas projection', () => {
     } as unknown as CanvasRenderingContext2D
     const tile: ReadyTile = {
       id: '8:0:0',
+      level: 8,
       image,
       bounds: {
         minX: micrometers(0),

@@ -145,6 +145,9 @@ done. This file records execution-level additions requested after work began.
 - [x] Optimized morphology tile loading: JPEG-2000 decode workers are now lazy
       and capped, visible tiles are requested center-first, and stale viewport
       tile fetches are aborted without leaving cached error entries.
+- [x] Fixed viewport-edge morphology artifacts by drawing only ready tiles from
+      the active pyramid level and requesting a small offscreen tile margin
+      around the visible viewport.
 
 ## Requested Analysis Features
 

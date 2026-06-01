@@ -51,12 +51,57 @@ describe('TileCache', () => {
     expect(cache.readyTiles(bounds)).toEqual([
       {
         id: '0:1:2',
+        level: 0,
         image: bitmap,
         bounds,
         sourceWidth: imagePixels(2),
         sourceHeight: imagePixels(1),
       },
     ])
+  })
+
+  it('filters ready tiles by active pyramid level', async () => {
+    const source = new FakeTileSource()
+    const lowLevelBitmap = { close: vi.fn() } as unknown as ImageBitmap
+    const highLevelBitmap = { close: vi.fn() } as unknown as ImageBitmap
+    const bitmaps = [lowLevelBitmap, highLevelBitmap]
+    const cache = new TileCache({
+      decodeTile: async () => ({
+        bitmap: nextBitmap(),
+        width: 2,
+        height: 1,
+        lo: 0,
+        hi: 100,
+      }),
+    })
+
+    await cache.request(source, 4, 0, 0)
+    await cache.request(source, 2, 0, 0)
+
+    expect(cache.readyTiles(bounds, 2)).toEqual([
+      expect.objectContaining({
+        id: '2:0:0',
+        level: 2,
+        image: highLevelBitmap,
+      }),
+    ])
+    expect(cache.readyTiles(bounds, 4)).toEqual([
+      expect.objectContaining({
+        id: '4:0:0',
+        level: 4,
+        image: lowLevelBitmap,
+      }),
+    ])
+
+    function nextBitmap(): ImageBitmap {
+      const bitmap = bitmaps.shift()
+
+      if (bitmap === undefined) {
+        throw new Error('No test bitmap available.')
+      }
+
+      return bitmap
+    }
   })
 
   it('evicts least recently used ready bitmaps', async () => {

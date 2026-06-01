@@ -36,6 +36,7 @@ export interface TileLoadingEntry {
 
 export interface TileReadyEntry {
   readonly state: 'ready'
+  readonly level: number
   readonly bounds: BBox
   readonly bitmap: ImageBitmap
   readonly sourceWidth: ImagePixels
@@ -50,6 +51,7 @@ export interface TileErrorEntry {
 
 export interface ReadyTile {
   readonly id: string
+  readonly level: number
   readonly image: ImageBitmap
   readonly bounds: BBox
   readonly sourceWidth: ImagePixels
@@ -123,16 +125,21 @@ export class TileCache {
     return promise
   }
 
-  readyTiles(bbox: BBox): readonly ReadyTile[] {
+  readyTiles(bbox: BBox, level?: number): readonly ReadyTile[] {
     const ready: ReadyTile[] = []
 
     for (const [id, entry] of this.cache.entries()) {
-      if (entry.state !== 'ready' || !bboxesOverlap(entry.bounds, bbox)) {
+      if (
+        entry.state !== 'ready' ||
+        (level !== undefined && entry.level !== level) ||
+        !bboxesOverlap(entry.bounds, bbox)
+      ) {
         continue
       }
 
       ready.push({
         id,
+        level: entry.level,
         image: entry.bitmap,
         bounds: entry.bounds,
         sourceWidth: entry.sourceWidth,
@@ -189,6 +196,7 @@ export class TileCache {
 
       const ready: TileReadyEntry = {
         state: 'ready',
+        level,
         bounds,
         bitmap: decoded.bitmap,
         sourceWidth: sourceSize.width,
