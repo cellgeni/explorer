@@ -35,3 +35,12 @@ done. This file records execution-level additions requested after work began.
 - [x] `tiff/loader.ts`
 - [x] `tiff/tileCache.ts`
 - [x] `codecs/jpeg2000.ts`
+
+## Phase 1 Follow-up Notes
+
+- [x] `Load Dataset` now executes the first-paint path: read
+      `cells.parquet` via hyparquet, decode ZSTD-compressed demo parquet with
+      `hyparquet-compressors`, convert centroids to deck.gl coordinates, and
+      render the overview scatter layer.
+- [x] Demo dataset smoke check loaded 50,000 overview cells from the default
+      dataset URL on `http://127.0.0.1:5173/`.

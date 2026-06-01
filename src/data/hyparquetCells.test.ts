@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { intToCellId } from './cellid'
 import { micrometers } from './coords'
 import { CELL_OVERVIEW_COLUMNS, readCellsOverview } from './hyparquetCells'
@@ -30,14 +31,13 @@ describe('readCellsOverview', () => {
       },
     })
 
-    expect(calls).toEqual([
-      {
-        file: fakeFile,
-        columns: CELL_OVERVIEW_COLUMNS,
-        rowFormat: 'object',
-        rowEnd: 100,
-      },
-    ])
+    expect(calls[0]).toEqual({
+      file: fakeFile,
+      columns: CELL_OVERVIEW_COLUMNS,
+      rowFormat: 'object',
+      rowEnd: 100,
+      compressors: parquetCompressors,
+    })
     expect(rows).toEqual([
       {
         cellId,

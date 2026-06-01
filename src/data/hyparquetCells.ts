@@ -1,7 +1,7 @@
 import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet'
 import { asCellId } from './cellid'
 import { micrometers } from './coords'
-import type { AsyncBuffer } from 'hyparquet'
+import type { AsyncBuffer, Compressors } from 'hyparquet'
 import type { CellId } from './cellid'
 import type { DataPoint } from './coords'
 
@@ -23,6 +23,7 @@ export interface HyparquetReadObjectsOptions {
   readonly columns: readonly string[]
   readonly rowFormat: 'object'
   readonly rowEnd?: number
+  readonly compressors?: Compressors
 }
 
 export type HyparquetObjectReader = (
@@ -33,6 +34,8 @@ export interface ReadCellsOverviewOptions {
   readonly url?: string
   readonly file?: AsyncBuffer
   readonly limit?: number
+  readonly compressors?: Compressors
+  readonly loadCompressors?: () => Promise<Compressors>
   readonly fetcher?: typeof fetch
   readonly readObjects?: HyparquetObjectReader
 }
@@ -42,10 +45,13 @@ export async function readCellsOverview(
 ): Promise<readonly CellOverviewPoint[]> {
   const file = options.file ?? (await fileFromUrl(options))
   const readObjects = options.readObjects ?? readHyparquetObjects
+  const compressors =
+    options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
   const rows = await readObjects({
     file,
     columns: CELL_OVERVIEW_COLUMNS,
     rowFormat: 'object',
+    compressors,
     ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
   })
 
@@ -70,6 +76,7 @@ async function readHyparquetObjects(
     file: options.file,
     columns: [...options.columns],
     rowFormat: options.rowFormat,
+    ...(options.compressors === undefined ? {} : { compressors: options.compressors }),
     ...(options.rowEnd === undefined ? {} : { rowEnd: options.rowEnd }),
   })) as readonly Record<string, unknown>[]
 }
@@ -89,6 +96,11 @@ function parseCellOverviewRow(row: Record<string, unknown>): CellOverviewPoint {
     },
     transcriptCount: readNumericValue(row, 'transcript_counts'),
   }
+}
+
+async function loadDefaultCompressors(): Promise<Compressors> {
+  const { compressors } = await import('hyparquet-compressors')
+  return compressors
 }
 
 function readNumericValue(row: Record<string, unknown>, key: string): number {

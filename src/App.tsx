@@ -1,25 +1,79 @@
 import type { FormEvent } from 'react'
-import { useId } from 'react'
+import { useId, useRef, useState } from 'react'
 import { ViewerCore } from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
+import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
+import { overviewCellsToLayerData } from './rendering/deckLayers'
 import { bundledDeckVersion } from './rendering/deckLayers'
 import { useViewerStore } from './store/viewerStore'
+import type { CellOverviewPoint } from './data/hyparquetCells'
+import type { OverviewCellDatum } from './rendering/deckLayers'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 
-export function App() {
+export type DatasetOverviewLoader = (
+  baseUrl: string,
+) => Promise<readonly CellOverviewPoint[]>
+
+type DatasetLoadState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | { readonly status: 'ready'; readonly url: string; readonly cellCount: number }
+  | { readonly status: 'error'; readonly url: string; readonly message: string }
+
+export interface AppProps {
+  readonly loadDatasetOverview?: DatasetOverviewLoader
+}
+
+export function App({ loadDatasetOverview = defaultLoadDatasetOverview }: AppProps) {
   const datasetInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
+  const [loadState, setLoadState] = useState<DatasetLoadState>({ status: 'idle' })
+  const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
+  const loadRequestId = useRef(0)
+  const isLoading = loadState.status === 'loading'
+  const statusCopy = datasetStatusCopy(loadState, datasetUrl)
 
-  function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const formData = new FormData(event.currentTarget)
     const datasetUrl = formData.get('datasetUrl')
 
     if (typeof datasetUrl === 'string' && datasetUrl.trim().length > 0) {
-      setDatasetUrl(datasetUrl.trim())
+      const requestedUrl = datasetUrl.trim()
+      const requestId = loadRequestId.current + 1
+      loadRequestId.current = requestId
+
+      setDatasetUrl(requestedUrl)
+      setOverviewCells([])
+      setLoadState({ status: 'loading', url: requestedUrl })
+
+      try {
+        const cells = await loadDatasetOverview(requestedUrl)
+
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
+        setOverviewCells(overviewCellsToLayerData(cells))
+        setLoadState({
+          status: 'ready',
+          url: requestedUrl,
+          cellCount: cells.length,
+        })
+      } catch (error) {
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
+        setLoadState({
+          status: 'error',
+          url: requestedUrl,
+          message: readErrorMessage(error),
+        })
+      }
     }
   }
 
@@ -49,7 +103,9 @@ export function App() {
             defaultValue={datasetUrl}
             placeholder="https://bucket.example/output…"
           />
-          <button type="submit">Load Dataset</button>
+          <button type="submit" disabled={isLoading}>
+            {isLoading ? 'Loading...' : 'Load Dataset'}
+          </button>
         </form>
 
         <section className="layer-section" aria-labelledby="layer-heading">
@@ -75,12 +131,47 @@ export function App() {
             <h2 id="viewer-heading">Spatial View</h2>
           </div>
           <p className="dataset-status" aria-live="polite">
-            Queued dataset: <span translate="no">{datasetUrl}</span>
+            {statusCopy.label}: <span translate="no">{statusCopy.url}</span>
           </p>
         </header>
 
-        <ViewerCore />
+        <ViewerCore
+          cells={overviewCells}
+          status={loadState.status}
+          {...(loadState.status === 'error' ? { errorMessage: loadState.message } : {})}
+        />
       </section>
     </main>
   )
+}
+
+function datasetStatusCopy(
+  loadState: DatasetLoadState,
+  queuedUrl: string,
+): { readonly label: string; readonly url: string } {
+  if (loadState.status === 'loading') {
+    return { label: 'Loading overview', url: loadState.url }
+  }
+
+  if (loadState.status === 'ready') {
+    const noun = loadState.cellCount === 1 ? 'cell' : 'cells'
+    return {
+      label: `Loaded ${loadState.cellCount.toLocaleString()} overview ${noun}`,
+      url: loadState.url,
+    }
+  }
+
+  if (loadState.status === 'error') {
+    return { label: `Load failed - ${loadState.message}`, url: loadState.url }
+  }
+
+  return { label: 'Queued dataset', url: queuedUrl }
+}
+
+function readErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message
+  }
+
+  return 'Unknown dataset error'
 }

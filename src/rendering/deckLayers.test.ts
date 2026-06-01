@@ -1,8 +1,12 @@
 import { ScatterplotLayer } from '@deck.gl/layers'
 import { describe, expect, it } from 'vitest'
+import { intToCellId } from '../data/cellid'
+import { micrometers } from '../data/coords'
 import {
   bundledDeckVersion,
   createOverviewLayers,
+  createOverviewViewState,
+  overviewCellsToLayerData,
   spatialOverviewView,
 } from './deckLayers'
 import type { OverviewCellDatum } from './deckLayers'
@@ -33,5 +37,23 @@ describe('deck layer factory', () => {
     }
 
     expect(layer.id).toBe('cells-overview-scatter')
+  })
+
+  it('converts Xenium overview cells into deck.gl coordinates', () => {
+    const [datum] = overviewCellsToLayerData([
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 25,
+      },
+    ])
+
+    if (datum === undefined) {
+      throw new Error('Expected overview layer datum.')
+    }
+
+    expect(datum.position).toEqual([10, -20, 0])
+    expect(datum.radiusPixels).toBe(5)
+    expect(createOverviewViewState([datum]).target).toEqual([10, -20, 0])
   })
 })
