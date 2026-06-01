@@ -30,11 +30,12 @@ describe('TileCache', () => {
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap
     const cache = new TileCache({
       decodeTile: async () => ({
-        pixels: new Uint16Array([0, 100]),
+        bitmap,
         width: 2,
         height: 1,
+        lo: 0,
+        hi: 100,
       }),
-      createBitmap: async () => bitmap,
     })
 
     await expect(cache.request(source, 0, 1, 2)).resolves.toMatchObject({
@@ -54,19 +55,12 @@ describe('TileCache', () => {
     const cache = new TileCache({
       maxTiles: 1,
       decodeTile: async () => ({
-        pixels: new Uint16Array([0, 100]),
+        bitmap: nextBitmap(),
         width: 2,
         height: 1,
+        lo: 0,
+        hi: 100,
       }),
-      createBitmap: async () => {
-        const bitmap = bitmaps.shift()
-
-        if (bitmap === undefined) {
-          throw new Error('No test bitmap available.')
-        }
-
-        return bitmap
-      },
     })
 
     await cache.request(source, 0, 0, 0)
@@ -74,5 +68,15 @@ describe('TileCache', () => {
 
     expect(firstBitmap.close).toHaveBeenCalledTimes(1)
     expect(secondBitmap.close).not.toHaveBeenCalled()
+
+    function nextBitmap(): ImageBitmap {
+      const bitmap = bitmaps.shift()
+
+      if (bitmap === undefined) {
+        throw new Error('No test bitmap available.')
+      }
+
+      return bitmap
+    }
   })
 })

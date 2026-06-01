@@ -22,7 +22,7 @@ done. This file records execution-level additions requested after work began.
 - [x] Port with types + tests: `coords.ts`, `cellid.ts`, `duckdb.ts`, `gex.ts`,
       `tiff/loader.ts`, `tiff/tileCache.ts`, `codecs/jpeg2000.ts`.
 - [x] Define `SpatialDataset`; implement `XeniumDataset`.
-- [ ] Worker pool: J2K decode + windowing in workers; DuckDB in its own worker.
+- [x] Worker pool: J2K decode + windowing in workers; DuckDB in its own worker.
 - [ ] Zustand store; React chrome around the deck.gl/canvas core.
 - [ ] hyparquet first-paint scatter from `cells.parquet`.
 

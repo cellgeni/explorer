@@ -1,6 +1,7 @@
-import { normaliseToRgba } from '../codecs/jpeg2000'
-import type { DecodedJpeg2000, DisplayWindow } from '../codecs/jpeg2000'
+import { createWorkerTileDecoder } from '../workers/tileDecodePool'
+import type { DisplayWindow } from '../codecs/jpeg2000'
 import type { BBox } from '../data/coords'
+import type { TileBitmapDecoder } from '../workers/tileDecodePool'
 
 export interface TileSource {
   tileBounds(level: number, col: number, row: number): BBox
@@ -12,17 +13,9 @@ export interface TileSource {
   ): Promise<Uint8Array>
 }
 
-export type TileDecoder = (bytes: Uint8Array) => Promise<DecodedJpeg2000>
-export type BitmapFactory = (
-  rgba: Uint8ClampedArray,
-  width: number,
-  height: number,
-) => Promise<ImageBitmap>
-
 export interface TileCacheOptions {
   readonly maxTiles?: number
-  readonly decodeTile: TileDecoder
-  readonly createBitmap?: BitmapFactory
+  readonly decodeTile?: TileBitmapDecoder
 }
 
 export type TileCacheEntry = TileLoadingEntry | TileReadyEntry | TileErrorEntry
@@ -55,14 +48,12 @@ export class TileCache {
   private readonly cache = new Map<string, TileCacheEntry>()
   private readonly order: string[] = []
   private readonly maxTiles: number
-  private readonly decodeTile: TileDecoder
-  private readonly createBitmap: BitmapFactory
+  private readonly decodeTile: TileBitmapDecoder
   private displayWindow: DisplayWindow | undefined
 
   constructor(options: TileCacheOptions) {
     this.maxTiles = options.maxTiles ?? 150
-    this.decodeTile = options.decodeTile
-    this.createBitmap = options.createBitmap ?? defaultCreateBitmap
+    this.decodeTile = options.decodeTile ?? createWorkerTileDecoder()
   }
 
   key(level: number, col: number, row: number): string {
@@ -140,20 +131,12 @@ export class TileCache {
   ): Promise<TileCacheEntry> {
     try {
       const bytes = await loader.fetchTileBytes(level, col, row, signal)
-      const decoded = await this.decodeTile(bytes)
-      const rgba = normaliseToRgba(
-        decoded.pixels,
-        decoded.width,
-        decoded.height,
-        this.displayWindow,
-      )
+      const decoded = await this.decodeTile(bytes, this.displayWindow)
 
-      this.displayWindow ??= { lo: rgba.lo, hi: rgba.hi }
-
-      const bitmap = await this.createBitmap(rgba.rgba, decoded.width, decoded.height)
+      this.displayWindow ??= { lo: decoded.lo, hi: decoded.hi }
 
       if (!this.cache.has(key)) {
-        bitmap.close()
+        decoded.bitmap.close()
         return {
           state: 'error',
           bounds,
@@ -164,7 +147,7 @@ export class TileCache {
       const ready: TileReadyEntry = {
         state: 'ready',
         bounds,
-        bitmap,
+        bitmap: decoded.bitmap,
       }
 
       this.cache.set(key, ready)
@@ -215,19 +198,4 @@ export class TileCache {
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY)
-}
-
-async function defaultCreateBitmap(
-  rgba: Uint8ClampedArray,
-  width: number,
-  height: number,
-): Promise<ImageBitmap> {
-  if (typeof globalThis.createImageBitmap !== 'function') {
-    throw new Error('createImageBitmap is not available in this runtime.')
-  }
-
-  const imageDataArray: Uint8ClampedArray<ArrayBuffer> = new Uint8ClampedArray(rgba)
-  const imageData = new ImageData(imageDataArray, width, height)
-
-  return globalThis.createImageBitmap(imageData)
 }

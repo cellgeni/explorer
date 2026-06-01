@@ -1,0 +1,77 @@
+import { describe, expect, it, vi } from 'vitest'
+import { TileDecodeWorkerPool } from './tileDecodePool'
+import type {
+  DecodeWorkerFactory,
+  DecodeWorkerLike,
+  TileDecodeWorkerPoolOptions,
+} from './tileDecodePool'
+import type { TileDecodeRequest, TileDecodeResponse } from './tileDecodeMessages'
+
+class FakeWorker implements DecodeWorkerLike {
+  onmessage: ((event: MessageEvent<TileDecodeResponse>) => void) | null = null
+  onerror: ((event: ErrorEvent) => void) | null = null
+  readonly terminate = vi.fn()
+  readonly posted: TileDecodeRequest[] = []
+
+  postMessage(message: TileDecodeRequest): void {
+    this.posted.push(message)
+  }
+
+  resolve(response: TileDecodeResponse): void {
+    this.onmessage?.(new MessageEvent('message', { data: response }))
+  }
+}
+
+function makePool(options: Omit<TileDecodeWorkerPoolOptions, 'workerFactory'> = {}) {
+  const workers: FakeWorker[] = []
+  const workerFactory: DecodeWorkerFactory = () => {
+    const worker = new FakeWorker()
+    workers.push(worker)
+    return worker
+  }
+
+  return {
+    pool: new TileDecodeWorkerPool({ ...options, workerFactory }),
+    workers,
+  }
+}
+
+describe('TileDecodeWorkerPool', () => {
+  it('dispatches decode requests and resolves transferred bitmaps', async () => {
+    const { pool, workers } = makePool({ size: 1 })
+    const bitmap = { close: vi.fn() } as unknown as ImageBitmap
+    const promise = pool.decode(new Uint8Array([1, 2, 3]), { lo: 0, hi: 100 })
+    const request = workers[0]?.posted[0]
+
+    expect(request?.displayWindow).toEqual({ lo: 0, hi: 100 })
+    expect(request?.bytes.byteLength).toBe(3)
+
+    workers[0]?.resolve({
+      id: request?.id ?? -1,
+      ok: true,
+      bitmap,
+      width: 2,
+      height: 1,
+      lo: 0,
+      hi: 100,
+    })
+
+    await expect(promise).resolves.toEqual({
+      bitmap,
+      width: 2,
+      height: 1,
+      lo: 0,
+      hi: 100,
+    })
+  })
+
+  it('rejects pending work when the pool terminates', async () => {
+    const { pool, workers } = makePool({ size: 1 })
+    const promise = pool.decode(new Uint8Array([1]))
+
+    pool.terminate()
+
+    await expect(promise).rejects.toThrow(/terminated/)
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1)
+  })
+})
