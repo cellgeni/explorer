@@ -30,7 +30,8 @@ export function aggregateOverviewCells(
     return []
   }
 
-  const candidates = options.bbox === undefined ? cells : cellsInBbox(cells, options.bbox)
+  const candidates =
+    options.bbox === undefined ? cells : overviewCellsInBbox(cells, options.bbox)
 
   if (candidates.length === 0) {
     return []
@@ -59,7 +60,7 @@ export function overviewAggregationBinMicrometers(
   return targetPixels / scaleFromZoom(viewState.zoom)
 }
 
-function cellsInBbox(
+export function overviewCellsInBbox(
   cells: readonly OverviewCellDatum[],
   bbox: BBox,
 ): readonly OverviewCellDatum[] {

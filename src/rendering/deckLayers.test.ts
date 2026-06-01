@@ -59,6 +59,42 @@ describe('deck layer factory', () => {
     expect(layers[1]).toBeInstanceOf(PolygonLayer)
   })
 
+  it('adds rough polygon boundaries only when true boundary data is absent', () => {
+    const roughBoundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'rough-cell-1',
+        polygon: [
+          [0, -5, 0],
+          [5, 0, 0],
+          [0, 5, 0],
+          [-5, 0, 0],
+        ],
+        fillColor: [32, 102, 83, 18],
+        lineColor: [246, 242, 232, 112],
+      },
+    ]
+
+    const roughLayers = createOverviewLayers(fixtureCells, [], roughBoundaries)
+    const trueLayers = createOverviewLayers(
+      fixtureCells,
+      roughBoundaries,
+      roughBoundaries,
+    )
+
+    expect(roughLayers).toHaveLength(2)
+    expect(roughLayers[1]).toBeInstanceOf(PolygonLayer)
+    expect(trueLayers).toHaveLength(2)
+    expect(trueLayers[1]).toBeInstanceOf(PolygonLayer)
+
+    const [, trueBoundaryLayer] = trueLayers
+
+    if (!(trueBoundaryLayer instanceof PolygonLayer)) {
+      throw new Error('Expected true boundary layer to be a PolygonLayer.')
+    }
+
+    expect(trueBoundaryLayer.id).toBe('cell-boundary-polygons')
+  })
+
   it('converts Xenium overview cells into deck.gl coordinates', () => {
     const [datum] = overviewCellsToLayerData([
       {

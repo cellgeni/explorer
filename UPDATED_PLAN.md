@@ -87,6 +87,10 @@ done. This file records execution-level additions requested after work began.
 - [x] Live smoke check on `http://127.0.0.1:5173/` loaded all 1,414,155 demo
       centroids by default in roughly 5 seconds with no morphology or boundary
       network requests at the top overview.
+- [x] Added an intermediate rough-boundary layer for up to 3x the configured
+      true-boundary limit. With the default 500-cell true-boundary limit, the
+      viewer renders four-point centroid/area approximations for up to 1,500
+      visible cells, then switches to true segmentation below 500 visible cells.
 
 ## Boundary Simplification Decision
 
@@ -94,3 +98,6 @@ done. This file records execution-level additions requested after work began.
       It would not reduce network or DuckDB work because the app would still have
       to fetch the full boundary vertices first. Revisit this only if a separate
       precomputed simplified-boundary parquet/geometry pyramid is added.
+- [x] The intermediate rough-boundary mode is not a simplified true boundary. It
+      is generated locally from centroids and `cell_area`, so it adds no
+      boundary-Parquet I/O and remains cheap enough for roughly 1,500 cells.

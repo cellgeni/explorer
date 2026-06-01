@@ -6,8 +6,9 @@ import {
   createOverviewViewState,
   spatialOverviewView,
 } from '../rendering/deckLayers'
-import { aggregateOverviewCells } from '../rendering/cellAggregation'
+import { aggregateOverviewCells, overviewCellsInBbox } from '../rendering/cellAggregation'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
+import { roughCellBoundariesForVisibleCells } from '../rendering/roughCellBoundaries'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
@@ -27,6 +28,7 @@ export interface ViewerCoreProps {
   readonly errorMessage?: string
   readonly imageErrorMessage?: string
   readonly boundaryErrorMessage?: string
+  readonly roughBoundaryMaxVisibleCells?: number
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
 }
@@ -47,6 +49,7 @@ export function ViewerCore({
   errorMessage,
   imageErrorMessage,
   boundaryErrorMessage,
+  roughBoundaryMaxVisibleCells = 0,
   onImageTileError,
   onViewportChange,
 }: ViewerCoreProps) {
@@ -66,6 +69,7 @@ export function ViewerCore({
       {...(errorMessage === undefined ? {} : { errorMessage })}
       {...(imageErrorMessage === undefined ? {} : { imageErrorMessage })}
       {...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage })}
+      roughBoundaryMaxVisibleCells={roughBoundaryMaxVisibleCells}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
     />
@@ -83,6 +87,7 @@ interface ViewerSurfaceProps {
   readonly errorMessage?: string
   readonly imageErrorMessage?: string
   readonly boundaryErrorMessage?: string
+  readonly roughBoundaryMaxVisibleCells: number
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
 }
@@ -98,6 +103,7 @@ function ViewerSurface({
   errorMessage,
   imageErrorMessage,
   boundaryErrorMessage,
+  roughBoundaryMaxVisibleCells,
   onImageTileError,
   onViewportChange,
 }: ViewerSurfaceProps) {
@@ -114,20 +120,27 @@ function ViewerSurface({
 
     return morphologyViewportBbox(viewState, viewport)
   }, [viewState, viewport])
+  const visibleCells = useMemo(
+    () => (viewportBbox === null ? cells : overviewCellsInBbox(cells, viewportBbox)),
+    [cells, viewportBbox],
+  )
   const displayCells = useMemo(
+    () => aggregateOverviewCells(visibleCells, viewState),
+    [visibleCells, viewState],
+  )
+  const roughBoundaries = useMemo(
     () =>
-      aggregateOverviewCells(
-        cells,
-        viewState,
-        viewportBbox === null ? {} : { bbox: viewportBbox },
-      ),
-    [cells, viewState, viewportBbox],
+      roughCellBoundariesForVisibleCells(visibleCells, {
+        maxCells: roughBoundaryMaxVisibleCells,
+      }),
+    [roughBoundaryMaxVisibleCells, visibleCells],
   )
   const layers = useMemo(
-    () => createOverviewLayers(displayCells, boundaries),
-    [boundaries, displayCells],
+    () => createOverviewLayers(displayCells, boundaries, roughBoundaries),
+    [boundaries, displayCells, roughBoundaries],
   )
   const hasCells = cells.length > 0
+  const visibleCellCount = visibleCells.length
   const viewportMessage = readViewportMessage(status, imageStatus, boundaryStatus, {
     ...(errorMessage === undefined ? {} : { errorMessage }),
     ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
@@ -176,7 +189,7 @@ function ViewerSurface({
     const timeout = window.setTimeout(() => {
       onViewportChange({
         bbox: viewportBbox,
-        visibleCellCount: countVisibleCells(cells, viewportBbox),
+        visibleCellCount,
         viewState,
       })
     }, 180)
@@ -184,7 +197,7 @@ function ViewerSurface({
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [cells, hasCells, onViewportChange, viewState, viewportBbox])
+  }, [hasCells, onViewportChange, viewState, viewportBbox, visibleCellCount])
 
   return (
     <div
@@ -276,21 +289,6 @@ function readViewportMessage(
   }
 
   return null
-}
-
-function countVisibleCells(cells: readonly OverviewCellDatum[], bbox: BBox): number {
-  let count = 0
-
-  for (const cell of cells) {
-    const [x = 0, deckY = 0] = cell.position
-    const rawY = -deckY
-
-    if (x >= bbox.minX && x <= bbox.maxX && rawY >= bbox.minY && rawY <= bbox.maxY) {
-      count += 1
-    }
-  }
-
-  return count
 }
 
 function normaliseViewState(viewState: {
