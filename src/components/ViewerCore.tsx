@@ -1,36 +1,53 @@
 import { DeckGL } from '@deck.gl/react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import {
   createOverviewLayers,
   createOverviewViewState,
   spatialOverviewView,
 } from '../rendering/deckLayers'
+import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
+import type { BBox } from '../data/coords'
+import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
-import type { OverviewCellDatum } from '../rendering/deckLayers'
+import type { CellBoundaryDatum, OverviewCellDatum } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
 export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface ViewerCoreProps {
   readonly cells?: readonly OverviewCellDatum[]
+  readonly boundaries?: readonly CellBoundaryDatum[]
   readonly imageLoader?: TiffPyramidLoader | null
   readonly status?: ViewerLoadStatus
   readonly imageStatus?: ViewerLoadStatus
+  readonly boundaryStatus?: ViewerLoadStatus
   readonly errorMessage?: string
   readonly imageErrorMessage?: string
+  readonly boundaryErrorMessage?: string
   readonly onImageTileError?: (error: Error) => void
+  readonly onViewportChange?: (detail: ViewerViewportDetail) => void
+}
+
+export interface ViewerViewportDetail {
+  readonly bbox: BBox
+  readonly visibleCellCount: number
+  readonly viewState: OverviewViewState
 }
 
 export function ViewerCore({
   cells = [],
+  boundaries = [],
   imageLoader = null,
   status = 'idle',
   imageStatus = 'idle',
+  boundaryStatus = 'idle',
   errorMessage,
   imageErrorMessage,
+  boundaryErrorMessage,
   onImageTileError,
+  onViewportChange,
 }: ViewerCoreProps) {
   const fittedViewState = useMemo(() => createOverviewViewState(cells), [cells])
   const resetKey = viewStateKey(fittedViewState)
@@ -39,44 +56,65 @@ export function ViewerCore({
     <ViewerSurface
       key={resetKey}
       cells={cells}
+      boundaries={boundaries}
       imageLoader={imageLoader}
       initialViewState={fittedViewState}
       status={status}
       imageStatus={imageStatus}
+      boundaryStatus={boundaryStatus}
       {...(errorMessage === undefined ? {} : { errorMessage })}
       {...(imageErrorMessage === undefined ? {} : { imageErrorMessage })}
+      {...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage })}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
+      {...(onViewportChange === undefined ? {} : { onViewportChange })}
     />
   )
 }
 
 interface ViewerSurfaceProps {
   readonly cells: readonly OverviewCellDatum[]
+  readonly boundaries: readonly CellBoundaryDatum[]
   readonly imageLoader: TiffPyramidLoader | null
   readonly initialViewState: OverviewViewState
   readonly status: ViewerLoadStatus
   readonly imageStatus: ViewerLoadStatus
+  readonly boundaryStatus: ViewerLoadStatus
   readonly errorMessage?: string
   readonly imageErrorMessage?: string
+  readonly boundaryErrorMessage?: string
   readonly onImageTileError?: (error: Error) => void
+  readonly onViewportChange?: (detail: ViewerViewportDetail) => void
 }
 
 function ViewerSurface({
   cells,
+  boundaries,
   imageLoader,
   initialViewState,
   status,
   imageStatus,
+  boundaryStatus,
   errorMessage,
   imageErrorMessage,
+  boundaryErrorMessage,
   onImageTileError,
+  onViewportChange,
 }: ViewerSurfaceProps) {
-  const layers = useMemo(() => createOverviewLayers(cells), [cells])
+  const frameRef = useRef<HTMLDivElement>(null)
+  const layers = useMemo(
+    () => createOverviewLayers(cells, boundaries),
+    [boundaries, cells],
+  )
   const [viewState, setViewState] = useState<OverviewViewState>(initialViewState)
+  const [viewport, setViewport] = useState<CssViewportSize>({
+    width: 0,
+    height: 0,
+  })
   const hasCells = cells.length > 0
-  const viewportMessage = readViewportMessage(status, imageStatus, {
+  const viewportMessage = readViewportMessage(status, imageStatus, boundaryStatus, {
     ...(errorMessage === undefined ? {} : { errorMessage }),
     ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
+    ...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage }),
   })
   const handleViewStateChange = useCallback(
     ({ viewState: nextViewState }: ViewStateChangeParameters) => {
@@ -85,8 +123,66 @@ function ViewerSurface({
     [],
   )
 
+  useEffect(() => {
+    const frame = frameRef.current
+
+    if (frame === null) {
+      return
+    }
+
+    const updateViewport = () => {
+      const rect = frame.getBoundingClientRect()
+      setViewport({
+        width: rect.width || frame.clientWidth,
+        height: rect.height || frame.clientHeight,
+      })
+    }
+
+    updateViewport()
+    window.addEventListener('resize', updateViewport)
+
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateViewport)
+    observer?.observe(frame)
+
+    return () => {
+      window.removeEventListener('resize', updateViewport)
+      observer?.disconnect()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (
+      onViewportChange === undefined ||
+      !hasCells ||
+      viewport.width <= 0 ||
+      viewport.height <= 0
+    ) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      const bbox = morphologyViewportBbox(viewState, viewport)
+
+      onViewportChange({
+        bbox,
+        visibleCellCount: countVisibleCells(cells, bbox),
+        viewState,
+      })
+    }, 180)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [cells, hasCells, onViewportChange, viewState, viewport])
+
   return (
-    <div className="viewport-frame" role="img" aria-label="Spatial viewer canvas area">
+    <div
+      ref={frameRef}
+      className="viewport-frame"
+      role="img"
+      aria-label="Spatial viewer canvas area"
+    >
       {imageLoader === null ? <div className="viewport-grid" aria-hidden="true" /> : null}
       <MorphologyCanvas
         loader={imageLoader}
@@ -129,9 +225,11 @@ function ViewerSurface({
 function readViewportMessage(
   status: ViewerLoadStatus,
   imageStatus: ViewerLoadStatus,
+  boundaryStatus: ViewerLoadStatus,
   messages: {
     readonly errorMessage?: string
     readonly imageErrorMessage?: string
+    readonly boundaryErrorMessage?: string
   },
 ): { readonly kind: 'info' | 'error'; readonly text: string } | null {
   if (status === 'loading') {
@@ -156,7 +254,33 @@ function readViewportMessage(
     }
   }
 
+  if (boundaryStatus === 'loading') {
+    return { kind: 'info', text: 'Loading cell boundaries...' }
+  }
+
+  if (boundaryStatus === 'error') {
+    return {
+      kind: 'error',
+      text: messages.boundaryErrorMessage ?? 'Cell boundary load failed.',
+    }
+  }
+
   return null
+}
+
+function countVisibleCells(cells: readonly OverviewCellDatum[], bbox: BBox): number {
+  let count = 0
+
+  for (const cell of cells) {
+    const [x = 0, deckY = 0] = cell.position
+    const rawY = -deckY
+
+    if (x >= bbox.minX && x <= bbox.maxX && rawY >= bbox.minY && rawY <= bbox.maxY) {
+      count += 1
+    }
+  }
+
+  return count
 }
 
 function normaliseViewState(viewState: {

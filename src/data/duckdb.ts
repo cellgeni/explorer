@@ -1,9 +1,6 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
-import duckdbCoiWasm from '@duckdb/duckdb-wasm/dist/duckdb-coi.wasm?url'
 import duckdbEhWasm from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url'
 import duckdbMvpWasm from '@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url'
-import coiPthreadWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-coi.pthread.worker.js?url'
-import coiWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-coi.worker.js?url'
 import ehWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'
 import mvpWorker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url'
 
@@ -17,6 +14,11 @@ export interface DuckDbClient {
   readonly bundle: duckdb.DuckDBBundle
   readonly version: string
   close(): Promise<void>
+}
+
+export interface ConfigureDuckDbOptions {
+  readonly requireSpatial?: boolean
+  readonly onSpatialLoadError?: (error: Error) => void
 }
 
 export interface CreateDuckDbClientOptions {
@@ -34,17 +36,26 @@ export function getDuckDbBundles(): duckdb.DuckDBBundles {
       mainModule: duckdbEhWasm,
       mainWorker: ehWorker,
     },
-    coi: {
-      mainModule: duckdbCoiWasm,
-      mainWorker: coiWorker,
-      pthreadWorker: coiPthreadWorker,
-    },
   }
 }
 
-export async function configureDuckDb(conn: DuckDbQueryConnection): Promise<void> {
+export async function configureDuckDb(
+  conn: DuckDbQueryConnection,
+  options: ConfigureDuckDbOptions = {},
+): Promise<void> {
   await conn.query('SET enable_http_metadata_cache=true')
-  await conn.query('LOAD spatial')
+
+  try {
+    await conn.query('LOAD spatial')
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error(String(cause))
+
+    if (options.requireSpatial === true) {
+      throw error
+    }
+
+    options.onSpatialLoadError?.(error)
+  }
 }
 
 export async function createDuckDbClient(

@@ -162,7 +162,7 @@ h2 {
   color: #171511;
 }
 
-.dataset-form .morphology-toggle {
+.dataset-form .dataset-toggle {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -173,7 +173,7 @@ h2 {
   text-transform: none;
 }
 
-.morphology-toggle input {
+.dataset-toggle input {
   width: 18px;
   min-width: 18px;
   height: 18px;

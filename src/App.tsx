@@ -1,23 +1,40 @@
 import type { FormEvent } from 'react'
-import { useCallback, useId, useRef, useState } from 'react'
+import { useCallback, useId, useMemo, useRef, useState } from 'react'
 import { ViewerCore } from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
-import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
+import { loadDatasetBoundaryElements as defaultLoadBoundaryElements } from './data/datasetBoundaries'
+import {
+  DEFAULT_OVERVIEW_CELL_LIMIT,
+  loadDatasetOverview as defaultLoadDatasetOverview,
+} from './data/datasetOverview'
 import { loadMorphologyImage as defaultLoadMorphologyImage } from './data/morphologyImage'
+import {
+  boundaryViewportKey,
+  shouldLoadBoundaryPolygons,
+} from './rendering/boundaryViewport'
+import { boundaryElementsToLayerData } from './rendering/deckLayers'
 import { overviewCellsToLayerData } from './rendering/deckLayers'
 import { bundledDeckVersion } from './rendering/deckLayers'
 import { useViewerStore } from './store/viewerStore'
+import type { BBox } from './data/coords'
 import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage } from './data/morphologyImage'
+import type { ElementBatch, SpatialElement } from './datasets/spatialDataset'
 import type { OverviewCellDatum } from './rendering/deckLayers'
+import type { ViewerViewportDetail } from './components/ViewerCore'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
+  options?: { readonly limit?: number | null },
 ) => Promise<readonly CellOverviewPoint[]>
 
 export type MorphologyImageLoader = (baseUrl: string) => Promise<MorphologyImage>
+export type BoundaryElementsLoader = (
+  baseUrl: string,
+  bbox: BBox,
+) => Promise<ElementBatch>
 
 type DatasetLoadState =
   | { readonly status: 'idle' }
@@ -31,16 +48,25 @@ type MorphologyLoadState =
   | { readonly status: 'ready'; readonly url: string }
   | { readonly status: 'error'; readonly url: string; readonly message: string }
 
+type BoundaryLoadState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | { readonly status: 'ready'; readonly url: string; readonly cellCount: number }
+  | { readonly status: 'error'; readonly url: string; readonly message: string }
+
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader
   readonly loadMorphologyImage?: MorphologyImageLoader
+  readonly loadBoundaryElements?: BoundaryElementsLoader
 }
 
 export function App({
   loadDatasetOverview = defaultLoadDatasetOverview,
   loadMorphologyImage = defaultLoadMorphologyImage,
+  loadBoundaryElements = defaultLoadBoundaryElements,
 }: AppProps) {
   const datasetInputId = useId()
+  const allCellsInputId = useId()
   const morphologyInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
@@ -48,12 +74,23 @@ export function App({
   const [morphologyState, setMorphologyState] = useState<MorphologyLoadState>({
     status: 'idle',
   })
+  const [boundaryState, setBoundaryState] = useState<BoundaryLoadState>({
+    status: 'idle',
+  })
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
   const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
+  const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
+  const [shouldLoadAllCells, setShouldLoadAllCells] = useState(false)
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(false)
   const loadRequestId = useRef(0)
+  const boundaryRequestId = useRef(0)
+  const boundaryViewportKeyRef = useRef<string | null>(null)
   const isLoading = loadState.status === 'loading'
   const statusCopy = datasetStatusCopy(loadState, datasetUrl)
+  const boundaryLayerData = useMemo(
+    () => boundaryElementsToLayerData(boundaryElements),
+    [boundaryElements],
+  )
   const handleImageTileError = useCallback((error: Error) => {
     setMorphologyState((current) => {
       if (current.status !== 'ready') {
@@ -67,12 +104,68 @@ export function App({
       }
     })
   }, [])
+  const handleViewportChange = useCallback(
+    (detail: ViewerViewportDetail) => {
+      if (loadState.status !== 'ready') {
+        return
+      }
+
+      if (!shouldLoadBoundaryPolygons(detail)) {
+        boundaryRequestId.current += 1
+        boundaryViewportKeyRef.current = null
+        setBoundaryElements((current) => (current.length === 0 ? current : []))
+        setBoundaryState((current) =>
+          current.status === 'idle' ? current : { status: 'idle' },
+        )
+        return
+      }
+
+      const requestKey = boundaryViewportKey(loadState.url, detail.bbox)
+
+      if (requestKey === boundaryViewportKeyRef.current) {
+        return
+      }
+
+      const requestId = boundaryRequestId.current + 1
+      boundaryRequestId.current = requestId
+      boundaryViewportKeyRef.current = requestKey
+      setBoundaryState({ status: 'loading', url: loadState.url })
+
+      void loadBoundaryElements(loadState.url, detail.bbox)
+        .then((batch) => {
+          if (boundaryRequestId.current !== requestId) {
+            return
+          }
+
+          setBoundaryElements(batch.elements)
+          setBoundaryState({
+            status: 'ready',
+            url: loadState.url,
+            cellCount: batch.elements.length,
+          })
+        })
+        .catch((error) => {
+          if (boundaryRequestId.current !== requestId) {
+            return
+          }
+
+          setBoundaryElements([])
+          setBoundaryState({
+            status: 'error',
+            url: loadState.url,
+            message: readErrorMessage(error),
+          })
+        })
+    },
+    [loadBoundaryElements, loadState],
+  )
 
   async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const formData = new FormData(event.currentTarget)
     const datasetUrl = formData.get('datasetUrl')
+    const loadAllCells = formData.get('loadAllCells') === 'on'
     const loadImage = formData.get('loadMorphologyImage') === 'on'
 
     if (typeof datasetUrl === 'string' && datasetUrl.trim().length > 0) {
@@ -83,13 +176,19 @@ export function App({
       setDatasetUrl(requestedUrl)
       setOverviewCells([])
       setMorphologyImage(null)
+      setBoundaryElements([])
       setLoadState({ status: 'loading', url: requestedUrl })
       setMorphologyState(
         loadImage ? { status: 'loading', url: requestedUrl } : { status: 'idle' },
       )
+      setBoundaryState({ status: 'idle' })
+      boundaryRequestId.current += 1
+      boundaryViewportKeyRef.current = null
 
       try {
-        const cells = await loadDatasetOverview(requestedUrl)
+        const cells = await loadDatasetOverview(requestedUrl, {
+          limit: loadAllCells ? null : DEFAULT_OVERVIEW_CELL_LIMIT,
+        })
 
         if (loadRequestId.current !== requestId) {
           return
@@ -170,7 +269,19 @@ export function App({
             defaultValue={datasetUrl}
             placeholder="https://bucket.example/output…"
           />
-          <label className="morphology-toggle" htmlFor={morphologyInputId}>
+          <label className="dataset-toggle" htmlFor={allCellsInputId}>
+            <input
+              id={allCellsInputId}
+              name="loadAllCells"
+              type="checkbox"
+              checked={shouldLoadAllCells}
+              onChange={(event) => {
+                setShouldLoadAllCells(event.currentTarget.checked)
+              }}
+            />
+            <span>All cells</span>
+          </label>
+          <label className="dataset-toggle" htmlFor={morphologyInputId}>
             <input
               id={morphologyInputId}
               name="loadMorphologyImage"
@@ -216,13 +327,19 @@ export function App({
 
         <ViewerCore
           cells={overviewCells}
+          boundaries={boundaryLayerData}
           imageLoader={morphologyImage?.loader ?? null}
           status={loadState.status}
           imageStatus={morphologyState.status}
+          boundaryStatus={boundaryState.status}
           onImageTileError={handleImageTileError}
+          onViewportChange={handleViewportChange}
           {...(loadState.status === 'error' ? { errorMessage: loadState.message } : {})}
           {...(morphologyState.status === 'error'
             ? { imageErrorMessage: morphologyState.message }
+            : {})}
+          {...(boundaryState.status === 'error'
+            ? { boundaryErrorMessage: boundaryState.message }
             : {})}
         />
       </section>

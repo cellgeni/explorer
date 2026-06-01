@@ -1,12 +1,14 @@
 import { readCellsOverview } from './hyparquetCells'
 import type { CellOverviewPoint, ReadCellsOverviewOptions } from './hyparquetCells'
 
+export const DEFAULT_OVERVIEW_CELL_LIMIT = 50_000
+
 export type CellsOverviewReader = (
   options: ReadCellsOverviewOptions,
 ) => Promise<readonly CellOverviewPoint[]>
 
 export interface LoadDatasetOverviewOptions {
-  readonly limit?: number
+  readonly limit?: number | null
   readonly readCells?: CellsOverviewReader
 }
 
@@ -15,10 +17,12 @@ export async function loadDatasetOverview(
   options: LoadDatasetOverviewOptions = {},
 ): Promise<readonly CellOverviewPoint[]> {
   const readCells = options.readCells ?? readCellsOverview
+  const limit =
+    options.limit === null ? undefined : (options.limit ?? DEFAULT_OVERVIEW_CELL_LIMIT)
 
   return readCells({
     url: cellsParquetUrl(baseUrl),
-    ...(options.limit === undefined ? {} : { limit: options.limit }),
+    ...(limit === undefined ? {} : { limit }),
   })
 }
 

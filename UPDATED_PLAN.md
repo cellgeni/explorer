@@ -58,3 +58,15 @@ done. This file records execution-level additions requested after work began.
       `Load Dataset` path loads overview cells only and does not start OME-TIFF
       metadata, range, or JPEG-2000 decode work unless `Morphology image` is
       selected.
+- [x] Overview cell loading keeps the fast 50,000-cell first-paint path by
+      default after a full-read smoke check exceeded 60 seconds. `All cells` is
+      now an explicit opt-in that removes the hyparquet row limit.
+- [x] True cell segmentation can now render as deck.gl polygons. The viewer
+      debounces viewport changes and loads `cell_boundaries.parquet` only when
+      the viewport is close enough or has no more than 500 visible overview
+      cells.
+- [x] Boundary loading uses the `SpatialDataset.elements(bbox)` range-read path
+      and dynamically imports DuckDB only after the polygon threshold is met.
+      DuckDB now uses the non-threaded MVP/EH worker bundles because the COI
+      pthread bundle failed to load DuckDB extensions (`spatial`/`parquet`) in
+      the browser with a shared-memory mismatch.

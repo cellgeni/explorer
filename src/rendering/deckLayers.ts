@@ -1,7 +1,8 @@
 import type { Color, LayersList, Position } from '@deck.gl/core'
 import { OrthographicView, VERSION as deckVersion } from '@deck.gl/core'
-import { ScatterplotLayer } from '@deck.gl/layers'
+import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
+import type { SpatialElement } from '../datasets/spatialDataset'
 
 export interface OverviewCellDatum {
   readonly id: string
@@ -15,6 +16,13 @@ export interface OverviewViewState {
   readonly zoom: number
   readonly minZoom: number
   readonly maxZoom: number
+}
+
+export interface CellBoundaryDatum {
+  readonly id: string
+  readonly polygon: readonly Position[]
+  readonly fillColor: Color
+  readonly lineColor: Color
 }
 
 const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
@@ -31,8 +39,11 @@ export const spatialOverviewView = new OrthographicView({
 
 export const bundledDeckVersion = deckVersion
 
-export function createOverviewLayers(cells: readonly OverviewCellDatum[]): LayersList {
-  return [
+export function createOverviewLayers(
+  cells: readonly OverviewCellDatum[],
+  boundaries: readonly CellBoundaryDatum[] = [],
+): LayersList {
+  const layers: LayersList = [
     new ScatterplotLayer<OverviewCellDatum>({
       id: 'cells-overview-scatter',
       data: cells,
@@ -44,6 +55,26 @@ export function createOverviewLayers(cells: readonly OverviewCellDatum[]): Layer
       getFillColor: (cell) => cell.fillColor,
     }),
   ]
+
+  if (boundaries.length > 0) {
+    layers.push(
+      new PolygonLayer<CellBoundaryDatum>({
+        id: 'cell-boundary-polygons',
+        data: boundaries,
+        pickable: true,
+        stroked: true,
+        filled: true,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 1,
+        getPolygon: (cell) => cell.polygon,
+        getFillColor: (cell) => cell.fillColor,
+        getLineColor: (cell) => cell.lineColor,
+        getLineWidth: 1,
+      }),
+    )
+  }
+
+  return layers
 }
 
 export function overviewCellsToLayerData(
@@ -68,6 +99,33 @@ export function overviewCellsToLayerData(
       fillColor: [215, 63, 124, 150 + Math.round(intensity * 90)],
     }
   })
+}
+
+export function boundaryElementsToLayerData(
+  elements: readonly SpatialElement[],
+): readonly CellBoundaryDatum[] {
+  const cells: CellBoundaryDatum[] = []
+
+  for (const element of elements) {
+    if (element.geometry.kind !== 'polygon') {
+      continue
+    }
+
+    const ring = element.geometry.rings[0]
+
+    if (ring === undefined || ring.length < 3) {
+      continue
+    }
+
+    cells.push({
+      id: element.id,
+      polygon: ring.map((point) => [point.x, -point.y, 0]),
+      fillColor: [32, 102, 83, 34],
+      lineColor: [246, 242, 232, 210],
+    })
+  }
+
+  return cells
 }
 
 export function createOverviewViewState(
