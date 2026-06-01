@@ -4,6 +4,7 @@ import { App } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
+import type { TiffPyramidLoader } from './tiff/loader'
 
 vi.mock('@deck.gl/react', () => ({
   DeckGL: () => <div data-testid="deckgl" />,
@@ -37,12 +38,24 @@ describe('App', () => {
         transcriptCount: 8,
       },
     ])
+    const loadMorphologyImage = vi.fn(async () => ({
+      url: `${DEMO_DATASET_URL}/morphology_focus/morphology_focus_0000.ome.tif`,
+      loader: {} as TiffPyramidLoader,
+    }))
 
-    render(<App loadDatasetOverview={loadDatasetOverview} />)
+    render(
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadMorphologyImage={loadMorphologyImage}
+      />,
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {
       expect(loadDatasetOverview).toHaveBeenCalledWith(DEMO_DATASET_URL)
+    })
+    await waitFor(() => {
+      expect(loadMorphologyImage).toHaveBeenCalledWith(DEMO_DATASET_URL)
     })
     expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
     expect(screen.getByTestId('deckgl')).toBeInTheDocument()

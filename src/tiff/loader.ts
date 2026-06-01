@@ -60,7 +60,6 @@ export async function openTiff(
   const tiff = await fromUrl(url, { allowFullFile: false }, signal)
   const firstImage = await tiff.getImage(0)
   const firstDirectory = firstImage.getFileDirectory()
-  const firstTags = firstDirectory.toObject()
   const imageWidth = imagePixels(firstImage.getWidth())
   const imageHeight = imagePixels(firstImage.getHeight())
   const tileWidth = imagePixels(firstImage.getTileWidth() || 256)
@@ -70,7 +69,7 @@ export async function openTiff(
     imageUnit: 'pixel',
     micrometersPerPixel: micrometers(
       parsePhysicalSizeMicrometersPerPixel(
-        readOptionalStringTag(firstTags, 'ImageDescription'),
+        await readOptionalStringTag(firstDirectory, 'ImageDescription'),
       ),
     ),
     origin: 'top-left',
@@ -79,9 +78,9 @@ export async function openTiff(
   const chunkIndex = new Map<string, TiffChunk>()
   const levelMeta = new Map<number, TiffLevelMeta>()
 
-  indexLevel({
+  await indexLevel({
     chunkIndex,
-    directory: firstTags,
+    directory: firstDirectory,
     height: imageHeight,
     level: 0,
     levelMeta,
@@ -90,18 +89,17 @@ export async function openTiff(
     width: imageWidth,
   })
 
-  const subIfds = readNumberArrayTag(firstTags, 'SubIFDs')
+  const subIfds = await readNumberArrayTag(firstDirectory, 'SubIFDs')
   await Promise.all(
     subIfds.map(async (offset, index) => {
       const directory = await parseFileDirectoryAt(tiff, offset)
-      const tags = directory.toObject()
       const level = index + 1
-      const width = imagePixels(readRequiredNumberTag(tags, 'ImageWidth'))
-      const height = imagePixels(readRequiredNumberTag(tags, 'ImageLength'))
+      const width = imagePixels(await readRequiredNumberTag(directory, 'ImageWidth'))
+      const height = imagePixels(await readRequiredNumberTag(directory, 'ImageLength'))
 
-      indexLevel({
+      await indexLevel({
         chunkIndex,
-        directory: tags,
+        directory,
         height,
         level,
         levelMeta,
@@ -221,7 +219,7 @@ export class TiffPyramidLoader {
 
 interface IndexLevelOptions {
   readonly chunkIndex: Map<string, TiffChunk>
-  readonly directory: Readonly<Record<string, unknown>>
+  readonly directory: ImageFileDirectory
   readonly height: ImagePixels
   readonly level: number
   readonly levelMeta: Map<number, TiffLevelMeta>
@@ -230,9 +228,9 @@ interface IndexLevelOptions {
   readonly width: ImagePixels
 }
 
-function indexLevel(options: IndexLevelOptions): void {
-  const offsets = readNumberArrayTag(options.directory, 'TileOffsets')
-  const byteCounts = readNumberArrayTag(options.directory, 'TileByteCounts')
+async function indexLevel(options: IndexLevelOptions): Promise<void> {
+  const offsets = await readNumberArrayTag(options.directory, 'TileOffsets')
+  const byteCounts = await readNumberArrayTag(options.directory, 'TileByteCounts')
   const nCols = Math.ceil(options.width / options.tileWidth)
   const nRows = Math.ceil(options.height / options.tileHeight)
 
@@ -278,11 +276,15 @@ function chunkKey(level: number, row: number, col: number): string {
   return `${level}/${row}/${col}`
 }
 
-function readOptionalStringTag(
-  tags: Readonly<Record<string, unknown>>,
+interface TiffDirectoryValueLoader {
+  loadValue(tagIdentifier: string | number): Promise<unknown>
+}
+
+export async function readOptionalStringTag(
+  directory: TiffDirectoryValueLoader,
   key: string,
-): string | undefined {
-  const value = tags[key]
+): Promise<string | undefined> {
+  const value = await directory.loadValue(key)
 
   if (value === undefined) {
     return undefined
@@ -295,36 +297,52 @@ function readOptionalStringTag(
   return value
 }
 
-function readRequiredNumberTag(
-  tags: Readonly<Record<string, unknown>>,
+export async function readRequiredNumberTag(
+  directory: TiffDirectoryValueLoader,
   key: string,
-): number {
-  const value = tags[key]
+): Promise<number> {
+  const value = await directory.loadValue(key)
 
-  if (typeof value !== 'number') {
+  if (!isNumberLike(value)) {
     throw new Error(`Expected TIFF tag ${key} to be a number.`)
   }
 
-  return value
+  return numberLikeToNumber(value, key)
 }
 
-function readNumberArrayTag(
-  tags: Readonly<Record<string, unknown>>,
+export async function readNumberArrayTag(
+  directory: TiffDirectoryValueLoader,
   key: string,
-): readonly number[] {
-  const value = tags[key]
+): Promise<readonly number[]> {
+  const value = await directory.loadValue(key)
 
   if (value === undefined) {
     return []
   }
 
-  if (Array.isArray(value) && value.every((item) => typeof item === 'number')) {
-    return value
+  if (Array.isArray(value) && value.every(isNumberLike)) {
+    return value.map((item) => numberLikeToNumber(item, key))
   }
 
-  if (ArrayBuffer.isView(value) && 'length' in value) {
-    return Array.from(value as unknown as ArrayLike<number>)
+  if (ArrayBuffer.isView(value) && !(value instanceof DataView) && 'length' in value) {
+    return Array.from(value as unknown as ArrayLike<number | bigint>, (item) =>
+      numberLikeToNumber(item, key),
+    )
   }
 
   throw new Error(`Expected TIFF tag ${key} to be a number array.`)
+}
+
+function isNumberLike(value: unknown): value is number | bigint {
+  return typeof value === 'number' || typeof value === 'bigint'
+}
+
+function numberLikeToNumber(value: number | bigint, key: string): number {
+  const numberValue = typeof value === 'bigint' ? Number(value) : value
+
+  if (!Number.isFinite(numberValue) || !Number.isSafeInteger(numberValue)) {
+    throw new Error(`Expected TIFF tag ${key} to contain a safe finite number.`)
+  }
+
+  return numberValue
 }

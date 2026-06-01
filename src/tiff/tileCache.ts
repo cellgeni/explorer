@@ -16,6 +16,7 @@ export interface TileSource {
 export interface TileCacheOptions {
   readonly maxTiles?: number
   readonly decodeTile?: TileBitmapDecoder
+  readonly onError?: (error: Error) => void
 }
 
 export type TileCacheEntry = TileLoadingEntry | TileReadyEntry | TileErrorEntry
@@ -49,11 +50,13 @@ export class TileCache {
   private readonly order: string[] = []
   private readonly maxTiles: number
   private readonly decodeTile: TileBitmapDecoder
+  private readonly onError: (error: Error) => void
   private displayWindow: DisplayWindow | undefined
 
   constructor(options: TileCacheOptions) {
     this.maxTiles = options.maxTiles ?? 150
     this.decodeTile = options.decodeTile ?? createWorkerTileDecoder()
+    this.onError = options.onError ?? noop
   }
 
   key(level: number, col: number, row: number): string {
@@ -163,6 +166,7 @@ export class TileCache {
       }
 
       this.cache.set(key, failed)
+      this.onError(error)
       return failed
     }
   }
@@ -199,3 +203,5 @@ export class TileCache {
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY)
 }
+
+function noop(): void {}

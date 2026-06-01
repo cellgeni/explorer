@@ -17,16 +17,15 @@ function assertStaticUserConfig(config: typeof viteConfig): UserConfig {
 }
 
 describe('vite config', () => {
-  it('keeps WASM packages out of dependency optimization', () => {
+  it('configures WASM package optimization boundaries', () => {
     const config = assertStaticUserConfig(viteConfig)
 
     expect(config.assetsInclude).toEqual(['**/*.wasm'])
     expect(config.optimizeDeps?.exclude).toEqual(
-      expect.arrayContaining([
-        '@cornerstonejs/codec-openjpeg',
-        '@duckdb/duckdb-wasm',
-        'h5wasm',
-      ]),
+      expect.arrayContaining(['@duckdb/duckdb-wasm', 'h5wasm']),
+    )
+    expect(config.optimizeDeps?.include).toEqual(
+      expect.arrayContaining(['@cornerstonejs/codec-openjpeg']),
     )
   })
 

@@ -79,4 +79,23 @@ describe('TileCache', () => {
       return bitmap
     }
   })
+
+  it('reports tile load errors through the cache callback', async () => {
+    const source = new FakeTileSource()
+    const onError = vi.fn()
+    const cache = new TileCache({
+      decodeTile: async () => {
+        throw new Error('decode failed')
+      },
+      onError,
+    })
+
+    await expect(cache.request(source, 0, 1, 2)).resolves.toMatchObject({
+      state: 'error',
+      error: new Error('decode failed'),
+    })
+
+    expect(onError).toHaveBeenCalledOnce()
+    expect(onError.mock.calls[0]?.[0].message).toBe('decode failed')
+  })
 })

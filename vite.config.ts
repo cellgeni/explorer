@@ -9,7 +9,8 @@ export const crossOriginIsolationHeaders = {
 export default defineConfig({
   assetsInclude: ['**/*.wasm'],
   optimizeDeps: {
-    exclude: ['@cornerstonejs/codec-openjpeg', '@duckdb/duckdb-wasm', 'h5wasm'],
+    exclude: ['@duckdb/duckdb-wasm', 'h5wasm'],
+    include: ['@cornerstonejs/codec-openjpeg'],
   },
   plugins: [react()],
   preview: {

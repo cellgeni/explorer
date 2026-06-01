@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { imagePixels, micrometers } from '../data/coords'
-import { parsePhysicalSizeMicrometersPerPixel, TiffPyramidLoader } from './loader'
+import {
+  parsePhysicalSizeMicrometersPerPixel,
+  readNumberArrayTag,
+  readOptionalStringTag,
+  readRequiredNumberTag,
+  TiffPyramidLoader,
+} from './loader'
 import type { TiffChunk, TiffLevelMeta } from './loader'
 import type { UnitsDescriptor } from '../data/coords'
 
@@ -17,6 +23,28 @@ describe('TIFF metadata parsing', () => {
     expect(parsePhysicalSizeMicrometersPerPixel('PhysicalSizeX="0.2125"')).toBe(0.2125)
     expect(parsePhysicalSizeMicrometersPerPixel(undefined)).toBe(0.2125)
     expect(parsePhysicalSizeMicrometersPerPixel('PhysicalSizeX="-1"')).toBe(0.2125)
+  })
+
+  it('loads deferred directory scalar and array tags', async () => {
+    const directory = {
+      async loadValue(tagIdentifier: string | number): Promise<unknown> {
+        const values: Readonly<Record<string, unknown>> = {
+          ImageDescription: 'PhysicalSizeX="0.2125"',
+          ImageWidth: 51294,
+          TileOffsets: new BigUint64Array([128n, 256n]),
+        }
+
+        return values[String(tagIdentifier)]
+      },
+    }
+
+    await expect(readOptionalStringTag(directory, 'ImageDescription')).resolves.toBe(
+      'PhysicalSizeX="0.2125"',
+    )
+    await expect(readRequiredNumberTag(directory, 'ImageWidth')).resolves.toBe(51294)
+    await expect(readNumberArrayTag(directory, 'TileOffsets')).resolves.toEqual([
+      128, 256,
+    ])
   })
 })
 

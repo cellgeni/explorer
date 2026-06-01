@@ -44,3 +44,13 @@ done. This file records execution-level additions requested after work began.
       render the overview scatter layer.
 - [x] Demo dataset smoke check loaded 50,000 overview cells from the default
       dataset URL on `http://127.0.0.1:5173/`.
+- [x] OME-TIFF morphology is now read after the cell overview loads. The loader
+      falls back from the missing `morphology_mip.ome.tif` to
+      `morphology_focus/morphology_focus_0000.ome.tif`, resolves GeoTIFF
+      deferred tile offset/byte-count arrays, indexes 9 pyramid levels, fetches
+      JPEG-2000 tile byte ranges, decodes them in workers, and draws the canvas
+      underlay.
+- [x] Tile decode failures are surfaced back to the viewport error state instead
+      of being silently swallowed.
+- [x] Live smoke check on `http://127.0.0.1:5173/` loaded 50,000 overview cells
+      and verified the morphology canvas had non-transparent decoded pixels.

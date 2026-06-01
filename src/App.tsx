@@ -1,12 +1,14 @@
 import type { FormEvent } from 'react'
-import { useId, useRef, useState } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
 import { ViewerCore } from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
+import { loadMorphologyImage as defaultLoadMorphologyImage } from './data/morphologyImage'
 import { overviewCellsToLayerData } from './rendering/deckLayers'
 import { bundledDeckVersion } from './rendering/deckLayers'
 import { useViewerStore } from './store/viewerStore'
 import type { CellOverviewPoint } from './data/hyparquetCells'
+import type { MorphologyImage } from './data/morphologyImage'
 import type { OverviewCellDatum } from './rendering/deckLayers'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
@@ -15,25 +17,54 @@ export type DatasetOverviewLoader = (
   baseUrl: string,
 ) => Promise<readonly CellOverviewPoint[]>
 
+export type MorphologyImageLoader = (baseUrl: string) => Promise<MorphologyImage>
+
 type DatasetLoadState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
   | { readonly status: 'ready'; readonly url: string; readonly cellCount: number }
   | { readonly status: 'error'; readonly url: string; readonly message: string }
 
+type MorphologyLoadState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | { readonly status: 'ready'; readonly url: string }
+  | { readonly status: 'error'; readonly url: string; readonly message: string }
+
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader
+  readonly loadMorphologyImage?: MorphologyImageLoader
 }
 
-export function App({ loadDatasetOverview = defaultLoadDatasetOverview }: AppProps) {
+export function App({
+  loadDatasetOverview = defaultLoadDatasetOverview,
+  loadMorphologyImage = defaultLoadMorphologyImage,
+}: AppProps) {
   const datasetInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const [loadState, setLoadState] = useState<DatasetLoadState>({ status: 'idle' })
+  const [morphologyState, setMorphologyState] = useState<MorphologyLoadState>({
+    status: 'idle',
+  })
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
+  const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
   const loadRequestId = useRef(0)
   const isLoading = loadState.status === 'loading'
   const statusCopy = datasetStatusCopy(loadState, datasetUrl)
+  const handleImageTileError = useCallback((error: Error) => {
+    setMorphologyState((current) => {
+      if (current.status !== 'ready') {
+        return current
+      }
+
+      return {
+        status: 'error',
+        url: current.url,
+        message: readErrorMessage(error),
+      }
+    })
+  }, [])
 
   async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -48,7 +79,9 @@ export function App({ loadDatasetOverview = defaultLoadDatasetOverview }: AppPro
 
       setDatasetUrl(requestedUrl)
       setOverviewCells([])
+      setMorphologyImage(null)
       setLoadState({ status: 'loading', url: requestedUrl })
+      setMorphologyState({ status: 'loading', url: requestedUrl })
 
       try {
         const cells = await loadDatasetOverview(requestedUrl)
@@ -63,6 +96,29 @@ export function App({ loadDatasetOverview = defaultLoadDatasetOverview }: AppPro
           url: requestedUrl,
           cellCount: cells.length,
         })
+        void loadMorphologyImage(requestedUrl)
+          .then((image) => {
+            if (loadRequestId.current !== requestId) {
+              return
+            }
+
+            setMorphologyImage(image)
+            setMorphologyState({
+              status: 'ready',
+              url: image.url,
+            })
+          })
+          .catch((error) => {
+            if (loadRequestId.current !== requestId) {
+              return
+            }
+
+            setMorphologyState({
+              status: 'error',
+              url: requestedUrl,
+              message: readErrorMessage(error),
+            })
+          })
       } catch (error) {
         if (loadRequestId.current !== requestId) {
           return
@@ -73,6 +129,7 @@ export function App({ loadDatasetOverview = defaultLoadDatasetOverview }: AppPro
           url: requestedUrl,
           message: readErrorMessage(error),
         })
+        setMorphologyState({ status: 'idle' })
       }
     }
   }
@@ -137,8 +194,14 @@ export function App({ loadDatasetOverview = defaultLoadDatasetOverview }: AppPro
 
         <ViewerCore
           cells={overviewCells}
+          imageLoader={morphologyImage?.loader ?? null}
           status={loadState.status}
+          imageStatus={morphologyState.status}
+          onImageTileError={handleImageTileError}
           {...(loadState.status === 'error' ? { errorMessage: loadState.message } : {})}
+          {...(morphologyState.status === 'error'
+            ? { imageErrorMessage: morphologyState.message }
+            : {})}
         />
       </section>
     </main>
