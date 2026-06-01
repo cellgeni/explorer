@@ -33,6 +33,7 @@ describe('morphology image loader', () => {
     ).resolves.toEqual({
       url: 'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
       loader,
+      channels: [],
     })
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(fetcher).toHaveBeenCalledWith('https://example.test/xenium/experiment.xenium')
@@ -55,6 +56,7 @@ describe('morphology image loader', () => {
     ).resolves.toEqual({
       url: 'https://example.test/xenium/morphology.ome.tif',
       loader,
+      channels: [],
     })
     expect(fetcher).not.toHaveBeenCalled()
     expect(openImage).toHaveBeenCalledWith(

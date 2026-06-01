@@ -93,6 +93,7 @@ describe('App', () => {
     const loadMorphologyImage = vi.fn(async () => ({
       url: `${DEMO_DATASET_URL}/morphology_focus/morphology_focus_0000.ome.tif`,
       loader: {} as TiffPyramidLoader,
+      channels: [],
     }))
     const loadGenePanel = vi.fn(async () => [])
 
@@ -137,6 +138,7 @@ describe('App', () => {
     const loadMorphologyImage = vi.fn(async () => ({
       url: `${DEMO_DATASET_URL}/morphology_focus/morphology_focus_0000.ome.tif`,
       loader: {} as TiffPyramidLoader,
+      channels: [],
     }))
     const loadGenePanel = vi.fn(async () => [])
 

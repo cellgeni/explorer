@@ -1,10 +1,12 @@
 import { openTiff } from '../tiff/loader'
 import { datasetFileUrl } from './datasetFiles'
 import type { TiffPyramidLoader } from '../tiff/loader'
+import type { TiffChannelInfo } from '../tiff/omeMetadata'
 
 export interface MorphologyImage {
   readonly url: string
   readonly loader: TiffPyramidLoader
+  readonly channels: readonly TiffChannelInfo[]
 }
 
 export interface LoadMorphologyImageOptions {
@@ -36,12 +38,15 @@ export async function loadMorphologyImage(
 
   if (candidate !== undefined) {
     const url = datasetFileUrl(baseUrl, candidate)
+    const loader =
+      options.signal === undefined
+        ? await openImage(url)
+        : await openImage(url, options.signal)
+
     return {
       url,
-      loader:
-        options.signal === undefined
-          ? await openImage(url)
-          : await openImage(url, options.signal),
+      loader,
+      channels: loader.channels ?? [],
     }
   }
 

@@ -25,8 +25,15 @@ export interface ElementBatch {
 
 export interface ChannelInfo {
   readonly id: string
+  readonly index?: number
   readonly name: string
   readonly color?: readonly [number, number, number]
+  readonly contrast?: {
+    readonly min: number
+    readonly max: number
+  }
+  readonly fileName?: string
+  readonly purpose?: string
 }
 
 export interface DatasetMeta {

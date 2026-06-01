@@ -14,6 +14,7 @@ import {
 } from '../data/coords'
 import { tiffChunkKey } from './chunkKeys'
 import { loadZchunkStorePyramidOptions } from './zchunkStore'
+import { parseOmeTiffMetadata } from './omeMetadata'
 import type {
   BBox,
   ImagePixels,
@@ -23,6 +24,7 @@ import type {
 } from '../data/coords'
 import type { TileSourceSize } from './tileCache'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
+import type { TiffChannelInfo } from './omeMetadata'
 
 export interface TiffChunk {
   readonly offset: number
@@ -46,27 +48,23 @@ export interface TiffPyramidLoaderOptions {
   readonly numLevels: number
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
+  readonly channels?: readonly TiffChannelInfo[]
   readonly fetcher?: typeof fetch
   readonly byteRangeCache?: PersistentByteRangeCache | null
 }
-
-export function parsePhysicalSizeMicrometersPerPixel(
-  description: string | undefined,
-): number {
-  if (description === undefined) {
-    return 0.2125
-  }
-
-  const match = description.match(/PhysicalSizeX="([^"]+)"/)
-  const value = match?.[1] === undefined ? Number.NaN : Number.parseFloat(match[1])
-
-  return value > 0 ? value : 0.2125
-}
+export { parsePhysicalSizeMicrometersPerPixel } from './omeMetadata'
 
 export async function openTiff(
   url: string,
   signal?: AbortSignal,
 ): Promise<TiffPyramidLoader> {
+  const tiff = await fromUrl(url, { allowFullFile: false }, signal)
+  const firstImage = await tiff.getImage(0)
+  const firstDirectory = firstImage.getFileDirectory()
+  const omeMetadata = parseOmeTiffMetadata(
+    await readOptionalStringTag(firstDirectory, 'ImageDescription'),
+  )
+
   const zchunkStoreOptions = await loadZchunkStorePyramidOptions(url, signal).catch(
     (cause: unknown) => {
       if (isAbortError(cause)) {
@@ -81,12 +79,14 @@ export async function openTiff(
     return new TiffPyramidLoader({
       url,
       ...zchunkStoreOptions,
+      units: {
+        ...zchunkStoreOptions.units,
+        micrometersPerPixel: micrometers(omeMetadata.micrometersPerPixel),
+      },
+      channels: omeMetadata.channels,
     })
   }
 
-  const tiff = await fromUrl(url, { allowFullFile: false }, signal)
-  const firstImage = await tiff.getImage(0)
-  const firstDirectory = firstImage.getFileDirectory()
   const imageWidth = imagePixels(firstImage.getWidth())
   const imageHeight = imagePixels(firstImage.getHeight())
   const tileWidth = imagePixels(firstImage.getTileWidth() || 256)
@@ -94,11 +94,7 @@ export async function openTiff(
   const units: UnitsDescriptor = {
     dataUnit: 'micrometer',
     imageUnit: 'pixel',
-    micrometersPerPixel: micrometers(
-      parsePhysicalSizeMicrometersPerPixel(
-        await readOptionalStringTag(firstDirectory, 'ImageDescription'),
-      ),
-    ),
+    micrometersPerPixel: micrometers(omeMetadata.micrometersPerPixel),
     origin: 'top-left',
     imageYAxis: 'down',
   }
@@ -147,6 +143,7 @@ export async function openTiff(
     numLevels: 1 + subIfds.length,
     imageWidth,
     imageHeight,
+    channels: omeMetadata.channels,
   })
 }
 
@@ -158,6 +155,7 @@ export class TiffPyramidLoader {
   readonly numLevels: number
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
+  readonly channels: readonly TiffChannelInfo[]
   private readonly chunks: ReadonlyMap<string, TiffChunk>
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly fetcher: typeof fetch
@@ -173,6 +171,7 @@ export class TiffPyramidLoader {
     this.numLevels = options.numLevels
     this.imageWidth = options.imageWidth
     this.imageHeight = options.imageHeight
+    this.channels = options.channels ?? []
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.byteRangeCache =
       options.byteRangeCache === undefined

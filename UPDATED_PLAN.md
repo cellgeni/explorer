@@ -167,6 +167,25 @@ done. This file records execution-level additions requested after work began.
       image tile, boundary, and gene-expression failures now feed a compact
       alert section and the existing viewer/status messages.
 
+## Phase 3 Running TODO
+
+- [x] Parse multi-file `morphology_focus_000N.ome.tif` channel set from OME-XML;
+      per-channel name/color/contrast.
+- [ ] Multi-channel compositing via Viv `XRLayer` (or custom shader) fed decoded
+      tiles; per-channel color + min/max + on/off.
+- [x] **Deferred by user:** JPEG XR decoder (WASM).
+- [x] **Deferred by user:** Z-stack plane selector for `morphology.ome.tif`.
+- [ ] Per-channel histogram + auto-contrast.
+
+## Phase 3 Notes
+
+- [x] User explicitly asked to start Phase 3 while skipping the JPEG XR decoder
+      and Z-stack plane selector. Do not implement those two tasks in this pass.
+- [x] Added OME-XML parsing for Xenium morphology focus channels. TIFF loaders
+      now expose channel id, index, name, focus-file name, purpose, RGB display
+      color, and default contrast range from the OME pixel type; the real demo
+      reports DAPI, ATP1A1/CD45/E-Cadherin, 18S, and alphaSMA/Vimentin.
+
 ## Requested Analysis Features
 
 These are product requirements requested after Phase 2 started. They align with
