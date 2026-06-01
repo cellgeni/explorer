@@ -166,6 +166,10 @@ done. This file records execution-level additions requested after work began.
       and optional detail fields. Dataset overview, gene panel, morphology image,
       image tile, boundary, and gene-expression failures now feed a compact
       alert section and the existing viewer/status messages.
+- [x] Improved dataset overview Parquet decode diagnostics. Low-level browser
+      `cells.parquet` reader failures now report the overview columns, file URL,
+      likely unsupported Parquet page encoding/layout, and a parquet-specific UI
+      action instead of the generic "Unexpected load error".
 
 ## Phase 3 Running TODO
 

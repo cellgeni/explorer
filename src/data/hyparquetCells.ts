@@ -66,13 +66,23 @@ export async function readCellsOverview(
     options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
   const columns =
     options.includeCellIds === false ? CELL_OVERVIEW_POINT_COLUMNS : CELL_OVERVIEW_COLUMNS
-  const rows = await readObjects({
-    file,
-    columns,
-    rowFormat: 'object',
-    compressors,
-    ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
-  })
+  let rows: readonly Record<string, unknown>[]
+
+  try {
+    rows = await readObjects({
+      file,
+      columns,
+      rowFormat: 'object',
+      compressors,
+      ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
+    })
+  } catch (error) {
+    if (isLowLevelParquetReadFailure(error)) {
+      throw createCellsParquetDecodeError(error, columns, options.url)
+    }
+
+    throw error
+  }
 
   return rows.map(parseCellOverviewRow)
 }
@@ -167,4 +177,35 @@ function readOptionalNumericProperty(
   }
 
   throw new Error(`Expected cells.parquet ${parquetKey} to be numeric.`)
+}
+
+function isLowLevelParquetReadFailure(error: unknown): boolean {
+  const message = readUnknownErrorMessage(error).toLowerCase()
+
+  return (
+    message.includes('offset is outside the bounds of the dataview') ||
+    message.includes('invalid typed array length')
+  )
+}
+
+function createCellsParquetDecodeError(
+  cause: unknown,
+  columns: readonly string[],
+  url: string | undefined,
+): Error {
+  const location =
+    url === undefined ? 'the provided cells.parquet file' : `cells.parquet at ${url}`
+  const error = new Error(
+    `Unable to decode cells.parquet while reading overview columns (${columns.join(', ')}). The file was reachable, but the browser Parquet reader failed on ${location}: ${readUnknownErrorMessage(cause)}. This usually means the Parquet page encoding or page layout is not supported by the current browser reader.`,
+  )
+  error.name = 'ParquetDecodeError'
+  return error
+}
+
+function readUnknownErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message
+  }
+
+  return String(error)
 }

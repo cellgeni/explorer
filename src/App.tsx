@@ -134,6 +134,7 @@ type LoadErrorCode =
   | 'network'
   | 'http'
   | 'range-not-supported'
+  | 'parquet-decode'
   | 'manifest'
   | 'decode'
   | 'unknown'
@@ -1242,6 +1243,22 @@ function createStructuredLoadError(
     )
   }
 
+  if (isCellsParquetDecodeError(source, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'parquet-decode',
+        title: 'cells.parquet decode failed',
+        message: normalizedMessage.includes('unable to decode cells.parquet')
+          ? message
+          : `The overview cells.parquet file was reachable, but the browser Parquet reader could not decode it: ${message}.`,
+        action:
+          'Rewrite cells.parquet with a browser-compatible Parquet encoding or use an alternate overview reader for this dataset.',
+      },
+      detail,
+    )
+  }
+
   if (
     normalizedMessage.includes('experiment.xenium') ||
     normalizedMessage.includes('no supported xenium ome-tiff')
@@ -1280,6 +1297,21 @@ function createStructuredLoadError(
       action: 'Retry the request after checking the dataset URL.',
     },
     detail,
+  )
+}
+
+function isCellsParquetDecodeError(
+  source: LoadErrorSource,
+  normalizedMessage: string,
+): boolean {
+  if (source !== 'Dataset overview') {
+    return false
+  }
+
+  return (
+    normalizedMessage.includes('unable to decode cells.parquet') ||
+    normalizedMessage.includes('offset is outside the bounds of the dataview') ||
+    normalizedMessage.includes('invalid typed array length')
   )
 }
 

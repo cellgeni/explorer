@@ -225,6 +225,32 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
+  it('surfaces cells.parquet decode failures with parquet-specific guidance', async () => {
+    const loadDatasetOverview = vi.fn(async () => {
+      throw new RangeError('Offset is outside the bounds of the DataView')
+    })
+    const loadGenePanel = vi.fn(async () => [])
+
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const alert = await screen.findByRole('alert', { name: 'Load issues' })
+
+    expect(alert).toHaveTextContent('Dataset overview')
+    expect(alert).toHaveTextContent('cells.parquet decode failed')
+    expect(alert).toHaveTextContent(
+      'The overview cells.parquet file was reachable, but the browser Parquet reader could not decode it',
+    )
+    expect(alert).toHaveTextContent(
+      'Rewrite cells.parquet with a browser-compatible Parquet encoding',
+    )
+    expect(
+      await screen.findByText(/Load failed - cells\.parquet decode failed/),
+    ).toBeInTheDocument()
+  })
+
   it('surfaces structured gene panel errors without failing the overview', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {

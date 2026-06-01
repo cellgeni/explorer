@@ -80,4 +80,22 @@ describe('readCellsOverview', () => {
       },
     ])
   })
+
+  it('wraps low-level parquet page read errors with overview context', async () => {
+    await expect(
+      readCellsOverview({
+        file: fakeFile,
+        includeCellIds: false,
+        url: 'https://example.test/xenium/cells.parquet',
+        readObjects: async () => {
+          throw new RangeError('Offset is outside the bounds of the DataView')
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: 'ParquetDecodeError',
+      message: expect.stringContaining(
+        'Unable to decode cells.parquet while reading overview columns (x_centroid, y_centroid, transcript_counts, cell_area).',
+      ),
+    })
+  })
 })
