@@ -64,16 +64,20 @@ export async function openTiff(
   const omeMetadata = parseOmeTiffMetadata(
     await readOptionalStringTag(firstDirectory, 'ImageDescription'),
   )
+  const channelIndex = channelIndexForUrl(url, omeMetadata.channels)
 
-  const zchunkStoreOptions = await loadZchunkStorePyramidOptions(url, signal).catch(
-    (cause: unknown) => {
-      if (isAbortError(cause)) {
-        throw cause
-      }
+  const zchunkStoreOptions = await loadZchunkStorePyramidOptions(
+    url,
+    signal,
+    globalThis.fetch.bind(globalThis),
+    channelIndex,
+  ).catch((cause: unknown) => {
+    if (isAbortError(cause)) {
+      throw cause
+    }
 
-      return null
-    },
-  )
+    return null
+  })
 
   if (zchunkStoreOptions !== null) {
     return new TiffPyramidLoader({
@@ -145,6 +149,16 @@ export async function openTiff(
     imageHeight,
     channels: omeMetadata.channels,
   })
+}
+
+function channelIndexForUrl(url: string, channels: readonly TiffChannelInfo[]): number {
+  const fileName = new URL(url).pathname.split('/').at(-1)
+
+  if (fileName === undefined) {
+    return 0
+  }
+
+  return channels.find((channel) => channel.fileName === fileName)?.index ?? 0
 }
 
 export class TiffPyramidLoader {

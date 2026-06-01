@@ -24,6 +24,7 @@ export async function loadZchunkStorePyramidOptions(
   tiffUrl: string,
   signal?: AbortSignal,
   fetcher: typeof fetch = globalThis.fetch.bind(globalThis),
+  channelIndex = 0,
 ): Promise<ZchunkStorePyramidOptions | null> {
   for (const manifestUrl of zchunkStoreCandidateUrls(tiffUrl)) {
     const requestInit: RequestInit = {}
@@ -42,7 +43,7 @@ export async function loadZchunkStorePyramidOptions(
       continue
     }
 
-    return zchunkStoreToPyramidOptions(await response.json())
+    return zchunkStoreToPyramidOptions(await response.json(), channelIndex)
   }
 
   return null

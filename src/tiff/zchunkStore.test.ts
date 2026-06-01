@@ -56,6 +56,31 @@ describe('Zarr chunk store TIFF adapter', () => {
     expect(options.imageHeight).toBe(200)
   })
 
+  it('maps a requested Zarr v3 channel index to TIFF chunks', () => {
+    const options = zchunkStoreToPyramidOptions(
+      {
+        'zarr.json': {
+          zarr_format: 3,
+          node_type: 'group',
+          attributes: {
+            multiscales: [{ datasets: [{ path: '0' }] }],
+          },
+        },
+        '0/zarr.json': {
+          zarr_format: 3,
+          node_type: 'array',
+          shape: [4, 200, 300],
+          chunk_grid: { configuration: { chunk_shape: [1, 100, 100] } },
+        },
+        '0/c/0/1/2': { offset: 10, size: 4 },
+        '0/c/2/1/2': { offset: 20, size: 8 },
+      },
+      2,
+    )
+
+    expect(options.chunkIndex.get('0/1/2')).toEqual({ offset: 20, length: 8 })
+  })
+
   it('also maps Observable-style Zarr v2 chunk-store keys', () => {
     const options = zchunkStoreToPyramidOptions({
       '.zattrs': {
