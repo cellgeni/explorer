@@ -170,6 +170,10 @@ done. This file records execution-level additions requested after work began.
       `cells.parquet` reader failures now report the overview columns, file URL,
       likely unsupported Parquet page encoding/layout, and a parquet-specific UI
       action instead of the generic "Unexpected load error".
+- [x] Added a DuckDB-WASM fallback for dataset overview loading when hyparquet
+      cannot decode `cells.parquet` page encoding/layout. The normal hyparquet
+      path remains first, and the fallback is loaded only after that specific
+      decode failure.
 
 ## Phase 3 Running TODO
 

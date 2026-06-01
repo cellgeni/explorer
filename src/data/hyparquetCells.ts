@@ -44,6 +44,10 @@ export type HyparquetObjectReader = (
   options: HyparquetReadObjectsOptions,
 ) => Promise<readonly Record<string, unknown>[]>
 
+export class CellsParquetDecodeError extends Error {
+  override readonly name = 'ParquetDecodeError'
+}
+
 export interface ReadCellsOverviewOptions {
   readonly url?: string
   readonly file?: AsyncBuffer
@@ -120,7 +124,7 @@ async function readHyparquetObjects(
   })) as readonly Record<string, unknown>[]
 }
 
-function parseCellOverviewRow(row: Record<string, unknown>): CellOverviewPoint {
+export function parseCellOverviewRow(row: Record<string, unknown>): CellOverviewPoint {
   const cellId = row.cell_id
 
   if (cellId !== undefined && typeof cellId !== 'string') {
@@ -188,6 +192,10 @@ function isLowLevelParquetReadFailure(error: unknown): boolean {
   )
 }
 
+export function isCellsParquetDecodeError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'ParquetDecodeError'
+}
+
 function createCellsParquetDecodeError(
   cause: unknown,
   columns: readonly string[],
@@ -195,11 +203,9 @@ function createCellsParquetDecodeError(
 ): Error {
   const location =
     url === undefined ? 'the provided cells.parquet file' : `cells.parquet at ${url}`
-  const error = new Error(
+  return new CellsParquetDecodeError(
     `Unable to decode cells.parquet while reading overview columns (${columns.join(', ')}). The file was reachable, but the browser Parquet reader failed on ${location}: ${readUnknownErrorMessage(cause)}. This usually means the Parquet page encoding or page layout is not supported by the current browser reader.`,
   )
-  error.name = 'ParquetDecodeError'
-  return error
 }
 
 function readUnknownErrorMessage(error: unknown): string {

@@ -4,6 +4,8 @@ import {
   cellsParquetUrl,
   loadDatasetOverview,
 } from './datasetOverview'
+import { CellsParquetDecodeError } from './hyparquetCells'
+import { micrometers } from './coords'
 import type { ReadCellsOverviewOptions } from './hyparquetCells'
 
 describe('dataset overview loader', () => {
@@ -86,5 +88,39 @@ describe('dataset overview loader', () => {
         includeCellIds: false,
       },
     ])
+  })
+
+  it('falls back to DuckDB-compatible overview reads after a parquet decode failure', async () => {
+    const readCells = vi.fn(async () => {
+      throw new CellsParquetDecodeError('Unable to decode cells.parquet.')
+    })
+    const readFallbackCells = vi.fn(async () => [
+      {
+        position: { x: micrometers(1), y: micrometers(2) },
+        transcriptCount: 3,
+        cellArea: 4,
+      },
+    ])
+
+    await expect(
+      loadDatasetOverview('https://example.test/xenium/', {
+        includeCellIds: false,
+        limit: null,
+        readCells,
+        readFallbackCells,
+        validateRangeSupport: async () => undefined,
+      }),
+    ).resolves.toEqual([
+      {
+        position: { x: micrometers(1), y: micrometers(2) },
+        transcriptCount: 3,
+        cellArea: 4,
+      },
+    ])
+
+    expect(readFallbackCells).toHaveBeenCalledWith({
+      url: 'https://example.test/xenium/cells.parquet',
+      includeCellIds: false,
+    })
   })
 })
