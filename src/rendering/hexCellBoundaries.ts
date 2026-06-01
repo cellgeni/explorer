@@ -1,7 +1,7 @@
 import type { OverviewCellDatum } from './deckLayers'
 import type { CellBoundaryDatum } from './deckLayers'
 
-export const HEX_BOUNDARY_MULTIPLIER = 3
+export const HEX_BOUNDARY_MULTIPLIER = 6
 export const HEX_BOUNDARY_VERTEX_COUNT = 6
 export const HEX_BOUNDARY_FALLBACK_RADIUS_MICROMETERS = 5
 

@@ -24,12 +24,12 @@ const cells: readonly OverviewCellDatum[] = [
 
 describe('hex cell boundaries', () => {
   it('derives the intermediate hex-boundary limit from the full boundary limit', () => {
-    expect(hexBoundaryCellLimit(500)).toBe(1500)
+    expect(hexBoundaryCellLimit(500)).toBe(3000)
   })
 
   it('creates six-point centroid hexagons for visible cells below the limit', () => {
     const hexBoundaries = hexCellBoundariesForVisibleCells(cells, {
-      maxCells: 1500,
+      maxCells: 3000,
     })
 
     expect(hexBoundaries).toHaveLength(2)
