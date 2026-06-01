@@ -25,3 +25,13 @@ done. This file records execution-level additions requested after work began.
 - [ ] Worker pool: J2K decode + windowing in workers; DuckDB in its own worker.
 - [ ] Zustand store; React chrome around the deck.gl/canvas core.
 - [ ] hyparquet first-paint scatter from `cells.parquet`.
+
+## Current Port Subtasks
+
+- [x] `coords.ts`
+- [x] `cellid.ts`
+- [ ] `duckdb.ts`
+- [ ] `gex.ts`
+- [ ] `tiff/loader.ts`
+- [ ] `tiff/tileCache.ts`
+- [ ] `codecs/jpeg2000.ts`
