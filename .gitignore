@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.vite/
+*.tsbuildinfo
+
+# Temporary scaffold output created by the sandboxed Vite generator.
+/private/tmp/
+
+.DS_Store

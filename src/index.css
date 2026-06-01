@@ -1,0 +1,345 @@
+:root {
+  color: #171511;
+  color-scheme: light;
+  background: #f6f2e8;
+  font-family: 'Avenir Next', 'DIN Alternate', 'Segoe UI', system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: #f6f2e8;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    linear-gradient(90deg, rgba(32, 102, 83, 0.08) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(32, 102, 83, 0.08) 1px, transparent 1px), #f6f2e8;
+  background-size: 44px 44px;
+  -webkit-tap-highlight-color: rgba(32, 102, 83, 0.18);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #d73f7c;
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 10;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #171511;
+  color: #fffdf7;
+  font-weight: 800;
+  text-decoration: none;
+  transform: translateY(calc(-100% - 18px));
+  transition: transform 160ms ease;
+}
+
+.skip-link:focus-visible {
+  outline: 3px solid #d73f7c;
+  outline-offset: 3px;
+  transform: translateY(0);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  min-height: 100vh;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  gap: 18px;
+}
+
+.control-rail,
+.viewer-region {
+  border: 1px solid rgba(23, 21, 17, 0.12);
+  background: rgba(255, 252, 243, 0.92);
+  box-shadow: 0 18px 48px rgba(37, 33, 22, 0.12);
+}
+
+.control-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 24px;
+  border-radius: 8px;
+}
+
+.brand-lockup {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border: 2px solid #171511;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 34%, #d73f7c 0 5px, transparent 6px),
+    radial-gradient(circle at 64% 68%, #206653 0 6px, transparent 7px), #f0c84b;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #7b4d1d;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  color: #171511;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(1.65rem, 7vw, 2.35rem);
+}
+
+h2 {
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.dataset-form {
+  display: grid;
+  gap: 10px;
+}
+
+.dataset-form label,
+.layer-section h2 {
+  color: #2f2b22;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.dataset-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(23, 21, 17, 0.22);
+  border-radius: 6px;
+  background: #fffdf7;
+  color: #171511;
+}
+
+.dataset-form button {
+  min-height: 42px;
+  border-radius: 6px;
+  background: #171511;
+  color: #fffdf7;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.dataset-form button:hover {
+  background: #206653;
+}
+
+.dataset-form button:active {
+  transform: translateY(1px);
+}
+
+.layer-section {
+  display: grid;
+  gap: 12px;
+}
+
+.layer-section ul {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.layer-section li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid rgba(23, 21, 17, 0.12);
+  color: #2f2b22;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.layer-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.layer-dot-cells {
+  background: #d73f7c;
+}
+
+.layer-dot-boundaries {
+  background: #206653;
+}
+
+.layer-dot-image {
+  background: #f0c84b;
+}
+
+.viewer-region {
+  display: grid;
+  grid-template-rows: auto minmax(360px, 1fr);
+  min-width: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.viewer-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: end;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(23, 21, 17, 0.12);
+  background: rgba(255, 252, 243, 0.88);
+}
+
+.dataset-status {
+  min-width: 0;
+  margin: 0;
+  color: #5d5548;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dataset-status span {
+  display: inline-block;
+  max-width: min(58vw, 780px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.viewport-frame {
+  position: relative;
+  min-height: 100%;
+  overflow: hidden;
+  background: #181713;
+}
+
+.viewport-grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(240, 200, 75, 0.12) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(240, 200, 75, 0.12) 1px, transparent 1px),
+    radial-gradient(circle at 42% 50%, rgba(215, 63, 124, 0.18), transparent 32%), #181713;
+  background-size:
+    72px 72px,
+    72px 72px,
+    auto,
+    auto;
+}
+
+.cell-field {
+  position: absolute;
+  inset: 0;
+}
+
+.cell-node {
+  position: absolute;
+  width: clamp(54px, 8vw, 112px);
+  aspect-ratio: 1;
+  border: 2px solid rgba(246, 242, 232, 0.88);
+  border-radius: 48% 52% 44% 56%;
+  background: rgba(215, 63, 124, 0.22);
+  box-shadow: inset 0 0 0 8px rgba(32, 102, 83, 0.24);
+}
+
+.cell-node-a {
+  top: 22%;
+  left: 18%;
+}
+
+.cell-node-b {
+  top: 50%;
+  left: 38%;
+  width: clamp(72px, 11vw, 148px);
+}
+
+.cell-node-c {
+  top: 30%;
+  right: 20%;
+  background: rgba(240, 200, 75, 0.22);
+}
+
+.cell-node-d {
+  right: 14%;
+  bottom: 16%;
+  width: clamp(48px, 7vw, 92px);
+}
+
+@media (max-width: 860px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .viewer-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .dataset-status {
+    text-align: left;
+  }
+
+  .dataset-status span {
+    max-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
