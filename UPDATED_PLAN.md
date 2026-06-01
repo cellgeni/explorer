@@ -131,3 +131,22 @@ done. This file records execution-level additions requested after work began.
 - [x] Rechecked the boundary path for the Phase 2 range-read task: the app uses
       DuckDB `read_parquet(?)` against the remote `cell_boundaries.parquet` URL
       and no longer has a full-download boundary path in `src/`.
+
+## Requested Analysis Features
+
+These are product requirements requested after Phase 2 started. They align with
+Phase 4 in `PLAN.md`; do not implement them before Phase 2 and Phase 3 are done
+unless the phase order is explicitly changed.
+
+- [ ] Gene selection: search/pick genes from `gene_panel.json`, keep selected
+      genes as URL/shareable state later, and avoid loading expression matrices
+      until a gene or region workflow needs them.
+- [ ] Gene expression highlighting: color cells by selected gene expression,
+      using low-zoom density/binning when needed and per-cell counts at close
+      zoom or within a selected ROI.
+- [ ] Cell highlighting by observations: support coloring by loaded cell-level
+      observations such as `transcript_counts`, `cell_area`, `nucleus_area`, and
+      later imported annotation labels.
+- [ ] Cell information visualization: show selected/hovered cell metadata,
+      observations, expression summaries for selected genes, and links between
+      spatial, boundary, and future embedding views.
