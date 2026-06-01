@@ -30,7 +30,8 @@ import { useViewerStore } from './store/viewerStore'
 import type { BBox } from './data/coords'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
 import type { CellOverviewPoint } from './data/hyparquetCells'
-import type { MorphologyImage } from './data/morphologyImage'
+import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
+import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { ElementBatch, SpatialElement } from './datasets/spatialDataset'
 import type { GeneExpressionColorScale } from './rendering/deckLayers'
@@ -154,6 +155,14 @@ interface StructuredLoadError {
   readonly detail?: string
 }
 
+interface MorphologyChannelSetting {
+  readonly id: string
+  readonly enabled: boolean
+  readonly color: readonly [number, number, number]
+  readonly contrastMin: number
+  readonly contrastMax: number
+}
+
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader
   readonly loadMorphologyImage?: MorphologyImageLoader
@@ -197,6 +206,9 @@ export function App({
     readonly OverviewCellDatum[]
   >([])
   const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
+  const [morphologyChannelSettings, setMorphologyChannelSettings] = useState<
+    readonly MorphologyChannelSetting[]
+  >([])
   const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(false)
   const [boundaryCellLimit, setBoundaryCellLimit] = useState(BOUNDARY_VIEWPORT_CELL_LIMIT)
@@ -227,6 +239,29 @@ export function App({
   const styledGeneExpressionCells = useMemo(
     () => styleGeneExpressionCellsByScale(geneExpressionCells, geneExpressionColorScale),
     [geneExpressionCells, geneExpressionColorScale],
+  )
+  const morphologyCanvasChannels = useMemo<readonly MorphologyCanvasChannel[]>(
+    () =>
+      morphologyImage === null
+        ? []
+        : morphologyImage.channelLoaders.map((channel) => {
+            const setting = morphologyChannelSettings.find(
+              (candidate) => candidate.id === channel.info.id,
+            )
+            const contrast = normalizeChannelContrast({
+              min: setting?.contrastMin ?? channel.info.contrast.min,
+              max: setting?.contrastMax ?? channel.info.contrast.max,
+            })
+
+            return {
+              id: channel.info.id,
+              loader: channel.loader,
+              enabled: setting?.enabled ?? false,
+              color: setting?.color ?? channel.info.color,
+              contrast,
+            }
+          }),
+    [morphologyChannelSettings, morphologyImage],
   )
   const boundaryLayerData = useMemo(
     () => boundaryElementsToLayerData(boundaryElements),
@@ -462,6 +497,7 @@ export function App({
       setOverviewCells([])
       setGeneExpressionCells([])
       setMorphologyImage(null)
+      setMorphologyChannelSettings([])
       setBoundaryElements([])
       setSelectedCell(null)
       setLoadState({ status: 'loading', url: requestedUrl })
@@ -530,6 +566,7 @@ export function App({
             }
 
             setMorphologyImage(image)
+            setMorphologyChannelSettings(createMorphologyChannelSettings(image))
             setMorphologyState({
               status: 'ready',
               url: image.url,
@@ -575,6 +612,15 @@ export function App({
       current.includes(gene)
         ? current.filter((selectedGene) => selectedGene !== gene)
         : [...current, gene].sort((a, b) => a.localeCompare(b)),
+    )
+  }
+
+  function updateMorphologyChannel(
+    id: string,
+    patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
+  ) {
+    setMorphologyChannelSettings((current) =>
+      current.map((setting) => (setting.id === id ? { ...setting, ...patch } : setting)),
     )
   }
 
@@ -693,6 +739,11 @@ export function App({
               />
             </div>
           </div>
+          <MorphologyChannelControls
+            channels={morphologyImage?.channelLoaders ?? []}
+            settings={morphologyChannelSettings}
+            onUpdate={updateMorphologyChannel}
+          />
         </section>
 
         <section className="analysis-section" aria-labelledby="analysis-heading">
@@ -811,6 +862,7 @@ export function App({
           expressionCells={styledGeneExpressionCells}
           boundaries={boundaryLayerData}
           imageLoader={morphologyImage?.loader ?? null}
+          imageChannels={morphologyCanvasChannels}
           imageOpacity={imageLayerOpacity}
           geneExpressionOpacity={geneLayerOpacity}
           status={loadState.status}
@@ -960,6 +1012,82 @@ function CellInfoPanel({ cell }: { readonly cell: OverviewCellDatum | null }) {
   )
 }
 
+function MorphologyChannelControls({
+  channels,
+  settings,
+  onUpdate,
+}: {
+  readonly channels: readonly MorphologyImageChannel[]
+  readonly settings: readonly MorphologyChannelSetting[]
+  readonly onUpdate: (
+    id: string,
+    patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
+  ) => void
+}) {
+  if (channels.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="channel-controls" aria-label="Image channels">
+      {channels.map((channel) => {
+        const setting = settings.find((candidate) => candidate.id === channel.info.id)
+        const color = setting?.color ?? channel.info.color
+        const contrastMin = setting?.contrastMin ?? channel.info.contrast.min
+        const contrastMax = setting?.contrastMax ?? channel.info.contrast.max
+
+        return (
+          <div className="channel-control" key={channel.info.id}>
+            <label className="channel-toggle">
+              <input
+                type="checkbox"
+                checked={setting?.enabled ?? false}
+                onChange={(event) => {
+                  onUpdate(channel.info.id, { enabled: event.currentTarget.checked })
+                }}
+              />
+              <span>{channel.info.name}</span>
+            </label>
+            <input
+              className="channel-color"
+              type="color"
+              aria-label={`${channel.info.name} color`}
+              value={rgbToHex(color)}
+              onChange={(event) => {
+                onUpdate(channel.info.id, { color: hexToRgb(event.currentTarget.value) })
+              }}
+            />
+            <div className="channel-contrast">
+              <input
+                type="number"
+                inputMode="numeric"
+                aria-label={`${channel.info.name} minimum`}
+                value={contrastMin}
+                onChange={(event) => {
+                  onUpdate(channel.info.id, {
+                    contrastMin: event.currentTarget.valueAsNumber,
+                  })
+                }}
+              />
+              <input
+                type="number"
+                inputMode="numeric"
+                aria-label={`${channel.info.name} maximum`}
+                value={contrastMax}
+                onChange={(event) => {
+                  onUpdate(channel.info.id, {
+                    contrastMax: event.currentTarget.valueAsNumber,
+                  })
+                }}
+              />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadError[] }) {
   if (errors.length === 0) {
     return null
@@ -998,6 +1126,50 @@ function formatNumber(value: number | undefined): string {
 function abortActiveRequest(ref: { current: AbortController | null }): void {
   ref.current?.abort()
   ref.current = null
+}
+
+function createMorphologyChannelSettings(
+  image: MorphologyImage,
+): readonly MorphologyChannelSetting[] {
+  return image.channelLoaders.map((channel, index) => ({
+    id: channel.info.id,
+    enabled: index === 0,
+    color: channel.info.color,
+    contrastMin: channel.info.contrast.min,
+    contrastMax: channel.info.contrast.max,
+  }))
+}
+
+function normalizeChannelContrast(options: {
+  readonly min: number
+  readonly max: number
+}): { readonly lo: number; readonly hi: number } {
+  const lo = Number.isFinite(options.min) ? options.min : 0
+  const hi = Number.isFinite(options.max) ? options.max : lo + 1
+
+  return hi > lo ? { lo, hi } : { lo, hi: lo + 1 }
+}
+
+function rgbToHex(color: readonly [number, number, number]): string {
+  return `#${color.map((channel) => clampColorChannel(channel).toString(16).padStart(2, '0')).join('')}`
+}
+
+function hexToRgb(value: string): readonly [number, number, number] {
+  const normalized = value.trim().replace(/^#/, '')
+
+  if (!/^[\da-f]{6}$/i.test(normalized)) {
+    return [255, 255, 255]
+  }
+
+  return [
+    Number.parseInt(normalized.slice(0, 2), 16),
+    Number.parseInt(normalized.slice(2, 4), 16),
+    Number.parseInt(normalized.slice(4, 6), 16),
+  ]
+}
+
+function clampColorChannel(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)))
 }
 
 function isAbortError(error: unknown): boolean {

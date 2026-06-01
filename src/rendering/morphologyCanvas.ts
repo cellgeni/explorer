@@ -14,6 +14,12 @@ export interface ScreenCoordinate {
   readonly y: number
 }
 
+export interface MorphologyChannelTileBatch {
+  readonly color: readonly [number, number, number]
+  readonly opacity: number
+  readonly tiles: readonly ReadyTile[]
+}
+
 export function morphologyViewportBbox(
   viewState: OverviewViewState,
   viewport: CssViewportSize,
@@ -42,35 +48,53 @@ export function drawMorphologyTiles(
   context.clearRect(0, 0, viewport.width, viewport.height)
 
   for (const tile of tiles) {
-    const topLeft = deckDataToScreen(
-      { x: tile.bounds.minX, y: -tile.bounds.minY },
-      viewState,
-      viewport,
-    )
-    const bottomRight = deckDataToScreen(
-      { x: tile.bounds.maxX, y: -tile.bounds.maxY },
-      viewState,
-      viewport,
-    )
-    const width = bottomRight.x - topLeft.x
-    const height = bottomRight.y - topLeft.y
-
-    if (width <= 0 || height <= 0) {
-      continue
-    }
-
-    context.drawImage(
-      tile.image,
-      0,
-      0,
-      tile.sourceWidth,
-      tile.sourceHeight,
-      topLeft.x,
-      topLeft.y,
-      width,
-      height,
-    )
+    drawReadyTile(context, tile, viewState, viewport)
   }
+}
+
+export function drawMorphologyTileChannels(
+  context: CanvasRenderingContext2D,
+  batches: readonly MorphologyChannelTileBatch[],
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+): void {
+  context.clearRect(0, 0, viewport.width, viewport.height)
+
+  if (batches.length === 1 && isWhite(batches[0]?.color)) {
+    for (const tile of batches[0]?.tiles ?? []) {
+      context.globalAlpha = batches[0]?.opacity ?? 1
+      drawReadyTile(context, tile, viewState, viewport)
+    }
+    context.globalAlpha = 1
+    return
+  }
+
+  const scratch = document.createElement('canvas')
+  const scratchContext = scratch.getContext('2d')
+
+  if (scratchContext === null) {
+    return
+  }
+
+  for (const batch of batches) {
+    context.globalAlpha = batch.opacity
+    context.globalCompositeOperation = 'lighter'
+
+    for (const tile of batch.tiles) {
+      drawTintedReadyTile({
+        color: batch.color,
+        context,
+        scratch,
+        scratchContext,
+        tile,
+        viewState,
+        viewport,
+      })
+    }
+  }
+
+  context.globalAlpha = 1
+  context.globalCompositeOperation = 'source-over'
 }
 
 export function selectCenteredTiles(
@@ -134,4 +158,135 @@ function deckDataToScreen(
     x: point.x * scale + offsetX,
     y: -point.y * scale + offsetY,
   }
+}
+
+function drawReadyTile(
+  context: CanvasRenderingContext2D,
+  tile: ReadyTile,
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+): void {
+  const target = tileTargetRect(tile, viewState, viewport)
+
+  if (target === null) {
+    return
+  }
+
+  context.drawImage(
+    tile.image,
+    0,
+    0,
+    tile.sourceWidth,
+    tile.sourceHeight,
+    target.x,
+    target.y,
+    target.width,
+    target.height,
+  )
+}
+
+function drawTintedReadyTile(options: {
+  readonly color: readonly [number, number, number]
+  readonly context: CanvasRenderingContext2D
+  readonly scratch: HTMLCanvasElement
+  readonly scratchContext: CanvasRenderingContext2D
+  readonly tile: ReadyTile
+  readonly viewState: OverviewViewState
+  readonly viewport: CssViewportSize
+}): void {
+  const target = tileTargetRect(options.tile, options.viewState, options.viewport)
+
+  if (target === null) {
+    return
+  }
+
+  if (
+    options.scratch.width !== options.tile.sourceWidth ||
+    options.scratch.height !== options.tile.sourceHeight
+  ) {
+    options.scratch.width = options.tile.sourceWidth
+    options.scratch.height = options.tile.sourceHeight
+  }
+
+  options.scratchContext.globalCompositeOperation = 'source-over'
+  options.scratchContext.clearRect(
+    0,
+    0,
+    options.tile.sourceWidth,
+    options.tile.sourceHeight,
+  )
+  options.scratchContext.drawImage(
+    options.tile.image,
+    0,
+    0,
+    options.tile.sourceWidth,
+    options.tile.sourceHeight,
+    0,
+    0,
+    options.tile.sourceWidth,
+    options.tile.sourceHeight,
+  )
+  options.scratchContext.globalCompositeOperation = 'source-in'
+  options.scratchContext.fillStyle = rgbCss(options.color)
+  options.scratchContext.fillRect(
+    0,
+    0,
+    options.tile.sourceWidth,
+    options.tile.sourceHeight,
+  )
+  options.scratchContext.globalCompositeOperation = 'source-over'
+  options.context.drawImage(
+    options.scratch,
+    0,
+    0,
+    options.tile.sourceWidth,
+    options.tile.sourceHeight,
+    target.x,
+    target.y,
+    target.width,
+    target.height,
+  )
+}
+
+function tileTargetRect(
+  tile: ReadyTile,
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+): {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+} | null {
+  const topLeft = deckDataToScreen(
+    { x: tile.bounds.minX, y: -tile.bounds.minY },
+    viewState,
+    viewport,
+  )
+  const bottomRight = deckDataToScreen(
+    { x: tile.bounds.maxX, y: -tile.bounds.maxY },
+    viewState,
+    viewport,
+  )
+  const width = bottomRight.x - topLeft.x
+  const height = bottomRight.y - topLeft.y
+
+  if (width <= 0 || height <= 0) {
+    return null
+  }
+
+  return {
+    x: topLeft.x,
+    y: topLeft.y,
+    width,
+    height,
+  }
+}
+
+function rgbCss(color: readonly [number, number, number]): string {
+  return `rgb(${color[0]}, ${color[1]}, ${color[2]})`
+}
+
+function isWhite(color: readonly [number, number, number] | undefined): boolean {
+  return color !== undefined && color[0] === 255 && color[1] === 255 && color[2] === 255
 }

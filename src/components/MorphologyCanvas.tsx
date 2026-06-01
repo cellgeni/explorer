@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { micrometers, scaleFromZoom, type BBox, type TileIndex } from '../data/coords'
 import { normalizeLayerOpacity } from '../rendering/layerOpacity'
 import {
-  drawMorphologyTiles,
+  drawMorphologyTileChannels,
   morphologyViewportBbox,
   selectCenteredTiles,
 } from '../rendering/morphologyCanvas'
 import { TileCache } from '../tiff/tileCache'
+import type { DisplayWindow } from '../codecs/jpeg2000'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { TileCacheEntry } from '../tiff/tileCache'
@@ -18,24 +19,38 @@ const PREFETCH_SCREEN_MARGIN_PIXELS = 256
 
 export interface MorphologyCanvasProps {
   readonly loader?: TiffPyramidLoader | null
+  readonly channels?: readonly MorphologyCanvasChannel[]
   readonly opacity?: number
   readonly viewState: OverviewViewState
   readonly onTileError?: (error: Error) => void
 }
 
+export interface MorphologyCanvasChannel {
+  readonly id: string
+  readonly loader: TiffPyramidLoader
+  readonly enabled: boolean
+  readonly color: readonly [number, number, number]
+  readonly contrast?: DisplayWindow
+  readonly opacity?: number
+}
+
 export function MorphologyCanvas({
   loader,
+  channels,
   opacity = 1,
   viewState,
   onTileError,
 }: MorphologyCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const cacheRef = useRef<TileCache | null>(null)
-  const previousLoaderRef = useRef<TiffPyramidLoader | null>(null)
+  const cacheRecordsRef = useRef<Map<string, ChannelCacheRecord>>(new Map())
   const [viewport, setViewport] = useState<CssViewportSize>({
     width: 0,
     height: 0,
   })
+  const renderChannels = useMemo(
+    () => visibleMorphologyChannels(loader, channels),
+    [channels, loader],
+  )
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -80,37 +95,37 @@ export function MorphologyCanvas({
 
     syncCanvasBackingStore(canvas, context, viewport)
 
-    if (loader === null || loader === undefined) {
+    if (renderChannels.length === 0) {
       context.clearRect(0, 0, viewport.width, viewport.height)
-      cacheRef.current?.clear()
-      previousLoaderRef.current = null
+      clearCacheRecords(cacheRecordsRef.current)
       return
     }
 
-    if (previousLoaderRef.current !== loader) {
-      cacheRef.current?.clear()
-      previousLoaderRef.current = loader
-    }
-
-    const cache = (cacheRef.current ??= new TileCache({
-      maxTiles: 96,
-      ...(onTileError === undefined ? {} : { onError: onTileError }),
-    }))
     const bbox = morphologyViewportBbox(viewState, viewport)
-    const level = loader.bestLevel(2 ** viewState.zoom)
     const tileRequestBbox = expandBboxByScreenPixels(
       bbox,
       viewState.zoom,
       PREFETCH_SCREEN_MARGIN_PIXELS,
     )
-    const tiles = selectCenteredTiles(
-      loader.tilesForBbox(level, tileRequestBbox),
-      MAX_INITIAL_TILE_REQUESTS,
-      bbox,
-      (tile) => loader.tileBounds(level, tile.col, tile.row),
+    const channelRequests = renderChannels.map((channel) =>
+      prepareChannelRequest({
+        bbox,
+        channel,
+        cacheRecords: cacheRecordsRef.current,
+        tileRequestBbox,
+        viewState,
+        ...(onTileError === undefined ? {} : { onTileError }),
+      }),
+    )
+    const activeKeys = new Set(channelRequests.map((request) => request.cacheKey))
+    const perChannelConcurrency = Math.max(
+      1,
+      Math.floor(MAX_CONCURRENT_TILE_REQUESTS / renderChannels.length),
     )
     const abortController = new AbortController()
     let cancelled = false
+
+    pruneInactiveCacheRecords(cacheRecordsRef.current, activeKeys)
 
     const drawReadyTiles = () => {
       if (cancelled) {
@@ -118,24 +133,38 @@ export function MorphologyCanvas({
       }
 
       syncCanvasBackingStore(canvas, context, viewport)
-      drawMorphologyTiles(context, cache.readyTiles(bbox, level), viewState, viewport)
+      drawMorphologyTileChannels(
+        context,
+        channelRequests.map((request) => ({
+          color: request.channel.color,
+          opacity: normalizeLayerOpacity(request.channel.opacity ?? 1),
+          tiles: request.cache.readyTiles(bbox, request.level),
+        })),
+        viewState,
+        viewport,
+      )
     }
 
     drawReadyTiles()
-    void requestTilesInPriorityOrder({
-      cache,
-      level,
-      loader,
-      onTileSettled: drawReadyTiles,
-      signal: abortController.signal,
-      tiles,
-    })
+    void Promise.allSettled(
+      channelRequests.map((request) =>
+        requestTilesInPriorityOrder({
+          cache: request.cache,
+          level: request.level,
+          loader: request.channel.loader,
+          maxConcurrentRequests: perChannelConcurrency,
+          onTileSettled: drawReadyTiles,
+          signal: abortController.signal,
+          tiles: request.tiles,
+        }),
+      ),
+    )
 
     return () => {
       cancelled = true
       abortController.abort()
     }
-  }, [loader, onTileError, viewState, viewport])
+  }, [onTileError, renderChannels, viewState, viewport])
 
   return (
     <canvas
@@ -151,6 +180,7 @@ interface RequestTilesOptions {
   readonly cache: TileCache
   readonly level: number
   readonly loader: TiffPyramidLoader
+  readonly maxConcurrentRequests: number
   readonly onTileSettled: () => void
   readonly signal: AbortSignal
   readonly tiles: readonly TileIndex[]
@@ -158,7 +188,7 @@ interface RequestTilesOptions {
 
 async function requestTilesInPriorityOrder(options: RequestTilesOptions): Promise<void> {
   const queue = [...options.tiles]
-  const workerCount = Math.min(MAX_CONCURRENT_TILE_REQUESTS, queue.length)
+  const workerCount = Math.min(options.maxConcurrentRequests, queue.length)
   const workers = Array.from({ length: workerCount }, async () => {
     while (!options.signal.aborted) {
       const tile = queue.shift()
@@ -182,6 +212,110 @@ async function requestTilesInPriorityOrder(options: RequestTilesOptions): Promis
   })
 
   await Promise.allSettled(workers)
+}
+
+interface ChannelCacheRecord {
+  readonly cache: TileCache
+}
+
+interface ChannelRequest {
+  readonly cache: TileCache
+  readonly cacheKey: string
+  readonly channel: MorphologyCanvasChannel
+  readonly level: number
+  readonly tiles: readonly TileIndex[]
+}
+
+function visibleMorphologyChannels(
+  loader: TiffPyramidLoader | null | undefined,
+  channels: readonly MorphologyCanvasChannel[] | undefined,
+): readonly MorphologyCanvasChannel[] {
+  if (channels !== undefined && channels.length > 0) {
+    return channels.filter((channel) => channel.enabled)
+  }
+
+  if (loader === null || loader === undefined) {
+    return []
+  }
+
+  return [
+    {
+      id: loader.url,
+      loader,
+      enabled: true,
+      color: [255, 255, 255],
+      opacity: 1,
+    },
+  ]
+}
+
+function prepareChannelRequest(options: {
+  readonly bbox: BBox
+  readonly channel: MorphologyCanvasChannel
+  readonly cacheRecords: Map<string, ChannelCacheRecord>
+  readonly onTileError?: (error: Error) => void
+  readonly tileRequestBbox: BBox
+  readonly viewState: OverviewViewState
+}): ChannelRequest {
+  const level = options.channel.loader.bestLevel(2 ** options.viewState.zoom)
+  const cacheKey = channelCacheKey(options.channel)
+  let record = options.cacheRecords.get(cacheKey)
+
+  if (record === undefined) {
+    record = {
+      cache: new TileCache({
+        maxTiles: Math.max(24, Math.floor(96 / Math.max(1, options.cacheRecords.size))),
+        ...(options.channel.contrast === undefined
+          ? {}
+          : { displayWindow: options.channel.contrast }),
+        ...(options.onTileError === undefined ? {} : { onError: options.onTileError }),
+      }),
+    }
+    options.cacheRecords.set(cacheKey, record)
+  }
+
+  return {
+    cache: record.cache,
+    cacheKey,
+    channel: options.channel,
+    level,
+    tiles: selectCenteredTiles(
+      options.channel.loader.tilesForBbox(level, options.tileRequestBbox),
+      MAX_INITIAL_TILE_REQUESTS,
+      options.bbox,
+      (tile) => options.channel.loader.tileBounds(level, tile.col, tile.row),
+    ),
+  }
+}
+
+function channelCacheKey(channel: MorphologyCanvasChannel): string {
+  const contrastKey =
+    channel.contrast === undefined
+      ? 'auto'
+      : `${channel.contrast.lo.toString()}:${channel.contrast.hi.toString()}`
+  return `${channel.id}:${channel.loader.url}:${contrastKey}`
+}
+
+function pruneInactiveCacheRecords(
+  records: Map<string, ChannelCacheRecord>,
+  activeKeys: ReadonlySet<string>,
+): void {
+  for (const [key, record] of records.entries()) {
+    if (activeKeys.has(key)) {
+      continue
+    }
+
+    record.cache.clear()
+    records.delete(key)
+  }
+}
+
+function clearCacheRecords(records: Map<string, ChannelCacheRecord>): void {
+  for (const record of records.values()) {
+    record.cache.clear()
+  }
+
+  records.clear()
 }
 
 function isAbortEntry(entry: TileCacheEntry): boolean {

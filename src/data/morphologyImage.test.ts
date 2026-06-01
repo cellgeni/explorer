@@ -34,6 +34,7 @@ describe('morphology image loader', () => {
       url: 'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
       loader,
       channels: [],
+      channelLoaders: [],
     })
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(fetcher).toHaveBeenCalledWith('https://example.test/xenium/experiment.xenium')
@@ -57,10 +58,63 @@ describe('morphology image loader', () => {
       url: 'https://example.test/xenium/morphology.ome.tif',
       loader,
       channels: [],
+      channelLoaders: [],
     })
     expect(fetcher).not.toHaveBeenCalled()
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology.ome.tif',
+    )
+  })
+
+  it('opens channel loaders from OME-declared sibling focus files', async () => {
+    const channel0 = {
+      id: 'Channel:0',
+      index: 0,
+      name: 'DAPI',
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+      fileName: 'morphology_focus_0000.ome.tif',
+    }
+    const channel1 = {
+      id: 'Channel:1',
+      index: 1,
+      name: 'Boundary',
+      color: [32, 166, 122] as const,
+      contrast: { min: 0, max: 65_535 },
+      fileName: 'morphology_focus_0001.ome.tif',
+    }
+    const loader0 = { channels: [channel0, channel1] } as unknown as TiffPyramidLoader
+    const loader1 = { channels: [channel0, channel1] } as unknown as TiffPyramidLoader
+    const fetcher = vi.fn(async () =>
+      Response.json({
+        images: {
+          morphology_focus_filepath: 'morphology_focus/morphology_focus_0000.ome.tif',
+        },
+      }),
+    )
+    const openImage = vi.fn(async (url: string) =>
+      url.endsWith('morphology_focus_0001.ome.tif') ? loader1 : loader0,
+    )
+
+    await expect(
+      loadMorphologyImage('https://example.test/xenium/', {
+        fetcher,
+        openImage,
+      }),
+    ).resolves.toEqual({
+      url: 'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+      loader: loader0,
+      channels: [channel0, channel1],
+      channelLoaders: [
+        { info: channel0, loader: loader0 },
+        { info: channel1, loader: loader1 },
+      ],
+    })
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+    )
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/xenium/morphology_focus/morphology_focus_0001.ome.tif',
     )
   })
 

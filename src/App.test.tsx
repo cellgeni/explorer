@@ -94,6 +94,7 @@ describe('App', () => {
       url: `${DEMO_DATASET_URL}/morphology_focus/morphology_focus_0000.ome.tif`,
       loader: {} as TiffPyramidLoader,
       channels: [],
+      channelLoaders: [],
     }))
     const loadGenePanel = vi.fn(async () => [])
 
@@ -128,6 +129,24 @@ describe('App', () => {
   })
 
   it('loads morphology image when the option is selected', async () => {
+    const dapiChannel = {
+      id: 'Channel:0',
+      index: 0,
+      name: 'DAPI',
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+      fileName: 'morphology_focus_0000.ome.tif',
+    }
+    const boundaryChannel = {
+      id: 'Channel:1',
+      index: 1,
+      name: 'Boundary',
+      color: [32, 166, 122] as const,
+      contrast: { min: 0, max: 65_535 },
+      fileName: 'morphology_focus_0001.ome.tif',
+    }
+    const dapiLoader = {} as TiffPyramidLoader
+    const boundaryLoader = {} as TiffPyramidLoader
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -137,8 +156,12 @@ describe('App', () => {
     ])
     const loadMorphologyImage = vi.fn(async () => ({
       url: `${DEMO_DATASET_URL}/morphology_focus/morphology_focus_0000.ome.tif`,
-      loader: {} as TiffPyramidLoader,
-      channels: [],
+      loader: dapiLoader,
+      channels: [dapiChannel, boundaryChannel],
+      channelLoaders: [
+        { info: dapiChannel, loader: dapiLoader },
+        { info: boundaryChannel, loader: boundaryLoader },
+      ],
     }))
     const loadGenePanel = vi.fn(async () => [])
 
@@ -171,6 +194,13 @@ describe('App', () => {
       )
     })
     expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+    expect(await screen.findByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Boundary' })).not.toBeChecked()
+    expect(screen.getByLabelText('DAPI color')).toHaveValue('#5890ff')
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Boundary' }))
+
+    expect(screen.getByRole('checkbox', { name: 'Boundary' })).toBeChecked()
     expect(screen.getByTestId('deckgl')).toBeInTheDocument()
   })
 

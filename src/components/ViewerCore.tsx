@@ -13,6 +13,7 @@ import type { ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
+import type { MorphologyCanvasChannel } from './MorphologyCanvas'
 import type { CellBoundaryDatum, OverviewCellDatum } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
@@ -23,6 +24,7 @@ export interface ViewerCoreProps {
   readonly expressionCells?: readonly OverviewCellDatum[]
   readonly boundaries?: readonly CellBoundaryDatum[]
   readonly imageLoader?: TiffPyramidLoader | null
+  readonly imageChannels?: readonly MorphologyCanvasChannel[]
   readonly imageOpacity?: number
   readonly geneExpressionOpacity?: number
   readonly status?: ViewerLoadStatus
@@ -48,6 +50,7 @@ export function ViewerCore({
   expressionCells = [],
   boundaries = [],
   imageLoader = null,
+  imageChannels = [],
   imageOpacity = 1,
   geneExpressionOpacity = 1,
   status = 'idle',
@@ -71,6 +74,7 @@ export function ViewerCore({
       expressionCells={expressionCells}
       boundaries={boundaries}
       imageLoader={imageLoader}
+      imageChannels={imageChannels}
       imageOpacity={imageOpacity}
       geneExpressionOpacity={geneExpressionOpacity}
       initialViewState={fittedViewState}
@@ -93,6 +97,7 @@ interface ViewerSurfaceProps {
   readonly expressionCells: readonly OverviewCellDatum[]
   readonly boundaries: readonly CellBoundaryDatum[]
   readonly imageLoader: TiffPyramidLoader | null
+  readonly imageChannels: readonly MorphologyCanvasChannel[]
   readonly imageOpacity: number
   readonly geneExpressionOpacity: number
   readonly initialViewState: OverviewViewState
@@ -113,6 +118,7 @@ function ViewerSurface({
   expressionCells,
   boundaries,
   imageLoader,
+  imageChannels,
   imageOpacity,
   geneExpressionOpacity,
   initialViewState,
@@ -163,6 +169,7 @@ function ViewerSurface({
     [boundaries, displayCells, expressionCells, geneExpressionOpacity, hexBoundaries],
   )
   const hasCells = cells.length > 0
+  const hasImage = imageLoader !== null || imageChannels.length > 0
   const visibleCellCount = visibleCells.length
   const viewportMessage = readViewportMessage(status, imageStatus, boundaryStatus, {
     ...(errorMessage === undefined ? {} : { errorMessage }),
@@ -239,8 +246,9 @@ function ViewerSurface({
       role="img"
       aria-label="Spatial viewer canvas area"
     >
-      {imageLoader === null ? <div className="viewport-grid" aria-hidden="true" /> : null}
+      {!hasImage ? <div className="viewport-grid" aria-hidden="true" /> : null}
       <MorphologyCanvas
+        channels={imageChannels}
         loader={imageLoader}
         opacity={imageOpacity}
         viewState={viewState}

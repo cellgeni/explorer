@@ -171,7 +171,7 @@ done. This file records execution-level additions requested after work began.
 
 - [x] Parse multi-file `morphology_focus_000N.ome.tif` channel set from OME-XML;
       per-channel name/color/contrast.
-- [ ] Multi-channel compositing via Viv `XRLayer` (or custom shader) fed decoded
+- [x] Multi-channel compositing via Viv `XRLayer` (or custom shader) fed decoded
       tiles; per-channel color + min/max + on/off.
 - [x] **Deferred by user:** JPEG XR decoder (WASM).
 - [x] **Deferred by user:** Z-stack plane selector for `morphology.ome.tif`.
@@ -185,6 +185,12 @@ done. This file records execution-level additions requested after work began.
       now expose channel id, index, name, focus-file name, purpose, RGB display
       color, and default contrast range from the OME pixel type; the real demo
       reports DAPI, ATP1A1/CD45/E-Cadherin, 18S, and alphaSMA/Vimentin.
+- [x] Implemented multi-channel morphology through the existing Canvas2D image
+      underlay rather than introducing Viv in this slice. Each OME channel gets
+      an independent TIFF loader/cache, decoded tiles are tinted and additively
+      composited, and the UI exposes per-channel on/off, RGB color, and min/max
+      contrast controls. This preserves the current custom J2K/decode pipeline
+      and avoids a renderer architecture change.
 
 ## Requested Analysis Features
 

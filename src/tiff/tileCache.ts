@@ -21,6 +21,7 @@ export interface TileSourceSize {
 
 export interface TileCacheOptions {
   readonly maxTiles?: number
+  readonly displayWindow?: DisplayWindow
   readonly decodeTile?: TileBitmapDecoder
   readonly onError?: (error: Error) => void
 }
@@ -70,6 +71,7 @@ export class TileCache {
     this.maxTiles = options.maxTiles ?? 150
     this.decodeTile = options.decodeTile ?? createWorkerTileDecoder()
     this.onError = options.onError ?? noop
+    this.displayWindow = options.displayWindow
   }
 
   key(level: number, col: number, row: number): string {

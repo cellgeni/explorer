@@ -7,6 +7,12 @@ export interface MorphologyImage {
   readonly url: string
   readonly loader: TiffPyramidLoader
   readonly channels: readonly TiffChannelInfo[]
+  readonly channelLoaders: readonly MorphologyImageChannel[]
+}
+
+export interface MorphologyImageChannel {
+  readonly info: TiffChannelInfo
+  readonly loader: TiffPyramidLoader
 }
 
 export interface LoadMorphologyImageOptions {
@@ -47,10 +53,60 @@ export async function loadMorphologyImage(
       url,
       loader,
       channels: loader.channels ?? [],
+      channelLoaders: await loadMorphologyChannelLoaders({
+        imageUrl: url,
+        loader,
+        openImage,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      }),
     }
   }
 
   throw new Error('No supported Xenium OME-TIFF image was found.')
+}
+
+interface LoadMorphologyChannelLoadersOptions {
+  readonly imageUrl: string
+  readonly loader: TiffPyramidLoader
+  readonly openImage: NonNullable<LoadMorphologyImageOptions['openImage']>
+  readonly signal?: AbortSignal
+}
+
+async function loadMorphologyChannelLoaders(
+  options: LoadMorphologyChannelLoadersOptions,
+): Promise<readonly MorphologyImageChannel[]> {
+  const channels = options.loader.channels ?? []
+
+  if (channels.length === 0) {
+    return []
+  }
+
+  const loaderByUrl = new Map<string, TiffPyramidLoader>([
+    [options.imageUrl, options.loader],
+  ])
+
+  return Promise.all(
+    channels.map(async (channel) => {
+      const channelUrl =
+        channel.fileName === undefined
+          ? options.imageUrl
+          : new URL(channel.fileName, options.imageUrl).toString()
+      let loader = loaderByUrl.get(channelUrl)
+
+      if (loader === undefined) {
+        loader =
+          options.signal === undefined
+            ? await options.openImage(channelUrl)
+            : await options.openImage(channelUrl, options.signal)
+        loaderByUrl.set(channelUrl, loader)
+      }
+
+      return {
+        info: channel,
+        loader,
+      }
+    }),
+  )
 }
 
 export async function loadMorphologyImageCandidatesFromManifest(
