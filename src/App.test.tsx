@@ -164,7 +164,17 @@ describe('App', () => {
       ],
     }))
     const loadGenePanel = vi.fn(async () => [])
-    const computeAutoChannelContrast = vi.fn(async () => ({ min: 12, max: 345 }))
+    const computeAutoChannelContrast = vi.fn(async () => ({
+      min: 12,
+      max: 345,
+      histogram: {
+        bins: Array.from({ length: 32 }, (_value, index) => index + 1),
+        maxCount: 32,
+        min: 12,
+        max: 345,
+        sampleCount: 528,
+      },
+    }))
 
     render(
       <App
@@ -212,6 +222,7 @@ describe('App', () => {
     })
     expect(screen.getByLabelText('DAPI minimum')).toHaveValue(12)
     expect(screen.getByLabelText('DAPI maximum')).toHaveValue(345)
+    expect(screen.getByLabelText('DAPI histogram')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Boundary' }))
 

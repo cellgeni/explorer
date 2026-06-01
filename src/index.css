@@ -582,6 +582,28 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+.channel-histogram {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(32, minmax(1px, 1fr));
+  align-items: end;
+  height: 24px;
+  gap: 1px;
+  padding: 3px;
+  border: 1px solid rgba(23, 21, 17, 0.12);
+  border-radius: 4px;
+  background: #fffdf7;
+}
+
+.channel-histogram-bar {
+  display: block;
+  height: 100%;
+  min-height: 1px;
+  border-radius: 1px 1px 0 0;
+  background: linear-gradient(180deg, rgba(215, 63, 124, 0.92), rgba(240, 200, 75, 0.68));
+  transform-origin: bottom;
+}
+
 .layer-dot {
   width: 8px;
   height: 8px;

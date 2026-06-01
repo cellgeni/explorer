@@ -26,7 +26,15 @@ describe('computeChannelAutoContrast', () => {
         lowPercentile: 20,
         highPercentile: 80,
       }),
-    ).resolves.toEqual({ min: 10, max: 40 })
+    ).resolves.toMatchObject({
+      min: 10,
+      max: 40,
+      histogram: {
+        min: 10,
+        max: 40,
+        sampleCount: 6,
+      },
+    })
 
     expect(loader.requestedTiles).toEqual([{ level: 2, col: 0, row: 0 }])
   })
@@ -51,7 +59,15 @@ describe('computeChannelAutoContrast', () => {
         lowPercentile: 0,
         highPercentile: 100,
       }),
-    ).resolves.toEqual({ min: 1, max: 4 })
+    ).resolves.toMatchObject({
+      min: 1,
+      max: 4,
+      histogram: {
+        min: 1,
+        max: 4,
+        sampleCount: 4,
+      },
+    })
   })
 })
 

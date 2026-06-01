@@ -28,7 +28,7 @@ import { hexBoundaryCellLimit } from './rendering/hexCellBoundaries'
 import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { BBox } from './data/coords'
-import type { ChannelAutoContrast } from './data/morphologyContrast'
+import type { ChannelAutoContrast, ChannelHistogram } from './data/morphologyContrast'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
 import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
@@ -41,6 +41,7 @@ import type { ViewerViewportDetail } from './components/ViewerCore'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 const GENE_EXPRESSION_VIEWPORT_CELL_LIMIT = 5_000
+const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
@@ -167,6 +168,7 @@ interface MorphologyChannelSetting {
   readonly color: readonly [number, number, number]
   readonly contrastMin: number
   readonly contrastMax: number
+  readonly histogram?: ChannelHistogram
 }
 
 export interface AppProps {
@@ -658,6 +660,7 @@ export function App({
         updateMorphologyChannel(channelId, {
           contrastMin: contrast.min,
           contrastMax: contrast.max,
+          histogram: contrast.histogram,
         })
       })
       .catch((error) => {
@@ -1106,6 +1109,7 @@ function MorphologyChannelControls({
         const contrastMin = setting?.contrastMin ?? channel.info.contrast.min
         const contrastMax = setting?.contrastMax ?? channel.info.contrast.max
         const isAutoContrastLoading = autoContrastChannelIds.includes(channel.info.id)
+        const histogram = setting?.histogram
 
         return (
           <div className="channel-control" key={channel.info.id}>
@@ -1163,9 +1167,41 @@ function MorphologyChannelControls({
                 }}
               />
             </div>
+            <ChannelHistogramView histogram={histogram} label={channel.info.name} />
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function ChannelHistogramView({
+  histogram,
+  label,
+}: {
+  readonly histogram: ChannelHistogram | undefined
+  readonly label: string
+}) {
+  const bins = histogram?.bins ?? EMPTY_HISTOGRAM_BINS
+  const maxCount = histogram?.maxCount ?? 1
+
+  return (
+    <div
+      className="channel-histogram"
+      aria-label={`${label} histogram`}
+      title={
+        histogram === undefined
+          ? `${label} histogram`
+          : `${label} histogram, ${histogram.sampleCount.toLocaleString()} samples`
+      }
+    >
+      {bins.map((count, index) => (
+        <span
+          className="channel-histogram-bar"
+          key={index}
+          style={{ transform: `scaleY(${Math.max(0.04, count / maxCount)})` }}
+        />
+      ))}
     </div>
   )
 }

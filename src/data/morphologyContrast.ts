@@ -5,6 +5,15 @@ import type { ImagePixels, TileIndex } from './coords'
 export interface ChannelAutoContrast {
   readonly min: number
   readonly max: number
+  readonly histogram: ChannelHistogram
+}
+
+export interface ChannelHistogram {
+  readonly bins: readonly number[]
+  readonly maxCount: number
+  readonly min: number
+  readonly max: number
+  readonly sampleCount: number
 }
 
 export interface AutoContrastTileLoader {
@@ -34,6 +43,7 @@ export interface ComputeChannelAutoContrastOptions {
 const DEFAULT_LOW_PERCENTILE = 0.5
 const DEFAULT_HIGH_PERCENTILE = 99.8
 const DEFAULT_MAX_SAMPLES = 250_000
+const DEFAULT_HISTOGRAM_BINS = 32
 
 export async function computeChannelAutoContrast(
   loader: AutoContrastTileLoader,
@@ -79,8 +89,12 @@ export async function computeChannelAutoContrast(
   const high = percentile(samples, options.highPercentile ?? DEFAULT_HIGH_PERCENTILE)
   const min = Math.floor(low)
   const max = Math.ceil(high)
+  const contrast = max > min ? { min, max } : { min, max: min + 1 }
 
-  return max > min ? { min, max } : { min, max: min + 1 }
+  return {
+    ...contrast,
+    histogram: buildHistogram(samples, contrast.min, contrast.max),
+  }
 }
 
 function countVisiblePixels(
@@ -126,6 +140,33 @@ function percentile(sortedValues: readonly number[], percentileValue: number): n
   const clamped = Math.max(0, Math.min(100, percentileValue))
   const index = Math.round(((sortedValues.length - 1) * clamped) / 100)
   return sortedValues[index] ?? 0
+}
+
+function buildHistogram(
+  sortedValues: readonly number[],
+  min: number,
+  max: number,
+): ChannelHistogram {
+  const bins = new Array<number>(DEFAULT_HISTOGRAM_BINS).fill(0)
+  const range = Math.max(1, max - min)
+
+  for (const value of sortedValues) {
+    const ratio = (value - min) / range
+    const bin = Math.max(
+      0,
+      Math.min(DEFAULT_HISTOGRAM_BINS - 1, Math.floor(ratio * DEFAULT_HISTOGRAM_BINS)),
+    )
+
+    bins[bin] = (bins[bin] ?? 0) + 1
+  }
+
+  return {
+    bins,
+    maxCount: Math.max(1, ...bins),
+    min,
+    max,
+    sampleCount: sortedValues.length,
+  }
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

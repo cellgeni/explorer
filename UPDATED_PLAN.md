@@ -183,7 +183,7 @@ done. This file records execution-level additions requested after work began.
       tiles; per-channel color + min/max + on/off.
 - [x] **Deferred by user:** JPEG XR decoder (WASM).
 - [x] **Deferred by user:** Z-stack plane selector for `morphology.ome.tif`.
-- [ ] Per-channel histogram + auto-contrast.
+- [x] Per-channel histogram + auto-contrast.
 
 ## Phase 3 Notes
 
@@ -197,6 +197,9 @@ done. This file records execution-level additions requested after work began.
       coarsest pyramid level for that channel, crops padded edge tiles, computes
       robust percentiles, and writes the resulting min/max into the existing
       channel contrast inputs.
+- [x] Auto contrast now also stores and renders a compact per-channel histogram
+      from the same sampled pixels, so the histogram and min/max are based on the
+      same pyramid-level data.
 - [x] Implemented multi-channel morphology through the existing Canvas2D image
       underlay rather than introducing Viv in this slice. Each OME channel gets
       an independent TIFF loader/cache, decoded tiles are tinted and additively
