@@ -23,7 +23,7 @@ done. This file records execution-level additions requested after work began.
       `tiff/loader.ts`, `tiff/tileCache.ts`, `codecs/jpeg2000.ts`.
 - [x] Define `SpatialDataset`; implement `XeniumDataset`.
 - [x] Worker pool: J2K decode + windowing in workers; DuckDB in its own worker.
-- [ ] Zustand store; React chrome around the deck.gl/canvas core.
+- [x] Zustand store; React chrome around the deck.gl/canvas core.
 - [ ] hyparquet first-paint scatter from `cells.parquet`.
 
 ## Current Port Subtasks

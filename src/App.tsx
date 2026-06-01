@@ -1,27 +1,16 @@
 import type { FormEvent } from 'react'
-import { useId, useState } from 'react'
-import { bundledDeckVersion, createOverviewLayers } from './rendering/deckLayers'
-import type { OverviewCellDatum } from './rendering/deckLayers'
-
-const DEMO_DATASET_URL =
-  'https://mp33.cog.sanger.ac.uk/public/xenium/output-XETG00155__0033412__Sob23-BRA-0-FFPE-2-s30__20240829__110328'
+import { useId } from 'react'
+import { ViewerCore } from './components/ViewerCore'
+import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
+import { bundledDeckVersion } from './rendering/deckLayers'
+import { useViewerStore } from './store/viewerStore'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 
-const scaffoldOverviewCells: readonly OverviewCellDatum[] = [
-  {
-    id: 'scaffold-cell-a',
-    position: [0, 0],
-    radiusPixels: 4,
-    fillColor: [215, 63, 124, 220],
-  },
-]
-
-const scaffoldDeckLayerCount = createOverviewLayers(scaffoldOverviewCells).length
-
 export function App() {
   const datasetInputId = useId()
-  const [queuedDatasetUrl, setQueuedDatasetUrl] = useState(DEMO_DATASET_URL)
+  const datasetUrl = useViewerStore((state) => state.datasetUrl)
+  const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
 
   function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -30,7 +19,7 @@ export function App() {
     const datasetUrl = formData.get('datasetUrl')
 
     if (typeof datasetUrl === 'string' && datasetUrl.trim().length > 0) {
-      setQueuedDatasetUrl(datasetUrl.trim())
+      setDatasetUrl(datasetUrl.trim())
     }
   }
 
@@ -57,7 +46,7 @@ export function App() {
             inputMode="url"
             autoComplete="off"
             spellCheck={false}
-            defaultValue={DEMO_DATASET_URL}
+            defaultValue={datasetUrl}
             placeholder="https://bucket.example/output…"
           />
           <button type="submit">Load Dataset</button>
@@ -86,23 +75,11 @@ export function App() {
             <h2 id="viewer-heading">Spatial View</h2>
           </div>
           <p className="dataset-status" aria-live="polite">
-            Queued dataset: <span translate="no">{queuedDatasetUrl}</span>
+            Queued dataset: <span translate="no">{datasetUrl}</span>
           </p>
         </header>
 
-        <div
-          className="viewport-frame"
-          role="img"
-          aria-label="Spatial viewer canvas area"
-        >
-          <div className="viewport-grid" aria-hidden="true" />
-          <div className="cell-field" aria-hidden="true">
-            <span className="cell-node cell-node-a" />
-            <span className="cell-node cell-node-b" />
-            <span className="cell-node cell-node-c" />
-            <span className="cell-node cell-node-d" />
-          </div>
-        </div>
+        <ViewerCore />
       </section>
     </main>
   )

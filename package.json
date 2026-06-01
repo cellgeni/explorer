@@ -27,7 +27,8 @@
     "geotiff": "3.0.5",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "zarrita": "0.7.3"
+    "zarrita": "0.7.3",
+    "zustand": "5.0.14"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
