@@ -17,7 +17,7 @@ done. This file records execution-level additions requested after work began.
       Vitest, Playwright.
 - [x] Bundle deck.gl (`deck.gl`, `@deck.gl/core`, `@deck.gl/layers`); remove the
       unpkg `<script>`.
-- [ ] `vite.config.ts`: `optimizeDeps.exclude` WASM packages;
+- [x] `vite.config.ts`: `optimizeDeps.exclude` WASM packages;
       `assetsInclude: ['**/*.wasm']`; dev server COOP/COEP headers.
 - [ ] Port with types + tests: `coords.ts`, `cellid.ts`, `duckdb.ts`, `gex.ts`,
       `tiff/loader.ts`, `tiff/tileCache.ts`, `codecs/jpeg2000.ts`.
