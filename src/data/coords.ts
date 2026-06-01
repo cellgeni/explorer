@@ -42,6 +42,8 @@ export interface OrthographicViewState {
 }
 
 export interface TileGrid {
+  readonly fullImageWidth?: ImagePixels
+  readonly fullImageHeight?: ImagePixels
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
   readonly tileWidth: ImagePixels
@@ -152,8 +154,10 @@ export function tileBounds(
   const right = (col + 1) * grid.tileWidth * levelScale
   const bottom = row * grid.tileHeight * levelScale
   const top = (row + 1) * grid.tileHeight * levelScale
-  const imageWidthMicrometers = grid.imageWidth * units.micrometersPerPixel
-  const imageHeightMicrometers = grid.imageHeight * units.micrometersPerPixel
+  const imageWidthMicrometers =
+    (grid.fullImageWidth ?? grid.imageWidth) * units.micrometersPerPixel
+  const imageHeightMicrometers =
+    (grid.fullImageHeight ?? grid.imageHeight) * units.micrometersPerPixel
 
   return {
     minX: micrometers(Math.max(0, left)),

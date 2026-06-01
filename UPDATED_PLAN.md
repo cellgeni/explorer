@@ -19,7 +19,7 @@ done. This file records execution-level additions requested after work began.
       unpkg `<script>`.
 - [x] `vite.config.ts`: `optimizeDeps.exclude` WASM packages;
       `assetsInclude: ['**/*.wasm']`; dev server COOP/COEP headers.
-- [ ] Port with types + tests: `coords.ts`, `cellid.ts`, `duckdb.ts`, `gex.ts`,
+- [x] Port with types + tests: `coords.ts`, `cellid.ts`, `duckdb.ts`, `gex.ts`,
       `tiff/loader.ts`, `tiff/tileCache.ts`, `codecs/jpeg2000.ts`.
 - [ ] Define `SpatialDataset`; implement `XeniumDataset`.
 - [ ] Worker pool: J2K decode + windowing in workers; DuckDB in its own worker.
@@ -32,6 +32,6 @@ done. This file records execution-level additions requested after work began.
 - [x] `cellid.ts`
 - [x] `duckdb.ts`
 - [x] `gex.ts`
-- [ ] `tiff/loader.ts`
-- [ ] `tiff/tileCache.ts`
-- [ ] `codecs/jpeg2000.ts`
+- [x] `tiff/loader.ts`
+- [x] `tiff/tileCache.ts`
+- [x] `codecs/jpeg2000.ts`

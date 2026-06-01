@@ -18,11 +18,13 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@cornerstonejs/codec-openjpeg": "1.3.0",
     "@deck.gl/core": "9.3.2",
     "@deck.gl/layers": "9.3.2",
     "@duckdb/duckdb-wasm": "1.33.1-dev45.0",
     "@zarrita/storage": "0.2.0",
     "deck.gl": "9.3.2",
+    "geotiff": "3.0.5",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "zarrita": "0.7.3"
