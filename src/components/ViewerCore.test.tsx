@@ -30,6 +30,14 @@ describe('ViewerCore', () => {
     expect(document.querySelector('canvas.morphology-canvas')).toBeInTheDocument()
   })
 
+  it('applies image opacity to the morphology canvas', () => {
+    render(<ViewerCore imageOpacity={0.4} />)
+
+    expect(document.querySelector('canvas.morphology-canvas')).toHaveStyle({
+      opacity: '0.4',
+    })
+  })
+
   it('reports debounced viewport details for boundary loading', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

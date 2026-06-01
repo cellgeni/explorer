@@ -102,7 +102,9 @@ describe('deck layer factory', () => {
         expressionCount: 5,
       },
     ]
-    const layers = createOverviewLayers(fixtureCells, [], [], expressionCells)
+    const layers = createOverviewLayers(fixtureCells, [], [], expressionCells, {
+      geneExpressionOpacity: 0.45,
+    })
 
     expect(layers).toHaveLength(2)
     expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
@@ -114,6 +116,7 @@ describe('deck layer factory', () => {
     }
 
     expect(expressionLayer.id).toBe('gene-expression-scatter')
+    expect(expressionLayer.props.opacity).toBe(0.45)
   })
 
   it('converts Xenium overview cells into deck.gl coordinates', () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { micrometers, scaleFromZoom, type BBox, type TileIndex } from '../data/coords'
+import { normalizeLayerOpacity } from '../rendering/layerOpacity'
 import {
   drawMorphologyTiles,
   morphologyViewportBbox,
@@ -17,12 +18,14 @@ const PREFETCH_SCREEN_MARGIN_PIXELS = 256
 
 export interface MorphologyCanvasProps {
   readonly loader?: TiffPyramidLoader | null
+  readonly opacity?: number
   readonly viewState: OverviewViewState
   readonly onTileError?: (error: Error) => void
 }
 
 export function MorphologyCanvas({
   loader,
+  opacity = 1,
   viewState,
   onTileError,
 }: MorphologyCanvasProps) {
@@ -134,7 +137,14 @@ export function MorphologyCanvas({
     }
   }, [loader, onTileError, viewState, viewport])
 
-  return <canvas ref={canvasRef} className="morphology-canvas" aria-hidden="true" />
+  return (
+    <canvas
+      ref={canvasRef}
+      className="morphology-canvas"
+      style={{ opacity: normalizeLayerOpacity(opacity) }}
+      aria-hidden="true"
+    />
+  )
 }
 
 interface RequestTilesOptions {

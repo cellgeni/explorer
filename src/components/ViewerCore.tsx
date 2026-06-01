@@ -23,6 +23,8 @@ export interface ViewerCoreProps {
   readonly expressionCells?: readonly OverviewCellDatum[]
   readonly boundaries?: readonly CellBoundaryDatum[]
   readonly imageLoader?: TiffPyramidLoader | null
+  readonly imageOpacity?: number
+  readonly geneExpressionOpacity?: number
   readonly status?: ViewerLoadStatus
   readonly imageStatus?: ViewerLoadStatus
   readonly boundaryStatus?: ViewerLoadStatus
@@ -46,6 +48,8 @@ export function ViewerCore({
   expressionCells = [],
   boundaries = [],
   imageLoader = null,
+  imageOpacity = 1,
+  geneExpressionOpacity = 1,
   status = 'idle',
   imageStatus = 'idle',
   boundaryStatus = 'idle',
@@ -67,6 +71,8 @@ export function ViewerCore({
       expressionCells={expressionCells}
       boundaries={boundaries}
       imageLoader={imageLoader}
+      imageOpacity={imageOpacity}
+      geneExpressionOpacity={geneExpressionOpacity}
       initialViewState={fittedViewState}
       status={status}
       imageStatus={imageStatus}
@@ -87,6 +93,8 @@ interface ViewerSurfaceProps {
   readonly expressionCells: readonly OverviewCellDatum[]
   readonly boundaries: readonly CellBoundaryDatum[]
   readonly imageLoader: TiffPyramidLoader | null
+  readonly imageOpacity: number
+  readonly geneExpressionOpacity: number
   readonly initialViewState: OverviewViewState
   readonly status: ViewerLoadStatus
   readonly imageStatus: ViewerLoadStatus
@@ -105,6 +113,8 @@ function ViewerSurface({
   expressionCells,
   boundaries,
   imageLoader,
+  imageOpacity,
+  geneExpressionOpacity,
   initialViewState,
   status,
   imageStatus,
@@ -146,8 +156,11 @@ function ViewerSurface({
     [hexBoundaryMaxVisibleCells, visibleCells],
   )
   const layers = useMemo(
-    () => createOverviewLayers(displayCells, boundaries, hexBoundaries, expressionCells),
-    [boundaries, displayCells, expressionCells, hexBoundaries],
+    () =>
+      createOverviewLayers(displayCells, boundaries, hexBoundaries, expressionCells, {
+        geneExpressionOpacity,
+      }),
+    [boundaries, displayCells, expressionCells, geneExpressionOpacity, hexBoundaries],
   )
   const hasCells = cells.length > 0
   const visibleCellCount = visibleCells.length
@@ -229,6 +242,7 @@ function ViewerSurface({
       {imageLoader === null ? <div className="viewport-grid" aria-hidden="true" /> : null}
       <MorphologyCanvas
         loader={imageLoader}
+        opacity={imageOpacity}
         viewState={viewState}
         {...(onImageTileError === undefined ? {} : { onTileError: onImageTileError })}
       />

@@ -178,3 +178,6 @@ unless the phase order is explicitly changed.
       highlighting. The H5 feature-matrix backend remains a later Phase 4 task.
 - [x] Expression loading is viewport-scoped and capped at 5,000 visible cells for
       now to avoid whole-slide feature-matrix work on million-cell datasets.
+- [x] Added compact image-layer and gene-expression-layer opacity controls to the
+      layer stack. The image slider controls the morphology canvas opacity; the
+      gene slider controls the deck.gl gene-expression overlay opacity.

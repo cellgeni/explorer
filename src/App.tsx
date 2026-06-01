@@ -19,6 +19,7 @@ import { overviewCellsToLayerData } from './rendering/deckLayers'
 import { bundledDeckVersion } from './rendering/deckLayers'
 import { styleOverviewCellsByObservation } from './rendering/cellStyling'
 import { hexBoundaryCellLimit } from './rendering/hexCellBoundaries'
+import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { BBox } from './data/coords'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
@@ -107,6 +108,8 @@ export function App({
   const datasetInputId = useId()
   const morphologyInputId = useId()
   const boundaryLimitInputId = useId()
+  const imageOpacityInputId = useId()
+  const geneOpacityInputId = useId()
   const geneSearchInputId = useId()
   const observationModeInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
@@ -132,6 +135,8 @@ export function App({
   const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(false)
   const [boundaryCellLimit, setBoundaryCellLimit] = useState(BOUNDARY_VIEWPORT_CELL_LIMIT)
+  const [imageLayerOpacity, setImageLayerOpacity] = useState(1)
+  const [geneLayerOpacity, setGeneLayerOpacity] = useState(1)
   const [geneSearch, setGeneSearch] = useState('')
   const [selectedGenes, setSelectedGenes] = useState<readonly string[]>([])
   const [observationColorMode, setObservationColorMode] =
@@ -504,6 +509,46 @@ export function App({
               </li>
             ))}
           </ul>
+          <div className="layer-opacity-controls">
+            <div className="layer-opacity-control">
+              <div className="layer-opacity-header">
+                <label htmlFor={imageOpacityInputId}>Image opacity</label>
+                <span>{opacityToPercent(imageLayerOpacity)}%</span>
+              </div>
+              <input
+                id={imageOpacityInputId}
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={opacityToPercent(imageLayerOpacity)}
+                aria-valuetext={`${opacityToPercent(imageLayerOpacity)}%`}
+                onChange={(event) => {
+                  setImageLayerOpacity(
+                    percentToOpacity(event.currentTarget.valueAsNumber),
+                  )
+                }}
+              />
+            </div>
+            <div className="layer-opacity-control">
+              <div className="layer-opacity-header">
+                <label htmlFor={geneOpacityInputId}>Gene opacity</label>
+                <span>{opacityToPercent(geneLayerOpacity)}%</span>
+              </div>
+              <input
+                id={geneOpacityInputId}
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={opacityToPercent(geneLayerOpacity)}
+                aria-valuetext={`${opacityToPercent(geneLayerOpacity)}%`}
+                onChange={(event) => {
+                  setGeneLayerOpacity(percentToOpacity(event.currentTarget.valueAsNumber))
+                }}
+              />
+            </div>
+          </div>
         </section>
 
         <section className="analysis-section" aria-labelledby="analysis-heading">
@@ -597,6 +642,8 @@ export function App({
           expressionCells={geneExpressionCells}
           boundaries={boundaryLayerData}
           imageLoader={morphologyImage?.loader ?? null}
+          imageOpacity={imageLayerOpacity}
+          geneExpressionOpacity={geneLayerOpacity}
           status={loadState.status}
           imageStatus={morphologyState.status}
           boundaryStatus={boundaryState.status}

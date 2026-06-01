@@ -4,6 +4,7 @@ import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { GeneExpressionCell } from '../datasets/xeniumDataset'
 import type { SpatialElement } from '../datasets/spatialDataset'
+import { DEFAULT_LAYER_OPACITY, normalizeLayerOpacity } from './layerOpacity'
 
 export interface OverviewCellDatum {
   readonly id: string
@@ -32,6 +33,10 @@ export interface CellBoundaryDatum {
   readonly lineColor: Color
 }
 
+export interface OverviewLayerOptions {
+  readonly geneExpressionOpacity?: number
+}
+
 const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
   target: [0, 0, 0],
   zoom: -4,
@@ -51,7 +56,11 @@ export function createOverviewLayers(
   boundaries: readonly CellBoundaryDatum[] = [],
   hexBoundaries: readonly CellBoundaryDatum[] = [],
   expressionCells: readonly OverviewCellDatum[] = [],
+  options: OverviewLayerOptions = {},
 ): LayersList {
+  const geneExpressionOpacity = normalizeLayerOpacity(
+    options.geneExpressionOpacity ?? DEFAULT_LAYER_OPACITY,
+  )
   const layers: LayersList = [
     new ScatterplotLayer<OverviewCellDatum>({
       id: 'cells-overview-scatter',
@@ -77,6 +86,7 @@ export function createOverviewLayers(
         radiusMaxPixels: 18,
         stroked: true,
         lineWidthMinPixels: 1,
+        opacity: geneExpressionOpacity,
         getPosition: (cell) => cell.position,
         getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
         getFillColor: (cell) => cell.fillColor,

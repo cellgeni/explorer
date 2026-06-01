@@ -30,12 +30,31 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
     expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(500)
+    expect(screen.getByRole('slider', { name: 'Image opacity' })).toHaveValue('100')
+    expect(screen.getByRole('slider', { name: 'Gene opacity' })).toHaveValue('100')
     expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument()
     expect(screen.getByLabelText('Gene selection')).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
     expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
+  })
+
+  it('lets the user configure image and gene layer opacity', () => {
+    render(<App />)
+
+    const imageOpacityInput = screen.getByRole('slider', {
+      name: 'Image opacity',
+    })
+    const geneOpacityInput = screen.getByRole('slider', {
+      name: 'Gene opacity',
+    })
+
+    fireEvent.change(imageOpacityInput, { target: { value: '45' } })
+    fireEvent.change(geneOpacityInput, { target: { value: '70' } })
+
+    expect(imageOpacityInput).toHaveValue('45')
+    expect(geneOpacityInput).toHaveValue('70')
   })
 
   it('lets the user configure the boundary polygon visible-cell limit', () => {
