@@ -119,6 +119,8 @@ done. This file records execution-level additions requested after work began.
 - [ ] Read `experiment.xenium` manifest to know which files exist (replace
       HEAD-guessing in `loadMorphologyImage`).
 - [ ] Structured error states surfaced to UI.
+- [x] Use the dataset `.zchunkstore` image chunk index when present, falling
+      back to GeoTIFF metadata parsing when it is missing or unsupported.
 
 ## Phase 2 Notes
 
@@ -131,6 +133,12 @@ done. This file records execution-level additions requested after work began.
 - [x] Rechecked the boundary path for the Phase 2 range-read task: the app uses
       DuckDB `read_parquet(?)` against the remote `cell_boundaries.parquet` URL
       and no longer has a full-download boundary path in `src/`.
+- [x] Adapted the Observable OME-TIFF File Chunk Store pattern for the
+      Xenium `.zchunkstore`: fetch a JSON manifest, map Zarr chunk keys to TIFF
+      byte ranges, and reuse the existing range/decode tile pipeline.
+- [x] Live browser smoke verified the manifest path: `.zchunkstore` returned
+      HTTP 200, the first morphology tile fetched with HTTP 206 from the
+      OME-TIFF byte range, and the canvas rendered non-transparent image pixels.
 
 ## Requested Analysis Features
 

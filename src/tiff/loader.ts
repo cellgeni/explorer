@@ -7,6 +7,8 @@ import {
   tileBounds as coordsTileBounds,
   tilesForBbox,
 } from '../data/coords'
+import { tiffChunkKey } from './chunkKeys'
+import { loadZchunkStorePyramidOptions } from './zchunkStore'
 import type {
   BBox,
   ImagePixels,
@@ -57,6 +59,23 @@ export async function openTiff(
   url: string,
   signal?: AbortSignal,
 ): Promise<TiffPyramidLoader> {
+  const zchunkStoreOptions = await loadZchunkStorePyramidOptions(url, signal).catch(
+    (cause: unknown) => {
+      if (isAbortError(cause)) {
+        throw cause
+      }
+
+      return null
+    },
+  )
+
+  if (zchunkStoreOptions !== null) {
+    return new TiffPyramidLoader({
+      url,
+      ...zchunkStoreOptions,
+    })
+  }
+
   const tiff = await fromUrl(url, { allowFullFile: false }, signal)
   const firstImage = await tiff.getImage(0)
   const firstDirectory = firstImage.getFileDirectory()
@@ -172,7 +191,7 @@ export class TiffPyramidLoader {
     row: number,
     signal?: AbortSignal,
   ): Promise<Uint8Array> {
-    const chunk = this.chunks.get(chunkKey(level, row, col))
+    const chunk = this.chunks.get(tiffChunkKey(level, row, col))
 
     if (chunk === undefined) {
       throw new Error(`No TIFF chunk for level=${level} row=${row} col=${col}.`)
@@ -249,7 +268,7 @@ async function indexLevel(options: IndexLevelOptions): Promise<void> {
     }
 
     options.chunkIndex.set(
-      chunkKey(options.level, Math.floor(index / nCols), index % nCols),
+      tiffChunkKey(options.level, Math.floor(index / nCols), index % nCols),
       {
         offset,
         length,
@@ -270,10 +289,6 @@ async function parseFileDirectoryAt(
   offset: number,
 ): Promise<ImageFileDirectory> {
   return tiff.parser.parseFileDirectoryAt(offset)
-}
-
-function chunkKey(level: number, row: number, col: number): string {
-  return `${level}/${row}/${col}`
 }
 
 interface TiffDirectoryValueLoader {
@@ -345,4 +360,8 @@ function numberLikeToNumber(value: number | bigint, key: string): number {
   }
 
   return numberValue
+}
+
+function isAbortError(cause: unknown): boolean {
+  return cause instanceof Error && cause.name === 'AbortError'
 }
