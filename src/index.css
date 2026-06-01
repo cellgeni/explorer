@@ -139,11 +139,17 @@ h2 {
 }
 
 .dataset-form label,
-.layer-section h2 {
+.layer-section h2,
+.layer-section p {
   color: #2f2b22;
   font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.layer-section p {
+  margin: 0;
+  color: #7b4d1d;
 }
 
 .dataset-form input {

@@ -18,6 +18,9 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@deck.gl/core": "9.3.2",
+    "@deck.gl/layers": "9.3.2",
+    "deck.gl": "9.3.2",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },

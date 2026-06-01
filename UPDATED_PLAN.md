@@ -15,7 +15,7 @@ done. This file records execution-level additions requested after work began.
 
 - [x] `npm create vite@latest` → React + TypeScript. Add ESLint, Prettier,
       Vitest, Playwright.
-- [ ] Bundle deck.gl (`deck.gl`, `@deck.gl/core`, `@deck.gl/layers`); remove the
+- [x] Bundle deck.gl (`deck.gl`, `@deck.gl/core`, `@deck.gl/layers`); remove the
       unpkg `<script>`.
 - [ ] `vite.config.ts`: `optimizeDeps.exclude` WASM packages;
       `assetsInclude: ['**/*.wasm']`; dev server COOP/COEP headers.

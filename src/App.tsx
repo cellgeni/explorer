@@ -1,10 +1,23 @@
 import type { FormEvent } from 'react'
 import { useId, useState } from 'react'
+import { bundledDeckVersion, createOverviewLayers } from './rendering/deckLayers'
+import type { OverviewCellDatum } from './rendering/deckLayers'
 
 const DEMO_DATASET_URL =
   'https://mp33.cog.sanger.ac.uk/public/xenium/output-XETG00155__0033412__Sob23-BRA-0-FFPE-2-s30__20240829__110328'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
+
+const scaffoldOverviewCells: readonly OverviewCellDatum[] = [
+  {
+    id: 'scaffold-cell-a',
+    position: [0, 0],
+    radiusPixels: 4,
+    fillColor: [215, 63, 124, 220],
+  },
+]
+
+const scaffoldDeckLayerCount = createOverviewLayers(scaffoldOverviewCells).length
 
 export function App() {
   const datasetInputId = useId()
@@ -52,6 +65,9 @@ export function App() {
 
         <section className="layer-section" aria-labelledby="layer-heading">
           <h2 id="layer-heading">Layer Stack</h2>
+          <p>
+            {scaffoldDeckLayerCount} Deck Layer - deck.gl {bundledDeckVersion}
+          </p>
           <ul>
             {scaffoldLayers.map((layerName) => (
               <li key={layerName}>
