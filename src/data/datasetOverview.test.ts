@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  DEFAULT_OVERVIEW_CELL_LIMIT,
-  cellsParquetUrl,
-  loadDatasetOverview,
-} from './datasetOverview'
+import { cellsParquetUrl, loadDatasetOverview } from './datasetOverview'
 import type { ReadCellsOverviewOptions } from './hyparquetCells'
 
 describe('dataset overview loader', () => {
@@ -13,7 +9,7 @@ describe('dataset overview loader', () => {
     )
   })
 
-  it('uses the default first-paint cell limit', async () => {
+  it('loads all overview cells by default', async () => {
     const calls: ReadCellsOverviewOptions[] = []
 
     await loadDatasetOverview('https://example.test/xenium/', {
@@ -26,7 +22,25 @@ describe('dataset overview loader', () => {
     expect(calls).toEqual([
       {
         url: 'https://example.test/xenium/cells.parquet',
-        limit: DEFAULT_OVERVIEW_CELL_LIMIT,
+      },
+    ])
+  })
+
+  it('passes an explicit overview cell limit when requested', async () => {
+    const calls: ReadCellsOverviewOptions[] = []
+
+    await loadDatasetOverview('https://example.test/xenium/', {
+      limit: 50_000,
+      readCells: async (options) => {
+        calls.push(options)
+        return []
+      },
+    })
+
+    expect(calls).toEqual([
+      {
+        url: 'https://example.test/xenium/cells.parquet',
+        limit: 50_000,
       },
     ])
   })
