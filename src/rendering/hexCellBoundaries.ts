@@ -9,6 +9,7 @@ export interface HexCellBoundaryOptions {
   readonly maxCells: number
   readonly fillColorSource?: 'default' | 'cell'
   readonly lineColor?: CellBoundaryDatum['lineColor']
+  readonly lineColorSource?: 'default' | 'cell'
 }
 
 export function hexBoundaryCellLimit(fullBoundaryCellLimit: number): number {
@@ -39,8 +40,22 @@ function hexCellBoundary(
     id: `hex-boundary:${cell.id}`,
     polygon: hexagonPolygon(x, y, radius),
     fillColor: options.fillColorSource === 'cell' ? cell.fillColor : [32, 102, 83, 18],
-    lineColor: options.lineColor ?? [246, 242, 232, 112],
+    lineColor:
+      options.lineColorSource === 'cell'
+        ? cellLineColor(cell.fillColor)
+        : (options.lineColor ?? [246, 242, 232, 112]),
   }
+}
+
+function cellLineColor(
+  color: CellBoundaryDatum['lineColor'],
+): CellBoundaryDatum['lineColor'] {
+  return [
+    color[0] ?? 0,
+    color[1] ?? 0,
+    color[2] ?? 0,
+    Math.min(235, Math.max(160, color[3] ?? 210)),
+  ]
 }
 
 function hexagonPolygon(

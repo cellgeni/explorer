@@ -12,6 +12,7 @@ import {
   geneExpressionScoreDomainMax,
   overviewCellsToLayerData,
   spatialOverviewView,
+  styleCellBoundariesByCells,
   styleGeneExpressionCellsByScale,
 } from './deckLayers'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
@@ -239,6 +240,27 @@ describe('deck layer factory', () => {
 
     expect(expressionLayer.id).toBe('gene-expression-polygons')
     expect(expressionLayer.props.opacity).toBe(0.5)
+  })
+
+  it('styles true boundaries from matching visible cell colors', () => {
+    const [boundary] = styleCellBoundariesByCells(
+      [
+        {
+          id: 'cell-1',
+          polygon: [
+            [0, 0, 0],
+            [10, 0, 0],
+            [10, -10, 0],
+          ],
+          fillColor: [32, 102, 83, 34],
+          lineColor: [246, 242, 232, 210],
+        },
+      ],
+      fixtureCells,
+    )
+
+    expect(boundary?.fillColor).toEqual([215, 63, 124, 88])
+    expect(boundary?.lineColor).toEqual([215, 63, 124, 220])
   })
 
   it('converts Xenium overview cells into deck.gl coordinates', () => {

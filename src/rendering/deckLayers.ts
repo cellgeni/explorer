@@ -463,6 +463,35 @@ export function boundaryElementsToLayerData(
   return cells
 }
 
+export function styleCellBoundariesByCells(
+  boundaries: readonly CellBoundaryDatum[],
+  cells: readonly OverviewCellDatum[],
+): readonly CellBoundaryDatum[] {
+  if (boundaries.length === 0 || cells.length === 0) {
+    return boundaries
+  }
+
+  const cellById = new Map<string, OverviewCellDatum>()
+
+  for (const cell of cells) {
+    cellById.set(cell.id, cell)
+  }
+
+  return boundaries.map((boundary) => {
+    const cell = cellById.get(boundary.id)
+
+    if (cell === undefined) {
+      return boundary
+    }
+
+    return {
+      ...boundary,
+      fillColor: boundaryFillColor(cell.fillColor),
+      lineColor: boundaryLineColor(cell.fillColor),
+    }
+  })
+}
+
 export function expressionCellsToBoundaryLayerData(
   boundaries: readonly CellBoundaryDatum[],
   expressionCells: readonly OverviewCellDatum[],
@@ -494,6 +523,24 @@ export function expressionCellsToBoundaryLayerData(
   }
 
   return expressionBoundaries
+}
+
+function boundaryFillColor(color: Color): Color {
+  return [
+    color[0] ?? 0,
+    color[1] ?? 0,
+    color[2] ?? 0,
+    Math.min(88, Math.max(28, color[3] ?? 64)),
+  ]
+}
+
+function boundaryLineColor(color: Color): Color {
+  return [
+    color[0] ?? 0,
+    color[1] ?? 0,
+    color[2] ?? 0,
+    Math.min(235, Math.max(160, color[3] ?? 210)),
+  ]
 }
 
 export function createOverviewViewState(

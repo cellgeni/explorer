@@ -339,3 +339,7 @@ unless the phase order is explicitly changed.
       readable for the selected ROI, the loader now falls back to
       `transcripts.parquet` aggregation by ROI cell id instead of leaving the
       sidebar at "Genes unavailable".
+- [x] Fixed annotation color rendering. Overview loads now keep true cell IDs,
+      successful annotation imports/loads switch directly to annotation coloring,
+      and visible hex/true boundary geometry inherits the matching cell color
+      instead of staying on the default boundary palette.

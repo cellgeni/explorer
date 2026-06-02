@@ -946,7 +946,7 @@ export function App({
 
       try {
         const cells = await loadDatasetOverview(requestedUrl, {
-          includeCellIds: false,
+          includeCellIds: true,
           limit: null,
           signal: abortController.signal,
         })
@@ -1129,6 +1129,9 @@ export function App({
           annotations,
         })
         setAnnotationColors((current) => colorsForAnnotations(annotations, current))
+        if (annotations.length > 0) {
+          setObservationColorMode('annotations')
+        }
       })
       .catch((error) => {
         if (isAbortError(error) || loadRequestId.current !== requestId) {
@@ -1167,6 +1170,9 @@ export function App({
           removeAnnotationColorsByPrefix(current, importedPrefix),
         ),
       )
+      if (importedAnnotations.length > 0) {
+        setObservationColorMode('annotations')
+      }
     } catch (error) {
       setAnnotationState({
         status: 'error',
@@ -1335,6 +1341,7 @@ export function App({
       ...current,
       [annotation.id]: annotationPaletteColor(Object.keys(current).length),
     }))
+    setObservationColorMode('annotations')
     setRoiName(defaultRoiName(roiIdRef.current + 1))
   }
 

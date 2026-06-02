@@ -55,4 +55,15 @@ describe('hex cell boundaries', () => {
     expect(hexBoundary?.fillColor).toEqual(cells[0]?.fillColor)
     expect(hexBoundary?.lineColor).toEqual([255, 253, 247, 210])
   })
+
+  it('can use cell colors for visible hexagon outlines', () => {
+    const [hexBoundary] = hexCellBoundariesForVisibleCells(cells, {
+      maxCells: 3000,
+      fillColorSource: 'cell',
+      lineColorSource: 'cell',
+    })
+
+    expect(hexBoundary?.fillColor).toEqual(cells[0]?.fillColor)
+    expect(hexBoundary?.lineColor).toEqual([215, 63, 124, 220])
+  })
 })

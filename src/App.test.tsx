@@ -310,7 +310,7 @@ describe('App', () => {
       expect(loadDatasetOverview).toHaveBeenCalledWith(
         DEMO_DATASET_URL,
         expect.objectContaining({
-          includeCellIds: false,
+          includeCellIds: true,
           limit: null,
           signal: expect.any(AbortSignal) as AbortSignal,
         }),
@@ -390,7 +390,7 @@ describe('App', () => {
       expect(loadDatasetOverview).toHaveBeenCalledWith(
         DEMO_DATASET_URL,
         expect.objectContaining({
-          includeCellIds: false,
+          includeCellIds: true,
           limit: null,
           signal: expect.any(AbortSignal) as AbortSignal,
         }),
@@ -508,7 +508,7 @@ describe('App', () => {
     expect(alert).toHaveTextContent('Check the dataset URL and object permissions.')
   })
 
-  it('requests all overview cells by default without cell IDs', async () => {
+  it('requests all overview cells by default with cell IDs', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -527,7 +527,7 @@ describe('App', () => {
       expect(loadDatasetOverview).toHaveBeenCalledWith(
         DEMO_DATASET_URL,
         expect.objectContaining({
-          includeCellIds: false,
+          includeCellIds: true,
           limit: null,
           signal: expect.any(AbortSignal) as AbortSignal,
         }),
@@ -635,9 +635,6 @@ describe('App', () => {
     fireEvent.change(colorInput, { target: { value: '#d62728' } })
     expect(colorInput).toHaveValue('#d62728')
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Cell color' }), {
-      target: { value: 'annotations' },
-    })
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'annotations',
     )
@@ -679,10 +676,16 @@ describe('App', () => {
       'Manual ROI',
     )
     expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+    expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+      'annotations',
+    )
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear Annotations' }))
 
     expect(screen.queryByLabelText('Loaded annotations')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+      'transcript-count',
+    )
   })
 
   it('draws a box ROI, summarizes true cells, and saves it as an annotation', async () => {
@@ -816,6 +819,9 @@ describe('App', () => {
         'ROI 1',
       )
       expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+      expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+        'annotations',
+      )
     } finally {
       rectSpy.mockRestore()
       contextSpy.mockRestore()

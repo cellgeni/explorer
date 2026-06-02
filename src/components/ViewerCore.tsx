@@ -7,6 +7,7 @@ import {
   createOverviewViewState,
   expressionCellsToBoundaryLayerData,
   spatialOverviewView,
+  styleCellBoundariesByCells,
 } from '../rendering/deckLayers'
 import {
   aggregateExpressionCells,
@@ -202,29 +203,35 @@ function ViewerSurface({
     () =>
       hexCellBoundariesForVisibleCells(visibleCells, {
         maxCells: hexBoundaryMaxVisibleCells,
+        fillColorSource: 'cell',
+        lineColorSource: 'cell',
       }),
     [hexBoundaryMaxVisibleCells, visibleCells],
   )
+  const styledBoundaries = useMemo(
+    () => styleCellBoundariesByCells(boundaries, visibleCells),
+    [boundaries, visibleCells],
+  )
   const expressionHexBoundaries = useMemo(
     () =>
-      boundaries.length > 0 || hexBoundaries.length === 0
+      styledBoundaries.length > 0 || hexBoundaries.length === 0
         ? []
         : hexCellBoundariesForVisibleCells(displayExpressionCells, {
             maxCells: Number.MAX_SAFE_INTEGER,
             fillColorSource: 'cell',
             lineColor: [255, 253, 247, 210],
           }),
-    [boundaries.length, displayExpressionCells, hexBoundaries.length],
+    [displayExpressionCells, hexBoundaries.length, styledBoundaries.length],
   )
   const expressionBoundaryPolygons = useMemo(
-    () => expressionCellsToBoundaryLayerData(boundaries, displayExpressionCells),
-    [boundaries, displayExpressionCells],
+    () => expressionCellsToBoundaryLayerData(styledBoundaries, displayExpressionCells),
+    [displayExpressionCells, styledBoundaries],
   )
   const layers = useMemo(
     () =>
       createOverviewLayers(
         displayCells,
-        boundaries,
+        styledBoundaries,
         hexBoundaries,
         displayExpressionCells,
         {
@@ -234,13 +241,13 @@ function ViewerSurface({
         },
       ),
     [
-      boundaries,
       displayCells,
       expressionBoundaryPolygons,
       expressionHexBoundaries,
       displayExpressionCells,
       geneExpressionOpacity,
       hexBoundaries,
+      styledBoundaries,
     ],
   )
   const hasCells = cells.length > 0
