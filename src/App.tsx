@@ -13,6 +13,10 @@ import {
   planGeneExpressionLod,
 } from './data/geneExpressionLod'
 import { loadMorphologyImage as defaultLoadMorphologyImage } from './data/morphologyImage'
+import {
+  ROI_CELL_EXPORT_LIMIT,
+  loadDatasetRoiCells as defaultLoadDatasetRoiCells,
+} from './data/roiCells'
 import { micrometers } from './data/coords'
 import { parseCustomAnnotations } from './data/customAnnotations'
 import {
@@ -40,7 +44,7 @@ import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { BBox } from './data/coords'
 import type { ChannelAutoContrast, ChannelHistogram } from './data/morphologyContrast'
-import type { GeneExpressionBatch } from './datasets/xeniumDataset'
+import type { DatasetCell, GeneExpressionBatch } from './datasets/xeniumDataset'
 import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
 import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
@@ -55,7 +59,7 @@ import type {
   GeneExpressionScoreMode,
 } from './rendering/deckLayers'
 import type { OverviewCellDatum } from './rendering/deckLayers'
-import type { ViewerViewportDetail } from './components/ViewerCore'
+import type { RoiDrawMode, ViewerViewportDetail } from './components/ViewerCore'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
@@ -87,6 +91,11 @@ export type AnnotationLoader = (
   baseUrl: string,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<readonly Annotation[]>
+export type RoiCellsLoader = (
+  baseUrl: string,
+  bbox: BBox,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<readonly DatasetCell[]>
 export type GeneExpressionLoader = (
   baseUrl: string,
   bbox: BBox,
@@ -180,6 +189,23 @@ type GeneExpressionState =
       readonly error: StructuredLoadError
     }
 
+type RoiState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string; readonly bbox: BBox }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly bbox: BBox
+      readonly cells: readonly DatasetCell[]
+      readonly hitCellLimit: boolean
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly bbox: BBox
+      readonly error: StructuredLoadError
+    }
+
 type LoadErrorCode =
   | 'network'
   | 'http'
@@ -196,6 +222,7 @@ type LoadErrorSource =
   | 'Cell boundaries'
   | 'Gene panel'
   | 'Annotations'
+  | 'ROI cells'
   | 'Gene expression'
 
 interface StructuredLoadError {
@@ -223,12 +250,19 @@ interface SavedGeneSet {
   readonly scoreMode: GeneExpressionScoreMode
 }
 
+interface RoiSummary {
+  readonly cellCount: number
+  readonly meanTranscriptCount: number
+  readonly meanCellArea: number | undefined
+}
+
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader
   readonly loadMorphologyImage?: MorphologyImageLoader
   readonly loadBoundaryElements?: BoundaryElementsLoader
   readonly loadGenePanel?: GenePanelLoader
   readonly loadAnnotations?: AnnotationLoader
+  readonly loadRoiCells?: RoiCellsLoader
   readonly loadGeneExpression?: GeneExpressionLoader
   readonly computeAutoChannelContrast?: AutoChannelContrastLoader
 }
@@ -239,6 +273,7 @@ export function App({
   loadBoundaryElements = defaultLoadBoundaryElements,
   loadGenePanel = defaultLoadGenePanel,
   loadAnnotations = defaultLoadDatasetAnnotations,
+  loadRoiCells = defaultLoadDatasetRoiCells,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
   computeAutoChannelContrast = defaultComputeAutoChannelContrast,
 }: AppProps) {
@@ -254,6 +289,7 @@ export function App({
   const geneScaleInputId = useId()
   const geneExpressionDetailInputId = useId()
   const annotationImportInputId = useId()
+  const roiNameInputId = useId()
   const observationModeInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
@@ -270,6 +306,7 @@ export function App({
   const [annotationState, setAnnotationState] = useState<AnnotationState>({
     status: 'idle',
   })
+  const [roiState, setRoiState] = useState<RoiState>({ status: 'idle' })
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
     status: 'idle',
   })
@@ -299,16 +336,21 @@ export function App({
     useState<GeneExpressionDetailMode>('auto')
   const [savedGeneSets, setSavedGeneSets] = useState<readonly SavedGeneSet[]>([])
   const [selectedGenes, setSelectedGenes] = useState<readonly string[]>([])
+  const [roiMode, setRoiMode] = useState<RoiDrawMode>('idle')
+  const [roiName, setRoiName] = useState('ROI 1')
   const [observationColorMode, setObservationColorMode] =
     useState<ObservationColorMode>('transcript-count')
   const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
   const loadRequestId = useRef(0)
   const boundaryRequestId = useRef(0)
   const geneExpressionRequestId = useRef(0)
+  const roiRequestId = useRef(0)
   const datasetAbortRef = useRef<AbortController | null>(null)
   const boundaryAbortRef = useRef<AbortController | null>(null)
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
+  const roiAbortRef = useRef<AbortController | null>(null)
   const geneSetIdRef = useRef(0)
+  const roiIdRef = useRef(0)
   const boundaryViewportKeyRef = useRef<string | null>(null)
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
@@ -380,6 +422,12 @@ export function App({
   const genePanelCopy = genePanelStatusCopy(genePanelState)
   const annotationCopy = annotationStatusCopy(annotationState)
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
+  const roiCopy = roiStatusCopy(roiState, roiMode)
+  const roiSummary = useMemo(
+    () => (roiState.status === 'ready' ? summarizeRoiCells(roiState.cells) : null),
+    [roiState],
+  )
+  const activeRoiBbox = roiState.status === 'idle' ? null : roiState.bbox
   const activeErrors = useMemo(
     () =>
       [
@@ -388,6 +436,7 @@ export function App({
         boundaryState.status === 'error' ? boundaryState.error : null,
         genePanelState.status === 'error' ? genePanelState.error : null,
         annotationState.status === 'error' ? annotationState.error : null,
+        roiState.status === 'error' ? roiState.error : null,
         geneExpressionState.status === 'error' ? geneExpressionState.error : null,
       ].filter(isStructuredLoadError),
     [
@@ -397,6 +446,7 @@ export function App({
       genePanelState,
       loadState,
       morphologyState,
+      roiState,
     ],
   )
   const handleImageTileError = useCallback((error: Error) => {
@@ -607,6 +657,7 @@ export function App({
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
+      abortActiveRequest(roiAbortRef)
     }
   }, [])
 
@@ -623,6 +674,7 @@ export function App({
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
+      abortActiveRequest(roiAbortRef)
       const abortController = new AbortController()
       loadRequestId.current = requestId
       datasetAbortRef.current = abortController
@@ -641,6 +693,9 @@ export function App({
       setGeneExpressionScoreMode(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
       setGeneExpressionDetailMode('auto')
       setSelectedGenes([])
+      setRoiMode('idle')
+      setRoiName('ROI 1')
+      setRoiState({ status: 'idle' })
       setSelectedCell(null)
       setLoadState({ status: 'loading', url: requestedUrl })
       setMorphologyState(
@@ -652,6 +707,7 @@ export function App({
       setGeneExpressionState({ status: 'idle' })
       boundaryRequestId.current += 1
       geneExpressionRequestId.current += 1
+      roiRequestId.current += 1
       boundaryViewportKeyRef.current = null
       geneExpressionViewportKeyRef.current = null
       lastViewportDetailRef.current = null
@@ -859,6 +915,93 @@ export function App({
         error: createStructuredLoadError('Annotations', error),
       })
     }
+  }
+
+  function handleRoiComplete(bbox: BBox) {
+    if (loadState.status !== 'ready') {
+      return
+    }
+
+    const requestId = roiRequestId.current + 1
+    abortActiveRequest(roiAbortRef)
+    const abortController = new AbortController()
+    roiRequestId.current = requestId
+    roiAbortRef.current = abortController
+    setRoiMode('idle')
+    setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
+    setRoiState({ status: 'loading', url: loadState.url, bbox })
+
+    void loadRoiCells(loadState.url, bbox, { signal: abortController.signal })
+      .then((cells) => {
+        if (roiRequestId.current !== requestId) {
+          return
+        }
+
+        setRoiState({
+          status: 'ready',
+          url: loadState.url,
+          bbox,
+          cells,
+          hitCellLimit: cells.length >= ROI_CELL_EXPORT_LIMIT,
+        })
+      })
+      .catch((error) => {
+        if (isAbortError(error) || roiRequestId.current !== requestId) {
+          return
+        }
+
+        setRoiState({
+          status: 'error',
+          url: loadState.url,
+          bbox,
+          error: createStructuredLoadError('ROI cells', error),
+        })
+      })
+      .finally(() => {
+        if (roiAbortRef.current === abortController) {
+          roiAbortRef.current = null
+        }
+      })
+  }
+
+  function handleClearRoi() {
+    abortActiveRequest(roiAbortRef)
+    roiRequestId.current += 1
+    setRoiMode('idle')
+    setRoiState({ status: 'idle' })
+  }
+
+  function handleSaveRoiAnnotation() {
+    if (loadState.status !== 'ready' || roiState.status !== 'ready') {
+      return
+    }
+
+    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
+    const annotation: Annotation = {
+      id: `roi:${roiIdRef.current + 1}:${slug(name)}`,
+      label: name,
+      cellIds: roiState.cells.map((cell) => cell.id),
+    }
+
+    roiIdRef.current += 1
+    setAnnotationState((current) => ({
+      status: 'ready',
+      url: loadState.url,
+      annotations: [
+        annotation,
+        ...(current.status === 'ready' ? current.annotations : []),
+      ],
+    }))
+    setRoiName(defaultRoiName(roiIdRef.current + 1))
+  }
+
+  function handleExportRoiCells() {
+    if (roiState.status !== 'ready') {
+      return
+    }
+
+    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
+    downloadTextFile(`${slug(name)}-cells.csv`, roiCellsToCsv(roiState.cells))
   }
 
   function updateMorphologyChannel(
@@ -1285,6 +1428,86 @@ export function App({
           ) : null}
         </section>
 
+        <section className="analysis-section" aria-labelledby="roi-heading">
+          <div className="section-heading-row">
+            <h2 id="roi-heading">ROI</h2>
+            <span>{roiCopy}</span>
+          </div>
+          <div className="roi-action-row">
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={loadState.status !== 'ready'}
+              aria-pressed={roiMode === 'box'}
+              onClick={() => {
+                setRoiMode((current) => (current === 'box' ? 'idle' : 'box'))
+              }}
+            >
+              {roiMode === 'box' ? 'Drawing Box' : 'Draw Box'}
+            </button>
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={roiState.status === 'idle'}
+              onClick={handleClearRoi}
+            >
+              Clear
+            </button>
+          </div>
+
+          <label htmlFor={roiNameInputId}>ROI name</label>
+          <input
+            id={roiNameInputId}
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={roiName}
+            disabled={loadState.status !== 'ready'}
+            onChange={(event) => {
+              setRoiName(event.currentTarget.value)
+            }}
+          />
+
+          {roiSummary === null ? null : (
+            <dl className="roi-summary-list" aria-label="ROI summary">
+              <div>
+                <dt>Cells</dt>
+                <dd>
+                  {roiSummary.cellCount.toLocaleString()}
+                  {roiState.status === 'ready' && roiState.hitCellLimit ? '+' : ''}
+                </dd>
+              </div>
+              <div>
+                <dt>Mean transcripts</dt>
+                <dd>{formatNumber(roiSummary.meanTranscriptCount)}</dd>
+              </div>
+              <div>
+                <dt>Mean area</dt>
+                <dd>{formatNumber(roiSummary.meanCellArea)}</dd>
+              </div>
+            </dl>
+          )}
+
+          <div className="roi-action-row">
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={roiState.status !== 'ready'}
+              onClick={handleSaveRoiAnnotation}
+            >
+              Save ROI
+            </button>
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={roiState.status !== 'ready'}
+              onClick={handleExportRoiCells}
+            >
+              Export Cells
+            </button>
+          </div>
+        </section>
+
         <section className="analysis-section" aria-labelledby="cell-info-heading">
           <h2 id="cell-info-heading">Cell Info</h2>
           <CellInfoPanel cell={selectedCell} />
@@ -1314,8 +1537,11 @@ export function App({
           imageStatus={morphologyState.status}
           boundaryStatus={boundaryState.status}
           hexBoundaryMaxVisibleCells={hexBoundaryMaxVisibleCells}
+          roiMode={roiMode}
+          roiBbox={activeRoiBbox}
           onImageTileError={handleImageTileError}
           onViewportChange={handleViewportChange}
+          onRoiComplete={handleRoiComplete}
           onCellClick={(cell) => {
             setSelectedCell(cell)
           }}
@@ -1392,6 +1618,27 @@ function annotationStatusCopy(annotationState: AnnotationState): string {
   }
 
   if (annotationState.status === 'error') {
+    return 'Unavailable'
+  }
+
+  return 'Idle'
+}
+
+function roiStatusCopy(roiState: RoiState, roiMode: RoiDrawMode): string {
+  if (roiMode === 'box') {
+    return 'Drawing'
+  }
+
+  if (roiState.status === 'loading') {
+    return 'Loading'
+  }
+
+  if (roiState.status === 'ready') {
+    const noun = roiState.cells.length === 1 ? 'cell' : 'cells'
+    return `${roiState.cells.length.toLocaleString()}${roiState.hitCellLimit ? '+' : ''} ${noun}`
+  }
+
+  if (roiState.status === 'error') {
     return 'Unavailable'
   }
 
@@ -1772,6 +2019,68 @@ function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadErro
       </ul>
     </section>
   )
+}
+
+function summarizeRoiCells(cells: readonly DatasetCell[]): RoiSummary {
+  if (cells.length === 0) {
+    return {
+      cellCount: 0,
+      meanTranscriptCount: 0,
+      meanCellArea: undefined,
+    }
+  }
+
+  let transcriptTotal = 0
+  let cellAreaTotal = 0
+  let cellAreaCount = 0
+
+  for (const cell of cells) {
+    transcriptTotal += cell.transcriptCount ?? 0
+
+    if (cell.cellArea !== undefined) {
+      cellAreaTotal += cell.cellArea
+      cellAreaCount += 1
+    }
+  }
+
+  return {
+    cellCount: cells.length,
+    meanTranscriptCount: transcriptTotal / cells.length,
+    meanCellArea: cellAreaCount === 0 ? undefined : cellAreaTotal / cellAreaCount,
+  }
+}
+
+function roiCellsToCsv(cells: readonly DatasetCell[]): string {
+  const rows = [
+    ['cell_id', 'x_centroid', 'y_centroid', 'transcript_counts', 'cell_area'],
+    ...cells.map((cell) => [
+      cell.id,
+      String(cell.position.x),
+      String(cell.position.y),
+      String(cell.transcriptCount ?? ''),
+      String(cell.cellArea ?? ''),
+    ]),
+  ]
+
+  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
+}
+
+function csvEscape(value: string): string {
+  return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+}
+
+function downloadTextFile(fileName: string, text: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function defaultRoiName(index: number): string {
+  return `ROI ${index}`
 }
 
 function formatOptionalNumber(value: number | undefined): string {

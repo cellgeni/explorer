@@ -284,6 +284,52 @@ describe('XeniumDataset', () => {
     )
   })
 
+  it('loads true cell ids and observations for a rectangular ROI', async () => {
+    const cellId = intToCellId(1, 5)
+    const conn = new FakeConnection([
+      [
+        {
+          cell_id: cellId,
+          x_centroid: 12,
+          y_centroid: 24,
+          transcript_counts: 90,
+          cell_area: 35,
+        },
+      ],
+    ])
+    const dataset = makeDataset(conn)
+
+    await expect(
+      dataset.cells(
+        {
+          minX: micrometers(10),
+          maxX: micrometers(20),
+          minY: micrometers(20),
+          maxY: micrometers(30),
+        },
+        { limit: 75 },
+      ),
+    ).resolves.toEqual([
+      {
+        id: cellId,
+        position: { x: micrometers(12), y: micrometers(24) },
+        transcriptCount: 90,
+        cellArea: 35,
+      },
+    ])
+
+    expect(conn.preparedSql[0]).toContain('FROM read_parquet')
+    expect(conn.preparedSql[0]).toContain('ORDER BY file_row_number')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/cells.parquet',
+      micrometers(10),
+      micrometers(20),
+      micrometers(20),
+      micrometers(30),
+      75,
+    ])
+  })
+
   it('loads annotations from analysis.zarr and cell-feature matrix row ids', async () => {
     const conn = new FakeConnection([])
     const annotations = [

@@ -83,7 +83,7 @@ export interface GeneExpressionQueryOptions {
   readonly signal?: AbortSignal
 }
 
-interface ViewportCell {
+export interface DatasetCell {
   readonly id: CellId
   readonly position: DataPoint
   readonly transcriptCount?: number
@@ -234,6 +234,13 @@ ORDER BY b.cell_id, b.file_row_number
 
   overviewCells(limit?: number): Promise<readonly CellOverviewPoint[]> {
     return this.overviewReader(this.urlFor('cells.parquet'), limit)
+  }
+
+  cells(
+    bbox: BBox,
+    options: { readonly limit?: number } = {},
+  ): Promise<readonly DatasetCell[]> {
+    return this.cellsForBbox(bbox, options.limit ?? 50_000)
   }
 
   async geneExpression(
@@ -434,7 +441,7 @@ ORDER BY file_row_number
     bbox: BBox,
     limit: number,
     sampleStride = 1,
-  ): Promise<readonly ViewportCell[]> {
+  ): Promise<readonly DatasetCell[]> {
     const conn = await this.conn()
     const samplePredicate =
       sampleStride > 1
@@ -543,7 +550,7 @@ function parseBoundaryRow(row: Record<string, unknown>): {
   }
 }
 
-function parseViewportCellRow(row: Record<string, unknown>): ViewportCell {
+function parseViewportCellRow(row: Record<string, unknown>): DatasetCell {
   const cellId = row.cell_id
 
   if (typeof cellId !== 'string') {

@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { App, type AnnotationLoader, type GeneExpressionLoader } from './App'
+import {
+  App,
+  type AnnotationLoader,
+  type GeneExpressionLoader,
+  type RoiCellsLoader,
+} from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
 import { GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT } from './data/geneExpressionLod'
@@ -46,6 +51,8 @@ describe('App', () => {
     )
     expect(screen.getByRole('heading', { name: 'Annotations' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Load Annotations' })).toBeDisabled()
+    expect(screen.getByRole('heading', { name: 'ROI' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
     expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
   })
 
@@ -598,6 +605,99 @@ describe('App', () => {
       'Manual ROI',
     )
     expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+  })
+
+  it('draws a box ROI, summarizes true cells, and saves it as an annotation', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [
+      {
+        id: cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 12,
+        cellArea: 30,
+      },
+    ])
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+
+      const roiLayer = document.querySelector('.roi-draw-layer')
+
+      if (!(roiLayer instanceof HTMLElement)) {
+        throw new Error('Expected ROI draw layer.')
+      }
+
+      fireEvent.pointerDown(roiLayer, { clientX: 480, clientY: 480, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+
+      await waitFor(() => {
+        expect(loadRoiCells).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.objectContaining({
+            minX: expect.any(Number) as number,
+            maxX: expect.any(Number) as number,
+            minY: expect.any(Number) as number,
+            maxY: expect.any(Number) as number,
+          }),
+          expect.objectContaining({
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+
+      const summary = await screen.findByLabelText('ROI summary')
+      expect(summary).toHaveTextContent('Cells')
+      expect(summary).toHaveTextContent('1')
+      expect(summary).toHaveTextContent('12')
+      expect(summary).toHaveTextContent('30')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save ROI' }))
+
+      expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
+        'ROI 1',
+      )
+      expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
   })
 
   it('lets the user paste, score, save, and reapply gene sets', async () => {

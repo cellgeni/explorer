@@ -299,3 +299,8 @@ unless the phase order is explicitly changed.
       `cell_feature_matrix.zarr.zip` row-order cell ids, then shown as compact
       label/count rows in the sidebar. Local CSV (`cell_id,label`) and JSON
       label/cell-id files can be imported into the same annotation list.
+- [x] Started ROI annotations with the first reviewable slice: rectangular
+      box drawing in the spatial viewer, true ROI cell-id lookup through
+      `cells.parquet`, cell-count/mean-observation summaries, save-as-annotation,
+      and selected-cell CSV export. Polygon/lasso drawing and transcript export
+      remain under the open ROI checkbox.

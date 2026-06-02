@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ViewerCore } from './ViewerCore'
 import { scaffoldDeckLayerCount } from './viewerCoreModel'
@@ -62,6 +62,32 @@ describe('ViewerCore', () => {
     })
     expect(onViewportChange.mock.calls[0]?.[0]).toMatchObject({
       visibleCellCount: 1,
+    })
+  })
+
+  it('emits a data-space bounding box after drawing a box ROI', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onRoiComplete = vi.fn()
+
+    render(<ViewerCore roiMode="box" onRoiComplete={onRoiComplete} />)
+
+    const roiLayer = document.querySelector('.roi-draw-layer')
+
+    if (!(roiLayer instanceof HTMLElement)) {
+      throw new Error('Expected ROI draw layer.')
+    }
+
+    fireEvent.pointerDown(roiLayer, { clientX: 100, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(roiLayer, { clientX: 116, clientY: 66, pointerId: 1 })
+    fireEvent.pointerUp(roiLayer, { clientX: 116, clientY: 66, pointerId: 1 })
+
+    const bbox = onRoiComplete.mock.calls[0]?.[0]
+    expect(bbox).toMatchObject({
+      minX: 0,
+      maxX: 256,
+      minY: 0,
+      maxY: 256,
     })
   })
 })

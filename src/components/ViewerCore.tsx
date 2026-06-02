@@ -1,4 +1,5 @@
 import { DeckGL } from '@deck.gl/react'
+import type { PointerEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import {
@@ -13,8 +14,9 @@ import {
 } from '../rendering/cellAggregation'
 import { hexCellBoundariesForVisibleCells } from '../rendering/hexCellBoundaries'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
+import { dataToScreen, micrometers, scaleFromZoom, screenPixels } from '../data/coords'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
-import type { BBox } from '../data/coords'
+import type { BBox, DataPoint } from '../data/coords'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { MorphologyCanvasChannel } from './MorphologyCanvas'
@@ -38,9 +40,12 @@ export interface ViewerCoreProps {
   readonly imageErrorMessage?: string
   readonly boundaryErrorMessage?: string
   readonly hexBoundaryMaxVisibleCells?: number
+  readonly roiMode?: RoiDrawMode
+  readonly roiBbox?: BBox | null
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
+  readonly onRoiComplete?: (bbox: BBox) => void
 }
 
 export interface ViewerViewportDetail {
@@ -48,6 +53,8 @@ export interface ViewerViewportDetail {
   readonly visibleCellCount: number
   readonly viewState: OverviewViewState
 }
+
+export type RoiDrawMode = 'idle' | 'box'
 
 export function ViewerCore({
   cells = [],
@@ -64,9 +71,12 @@ export function ViewerCore({
   imageErrorMessage,
   boundaryErrorMessage,
   hexBoundaryMaxVisibleCells = 0,
+  roiMode = 'idle',
+  roiBbox = null,
   onImageTileError,
   onViewportChange,
   onCellClick,
+  onRoiComplete,
 }: ViewerCoreProps) {
   const fittedViewState = useMemo(() => createOverviewViewState(cells), [cells])
   const resetKey = viewStateKey(fittedViewState)
@@ -89,9 +99,12 @@ export function ViewerCore({
       {...(imageErrorMessage === undefined ? {} : { imageErrorMessage })}
       {...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage })}
       hexBoundaryMaxVisibleCells={hexBoundaryMaxVisibleCells}
+      roiMode={roiMode}
+      roiBbox={roiBbox}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
+      {...(onRoiComplete === undefined ? {} : { onRoiComplete })}
     />
   )
 }
@@ -112,9 +125,24 @@ interface ViewerSurfaceProps {
   readonly imageErrorMessage?: string
   readonly boundaryErrorMessage?: string
   readonly hexBoundaryMaxVisibleCells: number
+  readonly roiMode: RoiDrawMode
+  readonly roiBbox: BBox | null
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
+  readonly onRoiComplete?: (bbox: BBox) => void
+}
+
+interface RoiDrag {
+  readonly start: DataPoint
+  readonly current: DataPoint
+}
+
+interface RoiScreenRect {
+  readonly left: number
+  readonly top: number
+  readonly width: number
+  readonly height: number
 }
 
 function ViewerSurface({
@@ -133,9 +161,12 @@ function ViewerSurface({
   imageErrorMessage,
   boundaryErrorMessage,
   hexBoundaryMaxVisibleCells,
+  roiMode,
+  roiBbox,
   onImageTileError,
   onViewportChange,
   onCellClick,
+  onRoiComplete,
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
   const [viewState, setViewState] = useState<OverviewViewState>(initialViewState)
@@ -143,6 +174,7 @@ function ViewerSurface({
     width: 0,
     height: 0,
   })
+  const [roiDrag, setRoiDrag] = useState<RoiDrag | null>(null)
   const viewportBbox = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
       return null
@@ -194,6 +226,19 @@ function ViewerSurface({
   const hasCells = cells.length > 0
   const hasImage = imageLoader !== null || imageChannels.length > 0
   const visibleCellCount = visibleCells.length
+  const roiScreenRect = useMemo(() => {
+    if (viewport.width <= 0 || viewport.height <= 0) {
+      return null
+    }
+
+    return roiDrag === null
+      ? roiBboxToScreenRect(roiBbox, viewState, viewport)
+      : roiBboxToScreenRect(
+          dataPointsToBbox(roiDrag.start, roiDrag.current),
+          viewState,
+          viewport,
+        )
+  }, [roiBbox, roiDrag, viewState, viewport])
   const viewportMessage = readViewportMessage(status, imageStatus, boundaryStatus, {
     ...(errorMessage === undefined ? {} : { errorMessage }),
     ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
@@ -220,6 +265,49 @@ function ViewerSurface({
       onCellClick(info.object)
     },
     [onCellClick],
+  )
+  const handleRoiPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (roiMode !== 'box' || viewport.width <= 0 || viewport.height <= 0) {
+        return
+      }
+
+      event.preventDefault()
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+      const point = pointerEventToDataPoint(event, viewState, viewport)
+      setRoiDrag({ start: point, current: point })
+    },
+    [roiMode, viewState, viewport],
+  )
+  const handleRoiPointerMove = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (roiDrag === null || viewport.width <= 0 || viewport.height <= 0) {
+        return
+      }
+
+      event.preventDefault()
+      const point = pointerEventToDataPoint(event, viewState, viewport)
+      setRoiDrag({ start: roiDrag.start, current: point })
+    },
+    [roiDrag, viewState, viewport],
+  )
+  const handleRoiPointerUp = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (roiDrag === null || viewport.width <= 0 || viewport.height <= 0) {
+        return
+      }
+
+      event.preventDefault()
+      const point = pointerEventToDataPoint(event, viewState, viewport)
+      const bbox = dataPointsToBbox(roiDrag.start, point)
+
+      setRoiDrag(null)
+
+      if (onRoiComplete !== undefined && hasMinimumRoiSize(bbox)) {
+        onRoiComplete(bbox)
+      }
+    },
+    [onRoiComplete, roiDrag, viewState, viewport],
   )
 
   useEffect(() => {
@@ -301,6 +389,25 @@ function ViewerSurface({
           />
         </div>
       ) : null}
+      <div
+        className={`roi-draw-layer${roiMode === 'box' ? ' active' : ''}`}
+        aria-hidden="true"
+        onPointerDown={handleRoiPointerDown}
+        onPointerMove={handleRoiPointerMove}
+        onPointerUp={handleRoiPointerUp}
+      >
+        {roiScreenRect === null ? null : (
+          <span
+            className="roi-rectangle"
+            style={{
+              left: roiScreenRect.left,
+              top: roiScreenRect.top,
+              width: roiScreenRect.width,
+              height: roiScreenRect.height,
+            }}
+          />
+        )}
+      </div>
       {!hasCells ? (
         <div className="deck-layer-surface">
           <div className="cell-field" aria-hidden="true">
@@ -321,6 +428,87 @@ function ViewerSurface({
       )}
     </div>
   )
+}
+
+function pointerEventToDataPoint(
+  event: PointerEvent<HTMLDivElement>,
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+): DataPoint {
+  const rect = event.currentTarget.getBoundingClientRect()
+  const scale = scaleFromZoom(viewState.zoom)
+  const offsetX = viewport.width / 2 - viewState.target[0] * scale
+  const offsetY = viewport.height / 2 + viewState.target[1] * scale
+
+  return {
+    x: micrometers((event.clientX - rect.left - offsetX) / scale),
+    y: micrometers((event.clientY - rect.top - offsetY) / scale),
+  }
+}
+
+function dataPointsToBbox(first: DataPoint, second: DataPoint): BBox {
+  return {
+    minX: micrometers(Math.min(first.x, second.x)),
+    maxX: micrometers(Math.max(first.x, second.x)),
+    minY: micrometers(Math.min(first.y, second.y)),
+    maxY: micrometers(Math.max(first.y, second.y)),
+  }
+}
+
+function roiBboxToScreenRect(
+  bbox: BBox | null,
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+): RoiScreenRect | null {
+  if (bbox === null) {
+    return null
+  }
+
+  const topLeft = dataToScreen(
+    { x: bbox.minX, y: bbox.minY },
+    {
+      target: [
+        micrometers(viewState.target[0]),
+        micrometers(viewState.target[1]),
+        viewState.target[2],
+      ],
+      zoom: viewState.zoom,
+    },
+    {
+      width: screenPixels(viewport.width),
+      height: screenPixels(viewport.height),
+    },
+  )
+  const bottomRight = dataToScreen(
+    { x: bbox.maxX, y: bbox.maxY },
+    {
+      target: [
+        micrometers(viewState.target[0]),
+        micrometers(viewState.target[1]),
+        viewState.target[2],
+      ],
+      zoom: viewState.zoom,
+    },
+    {
+      width: screenPixels(viewport.width),
+      height: screenPixels(viewport.height),
+    },
+  )
+  const left = Math.min(topLeft.x, bottomRight.x)
+  const top = Math.min(topLeft.y, bottomRight.y)
+  const right = Math.max(topLeft.x, bottomRight.x)
+  const bottom = Math.max(topLeft.y, bottomRight.y)
+
+  return {
+    left,
+    top,
+    width: right - left,
+    height: bottom - top,
+  }
+}
+
+function hasMinimumRoiSize(bbox: BBox): boolean {
+  return bbox.maxX - bbox.minX >= 1 && bbox.maxY - bbox.minY >= 1
 }
 
 function readViewportMessage(
