@@ -102,11 +102,14 @@ export const ANNOTATION_DEFAULT_PALETTE = [
   '#073b4c',
   '#c1121f',
 ] as const
+const FALLBACK_ANNOTATION_COLOR = '#1f77b4'
 
 export function annotationPaletteColor(index: number): string {
-  return ANNOTATION_DEFAULT_PALETTE[
-    positiveModulo(index, ANNOTATION_DEFAULT_PALETTE.length)
-  ]
+  return (
+    ANNOTATION_DEFAULT_PALETTE[
+      positiveModulo(index, ANNOTATION_DEFAULT_PALETTE.length)
+    ] ?? FALLBACK_ANNOTATION_COLOR
+  )
 }
 
 export function normalizeAnnotationColor(color: string): string | null {

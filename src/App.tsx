@@ -309,9 +309,9 @@ export function App({
   const [annotationState, setAnnotationState] = useState<AnnotationState>({
     status: 'idle',
   })
-  const [annotationColors, setAnnotationColors] = useState<Readonly<Record<string, string>>>(
-    {},
-  )
+  const [annotationColors, setAnnotationColors] = useState<
+    Readonly<Record<string, string>>
+  >({})
   const [roiState, setRoiState] = useState<RoiState>({ status: 'idle' })
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
     status: 'idle',
@@ -974,9 +974,7 @@ export function App({
         (annotation) => annotation.id !== annotationId,
       )
 
-      return annotations.length === 0
-        ? { status: 'idle' }
-        : { ...current, annotations }
+      return annotations.length === 0 ? { status: 'idle' } : { ...current, annotations }
     })
     setAnnotationColors((current) => removeAnnotationColor(current, annotationId))
     setObservationColorMode((current) =>
@@ -1788,9 +1786,7 @@ function roiStatusCopy(roiState: RoiState, roiMode: RoiDrawMode): string {
 }
 
 function isObservationColorMode(value: string): value is ObservationColorMode {
-  return (
-    value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
-  )
+  return value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
 }
 
 function hasReadyAnnotationsAfterRemove(

@@ -38,8 +38,7 @@ function hexCellBoundary(
   return {
     id: `hex-boundary:${cell.id}`,
     polygon: hexagonPolygon(x, y, radius),
-    fillColor:
-      options.fillColorSource === 'cell' ? cell.fillColor : [32, 102, 83, 18],
+    fillColor: options.fillColorSource === 'cell' ? cell.fillColor : [32, 102, 83, 18],
     lineColor: options.lineColor ?? [246, 242, 232, 112],
   }
 }

@@ -168,9 +168,12 @@ describe('deck layer factory', () => {
     )
 
     expect(layers).toHaveLength(3)
-    expect(layers.some((layer) => layer?.id === 'gene-expression-scatter')).toBe(
-      false,
-    )
+    expect(
+      layers.some(
+        (layer) =>
+          layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter',
+      ),
+    ).toBe(false)
 
     const expressionLayer = layers[2]
 
@@ -208,16 +211,10 @@ describe('deck layer factory', () => {
       boundaries,
       expressionCells,
     )
-    const layers = createOverviewLayers(
-      fixtureCells,
-      boundaries,
-      [],
-      expressionCells,
-      {
-        geneExpressionOpacity: 0.5,
-        expressionBoundaryPolygons,
-      },
-    )
+    const layers = createOverviewLayers(fixtureCells, boundaries, [], expressionCells, {
+      geneExpressionOpacity: 0.5,
+      expressionBoundaryPolygons,
+    })
 
     expect(expressionBoundaryPolygons).toMatchObject([
       {
@@ -226,9 +223,12 @@ describe('deck layer factory', () => {
         lineColor: [255, 253, 247, 210],
       },
     ])
-    expect(layers.some((layer) => layer?.id === 'gene-expression-scatter')).toBe(
-      false,
-    )
+    expect(
+      layers.some(
+        (layer) =>
+          layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter',
+      ),
+    ).toBe(false)
 
     const expressionLayer = layers[2]
 
