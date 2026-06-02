@@ -309,3 +309,8 @@ unless the phase order is explicitly changed.
       buttons, and a clear-all action. The static layer bullet list was removed
       from the sidebar, and the `Cell color` control now offers an `Annotations`
       mode when labels are loaded.
+- [x] Gene expression now paints polygon geometry when possible. At intermediate
+      zooms the expression overlay fills centroid hexagons; when true boundary
+      polygons are visible and IDs match the expression batch, expression fills
+      those polygons. Point-based expression remains the fallback when no
+      suitable polygon geometry is available.

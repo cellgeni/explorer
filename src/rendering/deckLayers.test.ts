@@ -7,6 +7,7 @@ import {
   boundaryElementsToLayerData,
   createOverviewLayers,
   createOverviewViewState,
+  expressionCellsToBoundaryLayerData,
   geneExpressionCellsToLayerData,
   overviewCellsToLayerData,
   spatialOverviewView,
@@ -119,6 +120,124 @@ describe('deck layer factory', () => {
     expect(expressionLayer.id).toBe('gene-expression-scatter')
     expect(expressionLayer.props.opacity).toBe(0.45)
     expect(expressionLayer.props.pickable).toBe(false)
+  })
+
+  it('uses expression-filled hexagons instead of scatter when hex geometry is visible', () => {
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-2',
+        position: [12, -24, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 5,
+      },
+    ]
+    const hexBoundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'hex-cell-1',
+        polygon: [
+          [0, -5, 0],
+          [5, 0, 0],
+          [0, 5, 0],
+        ],
+        fillColor: [32, 102, 83, 18],
+        lineColor: [246, 242, 232, 112],
+      },
+    ]
+    const expressionHexBoundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'hex-boundary:cell-2',
+        polygon: [
+          [12, -30, 0],
+          [18, -24, 0],
+          [12, -18, 0],
+        ],
+        fillColor: [240, 128, 120, 220],
+        lineColor: [255, 253, 247, 210],
+      },
+    ]
+    const layers = createOverviewLayers(
+      fixtureCells,
+      [],
+      hexBoundaries,
+      expressionCells,
+      {
+        geneExpressionOpacity: 0.65,
+        expressionHexBoundaries,
+      },
+    )
+
+    expect(layers).toHaveLength(3)
+    expect(layers.some((layer) => layer?.id === 'gene-expression-scatter')).toBe(
+      false,
+    )
+
+    const expressionLayer = layers[2]
+
+    if (!(expressionLayer instanceof PolygonLayer)) {
+      throw new Error('Expected expression hex layer to be a PolygonLayer.')
+    }
+
+    expect(expressionLayer.id).toBe('gene-expression-hexagons')
+    expect(expressionLayer.props.opacity).toBe(0.65)
+  })
+
+  it('uses expression-filled true boundaries instead of scatter when matching polygons exist', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-2',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-2',
+        position: [12, -24, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 5,
+      },
+    ]
+    const expressionBoundaryPolygons = expressionCellsToBoundaryLayerData(
+      boundaries,
+      expressionCells,
+    )
+    const layers = createOverviewLayers(
+      fixtureCells,
+      boundaries,
+      [],
+      expressionCells,
+      {
+        geneExpressionOpacity: 0.5,
+        expressionBoundaryPolygons,
+      },
+    )
+
+    expect(expressionBoundaryPolygons).toMatchObject([
+      {
+        id: 'cell-2',
+        fillColor: [240, 128, 120, 220],
+        lineColor: [255, 253, 247, 210],
+      },
+    ])
+    expect(layers.some((layer) => layer?.id === 'gene-expression-scatter')).toBe(
+      false,
+    )
+
+    const expressionLayer = layers[2]
+
+    if (!(expressionLayer instanceof PolygonLayer)) {
+      throw new Error('Expected expression boundary layer to be a PolygonLayer.')
+    }
+
+    expect(expressionLayer.id).toBe('gene-expression-polygons')
+    expect(expressionLayer.props.opacity).toBe(0.5)
   })
 
   it('converts Xenium overview cells into deck.gl coordinates', () => {

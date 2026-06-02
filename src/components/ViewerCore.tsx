@@ -5,6 +5,7 @@ import { MorphologyCanvas } from './MorphologyCanvas'
 import {
   createOverviewLayers,
   createOverviewViewState,
+  expressionCellsToBoundaryLayerData,
   spatialOverviewView,
 } from '../rendering/deckLayers'
 import {
@@ -204,6 +205,21 @@ function ViewerSurface({
       }),
     [hexBoundaryMaxVisibleCells, visibleCells],
   )
+  const expressionHexBoundaries = useMemo(
+    () =>
+      boundaries.length > 0 || hexBoundaries.length === 0
+        ? []
+        : hexCellBoundariesForVisibleCells(displayExpressionCells, {
+            maxCells: Number.MAX_SAFE_INTEGER,
+            fillColorSource: 'cell',
+            lineColor: [255, 253, 247, 210],
+          }),
+    [boundaries.length, displayExpressionCells, hexBoundaries.length],
+  )
+  const expressionBoundaryPolygons = useMemo(
+    () => expressionCellsToBoundaryLayerData(boundaries, displayExpressionCells),
+    [boundaries, displayExpressionCells],
+  )
   const layers = useMemo(
     () =>
       createOverviewLayers(
@@ -213,11 +229,15 @@ function ViewerSurface({
         displayExpressionCells,
         {
           geneExpressionOpacity,
+          expressionBoundaryPolygons,
+          expressionHexBoundaries,
         },
       ),
     [
       boundaries,
       displayCells,
+      expressionBoundaryPolygons,
+      expressionHexBoundaries,
       displayExpressionCells,
       geneExpressionOpacity,
       hexBoundaries,

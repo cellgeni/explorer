@@ -44,4 +44,15 @@ describe('hex cell boundaries', () => {
   it('skips hexagons above the intermediate visible-cell limit', () => {
     expect(hexCellBoundariesForVisibleCells(cells, { maxCells: 1 })).toEqual([])
   })
+
+  it('can use cell colors for expression-filled hexagons', () => {
+    const [hexBoundary] = hexCellBoundariesForVisibleCells(cells, {
+      maxCells: 3000,
+      fillColorSource: 'cell',
+      lineColor: [255, 253, 247, 210],
+    })
+
+    expect(hexBoundary?.fillColor).toEqual(cells[0]?.fillColor)
+    expect(hexBoundary?.lineColor).toEqual([255, 253, 247, 210])
+  })
 })

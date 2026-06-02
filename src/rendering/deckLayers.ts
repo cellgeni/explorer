@@ -35,6 +35,8 @@ export interface CellBoundaryDatum {
 
 export interface OverviewLayerOptions {
   readonly geneExpressionOpacity?: number
+  readonly expressionBoundaryPolygons?: readonly CellBoundaryDatum[]
+  readonly expressionHexBoundaries?: readonly CellBoundaryDatum[]
 }
 
 export type GeneExpressionColorScale = 'gold' | 'magma' | 'viridis'
@@ -114,6 +116,10 @@ export function createOverviewLayers(
   const geneExpressionOpacity = normalizeLayerOpacity(
     options.geneExpressionOpacity ?? DEFAULT_LAYER_OPACITY,
   )
+  const expressionBoundaryPolygons = options.expressionBoundaryPolygons ?? []
+  const expressionHexBoundaries = options.expressionHexBoundaries ?? []
+  const hasExpressionPolygons =
+    expressionBoundaryPolygons.length > 0 || expressionHexBoundaries.length > 0
   const layers: LayersList = [
     new ScatterplotLayer<OverviewCellDatum>({
       id: 'cells-overview-scatter',
@@ -128,7 +134,7 @@ export function createOverviewLayers(
     }),
   ]
 
-  if (expressionCells.length > 0) {
+  if (expressionCells.length > 0 && !hasExpressionPolygons) {
     layers.push(
       new ScatterplotLayer<OverviewCellDatum>({
         id: 'gene-expression-scatter',
@@ -177,6 +183,44 @@ export function createOverviewLayers(
         filled: true,
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 1,
+        getPolygon: (cell) => cell.polygon,
+        getFillColor: (cell) => cell.fillColor,
+        getLineColor: (cell) => cell.lineColor,
+        getLineWidth: 1,
+      }),
+    )
+  }
+
+  if (expressionHexBoundaries.length > 0 && boundaries.length === 0) {
+    layers.push(
+      new PolygonLayer<CellBoundaryDatum>({
+        id: 'gene-expression-hexagons',
+        data: expressionHexBoundaries,
+        pickable: false,
+        stroked: true,
+        filled: true,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 1,
+        opacity: geneExpressionOpacity,
+        getPolygon: (cell) => cell.polygon,
+        getFillColor: (cell) => cell.fillColor,
+        getLineColor: (cell) => cell.lineColor,
+        getLineWidth: 1,
+      }),
+    )
+  }
+
+  if (expressionBoundaryPolygons.length > 0) {
+    layers.push(
+      new PolygonLayer<CellBoundaryDatum>({
+        id: 'gene-expression-polygons',
+        data: expressionBoundaryPolygons,
+        pickable: false,
+        stroked: true,
+        filled: true,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 1,
+        opacity: geneExpressionOpacity,
         getPolygon: (cell) => cell.polygon,
         getFillColor: (cell) => cell.fillColor,
         getLineColor: (cell) => cell.lineColor,
@@ -390,6 +434,39 @@ export function boundaryElementsToLayerData(
   }
 
   return cells
+}
+
+export function expressionCellsToBoundaryLayerData(
+  boundaries: readonly CellBoundaryDatum[],
+  expressionCells: readonly OverviewCellDatum[],
+): readonly CellBoundaryDatum[] {
+  if (boundaries.length === 0 || expressionCells.length === 0) {
+    return []
+  }
+
+  const expressionByCellId = new Map<string, OverviewCellDatum>()
+
+  for (const cell of expressionCells) {
+    expressionByCellId.set(cell.id, cell)
+  }
+
+  const expressionBoundaries: CellBoundaryDatum[] = []
+
+  for (const boundary of boundaries) {
+    const expressionCell = expressionByCellId.get(boundary.id)
+
+    if (expressionCell === undefined) {
+      continue
+    }
+
+    expressionBoundaries.push({
+      ...boundary,
+      fillColor: expressionCell.fillColor,
+      lineColor: [255, 253, 247, 210],
+    })
+  }
+
+  return expressionBoundaries
 }
 
 export function createOverviewViewState(

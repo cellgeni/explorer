@@ -7,6 +7,8 @@ export const HEX_BOUNDARY_FALLBACK_RADIUS_MICROMETERS = 5
 
 export interface HexCellBoundaryOptions {
   readonly maxCells: number
+  readonly fillColorSource?: 'default' | 'cell'
+  readonly lineColor?: CellBoundaryDatum['lineColor']
 }
 
 export function hexBoundaryCellLimit(fullBoundaryCellLimit: number): number {
@@ -21,10 +23,13 @@ export function hexCellBoundariesForVisibleCells(
     return []
   }
 
-  return cells.map(hexCellBoundary)
+  return cells.map((cell) => hexCellBoundary(cell, options))
 }
 
-function hexCellBoundary(cell: OverviewCellDatum): CellBoundaryDatum {
+function hexCellBoundary(
+  cell: OverviewCellDatum,
+  options: HexCellBoundaryOptions,
+): CellBoundaryDatum {
   const [x = 0, y = 0] = cell.position
   const radius =
     cell.radiusMicrometers ??
@@ -33,8 +38,9 @@ function hexCellBoundary(cell: OverviewCellDatum): CellBoundaryDatum {
   return {
     id: `hex-boundary:${cell.id}`,
     polygon: hexagonPolygon(x, y, radius),
-    fillColor: [32, 102, 83, 18],
-    lineColor: [246, 242, 232, 112],
+    fillColor:
+      options.fillColorSource === 'cell' ? cell.fillColor : [32, 102, 83, 18],
+    lineColor: options.lineColor ?? [246, 242, 232, 112],
   }
 }
 
