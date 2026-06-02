@@ -249,7 +249,7 @@ unless the phase order is explicitly changed.
 ## Phase 4 Running TODO
 
 - [x] Gene picker backed by full `gene_panel.json` (pick before drawing).
-- [ ] Whole-slide expression coloring with level-of-detail: low zoom density
+- [x] Whole-slide expression coloring with level-of-detail: low zoom density
       bins; medium zoom sampled cells; high zoom exact cells; ROI exact mode.
 - [x] Gene sets: import/paste symbol lists; score cells by sum/mean/z-scored
       signature; color by score; save named sets.
@@ -268,11 +268,14 @@ unless the phase order is explicitly changed.
       case-insensitive matching against the loaded gene panel, saved named sets,
       and sum/mean/z-score signature modes. Score-mode changes restyle the
       current expression batch without refetching `cell_feature_matrix.zarr.zip`.
-- [x] Started whole-slide expression LOD work without changing the matrix
-      architecture: expression no longer hard-stops above 5,000 visible cells.
-      The app loads a capped sampled batch from `cell_feature_matrix.zarr.zip`
-      for larger views and the viewer bins those expression cells at low zoom.
-      True all-cell feature-major expression and ROI exact mode remain pending.
+- [x] Completed the first production whole-slide expression LOD pass without
+      changing the matrix architecture. `Auto LOD` now uses a stable whole-slide
+      sampled batch at overview zooms, padded viewport samples at medium zoom,
+      exact viewport counts below 5,000 visible cells, and the explicit
+      `Exact region` path up to 50,000 visible cells. Low-zoom expression bins
+      use fixed data-space centers so marks do not drift while panning or
+      crossing zoom buckets. A true all-cell whole-slide matrix scan remains a
+      future optimization, not part of this slice.
 - [x] Fixed the sampled expression regression against the demo dataset. The
       reader now supports feature-major `cell_features/indptr`, `indices`, and
       `data` Zarr matrices when `cell_features/csc/*` is absent, and expression

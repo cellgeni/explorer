@@ -7,6 +7,11 @@ import { loadDatasetBoundaryElements as defaultLoadBoundaryElements } from './da
 import { loadDatasetGeneExpression as defaultLoadDatasetGeneExpression } from './data/geneExpression'
 import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
 import { loadGenePanel as defaultLoadGenePanel } from './data/genePanel'
+import {
+  geneExpressionRequestKey,
+  geneExpressionWaitingKey,
+  planGeneExpressionLod,
+} from './data/geneExpressionLod'
 import { loadMorphologyImage as defaultLoadMorphologyImage } from './data/morphologyImage'
 import { micrometers } from './data/coords'
 import { parseCustomAnnotations } from './data/customAnnotations'
@@ -42,6 +47,10 @@ import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { Annotation, ElementBatch, SpatialElement } from './datasets/spatialDataset'
 import type {
+  GeneExpressionDetailMode,
+  GeneExpressionLoadMode,
+} from './data/geneExpressionLod'
+import type {
   GeneExpressionColorScale,
   GeneExpressionScoreMode,
 } from './rendering/deckLayers'
@@ -49,10 +58,6 @@ import type { OverviewCellDatum } from './rendering/deckLayers'
 import type { ViewerViewportDetail } from './components/ViewerCore'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
-const GENE_EXPRESSION_EXACT_CELL_LIMIT = 5_000
-const GENE_EXPRESSION_SAMPLE_CELL_LIMIT = 5_000
-const GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT = 50_000
-const GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO = 0.2
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 
@@ -193,9 +198,6 @@ type LoadErrorSource =
   | 'Annotations'
   | 'Gene expression'
 
-type GeneExpressionLoadMode = 'exact' | 'sampled' | 'exact-region'
-type GeneExpressionDetailMode = 'auto' | 'exact-region'
-
 interface StructuredLoadError {
   readonly source: LoadErrorSource
   readonly code: LoadErrorCode
@@ -315,6 +317,10 @@ export function App({
   const styledOverviewCells = useMemo(
     () => styleOverviewCellsByObservation(overviewCells, observationColorMode),
     [observationColorMode, overviewCells],
+  )
+  const overviewExtent = useMemo(
+    () => overviewCellsToBbox(overviewCells),
+    [overviewCells],
   )
   const geneExpressionCells = useMemo(
     () =>
@@ -484,11 +490,14 @@ export function App({
         return
       }
 
-      if (
-        geneExpressionDetailMode === 'exact-region' &&
-        detail.visibleCellCount > GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT
-      ) {
-        const waitingKey = expressionWaitingKey(
+      const expressionPlan = planGeneExpressionLod(detail, {
+        detailMode: geneExpressionDetailMode,
+        slideBbox: overviewExtent,
+        totalCellCount: loadState.cellCount,
+      })
+
+      if (expressionPlan.kind === 'waiting') {
+        const waitingKey = geneExpressionWaitingKey(
           loadState.url,
           detail,
           selectedGenes,
@@ -503,39 +512,16 @@ export function App({
         geneExpressionRequestId.current += 1
         geneExpressionViewportKeyRef.current = waitingKey
         setGeneExpressionBatch(null)
-        setGeneExpressionState({
-          status: 'waiting',
-          message: `Exact region needs ${GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT.toLocaleString()} or fewer visible cells`,
-        })
+        setGeneExpressionState({ status: 'waiting', message: expressionPlan.message })
         return
       }
 
-      const expressionMode: GeneExpressionLoadMode =
-        geneExpressionDetailMode === 'exact-region'
-          ? 'exact-region'
-          : detail.visibleCellCount <= GENE_EXPRESSION_EXACT_CELL_LIMIT
-            ? 'exact'
-            : 'sampled'
-      const expressionCellLimit =
-        expressionMode === 'sampled'
-          ? GENE_EXPRESSION_SAMPLE_CELL_LIMIT
-          : expressionMode === 'exact-region'
-            ? Math.max(1, detail.visibleCellCount)
-            : GENE_EXPRESSION_EXACT_CELL_LIMIT
-      const expressionSampleStride =
-        expressionMode === 'sampled'
-          ? Math.max(1, Math.ceil(detail.visibleCellCount / expressionCellLimit))
-          : 1
-      const expressionBbox =
-        expressionMode === 'sampled'
-          ? padBbox(detail.bbox, GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO)
-          : detail.bbox
-      const expressionKey = expressionViewportKey(loadState.url, detail, {
-        cellLimit: expressionCellLimit,
-        genes: selectedGenes,
-        mode: expressionMode,
-        sampleStride: expressionSampleStride,
-      })
+      const expressionKey = geneExpressionRequestKey(
+        loadState.url,
+        detail,
+        expressionPlan,
+        selectedGenes,
+      )
 
       if (expressionKey === geneExpressionViewportKeyRef.current) {
         return
@@ -551,14 +537,14 @@ export function App({
         status: 'loading',
         url: loadState.url,
         genes: selectedGenes,
-        mode: expressionMode,
-        visibleCellCount: detail.visibleCellCount,
+        mode: expressionPlan.mode,
+        visibleCellCount: expressionPlan.sourceCellCount,
       })
 
-      void loadGeneExpression(loadState.url, expressionBbox, selectedGenes, {
+      void loadGeneExpression(loadState.url, expressionPlan.bbox, selectedGenes, {
         signal: expressionAbortController.signal,
-        limit: expressionCellLimit,
-        sampleStride: expressionSampleStride,
+        limit: expressionPlan.cellLimit,
+        sampleStride: expressionPlan.sampleStride,
       })
         .then((batch) => {
           if (geneExpressionRequestId.current !== expressionRequestId) {
@@ -571,8 +557,8 @@ export function App({
             url: loadState.url,
             genes: batch.genes,
             cellCount: batch.cells.length,
-            mode: expressionMode,
-            visibleCellCount: detail.visibleCellCount,
+            mode: expressionPlan.mode,
+            visibleCellCount: expressionPlan.sourceCellCount,
           })
         })
         .catch((error) => {
@@ -603,6 +589,7 @@ export function App({
       loadGeneExpression,
       loadState,
       geneExpressionDetailMode,
+      overviewExtent,
       selectedGenes,
     ],
   )
@@ -1423,6 +1410,10 @@ function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): str
       return `Expression exact region: ${geneExpressionState.cellCount.toLocaleString()} ${noun}`
     }
 
+    if (geneExpressionState.mode === 'overview-sampled') {
+      return `Expression overview: ${geneExpressionState.cellCount.toLocaleString()} positive ${noun} across ${geneExpressionState.visibleCellCount.toLocaleString()} slide cells`
+    }
+
     if (
       geneExpressionState.mode === 'sampled' &&
       geneExpressionState.visibleCellCount > geneExpressionState.cellCount
@@ -1447,6 +1438,10 @@ function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): str
 }
 
 function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
+  if (mode === 'overview-sampled') {
+    return 'Expression overview'
+  }
+
   if (mode === 'sampled') {
     return 'Expression sample'
   }
@@ -1462,68 +1457,31 @@ function isGeneExpressionDetailMode(value: string): value is GeneExpressionDetai
   return value === 'auto' || value === 'exact-region'
 }
 
-function expressionViewportKey(
-  baseUrl: string,
-  detail: ViewerViewportDetail,
-  options: {
-    readonly cellLimit: number
-    readonly genes: readonly string[]
-    readonly mode: GeneExpressionLoadMode
-    readonly sampleStride: number
-  },
-): string {
-  const [targetX = 0, targetY = 0] = detail.viewState.target
-  const viewportSpan = Math.max(
-    detail.bbox.maxX - detail.bbox.minX,
-    detail.bbox.maxY - detail.bbox.minY,
-    1,
-  )
-  const targetBucket = options.mode === 'sampled' ? Math.max(500, viewportSpan / 6) : 100
-  const zoomBucket = options.mode === 'sampled' ? 0.25 : 0.001
-  const roundedZoom =
-    Math.round(Math.round(detail.viewState.zoom / zoomBucket) * zoomBucket * 1000) / 1000
+function overviewCellsToBbox(cells: readonly OverviewCellDatum[]): BBox | null {
+  if (cells.length === 0) {
+    return null
+  }
 
-  return [
-    baseUrl.replace(/\/+$/, ''),
-    Math.round(targetX / targetBucket) * targetBucket,
-    Math.round(targetY / targetBucket) * targetBucket,
-    roundedZoom,
-    options.mode,
-    options.cellLimit,
-    options.sampleStride,
-    options.genes.join('|'),
-  ].join(':')
-}
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
 
-function expressionWaitingKey(
-  baseUrl: string,
-  detail: ViewerViewportDetail,
-  genes: readonly string[],
-  detailMode: GeneExpressionDetailMode,
-): string {
-  const [targetX = 0, targetY = 0] = detail.viewState.target
+  for (const cell of cells) {
+    const [x = 0, deckY = 0] = cell.position
+    const rawY = -deckY
 
-  return [
-    baseUrl.replace(/\/+$/, ''),
-    'waiting',
-    detailMode,
-    Math.round(targetX / 500) * 500,
-    Math.round(targetY / 500) * 500,
-    Math.round(detail.viewState.zoom * 100) / 100,
-    detail.visibleCellCount,
-    genes.join('|'),
-  ].join(':')
-}
-
-function padBbox(bbox: BBox, ratio: number): BBox {
-  const paddingX = (bbox.maxX - bbox.minX) * ratio
-  const paddingY = (bbox.maxY - bbox.minY) * ratio
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, rawY)
+    maxY = Math.max(maxY, rawY)
+  }
 
   return {
-    minX: micrometers(bbox.minX - paddingX),
-    maxX: micrometers(bbox.maxX + paddingX),
-    minY: micrometers(bbox.minY - paddingY),
-    maxY: micrometers(bbox.maxY + paddingY),
+    minX: micrometers(minX),
+    maxX: micrometers(maxX),
+    minY: micrometers(minY),
+    maxY: micrometers(maxY),
   }
 }
 

@@ -34,12 +34,9 @@ interface CellBin {
 
 interface ExpressionBin {
   readonly key: string
+  readonly binX: number
+  readonly binY: number
   count: number
-  sumX: number
-  sumY: number
-  weightedX: number
-  weightedY: number
-  weight: number
   maxRadiusPixels: number
   maxRadiusMicrometers: number | undefined
   maxAlpha: number
@@ -243,9 +240,10 @@ function aggregateExpressionCellsIntoBins(
   for (const cell of cells) {
     const [x = 0, deckY = 0] = cell.position
     const rawY = -deckY
-    const key = `${Math.floor(x / binSize)}:${Math.floor(rawY / binSize)}`
+    const binX = Math.floor(x / binSize)
+    const binY = Math.floor(rawY / binSize)
+    const key = `${binX}:${binY}`
     const expressionCount = cell.expressionCount ?? 0
-    const weight = Math.max(expressionCount, 1)
     const bin = bins.get(key)
     const alpha = readColorAlpha(cell)
     const red = readColorChannel(cell, 0)
@@ -255,12 +253,9 @@ function aggregateExpressionCellsIntoBins(
     if (bin === undefined) {
       bins.set(key, {
         key,
+        binX,
+        binY,
         count: 1,
-        sumX: x,
-        sumY: deckY,
-        weightedX: x * weight,
-        weightedY: deckY * weight,
-        weight,
         maxRadiusPixels: cell.radiusPixels,
         maxRadiusMicrometers: cell.radiusMicrometers,
         maxAlpha: alpha,
@@ -276,11 +271,6 @@ function aggregateExpressionCellsIntoBins(
     }
 
     bin.count += 1
-    bin.sumX += x
-    bin.sumY += deckY
-    bin.weightedX += x * weight
-    bin.weightedY += deckY * weight
-    bin.weight += weight
     bin.maxRadiusPixels = Math.max(bin.maxRadiusPixels, cell.radiusPixels)
     bin.maxRadiusMicrometers = maxOptionalNumber(
       bin.maxRadiusMicrometers,
@@ -303,8 +293,8 @@ function aggregateExpressionCellsIntoBins(
 
   for (const bin of bins.values()) {
     const countScale = Math.sqrt(bin.count)
-    const positionX = bin.weight > 0 ? bin.weightedX / bin.weight : bin.sumX / bin.count
-    const positionY = bin.weight > 0 ? bin.weightedY / bin.weight : bin.sumY / bin.count
+    const positionX = (bin.binX + 0.5) * binSize
+    const positionY = -(bin.binY + 0.5) * binSize
 
     aggregatedCells.push({
       id: `expression-bin:${bin.key}`,

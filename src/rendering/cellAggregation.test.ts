@@ -106,7 +106,7 @@ describe('overview cell aggregation', () => {
     })
   })
 
-  it('uses stable data-space bins for sampled expression cells across overview zooms', () => {
+  it('uses fixed data-space bin centers for sampled expression cells across overview zooms', () => {
     const expressionCells: readonly OverviewCellDatum[] = [
       {
         id: 'cell-1',
@@ -144,7 +144,7 @@ describe('overview cell aggregation', () => {
     expect(firstZoom[0]?.id).toBe('expression-bin:0:0')
     expect(firstZoom[0]?.position).toEqual(secondZoom[0]?.position)
     expect(firstZoom[0]).toMatchObject({
-      position: [18, -18, 0],
+      position: [50, -50, 0],
       expressionCount: 10,
       cellCount: 2,
     })

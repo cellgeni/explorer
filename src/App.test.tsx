@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, type AnnotationLoader, type GeneExpressionLoader } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
+import { GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT } from './data/geneExpressionLod'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
 import type { TiffPyramidLoader } from './tiff/loader'
 
@@ -160,6 +161,86 @@ describe('App', () => {
       )
       expect(
         await screen.findByText('Expression exact region: 0 cells'),
+      ).toBeInTheDocument()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('loads a stable whole-slide expression sample at overview zoom', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const overviewCells = Array.from({ length: 50_001 }, (_value, index) => ({
+      cellId: intToCellId(1, index + 1),
+      position: {
+        x: micrometers((index % 250) * 40),
+        y: micrometers(Math.floor(index / 250) * 40),
+      },
+      transcriptCount: 8,
+      cellArea: 22,
+    }))
+    const loadDatasetOverview = vi.fn(async () => overviewCells)
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadGeneExpression: ReturnType<typeof vi.fn<GeneExpressionLoader>> = vi.fn(
+      async () => ({
+        cells: [],
+        genes: ['Actb'],
+        maxCount: 0,
+      }),
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadGeneExpression={loadGeneExpression}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByText('1 genes')).toBeInTheDocument()
+      fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
+
+      await waitFor(() => {
+        expect(loadGeneExpression).toHaveBeenCalled()
+      })
+
+      const lastCall = loadGeneExpression.mock.calls.at(-1)
+      expect(lastCall?.[1]).toEqual({
+        minX: micrometers(0),
+        maxX: micrometers(9_960),
+        minY: micrometers(0),
+        maxY: micrometers(8_000),
+      })
+      expect(lastCall?.[2]).toEqual(['Actb'])
+      expect(lastCall?.[3]).toEqual(
+        expect.objectContaining({
+          limit: GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
+          sampleStride: 4,
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+      expect(
+        await screen.findByText(
+          'Expression overview: 0 positive cells across 50,001 slide cells',
+        ),
       ).toBeInTheDocument()
     } finally {
       rectSpy.mockRestore()
