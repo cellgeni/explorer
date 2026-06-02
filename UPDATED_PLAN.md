@@ -331,3 +331,7 @@ unless the phase order is explicitly changed.
       `Annotation set` selector with `All` plus dataset-discovered analysis
       groups such as `graphclust`, `kmeans 3`, and `kmeans 9`; selected loads
       fetch only that grouping instead of flattening every group.
+- [x] Added ROI gene distribution stats. Drawing an ROI now loads expression
+      from `cell_feature_matrix.zarr.zip` for the ROI cells, reports the top 10
+      expressed genes with total counts, detected-cell percentage, and mean
+      counts per cell, and samples large ROIs to keep the sidebar responsive.

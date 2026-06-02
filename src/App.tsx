@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ViewerCore } from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
@@ -21,6 +21,7 @@ import {
   ROI_CELL_EXPORT_LIMIT,
   loadDatasetRoiCells as defaultLoadDatasetRoiCells,
 } from './data/roiCells'
+import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
 import { micrometers } from './data/coords'
 import { parseCustomAnnotations } from './data/customAnnotations'
 import {
@@ -71,6 +72,7 @@ import type {
   GeneExpressionColorScale,
   GeneExpressionScoreMode,
 } from './rendering/deckLayers'
+import type { RoiGeneStats } from './data/roiGeneStats'
 import type { OverviewCellDatum } from './rendering/deckLayers'
 import type { RoiDrawMode, ViewerViewportDetail } from './components/ViewerCore'
 
@@ -113,6 +115,11 @@ export type RoiCellsLoader = (
   bbox: BBox,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<readonly DatasetCell[]>
+export type RoiGeneStatsLoader = (
+  baseUrl: string,
+  cells: readonly DatasetCell[],
+  options?: { readonly signal?: AbortSignal },
+) => Promise<RoiGeneStats>
 export type GeneExpressionLoader = (
   baseUrl: string,
   bbox: BBox,
@@ -237,6 +244,20 @@ type RoiState =
       readonly error: StructuredLoadError
     }
 
+type RoiGeneStatsState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string; readonly cellCount: number }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly stats: RoiGeneStats
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
+
 type LoadErrorCode =
   | 'network'
   | 'http'
@@ -254,6 +275,7 @@ type LoadErrorSource =
   | 'Gene panel'
   | 'Annotations'
   | 'ROI cells'
+  | 'ROI genes'
   | 'Gene expression'
 
 interface StructuredLoadError {
@@ -300,6 +322,7 @@ export interface AppProps {
   readonly loadAnnotations?: AnnotationLoader
   readonly loadAnnotationGroups?: AnnotationGroupLoader
   readonly loadRoiCells?: RoiCellsLoader
+  readonly loadRoiGeneStats?: RoiGeneStatsLoader
   readonly loadGeneExpression?: GeneExpressionLoader
   readonly computeAutoChannelContrast?: AutoChannelContrastLoader
 }
@@ -312,6 +335,7 @@ export function App({
   loadAnnotations = defaultLoadDatasetAnnotations,
   loadAnnotationGroups = defaultLoadDatasetAnnotationGroups,
   loadRoiCells = defaultLoadDatasetRoiCells,
+  loadRoiGeneStats = defaultLoadDatasetRoiGeneStats,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
   computeAutoChannelContrast = defaultComputeAutoChannelContrast,
 }: AppProps) {
@@ -355,6 +379,9 @@ export function App({
     ALL_ANNOTATION_GROUP_ID,
   )
   const [roiState, setRoiState] = useState<RoiState>({ status: 'idle' })
+  const [roiGeneStatsState, setRoiGeneStatsState] = useState<RoiGeneStatsState>({
+    status: 'idle',
+  })
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
     status: 'idle',
   })
@@ -536,6 +563,7 @@ export function App({
     annotationGroupState.status === 'ready' ? annotationGroupState.groups : []
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const roiCopy = roiStatusCopy(roiState, roiMode)
+  const roiGeneStatsCopy = roiGeneStatsStatusCopy(roiGeneStatsState)
   const roiSummary = useMemo(
     () => (roiState.status === 'ready' ? summarizeRoiCells(roiState.cells) : null),
     [roiState],
@@ -551,6 +579,7 @@ export function App({
         annotationState.status === 'error' ? annotationState.error : null,
         annotationGroupState.status === 'error' ? annotationGroupState.error : null,
         roiState.status === 'error' ? roiState.error : null,
+        roiGeneStatsState.status === 'error' ? roiGeneStatsState.error : null,
         geneExpressionState.status === 'error' ? geneExpressionState.error : null,
       ].filter(isStructuredLoadError),
     [
@@ -562,6 +591,7 @@ export function App({
       loadState,
       morphologyState,
       roiState,
+      roiGeneStatsState,
     ],
   )
   const handleImageTileError = useCallback((error: Error) => {
@@ -845,6 +875,7 @@ export function App({
       setRoiMode('idle')
       setRoiName('ROI 1')
       setRoiState({ status: 'idle' })
+      setRoiGeneStatsState({ status: 'idle' })
       setSelectedCell(null)
       setLoadState({ status: 'loading', url: requestedUrl })
       setMorphologyState(
@@ -1194,6 +1225,7 @@ export function App({
     setRoiMode('idle')
     setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
     setRoiState({ status: 'loading', url: loadState.url, bbox })
+    setRoiGeneStatsState({ status: 'idle' })
 
     void loadRoiCells(loadState.url, bbox, { signal: abortController.signal })
       .then((cells) => {
@@ -1208,6 +1240,47 @@ export function App({
           cells,
           hitCellLimit: cells.length >= ROI_CELL_EXPORT_LIMIT,
         })
+
+        if (cells.length === 0) {
+          setRoiGeneStatsState({
+            status: 'ready',
+            url: loadState.url,
+            stats: emptyRoiGeneStats(),
+          })
+          return undefined
+        }
+
+        setRoiGeneStatsState({
+          status: 'loading',
+          url: loadState.url,
+          cellCount: cells.length,
+        })
+
+        return loadRoiGeneStats(loadState.url, cells, {
+          signal: abortController.signal,
+        })
+          .then((stats) => {
+            if (roiRequestId.current !== requestId) {
+              return
+            }
+
+            setRoiGeneStatsState({
+              status: 'ready',
+              url: loadState.url,
+              stats,
+            })
+          })
+          .catch((error) => {
+            if (isAbortError(error) || roiRequestId.current !== requestId) {
+              return
+            }
+
+            setRoiGeneStatsState({
+              status: 'error',
+              url: loadState.url,
+              error: createStructuredLoadError('ROI genes', error),
+            })
+          })
       })
       .catch((error) => {
         if (isAbortError(error) || roiRequestId.current !== requestId) {
@@ -1220,6 +1293,7 @@ export function App({
           bbox,
           error: createStructuredLoadError('ROI cells', error),
         })
+        setRoiGeneStatsState({ status: 'idle' })
       })
       .finally(() => {
         if (roiAbortRef.current === abortController) {
@@ -1233,6 +1307,7 @@ export function App({
     roiRequestId.current += 1
     setRoiMode('idle')
     setRoiState({ status: 'idle' })
+    setRoiGeneStatsState({ status: 'idle' })
   }
 
   function handleSaveRoiAnnotation() {
@@ -1840,6 +1915,8 @@ export function App({
             </dl>
           )}
 
+          <RoiGeneStatsPanel copy={roiGeneStatsCopy} state={roiGeneStatsState} />
+
           <div className="roi-action-row">
             <button
               type="button"
@@ -1995,6 +2072,26 @@ function roiStatusCopy(roiState: RoiState, roiMode: RoiDrawMode): string {
   }
 
   return 'Idle'
+}
+
+function roiGeneStatsStatusCopy(roiGeneStatsState: RoiGeneStatsState): string {
+  if (roiGeneStatsState.status === 'loading') {
+    return `Genes loading for ${roiGeneStatsState.cellCount.toLocaleString()} cells`
+  }
+
+  if (roiGeneStatsState.status === 'ready') {
+    if (roiGeneStatsState.stats.genes.length === 0) {
+      return 'Genes: none'
+    }
+
+    return `Genes: top ${roiGeneStatsState.stats.genes.length}`
+  }
+
+  if (roiGeneStatsState.status === 'error') {
+    return 'Genes unavailable'
+  }
+
+  return 'Genes idle'
 }
 
 function isObservationColorMode(value: string): value is ObservationColorMode {
@@ -2473,6 +2570,90 @@ function summarizeRoiCells(cells: readonly DatasetCell[]): RoiSummary {
   }
 }
 
+function RoiGeneStatsPanel({
+  copy,
+  state,
+}: {
+  readonly copy: string
+  readonly state: RoiGeneStatsState
+}) {
+  if (state.status === 'idle') {
+    return null
+  }
+
+  if (state.status === 'loading') {
+    return (
+      <p className="roi-gene-status" aria-live="polite">
+        {copy}
+      </p>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <p className="roi-gene-status" aria-live="polite">
+        {copy}
+      </p>
+    )
+  }
+
+  if (state.stats.genes.length === 0) {
+    return (
+      <p className="roi-gene-status" aria-live="polite">
+        No detected ROI gene expression
+      </p>
+    )
+  }
+
+  const maxCount = Math.max(...state.stats.genes.map((gene) => gene.count), 1)
+
+  return (
+    <section className="roi-gene-panel" aria-label="ROI gene distribution">
+      <div className="roi-gene-heading">
+        <span>Top ROI genes</span>
+        <small>
+          {state.stats.hitCellLimit
+            ? `${state.stats.sampledCellCount.toLocaleString()} sampled`
+            : `${state.stats.sampledCellCount.toLocaleString()} cells`}
+        </small>
+      </div>
+      <ol className="roi-gene-list">
+        {state.stats.genes.map((gene) => (
+          <li
+            key={gene.gene}
+            style={
+              {
+                '--roi-gene-width': `${Math.max(4, (gene.count / maxCount) * 100)}%`,
+              } as CSSProperties
+            }
+          >
+            <div className="roi-gene-row">
+              <span>{gene.gene}</span>
+              <strong>{gene.count.toLocaleString()}</strong>
+            </div>
+            <div className="roi-gene-bar" aria-hidden="true" />
+            <small>
+              {formatPercent(gene.percentTotal)} total ·{' '}
+              {formatPercent(gene.percentCells)} cells · {formatNumber(gene.meanPerCell)}
+              /cell
+            </small>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+function emptyRoiGeneStats(): RoiGeneStats {
+  return {
+    genes: [],
+    cellCount: 0,
+    sampledCellCount: 0,
+    totalCount: 0,
+    hitCellLimit: false,
+  }
+}
+
 function roiCellsToCsv(cells: readonly DatasetCell[]): string {
   const rows = [
     ['cell_id', 'x_centroid', 'y_centroid', 'transcript_counts', 'cell_area'],
@@ -2514,6 +2695,10 @@ function formatNumber(value: number | undefined): string {
   return value === undefined
     ? '0'
     : value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
+
+function formatPercent(value: number): string {
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
 }
 
 function formatGeneScaleValue(value: number): string {

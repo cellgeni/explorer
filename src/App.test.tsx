@@ -6,6 +6,7 @@ import {
   type AnnotationLoader,
   type GeneExpressionLoader,
   type RoiCellsLoader,
+  type RoiGeneStatsLoader,
 } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
@@ -720,6 +721,32 @@ describe('App', () => {
         cellArea: 30,
       },
     ])
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      async () => ({
+        genes: [
+          {
+            gene: 'Actb',
+            count: 42,
+            detectedCells: 1,
+            percentCells: 100,
+            meanPerCell: 42,
+            percentTotal: 70,
+          },
+          {
+            gene: 'Gad1',
+            count: 18,
+            detectedCells: 1,
+            percentCells: 100,
+            meanPerCell: 18,
+            percentTotal: 30,
+          },
+        ],
+        cellCount: 1,
+        sampledCellCount: 1,
+        totalCount: 60,
+        hitCellLimit: false,
+      }),
+    )
 
     try {
       render(
@@ -727,6 +754,7 @@ describe('App', () => {
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
         />,
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
@@ -764,6 +792,23 @@ describe('App', () => {
       expect(summary).toHaveTextContent('1')
       expect(summary).toHaveTextContent('12')
       expect(summary).toHaveTextContent('30')
+
+      await waitFor(() => {
+        expect(loadRoiGeneStats).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.arrayContaining([
+            expect.objectContaining({ id: cellId }) as unknown as object,
+          ]),
+          expect.objectContaining({
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+      const geneDistribution = await screen.findByLabelText('ROI gene distribution')
+      expect(geneDistribution).toHaveTextContent('Top ROI genes')
+      expect(geneDistribution).toHaveTextContent('Actb')
+      expect(geneDistribution).toHaveTextContent('42')
+      expect(geneDistribution).toHaveTextContent('70% total')
 
       fireEvent.click(screen.getByRole('button', { name: 'Save ROI' }))
 
