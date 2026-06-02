@@ -34,6 +34,8 @@ describe('App', () => {
     expect(screen.getByRole('slider', { name: 'Gene opacity' })).toHaveValue('100')
     expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument()
     expect(screen.getByLabelText('Gene selection')).toBeDisabled()
+    expect(screen.getByLabelText('Gene set symbols')).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Signature score' })).toHaveValue('sum')
     expect(screen.getByRole('combobox', { name: 'Gene scale' })).toHaveValue('gold')
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
@@ -354,5 +356,54 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Gad1' }))
 
     expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Gad1')
+  })
+
+  it('lets the user paste, score, save, and reapply gene sets', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1', 'Slc17a7'])
+
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    expect(await screen.findByText('3 genes')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Gene set symbols'), {
+      target: { value: 'gad1, ACTB, missing' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Symbols' }))
+
+    const selectedGenes = screen.getByLabelText('Selected genes')
+    expect(selectedGenes).toHaveTextContent('Actb')
+    expect(selectedGenes).toHaveTextContent('Gad1')
+    expect(selectedGenes).not.toHaveTextContent('missing')
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Signature score' }), {
+      target: { value: 'mean' },
+    })
+    fireEvent.change(screen.getByLabelText('Set name'), {
+      target: { value: 'Interneuron set' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Set' }))
+
+    const savedSets = screen.getByLabelText('Saved gene sets')
+    expect(savedSets).toHaveTextContent('Interneuron set')
+    expect(savedSets).toHaveTextContent('mean')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Actb' }))
+    expect(screen.getByLabelText('Selected genes')).not.toHaveTextContent('Actb')
+
+    fireEvent.click(screen.getByRole('button', { name: /Interneuron set/ }))
+
+    expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Actb')
+    expect(screen.getByRole('combobox', { name: 'Signature score' })).toHaveValue('mean')
   })
 })

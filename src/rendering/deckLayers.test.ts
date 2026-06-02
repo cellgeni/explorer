@@ -163,6 +163,54 @@ describe('deck layer factory', () => {
     })
   })
 
+  it('scores multi-gene expression by mean count', () => {
+    const [datum] = geneExpressionCellsToLayerData(
+      [
+        {
+          id: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          count: 6,
+        },
+      ],
+      ['Gad1', 'Actb', 'Slc17a7'],
+      'gold',
+      'mean',
+    )
+
+    expect(datum?.expressionCount).toBe(2)
+    expect(datum?.fillColor).toEqual([255, 221, 99, 245])
+  })
+
+  it('scores expression signatures as z-scores across visible cells', () => {
+    const data = geneExpressionCellsToLayerData(
+      [
+        {
+          id: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          count: 2,
+        },
+        {
+          id: intToCellId(1, 2),
+          position: { x: micrometers(20), y: micrometers(20) },
+          count: 4,
+        },
+        {
+          id: intToCellId(1, 3),
+          position: { x: micrometers(30), y: micrometers(20) },
+          count: 8,
+        },
+      ],
+      ['Gad1'],
+      'gold',
+      'z-score',
+    )
+
+    expect(data[0]?.expressionCount).toBeLessThan(0)
+    expect(data[1]?.expressionCount).toBeLessThan(0)
+    expect(data[2]?.expressionCount).toBeCloseTo(1.34, 2)
+    expect(data[2]?.fillColor).toEqual([255, 221, 99, 245])
+  })
+
   it('colors expression cells with the selected scale', () => {
     const [goldDatum] = geneExpressionCellsToLayerData(
       [

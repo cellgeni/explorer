@@ -16,9 +16,12 @@ import {
 import {
   boundaryElementsToLayerData,
   DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
+  DEFAULT_GENE_EXPRESSION_SCORE_MODE,
   GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
+  GENE_EXPRESSION_SCORE_MODE_OPTIONS,
   geneExpressionCellsToLayerData,
   isGeneExpressionColorScale,
+  isGeneExpressionScoreMode,
   overviewCellsToLayerData,
   styleGeneExpressionCellsByScale,
   bundledDeckVersion,
@@ -35,13 +38,17 @@ import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyI
 import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { ElementBatch, SpatialElement } from './datasets/spatialDataset'
-import type { GeneExpressionColorScale } from './rendering/deckLayers'
+import type {
+  GeneExpressionColorScale,
+  GeneExpressionScoreMode,
+} from './rendering/deckLayers'
 import type { OverviewCellDatum } from './rendering/deckLayers'
 import type { ViewerViewportDetail } from './components/ViewerCore'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 const GENE_EXPRESSION_VIEWPORT_CELL_LIMIT = 5_000
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
+const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
@@ -171,6 +178,13 @@ interface MorphologyChannelSetting {
   readonly histogram?: ChannelHistogram
 }
 
+interface SavedGeneSet {
+  readonly id: string
+  readonly name: string
+  readonly genes: readonly string[]
+  readonly scoreMode: GeneExpressionScoreMode
+}
+
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader
   readonly loadMorphologyImage?: MorphologyImageLoader
@@ -194,6 +208,9 @@ export function App({
   const imageOpacityInputId = useId()
   const geneOpacityInputId = useId()
   const geneSearchInputId = useId()
+  const geneSetSymbolsInputId = useId()
+  const geneSetNameInputId = useId()
+  const geneSetScoreInputId = useId()
   const geneScaleInputId = useId()
   const observationModeInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
@@ -212,9 +229,8 @@ export function App({
     status: 'idle',
   })
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
-  const [geneExpressionCells, setGeneExpressionCells] = useState<
-    readonly OverviewCellDatum[]
-  >([])
+  const [geneExpressionBatch, setGeneExpressionBatch] =
+    useState<GeneExpressionBatch | null>(null)
   const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
   const [morphologyChannelSettings, setMorphologyChannelSettings] = useState<
     readonly MorphologyChannelSetting[]
@@ -228,8 +244,13 @@ export function App({
   const [imageLayerOpacity, setImageLayerOpacity] = useState(1)
   const [geneLayerOpacity, setGeneLayerOpacity] = useState(1)
   const [geneSearch, setGeneSearch] = useState('')
+  const [geneSetSymbols, setGeneSetSymbols] = useState('')
+  const [geneSetName, setGeneSetName] = useState('')
   const [geneExpressionColorScale, setGeneExpressionColorScale] =
     useState<GeneExpressionColorScale>(DEFAULT_GENE_EXPRESSION_COLOR_SCALE)
+  const [geneExpressionScoreMode, setGeneExpressionScoreMode] =
+    useState<GeneExpressionScoreMode>(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
+  const [savedGeneSets, setSavedGeneSets] = useState<readonly SavedGeneSet[]>([])
   const [selectedGenes, setSelectedGenes] = useState<readonly string[]>([])
   const [observationColorMode, setObservationColorMode] =
     useState<ObservationColorMode>('transcript-count')
@@ -240,6 +261,7 @@ export function App({
   const datasetAbortRef = useRef<AbortController | null>(null)
   const boundaryAbortRef = useRef<AbortController | null>(null)
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
+  const geneSetIdRef = useRef(0)
   const boundaryViewportKeyRef = useRef<string | null>(null)
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
@@ -248,6 +270,18 @@ export function App({
   const styledOverviewCells = useMemo(
     () => styleOverviewCellsByObservation(overviewCells, observationColorMode),
     [observationColorMode, overviewCells],
+  )
+  const geneExpressionCells = useMemo(
+    () =>
+      geneExpressionBatch === null
+        ? []
+        : geneExpressionCellsToLayerData(
+            geneExpressionBatch.cells,
+            geneExpressionBatch.genes,
+            geneExpressionColorScale,
+            geneExpressionScoreMode,
+          ),
+    [geneExpressionBatch, geneExpressionColorScale, geneExpressionScoreMode],
   )
   const styledGeneExpressionCells = useMemo(
     () => styleGeneExpressionCellsByScale(geneExpressionCells, geneExpressionColorScale),
@@ -389,7 +423,7 @@ export function App({
         abortActiveRequest(geneExpressionAbortRef)
         geneExpressionRequestId.current += 1
         geneExpressionViewportKeyRef.current = null
-        setGeneExpressionCells((current) => (current.length === 0 ? current : []))
+        setGeneExpressionBatch(null)
         setGeneExpressionState((current) =>
           current.status === 'idle' ? current : { status: 'idle' },
         )
@@ -400,7 +434,7 @@ export function App({
         abortActiveRequest(geneExpressionAbortRef)
         geneExpressionRequestId.current += 1
         geneExpressionViewportKeyRef.current = null
-        setGeneExpressionCells((current) => (current.length === 0 ? current : []))
+        setGeneExpressionBatch(null)
         setGeneExpressionState({
           status: 'waiting',
           message: `Zoom in for expression: ${detail.visibleCellCount.toLocaleString()} visible cells exceeds ${GENE_EXPRESSION_VIEWPORT_CELL_LIMIT.toLocaleString()}.`,
@@ -434,7 +468,7 @@ export function App({
             return
           }
 
-          setGeneExpressionCells(geneExpressionCellsToLayerData(batch.cells, batch.genes))
+          setGeneExpressionBatch(batch)
           setGeneExpressionState({
             status: 'ready',
             url: loadState.url,
@@ -451,7 +485,7 @@ export function App({
             return
           }
 
-          setGeneExpressionCells([])
+          setGeneExpressionBatch(null)
           setGeneExpressionState({
             status: 'error',
             url: loadState.url,
@@ -508,11 +542,17 @@ export function App({
 
       setDatasetUrl(requestedUrl)
       setOverviewCells([])
-      setGeneExpressionCells([])
+      setGeneExpressionBatch(null)
       setMorphologyImage(null)
       setMorphologyChannelSettings([])
       setAutoContrastChannelIds([])
       setBoundaryElements([])
+      setGeneSearch('')
+      setGeneSetSymbols('')
+      setGeneSetName('')
+      setSavedGeneSets([])
+      setGeneExpressionScoreMode(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
+      setSelectedGenes([])
       setSelectedCell(null)
       setLoadState({ status: 'loading', url: requestedUrl })
       setMorphologyState(
@@ -627,6 +667,45 @@ export function App({
         ? current.filter((selectedGene) => selectedGene !== gene)
         : [...current, gene].sort((a, b) => a.localeCompare(b)),
     )
+  }
+
+  function applyGeneSetSymbols() {
+    const genes = parseGeneSetSymbols(geneSetSymbols, geneOptions)
+
+    if (genes.length === 0) {
+      return
+    }
+
+    setSelectedGenes(genes)
+    setGeneSearch('')
+  }
+
+  function saveSelectedGeneSet() {
+    if (selectedGenes.length === 0) {
+      return
+    }
+
+    const name = geneSetName.trim() || defaultGeneSetName(selectedGenes)
+    const normalizedName = name.toLowerCase()
+    const savedSet: SavedGeneSet = {
+      id: `gene-set-${geneSetIdRef.current + 1}`,
+      name,
+      genes: selectedGenes,
+      scoreMode: geneExpressionScoreMode,
+    }
+
+    geneSetIdRef.current += 1
+    setSavedGeneSets((current) => [
+      savedSet,
+      ...current.filter((geneSet) => geneSet.name.toLowerCase() !== normalizedName),
+    ])
+    setGeneSetName('')
+  }
+
+  function applySavedGeneSet(geneSet: SavedGeneSet) {
+    setSelectedGenes(geneSet.genes)
+    setGeneExpressionScoreMode(geneSet.scoreMode)
+    setGeneSearch('')
   }
 
   function updateMorphologyChannel(
@@ -859,6 +938,86 @@ export function App({
             ))}
           </div>
 
+          <label htmlFor={geneSetSymbolsInputId}>Gene set symbols</label>
+          <textarea
+            id={geneSetSymbolsInputId}
+            className="gene-set-symbols"
+            autoComplete="off"
+            spellCheck={false}
+            rows={3}
+            value={geneSetSymbols}
+            disabled={genePanelState.status !== 'ready'}
+            placeholder="Actb, Gad1, Slc17a7"
+            onChange={(event) => {
+              setGeneSetSymbols(event.currentTarget.value)
+            }}
+          />
+          <div className="gene-set-actions">
+            <button
+              type="button"
+              disabled={genePanelState.status !== 'ready' || geneSetSymbols.trim() === ''}
+              onClick={applyGeneSetSymbols}
+            >
+              Apply Symbols
+            </button>
+            <button
+              type="button"
+              disabled={selectedGenes.length === 0}
+              onClick={saveSelectedGeneSet}
+            >
+              Save Set
+            </button>
+          </div>
+
+          <label htmlFor={geneSetNameInputId}>Set name</label>
+          <input
+            id={geneSetNameInputId}
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={geneSetName}
+            placeholder={defaultGeneSetName(selectedGenes)}
+            onChange={(event) => {
+              setGeneSetName(event.currentTarget.value)
+            }}
+          />
+
+          <label htmlFor={geneSetScoreInputId}>Signature score</label>
+          <select
+            id={geneSetScoreInputId}
+            value={geneExpressionScoreMode}
+            onChange={(event) => {
+              const nextScoreMode = event.currentTarget.value
+
+              if (isGeneExpressionScoreMode(nextScoreMode)) {
+                setGeneExpressionScoreMode(nextScoreMode)
+              }
+            }}
+          >
+            {GENE_EXPRESSION_SCORE_MODE_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          {savedGeneSets.length === 0 ? null : (
+            <div className="gene-set-list" aria-label="Saved gene sets">
+              {savedGeneSets.map((geneSet) => (
+                <button
+                  key={geneSet.id}
+                  type="button"
+                  onClick={() => {
+                    applySavedGeneSet(geneSet)
+                  }}
+                >
+                  <span>{geneSet.name}</span>
+                  <small>{geneSet.scoreMode}</small>
+                </button>
+              ))}
+            </div>
+          )}
+
           <label htmlFor={geneScaleInputId}>Gene scale</label>
           <div className="gene-scale-control">
             <select
@@ -1042,6 +1201,55 @@ function filterGeneOptions(
   }
 
   return matches
+}
+
+function parseGeneSetSymbols(
+  value: string,
+  availableGenes: readonly string[],
+): readonly string[] {
+  if (value.trim().length === 0 || availableGenes.length === 0) {
+    return []
+  }
+
+  const availableGenesByNormalizedName = new Map<string, string>()
+
+  for (const gene of availableGenes) {
+    availableGenesByNormalizedName.set(gene.toLowerCase(), gene)
+  }
+
+  const selectedGenes = new Set<string>()
+  const parsedGenes: string[] = []
+
+  for (const symbol of value.split(GENE_SET_SYMBOL_SPLIT_PATTERN)) {
+    const normalizedSymbol = symbol.trim().toLowerCase()
+
+    if (normalizedSymbol.length === 0) {
+      continue
+    }
+
+    const gene = availableGenesByNormalizedName.get(normalizedSymbol)
+
+    if (gene === undefined || selectedGenes.has(gene)) {
+      continue
+    }
+
+    selectedGenes.add(gene)
+    parsedGenes.push(gene)
+  }
+
+  return parsedGenes.sort((left, right) => left.localeCompare(right))
+}
+
+function defaultGeneSetName(genes: readonly string[]): string {
+  if (genes.length === 0) {
+    return 'Selected genes'
+  }
+
+  if (genes.length <= 3) {
+    return genes.join(', ')
+  }
+
+  return `${genes.slice(0, 3).join(', ')} +${genes.length - 3}`
 }
 
 function CellInfoPanel({ cell }: { readonly cell: OverviewCellDatum | null }) {

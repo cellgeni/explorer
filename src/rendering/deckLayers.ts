@@ -38,21 +38,35 @@ export interface OverviewLayerOptions {
 }
 
 export type GeneExpressionColorScale = 'gold' | 'magma' | 'viridis'
+export type GeneExpressionScoreMode = 'sum' | 'mean' | 'z-score'
 
 export interface GeneExpressionColorScaleOption {
   readonly id: GeneExpressionColorScale
   readonly label: string
 }
 
+export interface GeneExpressionScoreModeOption {
+  readonly id: GeneExpressionScoreMode
+  readonly label: string
+}
+
 type ColorStop = readonly [number, number, number, number]
 
 export const DEFAULT_GENE_EXPRESSION_COLOR_SCALE: GeneExpressionColorScale = 'gold'
+export const DEFAULT_GENE_EXPRESSION_SCORE_MODE: GeneExpressionScoreMode = 'sum'
 
 export const GENE_EXPRESSION_COLOR_SCALE_OPTIONS: readonly GeneExpressionColorScaleOption[] =
   [
     { id: 'gold', label: 'Gold' },
     { id: 'magma', label: 'Magma' },
     { id: 'viridis', label: 'Viridis' },
+  ]
+
+export const GENE_EXPRESSION_SCORE_MODE_OPTIONS: readonly GeneExpressionScoreModeOption[] =
+  [
+    { id: 'sum', label: 'Sum' },
+    { id: 'mean', label: 'Mean' },
+    { id: 'z-score', label: 'Z-score' },
   ]
 
 const GENE_EXPRESSION_COLOR_STOPS: Record<
@@ -207,19 +221,23 @@ export function geneExpressionCellsToLayerData(
   cells: readonly GeneExpressionCell[],
   genes: readonly string[],
   colorScale: GeneExpressionColorScale = DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
+  scoreMode: GeneExpressionScoreMode = DEFAULT_GENE_EXPRESSION_SCORE_MODE,
 ): readonly OverviewCellDatum[] {
   if (cells.length === 0) {
     return []
   }
 
-  let maxCount = 1
+  const scores = scoreExpressionCells(cells, genes, scoreMode)
+  let maxCount = 0
 
-  for (const cell of cells) {
-    maxCount = Math.max(maxCount, cell.count)
+  for (const score of scores) {
+    maxCount = Math.max(maxCount, score)
   }
+  const scoreDenominator = maxCount > 0 ? maxCount : 1
 
-  const layerData = cells.map((cell): OverviewCellDatum => {
-    const intensity = Math.sqrt(Math.max(cell.count, 0) / maxCount)
+  const layerData = cells.map((cell, index): OverviewCellDatum => {
+    const score = scores[index] ?? 0
+    const intensity = Math.sqrt(Math.max(score, 0) / scoreDenominator)
     const radiusMicrometers = cellAreaToRadiusMicrometers(cell.cellArea)
 
     return {
@@ -228,7 +246,7 @@ export function geneExpressionCellsToLayerData(
       radiusPixels: 4 + intensity * 6,
       ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
       fillColor: geneExpressionColor(colorScale, intensity),
-      expressionCount: cell.count,
+      expressionCount: score,
       expressionGenes: genes,
       ...(cell.transcriptCount === undefined
         ? {}
@@ -248,16 +266,15 @@ export function styleGeneExpressionCellsByScale(
     return cells
   }
 
-  let maxExpressionCount = 1
+  let maxExpressionCount = 0
 
   for (const cell of cells) {
     maxExpressionCount = Math.max(maxExpressionCount, cell.expressionCount ?? 0)
   }
+  const scoreDenominator = maxExpressionCount > 0 ? maxExpressionCount : 1
 
   return cells.map((cell) => {
-    const intensity = Math.sqrt(
-      Math.max(cell.expressionCount ?? 0, 0) / maxExpressionCount,
-    )
+    const intensity = Math.sqrt(Math.max(cell.expressionCount ?? 0, 0) / scoreDenominator)
 
     return {
       ...cell,
@@ -270,6 +287,51 @@ export function isGeneExpressionColorScale(
   value: string,
 ): value is GeneExpressionColorScale {
   return GENE_EXPRESSION_COLOR_SCALE_OPTIONS.some((option) => option.id === value)
+}
+
+export function isGeneExpressionScoreMode(
+  value: string,
+): value is GeneExpressionScoreMode {
+  return GENE_EXPRESSION_SCORE_MODE_OPTIONS.some((option) => option.id === value)
+}
+
+function scoreExpressionCells(
+  cells: readonly GeneExpressionCell[],
+  genes: readonly string[],
+  scoreMode: GeneExpressionScoreMode,
+): readonly number[] {
+  const geneCount = Math.max(genes.length, 1)
+
+  if (scoreMode === 'sum') {
+    return cells.map((cell) => cell.count)
+  }
+
+  const meanScores = cells.map((cell) => cell.count / geneCount)
+
+  if (scoreMode === 'mean') {
+    return meanScores
+  }
+
+  let total = 0
+
+  for (const score of meanScores) {
+    total += score
+  }
+
+  const mean = total / meanScores.length
+  let squaredDistanceTotal = 0
+
+  for (const score of meanScores) {
+    squaredDistanceTotal += (score - mean) ** 2
+  }
+
+  const standardDeviation = Math.sqrt(squaredDistanceTotal / meanScores.length)
+
+  if (standardDeviation === 0) {
+    return meanScores.map(() => 0)
+  }
+
+  return meanScores.map((score) => (score - mean) / standardDeviation)
 }
 
 function geneExpressionColor(

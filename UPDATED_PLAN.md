@@ -245,3 +245,26 @@ unless the phase order is explicitly changed.
 - [x] Added selectable gene-expression color scales. Switching scales restyles
       the current expression overlay from loaded per-cell counts without
       refetching the expression matrix.
+
+## Phase 4 Running TODO
+
+- [x] Gene picker backed by full `gene_panel.json` (pick before drawing).
+- [ ] Whole-slide expression coloring with level-of-detail: low zoom density
+      bins; medium zoom sampled cells; high zoom exact cells; ROI exact mode.
+- [x] Gene sets: import/paste symbol lists; score cells by sum/mean/z-scored
+      signature; color by score; save named sets.
+- [ ] Annotation import from `analysis.zarr.zip`, CSV, and JSON.
+- [ ] ROI annotations: draw polygon/box/lasso; compute summary stats; export
+      selected cells/transcripts.
+- [ ] UMAP/tSNE panel linked to spatial selection.
+- [ ] HDF5 path for `cell_feature_matrix.h5` with `h5wasm` and `jsfive`
+      fallback.
+
+## Phase 4 Notes
+
+- [x] Phase 4 started only after Phase 3 was complete, with the user-requested
+      JPEG XR decoder and Z-stack plane selector still deferred.
+- [x] Gene sets now support pasted comma/whitespace/semicolon symbol lists,
+      case-insensitive matching against the loaded gene panel, saved named sets,
+      and sum/mean/z-score signature modes. Score-mode changes restyle the
+      current expression batch without refetching `cell_feature_matrix.zarr.zip`.
