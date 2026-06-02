@@ -370,3 +370,9 @@ unless the phase order is explicitly changed.
       The overview point layer now remains visible during pan, drag, and zoom;
       annotation coloring is still deferred until close zoom to avoid full-slide
       recoloring at overview scale.
+- [x] Restored zoomed cell visibility after the hollow-point change from
+      `878fd4f`. Whole-slide overview points stay subtle and hollow, medium
+      zoom now uses high-contrast hollow outlines, and close zoom switches to a
+      brighter filled+outlined detail style so individual centroids remain
+      visible. Base hexagon/true-boundary polygons now draw below centroid
+      points so polygon fills do not hide the points.

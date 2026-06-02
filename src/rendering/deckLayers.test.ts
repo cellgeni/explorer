@@ -80,6 +80,54 @@ describe('deck layer factory', () => {
     expect(getLineColor(fixtureCells[0]!)).toEqual([31, 119, 180, 41])
   })
 
+  it('uses brighter hollow points for medium zoom focus', () => {
+    const layers = createOverviewLayers(fixtureCells, [], [], [], {
+      cellPointStyle: 'focus',
+    })
+    const [layer] = layers
+
+    if (!(layer instanceof ScatterplotLayer)) {
+      throw new Error('Expected first overview layer to be a ScatterplotLayer.')
+    }
+
+    const getLineColor = layer.props.getLineColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
+
+    expect(layer.props.filled).toBe(false)
+    expect(layer.props.stroked).toBe(true)
+    expect(layer.props.lineWidthMinPixels).toBe(1.8)
+    expect(layer.props.radiusMinPixels).toBe(1.25)
+    expect(layer.props.updateTriggers?.getLineColor).toEqual(['focus', null])
+    expect(layer.props.updateTriggers?.getLineWidth).toEqual(['focus'])
+    expect(getLineColor(fixtureCells[0]!)).toEqual([243, 197, 216, 255])
+  })
+
+  it('uses brighter filled points for close zoom detail', () => {
+    const layers = createOverviewLayers(fixtureCells, [], [], [], {
+      cellPointStyle: 'detail',
+    })
+    const [layer] = layers
+
+    if (!(layer instanceof ScatterplotLayer)) {
+      throw new Error('Expected first overview layer to be a ScatterplotLayer.')
+    }
+
+    const getLineColor = layer.props.getLineColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
+    const getFillColor = layer.props.getFillColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
+
+    expect(layer.props.filled).toBe(true)
+    expect(layer.props.stroked).toBe(true)
+    expect(layer.props.lineWidthMinPixels).toBe(1)
+    expect(layer.props.radiusMinPixels).toBe(1.5)
+    expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 220])
+    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 121])
+  })
+
   it('adds a non-pickable annotation preview layer for sampled overview colors', () => {
     const layers = createOverviewLayers(fixtureCells, [], [], [], {
       annotationPreviewCells: fixtureCells,
@@ -118,7 +166,8 @@ describe('deck layer factory', () => {
     const layers = createOverviewLayers(fixtureCells, boundaries)
 
     expect(layers).toHaveLength(2)
-    expect(layers[1]).toBeInstanceOf(PolygonLayer)
+    expect(layers[0]).toBeInstanceOf(PolygonLayer)
+    expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
   })
 
   it('adds hexagon boundaries only when true boundary data is absent', () => {
@@ -140,17 +189,50 @@ describe('deck layer factory', () => {
     const trueLayers = createOverviewLayers(fixtureCells, hexBoundaries, hexBoundaries)
 
     expect(hexLayers).toHaveLength(2)
-    expect(hexLayers[1]).toBeInstanceOf(PolygonLayer)
+    expect(hexLayers[0]).toBeInstanceOf(PolygonLayer)
+    expect(hexLayers[1]).toBeInstanceOf(ScatterplotLayer)
     expect(trueLayers).toHaveLength(2)
-    expect(trueLayers[1]).toBeInstanceOf(PolygonLayer)
+    expect(trueLayers[0]).toBeInstanceOf(PolygonLayer)
+    expect(trueLayers[1]).toBeInstanceOf(ScatterplotLayer)
 
-    const [, trueBoundaryLayer] = trueLayers
+    const [trueBoundaryLayer] = trueLayers
 
     if (!(trueBoundaryLayer instanceof PolygonLayer)) {
       throw new Error('Expected true boundary layer to be a PolygonLayer.')
     }
 
     expect(trueBoundaryLayer.id).toBe('cell-boundary-polygons')
+  })
+
+  it('draws centroid points above base boundary polygons', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const layers = createOverviewLayers(fixtureCells, boundaries, [], [], {
+      cellPointStyle: 'detail',
+    })
+
+    const [boundaryLayer, pointLayer] = layers
+
+    if (!(boundaryLayer instanceof PolygonLayer)) {
+      throw new Error('Expected boundary layer to be a PolygonLayer.')
+    }
+
+    if (!(pointLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected point layer to be a ScatterplotLayer.')
+    }
+
+    expect(boundaryLayer.id).toBe('cell-boundary-polygons')
+    expect(pointLayer.id).toBe('cells-overview-scatter')
   })
 
   it('adds a gene expression overlay layer', () => {

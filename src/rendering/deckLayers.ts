@@ -43,9 +43,12 @@ export interface OverviewLayerOptions {
   readonly expressionBoundaryPolygons?: readonly CellBoundaryDatum[]
   readonly expressionHexBoundaries?: readonly CellBoundaryDatum[]
   readonly cellColorLookup?: CellColorLookup | null
+  readonly cellPointStyle?: CellPointStyle
   readonly cellsPickable?: boolean
   readonly annotationPreviewCells?: readonly OverviewCellDatum[]
 }
+
+export type CellPointStyle = 'overview' | 'focus' | 'detail'
 
 export type GeneExpressionColorScale = 'gold' | 'magma' | 'viridis'
 export type GeneExpressionScoreMode = 'sum' | 'mean' | 'z-score'
@@ -112,6 +115,7 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
 }
 
 const OVERVIEW_CELL_LINE_WIDTH = 0.35
+const DETAIL_CELL_LINE_WIDTH = 1
 
 export const spatialOverviewView = new OrthographicView({
   id: 'spatial-overview',
@@ -133,31 +137,92 @@ export function createOverviewLayers(
   const expressionBoundaryPolygons = options.expressionBoundaryPolygons ?? []
   const expressionHexBoundaries = options.expressionHexBoundaries ?? []
   const cellColorLookup = options.cellColorLookup ?? null
+  const cellPointStyle = options.cellPointStyle ?? 'overview'
   const cellsPickable = options.cellsPickable ?? true
   const annotationPreviewCells = options.annotationPreviewCells ?? []
+  const focusPointStyle = cellPointStyle === 'focus'
+  const detailPointStyle = cellPointStyle === 'detail'
   const hasExpressionPolygons =
     expressionBoundaryPolygons.length > 0 || expressionHexBoundaries.length > 0
-  const layers: LayersList = [
-    new ScatterplotLayer<OverviewCellDatum>({
-      id: 'cells-overview-scatter',
-      data: cells,
-      pickable: cellsPickable,
-      radiusUnits: 'common',
-      radiusMinPixels: 0.12,
-      radiusMaxPixels: 6,
-      stroked: true,
-      filled: false,
-      lineWidthUnits: 'pixels',
-      lineWidthMinPixels: 0.25,
-      getPosition: getOverviewCellPosition,
-      getRadius: getOverviewCellRadius,
-      getLineColor:
-        cellColorLookup === null
-          ? getOverviewCellBaseOutlineColor
-          : (cell) => overviewCellOutlineColor(overviewCellColor(cell, cellColorLookup)),
-      getLineWidth: getOverviewCellLineWidth,
-    }),
-  ]
+  const layers: LayersList = []
+  const cellLayer = new ScatterplotLayer<OverviewCellDatum>({
+    id: 'cells-overview-scatter',
+    data: cells,
+    pickable: cellsPickable,
+    radiusUnits: 'common',
+    radiusMinPixels: detailPointStyle ? 1.5 : focusPointStyle ? 1.25 : 0.12,
+    radiusMaxPixels: detailPointStyle ? 10 : focusPointStyle ? 8 : 6,
+    stroked: true,
+    filled: detailPointStyle,
+    lineWidthUnits: 'pixels',
+    lineWidthMinPixels: detailPointStyle ? 1 : focusPointStyle ? 1.8 : 0.25,
+    getPosition: getOverviewCellPosition,
+    getRadius: getOverviewCellRadius,
+    getLineColor:
+      cellColorLookup === null
+        ? detailPointStyle
+          ? getOverviewCellDetailOutlineColor
+          : focusPointStyle
+            ? getOverviewCellFocusOutlineColor
+            : getOverviewCellBaseOutlineColor
+        : (cell) =>
+            overviewCellOutlineColor(
+              overviewCellColor(cell, cellColorLookup),
+              cellPointStyle,
+            ),
+    getFillColor:
+      cellColorLookup === null
+        ? getOverviewCellDetailFillColor
+        : (cell) => overviewCellDetailFillColor(overviewCellColor(cell, cellColorLookup)),
+    getLineWidth: detailPointStyle
+      ? getOverviewCellDetailLineWidth
+      : focusPointStyle
+        ? getOverviewCellFocusLineWidth
+        : getOverviewCellLineWidth,
+    updateTriggers: {
+      getFillColor: [cellPointStyle, cellColorLookup],
+      getLineColor: [cellPointStyle, cellColorLookup],
+      getLineWidth: [cellPointStyle],
+    },
+  })
+
+  if (hexBoundaries.length > 0 && boundaries.length === 0) {
+    layers.push(
+      new PolygonLayer<CellBoundaryDatum>({
+        id: 'cell-boundary-hexagons',
+        data: hexBoundaries,
+        pickable: false,
+        stroked: true,
+        filled: true,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 1,
+        getPolygon: (cell) => cell.polygon,
+        getFillColor: (cell) => cell.fillColor,
+        getLineColor: (cell) => cell.lineColor,
+        getLineWidth: 1,
+      }),
+    )
+  }
+
+  if (boundaries.length > 0) {
+    layers.push(
+      new PolygonLayer<CellBoundaryDatum>({
+        id: 'cell-boundary-polygons',
+        data: boundaries,
+        pickable: true,
+        stroked: true,
+        filled: true,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 1,
+        getPolygon: (cell) => cell.polygon,
+        getFillColor: (cell) => cell.fillColor,
+        getLineColor: (cell) => cell.lineColor,
+        getLineWidth: 1,
+      }),
+    )
+  }
+
+  layers.push(cellLayer)
 
   if (annotationPreviewCells.length > 0 && cellColorLookup !== null) {
     layers.push(
@@ -197,42 +262,6 @@ export function createOverviewLayers(
         getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
         getFillColor: (cell) => cell.fillColor,
         getLineColor: [255, 253, 247, 230],
-        getLineWidth: 1,
-      }),
-    )
-  }
-
-  if (hexBoundaries.length > 0 && boundaries.length === 0) {
-    layers.push(
-      new PolygonLayer<CellBoundaryDatum>({
-        id: 'cell-boundary-hexagons',
-        data: hexBoundaries,
-        pickable: false,
-        stroked: true,
-        filled: true,
-        lineWidthUnits: 'pixels',
-        lineWidthMinPixels: 1,
-        getPolygon: (cell) => cell.polygon,
-        getFillColor: (cell) => cell.fillColor,
-        getLineColor: (cell) => cell.lineColor,
-        getLineWidth: 1,
-      }),
-    )
-  }
-
-  if (boundaries.length > 0) {
-    layers.push(
-      new PolygonLayer<CellBoundaryDatum>({
-        id: 'cell-boundary-polygons',
-        data: boundaries,
-        pickable: true,
-        stroked: true,
-        filled: true,
-        lineWidthUnits: 'pixels',
-        lineWidthMinPixels: 1,
-        getPolygon: (cell) => cell.polygon,
-        getFillColor: (cell) => cell.fillColor,
-        getLineColor: (cell) => cell.lineColor,
         getLineWidth: 1,
       }),
     )
@@ -612,16 +641,75 @@ function getOverviewCellBaseOutlineColor(cell: OverviewCellDatum): Color {
   return overviewCellOutlineColor(cell.fillColor)
 }
 
+function getOverviewCellDetailOutlineColor(cell: OverviewCellDatum): Color {
+  return overviewCellOutlineColor(cell.fillColor, 'detail')
+}
+
+function getOverviewCellFocusOutlineColor(cell: OverviewCellDatum): Color {
+  return overviewCellOutlineColor(cell.fillColor, 'focus')
+}
+
+function getOverviewCellDetailFillColor(cell: OverviewCellDatum): Color {
+  return overviewCellDetailFillColor(cell.fillColor)
+}
+
 function getOverviewCellLineWidth(): number {
   return OVERVIEW_CELL_LINE_WIDTH
 }
 
-function overviewCellOutlineColor(color: Color): Color {
+function getOverviewCellDetailLineWidth(): number {
+  return DETAIL_CELL_LINE_WIDTH
+}
+
+function getOverviewCellFocusLineWidth(): number {
+  return 1.8
+}
+
+function overviewCellOutlineColor(
+  color: Color,
+  style: CellPointStyle = 'overview',
+): Color {
+  if (style === 'focus') {
+    const [red, green, blue] = brightenColor(color, 0.7)
+
+    return [red, green, blue, 255]
+  }
+
+  if (style === 'detail') {
+    return [
+      color[0] ?? 0,
+      color[1] ?? 0,
+      color[2] ?? 0,
+      Math.min(230, Math.max(160, color[3] ?? 210)),
+    ]
+  }
+
   return [
     color[0] ?? 0,
     color[1] ?? 0,
     color[2] ?? 0,
     Math.min(42, Math.max(10, Math.round((color[3] ?? 210) * 0.18))),
+  ]
+}
+
+function brightenColor(color: Color, amount: number): readonly [number, number, number] {
+  return [
+    brightenColorChannel(color[0] ?? 0, amount),
+    brightenColorChannel(color[1] ?? 0, amount),
+    brightenColorChannel(color[2] ?? 0, amount),
+  ]
+}
+
+function brightenColorChannel(channel: number, amount: number): number {
+  return Math.round(channel + (255 - channel) * amount)
+}
+
+function overviewCellDetailFillColor(color: Color): Color {
+  return [
+    color[0] ?? 0,
+    color[1] ?? 0,
+    color[2] ?? 0,
+    Math.min(145, Math.max(72, Math.round((color[3] ?? 210) * 0.55))),
   ]
 }
 
