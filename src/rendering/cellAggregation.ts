@@ -24,6 +24,9 @@ interface CellBin {
   sumBlue: number
   maxTranscriptCount: number | undefined
   maxCellArea: number | undefined
+  sumExpressionCount: number
+  hasExpressionCount: boolean
+  expressionGenes: readonly string[] | undefined
 }
 
 export function aggregateOverviewCells(
@@ -113,6 +116,9 @@ function aggregateCellsIntoBins(
         sumBlue: blue,
         maxTranscriptCount: cell.transcriptCount,
         maxCellArea: cell.cellArea,
+        sumExpressionCount: cell.expressionCount ?? 0,
+        hasExpressionCount: cell.expressionCount !== undefined,
+        expressionGenes: cell.expressionGenes,
       })
       continue
     }
@@ -134,6 +140,9 @@ function aggregateCellsIntoBins(
       cell.transcriptCount,
     )
     bin.maxCellArea = maxOptionalNumber(bin.maxCellArea, cell.cellArea)
+    bin.sumExpressionCount += cell.expressionCount ?? 0
+    bin.hasExpressionCount = bin.hasExpressionCount || cell.expressionCount !== undefined
+    bin.expressionGenes ??= cell.expressionGenes
   }
 
   const aggregatedCells: OverviewCellDatum[] = []
@@ -158,6 +167,10 @@ function aggregateCellsIntoBins(
         ? {}
         : { transcriptCount: bin.maxTranscriptCount }),
       ...(bin.maxCellArea === undefined ? {} : { cellArea: bin.maxCellArea }),
+      ...(bin.hasExpressionCount ? { expressionCount: bin.sumExpressionCount } : {}),
+      ...(bin.expressionGenes === undefined
+        ? {}
+        : { expressionGenes: bin.expressionGenes }),
     })
   }
 

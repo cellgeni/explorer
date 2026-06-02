@@ -268,3 +268,8 @@ unless the phase order is explicitly changed.
       case-insensitive matching against the loaded gene panel, saved named sets,
       and sum/mean/z-score signature modes. Score-mode changes restyle the
       current expression batch without refetching `cell_feature_matrix.zarr.zip`.
+- [x] Started whole-slide expression LOD work without changing the matrix
+      architecture: expression no longer hard-stops above 5,000 visible cells.
+      The app loads a capped sampled batch from `cell_feature_matrix.zarr.zip`
+      for larger views and the viewer bins those expression cells at low zoom.
+      True all-cell feature-major expression and ROI exact mode remain pending.

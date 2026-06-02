@@ -46,7 +46,8 @@ import type { OverviewCellDatum } from './rendering/deckLayers'
 import type { ViewerViewportDetail } from './components/ViewerCore'
 
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
-const GENE_EXPRESSION_VIEWPORT_CELL_LIMIT = 5_000
+const GENE_EXPRESSION_EXACT_CELL_LIMIT = 5_000
+const GENE_EXPRESSION_SAMPLE_CELL_LIMIT = 5_000
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 
@@ -76,7 +77,7 @@ export type GeneExpressionLoader = (
   baseUrl: string,
   bbox: BBox,
   genes: readonly string[],
-  options?: { readonly signal?: AbortSignal },
+  options?: { readonly limit?: number; readonly signal?: AbortSignal },
 ) => Promise<GeneExpressionBatch>
 export type AutoChannelContrastLoader = (
   channel: MorphologyImageChannel,
@@ -130,12 +131,16 @@ type GeneExpressionState =
       readonly status: 'loading'
       readonly url: string
       readonly genes: readonly string[]
+      readonly mode: GeneExpressionLoadMode
+      readonly visibleCellCount: number
     }
   | {
       readonly status: 'ready'
       readonly url: string
       readonly genes: readonly string[]
       readonly cellCount: number
+      readonly mode: GeneExpressionLoadMode
+      readonly visibleCellCount: number
     }
   | {
       readonly status: 'error'
@@ -159,6 +164,8 @@ type LoadErrorSource =
   | 'Cell boundaries'
   | 'Gene panel'
   | 'Gene expression'
+
+type GeneExpressionLoadMode = 'exact' | 'sampled'
 
 interface StructuredLoadError {
   readonly source: LoadErrorSource
@@ -430,19 +437,13 @@ export function App({
         return
       }
 
-      if (detail.visibleCellCount > GENE_EXPRESSION_VIEWPORT_CELL_LIMIT) {
-        abortActiveRequest(geneExpressionAbortRef)
-        geneExpressionRequestId.current += 1
-        geneExpressionViewportKeyRef.current = null
-        setGeneExpressionBatch(null)
-        setGeneExpressionState({
-          status: 'waiting',
-          message: `Zoom in for expression: ${detail.visibleCellCount.toLocaleString()} visible cells exceeds ${GENE_EXPRESSION_VIEWPORT_CELL_LIMIT.toLocaleString()}.`,
-        })
-        return
-      }
-
-      const expressionKey = `${boundaryViewportKey(loadState.url, detail.bbox)}:${selectedGenes.join('|')}`
+      const expressionMode: GeneExpressionLoadMode =
+        detail.visibleCellCount <= GENE_EXPRESSION_EXACT_CELL_LIMIT ? 'exact' : 'sampled'
+      const expressionCellLimit =
+        expressionMode === 'exact'
+          ? GENE_EXPRESSION_EXACT_CELL_LIMIT
+          : GENE_EXPRESSION_SAMPLE_CELL_LIMIT
+      const expressionKey = `${boundaryViewportKey(loadState.url, detail.bbox)}:${selectedGenes.join('|')}:${expressionMode}:${expressionCellLimit}`
 
       if (expressionKey === geneExpressionViewportKeyRef.current) {
         return
@@ -458,10 +459,13 @@ export function App({
         status: 'loading',
         url: loadState.url,
         genes: selectedGenes,
+        mode: expressionMode,
+        visibleCellCount: detail.visibleCellCount,
       })
 
       void loadGeneExpression(loadState.url, detail.bbox, selectedGenes, {
         signal: expressionAbortController.signal,
+        limit: expressionCellLimit,
       })
         .then((batch) => {
           if (geneExpressionRequestId.current !== expressionRequestId) {
@@ -474,6 +478,8 @@ export function App({
             url: loadState.url,
             genes: batch.genes,
             cellCount: batch.cells.length,
+            mode: expressionMode,
+            visibleCellCount: detail.visibleCellCount,
           })
         })
         .catch((error) => {
@@ -1158,11 +1164,21 @@ function genePanelStatusCopy(genePanelState: GenePanelState): string {
 
 function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): string {
   if (geneExpressionState.status === 'loading') {
-    return `Expression: ${geneExpressionState.genes.join(', ')}`
+    return `${geneExpressionModeLabel(geneExpressionState.mode)}: ${geneExpressionState.genes.join(', ')}`
   }
 
   if (geneExpressionState.status === 'ready') {
     const noun = geneExpressionState.cellCount === 1 ? 'cell' : 'cells'
+
+    if (
+      geneExpressionState.mode === 'sampled' &&
+      geneExpressionState.visibleCellCount > geneExpressionState.cellCount
+    ) {
+      const visibleNoun = geneExpressionState.visibleCellCount === 1 ? 'cell' : 'cells'
+
+      return `Expression sample: ${geneExpressionState.cellCount.toLocaleString()} of ${geneExpressionState.visibleCellCount.toLocaleString()} visible ${visibleNoun}`
+    }
+
     return `Expression: ${geneExpressionState.cellCount.toLocaleString()} ${noun}`
   }
 
@@ -1175,6 +1191,10 @@ function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): str
   }
 
   return 'Expression: none'
+}
+
+function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
+  return mode === 'sampled' ? 'Expression sample' : 'Expression'
 }
 
 function filterGeneOptions(

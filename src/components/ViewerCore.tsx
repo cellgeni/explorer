@@ -17,6 +17,9 @@ import type { MorphologyCanvasChannel } from './MorphologyCanvas'
 import type { CellBoundaryDatum, OverviewCellDatum } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
+const EXPRESSION_AGGREGATION_TARGET_PIXELS = 16
+const EXPRESSION_AGGREGATION_INDIVIDUAL_MICROMETERS = 18
+
 export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface ViewerCoreProps {
@@ -154,6 +157,14 @@ function ViewerSurface({
     () => aggregateOverviewCells(visibleCells, viewState),
     [visibleCells, viewState],
   )
+  const displayExpressionCells = useMemo(
+    () =>
+      aggregateOverviewCells(expressionCells, viewState, {
+        targetPixels: EXPRESSION_AGGREGATION_TARGET_PIXELS,
+        individualMicrometers: EXPRESSION_AGGREGATION_INDIVIDUAL_MICROMETERS,
+      }),
+    [expressionCells, viewState],
+  )
   const hexBoundaries = useMemo(
     () =>
       hexCellBoundariesForVisibleCells(visibleCells, {
@@ -163,10 +174,22 @@ function ViewerSurface({
   )
   const layers = useMemo(
     () =>
-      createOverviewLayers(displayCells, boundaries, hexBoundaries, expressionCells, {
-        geneExpressionOpacity,
-      }),
-    [boundaries, displayCells, expressionCells, geneExpressionOpacity, hexBoundaries],
+      createOverviewLayers(
+        displayCells,
+        boundaries,
+        hexBoundaries,
+        displayExpressionCells,
+        {
+          geneExpressionOpacity,
+        },
+      ),
+    [
+      boundaries,
+      displayCells,
+      displayExpressionCells,
+      geneExpressionOpacity,
+      hexBoundaries,
+    ],
   )
   const hasCells = cells.length > 0
   const hasImage = imageLoader !== null || imageChannels.length > 0

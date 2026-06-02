@@ -73,6 +73,38 @@ describe('overview cell aggregation', () => {
     expect(visibleCells[0]?.cellCount).toBe(2)
   })
 
+  it('preserves expression metadata when binning expression cells', () => {
+    const firstCell = cells[0]
+    const secondCell = cells[1]
+
+    if (firstCell === undefined || secondCell === undefined) {
+      throw new Error('Expected aggregation fixture cells.')
+    }
+
+    const aggregatedCells = aggregateOverviewCells(
+      [
+        {
+          ...firstCell,
+          expressionCount: 2,
+          expressionGenes: ['Actb', 'Gad1'],
+        },
+        {
+          ...secondCell,
+          expressionCount: 3,
+          expressionGenes: ['Actb', 'Gad1'],
+        },
+      ],
+      viewState,
+    )
+
+    expect(aggregatedCells).toHaveLength(1)
+    expect(aggregatedCells[0]).toMatchObject({
+      expressionCount: 5,
+      expressionGenes: ['Actb', 'Gad1'],
+      cellCount: 2,
+    })
+  })
+
   it('derives bin size from the current orthographic zoom', () => {
     expect(overviewAggregationBinMicrometers(viewState)).toBe(80)
     expect(overviewAggregationBinMicrometers({ ...viewState, zoom: 0 })).toBe(10)
