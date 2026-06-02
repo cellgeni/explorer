@@ -1,4 +1,4 @@
-import type { CSSProperties, FormEvent } from 'react'
+import type { CSSProperties, FormEvent, PointerEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ViewerCore } from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
@@ -8,6 +8,7 @@ import {
   loadDatasetAnnotations as defaultLoadDatasetAnnotations,
 } from './data/datasetAnnotations'
 import { loadDatasetBoundaryElements as defaultLoadBoundaryElements } from './data/datasetBoundaries'
+import { loadDatasetAnalysisEmbeddings as defaultLoadAnalysisEmbeddings } from './data/analysisEmbeddings'
 import { loadDatasetGeneExpression as defaultLoadDatasetGeneExpression } from './data/geneExpression'
 import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
 import { loadGenePanel as defaultLoadGenePanel } from './data/genePanel'
@@ -64,6 +65,11 @@ import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyI
 import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
 import type { AnnotationColorStyle, ObservationColorMode } from './rendering/cellStyling'
 import type {
+  AnalysisEmbedding,
+  AnalysisEmbeddingKind,
+  AnalysisEmbeddingPoint,
+} from './data/analysisEmbeddings'
+import type {
   AnnotationGroupOption,
   LoadDatasetAnnotationsOptions,
 } from './data/datasetAnnotations'
@@ -114,6 +120,10 @@ export type AnnotationGroupLoader = (
   baseUrl: string,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<readonly AnnotationGroupOption[]>
+export type AnalysisEmbeddingsLoader = (
+  baseUrl: string,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<readonly AnalysisEmbedding[]>
 export type RoiCellsLoader = (
   baseUrl: string,
   bbox: BBox,
@@ -212,6 +222,20 @@ type AnnotationGroupState =
       readonly error: StructuredLoadError
     }
 
+type AnalysisEmbeddingState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly embeddings: readonly AnalysisEmbedding[]
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
+
 type GeneExpressionState =
   | { readonly status: 'idle' }
   | { readonly status: 'waiting'; readonly message: string }
@@ -292,6 +316,7 @@ type LoadErrorSource =
   | 'Cell boundaries'
   | 'Gene panel'
   | 'Annotations'
+  | 'Embeddings'
   | 'ROI cells'
   | 'ROI genes'
   | 'ROI transcripts'
@@ -340,6 +365,7 @@ export interface AppProps {
   readonly loadGenePanel?: GenePanelLoader
   readonly loadAnnotations?: AnnotationLoader
   readonly loadAnnotationGroups?: AnnotationGroupLoader
+  readonly loadAnalysisEmbeddings?: AnalysisEmbeddingsLoader
   readonly loadRoiCells?: RoiCellsLoader
   readonly loadRoiGeneStats?: RoiGeneStatsLoader
   readonly loadRoiTranscripts?: RoiTranscriptsLoader
@@ -354,6 +380,7 @@ export function App({
   loadGenePanel = defaultLoadGenePanel,
   loadAnnotations = defaultLoadDatasetAnnotations,
   loadAnnotationGroups = defaultLoadDatasetAnnotationGroups,
+  loadAnalysisEmbeddings = defaultLoadAnalysisEmbeddings,
   loadRoiCells = defaultLoadDatasetRoiCells,
   loadRoiGeneStats = defaultLoadDatasetRoiGeneStats,
   loadRoiTranscripts = defaultLoadDatasetRoiTranscripts,
@@ -373,6 +400,7 @@ export function App({
   const geneExpressionDetailInputId = useId()
   const annotationImportInputId = useId()
   const annotationGroupInputId = useId()
+  const embeddingViewInputId = useId()
   const roiNameInputId = useId()
   const observationModeInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
@@ -393,12 +421,18 @@ export function App({
   const [annotationGroupState, setAnnotationGroupState] = useState<AnnotationGroupState>({
     status: 'idle',
   })
+  const [analysisEmbeddingState, setAnalysisEmbeddingState] =
+    useState<AnalysisEmbeddingState>({
+      status: 'idle',
+    })
   const [annotationColors, setAnnotationColors] = useState<
     Readonly<Record<string, string>>
   >({})
   const [selectedAnnotationGroupId, setSelectedAnnotationGroupId] = useState(
     ALL_ANNOTATION_GROUP_ID,
   )
+  const [selectedEmbeddingKind, setSelectedEmbeddingKind] =
+    useState<AnalysisEmbeddingKind>('umap')
   const [roiState, setRoiState] = useState<RoiState>({ status: 'idle' })
   const [roiGeneStatsState, setRoiGeneStatsState] = useState<RoiGeneStatsState>({
     status: 'idle',
@@ -443,11 +477,13 @@ export function App({
   const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
   const [viewportCellCount, setViewportCellCount] = useState<number | null>(null)
   const loadRequestId = useRef(0)
+  const analysisEmbeddingRequestId = useRef(0)
   const boundaryRequestId = useRef(0)
   const geneExpressionRequestId = useRef(0)
   const roiRequestId = useRef(0)
   const roiTranscriptExportRequestId = useRef(0)
   const datasetAbortRef = useRef<AbortController | null>(null)
+  const analysisEmbeddingAbortRef = useRef<AbortController | null>(null)
   const boundaryAbortRef = useRef<AbortController | null>(null)
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
   const roiAbortRef = useRef<AbortController | null>(null)
@@ -584,6 +620,36 @@ export function App({
   const annotationCopy = annotationStatusCopy(annotationState)
   const annotationGroupOptions =
     annotationGroupState.status === 'ready' ? annotationGroupState.groups : []
+  const overviewCellById = useMemo(() => {
+    const cellById = new Map<string, OverviewCellDatum>()
+
+    for (const cell of overviewCells) {
+      cellById.set(cell.id, cell)
+    }
+
+    return cellById
+  }, [overviewCells])
+  const activeEmbedding = useMemo(
+    () =>
+      analysisEmbeddingState.status === 'ready'
+        ? (analysisEmbeddingState.embeddings.find(
+            (embedding) => embedding.kind === selectedEmbeddingKind,
+          ) ??
+          analysisEmbeddingState.embeddings[0] ??
+          null)
+        : null,
+    [analysisEmbeddingState, selectedEmbeddingKind],
+  )
+  const roiCellIds = useMemo(
+    () => (roiState.status === 'ready' ? roiState.cells.map((cell) => cell.id) : []),
+    [roiState],
+  )
+  const embeddingCopy = analysisEmbeddingStatusCopy(
+    analysisEmbeddingState,
+    activeEmbedding,
+    roiCellIds,
+    selectedCell,
+  )
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const roiCopy = roiStatusCopy(roiState, roiMode)
   const roiGeneStatsCopy = roiGeneStatsStatusCopy(roiGeneStatsState)
@@ -601,6 +667,7 @@ export function App({
         genePanelState.status === 'error' ? genePanelState.error : null,
         annotationState.status === 'error' ? annotationState.error : null,
         annotationGroupState.status === 'error' ? annotationGroupState.error : null,
+        analysisEmbeddingState.status === 'error' ? analysisEmbeddingState.error : null,
         roiState.status === 'error' ? roiState.error : null,
         roiGeneStatsState.status === 'error' ? roiGeneStatsState.error : null,
         roiTranscriptExportState.status === 'error'
@@ -611,6 +678,7 @@ export function App({
     [
       annotationState,
       annotationGroupState,
+      analysisEmbeddingState,
       boundaryState,
       geneExpressionState,
       genePanelState,
@@ -855,6 +923,7 @@ export function App({
   useEffect(() => {
     return () => {
       abortActiveRequest(datasetAbortRef)
+      abortActiveRequest(analysisEmbeddingAbortRef)
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
@@ -873,6 +942,7 @@ export function App({
       const requestedUrl = datasetUrl.trim()
       const requestId = loadRequestId.current + 1
       abortActiveRequest(datasetAbortRef)
+      abortActiveRequest(analysisEmbeddingAbortRef)
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
@@ -897,6 +967,8 @@ export function App({
       setAnnotationColors({})
       setAnnotationGroupState({ status: 'loading', url: requestedUrl })
       setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
+      setAnalysisEmbeddingState({ status: 'idle' })
+      setSelectedEmbeddingKind('umap')
       setObservationColorMode('transcript-count')
       setGeneExpressionScoreMode(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
       setGeneExpressionDetailMode('auto')
@@ -917,6 +989,7 @@ export function App({
       setAnnotationState({ status: 'idle' })
       setGeneExpressionState({ status: 'idle' })
       boundaryRequestId.current += 1
+      analysisEmbeddingRequestId.current += 1
       geneExpressionRequestId.current += 1
       roiRequestId.current += 1
       roiTranscriptExportRequestId.current += 1
@@ -1176,6 +1249,63 @@ export function App({
           error: createStructuredLoadError('Annotations', error),
         })
       })
+  }
+
+  function handleLoadAnalysisEmbeddings() {
+    if (loadState.status !== 'ready' || analysisEmbeddingState.status === 'loading') {
+      return
+    }
+
+    const requestId = analysisEmbeddingRequestId.current + 1
+    abortActiveRequest(analysisEmbeddingAbortRef)
+    const abortController = new AbortController()
+    analysisEmbeddingRequestId.current = requestId
+    analysisEmbeddingAbortRef.current = abortController
+    setAnalysisEmbeddingState({ status: 'loading', url: loadState.url })
+
+    void loadAnalysisEmbeddings(loadState.url, { signal: abortController.signal })
+      .then((embeddings) => {
+        if (analysisEmbeddingRequestId.current !== requestId) {
+          return
+        }
+
+        setAnalysisEmbeddingState({
+          status: 'ready',
+          url: loadState.url,
+          embeddings,
+        })
+
+        if (
+          embeddings.length > 0 &&
+          !embeddings.some((embedding) => embedding.kind === selectedEmbeddingKind)
+        ) {
+          setSelectedEmbeddingKind(embeddings[0]?.kind ?? 'umap')
+        }
+      })
+      .catch((error) => {
+        if (isAbortError(error) || analysisEmbeddingRequestId.current !== requestId) {
+          return
+        }
+
+        setAnalysisEmbeddingState({
+          status: 'error',
+          url: loadState.url,
+          error: createStructuredLoadError('Embeddings', error),
+        })
+      })
+      .finally(() => {
+        if (analysisEmbeddingAbortRef.current === abortController) {
+          analysisEmbeddingAbortRef.current = null
+        }
+      })
+  }
+
+  function handleEmbeddingCellSelect(cellId: string) {
+    const cell = overviewCellById.get(cellId)
+
+    if (cell !== undefined) {
+      setSelectedCell(cell)
+    }
   }
 
   async function handleImportAnnotations(file: File | null) {
@@ -1915,19 +2045,24 @@ export function App({
 
                 return (
                   <li key={annotation.id}>
-                    <input
-                      className="annotation-color"
-                      type="color"
-                      aria-label={`${annotation.label} color`}
-                      value={annotationColor}
+                    <label
+                      className="annotation-color-picker"
                       style={{ '--annotation-color': annotationColor } as CSSProperties}
-                      onChange={(event) => {
-                        handleAnnotationColorChange(
-                          annotation.id,
-                          event.currentTarget.value,
-                        )
-                      }}
-                    />
+                    >
+                      <input
+                        className="annotation-color-input"
+                        type="color"
+                        aria-label={`${annotation.label} color`}
+                        value={annotationColor}
+                        onChange={(event) => {
+                          handleAnnotationColorChange(
+                            annotation.id,
+                            event.currentTarget.value,
+                          )
+                        }}
+                      />
+                      <span className="annotation-color-swatch" aria-hidden="true" />
+                    </label>
                     <span>{annotation.label}</span>
                     <small>{annotation.cellIds.length.toLocaleString()}</small>
                     <button
@@ -1945,6 +2080,62 @@ export function App({
               })}
             </ul>
           ) : null}
+        </section>
+
+        <section className="analysis-section" aria-labelledby="embedding-heading">
+          <div className="section-heading-row">
+            <h2 id="embedding-heading">UMAP/tSNE</h2>
+            <span>{embeddingCopy}</span>
+          </div>
+          <div className="embedding-controls">
+            <label htmlFor={embeddingViewInputId}>Embedding view</label>
+            <select
+              id={embeddingViewInputId}
+              value={activeEmbedding?.kind ?? selectedEmbeddingKind}
+              disabled={
+                analysisEmbeddingState.status !== 'ready' ||
+                analysisEmbeddingState.embeddings.length === 0
+              }
+              onChange={(event) => {
+                setSelectedEmbeddingKind(
+                  event.currentTarget.value as AnalysisEmbeddingKind,
+                )
+              }}
+            >
+              {analysisEmbeddingState.status === 'ready' &&
+              analysisEmbeddingState.embeddings.length > 0 ? (
+                analysisEmbeddingState.embeddings.map((embedding) => (
+                  <option key={embedding.kind} value={embedding.kind}>
+                    {embedding.label}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="umap">UMAP</option>
+                  <option value="tsne">t-SNE</option>
+                </>
+              )}
+            </select>
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={
+                loadState.status !== 'ready' ||
+                analysisEmbeddingState.status === 'loading'
+              }
+              onClick={handleLoadAnalysisEmbeddings}
+            >
+              {analysisEmbeddingState.status === 'loading'
+                ? 'Loading...'
+                : 'Load Embeddings'}
+            </button>
+          </div>
+          <EmbeddingPanel
+            embedding={activeEmbedding}
+            roiCellIds={roiCellIds}
+            selectedCellId={selectedCell?.id ?? null}
+            onSelectCell={handleEmbeddingCellSelect}
+          />
         </section>
 
         <section className="analysis-section" aria-labelledby="roi-heading">
@@ -2181,6 +2372,35 @@ function annotationStatusCopy(annotationState: AnnotationState): string {
   }
 
   if (annotationState.status === 'error') {
+    return 'Unavailable'
+  }
+
+  return 'Idle'
+}
+
+function analysisEmbeddingStatusCopy(
+  state: AnalysisEmbeddingState,
+  activeEmbedding: AnalysisEmbedding | null,
+  roiCellIds: readonly string[],
+  selectedCell: OverviewCellDatum | null,
+): string {
+  if (state.status === 'loading') {
+    return 'Loading'
+  }
+
+  if (state.status === 'ready') {
+    if (activeEmbedding === null) {
+      return 'No projection'
+    }
+
+    const linkedCount = roiCellIds.length + (selectedCell === null ? 0 : 1)
+
+    return linkedCount === 0
+      ? `${activeEmbedding.label}: ${activeEmbedding.points.length.toLocaleString()} cells`
+      : `${activeEmbedding.label}: ${linkedCount.toLocaleString()} linked`
+  }
+
+  if (state.status === 'error') {
     return 'Unavailable'
   }
 
@@ -2486,6 +2706,314 @@ function defaultGeneSetName(genes: readonly string[]): string {
   }
 
   return `${genes.slice(0, 3).join(', ')} +${genes.length - 3}`
+}
+
+const EMBEDDING_RENDER_POINT_LIMIT = 120_000
+const EMBEDDING_PLOT_FALLBACK_WIDTH = 320
+const EMBEDDING_PLOT_FALLBACK_HEIGHT = 190
+const EMBEDDING_PLOT_PADDING = 12
+
+interface EmbeddingBounds {
+  readonly minX: number
+  readonly maxX: number
+  readonly minY: number
+  readonly maxY: number
+}
+
+function EmbeddingPanel({
+  embedding,
+  roiCellIds,
+  selectedCellId,
+  onSelectCell,
+}: {
+  readonly embedding: AnalysisEmbedding | null
+  readonly roiCellIds: readonly string[]
+  readonly selectedCellId: string | null
+  readonly onSelectCell: (cellId: string) => void
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const sampledPoints = useMemo(
+    () =>
+      embedding === null
+        ? []
+        : sampleEmbeddingPoints(embedding.points, EMBEDDING_RENDER_POINT_LIMIT),
+    [embedding],
+  )
+  const bounds = useMemo(
+    () => (embedding === null ? null : embeddingBounds(embedding.points)),
+    [embedding],
+  )
+  const pointByCellId = useMemo(
+    () =>
+      embedding === null
+        ? new Map<string, AnalysisEmbeddingPoint>()
+        : mapEmbeddingPoints(embedding.points),
+    [embedding],
+  )
+  const roiPoints = useMemo(
+    () =>
+      roiCellIds.flatMap((cellId) => {
+        const point = pointByCellId.get(cellId)
+
+        return point === undefined ? [] : [point]
+      }),
+    [pointByCellId, roiCellIds],
+  )
+  const selectedPoint =
+    selectedCellId === null ? undefined : pointByCellId.get(selectedCellId)
+
+  useEffect(() => {
+    if (embedding === null || bounds === null) {
+      return
+    }
+
+    const canvas = canvasRef.current
+
+    if (canvas === null) {
+      return
+    }
+
+    const context = canvas.getContext('2d')
+
+    if (context === null) {
+      return
+    }
+
+    const rect = canvas.getBoundingClientRect()
+    const width = Math.max(
+      1,
+      Math.round(rect.width || canvas.clientWidth || EMBEDDING_PLOT_FALLBACK_WIDTH),
+    )
+    const height = Math.max(
+      1,
+      Math.round(rect.height || canvas.clientHeight || EMBEDDING_PLOT_FALLBACK_HEIGHT),
+    )
+    const pixelRatio = Math.max(1, window.devicePixelRatio || 1)
+
+    canvas.width = Math.round(width * pixelRatio)
+    canvas.height = Math.round(height * pixelRatio)
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+    drawEmbeddingPlot(context, width, height, bounds, {
+      basePoints: sampledPoints,
+      roiPoints,
+      selectedPoint,
+    })
+  }, [bounds, embedding, roiPoints, sampledPoints, selectedPoint])
+
+  const handlePointerDown = useCallback(
+    (event: PointerEvent<HTMLCanvasElement>) => {
+      if (embedding === null || bounds === null) {
+        return
+      }
+
+      const canvas = canvasRef.current
+
+      if (canvas === null) {
+        return
+      }
+
+      const rect = canvas.getBoundingClientRect()
+      const width = rect.width || canvas.clientWidth || EMBEDDING_PLOT_FALLBACK_WIDTH
+      const height = rect.height || canvas.clientHeight || EMBEDDING_PLOT_FALLBACK_HEIGHT
+      const point = nearestEmbeddingPoint(
+        embedding.points,
+        bounds,
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+        width,
+        height,
+      )
+
+      if (point !== null) {
+        onSelectCell(point.id)
+      }
+    },
+    [bounds, embedding, onSelectCell],
+  )
+
+  if (embedding === null) {
+    return <p className="embedding-empty">No embedding loaded</p>
+  }
+
+  return (
+    <div className="embedding-panel">
+      <div className="embedding-plot-shell">
+        <canvas
+          ref={canvasRef}
+          className="embedding-plot"
+          role="img"
+          aria-label={`${embedding.label} embedding, ${embedding.points.length.toLocaleString()} cells`}
+          onPointerDown={handlePointerDown}
+        />
+      </div>
+      <dl className="embedding-summary" aria-label="Embedding link summary">
+        <div>
+          <dt>Cells</dt>
+          <dd>{embedding.points.length.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Shown</dt>
+          <dd>{sampledPoints.length.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>ROI</dt>
+          <dd>{roiPoints.length.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Selected</dt>
+          <dd>{selectedPoint === undefined ? '0' : '1'}</dd>
+        </div>
+      </dl>
+    </div>
+  )
+}
+
+function sampleEmbeddingPoints(
+  points: readonly AnalysisEmbeddingPoint[],
+  limit: number,
+): readonly AnalysisEmbeddingPoint[] {
+  if (points.length <= limit) {
+    return points
+  }
+
+  const sampledPoints: AnalysisEmbeddingPoint[] = []
+  const step = points.length / limit
+
+  for (let index = 0; index < limit; index += 1) {
+    const point = points[Math.floor((index + 0.5) * step)]
+
+    if (point !== undefined) {
+      sampledPoints.push(point)
+    }
+  }
+
+  return sampledPoints
+}
+
+function mapEmbeddingPoints(
+  points: readonly AnalysisEmbeddingPoint[],
+): ReadonlyMap<string, AnalysisEmbeddingPoint> {
+  const pointByCellId = new Map<string, AnalysisEmbeddingPoint>()
+
+  for (const point of points) {
+    pointByCellId.set(point.id, point)
+  }
+
+  return pointByCellId
+}
+
+function embeddingBounds(points: readonly AnalysisEmbeddingPoint[]): EmbeddingBounds {
+  if (points.length === 0) {
+    return { minX: 0, maxX: 1, minY: 0, maxY: 1 }
+  }
+
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const point of points) {
+    minX = Math.min(minX, point.x)
+    maxX = Math.max(maxX, point.x)
+    minY = Math.min(minY, point.y)
+    maxY = Math.max(maxY, point.y)
+  }
+
+  if (minX === maxX) {
+    minX -= 0.5
+    maxX += 0.5
+  }
+
+  if (minY === maxY) {
+    minY -= 0.5
+    maxY += 0.5
+  }
+
+  return { minX, maxX, minY, maxY }
+}
+
+function drawEmbeddingPlot(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  bounds: EmbeddingBounds,
+  layers: {
+    readonly basePoints: readonly AnalysisEmbeddingPoint[]
+    readonly roiPoints: readonly AnalysisEmbeddingPoint[]
+    readonly selectedPoint: AnalysisEmbeddingPoint | undefined
+  },
+) {
+  context.clearRect(0, 0, width, height)
+  context.fillStyle = '#171511'
+  context.fillRect(0, 0, width, height)
+
+  context.fillStyle = 'rgba(246, 242, 232, 0.28)'
+  for (const point of layers.basePoints) {
+    const [x, y] = embeddingPointToScreen(point, bounds, width, height)
+    context.fillRect(x, y, 1.2, 1.2)
+  }
+
+  context.fillStyle = 'rgba(240, 200, 75, 0.92)'
+  for (const point of layers.roiPoints) {
+    const [x, y] = embeddingPointToScreen(point, bounds, width, height)
+    context.beginPath()
+    context.arc(x, y, 2.4, 0, Math.PI * 2)
+    context.fill()
+  }
+
+  if (layers.selectedPoint !== undefined) {
+    const [x, y] = embeddingPointToScreen(layers.selectedPoint, bounds, width, height)
+    context.beginPath()
+    context.arc(x, y, 4.4, 0, Math.PI * 2)
+    context.fillStyle = 'rgba(215, 63, 124, 0.98)'
+    context.fill()
+    context.lineWidth = 1.5
+    context.strokeStyle = 'rgba(255, 253, 247, 0.92)'
+    context.stroke()
+  }
+}
+
+function nearestEmbeddingPoint(
+  points: readonly AnalysisEmbeddingPoint[],
+  bounds: EmbeddingBounds,
+  screenX: number,
+  screenY: number,
+  width: number,
+  height: number,
+): AnalysisEmbeddingPoint | null {
+  let nearestPoint: AnalysisEmbeddingPoint | null = null
+  let nearestDistanceSquared = 9 * 9
+
+  for (const point of points) {
+    const [x, y] = embeddingPointToScreen(point, bounds, width, height)
+    const dx = x - screenX
+    const dy = y - screenY
+    const distanceSquared = dx * dx + dy * dy
+
+    if (distanceSquared < nearestDistanceSquared) {
+      nearestDistanceSquared = distanceSquared
+      nearestPoint = point
+    }
+  }
+
+  return nearestPoint
+}
+
+function embeddingPointToScreen(
+  point: AnalysisEmbeddingPoint,
+  bounds: EmbeddingBounds,
+  width: number,
+  height: number,
+): readonly [number, number] {
+  const plotWidth = Math.max(1, width - EMBEDDING_PLOT_PADDING * 2)
+  const plotHeight = Math.max(1, height - EMBEDDING_PLOT_PADDING * 2)
+  const xRatio = (point.x - bounds.minX) / Math.max(1e-9, bounds.maxX - bounds.minX)
+  const yRatio = (point.y - bounds.minY) / Math.max(1e-9, bounds.maxY - bounds.minY)
+
+  return [
+    EMBEDDING_PLOT_PADDING + xRatio * plotWidth,
+    EMBEDDING_PLOT_PADDING + (1 - yRatio) * plotHeight,
+  ]
 }
 
 function CellInfoPanel({ cell }: { readonly cell: OverviewCellDatum | null }) {

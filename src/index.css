@@ -443,29 +443,40 @@ h2 {
   color: #2f2b22;
 }
 
-.annotation-color {
+.annotation-color-picker {
+  position: relative;
+  display: block;
   width: 24px;
   height: 22px;
   min-width: 24px;
-  padding: 0;
-  border: 1px solid rgba(23, 21, 17, 0.2);
-  border-radius: 4px;
-  background: var(--annotation-color, #fffdf7);
   cursor: pointer;
 }
 
-.annotation-color::-webkit-color-swatch-wrapper {
-  padding: 2px;
+.annotation-color-input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
-.annotation-color::-webkit-color-swatch {
-  border: 0;
-  border-radius: 2px;
+.annotation-color-swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(23, 21, 17, 0.28);
+  border-radius: 4px;
+  background: var(--annotation-color, #fffdf7);
+  box-shadow: inset 0 0 0 2px rgba(255, 253, 247, 0.82);
 }
 
-.annotation-color::-moz-color-swatch {
-  border: 0;
-  border-radius: 2px;
+.annotation-color-input:focus-visible + .annotation-color-swatch {
+  outline: 2px solid #d73f7c;
+  outline-offset: 2px;
 }
 
 .annotation-list span {
@@ -699,10 +710,78 @@ h2 {
 }
 
 .analysis-status,
-.cell-info-empty {
+.cell-info-empty,
+.embedding-empty {
   margin: 0;
   color: #7b4d1d;
   overflow-wrap: anywhere;
+}
+
+.embedding-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: end;
+}
+
+.embedding-controls label {
+  grid-column: 1 / -1;
+}
+
+.embedding-panel {
+  display: grid;
+  gap: 7px;
+}
+
+.embedding-plot-shell {
+  overflow: hidden;
+  border: 1px solid rgba(23, 21, 17, 0.28);
+  border-radius: 6px;
+  background: #171511;
+}
+
+.embedding-plot {
+  display: block;
+  width: 100%;
+  height: 190px;
+  cursor: crosshair;
+}
+
+.embedding-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin: 0;
+}
+
+.embedding-summary div {
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid rgba(23, 21, 17, 0.12);
+  border-radius: 5px;
+  background: rgba(255, 253, 247, 0.7);
+}
+
+.embedding-summary dt,
+.embedding-summary dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.embedding-summary dt {
+  color: #7b4d1d;
+  font-size: 0.58rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.embedding-summary dd {
+  color: #174d3e;
+  font-size: 0.72rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .error-summary {

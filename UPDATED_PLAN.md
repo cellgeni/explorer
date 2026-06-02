@@ -64,7 +64,7 @@ done. This file records execution-level additions requested after work began.
       size while keeping zoom-aware grouping for dense views.
 - [x] True cell segmentation can now render as deck.gl polygons. The viewer
       debounces viewport changes and loads `cell_boundaries.parquet` only when
-      the viewport is close enough or has no more than 500 visible overview
+      the viewport is close enough or has no more than 5,000 visible overview
       cells.
 - [x] Boundary loading uses the `SpatialDataset.elements(bbox)` range-read path
       and dynamically imports DuckDB only after the polygon threshold is met.
@@ -78,7 +78,7 @@ done. This file records execution-level additions requested after work began.
       close zooms do not push off-screen cells through deck.gl.
 - [x] Cell boundaries now load only when the visible overview-cell count is below
       the configured threshold. The UI exposes `Boundary limit`, defaulting to
-      500 cells, so the cutoff can be tuned without code changes.
+      5,000 cells, so the cutoff can be tuned without code changes.
 - [x] Boundary polygon queries now order vertices by DuckDB's `file_row_number`
       and use a minimum 150 µm fetch margin around the viewport. This fixes
       misordered or viewport-clipped rings being stitched into long triangle
@@ -87,10 +87,9 @@ done. This file records execution-level additions requested after work began.
 - [x] Live smoke check on `http://127.0.0.1:5173/` loaded all 1,414,155 demo
       centroids by default in roughly 5 seconds with no morphology or boundary
       network requests at the top overview.
-- [x] Added an intermediate hexagon boundary layer for up to 6x the configured
-      true-boundary limit. With the default 500-cell true-boundary limit, the
-      viewer renders six-point centroid/area hexagons for up to 3,000
-      visible cells, then switches to true segmentation below 500 visible cells.
+- [x] Removed the intermediate generated-hexagon boundary layer. The viewer now
+      shows only loaded true cell-boundary polygons; cells without visible true
+      boundaries remain represented by centroid points.
 - [x] Full boundary loading now expands the candidate centroid window by 75
       micrometers and keeps a minimum 150 micrometer vertex fetch margin around
       the viewport. This keeps partially visible edge cells from disappearing
@@ -105,9 +104,9 @@ done. This file records execution-level additions requested after work began.
       It would not reduce network or DuckDB work because the app would still have
       to fetch the full boundary vertices first. Revisit this only if a separate
       precomputed simplified-boundary parquet/geometry pyramid is added.
-- [x] The intermediate hexagon-boundary mode is not a simplified true boundary. It
-      is generated locally from centroids and `cell_area`, so it adds no
-      boundary-Parquet I/O and remains cheap enough for roughly 3,000 cells.
+- [x] The intermediate hexagon-boundary mode was removed. Do not use
+      centroid-generated pseudo-boundaries as a substitute for true segmentation
+      geometry.
 
 ## Phase 2 Running TODO
 
@@ -239,9 +238,10 @@ unless the phase order is explicitly changed.
       highlighting. The H5 feature-matrix backend remains a later Phase 4 task.
 - [x] Expression loading is viewport-scoped and capped at 5,000 visible cells for
       now to avoid whole-slide feature-matrix work on million-cell datasets.
-- [x] Added compact image-layer and gene-expression-layer opacity controls to the
-      layer stack. The image slider controls the morphology canvas opacity; the
-      gene slider controls the deck.gl gene-expression overlay opacity.
+- [x] Added compact image-layer and cell-layer opacity controls to the layer
+      stack. The image slider controls the morphology canvas opacity; the gene
+      opacity slider now controls deck.gl cell opacity in general, including
+      overview points, true boundaries, and gene-expression overlays.
 - [x] Added selectable gene-expression color scales. Switching scales restyles
       the current expression overlay from loaded per-cell counts without
       refetching the expression matrix.
@@ -256,7 +256,7 @@ unless the phase order is explicitly changed.
 - [x] Annotation import from `analysis.zarr.zip`, CSV, and JSON.
 - [ ] ROI annotations: draw polygon/box/lasso; compute summary stats; export
       selected cells/transcripts.
-- [ ] UMAP/tSNE panel linked to spatial selection.
+- [x] UMAP/tSNE panel linked to spatial selection.
 - [ ] HDF5 path for `cell_feature_matrix.h5` with `h5wasm` and `jsfive`
       fallback.
 
@@ -309,11 +309,10 @@ unless the phase order is explicitly changed.
       buttons, and a clear-all action. The static layer bullet list was removed
       from the sidebar, and the `Cell color` control now offers an `Annotations`
       mode when labels are loaded.
-- [x] Gene expression now paints polygon geometry when possible. At intermediate
-      zooms the expression overlay fills centroid hexagons; when true boundary
-      polygons are visible and IDs match the expression batch, expression fills
-      those polygons. Point-based expression remains the fallback when no
-      suitable polygon geometry is available.
+- [x] Gene expression now paints polygon geometry when possible. When true
+      boundary polygons are visible and IDs match the expression batch,
+      expression fills those polygons. Point-based expression remains the
+      fallback when no suitable true polygon geometry is available.
 - [x] Morphology channel auto-thresholding now runs automatically when an image
       load completes. The manual `Auto` buttons still use the same per-channel
       percentile/histogram path for later retuning.
@@ -341,8 +340,8 @@ unless the phase order is explicitly changed.
       sidebar at "Genes unavailable".
 - [x] Fixed annotation color rendering. Overview loads now keep true cell IDs,
       successful annotation imports/loads switch directly to annotation coloring,
-      and visible hex/true boundary geometry inherits the matching cell color
-      instead of staying on the default boundary palette.
+      and visible true boundary geometry inherits the matching cell color instead
+      of staying on the default boundary palette.
 - [x] Disabled CPU-side overview point aggregation in the live viewer. The
       primary cell layer now renders all viewport-clipped centroids directly as
       points, which avoids rebuilding binned annotation-color averages during
@@ -357,3 +356,7 @@ unless the phase order is explicitly changed.
       action that Range-checks `transcripts.parquet`, queries QV-filtered raw
       transcript rows inside the selected ROI bbox, and downloads a CSV with
       cell id, feature name, x/y/z location, QV, nucleus overlap, and gene flag.
+- [x] Added a compact UMAP/tSNE embedding panel. It loads standard secondary
+      analysis projection CSVs when available, samples large projections for
+      canvas rendering, highlights the active spatial ROI and selected cell, and
+      lets an embedding point click reuse the existing cell info selection.

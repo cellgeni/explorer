@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   App,
+  type AnalysisEmbeddingsLoader,
   type AnnotationGroupLoader,
   type AnnotationLoader,
   type GeneExpressionLoader,
@@ -69,6 +70,9 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Annotation set' })).toHaveValue('all')
     expect(screen.getByRole('combobox', { name: 'Annotation set' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Load Annotations' })).toBeDisabled()
+    expect(screen.getByRole('heading', { name: 'UMAP/tSNE' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Embedding view' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Load Embeddings' })).toBeDisabled()
     expect(screen.getByRole('heading', { name: 'ROI' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
     expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
@@ -113,6 +117,108 @@ describe('App', () => {
     fireEvent.change(geneScaleInput, { target: { value: 'viridis' } })
 
     expect(geneScaleInput).toHaveValue('viridis')
+  })
+
+  it('loads an embedding panel linked to ROI cells', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(0), y: micrometers(0) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+      {
+        cellId: intToCellId(1, 2),
+        position: { x: micrometers(10), y: micrometers(10) },
+        transcriptCount: 12,
+        cellArea: 30,
+      },
+    ])
+    const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
+      vi.fn(async () => [
+        {
+          kind: 'umap',
+          label: 'UMAP',
+          sourcePath: 'analysis/umap/gene_expression_2_components/projection.csv',
+          points: [
+            { id: cellId, x: 0, y: 0 },
+            { id: intToCellId(1, 2), x: 1, y: 1 },
+          ],
+        },
+      ])
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [
+      {
+        id: cellId,
+        position: { x: micrometers(0), y: micrometers(0) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      async () => ({
+        genes: [],
+        cellCount: 1,
+        sampledCellCount: 1,
+        totalCount: 0,
+        hitCellLimit: false,
+      }),
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadAnalysisEmbeddings={loadAnalysisEmbeddings}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByText(/Loaded 2 overview cells/)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Load Embeddings' }))
+
+      expect(await screen.findByText('UMAP: 2 cells')).toBeInTheDocument()
+      expect(screen.getByLabelText('UMAP embedding, 2 cells')).toBeInTheDocument()
+
+      const roiLayer = document.querySelector('.roi-draw-layer')
+
+      if (!(roiLayer instanceof HTMLElement)) {
+        throw new Error('Expected ROI draw layer.')
+      }
+
+      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+      fireEvent.pointerDown(roiLayer, { clientX: 480, clientY: 480, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+
+      const embeddingSummary = await screen.findByLabelText('Embedding link summary')
+      expect(embeddingSummary).toHaveTextContent('ROI')
+      expect(embeddingSummary).toHaveTextContent('1')
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
   })
 
   it('loads exact expression for the current region when requested', async () => {
@@ -633,12 +739,18 @@ describe('App', () => {
     expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
 
     const colorInput = screen.getByLabelText('kmeans 3: Cluster 1 color')
+    const colorPicker = colorInput.closest('.annotation-color-picker')
+
+    if (!(colorPicker instanceof HTMLElement)) {
+      throw new Error('Expected annotation color picker wrapper.')
+    }
+
     expect(colorInput).toHaveValue('#1f77b4')
-    expect(colorInput).toHaveStyle('--annotation-color: #1f77b4')
+    expect(colorPicker).toHaveStyle('--annotation-color: #1f77b4')
 
     fireEvent.change(colorInput, { target: { value: '#d62728' } })
     expect(colorInput).toHaveValue('#d62728')
-    expect(colorInput).toHaveStyle('--annotation-color: #d62728')
+    expect(colorPicker).toHaveStyle('--annotation-color: #d62728')
 
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'annotations',
