@@ -286,3 +286,8 @@ unless the phase order is explicitly changed.
 - [x] Saved gene sets can now be removed from the Analysis panel, and the
       desktop control rail scrolls independently so an expanded sidebar cannot
       push the Spatial View below the viewport.
+- [x] Added an `Expression detail` control. `Auto LOD` keeps the existing
+      exact/sampled behavior, while `Exact region` uses the current viewport as
+      the active region and loads exact selected-gene counts for up to 50,000
+      visible cells. Larger regions enter a waiting state instead of silently
+      falling back to sampled data.

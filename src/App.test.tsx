@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { App } from './App'
+import { App, type GeneExpressionLoader } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
@@ -37,6 +37,9 @@ describe('App', () => {
     expect(screen.getByLabelText('Gene set symbols')).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'Signature score' })).toHaveValue('sum')
     expect(screen.getByRole('combobox', { name: 'Gene scale' })).toHaveValue('gold')
+    expect(screen.getByRole('combobox', { name: 'Expression detail' })).toHaveValue(
+      'auto',
+    )
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
@@ -82,6 +85,84 @@ describe('App', () => {
     fireEvent.change(geneScaleInput, { target: { value: 'viridis' } })
 
     expect(geneScaleInput).toHaveValue('viridis')
+  })
+
+  it('loads exact expression for the current region when requested', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const overviewCells = Array.from({ length: 6000 }, (_value, index) => ({
+      cellId: intToCellId(1, index + 1),
+      position: {
+        x: micrometers(index % 100),
+        y: micrometers(Math.floor(index / 100)),
+      },
+      transcriptCount: 8,
+      cellArea: 22,
+    }))
+    const loadDatasetOverview = vi.fn(async () => overviewCells)
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadGeneExpression: ReturnType<typeof vi.fn<GeneExpressionLoader>> = vi.fn(
+      async () => ({
+        cells: [],
+        genes: ['Actb'],
+        maxCount: 0,
+      }),
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadGeneExpression={loadGeneExpression}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByText('1 genes')).toBeInTheDocument()
+      fireEvent.change(screen.getByRole('combobox', { name: 'Expression detail' }), {
+        target: { value: 'exact-region' },
+      })
+      fireEvent.change(screen.getByLabelText('Gene selection'), {
+        target: { value: 'Actb' },
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
+
+      await waitFor(() => {
+        expect(loadGeneExpression).toHaveBeenCalled()
+      })
+
+      const lastCall = loadGeneExpression.mock.calls.at(-1)
+      expect(lastCall?.[2]).toEqual(['Actb'])
+      expect(lastCall?.[3]).toEqual(
+        expect.objectContaining({
+          limit: 6000,
+          sampleStride: 1,
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+      expect(
+        await screen.findByText('Expression exact region: 0 cells'),
+      ).toBeInTheDocument()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
   })
 
   it('loads overview cells without morphology image by default', async () => {

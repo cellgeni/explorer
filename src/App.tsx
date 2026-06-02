@@ -49,6 +49,7 @@ import type { ViewerViewportDetail } from './components/ViewerCore'
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 const GENE_EXPRESSION_EXACT_CELL_LIMIT = 5_000
 const GENE_EXPRESSION_SAMPLE_CELL_LIMIT = 5_000
+const GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT = 50_000
 const GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO = 0.2
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
@@ -171,7 +172,8 @@ type LoadErrorSource =
   | 'Gene panel'
   | 'Gene expression'
 
-type GeneExpressionLoadMode = 'exact' | 'sampled'
+type GeneExpressionLoadMode = 'exact' | 'sampled' | 'exact-region'
+type GeneExpressionDetailMode = 'auto' | 'exact-region'
 
 interface StructuredLoadError {
   readonly source: LoadErrorSource
@@ -225,6 +227,7 @@ export function App({
   const geneSetNameInputId = useId()
   const geneSetScoreInputId = useId()
   const geneScaleInputId = useId()
+  const geneExpressionDetailInputId = useId()
   const observationModeInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
@@ -263,6 +266,8 @@ export function App({
     useState<GeneExpressionColorScale>(DEFAULT_GENE_EXPRESSION_COLOR_SCALE)
   const [geneExpressionScoreMode, setGeneExpressionScoreMode] =
     useState<GeneExpressionScoreMode>(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
+  const [geneExpressionDetailMode, setGeneExpressionDetailMode] =
+    useState<GeneExpressionDetailMode>('auto')
   const [savedGeneSets, setSavedGeneSets] = useState<readonly SavedGeneSet[]>([])
   const [selectedGenes, setSelectedGenes] = useState<readonly string[]>([])
   const [observationColorMode, setObservationColorMode] =
@@ -443,12 +448,44 @@ export function App({
         return
       }
 
+      if (
+        geneExpressionDetailMode === 'exact-region' &&
+        detail.visibleCellCount > GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT
+      ) {
+        const waitingKey = expressionWaitingKey(
+          loadState.url,
+          detail,
+          selectedGenes,
+          geneExpressionDetailMode,
+        )
+
+        if (waitingKey === geneExpressionViewportKeyRef.current) {
+          return
+        }
+
+        abortActiveRequest(geneExpressionAbortRef)
+        geneExpressionRequestId.current += 1
+        geneExpressionViewportKeyRef.current = waitingKey
+        setGeneExpressionBatch(null)
+        setGeneExpressionState({
+          status: 'waiting',
+          message: `Exact region needs ${GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT.toLocaleString()} or fewer visible cells`,
+        })
+        return
+      }
+
       const expressionMode: GeneExpressionLoadMode =
-        detail.visibleCellCount <= GENE_EXPRESSION_EXACT_CELL_LIMIT ? 'exact' : 'sampled'
+        geneExpressionDetailMode === 'exact-region'
+          ? 'exact-region'
+          : detail.visibleCellCount <= GENE_EXPRESSION_EXACT_CELL_LIMIT
+            ? 'exact'
+            : 'sampled'
       const expressionCellLimit =
-        expressionMode === 'exact'
-          ? GENE_EXPRESSION_EXACT_CELL_LIMIT
-          : GENE_EXPRESSION_SAMPLE_CELL_LIMIT
+        expressionMode === 'sampled'
+          ? GENE_EXPRESSION_SAMPLE_CELL_LIMIT
+          : expressionMode === 'exact-region'
+            ? Math.max(1, detail.visibleCellCount)
+            : GENE_EXPRESSION_EXACT_CELL_LIMIT
       const expressionSampleStride =
         expressionMode === 'sampled'
           ? Math.max(1, Math.ceil(detail.visibleCellCount / expressionCellLimit))
@@ -529,6 +566,7 @@ export function App({
       loadBoundaryElements,
       loadGeneExpression,
       loadState,
+      geneExpressionDetailMode,
       selectedGenes,
     ],
   )
@@ -578,6 +616,7 @@ export function App({
       setGeneSetName('')
       setSavedGeneSets([])
       setGeneExpressionScoreMode(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
+      setGeneExpressionDetailMode('auto')
       setSelectedGenes([])
       setSelectedCell(null)
       setLoadState({ status: 'loading', url: requestedUrl })
@@ -1086,6 +1125,22 @@ export function App({
             />
           </div>
 
+          <label htmlFor={geneExpressionDetailInputId}>Expression detail</label>
+          <select
+            id={geneExpressionDetailInputId}
+            value={geneExpressionDetailMode}
+            onChange={(event) => {
+              const nextMode = event.currentTarget.value
+
+              if (isGeneExpressionDetailMode(nextMode)) {
+                setGeneExpressionDetailMode(nextMode)
+              }
+            }}
+          >
+            <option value="auto">Auto LOD</option>
+            <option value="exact-region">Exact region</option>
+          </select>
+
           <label htmlFor={observationModeInputId}>Cell color</label>
           <select
             id={observationModeInputId}
@@ -1207,6 +1262,10 @@ function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): str
   if (geneExpressionState.status === 'ready') {
     const noun = geneExpressionState.cellCount === 1 ? 'cell' : 'cells'
 
+    if (geneExpressionState.mode === 'exact-region') {
+      return `Expression exact region: ${geneExpressionState.cellCount.toLocaleString()} ${noun}`
+    }
+
     if (
       geneExpressionState.mode === 'sampled' &&
       geneExpressionState.visibleCellCount > geneExpressionState.cellCount
@@ -1231,7 +1290,19 @@ function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): str
 }
 
 function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
-  return mode === 'sampled' ? 'Expression sample' : 'Expression'
+  if (mode === 'sampled') {
+    return 'Expression sample'
+  }
+
+  if (mode === 'exact-region') {
+    return 'Expression exact region'
+  }
+
+  return 'Expression'
+}
+
+function isGeneExpressionDetailMode(value: string): value is GeneExpressionDetailMode {
+  return value === 'auto' || value === 'exact-region'
 }
 
 function expressionViewportKey(
@@ -1264,6 +1335,26 @@ function expressionViewportKey(
     options.cellLimit,
     options.sampleStride,
     options.genes.join('|'),
+  ].join(':')
+}
+
+function expressionWaitingKey(
+  baseUrl: string,
+  detail: ViewerViewportDetail,
+  genes: readonly string[],
+  detailMode: GeneExpressionDetailMode,
+): string {
+  const [targetX = 0, targetY = 0] = detail.viewState.target
+
+  return [
+    baseUrl.replace(/\/+$/, ''),
+    'waiting',
+    detailMode,
+    Math.round(targetX / 500) * 500,
+    Math.round(targetY / 500) * 500,
+    Math.round(detail.viewState.zoom * 100) / 100,
+    detail.visibleCellCount,
+    genes.join('|'),
   ].join(':')
 }
 
