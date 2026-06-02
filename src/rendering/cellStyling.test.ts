@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { intToCellId } from '../data/cellid'
-import { styleOverviewCellsByObservation } from './cellStyling'
+import {
+  createAnnotationColorLookup,
+  styleOverviewCellsByObservation,
+} from './cellStyling'
 import type { OverviewCellDatum } from './deckLayers'
 
 const cellA = intToCellId(1, 1)
@@ -51,5 +54,19 @@ describe('cell observation styling', () => {
 
     expect(styled[0]?.fillColor).toEqual([72, 68, 58, 44])
     expect(styled[1]?.fillColor).toEqual([31, 119, 180, 230])
+  })
+
+  it('creates a cell-id color lookup for annotation rendering', () => {
+    const lookup = createAnnotationColorLookup([
+      {
+        id: 'annotation-1',
+        cellIds: [cellB],
+        color: '#1f77b4',
+      },
+    ])
+
+    expect(lookup?.fallbackColor).toEqual([72, 68, 58, 44])
+    expect(lookup?.colorByCellId.get(cellA)).toBeUndefined()
+    expect(lookup?.colorByCellId.get(cellB)).toEqual([31, 119, 180, 230])
   })
 })

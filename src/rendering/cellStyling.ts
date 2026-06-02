@@ -1,6 +1,7 @@
 import type { Color } from '@deck.gl/core'
 import type { CellId } from '../data/cellid'
 import type { OverviewCellDatum } from './deckLayers'
+import type { CellColorLookup } from './deckLayers'
 
 export type ObservationColorMode = 'transcript-count' | 'cell-area' | 'annotations'
 
@@ -13,6 +14,8 @@ export interface AnnotationColorStyle {
 export interface ObservationStyleOptions {
   readonly annotations?: readonly AnnotationColorStyle[]
 }
+
+const UNANNOTATED_CELL_COLOR: Color = [72, 68, 58, 44]
 
 export function styleOverviewCellsByObservation(
   cells: readonly OverviewCellDatum[],
@@ -43,12 +46,11 @@ export function styleOverviewCellsByObservation(
   }))
 }
 
-function styleOverviewCellsByAnnotations(
-  cells: readonly OverviewCellDatum[],
+export function createAnnotationColorLookup(
   annotations: readonly AnnotationColorStyle[],
-): readonly OverviewCellDatum[] {
+): CellColorLookup | null {
   if (annotations.length === 0) {
-    return cells
+    return null
   }
 
   const colorByCellId = new Map<string, Color>()
@@ -63,9 +65,25 @@ function styleOverviewCellsByAnnotations(
     }
   }
 
+  return {
+    colorByCellId,
+    fallbackColor: UNANNOTATED_CELL_COLOR,
+  }
+}
+
+function styleOverviewCellsByAnnotations(
+  cells: readonly OverviewCellDatum[],
+  annotations: readonly AnnotationColorStyle[],
+): readonly OverviewCellDatum[] {
+  const colorLookup = createAnnotationColorLookup(annotations)
+
+  if (colorLookup === null) {
+    return cells
+  }
+
   return cells.map((cell) => ({
     ...cell,
-    fillColor: colorByCellId.get(cell.id) ?? [72, 68, 58, 44],
+    fillColor: colorLookup.colorByCellId.get(cell.id) ?? colorLookup.fallbackColor,
   }))
 }
 

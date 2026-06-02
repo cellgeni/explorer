@@ -353,3 +353,18 @@ unless the phase order is explicitly changed.
       centroid array instead of re-filtering it during overview pan/drag. This
       keeps all cells visible as points while reducing visual occlusion and CPU
       work.
+- [x] Optimized annotation coloring for pan/drag. Annotation mode now builds a
+      stable cell-id color lookup instead of cloning every overview cell, passes
+      that lookup to point, hexagon, and true-boundary styling, and disables
+      overview picking until the visible cell count is small enough for precise
+      cell selection. Empty expression overlays now reuse a stable empty array
+      so pan-only viewport changes do not recreate deck layers. Low-zoom
+      annotation activation leaves the million-point deck layer stack unchanged;
+      full per-cell annotation coloring is applied once the visible set is small
+      enough for precise interaction. Viewport cell clipping is deferred until
+      close zoom so overview and medium-zoom pans reuse the stable full centroid
+      array instead of scanning every cell on each drag event. The base
+      million-point layer uses stable accessor functions to prevent unnecessary
+      position/radius/color attribute invalidation, and active pan/drag
+      temporarily hides the huge point layer instead of redrawing 1.4M outlines
+      on every navigation frame.

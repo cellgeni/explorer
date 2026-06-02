@@ -66,4 +66,19 @@ describe('hex cell boundaries', () => {
     expect(hexBoundary?.fillColor).toEqual(cells[0]?.fillColor)
     expect(hexBoundary?.lineColor).toEqual([215, 63, 124, 220])
   })
+
+  it('can use annotation lookup colors for visible hexagons', () => {
+    const [hexBoundary] = hexCellBoundariesForVisibleCells(cells, {
+      maxCells: 3000,
+      fillColorSource: 'cell',
+      lineColorSource: 'cell',
+      cellColorLookup: {
+        colorByCellId: new Map([['cell-1', [31, 119, 180, 230]]]),
+        fallbackColor: [72, 68, 58, 44],
+      },
+    })
+
+    expect(hexBoundary?.fillColor).toEqual([31, 119, 180, 230])
+    expect(hexBoundary?.lineColor).toEqual([31, 119, 180, 230])
+  })
 })
