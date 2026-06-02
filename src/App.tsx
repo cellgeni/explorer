@@ -443,7 +443,11 @@ export function App({
         expressionMode === 'exact'
           ? GENE_EXPRESSION_EXACT_CELL_LIMIT
           : GENE_EXPRESSION_SAMPLE_CELL_LIMIT
-      const expressionKey = `${boundaryViewportKey(loadState.url, detail.bbox)}:${selectedGenes.join('|')}:${expressionMode}:${expressionCellLimit}`
+      const expressionKey = expressionViewportKey(loadState.url, detail, {
+        cellLimit: expressionCellLimit,
+        genes: selectedGenes,
+        mode: expressionMode,
+      })
 
       if (expressionKey === geneExpressionViewportKeyRef.current) {
         return
@@ -1195,6 +1199,28 @@ function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): str
 
 function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
   return mode === 'sampled' ? 'Expression sample' : 'Expression'
+}
+
+function expressionViewportKey(
+  baseUrl: string,
+  detail: ViewerViewportDetail,
+  options: {
+    readonly cellLimit: number
+    readonly genes: readonly string[]
+    readonly mode: GeneExpressionLoadMode
+  },
+): string {
+  const [targetX = 0, targetY = 0] = detail.viewState.target
+
+  return [
+    baseUrl.replace(/\/+$/, ''),
+    Math.round(targetX / 100) * 100,
+    Math.round(targetY / 100) * 100,
+    Math.round(detail.viewState.zoom * 1000) / 1000,
+    options.mode,
+    options.cellLimit,
+    options.genes.join('|'),
+  ].join(':')
 }
 
 function filterGeneOptions(

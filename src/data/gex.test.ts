@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { intToCellId } from './cellid'
+import { cellIdToInt, intToCellId } from './cellid'
 import {
   aggregateGex,
   createGeneFeatureIndex,
+  gexFromFeatureMajorSparseArrays,
   gexFromTranscriptsParquet,
   isGeneFeature,
   selectionToSql,
@@ -166,4 +167,52 @@ describe('GEX helpers', () => {
       { gene: 'Actb', count: 5 },
     ])
   })
+
+  it('extracts selected genes from feature-major matrix arrays', () => {
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(2, 1)
+    const cellC = intToCellId(3, 1)
+    const cellIdData = cellIdsToUint32Pairs([cellA, cellB, cellC])
+
+    const result = gexFromFeatureMajorSparseArrays({
+      cellIds: [cellB, cellA],
+      selectedGenes: ['gad1', 'Actb', 'Gad1'],
+      geneNames: ['Actb', 'Gad1', 'NegControlProbe_001'],
+      featureTypes: ['Gene Expression', 'Gene Expression', 'Gene Expression'],
+      cellIdData,
+      cellIdStride: 2,
+      indptr: new Uint32Array([0, 2, 5, 6]),
+      indices: new Uint32Array([0, 2, 0, 1, 2, 1]),
+      data: new Uint32Array([7, 1, 2, 3, 4, 99]),
+    })
+
+    expect(result.geneNames).toEqual(['Gad1', 'Actb'])
+    expect(result.cells.get(cellA)).toEqual({
+      geneNames: ['Gad1', 'Actb'],
+      counts: [2, 7],
+    })
+    expect(result.cells.get(cellB)).toEqual({
+      geneNames: ['Gad1'],
+      counts: [3],
+    })
+    expect(result.cells.has(cellC)).toBe(false)
+  })
 })
+
+function cellIdsToUint32Pairs(cellIds: readonly string[]): Uint32Array {
+  const values = new Uint32Array(cellIds.length * 2)
+
+  for (let index = 0; index < cellIds.length; index += 1) {
+    const cellId = cellIds[index]
+
+    if (cellId === undefined) {
+      continue
+    }
+
+    const { prefix, suffix } = cellIdToInt(cellId)
+    values[index * 2] = prefix
+    values[index * 2 + 1] = suffix
+  }
+
+  return values
+}

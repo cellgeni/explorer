@@ -1,8 +1,9 @@
 import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
-import { asCellId, intToCellId } from './cellid'
+import { asCellId, cellIdToInt, intToCellId } from './cellid'
 import type { CellId } from './cellid'
 import type { DataPoint, Micrometers } from './coords'
+import type { Array as ZarrArray, DataType, Group as ZarrGroup } from 'zarrita'
 
 export type TranscriptScope = 'spatial' | 'cells-only'
 
@@ -328,6 +329,102 @@ export async function gexFromCellFeatureMatrixZarr(
   }
 }
 
+export async function gexFromCellFeatureMatrixZarrSelectedGenes(
+  url: string,
+  cellIds: readonly CellId[],
+  genes: readonly string[],
+): Promise<GexResult> {
+  const selectedGenes = normalizeSelectedGeneList(genes)
+
+  if (cellIds.length === 0 || selectedGenes.length === 0) {
+    return {
+      geneNames: selectedGenes,
+      cells: emptyCellsFor(cellIds),
+    }
+  }
+
+  const store = ZipFileStore.fromUrl(url)
+  const root = await zarr.open(store, { kind: 'group' })
+  const cellFeatures = await zarr.open(root.resolve('cell_features'), { kind: 'group' })
+  const cscIndptrArray = await openZarrArrayOrNull(cellFeatures, 'csc/indptr')
+
+  if (cscIndptrArray !== null) {
+    return gexFromCellFeatureMatrixZarr(url, cellIds)
+  }
+
+  return gexFromFeatureMajorCellFeatureMatrix(cellFeatures, cellIds, selectedGenes)
+}
+
+export function gexFromFeatureMajorSparseArrays(options: {
+  readonly cellIds: readonly CellId[]
+  readonly selectedGenes: readonly string[]
+  readonly geneNames: readonly string[]
+  readonly featureTypes: readonly string[]
+  readonly cellIdData: Uint32Array
+  readonly cellIdStride: number
+  readonly indptr: Uint32Array
+  readonly indices: Uint32Array
+  readonly data: Uint32Array
+}): GexResult {
+  const geneFeatureIndices = createGeneFeatureIndex(
+    options.geneNames,
+    options.featureTypes,
+  )
+  const selectedFeatures = selectedFeatureRows(
+    options.geneNames,
+    geneFeatureIndices,
+    options.selectedGenes,
+  )
+  const cells = emptyMutableCellsFor(options.cellIds)
+
+  if (selectedFeatures.length === 0) {
+    return {
+      geneNames: [],
+      cells,
+    }
+  }
+
+  const targetRows = targetRowsByCellId(
+    options.cellIds,
+    options.cellIdData,
+    options.cellIdStride,
+  )
+
+  for (const feature of selectedFeatures) {
+    const start = Number(options.indptr[feature.index] ?? 0)
+    const end = Number(options.indptr[feature.index + 1] ?? start)
+
+    for (let cursor = start; cursor < end; cursor += 1) {
+      const cellRow = options.indices[cursor]
+      const count = options.data[cursor]
+
+      if (cellRow === undefined || count === undefined) {
+        continue
+      }
+
+      const cellId = targetRows.get(cellRow)
+
+      if (cellId === undefined) {
+        continue
+      }
+
+      const cell = cells.get(cellId)
+
+      if (cell === undefined) {
+        continue
+      }
+
+      cell.geneNames.push(feature.gene)
+      cell.counts.push(Number(count))
+    }
+  }
+
+  return {
+    geneNames: selectedFeatures.map((feature) => feature.gene),
+    cells,
+  }
+}
+
 interface TranscriptRow {
   readonly cellId: CellId | null
   readonly gene: string
@@ -360,6 +457,230 @@ function parseTranscriptRow(row: Record<string, unknown>): TranscriptRow {
 
 function emptyCellsFor(cellIds: readonly CellId[]): ReadonlyMap<CellId, GexCell> {
   return new Map(cellIds.map((cellId) => [cellId, { geneNames: [], counts: [] }]))
+}
+
+function emptyMutableCellsFor(
+  cellIds: readonly CellId[],
+): Map<CellId, { geneNames: string[]; counts: number[] }> {
+  return new Map(cellIds.map((cellId) => [cellId, { geneNames: [], counts: [] }]))
+}
+
+async function gexFromFeatureMajorCellFeatureMatrix(
+  cellFeatures: ZarrGroup<ZipFileStore>,
+  cellIds: readonly CellId[],
+  selectedGenes: readonly string[],
+): Promise<GexResult> {
+  const attrs = cellFeatures.attrs
+  const geneNames = readStringArrayAttribute(attrs, 'feature_keys')
+  const featureTypes = readStringArrayAttribute(attrs, 'feature_types')
+  const geneFeatureIndices = createGeneFeatureIndex(geneNames, featureTypes)
+  const selectedFeatures = selectedFeatureRows(
+    geneNames,
+    geneFeatureIndices,
+    selectedGenes,
+  )
+
+  if (selectedFeatures.length === 0) {
+    return {
+      geneNames: [],
+      cells: emptyCellsFor(cellIds),
+    }
+  }
+
+  const cellIdArray = await zarr.open(cellFeatures.resolve('cell_id'), {
+    kind: 'array',
+  })
+  const cellIdChunk = await zarr.get(cellIdArray, [null, null])
+  const cellIdData = expectUint32Array(cellIdChunk.data, 'cell_features/cell_id')
+  const stride = cellIdArray.shape[1] ?? 2
+  const targetRows = targetRowsByCellId(cellIds, cellIdData, stride)
+  const cells = emptyMutableCellsFor(cellIds)
+
+  if (targetRows.size === 0) {
+    return {
+      geneNames: selectedFeatures.map((feature) => feature.gene),
+      cells,
+    }
+  }
+
+  const indptrArray = await zarr.open(cellFeatures.resolve('indptr'), { kind: 'array' })
+  const indicesArray = await zarr.open(cellFeatures.resolve('indices'), {
+    kind: 'array',
+  })
+  const dataArray = await zarr.open(cellFeatures.resolve('data'), { kind: 'array' })
+
+  for (const feature of selectedFeatures) {
+    const indptrChunk = await zarr.get(indptrArray, [
+      zarr.slice(feature.index, feature.index + 2),
+    ])
+    const indptr = expectUint32Array(
+      indptrChunk.data,
+      `cell_features/indptr feature ${feature.index}`,
+    )
+    const start = Number(indptr[0] ?? 0)
+    const end = Number(indptr[1] ?? start)
+
+    if (end <= start) {
+      continue
+    }
+
+    const indices = expectUint32Array(
+      (await zarr.get(indicesArray, [zarr.slice(start, end)])).data,
+      `cell_features/indices feature ${feature.index}`,
+    )
+    const data = expectUint32Array(
+      (await zarr.get(dataArray, [zarr.slice(start, end)])).data,
+      `cell_features/data feature ${feature.index}`,
+    )
+
+    appendFeatureMajorCounts(cells, targetRows, feature.gene, indices, data)
+  }
+
+  return {
+    geneNames: selectedFeatures.map((feature) => feature.gene),
+    cells,
+  }
+}
+
+async function openZarrArrayOrNull(
+  group: ZarrGroup<ZipFileStore>,
+  path: string,
+): Promise<ZarrArray<DataType, ZipFileStore> | null> {
+  try {
+    return await zarr.open(group.resolve(path), { kind: 'array' })
+  } catch (error) {
+    if (isZarrNotFoundError(error)) {
+      return null
+    }
+
+    throw error
+  }
+}
+
+function appendFeatureMajorCounts(
+  cells: Map<CellId, { geneNames: string[]; counts: number[] }>,
+  targetRows: ReadonlyMap<number, CellId>,
+  gene: string,
+  indices: Uint32Array,
+  data: Uint32Array,
+): void {
+  for (let cursor = 0; cursor < indices.length; cursor += 1) {
+    const cellRow = indices[cursor]
+    const count = data[cursor]
+
+    if (cellRow === undefined || count === undefined) {
+      continue
+    }
+
+    const cellId = targetRows.get(cellRow)
+
+    if (cellId === undefined) {
+      continue
+    }
+
+    const cell = cells.get(cellId)
+
+    if (cell === undefined) {
+      continue
+    }
+
+    cell.geneNames.push(gene)
+    cell.counts.push(Number(count))
+  }
+}
+
+function targetRowsByCellId(
+  cellIds: readonly CellId[],
+  cellIdData: Uint32Array,
+  stride: number,
+): ReadonlyMap<number, CellId> {
+  const requestedCellRows = new Map<string, CellId>()
+
+  for (const cellId of cellIds) {
+    const { prefix, suffix } = cellIdToInt(cellId)
+    requestedCellRows.set(`${prefix}:${suffix}`, cellId)
+  }
+
+  const targetRows = new Map<number, CellId>()
+  const cellCount = Math.floor(cellIdData.length / stride)
+
+  for (let row = 0; row < cellCount; row += 1) {
+    const prefix = cellIdData[row * stride]
+    const suffix = cellIdData[row * stride + 1]
+
+    if (prefix === undefined || suffix === undefined) {
+      continue
+    }
+
+    const cellId = requestedCellRows.get(`${prefix}:${suffix}`)
+
+    if (cellId !== undefined) {
+      targetRows.set(row, cellId)
+    }
+  }
+
+  return targetRows
+}
+
+function selectedFeatureRows(
+  geneNames: readonly string[],
+  geneFeatureIndices: ReadonlySet<number>,
+  selectedGenes: readonly string[],
+): readonly { readonly gene: string; readonly index: number }[] {
+  const geneNameToIndex = new Map<string, { gene: string; index: number }>()
+
+  for (let index = 0; index < geneNames.length; index += 1) {
+    const gene = geneNames[index]
+
+    if (gene !== undefined && geneFeatureIndices.has(index)) {
+      geneNameToIndex.set(gene.toLowerCase(), { gene, index })
+    }
+  }
+
+  const selectedFeatures: { gene: string; index: number }[] = []
+  const seenFeatureIndices = new Set<number>()
+
+  for (const gene of selectedGenes) {
+    const feature = geneNameToIndex.get(gene.toLowerCase())
+
+    if (feature === undefined || seenFeatureIndices.has(feature.index)) {
+      continue
+    }
+
+    selectedFeatures.push(feature)
+    seenFeatureIndices.add(feature.index)
+  }
+
+  return selectedFeatures
+}
+
+function normalizeSelectedGeneList(genes: readonly string[]): readonly string[] {
+  const selectedGenes: string[] = []
+  const seenGenes = new Set<string>()
+
+  for (const gene of genes) {
+    const normalizedGene = gene.trim()
+    const key = normalizedGene.toLowerCase()
+
+    if (normalizedGene.length === 0 || seenGenes.has(key)) {
+      continue
+    }
+
+    selectedGenes.push(normalizedGene)
+    seenGenes.add(key)
+  }
+
+  return selectedGenes
+}
+
+function isZarrNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  return (
+    error.name === 'NotFoundError' || error.message.toLowerCase().includes('not found')
+  )
 }
 
 function readStringArrayAttribute(

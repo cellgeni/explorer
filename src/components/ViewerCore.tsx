@@ -201,7 +201,13 @@ function ViewerSurface({
   })
   const handleViewStateChange = useCallback(
     ({ viewState: nextViewState }: ViewStateChangeParameters) => {
-      setViewState(normaliseViewState(nextViewState))
+      const normalizedViewState = normaliseViewState(nextViewState)
+
+      setViewState((currentViewState) =>
+        equivalentViewState(currentViewState, normalizedViewState)
+          ? currentViewState
+          : normalizedViewState,
+      )
     },
     [],
   )
@@ -225,10 +231,16 @@ function ViewerSurface({
 
     const updateViewport = () => {
       const rect = frame.getBoundingClientRect()
-      setViewport({
+      const nextViewport = {
         width: rect.width || frame.clientWidth,
         height: rect.height || frame.clientHeight,
-      })
+      }
+
+      setViewport((currentViewport) =>
+        equivalentViewportSize(currentViewport, nextViewport)
+          ? currentViewport
+          : nextViewport,
+      )
     }
 
     updateViewport()
@@ -371,6 +383,28 @@ function normaliseViewState(viewState: {
     minZoom: viewState.minZoom ?? -10,
     maxZoom: viewState.maxZoom ?? 10,
   }
+}
+
+function equivalentViewState(left: OverviewViewState, right: OverviewViewState): boolean {
+  return (
+    nearlyEqual(left.target[0], right.target[0], 0.5) &&
+    nearlyEqual(left.target[1], right.target[1], 0.5) &&
+    nearlyEqual(left.target[2], right.target[2], 0.5) &&
+    nearlyEqual(left.zoom, right.zoom, 0.001) &&
+    nearlyEqual(left.minZoom, right.minZoom, 0.001) &&
+    nearlyEqual(left.maxZoom, right.maxZoom, 0.001)
+  )
+}
+
+function equivalentViewportSize(left: CssViewportSize, right: CssViewportSize): boolean {
+  return (
+    nearlyEqual(left.width, right.width, 0.5) &&
+    nearlyEqual(left.height, right.height, 0.5)
+  )
+}
+
+function nearlyEqual(left: number, right: number, tolerance: number): boolean {
+  return Math.abs(left - right) <= tolerance
 }
 
 function viewStateKey(viewState: OverviewViewState): string {

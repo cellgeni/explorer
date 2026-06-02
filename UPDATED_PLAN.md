@@ -273,3 +273,8 @@ unless the phase order is explicitly changed.
       The app loads a capped sampled batch from `cell_feature_matrix.zarr.zip`
       for larger views and the viewer bins those expression cells at low zoom.
       True all-cell feature-major expression and ROI exact mode remain pending.
+- [x] Fixed the sampled expression regression against the demo dataset. The
+      reader now supports feature-major `cell_features/indptr`, `indices`, and
+      `data` Zarr matrices when `cell_features/csc/*` is absent, and expression
+      request keys are based on quantized deck view state so viewport layout
+      jitter does not refetch GEX in a loop.

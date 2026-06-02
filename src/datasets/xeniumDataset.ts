@@ -2,6 +2,7 @@ import { asCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
 import {
   gexFromCellFeatureMatrixZarr,
+  gexFromCellFeatureMatrixZarrSelectedGenes,
   gexFromTranscriptsParquet,
   selectionToSql,
 } from '../data/gex'
@@ -36,6 +37,11 @@ export interface XeniumDatasetOptions {
   readonly createDuckDbClient?: () => Promise<DuckDbClientLike>
   readonly openTiff?: (url: string, signal?: AbortSignal) => Promise<TiffPyramidLoader>
   readonly matrixReader?: (url: string, ids: readonly CellId[]) => Promise<GexResult>
+  readonly geneExpressionMatrixReader?: (
+    url: string,
+    ids: readonly CellId[],
+    genes: readonly string[],
+  ) => Promise<GexResult>
   readonly transcriptReader?: typeof gexFromTranscriptsParquet
   readonly overviewReader?: (
     url: string,
@@ -101,6 +107,11 @@ export class XeniumDataset implements SpatialDataset {
     url: string,
     ids: readonly CellId[],
   ) => Promise<GexResult>
+  private readonly geneExpressionMatrixReader: (
+    url: string,
+    ids: readonly CellId[],
+    genes: readonly string[],
+  ) => Promise<GexResult>
   private readonly transcriptReader: typeof gexFromTranscriptsParquet
   private readonly overviewReader: (
     url: string,
@@ -114,6 +125,11 @@ export class XeniumDataset implements SpatialDataset {
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.tiffOpener = options.openTiff ?? openTiff
     this.matrixReader = options.matrixReader ?? gexFromCellFeatureMatrixZarr
+    this.geneExpressionMatrixReader =
+      options.geneExpressionMatrixReader ??
+      (options.matrixReader === undefined
+        ? gexFromCellFeatureMatrixZarrSelectedGenes
+        : (url, ids) => this.matrixReader(url, ids))
     this.transcriptReader = options.transcriptReader ?? gexFromTranscriptsParquet
     this.overviewReader =
       options.overviewReader ??
@@ -236,7 +252,11 @@ ORDER BY b.cell_id, b.file_row_number
       }
     }
 
-    const matrix = await this.matrix(viewportCells.map((cell) => cell.id))
+    const matrix = await this.geneExpressionMatrixReader(
+      this.urlFor('cell_feature_matrix.zarr.zip'),
+      viewportCells.map((cell) => cell.id),
+      selectedGenes,
+    )
     throwIfAborted(options.signal)
     const selectedGeneSet = new Set(selectedGenes)
     const cells: GeneExpressionCell[] = []
