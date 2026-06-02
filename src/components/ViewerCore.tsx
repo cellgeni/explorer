@@ -24,14 +24,11 @@ import type { MorphologyCanvasChannel } from './MorphologyCanvas'
 import type {
   CellBoundaryDatum,
   CellColorLookup,
-  CellPointStyle,
   OverviewCellDatum,
 } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = 4
-const FOCUS_CELL_POINT_MIN_ZOOM = 1.25
-const DETAIL_CELL_POINT_MIN_ZOOM = OVERVIEW_CELL_CLIP_MIN_ZOOM
 const OVERVIEW_CELL_PICK_MAX_VISIBLE_CELLS = 50_000
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_CELL_BOUNDARIES: readonly CellBoundaryDatum[] = []
@@ -251,12 +248,6 @@ function ViewerSurface({
     viewState.zoom > OVERVIEW_CELL_CLIP_MIN_ZOOM &&
     visibleCells.length <= OVERVIEW_CELL_PICK_MAX_VISIBLE_CELLS
   const pointCellColorLookup = cellsPickable ? cellColorLookup : null
-  const cellPointStyle: CellPointStyle =
-    viewState.zoom >= DETAIL_CELL_POINT_MIN_ZOOM
-      ? 'detail'
-      : viewState.zoom >= FOCUS_CELL_POINT_MIN_ZOOM
-        ? 'focus'
-        : 'overview'
   const annotationPreviewCells = EMPTY_OVERVIEW_CELLS
   const layers = useMemo(
     () =>
@@ -268,7 +259,6 @@ function ViewerSurface({
         {
           annotationPreviewCells,
           cellColorLookup: pointCellColorLookup,
-          cellPointStyle,
           cellsPickable,
           geneExpressionOpacity,
           expressionBoundaryPolygons,
@@ -277,7 +267,6 @@ function ViewerSurface({
       ),
     [
       annotationPreviewCells,
-      cellPointStyle,
       cellsPickable,
       expressionBoundaryPolygons,
       expressionHexBoundaries,
