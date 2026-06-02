@@ -387,8 +387,6 @@ describe('App', () => {
     expect(screen.getByRole('checkbox', { name: 'Boundary' })).not.toBeChecked()
     expect(screen.getByLabelText('DAPI color')).toHaveValue('#5890ff')
 
-    fireEvent.click(screen.getByRole('button', { name: 'DAPI auto contrast' }))
-
     await waitFor(() => {
       expect(computeAutoChannelContrast).toHaveBeenCalledWith(
         { info: dapiChannel, loader: dapiLoader },
@@ -397,9 +395,17 @@ describe('App', () => {
         }),
       )
     })
+    expect(computeAutoChannelContrast).toHaveBeenCalledWith(
+      { info: boundaryChannel, loader: boundaryLoader },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal) as AbortSignal,
+      }),
+    )
     expect(screen.getByLabelText('DAPI minimum')).toHaveValue(12)
     expect(screen.getByLabelText('DAPI maximum')).toHaveValue(345)
     expect(screen.getByLabelText('DAPI histogram')).toBeInTheDocument()
+    expect(screen.getByLabelText('Boundary minimum')).toHaveValue(12)
+    expect(screen.getByLabelText('Boundary maximum')).toHaveValue(345)
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Boundary' }))
 

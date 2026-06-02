@@ -314,3 +314,6 @@ unless the phase order is explicitly changed.
       polygons are visible and IDs match the expression batch, expression fills
       those polygons. Point-based expression remains the fallback when no
       suitable polygon geometry is available.
+- [x] Morphology channel auto-thresholding now runs automatically when an image
+      load completes. The manual `Auto` buttons still use the same per-channel
+      percentile/histogram path for later retuning.

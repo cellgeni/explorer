@@ -355,6 +355,7 @@ export function App({
   const boundaryAbortRef = useRef<AbortController | null>(null)
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
   const roiAbortRef = useRef<AbortController | null>(null)
+  const autoContrastChannelIdsRef = useRef<Set<string>>(new Set())
   const geneSetIdRef = useRef(0)
   const roiIdRef = useRef(0)
   const boundaryViewportKeyRef = useRef<string | null>(null)
@@ -705,6 +706,7 @@ export function App({
       setGeneExpressionBatch(null)
       setMorphologyImage(null)
       setMorphologyChannelSettings([])
+      autoContrastChannelIdsRef.current.clear()
       setAutoContrastChannelIds([])
       setBoundaryElements([])
       setGeneSearch('')
@@ -792,6 +794,10 @@ export function App({
             setMorphologyState({
               status: 'ready',
               url: image.url,
+            })
+            queueAutoContrast(image.channelLoaders, {
+              requestId,
+              signal: abortController.signal,
             })
           })
           .catch((error) => {
@@ -1087,18 +1093,48 @@ export function App({
   }
 
   function handleAutoContrast(channel: MorphologyImageChannel) {
-    const channelId = channel.info.id
+    queueAutoContrast([channel])
+  }
 
-    if (autoContrastChannelIds.includes(channelId)) {
+  function queueAutoContrast(
+    channels: readonly MorphologyImageChannel[],
+    options: {
+      readonly requestId?: number
+      readonly signal?: AbortSignal
+    } = {},
+  ) {
+    const requestId = options.requestId ?? loadRequestId.current
+    const signal = options.signal ?? datasetAbortRef.current?.signal
+    const channelsToLoad: MorphologyImageChannel[] = []
+
+    for (const channel of channels) {
+      const channelId = channel.info.id
+
+      if (autoContrastChannelIdsRef.current.has(channelId)) {
+        continue
+      }
+
+      autoContrastChannelIdsRef.current.add(channelId)
+      channelsToLoad.push(channel)
+    }
+
+    if (channelsToLoad.length === 0) {
       return
     }
 
-    const requestId = loadRequestId.current
-    const signal = datasetAbortRef.current?.signal
-    setAutoContrastChannelIds((current) =>
-      current.includes(channelId) ? current : [...current, channelId],
-    )
+    setAutoContrastChannelIds([...autoContrastChannelIdsRef.current])
 
+    for (const channel of channelsToLoad) {
+      startAutoContrast(channel, requestId, signal)
+    }
+  }
+
+  function startAutoContrast(
+    channel: MorphologyImageChannel,
+    requestId: number,
+    signal: AbortSignal | undefined,
+  ) {
+    const channelId = channel.info.id
     void computeAutoChannelContrast(channel, signal === undefined ? {} : { signal })
       .then((contrast) => {
         if (loadRequestId.current !== requestId) {
@@ -1127,7 +1163,8 @@ export function App({
           return
         }
 
-        setAutoContrastChannelIds((current) => current.filter((id) => id !== channelId))
+        autoContrastChannelIdsRef.current.delete(channelId)
+        setAutoContrastChannelIds([...autoContrastChannelIdsRef.current])
       })
   }
 
