@@ -13,6 +13,7 @@ import { loadMorphologyImage } from '../data/morphologyImage'
 import { openTiff } from '../tiff/loader'
 import type { CellId } from '../data/cellid'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
+import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type {
   DuckDbPreparedStatementLike,
@@ -51,6 +52,7 @@ export interface XeniumDatasetOptions {
   readonly analysisAnnotationReader?: (
     analysisUrl: string,
     matrixUrl: string,
+    options?: AnalysisAnnotationQueryOptions,
   ) => Promise<readonly Annotation[]>
 }
 
@@ -126,6 +128,7 @@ export class XeniumDataset implements SpatialDataset {
   private readonly analysisAnnotationReader: (
     analysisUrl: string,
     matrixUrl: string,
+    options?: AnalysisAnnotationQueryOptions,
   ) => Promise<readonly Annotation[]>
   private duckClientPromise: Promise<DuckDbClientLike> | null = null
   private metaPromise: Promise<DatasetMeta> | null = null
@@ -309,10 +312,13 @@ ORDER BY b.cell_id, b.file_row_number
     }
   }
 
-  annotations(): Promise<readonly Annotation[]> {
+  annotations(
+    options: AnalysisAnnotationQueryOptions = {},
+  ): Promise<readonly Annotation[]> {
     return this.analysisAnnotationReader(
       this.urlFor('analysis.zarr.zip'),
       this.urlFor('cell_feature_matrix.zarr.zip'),
+      options,
     )
   }
 

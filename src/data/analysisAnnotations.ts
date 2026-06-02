@@ -5,10 +5,22 @@ import type { CellId } from './cellid'
 import type { Annotation } from '../datasets/spatialDataset'
 
 export interface AnalysisGroupingArrays {
+  readonly groupingIndex?: number
   readonly groupingName: string
   readonly groupNames: readonly string[]
   readonly indptr: NumericIndexArray
   readonly indices: NumericIndexArray
+}
+
+export interface AnalysisAnnotationGroupOption {
+  readonly id: string
+  readonly label: string
+  readonly groupingName: string
+  readonly groupCount: number
+}
+
+export interface AnalysisAnnotationQueryOptions {
+  readonly groupId?: string
 }
 
 interface NumericIndexArray {
@@ -19,13 +31,48 @@ interface NumericIndexArray {
 export async function readAnalysisZarrAnnotations(
   analysisUrl: string,
   matrixUrl: string,
+  options: AnalysisAnnotationQueryOptions = {},
 ): Promise<readonly Annotation[]> {
   const [groupings, cellIdsByRow] = await Promise.all([
-    readAnalysisGroupings(analysisUrl),
+    readAnalysisGroupings(analysisUrl, options),
     readCellIdsByMatrixRow(matrixUrl),
   ])
 
   return annotationsFromAnalysisGroups(groupings, cellIdsByRow)
+}
+
+export async function readAnalysisZarrAnnotationGroupOptions(
+  analysisUrl: string,
+): Promise<readonly AnalysisAnnotationGroupOption[]> {
+  const metadata = await readAnalysisGroupingMetadata(analysisUrl)
+
+  return analysisAnnotationGroupOptionsFromMetadata(
+    metadata.groupingNames,
+    metadata.groupNames,
+    metadata.groupingCount,
+  )
+}
+
+export function analysisAnnotationGroupOptionsFromMetadata(
+  groupingNames: readonly string[],
+  groupNames: readonly (readonly string[])[],
+  groupingCount = groupingNames.length,
+): readonly AnalysisAnnotationGroupOption[] {
+  const options: AnalysisAnnotationGroupOption[] = []
+
+  for (let groupingIndex = 0; groupingIndex < groupingCount; groupingIndex += 1) {
+    const groupingName = groupingNames[groupingIndex] ?? `Grouping ${groupingIndex + 1}`
+    const groups = groupNames[groupingIndex] ?? []
+
+    options.push({
+      id: analysisAnnotationGroupId(groupingIndex),
+      label: formatGroupingName(groupingName),
+      groupingName,
+      groupCount: groups.length,
+    })
+  }
+
+  return options
 }
 
 export function annotationsFromAnalysisGroups(
@@ -56,7 +103,7 @@ export function annotationsFromAnalysisGroups(
       }
 
       annotations.push({
-        id: `analysis:${groupingIndex}:${groupIndex}`,
+        id: `analysis:${grouping.groupingIndex ?? groupingIndex}:${groupIndex}`,
         label: `${formatGroupingName(grouping.groupingName)}: ${
           grouping.groupNames[groupIndex] ?? `Group ${groupIndex + 1}`
         }`,
@@ -70,21 +117,25 @@ export function annotationsFromAnalysisGroups(
 
 async function readAnalysisGroupings(
   analysisUrl: string,
+  options: AnalysisAnnotationQueryOptions,
 ): Promise<readonly AnalysisGroupingArrays[]> {
-  const store = ZipFileStore.fromUrl(analysisUrl)
-  const root = await zarr.open(store, { kind: 'group' })
-  const cellGroups = await zarr.open(root.resolve('cell_groups'), { kind: 'group' })
-  const groupingNames = readStringArrayAttribute(cellGroups.attrs, 'grouping_names')
-  const groupNames = readNestedStringArrayAttribute(cellGroups.attrs, 'group_names')
-  const groupingCount = readNumberAttribute(
-    cellGroups.attrs,
-    'number_groupings',
-    groupingNames.length,
+  const metadata = await readAnalysisGroupingMetadata(analysisUrl)
+  const selectedGroupingIndexes = selectedAnalysisGroupingIndexes(
+    options.groupId,
+    metadata.groupingCount,
   )
   const groupings: AnalysisGroupingArrays[] = []
 
-  for (let groupingIndex = 0; groupingIndex < groupingCount; groupingIndex += 1) {
-    const group = await zarr.open(cellGroups.resolve(String(groupingIndex)), {
+  for (
+    let groupingIndex = 0;
+    groupingIndex < metadata.groupingCount;
+    groupingIndex += 1
+  ) {
+    if (selectedGroupingIndexes !== null && !selectedGroupingIndexes.has(groupingIndex)) {
+      continue
+    }
+
+    const group = await zarr.open(metadata.cellGroups.resolve(String(groupingIndex)), {
       kind: 'group',
     })
     const indptrArray = await zarr.open(group.resolve('indptr'), { kind: 'array' })
@@ -99,14 +150,40 @@ async function readAnalysisGroupings(
     )
 
     groupings.push({
-      groupingName: groupingNames[groupingIndex] ?? `Grouping ${groupingIndex + 1}`,
-      groupNames: groupNames[groupingIndex] ?? [],
+      groupingIndex,
+      groupingName:
+        metadata.groupingNames[groupingIndex] ?? `Grouping ${groupingIndex + 1}`,
+      groupNames: metadata.groupNames[groupingIndex] ?? [],
       indptr,
       indices,
     })
   }
 
   return groupings
+}
+
+async function readAnalysisGroupingMetadata(analysisUrl: string): Promise<{
+  readonly cellGroups: zarr.Group<ZipFileStore>
+  readonly groupingNames: readonly string[]
+  readonly groupNames: readonly (readonly string[])[]
+  readonly groupingCount: number
+}> {
+  const store = ZipFileStore.fromUrl(analysisUrl)
+  const root = await zarr.open(store, { kind: 'group' })
+  const cellGroups = await zarr.open(root.resolve('cell_groups'), { kind: 'group' })
+  const groupingNames = readStringArrayAttribute(cellGroups.attrs, 'grouping_names')
+  const groupNames = readNestedStringArrayAttribute(cellGroups.attrs, 'group_names')
+
+  return {
+    cellGroups,
+    groupingNames,
+    groupNames,
+    groupingCount: readNumberAttribute(
+      cellGroups.attrs,
+      'number_groupings',
+      groupingNames.length,
+    ),
+  }
 }
 
 async function readCellIdsByMatrixRow(matrixUrl: string): Promise<readonly CellId[]> {
@@ -137,7 +214,41 @@ async function readCellIdsByMatrixRow(matrixUrl: string): Promise<readonly CellI
 }
 
 function formatGroupingName(name: string): string {
-  return name.replace(/^gene_expression_/, '').replaceAll('_', ' ')
+  return name
+    .replace(/^gene_expression_/, '')
+    .replace(/_clusters$/, '')
+    .replaceAll('_', ' ')
+}
+
+function analysisAnnotationGroupId(groupingIndex: number): string {
+  return `analysis:${groupingIndex}`
+}
+
+function selectedAnalysisGroupingIndexes(
+  groupId: string | undefined,
+  groupingCount: number,
+): ReadonlySet<number> | null {
+  if (groupId === undefined) {
+    return null
+  }
+
+  const match = /^analysis:(\d+)$/.exec(groupId)
+
+  if (match === null) {
+    throw new Error(`Unknown annotation grouping "${groupId}".`)
+  }
+
+  const groupingIndex = Number.parseInt(match[1] ?? '', 10)
+
+  if (
+    !Number.isInteger(groupingIndex) ||
+    groupingIndex < 0 ||
+    groupingIndex >= groupingCount
+  ) {
+    throw new Error(`Annotation grouping "${groupId}" is not available.`)
+  }
+
+  return new Set([groupingIndex])
 }
 
 function readStringArrayAttribute(

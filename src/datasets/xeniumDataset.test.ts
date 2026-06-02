@@ -346,6 +346,14 @@ describe('XeniumDataset', () => {
     expect(analysisAnnotationReader).toHaveBeenCalledWith(
       'https://example.test/xenium/analysis.zarr.zip',
       'https://example.test/xenium/cell_feature_matrix.zarr.zip',
+      {},
+    )
+
+    await dataset.annotations({ groupId: 'analysis:1' })
+    expect(analysisAnnotationReader).toHaveBeenLastCalledWith(
+      'https://example.test/xenium/analysis.zarr.zip',
+      'https://example.test/xenium/cell_feature_matrix.zarr.zip',
+      { groupId: 'analysis:1' },
     )
   })
 

@@ -2,7 +2,11 @@ import type { FormEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ViewerCore } from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
-import { loadDatasetAnnotations as defaultLoadDatasetAnnotations } from './data/datasetAnnotations'
+import {
+  ALL_ANNOTATION_GROUP_ID,
+  loadDatasetAnnotationGroups as defaultLoadDatasetAnnotationGroups,
+  loadDatasetAnnotations as defaultLoadDatasetAnnotations,
+} from './data/datasetAnnotations'
 import { loadDatasetBoundaryElements as defaultLoadBoundaryElements } from './data/datasetBoundaries'
 import { loadDatasetGeneExpression as defaultLoadDatasetGeneExpression } from './data/geneExpression'
 import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
@@ -54,6 +58,10 @@ import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
 import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
 import type { AnnotationColorStyle, ObservationColorMode } from './rendering/cellStyling'
+import type {
+  AnnotationGroupOption,
+  LoadDatasetAnnotationsOptions,
+} from './data/datasetAnnotations'
 import type { Annotation, ElementBatch, SpatialElement } from './datasets/spatialDataset'
 import type {
   GeneExpressionDetailMode,
@@ -94,8 +102,12 @@ export type GenePanelLoader = (
 ) => Promise<readonly string[]>
 export type AnnotationLoader = (
   baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
+  options?: LoadDatasetAnnotationsOptions,
 ) => Promise<readonly Annotation[]>
+export type AnnotationGroupLoader = (
+  baseUrl: string,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<readonly AnnotationGroupOption[]>
 export type RoiCellsLoader = (
   baseUrl: string,
   bbox: BBox,
@@ -163,6 +175,20 @@ type AnnotationState =
       readonly status: 'ready'
       readonly url: string
       readonly annotations: readonly Annotation[]
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
+
+type AnnotationGroupState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly groups: readonly AnnotationGroupOption[]
     }
   | {
       readonly status: 'error'
@@ -272,6 +298,7 @@ export interface AppProps {
   readonly loadBoundaryElements?: BoundaryElementsLoader
   readonly loadGenePanel?: GenePanelLoader
   readonly loadAnnotations?: AnnotationLoader
+  readonly loadAnnotationGroups?: AnnotationGroupLoader
   readonly loadRoiCells?: RoiCellsLoader
   readonly loadGeneExpression?: GeneExpressionLoader
   readonly computeAutoChannelContrast?: AutoChannelContrastLoader
@@ -283,6 +310,7 @@ export function App({
   loadBoundaryElements = defaultLoadBoundaryElements,
   loadGenePanel = defaultLoadGenePanel,
   loadAnnotations = defaultLoadDatasetAnnotations,
+  loadAnnotationGroups = defaultLoadDatasetAnnotationGroups,
   loadRoiCells = defaultLoadDatasetRoiCells,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
   computeAutoChannelContrast = defaultComputeAutoChannelContrast,
@@ -299,6 +327,7 @@ export function App({
   const geneScaleInputId = useId()
   const geneExpressionDetailInputId = useId()
   const annotationImportInputId = useId()
+  const annotationGroupInputId = useId()
   const roiNameInputId = useId()
   const observationModeInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
@@ -316,9 +345,15 @@ export function App({
   const [annotationState, setAnnotationState] = useState<AnnotationState>({
     status: 'idle',
   })
+  const [annotationGroupState, setAnnotationGroupState] = useState<AnnotationGroupState>({
+    status: 'idle',
+  })
   const [annotationColors, setAnnotationColors] = useState<
     Readonly<Record<string, string>>
   >({})
+  const [selectedAnnotationGroupId, setSelectedAnnotationGroupId] = useState(
+    ALL_ANNOTATION_GROUP_ID,
+  )
   const [roiState, setRoiState] = useState<RoiState>({ status: 'idle' })
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
     status: 'idle',
@@ -497,6 +532,8 @@ export function App({
   )
   const genePanelCopy = genePanelStatusCopy(genePanelState)
   const annotationCopy = annotationStatusCopy(annotationState)
+  const annotationGroupOptions =
+    annotationGroupState.status === 'ready' ? annotationGroupState.groups : []
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const roiCopy = roiStatusCopy(roiState, roiMode)
   const roiSummary = useMemo(
@@ -512,11 +549,13 @@ export function App({
         boundaryState.status === 'error' ? boundaryState.error : null,
         genePanelState.status === 'error' ? genePanelState.error : null,
         annotationState.status === 'error' ? annotationState.error : null,
+        annotationGroupState.status === 'error' ? annotationGroupState.error : null,
         roiState.status === 'error' ? roiState.error : null,
         geneExpressionState.status === 'error' ? geneExpressionState.error : null,
       ].filter(isStructuredLoadError),
     [
       annotationState,
+      annotationGroupState,
       boundaryState,
       geneExpressionState,
       genePanelState,
@@ -797,6 +836,8 @@ export function App({
       setGeneSetName('')
       setSavedGeneSets([])
       setAnnotationColors({})
+      setAnnotationGroupState({ status: 'loading', url: requestedUrl })
+      setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
       setObservationColorMode('transcript-count')
       setGeneExpressionScoreMode(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
       setGeneExpressionDetailMode('auto')
@@ -841,6 +882,34 @@ export function App({
             status: 'error',
             url: requestedUrl,
             error: createStructuredLoadError('Gene panel', error),
+          })
+        })
+
+      void loadAnnotationGroups(requestedUrl, { signal: abortController.signal })
+        .then((groups) => {
+          if (loadRequestId.current !== requestId) {
+            return
+          }
+
+          setAnnotationGroupState({
+            status: 'ready',
+            url: requestedUrl,
+            groups,
+          })
+        })
+        .catch((error) => {
+          if (isAbortError(error)) {
+            return
+          }
+
+          if (loadRequestId.current !== requestId) {
+            return
+          }
+
+          setAnnotationGroupState({
+            status: 'error',
+            url: requestedUrl,
+            error: createStructuredLoadError('Annotations', error),
           })
         })
 
@@ -914,6 +983,7 @@ export function App({
         })
         setMorphologyState({ status: 'idle' })
         setGenePanelState({ status: 'idle' })
+        setAnnotationGroupState({ status: 'idle' })
       }
     }
   }
@@ -1007,9 +1077,16 @@ export function App({
 
     const requestId = loadRequestId.current
     const signal = datasetAbortRef.current?.signal
+    const groupId =
+      selectedAnnotationGroupId === ALL_ANNOTATION_GROUP_ID
+        ? undefined
+        : selectedAnnotationGroupId
     setAnnotationState({ status: 'loading', url: loadState.url })
 
-    void loadAnnotations(loadState.url, signal === undefined ? {} : { signal })
+    void loadAnnotations(loadState.url, {
+      ...(signal === undefined ? {} : { signal }),
+      ...(groupId === undefined ? {} : { groupId }),
+    })
       .then((annotations) => {
         if (loadRequestId.current !== requestId) {
           return
@@ -1616,6 +1693,22 @@ export function App({
             <h2 id="annotation-heading">Annotations</h2>
             <span>{annotationCopy}</span>
           </div>
+          <label htmlFor={annotationGroupInputId}>Annotation set</label>
+          <select
+            id={annotationGroupInputId}
+            value={selectedAnnotationGroupId}
+            disabled={loadState.status !== 'ready'}
+            onChange={(event) => {
+              setSelectedAnnotationGroupId(event.currentTarget.value)
+            }}
+          >
+            <option value={ALL_ANNOTATION_GROUP_ID}>All</option>
+            {annotationGroupOptions.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             className="secondary-action"

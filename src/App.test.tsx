@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   App,
+  type AnnotationGroupLoader,
   type AnnotationLoader,
   type GeneExpressionLoader,
   type RoiCellsLoader,
@@ -15,6 +16,15 @@ import type { TiffPyramidLoader } from './tiff/loader'
 vi.mock('@deck.gl/react', () => ({
   DeckGL: () => <div data-testid="deckgl" />,
 }))
+
+vi.mock('./data/datasetAnnotations', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./data/datasetAnnotations')>()
+
+  return {
+    ...actual,
+    loadDatasetAnnotationGroups: vi.fn(async () => []),
+  }
+})
 
 describe('App', () => {
   beforeEach(() => {
@@ -54,6 +64,8 @@ describe('App', () => {
       'transcript-count',
     )
     expect(screen.getByRole('heading', { name: 'Annotations' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Annotation set' })).toHaveValue('all')
+    expect(screen.getByRole('combobox', { name: 'Annotation set' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Load Annotations' })).toBeDisabled()
     expect(screen.getByRole('heading', { name: 'ROI' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
@@ -559,11 +571,27 @@ describe('App', () => {
       },
     ])
     const loadGenePanel = vi.fn(async () => [])
+    const loadAnnotationGroups: ReturnType<typeof vi.fn<AnnotationGroupLoader>> = vi.fn(
+      async () => [
+        {
+          id: 'analysis:0',
+          label: 'graphclust',
+          groupingName: 'gene_expression_graphclust',
+          groupCount: 2,
+        },
+        {
+          id: 'analysis:1',
+          label: 'kmeans 3',
+          groupingName: 'gene_expression_kmeans_3_clusters',
+          groupCount: 3,
+        },
+      ],
+    )
     const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(
       async () => [
         {
-          id: 'analysis:0:0',
-          label: 'graphclust: Cluster 1',
+          id: 'analysis:1:0',
+          label: 'kmeans 3: Cluster 1',
           cellIds: [cellId],
         },
       ],
@@ -573,28 +601,34 @@ describe('App', () => {
       <App
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={loadGenePanel}
+        loadAnnotationGroups={loadAnnotationGroups}
         loadAnnotations={loadAnnotations}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+    expect(await screen.findByRole('option', { name: 'kmeans 3' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Annotation set' }), {
+      target: { value: 'analysis:1' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Load Annotations' }))
 
     await waitFor(() => {
       expect(loadAnnotations).toHaveBeenCalledWith(
         DEMO_DATASET_URL,
         expect.objectContaining({
+          groupId: 'analysis:1',
           signal: expect.any(AbortSignal) as AbortSignal,
         }),
       )
     })
     expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
-      'graphclust: Cluster 1',
+      'kmeans 3: Cluster 1',
     )
     expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
 
-    const colorInput = screen.getByLabelText('graphclust: Cluster 1 color')
+    const colorInput = screen.getByLabelText('kmeans 3: Cluster 1 color')
     expect(colorInput).toHaveValue('#1f77b4')
 
     fireEvent.change(colorInput, { target: { value: '#d62728' } })
@@ -607,7 +641,7 @@ describe('App', () => {
       'annotations',
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove graphclust: Cluster 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove kmeans 3: Cluster 1' }))
 
     expect(screen.queryByLabelText('Loaded annotations')).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(

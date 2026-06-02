@@ -2,6 +2,7 @@ import type { BBox, DataPoint, Micrometers, UnitsDescriptor } from '../data/coor
 import type { CellId } from '../data/cellid'
 import type { GexResult, Selection, TranscriptScope } from '../data/gex'
 import type { TiffPyramidLoader } from '../tiff/loader'
+import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 
 export type Platform = 'xenium' | 'visium' | 'visium-hd'
 
@@ -68,7 +69,7 @@ export interface SpatialDataset {
   meta(): Promise<DatasetMeta>
   elements(bbox: BBox): Promise<ElementBatch>
   matrix(ids: readonly CellId[]): Promise<GexResult>
-  annotations(): Promise<readonly Annotation[]>
+  annotations(options?: AnalysisAnnotationQueryOptions): Promise<readonly Annotation[]>
   image(): Promise<ImageSource | null>
   transcripts?(
     selection: Selection,

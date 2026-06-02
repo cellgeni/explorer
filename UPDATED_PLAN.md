@@ -327,3 +327,7 @@ unless the phase order is explicitly changed.
       the same raw data-space transform for display and selection, and
       gene-expression colors now use a stable per-gene-set max observed across
       loaded regions with numeric scale ticks in the UI.
+- [x] Added grouped built-in annotation loading. The sidebar now exposes an
+      `Annotation set` selector with `All` plus dataset-discovered analysis
+      groups such as `graphclust`, `kmeans 3`, and `kmeans 9`; selected loads
+      fetch only that grouping instead of flattening every group.
