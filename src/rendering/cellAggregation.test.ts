@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers } from '../data/coords'
 import {
+  aggregateExpressionCells,
   aggregateOverviewCells,
   overviewAggregationBinMicrometers,
 } from './cellAggregation'
@@ -103,6 +104,58 @@ describe('overview cell aggregation', () => {
       expressionGenes: ['Actb', 'Gad1'],
       cellCount: 2,
     })
+  })
+
+  it('uses stable data-space bins for sampled expression cells across overview zooms', () => {
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-1',
+        position: [0, 0, 0],
+        radiusPixels: 3,
+        fillColor: [215, 63, 124, 180],
+        expressionCount: 1,
+      },
+      {
+        id: 'cell-2',
+        position: [20, -20, 0],
+        radiusPixels: 4,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 9,
+      },
+    ]
+
+    const firstZoom = aggregateExpressionCells(expressionCells, viewState, {
+      binMicrometers: 100,
+      exactCellLimit: 0,
+      exactZoom: 0,
+    })
+    const secondZoom = aggregateExpressionCells(
+      expressionCells,
+      { ...viewState, zoom: -1.25 },
+      {
+        binMicrometers: 100,
+        exactCellLimit: 0,
+        exactZoom: 0,
+      },
+    )
+
+    expect(firstZoom).toHaveLength(1)
+    expect(secondZoom).toHaveLength(1)
+    expect(firstZoom[0]?.id).toBe('expression-bin:0:0')
+    expect(firstZoom[0]?.position).toEqual(secondZoom[0]?.position)
+    expect(firstZoom[0]).toMatchObject({
+      position: [18, -18, 0],
+      expressionCount: 10,
+      cellCount: 2,
+    })
+  })
+
+  it('returns exact expression cells when the viewport is small enough', () => {
+    expect(
+      aggregateExpressionCells(cells, viewState, {
+        exactCellLimit: cells.length,
+      }),
+    ).toBe(cells)
   })
 
   it('derives bin size from the current orthographic zoom', () => {

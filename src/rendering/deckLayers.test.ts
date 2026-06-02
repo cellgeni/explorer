@@ -118,6 +118,7 @@ describe('deck layer factory', () => {
 
     expect(expressionLayer.id).toBe('gene-expression-scatter')
     expect(expressionLayer.props.opacity).toBe(0.45)
+    expect(expressionLayer.props.pickable).toBe(false)
   })
 
   it('converts Xenium overview cells into deck.gl coordinates', () => {

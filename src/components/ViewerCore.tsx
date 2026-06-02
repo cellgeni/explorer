@@ -6,7 +6,11 @@ import {
   createOverviewViewState,
   spatialOverviewView,
 } from '../rendering/deckLayers'
-import { aggregateOverviewCells, overviewCellsInBbox } from '../rendering/cellAggregation'
+import {
+  aggregateExpressionCells,
+  aggregateOverviewCells,
+  overviewCellsInBbox,
+} from '../rendering/cellAggregation'
 import { hexCellBoundariesForVisibleCells } from '../rendering/hexCellBoundaries'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
@@ -16,9 +20,6 @@ import type { TiffPyramidLoader } from '../tiff/loader'
 import type { MorphologyCanvasChannel } from './MorphologyCanvas'
 import type { CellBoundaryDatum, OverviewCellDatum } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
-
-const EXPRESSION_AGGREGATION_TARGET_PIXELS = 16
-const EXPRESSION_AGGREGATION_INDIVIDUAL_MICROMETERS = 18
 
 export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
@@ -159,11 +160,10 @@ function ViewerSurface({
   )
   const displayExpressionCells = useMemo(
     () =>
-      aggregateOverviewCells(expressionCells, viewState, {
-        targetPixels: EXPRESSION_AGGREGATION_TARGET_PIXELS,
-        individualMicrometers: EXPRESSION_AGGREGATION_INDIVIDUAL_MICROMETERS,
+      aggregateExpressionCells(expressionCells, viewState, {
+        ...(viewportBbox === null ? {} : { bbox: viewportBbox }),
       }),
-    [expressionCells, viewState],
+    [expressionCells, viewState, viewportBbox],
   )
   const hexBoundaries = useMemo(
     () =>

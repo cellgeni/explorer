@@ -40,6 +40,7 @@ export async function loadDatasetGeneExpression(
 
   return dataset.geneExpression(bbox, genes, {
     ...(options.limit === undefined ? {} : { limit: options.limit }),
+    ...(options.sampleStride === undefined ? {} : { sampleStride: options.sampleStride }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
 }

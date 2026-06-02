@@ -283,4 +283,48 @@ describe('XeniumDataset', () => {
       [cellId],
     )
   })
+
+  it('applies a deterministic viewport-cell stride for sampled expression queries', async () => {
+    const cellId = intToCellId(1, 2)
+    const conn = new FakeConnection([
+      [
+        {
+          cell_id: cellId,
+          x_centroid: 4,
+          y_centroid: 6,
+          transcript_counts: 12,
+          cell_area: 18,
+        },
+      ],
+    ])
+    const matrixReader = vi.fn(
+      async (_url: string, ids: readonly CellId[]): Promise<GexResult> => ({
+        geneNames: ['Actb'],
+        cells: new Map(ids.map((id) => [id, { geneNames: ['Actb'], counts: [2] }])),
+      }),
+    )
+    const dataset = makeDataset(conn, { matrixReader })
+
+    await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(10),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+      ['Actb'],
+      { limit: 100, sampleStride: 3 },
+    )
+
+    expect(conn.preparedSql[0]).toContain('hash(cell_id) % ? = 0')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/cells.parquet',
+      micrometers(0),
+      micrometers(10),
+      micrometers(0),
+      micrometers(20),
+      3,
+      100,
+    ])
+  })
 })

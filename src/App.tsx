@@ -7,6 +7,7 @@ import { loadDatasetGeneExpression as defaultLoadDatasetGeneExpression } from '.
 import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
 import { loadGenePanel as defaultLoadGenePanel } from './data/genePanel'
 import { loadMorphologyImage as defaultLoadMorphologyImage } from './data/morphologyImage'
+import { micrometers } from './data/coords'
 import {
   BOUNDARY_VIEWPORT_CELL_LIMIT,
   boundaryViewportKey,
@@ -48,6 +49,7 @@ import type { ViewerViewportDetail } from './components/ViewerCore'
 const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 const GENE_EXPRESSION_EXACT_CELL_LIMIT = 5_000
 const GENE_EXPRESSION_SAMPLE_CELL_LIMIT = 5_000
+const GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO = 0.2
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 
@@ -77,7 +79,11 @@ export type GeneExpressionLoader = (
   baseUrl: string,
   bbox: BBox,
   genes: readonly string[],
-  options?: { readonly limit?: number; readonly signal?: AbortSignal },
+  options?: {
+    readonly limit?: number
+    readonly sampleStride?: number
+    readonly signal?: AbortSignal
+  },
 ) => Promise<GeneExpressionBatch>
 export type AutoChannelContrastLoader = (
   channel: MorphologyImageChannel,
@@ -443,10 +449,19 @@ export function App({
         expressionMode === 'exact'
           ? GENE_EXPRESSION_EXACT_CELL_LIMIT
           : GENE_EXPRESSION_SAMPLE_CELL_LIMIT
+      const expressionSampleStride =
+        expressionMode === 'sampled'
+          ? Math.max(1, Math.ceil(detail.visibleCellCount / expressionCellLimit))
+          : 1
+      const expressionBbox =
+        expressionMode === 'sampled'
+          ? padBbox(detail.bbox, GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO)
+          : detail.bbox
       const expressionKey = expressionViewportKey(loadState.url, detail, {
         cellLimit: expressionCellLimit,
         genes: selectedGenes,
         mode: expressionMode,
+        sampleStride: expressionSampleStride,
       })
 
       if (expressionKey === geneExpressionViewportKeyRef.current) {
@@ -467,9 +482,10 @@ export function App({
         visibleCellCount: detail.visibleCellCount,
       })
 
-      void loadGeneExpression(loadState.url, detail.bbox, selectedGenes, {
+      void loadGeneExpression(loadState.url, expressionBbox, selectedGenes, {
         signal: expressionAbortController.signal,
         limit: expressionCellLimit,
+        sampleStride: expressionSampleStride,
       })
         .then((batch) => {
           if (geneExpressionRequestId.current !== expressionRequestId) {
@@ -716,6 +732,10 @@ export function App({
     setSelectedGenes(geneSet.genes)
     setGeneExpressionScoreMode(geneSet.scoreMode)
     setGeneSearch('')
+  }
+
+  function removeSavedGeneSet(id: string) {
+    setSavedGeneSets((current) => current.filter((geneSet) => geneSet.id !== id))
   }
 
   function updateMorphologyChannel(
@@ -1014,16 +1034,29 @@ export function App({
           {savedGeneSets.length === 0 ? null : (
             <div className="gene-set-list" aria-label="Saved gene sets">
               {savedGeneSets.map((geneSet) => (
-                <button
-                  key={geneSet.id}
-                  type="button"
-                  onClick={() => {
-                    applySavedGeneSet(geneSet)
-                  }}
-                >
-                  <span>{geneSet.name}</span>
-                  <small>{geneSet.scoreMode}</small>
-                </button>
+                <div key={geneSet.id} className="gene-set-row">
+                  <button
+                    type="button"
+                    className="gene-set-apply"
+                    aria-label={`Apply ${geneSet.name}`}
+                    onClick={() => {
+                      applySavedGeneSet(geneSet)
+                    }}
+                  >
+                    <span>{geneSet.name}</span>
+                    <small>{geneSet.scoreMode}</small>
+                  </button>
+                  <button
+                    type="button"
+                    className="gene-set-remove"
+                    aria-label={`Remove ${geneSet.name}`}
+                    onClick={() => {
+                      removeSavedGeneSet(geneSet.id)
+                    }}
+                  >
+                    x
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -1208,19 +1241,42 @@ function expressionViewportKey(
     readonly cellLimit: number
     readonly genes: readonly string[]
     readonly mode: GeneExpressionLoadMode
+    readonly sampleStride: number
   },
 ): string {
   const [targetX = 0, targetY = 0] = detail.viewState.target
+  const viewportSpan = Math.max(
+    detail.bbox.maxX - detail.bbox.minX,
+    detail.bbox.maxY - detail.bbox.minY,
+    1,
+  )
+  const targetBucket = options.mode === 'sampled' ? Math.max(500, viewportSpan / 6) : 100
+  const zoomBucket = options.mode === 'sampled' ? 0.25 : 0.001
+  const roundedZoom =
+    Math.round(Math.round(detail.viewState.zoom / zoomBucket) * zoomBucket * 1000) / 1000
 
   return [
     baseUrl.replace(/\/+$/, ''),
-    Math.round(targetX / 100) * 100,
-    Math.round(targetY / 100) * 100,
-    Math.round(detail.viewState.zoom * 1000) / 1000,
+    Math.round(targetX / targetBucket) * targetBucket,
+    Math.round(targetY / targetBucket) * targetBucket,
+    roundedZoom,
     options.mode,
     options.cellLimit,
+    options.sampleStride,
     options.genes.join('|'),
   ].join(':')
+}
+
+function padBbox(bbox: BBox, ratio: number): BBox {
+  const paddingX = (bbox.maxX - bbox.minX) * ratio
+  const paddingY = (bbox.maxY - bbox.minY) * ratio
+
+  return {
+    minX: micrometers(bbox.minX - paddingX),
+    maxX: micrometers(bbox.maxX + paddingX),
+    minY: micrometers(bbox.minY - paddingY),
+    maxY: micrometers(bbox.maxY + paddingY),
+  }
 }
 
 function filterGeneOptions(

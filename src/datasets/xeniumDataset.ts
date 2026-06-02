@@ -74,6 +74,7 @@ export interface GeneExpressionBatch {
 
 export interface GeneExpressionQueryOptions {
   readonly limit?: number
+  readonly sampleStride?: number
   readonly signal?: AbortSignal
 }
 
@@ -240,8 +241,9 @@ ORDER BY b.cell_id, b.file_row_number
     }
 
     const limit = options.limit ?? 5_000
+    const sampleStride = normalizeSampleStride(options.sampleStride)
     throwIfAborted(options.signal)
-    const viewportCells = await this.cellsForBbox(bbox, limit)
+    const viewportCells = await this.cellsForBbox(bbox, limit, sampleStride)
     throwIfAborted(options.signal)
 
     if (viewportCells.length === 0) {
@@ -417,8 +419,14 @@ ORDER BY file_row_number
   private async cellsForBbox(
     bbox: BBox,
     limit: number,
+    sampleStride = 1,
   ): Promise<readonly ViewportCell[]> {
     const conn = await this.conn()
+    const samplePredicate =
+      sampleStride > 1
+        ? `
+  AND hash(cell_id) % ? = 0`
+        : ''
     const stmt = await conn.prepare(`
 SELECT cell_id,
        x_centroid,
@@ -428,17 +436,29 @@ SELECT cell_id,
 FROM read_parquet( ? )
 WHERE x_centroid BETWEEN ? AND ?
   AND y_centroid BETWEEN ? AND ?
+${samplePredicate}
 ORDER BY file_row_number
 LIMIT ?
 `)
-    const result = await stmt.query(
-      this.urlFor('cells.parquet'),
-      bbox.minX,
-      bbox.maxX,
-      bbox.minY,
-      bbox.maxY,
-      limit,
-    )
+    const result =
+      sampleStride > 1
+        ? await stmt.query(
+            this.urlFor('cells.parquet'),
+            bbox.minX,
+            bbox.maxX,
+            bbox.minY,
+            bbox.maxY,
+            sampleStride,
+            limit,
+          )
+        : await stmt.query(
+            this.urlFor('cells.parquet'),
+            bbox.minX,
+            bbox.maxX,
+            bbox.minY,
+            bbox.maxY,
+            limit,
+          )
 
     return result.toArray().map(parseViewportCellRow)
   }
@@ -471,6 +491,14 @@ function abortError(signal: AbortSignal): Error {
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
+}
+
+function normalizeSampleStride(sampleStride: number | undefined): number {
+  if (sampleStride === undefined || !Number.isFinite(sampleStride)) {
+    return 1
+  }
+
+  return Math.max(1, Math.floor(sampleStride))
 }
 
 function parseExtentRow(row: Record<string, unknown>): BBox {

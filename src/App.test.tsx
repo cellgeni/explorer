@@ -401,9 +401,13 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Actb' }))
     expect(screen.getByLabelText('Selected genes')).not.toHaveTextContent('Actb')
 
-    fireEvent.click(screen.getByRole('button', { name: /Interneuron set/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Interneuron set' }))
 
     expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Actb')
     expect(screen.getByRole('combobox', { name: 'Signature score' })).toHaveValue('mean')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Interneuron set' }))
+
+    expect(screen.queryByLabelText('Saved gene sets')).not.toBeInTheDocument()
   })
 })

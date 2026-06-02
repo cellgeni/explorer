@@ -278,3 +278,11 @@ unless the phase order is explicitly changed.
       `data` Zarr matrices when `cell_features/csc/*` is absent, and expression
       request keys are based on quantized deck view state so viewport layout
       jitter does not refetch GEX in a loop.
+- [x] Stabilized sampled expression rendering for pan/zoom interaction. Low-zoom
+      expression now uses fixed data-space bins clipped to the viewport,
+      sampled expression requests use coarser viewport keys, padded request
+      bboxes, and deterministic row strides, and the expression overlay is
+      non-pickable to reduce deck.gl pan cost.
+- [x] Saved gene sets can now be removed from the Analysis panel, and the
+      desktop control rail scrolls independently so an expanded sidebar cannot
+      push the Spatial View below the viewport.

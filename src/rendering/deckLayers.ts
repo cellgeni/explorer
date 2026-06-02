@@ -133,7 +133,7 @@ export function createOverviewLayers(
       new ScatterplotLayer<OverviewCellDatum>({
         id: 'gene-expression-scatter',
         data: expressionCells,
-        pickable: true,
+        pickable: false,
         radiusUnits: 'common',
         radiusMinPixels: 3,
         radiusMaxPixels: 18,
