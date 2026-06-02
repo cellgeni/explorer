@@ -1910,37 +1910,41 @@ export function App({
           {annotationState.status === 'ready' &&
           annotationState.annotations.length > 0 ? (
             <ul className="annotation-list" aria-label="Loaded annotations">
-              {annotationState.annotations.map((annotation, annotationIndex) => (
-                <li key={annotation.id}>
-                  <input
-                    className="annotation-color"
-                    type="color"
-                    aria-label={`${annotation.label} color`}
-                    value={
-                      annotationColors[annotation.id] ??
-                      annotationPaletteColor(annotationIndex)
-                    }
-                    onChange={(event) => {
-                      handleAnnotationColorChange(
-                        annotation.id,
-                        event.currentTarget.value,
-                      )
-                    }}
-                  />
-                  <span>{annotation.label}</span>
-                  <small>{annotation.cellIds.length.toLocaleString()}</small>
-                  <button
-                    type="button"
-                    className="annotation-remove"
-                    aria-label={`Remove ${annotation.label}`}
-                    onClick={() => {
-                      handleRemoveAnnotation(annotation.id)
-                    }}
-                  >
-                    x
-                  </button>
-                </li>
-              ))}
+              {annotationState.annotations.map((annotation, annotationIndex) => {
+                const annotationColor =
+                  annotationColors[annotation.id] ??
+                  annotationPaletteColor(annotationIndex)
+
+                return (
+                  <li key={annotation.id}>
+                    <input
+                      className="annotation-color"
+                      type="color"
+                      aria-label={`${annotation.label} color`}
+                      value={annotationColor}
+                      style={{ '--annotation-color': annotationColor } as CSSProperties}
+                      onChange={(event) => {
+                        handleAnnotationColorChange(
+                          annotation.id,
+                          event.currentTarget.value,
+                        )
+                      }}
+                    />
+                    <span>{annotation.label}</span>
+                    <small>{annotation.cellIds.length.toLocaleString()}</small>
+                    <button
+                      type="button"
+                      className="annotation-remove"
+                      aria-label={`Remove ${annotation.label}`}
+                      onClick={() => {
+                        handleRemoveAnnotation(annotation.id)
+                      }}
+                    >
+                      x
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           ) : null}
         </section>

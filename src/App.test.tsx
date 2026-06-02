@@ -632,9 +632,11 @@ describe('App', () => {
 
     const colorInput = screen.getByLabelText('kmeans 3: Cluster 1 color')
     expect(colorInput).toHaveValue('#1f77b4')
+    expect(colorInput).toHaveStyle('--annotation-color: #1f77b4')
 
     fireEvent.change(colorInput, { target: { value: '#d62728' } })
     expect(colorInput).toHaveValue('#d62728')
+    expect(colorInput).toHaveStyle('--annotation-color: #d62728')
 
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'annotations',
