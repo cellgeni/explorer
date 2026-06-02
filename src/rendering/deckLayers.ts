@@ -52,6 +52,10 @@ export interface GeneExpressionScoreModeOption {
   readonly label: string
 }
 
+export interface GeneExpressionLayerDataOptions {
+  readonly scaleMax?: number
+}
+
 type ColorStop = readonly [number, number, number, number]
 
 export const DEFAULT_GENE_EXPRESSION_COLOR_SCALE: GeneExpressionColorScale = 'gold'
@@ -266,18 +270,14 @@ export function geneExpressionCellsToLayerData(
   genes: readonly string[],
   colorScale: GeneExpressionColorScale = DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
   scoreMode: GeneExpressionScoreMode = DEFAULT_GENE_EXPRESSION_SCORE_MODE,
+  options: GeneExpressionLayerDataOptions = {},
 ): readonly OverviewCellDatum[] {
   if (cells.length === 0) {
     return []
   }
 
   const scores = scoreExpressionCells(cells, genes, scoreMode)
-  let maxCount = 0
-
-  for (const score of scores) {
-    maxCount = Math.max(maxCount, score)
-  }
-  const scoreDenominator = maxCount > 0 ? maxCount : 1
+  const scoreDenominator = expressionScoreDenominator(scores, options.scaleMax)
 
   const layerData = cells.map((cell, index): OverviewCellDatum => {
     const score = scores[index] ?? 0
@@ -299,23 +299,22 @@ export function geneExpressionCellsToLayerData(
     }
   })
 
-  return styleGeneExpressionCellsByScale(layerData, colorScale)
+  return styleGeneExpressionCellsByScale(layerData, colorScale, options)
 }
 
 export function styleGeneExpressionCellsByScale(
   cells: readonly OverviewCellDatum[],
   colorScale: GeneExpressionColorScale,
+  options: GeneExpressionLayerDataOptions = {},
 ): readonly OverviewCellDatum[] {
   if (cells.length === 0) {
     return cells
   }
 
-  let maxExpressionCount = 0
-
-  for (const cell of cells) {
-    maxExpressionCount = Math.max(maxExpressionCount, cell.expressionCount ?? 0)
-  }
-  const scoreDenominator = maxExpressionCount > 0 ? maxExpressionCount : 1
+  const scoreDenominator = expressionScoreDenominator(
+    cells.map((cell) => cell.expressionCount ?? 0),
+    options.scaleMax,
+  )
 
   return cells.map((cell) => {
     const intensity = Math.sqrt(Math.max(cell.expressionCount ?? 0, 0) / scoreDenominator)
@@ -325,6 +324,14 @@ export function styleGeneExpressionCellsByScale(
       fillColor: geneExpressionColor(colorScale, intensity),
     }
   })
+}
+
+export function geneExpressionScoreDomainMax(
+  cells: readonly GeneExpressionCell[],
+  genes: readonly string[],
+  scoreMode: GeneExpressionScoreMode,
+): number {
+  return maxExpressionScore(scoreExpressionCells(cells, genes, scoreMode))
 }
 
 export function isGeneExpressionColorScale(
@@ -376,6 +383,26 @@ function scoreExpressionCells(
   }
 
   return meanScores.map((score) => (score - mean) / standardDeviation)
+}
+
+function expressionScoreDenominator(
+  scores: readonly number[],
+  scaleMax: number | undefined,
+): number {
+  const maxScore =
+    scaleMax === undefined || scaleMax <= 0 ? maxExpressionScore(scores) : scaleMax
+
+  return maxScore > 0 ? maxScore : 1
+}
+
+function maxExpressionScore(scores: readonly number[]): number {
+  let maxScore = 0
+
+  for (const score of scores) {
+    maxScore = Math.max(maxScore, score)
+  }
+
+  return maxScore
 }
 
 function geneExpressionColor(

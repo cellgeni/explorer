@@ -543,6 +543,26 @@ h2 {
   box-shadow: inset 0 0 0 1px rgba(255, 253, 247, 0.4);
 }
 
+.gene-scale-values {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: -3px;
+  color: #7b4d1d;
+  font-size: 0.64rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.gene-scale-values span:nth-child(2) {
+  text-align: center;
+}
+
+.gene-scale-values span:last-child {
+  text-align: right;
+}
+
 .gene-scale-preview-gold {
   background: linear-gradient(
     90deg,

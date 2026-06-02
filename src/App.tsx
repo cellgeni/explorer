@@ -32,6 +32,7 @@ import {
   GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
   GENE_EXPRESSION_SCORE_MODE_OPTIONS,
   geneExpressionCellsToLayerData,
+  geneExpressionScoreDomainMax,
   isGeneExpressionColorScale,
   isGeneExpressionScoreMode,
   overviewCellsToLayerData,
@@ -52,7 +53,7 @@ import type { DatasetCell, GeneExpressionBatch } from './datasets/xeniumDataset'
 import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
 import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
-import type { ObservationColorMode } from './rendering/cellStyling'
+import type { AnnotationColorStyle, ObservationColorMode } from './rendering/cellStyling'
 import type { Annotation, ElementBatch, SpatialElement } from './datasets/spatialDataset'
 import type {
   GeneExpressionDetailMode,
@@ -66,6 +67,7 @@ import type { OverviewCellDatum } from './rendering/deckLayers'
 import type { RoiDrawMode, ViewerViewportDetail } from './components/ViewerCore'
 
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
+const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 
 export type DatasetOverviewLoader = (
@@ -253,6 +255,11 @@ interface SavedGeneSet {
   readonly scoreMode: GeneExpressionScoreMode
 }
 
+interface GeneExpressionScaleDomain {
+  readonly key: string
+  readonly max: number
+}
+
 interface RoiSummary {
   readonly cellCount: number
   readonly meanTranscriptCount: number
@@ -319,6 +326,8 @@ export function App({
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
   const [geneExpressionBatch, setGeneExpressionBatch] =
     useState<GeneExpressionBatch | null>(null)
+  const [geneExpressionScaleDomain, setGeneExpressionScaleDomain] =
+    useState<GeneExpressionScaleDomain>({ key: '', max: 0 })
   const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
   const [morphologyChannelSettings, setMorphologyChannelSettings] = useState<
     readonly MorphologyChannelSetting[]
@@ -375,16 +384,52 @@ export function App({
         : [],
     [annotationColors, annotationState],
   )
-  const styledOverviewCells = useMemo(
-    () =>
-      styleOverviewCellsByObservation(overviewCells, observationColorMode, {
-        annotations: annotationStyleColors,
-      }),
-    [annotationStyleColors, observationColorMode, overviewCells],
-  )
+  const activeAnnotationStyleColors =
+    observationColorMode === 'annotations'
+      ? annotationStyleColors
+      : EMPTY_ANNOTATION_STYLE_COLORS
+  const styledOverviewCells = useMemo(() => {
+    if (observationColorMode === 'transcript-count') {
+      return overviewCells
+    }
+
+    return styleOverviewCellsByObservation(overviewCells, observationColorMode, {
+      annotations: activeAnnotationStyleColors,
+    })
+  }, [activeAnnotationStyleColors, observationColorMode, overviewCells])
   const overviewExtent = useMemo(
     () => overviewCellsToBbox(overviewCells),
     [overviewCells],
+  )
+  const geneExpressionScaleDatasetUrl =
+    loadState.status === 'ready' ? loadState.url : datasetUrl
+  const geneExpressionScaleKey = useMemo(
+    () =>
+      geneExpressionScaleKeyFor(
+        geneExpressionScaleDatasetUrl,
+        geneExpressionScoreMode,
+        selectedGenes,
+      ),
+    [geneExpressionScaleDatasetUrl, geneExpressionScoreMode, selectedGenes],
+  )
+  const currentGeneExpressionScaleMax = useMemo(
+    () =>
+      geneExpressionBatch === null
+        ? 0
+        : geneExpressionScoreDomainMax(
+            geneExpressionBatch.cells,
+            geneExpressionBatch.genes,
+            geneExpressionScoreMode,
+          ),
+    [geneExpressionBatch, geneExpressionScoreMode],
+  )
+  const storedGeneExpressionScaleMax =
+    geneExpressionScaleDomain.key === geneExpressionScaleKey
+      ? geneExpressionScaleDomain.max
+      : 0
+  const geneExpressionScaleMax = Math.max(
+    storedGeneExpressionScaleMax,
+    currentGeneExpressionScaleMax,
   )
   const geneExpressionCells = useMemo(
     () =>
@@ -395,12 +440,21 @@ export function App({
             geneExpressionBatch.genes,
             geneExpressionColorScale,
             geneExpressionScoreMode,
+            { scaleMax: geneExpressionScaleMax },
           ),
-    [geneExpressionBatch, geneExpressionColorScale, geneExpressionScoreMode],
+    [
+      geneExpressionBatch,
+      geneExpressionColorScale,
+      geneExpressionScaleMax,
+      geneExpressionScoreMode,
+    ],
   )
   const styledGeneExpressionCells = useMemo(
-    () => styleGeneExpressionCellsByScale(geneExpressionCells, geneExpressionColorScale),
-    [geneExpressionCells, geneExpressionColorScale],
+    () =>
+      styleGeneExpressionCellsByScale(geneExpressionCells, geneExpressionColorScale, {
+        scaleMax: geneExpressionScaleMax,
+      }),
+    [geneExpressionCells, geneExpressionColorScale, geneExpressionScaleMax],
   )
   const morphologyCanvasChannels = useMemo<readonly MorphologyCanvasChannel[]>(
     () =>
@@ -484,6 +538,26 @@ export function App({
       }
     })
   }, [])
+  const rememberGeneExpressionScaleMax = useCallback(
+    (key: string, batch: GeneExpressionBatch, scoreMode: GeneExpressionScoreMode) => {
+      const max = geneExpressionScoreDomainMax(batch.cells, batch.genes, scoreMode)
+
+      if (max <= 0) {
+        return
+      }
+
+      setGeneExpressionScaleDomain((current) => {
+        const currentMax = current.key === key ? current.max : 0
+
+        if (currentMax >= max) {
+          return current
+        }
+
+        return { key, max }
+      })
+    },
+    [],
+  )
   const handleViewportChange = useCallback(
     (detail: ViewerViewportDetail) => {
       if (loadState.status !== 'ready') {
@@ -623,6 +697,11 @@ export function App({
             return
           }
 
+          rememberGeneExpressionScaleMax(
+            geneExpressionScaleKey,
+            batch,
+            geneExpressionScoreMode,
+          )
           setGeneExpressionBatch(batch)
           setGeneExpressionState({
             status: 'ready',
@@ -657,11 +736,14 @@ export function App({
     },
     [
       boundaryCellLimit,
+      geneExpressionScaleKey,
+      geneExpressionScoreMode,
       loadBoundaryElements,
       loadGeneExpression,
       loadState,
       geneExpressionDetailMode,
       overviewExtent,
+      rememberGeneExpressionScaleMax,
       selectedGenes,
     ],
   )
@@ -704,6 +786,7 @@ export function App({
       setDatasetUrl(requestedUrl)
       setOverviewCells([])
       setGeneExpressionBatch(null)
+      setGeneExpressionScaleDomain({ key: '', max: 0 })
       setMorphologyImage(null)
       setMorphologyChannelSettings([])
       autoContrastChannelIdsRef.current.clear()
@@ -836,6 +919,7 @@ export function App({
   }
 
   function toggleGene(gene: string) {
+    resetGeneExpressionSelectionState()
     setSelectedGenes((current) =>
       current.includes(gene)
         ? current.filter((selectedGene) => selectedGene !== gene)
@@ -851,6 +935,7 @@ export function App({
     }
 
     setSelectedGenes(genes)
+    resetGeneExpressionSelectionState()
     setGeneSearch('')
   }
 
@@ -877,9 +962,38 @@ export function App({
   }
 
   function applySavedGeneSet(geneSet: SavedGeneSet) {
+    resetGeneExpressionSelectionState()
     setSelectedGenes(geneSet.genes)
     setGeneExpressionScoreMode(geneSet.scoreMode)
     setGeneSearch('')
+  }
+
+  function handleGeneExpressionScoreModeChange(nextScoreMode: GeneExpressionScoreMode) {
+    setGeneExpressionScoreMode(nextScoreMode)
+
+    if (geneExpressionBatch === null) {
+      setGeneExpressionScaleDomain({ key: '', max: 0 })
+      return
+    }
+
+    rememberGeneExpressionScaleMax(
+      geneExpressionScaleKeyFor(
+        geneExpressionScaleDatasetUrl,
+        nextScoreMode,
+        selectedGenes,
+      ),
+      geneExpressionBatch,
+      nextScoreMode,
+    )
+  }
+
+  function resetGeneExpressionSelectionState() {
+    abortActiveRequest(geneExpressionAbortRef)
+    geneExpressionRequestId.current += 1
+    geneExpressionViewportKeyRef.current = null
+    setGeneExpressionBatch(null)
+    setGeneExpressionScaleDomain({ key: '', max: 0 })
+    setGeneExpressionState({ status: 'idle' })
   }
 
   function removeSavedGeneSet(id: string) {
@@ -1386,7 +1500,7 @@ export function App({
               const nextScoreMode = event.currentTarget.value
 
               if (isGeneExpressionScoreMode(nextScoreMode)) {
-                setGeneExpressionScoreMode(nextScoreMode)
+                handleGeneExpressionScoreModeChange(nextScoreMode)
               }
             }}
           >
@@ -1450,6 +1564,11 @@ export function App({
               className={`gene-scale-preview gene-scale-preview-${geneExpressionColorScale}`}
               aria-hidden="true"
             />
+            <div className="gene-scale-values" aria-label="Gene scale values">
+              <span>0</span>
+              <span>{formatGeneScaleValue(geneExpressionScaleMax / 2)}</span>
+              <span>{formatGeneScaleValue(geneExpressionScaleMax)}</span>
+            </div>
           </div>
 
           <label htmlFor={geneExpressionDetailInputId}>Expression detail</label>
@@ -1856,6 +1975,14 @@ function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
 
 function isGeneExpressionDetailMode(value: string): value is GeneExpressionDetailMode {
   return value === 'auto' || value === 'exact-region'
+}
+
+function geneExpressionScaleKeyFor(
+  datasetUrl: string,
+  scoreMode: GeneExpressionScoreMode,
+  genes: readonly string[],
+): string {
+  return [datasetUrl, scoreMode, genes.join('|')].join('::')
 }
 
 function overviewCellsToBbox(cells: readonly OverviewCellDatum[]): BBox | null {
@@ -2294,6 +2421,16 @@ function formatNumber(value: number | undefined): string {
   return value === undefined
     ? '0'
     : value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
+
+function formatGeneScaleValue(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0'
+  }
+
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: value < 10 ? 2 : 1,
+  })
 }
 
 function abortActiveRequest(ref: { current: AbortController | null }): void {

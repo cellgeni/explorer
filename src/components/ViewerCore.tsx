@@ -15,7 +15,7 @@ import {
 } from '../rendering/cellAggregation'
 import { hexCellBoundariesForVisibleCells } from '../rendering/hexCellBoundaries'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
-import { dataToScreen, micrometers, scaleFromZoom, screenPixels } from '../data/coords'
+import { micrometers, scaleFromZoom } from '../data/coords'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox, DataPoint } from '../data/coords'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
@@ -479,35 +479,15 @@ function roiBboxToScreenRect(
     return null
   }
 
-  const topLeft = dataToScreen(
+  const topLeft = rawDataPointToScreen(
     { x: bbox.minX, y: bbox.minY },
-    {
-      target: [
-        micrometers(viewState.target[0]),
-        micrometers(viewState.target[1]),
-        viewState.target[2],
-      ],
-      zoom: viewState.zoom,
-    },
-    {
-      width: screenPixels(viewport.width),
-      height: screenPixels(viewport.height),
-    },
+    viewState,
+    viewport,
   )
-  const bottomRight = dataToScreen(
+  const bottomRight = rawDataPointToScreen(
     { x: bbox.maxX, y: bbox.maxY },
-    {
-      target: [
-        micrometers(viewState.target[0]),
-        micrometers(viewState.target[1]),
-        viewState.target[2],
-      ],
-      zoom: viewState.zoom,
-    },
-    {
-      width: screenPixels(viewport.width),
-      height: screenPixels(viewport.height),
-    },
+    viewState,
+    viewport,
   )
   const left = Math.min(topLeft.x, bottomRight.x)
   const top = Math.min(topLeft.y, bottomRight.y)
@@ -519,6 +499,21 @@ function roiBboxToScreenRect(
     top,
     width: right - left,
     height: bottom - top,
+  }
+}
+
+function rawDataPointToScreen(
+  point: DataPoint,
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+): { readonly x: number; readonly y: number } {
+  const scale = scaleFromZoom(viewState.zoom)
+  const offsetX = viewport.width / 2 - viewState.target[0] * scale
+  const offsetY = viewport.height / 2 + viewState.target[1] * scale
+
+  return {
+    x: point.x * scale + offsetX,
+    y: point.y * scale + offsetY,
   }
 }
 

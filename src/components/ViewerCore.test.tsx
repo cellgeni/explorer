@@ -82,6 +82,14 @@ describe('ViewerCore', () => {
 
     fireEvent.pointerDown(roiLayer, { clientX: 100, clientY: 50, pointerId: 1 })
     fireEvent.pointerMove(roiLayer, { clientX: 116, clientY: 66, pointerId: 1 })
+
+    expect(document.querySelector('.roi-rectangle')).toHaveStyle({
+      left: '100px',
+      top: '50px',
+      width: '16px',
+      height: '16px',
+    })
+
     fireEvent.pointerUp(roiLayer, { clientX: 116, clientY: 66, pointerId: 1 })
 
     const bbox = onRoiComplete.mock.calls[0]?.[0]

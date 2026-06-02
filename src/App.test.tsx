@@ -132,9 +132,15 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => ['Actb'])
     const loadGeneExpression: ReturnType<typeof vi.fn<GeneExpressionLoader>> = vi.fn(
       async () => ({
-        cells: [],
+        cells: [
+          {
+            id: intToCellId(1, 1),
+            position: { x: micrometers(0), y: micrometers(0) },
+            count: 8,
+          },
+        ],
         genes: ['Actb'],
-        maxCount: 0,
+        maxCount: 8,
       }),
     )
 
@@ -171,8 +177,11 @@ describe('App', () => {
         }),
       )
       expect(
-        await screen.findByText('Expression exact region: 0 cells'),
+        await screen.findByText('Expression exact region: 1 cell'),
       ).toBeInTheDocument()
+      expect(screen.getByLabelText('Gene scale values')).toHaveTextContent('0')
+      expect(screen.getByLabelText('Gene scale values')).toHaveTextContent('4')
+      expect(screen.getByLabelText('Gene scale values')).toHaveTextContent('8')
     } finally {
       rectSpy.mockRestore()
       contextSpy.mockRestore()

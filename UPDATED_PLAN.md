@@ -321,3 +321,9 @@ unless the phase order is explicitly changed.
       overlay; the previous red radial glow was removed.
 - [x] Spatial viewer empty state now shows a simple "Please load a dataset"
       legend instead of decorative colored cell placeholders.
+- [x] Tightened Phase 4 interaction polish: annotation remove/clear no longer
+      invalidates the full overview-cell styling unless annotation coloring is
+      active or a non-default observation palette is selected, ROI box drawing uses
+      the same raw data-space transform for display and selection, and
+      gene-expression colors now use a stable per-gene-set max observed across
+      loaded regions with numeric scale ticks in the UI.

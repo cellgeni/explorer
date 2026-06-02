@@ -9,6 +9,7 @@ import {
   createOverviewViewState,
   expressionCellsToBoundaryLayerData,
   geneExpressionCellsToLayerData,
+  geneExpressionScoreDomainMax,
   overviewCellsToLayerData,
   spatialOverviewView,
   styleGeneExpressionCellsByScale,
@@ -358,6 +359,38 @@ describe('deck layer factory', () => {
     expect(goldDatum?.fillColor).toEqual([255, 221, 99, 245])
     expect(viridisDatum?.fillColor).toEqual([253, 231, 37, 245])
     expect(goldDatum?.fillColor).not.toEqual(viridisDatum?.fillColor)
+  })
+
+  it('uses a supplied global expression scale maximum when coloring cells', () => {
+    const [datum] = geneExpressionCellsToLayerData(
+      [
+        {
+          id: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          count: 4,
+        },
+      ],
+      ['Gad1'],
+      'gold',
+      'sum',
+      { scaleMax: 16 },
+    )
+
+    expect(datum?.expressionCount).toBe(4)
+    expect(datum?.fillColor).toEqual([221, 127, 75, 196])
+    expect(
+      geneExpressionScoreDomainMax(
+        [
+          {
+            id: intToCellId(1, 2),
+            position: { x: micrometers(0), y: micrometers(0) },
+            count: 6,
+          },
+        ],
+        ['Gad1', 'Actb'],
+        'mean',
+      ),
+    ).toBe(3)
   })
 
   it('restyles existing expression layer data without changing positions', () => {
