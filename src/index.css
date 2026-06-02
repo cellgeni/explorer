@@ -975,6 +975,29 @@ h2 {
   background: rgba(255, 252, 243, 0.88);
 }
 
+.viewer-heading-stack {
+  min-width: 0;
+}
+
+.viewport-cell-estimate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  margin: 6px 0 0;
+  color: #7b4d1d;
+  font-size: 0.66rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.viewport-cell-estimate strong {
+  color: #174d3e;
+  font-size: 0.76rem;
+}
+
 .dataset-status {
   min-width: 0;
   margin: 0;

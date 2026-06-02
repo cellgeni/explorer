@@ -11,7 +11,10 @@ import {
 } from '../rendering/deckLayers'
 import {
   aggregateExpressionCells,
+  estimateOverviewCellCountInBbox,
+  overviewCellsExtentBbox,
   overviewCellsInBbox,
+  sampleOverviewCellsForRendering,
 } from '../rendering/cellAggregation'
 import { hexCellBoundariesForVisibleCells } from '../rendering/hexCellBoundaries'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
@@ -47,6 +50,7 @@ export interface ViewerCoreProps {
   readonly roiBbox?: BBox | null
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
+  readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onRoiComplete?: (bbox: BBox) => void
 }
@@ -78,6 +82,7 @@ export function ViewerCore({
   roiBbox = null,
   onImageTileError,
   onViewportChange,
+  onViewportCellCountChange,
   onCellClick,
   onRoiComplete,
 }: ViewerCoreProps) {
@@ -106,6 +111,7 @@ export function ViewerCore({
       roiBbox={roiBbox}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
+      {...(onViewportCellCountChange === undefined ? {} : { onViewportCellCountChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
       {...(onRoiComplete === undefined ? {} : { onRoiComplete })}
     />
@@ -132,6 +138,7 @@ interface ViewerSurfaceProps {
   readonly roiBbox: BBox | null
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
+  readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onRoiComplete?: (bbox: BBox) => void
 }
@@ -168,6 +175,7 @@ function ViewerSurface({
   roiBbox,
   onImageTileError,
   onViewportChange,
+  onViewportCellCountChange,
   onCellClick,
   onRoiComplete,
 }: ViewerSurfaceProps) {
@@ -178,6 +186,7 @@ function ViewerSurface({
     height: 0,
   })
   const [roiDrag, setRoiDrag] = useState<RoiDrag | null>(null)
+  const cellExtentBbox = useMemo(() => overviewCellsExtentBbox(cells), [cells])
   const viewportBbox = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
       return null
@@ -227,10 +236,14 @@ function ViewerSurface({
     () => expressionCellsToBoundaryLayerData(styledBoundaries, displayExpressionCells),
     [displayExpressionCells, styledBoundaries],
   )
+  const renderCells = useMemo(
+    () => sampleOverviewCellsForRendering(visibleCells),
+    [visibleCells],
+  )
   const layers = useMemo(
     () =>
       createOverviewLayers(
-        visibleCells,
+        renderCells,
         styledBoundaries,
         hexBoundaries,
         displayExpressionCells,
@@ -246,13 +259,26 @@ function ViewerSurface({
       displayExpressionCells,
       geneExpressionOpacity,
       hexBoundaries,
+      renderCells,
       styledBoundaries,
-      visibleCells,
     ],
   )
   const hasCells = cells.length > 0
   const hasImage = imageLoader !== null || imageChannels.length > 0
   const visibleCellCount = visibleCells.length
+  const estimatedViewportCellCount = useMemo(() => {
+    if (viewportBbox === null) {
+      return cells.length
+    }
+
+    if (viewState.zoom > OVERVIEW_CELL_CLIP_MIN_ZOOM) {
+      return visibleCellCount
+    }
+
+    return estimateOverviewCellCountInBbox(cells, viewportBbox, {
+      extentBbox: cellExtentBbox,
+    })
+  }, [cellExtentBbox, cells, viewState.zoom, viewportBbox, visibleCellCount])
   const roiScreenRect = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
       return null
@@ -370,6 +396,20 @@ function ViewerSurface({
       observer?.disconnect()
     }
   }, [])
+
+  useEffect(() => {
+    if (onViewportCellCountChange === undefined || !hasCells) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      onViewportCellCountChange(estimatedViewportCellCount)
+    }, 80)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [estimatedViewportCellCount, hasCells, onViewportCellCountChange])
 
   useEffect(() => {
     if (onViewportChange === undefined || !hasCells || viewportBbox === null) {

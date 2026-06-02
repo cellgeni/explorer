@@ -46,14 +46,14 @@ describe('deck layer factory', () => {
     expect(layer.props.filled).toBe(false)
     expect(layer.props.stroked).toBe(true)
     expect(layer.props.lineWidthUnits).toBe('pixels')
-    expect(layer.props.lineWidthMinPixels).toBe(0.25)
+    expect(layer.props.lineWidthMinPixels).toBe(1)
     expect(layer.props.radiusMinPixels).toBe(0.12)
 
     const getLineColor = layer.props.getLineColor as (
       cell: OverviewCellDatum,
     ) => readonly number[]
 
-    expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 40])
+    expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 220])
   })
 
   it('adds a polygon layer when boundary data is available', () => {
@@ -72,7 +72,8 @@ describe('deck layer factory', () => {
     const layers = createOverviewLayers(fixtureCells, boundaries)
 
     expect(layers).toHaveLength(2)
-    expect(layers[1]).toBeInstanceOf(PolygonLayer)
+    expect(layers[0]).toBeInstanceOf(PolygonLayer)
+    expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
   })
 
   it('adds hexagon boundaries only when true boundary data is absent', () => {
@@ -94,11 +95,13 @@ describe('deck layer factory', () => {
     const trueLayers = createOverviewLayers(fixtureCells, hexBoundaries, hexBoundaries)
 
     expect(hexLayers).toHaveLength(2)
-    expect(hexLayers[1]).toBeInstanceOf(PolygonLayer)
+    expect(hexLayers[0]).toBeInstanceOf(PolygonLayer)
+    expect(hexLayers[1]).toBeInstanceOf(ScatterplotLayer)
     expect(trueLayers).toHaveLength(2)
-    expect(trueLayers[1]).toBeInstanceOf(PolygonLayer)
+    expect(trueLayers[0]).toBeInstanceOf(PolygonLayer)
+    expect(trueLayers[1]).toBeInstanceOf(ScatterplotLayer)
 
-    const [, trueBoundaryLayer] = trueLayers
+    const [trueBoundaryLayer] = trueLayers
 
     if (!(trueBoundaryLayer instanceof PolygonLayer)) {
       throw new Error('Expected true boundary layer to be a PolygonLayer.')
@@ -133,6 +136,10 @@ describe('deck layer factory', () => {
     expect(expressionLayer.id).toBe('gene-expression-scatter')
     expect(expressionLayer.props.opacity).toBe(0.45)
     expect(expressionLayer.props.pickable).toBe(false)
+    expect(expressionLayer.props.filled).toBe(false)
+    expect(expressionLayer.props.stroked).toBe(true)
+    expect(expressionLayer.props.lineWidthUnits).toBe('pixels')
+    expect(expressionLayer.props.lineWidthMinPixels).toBe(1.5)
   })
 
   it('uses expression-filled hexagons instead of scatter when hex geometry is visible', () => {

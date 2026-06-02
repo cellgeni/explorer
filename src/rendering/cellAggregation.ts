@@ -1,9 +1,10 @@
-import { scaleFromZoom } from '../data/coords'
+import { micrometers, scaleFromZoom } from '../data/coords'
 import type { BBox } from '../data/coords'
 import type { OverviewCellDatum, OverviewViewState } from './deckLayers'
 
 export const OVERVIEW_AGGREGATION_TARGET_PIXELS = 10
 export const OVERVIEW_AGGREGATION_INDIVIDUAL_MICROMETERS = 12
+export const DEFAULT_OVERVIEW_RENDER_CELL_LIMIT = 250_000
 export const EXPRESSION_AGGREGATION_BIN_MICROMETERS = 220
 export const EXPRESSION_AGGREGATION_EXACT_ZOOM = -0.25
 export const EXPRESSION_AGGREGATION_EXACT_CELL_LIMIT = 800
@@ -12,6 +13,14 @@ export interface OverviewAggregationOptions {
   readonly bbox?: BBox
   readonly targetPixels?: number
   readonly individualMicrometers?: number
+}
+
+export interface OverviewCellCountEstimateOptions {
+  readonly extentBbox?: BBox | null
+}
+
+export interface OverviewRenderSamplingOptions {
+  readonly maxCells?: number
 }
 
 interface CellBin {
@@ -140,6 +149,93 @@ export function overviewCellsInBbox(
   return visibleCells
 }
 
+export function overviewCellsExtentBbox(
+  cells: readonly OverviewCellDatum[],
+): BBox | null {
+  if (cells.length === 0) {
+    return null
+  }
+
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const cell of cells) {
+    const [x = 0, deckY = 0] = cell.position
+    const rawY = -deckY
+
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, rawY)
+    maxY = Math.max(maxY, rawY)
+  }
+
+  return {
+    minX: micrometers(minX),
+    maxX: micrometers(maxX),
+    minY: micrometers(minY),
+    maxY: micrometers(maxY),
+  }
+}
+
+export function estimateOverviewCellCountInBbox(
+  cells: readonly OverviewCellDatum[],
+  bbox: BBox,
+  options: OverviewCellCountEstimateOptions = {},
+): number {
+  if (cells.length === 0) {
+    return 0
+  }
+
+  const extentBbox = options.extentBbox ?? overviewCellsExtentBbox(cells)
+
+  if (extentBbox === null) {
+    return 0
+  }
+
+  const extentArea = bboxArea(extentBbox)
+
+  if (extentArea <= 0) {
+    return pointInBbox(extentBbox.minX, extentBbox.minY, bbox) ? cells.length : 0
+  }
+
+  const intersectionArea = bboxIntersectionArea(extentBbox, bbox)
+
+  if (intersectionArea <= 0) {
+    return 0
+  }
+
+  return Math.min(
+    cells.length,
+    Math.max(1, Math.round(cells.length * (intersectionArea / extentArea))),
+  )
+}
+
+export function sampleOverviewCellsForRendering(
+  cells: readonly OverviewCellDatum[],
+  options: OverviewRenderSamplingOptions = {},
+): readonly OverviewCellDatum[] {
+  const maxCells = normalizeRenderCellLimit(options.maxCells)
+
+  if (cells.length <= maxCells) {
+    return cells
+  }
+
+  const sampleStep = cells.length / maxCells
+  const sampledCells: OverviewCellDatum[] = []
+
+  for (let index = 0; index < maxCells; index += 1) {
+    const cell = cells[Math.floor((index + 0.5) * sampleStep)]
+
+    if (cell !== undefined) {
+      sampledCells.push(cell)
+    }
+  }
+
+  return sampledCells
+}
+
 function aggregateCellsIntoBins(
   cells: readonly OverviewCellDatum[],
   binSize: number,
@@ -229,6 +325,31 @@ function aggregateCellsIntoBins(
   }
 
   return aggregatedCells
+}
+
+function bboxArea(bbox: BBox): number {
+  return Math.max(0, bbox.maxX - bbox.minX) * Math.max(0, bbox.maxY - bbox.minY)
+}
+
+function bboxIntersectionArea(first: BBox, second: BBox): number {
+  const minX = Math.max(first.minX, second.minX)
+  const maxX = Math.min(first.maxX, second.maxX)
+  const minY = Math.max(first.minY, second.minY)
+  const maxY = Math.min(first.maxY, second.maxY)
+
+  return Math.max(0, maxX - minX) * Math.max(0, maxY - minY)
+}
+
+function pointInBbox(x: number, y: number, bbox: BBox): boolean {
+  return x >= bbox.minX && x <= bbox.maxX && y >= bbox.minY && y <= bbox.maxY
+}
+
+function normalizeRenderCellLimit(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return DEFAULT_OVERVIEW_RENDER_CELL_LIMIT
+  }
+
+  return Math.max(1, Math.round(value))
 }
 
 function aggregateExpressionCellsIntoBins(

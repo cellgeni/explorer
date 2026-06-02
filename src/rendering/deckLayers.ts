@@ -124,45 +124,23 @@ export function createOverviewLayers(
   const expressionHexBoundaries = options.expressionHexBoundaries ?? []
   const hasExpressionPolygons =
     expressionBoundaryPolygons.length > 0 || expressionHexBoundaries.length > 0
-  const layers: LayersList = [
-    new ScatterplotLayer<OverviewCellDatum>({
-      id: 'cells-overview-scatter',
-      data: cells,
-      pickable: true,
-      radiusUnits: 'common',
-      radiusMinPixels: 0.12,
-      radiusMaxPixels: 6,
-      stroked: true,
-      filled: false,
-      lineWidthUnits: 'pixels',
-      lineWidthMinPixels: 0.25,
-      getPosition: (cell) => cell.position,
-      getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
-      getLineColor: (cell) => overviewCellOutlineColor(cell.fillColor),
-      getLineWidth: 0.35,
-    }),
-  ]
-
-  if (expressionCells.length > 0 && !hasExpressionPolygons) {
-    layers.push(
-      new ScatterplotLayer<OverviewCellDatum>({
-        id: 'gene-expression-scatter',
-        data: expressionCells,
-        pickable: false,
-        radiusUnits: 'common',
-        radiusMinPixels: 3,
-        radiusMaxPixels: 18,
-        stroked: true,
-        lineWidthMinPixels: 1,
-        opacity: geneExpressionOpacity,
-        getPosition: (cell) => cell.position,
-        getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
-        getFillColor: (cell) => cell.fillColor,
-        getLineColor: [255, 253, 247, 230],
-        getLineWidth: 1,
-      }),
-    )
-  }
+  const cellPointLayer = new ScatterplotLayer<OverviewCellDatum>({
+    id: 'cells-overview-scatter',
+    data: cells,
+    pickable: true,
+    radiusUnits: 'common',
+    radiusMinPixels: 0.12,
+    radiusMaxPixels: 6,
+    stroked: true,
+    filled: false,
+    lineWidthUnits: 'pixels',
+    lineWidthMinPixels: 1,
+    getPosition: (cell) => cell.position,
+    getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
+    getLineColor: (cell) => cellPointOutlineColor(cell.fillColor),
+    getLineWidth: 1,
+  })
+  const layers: LayersList = []
 
   if (hexBoundaries.length > 0 && boundaries.length === 0) {
     layers.push(
@@ -196,6 +174,30 @@ export function createOverviewLayers(
         getFillColor: (cell) => cell.fillColor,
         getLineColor: (cell) => cell.lineColor,
         getLineWidth: 1,
+      }),
+    )
+  }
+
+  layers.push(cellPointLayer)
+
+  if (expressionCells.length > 0 && !hasExpressionPolygons) {
+    layers.push(
+      new ScatterplotLayer<OverviewCellDatum>({
+        id: 'gene-expression-scatter',
+        data: expressionCells,
+        pickable: false,
+        radiusUnits: 'common',
+        radiusMinPixels: 3,
+        radiusMaxPixels: 18,
+        stroked: true,
+        filled: false,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 1.5,
+        opacity: geneExpressionOpacity,
+        getPosition: (cell) => cell.position,
+        getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
+        getLineColor: (cell) => cellPointOutlineColor(cell.fillColor),
+        getLineWidth: 1.5,
       }),
     )
   }
@@ -548,12 +550,12 @@ function boundaryLineColor(color: Color): Color {
   ]
 }
 
-function overviewCellOutlineColor(color: Color): Color {
+function cellPointOutlineColor(color: Color): Color {
   return [
     color[0] ?? 0,
     color[1] ?? 0,
     color[2] ?? 0,
-    Math.min(42, Math.max(10, Math.round((color[3] ?? 210) * 0.18))),
+    Math.min(245, Math.max(160, color[3] ?? 210)),
   ]
 }
 

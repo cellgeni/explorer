@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ViewerCore } from './ViewerCore'
 import { scaffoldDeckLayerCount } from './viewerCoreModel'
+import type { OverviewCellDatum } from '../rendering/deckLayers'
 
 const rect = {
   x: 0,
@@ -64,6 +65,36 @@ describe('ViewerCore', () => {
     })
     expect(onViewportChange.mock.calls[0]?.[0]).toMatchObject({
       visibleCellCount: 1,
+    })
+  })
+
+  it('reports a broad-zoom viewport cell estimate without waiting for render clipping', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      ...rect,
+      width: 300,
+      height: 300,
+      right: 300,
+      bottom: 300,
+    })
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onViewportCellCountChange = vi.fn()
+    const cells = Array.from(
+      { length: 100 },
+      (_value, index): OverviewCellDatum => ({
+        id: `cell-${index}`,
+        position: [(index % 10) * 1000, -Math.floor(index / 10) * 1000, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      }),
+    )
+
+    render(
+      <ViewerCore cells={cells} onViewportCellCountChange={onViewportCellCountChange} />,
+    )
+
+    await waitFor(() => {
+      expect(onViewportCellCountChange).toHaveBeenCalledWith(expect.any(Number) as number)
+      expect(onViewportCellCountChange).toHaveBeenLastCalledWith(17)
     })
   })
 

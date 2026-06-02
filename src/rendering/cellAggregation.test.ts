@@ -3,7 +3,10 @@ import { micrometers } from '../data/coords'
 import {
   aggregateExpressionCells,
   aggregateOverviewCells,
+  estimateOverviewCellCountInBbox,
   overviewAggregationBinMicrometers,
+  overviewCellsExtentBbox,
+  sampleOverviewCellsForRendering,
 } from './cellAggregation'
 import type { OverviewCellDatum, OverviewViewState } from './deckLayers'
 
@@ -161,5 +164,76 @@ describe('overview cell aggregation', () => {
   it('derives bin size from the current orthographic zoom', () => {
     expect(overviewAggregationBinMicrometers(viewState)).toBe(80)
     expect(overviewAggregationBinMicrometers({ ...viewState, zoom: 0 })).toBe(10)
+  })
+
+  it('estimates viewport cell counts from slide coverage at overview zooms', () => {
+    const estimateCells = Array.from(
+      { length: 100 },
+      (_value, index): OverviewCellDatum => ({
+        id: `cell-${index}`,
+        position: [index % 10, -Math.floor(index / 10), 0],
+        radiusPixels: 3,
+        fillColor: [215, 63, 124, 180],
+      }),
+    )
+    const extentBbox = overviewCellsExtentBbox(estimateCells)
+
+    expect(
+      estimateOverviewCellCountInBbox(
+        estimateCells,
+        {
+          minX: micrometers(0),
+          maxX: micrometers(9),
+          minY: micrometers(0),
+          maxY: micrometers(9),
+        },
+        { extentBbox },
+      ),
+    ).toBe(100)
+    expect(
+      estimateOverviewCellCountInBbox(
+        estimateCells,
+        {
+          minX: micrometers(0),
+          maxX: micrometers(4.5),
+          minY: micrometers(0),
+          maxY: micrometers(9),
+        },
+        { extentBbox },
+      ),
+    ).toBe(50)
+    expect(
+      estimateOverviewCellCountInBbox(
+        estimateCells,
+        {
+          minX: micrometers(20),
+          maxX: micrometers(30),
+          minY: micrometers(20),
+          maxY: micrometers(30),
+        },
+        { extentBbox },
+      ),
+    ).toBe(0)
+  })
+
+  it('subsamples overview cells for responsive rendering when above the limit', () => {
+    const sampleCells = Array.from(
+      { length: 10 },
+      (_value, index): OverviewCellDatum => ({
+        id: `cell-${index}`,
+        position: [index, -index, 0],
+        radiusPixels: 3,
+        fillColor: [215, 63, 124, 180],
+      }),
+    )
+
+    expect(sampleOverviewCellsForRendering(sampleCells, { maxCells: 10 })).toBe(
+      sampleCells,
+    )
+    expect(
+      sampleOverviewCellsForRendering(sampleCells, { maxCells: 4 }).map(
+        (cell) => cell.id,
+      ),
+    ).toEqual(['cell-1', 'cell-3', 'cell-6', 'cell-8'])
   })
 })

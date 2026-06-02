@@ -318,6 +318,8 @@ describe('App', () => {
       )
     })
     expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+    expect(screen.getByText('Estimated cells in view')).toBeInTheDocument()
+    expect(screen.getByText('1 cell')).toBeInTheDocument()
     expect(loadMorphologyImage).not.toHaveBeenCalled()
     expect(loadGenePanel).toHaveBeenCalledWith(
       DEMO_DATASET_URL,

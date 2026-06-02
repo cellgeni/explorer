@@ -442,6 +442,7 @@ export function App({
   const [observationColorMode, setObservationColorMode] =
     useState<ObservationColorMode>('transcript-count')
   const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
+  const [viewportCellCount, setViewportCellCount] = useState<number | null>(null)
   const loadRequestId = useRef(0)
   const boundaryRequestId = useRef(0)
   const geneExpressionRequestId = useRef(0)
@@ -460,6 +461,7 @@ export function App({
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
   const isLoading = loadState.status === 'loading'
   const statusCopy = datasetStatusCopy(loadState, datasetUrl)
+  const viewportCellCountCopy = viewportCellCountStatusCopy(loadState, viewportCellCount)
   const annotationStyleColors = useMemo(
     () =>
       annotationState.status === 'ready'
@@ -910,6 +912,7 @@ export function App({
       setRoiGeneStatsState({ status: 'idle' })
       setRoiTranscriptExportState({ status: 'idle' })
       setSelectedCell(null)
+      setViewportCellCount(null)
       setLoadState({ status: 'loading', url: requestedUrl })
       setMorphologyState(
         loadImage ? { status: 'loading', url: requestedUrl } : { status: 'idle' },
@@ -2057,9 +2060,15 @@ export function App({
 
       <section className="viewer-region" aria-labelledby="viewer-heading">
         <header className="viewer-toolbar">
-          <div>
+          <div className="viewer-heading-stack">
             <p className="eyebrow">Phase 1</p>
             <h2 id="viewer-heading">Spatial View</h2>
+            {viewportCellCountCopy === null ? null : (
+              <p className="viewport-cell-estimate" aria-live="polite">
+                <span>Estimated cells in view</span>{' '}
+                <strong>{viewportCellCountCopy}</strong>
+              </p>
+            )}
           </div>
           <p className="dataset-status" aria-live="polite">
             {statusCopy.label}: <span translate="no">{statusCopy.url}</span>
@@ -2081,6 +2090,7 @@ export function App({
           roiMode={roiMode}
           roiBbox={activeRoiBbox}
           onImageTileError={handleImageTileError}
+          onViewportCellCountChange={setViewportCellCount}
           onViewportChange={handleViewportChange}
           onRoiComplete={handleRoiComplete}
           onCellClick={(cell) => {
@@ -2122,6 +2132,24 @@ function datasetStatusCopy(
   }
 
   return { label: 'Queued dataset', url: queuedUrl }
+}
+
+function viewportCellCountStatusCopy(
+  loadState: DatasetLoadState,
+  visibleCellCount: number | null,
+): string | null {
+  if (loadState.status === 'loading') {
+    return 'Estimating'
+  }
+
+  if (loadState.status !== 'ready') {
+    return null
+  }
+
+  const count = visibleCellCount ?? loadState.cellCount
+  const noun = count === 1 ? 'cell' : 'cells'
+
+  return `${count.toLocaleString()} ${noun}`
 }
 
 async function defaultComputeAutoChannelContrast(
