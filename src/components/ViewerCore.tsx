@@ -24,6 +24,8 @@ import type { MorphologyCanvasChannel } from './MorphologyCanvas'
 import type { CellBoundaryDatum, OverviewCellDatum } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
+const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
+
 export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface ViewerCoreProps {
@@ -184,8 +186,11 @@ function ViewerSurface({
     return morphologyViewportBbox(viewState, viewport)
   }, [viewState, viewport])
   const visibleCells = useMemo(
-    () => (viewportBbox === null ? cells : overviewCellsInBbox(cells, viewportBbox)),
-    [cells, viewportBbox],
+    () =>
+      viewportBbox === null || viewState.zoom <= OVERVIEW_CELL_CLIP_MIN_ZOOM
+        ? cells
+        : overviewCellsInBbox(cells, viewportBbox),
+    [cells, viewportBbox, viewState.zoom],
   )
   const displayExpressionCells = useMemo(
     () =>

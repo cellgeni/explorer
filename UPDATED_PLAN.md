@@ -348,3 +348,8 @@ unless the phase order is explicitly changed.
       points, which avoids rebuilding binned annotation-color averages during
       low-zoom pan/drag interactions. Expression LOD aggregation remains in
       place for gene overlays.
+- [x] Changed the default overview centroid marks to low-alpha hollow point
+      outlines and added a low-zoom pass-through path that reuses the full
+      centroid array instead of re-filtering it during overview pan/drag. This
+      keeps all cells visible as points while reducing visual occlusion and CPU
+      work.

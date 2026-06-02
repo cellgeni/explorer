@@ -130,11 +130,16 @@ export function createOverviewLayers(
       data: cells,
       pickable: true,
       radiusUnits: 'common',
-      radiusMinPixels: 1.25,
-      radiusMaxPixels: 8,
+      radiusMinPixels: 0.12,
+      radiusMaxPixels: 6,
+      stroked: true,
+      filled: false,
+      lineWidthUnits: 'pixels',
+      lineWidthMinPixels: 0.25,
       getPosition: (cell) => cell.position,
       getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
-      getFillColor: (cell) => cell.fillColor,
+      getLineColor: (cell) => overviewCellOutlineColor(cell.fillColor),
+      getLineWidth: 0.35,
     }),
   ]
 
@@ -540,6 +545,15 @@ function boundaryLineColor(color: Color): Color {
     color[1] ?? 0,
     color[2] ?? 0,
     Math.min(235, Math.max(160, color[3] ?? 210)),
+  ]
+}
+
+function overviewCellOutlineColor(color: Color): Color {
+  return [
+    color[0] ?? 0,
+    color[1] ?? 0,
+    color[2] ?? 0,
+    Math.min(42, Math.max(10, Math.round((color[3] ?? 210) * 0.18))),
   ]
 }
 

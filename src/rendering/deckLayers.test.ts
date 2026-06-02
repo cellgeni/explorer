@@ -43,6 +43,17 @@ describe('deck layer factory', () => {
     }
 
     expect(layer.id).toBe('cells-overview-scatter')
+    expect(layer.props.filled).toBe(false)
+    expect(layer.props.stroked).toBe(true)
+    expect(layer.props.lineWidthUnits).toBe('pixels')
+    expect(layer.props.lineWidthMinPixels).toBe(0.25)
+    expect(layer.props.radiusMinPixels).toBe(0.12)
+
+    const getLineColor = layer.props.getLineColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
+
+    expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 40])
   })
 
   it('adds a polygon layer when boundary data is available', () => {
