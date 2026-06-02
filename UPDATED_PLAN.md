@@ -304,3 +304,8 @@ unless the phase order is explicitly changed.
       `cells.parquet`, cell-count/mean-observation summaries, save-as-annotation,
       and selected-cell CSV export. Polygon/lasso drawing and transcript export
       remain under the open ROI checkbox.
+- [x] Added annotation palette management. Loaded/imported/ROI annotations get
+      deterministic default categorical colors, editable color swatches, remove
+      buttons, and a clear-all action. The static layer bullet list was removed
+      from the sidebar, and the `Cell color` control now offers an `Annotations`
+      mode when labels are loaded.

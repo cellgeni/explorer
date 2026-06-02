@@ -40,6 +40,10 @@ import {
 } from './rendering/deckLayers'
 import { styleOverviewCellsByObservation } from './rendering/cellStyling'
 import { hexBoundaryCellLimit } from './rendering/hexCellBoundaries'
+import {
+  annotationPaletteColor,
+  normalizeAnnotationColor,
+} from './rendering/annotationPalette'
 import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { BBox } from './data/coords'
@@ -61,7 +65,6 @@ import type {
 import type { OverviewCellDatum } from './rendering/deckLayers'
 import type { RoiDrawMode, ViewerViewportDetail } from './components/ViewerCore'
 
-const scaffoldLayers = ['cells', 'boundaries', 'image'] as const
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 
@@ -306,6 +309,9 @@ export function App({
   const [annotationState, setAnnotationState] = useState<AnnotationState>({
     status: 'idle',
   })
+  const [annotationColors, setAnnotationColors] = useState<Readonly<Record<string, string>>>(
+    {},
+  )
   const [roiState, setRoiState] = useState<RoiState>({ status: 'idle' })
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
     status: 'idle',
@@ -356,9 +362,24 @@ export function App({
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
   const isLoading = loadState.status === 'loading'
   const statusCopy = datasetStatusCopy(loadState, datasetUrl)
+  const annotationStyleColors = useMemo(
+    () =>
+      annotationState.status === 'ready'
+        ? annotationState.annotations.map((annotation, annotationIndex) => ({
+            id: annotation.id,
+            cellIds: annotation.cellIds,
+            color:
+              annotationColors[annotation.id] ?? annotationPaletteColor(annotationIndex),
+          }))
+        : [],
+    [annotationColors, annotationState],
+  )
   const styledOverviewCells = useMemo(
-    () => styleOverviewCellsByObservation(overviewCells, observationColorMode),
-    [observationColorMode, overviewCells],
+    () =>
+      styleOverviewCellsByObservation(overviewCells, observationColorMode, {
+        annotations: annotationStyleColors,
+      }),
+    [annotationStyleColors, observationColorMode, overviewCells],
   )
   const overviewExtent = useMemo(
     () => overviewCellsToBbox(overviewCells),
@@ -690,6 +711,8 @@ export function App({
       setGeneSetSymbols('')
       setGeneSetName('')
       setSavedGeneSets([])
+      setAnnotationColors({})
+      setObservationColorMode('transcript-count')
       setGeneExpressionScoreMode(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
       setGeneExpressionDetailMode('auto')
       setSelectedGenes([])
@@ -877,6 +900,7 @@ export function App({
           url: loadState.url,
           annotations,
         })
+        setAnnotationColors((current) => colorsForAnnotations(annotations, current))
       })
       .catch((error) => {
         if (isAbortError(error) || loadRequestId.current !== requestId) {
@@ -898,6 +922,7 @@ export function App({
 
     try {
       const importedAnnotations = parseCustomAnnotations(await file.text(), file.name)
+      const importedPrefix = customAnnotationFilePrefix(file.name)
 
       setAnnotationState((current) => ({
         status: 'ready',
@@ -905,9 +930,15 @@ export function App({
         annotations: mergeImportedAnnotations(
           current.status === 'ready' ? current.annotations : [],
           importedAnnotations,
-          customAnnotationFilePrefix(file.name),
+          importedPrefix,
         ),
       }))
+      setAnnotationColors((current) =>
+        colorsForAnnotations(
+          importedAnnotations,
+          removeAnnotationColorsByPrefix(current, importedPrefix),
+        ),
+      )
     } catch (error) {
       setAnnotationState({
         status: 'error',
@@ -915,6 +946,44 @@ export function App({
         error: createStructuredLoadError('Annotations', error),
       })
     }
+  }
+
+  function handleAnnotationColorChange(annotationId: string, color: string) {
+    const normalizedColor = normalizeAnnotationColor(color)
+
+    if (normalizedColor === null) {
+      return
+    }
+
+    setAnnotationColors((current) => ({ ...current, [annotationId]: normalizedColor }))
+  }
+
+  function handleRemoveAnnotation(annotationId: string) {
+    setAnnotationState((current) => {
+      if (current.status !== 'ready') {
+        return current
+      }
+
+      const annotations = current.annotations.filter(
+        (annotation) => annotation.id !== annotationId,
+      )
+
+      return annotations.length === 0
+        ? { status: 'idle' }
+        : { ...current, annotations }
+    })
+    setAnnotationColors((current) => removeAnnotationColor(current, annotationId))
+    setObservationColorMode((current) =>
+      hasReadyAnnotationsAfterRemove(annotationState, annotationId)
+        ? current
+        : 'transcript-count',
+    )
+  }
+
+  function handleClearAnnotations() {
+    setAnnotationState({ status: 'idle' })
+    setAnnotationColors({})
+    setObservationColorMode('transcript-count')
   }
 
   function handleRoiComplete(bbox: BBox) {
@@ -991,6 +1060,10 @@ export function App({
         annotation,
         ...(current.status === 'ready' ? current.annotations : []),
       ],
+    }))
+    setAnnotationColors((current) => ({
+      ...current,
+      [annotation.id]: annotationPaletteColor(Object.keys(current).length),
     }))
     setRoiName(defaultRoiName(roiIdRef.current + 1))
   }
@@ -1125,14 +1198,6 @@ export function App({
           <p>
             {scaffoldDeckLayerCount} Deck Layer - deck.gl {bundledDeckVersion}
           </p>
-          <ul>
-            {scaffoldLayers.map((layerName) => (
-              <li key={layerName}>
-                <span className={`layer-dot layer-dot-${layerName}`} aria-hidden="true" />
-                <span>{layerName}</span>
-              </li>
-            ))}
-          </ul>
           <div className="layer-opacity-controls">
             <div className="layer-opacity-control">
               <div className="layer-opacity-header">
@@ -1373,11 +1438,18 @@ export function App({
             id={observationModeInputId}
             value={observationColorMode}
             onChange={(event) => {
-              setObservationColorMode(event.currentTarget.value as ObservationColorMode)
+              const nextMode = event.currentTarget.value
+
+              if (isObservationColorMode(nextMode)) {
+                setObservationColorMode(nextMode)
+              }
             }}
           >
             <option value="transcript-count">Transcript count</option>
             <option value="cell-area">Cell area</option>
+            {annotationStyleColors.length === 0 ? null : (
+              <option value="annotations">Annotations</option>
+            )}
           </select>
 
           <p className="analysis-status" aria-live="polite">
@@ -1400,6 +1472,14 @@ export function App({
           >
             {annotationState.status === 'loading' ? 'Loading…' : 'Load Annotations'}
           </button>
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={annotationState.status !== 'ready'}
+            onClick={handleClearAnnotations}
+          >
+            Clear Annotations
+          </button>
           <label className="secondary-file-action" htmlFor={annotationImportInputId}>
             Import File
           </label>
@@ -1418,10 +1498,35 @@ export function App({
           {annotationState.status === 'ready' &&
           annotationState.annotations.length > 0 ? (
             <ul className="annotation-list" aria-label="Loaded annotations">
-              {annotationState.annotations.map((annotation) => (
+              {annotationState.annotations.map((annotation, annotationIndex) => (
                 <li key={annotation.id}>
+                  <input
+                    className="annotation-color"
+                    type="color"
+                    aria-label={`${annotation.label} color`}
+                    value={
+                      annotationColors[annotation.id] ??
+                      annotationPaletteColor(annotationIndex)
+                    }
+                    onChange={(event) => {
+                      handleAnnotationColorChange(
+                        annotation.id,
+                        event.currentTarget.value,
+                      )
+                    }}
+                  />
                   <span>{annotation.label}</span>
                   <small>{annotation.cellIds.length.toLocaleString()}</small>
+                  <button
+                    type="button"
+                    className="annotation-remove"
+                    aria-label={`Remove ${annotation.label}`}
+                    onClick={() => {
+                      handleRemoveAnnotation(annotation.id)
+                    }}
+                  >
+                    x
+                  </button>
                 </li>
               ))}
             </ul>
@@ -1645,6 +1750,22 @@ function roiStatusCopy(roiState: RoiState, roiMode: RoiDrawMode): string {
   return 'Idle'
 }
 
+function isObservationColorMode(value: string): value is ObservationColorMode {
+  return (
+    value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
+  )
+}
+
+function hasReadyAnnotationsAfterRemove(
+  annotationState: AnnotationState,
+  annotationId: string,
+): boolean {
+  return (
+    annotationState.status === 'ready' &&
+    annotationState.annotations.some((annotation) => annotation.id !== annotationId)
+  )
+}
+
 function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): string {
   if (geneExpressionState.status === 'loading') {
     return `${geneExpressionModeLabel(geneExpressionState.mode)}: ${geneExpressionState.genes.join(', ')}`
@@ -1806,6 +1927,55 @@ function mergeImportedAnnotations(
     ),
     ...importedAnnotations,
   ]
+}
+
+function colorsForAnnotations(
+  annotations: readonly Annotation[],
+  currentColors: Readonly<Record<string, string>>,
+): Readonly<Record<string, string>> {
+  const nextColors: Record<string, string> = { ...currentColors }
+  let colorIndex = Object.keys(nextColors).length
+
+  for (const annotation of annotations) {
+    if (nextColors[annotation.id] !== undefined) {
+      continue
+    }
+
+    nextColors[annotation.id] = annotationPaletteColor(colorIndex)
+    colorIndex += 1
+  }
+
+  return nextColors
+}
+
+function removeAnnotationColor(
+  colors: Readonly<Record<string, string>>,
+  annotationId: string,
+): Readonly<Record<string, string>> {
+  const remainingColors: Record<string, string> = {}
+
+  for (const [candidateId, color] of Object.entries(colors)) {
+    if (candidateId !== annotationId) {
+      remainingColors[candidateId] = color
+    }
+  }
+
+  return remainingColors
+}
+
+function removeAnnotationColorsByPrefix(
+  colors: Readonly<Record<string, string>>,
+  prefix: string,
+): Readonly<Record<string, string>> {
+  const remainingColors: Record<string, string> = {}
+
+  for (const [annotationId, color] of Object.entries(colors)) {
+    if (!annotationId.startsWith(prefix)) {
+      remainingColors[annotationId] = color
+    }
+  }
+
+  return remainingColors
 }
 
 function customAnnotationFilePrefix(fileName: string): string {

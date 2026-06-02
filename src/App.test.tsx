@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   App,
@@ -38,6 +38,10 @@ describe('App', () => {
     expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(500)
     expect(screen.getByRole('slider', { name: 'Image opacity' })).toHaveValue('100')
     expect(screen.getByRole('slider', { name: 'Gene opacity' })).toHaveValue('100')
+    const layerStack = screen.getByRole('region', { name: 'Layer Stack' })
+    expect(within(layerStack).queryByText('cells')).not.toBeInTheDocument()
+    expect(within(layerStack).queryByText('boundaries')).not.toBeInTheDocument()
+    expect(within(layerStack).queryByText('image')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument()
     expect(screen.getByLabelText('Gene selection')).toBeDisabled()
     expect(screen.getByLabelText('Gene set symbols')).toBeDisabled()
@@ -574,6 +578,26 @@ describe('App', () => {
       'graphclust: Cluster 1',
     )
     expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+
+    const colorInput = screen.getByLabelText('graphclust: Cluster 1 color')
+    expect(colorInput).toHaveValue('#1f77b4')
+
+    fireEvent.change(colorInput, { target: { value: '#d62728' } })
+    expect(colorInput).toHaveValue('#d62728')
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Cell color' }), {
+      target: { value: 'annotations' },
+    })
+    expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+      'annotations',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove graphclust: Cluster 1' }))
+
+    expect(screen.queryByLabelText('Loaded annotations')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+      'transcript-count',
+    )
   })
 
   it('imports custom CSV annotations from a local file', async () => {
@@ -605,6 +629,10 @@ describe('App', () => {
       'Manual ROI',
     )
     expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Annotations' }))
+
+    expect(screen.queryByLabelText('Loaded annotations')).not.toBeInTheDocument()
   })
 
   it('draws a box ROI, summarizes true cells, and saves it as an annotation', async () => {
