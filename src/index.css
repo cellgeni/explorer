@@ -870,7 +870,7 @@ h2 {
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  background: #181713;
+  background: #000;
 }
 
 .morphology-canvas,
@@ -915,13 +915,10 @@ h2 {
 .viewport-grid {
   background:
     linear-gradient(90deg, rgba(240, 200, 75, 0.12) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(240, 200, 75, 0.12) 1px, transparent 1px),
-    radial-gradient(circle at 42% 50%, rgba(215, 63, 124, 0.18), transparent 32%), #181713;
+    linear-gradient(0deg, rgba(240, 200, 75, 0.12) 1px, transparent 1px), #000;
   background-size:
     72px 72px,
-    72px 72px,
-    auto,
-    auto;
+    72px 72px;
 }
 
 .cell-field {

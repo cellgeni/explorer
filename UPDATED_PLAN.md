@@ -317,3 +317,5 @@ unless the phase order is explicitly changed.
 - [x] Morphology channel auto-thresholding now runs automatically when an image
       load completes. The manual `Auto` buttons still use the same per-channel
       percentile/histogram path for later retuning.
+- [x] Spatial viewer idle background is now solid black with only the grid
+      overlay; the previous red radial glow was removed.
