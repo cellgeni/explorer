@@ -284,6 +284,25 @@ describe('XeniumDataset', () => {
     )
   })
 
+  it('loads annotations from analysis.zarr and cell-feature matrix row ids', async () => {
+    const conn = new FakeConnection([])
+    const annotations = [
+      {
+        id: 'analysis:0:0',
+        label: 'graphclust: Cluster 1',
+        cellIds: [intToCellId(1, 1)],
+      },
+    ]
+    const analysisAnnotationReader = vi.fn(async () => annotations)
+    const dataset = makeDataset(conn, { analysisAnnotationReader })
+
+    await expect(dataset.annotations()).resolves.toBe(annotations)
+    expect(analysisAnnotationReader).toHaveBeenCalledWith(
+      'https://example.test/xenium/analysis.zarr.zip',
+      'https://example.test/xenium/cell_feature_matrix.zarr.zip',
+    )
+  })
+
   it('applies a deterministic viewport-cell stride for sampled expression queries', async () => {
     const cellId = intToCellId(1, 2)
     const conn = new FakeConnection([

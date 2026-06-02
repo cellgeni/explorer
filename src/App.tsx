@@ -2,6 +2,7 @@ import type { FormEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ViewerCore } from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
+import { loadDatasetAnnotations as defaultLoadDatasetAnnotations } from './data/datasetAnnotations'
 import { loadDatasetBoundaryElements as defaultLoadBoundaryElements } from './data/datasetBoundaries'
 import { loadDatasetGeneExpression as defaultLoadDatasetGeneExpression } from './data/geneExpression'
 import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
@@ -38,7 +39,7 @@ import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
 import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
 import type { ObservationColorMode } from './rendering/cellStyling'
-import type { ElementBatch, SpatialElement } from './datasets/spatialDataset'
+import type { Annotation, ElementBatch, SpatialElement } from './datasets/spatialDataset'
 import type {
   GeneExpressionColorScale,
   GeneExpressionScoreMode,
@@ -76,6 +77,10 @@ export type GenePanelLoader = (
   baseUrl: string,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<readonly string[]>
+export type AnnotationLoader = (
+  baseUrl: string,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<readonly Annotation[]>
 export type GeneExpressionLoader = (
   baseUrl: string,
   bbox: BBox,
@@ -131,6 +136,20 @@ type GenePanelState =
       readonly error: StructuredLoadError
     }
 
+type AnnotationState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly annotations: readonly Annotation[]
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
+
 type GeneExpressionState =
   | { readonly status: 'idle' }
   | { readonly status: 'waiting'; readonly message: string }
@@ -170,6 +189,7 @@ type LoadErrorSource =
   | 'Image tiles'
   | 'Cell boundaries'
   | 'Gene panel'
+  | 'Annotations'
   | 'Gene expression'
 
 type GeneExpressionLoadMode = 'exact' | 'sampled' | 'exact-region'
@@ -205,6 +225,7 @@ export interface AppProps {
   readonly loadMorphologyImage?: MorphologyImageLoader
   readonly loadBoundaryElements?: BoundaryElementsLoader
   readonly loadGenePanel?: GenePanelLoader
+  readonly loadAnnotations?: AnnotationLoader
   readonly loadGeneExpression?: GeneExpressionLoader
   readonly computeAutoChannelContrast?: AutoChannelContrastLoader
 }
@@ -214,6 +235,7 @@ export function App({
   loadMorphologyImage = defaultLoadMorphologyImage,
   loadBoundaryElements = defaultLoadBoundaryElements,
   loadGenePanel = defaultLoadGenePanel,
+  loadAnnotations = defaultLoadDatasetAnnotations,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
   computeAutoChannelContrast = defaultComputeAutoChannelContrast,
 }: AppProps) {
@@ -239,6 +261,9 @@ export function App({
     status: 'idle',
   })
   const [genePanelState, setGenePanelState] = useState<GenePanelState>({
+    status: 'idle',
+  })
+  const [annotationState, setAnnotationState] = useState<AnnotationState>({
     status: 'idle',
   })
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
@@ -345,6 +370,7 @@ export function App({
     [geneOptions, geneSearch, selectedGenes],
   )
   const genePanelCopy = genePanelStatusCopy(genePanelState)
+  const annotationCopy = annotationStatusCopy(annotationState)
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const activeErrors = useMemo(
     () =>
@@ -353,9 +379,17 @@ export function App({
         morphologyState.status === 'error' ? morphologyState.error : null,
         boundaryState.status === 'error' ? boundaryState.error : null,
         genePanelState.status === 'error' ? genePanelState.error : null,
+        annotationState.status === 'error' ? annotationState.error : null,
         geneExpressionState.status === 'error' ? geneExpressionState.error : null,
       ].filter(isStructuredLoadError),
-    [boundaryState, geneExpressionState, genePanelState, loadState, morphologyState],
+    [
+      annotationState,
+      boundaryState,
+      geneExpressionState,
+      genePanelState,
+      loadState,
+      morphologyState,
+    ],
   )
   const handleImageTileError = useCallback((error: Error) => {
     setMorphologyState((current) => {
@@ -625,6 +659,7 @@ export function App({
       )
       setBoundaryState({ status: 'idle' })
       setGenePanelState({ status: 'loading', url: requestedUrl })
+      setAnnotationState({ status: 'idle' })
       setGeneExpressionState({ status: 'idle' })
       boundaryRequestId.current += 1
       geneExpressionRequestId.current += 1
@@ -775,6 +810,40 @@ export function App({
 
   function removeSavedGeneSet(id: string) {
     setSavedGeneSets((current) => current.filter((geneSet) => geneSet.id !== id))
+  }
+
+  function handleLoadAnnotations() {
+    if (loadState.status !== 'ready' || annotationState.status === 'loading') {
+      return
+    }
+
+    const requestId = loadRequestId.current
+    const signal = datasetAbortRef.current?.signal
+    setAnnotationState({ status: 'loading', url: loadState.url })
+
+    void loadAnnotations(loadState.url, signal === undefined ? {} : { signal })
+      .then((annotations) => {
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
+        setAnnotationState({
+          status: 'ready',
+          url: loadState.url,
+          annotations,
+        })
+      })
+      .catch((error) => {
+        if (isAbortError(error) || loadRequestId.current !== requestId) {
+          return
+        }
+
+        setAnnotationState({
+          status: 'error',
+          url: loadState.url,
+          error: createStructuredLoadError('Annotations', error),
+        })
+      })
   }
 
   function updateMorphologyChannel(
@@ -1158,6 +1227,34 @@ export function App({
           </p>
         </section>
 
+        <section className="analysis-section" aria-labelledby="annotation-heading">
+          <div className="section-heading-row">
+            <h2 id="annotation-heading">Annotations</h2>
+            <span>{annotationCopy}</span>
+          </div>
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={
+              loadState.status !== 'ready' || annotationState.status === 'loading'
+            }
+            onClick={handleLoadAnnotations}
+          >
+            {annotationState.status === 'loading' ? 'Loading…' : 'Load Annotations'}
+          </button>
+          {annotationState.status === 'ready' &&
+          annotationState.annotations.length > 0 ? (
+            <ul className="annotation-list" aria-label="Loaded annotations">
+              {annotationState.annotations.map((annotation) => (
+                <li key={annotation.id}>
+                  <span>{annotation.label}</span>
+                  <small>{annotation.cellIds.length.toLocaleString()}</small>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+
         <section className="analysis-section" aria-labelledby="cell-info-heading">
           <h2 id="cell-info-heading">Cell Info</h2>
           <CellInfoPanel cell={selectedCell} />
@@ -1248,6 +1345,23 @@ function genePanelStatusCopy(genePanelState: GenePanelState): string {
   }
 
   if (genePanelState.status === 'error') {
+    return 'Unavailable'
+  }
+
+  return 'Idle'
+}
+
+function annotationStatusCopy(annotationState: AnnotationState): string {
+  if (annotationState.status === 'loading') {
+    return 'Loading'
+  }
+
+  if (annotationState.status === 'ready') {
+    const noun = annotationState.annotations.length === 1 ? 'label' : 'labels'
+    return `${annotationState.annotations.length.toLocaleString()} ${noun}`
+  }
+
+  if (annotationState.status === 'error') {
     return 'Unavailable'
   }
 

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { App, type GeneExpressionLoader } from './App'
+import { App, type AnnotationLoader, type GeneExpressionLoader } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
@@ -43,6 +43,8 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
+    expect(screen.getByRole('heading', { name: 'Annotations' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Load Annotations' })).toBeDisabled()
     expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
   })
 
@@ -437,6 +439,53 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Gad1' }))
 
     expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Gad1')
+  })
+
+  it('loads built-in analysis annotations on request', async () => {
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(
+      async () => [
+        {
+          id: 'analysis:0:0',
+          label: 'graphclust: Cluster 1',
+          cellIds: [cellId],
+        },
+      ],
+    )
+
+    render(
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={loadGenePanel}
+        loadAnnotations={loadAnnotations}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Load Annotations' }))
+
+    await waitFor(() => {
+      expect(loadAnnotations).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+    })
+    expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
+      'graphclust: Cluster 1',
+    )
+    expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
   })
 
   it('lets the user paste, score, save, and reapply gene sets', async () => {

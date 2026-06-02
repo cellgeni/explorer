@@ -291,3 +291,8 @@ unless the phase order is explicitly changed.
       the active region and loads exact selected-gene counts for up to 50,000
       visible cells. Larger regions enter a waiting state instead of silently
       falling back to sampled data.
+- [x] Added user-triggered built-in annotation import from `analysis.zarr.zip`.
+      Xenium cluster group CSR arrays are mapped through
+      `cell_feature_matrix.zarr.zip` row-order cell ids, then shown as compact
+      label/count rows in the sidebar. CSV and JSON annotation import remain
+      pending under the same checkbox.

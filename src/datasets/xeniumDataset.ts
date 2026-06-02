@@ -7,6 +7,7 @@ import {
   selectionToSql,
 } from '../data/gex'
 import { createDuckDbClient } from '../data/duckdb'
+import { readAnalysisZarrAnnotations } from '../data/analysisAnnotations'
 import { readCellsOverview } from '../data/hyparquetCells'
 import { loadMorphologyImage } from '../data/morphologyImage'
 import { openTiff } from '../tiff/loader'
@@ -47,6 +48,10 @@ export interface XeniumDatasetOptions {
     url: string,
     limit?: number,
   ) => Promise<readonly CellOverviewPoint[]>
+  readonly analysisAnnotationReader?: (
+    analysisUrl: string,
+    matrixUrl: string,
+  ) => Promise<readonly Annotation[]>
 }
 
 export interface DuckDbClientLike {
@@ -118,6 +123,10 @@ export class XeniumDataset implements SpatialDataset {
     url: string,
     limit?: number,
   ) => Promise<readonly CellOverviewPoint[]>
+  private readonly analysisAnnotationReader: (
+    analysisUrl: string,
+    matrixUrl: string,
+  ) => Promise<readonly Annotation[]>
   private duckClientPromise: Promise<DuckDbClientLike> | null = null
   private metaPromise: Promise<DatasetMeta> | null = null
 
@@ -140,6 +149,8 @@ export class XeniumDataset implements SpatialDataset {
           fetcher: this.fetcher,
           ...(limit === undefined ? {} : { limit }),
         }))
+    this.analysisAnnotationReader =
+      options.analysisAnnotationReader ?? readAnalysisZarrAnnotations
     this.duckFactory =
       options.createDuckDbClient ??
       (() => {
@@ -292,7 +303,10 @@ ORDER BY b.cell_id, b.file_row_number
   }
 
   annotations(): Promise<readonly Annotation[]> {
-    return Promise.resolve([])
+    return this.analysisAnnotationReader(
+      this.urlFor('analysis.zarr.zip'),
+      this.urlFor('cell_feature_matrix.zarr.zip'),
+    )
   }
 
   async image(): Promise<ImageSource | null> {
