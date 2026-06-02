@@ -235,6 +235,27 @@ ORDER BY b.cell_id, b.file_row_number
     return this.matrixReader(this.urlFor('cell_feature_matrix.zarr.zip'), ids)
   }
 
+  async transcriptsForCellIds(
+    cellIds: readonly CellId[],
+    minQv = 20,
+  ): Promise<GexResult> {
+    const conn = await this.conn()
+
+    return this.transcriptReader(
+      conn,
+      this.urlFor('transcripts.parquet'),
+      {
+        kind: 'circle',
+        cx: micrometers(0),
+        cy: micrometers(0),
+        radius: micrometers(0),
+      },
+      'cells-only',
+      cellIds,
+      minQv,
+    )
+  }
+
   overviewCells(limit?: number): Promise<readonly CellOverviewPoint[]> {
     return this.overviewReader(this.urlFor('cells.parquet'), limit)
   }

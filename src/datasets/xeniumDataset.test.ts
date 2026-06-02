@@ -217,6 +217,32 @@ describe('XeniumDataset', () => {
     )
   })
 
+  it('loads transcript expression directly for known cell ids', async () => {
+    const cellId = intToCellId(1, 1)
+    const conn = new FakeConnection([])
+    const transcriptReader = vi.fn(
+      async (): Promise<GexResult> => ({
+        geneNames: ['Actb'],
+        cells: new Map([[cellId, { geneNames: ['Actb'], counts: [4] }]]),
+      }),
+    )
+    const dataset = makeDataset(conn, { transcriptReader })
+
+    await expect(dataset.transcriptsForCellIds([cellId], 30)).resolves.toMatchObject({
+      geneNames: ['Actb'],
+    })
+
+    expect(transcriptReader).toHaveBeenCalledWith(
+      conn,
+      'https://example.test/xenium/transcripts.parquet',
+      expect.objectContaining({ kind: 'circle' }),
+      'cells-only',
+      [cellId],
+      30,
+    )
+    expect(conn.preparedSql).toHaveLength(0)
+  })
+
   it('loads viewport-scoped expression counts for selected genes', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([

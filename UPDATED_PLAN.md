@@ -335,3 +335,7 @@ unless the phase order is explicitly changed.
       from `cell_feature_matrix.zarr.zip` for the ROI cells, reports the top 10
       expressed genes with total counts, detected-cell percentage, and mean
       counts per cell, and samples large ROIs to keep the sidebar responsive.
+- [x] Fixed ROI gene stats fallback. If the cell-feature matrix path is not
+      readable for the selected ROI, the loader now falls back to
+      `transcripts.parquet` aggregation by ROI cell id instead of leaving the
+      sidebar at "Genes unavailable".

@@ -5,7 +5,7 @@ import { cachedXeniumDataset } from './xeniumDatasetCache'
 import type { CellId } from './cellid'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { GexResult } from './gex'
-import type { DatasetCell, XeniumDataset } from '../datasets/xeniumDataset'
+import type { DatasetCell } from '../datasets/xeniumDataset'
 
 export const ROI_GENE_STATS_CELL_LIMIT = 10_000
 export const ROI_GENE_STATS_GENE_LIMIT = 10
@@ -27,8 +27,15 @@ export interface RoiGeneStats {
   readonly hitCellLimit: boolean
 }
 
+interface RoiGeneStatsDataset {
+  matrix(ids: readonly CellId[]): Promise<GexResult>
+  transcriptsForCellIds?(cellIds: readonly CellId[], minQv?: number): Promise<GexResult>
+}
+
 export interface LoadDatasetRoiGeneStatsOptions {
-  readonly getDataset?: (baseUrl: string) => XeniumDataset | Promise<XeniumDataset>
+  readonly getDataset?: (
+    baseUrl: string,
+  ) => RoiGeneStatsDataset | Promise<RoiGeneStatsDataset>
   readonly validateRangeSupport?: DatasetRangeValidator
   readonly signal?: AbortSignal
   readonly cellLimit?: number
@@ -47,26 +54,22 @@ export async function loadDatasetRoiGeneStats(
     return emptyRoiGeneStats(cells.length)
   }
 
-  const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
-
-  await validateRangeSupport(datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip'), {
-    label: 'cell_feature_matrix.zarr.zip',
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-  })
-  throwIfAborted(options.signal)
-
   const dataset =
     options.getDataset === undefined
       ? await cachedXeniumDataset(baseUrl)
       : await options.getDataset(baseUrl)
   throwIfAborted(options.signal)
 
-  const matrix = await dataset.matrix(sampledCells.map((cell) => cell.id))
+  const sampledCellIds = sampledCells.map((cell) => cell.id)
+  const matrix = await loadRoiGeneStatsMatrix(baseUrl, dataset, sampledCellIds, {
+    validateRangeSupport: options.validateRangeSupport ?? assertHttpRangeSupport,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
   throwIfAborted(options.signal)
 
   return summarizeRoiGeneExpression(matrix, {
     cellCount: cells.length,
-    sampledCellIds: sampledCells.map((cell) => cell.id),
+    sampledCellIds,
     geneLimit: normalizeLimit(options.geneLimit, ROI_GENE_STATS_GENE_LIMIT),
   })
 }
@@ -130,6 +133,41 @@ export function summarizeRoiGeneExpression(
   }
 }
 
+async function loadRoiGeneStatsMatrix(
+  baseUrl: string,
+  dataset: RoiGeneStatsDataset,
+  cellIds: readonly CellId[],
+  options: {
+    readonly validateRangeSupport: DatasetRangeValidator
+    readonly signal?: AbortSignal
+  },
+): Promise<GexResult> {
+  try {
+    await options.validateRangeSupport(
+      datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip'),
+      {
+        label: 'cell_feature_matrix.zarr.zip',
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      },
+    )
+    throwIfAborted(options.signal)
+
+    return await dataset.matrix(cellIds)
+  } catch (error) {
+    if (isAbortError(error) || dataset.transcriptsForCellIds === undefined) {
+      throw error
+    }
+  }
+
+  await options.validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {
+    label: 'transcripts.parquet',
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+  throwIfAborted(options.signal)
+
+  return dataset.transcriptsForCellIds(cellIds)
+}
+
 function sampleRoiCells(
   cells: readonly DatasetCell[],
   cellLimit: number,
@@ -172,6 +210,10 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw abortError(signal)
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 function abortError(signal: AbortSignal): Error {

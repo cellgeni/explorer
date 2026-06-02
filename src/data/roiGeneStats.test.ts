@@ -7,7 +7,7 @@ import {
 import { intToCellId } from './cellid'
 import { micrometers } from './coords'
 import type { GexResult } from './gex'
-import type { DatasetCell, XeniumDataset } from '../datasets/xeniumDataset'
+import type { DatasetCell } from '../datasets/xeniumDataset'
 
 describe('ROI gene stats', () => {
   it('summarizes top ROI genes by total expression', () => {
@@ -72,7 +72,7 @@ describe('ROI gene stats', () => {
     }
     const dataset = {
       matrix: vi.fn(async () => matrix),
-    } as unknown as XeniumDataset
+    }
     const validateRangeSupport = vi.fn(async () => undefined)
 
     const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
@@ -90,5 +90,43 @@ describe('ROI gene stats', () => {
     expect(stats.sampledCellCount).toBe(ROI_GENE_STATS_CELL_LIMIT)
     expect(stats.cellCount).toBe(ROI_GENE_STATS_CELL_LIMIT + 1)
     expect(stats.hitCellLimit).toBe(true)
+  })
+
+  it('falls back to transcript aggregation when the matrix layout is unavailable', async () => {
+    const cellId = intToCellId(1, 1)
+    const cells: readonly DatasetCell[] = [
+      {
+        id: cellId,
+        position: { x: micrometers(1), y: micrometers(2) },
+      },
+    ]
+    const transcriptMatrix: GexResult = {
+      geneNames: ['Actb'],
+      cells: new Map([[cellId, { geneNames: ['Actb'], counts: [9] }]]),
+    }
+    const dataset = {
+      matrix: vi.fn(async () => {
+        throw new Error('cell_features/csc/indptr not found')
+      }),
+      transcriptsForCellIds: vi.fn(async () => transcriptMatrix),
+    }
+    const validateRangeSupport = vi.fn(async () => undefined)
+
+    const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
+      getDataset: () => dataset,
+      validateRangeSupport,
+    })
+
+    expect(dataset.matrix).toHaveBeenCalledWith([cellId])
+    expect(validateRangeSupport).toHaveBeenCalledWith(
+      'https://example.test/xenium/transcripts.parquet',
+      { label: 'transcripts.parquet' },
+    )
+    expect(dataset.transcriptsForCellIds).toHaveBeenCalledWith([cellId])
+    expect(stats.genes[0]).toMatchObject({
+      gene: 'Actb',
+      count: 9,
+      detectedCells: 1,
+    })
   })
 })
