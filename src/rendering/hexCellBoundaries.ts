@@ -1,5 +1,4 @@
-import { overviewCellColor } from './deckLayers'
-import type { CellColorLookup, OverviewCellDatum } from './deckLayers'
+import type { OverviewCellDatum } from './deckLayers'
 import type { CellBoundaryDatum } from './deckLayers'
 
 export const HEX_BOUNDARY_MULTIPLIER = 6
@@ -11,7 +10,6 @@ export interface HexCellBoundaryOptions {
   readonly fillColorSource?: 'default' | 'cell'
   readonly lineColor?: CellBoundaryDatum['lineColor']
   readonly lineColorSource?: 'default' | 'cell'
-  readonly cellColorLookup?: CellColorLookup | null
 }
 
 export function hexBoundaryCellLimit(fullBoundaryCellLimit: number): number {
@@ -37,15 +35,14 @@ function hexCellBoundary(
   const radius =
     cell.radiusMicrometers ??
     Math.max(cell.radiusPixels, HEX_BOUNDARY_FALLBACK_RADIUS_MICROMETERS)
-  const color = overviewCellColor(cell, options.cellColorLookup ?? null)
 
   return {
     id: `hex-boundary:${cell.id}`,
     polygon: hexagonPolygon(x, y, radius),
-    fillColor: options.fillColorSource === 'cell' ? color : [32, 102, 83, 18],
+    fillColor: options.fillColorSource === 'cell' ? cell.fillColor : [32, 102, 83, 18],
     lineColor:
       options.lineColorSource === 'cell'
-        ? cellLineColor(color)
+        ? cellLineColor(cell.fillColor)
         : (options.lineColor ?? [246, 242, 232, 112]),
   }
 }

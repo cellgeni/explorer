@@ -43,8 +43,6 @@ describe('deck layer factory', () => {
     }
 
     expect(layer.id).toBe('cells-overview-scatter')
-    expect(layer.props.pickable).toBe(true)
-    expect(layer.props.visible).toBe(true)
     expect(layer.props.filled).toBe(false)
     expect(layer.props.stroked).toBe(true)
     expect(layer.props.lineWidthUnits).toBe('pixels')
@@ -56,66 +54,6 @@ describe('deck layer factory', () => {
     ) => readonly number[]
 
     expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 40])
-  })
-
-  it('can color overview cell outlines through a lookup without changing cell data', () => {
-    const layers = createOverviewLayers(fixtureCells, [], [], [], {
-      cellColorLookup: {
-        colorByCellId: new Map([['cell-1', [31, 119, 180, 230]]]),
-        fallbackColor: [72, 68, 58, 44],
-      },
-      cellsPickable: false,
-    })
-    const [layer] = layers
-
-    if (!(layer instanceof ScatterplotLayer)) {
-      throw new Error('Expected first overview layer to be a ScatterplotLayer.')
-    }
-
-    const getLineColor = layer.props.getLineColor as (
-      cell: OverviewCellDatum,
-    ) => readonly number[]
-
-    expect(layer.props.pickable).toBe(false)
-    expect(layer.props.visible).toBe(true)
-    expect(fixtureCells[0]?.fillColor).toEqual([215, 63, 124, 220])
-    expect(getLineColor(fixtureCells[0]!)).toEqual([31, 119, 180, 41])
-  })
-
-  it('can hide overview cells during navigation without changing data', () => {
-    const layers = createOverviewLayers(fixtureCells, [], [], [], {
-      cellsVisible: false,
-    })
-    const [layer] = layers
-
-    if (!(layer instanceof ScatterplotLayer)) {
-      throw new Error('Expected first overview layer to be a ScatterplotLayer.')
-    }
-
-    expect(layer.props.data).toBe(fixtureCells)
-    expect(layer.props.visible).toBe(false)
-  })
-
-  it('adds a non-pickable annotation preview layer for sampled overview colors', () => {
-    const layers = createOverviewLayers(fixtureCells, [], [], [], {
-      annotationPreviewCells: fixtureCells,
-      cellColorLookup: {
-        colorByCellId: new Map([['cell-1', [31, 119, 180, 230]]]),
-        fallbackColor: [72, 68, 58, 44],
-      },
-    })
-
-    expect(layers).toHaveLength(2)
-    expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
-
-    const previewLayer = layers[1]
-
-    if (!(previewLayer instanceof ScatterplotLayer)) {
-      throw new Error('Expected annotation preview layer to be a ScatterplotLayer.')
-    }
-
-    expect(previewLayer.id).toBe('annotation-preview-scatter')
-    expect(previewLayer.props.pickable).toBe(false)
   })
 
   it('adds a polygon layer when boundary data is available', () => {
@@ -334,31 +272,6 @@ describe('deck layer factory', () => {
 
     expect(boundary?.fillColor).toEqual([215, 63, 124, 88])
     expect(boundary?.lineColor).toEqual([215, 63, 124, 220])
-  })
-
-  it('styles true boundaries from an annotation color lookup', () => {
-    const [boundary] = styleCellBoundariesByCells(
-      [
-        {
-          id: 'cell-1',
-          polygon: [
-            [0, 0, 0],
-            [10, 0, 0],
-            [10, -10, 0],
-          ],
-          fillColor: [32, 102, 83, 34],
-          lineColor: [246, 242, 232, 210],
-        },
-      ],
-      fixtureCells,
-      {
-        colorByCellId: new Map([['cell-1', [31, 119, 180, 230]]]),
-        fallbackColor: [72, 68, 58, 44],
-      },
-    )
-
-    expect(boundary?.fillColor).toEqual([31, 119, 180, 88])
-    expect(boundary?.lineColor).toEqual([31, 119, 180, 230])
   })
 
   it('converts Xenium overview cells into deck.gl coordinates', () => {

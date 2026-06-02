@@ -21,25 +21,15 @@ import type { BBox, DataPoint } from '../data/coords'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { MorphologyCanvasChannel } from './MorphologyCanvas'
-import type {
-  CellBoundaryDatum,
-  CellColorLookup,
-  OverviewCellDatum,
-} from '../rendering/deckLayers'
+import type { CellBoundaryDatum, OverviewCellDatum } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
-const OVERVIEW_CELL_CLIP_MIN_ZOOM = 4
-const OVERVIEW_CELL_PICK_MAX_VISIBLE_CELLS = 50_000
-const OVERVIEW_NAVIGATION_HIDE_CELL_THRESHOLD = 50_000
-const OVERVIEW_NAVIGATION_IDLE_DELAY_MS = 180
-const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
-const EMPTY_CELL_BOUNDARIES: readonly CellBoundaryDatum[] = []
+const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
 
 export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface ViewerCoreProps {
   readonly cells?: readonly OverviewCellDatum[]
-  readonly cellColorLookup?: CellColorLookup | null
   readonly expressionCells?: readonly OverviewCellDatum[]
   readonly boundaries?: readonly CellBoundaryDatum[]
   readonly imageLoader?: TiffPyramidLoader | null
@@ -71,7 +61,6 @@ export type RoiDrawMode = 'idle' | 'box'
 
 export function ViewerCore({
   cells = [],
-  cellColorLookup = null,
   expressionCells = [],
   boundaries = [],
   imageLoader = null,
@@ -99,7 +88,6 @@ export function ViewerCore({
     <ViewerSurface
       key={resetKey}
       cells={cells}
-      cellColorLookup={cellColorLookup}
       expressionCells={expressionCells}
       boundaries={boundaries}
       imageLoader={imageLoader}
@@ -126,7 +114,6 @@ export function ViewerCore({
 
 interface ViewerSurfaceProps {
   readonly cells: readonly OverviewCellDatum[]
-  readonly cellColorLookup: CellColorLookup | null
   readonly expressionCells: readonly OverviewCellDatum[]
   readonly boundaries: readonly CellBoundaryDatum[]
   readonly imageLoader: TiffPyramidLoader | null
@@ -163,7 +150,6 @@ interface RoiScreenRect {
 
 function ViewerSurface({
   cells,
-  cellColorLookup,
   expressionCells,
   boundaries,
   imageLoader,
@@ -186,13 +172,11 @@ function ViewerSurface({
   onRoiComplete,
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
-  const navigationIdleTimeoutRef = useRef<number | null>(null)
   const [viewState, setViewState] = useState<OverviewViewState>(initialViewState)
   const [viewport, setViewport] = useState<CssViewportSize>({
     width: 0,
     height: 0,
   })
-  const [isNavigating, setIsNavigating] = useState(false)
   const [roiDrag, setRoiDrag] = useState<RoiDrag | null>(null)
   const viewportBbox = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
@@ -210,28 +194,23 @@ function ViewerSurface({
   )
   const displayExpressionCells = useMemo(
     () =>
-      expressionCells.length === 0
-        ? EMPTY_OVERVIEW_CELLS
-        : aggregateExpressionCells(expressionCells, viewState, {
-            ...(viewportBbox === null ? {} : { bbox: viewportBbox }),
-          }),
+      aggregateExpressionCells(expressionCells, viewState, {
+        ...(viewportBbox === null ? {} : { bbox: viewportBbox }),
+      }),
     [expressionCells, viewState, viewportBbox],
   )
-  const hexBoundaries = useMemo(() => {
-    if (visibleCells.length === 0 || visibleCells.length > hexBoundaryMaxVisibleCells) {
-      return EMPTY_CELL_BOUNDARIES
-    }
-
-    return hexCellBoundariesForVisibleCells(visibleCells, {
-      maxCells: hexBoundaryMaxVisibleCells,
-      fillColorSource: 'cell',
-      lineColorSource: 'cell',
-      cellColorLookup,
-    })
-  }, [cellColorLookup, hexBoundaryMaxVisibleCells, visibleCells])
+  const hexBoundaries = useMemo(
+    () =>
+      hexCellBoundariesForVisibleCells(visibleCells, {
+        maxCells: hexBoundaryMaxVisibleCells,
+        fillColorSource: 'cell',
+        lineColorSource: 'cell',
+      }),
+    [hexBoundaryMaxVisibleCells, visibleCells],
+  )
   const styledBoundaries = useMemo(
-    () => styleCellBoundariesByCells(boundaries, visibleCells, cellColorLookup),
-    [boundaries, cellColorLookup, visibleCells],
+    () => styleCellBoundariesByCells(boundaries, visibleCells),
+    [boundaries, visibleCells],
   )
   const expressionHexBoundaries = useMemo(
     () =>
@@ -248,14 +227,6 @@ function ViewerSurface({
     () => expressionCellsToBoundaryLayerData(styledBoundaries, displayExpressionCells),
     [displayExpressionCells, styledBoundaries],
   )
-  const cellsPickable =
-    !isNavigating &&
-    viewState.zoom > OVERVIEW_CELL_CLIP_MIN_ZOOM &&
-    visibleCells.length <= OVERVIEW_CELL_PICK_MAX_VISIBLE_CELLS
-  const cellsVisible =
-    !isNavigating || visibleCells.length <= OVERVIEW_NAVIGATION_HIDE_CELL_THRESHOLD
-  const pointCellColorLookup = cellsPickable ? cellColorLookup : null
-  const annotationPreviewCells = EMPTY_OVERVIEW_CELLS
   const layers = useMemo(
     () =>
       createOverviewLayers(
@@ -264,25 +235,17 @@ function ViewerSurface({
         hexBoundaries,
         displayExpressionCells,
         {
-          annotationPreviewCells,
-          cellColorLookup: pointCellColorLookup,
-          cellsPickable,
-          cellsVisible,
           geneExpressionOpacity,
           expressionBoundaryPolygons,
           expressionHexBoundaries,
         },
       ),
     [
-      annotationPreviewCells,
-      cellsPickable,
-      cellsVisible,
       expressionBoundaryPolygons,
       expressionHexBoundaries,
       displayExpressionCells,
       geneExpressionOpacity,
       hexBoundaries,
-      pointCellColorLookup,
       styledBoundaries,
       visibleCells,
     ],
@@ -311,17 +274,6 @@ function ViewerSurface({
   const handleViewStateChange = useCallback(
     ({ viewState: nextViewState }: ViewStateChangeParameters) => {
       const normalizedViewState = normaliseViewState(nextViewState)
-
-      setIsNavigating((currentValue) => (currentValue ? currentValue : true))
-
-      if (navigationIdleTimeoutRef.current !== null) {
-        window.clearTimeout(navigationIdleTimeoutRef.current)
-      }
-
-      navigationIdleTimeoutRef.current = window.setTimeout(() => {
-        setIsNavigating(false)
-        navigationIdleTimeoutRef.current = null
-      }, OVERVIEW_NAVIGATION_IDLE_DELAY_MS)
 
       setViewState((currentViewState) =>
         equivalentViewState(currentViewState, normalizedViewState)
@@ -436,15 +388,6 @@ function ViewerSurface({
       window.clearTimeout(timeout)
     }
   }, [hasCells, onViewportChange, viewState, viewportBbox, visibleCellCount])
-
-  useEffect(
-    () => () => {
-      if (navigationIdleTimeoutRef.current !== null) {
-        window.clearTimeout(navigationIdleTimeoutRef.current)
-      }
-    },
-    [],
-  )
 
   return (
     <div

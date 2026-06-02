@@ -44,10 +44,7 @@ import {
   styleGeneExpressionCellsByScale,
   bundledDeckVersion,
 } from './rendering/deckLayers'
-import {
-  createAnnotationColorLookup,
-  styleOverviewCellsByObservation,
-} from './rendering/cellStyling'
+import { styleOverviewCellsByObservation } from './rendering/cellStyling'
 import { hexBoundaryCellLimit } from './rendering/hexCellBoundaries'
 import {
   annotationPaletteColor,
@@ -453,22 +450,15 @@ export function App({
     observationColorMode === 'annotations'
       ? annotationStyleColors
       : EMPTY_ANNOTATION_STYLE_COLORS
-  const activeAnnotationColorLookup = useMemo(
-    () => createAnnotationColorLookup(activeAnnotationStyleColors),
-    [activeAnnotationStyleColors],
-  )
   const styledOverviewCells = useMemo(() => {
-    if (
-      observationColorMode === 'transcript-count' ||
-      observationColorMode === 'annotations'
-    ) {
+    if (observationColorMode === 'transcript-count') {
       return overviewCells
     }
 
     return styleOverviewCellsByObservation(overviewCells, observationColorMode, {
-      annotations: EMPTY_ANNOTATION_STYLE_COLORS,
+      annotations: activeAnnotationStyleColors,
     })
-  }, [observationColorMode, overviewCells])
+  }, [activeAnnotationStyleColors, observationColorMode, overviewCells])
   const overviewExtent = useMemo(
     () => overviewCellsToBbox(overviewCells),
     [overviewCells],
@@ -1973,7 +1963,6 @@ export function App({
 
         <ViewerCore
           cells={styledOverviewCells}
-          cellColorLookup={activeAnnotationColorLookup}
           expressionCells={styledGeneExpressionCells}
           boundaries={boundaryLayerData}
           imageLoader={morphologyImage?.loader ?? null}

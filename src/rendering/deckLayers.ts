@@ -33,19 +33,10 @@ export interface CellBoundaryDatum {
   readonly lineColor: Color
 }
 
-export interface CellColorLookup {
-  readonly colorByCellId: ReadonlyMap<string, Color>
-  readonly fallbackColor: Color
-}
-
 export interface OverviewLayerOptions {
   readonly geneExpressionOpacity?: number
   readonly expressionBoundaryPolygons?: readonly CellBoundaryDatum[]
   readonly expressionHexBoundaries?: readonly CellBoundaryDatum[]
-  readonly cellColorLookup?: CellColorLookup | null
-  readonly cellsPickable?: boolean
-  readonly cellsVisible?: boolean
-  readonly annotationPreviewCells?: readonly OverviewCellDatum[]
 }
 
 export type GeneExpressionColorScale = 'gold' | 'magma' | 'viridis'
@@ -112,8 +103,6 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
   maxZoom: 10,
 }
 
-const OVERVIEW_CELL_LINE_WIDTH = 0.35
-
 export const spatialOverviewView = new OrthographicView({
   id: 'spatial-overview',
   flipY: false,
@@ -133,18 +122,13 @@ export function createOverviewLayers(
   )
   const expressionBoundaryPolygons = options.expressionBoundaryPolygons ?? []
   const expressionHexBoundaries = options.expressionHexBoundaries ?? []
-  const cellColorLookup = options.cellColorLookup ?? null
-  const cellsPickable = options.cellsPickable ?? true
-  const cellsVisible = options.cellsVisible ?? true
-  const annotationPreviewCells = options.annotationPreviewCells ?? []
   const hasExpressionPolygons =
     expressionBoundaryPolygons.length > 0 || expressionHexBoundaries.length > 0
   const layers: LayersList = [
     new ScatterplotLayer<OverviewCellDatum>({
       id: 'cells-overview-scatter',
       data: cells,
-      pickable: cellsPickable,
-      visible: cellsVisible,
+      pickable: true,
       radiusUnits: 'common',
       radiusMinPixels: 0.12,
       radiusMaxPixels: 6,
@@ -152,37 +136,12 @@ export function createOverviewLayers(
       filled: false,
       lineWidthUnits: 'pixels',
       lineWidthMinPixels: 0.25,
-      getPosition: getOverviewCellPosition,
-      getRadius: getOverviewCellRadius,
-      getLineColor:
-        cellColorLookup === null
-          ? getOverviewCellBaseOutlineColor
-          : (cell) => overviewCellOutlineColor(overviewCellColor(cell, cellColorLookup)),
-      getLineWidth: getOverviewCellLineWidth,
+      getPosition: (cell) => cell.position,
+      getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
+      getLineColor: (cell) => overviewCellOutlineColor(cell.fillColor),
+      getLineWidth: 0.35,
     }),
   ]
-
-  if (annotationPreviewCells.length > 0 && cellColorLookup !== null) {
-    layers.push(
-      new ScatterplotLayer<OverviewCellDatum>({
-        id: 'annotation-preview-scatter',
-        data: annotationPreviewCells,
-        pickable: false,
-        radiusUnits: 'common',
-        radiusMinPixels: 0.35,
-        radiusMaxPixels: 7,
-        stroked: true,
-        filled: false,
-        lineWidthUnits: 'pixels',
-        lineWidthMinPixels: 0.5,
-        getPosition: getOverviewCellPosition,
-        getRadius: getOverviewCellRadius,
-        getLineColor: (cell) =>
-          overviewCellOutlineColor(overviewCellColor(cell, cellColorLookup)),
-        getLineWidth: 0.75,
-      }),
-    )
-  }
 
   if (expressionCells.length > 0 && !hasExpressionPolygons) {
     layers.push(
@@ -512,7 +471,6 @@ export function boundaryElementsToLayerData(
 export function styleCellBoundariesByCells(
   boundaries: readonly CellBoundaryDatum[],
   cells: readonly OverviewCellDatum[],
-  colorLookup: CellColorLookup | null = null,
 ): readonly CellBoundaryDatum[] {
   if (boundaries.length === 0 || cells.length === 0) {
     return boundaries
@@ -531,12 +489,10 @@ export function styleCellBoundariesByCells(
       return boundary
     }
 
-    const color = overviewCellColor(cell, colorLookup)
-
     return {
       ...boundary,
-      fillColor: boundaryFillColor(color),
-      lineColor: boundaryLineColor(color),
+      fillColor: boundaryFillColor(cell.fillColor),
+      lineColor: boundaryLineColor(cell.fillColor),
     }
   })
 }
@@ -590,33 +546,6 @@ function boundaryLineColor(color: Color): Color {
     color[2] ?? 0,
     Math.min(235, Math.max(160, color[3] ?? 210)),
   ]
-}
-
-export function overviewCellColor(
-  cell: OverviewCellDatum,
-  lookup: CellColorLookup | null = null,
-): Color {
-  if (lookup === null) {
-    return cell.fillColor
-  }
-
-  return lookup.colorByCellId.get(cell.id) ?? lookup.fallbackColor
-}
-
-function getOverviewCellPosition(cell: OverviewCellDatum): Position {
-  return cell.position
-}
-
-function getOverviewCellRadius(cell: OverviewCellDatum): number {
-  return cell.radiusMicrometers ?? cell.radiusPixels
-}
-
-function getOverviewCellBaseOutlineColor(cell: OverviewCellDatum): Color {
-  return overviewCellOutlineColor(cell.fillColor)
-}
-
-function getOverviewCellLineWidth(): number {
-  return OVERVIEW_CELL_LINE_WIDTH
 }
 
 function overviewCellOutlineColor(color: Color): Color {
