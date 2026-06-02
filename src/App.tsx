@@ -46,7 +46,6 @@ import {
   bundledDeckVersion,
 } from './rendering/deckLayers'
 import { styleOverviewCellsByObservation } from './rendering/cellStyling'
-import { hexBoundaryCellLimit } from './rendering/hexCellBoundaries'
 import {
   annotationPaletteColor,
   normalizeAnnotationColor,
@@ -572,10 +571,6 @@ export function App({
   const boundaryLayerData = useMemo(
     () => boundaryElementsToLayerData(boundaryElements),
     [boundaryElements],
-  )
-  const hexBoundaryMaxVisibleCells = useMemo(
-    () => hexBoundaryCellLimit(boundaryCellLimit),
-    [boundaryCellLimit],
   )
   const geneOptions = useMemo(
     () => (genePanelState.status === 'ready' ? genePanelState.genes : []),
@@ -2086,7 +2081,6 @@ export function App({
           status={loadState.status}
           imageStatus={morphologyState.status}
           boundaryStatus={boundaryState.status}
-          hexBoundaryMaxVisibleCells={hexBoundaryMaxVisibleCells}
           roiMode={roiMode}
           roiBbox={activeRoiBbox}
           onImageTileError={handleImageTileError}

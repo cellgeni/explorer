@@ -16,7 +16,6 @@ import {
   overviewCellsInBbox,
   sampleOverviewCellsForRendering,
 } from '../rendering/cellAggregation'
-import { hexCellBoundariesForVisibleCells } from '../rendering/hexCellBoundaries'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
 import { micrometers, scaleFromZoom } from '../data/coords'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
@@ -45,7 +44,6 @@ export interface ViewerCoreProps {
   readonly errorMessage?: string
   readonly imageErrorMessage?: string
   readonly boundaryErrorMessage?: string
-  readonly hexBoundaryMaxVisibleCells?: number
   readonly roiMode?: RoiDrawMode
   readonly roiBbox?: BBox | null
   readonly onImageTileError?: (error: Error) => void
@@ -77,7 +75,6 @@ export function ViewerCore({
   errorMessage,
   imageErrorMessage,
   boundaryErrorMessage,
-  hexBoundaryMaxVisibleCells = 0,
   roiMode = 'idle',
   roiBbox = null,
   onImageTileError,
@@ -106,7 +103,6 @@ export function ViewerCore({
       {...(errorMessage === undefined ? {} : { errorMessage })}
       {...(imageErrorMessage === undefined ? {} : { imageErrorMessage })}
       {...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage })}
-      hexBoundaryMaxVisibleCells={hexBoundaryMaxVisibleCells}
       roiMode={roiMode}
       roiBbox={roiBbox}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
@@ -133,7 +129,6 @@ interface ViewerSurfaceProps {
   readonly errorMessage?: string
   readonly imageErrorMessage?: string
   readonly boundaryErrorMessage?: string
-  readonly hexBoundaryMaxVisibleCells: number
   readonly roiMode: RoiDrawMode
   readonly roiBbox: BBox | null
   readonly onImageTileError?: (error: Error) => void
@@ -170,7 +165,6 @@ function ViewerSurface({
   errorMessage,
   imageErrorMessage,
   boundaryErrorMessage,
-  hexBoundaryMaxVisibleCells,
   roiMode,
   roiBbox,
   onImageTileError,
@@ -208,29 +202,9 @@ function ViewerSurface({
       }),
     [expressionCells, viewState, viewportBbox],
   )
-  const hexBoundaries = useMemo(
-    () =>
-      hexCellBoundariesForVisibleCells(visibleCells, {
-        maxCells: hexBoundaryMaxVisibleCells,
-        fillColorSource: 'cell',
-        lineColorSource: 'cell',
-      }),
-    [hexBoundaryMaxVisibleCells, visibleCells],
-  )
   const styledBoundaries = useMemo(
     () => styleCellBoundariesByCells(boundaries, visibleCells),
     [boundaries, visibleCells],
-  )
-  const expressionHexBoundaries = useMemo(
-    () =>
-      styledBoundaries.length > 0 || hexBoundaries.length === 0
-        ? []
-        : hexCellBoundariesForVisibleCells(displayExpressionCells, {
-            maxCells: Number.MAX_SAFE_INTEGER,
-            fillColorSource: 'cell',
-            lineColor: [255, 253, 247, 210],
-          }),
-    [displayExpressionCells, hexBoundaries.length, styledBoundaries.length],
   )
   const expressionBoundaryPolygons = useMemo(
     () => expressionCellsToBoundaryLayerData(styledBoundaries, displayExpressionCells),
@@ -242,23 +216,14 @@ function ViewerSurface({
   )
   const layers = useMemo(
     () =>
-      createOverviewLayers(
-        renderCells,
-        styledBoundaries,
-        hexBoundaries,
-        displayExpressionCells,
-        {
-          geneExpressionOpacity,
-          expressionBoundaryPolygons,
-          expressionHexBoundaries,
-        },
-      ),
+      createOverviewLayers(renderCells, styledBoundaries, displayExpressionCells, {
+        cellOpacity: geneExpressionOpacity,
+        expressionBoundaryPolygons,
+      }),
     [
       expressionBoundaryPolygons,
-      expressionHexBoundaries,
       displayExpressionCells,
       geneExpressionOpacity,
-      hexBoundaries,
       renderCells,
       styledBoundaries,
     ],

@@ -25,8 +25,10 @@ const candidate: BoundaryViewportCandidate = {
 
 describe('boundary viewport trigger', () => {
   it('loads polygons only below the configured visible-cell limit', () => {
-    expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 499 })).toBe(true)
-    expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 500 })).toBe(
+    expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 4_999 })).toBe(
+      true,
+    )
+    expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 5_000 })).toBe(
       false,
     )
     expect(
@@ -40,13 +42,15 @@ describe('boundary viewport trigger', () => {
   })
 
   it('skips polygons for dense overview candidates and empty viewports', () => {
-    expect(shouldLoadBoundaryPolygons(candidate)).toBe(false)
+    expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 6_000 })).toBe(
+      false,
+    )
     expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 0 })).toBe(false)
   })
 
   it('normalizes the configurable cell limit', () => {
-    expect(normalizeBoundaryCellLimit(undefined)).toBe(500)
-    expect(normalizeBoundaryCellLimit(Number.NaN)).toBe(500)
+    expect(normalizeBoundaryCellLimit(undefined)).toBe(5_000)
+    expect(normalizeBoundaryCellLimit(Number.NaN)).toBe(5_000)
     expect(normalizeBoundaryCellLimit(12.6)).toBe(13)
     expect(normalizeBoundaryCellLimit(-4)).toBe(1)
     expect(normalizeBoundaryCellLimit(20_000)).toBe(5_000)

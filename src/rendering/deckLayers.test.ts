@@ -48,6 +48,7 @@ describe('deck layer factory', () => {
     expect(layer.props.lineWidthUnits).toBe('pixels')
     expect(layer.props.lineWidthMinPixels).toBe(1)
     expect(layer.props.radiusMinPixels).toBe(0.12)
+    expect(layer.props.opacity).toBe(1)
 
     const getLineColor = layer.props.getLineColor as (
       cell: OverviewCellDatum,
@@ -74,40 +75,76 @@ describe('deck layer factory', () => {
     expect(layers).toHaveLength(2)
     expect(layers[0]).toBeInstanceOf(PolygonLayer)
     expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
-  })
 
-  it('adds hexagon boundaries only when true boundary data is absent', () => {
-    const hexBoundaries: readonly CellBoundaryDatum[] = [
-      {
-        id: 'hex-cell-1',
-        polygon: [
-          [0, -5, 0],
-          [5, 0, 0],
-          [0, 5, 0],
-          [-5, 0, 0],
-        ],
-        fillColor: [32, 102, 83, 18],
-        lineColor: [246, 242, 232, 112],
-      },
-    ]
+    const [, pointLayer] = layers
 
-    const hexLayers = createOverviewLayers(fixtureCells, [], hexBoundaries)
-    const trueLayers = createOverviewLayers(fixtureCells, hexBoundaries, hexBoundaries)
-
-    expect(hexLayers).toHaveLength(2)
-    expect(hexLayers[0]).toBeInstanceOf(PolygonLayer)
-    expect(hexLayers[1]).toBeInstanceOf(ScatterplotLayer)
-    expect(trueLayers).toHaveLength(2)
-    expect(trueLayers[0]).toBeInstanceOf(PolygonLayer)
-    expect(trueLayers[1]).toBeInstanceOf(ScatterplotLayer)
-
-    const [trueBoundaryLayer] = trueLayers
-
-    if (!(trueBoundaryLayer instanceof PolygonLayer)) {
-      throw new Error('Expected true boundary layer to be a PolygonLayer.')
+    if (!(pointLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected second overview layer to be a ScatterplotLayer.')
     }
 
-    expect(trueBoundaryLayer.id).toBe('cell-boundary-polygons')
+    expect(pointLayer.props.data).toEqual([])
+  })
+
+  it('applies cell opacity to overview points and boundaries', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const layers = createOverviewLayers(fixtureCells, boundaries, [], {
+      cellOpacity: 0.35,
+    })
+    const [boundaryLayer, pointLayer] = layers
+
+    if (!(boundaryLayer instanceof PolygonLayer)) {
+      throw new Error('Expected first overview layer to be a PolygonLayer.')
+    }
+
+    if (!(pointLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected second overview layer to be a ScatterplotLayer.')
+    }
+
+    expect(boundaryLayer.props.opacity).toBe(0.35)
+    expect(pointLayer.props.opacity).toBe(0.35)
+  })
+
+  it('keeps overview points for cells without visible boundaries', () => {
+    const cells: readonly OverviewCellDatum[] = [
+      ...fixtureCells,
+      {
+        id: 'cell-2',
+        position: [20, -30],
+        radiusPixels: 5,
+        fillColor: [44, 132, 168, 210],
+      },
+    ]
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const layers = createOverviewLayers(cells, boundaries)
+    const [, pointLayer] = layers
+
+    if (!(pointLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected second overview layer to be a ScatterplotLayer.')
+    }
+
+    expect(pointLayer.props.data).toEqual([cells[1]])
   })
 
   it('adds a gene expression overlay layer', () => {
@@ -120,8 +157,8 @@ describe('deck layer factory', () => {
         expressionCount: 5,
       },
     ]
-    const layers = createOverviewLayers(fixtureCells, [], [], expressionCells, {
-      geneExpressionOpacity: 0.45,
+    const layers = createOverviewLayers(fixtureCells, [], expressionCells, {
+      cellOpacity: 0.45,
     })
 
     expect(layers).toHaveLength(2)
@@ -140,69 +177,6 @@ describe('deck layer factory', () => {
     expect(expressionLayer.props.stroked).toBe(true)
     expect(expressionLayer.props.lineWidthUnits).toBe('pixels')
     expect(expressionLayer.props.lineWidthMinPixels).toBe(1.5)
-  })
-
-  it('uses expression-filled hexagons instead of scatter when hex geometry is visible', () => {
-    const expressionCells: readonly OverviewCellDatum[] = [
-      {
-        id: 'cell-2',
-        position: [12, -24, 0],
-        radiusPixels: 6,
-        fillColor: [240, 128, 120, 220],
-        expressionCount: 5,
-      },
-    ]
-    const hexBoundaries: readonly CellBoundaryDatum[] = [
-      {
-        id: 'hex-cell-1',
-        polygon: [
-          [0, -5, 0],
-          [5, 0, 0],
-          [0, 5, 0],
-        ],
-        fillColor: [32, 102, 83, 18],
-        lineColor: [246, 242, 232, 112],
-      },
-    ]
-    const expressionHexBoundaries: readonly CellBoundaryDatum[] = [
-      {
-        id: 'hex-boundary:cell-2',
-        polygon: [
-          [12, -30, 0],
-          [18, -24, 0],
-          [12, -18, 0],
-        ],
-        fillColor: [240, 128, 120, 220],
-        lineColor: [255, 253, 247, 210],
-      },
-    ]
-    const layers = createOverviewLayers(
-      fixtureCells,
-      [],
-      hexBoundaries,
-      expressionCells,
-      {
-        geneExpressionOpacity: 0.65,
-        expressionHexBoundaries,
-      },
-    )
-
-    expect(layers).toHaveLength(3)
-    expect(
-      layers.some(
-        (layer) =>
-          layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter',
-      ),
-    ).toBe(false)
-
-    const expressionLayer = layers[2]
-
-    if (!(expressionLayer instanceof PolygonLayer)) {
-      throw new Error('Expected expression hex layer to be a PolygonLayer.')
-    }
-
-    expect(expressionLayer.id).toBe('gene-expression-hexagons')
-    expect(expressionLayer.props.opacity).toBe(0.65)
   })
 
   it('uses expression-filled true boundaries instead of scatter when matching polygons exist', () => {
@@ -231,8 +205,8 @@ describe('deck layer factory', () => {
       boundaries,
       expressionCells,
     )
-    const layers = createOverviewLayers(fixtureCells, boundaries, [], expressionCells, {
-      geneExpressionOpacity: 0.5,
+    const layers = createOverviewLayers(fixtureCells, boundaries, expressionCells, {
+      cellOpacity: 0.5,
       expressionBoundaryPolygons,
     })
 

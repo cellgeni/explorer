@@ -47,7 +47,7 @@ describe('App', () => {
 
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
-    expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(500)
+    expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(5_000)
     expect(screen.getByRole('slider', { name: 'Image opacity' })).toHaveValue('100')
     expect(screen.getByRole('slider', { name: 'Gene opacity' })).toHaveValue('100')
     const layerStack = screen.getByRole('region', { name: 'Layer Stack' })

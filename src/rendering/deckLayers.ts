@@ -34,9 +34,8 @@ export interface CellBoundaryDatum {
 }
 
 export interface OverviewLayerOptions {
-  readonly geneExpressionOpacity?: number
+  readonly cellOpacity?: number
   readonly expressionBoundaryPolygons?: readonly CellBoundaryDatum[]
-  readonly expressionHexBoundaries?: readonly CellBoundaryDatum[]
 }
 
 export type GeneExpressionColorScale = 'gold' | 'magma' | 'viridis'
@@ -113,26 +112,23 @@ export const bundledDeckVersion = deckVersion
 export function createOverviewLayers(
   cells: readonly OverviewCellDatum[],
   boundaries: readonly CellBoundaryDatum[] = [],
-  hexBoundaries: readonly CellBoundaryDatum[] = [],
   expressionCells: readonly OverviewCellDatum[] = [],
   options: OverviewLayerOptions = {},
 ): LayersList {
-  const geneExpressionOpacity = normalizeLayerOpacity(
-    options.geneExpressionOpacity ?? DEFAULT_LAYER_OPACITY,
-  )
+  const cellOpacity = normalizeLayerOpacity(options.cellOpacity ?? DEFAULT_LAYER_OPACITY)
   const expressionBoundaryPolygons = options.expressionBoundaryPolygons ?? []
-  const expressionHexBoundaries = options.expressionHexBoundaries ?? []
-  const hasExpressionPolygons =
-    expressionBoundaryPolygons.length > 0 || expressionHexBoundaries.length > 0
+  const hasExpressionPolygons = expressionBoundaryPolygons.length > 0
+  const pointCells = cellsWithoutVisibleBoundaries(cells, boundaries)
   const cellPointLayer = new ScatterplotLayer<OverviewCellDatum>({
     id: 'cells-overview-scatter',
-    data: cells,
+    data: pointCells,
     pickable: true,
     radiusUnits: 'common',
     radiusMinPixels: 0.12,
     radiusMaxPixels: 6,
     stroked: true,
     filled: false,
+    opacity: cellOpacity,
     lineWidthUnits: 'pixels',
     lineWidthMinPixels: 1,
     getPosition: (cell) => cell.position,
@@ -142,24 +138,6 @@ export function createOverviewLayers(
   })
   const layers: LayersList = []
 
-  if (hexBoundaries.length > 0 && boundaries.length === 0) {
-    layers.push(
-      new PolygonLayer<CellBoundaryDatum>({
-        id: 'cell-boundary-hexagons',
-        data: hexBoundaries,
-        pickable: false,
-        stroked: true,
-        filled: true,
-        lineWidthUnits: 'pixels',
-        lineWidthMinPixels: 1,
-        getPolygon: (cell) => cell.polygon,
-        getFillColor: (cell) => cell.fillColor,
-        getLineColor: (cell) => cell.lineColor,
-        getLineWidth: 1,
-      }),
-    )
-  }
-
   if (boundaries.length > 0) {
     layers.push(
       new PolygonLayer<CellBoundaryDatum>({
@@ -168,6 +146,7 @@ export function createOverviewLayers(
         pickable: true,
         stroked: true,
         filled: true,
+        opacity: cellOpacity,
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 1,
         getPolygon: (cell) => cell.polygon,
@@ -193,30 +172,11 @@ export function createOverviewLayers(
         filled: false,
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 1.5,
-        opacity: geneExpressionOpacity,
+        opacity: cellOpacity,
         getPosition: (cell) => cell.position,
         getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
         getLineColor: (cell) => cellPointOutlineColor(cell.fillColor),
         getLineWidth: 1.5,
-      }),
-    )
-  }
-
-  if (expressionHexBoundaries.length > 0 && boundaries.length === 0) {
-    layers.push(
-      new PolygonLayer<CellBoundaryDatum>({
-        id: 'gene-expression-hexagons',
-        data: expressionHexBoundaries,
-        pickable: false,
-        stroked: true,
-        filled: true,
-        lineWidthUnits: 'pixels',
-        lineWidthMinPixels: 1,
-        opacity: geneExpressionOpacity,
-        getPolygon: (cell) => cell.polygon,
-        getFillColor: (cell) => cell.fillColor,
-        getLineColor: (cell) => cell.lineColor,
-        getLineWidth: 1,
       }),
     )
   }
@@ -231,7 +191,7 @@ export function createOverviewLayers(
         filled: true,
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 1,
-        opacity: geneExpressionOpacity,
+        opacity: cellOpacity,
         getPolygon: (cell) => cell.polygon,
         getFillColor: (cell) => cell.fillColor,
         getLineColor: (cell) => cell.lineColor,
@@ -557,6 +517,27 @@ function cellPointOutlineColor(color: Color): Color {
     color[2] ?? 0,
     Math.min(245, Math.max(160, color[3] ?? 210)),
   ]
+}
+
+function cellsWithoutVisibleBoundaries(
+  cells: readonly OverviewCellDatum[],
+  boundaries: readonly CellBoundaryDatum[],
+): readonly OverviewCellDatum[] {
+  if (cells.length === 0 || boundaries.length === 0) {
+    return cells
+  }
+
+  const boundaryCellIds = new Set<string>()
+
+  for (const boundary of boundaries) {
+    boundaryCellIds.add(boundary.id)
+  }
+
+  if (boundaryCellIds.size === 0) {
+    return cells
+  }
+
+  return cells.filter((cell) => !boundaryCellIds.has(cell.id))
 }
 
 export function createOverviewViewState(
