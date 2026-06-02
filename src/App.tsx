@@ -9,6 +9,7 @@ import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datase
 import { loadGenePanel as defaultLoadGenePanel } from './data/genePanel'
 import { loadMorphologyImage as defaultLoadMorphologyImage } from './data/morphologyImage'
 import { micrometers } from './data/coords'
+import { parseCustomAnnotations } from './data/customAnnotations'
 import {
   BOUNDARY_VIEWPORT_CELL_LIMIT,
   boundaryViewportKey,
@@ -250,6 +251,7 @@ export function App({
   const geneSetScoreInputId = useId()
   const geneScaleInputId = useId()
   const geneExpressionDetailInputId = useId()
+  const annotationImportInputId = useId()
   const observationModeInputId = useId()
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
@@ -846,6 +848,32 @@ export function App({
       })
   }
 
+  async function handleImportAnnotations(file: File | null) {
+    if (file === null) {
+      return
+    }
+
+    try {
+      const importedAnnotations = parseCustomAnnotations(await file.text(), file.name)
+
+      setAnnotationState((current) => ({
+        status: 'ready',
+        url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+        annotations: mergeImportedAnnotations(
+          current.status === 'ready' ? current.annotations : [],
+          importedAnnotations,
+          customAnnotationFilePrefix(file.name),
+        ),
+      }))
+    } catch (error) {
+      setAnnotationState({
+        status: 'error',
+        url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+        error: createStructuredLoadError('Annotations', error),
+      })
+    }
+  }
+
   function updateMorphologyChannel(
     id: string,
     patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
@@ -1242,6 +1270,21 @@ export function App({
           >
             {annotationState.status === 'loading' ? 'Loading…' : 'Load Annotations'}
           </button>
+          <label className="secondary-file-action" htmlFor={annotationImportInputId}>
+            Import File
+          </label>
+          <input
+            id={annotationImportInputId}
+            className="visually-hidden-file"
+            type="file"
+            accept=".csv,.json,application/json,text/csv"
+            disabled={loadState.status !== 'ready'}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0] ?? null
+              void handleImportAnnotations(file)
+              event.currentTarget.value = ''
+            }}
+          />
           {annotationState.status === 'ready' &&
           annotationState.annotations.length > 0 ? (
             <ul className="annotation-list" aria-label="Loaded annotations">
@@ -1545,6 +1588,33 @@ function parseGeneSetSymbols(
   }
 
   return parsedGenes.sort((left, right) => left.localeCompare(right))
+}
+
+function mergeImportedAnnotations(
+  currentAnnotations: readonly Annotation[],
+  importedAnnotations: readonly Annotation[],
+  importedPrefix: string,
+): readonly Annotation[] {
+  return [
+    ...currentAnnotations.filter(
+      (annotation) => !annotation.id.startsWith(importedPrefix),
+    ),
+    ...importedAnnotations,
+  ]
+}
+
+function customAnnotationFilePrefix(fileName: string): string {
+  return `custom:${slug(fileName)}:`
+}
+
+function slug(value: string): string {
+  const slugged = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return slugged.length === 0 ? 'annotation' : slugged
 }
 
 function defaultGeneSetName(genes: readonly string[]): string {

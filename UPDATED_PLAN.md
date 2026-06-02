@@ -253,7 +253,7 @@ unless the phase order is explicitly changed.
       bins; medium zoom sampled cells; high zoom exact cells; ROI exact mode.
 - [x] Gene sets: import/paste symbol lists; score cells by sum/mean/z-scored
       signature; color by score; save named sets.
-- [ ] Annotation import from `analysis.zarr.zip`, CSV, and JSON.
+- [x] Annotation import from `analysis.zarr.zip`, CSV, and JSON.
 - [ ] ROI annotations: draw polygon/box/lasso; compute summary stats; export
       selected cells/transcripts.
 - [ ] UMAP/tSNE panel linked to spatial selection.
@@ -294,5 +294,5 @@ unless the phase order is explicitly changed.
 - [x] Added user-triggered built-in annotation import from `analysis.zarr.zip`.
       Xenium cluster group CSR arrays are mapped through
       `cell_feature_matrix.zarr.zip` row-order cell ids, then shown as compact
-      label/count rows in the sidebar. CSV and JSON annotation import remain
-      pending under the same checkbox.
+      label/count rows in the sidebar. Local CSV (`cell_id,label`) and JSON
+      label/cell-id files can be imported into the same annotation list.

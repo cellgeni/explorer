@@ -488,6 +488,37 @@ describe('App', () => {
     expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
   })
 
+  it('imports custom CSV annotations from a local file', async () => {
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const file = new File([`cell_id,label\n${cellId},Manual ROI`], 'manual.csv', {
+      type: 'text/csv',
+    })
+
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Import File'), {
+      target: { files: [file] },
+    })
+
+    expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
+      'Manual ROI',
+    )
+    expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+  })
+
   it('lets the user paste, score, save, and reapply gene sets', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
