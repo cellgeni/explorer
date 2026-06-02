@@ -343,3 +343,8 @@ unless the phase order is explicitly changed.
       successful annotation imports/loads switch directly to annotation coloring,
       and visible hex/true boundary geometry inherits the matching cell color
       instead of staying on the default boundary palette.
+- [x] Disabled CPU-side overview point aggregation in the live viewer. The
+      primary cell layer now renders all viewport-clipped centroids directly as
+      points, which avoids rebuilding binned annotation-color averages during
+      low-zoom pan/drag interactions. Expression LOD aggregation remains in
+      place for gene overlays.

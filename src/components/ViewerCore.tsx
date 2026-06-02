@@ -11,7 +11,6 @@ import {
 } from '../rendering/deckLayers'
 import {
   aggregateExpressionCells,
-  aggregateOverviewCells,
   overviewCellsInBbox,
 } from '../rendering/cellAggregation'
 import { hexCellBoundariesForVisibleCells } from '../rendering/hexCellBoundaries'
@@ -188,10 +187,6 @@ function ViewerSurface({
     () => (viewportBbox === null ? cells : overviewCellsInBbox(cells, viewportBbox)),
     [cells, viewportBbox],
   )
-  const displayCells = useMemo(
-    () => aggregateOverviewCells(visibleCells, viewState),
-    [visibleCells, viewState],
-  )
   const displayExpressionCells = useMemo(
     () =>
       aggregateExpressionCells(expressionCells, viewState, {
@@ -230,7 +225,7 @@ function ViewerSurface({
   const layers = useMemo(
     () =>
       createOverviewLayers(
-        displayCells,
+        visibleCells,
         styledBoundaries,
         hexBoundaries,
         displayExpressionCells,
@@ -241,13 +236,13 @@ function ViewerSurface({
         },
       ),
     [
-      displayCells,
       expressionBoundaryPolygons,
       expressionHexBoundaries,
       displayExpressionCells,
       geneExpressionOpacity,
       hexBoundaries,
       styledBoundaries,
+      visibleCells,
     ],
   )
   const hasCells = cells.length > 0
