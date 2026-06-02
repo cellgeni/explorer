@@ -319,3 +319,5 @@ unless the phase order is explicitly changed.
       percentile/histogram path for later retuning.
 - [x] Spatial viewer idle background is now solid black with only the grid
       overlay; the previous red radial glow was removed.
+- [x] Spatial viewer empty state now shows a simple "Please load a dataset"
+      legend instead of decorative colored cell placeholders.

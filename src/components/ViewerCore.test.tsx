@@ -27,6 +27,8 @@ describe('ViewerCore', () => {
     expect(
       screen.getByRole('img', { name: 'Spatial viewer canvas area' }),
     ).toBeInTheDocument()
+    expect(screen.getByText('Please load a dataset')).toBeInTheDocument()
+    expect(document.querySelectorAll('.cell-node')).toHaveLength(0)
     expect(document.querySelector('canvas.morphology-canvas')).toBeInTheDocument()
   })
 
