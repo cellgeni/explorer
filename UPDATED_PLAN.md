@@ -365,8 +365,6 @@ unless the phase order is explicitly changed.
       close zoom so overview and medium-zoom pans reuse the stable full centroid
       array instead of scanning every cell on each drag event. The base
       million-point layer uses stable accessor functions to prevent unnecessary
-      position/radius/color attribute invalidation.
-- [x] Fixed the spatial-view blink introduced by the navigation optimization.
-      The overview point layer now remains visible during pan, drag, and zoom;
-      annotation coloring is still deferred until close zoom to avoid full-slide
-      recoloring at overview scale.
+      position/radius/color attribute invalidation, and active pan/drag
+      temporarily hides the huge point layer instead of redrawing 1.4M outlines
+      on every navigation frame.
