@@ -30,8 +30,6 @@ import type { OverviewViewState } from '../rendering/deckLayers'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = 4
 const OVERVIEW_CELL_PICK_MAX_VISIBLE_CELLS = 50_000
-const OVERVIEW_NAVIGATION_HIDE_CELL_THRESHOLD = 50_000
-const OVERVIEW_NAVIGATION_IDLE_DELAY_MS = 180
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_CELL_BOUNDARIES: readonly CellBoundaryDatum[] = []
 
@@ -186,13 +184,11 @@ function ViewerSurface({
   onRoiComplete,
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
-  const navigationIdleTimeoutRef = useRef<number | null>(null)
   const [viewState, setViewState] = useState<OverviewViewState>(initialViewState)
   const [viewport, setViewport] = useState<CssViewportSize>({
     width: 0,
     height: 0,
   })
-  const [isNavigating, setIsNavigating] = useState(false)
   const [roiDrag, setRoiDrag] = useState<RoiDrag | null>(null)
   const viewportBbox = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
@@ -249,11 +245,8 @@ function ViewerSurface({
     [displayExpressionCells, styledBoundaries],
   )
   const cellsPickable =
-    !isNavigating &&
     viewState.zoom > OVERVIEW_CELL_CLIP_MIN_ZOOM &&
     visibleCells.length <= OVERVIEW_CELL_PICK_MAX_VISIBLE_CELLS
-  const cellsVisible =
-    !isNavigating || visibleCells.length <= OVERVIEW_NAVIGATION_HIDE_CELL_THRESHOLD
   const pointCellColorLookup = cellsPickable ? cellColorLookup : null
   const annotationPreviewCells = EMPTY_OVERVIEW_CELLS
   const layers = useMemo(
@@ -267,7 +260,6 @@ function ViewerSurface({
           annotationPreviewCells,
           cellColorLookup: pointCellColorLookup,
           cellsPickable,
-          cellsVisible,
           geneExpressionOpacity,
           expressionBoundaryPolygons,
           expressionHexBoundaries,
@@ -276,7 +268,6 @@ function ViewerSurface({
     [
       annotationPreviewCells,
       cellsPickable,
-      cellsVisible,
       expressionBoundaryPolygons,
       expressionHexBoundaries,
       displayExpressionCells,
@@ -311,17 +302,6 @@ function ViewerSurface({
   const handleViewStateChange = useCallback(
     ({ viewState: nextViewState }: ViewStateChangeParameters) => {
       const normalizedViewState = normaliseViewState(nextViewState)
-
-      setIsNavigating((currentValue) => (currentValue ? currentValue : true))
-
-      if (navigationIdleTimeoutRef.current !== null) {
-        window.clearTimeout(navigationIdleTimeoutRef.current)
-      }
-
-      navigationIdleTimeoutRef.current = window.setTimeout(() => {
-        setIsNavigating(false)
-        navigationIdleTimeoutRef.current = null
-      }, OVERVIEW_NAVIGATION_IDLE_DELAY_MS)
 
       setViewState((currentViewState) =>
         equivalentViewState(currentViewState, normalizedViewState)
@@ -436,15 +416,6 @@ function ViewerSurface({
       window.clearTimeout(timeout)
     }
   }, [hasCells, onViewportChange, viewState, viewportBbox, visibleCellCount])
-
-  useEffect(
-    () => () => {
-      if (navigationIdleTimeoutRef.current !== null) {
-        window.clearTimeout(navigationIdleTimeoutRef.current)
-      }
-    },
-    [],
-  )
 
   return (
     <div

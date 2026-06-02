@@ -44,7 +44,6 @@ export interface OverviewLayerOptions {
   readonly expressionHexBoundaries?: readonly CellBoundaryDatum[]
   readonly cellColorLookup?: CellColorLookup | null
   readonly cellsPickable?: boolean
-  readonly cellsVisible?: boolean
   readonly annotationPreviewCells?: readonly OverviewCellDatum[]
 }
 
@@ -135,7 +134,6 @@ export function createOverviewLayers(
   const expressionHexBoundaries = options.expressionHexBoundaries ?? []
   const cellColorLookup = options.cellColorLookup ?? null
   const cellsPickable = options.cellsPickable ?? true
-  const cellsVisible = options.cellsVisible ?? true
   const annotationPreviewCells = options.annotationPreviewCells ?? []
   const hasExpressionPolygons =
     expressionBoundaryPolygons.length > 0 || expressionHexBoundaries.length > 0
@@ -144,7 +142,6 @@ export function createOverviewLayers(
       id: 'cells-overview-scatter',
       data: cells,
       pickable: cellsPickable,
-      visible: cellsVisible,
       radiusUnits: 'common',
       radiusMinPixels: 0.12,
       radiusMaxPixels: 6,
