@@ -353,3 +353,7 @@ unless the phase order is explicitly changed.
       centroid array instead of re-filtering it during overview pan/drag. This
       keeps all cells visible as points while reducing visual occlusion and CPU
       work.
+- [x] Added ROI transcript export. The ROI panel now has an `Export Transcripts`
+      action that Range-checks `transcripts.parquet`, queries QV-filtered raw
+      transcript rows inside the selected ROI bbox, and downloads a CSV with
+      cell id, feature name, x/y/z location, QV, nucleus overlap, and gene flag.

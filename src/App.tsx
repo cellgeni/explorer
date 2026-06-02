@@ -22,6 +22,7 @@ import {
   loadDatasetRoiCells as defaultLoadDatasetRoiCells,
 } from './data/roiCells'
 import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
+import { loadDatasetRoiTranscripts as defaultLoadDatasetRoiTranscripts } from './data/roiTranscripts'
 import { micrometers } from './data/coords'
 import { parseCustomAnnotations } from './data/customAnnotations'
 import {
@@ -54,7 +55,11 @@ import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { BBox } from './data/coords'
 import type { ChannelAutoContrast, ChannelHistogram } from './data/morphologyContrast'
-import type { DatasetCell, GeneExpressionBatch } from './datasets/xeniumDataset'
+import type {
+  DatasetCell,
+  DatasetTranscript,
+  GeneExpressionBatch,
+} from './datasets/xeniumDataset'
 import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
 import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
@@ -120,6 +125,11 @@ export type RoiGeneStatsLoader = (
   cells: readonly DatasetCell[],
   options?: { readonly signal?: AbortSignal },
 ) => Promise<RoiGeneStats>
+export type RoiTranscriptsLoader = (
+  baseUrl: string,
+  bbox: BBox,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<readonly DatasetTranscript[]>
 export type GeneExpressionLoader = (
   baseUrl: string,
   bbox: BBox,
@@ -258,6 +268,15 @@ type RoiGeneStatsState =
       readonly error: StructuredLoadError
     }
 
+type RoiTranscriptExportState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
+
 type LoadErrorCode =
   | 'network'
   | 'http'
@@ -276,6 +295,7 @@ type LoadErrorSource =
   | 'Annotations'
   | 'ROI cells'
   | 'ROI genes'
+  | 'ROI transcripts'
   | 'Gene expression'
 
 interface StructuredLoadError {
@@ -323,6 +343,7 @@ export interface AppProps {
   readonly loadAnnotationGroups?: AnnotationGroupLoader
   readonly loadRoiCells?: RoiCellsLoader
   readonly loadRoiGeneStats?: RoiGeneStatsLoader
+  readonly loadRoiTranscripts?: RoiTranscriptsLoader
   readonly loadGeneExpression?: GeneExpressionLoader
   readonly computeAutoChannelContrast?: AutoChannelContrastLoader
 }
@@ -336,6 +357,7 @@ export function App({
   loadAnnotationGroups = defaultLoadDatasetAnnotationGroups,
   loadRoiCells = defaultLoadDatasetRoiCells,
   loadRoiGeneStats = defaultLoadDatasetRoiGeneStats,
+  loadRoiTranscripts = defaultLoadDatasetRoiTranscripts,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
   computeAutoChannelContrast = defaultComputeAutoChannelContrast,
 }: AppProps) {
@@ -382,6 +404,8 @@ export function App({
   const [roiGeneStatsState, setRoiGeneStatsState] = useState<RoiGeneStatsState>({
     status: 'idle',
   })
+  const [roiTranscriptExportState, setRoiTranscriptExportState] =
+    useState<RoiTranscriptExportState>({ status: 'idle' })
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
     status: 'idle',
   })
@@ -422,10 +446,12 @@ export function App({
   const boundaryRequestId = useRef(0)
   const geneExpressionRequestId = useRef(0)
   const roiRequestId = useRef(0)
+  const roiTranscriptExportRequestId = useRef(0)
   const datasetAbortRef = useRef<AbortController | null>(null)
   const boundaryAbortRef = useRef<AbortController | null>(null)
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
   const roiAbortRef = useRef<AbortController | null>(null)
+  const roiTranscriptExportAbortRef = useRef<AbortController | null>(null)
   const autoContrastChannelIdsRef = useRef<Set<string>>(new Set())
   const geneSetIdRef = useRef(0)
   const roiIdRef = useRef(0)
@@ -580,6 +606,9 @@ export function App({
         annotationGroupState.status === 'error' ? annotationGroupState.error : null,
         roiState.status === 'error' ? roiState.error : null,
         roiGeneStatsState.status === 'error' ? roiGeneStatsState.error : null,
+        roiTranscriptExportState.status === 'error'
+          ? roiTranscriptExportState.error
+          : null,
         geneExpressionState.status === 'error' ? geneExpressionState.error : null,
       ].filter(isStructuredLoadError),
     [
@@ -592,6 +621,7 @@ export function App({
       morphologyState,
       roiState,
       roiGeneStatsState,
+      roiTranscriptExportState,
     ],
   )
   const handleImageTileError = useCallback((error: Error) => {
@@ -831,6 +861,7 @@ export function App({
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
+      abortActiveRequest(roiTranscriptExportAbortRef)
     }
   }, [])
 
@@ -848,6 +879,7 @@ export function App({
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
+      abortActiveRequest(roiTranscriptExportAbortRef)
       const abortController = new AbortController()
       loadRequestId.current = requestId
       datasetAbortRef.current = abortController
@@ -876,6 +908,7 @@ export function App({
       setRoiName('ROI 1')
       setRoiState({ status: 'idle' })
       setRoiGeneStatsState({ status: 'idle' })
+      setRoiTranscriptExportState({ status: 'idle' })
       setSelectedCell(null)
       setLoadState({ status: 'loading', url: requestedUrl })
       setMorphologyState(
@@ -888,6 +921,7 @@ export function App({
       boundaryRequestId.current += 1
       geneExpressionRequestId.current += 1
       roiRequestId.current += 1
+      roiTranscriptExportRequestId.current += 1
       boundaryViewportKeyRef.current = null
       geneExpressionViewportKeyRef.current = null
       lastViewportDetailRef.current = null
@@ -1232,6 +1266,7 @@ export function App({
     setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
     setRoiState({ status: 'loading', url: loadState.url, bbox })
     setRoiGeneStatsState({ status: 'idle' })
+    setRoiTranscriptExportState({ status: 'idle' })
 
     void loadRoiCells(loadState.url, bbox, { signal: abortController.signal })
       .then((cells) => {
@@ -1310,10 +1345,13 @@ export function App({
 
   function handleClearRoi() {
     abortActiveRequest(roiAbortRef)
+    abortActiveRequest(roiTranscriptExportAbortRef)
     roiRequestId.current += 1
+    roiTranscriptExportRequestId.current += 1
     setRoiMode('idle')
     setRoiState({ status: 'idle' })
     setRoiGeneStatsState({ status: 'idle' })
+    setRoiTranscriptExportState({ status: 'idle' })
   }
 
   function handleSaveRoiAnnotation() {
@@ -1352,6 +1390,51 @@ export function App({
 
     const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
     downloadTextFile(`${slug(name)}-cells.csv`, roiCellsToCsv(roiState.cells))
+  }
+
+  function handleExportRoiTranscripts() {
+    if (roiState.status !== 'ready') {
+      return
+    }
+
+    const requestId = roiTranscriptExportRequestId.current + 1
+    abortActiveRequest(roiTranscriptExportAbortRef)
+    const abortController = new AbortController()
+    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
+    roiTranscriptExportRequestId.current = requestId
+    roiTranscriptExportAbortRef.current = abortController
+    setRoiTranscriptExportState({ status: 'loading', url: roiState.url })
+
+    void loadRoiTranscripts(roiState.url, roiState.bbox, {
+      signal: abortController.signal,
+    })
+      .then((transcripts) => {
+        if (roiTranscriptExportRequestId.current !== requestId) {
+          return
+        }
+
+        downloadTextFile(
+          `${slug(name)}-transcripts.csv`,
+          roiTranscriptsToCsv(transcripts),
+        )
+        setRoiTranscriptExportState({ status: 'idle' })
+      })
+      .catch((error) => {
+        if (isAbortError(error) || roiTranscriptExportRequestId.current !== requestId) {
+          return
+        }
+
+        setRoiTranscriptExportState({
+          status: 'error',
+          url: roiState.url,
+          error: createStructuredLoadError('ROI transcripts', error),
+        })
+      })
+      .finally(() => {
+        if (roiTranscriptExportAbortRef.current === abortController) {
+          roiTranscriptExportAbortRef.current = null
+        }
+      })
   }
 
   function updateMorphologyChannel(
@@ -1941,7 +2024,25 @@ export function App({
             >
               Export Cells
             </button>
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={
+                roiState.status !== 'ready' ||
+                roiTranscriptExportState.status === 'loading'
+              }
+              onClick={handleExportRoiTranscripts}
+            >
+              {roiTranscriptExportState.status === 'loading'
+                ? 'Exporting...'
+                : 'Export Transcripts'}
+            </button>
           </div>
+          {roiTranscriptExportState.status === 'loading' ? (
+            <p className="roi-gene-status" aria-live="polite">
+              Preparing ROI transcript CSV
+            </p>
+          ) : null}
         </section>
 
         <section className="analysis-section" aria-labelledby="cell-info-heading">
@@ -2670,6 +2771,33 @@ function roiCellsToCsv(cells: readonly DatasetCell[]): string {
       String(cell.position.y),
       String(cell.transcriptCount ?? ''),
       String(cell.cellArea ?? ''),
+    ]),
+  ]
+
+  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
+}
+
+function roiTranscriptsToCsv(transcripts: readonly DatasetTranscript[]): string {
+  const rows = [
+    [
+      'cell_id',
+      'feature_name',
+      'x_location',
+      'y_location',
+      'z_location',
+      'qv',
+      'overlaps_nucleus',
+      'is_gene',
+    ],
+    ...transcripts.map((transcript) => [
+      transcript.cellId ?? '',
+      transcript.featureName,
+      String(transcript.position.x),
+      String(transcript.position.y),
+      transcript.zLocation === undefined ? '' : String(transcript.zLocation),
+      String(transcript.qv),
+      transcript.overlapsNucleus === undefined ? '' : String(transcript.overlapsNucleus),
+      transcript.isGene === undefined ? '' : String(transcript.isGene),
     ]),
   ]
 

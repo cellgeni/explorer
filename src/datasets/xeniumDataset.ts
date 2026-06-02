@@ -92,6 +92,21 @@ export interface DatasetCell {
   readonly cellArea?: number
 }
 
+export interface DatasetTranscript {
+  readonly cellId: CellId | null
+  readonly featureName: string
+  readonly position: DataPoint
+  readonly zLocation: number | undefined
+  readonly qv: number
+  readonly overlapsNucleus: boolean | undefined
+  readonly isGene: boolean | undefined
+}
+
+export interface TranscriptQueryOptions {
+  readonly limit?: number
+  readonly minQv?: number
+}
+
 const DEFAULT_XENIUM_UNITS: UnitsDescriptor = {
   dataUnit: 'micrometer',
   imageUnit: 'pixel',
@@ -265,6 +280,40 @@ ORDER BY b.cell_id, b.file_row_number
     options: { readonly limit?: number } = {},
   ): Promise<readonly DatasetCell[]> {
     return this.cellsForBbox(bbox, options.limit ?? 50_000)
+  }
+
+  async transcriptsInBbox(
+    bbox: BBox,
+    options: TranscriptQueryOptions = {},
+  ): Promise<readonly DatasetTranscript[]> {
+    const conn = await this.conn()
+    const stmt = await conn.prepare(`
+SELECT cell_id,
+       feature_name,
+       x_location,
+       y_location,
+       z_location,
+       qv,
+       overlaps_nucleus,
+       is_gene
+FROM read_parquet( ? )
+WHERE x_location BETWEEN ? AND ?
+  AND y_location BETWEEN ? AND ?
+  AND qv >= ?
+ORDER BY cell_id, feature_name
+LIMIT ?
+`)
+    const result = await stmt.query(
+      this.urlFor('transcripts.parquet'),
+      bbox.minX,
+      bbox.maxX,
+      bbox.minY,
+      bbox.maxY,
+      options.minQv ?? 20,
+      options.limit ?? 100_000,
+    )
+
+    return result.toArray().map(parseTranscriptExportRow)
   }
 
   async geneExpression(
@@ -595,6 +644,32 @@ function parseViewportCellRow(row: Record<string, unknown>): DatasetCell {
   }
 }
 
+function parseTranscriptExportRow(row: Record<string, unknown>): DatasetTranscript {
+  const cellId = row.cell_id
+  const featureName = row.feature_name
+
+  if (cellId !== null && cellId !== undefined && typeof cellId !== 'string') {
+    throw new Error('Expected transcript row cell_id to be a string or null.')
+  }
+
+  if (typeof featureName !== 'string') {
+    throw new Error('Expected transcript row feature_name to be a string.')
+  }
+
+  return {
+    cellId: cellId === null || cellId === undefined ? null : asCellId(cellId),
+    featureName,
+    position: {
+      x: micrometers(readNumericRowValue(row, 'x_location')),
+      y: micrometers(readNumericRowValue(row, 'y_location')),
+    },
+    zLocation: readOptionalNumericRowValue(row, 'z_location'),
+    qv: readNumericRowValue(row, 'qv'),
+    overlapsNucleus: readOptionalBooleanRowValue(row, 'overlaps_nucleus'),
+    isGene: readOptionalBooleanRowValue(row, 'is_gene'),
+  }
+}
+
 function selectedGeneCount(cell: GexCell, selectedGeneSet: ReadonlySet<string>): number {
   let count = 0
 
@@ -636,6 +711,36 @@ function readNumericRowValue(row: Record<string, unknown>, key: string): number 
   }
 
   throw new Error(`Expected row.${key} to be numeric.`)
+}
+
+function readOptionalNumericRowValue(
+  row: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  const value = row[key]
+
+  if (value === null || value === undefined) {
+    return undefined
+  }
+
+  return readNumericRowValue(row, key)
+}
+
+function readOptionalBooleanRowValue(
+  row: Record<string, unknown>,
+  key: string,
+): boolean | undefined {
+  const value = row[key]
+
+  if (value === null || value === undefined) {
+    return undefined
+  }
+
+  if (typeof value === 'boolean') {
+    return value
+  }
+
+  throw new Error(`Expected row.${key} to be boolean.`)
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

@@ -7,6 +7,7 @@ import {
   type GeneExpressionLoader,
   type RoiCellsLoader,
   type RoiGeneStatsLoader,
+  type RoiTranscriptsLoader,
 } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
@@ -706,6 +707,15 @@ describe('App', () => {
     const contextSpy = vi
       .spyOn(HTMLCanvasElement.prototype, 'getContext')
       .mockReturnValue(null)
+    const createObjectUrlSpy = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:roi-transcripts')
+    const revokeObjectUrlSpy = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+    const downloadClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
     const cellId = intToCellId(1, 1)
     const loadDatasetOverview = vi.fn(async () => [
       {
@@ -750,6 +760,19 @@ describe('App', () => {
         hitCellLimit: false,
       }),
     )
+    const loadRoiTranscripts: ReturnType<typeof vi.fn<RoiTranscriptsLoader>> = vi.fn(
+      async () => [
+        {
+          cellId,
+          featureName: 'Actb',
+          position: { x: micrometers(10), y: micrometers(20) },
+          zLocation: 1,
+          qv: 35,
+          overlapsNucleus: true,
+          isGene: true,
+        },
+      ],
+    )
 
     try {
       render(
@@ -758,6 +781,7 @@ describe('App', () => {
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
           loadRoiGeneStats={loadRoiGeneStats}
+          loadRoiTranscripts={loadRoiTranscripts}
         />,
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
@@ -813,6 +837,25 @@ describe('App', () => {
       expect(geneDistribution).toHaveTextContent('42')
       expect(geneDistribution).toHaveTextContent('70% total')
 
+      fireEvent.click(screen.getByRole('button', { name: 'Export Transcripts' }))
+
+      await waitFor(() => {
+        expect(loadRoiTranscripts).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.objectContaining({
+            minX: expect.any(Number) as number,
+            maxX: expect.any(Number) as number,
+            minY: expect.any(Number) as number,
+            maxY: expect.any(Number) as number,
+          }),
+          expect.objectContaining({
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+      expect(createObjectUrlSpy).toHaveBeenCalled()
+      expect(downloadClickSpy).toHaveBeenCalled()
+
       fireEvent.click(screen.getByRole('button', { name: 'Save ROI' }))
 
       expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
@@ -825,6 +868,9 @@ describe('App', () => {
     } finally {
       rectSpy.mockRestore()
       contextSpy.mockRestore()
+      createObjectUrlSpy.mockRestore()
+      revokeObjectUrlSpy.mockRestore()
+      downloadClickSpy.mockRestore()
     }
   })
 
