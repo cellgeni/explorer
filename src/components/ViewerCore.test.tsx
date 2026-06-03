@@ -98,6 +98,36 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('tracks mouse coordinates in micrometers and image pixels', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells: OverviewCellDatum[] = [
+      {
+        id: 'cell-1',
+        position: [1234, -5678, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      },
+    ]
+    const { rerender } = render(<ViewerCore cells={cells} />)
+    const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+
+    fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
+
+    expect(await screen.findByText('X 1234 μm | Y 5678 μm')).toBeInTheDocument()
+
+    rerender(<ViewerCore cells={cells} coordinateUnit="px" micrometersPerPixel={0.5} />)
+    fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
+
+    expect(await screen.findByText('X 2468 px | Y 11356 px')).toBeInTheDocument()
+
+    fireEvent.pointerLeave(frame)
+
+    await waitFor(() => {
+      expect(screen.queryByText('X 2468 px | Y 11356 px')).not.toBeInTheDocument()
+    })
+  })
+
   it('emits a data-space bounding box after drawing a box ROI', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

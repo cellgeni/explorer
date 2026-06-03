@@ -27,8 +27,10 @@ import type { CellBoundaryDatum, OverviewCellDatum } from '../rendering/deckLaye
 import type { OverviewViewState } from '../rendering/deckLayers'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
+const DEFAULT_MICROMETERS_PER_PIXEL = 0.2125
 
 export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
+export type ViewerCoordinateUnit = 'um' | 'px'
 
 export interface ViewerCoreProps {
   readonly cells?: readonly OverviewCellDatum[]
@@ -38,6 +40,8 @@ export interface ViewerCoreProps {
   readonly imageChannels?: readonly MorphologyCanvasChannel[]
   readonly imageOpacity?: number
   readonly geneExpressionOpacity?: number
+  readonly coordinateUnit?: ViewerCoordinateUnit
+  readonly micrometersPerPixel?: number
   readonly status?: ViewerLoadStatus
   readonly imageStatus?: ViewerLoadStatus
   readonly boundaryStatus?: ViewerLoadStatus
@@ -69,6 +73,8 @@ export function ViewerCore({
   imageChannels = [],
   imageOpacity = 1,
   geneExpressionOpacity = 1,
+  coordinateUnit = 'um',
+  micrometersPerPixel = DEFAULT_MICROMETERS_PER_PIXEL,
   status = 'idle',
   imageStatus = 'idle',
   boundaryStatus = 'idle',
@@ -96,6 +102,8 @@ export function ViewerCore({
       imageChannels={imageChannels}
       imageOpacity={imageOpacity}
       geneExpressionOpacity={geneExpressionOpacity}
+      coordinateUnit={coordinateUnit}
+      micrometersPerPixel={micrometersPerPixel}
       initialViewState={fittedViewState}
       status={status}
       imageStatus={imageStatus}
@@ -122,6 +130,8 @@ interface ViewerSurfaceProps {
   readonly imageChannels: readonly MorphologyCanvasChannel[]
   readonly imageOpacity: number
   readonly geneExpressionOpacity: number
+  readonly coordinateUnit: ViewerCoordinateUnit
+  readonly micrometersPerPixel: number
   readonly initialViewState: OverviewViewState
   readonly status: ViewerLoadStatus
   readonly imageStatus: ViewerLoadStatus
@@ -143,6 +153,11 @@ interface RoiDrag {
   readonly current: DataPoint
 }
 
+interface MouseCoordinate {
+  readonly xMicrometers: number
+  readonly yMicrometers: number
+}
+
 interface RoiScreenRect {
   readonly left: number
   readonly top: number
@@ -158,6 +173,8 @@ function ViewerSurface({
   imageChannels,
   imageOpacity,
   geneExpressionOpacity,
+  coordinateUnit,
+  micrometersPerPixel,
   initialViewState,
   status,
   imageStatus,
@@ -180,6 +197,9 @@ function ViewerSurface({
     height: 0,
   })
   const [roiDrag, setRoiDrag] = useState<RoiDrag | null>(null)
+  const [mouseCoordinate, setMouseCoordinate] = useState<MouseCoordinate | null>(null)
+  const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
+  const mouseCoordinateFrameRef = useRef<number | null>(null)
   const cellExtentBbox = useMemo(() => overviewCellsExtentBbox(cells), [cells])
   const viewportBbox = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
@@ -230,6 +250,7 @@ function ViewerSurface({
   )
   const hasCells = cells.length > 0
   const hasImage = imageLoader !== null || imageChannels.length > 0
+  const canTrackMouseCoordinates = hasCells || hasImage
   const visibleCellCount = visibleCells.length
   const estimatedViewportCellCount = useMemo(() => {
     if (viewportBbox === null) {
@@ -262,6 +283,41 @@ function ViewerSurface({
     ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
     ...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage }),
   })
+  const mouseCoordinateText =
+    !canTrackMouseCoordinates || mouseCoordinate === null
+      ? null
+      : formatMouseCoordinate(mouseCoordinate, coordinateUnit, micrometersPerPixel)
+  const flushMouseCoordinate = useCallback(() => {
+    mouseCoordinateFrameRef.current = null
+    setMouseCoordinate(pendingMouseCoordinateRef.current)
+  }, [])
+  const scheduleMouseCoordinate = useCallback(
+    (coordinate: MouseCoordinate | null) => {
+      pendingMouseCoordinateRef.current = coordinate
+
+      if (typeof window.requestAnimationFrame !== 'function') {
+        setMouseCoordinate(coordinate)
+        return
+      }
+
+      if (mouseCoordinateFrameRef.current === null) {
+        mouseCoordinateFrameRef.current =
+          window.requestAnimationFrame(flushMouseCoordinate)
+      }
+    },
+    [flushMouseCoordinate],
+  )
+  const clearMouseCoordinate = useCallback(() => {
+    pendingMouseCoordinateRef.current = null
+
+    if (mouseCoordinateFrameRef.current !== null) {
+      window.cancelAnimationFrame(mouseCoordinateFrameRef.current)
+      mouseCoordinateFrameRef.current = null
+    }
+
+    setMouseCoordinate(null)
+  }, [])
+
   const handleViewStateChange = useCallback(
     ({ viewState: nextViewState }: ViewStateChangeParameters) => {
       const normalizedViewState = normaliseViewState(nextViewState)
@@ -283,6 +339,20 @@ function ViewerSurface({
       onCellClick(info.object)
     },
     [onCellClick],
+  )
+  const handleMouseCoordinatePointerMove = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (!canTrackMouseCoordinates || viewport.width <= 0 || viewport.height <= 0) {
+        return
+      }
+
+      const point = pointerEventToDataPoint(event, viewState, viewport)
+      scheduleMouseCoordinate({
+        xMicrometers: point.x,
+        yMicrometers: point.y,
+      })
+    },
+    [canTrackMouseCoordinates, scheduleMouseCoordinate, viewState, viewport],
   )
   const handleRoiPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
@@ -363,6 +433,14 @@ function ViewerSurface({
   }, [])
 
   useEffect(() => {
+    return () => {
+      if (mouseCoordinateFrameRef.current !== null) {
+        window.cancelAnimationFrame(mouseCoordinateFrameRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (onViewportCellCountChange === undefined || !hasCells) {
       return
     }
@@ -400,6 +478,8 @@ function ViewerSurface({
       className="viewport-frame"
       role="img"
       aria-label="Spatial viewer canvas area"
+      onPointerMove={handleMouseCoordinatePointerMove}
+      onPointerLeave={clearMouseCoordinate}
     >
       {!hasImage ? <div className="viewport-grid" aria-hidden="true" /> : null}
       <MorphologyCanvas
@@ -445,6 +525,14 @@ function ViewerSurface({
           Please load a dataset
         </div>
       ) : null}
+      {mouseCoordinateText === null ? null : (
+        <p
+          className="viewport-coordinate-readout"
+          aria-label={`Mouse coordinates ${mouseCoordinateText}`}
+        >
+          {mouseCoordinateText}
+        </p>
+      )}
       {viewportMessage === null ? null : (
         <p
           className={`viewport-message${viewportMessage.kind === 'error' ? ' viewport-message-error' : ''}`}
@@ -531,6 +619,30 @@ function rawDataPointToScreen(
 
 function hasMinimumRoiSize(bbox: BBox): boolean {
   return bbox.maxX - bbox.minX >= 1 && bbox.maxY - bbox.minY >= 1
+}
+
+function formatMouseCoordinate(
+  coordinate: MouseCoordinate,
+  unit: ViewerCoordinateUnit,
+  micrometersPerPixel: number,
+): string {
+  if (unit === 'px') {
+    const pixelSize =
+      Number.isFinite(micrometersPerPixel) && micrometersPerPixel > 0
+        ? micrometersPerPixel
+        : DEFAULT_MICROMETERS_PER_PIXEL
+
+    return `X ${formatCoordinateValue(coordinate.xMicrometers / pixelSize)} px | Y ${formatCoordinateValue(coordinate.yMicrometers / pixelSize)} px`
+  }
+
+  return `X ${formatCoordinateValue(coordinate.xMicrometers)} μm | Y ${formatCoordinateValue(coordinate.yMicrometers)} μm`
+}
+
+function formatCoordinateValue(value: number): string {
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: Math.abs(value) < 10 ? 2 : 1,
+    useGrouping: false,
+  })
 }
 
 function readViewportMessage(

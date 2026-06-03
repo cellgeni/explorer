@@ -1,6 +1,6 @@
 import type { CSSProperties, FormEvent, PointerEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ViewerCore } from './components/ViewerCore'
+import { ViewerCore, type ViewerCoordinateUnit } from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import {
   ALL_ANNOTATION_GROUP_ID,
@@ -90,6 +90,16 @@ const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 const DEBUG_LOG_LIMIT = 12
+const CONTROL_HUD_TABS = [
+  { id: 'dataset', label: 'Dataset' },
+  { id: 'layers', label: 'Layers' },
+  { id: 'genes', label: 'Genes' },
+  { id: 'annotations', label: 'Annotations' },
+  { id: 'roi', label: 'ROI' },
+  { id: 'cell', label: 'Cell' },
+] as const
+
+type ControlHudTab = (typeof CONTROL_HUD_TABS)[number]['id']
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
@@ -340,6 +350,13 @@ interface DebugLogEntry {
   readonly coalesceKey?: string
 }
 
+interface LoadingTask {
+  readonly id: string
+  readonly tabId: ControlHudTab
+  readonly label: string
+  readonly detail?: string
+}
+
 interface MorphologyChannelSetting {
   readonly id: string
   readonly enabled: boolean
@@ -401,6 +418,7 @@ export function App({
   const boundaryLimitInputId = useId()
   const imageOpacityInputId = useId()
   const geneOpacityInputId = useId()
+  const coordinateUnitInputId = useId()
   const geneSearchInputId = useId()
   const geneSetSymbolsInputId = useId()
   const geneSetNameInputId = useId()
@@ -449,6 +467,8 @@ export function App({
   const [roiTranscriptExportState, setRoiTranscriptExportState] =
     useState<RoiTranscriptExportState>({ status: 'idle' })
   const [debugLog, setDebugLog] = useState<readonly DebugLogEntry[]>([])
+  const [isControlHudCollapsed, setIsControlHudCollapsed] = useState(false)
+  const [activeControlHudTab, setActiveControlHudTab] = useState<ControlHudTab>('dataset')
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
     status: 'idle',
   })
@@ -469,6 +489,7 @@ export function App({
   const [boundaryCellLimit, setBoundaryCellLimit] = useState(BOUNDARY_VIEWPORT_CELL_LIMIT)
   const [imageLayerOpacity, setImageLayerOpacity] = useState(1)
   const [geneLayerOpacity, setGeneLayerOpacity] = useState(1)
+  const [coordinateUnit, setCoordinateUnit] = useState<ViewerCoordinateUnit>('um')
   const [geneSearch, setGeneSearch] = useState('')
   const [geneSetSymbols, setGeneSetSymbols] = useState('')
   const [geneSetName, setGeneSetName] = useState('')
@@ -485,7 +506,7 @@ export function App({
   const [observationColorMode, setObservationColorMode] =
     useState<ObservationColorMode>('transcript-count')
   const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
-  const [viewportCellCount, setViewportCellCount] = useState<number | null>(null)
+  const [, setViewportCellCount] = useState<number | null>(null)
   const loadRequestId = useRef(0)
   const analysisEmbeddingRequestId = useRef(0)
   const boundaryRequestId = useRef(0)
@@ -506,8 +527,6 @@ export function App({
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
   const isLoading = loadState.status === 'loading'
-  const statusCopy = datasetStatusCopy(loadState, datasetUrl)
-  const viewportCellCountCopy = viewportCellCountStatusCopy(loadState, viewportCellCount)
   const annotationStyleColors = useMemo(
     () =>
       annotationState.status === 'ready'
@@ -615,6 +634,7 @@ export function App({
           }),
     [morphologyChannelSettings, morphologyImage],
   )
+  const morphologyMicrometersPerPixel = morphologyImage?.loader.units?.micrometersPerPixel
   const boundaryLayerData = useMemo(
     () => boundaryElementsToLayerData(boundaryElements),
     [boundaryElements],
@@ -664,9 +684,124 @@ export function App({
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const roiCopy = roiStatusCopy(roiState, roiMode)
   const roiGeneStatsCopy = roiGeneStatsStatusCopy(roiGeneStatsState)
+  const analysisHeaderCopy =
+    geneExpressionState.status === 'loading'
+      ? geneExpressionModeLabel(geneExpressionState.mode)
+      : genePanelCopy
+  const annotationHeaderCopy =
+    annotationGroupState.status === 'loading' ? 'Loading sets' : annotationCopy
+  const roiHeaderCopy =
+    roiGeneStatsState.status === 'loading'
+      ? 'Querying genes'
+      : roiTranscriptExportState.status === 'loading'
+        ? 'Exporting'
+        : roiCopy
   const roiSummary = useMemo(
     () => (roiState.status === 'ready' ? summarizeRoiCells(roiState.cells) : null),
     [roiState],
+  )
+  const loadingTasks = useMemo<readonly LoadingTask[]>(() => {
+    const tasks: LoadingTask[] = []
+
+    if (loadState.status === 'loading') {
+      tasks.push({
+        id: 'dataset',
+        tabId: 'dataset',
+        label: 'Loading dataset',
+        detail: shortDatasetLabel(loadState.url),
+      })
+    }
+
+    if (genePanelState.status === 'loading') {
+      tasks.push({ id: 'gene-panel', tabId: 'genes', label: 'Loading gene panel' })
+    }
+
+    if (morphologyState.status === 'loading') {
+      tasks.push({ id: 'morphology', tabId: 'layers', label: 'Loading image' })
+    }
+
+    if (annotationGroupState.status === 'loading') {
+      tasks.push({
+        id: 'annotation-sets',
+        tabId: 'annotations',
+        label: 'Loading annotation sets',
+      })
+    }
+
+    if (boundaryState.status === 'loading') {
+      tasks.push({ id: 'boundaries', tabId: 'layers', label: 'Loading boundaries' })
+    }
+
+    if (geneExpressionState.status === 'loading') {
+      tasks.push({
+        id: 'gene-expression',
+        tabId: 'genes',
+        label: geneExpressionModeLabel(geneExpressionState.mode),
+        detail: geneExpressionState.genes.join(', '),
+      })
+    }
+
+    if (annotationState.status === 'loading') {
+      tasks.push({
+        id: 'annotations',
+        tabId: 'annotations',
+        label: 'Loading annotations',
+      })
+    }
+
+    if (analysisEmbeddingState.status === 'loading') {
+      tasks.push({ id: 'embeddings', tabId: 'cell', label: 'Loading embeddings' })
+    }
+
+    if (roiState.status === 'loading') {
+      tasks.push({ id: 'roi-cells', tabId: 'roi', label: 'Querying ROI cells' })
+    }
+
+    if (roiGeneStatsState.status === 'loading') {
+      tasks.push({
+        id: 'roi-genes',
+        tabId: 'roi',
+        label: 'Querying ROI genes',
+        detail: `${roiGeneStatsState.cellCount.toLocaleString()} cells`,
+      })
+    }
+
+    if (roiTranscriptExportState.status === 'loading') {
+      tasks.push({
+        id: 'roi-transcripts',
+        tabId: 'roi',
+        label: 'Exporting ROI transcripts',
+      })
+    }
+
+    if (autoContrastChannelIds.length > 0) {
+      const channelNoun = autoContrastChannelIds.length === 1 ? 'channel' : 'channels'
+      tasks.push({
+        id: 'auto-contrast',
+        tabId: 'layers',
+        label: 'Auto contrast',
+        detail: `${autoContrastChannelIds.length.toLocaleString()} ${channelNoun}`,
+      })
+    }
+
+    return tasks
+  }, [
+    analysisEmbeddingState,
+    annotationGroupState,
+    annotationState,
+    autoContrastChannelIds,
+    boundaryState,
+    geneExpressionState,
+    genePanelState,
+    loadState,
+    morphologyState,
+    roiGeneStatsState,
+    roiState,
+    roiTranscriptExportState,
+  ])
+  const loadingTabIds = useMemo(
+    () => new Set(loadingTasks.map((task) => task.tabId)),
+    [loadingTasks],
   )
   const activeRoiBbox = roiState.status === 'idle' ? null : roiState.bbox
   const appendDebugEvent = useCallback(
@@ -1351,9 +1486,7 @@ export function App({
         ) {
           setSelectedEmbeddingKind(embeddings[0]?.kind ?? 'umap')
         }
-        appendDebugEvent(
-          `Embeddings loaded: ${embeddings.length.toLocaleString()} views`,
-        )
+        appendDebugEvent(`Embeddings loaded: ${embeddings.length.toLocaleString()} views`)
       })
       .catch((error) => {
         if (isAbortError(error) || analysisEmbeddingRequestId.current !== requestId) {
@@ -1769,638 +1902,824 @@ export function App({
       <a className="skip-link" href="#viewer-heading">
         Skip To Spatial View
       </a>
-      <aside className="control-rail" aria-label="Dataset controls">
-        <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true" />
-          <div>
-            <h1>Xenium Explorer</h1>
-          </div>
-        </div>
-
-        <form className="dataset-form" onSubmit={handleDatasetSubmit}>
-          <label htmlFor={datasetInputId}>Dataset URL</label>
-          <input
-            id={datasetInputId}
-            name="datasetUrl"
-            type="url"
-            inputMode="url"
-            autoComplete="off"
-            spellCheck={false}
-            defaultValue={datasetUrl}
-            placeholder="https://bucket.example/output…"
-          />
-          <label className="dataset-toggle" htmlFor={morphologyInputId}>
-            <input
-              id={morphologyInputId}
-              name="loadMorphologyImage"
-              type="checkbox"
-              checked={shouldLoadMorphology}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked
-                setShouldLoadMorphology(checked)
-                appendDebugEvent(
-                  checked ? 'Morphology image enabled' : 'Morphology image disabled',
-                )
-              }}
-            />
-            <span>Morphology image</span>
-          </label>
-          <label htmlFor={boundaryLimitInputId}>Boundary limit</label>
-          <input
-            id={boundaryLimitInputId}
-            name="boundaryCellLimit"
-            type="number"
-            inputMode="numeric"
-            min="1"
-            max="5000"
-            step="1"
-            autoComplete="off"
-            value={boundaryCellLimit}
-            onChange={(event) => {
-              const nextLimit = normalizeBoundaryCellLimit(
-                event.currentTarget.valueAsNumber,
-              )
-              setBoundaryCellLimit(nextLimit)
-              appendDebugEvent(`Boundary limit: ${nextLimit.toLocaleString()}`, {
-                coalesceKey: 'boundary-limit',
-              })
+      <aside
+        className={`control-hud${isControlHudCollapsed ? ' is-collapsed' : ''}`}
+        aria-label="Dataset controls"
+      >
+        <div className="hud-top-bar">
+          <LoadingIndicator tasks={loadingTasks} />
+          <button
+            type="button"
+            className="hud-toggle"
+            aria-controls="control-hud-content"
+            aria-expanded={!isControlHudCollapsed}
+            onClick={() => {
+              const nextCollapsed = !isControlHudCollapsed
+              setIsControlHudCollapsed(nextCollapsed)
+              appendDebugEvent(nextCollapsed ? 'HUD collapsed' : 'HUD expanded')
             }}
-          />
-          <button type="submit" disabled={isLoading}>
-            {isLoading ? 'Loading…' : 'Load Dataset'}
+          >
+            {isControlHudCollapsed ? 'Show Controls' : 'Hide Controls'}
           </button>
-        </form>
-
-        <ErrorSummary errors={activeErrors} />
-        <ActivityLog
-          entries={debugLog}
-          onClear={() => {
-            setDebugLog([])
-          }}
-        />
-
-        <section className="layer-section" aria-labelledby="layer-heading">
-          <h2 id="layer-heading">Layer Stack</h2>
-          <p>
-            {scaffoldDeckLayerCount} Deck Layer - deck.gl {bundledDeckVersion}
-          </p>
-          <div className="layer-opacity-controls">
-            <div className="layer-opacity-control">
-              <div className="layer-opacity-header">
-                <label htmlFor={imageOpacityInputId}>Image opacity</label>
-                <span>{opacityToPercent(imageLayerOpacity)}%</span>
-              </div>
-              <input
-                id={imageOpacityInputId}
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={opacityToPercent(imageLayerOpacity)}
-                aria-valuetext={`${opacityToPercent(imageLayerOpacity)}%`}
-                onChange={(event) => {
-                  const nextPercent = event.currentTarget.valueAsNumber
-                  setImageLayerOpacity(percentToOpacity(nextPercent))
-                  appendDebugEvent(`Image opacity: ${nextPercent}%`, {
-                    coalesceKey: 'image-opacity',
-                  })
-                }}
-              />
-            </div>
-            <div className="layer-opacity-control">
-              <div className="layer-opacity-header">
-                <label htmlFor={geneOpacityInputId}>Gene opacity</label>
-                <span>{opacityToPercent(geneLayerOpacity)}%</span>
-              </div>
-              <input
-                id={geneOpacityInputId}
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={opacityToPercent(geneLayerOpacity)}
-                aria-valuetext={`${opacityToPercent(geneLayerOpacity)}%`}
-                onChange={(event) => {
-                  const nextPercent = event.currentTarget.valueAsNumber
-                  setGeneLayerOpacity(percentToOpacity(nextPercent))
-                  appendDebugEvent(`Gene opacity: ${nextPercent}%`, {
-                    coalesceKey: 'gene-opacity',
-                  })
-                }}
-              />
-            </div>
-          </div>
-          <MorphologyChannelControls
-            channels={morphologyImage?.channelLoaders ?? []}
-            settings={morphologyChannelSettings}
-            autoContrastChannelIds={autoContrastChannelIds}
-            onAutoContrast={handleAutoContrast}
-            onUpdate={updateMorphologyChannel}
-          />
-        </section>
-
-        <section className="analysis-section" aria-labelledby="analysis-heading">
-          <div className="section-heading-row">
-            <h2 id="analysis-heading">Analysis</h2>
-            <span>{genePanelCopy}</span>
-          </div>
-
-          <label htmlFor={geneSearchInputId}>Gene selection</label>
-          <input
-            id={geneSearchInputId}
-            type="search"
-            autoComplete="off"
-            spellCheck={false}
-            value={geneSearch}
-            disabled={genePanelState.status !== 'ready'}
-            placeholder="Search genes"
-            onChange={(event) => {
-              setGeneSearch(event.currentTarget.value)
-            }}
-          />
-
-          {selectedGenes.length === 0 ? null : (
-            <div className="gene-chip-row" aria-label="Selected genes">
-              {selectedGenes.map((gene) => (
-                <button
-                  key={gene}
-                  type="button"
-                  className="gene-chip"
-                  onClick={() => {
-                    toggleGene(gene)
-                  }}
-                >
-                  {gene}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="gene-option-list" aria-label="Gene options">
-            {filteredGenes.map((gene) => (
+        </div>
+        <div
+          id="control-hud-content"
+          className="control-hud-content"
+          hidden={isControlHudCollapsed}
+        >
+          <div className="hud-tab-list" role="tablist" aria-label="Control categories">
+            {CONTROL_HUD_TABS.map((tab) => (
               <button
-                key={gene}
+                key={tab.id}
+                id={`hud-tab-${tab.id}`}
                 type="button"
-                className={selectedGenes.includes(gene) ? 'selected' : undefined}
+                role="tab"
+                aria-selected={activeControlHudTab === tab.id}
+                aria-controls={`hud-panel-${tab.id}`}
+                aria-busy={loadingTabIds.has(tab.id)}
+                className={
+                  [
+                    activeControlHudTab === tab.id ? 'active' : '',
+                    loadingTabIds.has(tab.id) ? 'is-loading' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ') || undefined
+                }
                 onClick={() => {
-                  toggleGene(gene)
+                  setActiveControlHudTab(tab.id)
+                  appendDebugEvent(`HUD tab: ${tab.label}`, {
+                    coalesceKey: 'hud-tab',
+                  })
                 }}
               >
-                {gene}
+                <span>{tab.label}</span>
+                {loadingTabIds.has(tab.id) ? (
+                  <span className="tab-loading-dot" aria-hidden="true" />
+                ) : null}
               </button>
             ))}
           </div>
 
-          <label htmlFor={geneSetSymbolsInputId}>Gene set symbols</label>
-          <textarea
-            id={geneSetSymbolsInputId}
-            className="gene-set-symbols"
-            autoComplete="off"
-            spellCheck={false}
-            rows={3}
-            value={geneSetSymbols}
-            disabled={genePanelState.status !== 'ready'}
-            placeholder="Actb, Gad1, Slc17a7"
-            onChange={(event) => {
-              setGeneSetSymbols(event.currentTarget.value)
-            }}
-          />
-          <div className="gene-set-actions">
-            <button
-              type="button"
-              disabled={genePanelState.status !== 'ready' || geneSetSymbols.trim() === ''}
-              onClick={applyGeneSetSymbols}
+          <div className="hud-tab-panels">
+            <div
+              id="hud-panel-dataset"
+              className="hud-tab-panel"
+              role="tabpanel"
+              aria-labelledby="hud-tab-dataset"
+              hidden={activeControlHudTab !== 'dataset'}
             >
-              Apply Symbols
-            </button>
-            <button
-              type="button"
-              disabled={selectedGenes.length === 0}
-              onClick={saveSelectedGeneSet}
+              <form className="dataset-form" onSubmit={handleDatasetSubmit}>
+                <label htmlFor={datasetInputId}>Dataset URL</label>
+                <input
+                  id={datasetInputId}
+                  name="datasetUrl"
+                  type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  spellCheck={false}
+                  defaultValue={datasetUrl}
+                  placeholder="https://bucket.example/output…"
+                />
+                <label className="dataset-toggle" htmlFor={morphologyInputId}>
+                  <input
+                    id={morphologyInputId}
+                    name="loadMorphologyImage"
+                    type="checkbox"
+                    checked={shouldLoadMorphology}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked
+                      setShouldLoadMorphology(checked)
+                      appendDebugEvent(
+                        checked
+                          ? 'Morphology image enabled'
+                          : 'Morphology image disabled',
+                      )
+                    }}
+                  />
+                  <span>Morphology image</span>
+                </label>
+                <label htmlFor={boundaryLimitInputId}>Boundary limit</label>
+                <input
+                  id={boundaryLimitInputId}
+                  name="boundaryCellLimit"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="5000"
+                  step="1"
+                  autoComplete="off"
+                  value={boundaryCellLimit}
+                  onChange={(event) => {
+                    const nextLimit = normalizeBoundaryCellLimit(
+                      event.currentTarget.valueAsNumber,
+                    )
+                    setBoundaryCellLimit(nextLimit)
+                    appendDebugEvent(`Boundary limit: ${nextLimit.toLocaleString()}`, {
+                      coalesceKey: 'boundary-limit',
+                    })
+                  }}
+                />
+                <button type="submit" disabled={isLoading}>
+                  {isLoading ? 'Loading…' : 'Load Dataset'}
+                </button>
+              </form>
+
+              <ErrorSummary errors={activeErrors} />
+              <ActivityLog
+                entries={debugLog}
+                onClear={() => {
+                  setDebugLog([])
+                }}
+              />
+            </div>
+
+            <div
+              id="hud-panel-layers"
+              className="hud-tab-panel"
+              role="tabpanel"
+              aria-labelledby="hud-tab-layers"
+              hidden={activeControlHudTab !== 'layers'}
             >
-              Save Set
-            </button>
-          </div>
-
-          <label htmlFor={geneSetNameInputId}>Set name</label>
-          <input
-            id={geneSetNameInputId}
-            type="text"
-            autoComplete="off"
-            spellCheck={false}
-            value={geneSetName}
-            placeholder={defaultGeneSetName(selectedGenes)}
-            onChange={(event) => {
-              setGeneSetName(event.currentTarget.value)
-            }}
-          />
-
-          <label htmlFor={geneSetScoreInputId}>Signature score</label>
-          <select
-            id={geneSetScoreInputId}
-            value={geneExpressionScoreMode}
-            onChange={(event) => {
-              const nextScoreMode = event.currentTarget.value
-
-              if (isGeneExpressionScoreMode(nextScoreMode)) {
-                handleGeneExpressionScoreModeChange(nextScoreMode)
-              }
-            }}
-          >
-            {GENE_EXPRESSION_SCORE_MODE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          {savedGeneSets.length === 0 ? null : (
-            <div className="gene-set-list" aria-label="Saved gene sets">
-              {savedGeneSets.map((geneSet) => (
-                <div key={geneSet.id} className="gene-set-row">
-                  <button
-                    type="button"
-                    className="gene-set-apply"
-                    aria-label={`Apply ${geneSet.name}`}
-                    onClick={() => {
-                      applySavedGeneSet(geneSet)
-                    }}
-                  >
-                    <span>{geneSet.name}</span>
-                    <small>{geneSet.scoreMode}</small>
-                  </button>
-                  <button
-                    type="button"
-                    className="gene-set-remove"
-                    aria-label={`Remove ${geneSet.name}`}
-                    onClick={() => {
-                      removeSavedGeneSet(geneSet.id)
-                    }}
-                  >
-                    x
-                  </button>
+              <section className="layer-section" aria-labelledby="layer-heading">
+                <h2 id="layer-heading">Layer Stack</h2>
+                <p>
+                  {scaffoldDeckLayerCount} Deck Layer - deck.gl {bundledDeckVersion}
+                </p>
+                <div className="layer-opacity-controls">
+                  <div className="layer-opacity-control">
+                    <div className="layer-opacity-header">
+                      <label htmlFor={imageOpacityInputId}>Image opacity</label>
+                      <span>{opacityToPercent(imageLayerOpacity)}%</span>
+                    </div>
+                    <input
+                      id={imageOpacityInputId}
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={opacityToPercent(imageLayerOpacity)}
+                      aria-valuetext={`${opacityToPercent(imageLayerOpacity)}%`}
+                      onChange={(event) => {
+                        const nextPercent = event.currentTarget.valueAsNumber
+                        setImageLayerOpacity(percentToOpacity(nextPercent))
+                        appendDebugEvent(`Image opacity: ${nextPercent}%`, {
+                          coalesceKey: 'image-opacity',
+                        })
+                      }}
+                    />
+                  </div>
+                  <div className="layer-opacity-control">
+                    <div className="layer-opacity-header">
+                      <label htmlFor={geneOpacityInputId}>Cell opacity</label>
+                      <span>{opacityToPercent(geneLayerOpacity)}%</span>
+                    </div>
+                    <input
+                      id={geneOpacityInputId}
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={opacityToPercent(geneLayerOpacity)}
+                      aria-valuetext={`${opacityToPercent(geneLayerOpacity)}%`}
+                      onChange={(event) => {
+                        const nextPercent = event.currentTarget.valueAsNumber
+                        setGeneLayerOpacity(percentToOpacity(nextPercent))
+                        appendDebugEvent(`Cell opacity: ${nextPercent}%`, {
+                          coalesceKey: 'gene-opacity',
+                        })
+                      }}
+                    />
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-
-          <label htmlFor={geneScaleInputId}>Gene scale</label>
-          <div className="gene-scale-control">
-            <select
-              id={geneScaleInputId}
-              value={geneExpressionColorScale}
-              onChange={(event) => {
-                const nextScale = event.currentTarget.value
-
-                if (isGeneExpressionColorScale(nextScale)) {
-                  setGeneExpressionColorScale(nextScale)
-                  appendDebugEvent(`Gene scale: ${nextScale}`)
-                }
-              }}
-            >
-              {GENE_EXPRESSION_COLOR_SCALE_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <span
-              className={`gene-scale-preview gene-scale-preview-${geneExpressionColorScale}`}
-              aria-hidden="true"
-            />
-            <div className="gene-scale-values" aria-label="Gene scale values">
-              <span>0</span>
-              <span>{formatGeneScaleValue(geneExpressionScaleMax / 2)}</span>
-              <span>{formatGeneScaleValue(geneExpressionScaleMax)}</span>
-            </div>
-          </div>
-
-          <label htmlFor={geneExpressionDetailInputId}>Expression detail</label>
-          <select
-            id={geneExpressionDetailInputId}
-            value={geneExpressionDetailMode}
-            onChange={(event) => {
-              const nextMode = event.currentTarget.value
-
-              if (isGeneExpressionDetailMode(nextMode)) {
-                setGeneExpressionDetailMode(nextMode)
-                appendDebugEvent(`Expression detail: ${nextMode}`)
-              }
-            }}
-          >
-            <option value="auto">Auto LOD</option>
-            <option value="exact-region">Exact region</option>
-          </select>
-
-          <label htmlFor={observationModeInputId}>Cell color</label>
-          <select
-            id={observationModeInputId}
-            value={observationColorMode}
-            onChange={(event) => {
-              const nextMode = event.currentTarget.value
-
-              if (isObservationColorMode(nextMode)) {
-                setObservationColorMode(nextMode)
-                appendDebugEvent(`Cell color: ${nextMode}`)
-              }
-            }}
-          >
-            <option value="transcript-count">Transcript count</option>
-            <option value="cell-area">Cell area</option>
-            {annotationStyleColors.length === 0 ? null : (
-              <option value="annotations">Annotations</option>
-            )}
-          </select>
-
-          <p className="analysis-status" aria-live="polite">
-            {geneExpressionCopy}
-          </p>
-        </section>
-
-        <section className="analysis-section" aria-labelledby="annotation-heading">
-          <div className="section-heading-row">
-            <h2 id="annotation-heading">Annotations</h2>
-            <span>{annotationCopy}</span>
-          </div>
-          <label htmlFor={annotationGroupInputId}>Annotation set</label>
-          <select
-            id={annotationGroupInputId}
-            value={selectedAnnotationGroupId}
-            disabled={loadState.status !== 'ready'}
-            onChange={(event) => {
-              const nextGroupId = event.currentTarget.value
-              setSelectedAnnotationGroupId(nextGroupId)
-              appendDebugEvent(`Annotation set: ${shortIdentifier(nextGroupId)}`)
-            }}
-          >
-            <option value={ALL_ANNOTATION_GROUP_ID}>All</option>
-            {annotationGroupOptions.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="secondary-action"
-            disabled={
-              loadState.status !== 'ready' || annotationState.status === 'loading'
-            }
-            onClick={handleLoadAnnotations}
-          >
-            {annotationState.status === 'loading' ? 'Loading…' : 'Load Annotations'}
-          </button>
-          <button
-            type="button"
-            className="secondary-action"
-            disabled={annotationState.status !== 'ready'}
-            onClick={handleClearAnnotations}
-          >
-            Clear Annotations
-          </button>
-          <label className="secondary-file-action" htmlFor={annotationImportInputId}>
-            Import File
-          </label>
-          <input
-            id={annotationImportInputId}
-            className="visually-hidden-file"
-            type="file"
-            accept=".csv,.json,application/json,text/csv"
-            disabled={loadState.status !== 'ready'}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0] ?? null
-              void handleImportAnnotations(file)
-              event.currentTarget.value = ''
-            }}
-          />
-          {annotationState.status === 'ready' &&
-          annotationState.annotations.length > 0 ? (
-            <ul className="annotation-list" aria-label="Loaded annotations">
-              {annotationState.annotations.map((annotation, annotationIndex) => {
-                const annotationColor =
-                  annotationColors[annotation.id] ??
-                  annotationPaletteColor(annotationIndex)
-
-                return (
-                  <li key={annotation.id}>
-                    <label
-                      className="annotation-color-picker"
-                      style={{ '--annotation-color': annotationColor } as CSSProperties}
-                    >
-                      <input
-                        className="annotation-color-input"
-                        type="color"
-                        aria-label={`${annotation.label} color`}
-                        value={annotationColor}
-                        onChange={(event) => {
-                          handleAnnotationColorChange(
-                            annotation.id,
-                            event.currentTarget.value,
-                          )
-                        }}
-                      />
-                      <span className="annotation-color-swatch" aria-hidden="true" />
-                    </label>
-                    <span>{annotation.label}</span>
-                    <small>{annotation.cellIds.length.toLocaleString()}</small>
+                <div className="coordinate-unit-control">
+                  <span id={coordinateUnitInputId}>Mouse coordinates</span>
+                  <div
+                    className="coordinate-unit-segmented"
+                    role="group"
+                    aria-labelledby={coordinateUnitInputId}
+                  >
                     <button
                       type="button"
-                      className="annotation-remove"
-                      aria-label={`Remove ${annotation.label}`}
+                      aria-pressed={coordinateUnit === 'um'}
                       onClick={() => {
-                        handleRemoveAnnotation(annotation.id)
+                        if (coordinateUnit === 'um') {
+                          return
+                        }
+
+                        setCoordinateUnit('um')
+                        appendDebugEvent('Mouse coordinates: μm', {
+                          coalesceKey: 'coordinate-unit',
+                        })
                       }}
                     >
-                      x
+                      μm
                     </button>
-                  </li>
-                )
-              })}
-            </ul>
-          ) : null}
-        </section>
+                    <button
+                      type="button"
+                      aria-pressed={coordinateUnit === 'px'}
+                      onClick={() => {
+                        if (coordinateUnit === 'px') {
+                          return
+                        }
 
-        <section className="analysis-section" aria-labelledby="embedding-heading">
-          <div className="section-heading-row">
-            <h2 id="embedding-heading">UMAP/tSNE</h2>
-            <span>{embeddingCopy}</span>
+                        setCoordinateUnit('px')
+                        appendDebugEvent('Mouse coordinates: px', {
+                          coalesceKey: 'coordinate-unit',
+                        })
+                      }}
+                    >
+                      px
+                    </button>
+                  </div>
+                </div>
+                <MorphologyChannelControls
+                  channels={morphologyImage?.channelLoaders ?? []}
+                  settings={morphologyChannelSettings}
+                  autoContrastChannelIds={autoContrastChannelIds}
+                  onAutoContrast={handleAutoContrast}
+                  onUpdate={updateMorphologyChannel}
+                />
+              </section>
+            </div>
+
+            <div
+              id="hud-panel-genes"
+              className="hud-tab-panel"
+              role="tabpanel"
+              aria-labelledby="hud-tab-genes"
+              hidden={activeControlHudTab !== 'genes'}
+            >
+              <section className="analysis-section" aria-labelledby="analysis-heading">
+                <div className="section-heading-row">
+                  <h2 id="analysis-heading">Analysis</h2>
+                  <span
+                    className={
+                      genePanelState.status === 'loading' ||
+                      geneExpressionState.status === 'loading'
+                        ? 'status-chip is-loading'
+                        : 'status-chip'
+                    }
+                    aria-live="polite"
+                  >
+                    {analysisHeaderCopy}
+                  </span>
+                </div>
+
+                <label htmlFor={geneSearchInputId}>Gene selection</label>
+                <input
+                  id={geneSearchInputId}
+                  type="search"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={geneSearch}
+                  disabled={genePanelState.status !== 'ready'}
+                  placeholder="Search genes"
+                  onChange={(event) => {
+                    setGeneSearch(event.currentTarget.value)
+                  }}
+                />
+
+                {selectedGenes.length === 0 ? null : (
+                  <div className="gene-chip-row" aria-label="Selected genes">
+                    {selectedGenes.map((gene) => (
+                      <button
+                        key={gene}
+                        type="button"
+                        className="gene-chip"
+                        onClick={() => {
+                          toggleGene(gene)
+                        }}
+                      >
+                        {gene}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="gene-option-list" aria-label="Gene options">
+                  {filteredGenes.map((gene) => (
+                    <button
+                      key={gene}
+                      type="button"
+                      className={selectedGenes.includes(gene) ? 'selected' : undefined}
+                      onClick={() => {
+                        toggleGene(gene)
+                      }}
+                    >
+                      {gene}
+                    </button>
+                  ))}
+                </div>
+
+                <label htmlFor={geneSetSymbolsInputId}>Gene set symbols</label>
+                <textarea
+                  id={geneSetSymbolsInputId}
+                  className="gene-set-symbols"
+                  autoComplete="off"
+                  spellCheck={false}
+                  rows={3}
+                  value={geneSetSymbols}
+                  disabled={genePanelState.status !== 'ready'}
+                  placeholder="Actb, Gad1, Slc17a7"
+                  onChange={(event) => {
+                    setGeneSetSymbols(event.currentTarget.value)
+                  }}
+                />
+                <div className="gene-set-actions">
+                  <button
+                    type="button"
+                    disabled={
+                      genePanelState.status !== 'ready' || geneSetSymbols.trim() === ''
+                    }
+                    onClick={applyGeneSetSymbols}
+                  >
+                    Apply Symbols
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedGenes.length === 0}
+                    onClick={saveSelectedGeneSet}
+                  >
+                    Save Set
+                  </button>
+                </div>
+
+                <label htmlFor={geneSetNameInputId}>Set name</label>
+                <input
+                  id={geneSetNameInputId}
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={geneSetName}
+                  placeholder={defaultGeneSetName(selectedGenes)}
+                  onChange={(event) => {
+                    setGeneSetName(event.currentTarget.value)
+                  }}
+                />
+
+                <label htmlFor={geneSetScoreInputId}>Signature score</label>
+                <select
+                  id={geneSetScoreInputId}
+                  value={geneExpressionScoreMode}
+                  onChange={(event) => {
+                    const nextScoreMode = event.currentTarget.value
+
+                    if (isGeneExpressionScoreMode(nextScoreMode)) {
+                      handleGeneExpressionScoreModeChange(nextScoreMode)
+                    }
+                  }}
+                >
+                  {GENE_EXPRESSION_SCORE_MODE_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+
+                {savedGeneSets.length === 0 ? null : (
+                  <div className="gene-set-list" aria-label="Saved gene sets">
+                    {savedGeneSets.map((geneSet) => (
+                      <div key={geneSet.id} className="gene-set-row">
+                        <button
+                          type="button"
+                          className="gene-set-apply"
+                          aria-label={`Apply ${geneSet.name}`}
+                          onClick={() => {
+                            applySavedGeneSet(geneSet)
+                          }}
+                        >
+                          <span>{geneSet.name}</span>
+                          <small>{geneSet.scoreMode}</small>
+                        </button>
+                        <button
+                          type="button"
+                          className="gene-set-remove"
+                          aria-label={`Remove ${geneSet.name}`}
+                          onClick={() => {
+                            removeSavedGeneSet(geneSet.id)
+                          }}
+                        >
+                          x
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <label htmlFor={geneScaleInputId}>Gene scale</label>
+                <div className="gene-scale-control">
+                  <select
+                    id={geneScaleInputId}
+                    value={geneExpressionColorScale}
+                    onChange={(event) => {
+                      const nextScale = event.currentTarget.value
+
+                      if (isGeneExpressionColorScale(nextScale)) {
+                        setGeneExpressionColorScale(nextScale)
+                        appendDebugEvent(`Gene scale: ${nextScale}`)
+                      }
+                    }}
+                  >
+                    {GENE_EXPRESSION_COLOR_SCALE_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className={`gene-scale-preview gene-scale-preview-${geneExpressionColorScale}`}
+                    aria-hidden="true"
+                  />
+                  <div className="gene-scale-values" aria-label="Gene scale values">
+                    <span>0</span>
+                    <span>{formatGeneScaleValue(geneExpressionScaleMax / 2)}</span>
+                    <span>{formatGeneScaleValue(geneExpressionScaleMax)}</span>
+                  </div>
+                </div>
+
+                <label htmlFor={geneExpressionDetailInputId}>Expression detail</label>
+                <select
+                  id={geneExpressionDetailInputId}
+                  value={geneExpressionDetailMode}
+                  onChange={(event) => {
+                    const nextMode = event.currentTarget.value
+
+                    if (isGeneExpressionDetailMode(nextMode)) {
+                      setGeneExpressionDetailMode(nextMode)
+                      appendDebugEvent(`Expression detail: ${nextMode}`)
+                    }
+                  }}
+                >
+                  <option value="auto">Auto LOD</option>
+                  <option value="exact-region">Exact region</option>
+                </select>
+
+                <label htmlFor={observationModeInputId}>Cell color</label>
+                <select
+                  id={observationModeInputId}
+                  value={observationColorMode}
+                  onChange={(event) => {
+                    const nextMode = event.currentTarget.value
+
+                    if (isObservationColorMode(nextMode)) {
+                      setObservationColorMode(nextMode)
+                      appendDebugEvent(`Cell color: ${nextMode}`)
+                    }
+                  }}
+                >
+                  <option value="transcript-count">Transcript count</option>
+                  <option value="cell-area">Cell area</option>
+                  {annotationStyleColors.length === 0 ? null : (
+                    <option value="annotations">Annotations</option>
+                  )}
+                </select>
+
+                <p className="analysis-status" aria-live="polite">
+                  {geneExpressionCopy}
+                </p>
+              </section>
+            </div>
+
+            <div
+              id="hud-panel-annotations"
+              className="hud-tab-panel"
+              role="tabpanel"
+              aria-labelledby="hud-tab-annotations"
+              hidden={activeControlHudTab !== 'annotations'}
+            >
+              <section className="analysis-section" aria-labelledby="annotation-heading">
+                <div className="section-heading-row">
+                  <h2 id="annotation-heading">Annotations</h2>
+                  <span
+                    className={
+                      annotationState.status === 'loading' ||
+                      annotationGroupState.status === 'loading'
+                        ? 'status-chip is-loading'
+                        : 'status-chip'
+                    }
+                    aria-live="polite"
+                  >
+                    {annotationHeaderCopy}
+                  </span>
+                </div>
+                <label htmlFor={annotationGroupInputId}>Annotation set</label>
+                <select
+                  id={annotationGroupInputId}
+                  value={selectedAnnotationGroupId}
+                  disabled={loadState.status !== 'ready'}
+                  onChange={(event) => {
+                    const nextGroupId = event.currentTarget.value
+                    setSelectedAnnotationGroupId(nextGroupId)
+                    appendDebugEvent(`Annotation set: ${shortIdentifier(nextGroupId)}`)
+                  }}
+                >
+                  <option value={ALL_ANNOTATION_GROUP_ID}>All</option>
+                  {annotationGroupOptions.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={
+                    loadState.status !== 'ready' || annotationState.status === 'loading'
+                  }
+                  onClick={handleLoadAnnotations}
+                >
+                  {annotationState.status === 'loading' ? 'Loading…' : 'Load Annotations'}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={annotationState.status !== 'ready'}
+                  onClick={handleClearAnnotations}
+                >
+                  Clear Annotations
+                </button>
+                <label
+                  className="secondary-file-action"
+                  htmlFor={annotationImportInputId}
+                >
+                  Import File
+                </label>
+                <input
+                  id={annotationImportInputId}
+                  className="visually-hidden-file"
+                  type="file"
+                  accept=".csv,.json,application/json,text/csv"
+                  disabled={loadState.status !== 'ready'}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0] ?? null
+                    void handleImportAnnotations(file)
+                    event.currentTarget.value = ''
+                  }}
+                />
+                {annotationState.status === 'ready' &&
+                annotationState.annotations.length > 0 ? (
+                  <ul className="annotation-list" aria-label="Loaded annotations">
+                    {annotationState.annotations.map((annotation, annotationIndex) => {
+                      const annotationColor =
+                        annotationColors[annotation.id] ??
+                        annotationPaletteColor(annotationIndex)
+
+                      return (
+                        <li key={annotation.id}>
+                          <label
+                            className="annotation-color-picker"
+                            style={
+                              { '--annotation-color': annotationColor } as CSSProperties
+                            }
+                          >
+                            <input
+                              className="annotation-color-input"
+                              type="color"
+                              aria-label={`${annotation.label} color`}
+                              value={annotationColor}
+                              onChange={(event) => {
+                                handleAnnotationColorChange(
+                                  annotation.id,
+                                  event.currentTarget.value,
+                                )
+                              }}
+                            />
+                            <span
+                              className="annotation-color-swatch"
+                              aria-hidden="true"
+                            />
+                          </label>
+                          <span>{annotation.label}</span>
+                          <small>{annotation.cellIds.length.toLocaleString()}</small>
+                          <button
+                            type="button"
+                            className="annotation-remove"
+                            aria-label={`Remove ${annotation.label}`}
+                            onClick={() => {
+                              handleRemoveAnnotation(annotation.id)
+                            }}
+                          >
+                            x
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : null}
+              </section>
+            </div>
+
+            <div
+              id="hud-panel-cell"
+              className="hud-tab-panel"
+              role="tabpanel"
+              aria-labelledby="hud-tab-cell"
+              hidden={activeControlHudTab !== 'cell'}
+            >
+              <section className="analysis-section" aria-labelledby="embedding-heading">
+                <div className="section-heading-row">
+                  <h2 id="embedding-heading">UMAP/tSNE</h2>
+                  <span
+                    className={
+                      analysisEmbeddingState.status === 'loading'
+                        ? 'status-chip is-loading'
+                        : 'status-chip'
+                    }
+                    aria-live="polite"
+                  >
+                    {embeddingCopy}
+                  </span>
+                </div>
+                <div className="embedding-controls">
+                  <label htmlFor={embeddingViewInputId}>Embedding view</label>
+                  <select
+                    id={embeddingViewInputId}
+                    value={activeEmbedding?.kind ?? selectedEmbeddingKind}
+                    disabled={
+                      analysisEmbeddingState.status !== 'ready' ||
+                      analysisEmbeddingState.embeddings.length === 0
+                    }
+                    onChange={(event) => {
+                      const nextEmbeddingKind = event.currentTarget
+                        .value as AnalysisEmbeddingKind
+                      setSelectedEmbeddingKind(nextEmbeddingKind)
+                      appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
+                    }}
+                  >
+                    {analysisEmbeddingState.status === 'ready' &&
+                    analysisEmbeddingState.embeddings.length > 0 ? (
+                      analysisEmbeddingState.embeddings.map((embedding) => (
+                        <option key={embedding.kind} value={embedding.kind}>
+                          {embedding.label}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="umap">UMAP</option>
+                        <option value="tsne">t-SNE</option>
+                      </>
+                    )}
+                  </select>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={
+                      loadState.status !== 'ready' ||
+                      analysisEmbeddingState.status === 'loading'
+                    }
+                    onClick={handleLoadAnalysisEmbeddings}
+                  >
+                    {analysisEmbeddingState.status === 'loading'
+                      ? 'Loading...'
+                      : 'Load Embeddings'}
+                  </button>
+                </div>
+                <EmbeddingPanel
+                  embedding={activeEmbedding}
+                  roiCellIds={roiCellIds}
+                  selectedCellId={selectedCell?.id ?? null}
+                  onSelectCell={handleEmbeddingCellSelect}
+                />
+              </section>
+
+              <section className="analysis-section" aria-labelledby="cell-info-heading">
+                <h2 id="cell-info-heading">Cell Info</h2>
+                <CellInfoPanel cell={selectedCell} />
+              </section>
+            </div>
+
+            <div
+              id="hud-panel-roi"
+              className="hud-tab-panel"
+              role="tabpanel"
+              aria-labelledby="hud-tab-roi"
+              hidden={activeControlHudTab !== 'roi'}
+            >
+              <section className="analysis-section" aria-labelledby="roi-heading">
+                <div className="section-heading-row">
+                  <h2 id="roi-heading">ROI</h2>
+                  <span
+                    className={
+                      roiState.status === 'loading' ||
+                      roiGeneStatsState.status === 'loading' ||
+                      roiTranscriptExportState.status === 'loading'
+                        ? 'status-chip is-loading'
+                        : 'status-chip'
+                    }
+                    aria-live="polite"
+                  >
+                    {roiHeaderCopy}
+                  </span>
+                </div>
+                <div className="roi-action-row">
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={loadState.status !== 'ready'}
+                    aria-pressed={roiMode === 'box'}
+                    onClick={() => {
+                      const nextMode = roiMode === 'box' ? 'idle' : 'box'
+                      setRoiMode(nextMode)
+                      appendDebugEvent(
+                        nextMode === 'box'
+                          ? 'ROI draw mode enabled'
+                          : 'ROI draw cancelled',
+                      )
+                    }}
+                  >
+                    {roiMode === 'box' ? 'Drawing Box' : 'Draw Box'}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={roiState.status === 'idle'}
+                    onClick={handleClearRoi}
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                <label htmlFor={roiNameInputId}>ROI name</label>
+                <input
+                  id={roiNameInputId}
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={roiName}
+                  disabled={loadState.status !== 'ready'}
+                  onChange={(event) => {
+                    setRoiName(event.currentTarget.value)
+                  }}
+                />
+
+                {roiSummary === null ? null : (
+                  <dl className="roi-summary-list" aria-label="ROI summary">
+                    <div>
+                      <dt>Cells</dt>
+                      <dd>
+                        {roiSummary.cellCount.toLocaleString()}
+                        {roiState.status === 'ready' && roiState.hitCellLimit ? '+' : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Mean transcripts</dt>
+                      <dd>{formatNumber(roiSummary.meanTranscriptCount)}</dd>
+                    </div>
+                    <div>
+                      <dt>Mean area</dt>
+                      <dd>{formatNumber(roiSummary.meanCellArea)}</dd>
+                    </div>
+                  </dl>
+                )}
+
+                <RoiGeneStatsPanel copy={roiGeneStatsCopy} state={roiGeneStatsState} />
+
+                <div className="roi-action-row">
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={roiState.status !== 'ready'}
+                    onClick={handleSaveRoiAnnotation}
+                  >
+                    Save ROI
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={roiState.status !== 'ready'}
+                    onClick={handleExportRoiCells}
+                  >
+                    Export Cells
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={
+                      roiState.status !== 'ready' ||
+                      roiTranscriptExportState.status === 'loading'
+                    }
+                    onClick={handleExportRoiTranscripts}
+                  >
+                    {roiTranscriptExportState.status === 'loading'
+                      ? 'Exporting...'
+                      : 'Export Transcripts'}
+                  </button>
+                </div>
+                {roiTranscriptExportState.status === 'loading' ? (
+                  <p className="roi-gene-status" aria-live="polite">
+                    Preparing ROI transcript CSV
+                  </p>
+                ) : null}
+              </section>
+            </div>
           </div>
-          <div className="embedding-controls">
-            <label htmlFor={embeddingViewInputId}>Embedding view</label>
-            <select
-              id={embeddingViewInputId}
-              value={activeEmbedding?.kind ?? selectedEmbeddingKind}
-              disabled={
-                analysisEmbeddingState.status !== 'ready' ||
-                analysisEmbeddingState.embeddings.length === 0
-              }
-              onChange={(event) => {
-                const nextEmbeddingKind = event.currentTarget.value as AnalysisEmbeddingKind
-                setSelectedEmbeddingKind(nextEmbeddingKind)
-                appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
-              }}
-            >
-              {analysisEmbeddingState.status === 'ready' &&
-              analysisEmbeddingState.embeddings.length > 0 ? (
-                analysisEmbeddingState.embeddings.map((embedding) => (
-                  <option key={embedding.kind} value={embedding.kind}>
-                    {embedding.label}
-                  </option>
-                ))
-              ) : (
-                <>
-                  <option value="umap">UMAP</option>
-                  <option value="tsne">t-SNE</option>
-                </>
-              )}
-            </select>
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={
-                loadState.status !== 'ready' ||
-                analysisEmbeddingState.status === 'loading'
-              }
-              onClick={handleLoadAnalysisEmbeddings}
-            >
-              {analysisEmbeddingState.status === 'loading'
-                ? 'Loading...'
-                : 'Load Embeddings'}
-            </button>
-          </div>
-          <EmbeddingPanel
-            embedding={activeEmbedding}
-            roiCellIds={roiCellIds}
-            selectedCellId={selectedCell?.id ?? null}
-            onSelectCell={handleEmbeddingCellSelect}
-          />
-        </section>
-
-        <section className="analysis-section" aria-labelledby="roi-heading">
-          <div className="section-heading-row">
-            <h2 id="roi-heading">ROI</h2>
-            <span>{roiCopy}</span>
-          </div>
-          <div className="roi-action-row">
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={loadState.status !== 'ready'}
-              aria-pressed={roiMode === 'box'}
-              onClick={() => {
-                const nextMode = roiMode === 'box' ? 'idle' : 'box'
-                setRoiMode(nextMode)
-                appendDebugEvent(
-                  nextMode === 'box' ? 'ROI draw mode enabled' : 'ROI draw cancelled',
-                )
-              }}
-            >
-              {roiMode === 'box' ? 'Drawing Box' : 'Draw Box'}
-            </button>
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={roiState.status === 'idle'}
-              onClick={handleClearRoi}
-            >
-              Clear
-            </button>
-          </div>
-
-          <label htmlFor={roiNameInputId}>ROI name</label>
-          <input
-            id={roiNameInputId}
-            type="text"
-            autoComplete="off"
-            spellCheck={false}
-            value={roiName}
-            disabled={loadState.status !== 'ready'}
-            onChange={(event) => {
-              setRoiName(event.currentTarget.value)
-            }}
-          />
-
-          {roiSummary === null ? null : (
-            <dl className="roi-summary-list" aria-label="ROI summary">
-              <div>
-                <dt>Cells</dt>
-                <dd>
-                  {roiSummary.cellCount.toLocaleString()}
-                  {roiState.status === 'ready' && roiState.hitCellLimit ? '+' : ''}
-                </dd>
-              </div>
-              <div>
-                <dt>Mean transcripts</dt>
-                <dd>{formatNumber(roiSummary.meanTranscriptCount)}</dd>
-              </div>
-              <div>
-                <dt>Mean area</dt>
-                <dd>{formatNumber(roiSummary.meanCellArea)}</dd>
-              </div>
-            </dl>
-          )}
-
-          <RoiGeneStatsPanel copy={roiGeneStatsCopy} state={roiGeneStatsState} />
-
-          <div className="roi-action-row">
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={roiState.status !== 'ready'}
-              onClick={handleSaveRoiAnnotation}
-            >
-              Save ROI
-            </button>
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={roiState.status !== 'ready'}
-              onClick={handleExportRoiCells}
-            >
-              Export Cells
-            </button>
-            <button
-              type="button"
-              className="secondary-action"
-              disabled={
-                roiState.status !== 'ready' ||
-                roiTranscriptExportState.status === 'loading'
-              }
-              onClick={handleExportRoiTranscripts}
-            >
-              {roiTranscriptExportState.status === 'loading'
-                ? 'Exporting...'
-                : 'Export Transcripts'}
-            </button>
-          </div>
-          {roiTranscriptExportState.status === 'loading' ? (
-            <p className="roi-gene-status" aria-live="polite">
-              Preparing ROI transcript CSV
-            </p>
-          ) : null}
-        </section>
-
-        <section className="analysis-section" aria-labelledby="cell-info-heading">
-          <h2 id="cell-info-heading">Cell Info</h2>
-          <CellInfoPanel cell={selectedCell} />
-        </section>
+        </div>
       </aside>
 
       <section className="viewer-region" aria-labelledby="viewer-heading">
-        <header className="viewer-toolbar">
-          <div className="viewer-heading-stack">
-            <h2 id="viewer-heading">Spatial View</h2>
-            {viewportCellCountCopy === null ? null : (
-              <p className="viewport-cell-estimate" aria-live="polite">
-                <span>Estimated cells in view</span>{' '}
-                <strong>{viewportCellCountCopy}</strong>
-              </p>
-            )}
-          </div>
-          <p className="dataset-status" aria-live="polite">
-            {statusCopy.label}: <span translate="no">{statusCopy.url}</span>
-          </p>
-        </header>
+        <h2 id="viewer-heading" className="visually-hidden">
+          Spatial View
+        </h2>
 
         <ViewerCore
           cells={styledOverviewCells}
@@ -2410,6 +2729,7 @@ export function App({
           imageChannels={morphologyCanvasChannels}
           imageOpacity={imageLayerOpacity}
           geneExpressionOpacity={geneLayerOpacity}
+          coordinateUnit={coordinateUnit}
           status={loadState.status}
           imageStatus={morphologyState.status}
           boundaryStatus={boundaryState.status}
@@ -2428,6 +2748,11 @@ export function App({
           {...(morphologyState.status === 'error'
             ? { imageErrorMessage: formatStructuredError(morphologyState.error) }
             : {})}
+          {...(morphologyMicrometersPerPixel === undefined
+            ? {}
+            : {
+                micrometersPerPixel: morphologyMicrometersPerPixel,
+              })}
           {...(boundaryState.status === 'error'
             ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
             : {})}
@@ -2435,47 +2760,6 @@ export function App({
       </section>
     </main>
   )
-}
-
-function datasetStatusCopy(
-  loadState: DatasetLoadState,
-  queuedUrl: string,
-): { readonly label: string; readonly url: string } {
-  if (loadState.status === 'loading') {
-    return { label: 'Loading overview', url: loadState.url }
-  }
-
-  if (loadState.status === 'ready') {
-    const noun = loadState.cellCount === 1 ? 'cell' : 'cells'
-    return {
-      label: `Loaded ${loadState.cellCount.toLocaleString()} overview ${noun}`,
-      url: loadState.url,
-    }
-  }
-
-  if (loadState.status === 'error') {
-    return { label: `Load failed - ${loadState.error.title}`, url: loadState.url }
-  }
-
-  return { label: 'Queued dataset', url: queuedUrl }
-}
-
-function viewportCellCountStatusCopy(
-  loadState: DatasetLoadState,
-  visibleCellCount: number | null,
-): string | null {
-  if (loadState.status === 'loading') {
-    return 'Estimating'
-  }
-
-  if (loadState.status !== 'ready') {
-    return null
-  }
-
-  const count = visibleCellCount ?? loadState.cellCount
-  const noun = count === 1 ? 'cell' : 'cells'
-
-  return `${count.toLocaleString()} ${noun}`
 }
 
 async function defaultComputeAutoChannelContrast(
@@ -3340,6 +3624,49 @@ function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadErro
           </li>
         ))}
       </ul>
+    </section>
+  )
+}
+
+function LoadingIndicator({ tasks }: { readonly tasks: readonly LoadingTask[] }) {
+  if (tasks.length === 0) {
+    return null
+  }
+
+  const primaryTask = tasks[0]
+  const secondaryTasks = tasks.slice(1)
+
+  if (primaryTask === undefined) {
+    return null
+  }
+
+  const visibleSecondaryTasks = secondaryTasks.slice(0, 3)
+  const hiddenTaskCount = secondaryTasks.length - visibleSecondaryTasks.length
+
+  return (
+    <section
+      className="loading-indicator"
+      role="status"
+      aria-label="Active loading tasks"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div className="loading-indicator-primary">
+        <span className="loading-spinner" aria-hidden="true" />
+        <span>{primaryTask.label}</span>
+        {primaryTask.detail === undefined ? null : <small>{primaryTask.detail}</small>}
+      </div>
+      {visibleSecondaryTasks.length === 0 ? null : (
+        <ol aria-label="Additional loading tasks">
+          {visibleSecondaryTasks.map((task) => (
+            <li key={task.id}>
+              <span>{task.label}</span>
+              {task.detail === undefined ? null : <small>{task.detail}</small>}
+            </li>
+          ))}
+          {hiddenTaskCount > 0 ? <li>+{hiddenTaskCount} more</li> : null}
+        </ol>
+      )}
     </section>
   )
 }

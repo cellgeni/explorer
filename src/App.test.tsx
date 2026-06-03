@@ -5,7 +5,9 @@ import {
   type AnalysisEmbeddingsLoader,
   type AnnotationGroupLoader,
   type AnnotationLoader,
+  type DatasetOverviewLoader,
   type GeneExpressionLoader,
+  type GenePanelLoader,
   type RoiCellsLoader,
   type RoiGeneStatsLoader,
   type RoiTranscriptsLoader,
@@ -29,6 +31,14 @@ vi.mock('./data/datasetAnnotations', async (importOriginal) => {
   }
 })
 
+function openHudTab(name: string): void {
+  fireEvent.click(screen.getByRole('tab', { name }))
+}
+
+function pendingPromise<T>(): Promise<T> {
+  return new Promise<T>(() => {})
+}
+
 describe('App', () => {
   beforeEach(() => {
     useViewerStore.setState(initialViewerState)
@@ -39,7 +49,7 @@ describe('App', () => {
 
     const datasetInput = screen.getByLabelText('Dataset URL')
 
-    expect(screen.getByRole('heading', { name: 'Xenium Explorer' })).toBeInTheDocument()
+    expect(screen.queryByText('Xenium Explorer')).not.toBeInTheDocument()
     expect(datasetInput).toBeInstanceOf(HTMLInputElement)
 
     if (datasetInput instanceof HTMLInputElement) {
@@ -49,12 +59,33 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
     expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(5_000)
+    expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('tab', { name: 'Layers' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    )
+
+    openHudTab('Layers')
     expect(screen.getByRole('slider', { name: 'Image opacity' })).toHaveValue('100')
-    expect(screen.getByRole('slider', { name: 'Gene opacity' })).toHaveValue('100')
+    expect(screen.getByRole('slider', { name: 'Cell opacity' })).toHaveValue('100')
+    const coordinateUnitGroup = screen.getByRole('group', {
+      name: 'Mouse coordinates',
+    })
+    expect(
+      within(coordinateUnitGroup).getByRole('button', { name: 'μm' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      within(coordinateUnitGroup).getByRole('button', { name: 'px' }),
+    ).toHaveAttribute('aria-pressed', 'false')
     const layerStack = screen.getByRole('region', { name: 'Layer Stack' })
     expect(within(layerStack).queryByText('cells')).not.toBeInTheDocument()
     expect(within(layerStack).queryByText('boundaries')).not.toBeInTheDocument()
     expect(within(layerStack).queryByText('image')).not.toBeInTheDocument()
+
+    openHudTab('Genes')
     expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument()
     expect(screen.getByLabelText('Gene selection')).toBeDisabled()
     expect(screen.getByLabelText('Gene set symbols')).toBeDisabled()
@@ -66,26 +97,33 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
+
+    openHudTab('Annotations')
     expect(screen.getByRole('heading', { name: 'Annotations' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Annotation set' })).toHaveValue('all')
     expect(screen.getByRole('combobox', { name: 'Annotation set' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Load Annotations' })).toBeDisabled()
+
+    openHudTab('Cell')
     expect(screen.getByRole('heading', { name: 'UMAP/tSNE' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Embedding view' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Load Embeddings' })).toBeDisabled()
+    expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
+
+    openHudTab('ROI')
     expect(screen.getByRole('heading', { name: 'ROI' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
-    expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
   })
 
   it('lets the user configure image and gene layer opacity', () => {
     render(<App />)
+    openHudTab('Layers')
 
     const imageOpacityInput = screen.getByRole('slider', {
       name: 'Image opacity',
     })
     const geneOpacityInput = screen.getByRole('slider', {
-      name: 'Gene opacity',
+      name: 'Cell opacity',
     })
 
     fireEvent.change(imageOpacityInput, { target: { value: '45' } })
@@ -102,15 +140,82 @@ describe('App', () => {
 
     expect(within(activityLog).getByText('Idle')).toBeInTheDocument()
 
+    openHudTab('Layers')
     fireEvent.change(screen.getByRole('slider', { name: 'Image opacity' }), {
       target: { value: '45' },
     })
+    fireEvent.click(screen.getByRole('button', { name: 'px' }))
 
+    openHudTab('Dataset')
     expect(within(activityLog).getByText('Image opacity: 45%')).toBeInTheDocument()
+    expect(within(activityLog).getByText('Mouse coordinates: px')).toBeInTheDocument()
 
     fireEvent.click(within(activityLog).getByRole('button', { name: 'Clear' }))
 
     expect(within(activityLog).getByText('Idle')).toBeInTheDocument()
+  })
+
+  it('collapses and expands the control HUD', () => {
+    render(<App />)
+
+    const hideButton = screen.getByRole('button', { name: 'Hide Controls' })
+    expect(hideButton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
+
+    fireEvent.click(hideButton)
+
+    const showButton = screen.getByRole('button', { name: 'Show Controls' })
+    expect(showButton).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: 'Load Dataset' })).not.toBeInTheDocument()
+
+    fireEvent.click(showButton)
+
+    expect(screen.getByRole('button', { name: 'Hide Controls' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
+  })
+
+  it('shows compact loading indicators while startup queries are pending', async () => {
+    const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
+      () => pendingPromise(),
+    )
+    const loadGenePanel: ReturnType<typeof vi.fn<GenePanelLoader>> = vi.fn(() =>
+      pendingPromise(),
+    )
+    const loadAnnotationGroups: ReturnType<typeof vi.fn<AnnotationGroupLoader>> = vi.fn(
+      () => pendingPromise(),
+    )
+
+    render(
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={loadGenePanel}
+        loadAnnotationGroups={loadAnnotationGroups}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const loadingStatus = await screen.findByRole('status', {
+      name: 'Active loading tasks',
+    })
+
+    expect(within(loadingStatus).getByText('Loading dataset')).toBeInTheDocument()
+    expect(within(loadingStatus).getByText('Loading gene panel')).toBeInTheDocument()
+    expect(within(loadingStatus).getByText('Loading annotation sets')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(screen.getByRole('tab', { name: 'Genes' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(screen.getByRole('tab', { name: 'Annotations' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
   })
 
   it('lets the user configure the boundary polygon visible-cell limit', () => {
@@ -127,6 +232,7 @@ describe('App', () => {
 
   it('lets the user configure the gene expression color scale', () => {
     render(<App />)
+    openHudTab('Genes')
 
     const geneScaleInput = screen.getByRole('combobox', {
       name: 'Gene scale',
@@ -213,7 +319,10 @@ describe('App', () => {
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
-      expect(await screen.findByText(/Loaded 2 overview cells/)).toBeInTheDocument()
+      openHudTab('Cell')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Load Embeddings' })).toBeEnabled()
+      })
       fireEvent.click(screen.getByRole('button', { name: 'Load Embeddings' }))
 
       expect(await screen.findByText('UMAP: 2 cells')).toBeInTheDocument()
@@ -225,6 +334,7 @@ describe('App', () => {
         throw new Error('Expected ROI draw layer.')
       }
 
+      openHudTab('ROI')
       fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
       fireEvent.pointerDown(roiLayer, { clientX: 480, clientY: 480, pointerId: 1 })
       fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
@@ -292,6 +402,7 @@ describe('App', () => {
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+      openHudTab('Genes')
       expect(await screen.findByText('1 genes')).toBeInTheDocument()
       fireEvent.change(screen.getByRole('combobox', { name: 'Expression detail' }), {
         target: { value: 'exact-region' },
@@ -373,6 +484,7 @@ describe('App', () => {
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+      openHudTab('Genes')
       expect(await screen.findByText('1 genes')).toBeInTheDocument()
       fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
 
@@ -441,9 +553,7 @@ describe('App', () => {
         }),
       )
     })
-    expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
-    expect(screen.getByText('Estimated cells in view')).toBeInTheDocument()
-    expect(screen.getByText('1 cell')).toBeInTheDocument()
+    expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
     expect(loadMorphologyImage).not.toHaveBeenCalled()
     expect(loadGenePanel).toHaveBeenCalledWith(
       DEMO_DATASET_URL,
@@ -451,7 +561,6 @@ describe('App', () => {
         signal: expect.any(AbortSignal) as AbortSignal,
       }),
     )
-    expect(screen.getByTestId('deckgl')).toBeInTheDocument()
   })
 
   it('loads morphology image when the option is selected', async () => {
@@ -531,7 +640,7 @@ describe('App', () => {
         }),
       )
     })
-    expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+    openHudTab('Layers')
     expect(await screen.findByRole('checkbox', { name: 'DAPI' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Boundary' })).not.toBeChecked()
     expect(screen.getByLabelText('DAPI color')).toHaveValue('#5890ff')
@@ -578,9 +687,6 @@ describe('App', () => {
     expect(alert).toHaveTextContent('Dataset overview')
     expect(alert).toHaveTextContent('Network request failed')
     expect(alert).toHaveTextContent('Check dataset URL, CORS, and network access.')
-    expect(
-      await screen.findByText(/Load failed - Network request failed/),
-    ).toBeInTheDocument()
   })
 
   it('surfaces cells.parquet decode failures with parquet-specific guidance', async () => {
@@ -604,9 +710,6 @@ describe('App', () => {
     expect(alert).toHaveTextContent(
       'Rewrite cells.parquet with a browser-compatible Parquet encoding',
     )
-    expect(
-      await screen.findByText(/Load failed - cells\.parquet decode failed/),
-    ).toBeInTheDocument()
   })
 
   it('surfaces structured gene panel errors without failing the overview', async () => {
@@ -625,8 +728,6 @@ describe('App', () => {
       <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
-
-    expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
 
     const alert = await screen.findByRole('alert', { name: 'Load issues' })
 
@@ -678,6 +779,7 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+    openHudTab('Genes')
     expect(await screen.findByText('3 genes')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Gene selection'), {
@@ -735,7 +837,7 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
-    expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+    openHudTab('Annotations')
     expect(await screen.findByRole('option', { name: 'kmeans 3' })).toBeInTheDocument()
     fireEvent.change(screen.getByRole('combobox', { name: 'Annotation set' }), {
       target: { value: 'analysis:1' },
@@ -770,13 +872,16 @@ describe('App', () => {
     expect(colorInput).toHaveValue('#d62728')
     expect(colorPicker).toHaveStyle('--annotation-color: #d62728')
 
+    openHudTab('Genes')
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'annotations',
     )
 
+    openHudTab('Annotations')
     fireEvent.click(screen.getByRole('button', { name: 'Remove kmeans 3: Cluster 1' }))
 
     expect(screen.queryByLabelText('Loaded annotations')).not.toBeInTheDocument()
+    openHudTab('Genes')
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
@@ -802,7 +907,10 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
-    expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+    openHudTab('Annotations')
+    await waitFor(() => {
+      expect(screen.getByLabelText('Import File')).toBeEnabled()
+    })
     fireEvent.change(screen.getByLabelText('Import File'), {
       target: { files: [file] },
     })
@@ -811,16 +919,90 @@ describe('App', () => {
       'Manual ROI',
     )
     expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+    openHudTab('Genes')
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'annotations',
     )
 
+    openHudTab('Annotations')
     fireEvent.click(screen.getByRole('button', { name: 'Clear Annotations' }))
 
     expect(screen.queryByLabelText('Loaded annotations')).not.toBeInTheDocument()
+    openHudTab('Genes')
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
+  })
+
+  it('shows ROI query loading while drawn ROI cells are pending', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(() =>
+      pendingPromise(),
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('ROI')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+
+      const roiLayer = document.querySelector('.roi-draw-layer')
+
+      if (!(roiLayer instanceof HTMLElement)) {
+        throw new Error('Expected ROI draw layer.')
+      }
+
+      fireEvent.pointerDown(roiLayer, { clientX: 480, clientY: 480, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+
+      const loadingStatus = await screen.findByRole('status', {
+        name: 'Active loading tasks',
+      })
+
+      expect(within(loadingStatus).getByText('Querying ROI cells')).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'ROI' })).toHaveAttribute(
+        'aria-busy',
+        'true',
+      )
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
   })
 
   it('draws a box ROI, summarizes true cells, and saves it as an annotation', async () => {
@@ -920,7 +1102,10 @@ describe('App', () => {
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
-      expect(await screen.findByText(/Loaded 1 overview cell/)).toBeInTheDocument()
+      openHudTab('ROI')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      })
       fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
 
       const roiLayer = document.querySelector('.roi-draw-layer')
@@ -992,10 +1177,12 @@ describe('App', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Save ROI' }))
 
+      openHudTab('Annotations')
       expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
         'ROI 1',
       )
       expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+      openHudTab('Genes')
       expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
         'annotations',
       )
@@ -1024,6 +1211,7 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+    openHudTab('Genes')
     expect(await screen.findByText('3 genes')).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Gene set symbols'), {
