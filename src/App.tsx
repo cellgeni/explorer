@@ -1773,7 +1773,6 @@ export function App({
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true" />
           <div>
-            <p className="eyebrow">CellGeni</p>
             <h1>Xenium Explorer</h1>
           </div>
         </div>
@@ -2390,7 +2389,6 @@ export function App({
       <section className="viewer-region" aria-labelledby="viewer-heading">
         <header className="viewer-toolbar">
           <div className="viewer-heading-stack">
-            <p className="eyebrow">Phase 1</p>
             <h2 id="viewer-heading">Spatial View</h2>
             {viewportCellCountCopy === null ? null : (
               <p className="viewport-cell-estimate" aria-live="polite">

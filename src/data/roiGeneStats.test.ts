@@ -111,16 +111,67 @@ describe('ROI gene stats', () => {
       transcriptsForCellIds: vi.fn(async () => transcriptMatrix),
     }
     const validateRangeSupport = vi.fn(async () => undefined)
+    const readH5Matrix = vi.fn(async () => {
+      throw new Error('cell_feature_matrix.h5 not found')
+    })
 
     await expect(
       loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
         getDataset: () => dataset,
         validateRangeSupport,
+        readH5Matrix,
       }),
     ).rejects.toThrow('ROI gene stats need a cell-major cell_feature_matrix reader')
 
     expect(dataset.matrix).toHaveBeenCalledWith([cellId])
+    expect(readH5Matrix).toHaveBeenCalledWith(
+      'https://example.test/xenium/cell_feature_matrix.h5',
+      [cellId],
+      {},
+    )
     expect(dataset.transcriptsForCellIds).not.toHaveBeenCalled()
+  })
+
+  it('falls back to H5 matrix stats when the Zarr matrix layout is unavailable', async () => {
+    const cellId = intToCellId(1, 1)
+    const cells: readonly DatasetCell[] = [
+      {
+        id: cellId,
+        position: { x: micrometers(1), y: micrometers(2) },
+      },
+    ]
+    const h5Matrix: GexResult = {
+      geneNames: ['Actb'],
+      cells: new Map([[cellId, { geneNames: ['Actb'], counts: [11] }]]),
+    }
+    const dataset = {
+      matrix: vi.fn(async () => {
+        throw new Error('cell_features/csc/indptr not found')
+      }),
+      transcriptsForCellIds: vi.fn(async () => {
+        throw new Error('transcripts should not be queried')
+      }),
+    }
+    const validateRangeSupport = vi.fn(async () => undefined)
+    const readH5Matrix = vi.fn(async () => h5Matrix)
+
+    const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
+      getDataset: () => dataset,
+      validateRangeSupport,
+      readH5Matrix,
+    })
+
+    expect(readH5Matrix).toHaveBeenCalledWith(
+      'https://example.test/xenium/cell_feature_matrix.h5',
+      [cellId],
+      {},
+    )
+    expect(dataset.transcriptsForCellIds).not.toHaveBeenCalled()
+    expect(stats.genes[0]).toMatchObject({
+      gene: 'Actb',
+      count: 11,
+      detectedCells: 1,
+    })
   })
 
   it('can explicitly fall back to transcript aggregation', async () => {
@@ -142,11 +193,15 @@ describe('ROI gene stats', () => {
       transcriptsForCellIds: vi.fn(async () => transcriptMatrix),
     }
     const validateRangeSupport = vi.fn(async () => undefined)
+    const readH5Matrix = vi.fn(async () => {
+      throw new Error('cell_feature_matrix.h5 not found')
+    })
 
     const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
       getDataset: () => dataset,
       validateRangeSupport,
       allowTranscriptFallback: true,
+      readH5Matrix,
     })
 
     expect(validateRangeSupport).toHaveBeenCalledWith(

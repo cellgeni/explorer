@@ -3,6 +3,7 @@ import { cellIdToInt, intToCellId } from './cellid'
 import {
   aggregateGex,
   createGeneFeatureIndex,
+  gexFromCellMajorSparseArrays,
   gexFromFeatureMajorSparseArrays,
   gexFromTranscriptsParquet,
   isGeneFeature,
@@ -219,6 +220,48 @@ describe('GEX helpers', () => {
       counts: [3],
     })
     expect(result.cells.has(cellC)).toBe(false)
+  })
+
+  it('extracts ROI genes from cell-major matrix arrays', () => {
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(2, 1)
+    const cellC = intToCellId(3, 1)
+    const indices = new BigInt64Array([1n, 2n, 0n, 1n, 0n, 1n])
+    const data = new Int32Array([3, 99, 100, 100, 7, 2])
+
+    const result = gexFromCellMajorSparseArrays({
+      cellIds: [cellA, cellB, cellC],
+      geneNames: ['Actb', 'Gad1', 'NegControlProbe_001'],
+      featureTypes: ['Gene Expression', 'Gene Expression', 'Gene Expression'],
+      cellIdRows: new Map([
+        [cellB, 0],
+        [cellA, 2],
+      ]),
+      indptr: new BigInt64Array([0n, 2n, 4n, 6n]),
+      indicesDataset: {
+        slice: (ranges) => {
+          const [start = 0, end = indices.length] = ranges[0] ?? []
+          return indices.subarray(start ?? 0, end ?? indices.length)
+        },
+      },
+      dataDataset: {
+        slice: (ranges) => {
+          const [start = 0, end = data.length] = ranges[0] ?? []
+          return data.subarray(start ?? 0, end ?? data.length)
+        },
+      },
+    })
+
+    expect(result.geneNames).toEqual(['Actb', 'Gad1'])
+    expect(result.cells.get(cellA)).toEqual({
+      geneNames: ['Actb', 'Gad1'],
+      counts: [7, 2],
+    })
+    expect(result.cells.get(cellB)).toEqual({
+      geneNames: ['Gad1'],
+      counts: [3],
+    })
+    expect(result.cells.get(cellC)).toEqual({ geneNames: [], counts: [] })
   })
 })
 

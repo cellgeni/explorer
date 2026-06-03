@@ -31,12 +31,40 @@ export interface GexResult {
   readonly cells: ReadonlyMap<CellId, GexCell>
 }
 
+export interface CellFeatureMatrixReadOptions {
+  readonly signal?: AbortSignal
+}
+
 export interface AggregatedGene {
   readonly gene: string
   readonly count: number
 }
 
 export type SqlParameter = string | number
+
+type NumericArrayLike =
+  | Int8Array
+  | Uint8Array
+  | Int16Array
+  | Uint16Array
+  | Int32Array
+  | Uint32Array
+  | BigInt64Array
+  | BigUint64Array
+
+interface SliceableNumericDataset {
+  slice(ranges: readonly (readonly (number | null)[])[]): unknown
+}
+
+interface H5MatrixCache {
+  readonly file: unknown
+  readonly geneNames: readonly string[]
+  readonly featureTypes: readonly string[]
+  readonly cellIdRows: ReadonlyMap<CellId, number>
+  readonly indptr: NumericArrayLike
+  readonly indicesDataset: SliceableNumericDataset
+  readonly dataDataset: SliceableNumericDataset
+}
 
 export interface SqlFragment {
   readonly sql: string
@@ -64,6 +92,10 @@ const NON_GENE_PATTERNS = [
   /antisense/i,
   /Deprecated/i,
 ] as const
+
+const CELL_MAJOR_RANGE_COALESCE_GAP = 4_096
+const CELL_MAJOR_RANGE_MAX_SPAN = 500_000
+const h5MatrixCache = new Map<string, Promise<H5MatrixCache>>()
 
 export function aggregateGex(
   cells: ReadonlyMap<CellId, GexCell>,
@@ -327,6 +359,129 @@ export async function gexFromCellFeatureMatrixZarr(
   }
 
   for (const cellId of cellIds) {
+    if (!cells.has(cellId)) {
+      cells.set(cellId, { geneNames: [], counts: [] })
+    }
+  }
+
+  return {
+    geneNames: filteredGeneNames,
+    cells,
+  }
+}
+
+export async function gexFromCellFeatureMatrixH5(
+  url: string,
+  cellIds: readonly CellId[],
+  options: CellFeatureMatrixReadOptions = {},
+): Promise<GexResult> {
+  if (cellIds.length === 0) {
+    return {
+      geneNames: [],
+      cells: emptyCellsFor(cellIds),
+    }
+  }
+
+  const matrix = await loadH5Matrix(url, options)
+  throwIfAborted(options.signal)
+
+  return gexFromCellMajorSparseArrays({
+    cellIds,
+    geneNames: matrix.geneNames,
+    featureTypes: matrix.featureTypes,
+    cellIdRows: matrix.cellIdRows,
+    indptr: matrix.indptr,
+    indicesDataset: matrix.indicesDataset,
+    dataDataset: matrix.dataDataset,
+  })
+}
+
+export function gexFromCellMajorSparseArrays(options: {
+  readonly cellIds: readonly CellId[]
+  readonly geneNames: readonly string[]
+  readonly featureTypes: readonly string[]
+  readonly cellIdRows: ReadonlyMap<CellId, number>
+  readonly indptr: NumericArrayLike
+  readonly indicesDataset: SliceableNumericDataset
+  readonly dataDataset: SliceableNumericDataset
+}): GexResult {
+  const geneFeatureIndices = createGeneFeatureIndex(
+    options.geneNames,
+    options.featureTypes,
+  )
+  const filteredGeneNames = options.geneNames.filter((_, index) =>
+    geneFeatureIndices.has(index),
+  )
+  const targets = options.cellIds
+    .map((cellId) => ({ id: cellId, row: options.cellIdRows.get(cellId) ?? -1 }))
+    .filter((target) => target.row >= 0)
+    .sort((a, b) => a.row - b.row)
+
+  if (targets.length === 0) {
+    return {
+      geneNames: filteredGeneNames,
+      cells: emptyCellsFor(options.cellIds),
+    }
+  }
+
+  const cells = new Map<CellId, { geneNames: string[]; counts: number[] }>()
+  const ranges: {
+    readonly id: CellId
+    readonly start: number
+    readonly end: number
+  }[] = []
+
+  for (const target of targets) {
+    const start = readNumericArrayValue(options.indptr, target.row)
+    const end = readNumericArrayValue(options.indptr, target.row + 1)
+
+    if (end <= start) {
+      cells.set(target.id, { geneNames: [], counts: [] })
+      continue
+    }
+
+    ranges.push({ id: target.id, start, end })
+  }
+
+  if (ranges.length === 0) {
+    return {
+      geneNames: filteredGeneNames,
+      cells: emptyCellsFor(options.cellIds),
+    }
+  }
+
+  for (const rangeGroup of coalesceCellMajorRanges(ranges)) {
+    const indices = expectNumericArrayLike(
+      options.indicesDataset.slice([[rangeGroup.start, rangeGroup.end]]),
+      'cell feature matrix indices',
+    )
+    const data = expectNumericArrayLike(
+      options.dataDataset.slice([[rangeGroup.start, rangeGroup.end]]),
+      'cell feature matrix data',
+    )
+
+    for (const target of rangeGroup.targets) {
+      const start = target.start - rangeGroup.start
+      const end = target.end - rangeGroup.start
+      const sparseGenes: string[] = []
+      const sparseCounts: number[] = []
+
+      for (let cursor = start; cursor < end; cursor += 1) {
+        const featureIndex = readNumericArrayValue(indices, cursor)
+
+        if (!geneFeatureIndices.has(featureIndex)) {
+          continue
+        }
+
+        sparseGenes.push(options.geneNames[featureIndex] ?? `feature_${featureIndex}`)
+        sparseCounts.push(readNumericArrayValue(data, cursor))
+      }
+
+      cells.set(target.id, { geneNames: sparseGenes, counts: sparseCounts })
+    }
+  }
+
+  for (const cellId of options.cellIds) {
     if (!cells.has(cellId)) {
       cells.set(cellId, { geneNames: [], counts: [] })
     }
@@ -680,6 +835,243 @@ function normalizeSelectedGeneList(genes: readonly string[]): readonly string[] 
   }
 
   return selectedGenes
+}
+
+function loadH5Matrix(
+  url: string,
+  options: CellFeatureMatrixReadOptions,
+): Promise<H5MatrixCache> {
+  const cached = h5MatrixCache.get(url)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const promise = loadH5MatrixUncached(url, options).catch((error: unknown) => {
+    if (h5MatrixCache.get(url) === promise) {
+      h5MatrixCache.delete(url)
+    }
+
+    throw error
+  })
+
+  h5MatrixCache.set(url, promise)
+  return promise
+}
+
+function coalesceCellMajorRanges(
+  ranges: readonly {
+    readonly id: CellId
+    readonly start: number
+    readonly end: number
+  }[],
+): readonly {
+  readonly start: number
+  readonly end: number
+  readonly targets: readonly {
+    readonly id: CellId
+    readonly start: number
+    readonly end: number
+  }[]
+}[] {
+  const groups: {
+    start: number
+    end: number
+    targets: {
+      readonly id: CellId
+      readonly start: number
+      readonly end: number
+    }[]
+  }[] = []
+
+  for (const range of ranges) {
+    const current = groups[groups.length - 1]
+
+    if (
+      current !== undefined &&
+      range.start <= current.end + CELL_MAJOR_RANGE_COALESCE_GAP &&
+      range.end - current.start <= CELL_MAJOR_RANGE_MAX_SPAN
+    ) {
+      current.end = Math.max(current.end, range.end)
+      current.targets.push(range)
+      continue
+    }
+
+    groups.push({
+      start: range.start,
+      end: range.end,
+      targets: [range],
+    })
+  }
+
+  return groups
+}
+
+async function loadH5MatrixUncached(
+  url: string,
+  options: CellFeatureMatrixReadOptions,
+): Promise<H5MatrixCache> {
+  const h5wasm = (await import('h5wasm')).default
+  const { FS } = await h5wasm.ready
+  throwIfAborted(options.signal)
+
+  const response = await fetch(url, {
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`cell_feature_matrix.h5 returned HTTP ${response.status}.`)
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  throwIfAborted(options.signal)
+
+  const fileName = `/cell-feature-matrix-${hashString(url)}.h5`
+  try {
+    FS.unlink(fileName)
+  } catch {
+    // The file is only present when this URL was loaded in a previous app session.
+  }
+
+  FS.writeFile(fileName, bytes)
+
+  try {
+    const file = new h5wasm.File(fileName, 'r')
+    const barcodeDataset = expectH5Dataset(
+      file.get('/matrix/barcodes'),
+      '/matrix/barcodes',
+    )
+    const geneNameDataset = expectH5Dataset(
+      file.get('/matrix/features/name'),
+      '/matrix/features/name',
+    )
+    const featureTypeDataset = expectH5Dataset(
+      file.get('/matrix/features/feature_type'),
+      '/matrix/features/feature_type',
+    )
+    const indptrDataset = expectH5Dataset(file.get('/matrix/indptr'), '/matrix/indptr')
+    const indicesDataset = expectH5Dataset(
+      file.get('/matrix/indices'),
+      '/matrix/indices',
+    )
+    const dataDataset = expectH5Dataset(file.get('/matrix/data'), '/matrix/data')
+
+    return {
+      file,
+      geneNames: expectStringArray(geneNameDataset.value, '/matrix/features/name'),
+      featureTypes: expectStringArray(
+        featureTypeDataset.value,
+        '/matrix/features/feature_type',
+      ),
+      cellIdRows: h5CellIdRows(
+        expectStringArray(barcodeDataset.value, '/matrix/barcodes'),
+      ),
+      indptr: expectNumericArrayLike(indptrDataset.value, '/matrix/indptr'),
+      indicesDataset,
+      dataDataset,
+    }
+  } catch (error) {
+    try {
+      FS.unlink(fileName)
+    } catch {
+      // Best-effort cleanup; the original error is more useful.
+    }
+
+    throw error
+  }
+}
+
+function expectH5Dataset(value: unknown, label: string): SliceableNumericDataset & {
+  readonly value: unknown
+} {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    !('slice' in value) ||
+    typeof value.slice !== 'function' ||
+    !('value' in value)
+  ) {
+    throw new Error(`Expected ${label} to be an HDF5 dataset.`)
+  }
+
+  return value as SliceableNumericDataset & { readonly value: unknown }
+}
+
+function h5CellIdRows(barcodes: readonly string[]): ReadonlyMap<CellId, number> {
+  const rows = new Map<CellId, number>()
+
+  for (let row = 0; row < barcodes.length; row += 1) {
+    const barcode = barcodes[row]
+
+    if (barcode === undefined) {
+      continue
+    }
+
+    rows.set(asCellId(barcode), row)
+  }
+
+  return rows
+}
+
+function expectStringArray(value: unknown, label: string): readonly string[] {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
+    throw new Error(`Expected ${label} to be a string array.`)
+  }
+
+  return value
+}
+
+function expectNumericArrayLike(value: unknown, label: string): NumericArrayLike {
+  if (
+    value instanceof Int8Array ||
+    value instanceof Uint8Array ||
+    value instanceof Int16Array ||
+    value instanceof Uint16Array ||
+    value instanceof Int32Array ||
+    value instanceof Uint32Array ||
+    value instanceof BigInt64Array ||
+    value instanceof BigUint64Array
+  ) {
+    return value
+  }
+
+  throw new Error(`Expected ${label} to be a numeric typed array.`)
+}
+
+function readNumericArrayValue(array: NumericArrayLike, index: number): number {
+  const value = array[index]
+
+  if (value === undefined) {
+    throw new Error(`Sparse matrix index ${index} is out of bounds.`)
+  }
+
+  return typeof value === 'bigint' ? Number(value) : value
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw abortError(signal)
+  }
+}
+
+function abortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason
+  }
+
+  const error = new Error('Cell feature matrix request aborted.')
+  error.name = 'AbortError'
+  return error
+}
+
+function hashString(value: string): string {
+  let hash = 0
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (Math.imul(hash, 31) + value.charCodeAt(index)) >>> 0
+  }
+
+  return hash.toString(16).padStart(8, '0')
 }
 
 function isZarrNotFoundError(error: unknown): boolean {

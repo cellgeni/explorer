@@ -1,10 +1,10 @@
-import { aggregateGex } from './gex'
+import { aggregateGex, gexFromCellFeatureMatrixH5 } from './gex'
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
 import type { CellId } from './cellid'
 import type { DatasetRangeValidator } from './datasetOverview'
-import type { GexResult } from './gex'
+import type { CellFeatureMatrixReadOptions, GexResult } from './gex'
 import type { DatasetCell } from '../datasets/xeniumDataset'
 
 export const ROI_GENE_STATS_CELL_LIMIT = 10_000
@@ -41,6 +41,11 @@ export interface LoadDatasetRoiGeneStatsOptions {
   readonly cellLimit?: number
   readonly geneLimit?: number
   readonly allowTranscriptFallback?: boolean
+  readonly readH5Matrix?: (
+    url: string,
+    cellIds: readonly CellId[],
+    options?: CellFeatureMatrixReadOptions,
+  ) => Promise<GexResult>
 }
 
 export async function loadDatasetRoiGeneStats(
@@ -66,6 +71,7 @@ export async function loadDatasetRoiGeneStats(
     validateRangeSupport: options.validateRangeSupport ?? assertHttpRangeSupport,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     allowTranscriptFallback: options.allowTranscriptFallback ?? false,
+    readH5Matrix: options.readH5Matrix ?? gexFromCellFeatureMatrixH5,
   })
   throwIfAborted(options.signal)
 
@@ -143,8 +149,15 @@ async function loadRoiGeneStatsMatrix(
     readonly validateRangeSupport: DatasetRangeValidator
     readonly signal?: AbortSignal
     readonly allowTranscriptFallback: boolean
+    readonly readH5Matrix: (
+      url: string,
+      cellIds: readonly CellId[],
+      options?: CellFeatureMatrixReadOptions,
+    ) => Promise<GexResult>
   },
 ): Promise<GexResult> {
+  let matrixError: unknown
+
   try {
     await options.validateRangeSupport(
       datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip'),
@@ -161,8 +174,22 @@ async function loadRoiGeneStatsMatrix(
       throw error
     }
 
+    matrixError = error
+  }
+
+  try {
+    return await options.readH5Matrix(
+      datasetFileUrl(baseUrl, 'cell_feature_matrix.h5'),
+      cellIds,
+      options.signal === undefined ? {} : { signal: options.signal },
+    )
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error
+    }
+
     if (!options.allowTranscriptFallback || dataset.transcriptsForCellIds === undefined) {
-      throw unsupportedRoiGeneStatsError(error)
+      throw unsupportedRoiGeneStatsError(matrixError, error)
     }
   }
 
@@ -233,11 +260,16 @@ function abortError(signal: AbortSignal): Error {
   return error
 }
 
-function unsupportedRoiGeneStatsError(cause: unknown): Error {
+function unsupportedRoiGeneStatsError(
+  zarrCause: unknown,
+  h5Cause: unknown,
+): Error {
   const message =
     'ROI gene stats need a cell-major cell_feature_matrix reader. ' +
-    'The available Zarr matrix could not provide per-cell sparse counts, and transcripts.parquet is too large for the interactive ROI gene panel.'
-  const error = new Error(message, { cause })
+    'The available Zarr/H5 matrix sources could not provide per-cell sparse counts, and transcripts.parquet is too large for the interactive ROI gene panel.'
+  const error = new Error(message, {
+    cause: { zarr: zarrCause, h5: h5Cause },
+  })
   error.name = 'UnsupportedRoiGeneStatsMatrixError'
   return error
 }
