@@ -115,7 +115,7 @@ describe('transcripts parquet GEX', () => {
     })
   })
 
-  it('uses cell_id IN UNNEST for cells-only transcript scope', async () => {
+  it('uses scalar cell_id parameters for cells-only transcript scope', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([])
 
@@ -133,12 +133,35 @@ describe('transcripts parquet GEX', () => {
       30,
     )
 
-    expect(conn.preparedSql).toContain('cell_id IN (SELECT * FROM UNNEST( ? ))')
+    expect(conn.preparedSql).toContain('cell_id IN (?)')
     expect(conn.statement.params).toEqual([
       'https://example/transcripts.parquet',
-      [String(cellId)],
+      String(cellId),
       30,
     ])
+  })
+
+  it('skips cells-only transcript queries with no cell ids', async () => {
+    const conn = new FakeConnection([])
+
+    const result = await gexFromTranscriptsParquet(
+      conn,
+      'https://example/transcripts.parquet',
+      {
+        kind: 'circle',
+        cx: micrometers(0),
+        cy: micrometers(0),
+        radius: micrometers(10),
+      },
+      'cells-only',
+      [],
+    )
+
+    expect(conn.preparedSql).toBe('')
+    expect(result).toEqual({
+      geneNames: [],
+      cells: new Map(),
+    })
   })
 })
 

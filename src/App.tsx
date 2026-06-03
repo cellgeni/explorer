@@ -89,6 +89,7 @@ import type { RoiDrawMode, ViewerViewportDetail } from './components/ViewerCore'
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
+const DEBUG_LOG_LIMIT = 12
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
@@ -304,6 +305,7 @@ type LoadErrorCode =
   | 'network'
   | 'http'
   | 'range-not-supported'
+  | 'unsupported'
   | 'parquet-decode'
   | 'manifest'
   | 'decode'
@@ -329,6 +331,13 @@ interface StructuredLoadError {
   readonly message: string
   readonly action: string
   readonly detail?: string
+}
+
+interface DebugLogEntry {
+  readonly id: number
+  readonly timestamp: number
+  readonly message: string
+  readonly coalesceKey?: string
 }
 
 interface MorphologyChannelSetting {
@@ -439,6 +448,7 @@ export function App({
   })
   const [roiTranscriptExportState, setRoiTranscriptExportState] =
     useState<RoiTranscriptExportState>({ status: 'idle' })
+  const [debugLog, setDebugLog] = useState<readonly DebugLogEntry[]>([])
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
     status: 'idle',
   })
@@ -482,6 +492,7 @@ export function App({
   const geneExpressionRequestId = useRef(0)
   const roiRequestId = useRef(0)
   const roiTranscriptExportRequestId = useRef(0)
+  const debugLogIdRef = useRef(0)
   const datasetAbortRef = useRef<AbortController | null>(null)
   const analysisEmbeddingAbortRef = useRef<AbortController | null>(null)
   const boundaryAbortRef = useRef<AbortController | null>(null)
@@ -658,6 +669,34 @@ export function App({
     [roiState],
   )
   const activeRoiBbox = roiState.status === 'idle' ? null : roiState.bbox
+  const appendDebugEvent = useCallback(
+    (message: string, options: { readonly coalesceKey?: string } = {}) => {
+      debugLogIdRef.current += 1
+      const entry: DebugLogEntry = {
+        id: debugLogIdRef.current,
+        timestamp: Date.now(),
+        message,
+        ...(options.coalesceKey === undefined
+          ? {}
+          : { coalesceKey: options.coalesceKey }),
+      }
+
+      setDebugLog((current) => {
+        const first = current[0]
+
+        if (
+          first !== undefined &&
+          entry.coalesceKey !== undefined &&
+          first.coalesceKey === entry.coalesceKey
+        ) {
+          return [entry, ...current.slice(1)]
+        }
+
+        return [entry, ...current].slice(0, DEBUG_LOG_LIMIT)
+      })
+    },
+    [],
+  )
   const activeErrors = useMemo(
     () =>
       [
@@ -941,6 +980,7 @@ export function App({
     if (typeof datasetUrl === 'string' && datasetUrl.trim().length > 0) {
       const requestedUrl = datasetUrl.trim()
       const requestId = loadRequestId.current + 1
+      appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(analysisEmbeddingAbortRef)
       abortActiveRequest(boundaryAbortRef)
@@ -1004,6 +1044,7 @@ export function App({
           }
 
           setGenePanelState({ status: 'ready', url: requestedUrl, genes })
+          appendDebugEvent(`Gene panel ready: ${genes.length.toLocaleString()} genes`)
         })
         .catch((error) => {
           if (isAbortError(error)) {
@@ -1019,6 +1060,7 @@ export function App({
             url: requestedUrl,
             error: createStructuredLoadError('Gene panel', error),
           })
+          appendDebugEvent('Gene panel failed')
         })
 
       void loadAnnotationGroups(requestedUrl, { signal: abortController.signal })
@@ -1032,6 +1074,9 @@ export function App({
             url: requestedUrl,
             groups,
           })
+          appendDebugEvent(
+            `Annotation sets ready: ${groups.length.toLocaleString()} groups`,
+          )
         })
         .catch((error) => {
           if (isAbortError(error)) {
@@ -1047,6 +1092,7 @@ export function App({
             url: requestedUrl,
             error: createStructuredLoadError('Annotations', error),
           })
+          appendDebugEvent('Annotation sets failed')
         })
 
       try {
@@ -1066,6 +1112,7 @@ export function App({
           url: requestedUrl,
           cellCount: cells.length,
         })
+        appendDebugEvent(`Dataset ready: ${cells.length.toLocaleString()} cells`)
 
         if (!loadImage) {
           return
@@ -1083,6 +1130,7 @@ export function App({
               status: 'ready',
               url: image.url,
             })
+            appendDebugEvent('Morphology image ready')
             queueAutoContrast(image.channelLoaders, {
               requestId,
               signal: abortController.signal,
@@ -1102,6 +1150,7 @@ export function App({
               url: requestedUrl,
               error: createStructuredLoadError('Morphology image', error),
             })
+            appendDebugEvent('Morphology image failed')
           })
       } catch (error) {
         if (isAbortError(error)) {
@@ -1117,6 +1166,7 @@ export function App({
           url: requestedUrl,
           error: createStructuredLoadError('Dataset overview', error),
         })
+        appendDebugEvent('Dataset load failed')
         setMorphologyState({ status: 'idle' })
         setGenePanelState({ status: 'idle' })
         setAnnotationGroupState({ status: 'idle' })
@@ -1125,9 +1175,11 @@ export function App({
   }
 
   function toggleGene(gene: string) {
+    const isSelected = selectedGenes.includes(gene)
+    appendDebugEvent(isSelected ? `Cleared gene ${gene}` : `Highlight gene ${gene}`)
     resetGeneExpressionSelectionState()
     setSelectedGenes((current) =>
-      current.includes(gene)
+      isSelected
         ? current.filter((selectedGene) => selectedGene !== gene)
         : [...current, gene].sort((a, b) => a.localeCompare(b)),
     )
@@ -1140,6 +1192,7 @@ export function App({
       return
     }
 
+    appendDebugEvent(`Applied symbols: ${genes.length.toLocaleString()} genes`)
     setSelectedGenes(genes)
     resetGeneExpressionSelectionState()
     setGeneSearch('')
@@ -1160,6 +1213,7 @@ export function App({
     }
 
     geneSetIdRef.current += 1
+    appendDebugEvent(`Saved gene set ${name}`)
     setSavedGeneSets((current) => [
       savedSet,
       ...current.filter((geneSet) => geneSet.name.toLowerCase() !== normalizedName),
@@ -1168,6 +1222,7 @@ export function App({
   }
 
   function applySavedGeneSet(geneSet: SavedGeneSet) {
+    appendDebugEvent(`Applied gene set ${geneSet.name}`)
     resetGeneExpressionSelectionState()
     setSelectedGenes(geneSet.genes)
     setGeneExpressionScoreMode(geneSet.scoreMode)
@@ -1175,6 +1230,7 @@ export function App({
   }
 
   function handleGeneExpressionScoreModeChange(nextScoreMode: GeneExpressionScoreMode) {
+    appendDebugEvent(`Signature score: ${nextScoreMode}`)
     setGeneExpressionScoreMode(nextScoreMode)
 
     if (geneExpressionBatch === null) {
@@ -1203,6 +1259,12 @@ export function App({
   }
 
   function removeSavedGeneSet(id: string) {
+    const removedSet = savedGeneSets.find((geneSet) => geneSet.id === id)
+
+    if (removedSet !== undefined) {
+      appendDebugEvent(`Removed gene set ${removedSet.name}`)
+    }
+
     setSavedGeneSets((current) => current.filter((geneSet) => geneSet.id !== id))
   }
 
@@ -1217,6 +1279,9 @@ export function App({
       selectedAnnotationGroupId === ALL_ANNOTATION_GROUP_ID
         ? undefined
         : selectedAnnotationGroupId
+    appendDebugEvent(
+      groupId === undefined ? 'Loading annotations' : `Loading annotations ${groupId}`,
+    )
     setAnnotationState({ status: 'loading', url: loadState.url })
 
     void loadAnnotations(loadState.url, {
@@ -1237,6 +1302,9 @@ export function App({
         if (annotations.length > 0) {
           setObservationColorMode('annotations')
         }
+        appendDebugEvent(
+          `Annotations loaded: ${annotations.length.toLocaleString()} labels`,
+        )
       })
       .catch((error) => {
         if (isAbortError(error) || loadRequestId.current !== requestId) {
@@ -1248,6 +1316,7 @@ export function App({
           url: loadState.url,
           error: createStructuredLoadError('Annotations', error),
         })
+        appendDebugEvent('Annotations failed')
       })
   }
 
@@ -1262,6 +1331,7 @@ export function App({
     analysisEmbeddingRequestId.current = requestId
     analysisEmbeddingAbortRef.current = abortController
     setAnalysisEmbeddingState({ status: 'loading', url: loadState.url })
+    appendDebugEvent('Loading embeddings')
 
     void loadAnalysisEmbeddings(loadState.url, { signal: abortController.signal })
       .then((embeddings) => {
@@ -1281,6 +1351,9 @@ export function App({
         ) {
           setSelectedEmbeddingKind(embeddings[0]?.kind ?? 'umap')
         }
+        appendDebugEvent(
+          `Embeddings loaded: ${embeddings.length.toLocaleString()} views`,
+        )
       })
       .catch((error) => {
         if (isAbortError(error) || analysisEmbeddingRequestId.current !== requestId) {
@@ -1292,6 +1365,7 @@ export function App({
           url: loadState.url,
           error: createStructuredLoadError('Embeddings', error),
         })
+        appendDebugEvent('Embeddings failed')
       })
       .finally(() => {
         if (analysisEmbeddingAbortRef.current === abortController) {
@@ -1335,12 +1409,16 @@ export function App({
       if (importedAnnotations.length > 0) {
         setObservationColorMode('annotations')
       }
+      appendDebugEvent(
+        `Imported annotations: ${importedAnnotations.length.toLocaleString()} labels`,
+      )
     } catch (error) {
       setAnnotationState({
         status: 'error',
         url: loadState.status === 'ready' ? loadState.url : datasetUrl,
         error: createStructuredLoadError('Annotations', error),
       })
+      appendDebugEvent('Annotation import failed')
     }
   }
 
@@ -1352,9 +1430,17 @@ export function App({
     }
 
     setAnnotationColors((current) => ({ ...current, [annotationId]: normalizedColor }))
+    appendDebugEvent(`Annotation color ${shortIdentifier(annotationId)}`, {
+      coalesceKey: `annotation-color:${annotationId}`,
+    })
   }
 
   function handleRemoveAnnotation(annotationId: string) {
+    const removedAnnotation =
+      annotationState.status === 'ready'
+        ? annotationState.annotations.find((annotation) => annotation.id === annotationId)
+        : undefined
+
     setAnnotationState((current) => {
       if (current.status !== 'ready') {
         return current
@@ -1372,12 +1458,17 @@ export function App({
         ? current
         : 'transcript-count',
     )
+
+    appendDebugEvent(
+      `Removed annotation ${removedAnnotation?.label ?? shortIdentifier(annotationId)}`,
+    )
   }
 
   function handleClearAnnotations() {
     setAnnotationState({ status: 'idle' })
     setAnnotationColors({})
     setObservationColorMode('transcript-count')
+    appendDebugEvent('Cleared annotations')
   }
 
   function handleRoiComplete(bbox: BBox) {
@@ -1395,6 +1486,7 @@ export function App({
     setRoiState({ status: 'loading', url: loadState.url, bbox })
     setRoiGeneStatsState({ status: 'idle' })
     setRoiTranscriptExportState({ status: 'idle' })
+    appendDebugEvent('ROI drawn: loading cells')
 
     void loadRoiCells(loadState.url, bbox, { signal: abortController.signal })
       .then((cells) => {
@@ -1409,6 +1501,11 @@ export function App({
           cells,
           hitCellLimit: cells.length >= ROI_CELL_EXPORT_LIMIT,
         })
+        appendDebugEvent(
+          `ROI cells ready: ${cells.length.toLocaleString()}${
+            cells.length >= ROI_CELL_EXPORT_LIMIT ? '+' : ''
+          }`,
+        )
 
         if (cells.length === 0) {
           setRoiGeneStatsState({
@@ -1438,6 +1535,9 @@ export function App({
               url: loadState.url,
               stats,
             })
+            appendDebugEvent(
+              `ROI genes ready: ${stats.genes.length.toLocaleString()} genes`,
+            )
           })
           .catch((error) => {
             if (isAbortError(error) || roiRequestId.current !== requestId) {
@@ -1449,6 +1549,7 @@ export function App({
               url: loadState.url,
               error: createStructuredLoadError('ROI genes', error),
             })
+            appendDebugEvent('ROI genes unsupported')
           })
       })
       .catch((error) => {
@@ -1463,6 +1564,7 @@ export function App({
           error: createStructuredLoadError('ROI cells', error),
         })
         setRoiGeneStatsState({ status: 'idle' })
+        appendDebugEvent('ROI cells failed')
       })
       .finally(() => {
         if (roiAbortRef.current === abortController) {
@@ -1480,6 +1582,7 @@ export function App({
     setRoiState({ status: 'idle' })
     setRoiGeneStatsState({ status: 'idle' })
     setRoiTranscriptExportState({ status: 'idle' })
+    appendDebugEvent('Cleared ROI')
   }
 
   function handleSaveRoiAnnotation() {
@@ -1495,6 +1598,7 @@ export function App({
     }
 
     roiIdRef.current += 1
+    appendDebugEvent(`Saved ROI annotation ${name}`)
     setAnnotationState((current) => ({
       status: 'ready',
       url: loadState.url,
@@ -1518,6 +1622,7 @@ export function App({
 
     const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
     downloadTextFile(`${slug(name)}-cells.csv`, roiCellsToCsv(roiState.cells))
+    appendDebugEvent(`Exported ROI cells ${name}`)
   }
 
   function handleExportRoiTranscripts() {
@@ -1532,6 +1637,7 @@ export function App({
     roiTranscriptExportRequestId.current = requestId
     roiTranscriptExportAbortRef.current = abortController
     setRoiTranscriptExportState({ status: 'loading', url: roiState.url })
+    appendDebugEvent(`Exporting ROI transcripts ${name}`)
 
     void loadRoiTranscripts(roiState.url, roiState.bbox, {
       signal: abortController.signal,
@@ -1546,6 +1652,9 @@ export function App({
           roiTranscriptsToCsv(transcripts),
         )
         setRoiTranscriptExportState({ status: 'idle' })
+        appendDebugEvent(
+          `Exported ROI transcripts: ${transcripts.length.toLocaleString()} rows`,
+        )
       })
       .catch((error) => {
         if (isAbortError(error) || roiTranscriptExportRequestId.current !== requestId) {
@@ -1557,6 +1666,7 @@ export function App({
           url: roiState.url,
           error: createStructuredLoadError('ROI transcripts', error),
         })
+        appendDebugEvent('ROI transcript export failed')
       })
       .finally(() => {
         if (roiTranscriptExportAbortRef.current === abortController) {
@@ -1572,9 +1682,13 @@ export function App({
     setMorphologyChannelSettings((current) =>
       current.map((setting) => (setting.id === id ? { ...setting, ...patch } : setting)),
     )
+    appendDebugEvent(`${morphologyPatchLabel(patch)} ${shortIdentifier(id)}`, {
+      coalesceKey: `morphology-channel:${id}`,
+    })
   }
 
   function handleAutoContrast(channel: MorphologyImageChannel) {
+    appendDebugEvent(`Auto contrast ${shortIdentifier(channel.info.id)}`)
     queueAutoContrast([channel])
   }
 
@@ -1683,7 +1797,11 @@ export function App({
               type="checkbox"
               checked={shouldLoadMorphology}
               onChange={(event) => {
-                setShouldLoadMorphology(event.currentTarget.checked)
+                const checked = event.currentTarget.checked
+                setShouldLoadMorphology(checked)
+                appendDebugEvent(
+                  checked ? 'Morphology image enabled' : 'Morphology image disabled',
+                )
               }}
             />
             <span>Morphology image</span>
@@ -1700,9 +1818,13 @@ export function App({
             autoComplete="off"
             value={boundaryCellLimit}
             onChange={(event) => {
-              setBoundaryCellLimit(
-                normalizeBoundaryCellLimit(event.currentTarget.valueAsNumber),
+              const nextLimit = normalizeBoundaryCellLimit(
+                event.currentTarget.valueAsNumber,
               )
+              setBoundaryCellLimit(nextLimit)
+              appendDebugEvent(`Boundary limit: ${nextLimit.toLocaleString()}`, {
+                coalesceKey: 'boundary-limit',
+              })
             }}
           />
           <button type="submit" disabled={isLoading}>
@@ -1711,6 +1833,12 @@ export function App({
         </form>
 
         <ErrorSummary errors={activeErrors} />
+        <ActivityLog
+          entries={debugLog}
+          onClear={() => {
+            setDebugLog([])
+          }}
+        />
 
         <section className="layer-section" aria-labelledby="layer-heading">
           <h2 id="layer-heading">Layer Stack</h2>
@@ -1732,9 +1860,11 @@ export function App({
                 value={opacityToPercent(imageLayerOpacity)}
                 aria-valuetext={`${opacityToPercent(imageLayerOpacity)}%`}
                 onChange={(event) => {
-                  setImageLayerOpacity(
-                    percentToOpacity(event.currentTarget.valueAsNumber),
-                  )
+                  const nextPercent = event.currentTarget.valueAsNumber
+                  setImageLayerOpacity(percentToOpacity(nextPercent))
+                  appendDebugEvent(`Image opacity: ${nextPercent}%`, {
+                    coalesceKey: 'image-opacity',
+                  })
                 }}
               />
             </div>
@@ -1752,7 +1882,11 @@ export function App({
                 value={opacityToPercent(geneLayerOpacity)}
                 aria-valuetext={`${opacityToPercent(geneLayerOpacity)}%`}
                 onChange={(event) => {
-                  setGeneLayerOpacity(percentToOpacity(event.currentTarget.valueAsNumber))
+                  const nextPercent = event.currentTarget.valueAsNumber
+                  setGeneLayerOpacity(percentToOpacity(nextPercent))
+                  appendDebugEvent(`Gene opacity: ${nextPercent}%`, {
+                    coalesceKey: 'gene-opacity',
+                  })
                 }}
               />
             </div>
@@ -1921,6 +2055,7 @@ export function App({
 
                 if (isGeneExpressionColorScale(nextScale)) {
                   setGeneExpressionColorScale(nextScale)
+                  appendDebugEvent(`Gene scale: ${nextScale}`)
                 }
               }}
             >
@@ -1950,6 +2085,7 @@ export function App({
 
               if (isGeneExpressionDetailMode(nextMode)) {
                 setGeneExpressionDetailMode(nextMode)
+                appendDebugEvent(`Expression detail: ${nextMode}`)
               }
             }}
           >
@@ -1966,6 +2102,7 @@ export function App({
 
               if (isObservationColorMode(nextMode)) {
                 setObservationColorMode(nextMode)
+                appendDebugEvent(`Cell color: ${nextMode}`)
               }
             }}
           >
@@ -1992,7 +2129,9 @@ export function App({
             value={selectedAnnotationGroupId}
             disabled={loadState.status !== 'ready'}
             onChange={(event) => {
-              setSelectedAnnotationGroupId(event.currentTarget.value)
+              const nextGroupId = event.currentTarget.value
+              setSelectedAnnotationGroupId(nextGroupId)
+              appendDebugEvent(`Annotation set: ${shortIdentifier(nextGroupId)}`)
             }}
           >
             <option value={ALL_ANNOTATION_GROUP_ID}>All</option>
@@ -2097,9 +2236,9 @@ export function App({
                 analysisEmbeddingState.embeddings.length === 0
               }
               onChange={(event) => {
-                setSelectedEmbeddingKind(
-                  event.currentTarget.value as AnalysisEmbeddingKind,
-                )
+                const nextEmbeddingKind = event.currentTarget.value as AnalysisEmbeddingKind
+                setSelectedEmbeddingKind(nextEmbeddingKind)
+                appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
               }}
             >
               {analysisEmbeddingState.status === 'ready' &&
@@ -2150,7 +2289,11 @@ export function App({
               disabled={loadState.status !== 'ready'}
               aria-pressed={roiMode === 'box'}
               onClick={() => {
-                setRoiMode((current) => (current === 'box' ? 'idle' : 'box'))
+                const nextMode = roiMode === 'box' ? 'idle' : 'box'
+                setRoiMode(nextMode)
+                appendDebugEvent(
+                  nextMode === 'box' ? 'ROI draw mode enabled' : 'ROI draw cancelled',
+                )
               }}
             >
               {roiMode === 'box' ? 'Drawing Box' : 'Draw Box'}
@@ -2442,7 +2585,7 @@ function roiGeneStatsStatusCopy(roiGeneStatsState: RoiGeneStatsState): string {
   }
 
   if (roiGeneStatsState.status === 'error') {
-    return 'Genes unavailable'
+    return roiGeneStatsState.error.title
   }
 
   return 'Genes idle'
@@ -3203,6 +3346,39 @@ function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadErro
   )
 }
 
+function ActivityLog({
+  entries,
+  onClear,
+}: {
+  readonly entries: readonly DebugLogEntry[]
+  readonly onClear: () => void
+}) {
+  return (
+    <section className="activity-log" aria-label="Activity log">
+      <div className="activity-log-heading">
+        <h2>Log</h2>
+        <button type="button" disabled={entries.length === 0} onClick={onClear}>
+          Clear
+        </button>
+      </div>
+      {entries.length === 0 ? (
+        <p>Idle</p>
+      ) : (
+        <ol>
+          {entries.map((entry) => (
+            <li key={entry.id}>
+              <time dateTime={new Date(entry.timestamp).toISOString()}>
+                {formatDebugTimestamp(entry.timestamp)}
+              </time>
+              <span title={entry.message}>{entry.message}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  )
+}
+
 function summarizeRoiCells(cells: readonly DatasetCell[]): RoiSummary {
   if (cells.length === 0) {
     return {
@@ -3400,6 +3576,53 @@ function formatGeneScaleValue(value: number): string {
   })
 }
 
+function formatDebugTimestamp(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+}
+
+function shortDatasetLabel(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const lastPathSegment = parsed.pathname.split('/').filter(Boolean).at(-1)
+    return shortIdentifier(lastPathSegment ?? parsed.host)
+  } catch {
+    return shortIdentifier(url)
+  }
+}
+
+function shortIdentifier(value: string): string {
+  const normalized = value.trim()
+
+  if (normalized.length <= 24) {
+    return normalized
+  }
+
+  return `${normalized.slice(0, 10)}...${normalized.slice(-8)}`
+}
+
+function morphologyPatchLabel(
+  patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
+): string {
+  if ('enabled' in patch) {
+    return patch.enabled ? 'Channel enabled' : 'Channel disabled'
+  }
+
+  if ('color' in patch) {
+    return 'Channel color'
+  }
+
+  if ('contrastMin' in patch || 'contrastMax' in patch) {
+    return 'Channel contrast'
+  }
+
+  return 'Channel updated'
+}
+
 function abortActiveRequest(ref: { current: AbortController | null }): void {
   ref.current?.abort()
   ref.current = null
@@ -3530,6 +3753,23 @@ function createStructuredLoadError(
           : `The overview cells.parquet file was reachable, but the browser Parquet reader could not decode it: ${message}.`,
         action:
           'Rewrite cells.parquet with a browser-compatible Parquet encoding or use an alternate overview reader for this dataset.',
+      },
+      detail,
+    )
+  }
+
+  if (
+    source === 'ROI genes' &&
+    normalizedMessage.includes('cell-major cell_feature_matrix')
+  ) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'unsupported',
+        title: 'ROI gene matrix unsupported',
+        message,
+        action:
+          'Use a cell-major cell_feature_matrix reader for ROI gene stats; keep transcripts.parquet for raw transcript export.',
       },
       detail,
     )

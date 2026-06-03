@@ -92,7 +92,38 @@ describe('ROI gene stats', () => {
     expect(stats.hitCellLimit).toBe(true)
   })
 
-  it('falls back to transcript aggregation when the matrix layout is unavailable', async () => {
+  it('reports unsupported ROI gene stats when the matrix layout is unavailable', async () => {
+    const cellId = intToCellId(1, 1)
+    const cells: readonly DatasetCell[] = [
+      {
+        id: cellId,
+        position: { x: micrometers(1), y: micrometers(2) },
+      },
+    ]
+    const transcriptMatrix: GexResult = {
+      geneNames: ['Actb'],
+      cells: new Map([[cellId, { geneNames: ['Actb'], counts: [9] }]]),
+    }
+    const dataset = {
+      matrix: vi.fn(async () => {
+        throw new Error('cell_features/csc/indptr not found')
+      }),
+      transcriptsForCellIds: vi.fn(async () => transcriptMatrix),
+    }
+    const validateRangeSupport = vi.fn(async () => undefined)
+
+    await expect(
+      loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
+        getDataset: () => dataset,
+        validateRangeSupport,
+      }),
+    ).rejects.toThrow('ROI gene stats need a cell-major cell_feature_matrix reader')
+
+    expect(dataset.matrix).toHaveBeenCalledWith([cellId])
+    expect(dataset.transcriptsForCellIds).not.toHaveBeenCalled()
+  })
+
+  it('can explicitly fall back to transcript aggregation', async () => {
     const cellId = intToCellId(1, 1)
     const cells: readonly DatasetCell[] = [
       {
@@ -115,9 +146,9 @@ describe('ROI gene stats', () => {
     const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
       getDataset: () => dataset,
       validateRangeSupport,
+      allowTranscriptFallback: true,
     })
 
-    expect(dataset.matrix).toHaveBeenCalledWith([cellId])
     expect(validateRangeSupport).toHaveBeenCalledWith(
       'https://example.test/xenium/transcripts.parquet',
       { label: 'transcripts.parquet' },

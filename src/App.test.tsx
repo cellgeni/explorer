@@ -95,6 +95,24 @@ describe('App', () => {
     expect(geneOpacityInput).toHaveValue('70')
   })
 
+  it('records compact debug activity entries', () => {
+    render(<App />)
+
+    const activityLog = screen.getByLabelText('Activity log')
+
+    expect(within(activityLog).getByText('Idle')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Image opacity' }), {
+      target: { value: '45' },
+    })
+
+    expect(within(activityLog).getByText('Image opacity: 45%')).toBeInTheDocument()
+
+    fireEvent.click(within(activityLog).getByRole('button', { name: 'Clear' }))
+
+    expect(within(activityLog).getByText('Idle')).toBeInTheDocument()
+  })
+
   it('lets the user configure the boundary polygon visible-cell limit', () => {
     render(<App />)
 

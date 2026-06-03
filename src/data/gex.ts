@@ -36,7 +36,7 @@ export interface AggregatedGene {
   readonly count: number
 }
 
-export type SqlParameter = string | number | readonly string[]
+export type SqlParameter = string | number
 
 export interface SqlFragment {
   readonly sql: string
@@ -171,14 +171,16 @@ export async function gexFromTranscriptsParquet(
   cellIds: readonly CellId[] = [],
   minQv = 20,
 ): Promise<GexResult> {
+  if (scope === 'cells-only' && cellIds.length === 0) {
+    return {
+      geneNames: [],
+      cells: emptyCellsFor(cellIds),
+    }
+  }
+
   const where =
     scope === 'cells-only'
-      ? {
-          sql: 'cell_id IN (SELECT * FROM UNNEST( ? ))',
-          params: [
-            cellIds.map((cellId) => String(cellId)),
-          ] satisfies readonly SqlParameter[],
-        }
+      ? cellIdWhereClause(cellIds)
       : selectionToSql(selection, 'x_location', 'y_location')
 
   const stmt = await conn.prepare(`
@@ -210,6 +212,13 @@ ORDER BY cell_id, count DESC
   return {
     geneNames: [...new Set(rows.map((row) => row.gene))].sort(),
     cells,
+  }
+}
+
+function cellIdWhereClause(cellIds: readonly CellId[]): SqlFragment {
+  return {
+    sql: `cell_id IN (${cellIds.map(() => '?').join(', ')})`,
+    params: cellIds.map((cellId) => String(cellId)),
   }
 }
 

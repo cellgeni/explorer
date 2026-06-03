@@ -40,6 +40,7 @@ export interface LoadDatasetRoiGeneStatsOptions {
   readonly signal?: AbortSignal
   readonly cellLimit?: number
   readonly geneLimit?: number
+  readonly allowTranscriptFallback?: boolean
 }
 
 export async function loadDatasetRoiGeneStats(
@@ -64,6 +65,7 @@ export async function loadDatasetRoiGeneStats(
   const matrix = await loadRoiGeneStatsMatrix(baseUrl, dataset, sampledCellIds, {
     validateRangeSupport: options.validateRangeSupport ?? assertHttpRangeSupport,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
+    allowTranscriptFallback: options.allowTranscriptFallback ?? false,
   })
   throwIfAborted(options.signal)
 
@@ -140,6 +142,7 @@ async function loadRoiGeneStatsMatrix(
   options: {
     readonly validateRangeSupport: DatasetRangeValidator
     readonly signal?: AbortSignal
+    readonly allowTranscriptFallback: boolean
   },
 ): Promise<GexResult> {
   try {
@@ -154,8 +157,12 @@ async function loadRoiGeneStatsMatrix(
 
     return await dataset.matrix(cellIds)
   } catch (error) {
-    if (isAbortError(error) || dataset.transcriptsForCellIds === undefined) {
+    if (isAbortError(error)) {
       throw error
+    }
+
+    if (!options.allowTranscriptFallback || dataset.transcriptsForCellIds === undefined) {
+      throw unsupportedRoiGeneStatsError(error)
     }
   }
 
@@ -223,5 +230,14 @@ function abortError(signal: AbortSignal): Error {
 
   const error = new Error('ROI gene stats request aborted.')
   error.name = 'AbortError'
+  return error
+}
+
+function unsupportedRoiGeneStatsError(cause: unknown): Error {
+  const message =
+    'ROI gene stats need a cell-major cell_feature_matrix reader. ' +
+    'The available Zarr matrix could not provide per-cell sparse counts, and transcripts.parquet is too large for the interactive ROI gene panel.'
+  const error = new Error(message, { cause })
+  error.name = 'UnsupportedRoiGeneStatsMatrixError'
   return error
 }
