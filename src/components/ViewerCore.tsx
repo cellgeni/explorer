@@ -17,6 +17,7 @@ import {
   sampleOverviewCellsForRendering,
 } from '../rendering/cellAggregation'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
+import { styleOverviewCellsByObservation } from '../rendering/cellStyling'
 import { micrometers, scaleFromZoom } from '../data/coords'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox, DataPoint } from '../data/coords'
@@ -25,9 +26,12 @@ import type { TiffPyramidLoader } from '../tiff/loader'
 import type { MorphologyCanvasChannel } from './MorphologyCanvas'
 import type { CellBoundaryDatum, OverviewCellDatum } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
+import type { AnnotationColorStyle, ObservationColorMode } from '../rendering/cellStyling'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
 const DEFAULT_MICROMETERS_PER_PIXEL = 0.2125
+const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
+const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 
 export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type ViewerCoordinateUnit = 'um' | 'px'
@@ -40,6 +44,8 @@ export interface ViewerCoreProps {
   readonly imageChannels?: readonly MorphologyCanvasChannel[]
   readonly imageOpacity?: number
   readonly geneExpressionOpacity?: number
+  readonly observationColorMode?: ObservationColorMode
+  readonly annotationStyleColors?: readonly AnnotationColorStyle[]
   readonly coordinateUnit?: ViewerCoordinateUnit
   readonly micrometersPerPixel?: number
   readonly status?: ViewerLoadStatus
@@ -73,6 +79,8 @@ export function ViewerCore({
   imageChannels = [],
   imageOpacity = 1,
   geneExpressionOpacity = 1,
+  observationColorMode = 'transcript-count',
+  annotationStyleColors = EMPTY_ANNOTATION_STYLE_COLORS,
   coordinateUnit = 'um',
   micrometersPerPixel = DEFAULT_MICROMETERS_PER_PIXEL,
   status = 'idle',
@@ -102,6 +110,8 @@ export function ViewerCore({
       imageChannels={imageChannels}
       imageOpacity={imageOpacity}
       geneExpressionOpacity={geneExpressionOpacity}
+      observationColorMode={observationColorMode}
+      annotationStyleColors={annotationStyleColors}
       coordinateUnit={coordinateUnit}
       micrometersPerPixel={micrometersPerPixel}
       initialViewState={fittedViewState}
@@ -130,6 +140,8 @@ interface ViewerSurfaceProps {
   readonly imageChannels: readonly MorphologyCanvasChannel[]
   readonly imageOpacity: number
   readonly geneExpressionOpacity: number
+  readonly observationColorMode: ObservationColorMode
+  readonly annotationStyleColors: readonly AnnotationColorStyle[]
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly micrometersPerPixel: number
   readonly initialViewState: OverviewViewState
@@ -173,6 +185,8 @@ function ViewerSurface({
   imageChannels,
   imageOpacity,
   geneExpressionOpacity,
+  observationColorMode,
+  annotationStyleColors,
   coordinateUnit,
   micrometersPerPixel,
   initialViewState,
@@ -215,6 +229,30 @@ function ViewerSurface({
         : overviewCellsInBbox(cells, viewportBbox),
     [cells, viewportBbox, viewState.zoom],
   )
+  const renderSourceCells = useMemo(
+    () => sampleOverviewCellsForRendering(visibleCells),
+    [visibleCells],
+  )
+  const renderCells = useMemo(
+    () =>
+      styleCellsForObservation(
+        renderSourceCells,
+        observationColorMode,
+        annotationStyleColors,
+      ),
+    [annotationStyleColors, observationColorMode, renderSourceCells],
+  )
+  const boundaryStyleCells = useMemo(
+    () =>
+      boundaries.length === 0
+        ? EMPTY_OVERVIEW_CELLS
+        : styleCellsForObservation(
+            visibleCells,
+            observationColorMode,
+            annotationStyleColors,
+          ),
+    [annotationStyleColors, boundaries.length, observationColorMode, visibleCells],
+  )
   const displayExpressionCells = useMemo(
     () =>
       aggregateExpressionCells(expressionCells, viewState, {
@@ -223,16 +261,12 @@ function ViewerSurface({
     [expressionCells, viewState, viewportBbox],
   )
   const styledBoundaries = useMemo(
-    () => styleCellBoundariesByCells(boundaries, visibleCells),
-    [boundaries, visibleCells],
+    () => styleCellBoundariesByCells(boundaries, boundaryStyleCells),
+    [boundaries, boundaryStyleCells],
   )
   const expressionBoundaryPolygons = useMemo(
     () => expressionCellsToBoundaryLayerData(styledBoundaries, displayExpressionCells),
     [displayExpressionCells, styledBoundaries],
-  )
-  const renderCells = useMemo(
-    () => sampleOverviewCellsForRendering(visibleCells),
-    [visibleCells],
   )
   const layers = useMemo(
     () =>
@@ -619,6 +653,20 @@ function rawDataPointToScreen(
 
 function hasMinimumRoiSize(bbox: BBox): boolean {
   return bbox.maxX - bbox.minX >= 1 && bbox.maxY - bbox.minY >= 1
+}
+
+function styleCellsForObservation(
+  cells: readonly OverviewCellDatum[],
+  observationColorMode: ObservationColorMode,
+  annotationStyleColors: readonly AnnotationColorStyle[],
+): readonly OverviewCellDatum[] {
+  if (observationColorMode === 'transcript-count') {
+    return cells
+  }
+
+  return styleOverviewCellsByObservation(cells, observationColorMode, {
+    annotations: annotationStyleColors,
+  })
 }
 
 function formatMouseCoordinate(

@@ -543,15 +543,15 @@ export function App({
     observationColorMode === 'annotations'
       ? annotationStyleColors
       : EMPTY_ANNOTATION_STYLE_COLORS
+  const viewerObservationColorMode: ObservationColorMode =
+    observationColorMode === 'annotations' ? 'annotations' : 'transcript-count'
   const styledOverviewCells = useMemo(() => {
-    if (observationColorMode === 'transcript-count') {
+    if (observationColorMode !== 'cell-area') {
       return overviewCells
     }
 
-    return styleOverviewCellsByObservation(overviewCells, observationColorMode, {
-      annotations: activeAnnotationStyleColors,
-    })
-  }, [activeAnnotationStyleColors, observationColorMode, overviewCells])
+    return styleOverviewCellsByObservation(overviewCells, 'cell-area')
+  }, [observationColorMode, overviewCells])
   const overviewExtent = useMemo(
     () => overviewCellsToBbox(overviewCells),
     [overviewCells],
@@ -2729,6 +2729,8 @@ export function App({
           imageChannels={morphologyCanvasChannels}
           imageOpacity={imageLayerOpacity}
           geneExpressionOpacity={geneLayerOpacity}
+          observationColorMode={viewerObservationColorMode}
+          annotationStyleColors={activeAnnotationStyleColors}
           coordinateUnit={coordinateUnit}
           status={loadState.status}
           imageStatus={morphologyState.status}

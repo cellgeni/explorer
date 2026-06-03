@@ -52,14 +52,28 @@ function styleOverviewCellsByAnnotations(
   }
 
   const colorByCellId = new Map<string, Color>()
+  const unstyledCellIds = new Set<string>()
+
+  for (const cell of cells) {
+    unstyledCellIds.add(cell.id)
+  }
 
   for (const annotation of annotations) {
     const color = hexToRgba(annotation.color, 230)
 
     for (const cellId of annotation.cellIds) {
-      if (!colorByCellId.has(cellId)) {
+      if (unstyledCellIds.has(cellId)) {
         colorByCellId.set(cellId, color)
+        unstyledCellIds.delete(cellId)
       }
+
+      if (unstyledCellIds.size === 0) {
+        break
+      }
+    }
+
+    if (unstyledCellIds.size === 0) {
+      break
     }
   }
 

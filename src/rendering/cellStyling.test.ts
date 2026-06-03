@@ -52,4 +52,32 @@ describe('cell observation styling', () => {
     expect(styled[0]?.fillColor).toEqual([72, 68, 58, 44])
     expect(styled[1]?.fillColor).toEqual([31, 119, 180, 230])
   })
+
+  it('keeps the first matching annotation color when skipping non-rendered cells', () => {
+    const styled = styleOverviewCellsByObservation(
+      [cells[1] as OverviewCellDatum],
+      'annotations',
+      {
+        annotations: [
+          {
+            id: 'annotation-offscreen',
+            cellIds: [cellA],
+            color: '#ff0000',
+          },
+          {
+            id: 'annotation-first-match',
+            cellIds: [cellB],
+            color: '#1f77b4',
+          },
+          {
+            id: 'annotation-later-match',
+            cellIds: [cellB],
+            color: '#2ca02c',
+          },
+        ],
+      },
+    )
+
+    expect(styled[0]?.fillColor).toEqual([31, 119, 180, 230])
+  })
 })
