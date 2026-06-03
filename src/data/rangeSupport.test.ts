@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { assertHttpRangeSupport } from './rangeSupport'
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('HTTP Range support diagnostics', () => {
   it('accepts a one-byte HTTP 206 response with an exposed Content-Range', async () => {
@@ -59,6 +63,17 @@ describe('HTTP Range support diagnostics', () => {
     ).rejects.toThrow(
       'cells.parquet cannot be range-read. The Range probe failed before an HTTP response was available.',
     )
+  })
+
+  it('reuses a successful default range probe for the same file', async () => {
+    const fetcher = vi.fn(async () => rangeResponse(206, 'bytes 0-0/100'))
+    vi.stubGlobal('fetch', fetcher)
+    const url = 'https://example.test/xenium/range-cache-test.parquet'
+
+    await assertHttpRangeSupport(url, { label: 'range-cache-test.parquet' })
+    await assertHttpRangeSupport(url, { label: 'range-cache-test.parquet' })
+
+    expect(fetcher).toHaveBeenCalledOnce()
   })
 })
 

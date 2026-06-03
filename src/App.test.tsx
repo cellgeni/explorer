@@ -14,6 +14,7 @@ import {
 } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
+import { warmDatasetForRoi } from './data/datasetWarmup'
 import { GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT } from './data/geneExpressionLod'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
 import type { TiffPyramidLoader } from './tiff/loader'
@@ -31,6 +32,10 @@ vi.mock('./data/datasetAnnotations', async (importOriginal) => {
   }
 })
 
+vi.mock('./data/datasetWarmup', () => ({
+  warmDatasetForRoi: vi.fn(async () => undefined),
+}))
+
 function openHudTab(name: string): void {
   fireEvent.click(screen.getByRole('tab', { name }))
 }
@@ -42,6 +47,7 @@ function pendingPromise<T>(): Promise<T> {
 describe('App', () => {
   beforeEach(() => {
     useViewerStore.setState(initialViewerState)
+    vi.mocked(warmDatasetForRoi).mockClear()
   })
 
   it('renders the Xenium viewer shell', () => {
@@ -554,6 +560,14 @@ describe('App', () => {
       )
     })
     expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(warmDatasetForRoi).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+    })
     expect(loadMorphologyImage).not.toHaveBeenCalled()
     expect(loadGenePanel).toHaveBeenCalledWith(
       DEMO_DATASET_URL,

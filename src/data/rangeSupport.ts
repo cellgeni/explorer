@@ -7,10 +7,44 @@ export interface AssertHttpRangeSupportOptions {
 }
 
 const RANGE_PROBE_HEADER = 'bytes=0-0'
+const rangeSupportCache = new Map<string, Promise<void>>()
 
 export async function assertHttpRangeSupport(
   url: string,
   options: AssertHttpRangeSupportOptions = {},
+): Promise<void> {
+  throwIfAborted(options.signal)
+
+  if (options.fetcher !== undefined) {
+    await assertHttpRangeSupportUncached(url, options)
+    return
+  }
+
+  const cacheKey = rangeSupportCacheKey(url, options.label)
+  const cached = rangeSupportCache.get(cacheKey)
+
+  if (cached !== undefined) {
+    await cached
+    throwIfAborted(options.signal)
+    return
+  }
+
+  const promise = assertHttpRangeSupportUncached(url, options).catch((error: unknown) => {
+    if (rangeSupportCache.get(cacheKey) === promise) {
+      rangeSupportCache.delete(cacheKey)
+    }
+
+    throw error
+  })
+
+  rangeSupportCache.set(cacheKey, promise)
+  await promise
+  throwIfAborted(options.signal)
+}
+
+async function assertHttpRangeSupportUncached(
+  url: string,
+  options: AssertHttpRangeSupportOptions,
 ): Promise<void> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
   let response: Response
@@ -49,10 +83,30 @@ export async function assertHttpRangeSupport(
   }
 }
 
+function rangeSupportCacheKey(url: string, label: string | undefined): string {
+  return `${url}\n${label ?? ''}`
+}
+
 function readTargetLabel(label: string | undefined): string {
   return label ?? 'Dataset file'
 }
 
 function isAbortError(cause: unknown): boolean {
   return cause instanceof Error && cause.name === 'AbortError'
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw abortError(signal)
+  }
+}
+
+function abortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason
+  }
+
+  const error = new Error('HTTP Range support probe aborted.')
+  error.name = 'AbortError'
+  return error
 }

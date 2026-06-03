@@ -11,6 +11,7 @@ import { loadDatasetBoundaryElements as defaultLoadBoundaryElements } from './da
 import { loadDatasetAnalysisEmbeddings as defaultLoadAnalysisEmbeddings } from './data/analysisEmbeddings'
 import { loadDatasetGeneExpression as defaultLoadDatasetGeneExpression } from './data/geneExpression'
 import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
+import { warmDatasetForRoi as defaultWarmDatasetForRoi } from './data/datasetWarmup'
 import { loadGenePanel as defaultLoadGenePanel } from './data/genePanel'
 import {
   geneExpressionRequestKey,
@@ -164,6 +165,10 @@ export type AutoChannelContrastLoader = (
   channel: MorphologyImageChannel,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<ChannelAutoContrast>
+export type DatasetWarmupLoader = (
+  baseUrl: string,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<void>
 
 type DatasetLoadState =
   | { readonly status: 'idle' }
@@ -174,6 +179,12 @@ type DatasetLoadState =
       readonly url: string
       readonly error: StructuredLoadError
     }
+
+type DatasetWarmupState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | { readonly status: 'ready'; readonly url: string }
+  | { readonly status: 'error'; readonly url: string }
 
 type MorphologyLoadState =
   | { readonly status: 'idle' }
@@ -396,6 +407,7 @@ export interface AppProps {
   readonly loadRoiGeneStats?: RoiGeneStatsLoader
   readonly loadRoiTranscripts?: RoiTranscriptsLoader
   readonly loadGeneExpression?: GeneExpressionLoader
+  readonly warmDatasetForRoi?: DatasetWarmupLoader
   readonly computeAutoChannelContrast?: AutoChannelContrastLoader
 }
 
@@ -411,6 +423,7 @@ export function App({
   loadRoiGeneStats = defaultLoadDatasetRoiGeneStats,
   loadRoiTranscripts = defaultLoadDatasetRoiTranscripts,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
+  warmDatasetForRoi = defaultWarmDatasetForRoi,
   computeAutoChannelContrast = defaultComputeAutoChannelContrast,
 }: AppProps) {
   const datasetInputId = useId()
@@ -433,6 +446,9 @@ export function App({
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const [loadState, setLoadState] = useState<DatasetLoadState>({ status: 'idle' })
+  const [datasetWarmupState, setDatasetWarmupState] = useState<DatasetWarmupState>({
+    status: 'idle',
+  })
   const [morphologyState, setMorphologyState] = useState<MorphologyLoadState>({
     status: 'idle',
   })
@@ -515,6 +531,7 @@ export function App({
   const roiTranscriptExportRequestId = useRef(0)
   const debugLogIdRef = useRef(0)
   const datasetAbortRef = useRef<AbortController | null>(null)
+  const datasetWarmupAbortRef = useRef<AbortController | null>(null)
   const analysisEmbeddingAbortRef = useRef<AbortController | null>(null)
   const boundaryAbortRef = useRef<AbortController | null>(null)
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
@@ -712,6 +729,15 @@ export function App({
       })
     }
 
+    if (datasetWarmupState.status === 'loading') {
+      tasks.push({
+        id: 'dataset-warmup',
+        tabId: 'dataset',
+        label: 'Preparing dataset',
+        detail: shortDatasetLabel(datasetWarmupState.url),
+      })
+    }
+
     if (genePanelState.status === 'loading') {
       tasks.push({ id: 'gene-panel', tabId: 'genes', label: 'Loading gene panel' })
     }
@@ -791,6 +817,7 @@ export function App({
     annotationState,
     autoContrastChannelIds,
     boundaryState,
+    datasetWarmupState,
     geneExpressionState,
     genePanelState,
     loadState,
@@ -1097,6 +1124,7 @@ export function App({
   useEffect(() => {
     return () => {
       abortActiveRequest(datasetAbortRef)
+      abortActiveRequest(datasetWarmupAbortRef)
       abortActiveRequest(analysisEmbeddingAbortRef)
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
@@ -1104,6 +1132,37 @@ export function App({
       abortActiveRequest(roiTranscriptExportAbortRef)
     }
   }, [])
+
+  function startDatasetWarmup(requestedUrl: string, requestId: number) {
+    abortActiveRequest(datasetWarmupAbortRef)
+    const abortController = new AbortController()
+    datasetWarmupAbortRef.current = abortController
+    setDatasetWarmupState({ status: 'loading', url: requestedUrl })
+    appendDebugEvent('Preparing dataset')
+
+    void warmDatasetForRoi(requestedUrl, { signal: abortController.signal })
+      .then(() => {
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
+        setDatasetWarmupState({ status: 'ready', url: requestedUrl })
+        appendDebugEvent('Dataset prepared')
+      })
+      .catch((error) => {
+        if (isAbortError(error) || loadRequestId.current !== requestId) {
+          return
+        }
+
+        setDatasetWarmupState({ status: 'error', url: requestedUrl })
+        appendDebugEvent('Dataset preparation incomplete')
+      })
+      .finally(() => {
+        if (datasetWarmupAbortRef.current === abortController) {
+          datasetWarmupAbortRef.current = null
+        }
+      })
+  }
 
   async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -1117,6 +1176,7 @@ export function App({
       const requestId = loadRequestId.current + 1
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
       abortActiveRequest(datasetAbortRef)
+      abortActiveRequest(datasetWarmupAbortRef)
       abortActiveRequest(analysisEmbeddingAbortRef)
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
@@ -1127,6 +1187,7 @@ export function App({
       datasetAbortRef.current = abortController
 
       setDatasetUrl(requestedUrl)
+      setDatasetWarmupState({ status: 'idle' })
       setOverviewCells([])
       setGeneExpressionBatch(null)
       setGeneExpressionScaleDomain({ key: '', max: 0 })
@@ -1248,6 +1309,7 @@ export function App({
           cellCount: cells.length,
         })
         appendDebugEvent(`Dataset ready: ${cells.length.toLocaleString()} cells`)
+        startDatasetWarmup(requestedUrl, requestId)
 
         if (!loadImage) {
           return
@@ -1302,6 +1364,7 @@ export function App({
           error: createStructuredLoadError('Dataset overview', error),
         })
         appendDebugEvent('Dataset load failed')
+        setDatasetWarmupState({ status: 'idle' })
         setMorphologyState({ status: 'idle' })
         setGenePanelState({ status: 'idle' })
         setAnnotationGroupState({ status: 'idle' })

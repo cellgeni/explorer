@@ -185,6 +185,10 @@ export class XeniumDataset implements SpatialDataset {
     return this.metaPromise
   }
 
+  async warm(): Promise<void> {
+    await this.conn()
+  }
+
   async elements(bbox: BBox): Promise<ElementBatch> {
     const conn = await this.conn()
     const margin = Math.max(

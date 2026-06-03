@@ -217,6 +217,39 @@ describe('XeniumDataset', () => {
     )
   })
 
+  it('warms and reuses the memoized DuckDB client before ROI queries', async () => {
+    const cellId = intToCellId(1, 1)
+    const conn = new FakeConnection([
+      [
+        {
+          cell_id: cellId,
+          x_centroid: 1,
+          y_centroid: 2,
+          transcript_counts: 3,
+          cell_area: 4,
+        },
+      ],
+    ])
+    const createDuckDbClient = vi.fn(async (): Promise<DuckDbClientLike> => ({ conn }))
+    const dataset = new XeniumDataset({
+      baseUrl: 'https://example.test/xenium/',
+      createDuckDbClient,
+      fetcher: async () => new Response(JSON.stringify({})),
+      openTiff: async () => ({}) as TiffPyramidLoader,
+    })
+
+    await dataset.warm()
+    await dataset.cells({
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    })
+
+    expect(createDuckDbClient).toHaveBeenCalledOnce()
+    expect(conn.preparedSql[0]).toContain('FROM read_parquet( ? )')
+  })
+
   it('loads transcript expression directly for known cell ids', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([])

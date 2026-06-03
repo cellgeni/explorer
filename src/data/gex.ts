@@ -66,6 +66,15 @@ interface H5MatrixCache {
   readonly dataDataset: SliceableNumericDataset
 }
 
+interface ZarrMatrixCache {
+  readonly cellFeatures: ZarrGroup<ZipFileStore>
+  readonly geneNames: readonly string[]
+  readonly featureTypes: readonly string[]
+  readonly geneFeatureIndices: ReadonlySet<number>
+  readonly filteredGeneNames: readonly string[]
+  readonly cellIdRows: ReadonlyMap<CellId, number>
+}
+
 export interface SqlFragment {
   readonly sql: string
   readonly params: readonly SqlParameter[]
@@ -96,6 +105,19 @@ const NON_GENE_PATTERNS = [
 const CELL_MAJOR_RANGE_COALESCE_GAP = 4_096
 const CELL_MAJOR_RANGE_MAX_SPAN = 500_000
 const h5MatrixCache = new Map<string, Promise<H5MatrixCache>>()
+const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
+
+export async function warmCellFeatureMatrixZarr(url: string): Promise<void> {
+  await loadZarrMatrix(url)
+}
+
+export function clearCellFeatureMatrixZarrCache(retainUrl?: string): void {
+  for (const url of zarrMatrixCache.keys()) {
+    if (url !== retainUrl) {
+      zarrMatrixCache.delete(url)
+    }
+  }
+}
 
 export function aggregateGex(
   cells: ReadonlyMap<CellId, GexCell>,
@@ -258,51 +280,29 @@ export async function gexFromCellFeatureMatrixZarr(
   url: string,
   cellIds: readonly CellId[],
 ): Promise<GexResult> {
-  const store = ZipFileStore.fromUrl(url)
-  const root = await zarr.open(store, { kind: 'group' })
-  const cellFeatures = await zarr.open(root.resolve('cell_features'), { kind: 'group' })
-  const attrs = cellFeatures.attrs
-  const geneNames = readStringArrayAttribute(attrs, 'feature_keys')
-  const featureTypes = readStringArrayAttribute(attrs, 'feature_types')
-  const geneFeatureIndices = createGeneFeatureIndex(geneNames, featureTypes)
-  const filteredGeneNames = geneNames.filter((_, index) => geneFeatureIndices.has(index))
-  const cellIdArray = await zarr.open(cellFeatures.resolve('cell_id'), { kind: 'array' })
-  const cellIdChunk = await zarr.get(cellIdArray, [null, null])
-  const cellIdData = expectUint32Array(cellIdChunk.data, 'cell_features/cell_id')
-  const nCells = expectShapeDimension(cellIdArray.shape, 0, 'cell_features/cell_id')
-  const stride = cellIdArray.shape[1] ?? 2
-  const cellIdToRow = new Map<CellId, number>()
-
-  for (let row = 0; row < nCells; row += 1) {
-    const prefix = cellIdData[row * stride]
-    const suffix = cellIdData[row * stride + 1]
-
-    if (prefix === undefined || suffix === undefined) {
-      throw new Error(`cell_features/cell_id row ${row} is incomplete.`)
-    }
-
-    cellIdToRow.set(intToCellId(prefix, suffix), row)
-  }
+  const matrix = await loadZarrMatrix(url)
 
   const targets = cellIds
-    .map((cellId) => ({ id: cellId, row: cellIdToRow.get(cellId) ?? -1 }))
+    .map((cellId) => ({ id: cellId, row: matrix.cellIdRows.get(cellId) ?? -1 }))
     .filter((target) => target.row >= 0)
     .sort((a, b) => a.row - b.row)
 
   if (targets.length === 0) {
     return {
-      geneNames: filteredGeneNames,
+      geneNames: matrix.filteredGeneNames,
       cells: emptyCellsFor(cellIds),
     }
   }
 
-  const indptrArray = await zarr.open(cellFeatures.resolve('csc/indptr'), {
+  const indptrArray = await zarr.open(matrix.cellFeatures.resolve('csc/indptr'), {
     kind: 'array',
   })
-  const indicesArray = await zarr.open(cellFeatures.resolve('csc/indices'), {
+  const indicesArray = await zarr.open(matrix.cellFeatures.resolve('csc/indices'), {
     kind: 'array',
   })
-  const dataArray = await zarr.open(cellFeatures.resolve('csc/data'), { kind: 'array' })
+  const dataArray = await zarr.open(matrix.cellFeatures.resolve('csc/data'), {
+    kind: 'array',
+  })
   const firstTarget = targets[0]
   const lastTarget = targets[targets.length - 1]
 
@@ -346,12 +346,12 @@ export async function gexFromCellFeatureMatrixZarr(
       if (
         featureIndex === undefined ||
         count === undefined ||
-        !geneFeatureIndices.has(featureIndex)
+        !matrix.geneFeatureIndices.has(featureIndex)
       ) {
         continue
       }
 
-      sparseGenes.push(geneNames[featureIndex] ?? `feature_${featureIndex}`)
+      sparseGenes.push(matrix.geneNames[featureIndex] ?? `feature_${featureIndex}`)
       sparseCounts.push(Number(count))
     }
 
@@ -365,7 +365,7 @@ export async function gexFromCellFeatureMatrixZarr(
   }
 
   return {
-    geneNames: filteredGeneNames,
+    geneNames: matrix.filteredGeneNames,
     cells,
   }
 }
@@ -507,16 +507,14 @@ export async function gexFromCellFeatureMatrixZarrSelectedGenes(
     }
   }
 
-  const store = ZipFileStore.fromUrl(url)
-  const root = await zarr.open(store, { kind: 'group' })
-  const cellFeatures = await zarr.open(root.resolve('cell_features'), { kind: 'group' })
-  const cscIndptrArray = await openZarrArrayOrNull(cellFeatures, 'csc/indptr')
+  const matrix = await loadZarrMatrix(url)
+  const cscIndptrArray = await openZarrArrayOrNull(matrix.cellFeatures, 'csc/indptr')
 
   if (cscIndptrArray !== null) {
     return gexFromCellFeatureMatrixZarr(url, cellIds)
   }
 
-  return gexFromFeatureMajorCellFeatureMatrix(cellFeatures, cellIds, selectedGenes)
+  return gexFromFeatureMajorCellFeatureMatrix(matrix, cellIds, selectedGenes)
 }
 
 export function gexFromFeatureMajorSparseArrays(options: {
@@ -629,18 +627,59 @@ function emptyMutableCellsFor(
   return new Map(cellIds.map((cellId) => [cellId, { geneNames: [], counts: [] }]))
 }
 
-async function gexFromFeatureMajorCellFeatureMatrix(
-  cellFeatures: ZarrGroup<ZipFileStore>,
-  cellIds: readonly CellId[],
-  selectedGenes: readonly string[],
-): Promise<GexResult> {
+function loadZarrMatrix(url: string): Promise<ZarrMatrixCache> {
+  const cached = zarrMatrixCache.get(url)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const promise = loadZarrMatrixUncached(url).catch((error: unknown) => {
+    if (zarrMatrixCache.get(url) === promise) {
+      zarrMatrixCache.delete(url)
+    }
+
+    throw error
+  })
+
+  zarrMatrixCache.set(url, promise)
+  return promise
+}
+
+async function loadZarrMatrixUncached(url: string): Promise<ZarrMatrixCache> {
+  const store = ZipFileStore.fromUrl(url)
+  const root = await zarr.open(store, { kind: 'group' })
+  const cellFeatures = await zarr.open(root.resolve('cell_features'), { kind: 'group' })
   const attrs = cellFeatures.attrs
   const geneNames = readStringArrayAttribute(attrs, 'feature_keys')
   const featureTypes = readStringArrayAttribute(attrs, 'feature_types')
   const geneFeatureIndices = createGeneFeatureIndex(geneNames, featureTypes)
-  const selectedFeatures = selectedFeatureRows(
+  const filteredGeneNames = geneNames.filter((_, index) => geneFeatureIndices.has(index))
+  const cellIdArray = await zarr.open(cellFeatures.resolve('cell_id'), { kind: 'array' })
+  const cellIdChunk = await zarr.get(cellIdArray, [null, null])
+  const cellIdData = expectUint32Array(cellIdChunk.data, 'cell_features/cell_id')
+  const nCells = expectShapeDimension(cellIdArray.shape, 0, 'cell_features/cell_id')
+  const stride = cellIdArray.shape[1] ?? 2
+  const cellIdRows = cellIdRowsFromCellIdData(cellIdData, nCells, stride)
+
+  return {
+    cellFeatures,
     geneNames,
+    featureTypes,
     geneFeatureIndices,
+    filteredGeneNames,
+    cellIdRows,
+  }
+}
+
+async function gexFromFeatureMajorCellFeatureMatrix(
+  matrix: ZarrMatrixCache,
+  cellIds: readonly CellId[],
+  selectedGenes: readonly string[],
+): Promise<GexResult> {
+  const selectedFeatures = selectedFeatureRows(
+    matrix.geneNames,
+    matrix.geneFeatureIndices,
     selectedGenes,
   )
 
@@ -651,13 +690,7 @@ async function gexFromFeatureMajorCellFeatureMatrix(
     }
   }
 
-  const cellIdArray = await zarr.open(cellFeatures.resolve('cell_id'), {
-    kind: 'array',
-  })
-  const cellIdChunk = await zarr.get(cellIdArray, [null, null])
-  const cellIdData = expectUint32Array(cellIdChunk.data, 'cell_features/cell_id')
-  const stride = cellIdArray.shape[1] ?? 2
-  const targetRows = targetRowsByCellId(cellIds, cellIdData, stride)
+  const targetRows = targetRowsFromCellIdRows(cellIds, matrix.cellIdRows)
   const cells = emptyMutableCellsFor(cellIds)
 
   if (targetRows.size === 0) {
@@ -667,11 +700,15 @@ async function gexFromFeatureMajorCellFeatureMatrix(
     }
   }
 
-  const indptrArray = await zarr.open(cellFeatures.resolve('indptr'), { kind: 'array' })
-  const indicesArray = await zarr.open(cellFeatures.resolve('indices'), {
+  const indptrArray = await zarr.open(matrix.cellFeatures.resolve('indptr'), {
     kind: 'array',
   })
-  const dataArray = await zarr.open(cellFeatures.resolve('data'), { kind: 'array' })
+  const indicesArray = await zarr.open(matrix.cellFeatures.resolve('indices'), {
+    kind: 'array',
+  })
+  const dataArray = await zarr.open(matrix.cellFeatures.resolve('data'), {
+    kind: 'array',
+  })
 
   for (const feature of selectedFeatures) {
     const indptrChunk = await zarr.get(indptrArray, [
@@ -779,6 +816,44 @@ function targetRowsByCellId(
     const cellId = requestedCellRows.get(`${prefix}:${suffix}`)
 
     if (cellId !== undefined) {
+      targetRows.set(row, cellId)
+    }
+  }
+
+  return targetRows
+}
+
+function cellIdRowsFromCellIdData(
+  cellIdData: Uint32Array,
+  nCells: number,
+  stride: number,
+): ReadonlyMap<CellId, number> {
+  const cellIdRows = new Map<CellId, number>()
+
+  for (let row = 0; row < nCells; row += 1) {
+    const prefix = cellIdData[row * stride]
+    const suffix = cellIdData[row * stride + 1]
+
+    if (prefix === undefined || suffix === undefined) {
+      throw new Error(`cell_features/cell_id row ${row} is incomplete.`)
+    }
+
+    cellIdRows.set(intToCellId(prefix, suffix), row)
+  }
+
+  return cellIdRows
+}
+
+function targetRowsFromCellIdRows(
+  cellIds: readonly CellId[],
+  cellIdRows: ReadonlyMap<CellId, number>,
+): ReadonlyMap<number, CellId> {
+  const targetRows = new Map<number, CellId>()
+
+  for (const cellId of cellIds) {
+    const row = cellIdRows.get(cellId)
+
+    if (row !== undefined) {
       targetRows.set(row, cellId)
     }
   }
@@ -950,10 +1025,7 @@ async function loadH5MatrixUncached(
       '/matrix/features/feature_type',
     )
     const indptrDataset = expectH5Dataset(file.get('/matrix/indptr'), '/matrix/indptr')
-    const indicesDataset = expectH5Dataset(
-      file.get('/matrix/indices'),
-      '/matrix/indices',
-    )
+    const indicesDataset = expectH5Dataset(file.get('/matrix/indices'), '/matrix/indices')
     const dataDataset = expectH5Dataset(file.get('/matrix/data'), '/matrix/data')
 
     return {
@@ -981,7 +1053,10 @@ async function loadH5MatrixUncached(
   }
 }
 
-function expectH5Dataset(value: unknown, label: string): SliceableNumericDataset & {
+function expectH5Dataset(
+  value: unknown,
+  label: string,
+): SliceableNumericDataset & {
   readonly value: unknown
 } {
   if (
