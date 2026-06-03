@@ -1232,6 +1232,7 @@ export function App({
       boundaryViewportKeyRef.current = null
       geneExpressionViewportKeyRef.current = null
       lastViewportDetailRef.current = null
+      startDatasetWarmup(requestedUrl, requestId)
 
       void loadGenePanel(requestedUrl, { signal: abortController.signal })
         .then((genes) => {
@@ -1309,7 +1310,6 @@ export function App({
           cellCount: cells.length,
         })
         appendDebugEvent(`Dataset ready: ${cells.length.toLocaleString()} cells`)
-        startDatasetWarmup(requestedUrl, requestId)
 
         if (!loadImage) {
           return
@@ -1364,6 +1364,7 @@ export function App({
           error: createStructuredLoadError('Dataset overview', error),
         })
         appendDebugEvent('Dataset load failed')
+        abortActiveRequest(datasetWarmupAbortRef)
         setDatasetWarmupState({ status: 'idle' })
         setMorphologyState({ status: 'idle' })
         setGenePanelState({ status: 'idle' })

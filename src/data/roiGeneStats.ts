@@ -29,6 +29,7 @@ export interface RoiGeneStats {
 
 interface RoiGeneStatsDataset {
   matrix(ids: readonly CellId[]): Promise<GexResult>
+  matrixForCells?(cells: readonly DatasetCell[]): Promise<GexResult>
   transcriptsForCellIds?(cellIds: readonly CellId[], minQv?: number): Promise<GexResult>
 }
 
@@ -67,7 +68,7 @@ export async function loadDatasetRoiGeneStats(
   throwIfAborted(options.signal)
 
   const sampledCellIds = sampledCells.map((cell) => cell.id)
-  const matrix = await loadRoiGeneStatsMatrix(baseUrl, dataset, sampledCellIds, {
+  const matrix = await loadRoiGeneStatsMatrix(baseUrl, dataset, sampledCells, {
     validateRangeSupport: options.validateRangeSupport ?? assertHttpRangeSupport,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     allowTranscriptFallback: options.allowTranscriptFallback ?? false,
@@ -144,7 +145,7 @@ export function summarizeRoiGeneExpression(
 async function loadRoiGeneStatsMatrix(
   baseUrl: string,
   dataset: RoiGeneStatsDataset,
-  cellIds: readonly CellId[],
+  cells: readonly DatasetCell[],
   options: {
     readonly validateRangeSupport: DatasetRangeValidator
     readonly signal?: AbortSignal
@@ -157,18 +158,24 @@ async function loadRoiGeneStatsMatrix(
   },
 ): Promise<GexResult> {
   let matrixError: unknown
+  const cellIds = cells.map((cell) => cell.id)
 
   try {
-    await options.validateRangeSupport(
-      datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip'),
-      {
-        label: 'cell_feature_matrix.zarr.zip',
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-      },
-    )
-    throwIfAborted(options.signal)
+    const [matrix] = await Promise.all([
+      dataset.matrixForCells === undefined
+        ? dataset.matrix(cellIds)
+        : dataset.matrixForCells(cells),
+      options
+        .validateRangeSupport(datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip'), {
+          label: 'cell_feature_matrix.zarr.zip',
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+        })
+        .then(() => {
+          throwIfAborted(options.signal)
+        }),
+    ])
 
-    return await dataset.matrix(cellIds)
+    return matrix
   } catch (error) {
     if (isAbortError(error)) {
       throw error
@@ -260,10 +267,7 @@ function abortError(signal: AbortSignal): Error {
   return error
 }
 
-function unsupportedRoiGeneStatsError(
-  zarrCause: unknown,
-  h5Cause: unknown,
-): Error {
+function unsupportedRoiGeneStatsError(zarrCause: unknown, h5Cause: unknown): Error {
   const message =
     'ROI gene stats need a cell-major cell_feature_matrix reader. ' +
     'The available Zarr/H5 matrix sources could not provide per-cell sparse counts, and transcripts.parquet is too large for the interactive ROI gene panel.'

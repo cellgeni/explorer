@@ -2,6 +2,7 @@ import { asCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
 import {
   gexFromCellFeatureMatrixZarr,
+  gexFromCellFeatureMatrixZarrRows,
   gexFromCellFeatureMatrixZarrSelectedGenes,
   gexFromTranscriptsParquet,
   selectionToSql,
@@ -90,6 +91,7 @@ export interface DatasetCell {
   readonly position: DataPoint
   readonly transcriptCount?: number
   readonly cellArea?: number
+  readonly cellFeatureMatrixRow?: number
 }
 
 export interface DatasetTranscript {
@@ -252,6 +254,23 @@ ORDER BY b.cell_id, b.file_row_number
 
   matrix(ids: readonly CellId[]): Promise<GexResult> {
     return this.matrixReader(this.urlFor('cell_feature_matrix.zarr.zip'), ids)
+  }
+
+  matrixForCells(cells: readonly DatasetCell[]): Promise<GexResult> {
+    const targets = cells.flatMap((cell) =>
+      cell.cellFeatureMatrixRow === undefined
+        ? []
+        : [{ id: cell.id, row: cell.cellFeatureMatrixRow }],
+    )
+
+    if (targets.length !== cells.length) {
+      return this.matrix(cells.map((cell) => cell.id))
+    }
+
+    return gexFromCellFeatureMatrixZarrRows(
+      this.urlFor('cell_feature_matrix.zarr.zip'),
+      targets,
+    )
   }
 
   async transcriptsForCellIds(
@@ -530,6 +549,7 @@ ORDER BY file_row_number
         : ''
     const stmt = await conn.prepare(`
 SELECT cell_id,
+       file_row_number AS cell_feature_matrix_row,
        x_centroid,
        y_centroid,
        transcript_counts,
@@ -632,6 +652,7 @@ function parseBoundaryRow(row: Record<string, unknown>): {
 
 function parseViewportCellRow(row: Record<string, unknown>): DatasetCell {
   const cellId = row.cell_id
+  const cellFeatureMatrixRow = readOptionalIntegerRowValue(row, 'cell_feature_matrix_row')
 
   if (typeof cellId !== 'string') {
     throw new Error('Expected viewport cell row cell_id to be a string.')
@@ -645,6 +666,7 @@ function parseViewportCellRow(row: Record<string, unknown>): DatasetCell {
     },
     transcriptCount: readNumericRowValue(row, 'transcript_counts'),
     cellArea: readNumericRowValue(row, 'cell_area'),
+    ...(cellFeatureMatrixRow === undefined ? {} : { cellFeatureMatrixRow }),
   }
 }
 
@@ -728,6 +750,15 @@ function readOptionalNumericRowValue(
   }
 
   return readNumericRowValue(row, key)
+}
+
+function readOptionalIntegerRowValue(
+  row: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  const value = readOptionalNumericRowValue(row, key)
+
+  return value === undefined ? undefined : Math.floor(value)
 }
 
 function readOptionalBooleanRowValue(

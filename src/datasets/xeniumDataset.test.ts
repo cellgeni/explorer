@@ -401,6 +401,7 @@ describe('XeniumDataset', () => {
       [
         {
           cell_id: cellId,
+          cell_feature_matrix_row: 17n,
           x_centroid: 12,
           y_centroid: 24,
           transcript_counts: 90,
@@ -426,6 +427,7 @@ describe('XeniumDataset', () => {
         position: { x: micrometers(12), y: micrometers(24) },
         transcriptCount: 90,
         cellArea: 35,
+        cellFeatureMatrixRow: 17,
       },
     ])
 

@@ -92,6 +92,46 @@ describe('ROI gene stats', () => {
     expect(stats.hitCellLimit).toBe(true)
   })
 
+  it('uses row-hinted ROI cells when the dataset exposes a cell-aware matrix reader', async () => {
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(1, 2)
+    const cells: readonly DatasetCell[] = [
+      {
+        id: cellA,
+        position: { x: micrometers(1), y: micrometers(2) },
+        cellFeatureMatrixRow: 4,
+      },
+      {
+        id: cellB,
+        position: { x: micrometers(3), y: micrometers(4) },
+        cellFeatureMatrixRow: 9,
+      },
+    ]
+    const matrix: GexResult = {
+      geneNames: ['Actb'],
+      cells: new Map([
+        [cellA, { geneNames: ['Actb'], counts: [2] }],
+        [cellB, { geneNames: ['Actb'], counts: [3] }],
+      ]),
+    }
+    const dataset = {
+      matrix: vi.fn(async () => {
+        throw new Error('global id map should not be used')
+      }),
+      matrixForCells: vi.fn(async () => matrix),
+    }
+    const validateRangeSupport = vi.fn(async () => undefined)
+
+    const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
+      getDataset: () => dataset,
+      validateRangeSupport,
+    })
+
+    expect(dataset.matrixForCells).toHaveBeenCalledWith(cells)
+    expect(dataset.matrix).not.toHaveBeenCalled()
+    expect(stats.genes[0]).toMatchObject({ gene: 'Actb', count: 5 })
+  })
+
   it('reports unsupported ROI gene stats when the matrix layout is unavailable', async () => {
     const cellId = intToCellId(1, 1)
     const cells: readonly DatasetCell[] = [
