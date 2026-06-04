@@ -23,6 +23,9 @@ export interface MorphologyCanvasProps {
   readonly opacity?: number
   readonly viewState: OverviewViewState
   readonly onTileError?: (error: Error) => void
+  readonly maxConcurrentTileRequests?: number
+  readonly tileCacheMaxTiles?: number
+  readonly onTileCacheEviction?: (evictedTileCount: number) => void
 }
 
 export interface MorphologyCanvasChannel {
@@ -40,6 +43,9 @@ export function MorphologyCanvas({
   opacity = 1,
   viewState,
   onTileError,
+  maxConcurrentTileRequests = MAX_CONCURRENT_TILE_REQUESTS,
+  tileCacheMaxTiles = 120,
+  onTileCacheEviction,
 }: MorphologyCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cacheRecordsRef = useRef<Map<string, ChannelCacheRecord>>(new Map())
@@ -112,6 +118,8 @@ export function MorphologyCanvas({
         bbox,
         channel,
         cacheRecords: cacheRecordsRef.current,
+        maxCacheTiles: tileCacheMaxTiles,
+        ...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction }),
         tileRequestBbox,
         viewState,
         ...(onTileError === undefined ? {} : { onTileError }),
@@ -120,7 +128,7 @@ export function MorphologyCanvas({
     const activeKeys = new Set(channelRequests.map((request) => request.cacheKey))
     const perChannelConcurrency = Math.max(
       1,
-      Math.floor(MAX_CONCURRENT_TILE_REQUESTS / renderChannels.length),
+      Math.floor(maxConcurrentTileRequests / renderChannels.length),
     )
     const abortController = new AbortController()
     let cancelled = false
@@ -164,7 +172,15 @@ export function MorphologyCanvas({
       cancelled = true
       abortController.abort()
     }
-  }, [onTileError, renderChannels, viewState, viewport])
+  }, [
+    maxConcurrentTileRequests,
+    onTileCacheEviction,
+    onTileError,
+    renderChannels,
+    tileCacheMaxTiles,
+    viewState,
+    viewport,
+  ])
 
   return (
     <canvas
@@ -253,6 +269,8 @@ function prepareChannelRequest(options: {
   readonly bbox: BBox
   readonly channel: MorphologyCanvasChannel
   readonly cacheRecords: Map<string, ChannelCacheRecord>
+  readonly maxCacheTiles: number
+  readonly onTileCacheEviction?: (evictedTileCount: number) => void
   readonly onTileError?: (error: Error) => void
   readonly tileRequestBbox: BBox
   readonly viewState: OverviewViewState
@@ -264,13 +282,19 @@ function prepareChannelRequest(options: {
   if (record === undefined) {
     record = {
       cache: new TileCache({
-        maxTiles: Math.max(24, Math.floor(96 / Math.max(1, options.cacheRecords.size))),
+        maxTiles: Math.max(
+          24,
+          Math.floor(options.maxCacheTiles / Math.max(1, options.cacheRecords.size + 1)),
+        ),
         color: options.channel.color,
         alphaFromIntensity: true,
         ...(options.channel.contrast === undefined
           ? {}
           : { displayWindow: options.channel.contrast }),
         ...(options.onTileError === undefined ? {} : { onError: options.onTileError }),
+        ...(options.onTileCacheEviction === undefined
+          ? {}
+          : { onEvict: options.onTileCacheEviction }),
       }),
     }
     options.cacheRecords.set(cacheKey, record)

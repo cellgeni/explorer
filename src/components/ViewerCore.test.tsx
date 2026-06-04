@@ -68,6 +68,42 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('supports keyboard panning and zooming on the spatial view', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onViewportChange = vi.fn()
+
+    render(
+      <ViewerCore
+        cells={[
+          {
+            id: 'cell-1',
+            position: [0, 0, 0],
+            radiusPixels: 4,
+            fillColor: [215, 63, 124, 220],
+          },
+        ]}
+        onViewportChange={onViewportChange}
+      />,
+    )
+
+    const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+    expect(frame).toHaveAttribute('tabindex', '0')
+
+    await waitFor(() => {
+      expect(onViewportChange).toHaveBeenCalled()
+    })
+
+    const initialZoom = onViewportChange.mock.calls.at(-1)?.[0].viewState.zoom
+    onViewportChange.mockClear()
+    fireEvent.keyDown(frame, { key: '+' })
+
+    await waitFor(() => {
+      const nextZoom = onViewportChange.mock.calls.at(-1)?.[0].viewState.zoom
+      expect(nextZoom).toBeGreaterThan(initialZoom)
+    })
+  })
+
   it('reports a broad-zoom viewport cell estimate without waiting for render clipping', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       ...rect,

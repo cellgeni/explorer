@@ -407,3 +407,32 @@ unless the phase order is explicitly changed.
       instead of the removed `Xenium Explorer` heading.
 - [x] Phase 4 verification passed after closeout: `npm run build`, `npm test`,
       `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.
+
+## Phase 5 Closeout - Product Hardening
+
+- [x] Added shareable URL hash state for dataset URL, active HUD tab, viewport,
+      selected genes, ROI selection, gene scale/score/detail controls, cell
+      color mode, coordinate unit, morphology toggle, and boundary limit. The
+      app restores hash-provided dataset/control state on startup and preserves
+      initial shared genes/ROI through the first matching dataset load.
+- [x] Added adaptive performance budgeting. The app detects compact, balanced,
+      or expanded device profiles and uses the selected budget for overview
+      point rendering caps, default boundary limits, tile request concurrency,
+      tile-cache capacity, and telemetry retention.
+- [x] Added keyboard spatial navigation and accessibility polish. The spatial
+      view is focusable with arrow-key pan, shifted arrow-key coarse pan,
+      plus/minus zoom, Home reset, explicit `aria-keyshortcuts`, and a visible
+      focus outline.
+- [x] Added dataset diagnostics and a local diagnostic dump. The Dataset tab can
+      probe the manifest plus required/optional byte-range assets, summarize the
+      result, and download JSON containing controls, active errors, local
+      telemetry, diagnostics, and the performance budget.
+- [x] Added a React error boundary around the app shell so render-time failures
+      land on an actionable fallback instead of a blank page.
+- [x] Added privacy-respecting local telemetry for dataset loads, diagnostics,
+      and tile-cache evictions. Events are retained in memory and exported only
+      through the user-triggered diagnostics dump.
+- [x] Added Phase 5 docs: `docs/user-guide.md` and
+      `docs/host-your-own-data.md`.
+- [x] Phase 5 final verification passed: `npm test`, `npm run build`,
+      `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.

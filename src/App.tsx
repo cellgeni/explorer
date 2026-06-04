@@ -29,7 +29,25 @@ import { micrometers } from './data/coords'
 import type { RoiSelection } from './data/roiSelection'
 import { parseCustomAnnotations } from './data/customAnnotations'
 import {
-  BOUNDARY_VIEWPORT_CELL_LIMIT,
+  runDatasetDiagnostics as defaultRunDatasetDiagnostics,
+  summarizeDatasetDiagnostics,
+  type DatasetDiagnosticsReport,
+} from './data/datasetDiagnostics'
+import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
+import {
+  formatShareableState,
+  parseShareableState,
+  shareableViewStateKey,
+  viewStateToShareable,
+  type ShareableState,
+  type ShareableViewState,
+} from './data/shareableState'
+import {
+  appendTelemetryEvent,
+  telemetryEvent,
+  type TelemetryEvent,
+} from './data/telemetry'
+import {
   boundaryViewportKey,
   normalizeBoundaryCellLimit,
   shouldLoadBoundaryPolygons,
@@ -170,6 +188,7 @@ export type DatasetWarmupLoader = (
   baseUrl: string,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<void>
+export type DatasetDiagnosticsRunner = typeof defaultRunDatasetDiagnostics
 
 type DatasetLoadState =
   | { readonly status: 'idle' }
@@ -186,6 +205,20 @@ type DatasetWarmupState =
   | { readonly status: 'loading'; readonly url: string }
   | { readonly status: 'ready'; readonly url: string }
   | { readonly status: 'error'; readonly url: string }
+
+type DatasetDiagnosticsState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly report: DatasetDiagnosticsReport
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
 
 type MorphologyLoadState =
   | { readonly status: 'idle' }
@@ -352,6 +385,7 @@ type LoadErrorSource =
   | 'ROI genes'
   | 'ROI transcripts'
   | 'Gene expression'
+  | 'Dataset diagnostics'
 
 interface StructuredLoadError {
   readonly source: LoadErrorSource
@@ -416,6 +450,7 @@ export interface AppProps {
   readonly loadRoiTranscripts?: RoiTranscriptsLoader
   readonly loadGeneExpression?: GeneExpressionLoader
   readonly warmDatasetForRoi?: DatasetWarmupLoader
+  readonly runDatasetDiagnostics?: DatasetDiagnosticsRunner
   readonly computeAutoChannelContrast?: AutoChannelContrastLoader
 }
 
@@ -432,6 +467,7 @@ export function App({
   loadRoiTranscripts = defaultLoadDatasetRoiTranscripts,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
   warmDatasetForRoi = defaultWarmDatasetForRoi,
+  runDatasetDiagnostics = defaultRunDatasetDiagnostics,
   computeAutoChannelContrast = defaultComputeAutoChannelContrast,
 }: AppProps) {
   const datasetInputId = useId()
@@ -452,10 +488,17 @@ export function App({
   const embeddingViewInputId = useId()
   const roiNameInputId = useId()
   const observationModeInputId = useId()
+  const [initialShareableState] = useState<ShareableState>(() =>
+    readShareableStateFromLocation(),
+  )
+  const [performanceBudget] = useState<PerformanceBudget>(() => detectPerformanceBudget())
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const [loadState, setLoadState] = useState<DatasetLoadState>({ status: 'idle' })
   const [datasetWarmupState, setDatasetWarmupState] = useState<DatasetWarmupState>({
+    status: 'idle',
+  })
+  const [diagnosticsState, setDiagnosticsState] = useState<DatasetDiagnosticsState>({
     status: 'idle',
   })
   const [morphologyState, setMorphologyState] = useState<MorphologyLoadState>({
@@ -492,8 +535,11 @@ export function App({
   const [roiTranscriptExportState, setRoiTranscriptExportState] =
     useState<RoiTranscriptExportState>({ status: 'idle' })
   const [debugLog, setDebugLog] = useState<readonly DebugLogEntry[]>([])
+  const [telemetryEvents, setTelemetryEvents] = useState<readonly TelemetryEvent[]>([])
   const [isControlHudCollapsed, setIsControlHudCollapsed] = useState(false)
-  const [activeControlHudTab, setActiveControlHudTab] = useState<ControlHudTab>('dataset')
+  const [activeControlHudTab, setActiveControlHudTab] = useState<ControlHudTab>(
+    () => parseControlHudTab(initialShareableState.activeTab) ?? 'dataset',
+  )
   const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
     status: 'idle',
   })
@@ -510,27 +556,55 @@ export function App({
     [],
   )
   const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
-  const [shouldLoadMorphology, setShouldLoadMorphology] = useState(false)
-  const [boundaryCellLimit, setBoundaryCellLimit] = useState(BOUNDARY_VIEWPORT_CELL_LIMIT)
+  const [shouldLoadMorphology, setShouldLoadMorphology] = useState(
+    initialShareableState.shouldLoadMorphology ?? false,
+  )
+  const [boundaryCellLimit, setBoundaryCellLimit] = useState(() =>
+    normalizeBoundaryCellLimit(
+      initialShareableState.boundaryCellLimit ?? performanceBudget.boundaryCellLimit,
+    ),
+  )
   const [imageLayerOpacity, setImageLayerOpacity] = useState(1)
   const [cellFillOpacity, setCellFillOpacity] = useState(1)
   const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(1)
-  const [coordinateUnit, setCoordinateUnit] = useState<ViewerCoordinateUnit>('um')
+  const [coordinateUnit, setCoordinateUnit] = useState<ViewerCoordinateUnit>(
+    () => parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ?? 'um',
+  )
   const [geneSearch, setGeneSearch] = useState('')
   const [geneSetSymbols, setGeneSetSymbols] = useState('')
   const [geneSetName, setGeneSetName] = useState('')
   const [geneExpressionColorScale, setGeneExpressionColorScale] =
-    useState<GeneExpressionColorScale>(DEFAULT_GENE_EXPRESSION_COLOR_SCALE)
+    useState<GeneExpressionColorScale>(
+      () =>
+        parseGeneExpressionColorScale(initialShareableState.geneExpressionColorScale) ??
+        DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
+    )
   const [geneExpressionScoreMode, setGeneExpressionScoreMode] =
-    useState<GeneExpressionScoreMode>(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
+    useState<GeneExpressionScoreMode>(
+      () =>
+        parseGeneExpressionScoreMode(initialShareableState.geneExpressionScoreMode) ??
+        DEFAULT_GENE_EXPRESSION_SCORE_MODE,
+    )
   const [geneExpressionDetailMode, setGeneExpressionDetailMode] =
-    useState<GeneExpressionDetailMode>('auto')
+    useState<GeneExpressionDetailMode>(
+      () =>
+        parseGeneExpressionDetailMode(initialShareableState.geneExpressionDetailMode) ??
+        'auto',
+    )
   const [savedGeneSets, setSavedGeneSets] = useState<readonly SavedGeneSet[]>([])
-  const [selectedGenes, setSelectedGenes] = useState<readonly string[]>([])
+  const [selectedGenes, setSelectedGenes] = useState<readonly string[]>(
+    initialShareableState.selectedGenes ?? [],
+  )
   const [roiMode, setRoiMode] = useState<RoiDrawMode>('idle')
   const [roiName, setRoiName] = useState('ROI 1')
-  const [observationColorMode, setObservationColorMode] =
-    useState<ObservationColorMode>('transcript-count')
+  const [observationColorMode, setObservationColorMode] = useState<ObservationColorMode>(
+    () =>
+      parseObservationColorMode(initialShareableState.observationColorMode) ??
+      'transcript-count',
+  )
+  const [shareableViewState, setShareableViewState] = useState<
+    ShareableViewState | undefined
+  >(initialShareableState.viewState)
   const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
   const [, setViewportCellCount] = useState<number | null>(null)
   const loadRequestId = useRef(0)
@@ -542,6 +616,7 @@ export function App({
   const debugLogIdRef = useRef(0)
   const datasetAbortRef = useRef<AbortController | null>(null)
   const datasetWarmupAbortRef = useRef<AbortController | null>(null)
+  const diagnosticsAbortRef = useRef<AbortController | null>(null)
   const analysisEmbeddingAbortRef = useRef<AbortController | null>(null)
   const boundaryAbortRef = useRef<AbortController | null>(null)
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
@@ -553,6 +628,11 @@ export function App({
   const boundaryViewportKeyRef = useRef<string | null>(null)
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
+  const initialShareableStateRef = useRef<ShareableState | null>(initialShareableState)
+  const initialSharedRoiSelectionRef = useRef<RoiSelection | null>(
+    initialShareableState.roiSelection ?? null,
+  )
+  const didApplyInitialDatasetUrlRef = useRef(false)
   const isLoading = loadState.status === 'loading'
   const annotationStyleColors = useMemo(
     () =>
@@ -748,6 +828,15 @@ export function App({
       })
     }
 
+    if (diagnosticsState.status === 'loading') {
+      tasks.push({
+        id: 'dataset-diagnostics',
+        tabId: 'dataset',
+        label: 'Diagnosing dataset',
+        detail: shortDatasetLabel(diagnosticsState.url),
+      })
+    }
+
     if (genePanelState.status === 'loading') {
       tasks.push({ id: 'gene-panel', tabId: 'genes', label: 'Loading gene panel' })
     }
@@ -828,6 +917,7 @@ export function App({
     autoContrastChannelIds,
     boundaryState,
     datasetWarmupState,
+    diagnosticsState,
     geneExpressionState,
     genePanelState,
     loadState,
@@ -869,10 +959,29 @@ export function App({
     },
     [],
   )
+  const recordTelemetry = useCallback(
+    (event: TelemetryEvent) => {
+      setTelemetryEvents((current) =>
+        appendTelemetryEvent(current, event, performanceBudget.telemetryEventLimit),
+      )
+    },
+    [performanceBudget.telemetryEventLimit],
+  )
+  const handleTileCacheEviction = useCallback(
+    (evictedTileCount: number) => {
+      recordTelemetry(
+        telemetryEvent('tile-cache.eviction', 'info', {
+          detail: `${evictedTileCount.toLocaleString()} tiles`,
+        }),
+      )
+    },
+    [recordTelemetry],
+  )
   const activeErrors = useMemo(
     () =>
       [
         loadState.status === 'error' ? loadState.error : null,
+        diagnosticsState.status === 'error' ? diagnosticsState.error : null,
         morphologyState.status === 'error' ? morphologyState.error : null,
         boundaryState.status === 'error' ? boundaryState.error : null,
         genePanelState.status === 'error' ? genePanelState.error : null,
@@ -891,6 +1000,7 @@ export function App({
       annotationGroupState,
       analysisEmbeddingState,
       boundaryState,
+      diagnosticsState,
       geneExpressionState,
       genePanelState,
       loadState,
@@ -940,6 +1050,12 @@ export function App({
       }
 
       lastViewportDetailRef.current = detail
+      const nextShareableViewState = viewStateToShareable(detail.viewState)
+      setShareableViewState((current) =>
+        shareableViewStateKey(current) === shareableViewStateKey(nextShareableViewState)
+          ? current
+          : nextShareableViewState,
+      )
 
       if (!shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })) {
         abortActiveRequest(boundaryAbortRef)
@@ -1132,9 +1248,73 @@ export function App({
   }, [handleViewportChange])
 
   useEffect(() => {
+    if (didApplyInitialDatasetUrlRef.current) {
+      return
+    }
+
+    didApplyInitialDatasetUrlRef.current = true
+
+    if (
+      initialShareableState.datasetUrl !== undefined &&
+      initialShareableState.datasetUrl.trim() !== ''
+    ) {
+      setDatasetUrl(initialShareableState.datasetUrl)
+    }
+  }, [initialShareableState.datasetUrl, setDatasetUrl])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      const hash = formatShareableState({
+        datasetUrl,
+        selectedGenes,
+        ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
+        ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
+        activeTab: activeControlHudTab,
+        geneExpressionColorScale,
+        geneExpressionScoreMode,
+        geneExpressionDetailMode,
+        observationColorMode,
+        coordinateUnit,
+        shouldLoadMorphology,
+        boundaryCellLimit,
+      })
+
+      if (window.location.hash !== hash) {
+        window.history.replaceState(
+          null,
+          '',
+          `${window.location.pathname}${window.location.search}${hash}`,
+        )
+      }
+    }, 160)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [
+    activeControlHudTab,
+    activeRoiSelection,
+    boundaryCellLimit,
+    coordinateUnit,
+    datasetUrl,
+    geneExpressionColorScale,
+    geneExpressionDetailMode,
+    geneExpressionScoreMode,
+    observationColorMode,
+    selectedGenes,
+    shareableViewState,
+    shouldLoadMorphology,
+  ])
+
+  useEffect(() => {
     return () => {
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(datasetWarmupAbortRef)
+      abortActiveRequest(diagnosticsAbortRef)
       abortActiveRequest(analysisEmbeddingAbortRef)
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
@@ -1184,9 +1364,18 @@ export function App({
     if (typeof datasetUrl === 'string' && datasetUrl.trim().length > 0) {
       const requestedUrl = datasetUrl.trim()
       const requestId = loadRequestId.current + 1
+      const loadStartedAt = readTimestamp()
+      const sharedState = initialShareableStateRef.current
+      const shouldRestoreSharedState =
+        sharedState?.datasetUrl !== undefined &&
+        sharedState.datasetUrl.trim() === requestedUrl
+      const sharedSelectedGenes = shouldRestoreSharedState
+        ? (sharedState.selectedGenes ?? [])
+        : []
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(datasetWarmupAbortRef)
+      abortActiveRequest(diagnosticsAbortRef)
       abortActiveRequest(analysisEmbeddingAbortRef)
       abortActiveRequest(boundaryAbortRef)
       abortActiveRequest(geneExpressionAbortRef)
@@ -1215,10 +1404,31 @@ export function App({
       setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
       setAnalysisEmbeddingState({ status: 'idle' })
       setSelectedEmbeddingKind('umap')
-      setObservationColorMode('transcript-count')
-      setGeneExpressionScoreMode(DEFAULT_GENE_EXPRESSION_SCORE_MODE)
-      setGeneExpressionDetailMode('auto')
-      setSelectedGenes([])
+      setObservationColorMode(
+        shouldRestoreSharedState
+          ? (parseObservationColorMode(sharedState?.observationColorMode) ??
+              'transcript-count')
+          : 'transcript-count',
+      )
+      setGeneExpressionScoreMode(
+        shouldRestoreSharedState
+          ? (parseGeneExpressionScoreMode(sharedState?.geneExpressionScoreMode) ??
+              DEFAULT_GENE_EXPRESSION_SCORE_MODE)
+          : DEFAULT_GENE_EXPRESSION_SCORE_MODE,
+      )
+      setGeneExpressionDetailMode(
+        shouldRestoreSharedState
+          ? (parseGeneExpressionDetailMode(sharedState?.geneExpressionDetailMode) ??
+              'auto')
+          : 'auto',
+      )
+      setGeneExpressionColorScale(
+        shouldRestoreSharedState
+          ? (parseGeneExpressionColorScale(sharedState?.geneExpressionColorScale) ??
+              geneExpressionColorScale)
+          : geneExpressionColorScale,
+      )
+      setSelectedGenes(sharedSelectedGenes)
       setRoiMode('idle')
       setRoiName('ROI 1')
       setRoiState({ status: 'idle' })
@@ -1230,6 +1440,7 @@ export function App({
       setMorphologyState(
         loadImage ? { status: 'loading', url: requestedUrl } : { status: 'idle' },
       )
+      setDiagnosticsState({ status: 'idle' })
       setBoundaryState({ status: 'idle' })
       setGenePanelState({ status: 'loading', url: requestedUrl })
       setAnnotationState({ status: 'idle' })
@@ -1242,6 +1453,10 @@ export function App({
       boundaryViewportKeyRef.current = null
       geneExpressionViewportKeyRef.current = null
       lastViewportDetailRef.current = null
+      initialSharedRoiSelectionRef.current = shouldRestoreSharedState
+        ? (sharedState?.roiSelection ?? null)
+        : null
+      initialShareableStateRef.current = null
       startDatasetWarmup(requestedUrl, requestId)
 
       void loadGenePanel(requestedUrl, { signal: abortController.signal })
@@ -1320,6 +1535,12 @@ export function App({
           cellCount: cells.length,
         })
         appendDebugEvent(`Dataset ready: ${cells.length.toLocaleString()} cells`)
+        recordTelemetry(
+          telemetryEvent('dataset.load', 'success', {
+            startedAt: loadStartedAt,
+            detail: `${cells.length.toLocaleString()} cells`,
+          }),
+        )
 
         if (!loadImage) {
           return
@@ -1374,6 +1595,12 @@ export function App({
           error: createStructuredLoadError('Dataset overview', error),
         })
         appendDebugEvent('Dataset load failed')
+        recordTelemetry(
+          telemetryEvent('dataset.load', 'failure', {
+            startedAt: loadStartedAt,
+            detail: readErrorMessage(error),
+          }),
+        )
         abortActiveRequest(datasetWarmupAbortRef)
         setDatasetWarmupState({ status: 'idle' })
         setMorphologyState({ status: 'idle' })
@@ -1381,6 +1608,93 @@ export function App({
         setAnnotationGroupState({ status: 'idle' })
       }
     }
+  }
+
+  async function handleRunDatasetDiagnostics() {
+    const requestedUrl = datasetUrl.trim()
+
+    if (requestedUrl === '') {
+      return
+    }
+
+    const diagnosticsStartedAt = readTimestamp()
+    abortActiveRequest(diagnosticsAbortRef)
+    const abortController = new AbortController()
+    diagnosticsAbortRef.current = abortController
+    setDiagnosticsState({ status: 'loading', url: requestedUrl })
+    appendDebugEvent(`Diagnosing dataset ${shortDatasetLabel(requestedUrl)}`)
+
+    try {
+      const report = await runDatasetDiagnostics(requestedUrl, {
+        signal: abortController.signal,
+      })
+
+      if (diagnosticsAbortRef.current !== abortController) {
+        return
+      }
+
+      const summary = summarizeDatasetDiagnostics(report)
+      setDiagnosticsState({ status: 'ready', url: requestedUrl, report })
+      appendDebugEvent(`Diagnostics: ${summary}`)
+      recordTelemetry(
+        telemetryEvent('dataset.diagnostics', 'success', {
+          startedAt: diagnosticsStartedAt,
+          detail: summary,
+        }),
+      )
+    } catch (error) {
+      if (isAbortError(error) || diagnosticsAbortRef.current !== abortController) {
+        return
+      }
+
+      setDiagnosticsState({
+        status: 'error',
+        url: requestedUrl,
+        error: createStructuredLoadError('Dataset diagnostics', error),
+      })
+      appendDebugEvent('Diagnostics failed')
+      recordTelemetry(
+        telemetryEvent('dataset.diagnostics', 'failure', {
+          startedAt: diagnosticsStartedAt,
+          detail: readErrorMessage(error),
+        }),
+      )
+    } finally {
+      if (diagnosticsAbortRef.current === abortController) {
+        diagnosticsAbortRef.current = null
+      }
+    }
+  }
+
+  function handleDownloadDiagnostics() {
+    downloadTextFile(
+      'xenium-diagnostics.json',
+      JSON.stringify(
+        createDiagnosticsDump({
+          activeControlHudTab,
+          activeErrors,
+          boundaryCellLimit,
+          coordinateUnit,
+          datasetUrl,
+          debugLog,
+          diagnosticsState,
+          geneExpressionColorScale,
+          geneExpressionDetailMode,
+          geneExpressionScoreMode,
+          loadState,
+          observationColorMode,
+          performanceBudget,
+          selectedGenes,
+          shareableViewState,
+          shouldLoadMorphology,
+          telemetryEvents,
+        }),
+        null,
+        2,
+      ),
+      'application/json;charset=utf-8',
+    )
+    appendDebugEvent('Downloaded diagnostics')
   }
 
   function toggleGene(gene: string) {
@@ -1678,110 +1992,129 @@ export function App({
     appendDebugEvent('Cleared annotations')
   }
 
-  function handleRoiComplete(selection: RoiSelection) {
-    if (loadState.status !== 'ready') {
-      return
-    }
+  const handleRoiComplete = useCallback(
+    (selection: RoiSelection) => {
+      if (loadState.status !== 'ready') {
+        return
+      }
 
-    const bbox = selection.bbox
-    const requestId = roiRequestId.current + 1
-    abortActiveRequest(roiAbortRef)
-    const abortController = new AbortController()
-    roiRequestId.current = requestId
-    roiAbortRef.current = abortController
-    setRoiMode('idle')
-    setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
-    setRoiState({ status: 'loading', url: loadState.url, bbox, selection })
-    setRoiGeneStatsState({ status: 'idle' })
-    setRoiTranscriptExportState({ status: 'idle' })
-    appendDebugEvent(`${roiSelectionLabel(selection)} drawn: loading cells`)
+      const bbox = selection.bbox
+      const requestId = roiRequestId.current + 1
+      abortActiveRequest(roiAbortRef)
+      const abortController = new AbortController()
+      roiRequestId.current = requestId
+      roiAbortRef.current = abortController
+      setRoiMode('idle')
+      setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
+      setRoiState({ status: 'loading', url: loadState.url, bbox, selection })
+      setRoiGeneStatsState({ status: 'idle' })
+      setRoiTranscriptExportState({ status: 'idle' })
+      appendDebugEvent(`${roiSelectionLabel(selection)} drawn: loading cells`)
 
-    void loadRoiCells(loadState.url, selection, { signal: abortController.signal })
-      .then((cells) => {
-        if (roiRequestId.current !== requestId) {
-          return
-        }
+      void loadRoiCells(loadState.url, selection, { signal: abortController.signal })
+        .then((cells) => {
+          if (roiRequestId.current !== requestId) {
+            return
+          }
 
-        setRoiState({
-          status: 'ready',
-          url: loadState.url,
-          bbox,
-          selection,
-          cells,
-          hitCellLimit: cells.length >= ROI_CELL_EXPORT_LIMIT,
-        })
-        appendDebugEvent(
-          `ROI cells ready: ${cells.length.toLocaleString()}${
-            cells.length >= ROI_CELL_EXPORT_LIMIT ? '+' : ''
-          }`,
-        )
-
-        if (cells.length === 0) {
-          setRoiGeneStatsState({
+          setRoiState({
             status: 'ready',
             url: loadState.url,
-            stats: emptyRoiGeneStats(),
+            bbox,
+            selection,
+            cells,
+            hitCellLimit: cells.length >= ROI_CELL_EXPORT_LIMIT,
           })
-          return undefined
-        }
+          appendDebugEvent(
+            `ROI cells ready: ${cells.length.toLocaleString()}${
+              cells.length >= ROI_CELL_EXPORT_LIMIT ? '+' : ''
+            }`,
+          )
 
-        setRoiGeneStatsState({
-          status: 'loading',
-          url: loadState.url,
-          cellCount: cells.length,
-        })
-
-        return loadRoiGeneStats(loadState.url, cells, {
-          signal: abortController.signal,
-        })
-          .then((stats) => {
-            if (roiRequestId.current !== requestId) {
-              return
-            }
-
+          if (cells.length === 0) {
             setRoiGeneStatsState({
               status: 'ready',
               url: loadState.url,
-              stats,
+              stats: emptyRoiGeneStats(),
             })
-            appendDebugEvent(
-              `ROI genes ready: ${stats.genes.length.toLocaleString()} genes`,
-            )
-          })
-          .catch((error) => {
-            if (isAbortError(error) || roiRequestId.current !== requestId) {
-              return
-            }
+            return undefined
+          }
 
-            setRoiGeneStatsState({
-              status: 'error',
-              url: loadState.url,
-              error: createStructuredLoadError('ROI genes', error),
+          setRoiGeneStatsState({
+            status: 'loading',
+            url: loadState.url,
+            cellCount: cells.length,
+          })
+
+          return loadRoiGeneStats(loadState.url, cells, {
+            signal: abortController.signal,
+          })
+            .then((stats) => {
+              if (roiRequestId.current !== requestId) {
+                return
+              }
+
+              setRoiGeneStatsState({
+                status: 'ready',
+                url: loadState.url,
+                stats,
+              })
+              appendDebugEvent(
+                `ROI genes ready: ${stats.genes.length.toLocaleString()} genes`,
+              )
             })
-            appendDebugEvent('ROI genes unsupported')
-          })
-      })
-      .catch((error) => {
-        if (isAbortError(error) || roiRequestId.current !== requestId) {
-          return
-        }
+            .catch((error) => {
+              if (isAbortError(error) || roiRequestId.current !== requestId) {
+                return
+              }
 
-        setRoiState({
-          status: 'error',
-          url: loadState.url,
-          bbox,
-          selection,
-          error: createStructuredLoadError('ROI cells', error),
+              setRoiGeneStatsState({
+                status: 'error',
+                url: loadState.url,
+                error: createStructuredLoadError('ROI genes', error),
+              })
+              appendDebugEvent('ROI genes unsupported')
+            })
         })
-        setRoiGeneStatsState({ status: 'idle' })
-        appendDebugEvent('ROI cells failed')
-      })
-      .finally(() => {
-        if (roiAbortRef.current === abortController) {
-          roiAbortRef.current = null
-        }
-      })
-  }
+        .catch((error) => {
+          if (isAbortError(error) || roiRequestId.current !== requestId) {
+            return
+          }
+
+          setRoiState({
+            status: 'error',
+            url: loadState.url,
+            bbox,
+            selection,
+            error: createStructuredLoadError('ROI cells', error),
+          })
+          setRoiGeneStatsState({ status: 'idle' })
+          appendDebugEvent('ROI cells failed')
+        })
+        .finally(() => {
+          if (roiAbortRef.current === abortController) {
+            roiAbortRef.current = null
+          }
+        })
+    },
+    [appendDebugEvent, loadRoiCells, loadRoiGeneStats, loadState],
+  )
+
+  useEffect(() => {
+    const selection = initialSharedRoiSelectionRef.current
+
+    if (
+      selection === null ||
+      loadState.status !== 'ready' ||
+      roiState.status !== 'idle'
+    ) {
+      return
+    }
+
+    initialSharedRoiSelectionRef.current = null
+    setRoiName('Shared ROI')
+    handleRoiComplete(selection)
+  }, [handleRoiComplete, loadState.status, roiState.status])
 
   function handleClearRoi() {
     abortActiveRequest(roiAbortRef)
@@ -2054,8 +2387,11 @@ export function App({
                   inputMode="url"
                   autoComplete="off"
                   spellCheck={false}
-                  defaultValue={datasetUrl}
+                  value={datasetUrl}
                   placeholder="https://bucket.example/output…"
+                  onChange={(event) => {
+                    setDatasetUrl(event.currentTarget.value)
+                  }}
                 />
                 <label className="dataset-toggle" htmlFor={morphologyInputId}>
                   <input
@@ -2100,6 +2436,30 @@ export function App({
                   {isLoading ? 'Loading…' : 'Load Dataset'}
                 </button>
               </form>
+              <div className="dataset-action-row">
+                <button
+                  type="button"
+                  className="secondary-action"
+                  disabled={
+                    diagnosticsState.status === 'loading' || datasetUrl.trim() === ''
+                  }
+                  onClick={() => {
+                    void handleRunDatasetDiagnostics()
+                  }}
+                >
+                  {diagnosticsState.status === 'loading'
+                    ? 'Diagnosing...'
+                    : 'Diagnose Dataset'}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  onClick={handleDownloadDiagnostics}
+                >
+                  Download Diagnostics
+                </button>
+              </div>
+              <DatasetDiagnosticsPanel state={diagnosticsState} />
 
               <ErrorSummary errors={activeErrors} />
               <ActivityLog
@@ -2121,6 +2481,11 @@ export function App({
                 <h2 id="layer-heading">Layer Stack</h2>
                 <p>
                   {scaffoldDeckLayerCount} Deck Layer - deck.gl {bundledDeckVersion}
+                </p>
+                <p>
+                  Budget {performanceBudget.profile} -{' '}
+                  {performanceBudget.overviewRenderCellLimit.toLocaleString()} cells -{' '}
+                  {performanceBudget.maxConcurrentTileRequests} tile requests
                 </p>
                 <div className="layer-opacity-controls">
                   <div className="layer-opacity-control">
@@ -2854,15 +3219,22 @@ export function App({
           status={loadState.status}
           imageStatus={morphologyState.status}
           boundaryStatus={boundaryState.status}
+          overviewRenderCellLimit={performanceBudget.overviewRenderCellLimit}
+          maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
+          tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
           roiMode={roiMode}
           roiSelection={activeRoiSelection}
           onImageTileError={handleImageTileError}
+          onTileCacheEviction={handleTileCacheEviction}
           onViewportCellCountChange={setViewportCellCount}
           onViewportChange={handleViewportChange}
           onRoiComplete={handleRoiComplete}
           onCellClick={(cell) => {
             setSelectedCell(cell)
           }}
+          {...(initialShareableState.viewState === undefined
+            ? {}
+            : { initialViewStateOverride: initialShareableState.viewState })}
           {...(loadState.status === 'error'
             ? { errorMessage: formatStructuredError(loadState.error) }
             : {})}
@@ -3004,6 +3376,46 @@ function roiGeneStatsStatusCopy(roiGeneStatsState: RoiGeneStatsState): string {
 
 function isObservationColorMode(value: string): value is ObservationColorMode {
   return value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
+}
+
+function readShareableStateFromLocation(): ShareableState {
+  return typeof window === 'undefined' ? {} : parseShareableState(window.location.hash)
+}
+
+function parseControlHudTab(value: string | undefined): ControlHudTab | undefined {
+  return CONTROL_HUD_TABS.some((tab) => tab.id === value)
+    ? (value as ControlHudTab)
+    : undefined
+}
+
+function parseViewerCoordinateUnit(
+  value: string | undefined,
+): ViewerCoordinateUnit | undefined {
+  return value === 'um' || value === 'px' ? value : undefined
+}
+
+function parseGeneExpressionColorScale(
+  value: string | undefined,
+): GeneExpressionColorScale | undefined {
+  return value !== undefined && isGeneExpressionColorScale(value) ? value : undefined
+}
+
+function parseGeneExpressionScoreMode(
+  value: string | undefined,
+): GeneExpressionScoreMode | undefined {
+  return value !== undefined && isGeneExpressionScoreMode(value) ? value : undefined
+}
+
+function parseGeneExpressionDetailMode(
+  value: string | undefined,
+): GeneExpressionDetailMode | undefined {
+  return value !== undefined && isGeneExpressionDetailMode(value) ? value : undefined
+}
+
+function parseObservationColorMode(
+  value: string | undefined,
+): ObservationColorMode | undefined {
+  return value !== undefined && isObservationColorMode(value) ? value : undefined
 }
 
 function hasReadyAnnotationsAfterRemove(
@@ -3757,6 +4169,47 @@ function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadErro
   )
 }
 
+function DatasetDiagnosticsPanel({ state }: { readonly state: DatasetDiagnosticsState }) {
+  if (state.status === 'idle') {
+    return null
+  }
+
+  if (state.status === 'loading') {
+    return (
+      <section className="dataset-diagnostics-panel" aria-label="Dataset diagnostics">
+        <h2>Diagnostics</h2>
+        <p role="status">Running checks</p>
+      </section>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <section className="dataset-diagnostics-panel" aria-label="Dataset diagnostics">
+        <h2>Diagnostics</h2>
+        <p>{state.error.title}</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="dataset-diagnostics-panel" aria-label="Dataset diagnostics">
+      <div className="dataset-diagnostics-heading">
+        <h2>Diagnostics</h2>
+        <span>{summarizeDatasetDiagnostics(state.report)}</span>
+      </div>
+      <ol>
+        {state.report.checks.map((check) => (
+          <li key={check.id} className={`diagnostic-check-${check.status}`}>
+            <span>{check.label}</span>
+            <strong>{check.status}</strong>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
 function LoadingIndicator({ tasks }: { readonly tasks: readonly LoadingTask[] }) {
   if (tasks.length === 0) {
     return null
@@ -3992,14 +4445,117 @@ function csvEscape(value: string): string {
   return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
 }
 
-function downloadTextFile(fileName: string, text: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
+function downloadTextFile(
+  fileName: string,
+  text: string,
+  mimeType = 'text/csv;charset=utf-8',
+): void {
+  const url = URL.createObjectURL(new Blob([text], { type: mimeType }))
   const link = document.createElement('a')
 
   link.href = url
   link.download = fileName
   link.click()
   URL.revokeObjectURL(url)
+}
+
+interface DiagnosticsDumpOptions {
+  readonly activeControlHudTab: ControlHudTab
+  readonly activeErrors: readonly StructuredLoadError[]
+  readonly boundaryCellLimit: number
+  readonly coordinateUnit: ViewerCoordinateUnit
+  readonly datasetUrl: string
+  readonly debugLog: readonly DebugLogEntry[]
+  readonly diagnosticsState: DatasetDiagnosticsState
+  readonly geneExpressionColorScale: GeneExpressionColorScale
+  readonly geneExpressionDetailMode: GeneExpressionDetailMode
+  readonly geneExpressionScoreMode: GeneExpressionScoreMode
+  readonly loadState: DatasetLoadState
+  readonly observationColorMode: ObservationColorMode
+  readonly performanceBudget: PerformanceBudget
+  readonly selectedGenes: readonly string[]
+  readonly shareableViewState: ShareableViewState | undefined
+  readonly shouldLoadMorphology: boolean
+  readonly telemetryEvents: readonly TelemetryEvent[]
+}
+
+function createDiagnosticsDump(options: DiagnosticsDumpOptions): Record<string, unknown> {
+  return {
+    generatedAt: new Date().toISOString(),
+    datasetUrl: options.datasetUrl,
+    location: readCurrentLocation(),
+    performanceBudget: options.performanceBudget,
+    controls: {
+      activeControlHudTab: options.activeControlHudTab,
+      boundaryCellLimit: options.boundaryCellLimit,
+      coordinateUnit: options.coordinateUnit,
+      geneExpressionColorScale: options.geneExpressionColorScale,
+      geneExpressionDetailMode: options.geneExpressionDetailMode,
+      geneExpressionScoreMode: options.geneExpressionScoreMode,
+      observationColorMode: options.observationColorMode,
+      selectedGenes: options.selectedGenes,
+      shareableViewState: options.shareableViewState,
+      shouldLoadMorphology: options.shouldLoadMorphology,
+    },
+    states: {
+      dataset: summarizeDatasetLoadState(options.loadState),
+      diagnostics: summarizeDiagnosticsState(options.diagnosticsState),
+    },
+    activeErrors: options.activeErrors,
+    activityLog: options.debugLog,
+    telemetryEvents: options.telemetryEvents,
+  }
+}
+
+function summarizeDatasetLoadState(state: DatasetLoadState): Record<string, unknown> {
+  if (state.status === 'ready') {
+    return {
+      status: state.status,
+      url: state.url,
+      cellCount: state.cellCount,
+    }
+  }
+
+  if (state.status === 'loading' || state.status === 'error') {
+    return {
+      status: state.status,
+      url: state.url,
+      ...(state.status === 'error' ? { error: state.error } : {}),
+    }
+  }
+
+  return { status: state.status }
+}
+
+function summarizeDiagnosticsState(
+  state: DatasetDiagnosticsState,
+): Record<string, unknown> {
+  if (state.status === 'ready') {
+    return {
+      status: state.status,
+      url: state.url,
+      summary: summarizeDatasetDiagnostics(state.report),
+      report: state.report,
+    }
+  }
+
+  if (state.status === 'loading' || state.status === 'error') {
+    return {
+      status: state.status,
+      url: state.url,
+      ...(state.status === 'error' ? { error: state.error } : {}),
+    }
+  }
+
+  return { status: state.status }
+}
+
+function readCurrentLocation(): string | undefined {
+  return typeof window === 'undefined' ? undefined : window.location.href
+}
+
+function readTimestamp(): number {
+  return Date.now()
 }
 
 function defaultRoiName(index: number): string {

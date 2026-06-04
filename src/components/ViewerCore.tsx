@@ -1,6 +1,6 @@
 import { DeckGL } from '@deck.gl/react'
-import type { PointerEvent } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent, PointerEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import {
   createOverviewLayers,
@@ -59,11 +59,21 @@ export interface ViewerCoreProps {
   readonly roiMode?: RoiDrawMode
   readonly roiBbox?: BBox | null
   readonly roiSelection?: RoiSelection | null
+  readonly initialViewStateOverride?: InitialViewStateOverride
+  readonly overviewRenderCellLimit?: number
+  readonly maxConcurrentTileRequests?: number
+  readonly tileCacheMaxTiles?: number
   readonly onImageTileError?: (error: Error) => void
+  readonly onTileCacheEviction?: (evictedTileCount: number) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onRoiComplete?: (selection: RoiSelection) => void
+}
+
+export interface InitialViewStateOverride {
+  readonly target?: readonly [number, number, number]
+  readonly zoom?: number
 }
 
 export interface ViewerViewportDetail {
@@ -96,14 +106,23 @@ export function ViewerCore({
   roiMode = 'idle',
   roiBbox = null,
   roiSelection = null,
+  initialViewStateOverride,
+  overviewRenderCellLimit,
+  maxConcurrentTileRequests,
+  tileCacheMaxTiles,
   onImageTileError,
+  onTileCacheEviction,
   onViewportChange,
   onViewportCellCountChange,
   onCellClick,
   onRoiComplete,
 }: ViewerCoreProps) {
   const fittedViewState = useMemo(() => createOverviewViewState(cells), [cells])
-  const resetKey = viewStateKey(fittedViewState)
+  const initialViewState = useMemo(
+    () => mergeInitialViewState(fittedViewState, initialViewStateOverride),
+    [fittedViewState, initialViewStateOverride],
+  )
+  const resetKey = viewStateKey(initialViewState)
 
   return (
     <ViewerSurface
@@ -120,7 +139,10 @@ export function ViewerCore({
       annotationStyleColors={annotationStyleColors}
       coordinateUnit={coordinateUnit}
       micrometersPerPixel={micrometersPerPixel}
-      initialViewState={fittedViewState}
+      initialViewState={initialViewState}
+      {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
+      {...(maxConcurrentTileRequests === undefined ? {} : { maxConcurrentTileRequests })}
+      {...(tileCacheMaxTiles === undefined ? {} : { tileCacheMaxTiles })}
       status={status}
       imageStatus={imageStatus}
       boundaryStatus={boundaryStatus}
@@ -131,6 +153,7 @@ export function ViewerCore({
       roiBbox={roiBbox}
       roiSelection={roiSelection}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
+      {...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
       {...(onViewportCellCountChange === undefined ? {} : { onViewportCellCountChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
@@ -153,6 +176,9 @@ interface ViewerSurfaceProps {
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly micrometersPerPixel: number
   readonly initialViewState: OverviewViewState
+  readonly overviewRenderCellLimit?: number
+  readonly maxConcurrentTileRequests?: number
+  readonly tileCacheMaxTiles?: number
   readonly status: ViewerLoadStatus
   readonly imageStatus: ViewerLoadStatus
   readonly boundaryStatus: ViewerLoadStatus
@@ -163,6 +189,7 @@ interface ViewerSurfaceProps {
   readonly roiBbox: BBox | null
   readonly roiSelection: RoiSelection | null
   readonly onImageTileError?: (error: Error) => void
+  readonly onTileCacheEviction?: (evictedTileCount: number) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
@@ -217,6 +244,9 @@ function ViewerSurface({
   coordinateUnit,
   micrometersPerPixel,
   initialViewState,
+  overviewRenderCellLimit,
+  maxConcurrentTileRequests,
+  tileCacheMaxTiles,
   status,
   imageStatus,
   boundaryStatus,
@@ -227,12 +257,14 @@ function ViewerSurface({
   roiBbox,
   roiSelection,
   onImageTileError,
+  onTileCacheEviction,
   onViewportChange,
   onViewportCellCountChange,
   onCellClick,
   onRoiComplete,
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
+  const keyboardHelpId = useId()
   const [viewState, setViewState] = useState<OverviewViewState>(initialViewState)
   const [viewport, setViewport] = useState<CssViewportSize>({
     width: 0,
@@ -258,8 +290,13 @@ function ViewerSurface({
     [cells, viewportBbox, viewState.zoom],
   )
   const renderSourceCells = useMemo(
-    () => sampleOverviewCellsForRendering(visibleCells),
-    [visibleCells],
+    () =>
+      sampleOverviewCellsForRendering(visibleCells, {
+        ...(overviewRenderCellLimit === undefined
+          ? {}
+          : { maxCells: overviewRenderCellLimit }),
+      }),
+    [overviewRenderCellLimit, visibleCells],
   )
   const renderCells = useMemo(
     () =>
@@ -430,6 +467,27 @@ function ViewerSurface({
       )
     },
     [],
+  )
+  const handleKeyboardNavigation = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (!canTrackMouseCoordinates) {
+        return
+      }
+
+      const nextViewState = viewStateFromKeyboardEvent(event, viewState, initialViewState)
+
+      if (nextViewState === null) {
+        return
+      }
+
+      event.preventDefault()
+      setViewState((currentViewState) =>
+        equivalentViewState(currentViewState, nextViewState)
+          ? currentViewState
+          : nextViewState,
+      )
+    },
+    [canTrackMouseCoordinates, initialViewState, viewState],
   )
   const handleDeckClick = useCallback(
     (info: { readonly object?: unknown }) => {
@@ -604,16 +662,28 @@ function ViewerSurface({
       className="viewport-frame"
       role="img"
       aria-label="Spatial viewer canvas area"
+      aria-describedby={keyboardHelpId}
+      aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - Home"
+      tabIndex={0}
+      onKeyDown={handleKeyboardNavigation}
       onPointerMove={handleMouseCoordinatePointerMove}
       onPointerLeave={clearMouseCoordinate}
     >
+      <p id={keyboardHelpId} className="visually-hidden">
+        Use arrow keys to pan, plus or minus to zoom, and Home to reset the spatial view.
+      </p>
       {!hasImage ? <div className="viewport-grid" aria-hidden="true" /> : null}
       <MorphologyCanvas
         channels={imageChannels}
         loader={imageLoader}
         opacity={imageOpacity}
         viewState={viewState}
+        {...(maxConcurrentTileRequests === undefined
+          ? {}
+          : { maxConcurrentTileRequests })}
+        {...(tileCacheMaxTiles === undefined ? {} : { tileCacheMaxTiles })}
         {...(onImageTileError === undefined ? {} : { onTileError: onImageTileError })}
+        {...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction })}
       />
       {hasCells ? (
         <div className="deckgl-host" aria-hidden="true">
@@ -935,6 +1005,75 @@ function readViewportMessage(
   return null
 }
 
+function mergeInitialViewState(
+  fittedViewState: OverviewViewState,
+  override: InitialViewStateOverride | undefined,
+): OverviewViewState {
+  if (override === undefined) {
+    return fittedViewState
+  }
+
+  const nextViewState = normaliseViewState({
+    ...fittedViewState,
+    ...override,
+    target: override.target ?? fittedViewState.target,
+    minZoom: fittedViewState.minZoom,
+    maxZoom: fittedViewState.maxZoom,
+  })
+
+  return {
+    ...nextViewState,
+    zoom: clampZoom(nextViewState.zoom, fittedViewState),
+  }
+}
+
+function viewStateFromKeyboardEvent(
+  event: KeyboardEvent<HTMLDivElement>,
+  viewState: OverviewViewState,
+  initialViewState: OverviewViewState,
+): OverviewViewState | null {
+  const panStep = (event.shiftKey ? 256 : 64) / scaleFromZoom(viewState.zoom)
+
+  switch (event.key) {
+    case 'ArrowLeft':
+      return {
+        ...viewState,
+        target: [viewState.target[0] - panStep, viewState.target[1], viewState.target[2]],
+      }
+    case 'ArrowRight':
+      return {
+        ...viewState,
+        target: [viewState.target[0] + panStep, viewState.target[1], viewState.target[2]],
+      }
+    case 'ArrowUp':
+      return {
+        ...viewState,
+        target: [viewState.target[0], viewState.target[1] - panStep, viewState.target[2]],
+      }
+    case 'ArrowDown':
+      return {
+        ...viewState,
+        target: [viewState.target[0], viewState.target[1] + panStep, viewState.target[2]],
+      }
+    case '+':
+    case '=':
+      return {
+        ...viewState,
+        zoom: clampZoom(viewState.zoom + 0.5, viewState),
+      }
+    case '-':
+    case '_':
+      return {
+        ...viewState,
+        zoom: clampZoom(viewState.zoom - 0.5, viewState),
+      }
+    case 'Home':
+      return initialViewState
+    default:
+      return null
+  }
+}
+
 function normaliseViewState(viewState: {
   readonly target?: readonly [number, number] | readonly [number, number, number]
   readonly zoom?: number
@@ -949,6 +1088,10 @@ function normaliseViewState(viewState: {
     minZoom: viewState.minZoom ?? -10,
     maxZoom: viewState.maxZoom ?? 10,
   }
+}
+
+function clampZoom(zoom: number, viewState: OverviewViewState): number {
+  return Math.min(viewState.maxZoom, Math.max(viewState.minZoom, zoom))
 }
 
 function equivalentViewState(left: OverviewViewState, right: OverviewViewState): boolean {

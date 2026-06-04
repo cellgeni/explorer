@@ -26,6 +26,7 @@ export interface TileCacheOptions {
   readonly alphaFromIntensity?: boolean
   readonly decodeTile?: TileBitmapDecoder
   readonly onError?: (error: Error) => void
+  readonly onEvict?: (evictedTileCount: number) => void
 }
 
 export type TileCacheEntry = TileLoadingEntry | TileReadyEntry | TileErrorEntry
@@ -67,6 +68,7 @@ export class TileCache {
   private readonly maxTiles: number
   private readonly decodeTile: TileBitmapDecoder
   private readonly onError: (error: Error) => void
+  private readonly onEvict: (evictedTileCount: number) => void
   private readonly initialDisplayWindow: DisplayWindow | undefined
   private displayWindow: DisplayWindow | undefined
   private readonly color: readonly [number, number, number] | undefined
@@ -76,6 +78,7 @@ export class TileCache {
     this.maxTiles = options.maxTiles ?? 150
     this.decodeTile = options.decodeTile ?? createWorkerTileDecoder()
     this.onError = options.onError ?? noop
+    this.onEvict = options.onEvict ?? noopNumber
     this.initialDisplayWindow = options.displayWindow
     this.displayWindow = options.displayWindow
     this.color = options.color
@@ -256,6 +259,8 @@ export class TileCache {
   }
 
   private evict(): void {
+    let evictedTileCount = 0
+
     while (this.order.length > this.maxTiles) {
       const oldest = this.order.shift()
 
@@ -270,6 +275,11 @@ export class TileCache {
       }
 
       this.cache.delete(oldest)
+      evictedTileCount += 1
+    }
+
+    if (evictedTileCount > 0) {
+      this.onEvict(evictedTileCount)
     }
   }
 
@@ -294,6 +304,8 @@ function bboxesOverlap(a: BBox, b: BBox): boolean {
 }
 
 function noop(): void {}
+
+function noopNumber(): void {}
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {

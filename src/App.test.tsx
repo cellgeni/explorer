@@ -5,6 +5,7 @@ import {
   type AnalysisEmbeddingsLoader,
   type AnnotationGroupLoader,
   type AnnotationLoader,
+  type DatasetDiagnosticsRunner,
   type DatasetOverviewLoader,
   type GeneExpressionLoader,
   type GenePanelLoader,
@@ -46,6 +47,7 @@ function pendingPromise<T>(): Promise<T> {
 
 describe('App', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/')
     useViewerStore.setState(initialViewerState)
     vi.mocked(warmDatasetForRoi).mockClear()
   })
@@ -191,6 +193,61 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
   })
 
+  it('restores dataset controls from a shareable hash', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px',
+    )
+
+    render(<App />)
+
+    expect(screen.getByRole('tab', { name: 'Genes' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('combobox', { name: 'Gene scale' })).toHaveValue('viridis')
+    expect(screen.getByRole('button', { name: 'Actb' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gad1' })).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Dataset URL')).toHaveValue(
+        'https://example.test/xenium',
+      )
+    })
+  })
+
+  it('runs dataset diagnostics and summarizes the report', async () => {
+    const runDatasetDiagnostics: ReturnType<typeof vi.fn<DatasetDiagnosticsRunner>> =
+      vi.fn(async (baseUrl) => ({
+        baseUrl,
+        startedAt: '2026-06-04T00:00:00.000Z',
+        completedAt: '2026-06-04T00:00:01.000Z',
+        checks: [
+          {
+            id: 'cells-parquet',
+            label: 'Overview cells',
+            url: `${baseUrl}/cells.parquet`,
+            required: true,
+            status: 'pass',
+            message: 'Byte-range readable',
+            durationMs: 1,
+          },
+        ],
+      }))
+
+    render(<App runDatasetDiagnostics={runDatasetDiagnostics} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnose Dataset' }))
+
+    expect(await screen.findByText('All checks passed')).toBeInTheDocument()
+    expect(screen.getByText('Overview cells')).toBeInTheDocument()
+    expect(runDatasetDiagnostics).toHaveBeenCalledWith(
+      expect.stringContaining('/public/xenium/'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+  })
+
   it('shows compact loading indicators while startup queries are pending', async () => {
     const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
       () => pendingPromise(),
@@ -252,11 +309,21 @@ describe('App', () => {
       name: 'Gene scale',
     })
 
-    expect(within(geneScaleInput).getByRole('option', { name: 'Plasma' })).toBeInTheDocument()
-    expect(within(geneScaleInput).getByRole('option', { name: 'Cividis' })).toBeInTheDocument()
-    expect(within(geneScaleInput).getByRole('option', { name: 'Teal' })).toBeInTheDocument()
-    expect(within(geneScaleInput).getByRole('option', { name: 'Rose' })).toBeInTheDocument()
-    expect(within(geneScaleInput).getByRole('option', { name: 'Glasbey' })).toBeInTheDocument()
+    expect(
+      within(geneScaleInput).getByRole('option', { name: 'Plasma' }),
+    ).toBeInTheDocument()
+    expect(
+      within(geneScaleInput).getByRole('option', { name: 'Cividis' }),
+    ).toBeInTheDocument()
+    expect(
+      within(geneScaleInput).getByRole('option', { name: 'Teal' }),
+    ).toBeInTheDocument()
+    expect(
+      within(geneScaleInput).getByRole('option', { name: 'Rose' }),
+    ).toBeInTheDocument()
+    expect(
+      within(geneScaleInput).getByRole('option', { name: 'Glasbey' }),
+    ).toBeInTheDocument()
 
     fireEvent.change(geneScaleInput, { target: { value: 'glasbey' } })
 
@@ -1257,9 +1324,7 @@ describe('App', () => {
       },
     ])
     const loadGenePanel = vi.fn(async () => [])
-    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(
-      async () => [],
-    )
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [])
 
     try {
       render(

@@ -85,6 +85,42 @@ textarea:focus-visible {
   background: #000;
 }
 
+.app-error-shell {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #fffdf7;
+}
+
+.app-error-boundary {
+  display: grid;
+  gap: 10px;
+  width: min(460px, 100%);
+  padding: 16px;
+  border: 1px solid rgba(215, 63, 124, 0.32);
+  border-radius: 8px;
+  background: rgba(215, 63, 124, 0.08);
+}
+
+.app-error-boundary p {
+  margin: 0;
+  color: #5d2a38;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.app-error-boundary button {
+  justify-self: start;
+  min-height: 30px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: #171511;
+  color: #fffdf7;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
 .control-hud {
   border: 1px solid rgba(23, 21, 17, 0.12);
   background: rgba(255, 252, 243, 0.58);
@@ -452,6 +488,12 @@ h2 {
   cursor: wait;
   opacity: 0.68;
   transform: none;
+}
+
+.dataset-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
 }
 
 .secondary-action,
@@ -1148,6 +1190,87 @@ h2 {
   line-height: 1.25;
 }
 
+.dataset-diagnostics-panel {
+  display: grid;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid rgba(23, 21, 17, 0.12);
+  border-left: 3px solid #7b4d1d;
+  border-radius: 6px;
+  background: rgba(123, 77, 29, 0.08);
+}
+
+.dataset-diagnostics-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dataset-diagnostics-panel h2,
+.dataset-diagnostics-panel p,
+.dataset-diagnostics-panel span,
+.dataset-diagnostics-panel strong {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.dataset-diagnostics-panel h2,
+.dataset-diagnostics-panel p {
+  color: #7b4d1d;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dataset-diagnostics-heading span {
+  color: #2f2b22;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.dataset-diagnostics-panel ol {
+  display: grid;
+  gap: 2px;
+  max-height: 92px;
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.dataset-diagnostics-panel li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 0.6rem;
+  line-height: 1.15;
+}
+
+.dataset-diagnostics-panel li span {
+  color: #2f2b22;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dataset-diagnostics-panel li strong {
+  color: #174d3e;
+  font-size: 0.54rem;
+  text-transform: uppercase;
+}
+
+.dataset-diagnostics-panel .diagnostic-check-warning strong {
+  color: #7b4d1d;
+}
+
+.dataset-diagnostics-panel .diagnostic-check-fail strong {
+  color: #7f2048;
+}
+
 .activity-log {
   display: grid;
   gap: 4px;
@@ -1485,6 +1608,11 @@ h2 {
   height: 100%;
   overflow: hidden;
   background: #000;
+}
+
+.viewport-frame:focus-visible {
+  outline: 3px solid #d73f7c;
+  outline-offset: -3px;
 }
 
 .morphology-canvas,
