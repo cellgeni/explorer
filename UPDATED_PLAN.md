@@ -5,16 +5,19 @@ done. This file records execution-level additions requested after work began.
 
 ## Current Stage Assessment - 2026-06-04
 
-- Current stage: Phase 4 complete. Phases 1-3 are implemented per the execution
-  notes, with JPEG XR decoding and Z-stack plane selection still intentionally
-  deferred by user request.
+- Current stage: Phase 5 complete and verified. Phases 1-5 are implemented per
+  the execution notes below, with JPEG XR decoding and Z-stack plane selection
+  still intentionally deferred by user request.
 - Phase 4 is complete: gene picking, expression LOD, gene sets,
   built-in/custom annotations, ROI box/lasso workflow, ROI
   cell/gene/transcript export, annotation coloring, linked embeddings, and HDF5
   matrix fallback coverage are implemented.
-- Current working slice: Phase 4 closeout documentation and HDF5 regression
-  coverage. The latest completed commits are `020b14e` (ROI closeout) and
-  `6071f5d` (gene-scale palette and cell opacity controls).
+- Phase 5 is complete: Magic Lens, URL/shareable state, adaptive performance
+  budgets, keyboard/accessibility polish, dataset diagnostics, local telemetry,
+  docs, and final verification are implemented.
+- Current working sequence: feature-fix existing functionality first, then
+  optimize. Do not start new Phase 5.1 transcript display work until that
+  correctness pass is closed out.
 
 ## Added Skill Requirements
 
@@ -440,3 +443,36 @@ unless the phase order is explicitly changed.
       `docs/host-your-own-data.md`.
 - [x] Phase 5 final verification passed: `npm test`, `npm run build`,
       `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.
+
+## Current Work Sequence - Feature Fixing Before Optimization
+
+- [ ] Feature-fix pass: get current functionality correct before broad
+      performance work. Record bug fixes and verification here as they close.
+- [x] Fixed ROI cell summary hanging after Magic Lens scans. Transcript scans now
+      use a separate cached Xenium dataset/DuckDB worker from ROI cell queries,
+      and drawing a new ROI aborts/resets any active Magic Lens scan before
+      querying ROI cells.
+- [ ] Observed ROI warmup behavior: the first ROI ever drawn after dataset load
+      can take a long time to return cell info, while subsequent ROIs return
+      cell info very quickly. Treat this as an optimization target after the
+      feature-fix pass.
+- [ ] Optimization pass: after correctness is stable, tune interaction
+      performance, memory pressure, fetch/decode concurrency, and rendering
+      costs without changing product behavior.
+- [ ] Only after those passes, begin Phase 5.1.
+
+## Phase 5.1 Planned Spike - Transcript Display LOD
+
+- [ ] Add a transcript-rendering spike over `transcripts.parquet`, gated by
+      `capabilities.transcripts` and using existing DuckDB/Range, QV filter, and
+      viewport-version cancellation patterns.
+- [ ] At whole-slide and low zoom, show transcripts as clustered cell-level
+      summaries or high-level FOV/tile aggregations rather than individual
+      molecule points.
+- [ ] At medium zoom, keep stable data-space aggregation with count summaries and
+      feature/gene coloring so panning does not reshuffle the display.
+- [ ] At close zoom, render all visible matching transcripts as exact points with
+      hover/pick metadata.
+- [ ] Verify the transcript LOD path with Magic Lens, ROI transcript export,
+      selected gene overlays, annotation coloring, URL/shareable state, and the
+      demo dataset.

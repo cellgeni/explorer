@@ -2126,6 +2126,11 @@ export function App({
       const bbox = selection.bbox
       const requestId = roiRequestId.current + 1
       abortActiveRequest(roiAbortRef)
+      clearTimeoutRef(magicLensDebounceRef)
+      magicLensLastDetailRef.current = null
+      magicLensLastQueryKeyRef.current = null
+      abortActiveRequest(magicLensAbortRef)
+      magicLensRequestId.current += 1
       const abortController = new AbortController()
       roiRequestId.current = requestId
       roiAbortRef.current = abortController
@@ -2134,6 +2139,7 @@ export function App({
       setRoiState({ status: 'loading', url: loadState.url, bbox, selection })
       setRoiGeneStatsState({ status: 'idle' })
       setRoiTranscriptExportState({ status: 'idle' })
+      setMagicLensState({ status: 'idle' })
       appendDebugEvent(`${roiSelectionLabel(selection)} drawn: loading cells`)
 
       void loadRoiCells(loadState.url, selection, { signal: abortController.signal })

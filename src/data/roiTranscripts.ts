@@ -1,7 +1,7 @@
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { normalizeRoiSelection } from './roiSelection'
-import { cachedXeniumDataset } from './xeniumDatasetCache'
+import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { RoiSelectionInput } from './roiSelection'
 import type { DatasetTranscript, XeniumDataset } from '../datasets/xeniumDataset'
@@ -32,7 +32,7 @@ export async function loadDatasetRoiTranscripts(
 
   const dataset =
     options.getDataset === undefined
-      ? await cachedXeniumDataset(baseUrl)
+      ? await cachedXeniumTranscriptDataset(baseUrl)
       : await options.getDataset(baseUrl)
   throwIfAborted(options.signal)
 

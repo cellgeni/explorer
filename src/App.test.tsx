@@ -381,6 +381,102 @@ describe('App', () => {
     }
   })
 
+  it('aborts an active magic lens scan when drawing a new ROI', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    let magicLensSignal: AbortSignal | undefined
+    const loadRoiTranscripts: ReturnType<typeof vi.fn<RoiTranscriptsLoader>> = vi.fn(
+      (_baseUrl, _selection, options) => {
+        magicLensSignal = options?.signal
+        return pendingPromise()
+      },
+    )
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [
+      {
+        id: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiTranscripts={loadRoiTranscripts}
+          loadRoiCells={loadRoiCells}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('Magic Lens')
+      fireEvent.click(await screen.findByRole('button', { name: 'Viewport' }))
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Scan Lens' }))
+
+      await waitFor(() => {
+        expect(loadRoiTranscripts).toHaveBeenCalled()
+      })
+      expect(magicLensSignal?.aborted).toBe(false)
+
+      openHudTab('ROI')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+
+      const roiLayer = document.querySelector('.roi-draw-layer')
+
+      if (!(roiLayer instanceof HTMLElement)) {
+        throw new Error('Expected ROI draw layer.')
+      }
+
+      fireEvent.pointerDown(roiLayer, { clientX: 480, clientY: 480, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+
+      await waitFor(() => {
+        expect(loadRoiCells).toHaveBeenCalled()
+      })
+      expect(magicLensSignal?.aborted).toBe(true)
+      expect(screen.getByRole('tab', { name: 'Magic Lens' })).not.toHaveAttribute(
+        'aria-busy',
+        'true',
+      )
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
   it('scans exact circle transcripts while cursor magic lens is enabled', async () => {
     const rect = {
       x: 0,
