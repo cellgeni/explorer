@@ -12,8 +12,13 @@ import { readAnalysisZarrAnnotations } from '../data/analysisAnnotations'
 import { readCellsOverview } from '../data/hyparquetCells'
 import { loadMorphologyImage } from '../data/morphologyImage'
 import { openTiff } from '../tiff/loader'
+import {
+  normalizeRoiSelection,
+  roiSelectionToSpatialSelection,
+} from '../data/roiSelection'
 import type { CellId } from '../data/cellid'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
+import type { RoiSelectionInput } from '../data/roiSelection'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type {
@@ -299,10 +304,16 @@ ORDER BY b.cell_id, b.file_row_number
   }
 
   cells(
-    bbox: BBox,
+    selectionInput: RoiSelectionInput,
     options: { readonly limit?: number } = {},
   ): Promise<readonly DatasetCell[]> {
-    return this.cellsForBbox(bbox, options.limit ?? 50_000)
+    const selection = normalizeRoiSelection(selectionInput)
+    const limit = options.limit ?? 50_000
+    const spatialSelection = roiSelectionToSpatialSelection(selection)
+
+    return spatialSelection === null
+      ? this.cellsForBbox(selection.bbox, limit)
+      : this.cellsForSpatialSelection(spatialSelection, limit)
   }
 
   async transcriptsInBbox(
@@ -332,6 +343,44 @@ LIMIT ?
       bbox.maxX,
       bbox.minY,
       bbox.maxY,
+      options.minQv ?? 20,
+      options.limit ?? 100_000,
+    )
+
+    return result.toArray().map(parseTranscriptExportRow)
+  }
+
+  async transcriptsForSelection(
+    selectionInput: RoiSelectionInput,
+    options: TranscriptQueryOptions = {},
+  ): Promise<readonly DatasetTranscript[]> {
+    const selection = normalizeRoiSelection(selectionInput)
+    const spatialSelection = roiSelectionToSpatialSelection(selection)
+
+    if (spatialSelection === null) {
+      return this.transcriptsInBbox(selection.bbox, options)
+    }
+
+    const conn = await this.conn()
+    const fragment = selectionToSql(spatialSelection, 'x_location', 'y_location')
+    const stmt = await conn.prepare(`
+SELECT cell_id,
+       feature_name,
+       x_location,
+       y_location,
+       z_location,
+       qv,
+       overlaps_nucleus,
+       is_gene
+FROM read_parquet( ? )
+WHERE ${fragment.sql}
+  AND qv >= ?
+ORDER BY cell_id, feature_name
+LIMIT ?
+`)
+    const result = await stmt.query(
+      this.urlFor('transcripts.parquet'),
+      ...fragment.params,
       options.minQv ?? 20,
       options.limit ?? 100_000,
     )
@@ -580,6 +629,33 @@ LIMIT ?
             bbox.maxY,
             limit,
           )
+
+    return result.toArray().map(parseViewportCellRow)
+  }
+
+  private async cellsForSpatialSelection(
+    selection: Selection,
+    limit: number,
+  ): Promise<readonly DatasetCell[]> {
+    const conn = await this.conn()
+    const fragment = selectionToSql(selection, 'x_centroid', 'y_centroid')
+    const stmt = await conn.prepare(`
+SELECT cell_id,
+       file_row_number AS cell_feature_matrix_row,
+       x_centroid,
+       y_centroid,
+       transcript_counts,
+       cell_area
+FROM read_parquet( ? )
+WHERE ${fragment.sql}
+ORDER BY file_row_number
+LIMIT ?
+`)
+    const result = await stmt.query(
+      this.urlFor('cells.parquet'),
+      ...fragment.params,
+      limit,
+    )
 
     return result.toArray().map(parseViewportCellRow)
   }

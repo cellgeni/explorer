@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from './coords'
 import { ROI_CELL_EXPORT_LIMIT, loadDatasetRoiCells } from './roiCells'
+import type { RoiSelection } from './roiSelection'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
 
 const bbox = {
@@ -42,5 +43,26 @@ describe('dataset ROI cell loader', () => {
     })
 
     expect(cells).toHaveBeenCalledWith(bbox, { limit: 250 })
+  })
+
+  it('delegates lasso ROI selections to the dataset cell query', async () => {
+    const cells = vi.fn(async () => [])
+    const getDataset = vi.fn(async () => ({ cells }) as unknown as XeniumDataset)
+    const selection: RoiSelection = {
+      kind: 'lasso',
+      bbox,
+      points: [
+        { x: micrometers(1), y: micrometers(3) },
+        { x: micrometers(2), y: micrometers(3) },
+        { x: micrometers(2), y: micrometers(4) },
+      ],
+    }
+
+    await loadDatasetRoiCells('https://example.test/xenium/', selection, {
+      getDataset,
+      validateRangeSupport: async () => undefined,
+    })
+
+    expect(cells).toHaveBeenCalledWith(selection, { limit: ROI_CELL_EXPORT_LIMIT })
   })
 })

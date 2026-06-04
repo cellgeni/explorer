@@ -328,6 +328,58 @@ describe('XeniumDataset', () => {
     ])
   })
 
+  it('loads raw transcript rows within a lasso ROI for exact export', async () => {
+    const cellId = intToCellId(1, 1)
+    const conn = new FakeConnection([
+      [
+        {
+          cell_id: cellId,
+          feature_name: 'Actb',
+          x_location: 2,
+          y_location: 3,
+          z_location: 1,
+          qv: 35,
+          overlaps_nucleus: true,
+          is_gene: true,
+        },
+      ],
+    ])
+    const dataset = makeDataset(conn)
+
+    await expect(
+      dataset.transcriptsForSelection(
+        {
+          kind: 'lasso',
+          bbox: {
+            minX: micrometers(0),
+            maxX: micrometers(10),
+            minY: micrometers(1),
+            maxY: micrometers(20),
+          },
+          points: [
+            { x: micrometers(0), y: micrometers(1) },
+            { x: micrometers(10), y: micrometers(1) },
+            { x: micrometers(10), y: micrometers(20) },
+          ],
+        },
+        { limit: 250, minQv: 30 },
+      ),
+    ).resolves.toHaveLength(1)
+
+    expect(conn.preparedSql[0]).toContain('ST_Within')
+    expect(conn.preparedSql[0]).toContain('x_location BETWEEN ? AND ?')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/transcripts.parquet',
+      micrometers(0),
+      micrometers(10),
+      micrometers(1),
+      micrometers(20),
+      'POLYGON((0 1, 10 1, 10 20, 0 1))',
+      30,
+      250,
+    ])
+  })
+
   it('loads viewport-scoped expression counts for selected genes', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([
@@ -439,6 +491,56 @@ describe('XeniumDataset', () => {
       micrometers(20),
       micrometers(20),
       micrometers(30),
+      75,
+    ])
+  })
+
+  it('loads true cell ids and observations for a lasso ROI', async () => {
+    const cellId = intToCellId(1, 5)
+    const conn = new FakeConnection([
+      [
+        {
+          cell_id: cellId,
+          cell_feature_matrix_row: 17n,
+          x_centroid: 12,
+          y_centroid: 24,
+          transcript_counts: 90,
+          cell_area: 35,
+        },
+      ],
+    ])
+    const dataset = makeDataset(conn)
+
+    await expect(
+      dataset.cells(
+        {
+          kind: 'lasso',
+          bbox: {
+            minX: micrometers(10),
+            maxX: micrometers(20),
+            minY: micrometers(20),
+            maxY: micrometers(30),
+          },
+          points: [
+            { x: micrometers(10), y: micrometers(20) },
+            { x: micrometers(20), y: micrometers(20) },
+            { x: micrometers(20), y: micrometers(30) },
+          ],
+        },
+        { limit: 75 },
+      ),
+    ).resolves.toHaveLength(1)
+
+    expect(conn.preparedSql[0]).toContain('ST_Within')
+    expect(conn.preparedSql[0]).toContain('x_centroid BETWEEN ? AND ?')
+    expect(conn.preparedSql[0]).toContain('ORDER BY file_row_number')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/cells.parquet',
+      micrometers(10),
+      micrometers(20),
+      micrometers(20),
+      micrometers(30),
+      'POLYGON((10 20, 20 20, 20 30, 10 20))',
       75,
     ])
   })

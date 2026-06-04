@@ -1,6 +1,9 @@
 import { asyncBufferFromUrl } from 'hyparquet'
 import { datasetFileUrl } from './datasetFiles'
-import { clearCellFeatureMatrixZarrCache, warmCellFeatureMatrixZarr } from './gex'
+import {
+  clearCellFeatureMatrixZarrCache,
+  warmCellFeatureMatrixZarrCellIdIndex,
+} from './gex'
 import {
   DEFAULT_PARQUET_FOOTER_CACHE_BYTES,
   cacheFooterByteRanges,
@@ -28,7 +31,7 @@ export async function warmDatasetForRoi(
   options: WarmDatasetForRoiOptions = {},
 ): Promise<void> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
-  const warmMatrix = options.warmMatrix ?? warmCellFeatureMatrixZarr
+  const warmMatrix = options.warmMatrix ?? warmCellFeatureMatrixZarrCellIdIndex
   const cellsUrl = datasetFileUrl(baseUrl, 'cells.parquet')
   const boundariesUrl = datasetFileUrl(baseUrl, 'cell_boundaries.parquet')
   const matrixUrl = datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip')
@@ -41,6 +44,12 @@ export async function warmDatasetForRoi(
   await Promise.all([
     datasetPromise.then((dataset) => dataset.warm()),
     warmRangeReadableFile(cellsUrl, 'cells.parquet', validateRangeSupport, options),
+    warmRangeReadableDatasetFile(
+      matrixUrl,
+      'cell_feature_matrix.zarr.zip',
+      validateRangeSupport,
+      options,
+    ),
     warmMatrix(matrixUrl),
     warmRangeReadableFile(
       boundariesUrl,
@@ -49,6 +58,19 @@ export async function warmDatasetForRoi(
       options,
     ).catch(noop),
   ])
+  throwIfAborted(options.signal)
+}
+
+async function warmRangeReadableDatasetFile(
+  url: string,
+  label: string,
+  validateRangeSupport: DatasetRangeValidator,
+  options: { readonly signal?: AbortSignal },
+): Promise<void> {
+  await validateRangeSupport(url, {
+    label,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
   throwIfAborted(options.signal)
 }
 

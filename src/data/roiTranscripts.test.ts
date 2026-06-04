@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { intToCellId } from './cellid'
 import { micrometers } from './coords'
 import { ROI_TRANSCRIPT_EXPORT_LIMIT, loadDatasetRoiTranscripts } from './roiTranscripts'
+import type { RoiSelection } from './roiSelection'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
 
 const bbox = {
@@ -63,6 +64,33 @@ describe('dataset ROI transcript loader', () => {
 
     expect(transcriptsInBbox).toHaveBeenCalledWith(bbox, {
       limit: 500,
+      minQv: 35,
+    })
+  })
+
+  it('delegates lasso ROI transcript export to the exact selection query', async () => {
+    const transcriptsForSelection = vi.fn(async () => [])
+    const getDataset = vi.fn(
+      async () => ({ transcriptsForSelection }) as unknown as XeniumDataset,
+    )
+    const selection: RoiSelection = {
+      kind: 'lasso',
+      bbox,
+      points: [
+        { x: micrometers(1), y: micrometers(3) },
+        { x: micrometers(2), y: micrometers(3) },
+        { x: micrometers(2), y: micrometers(4) },
+      ],
+    }
+
+    await loadDatasetRoiTranscripts('https://example.test/xenium/', selection, {
+      getDataset,
+      minQv: 35,
+      validateRangeSupport: async () => undefined,
+    })
+
+    expect(transcriptsForSelection).toHaveBeenCalledWith(selection, {
+      limit: ROI_TRANSCRIPT_EXPORT_LIMIT,
       minQv: 35,
     })
   })

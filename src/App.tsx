@@ -26,6 +26,7 @@ import {
 import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
 import { loadDatasetRoiTranscripts as defaultLoadDatasetRoiTranscripts } from './data/roiTranscripts'
 import { micrometers } from './data/coords'
+import type { RoiSelection } from './data/roiSelection'
 import { parseCustomAnnotations } from './data/customAnnotations'
 import {
   BOUNDARY_VIEWPORT_CELL_LIMIT,
@@ -138,7 +139,7 @@ export type AnalysisEmbeddingsLoader = (
 ) => Promise<readonly AnalysisEmbedding[]>
 export type RoiCellsLoader = (
   baseUrl: string,
-  bbox: BBox,
+  selection: RoiSelection,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<readonly DatasetCell[]>
 export type RoiGeneStatsLoader = (
@@ -148,7 +149,7 @@ export type RoiGeneStatsLoader = (
 ) => Promise<RoiGeneStats>
 export type RoiTranscriptsLoader = (
   baseUrl: string,
-  bbox: BBox,
+  selection: RoiSelection,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<readonly DatasetTranscript[]>
 export type GeneExpressionLoader = (
@@ -284,11 +285,17 @@ type GeneExpressionState =
 
 type RoiState =
   | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string; readonly bbox: BBox }
+  | {
+      readonly status: 'loading'
+      readonly url: string
+      readonly bbox: BBox
+      readonly selection: RoiSelection
+    }
   | {
       readonly status: 'ready'
       readonly url: string
       readonly bbox: BBox
+      readonly selection: RoiSelection
       readonly cells: readonly DatasetCell[]
       readonly hitCellLimit: boolean
     }
@@ -296,6 +303,7 @@ type RoiState =
       readonly status: 'error'
       readonly url: string
       readonly bbox: BBox
+      readonly selection: RoiSelection
       readonly error: StructuredLoadError
     }
 
@@ -830,7 +838,7 @@ export function App({
     () => new Set(loadingTasks.map((task) => task.tabId)),
     [loadingTasks],
   )
-  const activeRoiBbox = roiState.status === 'idle' ? null : roiState.bbox
+  const activeRoiSelection = roiState.status === 'idle' ? null : roiState.selection
   const appendDebugEvent = useCallback(
     (message: string, options: { readonly coalesceKey?: string } = {}) => {
       debugLogIdRef.current += 1
@@ -1668,11 +1676,12 @@ export function App({
     appendDebugEvent('Cleared annotations')
   }
 
-  function handleRoiComplete(bbox: BBox) {
+  function handleRoiComplete(selection: RoiSelection) {
     if (loadState.status !== 'ready') {
       return
     }
 
+    const bbox = selection.bbox
     const requestId = roiRequestId.current + 1
     abortActiveRequest(roiAbortRef)
     const abortController = new AbortController()
@@ -1680,12 +1689,12 @@ export function App({
     roiAbortRef.current = abortController
     setRoiMode('idle')
     setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
-    setRoiState({ status: 'loading', url: loadState.url, bbox })
+    setRoiState({ status: 'loading', url: loadState.url, bbox, selection })
     setRoiGeneStatsState({ status: 'idle' })
     setRoiTranscriptExportState({ status: 'idle' })
-    appendDebugEvent('ROI drawn: loading cells')
+    appendDebugEvent(`${roiSelectionLabel(selection)} drawn: loading cells`)
 
-    void loadRoiCells(loadState.url, bbox, { signal: abortController.signal })
+    void loadRoiCells(loadState.url, selection, { signal: abortController.signal })
       .then((cells) => {
         if (roiRequestId.current !== requestId) {
           return
@@ -1695,6 +1704,7 @@ export function App({
           status: 'ready',
           url: loadState.url,
           bbox,
+          selection,
           cells,
           hitCellLimit: cells.length >= ROI_CELL_EXPORT_LIMIT,
         })
@@ -1758,6 +1768,7 @@ export function App({
           status: 'error',
           url: loadState.url,
           bbox,
+          selection,
           error: createStructuredLoadError('ROI cells', error),
         })
         setRoiGeneStatsState({ status: 'idle' })
@@ -1836,7 +1847,7 @@ export function App({
     setRoiTranscriptExportState({ status: 'loading', url: roiState.url })
     appendDebugEvent(`Exporting ROI transcripts ${name}`)
 
-    void loadRoiTranscripts(roiState.url, roiState.bbox, {
+    void loadRoiTranscripts(roiState.url, roiState.selection, {
       signal: abortController.signal,
     })
       .then((transcripts) => {
@@ -2696,6 +2707,23 @@ export function App({
                   <button
                     type="button"
                     className="secondary-action"
+                    disabled={loadState.status !== 'ready'}
+                    aria-pressed={roiMode === 'lasso'}
+                    onClick={() => {
+                      const nextMode = roiMode === 'lasso' ? 'idle' : 'lasso'
+                      setRoiMode(nextMode)
+                      appendDebugEvent(
+                        nextMode === 'lasso'
+                          ? 'ROI lasso mode enabled'
+                          : 'ROI draw cancelled',
+                      )
+                    }}
+                  >
+                    {roiMode === 'lasso' ? 'Drawing Lasso' : 'Draw Lasso'}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-action"
                     disabled={roiState.status === 'idle'}
                     onClick={handleClearRoi}
                   >
@@ -2800,7 +2828,7 @@ export function App({
           imageStatus={morphologyState.status}
           boundaryStatus={boundaryState.status}
           roiMode={roiMode}
-          roiBbox={activeRoiBbox}
+          roiSelection={activeRoiSelection}
           onImageTileError={handleImageTileError}
           onViewportCellCountChange={setViewportCellCount}
           onViewportChange={handleViewportChange}
@@ -2900,7 +2928,11 @@ function analysisEmbeddingStatusCopy(
 
 function roiStatusCopy(roiState: RoiState, roiMode: RoiDrawMode): string {
   if (roiMode === 'box') {
-    return 'Drawing'
+    return 'Drawing box'
+  }
+
+  if (roiMode === 'lasso') {
+    return 'Drawing lasso'
   }
 
   if (roiState.status === 'loading') {
@@ -2917,6 +2949,10 @@ function roiStatusCopy(roiState: RoiState, roiMode: RoiDrawMode): string {
   }
 
   return 'Idle'
+}
+
+function roiSelectionLabel(selection: RoiSelection): string {
+  return selection.kind === 'lasso' ? 'ROI lasso' : 'ROI box'
 }
 
 function roiGeneStatsStatusCopy(roiGeneStatsState: RoiGeneStatsState): string {

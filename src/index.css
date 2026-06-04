@@ -1467,6 +1467,29 @@ h2 {
   pointer-events: auto;
 }
 
+.roi-path-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.roi-lasso-path {
+  fill: rgba(240, 200, 75, 0.14);
+  stroke: rgba(240, 200, 75, 0.98);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 1px rgba(255, 253, 247, 0.55));
+}
+
+.roi-lasso-path.is-draft {
+  fill: none;
+  stroke-dasharray: 4 4;
+}
+
 .roi-rectangle {
   position: absolute;
   border: 1px solid rgba(240, 200, 75, 0.95);

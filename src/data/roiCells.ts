@@ -1,6 +1,6 @@
-import type { BBox } from './coords'
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
+import type { RoiSelectionInput } from './roiSelection'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { DatasetCell, XeniumDataset } from '../datasets/xeniumDataset'
@@ -16,7 +16,7 @@ export interface LoadDatasetRoiCellsOptions {
 
 export async function loadDatasetRoiCells(
   baseUrl: string,
-  bbox: BBox,
+  selection: RoiSelectionInput,
   options: LoadDatasetRoiCellsOptions = {},
 ): Promise<readonly DatasetCell[]> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
@@ -33,7 +33,7 @@ export async function loadDatasetRoiCells(
       : await options.getDataset(baseUrl)
   throwIfAborted(options.signal)
 
-  const cells = await dataset.cells(bbox, {
+  const cells = await dataset.cells(selection, {
     limit: options.limit ?? ROI_CELL_EXPORT_LIMIT,
   })
   throwIfAborted(options.signal)

@@ -3,6 +3,24 @@
 `PLAN.md` remains the source of truth for scope, sequencing, and definitions of
 done. This file records execution-level additions requested after work began.
 
+## Current Stage Assessment - 2026-06-04
+
+- Current stage: Phase 4 closeout and performance hardening. Phases 1-3 are
+  implemented per the execution notes, with JPEG XR decoding and Z-stack plane
+  selection still intentionally deferred by user request.
+- Phase 4 is advanced: gene picking, expression LOD, gene sets, built-in/custom
+  annotations, ROI box/lasso workflow, ROI cell/gene/transcript export,
+  annotation coloring, and the linked embedding panel are implemented.
+- Remaining Phase 4 closeout item: production hardening for the HDF5 matrix
+  fallback.
+- Current working slices: first ROI gene-query speedup plus exact lasso ROI
+  selection/export.
+  The unstaged data-path changes warm the Zarr cell-id row index, Range-probe
+  `cell_feature_matrix.zarr.zip`, cache Zarr ZIP byte ranges through the
+  persistent byte-range cache, and fetch cell-major sparse ranges concurrently.
+  The ROI changes add lasso drawing and exact polygon-aware cell/transcript
+  queries.
+
 ## Added Skill Requirements
 
 - Use `frontend-design` for Phase 1 UI work, as already required by `PLAN.md`.
@@ -254,11 +272,15 @@ unless the phase order is explicitly changed.
 - [x] Gene sets: import/paste symbol lists; score cells by sum/mean/z-scored
       signature; color by score; save named sets.
 - [x] Annotation import from `analysis.zarr.zip`, CSV, and JSON.
-- [ ] ROI annotations: draw polygon/box/lasso; compute summary stats; export
-      selected cells/transcripts.
+- [x] ROI annotations: box drawing, lasso drawing, true ROI cell lookup, summary
+      stats, save-as-annotation, selected-cell CSV export, ROI gene stats,
+      transcript CSV export, and exact polygon-aware lasso selection/export.
 - [x] UMAP/tSNE panel linked to spatial selection.
-- [ ] HDF5 path for `cell_feature_matrix.h5` with `h5wasm` and `jsfive`
-      fallback.
+- [ ] HDF5 path for `cell_feature_matrix.h5`. A `h5wasm` reader path exists for
+      ROI gene fallback; production hardening and regression smoke coverage
+      against a dataset that requires H5 remain. Recommendation captured:
+      `jsfive` is deferred unless a real dataset shows `h5wasm` cannot read a
+      needed H5 matrix that `jsfive` can support.
 
 ## Phase 4 Notes
 
@@ -354,9 +376,18 @@ unless the phase order is explicitly changed.
       work.
 - [x] Added ROI transcript export. The ROI panel now has an `Export Transcripts`
       action that Range-checks `transcripts.parquet`, queries QV-filtered raw
-      transcript rows inside the selected ROI bbox, and downloads a CSV with
-      cell id, feature name, x/y/z location, QV, nucleus overlap, and gene flag.
+      transcript rows inside the selected ROI selection, and downloads a CSV
+      with cell id, feature name, x/y/z location, QV, nucleus overlap, and gene
+      flag.
 - [x] Added a compact UMAP/tSNE embedding panel. It loads standard secondary
       analysis projection CSVs when available, samples large projections for
       canvas rendering, highlights the active spatial ROI and selected cell, and
       lets an embedding point click reuse the existing cell info selection.
+- [x] Captured the HDF5 fallback recommendation: keep `h5wasm` as the production
+      H5 reader, defer `jsfive` because it is a slower compatibility fallback,
+      and only add it if a concrete H5-only dataset fails under `h5wasm` but is
+      readable through `jsfive`.
+- [x] Added exact lasso ROI selection/export. Lasso selections render as polygon
+      overlays, ROI cell lookup filters centroids with DuckDB spatial
+      `ST_Within`, ROI gene stats use those exact selected cells, and transcript
+      export filters transcript coordinates with the same polygon semantics.

@@ -7,10 +7,20 @@ const zarrMock = vi.hoisted(() => ({
   slice: vi.fn((start: number, end: number) => ({ end, start })),
 }))
 
+const storageMock = vi.hoisted(() => ({
+  ZipFileStore: vi
+    .fn()
+    .mockImplementation(function MockZipFileStore(reader: { readonly url: string }) {
+      return {
+        kind: 'store',
+        reader,
+        url: reader.url,
+      }
+    }),
+}))
+
 vi.mock('@zarrita/storage', () => ({
-  ZipFileStore: {
-    fromUrl: vi.fn((url: string) => ({ kind: 'store', url })),
-  },
+  ZipFileStore: storageMock.ZipFileStore,
 }))
 
 vi.mock('zarrita', () => zarrMock)
@@ -48,6 +58,7 @@ describe('Zarr cell feature matrix cache', () => {
     zarrMock.get.mockReset()
     zarrMock.open.mockReset()
     zarrMock.slice.mockClear()
+    storageMock.ZipFileStore.mockClear()
   })
 
   it('reads the full cell_id array once per dataset URL', async () => {
@@ -115,7 +126,7 @@ describe('Zarr cell feature matrix cache', () => {
     ])
   })
 
-  it('warms zarr matrix metadata without scanning every cell id', async () => {
+  it('warms zarr matrix metadata and cell-major arrays without scanning every cell id', async () => {
     setupZarrMatrixMock({
       cellIdPairs: new Uint32Array([1, 1, 2, 1]),
       indptr: new Uint32Array([0, 1, 2]),
@@ -132,9 +143,84 @@ describe('Zarr cell feature matrix cache', () => {
     const indptrReads = zarrMock.get.mock.calls.filter(
       ([target]) => target.path === 'cell_features/csc/indptr',
     )
+    const openedPaths = zarrMock.open.mock.calls
+      .map(([target]) => target.path)
+      .filter((path): path is string => typeof path === 'string')
 
     expect(cellIdReads).toHaveLength(0)
     expect(indptrReads).toHaveLength(0)
+    expect(openedPaths).toEqual(
+      expect.arrayContaining([
+        'cell_features/csc/indptr',
+        'cell_features/csc/indices',
+        'cell_features/csc/data',
+      ]),
+    )
+  })
+
+  it('reuses warmed cell-major array handles for row-targeted ROI gene reads', async () => {
+    const cellA = intToCellId(1, 1)
+
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array([1, 1, 2, 1]),
+      indptr: new Uint32Array([0, 1, 2]),
+    })
+
+    const { gexFromCellFeatureMatrixZarrRows, warmCellFeatureMatrixZarr } =
+      await import('./gex')
+    const url = 'https://example.test/xenium/warmed-rows/cell_feature_matrix.zarr.zip'
+
+    await warmCellFeatureMatrixZarr(url)
+    zarrMock.open.mockClear()
+
+    await expect(
+      gexFromCellFeatureMatrixZarrRows(url, [{ id: cellA, row: 0 }]),
+    ).resolves.toMatchObject({
+      geneNames: ['Actb', 'Gad1'],
+    })
+
+    const reopenedCellMajorArrays = zarrMock.open.mock.calls.filter(
+      ([target]) =>
+        target.path === 'cell_features/csc/indptr' ||
+        target.path === 'cell_features/csc/indices' ||
+        target.path === 'cell_features/csc/data',
+    )
+
+    expect(reopenedCellMajorArrays).toHaveLength(0)
+  })
+
+  it('warms and memoizes the decoded cell-id row map before ROI gene reads', async () => {
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(2, 1)
+
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array([1, 1, 2, 1]),
+      indptr: new Uint32Array([0, 1, 2]),
+    })
+
+    const { gexFromCellFeatureMatrixZarr, warmCellFeatureMatrixZarrCellIdIndex } =
+      await import('./gex')
+    const url = 'https://example.test/xenium/warm-index/cell_feature_matrix.zarr.zip'
+
+    await warmCellFeatureMatrixZarrCellIdIndex(url)
+
+    const warmCellIdReads = zarrMock.get.mock.calls.filter(
+      ([target]) => target.path === 'cell_features/cell_id',
+    )
+    expect(warmCellIdReads).toHaveLength(1)
+
+    zarrMock.get.mockClear()
+
+    await expect(gexFromCellFeatureMatrixZarr(url, [cellB, cellA])).resolves.toMatchObject(
+      {
+        geneNames: ['Actb', 'Gad1'],
+      },
+    )
+
+    const roiCellIdReads = zarrMock.get.mock.calls.filter(
+      ([target]) => target.path === 'cell_features/cell_id',
+    )
+    expect(roiCellIdReads).toHaveLength(0)
   })
 })
 

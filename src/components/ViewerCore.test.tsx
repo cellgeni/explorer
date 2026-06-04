@@ -153,12 +153,49 @@ describe('ViewerCore', () => {
 
     fireEvent.pointerUp(roiLayer, { clientX: 116, clientY: 66, pointerId: 1 })
 
-    const bbox = onRoiComplete.mock.calls[0]?.[0]
-    expect(bbox).toMatchObject({
-      minX: 0,
-      maxX: 256,
-      minY: 0,
-      maxY: 256,
+    const selection = onRoiComplete.mock.calls[0]?.[0]
+    expect(selection).toMatchObject({
+      kind: 'box',
+      bbox: {
+        minX: 0,
+        maxX: 256,
+        minY: 0,
+        maxY: 256,
+      },
     })
+  })
+
+  it('emits a lasso ROI selection from a dragged polygon path', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onRoiComplete = vi.fn()
+
+    render(<ViewerCore roiMode="lasso" onRoiComplete={onRoiComplete} />)
+
+    const roiLayer = document.querySelector('.roi-draw-layer')
+
+    if (!(roiLayer instanceof HTMLElement)) {
+      throw new Error('Expected ROI draw layer.')
+    }
+
+    fireEvent.pointerDown(roiLayer, { clientX: 100, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(roiLayer, { clientX: 116, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(roiLayer, { clientX: 116, clientY: 66, pointerId: 1 })
+
+    expect(document.querySelector('.roi-lasso-path')).toBeInTheDocument()
+
+    fireEvent.pointerUp(roiLayer, { clientX: 100, clientY: 66, pointerId: 1 })
+
+    const selection = onRoiComplete.mock.calls[0]?.[0]
+    expect(selection).toMatchObject({
+      kind: 'lasso',
+      bbox: {
+        minX: 0,
+        maxX: 256,
+        minY: 0,
+        maxY: 256,
+      },
+    })
+    expect(selection.points).toHaveLength(4)
   })
 })

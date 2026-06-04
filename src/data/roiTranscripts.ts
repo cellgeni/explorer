@@ -1,8 +1,9 @@
-import type { BBox } from './coords'
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
+import { normalizeRoiSelection } from './roiSelection'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
 import type { DatasetRangeValidator } from './datasetOverview'
+import type { RoiSelectionInput } from './roiSelection'
 import type { DatasetTranscript, XeniumDataset } from '../datasets/xeniumDataset'
 
 export const ROI_TRANSCRIPT_EXPORT_LIMIT = 100_000
@@ -18,7 +19,7 @@ export interface LoadDatasetRoiTranscriptsOptions {
 
 export async function loadDatasetRoiTranscripts(
   baseUrl: string,
-  bbox: BBox,
+  selectionInput: RoiSelectionInput,
   options: LoadDatasetRoiTranscriptsOptions = {},
 ): Promise<readonly DatasetTranscript[]> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
@@ -35,10 +36,15 @@ export async function loadDatasetRoiTranscripts(
       : await options.getDataset(baseUrl)
   throwIfAborted(options.signal)
 
-  const transcripts = await dataset.transcriptsInBbox(bbox, {
+  const selection = normalizeRoiSelection(selectionInput)
+  const queryOptions = {
     limit: options.limit ?? ROI_TRANSCRIPT_EXPORT_LIMIT,
     minQv: options.minQv ?? DEFAULT_ROI_TRANSCRIPT_MIN_QV,
-  })
+  }
+  const transcripts =
+    selection.kind === 'box'
+      ? await dataset.transcriptsInBbox(selection.bbox, queryOptions)
+      : await dataset.transcriptsForSelection(selection, queryOptions)
   throwIfAborted(options.signal)
 
   return transcripts

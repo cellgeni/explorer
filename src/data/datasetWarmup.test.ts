@@ -3,7 +3,7 @@ import { warmDatasetForRoi } from './datasetWarmup'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
 
 describe('dataset ROI warmup', () => {
-  it('warms DuckDB, range probes, parquet footers, and zarr matrix metadata', async () => {
+  it('warms DuckDB, range probes, parquet footers, and the zarr matrix index', async () => {
     const warm = vi.fn(async () => undefined)
     const getDataset = vi.fn(async () => ({ warm }) as unknown as XeniumDataset)
     const validateRangeSupport = vi.fn(async () => undefined)
@@ -26,6 +26,10 @@ describe('dataset ROI warmup', () => {
     expect(validateRangeSupport).toHaveBeenCalledWith(
       'https://example.test/xenium/cell_boundaries.parquet',
       { label: 'cell_boundaries.parquet' },
+    )
+    expect(validateRangeSupport).toHaveBeenCalledWith(
+      'https://example.test/xenium/cell_feature_matrix.zarr.zip',
+      { label: 'cell_feature_matrix.zarr.zip' },
     )
     expect(prefetchParquetFooter).toHaveBeenCalledWith(
       'https://example.test/xenium/cells.parquet',

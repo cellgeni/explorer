@@ -6,6 +6,7 @@ export const DEFAULT_BYTE_RANGE_CACHE_MAX_ENTRY_BYTES = 8 * 1024 * 1024
 export const DEFAULT_PARQUET_FOOTER_CACHE_BYTES = 512 * 1024
 export const PARQUET_FOOTER_CACHE_NAMESPACE = 'parquet-footer'
 export const TIFF_TILE_CACHE_NAMESPACE = 'tiff-tile'
+export const ZARR_ZIP_CACHE_NAMESPACE = 'zarr-zip'
 
 const BYTE_RANGE_STORE_NAME = 'byte-ranges'
 

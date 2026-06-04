@@ -1136,10 +1136,13 @@ describe('App', () => {
         expect(loadRoiCells).toHaveBeenCalledWith(
           DEMO_DATASET_URL,
           expect.objectContaining({
-            minX: expect.any(Number) as number,
-            maxX: expect.any(Number) as number,
-            minY: expect.any(Number) as number,
-            maxY: expect.any(Number) as number,
+            kind: 'box',
+            bbox: expect.objectContaining({
+              minX: expect.any(Number) as number,
+              maxX: expect.any(Number) as number,
+              minY: expect.any(Number) as number,
+              maxY: expect.any(Number) as number,
+            }) as object,
           }),
           expect.objectContaining({
             signal: expect.any(AbortSignal) as AbortSignal,
@@ -1176,10 +1179,13 @@ describe('App', () => {
         expect(loadRoiTranscripts).toHaveBeenCalledWith(
           DEMO_DATASET_URL,
           expect.objectContaining({
-            minX: expect.any(Number) as number,
-            maxX: expect.any(Number) as number,
-            minY: expect.any(Number) as number,
-            maxY: expect.any(Number) as number,
+            kind: 'box',
+            bbox: expect.objectContaining({
+              minX: expect.any(Number) as number,
+              maxX: expect.any(Number) as number,
+              minY: expect.any(Number) as number,
+              maxY: expect.any(Number) as number,
+            }) as object,
           }),
           expect.objectContaining({
             signal: expect.any(AbortSignal) as AbortSignal,
@@ -1206,6 +1212,90 @@ describe('App', () => {
       createObjectUrlSpy.mockRestore()
       revokeObjectUrlSpy.mockRestore()
       downloadClickSpy.mockRestore()
+    }
+  })
+
+  it('starts a bbox-backed ROI query from a lasso selection', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(
+      async () => [],
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('ROI')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Draw Lasso' })).toBeEnabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Draw Lasso' }))
+
+      const roiLayer = document.querySelector('.roi-draw-layer')
+
+      if (!(roiLayer instanceof HTMLElement)) {
+        throw new Error('Expected ROI draw layer.')
+      }
+
+      fireEvent.pointerDown(roiLayer, { clientX: 480, clientY: 480, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 480, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: 480, clientY: 520, pointerId: 1 })
+
+      await waitFor(() => {
+        expect(loadRoiCells).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.objectContaining({
+            kind: 'lasso',
+            bbox: expect.objectContaining({
+              minX: expect.any(Number) as number,
+              maxX: expect.any(Number) as number,
+              minY: expect.any(Number) as number,
+              maxY: expect.any(Number) as number,
+            }) as object,
+            points: expect.any(Array) as unknown as object,
+          }),
+          expect.objectContaining({
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+      expect(await screen.findByText('0 cells')).toBeInTheDocument()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
     }
   })
 

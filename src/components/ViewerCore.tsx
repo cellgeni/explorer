@@ -21,6 +21,7 @@ import { styleOverviewCellsByObservation } from '../rendering/cellStyling'
 import { micrometers, scaleFromZoom } from '../data/coords'
 import type { ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox, DataPoint } from '../data/coords'
+import type { RoiSelection } from '../data/roiSelection'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { MorphologyCanvasChannel } from './MorphologyCanvas'
@@ -56,11 +57,12 @@ export interface ViewerCoreProps {
   readonly boundaryErrorMessage?: string
   readonly roiMode?: RoiDrawMode
   readonly roiBbox?: BBox | null
+  readonly roiSelection?: RoiSelection | null
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
-  readonly onRoiComplete?: (bbox: BBox) => void
+  readonly onRoiComplete?: (selection: RoiSelection) => void
 }
 
 export interface ViewerViewportDetail {
@@ -69,7 +71,7 @@ export interface ViewerViewportDetail {
   readonly viewState: OverviewViewState
 }
 
-export type RoiDrawMode = 'idle' | 'box'
+export type RoiDrawMode = 'idle' | 'box' | 'lasso'
 
 export function ViewerCore({
   cells = [],
@@ -91,6 +93,7 @@ export function ViewerCore({
   boundaryErrorMessage,
   roiMode = 'idle',
   roiBbox = null,
+  roiSelection = null,
   onImageTileError,
   onViewportChange,
   onViewportCellCountChange,
@@ -123,6 +126,7 @@ export function ViewerCore({
       {...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage })}
       roiMode={roiMode}
       roiBbox={roiBbox}
+      roiSelection={roiSelection}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
       {...(onViewportCellCountChange === undefined ? {} : { onViewportCellCountChange })}
@@ -153,16 +157,34 @@ interface ViewerSurfaceProps {
   readonly boundaryErrorMessage?: string
   readonly roiMode: RoiDrawMode
   readonly roiBbox: BBox | null
+  readonly roiSelection: RoiSelection | null
   readonly onImageTileError?: (error: Error) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
-  readonly onRoiComplete?: (bbox: BBox) => void
+  readonly onRoiComplete?: (selection: RoiSelection) => void
 }
 
-interface RoiDrag {
-  readonly start: DataPoint
-  readonly current: DataPoint
+type RoiDraft =
+  | {
+      readonly kind: 'box'
+      readonly start: DataPoint
+      readonly current: DataPoint
+    }
+  | {
+      readonly kind: 'lasso'
+      readonly points: readonly DataPoint[]
+      readonly current: DataPoint
+    }
+
+interface ScreenPoint {
+  readonly x: number
+  readonly y: number
+}
+
+interface RoiPathOverlay {
+  readonly d: string
+  readonly isDraft: boolean
 }
 
 interface MouseCoordinate {
@@ -198,6 +220,7 @@ function ViewerSurface({
   boundaryErrorMessage,
   roiMode,
   roiBbox,
+  roiSelection,
   onImageTileError,
   onViewportChange,
   onViewportCellCountChange,
@@ -210,7 +233,7 @@ function ViewerSurface({
     width: 0,
     height: 0,
   })
-  const [roiDrag, setRoiDrag] = useState<RoiDrag | null>(null)
+  const [roiDraft, setRoiDraft] = useState<RoiDraft | null>(null)
   const [mouseCoordinate, setMouseCoordinate] = useState<MouseCoordinate | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
   const mouseCoordinateFrameRef = useRef<number | null>(null)
@@ -299,19 +322,56 @@ function ViewerSurface({
       extentBbox: cellExtentBbox,
     })
   }, [cellExtentBbox, cells, viewState.zoom, viewportBbox, visibleCellCount])
+  const displayedRoiSelection = useMemo<RoiSelection | null>(
+    () => roiSelection ?? (roiBbox === null ? null : { kind: 'box', bbox: roiBbox }),
+    [roiBbox, roiSelection],
+  )
   const roiScreenRect = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
       return null
     }
 
-    return roiDrag === null
-      ? roiBboxToScreenRect(roiBbox, viewState, viewport)
-      : roiBboxToScreenRect(
-          dataPointsToBbox(roiDrag.start, roiDrag.current),
+    const boxDraft = roiDraft?.kind === 'box' ? roiDraft : null
+
+    return boxDraft === null
+      ? roiBboxToScreenRect(
+          displayedRoiSelection?.kind === 'box' ? displayedRoiSelection.bbox : null,
           viewState,
           viewport,
         )
-  }, [roiBbox, roiDrag, viewState, viewport])
+      : roiBboxToScreenRect(
+          dataPointsToBbox(boxDraft.start, boxDraft.current),
+          viewState,
+          viewport,
+        )
+  }, [displayedRoiSelection, roiDraft, viewState, viewport])
+  const roiPathOverlay = useMemo(() => {
+    if (viewport.width <= 0 || viewport.height <= 0) {
+      return null
+    }
+
+    const lassoDraft = roiDraft?.kind === 'lasso' ? roiDraft : null
+
+    if (lassoDraft !== null) {
+      return dataPointsToPathOverlay(
+        [...lassoDraft.points, lassoDraft.current],
+        viewState,
+        viewport,
+        true,
+      )
+    }
+
+    if (displayedRoiSelection?.kind === 'lasso') {
+      return dataPointsToPathOverlay(
+        displayedRoiSelection.points,
+        viewState,
+        viewport,
+        false,
+      )
+    }
+
+    return null
+  }, [displayedRoiSelection, roiDraft, viewState, viewport])
   const viewportMessage = readViewportMessage(status, imageStatus, boundaryStatus, {
     ...(errorMessage === undefined ? {} : { errorMessage }),
     ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
@@ -390,46 +450,71 @@ function ViewerSurface({
   )
   const handleRoiPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
-      if (roiMode !== 'box' || viewport.width <= 0 || viewport.height <= 0) {
+      if (roiMode === 'idle' || viewport.width <= 0 || viewport.height <= 0) {
         return
       }
 
       event.preventDefault()
       event.currentTarget.setPointerCapture?.(event.pointerId)
       const point = pointerEventToDataPoint(event, viewState, viewport)
-      setRoiDrag({ start: point, current: point })
+      setRoiDraft(
+        roiMode === 'box'
+          ? { kind: 'box', start: point, current: point }
+          : { kind: 'lasso', points: [point], current: point },
+      )
     },
     [roiMode, viewState, viewport],
   )
   const handleRoiPointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
-      if (roiDrag === null || viewport.width <= 0 || viewport.height <= 0) {
+      if (roiDraft === null || viewport.width <= 0 || viewport.height <= 0) {
         return
       }
 
       event.preventDefault()
       const point = pointerEventToDataPoint(event, viewState, viewport)
-      setRoiDrag({ start: roiDrag.start, current: point })
+      const minPointStep = 4 / scaleFromZoom(viewState.zoom)
+
+      setRoiDraft((currentDraft) => {
+        if (currentDraft === null) {
+          return null
+        }
+
+        if (currentDraft.kind === 'box') {
+          return { ...currentDraft, current: point }
+        }
+
+        const previousPoint =
+          currentDraft.points[currentDraft.points.length - 1] ?? currentDraft.current
+        const points = hasMinimumPointStep(previousPoint, point, minPointStep)
+          ? [...currentDraft.points, point]
+          : currentDraft.points
+
+        return { ...currentDraft, points, current: point }
+      })
     },
-    [roiDrag, viewState, viewport],
+    [roiDraft, viewState, viewport],
   )
   const handleRoiPointerUp = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
-      if (roiDrag === null || viewport.width <= 0 || viewport.height <= 0) {
+      if (roiDraft === null || viewport.width <= 0 || viewport.height <= 0) {
         return
       }
 
       event.preventDefault()
       const point = pointerEventToDataPoint(event, viewState, viewport)
-      const bbox = dataPointsToBbox(roiDrag.start, point)
+      const selection =
+        roiDraft.kind === 'box'
+          ? roiSelectionFromBox(roiDraft.start, point)
+          : roiSelectionFromLasso([...roiDraft.points, point])
 
-      setRoiDrag(null)
+      setRoiDraft(null)
 
-      if (onRoiComplete !== undefined && hasMinimumRoiSize(bbox)) {
-        onRoiComplete(bbox)
+      if (selection !== null && onRoiComplete !== undefined) {
+        onRoiComplete(selection)
       }
     },
-    [onRoiComplete, roiDrag, viewState, viewport],
+    [onRoiComplete, roiDraft, viewState, viewport],
   )
 
   useEffect(() => {
@@ -536,12 +621,20 @@ function ViewerSurface({
         </div>
       ) : null}
       <div
-        className={`roi-draw-layer${roiMode === 'box' ? ' active' : ''}`}
+        className={`roi-draw-layer${roiMode !== 'idle' ? ' active' : ''}`}
         aria-hidden="true"
         onPointerDown={handleRoiPointerDown}
         onPointerMove={handleRoiPointerMove}
         onPointerUp={handleRoiPointerUp}
       >
+        {roiPathOverlay === null ? null : (
+          <svg className="roi-path-svg" focusable="false" aria-hidden="true">
+            <path
+              className={`roi-lasso-path${roiPathOverlay.isDraft ? ' is-draft' : ''}`}
+              d={roiPathOverlay.d}
+            />
+          </svg>
+        )}
         {roiScreenRect === null ? null : (
           <span
             className="roi-rectangle"
@@ -604,6 +697,31 @@ function dataPointsToBbox(first: DataPoint, second: DataPoint): BBox {
   }
 }
 
+function dataPointArrayToBbox(points: readonly DataPoint[]): BBox | null {
+  if (points.length === 0) {
+    return null
+  }
+
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const point of points) {
+    minX = Math.min(minX, point.x)
+    maxX = Math.max(maxX, point.x)
+    minY = Math.min(minY, point.y)
+    maxY = Math.max(maxY, point.y)
+  }
+
+  return {
+    minX: micrometers(minX),
+    maxX: micrometers(maxX),
+    minY: micrometers(minY),
+    maxY: micrometers(maxY),
+  }
+}
+
 function roiBboxToScreenRect(
   bbox: BBox | null,
   viewState: OverviewViewState,
@@ -651,8 +769,79 @@ function rawDataPointToScreen(
   }
 }
 
+function dataPointsToPathOverlay(
+  points: readonly DataPoint[],
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+  isDraft: boolean,
+): RoiPathOverlay | null {
+  if (points.length < 2) {
+    return null
+  }
+
+  const screenPoints = points.map((point) =>
+    rawDataPointToScreen(point, viewState, viewport),
+  )
+
+  return {
+    d: screenPointsToPath(screenPoints, !isDraft && screenPoints.length >= 3),
+    isDraft,
+  }
+}
+
+function screenPointsToPath(points: readonly ScreenPoint[], closePath: boolean): string {
+  const [firstPoint, ...remainingPoints] = points
+
+  if (firstPoint === undefined) {
+    return ''
+  }
+
+  const lineCommands = remainingPoints
+    .map((point) => `L ${formatPathPoint(point.x)} ${formatPathPoint(point.y)}`)
+    .join(' ')
+
+  return [
+    `M ${formatPathPoint(firstPoint.x)} ${formatPathPoint(firstPoint.y)}`,
+    lineCommands,
+    closePath ? 'Z' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+function formatPathPoint(value: number): string {
+  return value.toFixed(2)
+}
+
+function roiSelectionFromBox(first: DataPoint, second: DataPoint): RoiSelection | null {
+  const bbox = dataPointsToBbox(first, second)
+
+  return hasMinimumRoiSize(bbox) ? { kind: 'box', bbox } : null
+}
+
+function roiSelectionFromLasso(points: readonly DataPoint[]): RoiSelection | null {
+  const bbox = dataPointArrayToBbox(points)
+
+  if (bbox === null || points.length < 3 || !hasMinimumRoiSize(bbox)) {
+    return null
+  }
+
+  return { kind: 'lasso', bbox, points }
+}
+
 function hasMinimumRoiSize(bbox: BBox): boolean {
   return bbox.maxX - bbox.minX >= 1 && bbox.maxY - bbox.minY >= 1
+}
+
+function hasMinimumPointStep(
+  first: DataPoint,
+  second: DataPoint,
+  minDistance: number,
+): boolean {
+  const deltaX = second.x - first.x
+  const deltaY = second.y - first.y
+
+  return deltaX * deltaX + deltaY * deltaY >= minDistance * minDistance
 }
 
 function styleCellsForObservation(

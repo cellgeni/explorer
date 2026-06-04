@@ -1,8 +1,14 @@
 import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
 import { asCellId, cellIdToInt, intToCellId } from './cellid'
+import {
+  defaultPersistentByteRangeCache,
+  fetchByteRangeWithCache,
+  ZARR_ZIP_CACHE_NAMESPACE,
+} from './persistentByteRangeCache'
 import type { CellId } from './cellid'
 import type { DataPoint, Micrometers } from './coords'
+import type { PersistentByteRangeCache } from './persistentByteRangeCache'
 import type { Array as ZarrArray, DataType, Group as ZarrGroup } from 'zarrita'
 
 export type TranscriptScope = 'spatial' | 'cells-only'
@@ -76,6 +82,8 @@ interface ZarrMatrixCache {
   readonly nCells: number
   readonly cellIdStride: number
   readonly cscIndptrArray?: ZarrArray<DataType, ZipFileStore>
+  readonly cscIndicesArray?: ZarrArray<DataType, ZipFileStore>
+  readonly cscDataArray?: ZarrArray<DataType, ZipFileStore>
 }
 
 interface ZarrMatrixCellIdCache extends ZarrMatrixCache {
@@ -116,6 +124,7 @@ const NON_GENE_PATTERNS = [
 
 const CELL_MAJOR_RANGE_COALESCE_GAP = 4_096
 const CELL_MAJOR_RANGE_MAX_SPAN = 500_000
+const CELL_MAJOR_RANGE_FETCH_CONCURRENCY = 8
 const CELL_MAJOR_INDPTR_COALESCE_GAP = 4_096
 const CELL_MAJOR_INDPTR_MAX_SPAN = 100_000
 const h5MatrixCache = new Map<string, Promise<H5MatrixCache>>()
@@ -124,6 +133,12 @@ const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
 
 export async function warmCellFeatureMatrixZarr(url: string): Promise<void> {
   await loadZarrMatrixMetadata(url)
+}
+
+export async function warmCellFeatureMatrixZarrCellIdIndex(
+  url: string,
+): Promise<void> {
+  await loadZarrMatrixWithCellIds(url)
 }
 
 export function clearCellFeatureMatrixZarrCache(retainUrl?: string): void {
@@ -345,50 +360,59 @@ async function gexFromCellFeatureMatrixZarrTargets(
     )
   }
 
-  const indicesArray = await zarr.open(matrix.cellFeatures.resolve('csc/indices'), {
-    kind: 'array',
-  })
-  const dataArray = await zarr.open(matrix.cellFeatures.resolve('csc/data'), {
-    kind: 'array',
-  })
+  const indicesArray =
+    matrix.cscIndicesArray ??
+    (await zarr.open(matrix.cellFeatures.resolve('csc/indices'), {
+      kind: 'array',
+    }))
+  const dataArray =
+    matrix.cscDataArray ??
+    (await zarr.open(matrix.cellFeatures.resolve('csc/data'), {
+      kind: 'array',
+    }))
   const cells = new Map<CellId, { geneNames: string[]; counts: number[] }>()
   const ranges = await zarrCellMajorSparseRanges(matrix.cscIndptrArray, targets, cells)
 
-  for (const rangeGroup of coalesceCellMajorRanges(ranges)) {
-    const indices = expectUint16Array(
-      (await zarr.get(indicesArray, [zarr.slice(rangeGroup.start, rangeGroup.end)])).data,
-      'cell_features/csc/indices',
-    )
-    const data = expectUint32Array(
-      (await zarr.get(dataArray, [zarr.slice(rangeGroup.start, rangeGroup.end)])).data,
-      'cell_features/csc/data',
-    )
+  await mapWithConcurrency(
+    coalesceCellMajorRanges(ranges),
+    CELL_MAJOR_RANGE_FETCH_CONCURRENCY,
+    async (rangeGroup) => {
+      const [indicesChunk, dataChunk] = await Promise.all([
+        zarr.get(indicesArray, [zarr.slice(rangeGroup.start, rangeGroup.end)]),
+        zarr.get(dataArray, [zarr.slice(rangeGroup.start, rangeGroup.end)]),
+      ])
+      const indices = expectUint16Array(
+        indicesChunk.data,
+        'cell_features/csc/indices',
+      )
+      const data = expectUint32Array(dataChunk.data, 'cell_features/csc/data')
 
-    for (const target of rangeGroup.targets) {
-      const start = target.start - rangeGroup.start
-      const end = target.end - rangeGroup.start
-      const sparseGenes: string[] = []
-      const sparseCounts: number[] = []
+      for (const target of rangeGroup.targets) {
+        const start = target.start - rangeGroup.start
+        const end = target.end - rangeGroup.start
+        const sparseGenes: string[] = []
+        const sparseCounts: number[] = []
 
-      for (let cursor = start; cursor < end; cursor += 1) {
-        const featureIndex = indices[cursor]
-        const count = data[cursor]
+        for (let cursor = start; cursor < end; cursor += 1) {
+          const featureIndex = indices[cursor]
+          const count = data[cursor]
 
-        if (
-          featureIndex === undefined ||
-          count === undefined ||
-          !matrix.geneFeatureIndices.has(featureIndex)
-        ) {
-          continue
+          if (
+            featureIndex === undefined ||
+            count === undefined ||
+            !matrix.geneFeatureIndices.has(featureIndex)
+          ) {
+            continue
+          }
+
+          sparseGenes.push(matrix.geneNames[featureIndex] ?? `feature_${featureIndex}`)
+          sparseCounts.push(Number(count))
         }
 
-        sparseGenes.push(matrix.geneNames[featureIndex] ?? `feature_${featureIndex}`)
-        sparseCounts.push(Number(count))
+        cells.set(target.id, { geneNames: sparseGenes, counts: sparseCounts })
       }
-
-      cells.set(target.id, { geneNames: sparseGenes, counts: sparseCounts })
-    }
-  }
+    },
+  )
 
   for (const cellId of cellIds) {
     if (!cells.has(cellId)) {
@@ -678,7 +702,7 @@ function loadZarrMatrixMetadata(url: string): Promise<ZarrMatrixCache> {
 }
 
 async function loadZarrMatrixUncached(url: string): Promise<ZarrMatrixCache> {
-  const store = ZipFileStore.fromUrl(url)
+  const store = cachedZipFileStoreFromUrl(url)
   const root = await zarr.open(store, { kind: 'group' })
   const cellFeatures = await zarr.open(root.resolve('cell_features'), { kind: 'group' })
   const attrs = cellFeatures.attrs
@@ -690,6 +714,13 @@ async function loadZarrMatrixUncached(url: string): Promise<ZarrMatrixCache> {
   const nCells = expectShapeDimension(cellIdArray.shape, 0, 'cell_features/cell_id')
   const cellIdStride = cellIdArray.shape[1] ?? 2
   const cscIndptrArray = await openZarrArrayOrNull(cellFeatures, 'csc/indptr')
+  const [cscIndicesArray, cscDataArray] =
+    cscIndptrArray === null
+      ? [null, null]
+      : await Promise.all([
+          openZarrArrayOrNull(cellFeatures, 'csc/indices'),
+          openZarrArrayOrNull(cellFeatures, 'csc/data'),
+        ])
 
   return {
     cellFeatures,
@@ -701,6 +732,8 @@ async function loadZarrMatrixUncached(url: string): Promise<ZarrMatrixCache> {
     nCells,
     cellIdStride,
     ...(cscIndptrArray === null ? {} : { cscIndptrArray }),
+    ...(cscIndicesArray === null ? {} : { cscIndicesArray }),
+    ...(cscDataArray === null ? {} : { cscDataArray }),
   }
 }
 
@@ -738,6 +771,77 @@ async function loadZarrMatrixWithCellIdsUncached(
   return {
     ...matrix,
     cellIdRows,
+  }
+}
+
+function cachedZipFileStoreFromUrl(url: string): ZipFileStore {
+  return new ZipFileStore(
+    new CachedHttpRangeReader(url, defaultPersistentByteRangeCache()),
+  )
+}
+
+class CachedHttpRangeReader {
+  private byteLength: number | undefined
+
+  constructor(
+    readonly url: string,
+    private readonly cache: PersistentByteRangeCache | null,
+  ) {}
+
+  async getLength(): Promise<number> {
+    if (this.byteLength !== undefined) {
+      return this.byteLength
+    }
+
+    const response = await fetch(this.url, { method: 'HEAD' })
+
+    if (!response.ok) {
+      throw new Error(
+        `failed http request ${this.url}, status: ${response.status}: ${response.statusText}`,
+      )
+    }
+
+    const byteLength = Number(response.headers.get('content-length'))
+
+    if (!Number.isFinite(byteLength)) {
+      throw new Error('could not get length')
+    }
+
+    this.byteLength = byteLength
+    return byteLength
+  }
+
+  async read(offset: number, size: number): Promise<Uint8Array<ArrayBuffer>> {
+    if (size === 0) {
+      return new Uint8Array(0)
+    }
+
+    const bytes = await fetchByteRangeWithCache({
+      cache: this.cache,
+      namespace: ZARR_ZIP_CACHE_NAMESPACE,
+      url: this.url,
+      start: offset,
+      end: offset + size,
+      fetchRange: async () => {
+        const response = await fetch(this.url, {
+          headers: {
+            Range: `bytes=${offset}-${offset + size - 1}`,
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error(
+            `failed http request ${this.url}, status: ${response.status} offset: ${offset} size: ${size}: ${response.statusText}`,
+          )
+        }
+
+        return new Uint8Array(await response.arrayBuffer())
+      },
+    })
+
+    const copy = new Uint8Array(bytes.byteLength)
+    copy.set(bytes)
+    return copy
   }
 }
 
@@ -1127,6 +1231,28 @@ function coalesceCellMajorRanges(
   }
 
   return groups
+}
+
+async function mapWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<void>,
+): Promise<void> {
+  const workerCount = Math.min(Math.max(1, concurrency), items.length)
+  let cursor = 0
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (cursor < items.length) {
+        const item = items[cursor]
+        cursor += 1
+
+        if (item !== undefined) {
+          await mapper(item)
+        }
+      }
+    }),
+  )
 }
 
 async function loadH5MatrixUncached(
