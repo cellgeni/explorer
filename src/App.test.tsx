@@ -76,7 +76,10 @@ describe('App', () => {
 
     openHudTab('Layers')
     expect(screen.getByRole('slider', { name: 'Image opacity' })).toHaveValue('100')
-    expect(screen.getByRole('slider', { name: 'Cell opacity' })).toHaveValue('100')
+    expect(screen.getByRole('slider', { name: 'Cell fill opacity' })).toHaveValue('100')
+    expect(screen.getByRole('slider', { name: 'Cell boundary opacity' })).toHaveValue(
+      '100',
+    )
     const coordinateUnitGroup = screen.getByRole('group', {
       name: 'Mouse coordinates',
     })
@@ -96,7 +99,7 @@ describe('App', () => {
     expect(screen.getByLabelText('Gene selection')).toBeDisabled()
     expect(screen.getByLabelText('Gene set symbols')).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'Signature score' })).toHaveValue('sum')
-    expect(screen.getByRole('combobox', { name: 'Gene scale' })).toHaveValue('gold')
+    expect(screen.getByRole('combobox', { name: 'Gene scale' })).toHaveValue('plasma')
     expect(screen.getByRole('combobox', { name: 'Expression detail' })).toHaveValue(
       'auto',
     )
@@ -121,22 +124,27 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
   })
 
-  it('lets the user configure image and gene layer opacity', () => {
+  it('lets the user configure image and cell layer opacity', () => {
     render(<App />)
     openHudTab('Layers')
 
     const imageOpacityInput = screen.getByRole('slider', {
       name: 'Image opacity',
     })
-    const geneOpacityInput = screen.getByRole('slider', {
-      name: 'Cell opacity',
+    const cellFillOpacityInput = screen.getByRole('slider', {
+      name: 'Cell fill opacity',
+    })
+    const cellBoundaryOpacityInput = screen.getByRole('slider', {
+      name: 'Cell boundary opacity',
     })
 
     fireEvent.change(imageOpacityInput, { target: { value: '45' } })
-    fireEvent.change(geneOpacityInput, { target: { value: '70' } })
+    fireEvent.change(cellFillOpacityInput, { target: { value: '70' } })
+    fireEvent.change(cellBoundaryOpacityInput, { target: { value: '35' } })
 
     expect(imageOpacityInput).toHaveValue('45')
-    expect(geneOpacityInput).toHaveValue('70')
+    expect(cellFillOpacityInput).toHaveValue('70')
+    expect(cellBoundaryOpacityInput).toHaveValue('35')
   })
 
   it('records compact debug activity entries', () => {
@@ -244,9 +252,15 @@ describe('App', () => {
       name: 'Gene scale',
     })
 
-    fireEvent.change(geneScaleInput, { target: { value: 'viridis' } })
+    expect(within(geneScaleInput).getByRole('option', { name: 'Plasma' })).toBeInTheDocument()
+    expect(within(geneScaleInput).getByRole('option', { name: 'Cividis' })).toBeInTheDocument()
+    expect(within(geneScaleInput).getByRole('option', { name: 'Teal' })).toBeInTheDocument()
+    expect(within(geneScaleInput).getByRole('option', { name: 'Rose' })).toBeInTheDocument()
+    expect(within(geneScaleInput).getByRole('option', { name: 'Glasbey' })).toBeInTheDocument()
 
-    expect(geneScaleInput).toHaveValue('viridis')
+    fireEvent.change(geneScaleInput, { target: { value: 'glasbey' } })
+
+    expect(geneScaleInput).toHaveValue('glasbey')
   })
 
   it('loads an embedding panel linked to ROI cells', async () => {

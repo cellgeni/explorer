@@ -44,7 +44,8 @@ export interface ViewerCoreProps {
   readonly imageLoader?: TiffPyramidLoader | null
   readonly imageChannels?: readonly MorphologyCanvasChannel[]
   readonly imageOpacity?: number
-  readonly geneExpressionOpacity?: number
+  readonly cellFillOpacity?: number
+  readonly cellBoundaryOpacity?: number
   readonly observationColorMode?: ObservationColorMode
   readonly annotationStyleColors?: readonly AnnotationColorStyle[]
   readonly coordinateUnit?: ViewerCoordinateUnit
@@ -80,7 +81,8 @@ export function ViewerCore({
   imageLoader = null,
   imageChannels = [],
   imageOpacity = 1,
-  geneExpressionOpacity = 1,
+  cellFillOpacity = 1,
+  cellBoundaryOpacity = 1,
   observationColorMode = 'transcript-count',
   annotationStyleColors = EMPTY_ANNOTATION_STYLE_COLORS,
   coordinateUnit = 'um',
@@ -112,7 +114,8 @@ export function ViewerCore({
       imageLoader={imageLoader}
       imageChannels={imageChannels}
       imageOpacity={imageOpacity}
-      geneExpressionOpacity={geneExpressionOpacity}
+      cellFillOpacity={cellFillOpacity}
+      cellBoundaryOpacity={cellBoundaryOpacity}
       observationColorMode={observationColorMode}
       annotationStyleColors={annotationStyleColors}
       coordinateUnit={coordinateUnit}
@@ -143,7 +146,8 @@ interface ViewerSurfaceProps {
   readonly imageLoader: TiffPyramidLoader | null
   readonly imageChannels: readonly MorphologyCanvasChannel[]
   readonly imageOpacity: number
-  readonly geneExpressionOpacity: number
+  readonly cellFillOpacity: number
+  readonly cellBoundaryOpacity: number
   readonly observationColorMode: ObservationColorMode
   readonly annotationStyleColors: readonly AnnotationColorStyle[]
   readonly coordinateUnit: ViewerCoordinateUnit
@@ -206,7 +210,8 @@ function ViewerSurface({
   imageLoader,
   imageChannels,
   imageOpacity,
-  geneExpressionOpacity,
+  cellFillOpacity,
+  cellBoundaryOpacity,
   observationColorMode,
   annotationStyleColors,
   coordinateUnit,
@@ -294,13 +299,15 @@ function ViewerSurface({
   const layers = useMemo(
     () =>
       createOverviewLayers(renderCells, styledBoundaries, displayExpressionCells, {
-        cellOpacity: geneExpressionOpacity,
+        cellFillOpacity,
+        cellBoundaryOpacity,
         expressionBoundaryPolygons,
       }),
     [
+      cellBoundaryOpacity,
+      cellFillOpacity,
       expressionBoundaryPolygons,
       displayExpressionCells,
-      geneExpressionOpacity,
       renderCells,
       styledBoundaries,
     ],

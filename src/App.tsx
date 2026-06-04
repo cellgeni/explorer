@@ -438,7 +438,8 @@ export function App({
   const morphologyInputId = useId()
   const boundaryLimitInputId = useId()
   const imageOpacityInputId = useId()
-  const geneOpacityInputId = useId()
+  const cellFillOpacityInputId = useId()
+  const cellBoundaryOpacityInputId = useId()
   const coordinateUnitInputId = useId()
   const geneSearchInputId = useId()
   const geneSetSymbolsInputId = useId()
@@ -512,7 +513,8 @@ export function App({
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(false)
   const [boundaryCellLimit, setBoundaryCellLimit] = useState(BOUNDARY_VIEWPORT_CELL_LIMIT)
   const [imageLayerOpacity, setImageLayerOpacity] = useState(1)
-  const [geneLayerOpacity, setGeneLayerOpacity] = useState(1)
+  const [cellFillOpacity, setCellFillOpacity] = useState(1)
+  const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(1)
   const [coordinateUnit, setCoordinateUnit] = useState<ViewerCoordinateUnit>('um')
   const [geneSearch, setGeneSearch] = useState('')
   const [geneSetSymbols, setGeneSetSymbols] = useState('')
@@ -2145,22 +2147,46 @@ export function App({
                   </div>
                   <div className="layer-opacity-control">
                     <div className="layer-opacity-header">
-                      <label htmlFor={geneOpacityInputId}>Cell opacity</label>
-                      <span>{opacityToPercent(geneLayerOpacity)}%</span>
+                      <label htmlFor={cellFillOpacityInputId}>Cell fill opacity</label>
+                      <span>{opacityToPercent(cellFillOpacity)}%</span>
                     </div>
                     <input
-                      id={geneOpacityInputId}
+                      id={cellFillOpacityInputId}
                       type="range"
                       min="0"
                       max="100"
                       step="5"
-                      value={opacityToPercent(geneLayerOpacity)}
-                      aria-valuetext={`${opacityToPercent(geneLayerOpacity)}%`}
+                      value={opacityToPercent(cellFillOpacity)}
+                      aria-valuetext={`${opacityToPercent(cellFillOpacity)}%`}
                       onChange={(event) => {
                         const nextPercent = event.currentTarget.valueAsNumber
-                        setGeneLayerOpacity(percentToOpacity(nextPercent))
-                        appendDebugEvent(`Cell opacity: ${nextPercent}%`, {
-                          coalesceKey: 'gene-opacity',
+                        setCellFillOpacity(percentToOpacity(nextPercent))
+                        appendDebugEvent(`Cell fill opacity: ${nextPercent}%`, {
+                          coalesceKey: 'cell-fill-opacity',
+                        })
+                      }}
+                    />
+                  </div>
+                  <div className="layer-opacity-control">
+                    <div className="layer-opacity-header">
+                      <label htmlFor={cellBoundaryOpacityInputId}>
+                        Cell boundary opacity
+                      </label>
+                      <span>{opacityToPercent(cellBoundaryOpacity)}%</span>
+                    </div>
+                    <input
+                      id={cellBoundaryOpacityInputId}
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={opacityToPercent(cellBoundaryOpacity)}
+                      aria-valuetext={`${opacityToPercent(cellBoundaryOpacity)}%`}
+                      onChange={(event) => {
+                        const nextPercent = event.currentTarget.valueAsNumber
+                        setCellBoundaryOpacity(percentToOpacity(nextPercent))
+                        appendDebugEvent(`Cell boundary opacity: ${nextPercent}%`, {
+                          coalesceKey: 'cell-boundary-opacity',
                         })
                       }}
                     />
@@ -2820,7 +2846,8 @@ export function App({
           imageLoader={morphologyImage?.loader ?? null}
           imageChannels={morphologyCanvasChannels}
           imageOpacity={imageLayerOpacity}
-          geneExpressionOpacity={geneLayerOpacity}
+          cellFillOpacity={cellFillOpacity}
+          cellBoundaryOpacity={cellBoundaryOpacity}
           observationColorMode={viewerObservationColorMode}
           annotationStyleColors={activeAnnotationStyleColors}
           coordinateUnit={coordinateUnit}

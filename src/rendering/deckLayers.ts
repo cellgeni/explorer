@@ -34,11 +34,20 @@ export interface CellBoundaryDatum {
 }
 
 export interface OverviewLayerOptions {
-  readonly cellOpacity?: number
+  readonly cellFillOpacity?: number
+  readonly cellBoundaryOpacity?: number
   readonly expressionBoundaryPolygons?: readonly CellBoundaryDatum[]
 }
 
-export type GeneExpressionColorScale = 'gold' | 'magma' | 'viridis'
+export type GeneExpressionColorScale =
+  | 'gold'
+  | 'magma'
+  | 'viridis'
+  | 'plasma'
+  | 'cividis'
+  | 'teal'
+  | 'rose'
+  | 'glasbey'
 export type GeneExpressionScoreMode = 'sum' | 'mean' | 'z-score'
 
 export interface GeneExpressionColorScaleOption {
@@ -57,7 +66,7 @@ export interface GeneExpressionLayerDataOptions {
 
 type ColorStop = readonly [number, number, number, number]
 
-export const DEFAULT_GENE_EXPRESSION_COLOR_SCALE: GeneExpressionColorScale = 'gold'
+export const DEFAULT_GENE_EXPRESSION_COLOR_SCALE: GeneExpressionColorScale = 'plasma'
 export const DEFAULT_GENE_EXPRESSION_SCORE_MODE: GeneExpressionScoreMode = 'sum'
 
 export const GENE_EXPRESSION_COLOR_SCALE_OPTIONS: readonly GeneExpressionColorScaleOption[] =
@@ -65,6 +74,11 @@ export const GENE_EXPRESSION_COLOR_SCALE_OPTIONS: readonly GeneExpressionColorSc
     { id: 'gold', label: 'Gold' },
     { id: 'magma', label: 'Magma' },
     { id: 'viridis', label: 'Viridis' },
+    { id: 'plasma', label: 'Plasma' },
+    { id: 'cividis', label: 'Cividis' },
+    { id: 'teal', label: 'Teal' },
+    { id: 'rose', label: 'Rose' },
+    { id: 'glasbey', label: 'Glasbey' },
   ]
 
 export const GENE_EXPRESSION_SCORE_MODE_OPTIONS: readonly GeneExpressionScoreModeOption[] =
@@ -93,6 +107,31 @@ const GENE_EXPRESSION_COLOR_STOPS: Record<
     [33, 145, 140, 205],
     [253, 231, 37, 245],
   ],
+  plasma: [
+    [13, 8, 135, 130],
+    [203, 71, 119, 205],
+    [240, 249, 33, 245],
+  ],
+  cividis: [
+    [0, 32, 76, 130],
+    [127, 124, 88, 205],
+    [255, 233, 69, 245],
+  ],
+  teal: [
+    [13, 59, 74, 130],
+    [31, 151, 139, 205],
+    [193, 230, 143, 245],
+  ],
+  rose: [
+    [64, 18, 77, 130],
+    [211, 69, 114, 205],
+    [255, 188, 121, 245],
+  ],
+  glasbey: [
+    [214, 0, 0, 130],
+    [140, 59, 255, 205],
+    [1, 135, 0, 245],
+  ],
 }
 
 const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
@@ -115,9 +154,15 @@ export function createOverviewLayers(
   expressionCells: readonly OverviewCellDatum[] = [],
   options: OverviewLayerOptions = {},
 ): LayersList {
-  const cellOpacity = normalizeLayerOpacity(options.cellOpacity ?? DEFAULT_LAYER_OPACITY)
+  const cellFillOpacity = normalizeLayerOpacity(
+    options.cellFillOpacity ?? DEFAULT_LAYER_OPACITY,
+  )
+  const cellBoundaryOpacity = normalizeLayerOpacity(
+    options.cellBoundaryOpacity ?? DEFAULT_LAYER_OPACITY,
+  )
   const expressionBoundaryPolygons = options.expressionBoundaryPolygons ?? []
   const hasExpressionPolygons = expressionBoundaryPolygons.length > 0
+  const shouldFillCellPolygons = cellFillOpacity > 0
   const pointCells = cellsWithoutVisibleBoundaries(cells, boundaries)
   const cellPointLayer = new ScatterplotLayer<OverviewCellDatum>({
     id: 'cells-overview-scatter',
@@ -128,12 +173,13 @@ export function createOverviewLayers(
     radiusMaxPixels: 6,
     stroked: true,
     filled: false,
-    opacity: cellOpacity,
+    opacity: 1,
     lineWidthUnits: 'pixels',
     lineWidthMinPixels: 1,
     getPosition: (cell) => cell.position,
     getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
-    getLineColor: (cell) => cellPointOutlineColor(cell.fillColor),
+    getLineColor: (cell) =>
+      colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
     getLineWidth: 1,
   })
   const layers: LayersList = []
@@ -145,13 +191,13 @@ export function createOverviewLayers(
         data: boundaries,
         pickable: true,
         stroked: true,
-        filled: true,
-        opacity: cellOpacity,
+        filled: shouldFillCellPolygons,
+        opacity: 1,
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 1,
         getPolygon: (cell) => cell.polygon,
-        getFillColor: (cell) => cell.fillColor,
-        getLineColor: (cell) => cell.lineColor,
+        getFillColor: (cell) => colorWithOpacity(cell.fillColor, cellFillOpacity),
+        getLineColor: (cell) => colorWithOpacity(cell.lineColor, cellBoundaryOpacity),
         getLineWidth: 1,
       }),
     )
@@ -172,10 +218,11 @@ export function createOverviewLayers(
         filled: false,
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 1.5,
-        opacity: cellOpacity,
+        opacity: 1,
         getPosition: (cell) => cell.position,
         getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
-        getLineColor: (cell) => cellPointOutlineColor(cell.fillColor),
+        getLineColor: (cell) =>
+          colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
         getLineWidth: 1.5,
       }),
     )
@@ -188,13 +235,13 @@ export function createOverviewLayers(
         data: expressionBoundaryPolygons,
         pickable: false,
         stroked: true,
-        filled: true,
+        filled: shouldFillCellPolygons,
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 1,
-        opacity: cellOpacity,
+        opacity: 1,
         getPolygon: (cell) => cell.polygon,
-        getFillColor: (cell) => cell.fillColor,
-        getLineColor: (cell) => cell.lineColor,
+        getFillColor: (cell) => colorWithOpacity(cell.fillColor, cellFillOpacity),
+        getLineColor: (cell) => colorWithOpacity(cell.lineColor, cellBoundaryOpacity),
         getLineWidth: 1,
       }),
     )
@@ -516,6 +563,17 @@ function cellPointOutlineColor(color: Color): Color {
     color[1] ?? 0,
     color[2] ?? 0,
     Math.min(245, Math.max(160, color[3] ?? 210)),
+  ]
+}
+
+function colorWithOpacity(color: Color, opacity: number): Color {
+  const normalizedOpacity = normalizeLayerOpacity(opacity)
+
+  return [
+    color[0] ?? 0,
+    color[1] ?? 0,
+    color[2] ?? 0,
+    Math.round((color[3] ?? 255) * normalizedOpacity),
   ]
 }
 

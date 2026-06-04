@@ -85,7 +85,7 @@ describe('deck layer factory', () => {
     expect(pointLayer.props.data).toEqual([])
   })
 
-  it('applies cell opacity to overview points and boundaries', () => {
+  it('applies separate cell fill and boundary opacity to points and boundaries', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {
         id: 'cell-1',
@@ -99,7 +99,8 @@ describe('deck layer factory', () => {
       },
     ]
     const layers = createOverviewLayers(fixtureCells, boundaries, [], {
-      cellOpacity: 0.35,
+      cellFillOpacity: 0.35,
+      cellBoundaryOpacity: 0.6,
     })
     const [boundaryLayer, pointLayer] = layers
 
@@ -111,8 +112,58 @@ describe('deck layer factory', () => {
       throw new Error('Expected second overview layer to be a ScatterplotLayer.')
     }
 
-    expect(boundaryLayer.props.opacity).toBe(0.35)
-    expect(pointLayer.props.opacity).toBe(0.35)
+    expect(boundaryLayer.props.opacity).toBe(1)
+    expect(pointLayer.props.opacity).toBe(1)
+
+    const getBoundaryFillColor = boundaryLayer.props.getFillColor as (
+      cell: CellBoundaryDatum,
+    ) => readonly number[]
+    const getBoundaryLineColor = boundaryLayer.props.getLineColor as (
+      cell: CellBoundaryDatum,
+    ) => readonly number[]
+    const getPointLineColor = pointLayer.props.getLineColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
+
+    expect(getBoundaryFillColor(boundaries[0]!)).toEqual([32, 102, 83, 12])
+    expect(getBoundaryLineColor(boundaries[0]!)).toEqual([246, 242, 232, 126])
+    expect(getPointLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 132])
+  })
+
+  it('disables polygon fill rendering when cell fill opacity is zero', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const layers = createOverviewLayers(fixtureCells, boundaries, [], {
+      cellFillOpacity: 0,
+      cellBoundaryOpacity: 0.5,
+    })
+    const [boundaryLayer] = layers
+
+    if (!(boundaryLayer instanceof PolygonLayer)) {
+      throw new Error('Expected first overview layer to be a PolygonLayer.')
+    }
+
+    const getFillColor = boundaryLayer.props.getFillColor as (
+      cell: CellBoundaryDatum,
+    ) => readonly number[]
+    const getLineColor = boundaryLayer.props.getLineColor as (
+      cell: CellBoundaryDatum,
+    ) => readonly number[]
+
+    expect(boundaryLayer.props.filled).toBe(false)
+    expect(boundaryLayer.props.stroked).toBe(true)
+    expect(getFillColor(boundaries[0]!)).toEqual([32, 102, 83, 0])
+    expect(getLineColor(boundaries[0]!)).toEqual([246, 242, 232, 105])
   })
 
   it('keeps overview points for cells without visible boundaries', () => {
@@ -158,7 +209,8 @@ describe('deck layer factory', () => {
       },
     ]
     const layers = createOverviewLayers(fixtureCells, [], expressionCells, {
-      cellOpacity: 0.45,
+      cellFillOpacity: 0.45,
+      cellBoundaryOpacity: 0.4,
     })
 
     expect(layers).toHaveLength(2)
@@ -171,12 +223,18 @@ describe('deck layer factory', () => {
     }
 
     expect(expressionLayer.id).toBe('gene-expression-scatter')
-    expect(expressionLayer.props.opacity).toBe(0.45)
+    expect(expressionLayer.props.opacity).toBe(1)
     expect(expressionLayer.props.pickable).toBe(false)
     expect(expressionLayer.props.filled).toBe(false)
     expect(expressionLayer.props.stroked).toBe(true)
     expect(expressionLayer.props.lineWidthUnits).toBe('pixels')
     expect(expressionLayer.props.lineWidthMinPixels).toBe(1.5)
+
+    const getLineColor = expressionLayer.props.getLineColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
+
+    expect(getLineColor(expressionCells[0]!)).toEqual([240, 128, 120, 88])
   })
 
   it('uses expression-filled true boundaries instead of scatter when matching polygons exist', () => {
@@ -206,7 +264,8 @@ describe('deck layer factory', () => {
       expressionCells,
     )
     const layers = createOverviewLayers(fixtureCells, boundaries, expressionCells, {
-      cellOpacity: 0.5,
+      cellFillOpacity: 0.5,
+      cellBoundaryOpacity: 0.25,
       expressionBoundaryPolygons,
     })
 
@@ -231,7 +290,67 @@ describe('deck layer factory', () => {
     }
 
     expect(expressionLayer.id).toBe('gene-expression-polygons')
-    expect(expressionLayer.props.opacity).toBe(0.5)
+    expect(expressionLayer.props.opacity).toBe(1)
+
+    const getFillColor = expressionLayer.props.getFillColor as (
+      cell: CellBoundaryDatum,
+    ) => readonly number[]
+    const getLineColor = expressionLayer.props.getLineColor as (
+      cell: CellBoundaryDatum,
+    ) => readonly number[]
+
+    expect(getFillColor(expressionBoundaryPolygons[0]!)).toEqual([240, 128, 120, 110])
+    expect(getLineColor(expressionBoundaryPolygons[0]!)).toEqual([255, 253, 247, 53])
+  })
+
+  it('disables expression polygon fill rendering when cell fill opacity is zero', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-2',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-2',
+        position: [12, -24, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 5,
+      },
+    ]
+    const expressionBoundaryPolygons = expressionCellsToBoundaryLayerData(
+      boundaries,
+      expressionCells,
+    )
+    const layers = createOverviewLayers(fixtureCells, boundaries, expressionCells, {
+      cellFillOpacity: 0,
+      cellBoundaryOpacity: 0.5,
+      expressionBoundaryPolygons,
+    })
+    const expressionLayer = layers[2]
+
+    if (!(expressionLayer instanceof PolygonLayer)) {
+      throw new Error('Expected expression boundary layer to be a PolygonLayer.')
+    }
+
+    const getFillColor = expressionLayer.props.getFillColor as (
+      cell: CellBoundaryDatum,
+    ) => readonly number[]
+    const getLineColor = expressionLayer.props.getLineColor as (
+      cell: CellBoundaryDatum,
+    ) => readonly number[]
+
+    expect(expressionLayer.props.filled).toBe(false)
+    expect(expressionLayer.props.stroked).toBe(true)
+    expect(getFillColor(expressionBoundaryPolygons[0]!)).toEqual([240, 128, 120, 0])
+    expect(getLineColor(expressionBoundaryPolygons[0]!)).toEqual([255, 253, 247, 105])
   })
 
   it('styles true boundaries from matching visible cell colors', () => {
