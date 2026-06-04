@@ -164,6 +164,59 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('reports cursor magic lens movement and renders the lens overlay', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onMagicLensMove = vi.fn()
+    const cells: OverviewCellDatum[] = [
+      {
+        id: 'cell-1',
+        position: [1234, -5678, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      },
+    ]
+
+    render(
+      <ViewerCore
+        cells={cells}
+        magicLensActive
+        magicLensRadiusMicrometers={40}
+        magicLensStatus="ready"
+        magicLensSummary={{
+          transcriptCount: 2,
+          cellCount: 1,
+          geneCount: 1,
+          selectedGeneTranscriptCount: 2,
+          topGenes: [{ gene: 'Actb', count: 2, selected: true }],
+          hitLimit: false,
+        }}
+        onMagicLensMove={onMagicLensMove}
+      />,
+    )
+
+    const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+    fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
+
+    await waitFor(() => {
+      expect(onMagicLensMove).toHaveBeenCalledWith(
+        expect.objectContaining({
+          radiusMicrometers: 40,
+          bbox: expect.objectContaining({
+            minX: 1194,
+            maxX: 1274,
+            minY: 5638,
+            maxY: 5718,
+          }),
+        }),
+      )
+    })
+    expect(document.querySelector('.viewer-magic-lens-circle')).toBeInTheDocument()
+    expect(document.querySelector('.viewer-magic-lens-hud')).toHaveTextContent(
+      '1 cells - 2 tx',
+    )
+  })
+
   it('emits a data-space bounding box after drawing a box ROI', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

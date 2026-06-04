@@ -65,6 +65,10 @@ describe('App', () => {
     }
 
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Download diagnostics' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Download Diagnostics')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
     expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(5_000)
     expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
@@ -108,6 +112,22 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
+
+    openHudTab('Magic Lens')
+    expect(screen.getByRole('heading', { name: 'Magic Lens' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(20)
+    expect(screen.getByRole('slider', { name: 'Radius' })).toHaveValue('80')
+    expect(screen.getByRole('button', { name: 'Enable Lens' })).toBeDisabled()
+    const magicLensScopeGroup = screen.getByRole('group', { name: 'Scope' })
+    expect(
+      within(magicLensScopeGroup).getByRole('button', { name: 'Cursor' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      within(magicLensScopeGroup).getByRole('button', { name: 'Viewport' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+    expect(
+      within(magicLensScopeGroup).getByRole('button', { name: 'ROI' }),
+    ).toBeDisabled()
 
     openHudTab('Annotations')
     expect(screen.getByRole('heading', { name: 'Annotations' })).toBeInTheDocument()
@@ -246,6 +266,227 @@ describe('App', () => {
       expect.stringContaining('/public/xenium/'),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
+  })
+
+  it('scans current viewport transcripts with the magic lens', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+    const loadRoiTranscripts: ReturnType<typeof vi.fn<RoiTranscriptsLoader>> = vi.fn(
+      async () => [
+        {
+          cellId: intToCellId(1, 1),
+          featureName: 'Actb',
+          position: { x: micrometers(10), y: micrometers(20) },
+          zLocation: 0,
+          qv: 35,
+          overlapsNucleus: true,
+          isGene: true,
+        },
+        {
+          cellId: intToCellId(1, 1),
+          featureName: 'Actb',
+          position: { x: micrometers(11), y: micrometers(20) },
+          zLocation: 0,
+          qv: 35,
+          overlapsNucleus: true,
+          isGene: true,
+        },
+        {
+          cellId: intToCellId(1, 1),
+          featureName: 'Gad1',
+          position: { x: micrometers(12), y: micrometers(20) },
+          zLocation: 0,
+          qv: 35,
+          overlapsNucleus: false,
+          isGene: true,
+        },
+      ],
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiTranscripts={loadRoiTranscripts}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('Genes')
+      expect(await screen.findByText('2 genes')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Actb' }))
+
+      openHudTab('Magic Lens')
+      fireEvent.click(screen.getByRole('button', { name: 'Viewport' }))
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Scan Lens' }))
+
+      await waitFor(() => {
+        expect(loadRoiTranscripts).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.objectContaining({
+            minX: expect.any(Number) as number,
+            maxX: expect.any(Number) as number,
+            minY: expect.any(Number) as number,
+            maxY: expect.any(Number) as number,
+          }),
+          expect.objectContaining({
+            limit: 25_000,
+            minQv: 20,
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+
+      const results = await screen.findByLabelText('Magic lens results')
+      expect(results).toHaveTextContent('Transcripts')
+      expect(results).toHaveTextContent('3')
+      expect(results).toHaveTextContent('Genes')
+      expect(results).toHaveTextContent('2')
+      expect(results).toHaveTextContent('Selected')
+      expect(results).toHaveTextContent('2')
+      const distribution = screen.getByLabelText('Magic lens gene distribution')
+      expect(distribution).toHaveTextContent('Actb')
+      expect(distribution).toHaveTextContent('Gad1')
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('scans exact circle transcripts while cursor magic lens is enabled', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+    const loadRoiTranscripts: ReturnType<typeof vi.fn<RoiTranscriptsLoader>> = vi.fn(
+      async () => [
+        {
+          cellId: intToCellId(1, 1),
+          featureName: 'Actb',
+          position: { x: micrometers(10), y: micrometers(20) },
+          zLocation: 0,
+          qv: 35,
+          overlapsNucleus: true,
+          isGene: true,
+        },
+        {
+          cellId: intToCellId(1, 1),
+          featureName: 'Gad1',
+          position: { x: micrometers(240), y: micrometers(20) },
+          zLocation: 0,
+          qv: 35,
+          overlapsNucleus: false,
+          isGene: true,
+        },
+      ],
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiTranscripts={loadRoiTranscripts}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('Magic Lens')
+      const enableButton = await screen.findByRole('button', { name: 'Enable Lens' })
+      await waitFor(() => {
+        expect(enableButton).toBeEnabled()
+      })
+      fireEvent.click(enableButton)
+      fireEvent.pointerMove(
+        screen.getByRole('img', { name: 'Spatial viewer canvas area' }),
+        {
+          clientX: 500,
+          clientY: 500,
+        },
+      )
+
+      await waitFor(() => {
+        expect(loadRoiTranscripts).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.objectContaining({
+            minX: expect.any(Number) as number,
+            maxX: expect.any(Number) as number,
+            minY: expect.any(Number) as number,
+            maxY: expect.any(Number) as number,
+          }),
+          expect.objectContaining({
+            limit: 25_000,
+            minQv: 20,
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+
+      const results = await screen.findByLabelText('Magic lens results')
+      expect(results).toHaveTextContent('Transcripts')
+      expect(results).toHaveTextContent('1')
+      expect(results).toHaveTextContent('Cells')
+      expect(results).toHaveTextContent('1')
+      expect(screen.getByLabelText('Magic lens gene distribution')).toHaveTextContent(
+        'Actb',
+      )
+      expect(screen.getByLabelText('Magic lens gene distribution')).not.toHaveTextContent(
+        'Gad1',
+      )
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
   })
 
   it('shows compact loading indicators while startup queries are pending', async () => {

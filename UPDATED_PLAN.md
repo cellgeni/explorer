@@ -410,6 +410,10 @@ unless the phase order is explicitly changed.
 
 ## Phase 5 Closeout - Product Hardening
 
+- [x] Added Magic Lens panel and viewer behavior based on the old POC:
+      cursor/viewport/ROI scopes, cursor radius and QV controls, debounced
+      exact-circle transcript scans, cell/transcript/gene summaries, and an
+      in-view lens HUD.
 - [x] Added shareable URL hash state for dataset URL, active HUD tab, viewport,
       selected genes, ROI selection, gene scale/score/detail controls, cell
       color mode, coordinate unit, morphology toggle, and boundary limit. The

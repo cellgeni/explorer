@@ -1,5 +1,5 @@
 import { DeckGL } from '@deck.gl/react'
-import type { KeyboardEvent, PointerEvent } from 'react'
+import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import {
@@ -59,6 +59,10 @@ export interface ViewerCoreProps {
   readonly roiMode?: RoiDrawMode
   readonly roiBbox?: BBox | null
   readonly roiSelection?: RoiSelection | null
+  readonly magicLensActive?: boolean
+  readonly magicLensRadiusMicrometers?: number
+  readonly magicLensStatus?: ViewerMagicLensStatus
+  readonly magicLensSummary?: ViewerMagicLensSummary | null
   readonly initialViewStateOverride?: InitialViewStateOverride
   readonly overviewRenderCellLimit?: number
   readonly maxConcurrentTileRequests?: number
@@ -69,11 +73,37 @@ export interface ViewerCoreProps {
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onRoiComplete?: (selection: RoiSelection) => void
+  readonly onMagicLensMove?: (detail: ViewerMagicLensDetail) => void
+  readonly onMagicLensLeave?: () => void
 }
 
 export interface InitialViewStateOverride {
   readonly target?: readonly [number, number, number]
   readonly zoom?: number
+}
+
+export type ViewerMagicLensStatus = 'idle' | 'loading' | 'ready' | 'error'
+
+export interface ViewerMagicLensDetail {
+  readonly center: DataPoint
+  readonly radiusMicrometers: number
+  readonly bbox: BBox
+  readonly screen: ScreenPoint
+}
+
+export interface ViewerMagicLensSummary {
+  readonly transcriptCount: number
+  readonly cellCount: number
+  readonly geneCount: number
+  readonly selectedGeneTranscriptCount: number
+  readonly topGenes: readonly ViewerMagicLensGeneSummary[]
+  readonly hitLimit: boolean
+}
+
+export interface ViewerMagicLensGeneSummary {
+  readonly gene: string
+  readonly count: number
+  readonly selected: boolean
 }
 
 export interface ViewerViewportDetail {
@@ -106,6 +136,10 @@ export function ViewerCore({
   roiMode = 'idle',
   roiBbox = null,
   roiSelection = null,
+  magicLensActive = false,
+  magicLensRadiusMicrometers = 80,
+  magicLensStatus = 'idle',
+  magicLensSummary = null,
   initialViewStateOverride,
   overviewRenderCellLimit,
   maxConcurrentTileRequests,
@@ -116,6 +150,8 @@ export function ViewerCore({
   onViewportCellCountChange,
   onCellClick,
   onRoiComplete,
+  onMagicLensMove,
+  onMagicLensLeave,
 }: ViewerCoreProps) {
   const fittedViewState = useMemo(() => createOverviewViewState(cells), [cells])
   const initialViewState = useMemo(
@@ -152,12 +188,18 @@ export function ViewerCore({
       roiMode={roiMode}
       roiBbox={roiBbox}
       roiSelection={roiSelection}
+      magicLensActive={magicLensActive}
+      magicLensRadiusMicrometers={magicLensRadiusMicrometers}
+      magicLensStatus={magicLensStatus}
+      magicLensSummary={magicLensSummary}
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
       {...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
       {...(onViewportCellCountChange === undefined ? {} : { onViewportCellCountChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
       {...(onRoiComplete === undefined ? {} : { onRoiComplete })}
+      {...(onMagicLensMove === undefined ? {} : { onMagicLensMove })}
+      {...(onMagicLensLeave === undefined ? {} : { onMagicLensLeave })}
     />
   )
 }
@@ -188,12 +230,18 @@ interface ViewerSurfaceProps {
   readonly roiMode: RoiDrawMode
   readonly roiBbox: BBox | null
   readonly roiSelection: RoiSelection | null
+  readonly magicLensActive: boolean
+  readonly magicLensRadiusMicrometers: number
+  readonly magicLensStatus: ViewerMagicLensStatus
+  readonly magicLensSummary: ViewerMagicLensSummary | null
   readonly onImageTileError?: (error: Error) => void
   readonly onTileCacheEviction?: (evictedTileCount: number) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onRoiComplete?: (selection: RoiSelection) => void
+  readonly onMagicLensMove?: (detail: ViewerMagicLensDetail) => void
+  readonly onMagicLensLeave?: () => void
 }
 
 type RoiDraft =
@@ -256,12 +304,18 @@ function ViewerSurface({
   roiMode,
   roiBbox,
   roiSelection,
+  magicLensActive,
+  magicLensRadiusMicrometers,
+  magicLensStatus,
+  magicLensSummary,
   onImageTileError,
   onTileCacheEviction,
   onViewportChange,
   onViewportCellCountChange,
   onCellClick,
   onRoiComplete,
+  onMagicLensMove,
+  onMagicLensLeave,
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
   const keyboardHelpId = useId()
@@ -272,6 +326,7 @@ function ViewerSurface({
   })
   const [roiDraft, setRoiDraft] = useState<RoiDraft | null>(null)
   const [mouseCoordinate, setMouseCoordinate] = useState<MouseCoordinate | null>(null)
+  const [magicLensScreen, setMagicLensScreen] = useState<ScreenPoint | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
   const mouseCoordinateFrameRef = useRef<number | null>(null)
   const cellExtentBbox = useMemo(() => overviewCellsExtentBbox(cells), [cells])
@@ -416,6 +471,28 @@ function ViewerSurface({
 
     return null
   }, [displayedRoiSelection, roiDraft, viewState, viewport])
+  const magicLensOverlay = useMemo(
+    () =>
+      magicLensActive && magicLensScreen !== null
+        ? magicLensOverlayModel(
+            magicLensScreen,
+            magicLensRadiusMicrometers,
+            viewState,
+            viewport,
+            magicLensStatus,
+            magicLensSummary,
+          )
+        : null,
+    [
+      magicLensActive,
+      magicLensRadiusMicrometers,
+      magicLensScreen,
+      magicLensStatus,
+      magicLensSummary,
+      viewState,
+      viewport,
+    ],
+  )
   const viewportMessage = readViewportMessage(status, imageStatus, boundaryStatus, {
     ...(errorMessage === undefined ? {} : { errorMessage }),
     ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
@@ -510,9 +587,39 @@ function ViewerSurface({
         xMicrometers: point.x,
         yMicrometers: point.y,
       })
+
+      if (magicLensActive && roiMode === 'idle') {
+        const rect = event.currentTarget.getBoundingClientRect()
+        const screen = {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        }
+
+        setMagicLensScreen(screen)
+        onMagicLensMove?.({
+          center: point,
+          radiusMicrometers: magicLensRadiusMicrometers,
+          bbox: bboxFromCircle(point, magicLensRadiusMicrometers),
+          screen,
+        })
+      }
     },
-    [canTrackMouseCoordinates, scheduleMouseCoordinate, viewState, viewport],
+    [
+      canTrackMouseCoordinates,
+      magicLensActive,
+      magicLensRadiusMicrometers,
+      onMagicLensMove,
+      roiMode,
+      scheduleMouseCoordinate,
+      viewState,
+      viewport,
+    ],
   )
+  const handlePointerLeave = useCallback(() => {
+    clearMouseCoordinate()
+    setMagicLensScreen(null)
+    onMagicLensLeave?.()
+  }, [clearMouseCoordinate, onMagicLensLeave])
   const handleRoiPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       if (roiMode === 'idle' || viewport.width <= 0 || viewport.height <= 0) {
@@ -659,7 +766,7 @@ function ViewerSurface({
   return (
     <div
       ref={frameRef}
-      className="viewport-frame"
+      className={`viewport-frame${magicLensActive ? ' is-magic-lens-active' : ''}`}
       role="img"
       aria-label="Spatial viewer canvas area"
       aria-describedby={keyboardHelpId}
@@ -667,7 +774,7 @@ function ViewerSurface({
       tabIndex={0}
       onKeyDown={handleKeyboardNavigation}
       onPointerMove={handleMouseCoordinatePointerMove}
-      onPointerLeave={clearMouseCoordinate}
+      onPointerLeave={handlePointerLeave}
     >
       <p id={keyboardHelpId} className="visually-hidden">
         Use arrow keys to pan, plus or minus to zoom, and Home to reset the spatial view.
@@ -724,6 +831,13 @@ function ViewerSurface({
           />
         )}
       </div>
+      {magicLensOverlay === null ? null : (
+        <MagicLensOverlay
+          model={magicLensOverlay}
+          status={magicLensStatus}
+          summary={magicLensSummary}
+        />
+      )}
       {!hasCells ? (
         <div className="viewport-empty-state" aria-hidden="true">
           Please load a dataset
@@ -771,6 +885,111 @@ function dataPointsToBbox(first: DataPoint, second: DataPoint): BBox {
     maxX: micrometers(Math.max(first.x, second.x)),
     minY: micrometers(Math.min(first.y, second.y)),
     maxY: micrometers(Math.max(first.y, second.y)),
+  }
+}
+
+function bboxFromCircle(center: DataPoint, radius: number): BBox {
+  return {
+    minX: micrometers(Math.max(0, center.x - radius)),
+    maxX: micrometers(center.x + radius),
+    minY: micrometers(Math.max(0, center.y - radius)),
+    maxY: micrometers(center.y + radius),
+  }
+}
+
+interface MagicLensOverlayModel {
+  readonly circleStyle: CSSProperties
+  readonly hudStyle: CSSProperties
+}
+
+function MagicLensOverlay({
+  model,
+  status,
+  summary,
+}: {
+  readonly model: MagicLensOverlayModel
+  readonly status: ViewerMagicLensStatus
+  readonly summary: ViewerMagicLensSummary | null
+}) {
+  const topGenes = summary?.topGenes.slice(0, 8) ?? []
+  const maxCount = Math.max(...topGenes.map((gene) => gene.count), 1)
+
+  return (
+    <div className="viewer-magic-lens" aria-hidden="true">
+      <span className="viewer-magic-lens-circle" style={model.circleStyle} />
+      {status === 'idle' && summary === null ? null : (
+        <div className="viewer-magic-lens-hud" style={model.hudStyle}>
+          <p>
+            {summary === null
+              ? 'Scanning lens'
+              : `${summary.cellCount.toLocaleString()} cells - ${summary.transcriptCount.toLocaleString()} tx`}
+          </p>
+          {status === 'loading' ? <small>loading expression...</small> : null}
+          {topGenes.length === 0 && status !== 'loading' ? (
+            <small>No detected genes</small>
+          ) : null}
+          {topGenes.length === 0 ? null : (
+            <ol>
+              {topGenes.map((gene) => (
+                <li
+                  key={gene.gene}
+                  className={gene.selected ? 'is-selected' : undefined}
+                  style={
+                    {
+                      '--viewer-magic-lens-gene-width': `${Math.max(
+                        4,
+                        (gene.count / maxCount) * 100,
+                      )}%`,
+                    } as CSSProperties
+                  }
+                >
+                  <span>{gene.gene}</span>
+                  <strong>{gene.count.toLocaleString()}</strong>
+                  <i />
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function magicLensOverlayModel(
+  screen: ScreenPoint,
+  radiusMicrometers: number,
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+  status: ViewerMagicLensStatus,
+  summary: ViewerMagicLensSummary | null,
+): MagicLensOverlayModel {
+  const radiusPixels = Math.max(10, radiusMicrometers * scaleFromZoom(viewState.zoom))
+  const hudWidth = 190
+  const geneCount = Math.min(summary?.topGenes.length ?? 1, 8)
+  const hudHeight = status === 'loading' ? 58 : 46 + geneCount * 22
+  const gap = 10
+  let hudLeft = screen.x + radiusPixels + gap
+  let hudTop = screen.y - hudHeight / 2
+
+  if (hudLeft + hudWidth > viewport.width - 8) {
+    hudLeft = screen.x - radiusPixels - gap - hudWidth
+  }
+
+  hudTop = Math.max(8, Math.min(viewport.height - hudHeight - 8, hudTop))
+
+  return {
+    circleStyle: {
+      left: screen.x,
+      top: screen.y,
+      width: radiusPixels * 2,
+      height: radiusPixels * 2,
+    },
+    hudStyle: {
+      left: Math.max(8, hudLeft),
+      top: hudTop,
+      width: hudWidth,
+    },
   }
 }
 

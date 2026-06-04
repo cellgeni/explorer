@@ -26,7 +26,7 @@ import {
 import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
 import { loadDatasetRoiTranscripts as defaultLoadDatasetRoiTranscripts } from './data/roiTranscripts'
 import { micrometers } from './data/coords'
-import type { RoiSelection } from './data/roiSelection'
+import type { RoiSelection, RoiSelectionInput } from './data/roiSelection'
 import { parseCustomAnnotations } from './data/customAnnotations'
 import {
   runDatasetDiagnostics as defaultRunDatasetDiagnostics,
@@ -73,7 +73,7 @@ import {
 } from './rendering/annotationPalette'
 import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
-import type { BBox } from './data/coords'
+import type { BBox, DataPoint } from './data/coords'
 import type { ChannelAutoContrast, ChannelHistogram } from './data/morphologyContrast'
 import type {
   DatasetCell,
@@ -104,16 +104,24 @@ import type {
 } from './rendering/deckLayers'
 import type { RoiGeneStats } from './data/roiGeneStats'
 import type { OverviewCellDatum } from './rendering/deckLayers'
-import type { RoiDrawMode, ViewerViewportDetail } from './components/ViewerCore'
+import type {
+  RoiDrawMode,
+  ViewerMagicLensDetail,
+  ViewerMagicLensStatus,
+  ViewerViewportDetail,
+} from './components/ViewerCore'
 
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 const DEBUG_LOG_LIMIT = 12
+const MAGIC_LENS_TRANSCRIPT_LIMIT = 25_000
+const MAGIC_LENS_TOP_GENE_LIMIT = 8
 const CONTROL_HUD_TABS = [
   { id: 'dataset', label: 'Dataset' },
   { id: 'layers', label: 'Layers' },
   { id: 'genes', label: 'Genes' },
+  { id: 'magic-lens', label: 'Magic Lens' },
   { id: 'annotations', label: 'Annotations' },
   { id: 'roi', label: 'ROI' },
   { id: 'cell', label: 'Cell' },
@@ -167,8 +175,12 @@ export type RoiGeneStatsLoader = (
 ) => Promise<RoiGeneStats>
 export type RoiTranscriptsLoader = (
   baseUrl: string,
-  selection: RoiSelection,
-  options?: { readonly signal?: AbortSignal },
+  selection: RoiSelectionInput,
+  options?: {
+    readonly signal?: AbortSignal
+    readonly limit?: number
+    readonly minQv?: number
+  },
 ) => Promise<readonly DatasetTranscript[]>
 export type GeneExpressionLoader = (
   baseUrl: string,
@@ -363,6 +375,24 @@ type RoiTranscriptExportState =
       readonly error: StructuredLoadError
     }
 
+type MagicLensScope = 'cursor' | 'viewport' | 'roi'
+
+type MagicLensState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string; readonly scope: MagicLensScope }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly scope: MagicLensScope
+      readonly summary: MagicLensSummary
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly scope: MagicLensScope
+      readonly error: StructuredLoadError
+    }
+
 type LoadErrorCode =
   | 'network'
   | 'http'
@@ -385,6 +415,7 @@ type LoadErrorSource =
   | 'ROI genes'
   | 'ROI transcripts'
   | 'Gene expression'
+  | 'Magic lens'
   | 'Dataset diagnostics'
 
 interface StructuredLoadError {
@@ -435,6 +466,27 @@ interface RoiSummary {
   readonly cellCount: number
   readonly meanTranscriptCount: number
   readonly meanCellArea: number | undefined
+}
+
+interface MagicLensSummary {
+  readonly transcriptCount: number
+  readonly cellCount: number
+  readonly geneCount: number
+  readonly selectedGeneTranscriptCount: number
+  readonly topGenes: readonly MagicLensGeneSummary[]
+  readonly hitLimit: boolean
+}
+
+interface MagicLensGeneSummary {
+  readonly gene: string
+  readonly count: number
+  readonly percentTotal: number
+  readonly selected: boolean
+}
+
+interface MagicLensCircleFilter {
+  readonly center: DataPoint
+  readonly radiusMicrometers: number
 }
 
 export interface AppProps {
@@ -488,6 +540,9 @@ export function App({
   const embeddingViewInputId = useId()
   const roiNameInputId = useId()
   const observationModeInputId = useId()
+  const magicLensScopeInputId = useId()
+  const magicLensRadiusInputId = useId()
+  const magicLensMinQvInputId = useId()
   const [initialShareableState] = useState<ShareableState>(() =>
     readShareableStateFromLocation(),
   )
@@ -534,6 +589,13 @@ export function App({
   })
   const [roiTranscriptExportState, setRoiTranscriptExportState] =
     useState<RoiTranscriptExportState>({ status: 'idle' })
+  const [magicLensState, setMagicLensState] = useState<MagicLensState>({
+    status: 'idle',
+  })
+  const [magicLensScope, setMagicLensScope] = useState<MagicLensScope>('cursor')
+  const [magicLensActive, setMagicLensActive] = useState(false)
+  const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(80)
+  const [magicLensMinQv, setMagicLensMinQv] = useState(20)
   const [debugLog, setDebugLog] = useState<readonly DebugLogEntry[]>([])
   const [telemetryEvents, setTelemetryEvents] = useState<readonly TelemetryEvent[]>([])
   const [isControlHudCollapsed, setIsControlHudCollapsed] = useState(false)
@@ -606,6 +668,8 @@ export function App({
     ShareableViewState | undefined
   >(initialShareableState.viewState)
   const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
+  const [currentViewportDetail, setCurrentViewportDetail] =
+    useState<ViewerViewportDetail | null>(null)
   const [, setViewportCellCount] = useState<number | null>(null)
   const loadRequestId = useRef(0)
   const analysisEmbeddingRequestId = useRef(0)
@@ -613,6 +677,10 @@ export function App({
   const geneExpressionRequestId = useRef(0)
   const roiRequestId = useRef(0)
   const roiTranscriptExportRequestId = useRef(0)
+  const magicLensRequestId = useRef(0)
+  const magicLensDebounceRef = useRef<number | null>(null)
+  const magicLensLastDetailRef = useRef<ViewerMagicLensDetail | null>(null)
+  const magicLensLastQueryKeyRef = useRef<string | null>(null)
   const debugLogIdRef = useRef(0)
   const datasetAbortRef = useRef<AbortController | null>(null)
   const datasetWarmupAbortRef = useRef<AbortController | null>(null)
@@ -622,6 +690,7 @@ export function App({
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
   const roiAbortRef = useRef<AbortController | null>(null)
   const roiTranscriptExportAbortRef = useRef<AbortController | null>(null)
+  const magicLensAbortRef = useRef<AbortController | null>(null)
   const autoContrastChannelIdsRef = useRef<Set<string>>(new Set())
   const geneSetIdRef = useRef(0)
   const roiIdRef = useRef(0)
@@ -866,6 +935,15 @@ export function App({
       })
     }
 
+    if (magicLensState.status === 'loading') {
+      tasks.push({
+        id: 'magic-lens',
+        tabId: 'magic-lens',
+        label: 'Scanning magic lens',
+        detail: magicLensScopeLabel(magicLensState.scope),
+      })
+    }
+
     if (annotationState.status === 'loading') {
       tasks.push({
         id: 'annotations',
@@ -921,6 +999,7 @@ export function App({
     geneExpressionState,
     genePanelState,
     loadState,
+    magicLensState,
     morphologyState,
     roiGeneStatsState,
     roiState,
@@ -931,6 +1010,39 @@ export function App({
     [loadingTasks],
   )
   const activeRoiSelection = roiState.status === 'idle' ? null : roiState.selection
+  const magicLensIsCursorActive =
+    magicLensScope === 'cursor' && magicLensActive && loadState.status === 'ready'
+  const magicLensCanScan =
+    loadState.status === 'ready' &&
+    magicLensState.status !== 'loading' &&
+    (magicLensScope === 'cursor'
+      ? true
+      : magicLensScope === 'roi'
+        ? activeRoiSelection !== null
+        : currentViewportDetail !== null)
+  const magicLensViewerSummary =
+    magicLensState.status === 'ready' || magicLensState.status === 'loading'
+      ? magicLensState.status === 'ready'
+        ? magicLensState.summary
+        : null
+      : magicLensState.status === 'error'
+        ? null
+        : null
+  const magicLensViewerStatus: ViewerMagicLensStatus =
+    magicLensState.status === 'loading'
+      ? 'loading'
+      : magicLensState.status === 'ready'
+        ? 'ready'
+        : magicLensState.status === 'error'
+          ? 'error'
+          : 'idle'
+  const magicLensCopy = magicLensStatusCopy(
+    magicLensState,
+    magicLensScope,
+    loadState.status,
+    magicLensCanScan,
+    magicLensActive,
+  )
   const appendDebugEvent = useCallback(
     (message: string, options: { readonly coalesceKey?: string } = {}) => {
       debugLogIdRef.current += 1
@@ -994,6 +1106,7 @@ export function App({
           ? roiTranscriptExportState.error
           : null,
         geneExpressionState.status === 'error' ? geneExpressionState.error : null,
+        magicLensState.status === 'error' ? magicLensState.error : null,
       ].filter(isStructuredLoadError),
     [
       annotationState,
@@ -1004,6 +1117,7 @@ export function App({
       geneExpressionState,
       genePanelState,
       loadState,
+      magicLensState,
       morphologyState,
       roiState,
       roiGeneStatsState,
@@ -1050,6 +1164,7 @@ export function App({
       }
 
       lastViewportDetailRef.current = detail
+      setCurrentViewportDetail(detail)
       const nextShareableViewState = viewStateToShareable(detail.viewState)
       setShareableViewState((current) =>
         shareableViewStateKey(current) === shareableViewStateKey(nextShareableViewState)
@@ -1320,6 +1435,8 @@ export function App({
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
       abortActiveRequest(roiTranscriptExportAbortRef)
+      abortActiveRequest(magicLensAbortRef)
+      clearTimeoutRef(magicLensDebounceRef)
     }
   }, [])
 
@@ -1381,6 +1498,8 @@ export function App({
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
       abortActiveRequest(roiTranscriptExportAbortRef)
+      abortActiveRequest(magicLensAbortRef)
+      clearTimeoutRef(magicLensDebounceRef)
       const abortController = new AbortController()
       loadRequestId.current = requestId
       datasetAbortRef.current = abortController
@@ -1434,7 +1553,10 @@ export function App({
       setRoiState({ status: 'idle' })
       setRoiGeneStatsState({ status: 'idle' })
       setRoiTranscriptExportState({ status: 'idle' })
+      setMagicLensState({ status: 'idle' })
+      setMagicLensActive(false)
       setSelectedCell(null)
+      setCurrentViewportDetail(null)
       setViewportCellCount(null)
       setLoadState({ status: 'loading', url: requestedUrl })
       setMorphologyState(
@@ -1450,6 +1572,9 @@ export function App({
       geneExpressionRequestId.current += 1
       roiRequestId.current += 1
       roiTranscriptExportRequestId.current += 1
+      magicLensRequestId.current += 1
+      magicLensLastDetailRef.current = null
+      magicLensLastQueryKeyRef.current = null
       boundaryViewportKeyRef.current = null
       geneExpressionViewportKeyRef.current = null
       lastViewportDetailRef.current = null
@@ -2119,6 +2244,11 @@ export function App({
   function handleClearRoi() {
     abortActiveRequest(roiAbortRef)
     abortActiveRequest(roiTranscriptExportAbortRef)
+    if (magicLensScope === 'roi') {
+      abortActiveRequest(magicLensAbortRef)
+      magicLensRequestId.current += 1
+      setMagicLensState({ status: 'idle' })
+    }
     roiRequestId.current += 1
     roiTranscriptExportRequestId.current += 1
     setRoiMode('idle')
@@ -2216,6 +2346,158 @@ export function App({
           roiTranscriptExportAbortRef.current = null
         }
       })
+  }
+
+  function runMagicLensQuery(
+    selection: RoiSelectionInput,
+    scope: MagicLensScope,
+    circleFilter: MagicLensCircleFilter | null = null,
+  ) {
+    if (loadState.status !== 'ready') {
+      return
+    }
+
+    const requestId = magicLensRequestId.current + 1
+    abortActiveRequest(magicLensAbortRef)
+    const abortController = new AbortController()
+    magicLensRequestId.current = requestId
+    magicLensAbortRef.current = abortController
+    setMagicLensState({
+      status: 'loading',
+      url: loadState.url,
+      scope,
+    })
+    appendDebugEvent(
+      `Scanning magic lens ${magicLensScopeLabel(scope)}`,
+      scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-scan' } : {},
+    )
+
+    void loadRoiTranscripts(loadState.url, selection, {
+      signal: abortController.signal,
+      limit: MAGIC_LENS_TRANSCRIPT_LIMIT,
+      minQv: magicLensMinQv,
+    })
+      .then((transcripts) => {
+        if (magicLensRequestId.current !== requestId) {
+          return
+        }
+
+        const filteredTranscripts =
+          circleFilter === null
+            ? transcripts
+            : filterTranscriptsForCircle(transcripts, circleFilter)
+
+        setMagicLensState({
+          status: 'ready',
+          url: loadState.url,
+          scope,
+          summary: summarizeMagicLensTranscripts(filteredTranscripts, selectedGenes, {
+            limit: MAGIC_LENS_TRANSCRIPT_LIMIT,
+            hitLimit: transcripts.length >= MAGIC_LENS_TRANSCRIPT_LIMIT,
+            ...(circleFilter === null
+              ? {}
+              : { cellCount: countOverviewCellsInCircle(overviewCells, circleFilter) }),
+          }),
+        })
+        appendDebugEvent(
+          `Magic lens ready: ${filteredTranscripts.length.toLocaleString()} transcripts`,
+          scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-ready' } : {},
+        )
+      })
+      .catch((error) => {
+        if (isAbortError(error) || magicLensRequestId.current !== requestId) {
+          return
+        }
+
+        setMagicLensState({
+          status: 'error',
+          url: loadState.url,
+          scope,
+          error: createStructuredLoadError('Magic lens', error),
+        })
+        appendDebugEvent('Magic lens failed')
+      })
+      .finally(() => {
+        if (magicLensAbortRef.current === abortController) {
+          magicLensAbortRef.current = null
+        }
+      })
+  }
+
+  function handleRunMagicLens() {
+    if (loadState.status !== 'ready') {
+      return
+    }
+
+    const selection = resolveMagicLensSelection(
+      magicLensScope,
+      currentViewportDetail,
+      activeRoiSelection,
+    )
+
+    if (selection === null) {
+      appendDebugEvent('Magic lens scope unavailable')
+      return
+    }
+
+    runMagicLensQuery(selection, magicLensScope)
+  }
+
+  function handleMagicLensMove(detail: ViewerMagicLensDetail) {
+    if (loadState.status !== 'ready' || magicLensScope !== 'cursor' || !magicLensActive) {
+      return
+    }
+
+    magicLensLastDetailRef.current = detail
+    const queryKey = magicLensDetailQueryKey(detail, magicLensMinQv, selectedGenes)
+
+    if (magicLensLastQueryKeyRef.current === queryKey) {
+      return
+    }
+
+    clearTimeoutRef(magicLensDebounceRef)
+
+    if (typeof window === 'undefined') {
+      magicLensLastQueryKeyRef.current = queryKey
+      runMagicLensQuery(detail.bbox, 'cursor', {
+        center: detail.center,
+        radiusMicrometers: detail.radiusMicrometers,
+      })
+      return
+    }
+
+    magicLensDebounceRef.current = window.setTimeout(() => {
+      const latestDetail = magicLensLastDetailRef.current
+
+      if (latestDetail === null) {
+        return
+      }
+
+      const latestQueryKey = magicLensDetailQueryKey(
+        latestDetail,
+        magicLensMinQv,
+        selectedGenes,
+      )
+      magicLensLastQueryKeyRef.current = latestQueryKey
+      runMagicLensQuery(latestDetail.bbox, 'cursor', {
+        center: latestDetail.center,
+        radiusMicrometers: latestDetail.radiusMicrometers,
+      })
+    }, 320)
+  }
+
+  function handleMagicLensLeave() {
+    clearTimeoutRef(magicLensDebounceRef)
+    magicLensLastDetailRef.current = null
+    magicLensLastQueryKeyRef.current = null
+
+    if (magicLensScope !== 'cursor') {
+      return
+    }
+
+    abortActiveRequest(magicLensAbortRef)
+    magicLensRequestId.current += 1
+    setMagicLensState({ status: 'idle' })
   }
 
   function updateMorphologyChannel(
@@ -2453,10 +2735,12 @@ export function App({
                 </button>
                 <button
                   type="button"
-                  className="secondary-action"
+                  className="secondary-action icon-action"
+                  aria-label="Download diagnostics"
+                  title="Download diagnostics"
                   onClick={handleDownloadDiagnostics}
                 >
-                  Download Diagnostics
+                  <DownloadIcon />
                 </button>
               </div>
               <DatasetDiagnosticsPanel state={diagnosticsState} />
@@ -2847,6 +3131,168 @@ export function App({
             </div>
 
             <div
+              id="hud-panel-magic-lens"
+              className="hud-tab-panel"
+              role="tabpanel"
+              aria-labelledby="hud-tab-magic-lens"
+              hidden={activeControlHudTab !== 'magic-lens'}
+            >
+              <section
+                className="analysis-section magic-lens-section"
+                aria-labelledby="magic-lens-heading"
+              >
+                <div className="section-heading-row">
+                  <h2 id="magic-lens-heading">Magic Lens</h2>
+                  <span
+                    className={
+                      magicLensState.status === 'loading'
+                        ? 'status-chip is-loading'
+                        : 'status-chip'
+                    }
+                    aria-live="polite"
+                  >
+                    {magicLensCopy}
+                  </span>
+                </div>
+
+                <div className="magic-lens-scope">
+                  <span id={magicLensScopeInputId}>Scope</span>
+                  <div
+                    className="magic-lens-scope-segmented"
+                    role="group"
+                    aria-labelledby={magicLensScopeInputId}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={magicLensScope === 'cursor'}
+                      onClick={() => {
+                        setMagicLensScope('cursor')
+                        setMagicLensState({ status: 'idle' })
+                        magicLensLastQueryKeyRef.current = null
+                        appendDebugEvent('Magic lens scope: cursor', {
+                          coalesceKey: 'magic-lens-scope',
+                        })
+                      }}
+                    >
+                      Cursor
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={magicLensScope === 'viewport'}
+                      onClick={() => {
+                        handleMagicLensLeave()
+                        setMagicLensActive(false)
+                        setMagicLensScope('viewport')
+                        appendDebugEvent('Magic lens scope: viewport', {
+                          coalesceKey: 'magic-lens-scope',
+                        })
+                      }}
+                    >
+                      Viewport
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={magicLensScope === 'roi'}
+                      disabled={activeRoiSelection === null}
+                      onClick={() => {
+                        handleMagicLensLeave()
+                        setMagicLensActive(false)
+                        setMagicLensScope('roi')
+                        appendDebugEvent('Magic lens scope: ROI', {
+                          coalesceKey: 'magic-lens-scope',
+                        })
+                      }}
+                    >
+                      ROI
+                    </button>
+                  </div>
+                </div>
+
+                <label htmlFor={magicLensRadiusInputId}>Radius</label>
+                <div className="magic-lens-radius-control">
+                  <input
+                    id={magicLensRadiusInputId}
+                    type="range"
+                    min="10"
+                    max="500"
+                    step="10"
+                    value={magicLensRadiusMicrometers}
+                    disabled={magicLensScope !== 'cursor'}
+                    onChange={(event) => {
+                      const nextRadius = normalizeMagicLensRadius(
+                        event.currentTarget.valueAsNumber,
+                      )
+                      setMagicLensRadiusMicrometers(nextRadius)
+                      magicLensLastQueryKeyRef.current = null
+                      appendDebugEvent(`Magic lens radius: ${nextRadius} um`, {
+                        coalesceKey: 'magic-lens-radius',
+                      })
+                    }}
+                  />
+                  <output htmlFor={magicLensRadiusInputId}>
+                    {magicLensRadiusMicrometers.toLocaleString()} um
+                  </output>
+                </div>
+
+                <label htmlFor={magicLensMinQvInputId}>Min QV</label>
+                <input
+                  id={magicLensMinQvInputId}
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max="40"
+                  step="1"
+                  value={magicLensMinQv}
+                  onChange={(event) => {
+                    const nextMinQv = normalizeMagicLensMinQv(
+                      event.currentTarget.valueAsNumber,
+                    )
+                    setMagicLensMinQv(nextMinQv)
+                    magicLensLastQueryKeyRef.current = null
+                    appendDebugEvent(`Magic lens min QV: ${nextMinQv}`, {
+                      coalesceKey: 'magic-lens-min-qv',
+                    })
+                  }}
+                />
+
+                {magicLensScope === 'cursor' ? (
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    aria-pressed={magicLensIsCursorActive}
+                    disabled={loadState.status !== 'ready'}
+                    onClick={() => {
+                      const nextActive = !magicLensActive
+
+                      setMagicLensActive(nextActive)
+
+                      if (!nextActive) {
+                        handleMagicLensLeave()
+                      } else {
+                        setMagicLensState({ status: 'idle' })
+                        magicLensLastQueryKeyRef.current = null
+                        appendDebugEvent('Magic lens enabled')
+                      }
+                    }}
+                  >
+                    {magicLensIsCursorActive ? 'Disable Lens' : 'Enable Lens'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={!magicLensCanScan}
+                    onClick={handleRunMagicLens}
+                  >
+                    {magicLensState.status === 'loading' ? 'Scanning...' : 'Scan Lens'}
+                  </button>
+                )}
+
+                <MagicLensPanel state={magicLensState} />
+              </section>
+            </div>
+
+            <div
               id="hud-panel-annotations"
               className="hud-tab-panel"
               role="tabpanel"
@@ -3224,11 +3670,17 @@ export function App({
           tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
           roiMode={roiMode}
           roiSelection={activeRoiSelection}
+          magicLensActive={magicLensIsCursorActive}
+          magicLensRadiusMicrometers={magicLensRadiusMicrometers}
+          magicLensStatus={magicLensViewerStatus}
+          magicLensSummary={magicLensViewerSummary}
           onImageTileError={handleImageTileError}
           onTileCacheEviction={handleTileCacheEviction}
           onViewportCellCountChange={setViewportCellCount}
           onViewportChange={handleViewportChange}
           onRoiComplete={handleRoiComplete}
+          onMagicLensMove={handleMagicLensMove}
+          onMagicLensLeave={handleMagicLensLeave}
           onCellClick={(cell) => {
             setSelectedCell(cell)
           }}
@@ -4144,6 +4596,16 @@ function ChannelHistogramView({
   )
 }
 
+function DownloadIcon() {
+  return (
+    <svg className="button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 3v11" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 19h14" />
+    </svg>
+  )
+}
+
 function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadError[] }) {
   if (errors.length === 0) {
     return null
@@ -4315,6 +4777,100 @@ function summarizeRoiCells(cells: readonly DatasetCell[]): RoiSummary {
   }
 }
 
+function MagicLensPanel({ state }: { readonly state: MagicLensState }) {
+  if (state.status === 'idle') {
+    return null
+  }
+
+  if (state.status === 'loading') {
+    return (
+      <p className="magic-lens-status" aria-live="polite">
+        Scanning {magicLensScopeLabel(state.scope).toLowerCase()}
+      </p>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <p className="magic-lens-status" aria-live="polite">
+        {state.error.title}
+      </p>
+    )
+  }
+
+  const maxCount = Math.max(
+    ...state.summary.topGenes.map((geneSummary) => geneSummary.count),
+    1,
+  )
+
+  return (
+    <section className="magic-lens-results" aria-label="Magic lens results">
+      <dl className="magic-lens-summary-list">
+        <div>
+          <dt>Scope</dt>
+          <dd>{magicLensScopeLabel(state.scope)}</dd>
+        </div>
+        <div>
+          <dt>Transcripts</dt>
+          <dd>
+            {state.summary.transcriptCount.toLocaleString()}
+            {state.summary.hitLimit ? '+' : ''}
+          </dd>
+        </div>
+        <div>
+          <dt>Cells</dt>
+          <dd>{state.summary.cellCount.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Genes</dt>
+          <dd>{state.summary.geneCount.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Selected</dt>
+          <dd>{state.summary.selectedGeneTranscriptCount.toLocaleString()}</dd>
+        </div>
+      </dl>
+
+      {state.summary.topGenes.length === 0 ? (
+        <p className="magic-lens-status">No detected gene transcripts</p>
+      ) : (
+        <section
+          className="magic-lens-gene-panel"
+          aria-label="Magic lens gene distribution"
+        >
+          <div className="magic-lens-gene-heading">
+            <span>Top lens genes</span>
+            <small>{state.summary.topGenes.length.toLocaleString()}</small>
+          </div>
+          <ol className="magic-lens-gene-list">
+            {state.summary.topGenes.map((geneSummary) => (
+              <li
+                key={geneSummary.gene}
+                className={geneSummary.selected ? 'is-selected' : undefined}
+                style={
+                  {
+                    '--magic-lens-gene-width': `${Math.max(
+                      4,
+                      (geneSummary.count / maxCount) * 100,
+                    )}%`,
+                  } as CSSProperties
+                }
+              >
+                <div className="magic-lens-gene-row">
+                  <span>{geneSummary.gene}</span>
+                  <strong>{geneSummary.count.toLocaleString()}</strong>
+                </div>
+                <div className="magic-lens-gene-bar" aria-hidden="true" />
+                <small>{formatPercent(geneSummary.percentTotal)} total</small>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </section>
+  )
+}
+
 function RoiGeneStatsPanel({
   copy,
   state,
@@ -4397,6 +4953,198 @@ function emptyRoiGeneStats(): RoiGeneStats {
     totalCount: 0,
     hitCellLimit: false,
   }
+}
+
+function resolveMagicLensSelection(
+  scope: MagicLensScope,
+  viewportDetail: ViewerViewportDetail | null,
+  roiSelection: RoiSelection | null,
+): RoiSelectionInput | null {
+  if (scope === 'roi') {
+    return roiSelection
+  }
+
+  if (scope === 'cursor') {
+    return null
+  }
+
+  return viewportDetail?.bbox ?? null
+}
+
+function summarizeMagicLensTranscripts(
+  transcripts: readonly DatasetTranscript[],
+  selectedGenes: readonly string[],
+  options: {
+    readonly limit: number
+    readonly cellCount?: number
+    readonly hitLimit?: boolean
+  },
+): MagicLensSummary {
+  const selectedGeneKeys = new Set(selectedGenes.map((gene) => gene.toLocaleLowerCase()))
+  const counts = new Map<string, number>()
+  const cellIds = new Set<string>()
+  let selectedGeneTranscriptCount = 0
+
+  for (const transcript of transcripts) {
+    if (transcript.cellId !== null) {
+      cellIds.add(transcript.cellId)
+    }
+
+    if (transcript.isGene === false) {
+      continue
+    }
+
+    const gene = transcript.featureName.trim()
+
+    if (gene === '') {
+      continue
+    }
+
+    counts.set(gene, (counts.get(gene) ?? 0) + 1)
+
+    if (selectedGeneKeys.has(gene.toLocaleLowerCase())) {
+      selectedGeneTranscriptCount += 1
+    }
+  }
+
+  const totalGeneTranscripts = Array.from(counts.values()).reduce(
+    (total, count) => total + count,
+    0,
+  )
+  const topGenes = Array.from(counts.entries())
+    .map(([gene, count]) => ({
+      gene,
+      count,
+      percentTotal: totalGeneTranscripts === 0 ? 0 : (count / totalGeneTranscripts) * 100,
+      selected: selectedGeneKeys.has(gene.toLocaleLowerCase()),
+    }))
+    .sort((left, right) =>
+      right.count === left.count
+        ? left.gene.localeCompare(right.gene)
+        : right.count - left.count,
+    )
+    .slice(0, MAGIC_LENS_TOP_GENE_LIMIT)
+
+  return {
+    transcriptCount: transcripts.length,
+    cellCount: options.cellCount ?? cellIds.size,
+    geneCount: counts.size,
+    selectedGeneTranscriptCount,
+    topGenes,
+    hitLimit: options.hitLimit ?? transcripts.length >= options.limit,
+  }
+}
+
+function magicLensScopeLabel(scope: MagicLensScope): string {
+  if (scope === 'cursor') {
+    return 'Cursor'
+  }
+
+  return scope === 'roi' ? 'ROI' : 'Viewport'
+}
+
+function magicLensStatusCopy(
+  state: MagicLensState,
+  scope: MagicLensScope,
+  loadStatus: DatasetLoadState['status'],
+  canScan: boolean,
+  active: boolean,
+): string {
+  if (state.status === 'loading') {
+    return `Scanning ${magicLensScopeLabel(state.scope)}`
+  }
+
+  if (state.status === 'ready') {
+    return `${state.summary.transcriptCount.toLocaleString()} transcripts`
+  }
+
+  if (state.status === 'error') {
+    return state.error.title
+  }
+
+  if (loadStatus !== 'ready') {
+    return 'Load dataset'
+  }
+
+  if (scope === 'cursor') {
+    return active ? 'Move cursor' : 'Lens off'
+  }
+
+  if (canScan) {
+    return 'Ready'
+  }
+
+  return scope === 'roi' ? 'ROI required' : 'Viewport pending'
+}
+
+function filterTranscriptsForCircle(
+  transcripts: readonly DatasetTranscript[],
+  filter: MagicLensCircleFilter,
+): readonly DatasetTranscript[] {
+  const radiusSquared = filter.radiusMicrometers * filter.radiusMicrometers
+
+  return transcripts.filter((transcript) => {
+    const deltaX = transcript.position.x - filter.center.x
+    const deltaY = transcript.position.y - filter.center.y
+
+    return deltaX * deltaX + deltaY * deltaY <= radiusSquared
+  })
+}
+
+function countOverviewCellsInCircle(
+  cells: readonly OverviewCellDatum[],
+  filter: MagicLensCircleFilter,
+): number {
+  const radiusSquared = filter.radiusMicrometers * filter.radiusMicrometers
+  let count = 0
+
+  for (const cell of cells) {
+    const deltaX = cell.position[0] - filter.center.x
+    const deltaY = -cell.position[1] - filter.center.y
+
+    if (deltaX * deltaX + deltaY * deltaY <= radiusSquared) {
+      count += 1
+    }
+  }
+
+  return count
+}
+
+function magicLensDetailQueryKey(
+  detail: ViewerMagicLensDetail,
+  minQv: number,
+  selectedGenes: readonly string[],
+): string {
+  const roundedX = Math.round(detail.center.x / 4)
+  const roundedY = Math.round(detail.center.y / 4)
+  const selectedGeneKey = selectedGenes
+    .map((gene) => gene.toLocaleLowerCase())
+    .sort()
+    .join(',')
+
+  return [
+    roundedX,
+    roundedY,
+    Math.round(detail.radiusMicrometers),
+    minQv,
+    selectedGeneKey,
+  ].join(':')
+}
+
+function normalizeMagicLensRadius(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 80
+  }
+
+  return Math.max(10, Math.min(500, Math.round(value)))
+}
+
+function normalizeMagicLensMinQv(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 20
+  }
+
+  return Math.max(0, Math.min(40, Math.round(value)))
 }
 
 function roiCellsToCsv(cells: readonly DatasetCell[]): string {
@@ -4635,6 +5383,14 @@ function morphologyPatchLabel(
 
 function abortActiveRequest(ref: { current: AbortController | null }): void {
   ref.current?.abort()
+  ref.current = null
+}
+
+function clearTimeoutRef(ref: { current: number | null }): void {
+  if (ref.current !== null && typeof window !== 'undefined') {
+    window.clearTimeout(ref.current)
+  }
+
   ref.current = null
 }
 
