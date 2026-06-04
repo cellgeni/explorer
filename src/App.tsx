@@ -26,7 +26,11 @@ import {
 import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
 import { loadDatasetRoiTranscripts as defaultLoadDatasetRoiTranscripts } from './data/roiTranscripts'
 import { micrometers } from './data/coords'
-import type { RoiSelection, RoiSelectionInput } from './data/roiSelection'
+import {
+  normalizeRoiSelection,
+  type RoiSelection,
+  type RoiSelectionInput,
+} from './data/roiSelection'
 import { parseCustomAnnotations } from './data/customAnnotations'
 import {
   runDatasetDiagnostics as defaultRunDatasetDiagnostics,
@@ -115,8 +119,9 @@ const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 const DEBUG_LOG_LIMIT = 12
-const MAGIC_LENS_TRANSCRIPT_LIMIT = 25_000
+const MAGIC_LENS_CELL_LIMIT = 25_000
 const MAGIC_LENS_TOP_GENE_LIMIT = 8
+const MAGIC_LENS_GENE_STATS_LIMIT = 10_000
 const CONTROL_HUD_TABS = [
   { id: 'dataset', label: 'Dataset' },
   { id: 'layers', label: 'Layers' },
@@ -165,13 +170,17 @@ export type AnalysisEmbeddingsLoader = (
 ) => Promise<readonly AnalysisEmbedding[]>
 export type RoiCellsLoader = (
   baseUrl: string,
-  selection: RoiSelection,
-  options?: { readonly signal?: AbortSignal },
+  selection: RoiSelectionInput,
+  options?: { readonly signal?: AbortSignal; readonly limit?: number },
 ) => Promise<readonly DatasetCell[]>
 export type RoiGeneStatsLoader = (
   baseUrl: string,
   cells: readonly DatasetCell[],
-  options?: { readonly signal?: AbortSignal },
+  options?: {
+    readonly signal?: AbortSignal
+    readonly cellLimit?: number
+    readonly geneLimit?: number
+  },
 ) => Promise<RoiGeneStats>
 export type RoiTranscriptsLoader = (
   baseUrl: string,
@@ -2378,37 +2387,63 @@ export function App({
       scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-scan' } : {},
     )
 
-    void loadRoiTranscripts(loadState.url, selection, {
+    const normalizedSelection = normalizeRoiSelection(selection)
+
+    void loadRoiCells(loadState.url, normalizedSelection, {
       signal: abortController.signal,
-      limit: MAGIC_LENS_TRANSCRIPT_LIMIT,
-      minQv: magicLensMinQv,
+      limit: MAGIC_LENS_CELL_LIMIT,
     })
-      .then((transcripts) => {
+      .then((cells) => {
         if (magicLensRequestId.current !== requestId) {
-          return
+          return undefined
         }
 
-        const filteredTranscripts =
-          circleFilter === null
-            ? transcripts
-            : filterTranscriptsForCircle(transcripts, circleFilter)
+        const lensCells =
+          circleFilter === null ? cells : filterCellsForCircle(cells, circleFilter)
 
-        setMagicLensState({
-          status: 'ready',
-          url: loadState.url,
-          scope,
-          summary: summarizeMagicLensTranscripts(filteredTranscripts, selectedGenes, {
-            limit: MAGIC_LENS_TRANSCRIPT_LIMIT,
-            hitLimit: transcripts.length >= MAGIC_LENS_TRANSCRIPT_LIMIT,
-            ...(circleFilter === null
-              ? {}
-              : { cellCount: countOverviewCellsInCircle(overviewCells, circleFilter) }),
-          }),
+        if (lensCells.length === 0) {
+          setMagicLensState({
+            status: 'ready',
+            url: loadState.url,
+            scope,
+            summary: summarizeMagicLensCells(
+              lensCells,
+              emptyRoiGeneStats(),
+              selectedGenes,
+              {
+                hitLimit: cells.length >= MAGIC_LENS_CELL_LIMIT,
+              },
+            ),
+          })
+          appendDebugEvent(
+            'Magic lens ready: 0 cells',
+            scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-ready' } : {},
+          )
+          return undefined
+        }
+
+        return loadRoiGeneStats(loadState.url, lensCells, {
+          signal: abortController.signal,
+          cellLimit: MAGIC_LENS_CELL_LIMIT,
+          geneLimit: MAGIC_LENS_GENE_STATS_LIMIT,
+        }).then((stats) => {
+          if (magicLensRequestId.current !== requestId) {
+            return
+          }
+
+          setMagicLensState({
+            status: 'ready',
+            url: loadState.url,
+            scope,
+            summary: summarizeMagicLensCells(lensCells, stats, selectedGenes, {
+              hitLimit: cells.length >= MAGIC_LENS_CELL_LIMIT || stats.hitCellLimit,
+            }),
+          })
+          appendDebugEvent(
+            `Magic lens ready: ${lensCells.length.toLocaleString()} cells`,
+            scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-ready' } : {},
+          )
         })
-        appendDebugEvent(
-          `Magic lens ready: ${filteredTranscripts.length.toLocaleString()} transcripts`,
-          scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-ready' } : {},
-        )
       })
       .catch((error) => {
         if (isAbortError(error) || magicLensRequestId.current !== requestId) {
@@ -4977,67 +5012,44 @@ function resolveMagicLensSelection(
   return viewportDetail?.bbox ?? null
 }
 
-function summarizeMagicLensTranscripts(
-  transcripts: readonly DatasetTranscript[],
+function summarizeMagicLensCells(
+  cells: readonly DatasetCell[],
+  stats: RoiGeneStats,
   selectedGenes: readonly string[],
   options: {
-    readonly limit: number
-    readonly cellCount?: number
     readonly hitLimit?: boolean
   },
 ): MagicLensSummary {
   const selectedGeneKeys = new Set(selectedGenes.map((gene) => gene.toLocaleLowerCase()))
-  const counts = new Map<string, number>()
-  const cellIds = new Set<string>()
   let selectedGeneTranscriptCount = 0
+  let transcriptCount = 0
 
-  for (const transcript of transcripts) {
-    if (transcript.cellId !== null) {
-      cellIds.add(transcript.cellId)
-    }
+  for (const cell of cells) {
+    transcriptCount += cell.transcriptCount ?? 0
+  }
 
-    if (transcript.isGene === false) {
-      continue
-    }
-
-    const gene = transcript.featureName.trim()
-
-    if (gene === '') {
-      continue
-    }
-
-    counts.set(gene, (counts.get(gene) ?? 0) + 1)
-
-    if (selectedGeneKeys.has(gene.toLocaleLowerCase())) {
-      selectedGeneTranscriptCount += 1
+  for (const gene of stats.genes) {
+    if (selectedGeneKeys.has(gene.gene.toLocaleLowerCase())) {
+      selectedGeneTranscriptCount += gene.count
     }
   }
 
-  const totalGeneTranscripts = Array.from(counts.values()).reduce(
-    (total, count) => total + count,
-    0,
-  )
-  const topGenes = Array.from(counts.entries())
-    .map(([gene, count]) => ({
-      gene,
-      count,
-      percentTotal: totalGeneTranscripts === 0 ? 0 : (count / totalGeneTranscripts) * 100,
-      selected: selectedGeneKeys.has(gene.toLocaleLowerCase()),
+  const topGenes = stats.genes
+    .map((gene) => ({
+      gene: gene.gene,
+      count: gene.count,
+      percentTotal: gene.percentTotal,
+      selected: selectedGeneKeys.has(gene.gene.toLocaleLowerCase()),
     }))
-    .sort((left, right) =>
-      right.count === left.count
-        ? left.gene.localeCompare(right.gene)
-        : right.count - left.count,
-    )
     .slice(0, MAGIC_LENS_TOP_GENE_LIMIT)
 
   return {
-    transcriptCount: transcripts.length,
-    cellCount: options.cellCount ?? cellIds.size,
-    geneCount: counts.size,
+    transcriptCount,
+    cellCount: cells.length,
+    geneCount: stats.genes.length,
     selectedGeneTranscriptCount,
     topGenes,
-    hitLimit: options.hitLimit ?? transcripts.length >= options.limit,
+    hitLimit: options.hitLimit ?? false,
   }
 }
 
@@ -5083,37 +5095,18 @@ function magicLensStatusCopy(
   return scope === 'roi' ? 'ROI required' : 'Viewport pending'
 }
 
-function filterTranscriptsForCircle(
-  transcripts: readonly DatasetTranscript[],
+function filterCellsForCircle(
+  cells: readonly DatasetCell[],
   filter: MagicLensCircleFilter,
-): readonly DatasetTranscript[] {
+): readonly DatasetCell[] {
   const radiusSquared = filter.radiusMicrometers * filter.radiusMicrometers
 
-  return transcripts.filter((transcript) => {
-    const deltaX = transcript.position.x - filter.center.x
-    const deltaY = transcript.position.y - filter.center.y
+  return cells.filter((cell) => {
+    const deltaX = cell.position.x - filter.center.x
+    const deltaY = cell.position.y - filter.center.y
 
     return deltaX * deltaX + deltaY * deltaY <= radiusSquared
   })
-}
-
-function countOverviewCellsInCircle(
-  cells: readonly OverviewCellDatum[],
-  filter: MagicLensCircleFilter,
-): number {
-  const radiusSquared = filter.radiusMicrometers * filter.radiusMicrometers
-  let count = 0
-
-  for (const cell of cells) {
-    const deltaX = cell.position[0] - filter.center.x
-    const deltaY = -cell.position[1] - filter.center.y
-
-    if (deltaX * deltaX + deltaY * deltaY <= radiusSquared) {
-      count += 1
-    }
-  }
-
-  return count
 }
 
 function magicLensDetailQueryKey(

@@ -268,7 +268,7 @@ describe('App', () => {
     )
   })
 
-  it('scans current viewport transcripts with the magic lens', async () => {
+  it('scans current viewport cells with the magic lens', async () => {
     const rect = {
       x: 0,
       y: 0,
@@ -295,36 +295,43 @@ describe('App', () => {
       },
     ])
     const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+    const cellId = intToCellId(1, 1)
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [
+      {
+        id: cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      async () => ({
+        genes: [
+          {
+            gene: 'Actb',
+            count: 2,
+            detectedCells: 1,
+            percentCells: 100,
+            meanPerCell: 2,
+            percentTotal: 66.7,
+          },
+          {
+            gene: 'Gad1',
+            count: 1,
+            detectedCells: 1,
+            percentCells: 100,
+            meanPerCell: 1,
+            percentTotal: 33.3,
+          },
+        ],
+        cellCount: 1,
+        sampledCellCount: 1,
+        totalCount: 3,
+        hitCellLimit: false,
+      }),
+    )
     const loadRoiTranscripts: ReturnType<typeof vi.fn<RoiTranscriptsLoader>> = vi.fn(
-      async () => [
-        {
-          cellId: intToCellId(1, 1),
-          featureName: 'Actb',
-          position: { x: micrometers(10), y: micrometers(20) },
-          zLocation: 0,
-          qv: 35,
-          overlapsNucleus: true,
-          isGene: true,
-        },
-        {
-          cellId: intToCellId(1, 1),
-          featureName: 'Actb',
-          position: { x: micrometers(11), y: micrometers(20) },
-          zLocation: 0,
-          qv: 35,
-          overlapsNucleus: true,
-          isGene: true,
-        },
-        {
-          cellId: intToCellId(1, 1),
-          featureName: 'Gad1',
-          position: { x: micrometers(12), y: micrometers(20) },
-          zLocation: 0,
-          qv: 35,
-          overlapsNucleus: false,
-          isGene: true,
-        },
-      ],
+      async () => [],
     )
 
     try {
@@ -332,6 +339,8 @@ describe('App', () => {
         <App
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
           loadRoiTranscripts={loadRoiTranscripts}
         />,
       )
@@ -349,25 +358,41 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Scan Lens' }))
 
       await waitFor(() => {
-        expect(loadRoiTranscripts).toHaveBeenCalledWith(
+        expect(loadRoiCells).toHaveBeenCalledWith(
           DEMO_DATASET_URL,
           expect.objectContaining({
-            minX: expect.any(Number) as number,
-            maxX: expect.any(Number) as number,
-            minY: expect.any(Number) as number,
-            maxY: expect.any(Number) as number,
+            kind: 'box',
+            bbox: expect.objectContaining({
+              minX: expect.any(Number) as number,
+              maxX: expect.any(Number) as number,
+              minY: expect.any(Number) as number,
+              maxY: expect.any(Number) as number,
+            }) as object,
           }),
           expect.objectContaining({
             limit: 25_000,
-            minQv: 20,
             signal: expect.any(AbortSignal) as AbortSignal,
           }),
         )
       })
+      await waitFor(() => {
+        expect(loadRoiGeneStats).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.arrayContaining([
+            expect.objectContaining({ id: cellId }) as unknown as object,
+          ]),
+          expect.objectContaining({
+            cellLimit: 25_000,
+            geneLimit: 10_000,
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+      expect(loadRoiTranscripts).not.toHaveBeenCalled()
 
       const results = await screen.findByLabelText('Magic lens results')
       expect(results).toHaveTextContent('Transcripts')
-      expect(results).toHaveTextContent('3')
+      expect(results).toHaveTextContent('8')
       expect(results).toHaveTextContent('Genes')
       expect(results).toHaveTextContent('2')
       expect(results).toHaveTextContent('Selected')
@@ -409,20 +434,29 @@ describe('App', () => {
     ])
     const loadGenePanel = vi.fn(async () => [])
     let magicLensSignal: AbortSignal | undefined
-    const loadRoiTranscripts: ReturnType<typeof vi.fn<RoiTranscriptsLoader>> = vi.fn(
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(
       (_baseUrl, _selection, options) => {
-        magicLensSignal = options?.signal
-        return pendingPromise()
+        if (magicLensSignal === undefined) {
+          magicLensSignal = options?.signal
+          return pendingPromise()
+        }
+
+        return Promise.resolve([
+          {
+            id: intToCellId(1, 1),
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 8,
+            cellArea: 22,
+          },
+        ])
       },
     )
-    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [
-      {
-        id: intToCellId(1, 1),
-        position: { x: micrometers(10), y: micrometers(20) },
-        transcriptCount: 8,
-        cellArea: 22,
-      },
-    ])
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(() => {
+      return pendingPromise()
+    })
+    const loadRoiTranscripts: ReturnType<typeof vi.fn<RoiTranscriptsLoader>> = vi.fn(
+      async () => [],
+    )
 
     try {
       render(
@@ -431,6 +465,7 @@ describe('App', () => {
           loadGenePanel={loadGenePanel}
           loadRoiTranscripts={loadRoiTranscripts}
           loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
         />,
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
@@ -443,9 +478,10 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Scan Lens' }))
 
       await waitFor(() => {
-        expect(loadRoiTranscripts).toHaveBeenCalled()
+        expect(loadRoiCells).toHaveBeenCalledTimes(1)
       })
       expect(magicLensSignal?.aborted).toBe(false)
+      expect(loadRoiTranscripts).not.toHaveBeenCalled()
 
       openHudTab('ROI')
       await waitFor(() => {
@@ -464,7 +500,7 @@ describe('App', () => {
       fireEvent.pointerUp(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
 
       await waitFor(() => {
-        expect(loadRoiCells).toHaveBeenCalled()
+        expect(loadRoiCells).toHaveBeenCalledTimes(2)
       })
       expect(magicLensSignal?.aborted).toBe(true)
       expect(screen.getByRole('tab', { name: 'Magic Lens' })).not.toHaveAttribute(
@@ -477,7 +513,7 @@ describe('App', () => {
     }
   })
 
-  it('scans exact circle transcripts while cursor magic lens is enabled', async () => {
+  it('scans exact circle cells while cursor magic lens is enabled', async () => {
     const rect = {
       x: 0,
       y: 0,
@@ -504,27 +540,42 @@ describe('App', () => {
       },
     ])
     const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+    const insideCellId = intToCellId(1, 1)
+    const outsideCellId = intToCellId(1, 2)
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [
+      {
+        id: insideCellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+      {
+        id: outsideCellId,
+        position: { x: micrometers(240), y: micrometers(20) },
+        transcriptCount: 12,
+        cellArea: 24,
+      },
+    ])
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      async () => ({
+        genes: [
+          {
+            gene: 'Actb',
+            count: 8,
+            detectedCells: 1,
+            percentCells: 100,
+            meanPerCell: 8,
+            percentTotal: 100,
+          },
+        ],
+        cellCount: 1,
+        sampledCellCount: 1,
+        totalCount: 8,
+        hitCellLimit: false,
+      }),
+    )
     const loadRoiTranscripts: ReturnType<typeof vi.fn<RoiTranscriptsLoader>> = vi.fn(
-      async () => [
-        {
-          cellId: intToCellId(1, 1),
-          featureName: 'Actb',
-          position: { x: micrometers(10), y: micrometers(20) },
-          zLocation: 0,
-          qv: 35,
-          overlapsNucleus: true,
-          isGene: true,
-        },
-        {
-          cellId: intToCellId(1, 1),
-          featureName: 'Gad1',
-          position: { x: micrometers(240), y: micrometers(20) },
-          zLocation: 0,
-          qv: 35,
-          overlapsNucleus: false,
-          isGene: true,
-        },
-      ],
+      async () => [],
     )
 
     try {
@@ -532,6 +583,8 @@ describe('App', () => {
         <App
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
           loadRoiTranscripts={loadRoiTranscripts}
         />,
       )
@@ -552,25 +605,39 @@ describe('App', () => {
       )
 
       await waitFor(() => {
-        expect(loadRoiTranscripts).toHaveBeenCalledWith(
+        expect(loadRoiCells).toHaveBeenCalledWith(
           DEMO_DATASET_URL,
           expect.objectContaining({
-            minX: expect.any(Number) as number,
-            maxX: expect.any(Number) as number,
-            minY: expect.any(Number) as number,
-            maxY: expect.any(Number) as number,
+            kind: 'box',
+            bbox: expect.objectContaining({
+              minX: expect.any(Number) as number,
+              maxX: expect.any(Number) as number,
+              minY: expect.any(Number) as number,
+              maxY: expect.any(Number) as number,
+            }) as object,
           }),
           expect.objectContaining({
             limit: 25_000,
-            minQv: 20,
             signal: expect.any(AbortSignal) as AbortSignal,
           }),
         )
       })
+      await waitFor(() => {
+        expect(loadRoiGeneStats).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          [expect.objectContaining({ id: insideCellId })],
+          expect.objectContaining({
+            cellLimit: 25_000,
+            geneLimit: 10_000,
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+      expect(loadRoiTranscripts).not.toHaveBeenCalled()
 
       const results = await screen.findByLabelText('Magic lens results')
       expect(results).toHaveTextContent('Transcripts')
-      expect(results).toHaveTextContent('1')
+      expect(results).toHaveTextContent('8')
       expect(results).toHaveTextContent('Cells')
       expect(results).toHaveTextContent('1')
       expect(screen.getByLabelText('Magic lens gene distribution')).toHaveTextContent(

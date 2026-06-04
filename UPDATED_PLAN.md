@@ -452,6 +452,10 @@ unless the phase order is explicitly changed.
       use a separate cached Xenium dataset/DuckDB worker from ROI cell queries,
       and drawing a new ROI aborts/resets any active Magic Lens scan before
       querying ROI cells.
+- [x] Fixed Magic Lens loading hang by changing interactive lens scans to reuse
+      the bounded ROI cell query path first, filter cursor circles by cell
+      centroid, and summarize genes through the ROI matrix-backed gene stats
+      path instead of blocking on a spatial scan of `transcripts.parquet`.
 - [ ] Observed ROI warmup behavior: the first ROI ever drawn after dataset load
       can take a long time to return cell info, while subsequent ROIs return
       cell info very quickly. Treat this as an optimization target after the
