@@ -5,21 +5,16 @@ done. This file records execution-level additions requested after work began.
 
 ## Current Stage Assessment - 2026-06-04
 
-- Current stage: Phase 4 closeout and performance hardening. Phases 1-3 are
-  implemented per the execution notes, with JPEG XR decoding and Z-stack plane
-  selection still intentionally deferred by user request.
-- Phase 4 is advanced: gene picking, expression LOD, gene sets, built-in/custom
-  annotations, ROI box/lasso workflow, ROI cell/gene/transcript export,
-  annotation coloring, and the linked embedding panel are implemented.
-- Remaining Phase 4 closeout item: production hardening for the HDF5 matrix
-  fallback.
-- Current working slices: first ROI gene-query speedup plus exact lasso ROI
-  selection/export.
-  The unstaged data-path changes warm the Zarr cell-id row index, Range-probe
-  `cell_feature_matrix.zarr.zip`, cache Zarr ZIP byte ranges through the
-  persistent byte-range cache, and fetch cell-major sparse ranges concurrently.
-  The ROI changes add lasso drawing and exact polygon-aware cell/transcript
-  queries.
+- Current stage: Phase 4 complete. Phases 1-3 are implemented per the execution
+  notes, with JPEG XR decoding and Z-stack plane selection still intentionally
+  deferred by user request.
+- Phase 4 is complete: gene picking, expression LOD, gene sets,
+  built-in/custom annotations, ROI box/lasso workflow, ROI
+  cell/gene/transcript export, annotation coloring, linked embeddings, and HDF5
+  matrix fallback coverage are implemented.
+- Current working slice: Phase 4 closeout documentation and HDF5 regression
+  coverage. The latest completed commits are `020b14e` (ROI closeout) and
+  `6071f5d` (gene-scale palette and cell opacity controls).
 
 ## Added Skill Requirements
 
@@ -253,16 +248,19 @@ unless the phase order is explicitly changed.
 - [x] Gene expression highlighting uses `cell_feature_matrix.zarr.zip` through
       `XeniumDataset.matrix()` after collecting viewport cell IDs from
       `cells.parquet`. Do not use `transcripts.parquet` for per-cell expression
-      highlighting. The H5 feature-matrix backend remains a later Phase 4 task.
+      highlighting. The H5 feature-matrix backend is now covered as a Phase 4
+      ROI gene fallback.
 - [x] Expression loading is viewport-scoped and capped at 5,000 visible cells for
       now to avoid whole-slide feature-matrix work on million-cell datasets.
 - [x] Added compact image-layer and cell-layer opacity controls to the layer
-      stack. The image slider controls the morphology canvas opacity; the gene
-      opacity slider now controls deck.gl cell opacity in general, including
-      overview points, true boundaries, and gene-expression overlays.
+      stack. The image slider controls the morphology canvas opacity. Cell
+      opacity is split into `Cell fill opacity` for polygon interiors and
+      `Cell boundary opacity` for polygon strokes and point borders; zero fill
+      opacity disables polygon fill rendering outright.
 - [x] Added selectable gene-expression color scales. Switching scales restyles
       the current expression overlay from loaded per-cell counts without
-      refetching the expression matrix.
+      refetching the expression matrix. Phase 4 closeout added Plasma, Cividis,
+      Teal, Rose, and Glasbey palettes and made Plasma the default.
 
 ## Phase 4 Running TODO
 
@@ -276,11 +274,12 @@ unless the phase order is explicitly changed.
       stats, save-as-annotation, selected-cell CSV export, ROI gene stats,
       transcript CSV export, and exact polygon-aware lasso selection/export.
 - [x] UMAP/tSNE panel linked to spatial selection.
-- [ ] HDF5 path for `cell_feature_matrix.h5`. A `h5wasm` reader path exists for
-      ROI gene fallback; production hardening and regression smoke coverage
-      against a dataset that requires H5 remain. Recommendation captured:
-      `jsfive` is deferred unless a real dataset shows `h5wasm` cannot read a
-      needed H5 matrix that `jsfive` can support.
+- [x] HDF5 path for `cell_feature_matrix.h5`. The `h5wasm` reader is wired into
+      ROI gene fallback, covered by ROI fallback tests, and now has a direct
+      regression test that creates a tiny HDF5 feature matrix with `h5wasm` and
+      reads it through `gexFromCellFeatureMatrixH5`. Recommendation captured:
+      `jsfive` remains deferred unless a real dataset shows `h5wasm` cannot
+      read a needed H5 matrix that `jsfive` can support.
 
 ## Phase 4 Notes
 
@@ -391,3 +390,20 @@ unless the phase order is explicitly changed.
       overlays, ROI cell lookup filters centroids with DuckDB spatial
       `ST_Within`, ROI gene stats use those exact selected cells, and transcript
       export filters transcript coordinates with the same polygon semantics.
+- [x] Completed gene-scale control polish. The selector is narrower, the color
+      ramp is wider, numeric ticks align under the ramp, and the UI/renderer
+      expose additional continuous palettes: Plasma, Cividis, Teal, Rose, and
+      Glasbey. Plasma is the default gene scale.
+- [x] Completed layer opacity split. `Cell fill opacity` controls true polygon
+      interiors, `Cell boundary opacity` controls true polygon outlines and
+      point borders, and a zero fill value disables deck.gl polygon fill
+      rendering so default polygon interiors cannot show through.
+- [x] Closed the HDF5 matrix fallback item. ROI gene stats already try
+      `cell_feature_matrix.h5` via `h5wasm` when the Zarr matrix is unavailable;
+      Phase 4 closeout added a direct production-reader regression test using a
+      generated HDF5 feature matrix.
+- [x] Updated the scaffold E2E smoke test to assert the current shell
+      (`Hide Controls`, selected `Dataset` tab, dataset URL, and load button)
+      instead of the removed `Xenium Explorer` heading.
+- [x] Phase 4 verification passed after closeout: `npm run build`, `npm test`,
+      `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.
