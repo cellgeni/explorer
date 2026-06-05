@@ -27,7 +27,7 @@ const COMPACT_BUDGET: PerformanceBudget = {
 const BALANCED_BUDGET: PerformanceBudget = {
   profile: 'balanced',
   overviewRenderCellLimit: 150_000,
-  boundaryCellLimit: 5_000,
+  boundaryCellLimit: 50_000,
   maxConcurrentTileRequests: 4,
   tileCacheMaxTiles: 120,
   telemetryEventLimit: 120,
@@ -36,7 +36,7 @@ const BALANCED_BUDGET: PerformanceBudget = {
 const EXPANDED_BUDGET: PerformanceBudget = {
   profile: 'expanded',
   overviewRenderCellLimit: 250_000,
-  boundaryCellLimit: 5_000,
+  boundaryCellLimit: 50_000,
   maxConcurrentTileRequests: 6,
   tileCacheMaxTiles: 180,
   telemetryEventLimit: 160,

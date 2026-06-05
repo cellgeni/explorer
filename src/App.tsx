@@ -35,10 +35,12 @@ import { asCellId } from './data/cellid'
 import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
 import { loadDatasetRoiTranscripts as defaultLoadDatasetRoiTranscripts } from './data/roiTranscripts'
 import {
-  TRANSCRIPT_EXACT_RENDER_LIMIT,
+  MAX_TRANSCRIPT_EXACT_RENDER_LIMIT,
+  MIN_TRANSCRIPT_EXACT_RENDER_LIMIT,
   TRANSCRIPT_GROUP_LIMIT,
   loadDatasetTranscriptCapabilities as defaultLoadDatasetTranscriptCapabilities,
   loadDatasetTranscriptViewport as defaultLoadDatasetTranscriptViewport,
+  normalizeTranscriptExactPointLimit,
   planTranscriptLod,
   transcriptViewportRequestKey,
   type TranscriptCapabilities,
@@ -75,6 +77,7 @@ import {
   type TelemetryEvent,
 } from './data/telemetry'
 import {
+  MAX_BOUNDARY_VIEWPORT_CELL_LIMIT,
   boundaryViewportKey,
   normalizeBoundaryCellLimit,
   shouldLoadBoundaryPolygons,
@@ -738,6 +741,7 @@ export function App({
   const observationModeInputId = useId()
   const transcriptDetailInputId = useId()
   const transcriptDensityScaleInputId = useId()
+  const transcriptPointBudgetInputId = useId()
   const transcriptMinQvInputId = useId()
   const transcriptFeatureFilterInputId = useId()
   const transcriptOpacityInputId = useId()
@@ -838,6 +842,9 @@ export function App({
           initialShareableState.transcriptDensityColorScale,
         ) ?? DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
     )
+  const [transcriptExactPointLimit, setTranscriptExactPointLimit] = useState(() =>
+    normalizeTranscriptExactPointLimit(initialShareableState.transcriptExactPointLimit),
+  )
   const [transcriptOpacity, setTranscriptOpacity] = useState(
     initialShareableState.transcriptOpacity ?? 0.85,
   )
@@ -1848,7 +1855,7 @@ export function App({
     const plan = planTranscriptLod(currentViewportDetail, {
       detailMode: transcriptDetailMode,
       visibleTranscriptEstimate,
-      exactLimit: TRANSCRIPT_EXACT_RENDER_LIMIT,
+      exactLimit: transcriptExactPointLimit,
       hasRawParquet: transcriptCapabilityState.capabilities.rawParquet,
       hasNativeZarr: transcriptCapabilityState.capabilities.nativeZarr,
       hasSelectedFeatureFilter:
@@ -1925,7 +1932,7 @@ export function App({
         minQv: transcriptMinQv,
         geneOnly: transcriptGeneOnly,
         featureNames,
-        pointLimit: TRANSCRIPT_EXACT_RENDER_LIMIT,
+        pointLimit: transcriptExactPointLimit,
       },
     )
 
@@ -1988,7 +1995,7 @@ export function App({
 
       void loadTranscriptViewport(loadState.url, currentViewportDetail.bbox, {
         signal: abortController.signal,
-        pointLimit: TRANSCRIPT_EXACT_RENDER_LIMIT,
+        pointLimit: transcriptExactPointLimit,
         groupLimit: TRANSCRIPT_GROUP_LIMIT,
         minQv: transcriptMinQv,
         geneOnly: transcriptGeneOnly,
@@ -2010,7 +2017,7 @@ export function App({
             transcriptViewportKeyRef.current = null
             setTranscriptLayerState({
               status: 'waiting',
-              message: `Exact transcript viewport exceeded the ${TRANSCRIPT_EXACT_RENDER_LIMIT.toLocaleString()} point budget. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.`,
+              message: `Exact transcript viewport exceeded the ${transcriptExactPointLimit.toLocaleString()} point budget. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.`,
               visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
             })
             appendDebugEvent('Transcript exact query exceeded point budget', {
@@ -2090,6 +2097,7 @@ export function App({
     showTranscriptOverlay,
     transcriptCapabilityState,
     transcriptDetailMode,
+    transcriptExactPointLimit,
     transcriptFeatureFilterMode,
     transcriptGeneOnly,
     transcriptMinQv,
@@ -2272,6 +2280,7 @@ export function App({
         transcriptOverlay: showTranscriptOverlay,
         transcriptDetailMode,
         transcriptDensityColorScale,
+        transcriptExactPointLimit,
         transcriptMinQv,
         transcriptGeneOnly,
         transcriptFeatureFilterMode,
@@ -2307,6 +2316,7 @@ export function App({
     showTranscriptOverlay,
     transcriptDetailMode,
     transcriptDensityColorScale,
+    transcriptExactPointLimit,
     transcriptFeatureFilterMode,
     transcriptGeneOnly,
     transcriptMinQv,
@@ -2584,6 +2594,13 @@ export function App({
           ? (parseTranscriptDensityColorScale(sharedState?.transcriptDensityColorScale) ??
               transcriptDensityColorScale)
           : transcriptDensityColorScale,
+      )
+      setTranscriptExactPointLimit(
+        shouldRestoreSharedState
+          ? sharedState?.transcriptExactPointLimit === undefined
+            ? transcriptExactPointLimit
+            : normalizeTranscriptExactPointLimit(sharedState.transcriptExactPointLimit)
+          : transcriptExactPointLimit,
       )
       setSelectedGenes(sharedSelectedGenes)
       setRoiMode('idle')
@@ -2871,6 +2888,7 @@ export function App({
           transcriptCapabilityState,
           transcriptDetailMode,
           transcriptDensityColorScale,
+          transcriptExactPointLimit,
           transcriptFeatureFilterMode,
           transcriptGeneOnly,
           transcriptLayerState,
@@ -3863,7 +3881,7 @@ export function App({
                   type="number"
                   inputMode="numeric"
                   min="1"
-                  max="5000"
+                  max={MAX_BOUNDARY_VIEWPORT_CELL_LIMIT}
                   step="1"
                   autoComplete="off"
                   value={boundaryCellLimit}
@@ -4364,6 +4382,30 @@ export function App({
                   <option value="exact">Exact</option>
                 </select>
 
+                <label htmlFor={transcriptPointBudgetInputId}>Exact budget</label>
+                <input
+                  id={transcriptPointBudgetInputId}
+                  type="number"
+                  inputMode="numeric"
+                  min={MIN_TRANSCRIPT_EXACT_RENDER_LIMIT}
+                  max={MAX_TRANSCRIPT_EXACT_RENDER_LIMIT}
+                  step="1000"
+                  value={transcriptExactPointLimit}
+                  onChange={(event) => {
+                    const nextLimit = normalizeTranscriptExactPointLimit(
+                      event.currentTarget.valueAsNumber,
+                    )
+                    setTranscriptExactPointLimit(nextLimit)
+                    transcriptViewportKeyRef.current = null
+                    appendDebugEvent(
+                      `Transcript exact budget: ${nextLimit.toLocaleString()}`,
+                      {
+                        coalesceKey: 'transcript-exact-budget',
+                      },
+                    )
+                  }}
+                />
+
                 <label htmlFor={transcriptFeatureFilterInputId}>Feature filter</label>
                 <select
                   id={transcriptFeatureFilterInputId}
@@ -4504,6 +4546,7 @@ export function App({
                 <TranscriptStatusPanel
                   capabilityState={transcriptCapabilityState}
                   layerState={transcriptLayerState}
+                  exactPointLimit={transcriptExactPointLimit}
                   visibleTranscriptEstimate={visibleTranscriptEstimate}
                   hoveredTranscript={hoveredTranscript}
                 />
@@ -6669,11 +6712,13 @@ function CellFeatureMatrixCompatibilityNotice({
 function TranscriptStatusPanel({
   capabilityState,
   layerState,
+  exactPointLimit,
   visibleTranscriptEstimate,
   hoveredTranscript,
 }: {
   readonly capabilityState: TranscriptCapabilityState
   readonly layerState: TranscriptLayerState
+  readonly exactPointLimit: number
   readonly visibleTranscriptEstimate: number
   readonly hoveredTranscript: ViewerTranscriptHoverDetail | null
 }) {
@@ -6697,7 +6742,7 @@ function TranscriptStatusPanel({
         </div>
         <div>
           <dt>Exact budget</dt>
-          <dd>{TRANSCRIPT_EXACT_RENDER_LIMIT.toLocaleString()}</dd>
+          <dd>{exactPointLimit.toLocaleString()}</dd>
         </div>
         {layerState.status === 'ready' ? (
           <>
@@ -7442,6 +7487,7 @@ interface DiagnosticsDumpOptions {
   readonly transcriptCapabilityState: TranscriptCapabilityState
   readonly transcriptDetailMode: TranscriptDetailMode
   readonly transcriptDensityColorScale: TranscriptDensityColorScale
+  readonly transcriptExactPointLimit: number
   readonly transcriptFeatureFilterMode: TranscriptFeatureFilterMode
   readonly transcriptGeneOnly: boolean
   readonly transcriptLayerState: TranscriptLayerState
@@ -7470,6 +7516,7 @@ function createDiagnosticsDump(options: DiagnosticsDumpOptions): Record<string, 
       showTranscriptOverlay: options.showTranscriptOverlay,
       transcriptDetailMode: options.transcriptDetailMode,
       transcriptDensityColorScale: options.transcriptDensityColorScale,
+      transcriptExactPointLimit: options.transcriptExactPointLimit,
       transcriptFeatureFilterMode: options.transcriptFeatureFilterMode,
       transcriptGeneOnly: options.transcriptGeneOnly,
       transcriptMinQv: options.transcriptMinQv,

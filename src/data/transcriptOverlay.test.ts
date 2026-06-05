@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MAX_TRANSCRIPT_EXACT_RENDER_LIMIT,
   TRANSCRIPT_EXACT_RENDER_LIMIT,
+  normalizeTranscriptExactPointLimit,
   planTranscriptLod,
   transcriptViewportRequestKey,
 } from './transcriptOverlay'
@@ -85,6 +87,21 @@ describe('transcriptOverlay', () => {
     }
 
     expect(plan.message).toContain('Select genes')
+  })
+
+  it('normalizes the exact point budget', () => {
+    expect(normalizeTranscriptExactPointLimit(undefined)).toBe(
+      TRANSCRIPT_EXACT_RENDER_LIMIT,
+    )
+    expect(normalizeTranscriptExactPointLimit(Number.NaN)).toBe(
+      TRANSCRIPT_EXACT_RENDER_LIMIT,
+    )
+    expect(normalizeTranscriptExactPointLimit(12.6)).toBe(13)
+    expect(normalizeTranscriptExactPointLimit(-4)).toBe(1)
+    expect(normalizeTranscriptExactPointLimit(300_000)).toBe(300_000)
+    expect(normalizeTranscriptExactPointLimit(1_500_000)).toBe(
+      MAX_TRANSCRIPT_EXACT_RENDER_LIMIT,
+    )
   })
 
   it('normalizes feature order in viewport request keys', () => {

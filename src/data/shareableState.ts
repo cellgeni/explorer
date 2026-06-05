@@ -27,6 +27,7 @@ export interface ShareableState {
   readonly transcriptGeneOnly?: boolean
   readonly transcriptFeatureFilterMode?: string
   readonly transcriptDensityColorScale?: string
+  readonly transcriptExactPointLimit?: number
   readonly transcriptOpacity?: number
   readonly transcriptPointSize?: number
 }
@@ -62,6 +63,7 @@ export function parseShareableState(hash: string): ShareableState {
   const transcriptGeneOnly = parseBoolean(params.get('txGene'))
   const transcriptFeatureFilterMode = readString(params, 'txFilter')
   const transcriptDensityColorScale = readString(params, 'txDensity')
+  const transcriptExactPointLimit = parsePositiveInteger(params.get('txBudget'))
   const transcriptOpacity = parseUnitNumber(params.get('txOpacity'))
   const transcriptPointSize = parsePositiveInteger(params.get('txSize'))
 
@@ -137,6 +139,10 @@ export function parseShareableState(hash: string): ShareableState {
     state.transcriptDensityColorScale = transcriptDensityColorScale
   }
 
+  if (transcriptExactPointLimit !== undefined) {
+    state.transcriptExactPointLimit = transcriptExactPointLimit
+  }
+
   if (transcriptOpacity !== undefined) {
     state.transcriptOpacity = transcriptOpacity
   }
@@ -203,6 +209,16 @@ export function formatShareableState(state: ShareableState): string {
 
   setOptionalString(params, 'txFilter', state.transcriptFeatureFilterMode)
   setOptionalString(params, 'txDensity', state.transcriptDensityColorScale)
+
+  if (
+    state.transcriptExactPointLimit !== undefined &&
+    Number.isFinite(state.transcriptExactPointLimit)
+  ) {
+    params.set(
+      'txBudget',
+      Math.max(1, Math.floor(state.transcriptExactPointLimit)).toString(),
+    )
+  }
 
   if (state.transcriptOpacity !== undefined && Number.isFinite(state.transcriptOpacity)) {
     params.set('txOpacity', roundForHash(state.transcriptOpacity).toString())

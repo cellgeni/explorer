@@ -8,6 +8,8 @@ import type { DatasetRangeValidator } from './datasetOverview'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
 
 export const TRANSCRIPT_EXACT_RENDER_LIMIT = 50_000
+export const MIN_TRANSCRIPT_EXACT_RENDER_LIMIT = 1
+export const MAX_TRANSCRIPT_EXACT_RENDER_LIMIT = 1_000_000
 export const TRANSCRIPT_GROUP_LIMIT = 18
 export const TRANSCRIPT_EXACT_MIN_ZOOM = 1.2
 
@@ -173,6 +175,7 @@ export async function loadDatasetTranscriptViewport(
   options: TranscriptViewportOptions = {},
 ): Promise<TranscriptViewportResult> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
+  const pointLimit = normalizeTranscriptExactPointLimit(options.pointLimit)
   const zarrUrl = datasetFileUrl(baseUrl, 'transcripts.zarr.zip')
   let hasNativeZarr = false
 
@@ -193,7 +196,7 @@ export async function loadDatasetTranscriptViewport(
   if (hasNativeZarr) {
     return loadTranscriptZarrViewport(zarrUrl, bbox, {
       ...(options.signal === undefined ? {} : { signal: options.signal }),
-      pointLimit: options.pointLimit ?? TRANSCRIPT_EXACT_RENDER_LIMIT,
+      pointLimit,
       groupLimit: options.groupLimit ?? TRANSCRIPT_GROUP_LIMIT,
       minQv: options.minQv ?? 20,
       geneOnly: options.geneOnly ?? true,
@@ -214,7 +217,7 @@ export async function loadDatasetTranscriptViewport(
   throwIfAborted(options.signal)
 
   return dataset.transcriptsForViewport(bbox, {
-    pointLimit: options.pointLimit ?? TRANSCRIPT_EXACT_RENDER_LIMIT,
+    pointLimit,
     groupLimit: options.groupLimit ?? TRANSCRIPT_GROUP_LIMIT,
     minQv: options.minQv ?? 20,
     geneOnly: options.geneOnly ?? true,
@@ -226,7 +229,7 @@ export function planTranscriptLod(
   input: TranscriptLodPlanningInput,
   options: TranscriptLodPlanningOptions,
 ): TranscriptLodPlan {
-  const exactLimit = options.exactLimit ?? TRANSCRIPT_EXACT_RENDER_LIMIT
+  const exactLimit = normalizeTranscriptExactPointLimit(options.exactLimit)
   const visibleTranscriptEstimate = Math.max(
     0,
     Math.floor(options.visibleTranscriptEstimate),
@@ -310,6 +313,17 @@ export function planTranscriptLod(
         ? `Zoom or filter below ${exactLimit.toLocaleString()} visible transcripts for exact rendering.`
         : 'Zoom closer for exact transcript rendering.',
   }
+}
+
+export function normalizeTranscriptExactPointLimit(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return TRANSCRIPT_EXACT_RENDER_LIMIT
+  }
+
+  return Math.max(
+    MIN_TRANSCRIPT_EXACT_RENDER_LIMIT,
+    Math.min(MAX_TRANSCRIPT_EXACT_RENDER_LIMIT, Math.round(value)),
+  )
 }
 
 export function transcriptViewportRequestKey(

@@ -1,9 +1,9 @@
 import type { BBox } from '../data/coords'
 import type { OverviewViewState } from './deckLayers'
 
-export const BOUNDARY_VIEWPORT_CELL_LIMIT = 5_000
+export const BOUNDARY_VIEWPORT_CELL_LIMIT = 50_000
 export const MIN_BOUNDARY_VIEWPORT_CELL_LIMIT = 1
-export const MAX_BOUNDARY_VIEWPORT_CELL_LIMIT = 5_000
+export const MAX_BOUNDARY_VIEWPORT_CELL_LIMIT = 100_000
 
 export interface BoundaryViewportCandidate {
   readonly bbox: BBox

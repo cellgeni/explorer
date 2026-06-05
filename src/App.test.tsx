@@ -96,7 +96,11 @@ describe('App', () => {
     ).toBeInTheDocument()
     expect(screen.queryByText('Download Diagnostics')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
-    expect(screen.getByRole('spinbutton', { name: 'Boundary limit' })).toHaveValue(5_000)
+    const boundaryLimitInput = screen.getByRole('spinbutton', {
+      name: 'Boundary limit',
+    })
+    expect(boundaryLimitInput).toHaveValue(50_000)
+    expect(boundaryLimitInput).toHaveAttribute('max', '100000')
     expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -143,6 +147,11 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Transcripts' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Show transcripts' })).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'Detail' })).toHaveValue('auto')
+    const transcriptExactBudgetInput = screen.getByRole('spinbutton', {
+      name: 'Exact budget',
+    })
+    expect(transcriptExactBudgetInput).toHaveValue(50_000)
+    expect(transcriptExactBudgetInput).toHaveAttribute('max', '1000000')
     expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
       'selected',
     )
@@ -1479,6 +1488,9 @@ describe('App', () => {
       })
 
       vi.useFakeTimers()
+      fireEvent.change(screen.getByRole('spinbutton', { name: 'Exact budget' }), {
+        target: { value: '75000' },
+      })
       fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
         target: { value: 'all' },
       })
@@ -1490,7 +1502,13 @@ describe('App', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(220)
       })
-      expect(loadTranscriptViewport).toHaveBeenCalled()
+      expect(loadTranscriptViewport).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.any(Object),
+        expect.objectContaining({
+          pointLimit: 75_000,
+        }),
+      )
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(12_000)
