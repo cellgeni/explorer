@@ -25,7 +25,29 @@ import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/vi
 import type { TiffPyramidLoader } from './tiff/loader'
 
 vi.mock('@deck.gl/react', () => ({
-  DeckGL: () => <div data-testid="deckgl" />,
+  DeckGL: ({ layers = [] }: { readonly layers?: readonly unknown[] }) => (
+    <div data-testid="deckgl">
+      {layers.map((layer) => {
+        const candidate = layer as {
+          readonly id?: string
+          readonly props?: {
+            readonly id?: string
+            readonly data?: readonly unknown[]
+          }
+        }
+        const id = candidate.id ?? candidate.props?.id ?? 'unknown-layer'
+        const data = candidate.props?.data ?? []
+
+        return (
+          <div
+            key={id}
+            data-testid={`deck-layer-${id}`}
+            data-count={String(data.length)}
+          />
+        )
+      })}
+    </div>
+  ),
 }))
 
 vi.mock('./data/datasetAnnotations', async (importOriginal) => {
@@ -1478,6 +1500,123 @@ describe('App', () => {
       expect(
         screen.getByText(/Exact transcript loading exceeded 12 seconds/),
       ).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('keeps the previous exact transcript layer visible while panning loads the next viewport', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: false,
+    }))
+    const loadTranscriptViewport: ReturnType<
+      typeof vi.fn<TranscriptViewportLoader>
+    > = vi
+      .fn()
+      .mockResolvedValueOnce({
+        points: [
+          {
+            id: 't1',
+            cellId: intToCellId(1, 1),
+            featureName: 'Actb',
+            fovName: 'AA1',
+            position: { x: micrometers(10), y: micrometers(20) },
+            qv: 35,
+            isGene: true,
+          },
+        ],
+        groups: [],
+        hitPointLimit: false,
+      })
+      .mockReturnValueOnce(pendingPromise())
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadTranscriptCapabilities={loadTranscriptCapabilities}
+          loadTranscriptViewport={loadTranscriptViewport}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+      openHudTab('Transcripts')
+      expect(await screen.findByText('Exact only')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(
+          within(screen.getByLabelText('Transcript overlay summary')).getByText('8'),
+        ).toBeInTheDocument()
+      })
+
+      vi.useFakeTimers()
+      fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
+        target: { value: 'all' },
+      })
+      fireEvent.change(screen.getByRole('combobox', { name: 'Detail' }), {
+        target: { value: 'exact' },
+      })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(220)
+        await Promise.resolve()
+      })
+      expect(loadTranscriptViewport).toHaveBeenCalledTimes(1)
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(screen.getByText('1 points')).toBeInTheDocument()
+      expect(screen.getByTestId('deck-layer-transcript-exact-points')).toHaveAttribute(
+        'data-count',
+        '1',
+      )
+
+      fireEvent.keyDown(screen.getByRole('img', { name: 'Spatial viewer canvas area' }), {
+        key: 'ArrowRight',
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(180)
+        await Promise.resolve()
+      })
+
+      expect(screen.getByText('Loading')).toBeInTheDocument()
+      expect(screen.getByTestId('deck-layer-transcript-exact-points')).toHaveAttribute(
+        'data-count',
+        '1',
+      )
     } finally {
       vi.useRealTimers()
       rectSpy.mockRestore()

@@ -144,6 +144,8 @@ const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS = 12_000
 const EMPTY_GENE_LIST: readonly string[] = []
+const EMPTY_TRANSCRIPT_POINTS: readonly TranscriptPoint[] = []
+const EMPTY_TRANSCRIPT_AGGREGATE_BINS: readonly TranscriptAggregateBin[] = []
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 const DEBUG_LOG_LIMIT = 32
 const MAGIC_LENS_CELL_LIMIT = 25_000
@@ -490,6 +492,7 @@ type TranscriptLayerState =
       readonly status: 'loading'
       readonly url: string
       readonly visibleTranscriptEstimate: number
+      readonly previousLayer?: TranscriptRetainedLayerState
     }
   | {
       readonly status: 'ready'
@@ -504,6 +507,16 @@ type TranscriptLayerState =
       readonly status: 'error'
       readonly url: string
       readonly error: StructuredLoadError
+    }
+
+type TranscriptRetainedLayerState =
+  | {
+      readonly kind: 'exact'
+      readonly points: readonly TranscriptPoint[]
+    }
+  | {
+      readonly kind: 'aggregate'
+      readonly bins: readonly TranscriptAggregateBin[]
     }
 
 type MagicLensScope = 'cursor' | 'viewport' | 'roi'
@@ -1025,17 +1038,14 @@ export function App({
     [geneExpressionCells, geneExpressionColorScale, geneExpressionScaleMax],
   )
   const transcriptLayerPoints = useMemo(
-    () =>
-      transcriptLayerState.status === 'ready'
-        ? transcriptPointsToLayerData(transcriptLayerState.points)
-        : [],
+    () => transcriptPointsToLayerData(transcriptPointsForRendering(transcriptLayerState)),
     [transcriptLayerState],
   )
   const transcriptLayerAggregateBins = useMemo(
     () =>
-      transcriptLayerState.status === 'aggregate'
-        ? transcriptAggregateBinsToLayerData(transcriptLayerState.bins)
-        : [],
+      transcriptAggregateBinsToLayerData(
+        transcriptAggregateBinsForRendering(transcriptLayerState),
+      ),
     [transcriptLayerState],
   )
   const visibleTranscriptEstimate = useMemo(
@@ -1916,10 +1926,15 @@ export function App({
     transcriptViewportKeyRef.current = requestKey
     queueMicrotask(() => {
       if (transcriptRequestId.current === requestId) {
-        setTranscriptLayerState({
-          status: 'loading',
-          url: loadState.url,
-          visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+        setTranscriptLayerState((current) => {
+          const previousLayer = retainedTranscriptLayerState(current)
+
+          return {
+            status: 'loading',
+            url: loadState.url,
+            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+            ...(previousLayer === undefined ? {} : { previousLayer }),
+          }
         })
       }
     })
@@ -5216,6 +5231,64 @@ function transcriptStatusCopy(
   }
 
   return 'Idle'
+}
+
+function transcriptPointsForRendering(
+  layerState: TranscriptLayerState,
+): readonly TranscriptPoint[] {
+  if (layerState.status === 'ready') {
+    return layerState.points
+  }
+
+  if (
+    layerState.status === 'loading' &&
+    layerState.previousLayer?.kind === 'exact'
+  ) {
+    return layerState.previousLayer.points
+  }
+
+  return EMPTY_TRANSCRIPT_POINTS
+}
+
+function transcriptAggregateBinsForRendering(
+  layerState: TranscriptLayerState,
+): readonly TranscriptAggregateBin[] {
+  if (layerState.status === 'aggregate') {
+    return layerState.bins
+  }
+
+  if (
+    layerState.status === 'loading' &&
+    layerState.previousLayer?.kind === 'aggregate'
+  ) {
+    return layerState.previousLayer.bins
+  }
+
+  return EMPTY_TRANSCRIPT_AGGREGATE_BINS
+}
+
+function retainedTranscriptLayerState(
+  layerState: TranscriptLayerState,
+): TranscriptRetainedLayerState | undefined {
+  if (layerState.status === 'ready') {
+    return {
+      kind: 'exact',
+      points: layerState.points,
+    }
+  }
+
+  if (layerState.status === 'aggregate') {
+    return {
+      kind: 'aggregate',
+      bins: layerState.bins,
+    }
+  }
+
+  if (layerState.status === 'loading') {
+    return layerState.previousLayer
+  }
+
+  return undefined
 }
 
 function transcriptCapabilityLabel(capabilities: TranscriptCapabilities): string {
