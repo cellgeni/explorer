@@ -2,6 +2,7 @@ import type { Color, LayersList, Position } from '@deck.gl/core'
 import { OrthographicView, VERSION as deckVersion } from '@deck.gl/core'
 import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
+import type { TranscriptAggregateBin, TranscriptPoint } from '../data/transcriptOverlay'
 import type { GeneExpressionCell } from '../datasets/xeniumDataset'
 import type { SpatialElement } from '../datasets/spatialDataset'
 import { DEFAULT_LAYER_OPACITY, normalizeLayerOpacity } from './layerOpacity'
@@ -33,10 +34,41 @@ export interface CellBoundaryDatum {
   readonly lineColor: Color
 }
 
+export interface TranscriptPointDatum {
+  readonly id: string
+  readonly position: Position
+  readonly featureName: string
+  readonly fovName: string | null
+  readonly cellId: string | null
+  readonly qv: number
+  readonly zLocation?: number
+  readonly overlapsNucleus?: boolean
+  readonly isGene?: boolean
+  readonly nucleusDistance?: number
+  readonly fillColor: Color
+}
+
+export interface TranscriptAggregateDatum {
+  readonly id: string
+  readonly position: Position
+  readonly level: number
+  readonly binX: number
+  readonly binY: number
+  readonly count: number
+  readonly radiusMicrometers: number
+  readonly featureName?: string
+  readonly fovName?: string
+  readonly fillColor: Color
+}
+
 export interface OverviewLayerOptions {
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
   readonly expressionBoundaryPolygons?: readonly CellBoundaryDatum[]
+  readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
+  readonly transcriptPoints?: readonly TranscriptPointDatum[]
+  readonly transcriptOpacity?: number
+  readonly transcriptPointSize?: number
 }
 
 export type GeneExpressionColorScale =
@@ -161,6 +193,8 @@ export function createOverviewLayers(
     options.cellBoundaryOpacity ?? DEFAULT_LAYER_OPACITY,
   )
   const expressionBoundaryPolygons = options.expressionBoundaryPolygons ?? []
+  const transcriptAggregateBins = options.transcriptAggregateBins ?? []
+  const transcriptPoints = options.transcriptPoints ?? []
   const hasExpressionPolygons = expressionBoundaryPolygons.length > 0
   const pointCells = cellsWithoutVisibleBoundaries(cells, boundaries)
   const cellPointLayer = new ScatterplotLayer<OverviewCellDatum>({
@@ -260,6 +294,66 @@ export function createOverviewLayers(
     )
   }
 
+  if (transcriptAggregateBins.length > 0) {
+    const transcriptOpacity = normalizeLayerOpacity(
+      options.transcriptOpacity ?? DEFAULT_LAYER_OPACITY,
+    )
+
+    layers.push(
+      new ScatterplotLayer<TranscriptAggregateDatum>({
+        id: 'transcript-density-bins',
+        data: transcriptAggregateBins,
+        pickable: true,
+        radiusUnits: 'common',
+        radiusMinPixels: 2,
+        radiusMaxPixels: 36,
+        stroked: true,
+        filled: true,
+        opacity: 1,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 0.75,
+        getPosition: (bin) => bin.position,
+        getRadius: (bin) => bin.radiusMicrometers,
+        getFillColor: (bin) => colorWithOpacity(bin.fillColor, transcriptOpacity),
+        getLineColor: () => colorWithOpacity([255, 253, 247, 190], transcriptOpacity),
+        getLineWidth: 0.75,
+        updateTriggers: {
+          getFillColor: [transcriptOpacity],
+          getLineColor: [transcriptOpacity],
+        },
+      }),
+    )
+  }
+
+  if (transcriptPoints.length > 0) {
+    const transcriptOpacity = normalizeLayerOpacity(
+      options.transcriptOpacity ?? DEFAULT_LAYER_OPACITY,
+    )
+    const transcriptPointSize = Math.max(1, options.transcriptPointSize ?? 2)
+
+    layers.push(
+      new ScatterplotLayer<TranscriptPointDatum>({
+        id: 'transcript-exact-points',
+        data: transcriptPoints,
+        pickable: true,
+        radiusUnits: 'pixels',
+        radiusMinPixels: 1,
+        radiusMaxPixels: 8,
+        stroked: false,
+        filled: true,
+        opacity: 1,
+        getPosition: (transcript) => transcript.position,
+        getRadius: transcriptPointSize,
+        getFillColor: (transcript) =>
+          colorWithOpacity(transcript.fillColor, transcriptOpacity),
+        updateTriggers: {
+          getFillColor: [transcriptOpacity],
+          getRadius: [transcriptPointSize],
+        },
+      }),
+    )
+  }
+
   return layers
 }
 
@@ -327,6 +421,59 @@ export function geneExpressionCellsToLayerData(
   })
 
   return styleGeneExpressionCellsByScale(layerData, colorScale, options)
+}
+
+export function transcriptPointsToLayerData(
+  transcripts: readonly TranscriptPoint[],
+): readonly TranscriptPointDatum[] {
+  return transcripts.map((transcript) => ({
+    id: transcript.id,
+    position: [transcript.position.x, -transcript.position.y, 0],
+    featureName: transcript.featureName,
+    fovName: transcript.fovName,
+    cellId: transcript.cellId,
+    qv: transcript.qv,
+    ...(transcript.zLocation === undefined ? {} : { zLocation: transcript.zLocation }),
+    ...(transcript.overlapsNucleus === undefined
+      ? {}
+      : { overlapsNucleus: transcript.overlapsNucleus }),
+    ...(transcript.isGene === undefined ? {} : { isGene: transcript.isGene }),
+    ...(transcript.nucleusDistance === undefined
+      ? {}
+      : { nucleusDistance: transcript.nucleusDistance }),
+    fillColor: transcriptFeatureColor(transcript.featureName),
+  }))
+}
+
+export function transcriptAggregateBinsToLayerData(
+  bins: readonly TranscriptAggregateBin[],
+): readonly TranscriptAggregateDatum[] {
+  if (bins.length === 0) {
+    return []
+  }
+
+  let maxCount = 1
+
+  for (const bin of bins) {
+    maxCount = Math.max(maxCount, bin.count)
+  }
+
+  return bins.map((bin) => {
+    const intensity = Math.sqrt(Math.max(bin.count, 0) / maxCount)
+
+    return {
+      id: bin.id,
+      position: [bin.position.x, -bin.position.y, 0],
+      level: bin.level,
+      binX: bin.binX,
+      binY: bin.binY,
+      count: bin.count,
+      radiusMicrometers: bin.radiusMicrometers,
+      ...(bin.featureName === undefined ? {} : { featureName: bin.featureName }),
+      ...(bin.fovName === undefined ? {} : { fovName: bin.fovName }),
+      fillColor: transcriptAggregateColor(intensity),
+    }
+  })
 }
 
 export function styleGeneExpressionCellsByScale(
@@ -576,6 +723,37 @@ function cellPointOutlineColor(color: Color): Color {
     color[1] ?? 0,
     color[2] ?? 0,
     Math.min(245, Math.max(160, color[3] ?? 210)),
+  ]
+}
+
+function transcriptFeatureColor(featureName: string): Color {
+  const palette: readonly Color[] = [
+    [76, 211, 194, 235],
+    [248, 197, 80, 235],
+    [231, 97, 126, 235],
+    [147, 197, 253, 235],
+    [167, 139, 250, 235],
+    [132, 204, 22, 235],
+    [251, 146, 60, 235],
+    [244, 114, 182, 235],
+  ]
+  let hash = 0
+
+  for (let index = 0; index < featureName.length; index += 1) {
+    hash = (hash * 31 + featureName.charCodeAt(index)) >>> 0
+  }
+
+  return palette[hash % palette.length] ?? [76, 211, 194, 235]
+}
+
+function transcriptAggregateColor(intensity: number): Color {
+  const clamped = Math.max(0, Math.min(1, intensity))
+
+  return [
+    Math.round(37 + clamped * 218),
+    Math.round(172 + clamped * 41),
+    Math.round(166 - clamped * 78),
+    Math.round(96 + clamped * 150),
   ]
 }
 

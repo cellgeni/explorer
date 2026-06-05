@@ -380,6 +380,101 @@ describe('XeniumDataset', () => {
     ])
   })
 
+  it('loads exact transcript points and gene/FOV groups for a viewport', async () => {
+    const cellId = intToCellId(1, 1)
+    const conn = new FakeConnection([
+      [
+        {
+          transcript_id: 12,
+          cell_id: cellId,
+          feature_name: 'Actb',
+          x_location: 2,
+          y_location: 3,
+          z_location: 1,
+          qv: 35,
+          fov_name: 'FOV-001',
+          overlaps_nucleus: 1,
+          nucleus_distance: 0,
+          is_gene: true,
+        },
+      ],
+      [
+        {
+          feature_name: 'Actb',
+          fov_name: 'FOV-001',
+          count: 7,
+          mean_qv: 33.5,
+        },
+      ],
+    ])
+    const dataset = makeDataset(conn)
+
+    await expect(
+      dataset.transcriptsForViewport(
+        {
+          minX: micrometers(0),
+          maxX: micrometers(10),
+          minY: micrometers(1),
+          maxY: micrometers(20),
+        },
+        {
+          pointLimit: 250,
+          groupLimit: 12,
+          minQv: 30,
+          geneOnly: true,
+          featureNames: ['Actb'],
+        },
+      ),
+    ).resolves.toEqual({
+      points: [
+        {
+          id: '12',
+          cellId,
+          featureName: 'Actb',
+          fovName: 'FOV-001',
+          position: { x: micrometers(2), y: micrometers(3) },
+          zLocation: 1,
+          qv: 35,
+          overlapsNucleus: true,
+          nucleusDistance: 0,
+          isGene: true,
+        },
+      ],
+      groups: [
+        {
+          featureName: 'Actb',
+          fovName: 'FOV-001',
+          count: 7,
+          meanQv: 33.5,
+        },
+      ],
+      hitPointLimit: false,
+    })
+    expect(conn.preparedSql[0]).not.toContain('ORDER BY')
+    expect(conn.preparedSql[0]).toContain('feature_name IN (?)')
+    expect(conn.preparedSql[1]).toContain('GROUP BY feature_name, fov_name')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/transcripts.parquet',
+      micrometers(0),
+      micrometers(10),
+      micrometers(1),
+      micrometers(20),
+      30,
+      'Actb',
+      251,
+    ])
+    expect(conn.statements[1]?.params).toEqual([
+      'https://example.test/xenium/transcripts.parquet',
+      micrometers(0),
+      micrometers(10),
+      micrometers(1),
+      micrometers(20),
+      30,
+      'Actb',
+      12,
+    ])
+  })
+
   it('loads viewport-scoped expression counts for selected genes', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([

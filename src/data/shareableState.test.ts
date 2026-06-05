@@ -30,6 +30,13 @@ describe('shareableState', () => {
       coordinateUnit: 'px',
       shouldLoadMorphology: true,
       boundaryCellLimit: 2500,
+      transcriptOverlay: true,
+      transcriptDetailMode: 'exact',
+      transcriptMinQv: 25,
+      transcriptGeneOnly: true,
+      transcriptFeatureFilterMode: 'selected',
+      transcriptOpacity: 0.75,
+      transcriptPointSize: 3,
     })
 
     const state = parseShareableState(hash)
@@ -43,6 +50,13 @@ describe('shareableState', () => {
     expect(state.coordinateUnit).toBe('px')
     expect(state.shouldLoadMorphology).toBe(true)
     expect(state.boundaryCellLimit).toBe(2500)
+    expect(state.transcriptOverlay).toBe(true)
+    expect(state.transcriptDetailMode).toBe('exact')
+    expect(state.transcriptMinQv).toBe(25)
+    expect(state.transcriptGeneOnly).toBe(true)
+    expect(state.transcriptFeatureFilterMode).toBe('selected')
+    expect(state.transcriptOpacity).toBe(0.75)
+    expect(state.transcriptPointSize).toBe(3)
   })
 
   it('keeps a compact key for rounded view state comparisons', () => {

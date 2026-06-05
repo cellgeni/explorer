@@ -17,7 +17,9 @@ export interface DuckDbClient {
 }
 
 export interface ConfigureDuckDbOptions {
+  readonly requireHttpfs?: boolean
   readonly requireSpatial?: boolean
+  readonly onHttpfsLoadError?: (error: Error) => void
   readonly onSpatialLoadError?: (error: Error) => void
 }
 
@@ -43,6 +45,18 @@ export async function configureDuckDb(
   conn: DuckDbQueryConnection,
   options: ConfigureDuckDbOptions = {},
 ): Promise<void> {
+  try {
+    await conn.query('LOAD httpfs')
+  } catch (cause) {
+    const error = cause instanceof Error ? cause : new Error(String(cause))
+
+    if (options.requireHttpfs === true) {
+      throw error
+    }
+
+    options.onHttpfsLoadError?.(error)
+  }
+
   await conn.query('SET enable_http_metadata_cache=true')
 
   try {

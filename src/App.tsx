@@ -1,6 +1,10 @@
 import type { CSSProperties, FormEvent, PointerEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ViewerCore, type ViewerCoordinateUnit } from './components/ViewerCore'
+import {
+  ViewerCore,
+  type ViewerCoordinateUnit,
+  type ViewerTranscriptHoverDetail,
+} from './components/ViewerCore'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import {
   ALL_ANNOTATION_GROUP_ID,
@@ -30,6 +34,20 @@ import {
 import { asCellId } from './data/cellid'
 import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
 import { loadDatasetRoiTranscripts as defaultLoadDatasetRoiTranscripts } from './data/roiTranscripts'
+import {
+  TRANSCRIPT_EXACT_RENDER_LIMIT,
+  TRANSCRIPT_GROUP_LIMIT,
+  loadDatasetTranscriptCapabilities as defaultLoadDatasetTranscriptCapabilities,
+  loadDatasetTranscriptViewport as defaultLoadDatasetTranscriptViewport,
+  planTranscriptLod,
+  transcriptViewportRequestKey,
+  type TranscriptCapabilities,
+  type TranscriptAggregateBin,
+  type TranscriptDetailMode,
+  type TranscriptFeatureFilterMode,
+  type TranscriptGroupSummary,
+  type TranscriptPoint,
+} from './data/transcriptOverlay'
 import { micrometers } from './data/coords'
 import {
   normalizeRoiSelection,
@@ -73,6 +91,8 @@ import {
   isGeneExpressionScoreMode,
   overviewCellsToLayerData,
   styleGeneExpressionCellsByScale,
+  transcriptAggregateBinsToLayerData,
+  transcriptPointsToLayerData,
   bundledDeckVersion,
 } from './rendering/deckLayers'
 import { styleOverviewCellsByObservation } from './rendering/cellStyling'
@@ -122,6 +142,8 @@ import type {
 
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
+const TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS = 12_000
+const EMPTY_GENE_LIST: readonly string[] = []
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 const DEBUG_LOG_LIMIT = 32
 const MAGIC_LENS_CELL_LIMIT = 25_000
@@ -136,6 +158,7 @@ const CONTROL_HUD_TABS = [
   { id: 'dataset', label: 'Dataset' },
   { id: 'layers', label: 'Layers' },
   { id: 'genes', label: 'Genes' },
+  { id: 'transcripts', label: 'Transcripts' },
   { id: 'magic-lens', label: 'Magic Lens' },
   { id: 'annotations', label: 'Annotations' },
   { id: 'roi', label: 'ROI' },
@@ -202,6 +225,26 @@ export type RoiTranscriptsLoader = (
     readonly minQv?: number
   },
 ) => Promise<readonly DatasetTranscript[]>
+export type TranscriptCapabilitiesLoader = (
+  baseUrl: string,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<TranscriptCapabilities>
+export type TranscriptViewportLoader = (
+  baseUrl: string,
+  bbox: BBox,
+  options?: {
+    readonly signal?: AbortSignal
+    readonly pointLimit?: number
+    readonly groupLimit?: number
+    readonly minQv?: number
+    readonly geneOnly?: boolean
+    readonly featureNames?: readonly string[]
+  },
+) => Promise<{
+  readonly points: readonly TranscriptPoint[]
+  readonly groups: readonly TranscriptGroupSummary[]
+  readonly hitPointLimit: boolean
+}>
 export type GeneExpressionLoader = (
   baseUrl: string,
   bbox: BBox,
@@ -409,6 +452,60 @@ type RoiTranscriptExportState =
       readonly error: StructuredLoadError
     }
 
+type TranscriptCapabilityState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly capabilities: TranscriptCapabilities
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
+
+type TranscriptLayerState =
+  | { readonly status: 'idle' }
+  | {
+      readonly status: 'waiting'
+      readonly message: string
+      readonly visibleTranscriptEstimate: number
+    }
+  | {
+      readonly status: 'aggregate'
+      readonly message: string
+      readonly source: 'cell-summary'
+      readonly mode: 'density' | 'bins'
+      readonly bins: readonly TranscriptAggregateBin[]
+      readonly visibleTranscriptEstimate: number
+    }
+  | {
+      readonly status: 'unavailable'
+      readonly message: string
+      readonly visibleTranscriptEstimate: number
+    }
+  | {
+      readonly status: 'loading'
+      readonly url: string
+      readonly visibleTranscriptEstimate: number
+    }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly points: readonly TranscriptPoint[]
+      readonly groups: readonly TranscriptGroupSummary[]
+      readonly visibleTranscriptEstimate: number
+      readonly hitPointLimit: boolean
+      readonly durationMs: number
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly error: StructuredLoadError
+    }
+
 type MagicLensScope = 'cursor' | 'viewport' | 'roi'
 
 type MagicLensState =
@@ -490,6 +587,7 @@ type LoadErrorSource =
   | 'ROI cells'
   | 'ROI genes'
   | 'ROI transcripts'
+  | 'Transcripts'
   | 'Gene expression'
   | 'Magic lens'
   | 'Cell details'
@@ -577,6 +675,8 @@ export interface AppProps {
   readonly loadRoiCells?: RoiCellsLoader
   readonly loadRoiGeneStats?: RoiGeneStatsLoader
   readonly loadRoiTranscripts?: RoiTranscriptsLoader
+  readonly loadTranscriptCapabilities?: TranscriptCapabilitiesLoader
+  readonly loadTranscriptViewport?: TranscriptViewportLoader
   readonly loadGeneExpression?: GeneExpressionLoader
   readonly warmDatasetForRoi?: DatasetWarmupLoader
   readonly runDatasetDiagnostics?: DatasetDiagnosticsRunner
@@ -594,6 +694,8 @@ export function App({
   loadRoiCells = defaultLoadDatasetRoiCells,
   loadRoiGeneStats = defaultLoadDatasetRoiGeneStats,
   loadRoiTranscripts = defaultLoadDatasetRoiTranscripts,
+  loadTranscriptCapabilities = defaultLoadDatasetTranscriptCapabilities,
+  loadTranscriptViewport = defaultLoadDatasetTranscriptViewport,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
   warmDatasetForRoi = defaultWarmDatasetForRoi,
   runDatasetDiagnostics = defaultRunDatasetDiagnostics,
@@ -617,6 +719,11 @@ export function App({
   const embeddingViewInputId = useId()
   const roiNameInputId = useId()
   const observationModeInputId = useId()
+  const transcriptDetailInputId = useId()
+  const transcriptMinQvInputId = useId()
+  const transcriptFeatureFilterInputId = useId()
+  const transcriptOpacityInputId = useId()
+  const transcriptPointSizeInputId = useId()
   const magicLensScopeInputId = useId()
   const magicLensRadiusInputId = useId()
   const magicLensMinQvInputId = useId()
@@ -672,6 +779,11 @@ export function App({
     useState<RoiGeneViewportWarmupState>({ status: 'idle' })
   const [roiTranscriptExportState, setRoiTranscriptExportState] =
     useState<RoiTranscriptExportState>({ status: 'idle' })
+  const [transcriptCapabilityState, setTranscriptCapabilityState] =
+    useState<TranscriptCapabilityState>({ status: 'idle' })
+  const [transcriptLayerState, setTranscriptLayerState] = useState<TranscriptLayerState>({
+    status: 'idle',
+  })
   const [magicLensState, setMagicLensState] = useState<MagicLensState>({
     status: 'idle',
   })
@@ -682,6 +794,34 @@ export function App({
   const [magicLensActive, setMagicLensActive] = useState(false)
   const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(80)
   const [magicLensMinQv, setMagicLensMinQv] = useState(20)
+  const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(
+    initialShareableState.transcriptOverlay ?? false,
+  )
+  const [transcriptDetailMode, setTranscriptDetailMode] =
+    useState<TranscriptDetailMode>(
+      () => parseTranscriptDetailMode(initialShareableState.transcriptDetailMode) ?? 'auto',
+    )
+  const [transcriptMinQv, setTranscriptMinQv] = useState(
+    initialShareableState.transcriptMinQv ?? 20,
+  )
+  const [transcriptGeneOnly, setTranscriptGeneOnly] = useState(
+    initialShareableState.transcriptGeneOnly ?? true,
+  )
+  const [transcriptFeatureFilterMode, setTranscriptFeatureFilterMode] =
+    useState<TranscriptFeatureFilterMode>(
+      () =>
+        parseTranscriptFeatureFilterMode(
+          initialShareableState.transcriptFeatureFilterMode,
+        ) ?? 'selected',
+    )
+  const [transcriptOpacity, setTranscriptOpacity] = useState(
+    initialShareableState.transcriptOpacity ?? 0.85,
+  )
+  const [transcriptPointSize, setTranscriptPointSize] = useState(
+    initialShareableState.transcriptPointSize ?? 2,
+  )
+  const [hoveredTranscript, setHoveredTranscript] =
+    useState<ViewerTranscriptHoverDetail | null>(null)
   const [debugLog, setDebugLog] = useState<readonly DebugLogEntry[]>([])
   const [telemetryEvents, setTelemetryEvents] = useState<readonly TelemetryEvent[]>([])
   const [isControlHudCollapsed, setIsControlHudCollapsed] = useState(false)
@@ -763,6 +903,8 @@ export function App({
   const geneExpressionRequestId = useRef(0)
   const roiRequestId = useRef(0)
   const roiTranscriptExportRequestId = useRef(0)
+  const transcriptCapabilityRequestId = useRef(0)
+  const transcriptRequestId = useRef(0)
   const magicLensRequestId = useRef(0)
   const cellDetailRequestId = useRef(0)
   const magicLensDebounceRef = useRef<number | null>(null)
@@ -777,6 +919,8 @@ export function App({
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
   const roiAbortRef = useRef<AbortController | null>(null)
   const roiTranscriptExportAbortRef = useRef<AbortController | null>(null)
+  const transcriptCapabilityAbortRef = useRef<AbortController | null>(null)
+  const transcriptAbortRef = useRef<AbortController | null>(null)
   const roiGeneViewportWarmupAbortRef = useRef<AbortController | null>(null)
   const roiGeneViewportWarmupTimeoutRef = useRef<number | null>(null)
   const roiGeneViewportWarmupKeyRef = useRef<string | null>(null)
@@ -788,6 +932,7 @@ export function App({
   const roiIdRef = useRef(0)
   const boundaryViewportKeyRef = useRef<string | null>(null)
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
+  const transcriptViewportKeyRef = useRef<string | null>(null)
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
   const initialShareableStateRef = useRef<ShareableState | null>(initialShareableState)
   const initialSharedRoiSelectionRef = useRef<RoiSelection | null>(
@@ -878,6 +1023,27 @@ export function App({
         scaleMax: geneExpressionScaleMax,
       }),
     [geneExpressionCells, geneExpressionColorScale, geneExpressionScaleMax],
+  )
+  const transcriptLayerPoints = useMemo(
+    () =>
+      transcriptLayerState.status === 'ready'
+        ? transcriptPointsToLayerData(transcriptLayerState.points)
+        : [],
+    [transcriptLayerState],
+  )
+  const transcriptLayerAggregateBins = useMemo(
+    () =>
+      transcriptLayerState.status === 'aggregate'
+        ? transcriptAggregateBinsToLayerData(transcriptLayerState.bins)
+        : [],
+    [transcriptLayerState],
+  )
+  const visibleTranscriptEstimate = useMemo(
+    () =>
+      currentViewportDetail === null
+        ? 0
+        : estimateVisibleTranscriptsFromCells(overviewCells, currentViewportDetail.bbox),
+    [currentViewportDetail, overviewCells],
   )
   const morphologyCanvasChannels = useMemo<readonly MorphologyCanvasChannel[]>(
     () =>
@@ -1049,6 +1215,23 @@ export function App({
       })
     }
 
+    if (transcriptCapabilityState.status === 'loading') {
+      tasks.push({
+        id: 'transcript-capabilities',
+        tabId: 'transcripts',
+        label: 'Checking transcripts',
+      })
+    }
+
+    if (transcriptLayerState.status === 'loading') {
+      tasks.push({
+        id: 'transcript-overlay',
+        tabId: 'transcripts',
+        label: 'Loading transcripts',
+        detail: `${transcriptLayerState.visibleTranscriptEstimate.toLocaleString()} estimated`,
+      })
+    }
+
     if (magicLensState.status === 'loading') {
       tasks.push({
         id: 'magic-lens',
@@ -1137,6 +1320,8 @@ export function App({
     isRoiGeneViewportWarmupLoading,
     roiState,
     roiTranscriptExportState,
+    transcriptCapabilityState,
+    transcriptLayerState,
   ])
   const loadingTabIds = useMemo(
     () => new Set(loadingTasks.map((task) => task.tabId)),
@@ -1175,6 +1360,11 @@ export function App({
     loadState.status,
     magicLensCanScan,
     magicLensActive,
+  )
+  const transcriptCopy = transcriptStatusCopy(
+    transcriptCapabilityState,
+    transcriptLayerState,
+    showTranscriptOverlay,
   )
   const appendDebugEvent = useCallback(
     (message: string, options: { readonly coalesceKey?: string } = {}) => {
@@ -1239,6 +1429,10 @@ export function App({
           ? roiTranscriptExportState.error
           : null,
         geneExpressionState.status === 'error' ? geneExpressionState.error : null,
+        transcriptCapabilityState.status === 'error'
+          ? transcriptCapabilityState.error
+          : null,
+        transcriptLayerState.status === 'error' ? transcriptLayerState.error : null,
         magicLensState.status === 'error' ? magicLensState.error : null,
         cellDetailState.status === 'error' ? cellDetailState.error : null,
       ].filter(isStructuredLoadError),
@@ -1257,6 +1451,8 @@ export function App({
       roiState,
       roiGeneStatsState,
       roiTranscriptExportState,
+      transcriptCapabilityState,
+      transcriptLayerState,
     ],
   )
   const handleImageTileError = useCallback((error: Error) => {
@@ -1498,6 +1694,379 @@ export function App({
   }, [handleViewportChange])
 
   useEffect(() => {
+    if (
+      loadState.status !== 'ready' ||
+      transcriptCapabilityState.status !== 'idle' ||
+      (!showTranscriptOverlay && activeControlHudTab !== 'transcripts')
+    ) {
+      return
+    }
+
+    const requestedUrl = loadState.url
+    const requestId = loadRequestId.current
+    const abortController = new AbortController()
+    const transcriptStartedAt = readTimestamp()
+    abortActiveRequest(transcriptCapabilityAbortRef)
+    transcriptCapabilityRequestId.current += 1
+    transcriptCapabilityAbortRef.current = abortController
+    queueMicrotask(() => {
+      if (transcriptCapabilityAbortRef.current === abortController) {
+        setTranscriptCapabilityState({ status: 'loading', url: requestedUrl })
+      }
+    })
+    appendDebugEvent('Transcript output check started')
+
+    void loadTranscriptCapabilities(requestedUrl, {
+      signal: abortController.signal,
+    })
+      .then((capabilities) => {
+        if (loadRequestId.current !== requestId || abortController.signal.aborted) {
+          return
+        }
+
+        setTranscriptCapabilityState({
+          status: 'ready',
+          url: requestedUrl,
+          capabilities,
+        })
+        appendDebugEvent(
+          `Transcript outputs: ${transcriptCapabilityLabel(capabilities)} (${formatElapsed(
+            transcriptStartedAt,
+          )})`,
+          { coalesceKey: 'transcript-capability' },
+        )
+      })
+      .catch((error) => {
+        if (isAbortError(error) || loadRequestId.current !== requestId) {
+          return
+        }
+
+        setTranscriptCapabilityState({
+          status: 'error',
+          url: requestedUrl,
+          error: createStructuredLoadError('Transcripts', error),
+        })
+        appendDebugEvent('Transcript output check failed', {
+          coalesceKey: 'transcript-capability',
+        })
+      })
+      .finally(() => {
+        if (transcriptCapabilityAbortRef.current === abortController) {
+          transcriptCapabilityAbortRef.current = null
+        }
+      })
+  }, [
+    activeControlHudTab,
+    appendDebugEvent,
+    loadState,
+    loadTranscriptCapabilities,
+    showTranscriptOverlay,
+    transcriptCapabilityState.status,
+  ])
+
+  useEffect(() => {
+    if (
+      !showTranscriptOverlay ||
+      loadState.status !== 'ready' ||
+      currentViewportDetail === null
+    ) {
+      abortActiveRequest(transcriptAbortRef)
+      transcriptRequestId.current += 1
+      const clearRequestId = transcriptRequestId.current
+      transcriptViewportKeyRef.current = null
+      queueMicrotask(() => {
+        if (transcriptRequestId.current === clearRequestId) {
+          setTranscriptLayerState((current) =>
+            current.status === 'idle' ? current : { status: 'idle' },
+          )
+        }
+      })
+      return
+    }
+
+    if (
+      transcriptCapabilityState.status === 'idle' ||
+      transcriptCapabilityState.status === 'loading'
+    ) {
+      abortActiveRequest(transcriptAbortRef)
+      transcriptRequestId.current += 1
+      const waitingRequestId = transcriptRequestId.current
+      transcriptViewportKeyRef.current = null
+      queueMicrotask(() => {
+        if (transcriptRequestId.current === waitingRequestId) {
+          setTranscriptLayerState({
+            status: 'waiting',
+            message: 'Checking transcript outputs for this dataset.',
+            visibleTranscriptEstimate,
+          })
+        }
+      })
+      return
+    }
+
+    if (transcriptCapabilityState.status === 'error') {
+      abortActiveRequest(transcriptAbortRef)
+      transcriptRequestId.current += 1
+      const errorRequestId = transcriptRequestId.current
+      transcriptViewportKeyRef.current = null
+      queueMicrotask(() => {
+        if (transcriptRequestId.current === errorRequestId) {
+          setTranscriptLayerState({
+            status: 'error',
+            url: loadState.url,
+            error: transcriptCapabilityState.error,
+          })
+        }
+      })
+      return
+    }
+
+    const featureNames =
+      transcriptFeatureFilterMode === 'selected' ? selectedGenes : EMPTY_GENE_LIST
+    const plan = planTranscriptLod(currentViewportDetail, {
+      detailMode: transcriptDetailMode,
+      visibleTranscriptEstimate,
+      exactLimit: TRANSCRIPT_EXACT_RENDER_LIMIT,
+      hasRawParquet: transcriptCapabilityState.capabilities.rawParquet,
+      hasNativeZarr: transcriptCapabilityState.capabilities.nativeZarr,
+      hasSelectedFeatureFilter:
+        transcriptFeatureFilterMode !== 'selected' || featureNames.length > 0,
+    })
+
+    if (plan.kind === 'native-zarr') {
+      abortActiveRequest(transcriptAbortRef)
+      transcriptRequestId.current += 1
+      const aggregateRequestId = transcriptRequestId.current
+      const bins = buildCellSummaryTranscriptBins(
+        overviewCells,
+        currentViewportDetail.bbox,
+        plan.mode,
+      )
+      transcriptViewportKeyRef.current = null
+      queueMicrotask(() => {
+        if (transcriptRequestId.current === aggregateRequestId) {
+          setTranscriptLayerState({
+            status: 'aggregate',
+            source: 'cell-summary',
+            mode: plan.mode,
+            bins,
+            message: transcriptAggregateFallbackMessage({
+              mode: plan.mode,
+              featureFilterMode: transcriptFeatureFilterMode,
+              selectedFeatureCount: featureNames.length,
+            }),
+            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+          })
+        }
+      })
+      return
+    }
+
+    if (plan.kind === 'waiting') {
+      abortActiveRequest(transcriptAbortRef)
+      transcriptRequestId.current += 1
+      const waitingRequestId = transcriptRequestId.current
+      transcriptViewportKeyRef.current = null
+      queueMicrotask(() => {
+        if (transcriptRequestId.current === waitingRequestId) {
+          setTranscriptLayerState({
+            status: 'waiting',
+            message: plan.message,
+            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+          })
+        }
+      })
+      return
+    }
+
+    if (plan.kind === 'unavailable') {
+      abortActiveRequest(transcriptAbortRef)
+      transcriptRequestId.current += 1
+      const unavailableRequestId = transcriptRequestId.current
+      transcriptViewportKeyRef.current = null
+      queueMicrotask(() => {
+        if (transcriptRequestId.current === unavailableRequestId) {
+          setTranscriptLayerState({
+            status: 'unavailable',
+            message: plan.message,
+            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+          })
+        }
+      })
+      return
+    }
+
+    const requestKey = transcriptViewportRequestKey(loadState.url, currentViewportDetail.bbox, {
+      minQv: transcriptMinQv,
+      geneOnly: transcriptGeneOnly,
+      featureNames,
+      pointLimit: TRANSCRIPT_EXACT_RENDER_LIMIT,
+    })
+
+    if (requestKey === transcriptViewportKeyRef.current) {
+      return
+    }
+
+    abortActiveRequest(transcriptAbortRef)
+    const requestId = transcriptRequestId.current + 1
+    const abortController = new AbortController()
+    const transcriptStartedAt = readTimestamp()
+    transcriptRequestId.current = requestId
+    transcriptAbortRef.current = abortController
+    transcriptViewportKeyRef.current = requestKey
+    queueMicrotask(() => {
+      if (transcriptRequestId.current === requestId) {
+        setTranscriptLayerState({
+          status: 'loading',
+          url: loadState.url,
+          visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+        })
+      }
+    })
+    appendDebugEvent(
+      `Transcript exact query started: ${plan.visibleTranscriptEstimate.toLocaleString()} estimated`,
+      { coalesceKey: 'transcript-query' },
+    )
+
+    let didExactQueryTimeOut = false
+    let exactQueryTimeout: number | null = null
+    const startTimeout = window.setTimeout(() => {
+      exactQueryTimeout = window.setTimeout(() => {
+        if (transcriptRequestId.current !== requestId) {
+          return
+        }
+
+        didExactQueryTimeOut = true
+        transcriptViewportKeyRef.current = null
+
+        if (transcriptAbortRef.current === abortController) {
+          transcriptAbortRef.current = null
+        }
+
+        abortController.abort()
+        setTranscriptLayerState({
+          status: 'waiting',
+          message:
+            'Exact transcript loading exceeded 12 seconds. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.',
+          visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+        })
+        appendDebugEvent('Transcript exact query timed out', {
+          coalesceKey: 'transcript-query',
+        })
+      }, TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS)
+
+      void loadTranscriptViewport(loadState.url, currentViewportDetail.bbox, {
+        signal: abortController.signal,
+        pointLimit: TRANSCRIPT_EXACT_RENDER_LIMIT,
+        groupLimit: TRANSCRIPT_GROUP_LIMIT,
+        minQv: transcriptMinQv,
+        geneOnly: transcriptGeneOnly,
+        featureNames,
+      })
+        .then((result) => {
+          if (didExactQueryTimeOut || transcriptRequestId.current !== requestId) {
+            return
+          }
+
+          if (exactQueryTimeout !== null) {
+            window.clearTimeout(exactQueryTimeout)
+            exactQueryTimeout = null
+          }
+
+          const durationMs = Math.max(0, readTimestamp() - transcriptStartedAt)
+
+          if (result.hitPointLimit) {
+            transcriptViewportKeyRef.current = null
+            setTranscriptLayerState({
+              status: 'waiting',
+              message:
+                'Exact transcript viewport exceeded the 25,000 point budget. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.',
+              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+            })
+            appendDebugEvent('Transcript exact query exceeded point budget', {
+              coalesceKey: 'transcript-query',
+            })
+            return
+          }
+
+          setTranscriptLayerState({
+            status: 'ready',
+            url: loadState.url,
+            points: result.points,
+            groups: result.groups,
+            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+            hitPointLimit: result.hitPointLimit,
+            durationMs,
+          })
+          appendDebugEvent(
+            `Transcript exact query ready: ${result.points.length.toLocaleString()} points in ${formatElapsed(
+              transcriptStartedAt,
+            )}`,
+            { coalesceKey: 'transcript-query' },
+          )
+        })
+        .catch((error) => {
+          if (
+            didExactQueryTimeOut ||
+            isAbortError(error) ||
+            transcriptRequestId.current !== requestId
+          ) {
+            return
+          }
+
+          if (exactQueryTimeout !== null) {
+            window.clearTimeout(exactQueryTimeout)
+            exactQueryTimeout = null
+          }
+
+          setTranscriptLayerState({
+            status: 'error',
+            url: loadState.url,
+            error: createStructuredLoadError('Transcripts', error),
+          })
+          appendDebugEvent('Transcript query failed', {
+            coalesceKey: 'transcript-query',
+          })
+        })
+        .finally(() => {
+          if (exactQueryTimeout !== null) {
+            window.clearTimeout(exactQueryTimeout)
+            exactQueryTimeout = null
+          }
+
+          if (transcriptAbortRef.current === abortController) {
+            transcriptAbortRef.current = null
+          }
+        })
+    }, 220)
+
+    return () => {
+      window.clearTimeout(startTimeout)
+      if (exactQueryTimeout !== null) {
+        window.clearTimeout(exactQueryTimeout)
+      }
+
+      if (transcriptAbortRef.current === abortController) {
+        abortActiveRequest(transcriptAbortRef)
+      }
+    }
+  }, [
+    appendDebugEvent,
+    currentViewportDetail,
+    loadState,
+    loadTranscriptViewport,
+    overviewCells,
+    selectedGenes,
+    showTranscriptOverlay,
+    transcriptCapabilityState,
+    transcriptDetailMode,
+    transcriptFeatureFilterMode,
+    transcriptGeneOnly,
+    transcriptMinQv,
+    visibleTranscriptEstimate,
+  ])
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return
     }
@@ -1670,6 +2239,13 @@ export function App({
         coordinateUnit,
         shouldLoadMorphology,
         boundaryCellLimit,
+        transcriptOverlay: showTranscriptOverlay,
+        transcriptDetailMode,
+        transcriptMinQv,
+        transcriptGeneOnly,
+        transcriptFeatureFilterMode,
+        transcriptOpacity,
+        transcriptPointSize,
       })
 
       if (window.location.hash !== hash) {
@@ -1697,6 +2273,13 @@ export function App({
     selectedGenes,
     shareableViewState,
     shouldLoadMorphology,
+    showTranscriptOverlay,
+    transcriptDetailMode,
+    transcriptFeatureFilterMode,
+    transcriptGeneOnly,
+    transcriptMinQv,
+    transcriptOpacity,
+    transcriptPointSize,
   ])
 
   useEffect(() => {
@@ -1800,6 +2383,8 @@ export function App({
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
       abortActiveRequest(roiTranscriptExportAbortRef)
+      abortActiveRequest(transcriptCapabilityAbortRef)
+      abortActiveRequest(transcriptAbortRef)
       abortActiveRequest(roiGeneViewportWarmupAbortRef)
       abortActiveRequest(magicLensAbortRef)
       abortActiveRequest(cellDetailAbortRef)
@@ -1905,6 +2490,8 @@ export function App({
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
       abortActiveRequest(roiTranscriptExportAbortRef)
+      abortActiveRequest(transcriptCapabilityAbortRef)
+      abortActiveRequest(transcriptAbortRef)
       abortActiveRequest(roiGeneViewportWarmupAbortRef)
       abortActiveRequest(magicLensAbortRef)
       abortActiveRequest(cellDetailAbortRef)
@@ -1967,6 +2554,8 @@ export function App({
       setRoiGeneStatsState({ status: 'idle' })
       setRoiGeneViewportWarmupState({ status: 'idle' })
       setRoiTranscriptExportState({ status: 'idle' })
+      setTranscriptCapabilityState({ status: 'idle' })
+      setTranscriptLayerState({ status: 'idle' })
       setMagicLensState({ status: 'idle' })
       setCellDetailState({ status: 'idle' })
       setMagicLensActive(false)
@@ -1987,12 +2576,15 @@ export function App({
       geneExpressionRequestId.current += 1
       roiRequestId.current += 1
       roiTranscriptExportRequestId.current += 1
+      transcriptCapabilityRequestId.current += 1
+      transcriptRequestId.current += 1
       magicLensRequestId.current += 1
       cellDetailRequestId.current += 1
       magicLensLastDetailRef.current = null
       magicLensLastQueryKeyRef.current = null
       boundaryViewportKeyRef.current = null
       geneExpressionViewportKeyRef.current = null
+      transcriptViewportKeyRef.current = null
       lastViewportDetailRef.current = null
       initialSharedRoiSelectionRef.current = shouldRestoreSharedState
         ? (sharedState?.roiSelection ?? null)
@@ -2153,6 +2745,8 @@ export function App({
         setMorphologyState({ status: 'idle' })
         setGenePanelState({ status: 'idle' })
         setAnnotationGroupState({ status: 'idle' })
+        setTranscriptCapabilityState({ status: 'idle' })
+        setTranscriptLayerState({ status: 'idle' })
       }
     }
   }
@@ -2235,6 +2829,15 @@ export function App({
           shareableViewState,
           shouldLoadMorphology,
           telemetryEvents,
+          showTranscriptOverlay,
+          transcriptCapabilityState,
+          transcriptDetailMode,
+          transcriptFeatureFilterMode,
+          transcriptGeneOnly,
+          transcriptLayerState,
+          transcriptMinQv,
+          transcriptOpacity,
+          transcriptPointSize,
         }),
         null,
         2,
@@ -3655,6 +4258,192 @@ export function App({
             </div>
 
             <div
+              id="hud-panel-transcripts"
+              className="hud-tab-panel"
+              role="tabpanel"
+              aria-labelledby="hud-tab-transcripts"
+              hidden={activeControlHudTab !== 'transcripts'}
+            >
+              <section
+                className="analysis-section transcript-section"
+                aria-labelledby="transcript-heading"
+              >
+                <div className="section-heading-row">
+                  <h2 id="transcript-heading">Transcripts</h2>
+                  <span
+                    className={
+                      transcriptCapabilityState.status === 'loading' ||
+                      transcriptLayerState.status === 'loading'
+                        ? 'status-chip is-loading'
+                        : 'status-chip'
+                    }
+                    aria-live="polite"
+                  >
+                    {transcriptCopy}
+                  </span>
+                </div>
+
+                <label className="dataset-toggle" htmlFor="show-transcripts-overlay">
+                  <input
+                    id="show-transcripts-overlay"
+                    type="checkbox"
+                    checked={showTranscriptOverlay}
+                    disabled={loadState.status !== 'ready'}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked
+                      setShowTranscriptOverlay(checked)
+                      appendDebugEvent(
+                        checked
+                          ? 'Transcript overlay enabled'
+                          : 'Transcript overlay disabled',
+                        { coalesceKey: 'transcript-overlay-toggle' },
+                      )
+                    }}
+                  />
+                  <span>Show transcripts</span>
+                </label>
+
+                <label htmlFor={transcriptDetailInputId}>Detail</label>
+                <select
+                  id={transcriptDetailInputId}
+                  value={transcriptDetailMode}
+                  onChange={(event) => {
+                    const nextMode = event.currentTarget.value
+
+                    if (isTranscriptDetailMode(nextMode)) {
+                      setTranscriptDetailMode(nextMode)
+                      transcriptViewportKeyRef.current = null
+                      appendDebugEvent(`Transcript detail: ${nextMode}`, {
+                        coalesceKey: 'transcript-detail',
+                      })
+                    }
+                  }}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="density">Density</option>
+                  <option value="bins">Bins</option>
+                  <option value="exact">Exact</option>
+                </select>
+
+                <label htmlFor={transcriptFeatureFilterInputId}>Feature filter</label>
+                <select
+                  id={transcriptFeatureFilterInputId}
+                  value={transcriptFeatureFilterMode}
+                  onChange={(event) => {
+                    const nextMode = event.currentTarget.value
+
+                    if (isTranscriptFeatureFilterMode(nextMode)) {
+                      setTranscriptFeatureFilterMode(nextMode)
+                      transcriptViewportKeyRef.current = null
+                      appendDebugEvent(`Transcript feature filter: ${nextMode}`, {
+                        coalesceKey: 'transcript-feature-filter',
+                      })
+                    }
+                  }}
+                >
+                  <option value="selected">Selected genes</option>
+                  <option value="all">All features</option>
+                </select>
+
+                <label htmlFor={transcriptMinQvInputId}>Min QV</label>
+                <input
+                  id={transcriptMinQvInputId}
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max="40"
+                  step="1"
+                  value={transcriptMinQv}
+                  onChange={(event) => {
+                    const nextMinQv = normalizeTranscriptMinQv(
+                      event.currentTarget.valueAsNumber,
+                    )
+                    setTranscriptMinQv(nextMinQv)
+                    transcriptViewportKeyRef.current = null
+                    appendDebugEvent(`Transcript min QV: ${nextMinQv}`, {
+                      coalesceKey: 'transcript-min-qv',
+                    })
+                  }}
+                />
+
+                <label className="dataset-toggle" htmlFor="transcript-gene-only">
+                  <input
+                    id="transcript-gene-only"
+                    type="checkbox"
+                    checked={transcriptGeneOnly}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked
+                      setTranscriptGeneOnly(checked)
+                      transcriptViewportKeyRef.current = null
+                      appendDebugEvent(
+                        checked
+                          ? 'Transcript gene-only filter enabled'
+                          : 'Transcript gene-only filter disabled',
+                        { coalesceKey: 'transcript-gene-only' },
+                      )
+                    }}
+                  />
+                  <span>Gene-only calls</span>
+                </label>
+
+                <div className="layer-opacity-control">
+                  <div className="layer-opacity-header">
+                    <label htmlFor={transcriptOpacityInputId}>Transcript opacity</label>
+                    <span>{opacityToPercent(transcriptOpacity)}%</span>
+                  </div>
+                  <input
+                    id={transcriptOpacityInputId}
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={opacityToPercent(transcriptOpacity)}
+                    aria-valuetext={`${opacityToPercent(transcriptOpacity)}%`}
+                    onChange={(event) => {
+                      const nextPercent = event.currentTarget.valueAsNumber
+                      setTranscriptOpacity(percentToOpacity(nextPercent))
+                      appendDebugEvent(`Transcript opacity: ${nextPercent}%`, {
+                        coalesceKey: 'transcript-opacity',
+                      })
+                    }}
+                  />
+                </div>
+
+                <div className="layer-opacity-control">
+                  <div className="layer-opacity-header">
+                    <label htmlFor={transcriptPointSizeInputId}>Point size</label>
+                    <span>{transcriptPointSize}px</span>
+                  </div>
+                  <input
+                    id={transcriptPointSizeInputId}
+                    type="range"
+                    min="1"
+                    max="6"
+                    step="1"
+                    value={transcriptPointSize}
+                    aria-valuetext={`${transcriptPointSize}px`}
+                    onChange={(event) => {
+                      const nextSize = normalizeTranscriptPointSize(
+                        event.currentTarget.valueAsNumber,
+                      )
+                      setTranscriptPointSize(nextSize)
+                      appendDebugEvent(`Transcript point size: ${nextSize}px`, {
+                        coalesceKey: 'transcript-point-size',
+                      })
+                    }}
+                  />
+                </div>
+
+                <TranscriptStatusPanel
+                  capabilityState={transcriptCapabilityState}
+                  layerState={transcriptLayerState}
+                  visibleTranscriptEstimate={visibleTranscriptEstimate}
+                  hoveredTranscript={hoveredTranscript}
+                />
+              </section>
+            </div>
+
+            <div
               id="hud-panel-magic-lens"
               className="hud-tab-panel"
               role="tabpanel"
@@ -4188,11 +4977,15 @@ export function App({
           cells={styledOverviewCells}
           expressionCells={styledGeneExpressionCells}
           boundaries={boundaryLayerData}
+          transcriptAggregateBins={transcriptLayerAggregateBins}
+          transcriptPoints={transcriptLayerPoints}
           imageLoader={morphologyImage?.loader ?? null}
           imageChannels={morphologyCanvasChannels}
           imageOpacity={imageLayerOpacity}
           cellFillOpacity={cellFillOpacity}
           cellBoundaryOpacity={cellBoundaryOpacity}
+          transcriptOpacity={transcriptOpacity}
+          transcriptPointSize={transcriptPointSize}
           observationColorMode={viewerObservationColorMode}
           annotationStyleColors={activeAnnotationStyleColors}
           coordinateUnit={coordinateUnit}
@@ -4213,6 +5006,7 @@ export function App({
           onViewportCellCountChange={setViewportCellCount}
           onViewportChange={handleViewportChange}
           onRoiComplete={handleRoiComplete}
+          onTranscriptHover={setHoveredTranscript}
           onMagicLensMove={handleMagicLensMove}
           onMagicLensLeave={handleMagicLensLeave}
           onCellClick={(cell) => {
@@ -4384,8 +5178,74 @@ function roiGeneStatsStatusCopy(roiGeneStatsState: RoiGeneStatsState): string {
   return 'Genes idle'
 }
 
+function transcriptStatusCopy(
+  capabilityState: TranscriptCapabilityState,
+  layerState: TranscriptLayerState,
+  isEnabled: boolean,
+): string {
+  if (!isEnabled) {
+    return 'Off'
+  }
+
+  if (capabilityState.status === 'loading') {
+    return 'Checking'
+  }
+
+  if (layerState.status === 'loading') {
+    return 'Loading'
+  }
+
+  if (layerState.status === 'ready') {
+    return `${layerState.points.length.toLocaleString()} points`
+  }
+
+  if (layerState.status === 'aggregate') {
+    return `${layerState.bins.length.toLocaleString()} bins`
+  }
+
+  if (layerState.status === 'waiting') {
+    return 'Waiting'
+  }
+
+  if (layerState.status === 'unavailable' || layerState.status === 'error') {
+    return 'Unavailable'
+  }
+
+  if (capabilityState.status === 'ready') {
+    return transcriptCapabilityLabel(capabilityState.capabilities)
+  }
+
+  return 'Idle'
+}
+
+function transcriptCapabilityLabel(capabilities: TranscriptCapabilities): string {
+  if (capabilities.nativeZarr && capabilities.rawParquet) {
+    return 'Native LOD + exact'
+  }
+
+  if (capabilities.nativeZarr) {
+    return 'Native LOD'
+  }
+
+  if (capabilities.rawParquet) {
+    return 'Exact only'
+  }
+
+  return 'No transcripts'
+}
+
 function isObservationColorMode(value: string): value is ObservationColorMode {
   return value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
+}
+
+function isTranscriptDetailMode(value: string): value is TranscriptDetailMode {
+  return value === 'auto' || value === 'density' || value === 'bins' || value === 'exact'
+}
+
+function isTranscriptFeatureFilterMode(
+  value: string,
+): value is TranscriptFeatureFilterMode {
+  return value === 'all' || value === 'selected'
 }
 
 function readShareableStateFromLocation(): ShareableState {
@@ -4426,6 +5286,18 @@ function parseObservationColorMode(
   value: string | undefined,
 ): ObservationColorMode | undefined {
   return value !== undefined && isObservationColorMode(value) ? value : undefined
+}
+
+function parseTranscriptDetailMode(
+  value: string | undefined,
+): TranscriptDetailMode | undefined {
+  return value !== undefined && isTranscriptDetailMode(value) ? value : undefined
+}
+
+function parseTranscriptFeatureFilterMode(
+  value: string | undefined,
+): TranscriptFeatureFilterMode | undefined {
+  return value !== undefined && isTranscriptFeatureFilterMode(value) ? value : undefined
 }
 
 function hasReadyAnnotationsAfterRemove(
@@ -4531,6 +5403,113 @@ function overviewCellsToBbox(cells: readonly OverviewCellDatum[]): BBox | null {
     minY: micrometers(minY),
     maxY: micrometers(maxY),
   }
+}
+
+function estimateVisibleTranscriptsFromCells(
+  cells: readonly OverviewCellDatum[],
+  bbox: BBox,
+): number {
+  let transcriptCount = 0
+
+  for (const cell of cells) {
+    const [x = 0, deckY = 0] = cell.position
+    const rawY = -deckY
+
+    if (x < bbox.minX || x > bbox.maxX || rawY < bbox.minY || rawY > bbox.maxY) {
+      continue
+    }
+
+    transcriptCount += cell.transcriptCount ?? 0
+  }
+
+  return Math.max(0, Math.floor(transcriptCount))
+}
+
+function buildCellSummaryTranscriptBins(
+  cells: readonly OverviewCellDatum[],
+  bbox: BBox,
+  mode: 'density' | 'bins',
+): readonly TranscriptAggregateBin[] {
+  const width = Math.max(1, bbox.maxX - bbox.minX)
+  const height = Math.max(1, bbox.maxY - bbox.minY)
+  const targetAxisBins = mode === 'bins' ? 44 : 72
+  const minBinSize = mode === 'bins' ? 24 : 10
+  const binSize = Math.max(minBinSize, Math.max(width, height) / targetAxisBins)
+  const radiusMicrometers = Math.max(3, Math.min(90, binSize * 0.45))
+  const level = Math.max(0, Math.floor(Math.log2(Math.max(1, binSize / 10))))
+  const bins = new Map<
+    string,
+    {
+      readonly binX: number
+      readonly binY: number
+      count: number
+    }
+  >()
+
+  for (const cell of cells) {
+    const transcriptCount = cell.transcriptCount ?? 0
+
+    if (transcriptCount <= 0) {
+      continue
+    }
+
+    const [x = 0, deckY = 0] = cell.position
+    const y = -deckY
+
+    if (x < bbox.minX || x > bbox.maxX || y < bbox.minY || y > bbox.maxY) {
+      continue
+    }
+
+    const binX = Math.floor((x - bbox.minX) / binSize)
+    const binY = Math.floor((y - bbox.minY) / binSize)
+    const key = `${binX}:${binY}`
+    const existing = bins.get(key)
+
+    if (existing === undefined) {
+      bins.set(key, { binX, binY, count: transcriptCount })
+    } else {
+      existing.count += transcriptCount
+    }
+  }
+
+  return [...bins.values()]
+    .sort((left, right) => right.count - left.count)
+    .slice(0, 4_096)
+    .map((bin) => {
+      const centerX = bbox.minX + (bin.binX + 0.5) * binSize
+      const centerY = bbox.minY + (bin.binY + 0.5) * binSize
+
+      return {
+        id: `cell-summary:${mode}:${level}:${bin.binX}:${bin.binY}`,
+        level,
+        binX: bin.binX,
+        binY: bin.binY,
+        position: {
+          x: micrometers(centerX),
+          y: micrometers(centerY),
+        },
+        radiusMicrometers,
+        count: Math.floor(bin.count),
+      }
+    })
+}
+
+function transcriptAggregateFallbackMessage({
+  mode,
+  featureFilterMode,
+  selectedFeatureCount,
+}: {
+  readonly mode: 'density' | 'bins'
+  readonly featureFilterMode: TranscriptFeatureFilterMode
+  readonly selectedFeatureCount: number
+}): string {
+  const modeLabel = mode === 'bins' ? 'binned' : 'density'
+  const filterNote =
+    featureFilterMode === 'selected' && selectedFeatureCount > 0
+      ? ' Selected-gene isolation needs the native transcript LOD reader.'
+      : ''
+
+  return `Showing all-gene cell-summary ${modeLabel} bins for this viewport. Min QV and gene-only filters need exact points or native transcript LOD.${filterNote}`
 }
 
 function filterGeneOptions(
@@ -5562,6 +6541,156 @@ function CellFeatureMatrixCompatibilityNotice({
   )
 }
 
+function TranscriptStatusPanel({
+  capabilityState,
+  layerState,
+  visibleTranscriptEstimate,
+  hoveredTranscript,
+}: {
+  readonly capabilityState: TranscriptCapabilityState
+  readonly layerState: TranscriptLayerState
+  readonly visibleTranscriptEstimate: number
+  readonly hoveredTranscript: ViewerTranscriptHoverDetail | null
+}) {
+  const capabilities =
+    capabilityState.status === 'ready' ? capabilityState.capabilities : null
+
+  return (
+    <div className="transcript-status-panel">
+      <dl className="transcript-summary-list" aria-label="Transcript overlay summary">
+        <div>
+          <dt>Source</dt>
+          <dd>
+            {capabilities === null
+              ? capabilityStateLabel(capabilityState)
+              : transcriptCapabilityLabel(capabilities)}
+          </dd>
+        </div>
+        <div>
+          <dt>Estimate</dt>
+          <dd>{visibleTranscriptEstimate.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Exact budget</dt>
+          <dd>{TRANSCRIPT_EXACT_RENDER_LIMIT.toLocaleString()}</dd>
+        </div>
+        {layerState.status === 'ready' ? (
+          <>
+            <div>
+              <dt>Rendered</dt>
+              <dd>
+                {layerState.points.length.toLocaleString()}
+                {layerState.hitPointLimit ? '+' : ''}
+              </dd>
+            </div>
+            <div>
+              <dt>Query</dt>
+              <dd>{layerState.durationMs.toLocaleString()} ms</dd>
+            </div>
+          </>
+        ) : null}
+        {layerState.status === 'aggregate' ? (
+          <>
+            <div>
+              <dt>Rendered</dt>
+              <dd>{layerState.bins.length.toLocaleString()} bins</dd>
+            </div>
+            <div>
+              <dt>Layer</dt>
+              <dd>{layerState.source === 'cell-summary' ? 'Cell summary' : 'Native'}</dd>
+            </div>
+          </>
+        ) : null}
+      </dl>
+
+      {layerState.status === 'waiting' ||
+      layerState.status === 'aggregate' ||
+      layerState.status === 'unavailable' ? (
+        <p className="transcript-status-message">{layerState.message}</p>
+      ) : null}
+      {layerState.status === 'error' ? (
+        <p className="transcript-status-message">{layerState.error.message}</p>
+      ) : null}
+
+      {layerState.status === 'ready' && layerState.groups.length > 0 ? (
+        <div className="transcript-group-panel">
+          <div className="transcript-group-heading">
+            <span>Gene</span>
+            <span>FOV</span>
+            <span>Count</span>
+          </div>
+          <ol className="transcript-group-list" aria-label="Top transcript groups">
+            {layerState.groups.map((group) => (
+              <li key={`${group.featureName}:${group.fovName ?? 'none'}`}>
+                <span>{group.featureName}</span>
+                <span>{group.fovName ?? 'Unassigned'}</span>
+                <strong>{group.count.toLocaleString()}</strong>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+
+      {hoveredTranscript === null ? null : hoveredTranscript.transcript !== undefined ? (
+        <div className="transcript-hover-panel">
+          <p>{hoveredTranscript.transcript.featureName}</p>
+          <dl>
+            <div>
+              <dt>Transcript</dt>
+              <dd>{hoveredTranscript.transcript.id}</dd>
+            </div>
+            <div>
+              <dt>FOV</dt>
+              <dd>{hoveredTranscript.transcript.fovName ?? 'Unassigned'}</dd>
+            </div>
+            <div>
+              <dt>Cell</dt>
+              <dd>{hoveredTranscript.transcript.cellId ?? 'Unassigned'}</dd>
+            </div>
+            <div>
+              <dt>QV</dt>
+              <dd>{formatOptionalNumber(hoveredTranscript.transcript.qv)}</dd>
+            </div>
+          </dl>
+        </div>
+      ) : hoveredTranscript.aggregate !== undefined ? (
+        <div className="transcript-hover-panel">
+          <p>Transcript density bin</p>
+          <dl>
+            <div>
+              <dt>Count</dt>
+              <dd>{hoveredTranscript.aggregate.count.toLocaleString()}</dd>
+            </div>
+            <div>
+              <dt>Level</dt>
+              <dd>{hoveredTranscript.aggregate.level.toLocaleString()}</dd>
+            </div>
+            <div>
+              <dt>Bin</dt>
+              <dd>
+                {hoveredTranscript.aggregate.binX.toLocaleString()},{' '}
+                {hoveredTranscript.aggregate.binY.toLocaleString()}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function capabilityStateLabel(state: TranscriptCapabilityState): string {
+  if (state.status === 'loading') {
+    return 'Checking'
+  }
+
+  if (state.status === 'error') {
+    return 'Unavailable'
+  }
+
+  return 'Not checked'
+}
+
 function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadError[] }) {
   if (errors.length === 0) {
     return null
@@ -6090,6 +7219,22 @@ function normalizeMagicLensMinQv(value: number): number {
   return Math.max(0, Math.min(40, Math.round(value)))
 }
 
+function normalizeTranscriptMinQv(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 20
+  }
+
+  return Math.max(0, Math.min(40, Math.round(value)))
+}
+
+function normalizeTranscriptPointSize(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 2
+  }
+
+  return Math.max(1, Math.min(6, Math.round(value)))
+}
+
 function roiCellsToCsv(cells: readonly DatasetCell[]): string {
   const rows = [
     ['cell_id', 'x_centroid', 'y_centroid', 'transcript_counts', 'cell_area'],
@@ -6168,6 +7313,15 @@ interface DiagnosticsDumpOptions {
   readonly shareableViewState: ShareableViewState | undefined
   readonly shouldLoadMorphology: boolean
   readonly telemetryEvents: readonly TelemetryEvent[]
+  readonly showTranscriptOverlay: boolean
+  readonly transcriptCapabilityState: TranscriptCapabilityState
+  readonly transcriptDetailMode: TranscriptDetailMode
+  readonly transcriptFeatureFilterMode: TranscriptFeatureFilterMode
+  readonly transcriptGeneOnly: boolean
+  readonly transcriptLayerState: TranscriptLayerState
+  readonly transcriptMinQv: number
+  readonly transcriptOpacity: number
+  readonly transcriptPointSize: number
 }
 
 function createDiagnosticsDump(options: DiagnosticsDumpOptions): Record<string, unknown> {
@@ -6187,10 +7341,21 @@ function createDiagnosticsDump(options: DiagnosticsDumpOptions): Record<string, 
       selectedGenes: options.selectedGenes,
       shareableViewState: options.shareableViewState,
       shouldLoadMorphology: options.shouldLoadMorphology,
+      showTranscriptOverlay: options.showTranscriptOverlay,
+      transcriptDetailMode: options.transcriptDetailMode,
+      transcriptFeatureFilterMode: options.transcriptFeatureFilterMode,
+      transcriptGeneOnly: options.transcriptGeneOnly,
+      transcriptMinQv: options.transcriptMinQv,
+      transcriptOpacity: options.transcriptOpacity,
+      transcriptPointSize: options.transcriptPointSize,
     },
     states: {
       dataset: summarizeDatasetLoadState(options.loadState),
       diagnostics: summarizeDiagnosticsState(options.diagnosticsState),
+      transcripts: {
+        capability: options.transcriptCapabilityState,
+        layer: options.transcriptLayerState,
+      },
     },
     activeErrors: options.activeErrors,
     activityLog: options.debugLog,

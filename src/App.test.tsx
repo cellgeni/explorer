@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   App,
@@ -14,6 +14,8 @@ import {
   type RoiCellsLoader,
   type RoiGeneStatsLoader,
   type RoiTranscriptsLoader,
+  type TranscriptCapabilitiesLoader,
+  type TranscriptViewportLoader,
 } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
@@ -114,6 +116,18 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
+
+    openHudTab('Transcripts')
+    expect(screen.getByRole('heading', { name: 'Transcripts' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Show transcripts' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Detail' })).toHaveValue('auto')
+    expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
+      'selected',
+    )
+    expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(20)
+    expect(screen.getByRole('checkbox', { name: 'Gene-only calls' })).toBeChecked()
+    expect(screen.getByRole('slider', { name: 'Transcript opacity' })).toHaveValue('85')
+    expect(screen.getByRole('slider', { name: 'Point size' })).toHaveValue('2')
 
     openHudTab('Magic Lens')
     expect(screen.getByRole('heading', { name: 'Magic Lens' })).toBeInTheDocument()
@@ -1205,6 +1219,270 @@ describe('App', () => {
         signal: expect.any(AbortSignal) as AbortSignal,
       }),
     )
+  })
+
+  it('finishes the lazy transcript capability check when the Transcripts tab opens', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: false,
+    }))
+
+    render(
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={loadGenePanel}
+        loadTranscriptCapabilities={loadTranscriptCapabilities}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+    openHudTab('Transcripts')
+
+    await waitFor(() => {
+      expect(loadTranscriptCapabilities).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+    })
+    expect(await screen.findByText('Exact only')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Checking transcript outputs for this dataset.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders density bins when native transcript LOD planning is selected', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+      {
+        cellId: intToCellId(1, 2),
+        position: { x: micrometers(40), y: micrometers(60) },
+        transcriptCount: 12,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: true,
+    }))
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadTranscriptCapabilities={loadTranscriptCapabilities}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+      openHudTab('Transcripts')
+      expect(await screen.findByText('Native LOD + exact')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
+        target: { value: 'all' },
+      })
+      fireEvent.change(screen.getByRole('combobox', { name: 'Detail' }), {
+        target: { value: 'density' },
+      })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
+
+      expect(
+        await screen.findByText(/Showing all-gene cell-summary density bins/),
+      ).toBeInTheDocument()
+      expect(screen.getByText('Cell summary')).toBeInTheDocument()
+      expect(screen.getAllByText(/^[1-9][0-9]* bins$/).length).toBeGreaterThan(0)
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('uses density bins in Auto when native transcript LOD is available', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: true,
+    }))
+    const loadTranscriptViewport: ReturnType<
+      typeof vi.fn<TranscriptViewportLoader>
+    > = vi.fn(() => pendingPromise())
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadTranscriptCapabilities={loadTranscriptCapabilities}
+          loadTranscriptViewport={loadTranscriptViewport}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+      openHudTab('Transcripts')
+      expect(await screen.findByText('Native LOD + exact')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
+        target: { value: 'all' },
+      })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
+
+      expect(
+        await screen.findByText(/Showing all-gene cell-summary density bins/),
+      ).toBeInTheDocument()
+      expect(screen.getAllByText(/^[1-9][0-9]* bins$/).length).toBeGreaterThan(0)
+      expect(loadTranscriptViewport).not.toHaveBeenCalled()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('times out exact transcript loading instead of staying busy forever', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: false,
+    }))
+    const loadTranscriptViewport: ReturnType<
+      typeof vi.fn<TranscriptViewportLoader>
+    > = vi.fn(() => pendingPromise())
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadTranscriptCapabilities={loadTranscriptCapabilities}
+          loadTranscriptViewport={loadTranscriptViewport}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+      openHudTab('Transcripts')
+      expect(await screen.findByText('Exact only')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(
+          within(screen.getByLabelText('Transcript overlay summary')).getByText('8'),
+        ).toBeInTheDocument()
+      })
+
+      vi.useFakeTimers()
+      fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
+        target: { value: 'all' },
+      })
+      fireEvent.change(screen.getByRole('combobox', { name: 'Detail' }), {
+        target: { value: 'exact' },
+      })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(220)
+      })
+      expect(loadTranscriptViewport).toHaveBeenCalled()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(12_000)
+      })
+
+      expect(
+        screen.getByText(/Exact transcript loading exceeded 12 seconds/),
+      ).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
   })
 
   it('loads morphology image when the option is selected', async () => {

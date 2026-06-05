@@ -21,6 +21,13 @@ export interface ShareableState {
   readonly coordinateUnit?: string
   readonly shouldLoadMorphology?: boolean
   readonly boundaryCellLimit?: number
+  readonly transcriptOverlay?: boolean
+  readonly transcriptDetailMode?: string
+  readonly transcriptMinQv?: number
+  readonly transcriptGeneOnly?: boolean
+  readonly transcriptFeatureFilterMode?: string
+  readonly transcriptOpacity?: number
+  readonly transcriptPointSize?: number
 }
 
 type MutableShareableState = {
@@ -48,6 +55,13 @@ export function parseShareableState(hash: string): ShareableState {
   const coordinateUnit = readString(params, 'coord')
   const shouldLoadMorphology = parseBoolean(params.get('morphology'))
   const boundaryCellLimit = parsePositiveInteger(params.get('boundaryLimit'))
+  const transcriptOverlay = parseBoolean(params.get('tx'))
+  const transcriptDetailMode = readString(params, 'txDetail')
+  const transcriptMinQv = parseNonNegativeInteger(params.get('txQv'))
+  const transcriptGeneOnly = parseBoolean(params.get('txGene'))
+  const transcriptFeatureFilterMode = readString(params, 'txFilter')
+  const transcriptOpacity = parseUnitNumber(params.get('txOpacity'))
+  const transcriptPointSize = parsePositiveInteger(params.get('txSize'))
 
   if (datasetUrl !== undefined) {
     state.datasetUrl = datasetUrl
@@ -97,6 +111,34 @@ export function parseShareableState(hash: string): ShareableState {
     state.boundaryCellLimit = boundaryCellLimit
   }
 
+  if (transcriptOverlay !== undefined) {
+    state.transcriptOverlay = transcriptOverlay
+  }
+
+  if (transcriptDetailMode !== undefined) {
+    state.transcriptDetailMode = transcriptDetailMode
+  }
+
+  if (transcriptMinQv !== undefined) {
+    state.transcriptMinQv = transcriptMinQv
+  }
+
+  if (transcriptGeneOnly !== undefined) {
+    state.transcriptGeneOnly = transcriptGeneOnly
+  }
+
+  if (transcriptFeatureFilterMode !== undefined) {
+    state.transcriptFeatureFilterMode = transcriptFeatureFilterMode
+  }
+
+  if (transcriptOpacity !== undefined) {
+    state.transcriptOpacity = transcriptOpacity
+  }
+
+  if (transcriptPointSize !== undefined) {
+    state.transcriptPointSize = transcriptPointSize
+  }
+
   return state
 }
 
@@ -136,6 +178,39 @@ export function formatShareableState(state: ShareableState): string {
     params.set(
       'boundaryLimit',
       Math.max(1, Math.floor(state.boundaryCellLimit)).toString(),
+    )
+  }
+
+  if (state.transcriptOverlay !== undefined) {
+    params.set('tx', state.transcriptOverlay ? '1' : '0')
+  }
+
+  setOptionalString(params, 'txDetail', state.transcriptDetailMode)
+
+  if (state.transcriptMinQv !== undefined && Number.isFinite(state.transcriptMinQv)) {
+    params.set('txQv', Math.max(0, Math.floor(state.transcriptMinQv)).toString())
+  }
+
+  if (state.transcriptGeneOnly !== undefined) {
+    params.set('txGene', state.transcriptGeneOnly ? '1' : '0')
+  }
+
+  setOptionalString(params, 'txFilter', state.transcriptFeatureFilterMode)
+
+  if (
+    state.transcriptOpacity !== undefined &&
+    Number.isFinite(state.transcriptOpacity)
+  ) {
+    params.set('txOpacity', roundForHash(state.transcriptOpacity).toString())
+  }
+
+  if (
+    state.transcriptPointSize !== undefined &&
+    Number.isFinite(state.transcriptPointSize)
+  ) {
+    params.set(
+      'txSize',
+      Math.max(1, Math.floor(state.transcriptPointSize)).toString(),
     )
   }
 
@@ -341,6 +416,24 @@ function parsePositiveInteger(value: string | null): number | undefined {
 
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function parseNonNegativeInteger(value: string | null): number | undefined {
+  if (value === null) {
+    return undefined
+  }
+
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined
+}
+
+function parseUnitNumber(value: string | null): number | undefined {
+  if (value === null) {
+    return undefined
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : undefined
 }
 
 function roundForHash(value: number): number {

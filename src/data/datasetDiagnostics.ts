@@ -41,6 +41,11 @@ const REQUIRED_RANGE_FILES = [
 const OPTIONAL_RANGE_FILES = [
   { id: 'cell-boundaries', label: 'Cell boundaries', path: 'cell_boundaries.parquet' },
   { id: 'transcripts', label: 'Transcripts', path: 'transcripts.parquet' },
+  {
+    id: 'transcripts-zarr',
+    label: 'Transcript native LOD',
+    path: 'transcripts.zarr.zip',
+  },
   { id: 'feature-matrix', label: 'Feature matrix', path: 'cell_feature_matrix.zarr.zip' },
   { id: 'morphology', label: 'Morphology image', path: 'morphology.ome.tif' },
 ]

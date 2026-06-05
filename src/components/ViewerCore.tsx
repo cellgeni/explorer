@@ -19,13 +19,18 @@ import {
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
 import { styleOverviewCellsByObservation } from '../rendering/cellStyling'
 import { micrometers, scaleFromZoom } from '../data/coords'
-import type { Position, ViewStateChangeParameters } from '@deck.gl/core'
+import type { PickingInfo, Position, ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox, DataPoint } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { MorphologyCanvasChannel } from './MorphologyCanvas'
-import type { CellBoundaryDatum, OverviewCellDatum } from '../rendering/deckLayers'
+import type {
+  CellBoundaryDatum,
+  OverviewCellDatum,
+  TranscriptAggregateDatum,
+  TranscriptPointDatum,
+} from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
 import type { AnnotationColorStyle, ObservationColorMode } from '../rendering/cellStyling'
 
@@ -41,11 +46,15 @@ export interface ViewerCoreProps {
   readonly cells?: readonly OverviewCellDatum[]
   readonly expressionCells?: readonly OverviewCellDatum[]
   readonly boundaries?: readonly CellBoundaryDatum[]
+  readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
+  readonly transcriptPoints?: readonly TranscriptPointDatum[]
   readonly imageLoader?: TiffPyramidLoader | null
   readonly imageChannels?: readonly MorphologyCanvasChannel[]
   readonly imageOpacity?: number
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
+  readonly transcriptOpacity?: number
+  readonly transcriptPointSize?: number
   readonly observationColorMode?: ObservationColorMode
   readonly annotationStyleColors?: readonly AnnotationColorStyle[]
   readonly coordinateUnit?: ViewerCoordinateUnit
@@ -72,6 +81,7 @@ export interface ViewerCoreProps {
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
+  readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
   readonly onRoiComplete?: (selection: RoiSelection) => void
   readonly onMagicLensMove?: (detail: ViewerMagicLensDetail) => void
   readonly onMagicLensLeave?: () => void
@@ -112,17 +122,27 @@ export interface ViewerViewportDetail {
   readonly viewState: OverviewViewState
 }
 
+export interface ViewerTranscriptHoverDetail {
+  readonly transcript?: TranscriptPointDatum
+  readonly aggregate?: TranscriptAggregateDatum
+  readonly screen: ScreenPoint
+}
+
 export type RoiDrawMode = 'idle' | 'box' | 'lasso'
 
 export function ViewerCore({
   cells = [],
   expressionCells = [],
   boundaries = [],
+  transcriptAggregateBins = [],
+  transcriptPoints = [],
   imageLoader = null,
   imageChannels = [],
   imageOpacity = 1,
   cellFillOpacity = 1,
   cellBoundaryOpacity = 1,
+  transcriptOpacity = 1,
+  transcriptPointSize = 2,
   observationColorMode = 'transcript-count',
   annotationStyleColors = EMPTY_ANNOTATION_STYLE_COLORS,
   coordinateUnit = 'um',
@@ -149,6 +169,7 @@ export function ViewerCore({
   onViewportChange,
   onViewportCellCountChange,
   onCellClick,
+  onTranscriptHover,
   onRoiComplete,
   onMagicLensMove,
   onMagicLensLeave,
@@ -166,11 +187,15 @@ export function ViewerCore({
       cells={cells}
       expressionCells={expressionCells}
       boundaries={boundaries}
+      transcriptAggregateBins={transcriptAggregateBins}
+      transcriptPoints={transcriptPoints}
       imageLoader={imageLoader}
       imageChannels={imageChannels}
       imageOpacity={imageOpacity}
       cellFillOpacity={cellFillOpacity}
       cellBoundaryOpacity={cellBoundaryOpacity}
+      transcriptOpacity={transcriptOpacity}
+      transcriptPointSize={transcriptPointSize}
       observationColorMode={observationColorMode}
       annotationStyleColors={annotationStyleColors}
       coordinateUnit={coordinateUnit}
@@ -197,6 +222,7 @@ export function ViewerCore({
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
       {...(onViewportCellCountChange === undefined ? {} : { onViewportCellCountChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
+      {...(onTranscriptHover === undefined ? {} : { onTranscriptHover })}
       {...(onRoiComplete === undefined ? {} : { onRoiComplete })}
       {...(onMagicLensMove === undefined ? {} : { onMagicLensMove })}
       {...(onMagicLensLeave === undefined ? {} : { onMagicLensLeave })}
@@ -208,11 +234,15 @@ interface ViewerSurfaceProps {
   readonly cells: readonly OverviewCellDatum[]
   readonly expressionCells: readonly OverviewCellDatum[]
   readonly boundaries: readonly CellBoundaryDatum[]
+  readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
+  readonly transcriptPoints: readonly TranscriptPointDatum[]
   readonly imageLoader: TiffPyramidLoader | null
   readonly imageChannels: readonly MorphologyCanvasChannel[]
   readonly imageOpacity: number
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
+  readonly transcriptOpacity: number
+  readonly transcriptPointSize: number
   readonly observationColorMode: ObservationColorMode
   readonly annotationStyleColors: readonly AnnotationColorStyle[]
   readonly coordinateUnit: ViewerCoordinateUnit
@@ -239,6 +269,7 @@ interface ViewerSurfaceProps {
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
+  readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
   readonly onRoiComplete?: (selection: RoiSelection) => void
   readonly onMagicLensMove?: (detail: ViewerMagicLensDetail) => void
   readonly onMagicLensLeave?: () => void
@@ -282,11 +313,15 @@ function ViewerSurface({
   cells,
   expressionCells,
   boundaries,
+  transcriptAggregateBins,
+  transcriptPoints,
   imageLoader,
   imageChannels,
   imageOpacity,
   cellFillOpacity,
   cellBoundaryOpacity,
+  transcriptOpacity,
+  transcriptPointSize,
   observationColorMode,
   annotationStyleColors,
   coordinateUnit,
@@ -313,6 +348,7 @@ function ViewerSurface({
   onViewportChange,
   onViewportCellCountChange,
   onCellClick,
+  onTranscriptHover,
   onRoiComplete,
   onMagicLensMove,
   onMagicLensLeave,
@@ -327,6 +363,8 @@ function ViewerSurface({
   const [roiDraft, setRoiDraft] = useState<RoiDraft | null>(null)
   const [mouseCoordinate, setMouseCoordinate] = useState<MouseCoordinate | null>(null)
   const [magicLensScreen, setMagicLensScreen] = useState<ScreenPoint | null>(null)
+  const [transcriptHover, setTranscriptHover] =
+    useState<ViewerTranscriptHoverDetail | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
   const mouseCoordinateFrameRef = useRef<number | null>(null)
   const cellExtentBbox = useMemo(() => overviewCellsExtentBbox(cells), [cells])
@@ -403,6 +441,10 @@ function ViewerSurface({
         cellFillOpacity,
         cellBoundaryOpacity,
         expressionBoundaryPolygons,
+        transcriptAggregateBins,
+        transcriptPoints,
+        transcriptOpacity,
+        transcriptPointSize,
       }),
     [
       cellBoundaryOpacity,
@@ -411,6 +453,10 @@ function ViewerSurface({
       displayExpressionCells,
       renderCells,
       styledBoundaries,
+      transcriptAggregateBins,
+      transcriptOpacity,
+      transcriptPointSize,
+      transcriptPoints,
     ],
   )
   const hasCells = cells.length > 0
@@ -608,6 +654,44 @@ function ViewerSurface({
     },
     [cellById, onCellClick, styledBoundaries, visibleCells],
   )
+  const handleDeckHover = useCallback(
+    (info: PickingInfo<unknown>) => {
+      if (isTranscriptPointDatum(info.object)) {
+        const detail = {
+          transcript: info.object,
+          screen: {
+            x: info.x,
+            y: info.y,
+          },
+        }
+        setTranscriptHover(detail)
+        onTranscriptHover?.(detail)
+        return
+      }
+
+      if (isTranscriptAggregateDatum(info.object)) {
+        const detail = {
+          aggregate: info.object,
+          screen: {
+            x: info.x,
+            y: info.y,
+          },
+        }
+        setTranscriptHover(detail)
+        onTranscriptHover?.(detail)
+        return
+      }
+
+      setTranscriptHover((current) => {
+        if (current !== null) {
+          onTranscriptHover?.(null)
+        }
+
+        return null
+      })
+    },
+    [onTranscriptHover],
+  )
   const handleMouseCoordinatePointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       if (!canTrackMouseCoordinates || viewport.width <= 0 || viewport.height <= 0) {
@@ -650,8 +734,10 @@ function ViewerSurface({
   const handlePointerLeave = useCallback(() => {
     clearMouseCoordinate()
     setMagicLensScreen(null)
+    setTranscriptHover(null)
+    onTranscriptHover?.(null)
     onMagicLensLeave?.()
-  }, [clearMouseCoordinate, onMagicLensLeave])
+  }, [clearMouseCoordinate, onMagicLensLeave, onTranscriptHover])
   const handleRoiPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       if (roiMode === 'idle' || viewport.width <= 0 || viewport.height <= 0) {
@@ -831,6 +917,7 @@ function ViewerSurface({
             viewState={viewState}
             onViewStateChange={handleViewStateChange}
             onClick={handleDeckClick}
+            onHover={handleDeckHover}
             controller
             layers={layers}
           />
@@ -869,6 +956,9 @@ function ViewerSurface({
           status={magicLensStatus}
           summary={magicLensSummary}
         />
+      )}
+      {transcriptHover === null ? null : (
+        <TranscriptHoverTooltip detail={transcriptHover} />
       )}
       {!hasCells ? (
         <div className="viewport-empty-state" aria-hidden="true">
@@ -984,6 +1074,110 @@ function MagicLensOverlay({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function TranscriptHoverTooltip({
+  detail,
+}: {
+  readonly detail: ViewerTranscriptHoverDetail
+}) {
+  const aggregate = detail.aggregate
+
+  if (aggregate !== undefined) {
+    return (
+      <div
+        className="transcript-hover-tooltip"
+        style={{
+          left: detail.screen.x,
+          top: detail.screen.y,
+        }}
+        aria-hidden="true"
+      >
+        <p>Transcript density bin</p>
+        <dl>
+          <div>
+            <dt>Count</dt>
+            <dd>{aggregate.count.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt>Level</dt>
+            <dd>{aggregate.level.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt>X/Y</dt>
+            <dd>
+              {formatCoordinateValue(aggregate.position[0] ?? 0)},{' '}
+              {formatCoordinateValue(-(aggregate.position[1] ?? 0))} um
+            </dd>
+          </div>
+          <div>
+            <dt>Bin</dt>
+            <dd>
+              {aggregate.binX.toLocaleString()}, {aggregate.binY.toLocaleString()}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    )
+  }
+
+  const transcript = detail.transcript
+
+  if (transcript === undefined) {
+    return null
+  }
+
+  return (
+    <div
+      className="transcript-hover-tooltip"
+      style={{
+        left: detail.screen.x,
+        top: detail.screen.y,
+      }}
+      aria-hidden="true"
+    >
+      <p>{transcript.featureName}</p>
+      <dl>
+        <div>
+          <dt>FOV</dt>
+          <dd>{transcript.fovName ?? 'Unassigned'}</dd>
+        </div>
+        <div>
+          <dt>Cell</dt>
+          <dd>{transcript.cellId ?? 'Unassigned'}</dd>
+        </div>
+        <div>
+          <dt>QV</dt>
+          <dd>{formatCoordinateValue(transcript.qv)}</dd>
+        </div>
+        <div>
+          <dt>X/Y</dt>
+          <dd>
+            {formatCoordinateValue(transcript.position[0] ?? 0)},{' '}
+            {formatCoordinateValue(-(transcript.position[1] ?? 0))} um
+          </dd>
+        </div>
+        {transcript.zLocation === undefined ? null : (
+          <div>
+            <dt>Z</dt>
+            <dd>{formatCoordinateValue(transcript.zLocation)} um</dd>
+          </div>
+        )}
+        {transcript.overlapsNucleus === undefined ? null : (
+          <div>
+            <dt>Nucleus</dt>
+            <dd>{transcript.overlapsNucleus ? 'Overlap' : 'Outside'}</dd>
+          </div>
+        )}
+        {transcript.nucleusDistance === undefined ? null : (
+          <div>
+            <dt>Distance</dt>
+            <dd>{formatCoordinateValue(transcript.nucleusDistance)} um</dd>
+          </div>
+        )}
+      </dl>
     </div>
   )
 }
@@ -1393,6 +1587,36 @@ function isCellBoundaryDatum(value: unknown): value is CellBoundaryDatum {
   const candidate = value as Partial<CellBoundaryDatum>
 
   return typeof candidate.id === 'string' && Array.isArray(candidate.polygon)
+}
+
+function isTranscriptPointDatum(value: unknown): value is TranscriptPointDatum {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const candidate = value as Partial<TranscriptPointDatum>
+
+  return (
+    typeof candidate.id === 'string' &&
+    Array.isArray(candidate.position) &&
+    typeof candidate.featureName === 'string' &&
+    typeof candidate.qv === 'number'
+  )
+}
+
+function isTranscriptAggregateDatum(value: unknown): value is TranscriptAggregateDatum {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const candidate = value as Partial<TranscriptAggregateDatum>
+
+  return (
+    typeof candidate.id === 'string' &&
+    Array.isArray(candidate.position) &&
+    typeof candidate.count === 'number' &&
+    typeof candidate.radiusMicrometers === 'number'
+  )
 }
 
 function cellForDeckCoordinate(

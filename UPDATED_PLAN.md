@@ -497,18 +497,210 @@ unless the phase order is explicitly changed.
       costs without changing product behavior.
 - [ ] Only after those passes, begin Phase 5.1.
 
-## Phase 5.1 Planned Spike - Transcript Display LOD
+## Phase 5.1 New Phase - Transcript Visualization
 
-- [ ] Add a transcript-rendering spike over `transcripts.parquet`, gated by
-      `capabilities.transcripts` and using existing DuckDB/Range, QV filter, and
-      viewport-version cancellation patterns.
-- [ ] At whole-slide and low zoom, show transcripts as clustered cell-level
-      summaries or high-level FOV/tile aggregations rather than individual
-      molecule points.
-- [ ] At medium zoom, keep stable data-space aggregation with count summaries and
-      feature/gene coloring so panning does not reshuffle the display.
-- [ ] At close zoom, render all visible matching transcripts as exact points with
-      hover/pick metadata.
-- [ ] Verify the transcript LOD path with Magic Lens, ROI transcript export,
-      selected gene overlays, annotation coloring, URL/shareable state, and the
-      demo dataset.
+User-added requirement: show individual transcript locations, group transcripts
+when zoomed out, show all visible transcripts in the viewport at the closest
+detail tier, and show transcript information on hover. The scale target is
+hundred-million transcript datasets, so the overlay must be designed as a
+windowed/LOD system rather than a simple point layer over `transcripts.parquet`.
+
+Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
+
+### Product Decisions
+
+- [x] Official 10x assessment: `transcripts.parquet` contains `feature_name`,
+      `fov_name`, physical x/y/z locations, QV, nucleus/cell assignment fields,
+      and one row per decoded transcript. `transcripts.zarr.zip` contains a
+      native transcript density view and `/grids` pyramid used for downsampled
+      transcript visualization in Xenium Explorer. Therefore, the best
+      production visual LOD source is the official `transcripts.zarr.zip`
+      density/grid structure, not a custom sidecar as the first choice.
+- [x] Grouping the current viewport by `feature_name` and `fov_name` is useful
+      for summaries, QC, and hover/sidebar context because both fields are
+      official transcript metadata. It is not the best spatial grouping primitive
+      for low-zoom rendering because FOVs are acquisition tiles with overlap and
+      can be much larger than the visual detail needed in dense tissue.
+- [x] Treat transcripts as their own visualization modality, not as a variant of
+      cell expression coloring. Add a new `Transcripts` HUD tab and keep the
+      current `Layers` tab focused on global image/cell opacity and morphology
+      channel controls.
+- [x] Place the `Transcripts` tab after `Genes` and before `Magic Lens`, because
+      transcript visibility depends on gene/feature filters but uses separate
+      data, LOD, opacity, and hover controls.
+- [x] Do not scan or fetch raw hundred-million-row transcript data for low-zoom
+      overviews. Low/medium zoom needs native Xenium Zarr LOD or an explicitly
+      degraded raw-only fallback.
+- [ ] Support two data modes:
+      1. `Raw exact`: query `transcripts.parquet` by viewport bbox, QV, gene
+         filter, and projected columns. Use this only when the visible transcript
+         estimate is inside the exact render budget.
+      2. `Native Xenium LOD`: read official `transcripts.zarr.zip` density and
+         grid-pyramid data. Use these for whole-slide and medium-zoom transcript
+         density/gene bins.
+- [ ] If native LOD is missing, the tab should make that visible. The app can
+      still show exact transcripts after the user zooms far enough, but low zoom
+      should show a cell-level transcript-count hint or an unavailable state
+      rather than silently scanning the raw transcript file.
+
+### LOD And Grouping Options
+
+- [ ] Option A: raw DuckDB `GROUP BY` over `transcripts.parquet` for the current
+      viewport. This is useful for small fixtures and narrow close-zoom regions,
+      but it is not the production low-zoom strategy unless the transcript
+      parquet is spatially sorted with row-group statistics that prune tightly.
+- [x] Option B: cell-derived `transcript_counts` from `cells.parquet`. This is
+      cheap and already loaded, but it only approximates transcript density and
+      cannot support feature/gene-level hover. Use only as a fallback hint.
+- [ ] Option C, recommended: official `transcripts.zarr.zip`. Use `/density/gene`
+      and `/density/codeword` for binned Q20 count density and `/grids` as the
+      transcript pyramid for downsampled views. This follows 10x's own output
+      contract and avoids inventing a sidecar before exhausting native data.
+- [ ] Option D: browser/GPU screen aggregation after loading raw transcript
+      points. This helps visual density once points are already loaded, but it
+      does not solve the hundred-million fetch problem and should not be used as
+      the low-zoom data strategy.
+- [ ] Option E: server-side tiles/API. This would be operationally useful later
+      but does not match the current no-application-server data path. Keep this
+      out of Phase 5.1 unless the product direction changes.
+
+### Data Architecture
+
+- [x] Add transcript-specific model types, separate from ROI export:
+      `TranscriptPoint`, `TranscriptAggregateBin`, `TranscriptLodLevel`,
+      `TranscriptViewportEstimate`, and `TranscriptLayerState`.
+- [x] Extend dataset capability discovery to distinguish raw
+      `transcripts.parquet` exact rendering from native `transcripts.zarr.zip`
+      LOD availability. Keep the existing boolean compatibility path, but let
+      the UI know whether exact-only or full LOD is available.
+- [ ] Read native transcript Zarr metadata from root attributes, `/density`
+      attributes, and `/grids` attributes: total transcript count, FOV names,
+      gene names, density grid size/origin, grid pyramid levels, grid keys, and
+      per-grid transcript counts.
+- [x] Raw exact queries should project only columns needed for rendering and
+      hover: `cell_id`, `feature_name`, `x_location`, `y_location`,
+      `z_location`, `qv`, `overlaps_nucleus`, `is_gene`, and `transcript_id` if
+      present. Avoid `ORDER BY` in overlay point queries.
+- [x] Add a viewport summary query grouped by `feature_name` and `fov_name` for
+      the Transcripts tab. Keep it bounded and filtered by bbox/QV/feature so it
+      supports exact-mode context without becoming a low-zoom rendering strategy.
+- [x] Load DuckDB-WASM `httpfs` during bootstrap before remote Parquet reads,
+      keeping a non-fatal fallback for older bundles. Browser verification on
+      DuckDB v1.5.1 read 100 remote default-dataset transcript rows in about 1.2s
+      after client initialization, but exact bbox scans can still exceed the
+      interactive timeout when Parquet row groups do not prune tightly.
+- [x] Exact transcript viewport loading now prefers the official
+      `transcripts.zarr.zip` level-0 `/grids/[grid_position]` records when the
+      Zarr file is range-readable, falling back to raw `transcripts.parquet` only
+      when the Zarr file is unavailable. This matches 10x's scaled transcript
+      visualization layout and fixes close-zoom cases where the visible
+      transcript count is tiny but raw Parquet scans still time out.
+- [x] Zarr exact transcript coordinates are decoded with Zarrita ndarray strides
+      instead of assuming row-major `[x,y,z]` storage. This fixes the erroneous
+      horizontal-band rendering caused by reading all X values, then all Y
+      values, as interleaved coordinate rows. Exact mode now also refuses to draw
+      partial point-budget results; if a viewport exceeds the exact budget, it
+      shows a budget message rather than a misleading tile strip.
+- [x] Use viewport-version cancellation, `AbortController`, and a transcript
+      query queue so transcript overlay work cannot block ROI export or Magic
+      Lens. Reuse current Range checks and DuckDB worker patterns, but avoid
+      sharing a busy transcript scan with interactive cell/ROI actions.
+- [x] Add a transcript count/LOD estimate path before exact loading. The first
+      pass estimates visible transcript count from already-loaded
+      `cells.parquet` transcript-count summaries; native Zarr density counts
+      remain the next accuracy improvement.
+
+### Rendering Behavior
+
+- [x] Add transcript layers to the deck.gl composition without changing the
+      morphology canvas path. Keep aggregate bins and exact transcript points as
+      distinct layer data so updates do not rebuild cell layers.
+- [ ] Whole-slide/low zoom: draw stable aggregate bins or tile clusters. Encode
+      count by area/opacity and color by selected feature/gene when a filter is
+      active; otherwise use a neutral density color that does not fight cell
+      annotation or morphology colors.
+- [x] Initial low-zoom fallback: Density/Bins/Auto now render stable all-gene
+      aggregate bins from loaded cell transcript counts instead of showing a
+      native-LOD message with no layer. The tab labels this as a cell-summary
+      fallback because native `transcripts.zarr.zip` density/grid parsing is
+      still pending.
+- [ ] Medium zoom: use smaller fixed data-space bins. Hover shows aggregate
+      count, selected-gene count, top features, bin size, and whether the data is
+      exact or aggregated.
+- [x] Closest detail tier: render every visible matching transcript in the
+      viewport as an exact point. Do not sample in exact mode. If the viewport
+      still exceeds the exact budget, stay in aggregate mode and show an
+      explicit "zoom or filter for exact transcripts" status instead of dropping
+      rows.
+- [x] Exact transcript points should be pickable. Hover copy should include
+      feature/gene, cell id when present, x/y/z location, QV, nucleus overlap,
+      gene/control status, and transcript id when present.
+- [x] Keep point sizing in screen pixels with a small radius and configurable
+      opacity. Panning and zooming should not shift aggregate bin membership
+      because bins are anchored in data coordinates.
+
+### Transcripts Tab UX
+
+- [ ] Controls:
+      `Show transcripts` toggle, `Detail` segmented control (`Auto`, `Density`,
+      `Bins`, `Exact`), `Min QV`, `Gene-only` toggle, feature filter
+      (`All genes`, `Selected genes`, search/pick feature), color mode,
+      opacity, point size, and aggregate scale.
+- [x] Initial status readout:
+      active data source (`Raw exact` or `Native Xenium LOD`), current LOD tier,
+      estimated visible transcripts, rendered point/bin count, exact eligibility,
+      and last query timing. Use the existing status-chip/loading-dot pattern.
+- [ ] Interaction model:
+      hover shows a compact floating tooltip; click or keyboard focus can pin
+      the hovered transcript/aggregate into the tab for copying and inspection.
+      Aggregate hover should not imply individual transcript identity.
+- [ ] Query behavior:
+      auto-refresh in `Auto` mode after debounced viewport changes, with visible
+      loading state and cancellation. Exact mode may require an explicit
+      `Load exact viewport` action when the estimate is near the budget.
+- [ ] Shareable state:
+      include transcript overlay enabled, detail mode, min QV, feature filter,
+      color mode, opacity, and point size in the URL hash. Keep hashes compact
+      and omit defaults.
+- [ ] Diagnostics:
+      include transcript capability, native LOD availability, transcript query
+      timings, exact-budget decisions, and last hover/query errors in the local
+      diagnostics dump.
+
+### Implementation Slices
+
+- [x] Slice 1: transcript capability/manifest detection, LOD planner, state
+      types, tests, and tab shell with disabled/unavailable states.
+- [x] Slice 2: raw exact viewport query and exact transcript point rendering at
+      close zoom, including hover tooltip and exact-budget status.
+- [ ] Slice 3: native `transcripts.zarr.zip` density/grid reader, aggregate bin
+      rendering, and aggregate hover summaries.
+      Aggregate bin rendering and hover are present for the cell-summary
+      fallback; the native Zarr reader remains the unchecked part of this slice.
+- [ ] Slice 4: gene/feature filters, QV controls, color/opacity/point-size
+      controls, URL/shareable state, diagnostics, and loading indicators.
+- [ ] Slice 5: integration verification against Magic Lens, ROI transcript
+      export, selected-gene expression overlays, annotation coloring, and
+      morphology channels.
+
+### Definition Of Done
+
+- [ ] At low and medium zoom, the viewer never attempts to materialize
+      hundred-million raw transcript rows. It either uses native Xenium Zarr
+      aggregate levels or shows a clear unavailable/fallback state.
+- [ ] At the closest exact tier, every visible matching transcript is rendered
+      when the visible estimate is within budget, and hover shows record-level
+      transcript metadata.
+- [x] Exact mode does not silently sample. If the viewport is too dense, or the
+      raw exact query exceeds the interactive timeout, the UI explains the
+      budget/timeout decision and how to reach exact rendering.
+- [ ] Aggregate bins are stable while panning and zooming across LOD thresholds.
+- [ ] Transcript overlay work is abortable and does not block ROI cell lookup,
+      ROI transcript export, Magic Lens, or selected-cell detail loading.
+- [ ] Unit tests cover LOD planning, raw SQL/query options, native Zarr metadata
+      parsing, layer-data conversion, hover copy, shareable state, and budget
+      decisions.
+- [ ] E2E verification covers enabling the Transcripts tab, seeing aggregate
+      mode at low zoom, zooming to exact mode, and hovering an exact transcript.
+- [ ] Final verification passes `npm test`, `npm run build`,
+      `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.

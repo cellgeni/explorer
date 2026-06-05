@@ -14,6 +14,7 @@ import {
   spatialOverviewView,
   styleCellBoundariesByCells,
   styleGeneExpressionCellsByScale,
+  transcriptAggregateBinsToLayerData,
 } from './deckLayers'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
 
@@ -432,6 +433,46 @@ describe('deck layer factory', () => {
       expressionGenes: ['Gad1'],
       transcriptCount: 11,
     })
+  })
+
+  it('renders transcript aggregate bins as a pickable density layer', () => {
+    const bins = transcriptAggregateBinsToLayerData([
+      {
+        id: 'bin-1',
+        level: 2,
+        binX: 3,
+        binY: 4,
+        position: { x: micrometers(10), y: micrometers(20) },
+        radiusMicrometers: 12,
+        count: 25,
+      },
+    ])
+    const layers = createOverviewLayers(fixtureCells, [], [], {
+      transcriptAggregateBins: bins,
+      transcriptOpacity: 0.5,
+    })
+    const aggregateLayer = layers.find(
+      (layer) => layer instanceof ScatterplotLayer && layer.id === 'transcript-density-bins',
+    )
+
+    expect(aggregateLayer).toBeInstanceOf(ScatterplotLayer)
+
+    if (!(aggregateLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected transcript aggregate bins to render as ScatterplotLayer.')
+    }
+
+    expect(aggregateLayer.props.pickable).toBe(true)
+    expect(aggregateLayer.props.radiusUnits).toBe('common')
+
+    const getPosition = aggregateLayer.props.getPosition as (
+      bin: (typeof bins)[number],
+    ) => readonly number[]
+    const getRadius = aggregateLayer.props.getRadius as (
+      bin: (typeof bins)[number],
+    ) => number
+
+    expect(getPosition(bins[0]!)).toEqual([10, -20, 0])
+    expect(getRadius(bins[0]!)).toBe(12)
   })
 
   it('scores multi-gene expression by mean count', () => {

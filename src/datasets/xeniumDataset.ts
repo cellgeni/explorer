@@ -26,6 +26,8 @@ import type {
   GexCell,
   GexResult,
   Selection,
+  SqlFragment,
+  SqlParameter,
   TranscriptDuckDbConnection,
   TranscriptScope,
 } from '../data/gex'
@@ -37,6 +39,11 @@ import type {
   ImageSource,
   SpatialDataset,
 } from './spatialDataset'
+import type {
+  TranscriptGroupSummary,
+  TranscriptPoint,
+  TranscriptViewportResult,
+} from '../data/transcriptOverlay'
 
 export interface XeniumDatasetOptions {
   readonly baseUrl: string
@@ -112,6 +119,14 @@ export interface DatasetTranscript {
 export interface TranscriptQueryOptions {
   readonly limit?: number
   readonly minQv?: number
+}
+
+export interface TranscriptViewportQueryOptions {
+  readonly pointLimit?: number
+  readonly groupLimit?: number
+  readonly minQv?: number
+  readonly geneOnly?: boolean
+  readonly featureNames?: readonly string[]
 }
 
 const DEFAULT_XENIUM_UNITS: UnitsDescriptor = {
@@ -386,6 +401,55 @@ LIMIT ?
     )
 
     return result.toArray().map(parseTranscriptExportRow)
+  }
+
+  async transcriptsForViewport(
+    bbox: BBox,
+    options: TranscriptViewportQueryOptions = {},
+  ): Promise<TranscriptViewportResult> {
+    const conn = await this.conn()
+    const pointLimit = Math.max(1, Math.floor(options.pointLimit ?? 25_000))
+    const groupLimit = Math.max(1, Math.floor(options.groupLimit ?? 18))
+    const filter = transcriptViewportFilterSql(bbox, options)
+    const pointStmt = await conn.prepare(`
+SELECT transcript_id,
+       cell_id,
+       feature_name,
+       x_location,
+       y_location,
+       z_location,
+       qv,
+       fov_name,
+       overlaps_nucleus,
+       nucleus_distance,
+       is_gene
+FROM read_parquet( ? )
+WHERE ${filter.sql}
+LIMIT ?
+`)
+    const pointRows = await pointStmt
+      .query(this.urlFor('transcripts.parquet'), ...filter.params, pointLimit + 1)
+      .then((result) => result.toArray())
+    const groupStmt = await conn.prepare(`
+SELECT feature_name,
+       fov_name,
+       COUNT(*) AS count,
+       AVG(qv) AS mean_qv
+FROM read_parquet( ? )
+WHERE ${filter.sql}
+GROUP BY feature_name, fov_name
+ORDER BY count DESC
+LIMIT ?
+`)
+    const groupRows = await groupStmt
+      .query(this.urlFor('transcripts.parquet'), ...filter.params, groupLimit)
+      .then((result) => result.toArray())
+
+    return {
+      points: pointRows.slice(0, pointLimit).map(parseTranscriptPointRow),
+      groups: groupRows.map(parseTranscriptGroupRow),
+      hitPointLimit: pointRows.length > pointLimit,
+    }
   }
 
   async geneExpression(
@@ -772,6 +836,132 @@ function parseTranscriptExportRow(row: Record<string, unknown>): DatasetTranscri
   }
 }
 
+function parseTranscriptPointRow(row: Record<string, unknown>): TranscriptPoint {
+  const transcriptId = row.transcript_id
+  const cellId = row.cell_id
+  const featureName = row.feature_name
+  const fovName = row.fov_name
+
+  if (
+    typeof transcriptId !== 'string' &&
+    typeof transcriptId !== 'number' &&
+    typeof transcriptId !== 'bigint'
+  ) {
+    throw new Error('Expected transcript point row transcript_id to be scalar.')
+  }
+
+  if (cellId !== null && cellId !== undefined && typeof cellId !== 'string') {
+    throw new Error('Expected transcript point row cell_id to be a string or null.')
+  }
+
+  if (typeof featureName !== 'string') {
+    throw new Error('Expected transcript point row feature_name to be a string.')
+  }
+
+  if (fovName !== null && fovName !== undefined && typeof fovName !== 'string') {
+    throw new Error('Expected transcript point row fov_name to be a string or null.')
+  }
+
+  return {
+    id: String(transcriptId),
+    cellId: cellId === null || cellId === undefined ? null : asCellId(cellId),
+    featureName,
+    fovName: fovName ?? null,
+    position: {
+      x: micrometers(readNumericRowValue(row, 'x_location')),
+      y: micrometers(readNumericRowValue(row, 'y_location')),
+    },
+    qv: readNumericRowValue(row, 'qv'),
+    ...optionalTranscriptNumber('zLocation', readOptionalNumericRowValue(row, 'z_location')),
+    ...optionalTranscriptBoolean(
+      'overlapsNucleus',
+      readOptionalBooleanRowValue(row, 'overlaps_nucleus'),
+    ),
+    ...optionalTranscriptNumber(
+      'nucleusDistance',
+      readOptionalNumericRowValue(row, 'nucleus_distance'),
+    ),
+    ...optionalTranscriptBoolean('isGene', readOptionalBooleanRowValue(row, 'is_gene')),
+  }
+}
+
+function parseTranscriptGroupRow(
+  row: Record<string, unknown>,
+): TranscriptGroupSummary {
+  const featureName = row.feature_name
+  const fovName = row.fov_name
+
+  if (typeof featureName !== 'string') {
+    throw new Error('Expected transcript group row feature_name to be a string.')
+  }
+
+  if (fovName !== null && fovName !== undefined && typeof fovName !== 'string') {
+    throw new Error('Expected transcript group row fov_name to be a string or null.')
+  }
+
+  return {
+    featureName,
+    fovName: fovName ?? null,
+    count: readNumericRowValue(row, 'count'),
+    ...optionalTranscriptGroupNumber('meanQv', readOptionalNumericRowValue(row, 'mean_qv')),
+  }
+}
+
+function transcriptViewportFilterSql(
+  bbox: BBox,
+  options: TranscriptViewportQueryOptions,
+): SqlFragment {
+  const clauses = [
+    'x_location BETWEEN ? AND ?',
+    'y_location BETWEEN ? AND ?',
+    'qv >= ?',
+  ]
+  const params: SqlParameter[] = [
+    bbox.minX,
+    bbox.maxX,
+    bbox.minY,
+    bbox.maxY,
+    options.minQv ?? 20,
+  ]
+
+  if (options.geneOnly ?? true) {
+    clauses.push('is_gene = true')
+  }
+
+  const featureNames = normalizeGeneList(options.featureNames ?? [])
+
+  if (featureNames.length > 0) {
+    clauses.push(`feature_name IN (${featureNames.map(() => '?').join(', ')})`)
+    params.push(...featureNames)
+  }
+
+  return {
+    sql: clauses.join('\n  AND '),
+    params,
+  }
+}
+
+function optionalTranscriptNumber(
+  key: 'zLocation' | 'nucleusDistance',
+  value: number | undefined,
+): Pick<TranscriptPoint, typeof key> | Record<string, never> {
+  return value === undefined ? {} : { [key]: value }
+}
+
+function optionalTranscriptBoolean(
+  key: 'overlapsNucleus' | 'isGene',
+  value: boolean | undefined,
+): Pick<TranscriptPoint, typeof key> | Record<string, never> {
+  return value === undefined ? {} : { [key]: value }
+}
+
+function optionalTranscriptGroupNumber(
+  key: 'meanQv',
+  value: number | undefined,
+): Pick<TranscriptGroupSummary, typeof key> | Record<string, never> {
+  return value === undefined ? {} : { [key]: value }
+}
+
 function selectedGeneCount(cell: GexCell, selectedGeneSet: ReadonlySet<string>): number {
   let count = 0
 
@@ -849,6 +1039,14 @@ function readOptionalBooleanRowValue(
 
   if (typeof value === 'boolean') {
     return value
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0
+  }
+
+  if (typeof value === 'bigint') {
+    return value !== 0n
   }
 
   throw new Error(`Expected row.${key} to be boolean.`)
