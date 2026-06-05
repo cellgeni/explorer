@@ -259,7 +259,8 @@ unless the phase order is explicitly changed.
       stack. The image slider controls the morphology canvas opacity. Cell
       opacity is split into `Cell fill opacity` for polygon interiors and
       `Cell boundary opacity` for polygon strokes and point borders; zero fill
-      opacity disables polygon fill rendering outright.
+      opacity now keeps transparent polygon fills active so cell picking remains
+      available while interiors are visually hidden.
 - [x] Added selectable gene-expression color scales. Switching scales restyles
       the current expression overlay from loaded per-cell counts without
       refetching the expression matrix. Phase 4 closeout added Plasma, Cividis,
@@ -399,8 +400,8 @@ unless the phase order is explicitly changed.
       Glasbey. Plasma is the default gene scale.
 - [x] Completed layer opacity split. `Cell fill opacity` controls true polygon
       interiors, `Cell boundary opacity` controls true polygon outlines and
-      point borders, and a zero fill value disables deck.gl polygon fill
-      rendering so default polygon interiors cannot show through.
+      point borders, and a zero fill value makes deck.gl polygon interiors
+      transparent while keeping filled geometry active for picking.
 - [x] Closed the HDF5 matrix fallback item. ROI gene stats already try
       `cell_feature_matrix.h5` via `h5wasm` when the Zarr matrix is unavailable;
       Phase 4 closeout added a direct production-reader regression test using a
@@ -441,6 +442,9 @@ unless the phase order is explicitly changed.
       through the user-triggered diagnostics dump.
 - [x] Added Phase 5 docs: `docs/user-guide.md` and
       `docs/host-your-own-data.md`.
+- [x] Added the repository root `README.md` with the project overview, quick
+      start commands, implementation layout, data expectations, and links to the
+      existing `docs/` user/hosting/CORS/matrix-compatibility notes.
 - [x] Phase 5 final verification passed: `npm test`, `npm run build`,
       `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.
 
@@ -473,6 +477,21 @@ unless the phase order is explicitly changed.
       original `cell_feature_matrix.zarr.zip` for native CSC Zarr reads, does
       not look for generated cell-major Zarr sidecars, and falls back to
       `cell_feature_matrix.h5` for older feature-major-only Zarr output.
+- [x] Added selected-cell detail loading on the Cell tab. Selecting a spatial or
+      embedding cell now loads all nonzero gene counts for that single cell via
+      the same matrix/HDF5 fallback path as ROI gene stats, and shows searchable
+      expression plus cell metadata and boundary-derived shape metrics such as
+      equivalent diameter, perimeter, axes, eccentricity, and circularity when
+      true boundary geometry is available.
+- [x] Fixed selected-cell picking so it does not depend on visible cell fill.
+      Boundary polygons remain pickable with transparent fills, DeckGL click
+      handling maps picked boundary objects back to overview cells, and the
+      viewer falls back to coordinate-based point-in-polygon/point-cell hit
+      testing if no object is returned by deck.gl.
+- [x] Fixed stale cell opacity updates. Cell fill and boundary opacity changes
+      now declare deck.gl `updateTriggers` for color accessors so sliders update
+      the active layers immediately without waiting for boundary data or other
+      layer data to re-render.
 - [ ] Optimization pass: after correctness is stable, tune interaction
       performance, memory pressure, fetch/decode concurrency, and rendering
       costs without changing product behavior.
