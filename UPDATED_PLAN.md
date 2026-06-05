@@ -456,10 +456,23 @@ unless the phase order is explicitly changed.
       the bounded ROI cell query path first, filter cursor circles by cell
       centroid, and summarize genes through the ROI matrix-backed gene stats
       path instead of blocking on a spatial scan of `transcripts.parquet`.
-- [ ] Observed ROI warmup behavior: the first ROI ever drawn after dataset load
-      can take a long time to return cell info, while subsequent ROIs return
-      cell info very quickly. Treat this as an optimization target after the
-      feature-fix pass.
+- [x] Fixed the misleading first-ROI gene wait. Direct browser probes showed even
+      a 1-cell cold Zarr gene read can take about 20 seconds, so the first cost
+      is opening/warming the feature-matrix path rather than ROI sample size.
+      Dataset warmup now stays metadata-only, viewport-specific ROI gene warmup
+      starts as soon as the loaded viewport is known, and ROI draw controls stay
+      disabled with a preparing state until that viewport warmup is ready or
+      fails. After drawing, the demo dataset timing showed `Top ROI genes`
+      appears within milliseconds of ROI cells being ready instead of sitting at
+      `Querying ROI genes` for 20+ seconds.
+- [x] Added detailed activity-log timings for the ROI path: dataset prep,
+      viewport ROI-gene warmup cell query, viewport ROI-gene warmup stats,
+      drawn ROI cell query, preview gene stats, and full gene refinement now log
+      elapsed wall time in the UI.
+- [x] Reconfirmed the ROI gene matrix fallback strategy: the app uses the
+      original `cell_feature_matrix.zarr.zip` for native CSC Zarr reads, does
+      not look for generated cell-major Zarr sidecars, and falls back to
+      `cell_feature_matrix.h5` for older feature-major-only Zarr output.
 - [ ] Optimization pass: after correctness is stable, tune interaction
       performance, memory pressure, fetch/decode concurrency, and rendering
       costs without changing product behavior.

@@ -1691,7 +1691,7 @@ export function App({
 
       if (!capability.hasCellMajorCsc) {
         appendDebugEvent(
-          'Cell-feature matrix is not CSC; initial gene expression may take up to 30s',
+          'Cell-feature matrix is not CSC; ROI gene stats will use H5 fallback when needed',
           { coalesceKey: 'cell-feature-matrix-csc' },
         )
       }
@@ -4991,9 +4991,9 @@ function CellFeatureMatrixCompatibilityNotice({
     >
       <h2>Matrix Warning</h2>
       <p>
-        <code>cell_feature_matrix.zarr.zip</code> is not in CSC format. Initial
-        gene expression may take up to 30s to load while the browser uses the
-        older feature-major matrix layout.
+        <code>cell_feature_matrix.zarr.zip</code> is not in CSC format.
+        Selected-gene reads may use the older feature-major Zarr layout; ROI
+        gene stats will fall back to <code>cell_feature_matrix.h5</code>.
       </p>
     </section>
   )
@@ -5918,16 +5918,16 @@ function createStructuredLoadError(
 
   if (
     source === 'ROI genes' &&
-    normalizedMessage.includes('cell-major cell_feature_matrix')
+    isUnsupportedRoiGeneStatsError(error, normalizedMessage)
   ) {
     return withOptionalDetail(
       {
         source,
         code: 'unsupported',
-        title: 'ROI gene matrix unsupported',
+        title: 'ROI gene matrix unavailable',
         message,
         action:
-          'Use a cell-major cell_feature_matrix reader for ROI gene stats; keep transcripts.parquet for raw transcript export.',
+          'Host a readable cell_feature_matrix.h5 for older XOA output; native CSC Zarr remains the fast path when available.',
       },
       detail,
     )
@@ -5971,6 +5971,17 @@ function createStructuredLoadError(
       action: 'Retry the request after checking the dataset URL.',
     },
     detail,
+  )
+}
+
+function isUnsupportedRoiGeneStatsError(
+  error: unknown,
+  normalizedMessage: string,
+): boolean {
+  return (
+    (error instanceof Error && error.name === 'UnsupportedRoiGeneStatsMatrixError') ||
+    normalizedMessage.includes('native csc arrays in cell_feature_matrix.zarr.zip') ||
+    normalizedMessage.includes('readable cell_feature_matrix.h5 fallback')
   )
 }
 

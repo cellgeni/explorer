@@ -194,7 +194,9 @@ describe('ROI gene stats', () => {
         validateRangeSupport,
         readH5Matrix,
       }),
-    ).rejects.toThrow('ROI gene stats need a cell-major cell_feature_matrix reader')
+    ).rejects.toThrow(
+      'ROI gene stats need native CSC arrays in cell_feature_matrix.zarr.zip or a readable cell_feature_matrix.h5 fallback',
+    )
 
     expect(dataset.matrix).toHaveBeenCalledWith([cellId])
     expect(readH5Matrix).toHaveBeenCalledWith(

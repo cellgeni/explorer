@@ -1567,7 +1567,7 @@ describe('App', () => {
 
     expect(notice).toHaveTextContent('cell_feature_matrix.zarr.zip')
     expect(notice).toHaveTextContent('not in CSC format')
-    expect(notice).toHaveTextContent('up to 30s')
+    expect(notice).toHaveTextContent('cell_feature_matrix.h5')
   })
 
   it('shows sampled ROI genes before the full ROI gene refinement finishes', async () => {

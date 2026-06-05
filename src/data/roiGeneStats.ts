@@ -281,8 +281,8 @@ function abortError(signal: AbortSignal): Error {
 
 function unsupportedRoiGeneStatsError(zarrCause: unknown, h5Cause: unknown): Error {
   const message =
-    'ROI gene stats need a cell-major cell_feature_matrix reader. ' +
-    'The available Zarr/H5 matrix sources could not provide per-cell sparse counts, and transcripts.parquet is too large for the interactive ROI gene panel.'
+    'ROI gene stats need native CSC arrays in cell_feature_matrix.zarr.zip or a readable cell_feature_matrix.h5 fallback. ' +
+    'The available matrix sources could not provide per-cell sparse counts, and transcripts.parquet is too large for the interactive ROI gene panel.'
   const error = new Error(message, {
     cause: { zarr: zarrCause, h5: h5Cause },
   })
