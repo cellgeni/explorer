@@ -2,7 +2,8 @@ import { asyncBufferFromUrl } from 'hyparquet'
 import { datasetFileUrl } from './datasetFiles'
 import {
   clearCellFeatureMatrixZarrCache,
-  warmCellFeatureMatrixZarrCellIdIndex,
+  warmCellFeatureMatrixZarr,
+  type CellFeatureMatrixZarrCapability,
 } from './gex'
 import {
   DEFAULT_PARQUET_FOOTER_CACHE_BYTES,
@@ -18,7 +19,12 @@ import type { XeniumDataset } from '../datasets/xeniumDataset'
 export interface WarmDatasetForRoiOptions {
   readonly getDataset?: (baseUrl: string) => XeniumDataset | Promise<XeniumDataset>
   readonly validateRangeSupport?: DatasetRangeValidator
-  readonly warmMatrix?: (url: string) => Promise<void>
+  readonly warmMatrix?: (
+    url: string,
+  ) => Promise<CellFeatureMatrixZarrCapability | void>
+  readonly onCellFeatureMatrixCapability?: (
+    capability: CellFeatureMatrixZarrCapability,
+  ) => void
   readonly prefetchParquetFooter?: (
     url: string,
     options?: { readonly signal?: AbortSignal },
@@ -26,12 +32,16 @@ export interface WarmDatasetForRoiOptions {
   readonly signal?: AbortSignal
 }
 
+export interface WarmDatasetForRoiResult {
+  readonly cellFeatureMatrix: CellFeatureMatrixZarrCapability | null
+}
+
 export async function warmDatasetForRoi(
   baseUrl: string,
   options: WarmDatasetForRoiOptions = {},
-): Promise<void> {
+): Promise<WarmDatasetForRoiResult> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
-  const warmMatrix = options.warmMatrix ?? warmCellFeatureMatrixZarrCellIdIndex
+  const warmMatrix = options.warmMatrix ?? warmCellFeatureMatrixZarr
   const cellsUrl = datasetFileUrl(baseUrl, 'cells.parquet')
   const boundariesUrl = datasetFileUrl(baseUrl, 'cell_boundaries.parquet')
   const matrixUrl = datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip')
@@ -41,7 +51,17 @@ export async function warmDatasetForRoi(
       : Promise.resolve(options.getDataset(baseUrl))
 
   clearCellFeatureMatrixZarrCache(matrixUrl)
-  await Promise.all([
+  const matrixWarmup = warmMatrix(matrixUrl).then((capability) => {
+    const normalizedCapability = capability ?? null
+
+    if (normalizedCapability !== null) {
+      options.onCellFeatureMatrixCapability?.(normalizedCapability)
+    }
+
+    return normalizedCapability
+  })
+
+  const [, , , cellFeatureMatrix] = await Promise.all([
     datasetPromise.then((dataset) => dataset.warm()),
     warmRangeReadableFile(cellsUrl, 'cells.parquet', validateRangeSupport, options),
     warmRangeReadableDatasetFile(
@@ -50,7 +70,7 @@ export async function warmDatasetForRoi(
       validateRangeSupport,
       options,
     ),
-    warmMatrix(matrixUrl),
+    matrixWarmup,
     warmRangeReadableFile(
       boundariesUrl,
       'cell_boundaries.parquet',
@@ -59,6 +79,8 @@ export async function warmDatasetForRoi(
     ).catch(noop),
   ])
   throwIfAborted(options.signal)
+
+  return { cellFeatureMatrix }
 }
 
 async function warmRangeReadableDatasetFile(

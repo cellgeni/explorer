@@ -46,6 +46,13 @@ export interface AggregatedGene {
   readonly count: number
 }
 
+export interface CellFeatureMatrixZarrCapability {
+  readonly url: string
+  readonly hasCellMajorCsc: boolean
+  readonly cellCount: number
+  readonly featureCount: number
+}
+
 export type SqlParameter = string | number
 
 type NumericArrayLike =
@@ -127,17 +134,45 @@ const CELL_MAJOR_RANGE_MAX_SPAN = 500_000
 const CELL_MAJOR_RANGE_FETCH_CONCURRENCY = 8
 const CELL_MAJOR_INDPTR_COALESCE_GAP = 4_096
 const CELL_MAJOR_INDPTR_MAX_SPAN = 100_000
+const CELL_MAJOR_INDPTR_FETCH_CONCURRENCY = 8
+const CELL_MAJOR_FULL_INDPTR_TARGET_THRESHOLD = 64
+const CELL_MAJOR_FULL_INDPTR_MAX_LENGTH = 6_000_000
+const CELL_MAJOR_ROI_WARMUP_ROW_COUNT = 128
 const h5MatrixCache = new Map<string, Promise<H5MatrixCache>>()
 const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
 const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
-
-export async function warmCellFeatureMatrixZarr(url: string): Promise<void> {
-  await loadZarrMatrixMetadata(url)
+interface CellMajorIndptrCacheEntry {
+  readonly promise: Promise<Uint32Array>
+  state: 'pending' | 'ready'
 }
 
-export async function warmCellFeatureMatrixZarrCellIdIndex(
+const zarrCellMajorIndptrCache = new WeakMap<
+  ZarrArray<DataType, ZipFileStore>,
+  CellMajorIndptrCacheEntry
+>()
+
+export async function warmCellFeatureMatrixZarr(
   url: string,
-): Promise<void> {
+): Promise<CellFeatureMatrixZarrCapability> {
+  return zarrMatrixCapability(url, await loadZarrMatrixMetadata(url))
+}
+
+export async function warmCellFeatureMatrixZarrRoiStats(url: string): Promise<void> {
+  const matrix = await loadZarrMatrixMetadata(url)
+
+  if (!hasCellMajorCsc(matrix)) {
+    return
+  }
+
+  await loadFullCellMajorIndptr(matrix.cscIndptrArray)
+  await gexFromCellFeatureMatrixZarrTargets(
+    matrix,
+    warmupCellFeatureMatrixRowTargets(matrix.nCells, CELL_MAJOR_ROI_WARMUP_ROW_COUNT),
+    [],
+  )
+}
+
+export async function warmCellFeatureMatrixZarrCellIdIndex(url: string): Promise<void> {
   await loadZarrMatrixWithCellIds(url)
 }
 
@@ -354,9 +389,9 @@ async function gexFromCellFeatureMatrixZarrTargets(
     }
   }
 
-  if (matrix.cscIndptrArray === undefined) {
+  if (!hasCellMajorCsc(matrix)) {
     throw new Error(
-      'cell_feature_matrix.zarr.zip does not expose a cell-major csc/indptr array.',
+      'cell_feature_matrix.zarr.zip does not expose cell-major csc/indptr, csc/indices, and csc/data arrays.',
     )
   }
 
@@ -381,10 +416,7 @@ async function gexFromCellFeatureMatrixZarrTargets(
         zarr.get(indicesArray, [zarr.slice(rangeGroup.start, rangeGroup.end)]),
         zarr.get(dataArray, [zarr.slice(rangeGroup.start, rangeGroup.end)]),
       ])
-      const indices = expectUint16Array(
-        indicesChunk.data,
-        'cell_features/csc/indices',
-      )
+      const indices = expectUint16Array(indicesChunk.data, 'cell_features/csc/indices')
       const data = expectUint32Array(dataChunk.data, 'cell_features/csc/data')
 
       for (const target of rangeGroup.targets) {
@@ -565,7 +597,7 @@ export async function gexFromCellFeatureMatrixZarrSelectedGenes(
 
   const matrix = await loadZarrMatrixWithCellIds(url)
 
-  if (matrix.cscIndptrArray !== undefined) {
+  if (hasCellMajorCsc(matrix)) {
     return gexFromCellFeatureMatrixZarr(url, cellIds)
   }
 
@@ -735,6 +767,30 @@ async function loadZarrMatrixUncached(url: string): Promise<ZarrMatrixCache> {
     ...(cscIndicesArray === null ? {} : { cscIndicesArray }),
     ...(cscDataArray === null ? {} : { cscDataArray }),
   }
+}
+
+function zarrMatrixCapability(
+  url: string,
+  matrix: ZarrMatrixCache,
+): CellFeatureMatrixZarrCapability {
+  return {
+    url,
+    hasCellMajorCsc: hasCellMajorCsc(matrix),
+    cellCount: matrix.nCells,
+    featureCount: matrix.geneNames.length,
+  }
+}
+
+function hasCellMajorCsc(matrix: ZarrMatrixCache): matrix is ZarrMatrixCache & {
+  readonly cscIndptrArray: ZarrArray<DataType, ZipFileStore>
+  readonly cscIndicesArray: ZarrArray<DataType, ZipFileStore>
+  readonly cscDataArray: ZarrArray<DataType, ZipFileStore>
+} {
+  return (
+    matrix.cscIndptrArray !== undefined &&
+    matrix.cscIndicesArray !== undefined &&
+    matrix.cscDataArray !== undefined
+  )
 }
 
 function loadZarrMatrixWithCellIds(url: string): Promise<ZarrMatrixCellIdCache> {
@@ -1118,33 +1174,134 @@ async function zarrCellMajorSparseRanges(
     readonly end: number
   }[]
 > {
+  if (
+    hasReadyFullCellMajorIndptr(indptrArray) ||
+    shouldUseFullCellMajorIndptr(indptrArray, targets)
+  ) {
+    const indptr = await loadFullCellMajorIndptr(indptrArray)
+
+    return zarrCellMajorSparseRangesFromIndptr(indptr, targets, cells)
+  }
+
+  const groups = coalesceIndptrTargetRanges(targets)
+  const rangesByGroup: {
+    readonly id: CellId
+    readonly start: number
+    readonly end: number
+  }[][] = []
+
+  await mapWithConcurrency(
+    groups.map((group, index) => ({ group, index })),
+    CELL_MAJOR_INDPTR_FETCH_CONCURRENCY,
+    async ({ group, index }) => {
+      const indptr = expectUint32Array(
+        (await zarr.get(indptrArray, [zarr.slice(group.start, group.end)])).data,
+        'cell_features/csc/indptr',
+      )
+      const groupRanges: {
+        readonly id: CellId
+        readonly start: number
+        readonly end: number
+      }[] = []
+
+      for (const target of group.targets) {
+        const localRow = target.row - group.start
+        const start = Number(indptr[localRow] ?? 0)
+        const end = Number(indptr[localRow + 1] ?? start)
+
+        if (end <= start) {
+          cells.set(target.id, { geneNames: [], counts: [] })
+          continue
+        }
+
+        groupRanges.push({ id: target.id, start, end })
+      }
+
+      rangesByGroup[index] = groupRanges
+    },
+  )
+
+  return rangesByGroup.flat().sort((left, right) => left.start - right.start)
+}
+
+function shouldUseFullCellMajorIndptr(
+  indptrArray: ZarrArray<DataType, ZipFileStore>,
+  targets: readonly CellFeatureMatrixRowTarget[],
+): boolean {
+  const indptrLength = indptrArray.shape[0] ?? 0
+
+  return (
+    targets.length >= CELL_MAJOR_FULL_INDPTR_TARGET_THRESHOLD &&
+    indptrLength > 0 &&
+    indptrLength <= CELL_MAJOR_FULL_INDPTR_MAX_LENGTH
+  )
+}
+
+function hasReadyFullCellMajorIndptr(
+  indptrArray: ZarrArray<DataType, ZipFileStore>,
+): boolean {
+  return zarrCellMajorIndptrCache.get(indptrArray)?.state === 'ready'
+}
+
+function loadFullCellMajorIndptr(
+  indptrArray: ZarrArray<DataType, ZipFileStore>,
+): Promise<Uint32Array> {
+  const cached = zarrCellMajorIndptrCache.get(indptrArray)
+
+  if (cached !== undefined) {
+    return cached.promise
+  }
+
+  const entry: CellMajorIndptrCacheEntry = {
+    state: 'pending',
+    promise: zarr
+      .get(indptrArray, [null])
+      .then((chunk) => {
+        const indptr = expectUint32Array(chunk.data, 'cell_features/csc/indptr')
+        entry.state = 'ready'
+        return indptr
+      })
+      .catch((error: unknown) => {
+        if (zarrCellMajorIndptrCache.get(indptrArray) === entry) {
+          zarrCellMajorIndptrCache.delete(indptrArray)
+        }
+
+        throw error
+      }),
+  }
+
+  zarrCellMajorIndptrCache.set(indptrArray, entry)
+  return entry.promise
+}
+
+function zarrCellMajorSparseRangesFromIndptr(
+  indptr: Uint32Array,
+  targets: readonly CellFeatureMatrixRowTarget[],
+  cells: Map<CellId, { geneNames: string[]; counts: number[] }>,
+): readonly {
+  readonly id: CellId
+  readonly start: number
+  readonly end: number
+}[] {
   const ranges: {
     readonly id: CellId
     readonly start: number
     readonly end: number
   }[] = []
 
-  for (const group of coalesceIndptrTargetRanges(targets)) {
-    const indptr = expectUint32Array(
-      (await zarr.get(indptrArray, [zarr.slice(group.start, group.end)])).data,
-      'cell_features/csc/indptr',
-    )
+  for (const target of targets) {
+    const start = Number(indptr[target.row] ?? 0)
+    const end = Number(indptr[target.row + 1] ?? start)
 
-    for (const target of group.targets) {
-      const localRow = target.row - group.start
-      const start = Number(indptr[localRow] ?? 0)
-      const end = Number(indptr[localRow + 1] ?? start)
-
-      if (end <= start) {
-        cells.set(target.id, { geneNames: [], counts: [] })
-        continue
-      }
-
-      ranges.push({ id: target.id, start, end })
+    if (end <= start) {
+      cells.set(target.id, { geneNames: [], counts: [] })
+      continue
     }
+
+    ranges.push({ id: target.id, start, end })
   }
 
-  return ranges
+  return ranges.sort((left, right) => left.start - right.start)
 }
 
 function coalesceIndptrTargetRanges(
@@ -1231,6 +1388,28 @@ function coalesceCellMajorRanges(
   }
 
   return groups
+}
+
+function warmupCellFeatureMatrixRowTargets(
+  nCells: number,
+  count: number,
+): readonly CellFeatureMatrixRowTarget[] {
+  const targetCount = Math.min(Math.max(0, Math.floor(count)), nCells)
+
+  if (targetCount === 0) {
+    return []
+  }
+
+  if (targetCount === 1) {
+    return [{ id: intToCellId(0, 1), row: 0 }]
+  }
+
+  const maxRow = nCells - 1
+
+  return Array.from({ length: targetCount }, (_value, index) => ({
+    id: intToCellId(0, index + 1),
+    row: Math.floor((index * maxRow) / (targetCount - 1)),
+  }))
 }
 
 async function mapWithConcurrency<T>(

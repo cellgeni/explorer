@@ -6,7 +6,12 @@ At minimum, host a Xenium output folder with:
 
 - `experiment.xenium`
 - `cells.parquet`
-- `cell_feature_matrix.zarr.zip` or `cell_feature_matrix.h5` for gene expression
+- `cell_feature_matrix.zarr.zip` (or `cell_feature_matrix.h5`) for gene expression
+
+For interactive ROI gene statistics, prefer `cell_feature_matrix.zarr.zip` files
+with `cell_features/csc/*` arrays. Older XOA output can use a generated
+cell-major sidecar instead of the browser H5 fallback; see
+[`docs/cell-feature-matrix-compatibility.md`](./cell-feature-matrix-compatibility.md).
 
 Optional but supported files include:
 

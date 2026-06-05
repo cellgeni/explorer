@@ -8,15 +8,15 @@ const zarrMock = vi.hoisted(() => ({
 }))
 
 const storageMock = vi.hoisted(() => ({
-  ZipFileStore: vi
-    .fn()
-    .mockImplementation(function MockZipFileStore(reader: { readonly url: string }) {
-      return {
-        kind: 'store',
-        reader,
-        url: reader.url,
-      }
-    }),
+  ZipFileStore: vi.fn().mockImplementation(function MockZipFileStore(reader: {
+    readonly url: string
+  }) {
+    return {
+      kind: 'store',
+      reader,
+      url: reader.url,
+    }
+  }),
 }))
 
 vi.mock('@zarrita/storage', () => ({
@@ -126,6 +126,55 @@ describe('Zarr cell feature matrix cache', () => {
     ])
   })
 
+  it('fetches distant indptr target ranges concurrently during cold ROI gene reads', async () => {
+    const cellA = intToCellId(10, 1)
+    const cellB = intToCellId(20, 1)
+    const indptr = new Uint32Array(20_003)
+    indptr[0] = 0
+    indptr[1] = 1
+    indptr[20_000] = 2
+    indptr[20_001] = 3
+
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array(40_002),
+      indptr,
+    })
+
+    const defaultGet = zarrMock.get.getMockImplementation()
+    let activeIndptrReads = 0
+    let maxActiveIndptrReads = 0
+
+    zarrMock.get.mockImplementation(async (target: MockZarrNode, ranges: unknown) => {
+      if (target.path === 'cell_features/csc/indptr') {
+        activeIndptrReads += 1
+        maxActiveIndptrReads = Math.max(maxActiveIndptrReads, activeIndptrReads)
+        await new Promise((resolve) => setTimeout(resolve, 25))
+        activeIndptrReads -= 1
+      }
+
+      if (defaultGet === undefined) {
+        throw new Error('Expected default zarr.get implementation.')
+      }
+
+      return defaultGet(target, ranges)
+    })
+
+    const { gexFromCellFeatureMatrixZarrRows } = await import('./gex')
+    const url =
+      'https://example.test/xenium/concurrent-indptr/cell_feature_matrix.zarr.zip'
+
+    await expect(
+      gexFromCellFeatureMatrixZarrRows(url, [
+        { id: cellA, row: 0 },
+        { id: cellB, row: 20_000 },
+      ]),
+    ).resolves.toMatchObject({
+      geneNames: ['Actb', 'Gad1'],
+    })
+
+    expect(maxActiveIndptrReads).toBeGreaterThan(1)
+  })
+
   it('warms zarr matrix metadata and cell-major arrays without scanning every cell id', async () => {
     setupZarrMatrixMock({
       cellIdPairs: new Uint32Array([1, 1, 2, 1]),
@@ -156,6 +205,166 @@ describe('Zarr cell feature matrix cache', () => {
         'cell_features/csc/data',
       ]),
     )
+  })
+
+  it('reports when warmed zarr matrix metadata lacks cell-major CSC arrays', async () => {
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array([1, 1, 2, 1]),
+      indptr: new Uint32Array([0, 1, 2]),
+      hasCellMajorCsc: false,
+    })
+
+    const { warmCellFeatureMatrixZarr } = await import('./gex')
+    const url =
+      'https://example.test/xenium/feature-major-only/cell_feature_matrix.zarr.zip'
+
+    await expect(warmCellFeatureMatrixZarr(url)).resolves.toEqual({
+      url,
+      hasCellMajorCsc: false,
+      cellCount: 2,
+      featureCount: 2,
+    })
+  })
+
+  it('warms distributed ROI sparse row reads without scanning every cell id', async () => {
+    const indptr = Uint32Array.from({ length: 129 }, (_value, index) => index)
+
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array(256),
+      indptr,
+    })
+
+    const { warmCellFeatureMatrixZarrRoiStats } = await import('./gex')
+    const url = 'https://example.test/xenium/warm-roi-stats/cell_feature_matrix.zarr.zip'
+
+    await warmCellFeatureMatrixZarrRoiStats(url)
+
+    const cellIdReads = zarrMock.get.mock.calls.filter(
+      ([target]) => target.path === 'cell_features/cell_id',
+    )
+    const indptrReads = zarrMock.get.mock.calls.filter(
+      ([target]) => target.path === 'cell_features/csc/indptr',
+    )
+    const fullIndptrReads = indptrReads.filter(([, ranges]) => {
+      const range = readRange(ranges, indptr.length)
+
+      return range.start === 0 && range.end === indptr.length
+    })
+    const indexReads = zarrMock.get.mock.calls.filter(
+      ([target]) => target.path === 'cell_features/csc/indices',
+    )
+    const dataReads = zarrMock.get.mock.calls.filter(
+      ([target]) => target.path === 'cell_features/csc/data',
+    )
+
+    expect(cellIdReads).toHaveLength(0)
+    expect(indptrReads.length).toBeGreaterThan(0)
+    expect(fullIndptrReads).toHaveLength(1)
+    expect(indexReads.length).toBeGreaterThan(0)
+    expect(dataReads.length).toBeGreaterThan(0)
+  })
+
+  it('reuses a warmed full cell-major indptr for later ROI gene reads', async () => {
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(1, 2)
+    const indptr = Uint32Array.from({ length: 129 }, (_value, index) => index)
+
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array(256),
+      indptr,
+    })
+
+    const { gexFromCellFeatureMatrixZarrRows, warmCellFeatureMatrixZarrRoiStats } =
+      await import('./gex')
+    const url =
+      'https://example.test/xenium/warm-full-indptr/cell_feature_matrix.zarr.zip'
+
+    await warmCellFeatureMatrixZarrRoiStats(url)
+    zarrMock.get.mockClear()
+
+    await expect(
+      gexFromCellFeatureMatrixZarrRows(url, [
+        { id: cellA, row: 0 },
+        { id: cellB, row: 127 },
+      ]),
+    ).resolves.toMatchObject({
+      geneNames: ['Actb', 'Gad1'],
+    })
+
+    const indptrReads = zarrMock.get.mock.calls.filter(
+      ([target]) => target.path === 'cell_features/csc/indptr',
+    )
+
+    expect(indptrReads).toHaveLength(0)
+  })
+
+  it('does not block small ROI previews on a pending full indptr warmup', async () => {
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(1, 2)
+    const indptr = Uint32Array.from({ length: 10_001 }, (_value, index) => index)
+
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array(20_000),
+      indptr,
+    })
+
+    const defaultGet = zarrMock.get.getMockImplementation()
+    let releaseFullIndptr!: () => void
+    let fullIndptrStarted!: () => void
+    const fullIndptrRelease = new Promise<void>((resolve) => {
+      releaseFullIndptr = resolve
+    })
+    const fullIndptrRequest = new Promise<void>((resolve) => {
+      fullIndptrStarted = resolve
+    })
+
+    zarrMock.get.mockImplementation(async (target: MockZarrNode, ranges: unknown) => {
+      if (target.path === 'cell_features/csc/indptr') {
+        const range = readRange(ranges, indptr.length)
+
+        if (range.start === 0 && range.end === indptr.length) {
+          fullIndptrStarted()
+          await fullIndptrRelease
+        }
+      }
+
+      if (defaultGet === undefined) {
+        throw new Error('Expected default zarr.get implementation.')
+      }
+
+      return defaultGet(target, ranges)
+    })
+
+    const { gexFromCellFeatureMatrixZarrRows, warmCellFeatureMatrixZarrRoiStats } =
+      await import('./gex')
+    const url =
+      'https://example.test/xenium/pending-full-indptr/cell_feature_matrix.zarr.zip'
+    const warmup = warmCellFeatureMatrixZarrRoiStats(url)
+
+    await fullIndptrRequest
+
+    await expect(
+      gexFromCellFeatureMatrixZarrRows(url, [
+        { id: cellA, row: 0 },
+        { id: cellB, row: 9_000 },
+      ]),
+    ).resolves.toMatchObject({
+      geneNames: ['Actb', 'Gad1'],
+    })
+
+    const slicedIndptrReads = zarrMock.get.mock.calls.filter(([target, ranges]) => {
+      if (target.path !== 'cell_features/csc/indptr') {
+        return false
+      }
+
+      const range = readRange(ranges, indptr.length)
+      return range.end - range.start < indptr.length
+    })
+
+    expect(slicedIndptrReads.length).toBeGreaterThan(0)
+
+    releaseFullIndptr()
+    await warmup
   })
 
   it('reuses warmed cell-major array handles for row-targeted ROI gene reads', async () => {
@@ -211,11 +420,11 @@ describe('Zarr cell feature matrix cache', () => {
 
     zarrMock.get.mockClear()
 
-    await expect(gexFromCellFeatureMatrixZarr(url, [cellB, cellA])).resolves.toMatchObject(
-      {
-        geneNames: ['Actb', 'Gad1'],
-      },
-    )
+    await expect(
+      gexFromCellFeatureMatrixZarr(url, [cellB, cellA]),
+    ).resolves.toMatchObject({
+      geneNames: ['Actb', 'Gad1'],
+    })
 
     const roiCellIdReads = zarrMock.get.mock.calls.filter(
       ([target]) => target.path === 'cell_features/cell_id',
@@ -227,12 +436,14 @@ describe('Zarr cell feature matrix cache', () => {
 function setupZarrMatrixMock(options: {
   readonly cellIdPairs: Uint32Array
   readonly indptr: Uint32Array
+  readonly hasCellMajorCsc?: boolean
 }): void {
   const root = node('')
   const cellFeatures = node('cell_features', {
     feature_keys: ['Actb', 'Gad1'],
     feature_types: ['Gene Expression', 'Gene Expression'],
   })
+  const hasCellMajorCsc = options.hasCellMajorCsc ?? true
 
   zarrMock.open.mockImplementation(async (target: MockZarrNode) => {
     if (target.kind === 'store') {
@@ -245,6 +456,14 @@ function setupZarrMatrixMock(options: {
 
     if (target.path === 'cell_features/cell_id') {
       return array(target.path, [options.cellIdPairs.length / 2, 2])
+    }
+
+    if (target.path.startsWith('cell_features/csc/') && !hasCellMajorCsc) {
+      throw new Error(`${target.path} not found`)
+    }
+
+    if (target.path === 'cell_features/csc/indptr') {
+      return array(target.path, [options.indptr.length])
     }
 
     return array(target.path)

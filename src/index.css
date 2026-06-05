@@ -1412,6 +1412,41 @@ h2 {
   line-height: 1.25;
 }
 
+.cell-feature-matrix-notice {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid rgba(184, 110, 27, 0.34);
+  border-left: 3px solid #b86e1b;
+  border-radius: 6px;
+  background: rgba(184, 110, 27, 0.08);
+}
+
+.cell-feature-matrix-notice h2,
+.cell-feature-matrix-notice p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cell-feature-matrix-notice h2 {
+  color: #7b4d1d;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cell-feature-matrix-notice p {
+  color: #5b3c18;
+  font-size: 0.64rem;
+  line-height: 1.25;
+}
+
+.cell-feature-matrix-notice code {
+  color: #2f2b22;
+  font-size: 0.62rem;
+}
+
 .dataset-diagnostics-panel {
   display: grid;
   gap: 5px;

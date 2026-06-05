@@ -92,6 +92,39 @@ describe('ROI gene stats', () => {
     expect(stats.hitCellLimit).toBe(true)
   })
 
+  it('can use a contiguous head sample for low-latency previews', async () => {
+    const cells = Array.from(
+      { length: 5 },
+      (_value, index): DatasetCell => ({
+        id: intToCellId(1, index + 1),
+        position: { x: micrometers(index), y: micrometers(index) },
+        transcriptCount: 1,
+      }),
+    )
+    const matrix: GexResult = {
+      geneNames: ['Actb'],
+      cells: new Map(
+        cells
+          .slice(0, 2)
+          .map((cell) => [cell.id, { geneNames: ['Actb'], counts: [1] }]),
+      ),
+    }
+    const dataset = {
+      matrix: vi.fn(async () => matrix),
+    }
+
+    const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
+      cellLimit: 2,
+      getDataset: () => dataset,
+      sampleStrategy: 'head',
+      validateRangeSupport: vi.fn(async () => undefined),
+    })
+
+    expect(dataset.matrix).toHaveBeenCalledWith([intToCellId(1, 1), intToCellId(1, 2)])
+    expect(stats.sampledCellCount).toBe(2)
+    expect(stats.hitCellLimit).toBe(true)
+  })
+
   it('uses row-hinted ROI cells when the dataset exposes a cell-aware matrix reader', async () => {
     const cellA = intToCellId(1, 1)
     const cellB = intToCellId(1, 2)

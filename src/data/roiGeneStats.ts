@@ -27,6 +27,8 @@ export interface RoiGeneStats {
   readonly hitCellLimit: boolean
 }
 
+export type RoiGeneStatsSampleStrategy = 'stratified' | 'head'
+
 interface RoiGeneStatsDataset {
   matrix(ids: readonly CellId[]): Promise<GexResult>
   matrixForCells?(cells: readonly DatasetCell[]): Promise<GexResult>
@@ -41,6 +43,7 @@ export interface LoadDatasetRoiGeneStatsOptions {
   readonly signal?: AbortSignal
   readonly cellLimit?: number
   readonly geneLimit?: number
+  readonly sampleStrategy?: RoiGeneStatsSampleStrategy
   readonly allowTranscriptFallback?: boolean
   readonly readH5Matrix?: (
     url: string,
@@ -55,7 +58,11 @@ export async function loadDatasetRoiGeneStats(
   options: LoadDatasetRoiGeneStatsOptions = {},
 ): Promise<RoiGeneStats> {
   const cellLimit = normalizeLimit(options.cellLimit, ROI_GENE_STATS_CELL_LIMIT)
-  const sampledCells = sampleRoiCells(cells, cellLimit)
+  const sampledCells = sampleRoiCells(
+    cells,
+    cellLimit,
+    options.sampleStrategy ?? 'stratified',
+  )
 
   if (sampledCells.length === 0) {
     return emptyRoiGeneStats(cells.length)
@@ -212,9 +219,14 @@ async function loadRoiGeneStatsMatrix(
 function sampleRoiCells(
   cells: readonly DatasetCell[],
   cellLimit: number,
+  strategy: RoiGeneStatsSampleStrategy,
 ): readonly DatasetCell[] {
   if (cells.length <= cellLimit) {
     return cells
+  }
+
+  if (strategy === 'head') {
+    return cells.slice(0, cellLimit)
   }
 
   const sampledCells: DatasetCell[] = []

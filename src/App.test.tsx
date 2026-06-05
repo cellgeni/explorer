@@ -7,6 +7,7 @@ import {
   type AnnotationLoader,
   type DatasetDiagnosticsRunner,
   type DatasetOverviewLoader,
+  type DatasetWarmupLoader,
   type GeneExpressionLoader,
   type GenePanelLoader,
   type RoiCellsLoader,
@@ -1497,6 +1498,364 @@ describe('App', () => {
       expect(screen.getByRole('tab', { name: 'ROI' })).toHaveAttribute(
         'aria-busy',
         'true',
+      )
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('keeps ROI drawing disabled until dataset preparation completes', async () => {
+    vi.mocked(warmDatasetForRoi).mockImplementationOnce(() => pendingPromise())
+
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    openHudTab('ROI')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
+    })
+    expect(screen.getByText('Preparing')).toBeInTheDocument()
+  })
+
+  it('notifies when the cell-feature matrix is not CSC formatted', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const capability = {
+      url: `${DEMO_DATASET_URL}/cell_feature_matrix.zarr.zip`,
+      hasCellMajorCsc: false,
+      cellCount: 1,
+      featureCount: 2,
+    }
+    const warmDatasetForRoi: ReturnType<typeof vi.fn<DatasetWarmupLoader>> = vi.fn(
+      async (_baseUrl, options) => {
+        options?.onCellFeatureMatrixCapability?.(capability)
+
+        return { cellFeatureMatrix: capability }
+      },
+    )
+
+    render(
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={loadGenePanel}
+        warmDatasetForRoi={warmDatasetForRoi}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const notice = await screen.findByRole('status', {
+      name: 'Cell-feature matrix warning',
+    })
+
+    expect(notice).toHaveTextContent('cell_feature_matrix.zarr.zip')
+    expect(notice).toHaveTextContent('not in CSC format')
+    expect(notice).toHaveTextContent('up to 30s')
+  })
+
+  it('shows sampled ROI genes before the full ROI gene refinement finishes', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const roiCells = Array.from({ length: 1_500 }, (_value, index) => ({
+      id: intToCellId(1, index + 1),
+      position: { x: micrometers(index), y: micrometers(index) },
+      transcriptCount: 8,
+      cellArea: 22,
+    }))
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(
+      async () => roiCells,
+    )
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi
+      .fn()
+      .mockResolvedValueOnce({
+        genes: [
+          {
+            gene: 'Actb',
+            count: 900,
+            detectedCells: 900,
+            percentCells: 90,
+            meanPerCell: 0.9,
+            percentTotal: 100,
+          },
+        ],
+        cellCount: 1_500,
+        sampledCellCount: 32,
+        totalCount: 900,
+        hitCellLimit: true,
+      })
+      .mockImplementationOnce(() => pendingPromise())
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('ROI')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+
+      const roiLayer = document.querySelector('.roi-draw-layer')
+
+      if (!(roiLayer instanceof HTMLElement)) {
+        throw new Error('Expected ROI draw layer.')
+      }
+
+      fireEvent.pointerDown(roiLayer, { clientX: 480, clientY: 480, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+
+      const geneDistribution = await screen.findByLabelText('ROI gene distribution')
+
+      expect(geneDistribution).toHaveTextContent('Top ROI genes')
+      expect(geneDistribution).toHaveTextContent('32 sampled')
+      expect(geneDistribution).toHaveTextContent('Actb')
+      await waitFor(() => {
+        expect(loadRoiGeneStats).toHaveBeenCalledTimes(2)
+      })
+      expect(loadRoiGeneStats).toHaveBeenNthCalledWith(
+        1,
+        DEMO_DATASET_URL,
+        roiCells,
+        expect.objectContaining({
+          cellLimit: 32,
+          sampleStrategy: 'head',
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+      expect(loadRoiGeneStats).toHaveBeenNthCalledWith(
+        2,
+        DEMO_DATASET_URL,
+        roiCells,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('keeps ROI drawing enabled while viewport ROI gene warmup is pending', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const overviewCells = Array.from({ length: 200 }, (_value, index) => ({
+      cellId: intToCellId(1, index + 1),
+      position: {
+        x: micrometers(index % 20),
+        y: micrometers(Math.floor(index / 20)),
+      },
+      transcriptCount: 8,
+      cellArea: 22,
+    }))
+    const roiCells = overviewCells.map((cell) => ({
+      id: cell.cellId,
+      position: cell.position,
+      transcriptCount: cell.transcriptCount,
+      cellArea: cell.cellArea,
+    }))
+    const loadDatasetOverview = vi.fn(async () => overviewCells)
+    const loadGenePanel = vi.fn(async () => [])
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(
+      async () => roiCells,
+    )
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      () => pendingPromise(),
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('ROI')
+      await waitFor(
+        () => {
+          expect(loadRoiGeneStats).toHaveBeenCalled()
+        },
+        { timeout: 2_000 },
+      )
+
+      expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      expect(screen.getByText('Preparing genes')).toBeInTheDocument()
+
+      const loadingStatus = await screen.findByRole('status', {
+        name: 'Active loading tasks',
+      })
+      expect(within(loadingStatus).getByText('Preparing ROI genes')).toBeInTheDocument()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('prewarms ROI gene stats for the visible ROI viewport', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const overviewCells = Array.from({ length: 200 }, (_value, index) => ({
+      cellId: intToCellId(1, index + 1),
+      position: {
+        x: micrometers(index % 20),
+        y: micrometers(Math.floor(index / 20)),
+      },
+      transcriptCount: 8,
+      cellArea: 22,
+    }))
+    const roiCells = overviewCells.map((cell) => ({
+      id: cell.cellId,
+      position: cell.position,
+      transcriptCount: cell.transcriptCount,
+      cellArea: cell.cellArea,
+    }))
+    const loadDatasetOverview = vi.fn(async () => overviewCells)
+    const loadGenePanel = vi.fn(async () => [])
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(
+      async () => roiCells,
+    )
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      async () => ({
+        genes: [],
+        cellCount: roiCells.length,
+        sampledCellCount: 32,
+        totalCount: 0,
+        hitCellLimit: true,
+      }),
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('ROI')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      })
+
+      await waitFor(
+        () => {
+          expect(loadRoiCells).toHaveBeenCalledWith(
+            DEMO_DATASET_URL,
+            expect.objectContaining({
+              kind: 'box',
+              bbox: expect.objectContaining({
+                minX: expect.any(Number) as number,
+                maxX: expect.any(Number) as number,
+                minY: expect.any(Number) as number,
+                maxY: expect.any(Number) as number,
+              }) as object,
+            }),
+            expect.objectContaining({
+              limit: 5_000,
+              signal: expect.any(AbortSignal) as AbortSignal,
+            }),
+          )
+        },
+        { timeout: 2_000 },
+      )
+      await waitFor(
+        () => {
+          expect(loadRoiGeneStats).toHaveBeenCalledWith(
+            DEMO_DATASET_URL,
+            roiCells,
+            expect.objectContaining({
+              cellLimit: 32,
+              sampleStrategy: 'head',
+              signal: expect.any(AbortSignal) as AbortSignal,
+            }),
+          )
+        },
+        { timeout: 2_000 },
       )
     } finally {
       rectSpy.mockRestore()

@@ -11,7 +11,11 @@ import { loadDatasetBoundaryElements as defaultLoadBoundaryElements } from './da
 import { loadDatasetAnalysisEmbeddings as defaultLoadAnalysisEmbeddings } from './data/analysisEmbeddings'
 import { loadDatasetGeneExpression as defaultLoadDatasetGeneExpression } from './data/geneExpression'
 import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
-import { warmDatasetForRoi as defaultWarmDatasetForRoi } from './data/datasetWarmup'
+import {
+  warmDatasetForRoi as defaultWarmDatasetForRoi,
+  type WarmDatasetForRoiOptions,
+  type WarmDatasetForRoiResult,
+} from './data/datasetWarmup'
 import { loadGenePanel as defaultLoadGenePanel } from './data/genePanel'
 import {
   geneExpressionRequestKey,
@@ -118,10 +122,13 @@ import type {
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
-const DEBUG_LOG_LIMIT = 12
+const DEBUG_LOG_LIMIT = 32
 const MAGIC_LENS_CELL_LIMIT = 25_000
 const MAGIC_LENS_TOP_GENE_LIMIT = 8
 const MAGIC_LENS_GENE_STATS_LIMIT = 10_000
+const ROI_GENE_STATS_PREVIEW_CELL_LIMIT = 32
+const ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT = 5_000
+const ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS = 120
 const CONTROL_HUD_TABS = [
   { id: 'dataset', label: 'Dataset' },
   { id: 'layers', label: 'Layers' },
@@ -180,6 +187,7 @@ export type RoiGeneStatsLoader = (
     readonly signal?: AbortSignal
     readonly cellLimit?: number
     readonly geneLimit?: number
+    readonly sampleStrategy?: 'stratified' | 'head'
   },
 ) => Promise<RoiGeneStats>
 export type RoiTranscriptsLoader = (
@@ -207,8 +215,11 @@ export type AutoChannelContrastLoader = (
 ) => Promise<ChannelAutoContrast>
 export type DatasetWarmupLoader = (
   baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
-) => Promise<void>
+  options?: Pick<
+    WarmDatasetForRoiOptions,
+    'signal' | 'onCellFeatureMatrixCapability'
+  >,
+) => Promise<WarmDatasetForRoiResult | void>
 export type DatasetDiagnosticsRunner = typeof defaultRunDatasetDiagnostics
 
 type DatasetLoadState =
@@ -226,6 +237,14 @@ type DatasetWarmupState =
   | { readonly status: 'loading'; readonly url: string }
   | { readonly status: 'ready'; readonly url: string }
   | { readonly status: 'error'; readonly url: string }
+
+type CellFeatureMatrixCapabilityState =
+  | { readonly status: 'idle' }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly hasCellMajorCsc: boolean
+    }
 
 type DatasetDiagnosticsState =
   | { readonly status: 'idle' }
@@ -374,6 +393,12 @@ type RoiGeneStatsState =
       readonly url: string
       readonly error: StructuredLoadError
     }
+
+type RoiGeneViewportWarmupState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly key: string }
+  | { readonly status: 'ready'; readonly key: string }
+  | { readonly status: 'error'; readonly key: string }
 
 type RoiTranscriptExportState =
   | { readonly status: 'idle' }
@@ -562,6 +587,10 @@ export function App({
   const [datasetWarmupState, setDatasetWarmupState] = useState<DatasetWarmupState>({
     status: 'idle',
   })
+  const [cellFeatureMatrixCapabilityState, setCellFeatureMatrixCapabilityState] =
+    useState<CellFeatureMatrixCapabilityState>({
+      status: 'idle',
+    })
   const [diagnosticsState, setDiagnosticsState] = useState<DatasetDiagnosticsState>({
     status: 'idle',
   })
@@ -596,6 +625,8 @@ export function App({
   const [roiGeneStatsState, setRoiGeneStatsState] = useState<RoiGeneStatsState>({
     status: 'idle',
   })
+  const [roiGeneViewportWarmupState, setRoiGeneViewportWarmupState] =
+    useState<RoiGeneViewportWarmupState>({ status: 'idle' })
   const [roiTranscriptExportState, setRoiTranscriptExportState] =
     useState<RoiTranscriptExportState>({ status: 'idle' })
   const [magicLensState, setMagicLensState] = useState<MagicLensState>({
@@ -699,6 +730,10 @@ export function App({
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
   const roiAbortRef = useRef<AbortController | null>(null)
   const roiTranscriptExportAbortRef = useRef<AbortController | null>(null)
+  const roiGeneViewportWarmupAbortRef = useRef<AbortController | null>(null)
+  const roiGeneViewportWarmupTimeoutRef = useRef<number | null>(null)
+  const roiGeneViewportWarmupKeyRef = useRef<string | null>(null)
+  const cellFeatureMatrixCapabilityKeyRef = useRef<string | null>(null)
   const magicLensAbortRef = useRef<AbortController | null>(null)
   const autoContrastChannelIdsRef = useRef<Set<string>>(new Set())
   const geneSetIdRef = useRef(0)
@@ -875,12 +910,33 @@ export function App({
       : genePanelCopy
   const annotationHeaderCopy =
     annotationGroupState.status === 'loading' ? 'Loading sets' : annotationCopy
-  const roiHeaderCopy =
-    roiGeneStatsState.status === 'loading'
+  const roiGeneViewportWarmupRequiredKey =
+    loadState.status === 'ready' &&
+    currentViewportDetail !== null &&
+    currentViewportDetail.visibleCellCount > ROI_GENE_STATS_PREVIEW_CELL_LIMIT
+      ? roiGeneViewportWarmupKey(loadState.url, currentViewportDetail)
+      : null
+  const isRoiGeneViewportWarmupLoading =
+    roiGeneViewportWarmupRequiredKey !== null &&
+    roiGeneViewportWarmupState.status === 'loading' &&
+    roiGeneViewportWarmupState.key === roiGeneViewportWarmupRequiredKey
+  const isDatasetPreparationPending =
+    loadState.status === 'ready' && datasetWarmupState.status === 'loading'
+  const canDrawRoi = loadState.status === 'ready' && !isDatasetPreparationPending
+  const roiHeaderCopy = isDatasetPreparationPending
+    ? 'Preparing'
+    : roiGeneStatsState.status === 'loading'
       ? 'Querying genes'
       : roiTranscriptExportState.status === 'loading'
         ? 'Exporting'
-        : roiCopy
+        : isRoiGeneViewportWarmupLoading
+          ? 'Preparing genes'
+          : roiCopy
+  const isRoiTabLoading =
+    roiState.status === 'loading' ||
+    roiGeneStatsState.status === 'loading' ||
+    roiTranscriptExportState.status === 'loading' ||
+    isRoiGeneViewportWarmupLoading
   const roiSummary = useMemo(
     () => (roiState.status === 'ready' ? summarizeRoiCells(roiState.cells) : null),
     [roiState],
@@ -969,6 +1025,14 @@ export function App({
       tasks.push({ id: 'roi-cells', tabId: 'roi', label: 'Querying ROI cells' })
     }
 
+    if (isRoiGeneViewportWarmupLoading) {
+      tasks.push({
+        id: 'roi-gene-warmup',
+        tabId: 'roi',
+        label: 'Preparing ROI genes',
+      })
+    }
+
     if (roiGeneStatsState.status === 'loading') {
       tasks.push({
         id: 'roi-genes',
@@ -1011,6 +1075,7 @@ export function App({
     magicLensState,
     morphologyState,
     roiGeneStatsState,
+    isRoiGeneViewportWarmupLoading,
     roiState,
     roiTranscriptExportState,
   ])
@@ -1372,6 +1437,145 @@ export function App({
   }, [handleViewportChange])
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const detail = currentViewportDetail
+    const readyDatasetUrl = loadState.status === 'ready' ? loadState.url : null
+
+    if (
+      readyDatasetUrl === null ||
+      detail === null ||
+      roiState.status !== 'idle' ||
+      detail.visibleCellCount <= ROI_GENE_STATS_PREVIEW_CELL_LIMIT
+    ) {
+      const hadPendingWarmup =
+        roiGeneViewportWarmupTimeoutRef.current !== null ||
+        roiGeneViewportWarmupAbortRef.current !== null
+      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
+      abortActiveRequest(roiGeneViewportWarmupAbortRef)
+
+      if (hadPendingWarmup) {
+        roiGeneViewportWarmupKeyRef.current = null
+      }
+
+      return
+    }
+
+    const warmupKey = roiGeneViewportWarmupKey(readyDatasetUrl, detail)
+
+    if (warmupKey === roiGeneViewportWarmupKeyRef.current) {
+      return
+    }
+
+    clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
+    abortActiveRequest(roiGeneViewportWarmupAbortRef)
+    setRoiGeneViewportWarmupState({ status: 'loading', key: warmupKey })
+
+    roiGeneViewportWarmupTimeoutRef.current = window.setTimeout(() => {
+      const abortController = new AbortController()
+      const selection = { kind: 'box' as const, bbox: detail.bbox }
+      const warmupStartedAt = readTimestamp()
+      roiGeneViewportWarmupAbortRef.current = abortController
+      roiGeneViewportWarmupKeyRef.current = warmupKey
+
+      void (async () => {
+        try {
+          const cellsStartedAt = readTimestamp()
+          appendDebugEvent(
+            `ROI warmup cells started: ${detail.visibleCellCount.toLocaleString()} visible, limit ${ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT.toLocaleString()}`,
+          )
+          const cells = await loadRoiCells(readyDatasetUrl, selection, {
+            signal: abortController.signal,
+            limit: ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT,
+          })
+
+          if (abortController.signal.aborted) {
+            return
+          }
+
+          appendDebugEvent(
+            `ROI warmup cells ready: ${cells.length.toLocaleString()} in ${formatElapsed(cellsStartedAt)}`,
+          )
+
+          if (cells.length === 0) {
+            appendDebugEvent(
+              `ROI gene viewport warmup ready: no cells (${formatElapsed(warmupStartedAt)})`,
+              {
+                coalesceKey: 'roi-gene-warmup',
+              },
+            )
+            setRoiGeneViewportWarmupState({ status: 'ready', key: warmupKey })
+            return
+          }
+
+          const genesStartedAt = readTimestamp()
+          appendDebugEvent(
+            `ROI warmup genes started: sample ${Math.min(
+              cells.length,
+              ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
+            ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
+          )
+          const stats = await loadRoiGeneStats(readyDatasetUrl, cells, {
+            signal: abortController.signal,
+            cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
+            sampleStrategy: 'head',
+          })
+
+          if (abortController.signal.aborted) {
+            return
+          }
+
+          appendDebugEvent(
+            `ROI warmup genes ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
+              genesStartedAt,
+            )}`,
+          )
+          appendDebugEvent(
+            `ROI gene viewport warmup ready (${formatElapsed(warmupStartedAt)})`,
+            {
+              coalesceKey: 'roi-gene-warmup',
+            },
+          )
+          setRoiGeneViewportWarmupState({ status: 'ready', key: warmupKey })
+        } catch (error) {
+          if (isAbortError(error)) {
+            return
+          }
+
+          if (roiGeneViewportWarmupKeyRef.current === warmupKey) {
+            roiGeneViewportWarmupKeyRef.current = null
+          }
+
+          appendDebugEvent(
+            `ROI gene viewport warmup skipped (${formatElapsed(warmupStartedAt)})`,
+            {
+              coalesceKey: 'roi-gene-warmup',
+            },
+          )
+          setRoiGeneViewportWarmupState({ status: 'error', key: warmupKey })
+        } finally {
+          if (roiGeneViewportWarmupAbortRef.current === abortController) {
+            roiGeneViewportWarmupAbortRef.current = null
+          }
+        }
+      })()
+    }, ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
+
+    return () => {
+      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
+    }
+  }, [
+    appendDebugEvent,
+    currentViewportDetail,
+    loadRoiCells,
+    loadRoiGeneStats,
+    loadState,
+    roiState.status,
+  ])
+
+  useEffect(() => {
     if (didApplyInitialDatasetUrlRef.current) {
       return
     }
@@ -1444,26 +1648,69 @@ export function App({
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
       abortActiveRequest(roiTranscriptExportAbortRef)
+      abortActiveRequest(roiGeneViewportWarmupAbortRef)
       abortActiveRequest(magicLensAbortRef)
       clearTimeoutRef(magicLensDebounceRef)
+      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
     }
   }, [])
 
   function startDatasetWarmup(requestedUrl: string, requestId: number) {
     abortActiveRequest(datasetWarmupAbortRef)
+    const warmupStartedAt = readTimestamp()
     const abortController = new AbortController()
     datasetWarmupAbortRef.current = abortController
     setDatasetWarmupState({ status: 'loading', url: requestedUrl })
-    appendDebugEvent('Preparing dataset')
+    appendDebugEvent('Dataset prep started')
+    const applyCellFeatureMatrixCapability = (
+      result: WarmDatasetForRoiResult | void,
+    ) => {
+      const capability = result?.cellFeatureMatrix
 
-    void warmDatasetForRoi(requestedUrl, { signal: abortController.signal })
-      .then(() => {
+      if (
+        capability === undefined ||
+        capability === null ||
+        loadRequestId.current !== requestId ||
+        abortController.signal.aborted
+      ) {
+        return
+      }
+
+      const capabilityKey = `${requestedUrl}:${capability.hasCellMajorCsc}`
+
+      if (cellFeatureMatrixCapabilityKeyRef.current === capabilityKey) {
+        return
+      }
+
+      cellFeatureMatrixCapabilityKeyRef.current = capabilityKey
+      setCellFeatureMatrixCapabilityState({
+        status: 'ready',
+        url: requestedUrl,
+        hasCellMajorCsc: capability.hasCellMajorCsc,
+      })
+
+      if (!capability.hasCellMajorCsc) {
+        appendDebugEvent(
+          'Cell-feature matrix is not CSC; initial gene expression may take up to 30s',
+          { coalesceKey: 'cell-feature-matrix-csc' },
+        )
+      }
+    }
+
+    void warmDatasetForRoi(requestedUrl, {
+      signal: abortController.signal,
+      onCellFeatureMatrixCapability: (capability) => {
+        applyCellFeatureMatrixCapability({ cellFeatureMatrix: capability })
+      },
+    })
+      .then((result) => {
         if (loadRequestId.current !== requestId) {
           return
         }
 
+        applyCellFeatureMatrixCapability(result)
         setDatasetWarmupState({ status: 'ready', url: requestedUrl })
-        appendDebugEvent('Dataset prepared')
+        appendDebugEvent(`Dataset prep ready (${formatElapsed(warmupStartedAt)})`)
       })
       .catch((error) => {
         if (isAbortError(error) || loadRequestId.current !== requestId) {
@@ -1471,7 +1718,7 @@ export function App({
         }
 
         setDatasetWarmupState({ status: 'error', url: requestedUrl })
-        appendDebugEvent('Dataset preparation incomplete')
+        appendDebugEvent(`Dataset prep incomplete (${formatElapsed(warmupStartedAt)})`)
       })
       .finally(() => {
         if (datasetWarmupAbortRef.current === abortController) {
@@ -1507,14 +1754,19 @@ export function App({
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
       abortActiveRequest(roiTranscriptExportAbortRef)
+      abortActiveRequest(roiGeneViewportWarmupAbortRef)
       abortActiveRequest(magicLensAbortRef)
       clearTimeoutRef(magicLensDebounceRef)
+      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
+      roiGeneViewportWarmupKeyRef.current = null
       const abortController = new AbortController()
       loadRequestId.current = requestId
       datasetAbortRef.current = abortController
 
       setDatasetUrl(requestedUrl)
       setDatasetWarmupState({ status: 'idle' })
+      setCellFeatureMatrixCapabilityState({ status: 'idle' })
+      cellFeatureMatrixCapabilityKeyRef.current = null
       setOverviewCells([])
       setGeneExpressionBatch(null)
       setGeneExpressionScaleDomain({ key: '', max: 0 })
@@ -1561,6 +1813,7 @@ export function App({
       setRoiName('ROI 1')
       setRoiState({ status: 'idle' })
       setRoiGeneStatsState({ status: 'idle' })
+      setRoiGeneViewportWarmupState({ status: 'idle' })
       setRoiTranscriptExportState({ status: 'idle' })
       setMagicLensState({ status: 'idle' })
       setMagicLensActive(false)
@@ -1668,7 +1921,11 @@ export function App({
           url: requestedUrl,
           cellCount: cells.length,
         })
-        appendDebugEvent(`Dataset ready: ${cells.length.toLocaleString()} cells`)
+        appendDebugEvent(
+          `Dataset ready: ${cells.length.toLocaleString()} cells in ${formatElapsed(
+            loadStartedAt,
+          )}`,
+        )
         recordTelemetry(
           telemetryEvent('dataset.load', 'success', {
             startedAt: loadStartedAt,
@@ -1737,6 +1994,8 @@ export function App({
         )
         abortActiveRequest(datasetWarmupAbortRef)
         setDatasetWarmupState({ status: 'idle' })
+        setCellFeatureMatrixCapabilityState({ status: 'idle' })
+        cellFeatureMatrixCapabilityKeyRef.current = null
         setMorphologyState({ status: 'idle' })
         setGenePanelState({ status: 'idle' })
         setAnnotationGroupState({ status: 'idle' })
@@ -2134,6 +2393,8 @@ export function App({
 
       const bbox = selection.bbox
       const requestId = roiRequestId.current + 1
+      const roiStartedAt = readTimestamp()
+      const roiCellsStartedAt = roiStartedAt
       abortActiveRequest(roiAbortRef)
       clearTimeoutRef(magicLensDebounceRef)
       magicLensLastDetailRef.current = null
@@ -2145,11 +2406,15 @@ export function App({
       roiAbortRef.current = abortController
       setRoiMode('idle')
       setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
+      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
+      abortActiveRequest(roiGeneViewportWarmupAbortRef)
+      roiGeneViewportWarmupKeyRef.current = null
+      setRoiGeneViewportWarmupState({ status: 'idle' })
       setRoiState({ status: 'loading', url: loadState.url, bbox, selection })
       setRoiGeneStatsState({ status: 'idle' })
       setRoiTranscriptExportState({ status: 'idle' })
       setMagicLensState({ status: 'idle' })
-      appendDebugEvent(`${roiSelectionLabel(selection)} drawn: loading cells`)
+      appendDebugEvent(`${roiSelectionLabel(selection)} drawn: ROI cells started`)
 
       void loadRoiCells(loadState.url, selection, { signal: abortController.signal })
         .then((cells) => {
@@ -2168,7 +2433,7 @@ export function App({
           appendDebugEvent(
             `ROI cells ready: ${cells.length.toLocaleString()}${
               cells.length >= ROI_CELL_EXPORT_LIMIT ? '+' : ''
-            }`,
+            } in ${formatElapsed(roiCellsStartedAt)}`,
           )
 
           if (cells.length === 0) {
@@ -2185,11 +2450,20 @@ export function App({
             url: loadState.url,
             cellCount: cells.length,
           })
+          const previewStartedAt = readTimestamp()
+          appendDebugEvent(
+            `ROI genes preview started: sample ${Math.min(
+              cells.length,
+              ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
+            ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
+          )
 
           return loadRoiGeneStats(loadState.url, cells, {
             signal: abortController.signal,
+            cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
+            sampleStrategy: 'head',
           })
-            .then((stats) => {
+            .then((previewStats) => {
               if (roiRequestId.current !== requestId) {
                 return
               }
@@ -2197,11 +2471,61 @@ export function App({
               setRoiGeneStatsState({
                 status: 'ready',
                 url: loadState.url,
-                stats,
+                stats: previewStats,
               })
               appendDebugEvent(
-                `ROI genes ready: ${stats.genes.length.toLocaleString()} genes`,
+                `ROI genes preview ready: ${previewStats.genes.length.toLocaleString()} genes in ${formatElapsed(
+                  previewStartedAt,
+                )}`,
               )
+
+              if (cells.length <= ROI_GENE_STATS_PREVIEW_CELL_LIMIT) {
+                return undefined
+              }
+
+              const refinementStartedAt = readTimestamp()
+              appendDebugEvent(
+                `ROI genes refinement started: ${cells.length.toLocaleString()} cells`,
+              )
+              return deferRoiGeneRefinement()
+                .then(() => {
+                  if (roiRequestId.current !== requestId) {
+                    return undefined
+                  }
+
+                  return loadRoiGeneStats(loadState.url, cells, {
+                    signal: abortController.signal,
+                  })
+                })
+                .then((stats) => {
+                  if (roiRequestId.current !== requestId) {
+                    return
+                  }
+
+                  if (stats === undefined) {
+                    return
+                  }
+
+                  setRoiGeneStatsState({
+                    status: 'ready',
+                    url: loadState.url,
+                    stats,
+                  })
+                  appendDebugEvent(
+                    `ROI genes ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
+                      refinementStartedAt,
+                    )} (total ${formatElapsed(roiStartedAt)})`,
+                  )
+                })
+                .catch((error) => {
+                  if (isAbortError(error) || roiRequestId.current !== requestId) {
+                    return
+                  }
+
+                  appendDebugEvent(
+                    `ROI gene refinement failed (${formatElapsed(refinementStartedAt)})`,
+                  )
+                })
             })
             .catch((error) => {
               if (isAbortError(error) || roiRequestId.current !== requestId) {
@@ -2213,7 +2537,9 @@ export function App({
                 url: loadState.url,
                 error: createStructuredLoadError('ROI genes', error),
               })
-              appendDebugEvent('ROI genes unsupported')
+              appendDebugEvent(
+                `ROI genes unsupported (${formatElapsed(previewStartedAt)})`,
+              )
             })
         })
         .catch((error) => {
@@ -2229,7 +2555,7 @@ export function App({
             error: createStructuredLoadError('ROI cells', error),
           })
           setRoiGeneStatsState({ status: 'idle' })
-          appendDebugEvent('ROI cells failed')
+          appendDebugEvent(`ROI cells failed (${formatElapsed(roiCellsStartedAt)})`)
         })
         .finally(() => {
           if (roiAbortRef.current === abortController) {
@@ -2785,6 +3111,9 @@ export function App({
                 </button>
               </div>
               <DatasetDiagnosticsPanel state={diagnosticsState} />
+              <CellFeatureMatrixCompatibilityNotice
+                state={cellFeatureMatrixCapabilityState}
+              />
 
               <ErrorSummary errors={activeErrors} />
               <ActivityLog
@@ -3553,9 +3882,7 @@ export function App({
                   <h2 id="roi-heading">ROI</h2>
                   <span
                     className={
-                      roiState.status === 'loading' ||
-                      roiGeneStatsState.status === 'loading' ||
-                      roiTranscriptExportState.status === 'loading'
+                      isRoiTabLoading
                         ? 'status-chip is-loading'
                         : 'status-chip'
                     }
@@ -3568,7 +3895,7 @@ export function App({
                   <button
                     type="button"
                     className="secondary-action"
-                    disabled={loadState.status !== 'ready'}
+                    disabled={!canDrawRoi}
                     aria-pressed={roiMode === 'box'}
                     onClick={() => {
                       const nextMode = roiMode === 'box' ? 'idle' : 'box'
@@ -3585,7 +3912,7 @@ export function App({
                   <button
                     type="button"
                     className="secondary-action"
-                    disabled={loadState.status !== 'ready'}
+                    disabled={!canDrawRoi}
                     aria-pressed={roiMode === 'lasso'}
                     onClick={() => {
                       const nextMode = roiMode === 'lasso' ? 'idle' : 'lasso'
@@ -4647,6 +4974,31 @@ function DownloadIcon() {
   )
 }
 
+function CellFeatureMatrixCompatibilityNotice({
+  state,
+}: {
+  readonly state: CellFeatureMatrixCapabilityState
+}) {
+  if (state.status !== 'ready' || state.hasCellMajorCsc) {
+    return null
+  }
+
+  return (
+    <section
+      className="cell-feature-matrix-notice"
+      role="status"
+      aria-label="Cell-feature matrix warning"
+    >
+      <h2>Matrix Warning</h2>
+      <p>
+        <code>cell_feature_matrix.zarr.zip</code> is not in CSC format. Initial
+        gene expression may take up to 30s to load while the browser uses the
+        older feature-major matrix layout.
+      </p>
+    </section>
+  )
+}
+
 function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadError[] }) {
   if (errors.length === 0) {
     return null
@@ -4996,6 +5348,35 @@ function emptyRoiGeneStats(): RoiGeneStats {
   }
 }
 
+function roiGeneViewportWarmupKey(
+  datasetUrl: string,
+  detail: ViewerViewportDetail,
+): string {
+  const coordinateBucketMicrometers = 100
+  const visibleCellBucket = ROI_GENE_STATS_PREVIEW_CELL_LIMIT
+  const { bbox, viewState } = detail
+
+  return [
+    datasetUrl,
+    Math.round(bbox.minX / coordinateBucketMicrometers),
+    Math.round(bbox.maxX / coordinateBucketMicrometers),
+    Math.round(bbox.minY / coordinateBucketMicrometers),
+    Math.round(bbox.maxY / coordinateBucketMicrometers),
+    Math.round(viewState.zoom * 10),
+    Math.round(detail.visibleCellCount / visibleCellBucket),
+  ].join(':')
+}
+
+function deferRoiGeneRefinement(): Promise<void> {
+  if (typeof window === 'undefined') {
+    return Promise.resolve()
+  }
+
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0)
+  })
+}
+
 function resolveMagicLensSelection(
   scope: MagicLensScope,
   viewportDetail: ViewerViewportDetail | null,
@@ -5303,6 +5684,18 @@ function readCurrentLocation(): string | undefined {
 
 function readTimestamp(): number {
   return Date.now()
+}
+
+function formatElapsed(startedAt: number): string {
+  const elapsedMs = Math.max(0, readTimestamp() - startedAt)
+
+  if (elapsedMs < 1_000) {
+    return `${Math.round(elapsedMs)} ms`
+  }
+
+  return `${(elapsedMs / 1_000).toLocaleString(undefined, {
+    maximumFractionDigits: 1,
+  })} s`
 }
 
 function defaultRoiName(index: number): string {
