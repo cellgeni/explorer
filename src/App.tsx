@@ -27,6 +27,7 @@ import {
   ROI_CELL_EXPORT_LIMIT,
   loadDatasetRoiCells as defaultLoadDatasetRoiCells,
 } from './data/roiCells'
+import { asCellId } from './data/cellid'
 import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
 import { loadDatasetRoiTranscripts as defaultLoadDatasetRoiTranscripts } from './data/roiTranscripts'
 import { micrometers } from './data/coords'
@@ -126,6 +127,8 @@ const DEBUG_LOG_LIMIT = 32
 const MAGIC_LENS_CELL_LIMIT = 25_000
 const MAGIC_LENS_TOP_GENE_LIMIT = 8
 const MAGIC_LENS_GENE_STATS_LIMIT = 10_000
+const CELL_GENE_EXPRESSION_LIMIT = 100_000
+const CELL_DETAIL_BOUNDARY_RADIUS_MICROMETERS = 25
 const ROI_GENE_STATS_PREVIEW_CELL_LIMIT = 32
 const ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT = 5_000
 const ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS = 120
@@ -215,10 +218,7 @@ export type AutoChannelContrastLoader = (
 ) => Promise<ChannelAutoContrast>
 export type DatasetWarmupLoader = (
   baseUrl: string,
-  options?: Pick<
-    WarmDatasetForRoiOptions,
-    'signal' | 'onCellFeatureMatrixCapability'
-  >,
+  options?: Pick<WarmDatasetForRoiOptions, 'signal' | 'onCellFeatureMatrixCapability'>,
 ) => Promise<WarmDatasetForRoiResult | void>
 export type DatasetDiagnosticsRunner = typeof defaultRunDatasetDiagnostics
 
@@ -427,6 +427,48 @@ type MagicLensState =
       readonly error: StructuredLoadError
     }
 
+type CellDetailState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string; readonly cellId: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly cellId: string
+      readonly expression: CellGeneExpressionSummary
+      readonly shape: CellShapeMetrics
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly cellId: string
+      readonly error: StructuredLoadError
+    }
+
+interface CellGeneExpressionSummary {
+  readonly genes: readonly CellGeneExpressionGene[]
+  readonly totalCount: number
+  readonly hitGeneLimit: boolean
+}
+
+interface CellGeneExpressionGene {
+  readonly gene: string
+  readonly count: number
+  readonly percentTotal: number
+}
+
+interface CellShapeMetrics {
+  readonly areaMicrometersSquared?: number
+  readonly equivalentDiameterMicrometers?: number
+  readonly boundaryAreaMicrometersSquared?: number
+  readonly boundaryEquivalentDiameterMicrometers?: number
+  readonly perimeterMicrometers?: number
+  readonly majorAxisMicrometers?: number
+  readonly minorAxisMicrometers?: number
+  readonly eccentricity?: number
+  readonly circularity?: number
+  readonly boundaryPointCount?: number
+}
+
 type LoadErrorCode =
   | 'network'
   | 'http'
@@ -450,6 +492,7 @@ type LoadErrorSource =
   | 'ROI transcripts'
   | 'Gene expression'
   | 'Magic lens'
+  | 'Cell details'
   | 'Dataset diagnostics'
 
 interface StructuredLoadError {
@@ -632,6 +675,9 @@ export function App({
   const [magicLensState, setMagicLensState] = useState<MagicLensState>({
     status: 'idle',
   })
+  const [cellDetailState, setCellDetailState] = useState<CellDetailState>({
+    status: 'idle',
+  })
   const [magicLensScope, setMagicLensScope] = useState<MagicLensScope>('cursor')
   const [magicLensActive, setMagicLensActive] = useState(false)
   const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(80)
@@ -718,6 +764,7 @@ export function App({
   const roiRequestId = useRef(0)
   const roiTranscriptExportRequestId = useRef(0)
   const magicLensRequestId = useRef(0)
+  const cellDetailRequestId = useRef(0)
   const magicLensDebounceRef = useRef<number | null>(null)
   const magicLensLastDetailRef = useRef<ViewerMagicLensDetail | null>(null)
   const magicLensLastQueryKeyRef = useRef<string | null>(null)
@@ -735,6 +782,7 @@ export function App({
   const roiGeneViewportWarmupKeyRef = useRef<string | null>(null)
   const cellFeatureMatrixCapabilityKeyRef = useRef<string | null>(null)
   const magicLensAbortRef = useRef<AbortController | null>(null)
+  const cellDetailAbortRef = useRef<AbortController | null>(null)
   const autoContrastChannelIdsRef = useRef<Set<string>>(new Set())
   const geneSetIdRef = useRef(0)
   const roiIdRef = useRef(0)
@@ -901,6 +949,7 @@ export function App({
     roiCellIds,
     selectedCell,
   )
+  const cellDetailCopy = cellDetailStatusCopy(cellDetailState, selectedCell)
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const roiCopy = roiStatusCopy(roiState, roiMode)
   const roiGeneStatsCopy = roiGeneStatsStatusCopy(roiGeneStatsState)
@@ -1021,6 +1070,15 @@ export function App({
       tasks.push({ id: 'embeddings', tabId: 'cell', label: 'Loading embeddings' })
     }
 
+    if (cellDetailState.status === 'loading') {
+      tasks.push({
+        id: 'cell-details',
+        tabId: 'cell',
+        label: 'Loading cell details',
+        detail: shortIdentifier(cellDetailState.cellId),
+      })
+    }
+
     if (roiState.status === 'loading') {
       tasks.push({ id: 'roi-cells', tabId: 'roi', label: 'Querying ROI cells' })
     }
@@ -1067,6 +1125,7 @@ export function App({
     annotationState,
     autoContrastChannelIds,
     boundaryState,
+    cellDetailState,
     datasetWarmupState,
     diagnosticsState,
     geneExpressionState,
@@ -1181,12 +1240,14 @@ export function App({
           : null,
         geneExpressionState.status === 'error' ? geneExpressionState.error : null,
         magicLensState.status === 'error' ? magicLensState.error : null,
+        cellDetailState.status === 'error' ? cellDetailState.error : null,
       ].filter(isStructuredLoadError),
     [
       annotationState,
       annotationGroupState,
       analysisEmbeddingState,
       boundaryState,
+      cellDetailState,
       diagnosticsState,
       geneExpressionState,
       genePanelState,
@@ -1639,6 +1700,97 @@ export function App({
   ])
 
   useEffect(() => {
+    if (selectedCell === null || loadState.status !== 'ready') {
+      abortActiveRequest(cellDetailAbortRef)
+      cellDetailRequestId.current += 1
+      return
+    }
+
+    const requestId = cellDetailRequestId.current + 1
+    const detailStartedAt = readTimestamp()
+    const abortController = new AbortController()
+    abortActiveRequest(cellDetailAbortRef)
+    cellDetailRequestId.current = requestId
+    cellDetailAbortRef.current = abortController
+    queueMicrotask(() => {
+      if (abortController.signal.aborted || cellDetailRequestId.current !== requestId) {
+        return
+      }
+
+      setCellDetailState({
+        status: 'loading',
+        url: loadState.url,
+        cellId: selectedCell.id,
+      })
+    })
+    appendDebugEvent(`Cell details started: ${shortIdentifier(selectedCell.id)}`, {
+      coalesceKey: 'cell-details',
+    })
+
+    void (async () => {
+      const datasetCell = overviewCellToDatasetCell(selectedCell)
+      const [stats, boundaryElement] = await Promise.all([
+        loadRoiGeneStats(loadState.url, [datasetCell], {
+          signal: abortController.signal,
+          cellLimit: 1,
+          geneLimit: CELL_GENE_EXPRESSION_LIMIT,
+          sampleStrategy: 'head',
+        }),
+        loadSelectedCellBoundary(
+          loadState.url,
+          selectedCell,
+          loadBoundaryElements,
+          abortController.signal,
+        ),
+      ])
+
+      if (abortController.signal.aborted || cellDetailRequestId.current !== requestId) {
+        return
+      }
+
+      setCellDetailState({
+        status: 'ready',
+        url: loadState.url,
+        cellId: selectedCell.id,
+        expression: cellExpressionSummaryFromStats(stats),
+        shape: summarizeCellShape(selectedCell, boundaryElement),
+      })
+      appendDebugEvent(
+        `Cell details ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
+          detailStartedAt,
+        )}`,
+        { coalesceKey: 'cell-details' },
+      )
+    })()
+      .catch((error) => {
+        if (isAbortError(error) || cellDetailRequestId.current !== requestId) {
+          return
+        }
+
+        setCellDetailState({
+          status: 'error',
+          url: loadState.url,
+          cellId: selectedCell.id,
+          error: createStructuredLoadError('Cell details', error),
+        })
+        appendDebugEvent(`Cell details failed (${formatElapsed(detailStartedAt)})`, {
+          coalesceKey: 'cell-details',
+        })
+      })
+      .finally(() => {
+        if (cellDetailAbortRef.current === abortController) {
+          cellDetailAbortRef.current = null
+        }
+      })
+
+    return () => {
+      if (cellDetailAbortRef.current === abortController) {
+        abortActiveRequest(cellDetailAbortRef)
+      }
+    }
+  }, [appendDebugEvent, loadBoundaryElements, loadRoiGeneStats, loadState, selectedCell])
+
+  useEffect(() => {
     return () => {
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(datasetWarmupAbortRef)
@@ -1650,6 +1802,7 @@ export function App({
       abortActiveRequest(roiTranscriptExportAbortRef)
       abortActiveRequest(roiGeneViewportWarmupAbortRef)
       abortActiveRequest(magicLensAbortRef)
+      abortActiveRequest(cellDetailAbortRef)
       clearTimeoutRef(magicLensDebounceRef)
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
     }
@@ -1662,9 +1815,7 @@ export function App({
     datasetWarmupAbortRef.current = abortController
     setDatasetWarmupState({ status: 'loading', url: requestedUrl })
     appendDebugEvent('Dataset prep started')
-    const applyCellFeatureMatrixCapability = (
-      result: WarmDatasetForRoiResult | void,
-    ) => {
+    const applyCellFeatureMatrixCapability = (result: WarmDatasetForRoiResult | void) => {
       const capability = result?.cellFeatureMatrix
 
       if (
@@ -1756,6 +1907,7 @@ export function App({
       abortActiveRequest(roiTranscriptExportAbortRef)
       abortActiveRequest(roiGeneViewportWarmupAbortRef)
       abortActiveRequest(magicLensAbortRef)
+      abortActiveRequest(cellDetailAbortRef)
       clearTimeoutRef(magicLensDebounceRef)
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
       roiGeneViewportWarmupKeyRef.current = null
@@ -1816,6 +1968,7 @@ export function App({
       setRoiGeneViewportWarmupState({ status: 'idle' })
       setRoiTranscriptExportState({ status: 'idle' })
       setMagicLensState({ status: 'idle' })
+      setCellDetailState({ status: 'idle' })
       setMagicLensActive(false)
       setSelectedCell(null)
       setCurrentViewportDetail(null)
@@ -1835,6 +1988,7 @@ export function App({
       roiRequestId.current += 1
       roiTranscriptExportRequestId.current += 1
       magicLensRequestId.current += 1
+      cellDetailRequestId.current += 1
       magicLensLastDetailRef.current = null
       magicLensLastQueryKeyRef.current = null
       boundaryViewportKeyRef.current = null
@@ -3865,8 +4019,24 @@ export function App({
               </section>
 
               <section className="analysis-section" aria-labelledby="cell-info-heading">
-                <h2 id="cell-info-heading">Cell Info</h2>
-                <CellInfoPanel cell={selectedCell} />
+                <div className="section-heading-row">
+                  <h2 id="cell-info-heading">Cell Info</h2>
+                  <span
+                    className={
+                      cellDetailState.status === 'loading'
+                        ? 'status-chip is-loading'
+                        : 'status-chip'
+                    }
+                    aria-live="polite"
+                  >
+                    {cellDetailCopy}
+                  </span>
+                </div>
+                <CellInfoPanel
+                  key={selectedCell?.id ?? 'none'}
+                  cell={selectedCell}
+                  state={cellDetailState}
+                />
               </section>
             </div>
 
@@ -3881,11 +4051,7 @@ export function App({
                 <div className="section-heading-row">
                   <h2 id="roi-heading">ROI</h2>
                   <span
-                    className={
-                      isRoiTabLoading
-                        ? 'status-chip is-loading'
-                        : 'status-chip'
-                    }
+                    className={isRoiTabLoading ? 'status-chip is-loading' : 'status-chip'}
                     aria-live="polite"
                   >
                     {roiHeaderCopy}
@@ -4143,6 +4309,30 @@ function analysisEmbeddingStatusCopy(
   }
 
   return 'Idle'
+}
+
+function cellDetailStatusCopy(
+  state: CellDetailState,
+  selectedCell: OverviewCellDatum | null,
+): string {
+  if (selectedCell === null) {
+    return 'No selection'
+  }
+
+  if (state.status === 'loading' && state.cellId === selectedCell.id) {
+    return 'Loading'
+  }
+
+  if (state.status === 'ready' && state.cellId === selectedCell.id) {
+    const noun = state.expression.genes.length === 1 ? 'gene' : 'genes'
+    return `${state.expression.genes.length.toLocaleString()} ${noun}`
+  }
+
+  if (state.status === 'error' && state.cellId === selectedCell.id) {
+    return state.error.title
+  }
+
+  return 'Selected'
 }
 
 function roiStatusCopy(roiState: RoiState, roiMode: RoiDrawMode): string {
@@ -4802,41 +4992,414 @@ function embeddingPointToScreen(
   ]
 }
 
-function CellInfoPanel({ cell }: { readonly cell: OverviewCellDatum | null }) {
+function CellInfoPanel({
+  cell,
+  state,
+}: {
+  readonly cell: OverviewCellDatum | null
+  readonly state: CellDetailState
+}) {
+  const geneSearchInputId = useId()
+  const [geneSearch, setGeneSearch] = useState('')
+  const readyState =
+    cell !== null && state.status === 'ready' && state.cellId === cell.id ? state : null
+  const loadingState =
+    cell !== null && state.status === 'loading' && state.cellId === cell.id ? state : null
+  const errorState =
+    cell !== null && state.status === 'error' && state.cellId === cell.id ? state : null
+  const shape =
+    readyState === null || cell === null
+      ? cell === null
+        ? null
+        : summarizeCellShape(cell, null)
+      : readyState.shape
+  const expression = readyState?.expression ?? null
+  const filteredGenes = useMemo(
+    () =>
+      expression === null ? [] : filterCellExpressionGenes(expression.genes, geneSearch),
+    [expression, geneSearch],
+  )
+  const maxExpressionCount =
+    expression?.genes.reduce((max, gene) => Math.max(max, gene.count), 0) ?? 0
+
   if (cell === null) {
     return <p className="cell-info-empty">No cell selected</p>
   }
 
   return (
-    <dl className="cell-info-list">
-      <div>
-        <dt>ID</dt>
-        <dd>{cell.id}</dd>
+    <div className="cell-detail-panel">
+      <dl className="cell-info-list">
+        <div>
+          <dt>ID</dt>
+          <dd>{cell.id}</dd>
+        </div>
+        <div>
+          <dt>Position</dt>
+          <dd>
+            {formatNumber(cell.position[0])}, {formatNumber(-(cell.position[1] ?? 0))}
+          </dd>
+        </div>
+        <div>
+          <dt>Transcripts</dt>
+          <dd>{formatOptionalNumber(cell.transcriptCount)}</dd>
+        </div>
+        <div>
+          <dt>Cell Area</dt>
+          <dd>{formatMetric(shape?.areaMicrometersSquared, 'um2')}</dd>
+        </div>
+        <div>
+          <dt>Diameter</dt>
+          <dd>{formatMetric(shape?.equivalentDiameterMicrometers, 'um')}</dd>
+        </div>
+        <div>
+          <dt>Eccentricity</dt>
+          <dd>{formatMetric(shape?.eccentricity)}</dd>
+        </div>
+        <div>
+          <dt>Major Axis</dt>
+          <dd>{formatMetric(shape?.majorAxisMicrometers, 'um')}</dd>
+        </div>
+        <div>
+          <dt>Minor Axis</dt>
+          <dd>{formatMetric(shape?.minorAxisMicrometers, 'um')}</dd>
+        </div>
+        <div>
+          <dt>Perimeter</dt>
+          <dd>{formatMetric(shape?.perimeterMicrometers, 'um')}</dd>
+        </div>
+        <div>
+          <dt>Circularity</dt>
+          <dd>{formatMetric(shape?.circularity)}</dd>
+        </div>
+      </dl>
+
+      <div className="cell-expression-panel">
+        <div className="cell-expression-heading">
+          <span>Gene expression</span>
+          <small>
+            {expression === null
+              ? loadingState === null
+                ? 'Waiting'
+                : 'Loading'
+              : `${expression.totalCount.toLocaleString()} counts`}
+          </small>
+        </div>
+
+        {loadingState === null ? null : (
+          <p className="cell-expression-status" aria-live="polite">
+            Loading full cell expression
+          </p>
+        )}
+
+        {errorState === null ? null : (
+          <p className="cell-expression-status is-error" aria-live="polite">
+            {formatStructuredError(errorState.error)}
+          </p>
+        )}
+
+        {expression === null ? null : (
+          <>
+            <label className="cell-expression-filter" htmlFor={geneSearchInputId}>
+              Gene filter
+            </label>
+            <input
+              id={geneSearchInputId}
+              className="cell-expression-search"
+              type="search"
+              autoComplete="off"
+              spellCheck={false}
+              value={geneSearch}
+              placeholder="Search expressed genes"
+              onChange={(event) => {
+                setGeneSearch(event.currentTarget.value)
+              }}
+            />
+            {expression.genes.length === 0 ? (
+              <p className="cell-expression-status">No expressed genes found</p>
+            ) : filteredGenes.length === 0 ? (
+              <p className="cell-expression-status">No matching genes</p>
+            ) : (
+              <ol className="cell-expression-list" aria-label="Cell gene expression">
+                {filteredGenes.map((gene) => (
+                  <li
+                    key={gene.gene}
+                    style={
+                      {
+                        '--cell-gene-width': `${expressionBarWidth(
+                          gene.count,
+                          maxExpressionCount,
+                        )}%`,
+                      } as CSSProperties
+                    }
+                  >
+                    <div className="cell-expression-row">
+                      <span>{gene.gene}</span>
+                      <strong>{gene.count.toLocaleString()}</strong>
+                    </div>
+                    <div className="cell-expression-bar" aria-hidden="true" />
+                    <small>{formatPercent(gene.percentTotal)} total</small>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {expression.hitGeneLimit ? (
+              <p className="cell-expression-status">
+                Showing first {CELL_GENE_EXPRESSION_LIMIT.toLocaleString()} genes
+              </p>
+            ) : null}
+          </>
+        )}
       </div>
-      <div>
-        <dt>Position</dt>
-        <dd>
-          {formatNumber(cell.position[0])}, {formatNumber(-(cell.position[1] ?? 0))}
-        </dd>
-      </div>
-      <div>
-        <dt>Transcripts</dt>
-        <dd>{formatOptionalNumber(cell.transcriptCount)}</dd>
-      </div>
-      <div>
-        <dt>Cell Area</dt>
-        <dd>{formatOptionalNumber(cell.cellArea)}</dd>
-      </div>
-      <div>
-        <dt>Expression</dt>
-        <dd>
-          {cell.expressionCount === undefined
-            ? 'None'
-            : `${cell.expressionCount.toLocaleString()} ${cell.expressionGenes?.join(', ') ?? ''}`}
-        </dd>
-      </div>
-    </dl>
+    </div>
   )
+}
+
+function overviewCellToDatasetCell(cell: OverviewCellDatum): DatasetCell {
+  return {
+    id: asCellId(cell.id),
+    position: overviewCellToDataPoint(cell),
+    ...(cell.transcriptCount === undefined
+      ? {}
+      : { transcriptCount: cell.transcriptCount }),
+    ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
+  }
+}
+
+function overviewCellToDataPoint(cell: OverviewCellDatum): DataPoint {
+  const [x = 0, deckY = 0] = cell.position
+
+  return {
+    x: micrometers(x),
+    y: micrometers(-deckY),
+  }
+}
+
+async function loadSelectedCellBoundary(
+  baseUrl: string,
+  cell: OverviewCellDatum,
+  loadBoundaryElements: BoundaryElementsLoader,
+  signal: AbortSignal,
+): Promise<SpatialElement | null> {
+  try {
+    const batch = await loadBoundaryElements(baseUrl, selectedCellBoundaryBbox(cell), {
+      signal,
+    })
+
+    if (signal.aborted) {
+      throwAbortError('Selected cell boundary request aborted.')
+    }
+
+    return batch.elements.find((element) => element.id === cell.id) ?? null
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error
+    }
+
+    return null
+  }
+}
+
+function selectedCellBoundaryBbox(cell: OverviewCellDatum): BBox {
+  const center = overviewCellToDataPoint(cell)
+  const cellRadius =
+    cell.radiusMicrometers ??
+    optionalHalf(cellAreaToEquivalentDiameterMicrometers(cell.cellArea))
+  const radius = Math.max(CELL_DETAIL_BOUNDARY_RADIUS_MICROMETERS, cellRadius ?? 0)
+
+  return {
+    minX: micrometers(center.x - radius),
+    maxX: micrometers(center.x + radius),
+    minY: micrometers(center.y - radius),
+    maxY: micrometers(center.y + radius),
+  }
+}
+
+function cellExpressionSummaryFromStats(stats: RoiGeneStats): CellGeneExpressionSummary {
+  return {
+    genes: stats.genes.map((gene) => ({
+      gene: gene.gene,
+      count: gene.count,
+      percentTotal: gene.percentTotal,
+    })),
+    totalCount: stats.totalCount,
+    hitGeneLimit: stats.genes.length >= CELL_GENE_EXPRESSION_LIMIT,
+  }
+}
+
+function filterCellExpressionGenes(
+  genes: readonly CellGeneExpressionGene[],
+  search: string,
+): readonly CellGeneExpressionGene[] {
+  const normalizedSearch = search.trim().toLowerCase()
+
+  if (normalizedSearch.length === 0) {
+    return genes
+  }
+
+  return genes.filter((gene) => gene.gene.toLowerCase().includes(normalizedSearch))
+}
+
+function expressionBarWidth(count: number, maxCount: number): number {
+  if (maxCount <= 0) {
+    return 0
+  }
+
+  return Math.max(2, Math.min(100, (count / maxCount) * 100))
+}
+
+function summarizeCellShape(
+  cell: OverviewCellDatum,
+  boundaryElement: SpatialElement | null,
+): CellShapeMetrics {
+  const boundaryMetrics = polygonShapeMetrics(boundaryElement)
+  const area = cell.cellArea ?? boundaryMetrics?.boundaryAreaMicrometersSquared
+
+  return {
+    ...(area === undefined ? {} : { areaMicrometersSquared: area }),
+    ...optionalMetric(
+      'equivalentDiameterMicrometers',
+      cellAreaToEquivalentDiameterMicrometers(area),
+    ),
+    ...(boundaryMetrics ?? {}),
+  }
+}
+
+function polygonShapeMetrics(
+  boundaryElement: SpatialElement | null,
+): CellShapeMetrics | null {
+  if (
+    boundaryElement === null ||
+    boundaryElement.geometry.kind !== 'polygon' ||
+    boundaryElement.geometry.rings.length === 0
+  ) {
+    return null
+  }
+
+  const ring = boundaryElement.geometry.rings[0]
+
+  if (ring === undefined || ring.length < 3) {
+    return null
+  }
+
+  return polygonRingShapeMetrics(ring)
+}
+
+function polygonRingShapeMetrics(points: readonly DataPoint[]): CellShapeMetrics | null {
+  let twiceSignedArea = 0
+  let centroidXNumerator = 0
+  let centroidYNumerator = 0
+  let ixxNumerator = 0
+  let iyyNumerator = 0
+  let ixyNumerator = 0
+  let perimeter = 0
+
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index]
+    const next = points[(index + 1) % points.length]
+
+    if (current === undefined || next === undefined) {
+      continue
+    }
+
+    const cross = current.x * next.y - next.x * current.y
+    twiceSignedArea += cross
+    centroidXNumerator += (current.x + next.x) * cross
+    centroidYNumerator += (current.y + next.y) * cross
+    ixxNumerator += (current.y * current.y + current.y * next.y + next.y * next.y) * cross
+    iyyNumerator += (current.x * current.x + current.x * next.x + next.x * next.x) * cross
+    ixyNumerator +=
+      (2 * current.x * current.y +
+        current.x * next.y +
+        next.x * current.y +
+        2 * next.x * next.y) *
+      cross
+    perimeter += Math.hypot(next.x - current.x, next.y - current.y)
+  }
+
+  const signedArea = twiceSignedArea / 2
+  const boundaryArea = Math.abs(signedArea)
+
+  if (boundaryArea <= 0 || perimeter <= 0) {
+    return null
+  }
+
+  const centroidX = centroidXNumerator / (6 * signedArea)
+  const centroidY = centroidYNumerator / (6 * signedArea)
+  const ixx = ixxNumerator / 12
+  const iyy = iyyNumerator / 12
+  const ixy = ixyNumerator / 24
+  const varianceX = Math.max(0, iyy / signedArea - centroidX * centroidX)
+  const varianceY = Math.max(0, ixx / signedArea - centroidY * centroidY)
+  const covarianceXY = ixy / signedArea - centroidX * centroidY
+  const discriminant = Math.sqrt(
+    Math.max(
+      0,
+      (varianceX - varianceY) * (varianceX - varianceY) + 4 * covarianceXY * covarianceXY,
+    ),
+  )
+  const majorVariance = Math.max(0, (varianceX + varianceY + discriminant) / 2)
+  const minorVariance = Math.max(0, (varianceX + varianceY - discriminant) / 2)
+  const majorAxis = majorVariance > 0 ? 4 * Math.sqrt(majorVariance) : undefined
+  const minorAxis = minorVariance > 0 ? 4 * Math.sqrt(minorVariance) : undefined
+  const eccentricity =
+    majorVariance > 0
+      ? Math.sqrt(Math.max(0, 1 - minorVariance / majorVariance))
+      : undefined
+
+  return {
+    boundaryAreaMicrometersSquared: boundaryArea,
+    ...optionalMetric(
+      'boundaryEquivalentDiameterMicrometers',
+      cellAreaToEquivalentDiameterMicrometers(boundaryArea),
+    ),
+    perimeterMicrometers: perimeter,
+    ...optionalMetric('majorAxisMicrometers', majorAxis),
+    ...optionalMetric('minorAxisMicrometers', minorAxis),
+    ...optionalMetric('eccentricity', eccentricity),
+    circularity: (4 * Math.PI * boundaryArea) / (perimeter * perimeter),
+    boundaryPointCount: points.length,
+  }
+}
+
+function cellAreaToEquivalentDiameterMicrometers(
+  area: number | undefined,
+): number | undefined {
+  if (area === undefined || area <= 0 || !Number.isFinite(area)) {
+    return undefined
+  }
+
+  return Math.sqrt((4 * area) / Math.PI)
+}
+
+function optionalHalf(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : value / 2
+}
+
+function optionalMetric<Key extends keyof CellShapeMetrics>(
+  key: Key,
+  value: CellShapeMetrics[Key] | undefined,
+): Pick<CellShapeMetrics, Key> | Record<string, never> {
+  return value === undefined || !Number.isFinite(Number(value))
+    ? {}
+    : ({ [key]: value } as Pick<CellShapeMetrics, Key>)
+}
+
+function throwAbortError(message: string): never {
+  const error = new Error(message)
+  error.name = 'AbortError'
+  throw error
+}
+
+function formatMetric(value: number | undefined, unit?: string): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return 'Unavailable'
+  }
+
+  const formatted = value.toLocaleString(undefined, {
+    maximumFractionDigits: value < 1 ? 3 : 1,
+  })
+
+  return unit === undefined ? formatted : `${formatted} ${unit}`
 }
 
 function MorphologyChannelControls({
@@ -4991,9 +5554,9 @@ function CellFeatureMatrixCompatibilityNotice({
     >
       <h2>Matrix Warning</h2>
       <p>
-        <code>cell_feature_matrix.zarr.zip</code> is not in CSC format.
-        Selected-gene reads may use the older feature-major Zarr layout; ROI
-        gene stats will fall back to <code>cell_feature_matrix.h5</code>.
+        <code>cell_feature_matrix.zarr.zip</code> is not in CSC format. Selected-gene
+        reads may use the older feature-major Zarr layout; ROI gene stats will fall back
+        to <code>cell_feature_matrix.h5</code>.
       </p>
     </section>
   )

@@ -380,6 +380,15 @@ function ViewerSurface({
       }),
     [expressionCells, viewState, viewportBbox],
   )
+  const cellById = useMemo(() => {
+    const nextCellById = new Map<string, OverviewCellDatum>()
+
+    for (const cell of cells) {
+      nextCellById.set(cell.id, cell)
+    }
+
+    return nextCellById
+  }, [cells])
   const styledBoundaries = useMemo(
     () => styleCellBoundariesByCells(boundaries, boundaryStyleCells),
     [boundaries, boundaryStyleCells],
@@ -568,13 +577,24 @@ function ViewerSurface({
   )
   const handleDeckClick = useCallback(
     (info: { readonly object?: unknown }) => {
-      if (onCellClick === undefined || !isOverviewCellDatum(info.object)) {
+      if (onCellClick === undefined) {
         return
       }
 
-      onCellClick(info.object)
+      if (isOverviewCellDatum(info.object)) {
+        onCellClick(info.object)
+        return
+      }
+
+      if (isCellBoundaryDatum(info.object)) {
+        const cell = cellById.get(info.object.id)
+
+        if (cell !== undefined) {
+          onCellClick(cell)
+        }
+      }
     },
-    [onCellClick],
+    [cellById, onCellClick],
   )
   const handleMouseCoordinatePointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
@@ -1351,4 +1371,14 @@ function isOverviewCellDatum(value: unknown): value is OverviewCellDatum {
     Array.isArray(candidate.position) &&
     typeof candidate.radiusPixels === 'number'
   )
+}
+
+function isCellBoundaryDatum(value: unknown): value is CellBoundaryDatum {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const candidate = value as Partial<CellBoundaryDatum>
+
+  return typeof candidate.id === 'string' && Array.isArray(candidate.polygon)
 }

@@ -5,6 +5,7 @@ import {
   type AnalysisEmbeddingsLoader,
   type AnnotationGroupLoader,
   type AnnotationLoader,
+  type BoundaryElementsLoader,
   type DatasetDiagnosticsRunner,
   type DatasetOverviewLoader,
   type DatasetWarmupLoader,
@@ -835,6 +836,149 @@ describe('App', () => {
       const embeddingSummary = await screen.findByLabelText('Embedding link summary')
       expect(embeddingSummary).toHaveTextContent('ROI')
       expect(embeddingSummary).toHaveTextContent('1')
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('loads full expression and shape metrics for a selected cell', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(0), y: micrometers(0) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
+      vi.fn(async () => [
+        {
+          kind: 'umap',
+          label: 'UMAP',
+          sourcePath: 'analysis/umap/gene_expression_2_components/projection.csv',
+          points: [{ id: cellId, x: 0, y: 0 }],
+        },
+      ])
+    const loadBoundaryElements: ReturnType<typeof vi.fn<BoundaryElementsLoader>> = vi.fn(
+      async () => ({
+        elements: [
+          {
+            id: cellId,
+            geometry: {
+              kind: 'polygon',
+              rings: [
+                [
+                  { x: micrometers(-2), y: micrometers(-2) },
+                  { x: micrometers(2), y: micrometers(-2) },
+                  { x: micrometers(2), y: micrometers(2) },
+                  { x: micrometers(-2), y: micrometers(2) },
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+    )
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      async () => ({
+        genes: [
+          {
+            gene: 'Actb',
+            count: 7,
+            detectedCells: 1,
+            percentCells: 100,
+            meanPerCell: 7,
+            percentTotal: 70,
+          },
+          {
+            gene: 'Gad1',
+            count: 3,
+            detectedCells: 1,
+            percentCells: 100,
+            meanPerCell: 3,
+            percentTotal: 30,
+          },
+        ],
+        cellCount: 1,
+        sampledCellCount: 1,
+        totalCount: 10,
+        hitCellLimit: false,
+      }),
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadAnalysisEmbeddings={loadAnalysisEmbeddings}
+          loadBoundaryElements={loadBoundaryElements}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('Cell')
+      fireEvent.click(await screen.findByRole('button', { name: 'Load Embeddings' }))
+      const embeddingCanvas = await screen.findByLabelText('UMAP embedding, 1 cells')
+      fireEvent.pointerDown(embeddingCanvas, { clientX: 500, clientY: 500 })
+
+      await waitFor(() => {
+        expect(loadRoiGeneStats).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          [
+            expect.objectContaining({
+              id: cellId,
+              transcriptCount: 8,
+              cellArea: 22,
+            }) as unknown as object,
+          ],
+          expect.objectContaining({
+            cellLimit: 1,
+            geneLimit: 100_000,
+            sampleStrategy: 'head',
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+      expect(loadBoundaryElements).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.objectContaining({
+          minX: expect.any(Number) as number,
+          maxX: expect.any(Number) as number,
+          minY: expect.any(Number) as number,
+          maxY: expect.any(Number) as number,
+        }) as object,
+        expect.objectContaining({ signal: expect.any(AbortSignal) as AbortSignal }),
+      )
+
+      const expressionList = await screen.findByLabelText('Cell gene expression')
+      expect(expressionList).toHaveTextContent('Actb')
+      expect(expressionList).toHaveTextContent('Gad1')
+      expect(screen.getByText('10 counts')).toBeInTheDocument()
+      expect(screen.getByText('5.3 um')).toBeInTheDocument()
+      expect(screen.getByText('Eccentricity')).toBeInTheDocument()
+      expect(screen.getAllByText('0').length).toBeGreaterThan(0)
     } finally {
       rectSpy.mockRestore()
       contextSpy.mockRestore()
@@ -1722,8 +1866,8 @@ describe('App', () => {
     const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(
       async () => roiCells,
     )
-    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
-      () => pendingPromise(),
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(() =>
+      pendingPromise(),
     )
 
     try {

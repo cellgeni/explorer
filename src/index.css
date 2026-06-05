@@ -1619,9 +1619,14 @@ h2 {
   margin: 0;
 }
 
+.cell-detail-panel {
+  display: grid;
+  gap: 7px;
+}
+
 .cell-info-list div {
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr);
+  grid-template-columns: 86px minmax(0, 1fr);
   gap: 6px;
   align-items: baseline;
 }
@@ -1644,6 +1649,120 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cell-expression-panel {
+  display: grid;
+  gap: 5px;
+}
+
+.cell-expression-heading,
+.cell-expression-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.cell-expression-heading span {
+  color: #2f2b22;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cell-expression-heading small {
+  color: #7b4d1d;
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-expression-status {
+  margin: 0;
+  padding: 5px 6px;
+  border: 1px solid rgba(23, 21, 17, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 253, 247, 0.62);
+  color: #5f5848;
+  font-size: 0.64rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.cell-expression-status.is-error {
+  border-color: rgba(166, 94, 78, 0.32);
+  background: rgba(166, 94, 78, 0.1);
+  color: #6f332a;
+}
+
+.cell-expression-filter {
+  color: #7b4d1d;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cell-expression-search {
+  width: 100%;
+}
+
+.cell-expression-list {
+  display: grid;
+  max-height: 230px;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.cell-expression-list li {
+  display: grid;
+  gap: 2px;
+  padding: 4px 6px;
+  border: 1px solid rgba(23, 21, 17, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 253, 247, 0.72);
+}
+
+.cell-expression-row span {
+  overflow: hidden;
+  color: #2f2b22;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-expression-row strong {
+  color: #7b4d1d;
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-expression-bar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(23, 21, 17, 0.08);
+}
+
+.cell-expression-bar::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--cell-gene-width);
+  border-radius: inherit;
+  background: linear-gradient(90deg, #174d3e, #d73f7c);
+  content: '';
+}
+
+.cell-expression-list small {
+  color: #5f5848;
+  font-size: 0.58rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .layer-opacity-controls {
