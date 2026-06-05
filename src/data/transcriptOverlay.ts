@@ -7,7 +7,7 @@ import type { BBox, DataPoint } from './coords'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
 
-export const TRANSCRIPT_EXACT_RENDER_LIMIT = 25_000
+export const TRANSCRIPT_EXACT_RENDER_LIMIT = 50_000
 export const TRANSCRIPT_GROUP_LIMIT = 18
 export const TRANSCRIPT_EXACT_MIN_ZOOM = 1.2
 

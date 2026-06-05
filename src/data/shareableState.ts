@@ -26,6 +26,7 @@ export interface ShareableState {
   readonly transcriptMinQv?: number
   readonly transcriptGeneOnly?: boolean
   readonly transcriptFeatureFilterMode?: string
+  readonly transcriptDensityColorScale?: string
   readonly transcriptOpacity?: number
   readonly transcriptPointSize?: number
 }
@@ -60,6 +61,7 @@ export function parseShareableState(hash: string): ShareableState {
   const transcriptMinQv = parseNonNegativeInteger(params.get('txQv'))
   const transcriptGeneOnly = parseBoolean(params.get('txGene'))
   const transcriptFeatureFilterMode = readString(params, 'txFilter')
+  const transcriptDensityColorScale = readString(params, 'txDensity')
   const transcriptOpacity = parseUnitNumber(params.get('txOpacity'))
   const transcriptPointSize = parsePositiveInteger(params.get('txSize'))
 
@@ -131,6 +133,10 @@ export function parseShareableState(hash: string): ShareableState {
     state.transcriptFeatureFilterMode = transcriptFeatureFilterMode
   }
 
+  if (transcriptDensityColorScale !== undefined) {
+    state.transcriptDensityColorScale = transcriptDensityColorScale
+  }
+
   if (transcriptOpacity !== undefined) {
     state.transcriptOpacity = transcriptOpacity
   }
@@ -196,11 +202,9 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   setOptionalString(params, 'txFilter', state.transcriptFeatureFilterMode)
+  setOptionalString(params, 'txDensity', state.transcriptDensityColorScale)
 
-  if (
-    state.transcriptOpacity !== undefined &&
-    Number.isFinite(state.transcriptOpacity)
-  ) {
+  if (state.transcriptOpacity !== undefined && Number.isFinite(state.transcriptOpacity)) {
     params.set('txOpacity', roundForHash(state.transcriptOpacity).toString())
   }
 
@@ -208,10 +212,7 @@ export function formatShareableState(state: ShareableState): string {
     state.transcriptPointSize !== undefined &&
     Number.isFinite(state.transcriptPointSize)
   ) {
-    params.set(
-      'txSize',
-      Math.max(1, Math.floor(state.transcriptPointSize)).toString(),
-    )
+    params.set('txSize', Math.max(1, Math.floor(state.transcriptPointSize)).toString())
   }
 
   const text = params.toString()

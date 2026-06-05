@@ -146,6 +146,7 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
       'selected',
     )
+    expect(screen.getByRole('combobox', { name: 'Density color' })).toHaveValue('thermal')
     expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(20)
     expect(screen.getByRole('checkbox', { name: 'Gene-only calls' })).toBeChecked()
     expect(screen.getByRole('slider', { name: 'Transcript opacity' })).toHaveValue('85')
@@ -1388,9 +1389,8 @@ describe('App', () => {
       rawParquet: true,
       nativeZarr: true,
     }))
-    const loadTranscriptViewport: ReturnType<
-      typeof vi.fn<TranscriptViewportLoader>
-    > = vi.fn(() => pendingPromise())
+    const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> =
+      vi.fn(() => pendingPromise())
 
     try {
       render(
@@ -1455,9 +1455,8 @@ describe('App', () => {
       rawParquet: true,
       nativeZarr: false,
     }))
-    const loadTranscriptViewport: ReturnType<
-      typeof vi.fn<TranscriptViewportLoader>
-    > = vi.fn(() => pendingPromise())
+    const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> =
+      vi.fn(() => pendingPromise())
 
     try {
       render(
@@ -1539,9 +1538,7 @@ describe('App', () => {
       rawParquet: true,
       nativeZarr: false,
     }))
-    const loadTranscriptViewport: ReturnType<
-      typeof vi.fn<TranscriptViewportLoader>
-    > = vi
+    const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> = vi
       .fn()
       .mockResolvedValueOnce({
         points: [

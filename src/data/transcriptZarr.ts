@@ -68,7 +68,7 @@ export async function loadTranscriptZarrViewport(
   const metadata = await cachedTranscriptZarrMetadata(url)
   throwIfAborted(options.signal)
 
-  const pointLimit = Math.max(1, Math.floor(options.pointLimit ?? 25_000))
+  const pointLimit = Math.max(1, Math.floor(options.pointLimit ?? 50_000))
   const groupLimit = Math.max(1, Math.floor(options.groupLimit ?? 18))
   const minQv = options.minQv ?? 20
   const geneOnly = options.geneOnly ?? true

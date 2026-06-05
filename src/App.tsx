@@ -83,12 +83,15 @@ import {
   boundaryElementsToLayerData,
   DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
+  DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
   GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
   GENE_EXPRESSION_SCORE_MODE_OPTIONS,
+  TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS,
   geneExpressionCellsToLayerData,
   geneExpressionScoreDomainMax,
   isGeneExpressionColorScale,
   isGeneExpressionScoreMode,
+  isTranscriptDensityColorScale,
   overviewCellsToLayerData,
   styleGeneExpressionCellsByScale,
   transcriptAggregateBinsToLayerData,
@@ -130,6 +133,7 @@ import type {
 import type {
   GeneExpressionColorScale,
   GeneExpressionScoreMode,
+  TranscriptDensityColorScale,
 } from './rendering/deckLayers'
 import type { RoiGeneStats } from './data/roiGeneStats'
 import type { OverviewCellDatum } from './rendering/deckLayers'
@@ -733,6 +737,7 @@ export function App({
   const roiNameInputId = useId()
   const observationModeInputId = useId()
   const transcriptDetailInputId = useId()
+  const transcriptDensityScaleInputId = useId()
   const transcriptMinQvInputId = useId()
   const transcriptFeatureFilterInputId = useId()
   const transcriptOpacityInputId = useId()
@@ -810,10 +815,9 @@ export function App({
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(
     initialShareableState.transcriptOverlay ?? false,
   )
-  const [transcriptDetailMode, setTranscriptDetailMode] =
-    useState<TranscriptDetailMode>(
-      () => parseTranscriptDetailMode(initialShareableState.transcriptDetailMode) ?? 'auto',
-    )
+  const [transcriptDetailMode, setTranscriptDetailMode] = useState<TranscriptDetailMode>(
+    () => parseTranscriptDetailMode(initialShareableState.transcriptDetailMode) ?? 'auto',
+  )
   const [transcriptMinQv, setTranscriptMinQv] = useState(
     initialShareableState.transcriptMinQv ?? 20,
   )
@@ -826,6 +830,13 @@ export function App({
         parseTranscriptFeatureFilterMode(
           initialShareableState.transcriptFeatureFilterMode,
         ) ?? 'selected',
+    )
+  const [transcriptDensityColorScale, setTranscriptDensityColorScale] =
+    useState<TranscriptDensityColorScale>(
+      () =>
+        parseTranscriptDensityColorScale(
+          initialShareableState.transcriptDensityColorScale,
+        ) ?? DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
     )
   const [transcriptOpacity, setTranscriptOpacity] = useState(
     initialShareableState.transcriptOpacity ?? 0.85,
@@ -1045,8 +1056,9 @@ export function App({
     () =>
       transcriptAggregateBinsToLayerData(
         transcriptAggregateBinsForRendering(transcriptLayerState),
+        transcriptDensityColorScale,
       ),
-    [transcriptLayerState],
+    [transcriptDensityColorScale, transcriptLayerState],
   )
   const visibleTranscriptEstimate = useMemo(
     () =>
@@ -1906,12 +1918,16 @@ export function App({
       return
     }
 
-    const requestKey = transcriptViewportRequestKey(loadState.url, currentViewportDetail.bbox, {
-      minQv: transcriptMinQv,
-      geneOnly: transcriptGeneOnly,
-      featureNames,
-      pointLimit: TRANSCRIPT_EXACT_RENDER_LIMIT,
-    })
+    const requestKey = transcriptViewportRequestKey(
+      loadState.url,
+      currentViewportDetail.bbox,
+      {
+        minQv: transcriptMinQv,
+        geneOnly: transcriptGeneOnly,
+        featureNames,
+        pointLimit: TRANSCRIPT_EXACT_RENDER_LIMIT,
+      },
+    )
 
     if (requestKey === transcriptViewportKeyRef.current) {
       return
@@ -1994,8 +2010,7 @@ export function App({
             transcriptViewportKeyRef.current = null
             setTranscriptLayerState({
               status: 'waiting',
-              message:
-                'Exact transcript viewport exceeded the 25,000 point budget. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.',
+              message: `Exact transcript viewport exceeded the ${TRANSCRIPT_EXACT_RENDER_LIMIT.toLocaleString()} point budget. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.`,
               visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
             })
             appendDebugEvent('Transcript exact query exceeded point budget', {
@@ -2256,6 +2271,7 @@ export function App({
         boundaryCellLimit,
         transcriptOverlay: showTranscriptOverlay,
         transcriptDetailMode,
+        transcriptDensityColorScale,
         transcriptMinQv,
         transcriptGeneOnly,
         transcriptFeatureFilterMode,
@@ -2290,6 +2306,7 @@ export function App({
     shouldLoadMorphology,
     showTranscriptOverlay,
     transcriptDetailMode,
+    transcriptDensityColorScale,
     transcriptFeatureFilterMode,
     transcriptGeneOnly,
     transcriptMinQv,
@@ -2561,6 +2578,12 @@ export function App({
           ? (parseGeneExpressionColorScale(sharedState?.geneExpressionColorScale) ??
               geneExpressionColorScale)
           : geneExpressionColorScale,
+      )
+      setTranscriptDensityColorScale(
+        shouldRestoreSharedState
+          ? (parseTranscriptDensityColorScale(sharedState?.transcriptDensityColorScale) ??
+              transcriptDensityColorScale)
+          : transcriptDensityColorScale,
       )
       setSelectedGenes(sharedSelectedGenes)
       setRoiMode('idle')
@@ -2847,6 +2870,7 @@ export function App({
           showTranscriptOverlay,
           transcriptCapabilityState,
           transcriptDetailMode,
+          transcriptDensityColorScale,
           transcriptFeatureFilterMode,
           transcriptGeneOnly,
           transcriptLayerState,
@@ -4360,6 +4384,34 @@ export function App({
                   <option value="all">All features</option>
                 </select>
 
+                <label htmlFor={transcriptDensityScaleInputId}>Density color</label>
+                <div className="transcript-density-scale-control">
+                  <select
+                    id={transcriptDensityScaleInputId}
+                    value={transcriptDensityColorScale}
+                    onChange={(event) => {
+                      const nextScale = event.currentTarget.value
+
+                      if (isTranscriptDensityColorScale(nextScale)) {
+                        setTranscriptDensityColorScale(nextScale)
+                        appendDebugEvent(`Transcript density color: ${nextScale}`, {
+                          coalesceKey: 'transcript-density-color',
+                        })
+                      }
+                    }}
+                  >
+                    {TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className={`transcript-density-scale-preview transcript-density-scale-preview-${transcriptDensityColorScale}`}
+                    aria-hidden="true"
+                  />
+                </div>
+
                 <label htmlFor={transcriptMinQvInputId}>Min QV</label>
                 <input
                   id={transcriptMinQvInputId}
@@ -5240,10 +5292,7 @@ function transcriptPointsForRendering(
     return layerState.points
   }
 
-  if (
-    layerState.status === 'loading' &&
-    layerState.previousLayer?.kind === 'exact'
-  ) {
+  if (layerState.status === 'loading' && layerState.previousLayer?.kind === 'exact') {
     return layerState.previousLayer.points
   }
 
@@ -5257,10 +5306,7 @@ function transcriptAggregateBinsForRendering(
     return layerState.bins
   }
 
-  if (
-    layerState.status === 'loading' &&
-    layerState.previousLayer?.kind === 'aggregate'
-  ) {
+  if (layerState.status === 'loading' && layerState.previousLayer?.kind === 'aggregate') {
     return layerState.previousLayer.bins
   }
 
@@ -5347,6 +5393,12 @@ function parseGeneExpressionScoreMode(
   value: string | undefined,
 ): GeneExpressionScoreMode | undefined {
   return value !== undefined && isGeneExpressionScoreMode(value) ? value : undefined
+}
+
+function parseTranscriptDensityColorScale(
+  value: string | undefined,
+): TranscriptDensityColorScale | undefined {
+  return value !== undefined && isTranscriptDensityColorScale(value) ? value : undefined
 }
 
 function parseGeneExpressionDetailMode(
@@ -7389,6 +7441,7 @@ interface DiagnosticsDumpOptions {
   readonly showTranscriptOverlay: boolean
   readonly transcriptCapabilityState: TranscriptCapabilityState
   readonly transcriptDetailMode: TranscriptDetailMode
+  readonly transcriptDensityColorScale: TranscriptDensityColorScale
   readonly transcriptFeatureFilterMode: TranscriptFeatureFilterMode
   readonly transcriptGeneOnly: boolean
   readonly transcriptLayerState: TranscriptLayerState
@@ -7416,6 +7469,7 @@ function createDiagnosticsDump(options: DiagnosticsDumpOptions): Record<string, 
       shouldLoadMorphology: options.shouldLoadMorphology,
       showTranscriptOverlay: options.showTranscriptOverlay,
       transcriptDetailMode: options.transcriptDetailMode,
+      transcriptDensityColorScale: options.transcriptDensityColorScale,
       transcriptFeatureFilterMode: options.transcriptFeatureFilterMode,
       transcriptGeneOnly: options.transcriptGeneOnly,
       transcriptMinQv: options.transcriptMinQv,

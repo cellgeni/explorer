@@ -81,9 +81,20 @@ export type GeneExpressionColorScale =
   | 'rose'
   | 'glasbey'
 export type GeneExpressionScoreMode = 'sum' | 'mean' | 'z-score'
+export type TranscriptDensityColorScale =
+  | 'thermal'
+  | 'magma'
+  | 'viridis'
+  | 'cividis'
+  | 'teal'
 
 export interface GeneExpressionColorScaleOption {
   readonly id: GeneExpressionColorScale
+  readonly label: string
+}
+
+export interface TranscriptDensityColorScaleOption {
+  readonly id: TranscriptDensityColorScale
   readonly label: string
 }
 
@@ -100,6 +111,8 @@ type ColorStop = readonly [number, number, number, number]
 
 export const DEFAULT_GENE_EXPRESSION_COLOR_SCALE: GeneExpressionColorScale = 'plasma'
 export const DEFAULT_GENE_EXPRESSION_SCORE_MODE: GeneExpressionScoreMode = 'sum'
+export const DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE: TranscriptDensityColorScale =
+  'thermal'
 
 export const GENE_EXPRESSION_COLOR_SCALE_OPTIONS: readonly GeneExpressionColorScaleOption[] =
   [
@@ -118,6 +131,15 @@ export const GENE_EXPRESSION_SCORE_MODE_OPTIONS: readonly GeneExpressionScoreMod
     { id: 'sum', label: 'Sum' },
     { id: 'mean', label: 'Mean' },
     { id: 'z-score', label: 'Z-score' },
+  ]
+
+export const TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS: readonly TranscriptDensityColorScaleOption[] =
+  [
+    { id: 'thermal', label: 'Thermal' },
+    { id: 'magma', label: 'Magma' },
+    { id: 'viridis', label: 'Viridis' },
+    { id: 'cividis', label: 'Cividis' },
+    { id: 'teal', label: 'Teal' },
   ]
 
 const GENE_EXPRESSION_COLOR_STOPS: Record<
@@ -163,6 +185,37 @@ const GENE_EXPRESSION_COLOR_STOPS: Record<
     [214, 0, 0, 130],
     [140, 59, 255, 205],
     [1, 135, 0, 245],
+  ],
+}
+
+const TRANSCRIPT_DENSITY_COLOR_STOPS: Record<
+  TranscriptDensityColorScale,
+  readonly [ColorStop, ColorStop, ColorStop]
+> = {
+  thermal: [
+    [29, 78, 86, 96],
+    [239, 137, 80, 180],
+    [255, 223, 91, 246],
+  ],
+  magma: [
+    [0, 0, 4, 96],
+    [183, 55, 121, 180],
+    [252, 253, 191, 246],
+  ],
+  viridis: [
+    [68, 1, 84, 96],
+    [32, 144, 140, 180],
+    [253, 231, 37, 246],
+  ],
+  cividis: [
+    [0, 34, 78, 96],
+    [125, 124, 82, 180],
+    [255, 233, 69, 246],
+  ],
+  teal: [
+    [13, 59, 74, 96],
+    [37, 172, 166, 180],
+    [198, 255, 221, 246],
   ],
 }
 
@@ -447,6 +500,7 @@ export function transcriptPointsToLayerData(
 
 export function transcriptAggregateBinsToLayerData(
   bins: readonly TranscriptAggregateBin[],
+  colorScale: TranscriptDensityColorScale = DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
 ): readonly TranscriptAggregateDatum[] {
   if (bins.length === 0) {
     return []
@@ -471,7 +525,7 @@ export function transcriptAggregateBinsToLayerData(
       radiusMicrometers: bin.radiusMicrometers,
       ...(bin.featureName === undefined ? {} : { featureName: bin.featureName }),
       ...(bin.fovName === undefined ? {} : { fovName: bin.fovName }),
-      fillColor: transcriptAggregateColor(intensity),
+      fillColor: transcriptDensityColor(colorScale, intensity),
     }
   })
 }
@@ -518,6 +572,12 @@ export function isGeneExpressionScoreMode(
   value: string,
 ): value is GeneExpressionScoreMode {
   return GENE_EXPRESSION_SCORE_MODE_OPTIONS.some((option) => option.id === value)
+}
+
+export function isTranscriptDensityColorScale(
+  value: string,
+): value is TranscriptDensityColorScale {
+  return TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS.some((option) => option.id === value)
 }
 
 function scoreExpressionCells(
@@ -584,6 +644,23 @@ function geneExpressionColor(
   intensity: number,
 ): Color {
   const [lowStop, middleStop, highStop] = GENE_EXPRESSION_COLOR_STOPS[colorScale]
+  return interpolateColorStops(lowStop, middleStop, highStop, intensity)
+}
+
+function transcriptDensityColor(
+  colorScale: TranscriptDensityColorScale,
+  intensity: number,
+): Color {
+  const [lowStop, middleStop, highStop] = TRANSCRIPT_DENSITY_COLOR_STOPS[colorScale]
+  return interpolateColorStops(lowStop, middleStop, highStop, intensity)
+}
+
+function interpolateColorStops(
+  lowStop: ColorStop,
+  middleStop: ColorStop,
+  highStop: ColorStop,
+  intensity: number,
+): Color {
   const normalizedIntensity = Math.min(1, Math.max(0, intensity))
   const startStop = normalizedIntensity <= 0.5 ? lowStop : middleStop
   const endStop = normalizedIntensity <= 0.5 ? middleStop : highStop
@@ -744,17 +821,6 @@ function transcriptFeatureColor(featureName: string): Color {
   }
 
   return palette[hash % palette.length] ?? [76, 211, 194, 235]
-}
-
-function transcriptAggregateColor(intensity: number): Color {
-  const clamped = Math.max(0, Math.min(1, intensity))
-
-  return [
-    Math.round(37 + clamped * 218),
-    Math.round(172 + clamped * 41),
-    Math.round(166 - clamped * 78),
-    Math.round(96 + clamped * 150),
-  ]
 }
 
 function colorWithOpacity(color: Color, opacity: number): Color {

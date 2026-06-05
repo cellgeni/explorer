@@ -452,7 +452,8 @@ describe('deck layer factory', () => {
       transcriptOpacity: 0.5,
     })
     const aggregateLayer = layers.find(
-      (layer) => layer instanceof ScatterplotLayer && layer.id === 'transcript-density-bins',
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'transcript-density-bins',
     )
 
     expect(aggregateLayer).toBeInstanceOf(ScatterplotLayer)
@@ -473,6 +474,40 @@ describe('deck layer factory', () => {
 
     expect(getPosition(bins[0]!)).toEqual([10, -20, 0])
     expect(getRadius(bins[0]!)).toBe(12)
+  })
+
+  it('colors transcript aggregate bins with the selected density scale', () => {
+    const thermalBins = transcriptAggregateBinsToLayerData(
+      [
+        {
+          id: 'bin-1',
+          level: 2,
+          binX: 3,
+          binY: 4,
+          position: { x: micrometers(10), y: micrometers(20) },
+          radiusMicrometers: 12,
+          count: 25,
+        },
+      ],
+      'thermal',
+    )
+    const viridisBins = transcriptAggregateBinsToLayerData(
+      [
+        {
+          id: 'bin-1',
+          level: 2,
+          binX: 3,
+          binY: 4,
+          position: { x: micrometers(10), y: micrometers(20) },
+          radiusMicrometers: 12,
+          count: 25,
+        },
+      ],
+      'viridis',
+    )
+
+    expect(thermalBins[0]?.fillColor).toEqual([255, 223, 91, 246])
+    expect(viridisBins[0]?.fillColor).toEqual([253, 231, 37, 246])
   })
 
   it('scores multi-gene expression by mean count', () => {

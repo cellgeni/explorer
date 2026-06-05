@@ -35,6 +35,7 @@ describe('shareableState', () => {
       transcriptMinQv: 25,
       transcriptGeneOnly: true,
       transcriptFeatureFilterMode: 'selected',
+      transcriptDensityColorScale: 'viridis',
       transcriptOpacity: 0.75,
       transcriptPointSize: 3,
     })
@@ -55,6 +56,7 @@ describe('shareableState', () => {
     expect(state.transcriptMinQv).toBe(25)
     expect(state.transcriptGeneOnly).toBe(true)
     expect(state.transcriptFeatureFilterMode).toBe('selected')
+    expect(state.transcriptDensityColorScale).toBe('viridis')
     expect(state.transcriptOpacity).toBe(0.75)
     expect(state.transcriptPointSize).toBe(3)
   })
