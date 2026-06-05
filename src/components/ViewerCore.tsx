@@ -19,7 +19,7 @@ import {
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
 import { styleOverviewCellsByObservation } from '../rendering/cellStyling'
 import { micrometers, scaleFromZoom } from '../data/coords'
-import type { ViewStateChangeParameters } from '@deck.gl/core'
+import type { Position, ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox, DataPoint } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
@@ -576,7 +576,7 @@ function ViewerSurface({
     [canTrackMouseCoordinates, initialViewState, viewState],
   )
   const handleDeckClick = useCallback(
-    (info: { readonly object?: unknown }) => {
+    (info: { readonly object?: unknown; readonly coordinate?: readonly number[] }) => {
       if (onCellClick === undefined) {
         return
       }
@@ -591,10 +591,22 @@ function ViewerSurface({
 
         if (cell !== undefined) {
           onCellClick(cell)
+          return
         }
       }
+
+      const coordinateCell = cellForDeckCoordinate(
+        info.coordinate,
+        styledBoundaries,
+        visibleCells,
+        cellById,
+      )
+
+      if (coordinateCell !== null) {
+        onCellClick(coordinateCell)
+      }
     },
-    [cellById, onCellClick],
+    [cellById, onCellClick, styledBoundaries, visibleCells],
   )
   const handleMouseCoordinatePointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
@@ -1381,4 +1393,81 @@ function isCellBoundaryDatum(value: unknown): value is CellBoundaryDatum {
   const candidate = value as Partial<CellBoundaryDatum>
 
   return typeof candidate.id === 'string' && Array.isArray(candidate.polygon)
+}
+
+function cellForDeckCoordinate(
+  coordinate: readonly number[] | undefined,
+  boundaries: readonly CellBoundaryDatum[],
+  cells: readonly OverviewCellDatum[],
+  cellById: ReadonlyMap<string, OverviewCellDatum>,
+): OverviewCellDatum | null {
+  const x = coordinate?.[0]
+  const y = coordinate?.[1]
+
+  if (x === undefined || y === undefined) {
+    return null
+  }
+
+  for (let index = boundaries.length - 1; index >= 0; index -= 1) {
+    const boundary = boundaries[index]
+
+    if (boundary === undefined || !polygonContainsDeckPoint(boundary.polygon, x, y)) {
+      continue
+    }
+
+    return cellById.get(boundary.id) ?? null
+  }
+
+  for (const cell of cells) {
+    const [cellX = 0, cellY = 0] = cell.position
+    const radius = Math.max(0, cell.radiusMicrometers ?? cell.radiusPixels)
+    const dx = x - cellX
+    const dy = y - cellY
+
+    if (dx * dx + dy * dy <= radius * radius) {
+      return cell
+    }
+  }
+
+  return null
+}
+
+function polygonContainsDeckPoint(
+  polygon: readonly Position[],
+  x: number,
+  y: number,
+): boolean {
+  if (polygon.length < 3) {
+    return false
+  }
+
+  let inside = false
+
+  for (
+    let currentIndex = 0, previousIndex = polygon.length - 1;
+    currentIndex < polygon.length;
+    previousIndex = currentIndex, currentIndex += 1
+  ) {
+    const current = polygon[currentIndex]
+    const previous = polygon[previousIndex]
+
+    if (current === undefined || previous === undefined) {
+      continue
+    }
+
+    const currentX = current[0] ?? 0
+    const currentY = current[1] ?? 0
+    const previousX = previous[0] ?? 0
+    const previousY = previous[1] ?? 0
+    const crossesY = currentY > y !== previousY > y
+
+    if (
+      crossesY &&
+      x < ((previousX - currentX) * (y - currentY)) / (previousY - currentY) + currentX
+    ) {
+      inside = !inside
+    }
+  }
+
+  return inside
 }

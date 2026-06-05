@@ -49,6 +49,9 @@ describe('deck layer factory', () => {
     expect(layer.props.lineWidthMinPixels).toBe(1)
     expect(layer.props.radiusMinPixels).toBe(0.12)
     expect(layer.props.opacity).toBe(1)
+    expect(layer.props.updateTriggers).toMatchObject({
+      getLineColor: [1],
+    })
 
     const getLineColor = layer.props.getLineColor as (
       cell: OverviewCellDatum,
@@ -114,6 +117,13 @@ describe('deck layer factory', () => {
 
     expect(boundaryLayer.props.opacity).toBe(1)
     expect(pointLayer.props.opacity).toBe(1)
+    expect(boundaryLayer.props.updateTriggers).toMatchObject({
+      getFillColor: [0.35],
+      getLineColor: [0.6],
+    })
+    expect(pointLayer.props.updateTriggers).toMatchObject({
+      getLineColor: [0.6],
+    })
 
     const getBoundaryFillColor = boundaryLayer.props.getFillColor as (
       cell: CellBoundaryDatum,
@@ -130,7 +140,7 @@ describe('deck layer factory', () => {
     expect(getPointLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 132])
   })
 
-  it('disables polygon fill rendering when cell fill opacity is zero', () => {
+  it('keeps transparent polygon fills pickable when cell fill opacity is zero', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {
         id: 'cell-1',
@@ -160,7 +170,7 @@ describe('deck layer factory', () => {
       cell: CellBoundaryDatum,
     ) => readonly number[]
 
-    expect(boundaryLayer.props.filled).toBe(false)
+    expect(boundaryLayer.props.filled).toBe(true)
     expect(boundaryLayer.props.stroked).toBe(true)
     expect(getFillColor(boundaries[0]!)).toEqual([32, 102, 83, 0])
     expect(getLineColor(boundaries[0]!)).toEqual([246, 242, 232, 105])
@@ -229,6 +239,9 @@ describe('deck layer factory', () => {
     expect(expressionLayer.props.stroked).toBe(true)
     expect(expressionLayer.props.lineWidthUnits).toBe('pixels')
     expect(expressionLayer.props.lineWidthMinPixels).toBe(1.5)
+    expect(expressionLayer.props.updateTriggers).toMatchObject({
+      getLineColor: [0.4],
+    })
 
     const getLineColor = expressionLayer.props.getLineColor as (
       cell: OverviewCellDatum,
@@ -291,6 +304,10 @@ describe('deck layer factory', () => {
 
     expect(expressionLayer.id).toBe('gene-expression-polygons')
     expect(expressionLayer.props.opacity).toBe(1)
+    expect(expressionLayer.props.updateTriggers).toMatchObject({
+      getFillColor: [0.5],
+      getLineColor: [0.25],
+    })
 
     const getFillColor = expressionLayer.props.getFillColor as (
       cell: CellBoundaryDatum,
@@ -303,7 +320,7 @@ describe('deck layer factory', () => {
     expect(getLineColor(expressionBoundaryPolygons[0]!)).toEqual([255, 253, 247, 53])
   })
 
-  it('disables expression polygon fill rendering when cell fill opacity is zero', () => {
+  it('keeps expression polygon fills transparent when cell fill opacity is zero', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {
         id: 'cell-2',
@@ -347,7 +364,7 @@ describe('deck layer factory', () => {
       cell: CellBoundaryDatum,
     ) => readonly number[]
 
-    expect(expressionLayer.props.filled).toBe(false)
+    expect(expressionLayer.props.filled).toBe(true)
     expect(expressionLayer.props.stroked).toBe(true)
     expect(getFillColor(expressionBoundaryPolygons[0]!)).toEqual([240, 128, 120, 0])
     expect(getLineColor(expressionBoundaryPolygons[0]!)).toEqual([255, 253, 247, 105])

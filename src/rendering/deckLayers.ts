@@ -162,7 +162,6 @@ export function createOverviewLayers(
   )
   const expressionBoundaryPolygons = options.expressionBoundaryPolygons ?? []
   const hasExpressionPolygons = expressionBoundaryPolygons.length > 0
-  const shouldFillCellPolygons = cellFillOpacity > 0
   const pointCells = cellsWithoutVisibleBoundaries(cells, boundaries)
   const cellPointLayer = new ScatterplotLayer<OverviewCellDatum>({
     id: 'cells-overview-scatter',
@@ -181,6 +180,9 @@ export function createOverviewLayers(
     getLineColor: (cell) =>
       colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
     getLineWidth: 1,
+    updateTriggers: {
+      getLineColor: [cellBoundaryOpacity],
+    },
   })
   const layers: LayersList = []
 
@@ -191,7 +193,7 @@ export function createOverviewLayers(
         data: boundaries,
         pickable: true,
         stroked: true,
-        filled: shouldFillCellPolygons,
+        filled: true,
         opacity: 1,
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 1,
@@ -199,6 +201,10 @@ export function createOverviewLayers(
         getFillColor: (cell) => colorWithOpacity(cell.fillColor, cellFillOpacity),
         getLineColor: (cell) => colorWithOpacity(cell.lineColor, cellBoundaryOpacity),
         getLineWidth: 1,
+        updateTriggers: {
+          getFillColor: [cellFillOpacity],
+          getLineColor: [cellBoundaryOpacity],
+        },
       }),
     )
   }
@@ -224,6 +230,9 @@ export function createOverviewLayers(
         getLineColor: (cell) =>
           colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
         getLineWidth: 1.5,
+        updateTriggers: {
+          getLineColor: [cellBoundaryOpacity],
+        },
       }),
     )
   }
@@ -235,7 +244,7 @@ export function createOverviewLayers(
         data: expressionBoundaryPolygons,
         pickable: false,
         stroked: true,
-        filled: shouldFillCellPolygons,
+        filled: true,
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 1,
         opacity: 1,
@@ -243,6 +252,10 @@ export function createOverviewLayers(
         getFillColor: (cell) => colorWithOpacity(cell.fillColor, cellFillOpacity),
         getLineColor: (cell) => colorWithOpacity(cell.lineColor, cellBoundaryOpacity),
         getLineWidth: 1,
+        updateTriggers: {
+          getFillColor: [cellFillOpacity],
+          getLineColor: [cellBoundaryOpacity],
+        },
       }),
     )
   }
