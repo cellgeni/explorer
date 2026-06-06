@@ -1,6 +1,9 @@
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
-import { loadTranscriptZarrViewport } from './transcriptZarr'
+import {
+  loadTranscriptZarrAggregates,
+  loadTranscriptZarrViewport,
+} from './transcriptZarr'
 import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
 import type { CellId } from './cellid'
 import type { BBox, DataPoint } from './coords'
@@ -12,9 +15,11 @@ export const MIN_TRANSCRIPT_EXACT_RENDER_LIMIT = 1
 export const MAX_TRANSCRIPT_EXACT_RENDER_LIMIT = 1_000_000
 export const TRANSCRIPT_GROUP_LIMIT = 18
 export const TRANSCRIPT_EXACT_MIN_ZOOM = 1.2
+export const TRANSCRIPT_METADATA_ENRICH_TIMEOUT_MS = 1_500
 
 export type TranscriptDetailMode = 'auto' | 'density' | 'bins' | 'exact'
 export type TranscriptFeatureFilterMode = 'all' | 'selected'
+export type TranscriptCellAssignment = 'known' | 'unassigned' | 'unavailable'
 
 export interface TranscriptCapabilities {
   readonly rawParquet: boolean
@@ -25,7 +30,9 @@ export interface TranscriptCapabilities {
 
 export interface TranscriptPoint {
   readonly id: string
+  readonly transcriptId?: string
   readonly cellId: CellId | null
+  readonly cellAssignment?: TranscriptCellAssignment
   readonly featureName: string
   readonly fovName: string | null
   readonly position: DataPoint
@@ -45,15 +52,24 @@ export interface TranscriptGroupSummary {
 
 export interface TranscriptAggregateBin {
   readonly id: string
+  readonly source?: 'cell-summary' | 'native-zarr'
   readonly level: number
   readonly binX: number
   readonly binY: number
   readonly position: DataPoint
   readonly radiusMicrometers: number
+  readonly binSizeMicrometers?: number
   readonly count: number
+  readonly selectedGeneCount?: number
+  readonly topFeatures?: readonly TranscriptAggregateFeatureSummary[]
   readonly featureName?: string
   readonly fovName?: string
   readonly meanQv?: number
+}
+
+export interface TranscriptAggregateFeatureSummary {
+  readonly featureName: string
+  readonly count: number
 }
 
 export interface TranscriptLodLevel {
@@ -86,6 +102,13 @@ export interface TranscriptViewportResult {
   readonly hitPointLimit: boolean
 }
 
+export interface TranscriptAggregateResult {
+  readonly bins: readonly TranscriptAggregateBin[]
+  readonly level: TranscriptLodLevel
+  readonly source: 'native-zarr'
+  readonly selectedFeatureNames: readonly string[]
+}
+
 export interface TranscriptViewportOptions {
   readonly getDataset?: (baseUrl: string) => XeniumDataset | Promise<XeniumDataset>
   readonly validateRangeSupport?: DatasetRangeValidator
@@ -95,11 +118,20 @@ export interface TranscriptViewportOptions {
   readonly minQv?: number
   readonly geneOnly?: boolean
   readonly featureNames?: readonly string[]
+  readonly metadataEnrichmentTimeoutMs?: number
 }
 
 export interface TranscriptCapabilityOptions {
   readonly validateRangeSupport?: DatasetRangeValidator
   readonly signal?: AbortSignal
+}
+
+export interface TranscriptAggregateOptions {
+  readonly validateRangeSupport?: DatasetRangeValidator
+  readonly signal?: AbortSignal
+  readonly mode?: 'density' | 'bins'
+  readonly featureNames?: readonly string[]
+  readonly maxBins?: number
 }
 
 export type TranscriptLodPlan =
@@ -194,7 +226,7 @@ export async function loadDatasetTranscriptViewport(
   throwIfAborted(options.signal)
 
   if (hasNativeZarr) {
-    return loadTranscriptZarrViewport(zarrUrl, bbox, {
+    const nativeResult = await loadTranscriptZarrViewport(zarrUrl, bbox, {
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       pointLimit,
       groupLimit: options.groupLimit ?? TRANSCRIPT_GROUP_LIMIT,
@@ -202,6 +234,18 @@ export async function loadDatasetTranscriptViewport(
       geneOnly: options.geneOnly ?? true,
       featureNames: options.featureNames ?? [],
     })
+
+    throwIfAborted(options.signal)
+
+    return transcriptResultWithMetadataDeadline(
+      nativeResult,
+      enrichNativeTranscriptViewportFromParquet(baseUrl, bbox, nativeResult, {
+        ...options,
+        pointLimit,
+      }),
+      options.signal,
+      options.metadataEnrichmentTimeoutMs ?? TRANSCRIPT_METADATA_ENRICH_TIMEOUT_MS,
+    )
   }
 
   await validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {
@@ -222,6 +266,114 @@ export async function loadDatasetTranscriptViewport(
     minQv: options.minQv ?? 20,
     geneOnly: options.geneOnly ?? true,
     featureNames: options.featureNames ?? [],
+  })
+}
+
+export function mergeTranscriptPointMetadata(
+  nativePoints: readonly TranscriptPoint[],
+  parquetPoints: readonly TranscriptPoint[],
+): readonly TranscriptPoint[] {
+  if (nativePoints.length === 0 || parquetPoints.length === 0) {
+    return nativePoints
+  }
+
+  const parquetPointByKey = new Map<string, TranscriptPoint>()
+
+  for (const point of parquetPoints) {
+    parquetPointByKey.set(transcriptPointMetadataKey(point), point)
+  }
+
+  return nativePoints.map((point) => {
+    const parquetPoint = parquetPointByKey.get(transcriptPointMetadataKey(point))
+
+    if (parquetPoint === undefined) {
+      return point
+    }
+
+    return {
+      ...point,
+      transcriptId: point.transcriptId ?? parquetPoint.transcriptId ?? parquetPoint.id,
+      cellId: parquetPoint.cellId,
+      cellAssignment:
+        parquetPoint.cellAssignment ??
+        (parquetPoint.cellId === null ? 'unassigned' : 'known'),
+      ...(parquetPoint.overlapsNucleus === undefined
+        ? {}
+        : { overlapsNucleus: parquetPoint.overlapsNucleus }),
+      ...(parquetPoint.nucleusDistance === undefined
+        ? {}
+        : { nucleusDistance: parquetPoint.nucleusDistance }),
+      ...(parquetPoint.isGene === undefined ? {} : { isGene: parquetPoint.isGene }),
+    }
+  })
+}
+
+async function enrichNativeTranscriptViewportFromParquet(
+  baseUrl: string,
+  bbox: BBox,
+  nativeResult: TranscriptViewportResult,
+  options: TranscriptViewportOptions & { readonly pointLimit: number },
+): Promise<TranscriptViewportResult> {
+  if (nativeResult.points.length === 0) {
+    return nativeResult
+  }
+
+  const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
+
+  try {
+    await validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {
+      label: 'transcripts.parquet',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+    throwIfAborted(options.signal)
+
+    const dataset =
+      options.getDataset === undefined
+        ? await cachedXeniumTranscriptDataset(baseUrl)
+        : await options.getDataset(baseUrl)
+    throwIfAborted(options.signal)
+
+    const parquetResult = await dataset.transcriptsForViewport(bbox, {
+      pointLimit: options.pointLimit,
+      groupLimit: options.groupLimit ?? TRANSCRIPT_GROUP_LIMIT,
+      minQv: options.minQv ?? 20,
+      geneOnly: options.geneOnly ?? true,
+      featureNames: options.featureNames ?? [],
+    })
+    throwIfAborted(options.signal)
+
+    return {
+      ...nativeResult,
+      points: mergeTranscriptPointMetadata(nativeResult.points, parquetResult.points),
+    }
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error
+    }
+
+    return nativeResult
+  }
+}
+
+export async function loadDatasetTranscriptAggregates(
+  baseUrl: string,
+  bbox: BBox,
+  options: TranscriptAggregateOptions = {},
+): Promise<TranscriptAggregateResult> {
+  const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
+  const zarrUrl = datasetFileUrl(baseUrl, 'transcripts.zarr.zip')
+
+  await validateRangeSupport(zarrUrl, {
+    label: 'transcripts.zarr.zip',
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+  throwIfAborted(options.signal)
+
+  return loadTranscriptZarrAggregates(zarrUrl, bbox, {
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    mode: options.mode ?? 'density',
+    featureNames: options.featureNames ?? [],
+    ...(options.maxBins === undefined ? {} : { maxBins: options.maxBins }),
   })
 }
 
@@ -347,6 +499,98 @@ export function transcriptViewportRequestKey(
     options.pointLimit,
     [...options.featureNames].sort((a, b) => a.localeCompare(b)).join(','),
   ].join('|')
+}
+
+export function transcriptAggregateRequestKey(
+  baseUrl: string,
+  bbox: BBox,
+  options: {
+    readonly mode: 'density' | 'bins'
+    readonly featureNames: readonly string[]
+    readonly maxBins: number
+  },
+): string {
+  return [
+    baseUrl,
+    'aggregate',
+    bbox.minX.toFixed(1),
+    bbox.minY.toFixed(1),
+    bbox.maxX.toFixed(1),
+    bbox.maxY.toFixed(1),
+    options.mode,
+    options.maxBins,
+    [...options.featureNames].sort((a, b) => a.localeCompare(b)).join(','),
+  ].join('|')
+}
+
+function transcriptPointMetadataKey(point: TranscriptPoint): string {
+  return `${point.fovName ?? ''}\u0000${point.transcriptId ?? point.id}`
+}
+
+function transcriptResultWithMetadataDeadline(
+  nativeResult: TranscriptViewportResult,
+  enrichment: Promise<TranscriptViewportResult>,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<TranscriptViewportResult> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return Promise.resolve(nativeResult)
+  }
+
+  if (signal?.aborted) {
+    return Promise.reject(abortError(signal))
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+
+    const cleanup = () => {
+      globalThis.clearTimeout(timeout)
+      signal?.removeEventListener('abort', handleAbort)
+    }
+
+    const settleWithNative = () => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+      resolve(nativeResult)
+    }
+
+    const settleWithResult = (result: TranscriptViewportResult) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+      resolve(result)
+    }
+
+    const settleWithError = (error: unknown) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+
+      if (isAbortError(error)) {
+        reject(error)
+        return
+      }
+
+      resolve(nativeResult)
+    }
+
+    const handleAbort = () => settleWithError(abortError(signal as AbortSignal))
+    const timeout = globalThis.setTimeout(settleWithNative, timeoutMs)
+
+    signal?.addEventListener('abort', handleAbort, { once: true })
+    enrichment.then(settleWithResult, settleWithError)
+  })
 }
 
 async function probeTranscriptFile(

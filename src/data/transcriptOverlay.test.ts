@@ -1,12 +1,29 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   MAX_TRANSCRIPT_EXACT_RENDER_LIMIT,
   TRANSCRIPT_EXACT_RENDER_LIMIT,
+  loadDatasetTranscriptViewport,
+  mergeTranscriptPointMetadata,
   normalizeTranscriptExactPointLimit,
   planTranscriptLod,
   transcriptViewportRequestKey,
+  type TranscriptPoint,
 } from './transcriptOverlay'
+import { intToCellId } from './cellid'
 import { micrometers } from './coords'
+import type { XeniumDataset } from '../datasets/xeniumDataset'
+
+const transcriptZarrMock = vi.hoisted(() => ({
+  loadTranscriptZarrAggregates: vi.fn(),
+  loadTranscriptZarrViewport: vi.fn(),
+}))
+
+vi.mock('./transcriptZarr', () => transcriptZarrMock)
+
+beforeEach(() => {
+  transcriptZarrMock.loadTranscriptZarrAggregates.mockReset()
+  transcriptZarrMock.loadTranscriptZarrViewport.mockReset()
+})
 
 describe('transcriptOverlay', () => {
   it('plans exact rendering when the viewport is close and inside budget', () => {
@@ -126,4 +143,120 @@ describe('transcriptOverlay', () => {
 
     expect(left).toBe(right)
   })
+
+  it('merges Parquet transcript assignment metadata into native Zarr points', () => {
+    const cellId = intToCellId(1, 1)
+    const nativePoint = transcriptPoint({
+      id: 'FOV-001:12',
+      transcriptId: '12',
+      cellId: null,
+      cellAssignment: 'unavailable',
+      fovName: 'FOV-001',
+    })
+    const parquetPoint = transcriptPoint({
+      id: '12',
+      transcriptId: '12',
+      cellId,
+      cellAssignment: 'known',
+      fovName: 'FOV-001',
+      overlapsNucleus: true,
+      nucleusDistance: 0,
+    })
+
+    expect(mergeTranscriptPointMetadata([nativePoint], [parquetPoint])).toEqual([
+      expect.objectContaining({
+        id: 'FOV-001:12',
+        transcriptId: '12',
+        cellId,
+        cellAssignment: 'known',
+        overlapsNucleus: true,
+        nucleusDistance: 0,
+      }),
+    ])
+  })
+
+  it('returns native exact points when Parquet metadata enrichment is slow', async () => {
+    vi.useFakeTimers()
+    const nativeResult = {
+      points: [
+        transcriptPoint({
+          id: 'FOV-001:12',
+          transcriptId: '12',
+          cellId: null,
+          cellAssignment: 'unavailable',
+          fovName: 'FOV-001',
+        }),
+      ],
+      groups: [],
+      hitPointLimit: false,
+    }
+    const transcriptsForViewport = vi.fn(() => pendingPromise())
+    transcriptZarrMock.loadTranscriptZarrViewport.mockResolvedValue(nativeResult)
+
+    try {
+      const result = loadDatasetTranscriptViewport(
+        'https://example.test/xenium/',
+        {
+          minX: micrometers(0),
+          minY: micrometers(0),
+          maxX: micrometers(10),
+          maxY: micrometers(10),
+        },
+        {
+          validateRangeSupport: vi.fn(async () => undefined),
+          getDataset: async () =>
+            ({
+              transcriptsForViewport,
+            }) as unknown as XeniumDataset,
+          metadataEnrichmentTimeoutMs: 25,
+        },
+      )
+
+      await vi.advanceTimersByTimeAsync(25)
+
+      await expect(result).resolves.toEqual(nativeResult)
+      expect(transcriptsForViewport).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
+
+function pendingPromise<T = never>(): Promise<T> {
+  return new Promise<T>(() => {})
+}
+
+function transcriptPoint({
+  id,
+  transcriptId,
+  cellId,
+  cellAssignment,
+  fovName,
+  overlapsNucleus,
+  nucleusDistance,
+}: {
+  readonly id: string
+  readonly transcriptId: string
+  readonly cellId: TranscriptPoint['cellId']
+  readonly cellAssignment: TranscriptPoint['cellAssignment']
+  readonly fovName: string
+  readonly overlapsNucleus?: boolean
+  readonly nucleusDistance?: number
+}): TranscriptPoint {
+  return {
+    id,
+    transcriptId,
+    cellId,
+    ...(cellAssignment === undefined ? {} : { cellAssignment }),
+    featureName: 'Actb',
+    fovName,
+    position: {
+      x: micrometers(1),
+      y: micrometers(2),
+    },
+    qv: 31,
+    isGene: true,
+    ...(overlapsNucleus === undefined ? {} : { overlapsNucleus }),
+    ...(nucleusDistance === undefined ? {} : { nucleusDistance }),
+  }
+}

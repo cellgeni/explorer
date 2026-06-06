@@ -39,12 +39,15 @@ import {
   MIN_TRANSCRIPT_EXACT_RENDER_LIMIT,
   TRANSCRIPT_GROUP_LIMIT,
   loadDatasetTranscriptCapabilities as defaultLoadDatasetTranscriptCapabilities,
+  loadDatasetTranscriptAggregates as defaultLoadDatasetTranscriptAggregates,
   loadDatasetTranscriptViewport as defaultLoadDatasetTranscriptViewport,
   normalizeTranscriptExactPointLimit,
+  transcriptAggregateRequestKey,
   planTranscriptLod,
   transcriptViewportRequestKey,
   type TranscriptCapabilities,
   type TranscriptAggregateBin,
+  type TranscriptAggregateResult,
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
   type TranscriptGroupSummary,
@@ -139,7 +142,7 @@ import type {
   TranscriptDensityColorScale,
 } from './rendering/deckLayers'
 import type { RoiGeneStats } from './data/roiGeneStats'
-import type { OverviewCellDatum } from './rendering/deckLayers'
+import type { OverviewCellDatum, TranscriptPointDatum } from './rendering/deckLayers'
 import type {
   RoiDrawMode,
   ViewerMagicLensDetail,
@@ -150,6 +153,8 @@ import type {
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS = 12_000
+const TRANSCRIPT_NATIVE_DENSITY_MAX_BINS = 700
+const TRANSCRIPT_NATIVE_BIN_MAX_BINS = 1_500
 const EMPTY_GENE_LIST: readonly string[] = []
 const EMPTY_TRANSCRIPT_POINTS: readonly TranscriptPoint[] = []
 const EMPTY_TRANSCRIPT_AGGREGATE_BINS: readonly TranscriptAggregateBin[] = []
@@ -238,6 +243,16 @@ export type TranscriptCapabilitiesLoader = (
   baseUrl: string,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<TranscriptCapabilities>
+export type TranscriptAggregateLoader = (
+  baseUrl: string,
+  bbox: BBox,
+  options?: {
+    readonly signal?: AbortSignal
+    readonly mode?: 'density' | 'bins'
+    readonly featureNames?: readonly string[]
+    readonly maxBins?: number
+  },
+) => Promise<TranscriptAggregateResult>
 export type TranscriptViewportLoader = (
   baseUrl: string,
   bbox: BBox,
@@ -485,10 +500,11 @@ type TranscriptLayerState =
   | {
       readonly status: 'aggregate'
       readonly message: string
-      readonly source: 'cell-summary'
+      readonly source: 'cell-summary' | 'native-zarr'
       readonly mode: 'density' | 'bins'
       readonly bins: readonly TranscriptAggregateBin[]
       readonly visibleTranscriptEstimate: number
+      readonly durationMs?: number
     }
   | {
       readonly status: 'unavailable'
@@ -696,6 +712,7 @@ export interface AppProps {
   readonly loadRoiGeneStats?: RoiGeneStatsLoader
   readonly loadRoiTranscripts?: RoiTranscriptsLoader
   readonly loadTranscriptCapabilities?: TranscriptCapabilitiesLoader
+  readonly loadTranscriptAggregates?: TranscriptAggregateLoader
   readonly loadTranscriptViewport?: TranscriptViewportLoader
   readonly loadGeneExpression?: GeneExpressionLoader
   readonly warmDatasetForRoi?: DatasetWarmupLoader
@@ -715,6 +732,7 @@ export function App({
   loadRoiGeneStats = defaultLoadDatasetRoiGeneStats,
   loadRoiTranscripts = defaultLoadDatasetRoiTranscripts,
   loadTranscriptCapabilities = defaultLoadDatasetTranscriptCapabilities,
+  loadTranscriptAggregates = defaultLoadDatasetTranscriptAggregates,
   loadTranscriptViewport = defaultLoadDatasetTranscriptViewport,
   loadGeneExpression = defaultLoadDatasetGeneExpression,
   warmDatasetForRoi = defaultWarmDatasetForRoi,
@@ -1863,13 +1881,124 @@ export function App({
     })
 
     if (plan.kind === 'native-zarr') {
+      const maxBins =
+        plan.mode === 'density'
+          ? TRANSCRIPT_NATIVE_DENSITY_MAX_BINS
+          : TRANSCRIPT_NATIVE_BIN_MAX_BINS
+      const requestKey = transcriptAggregateRequestKey(
+        loadState.url,
+        currentViewportDetail.bbox,
+        {
+          mode: plan.mode,
+          featureNames,
+          maxBins,
+        },
+      )
+
+      if (requestKey === transcriptViewportKeyRef.current) {
+        return
+      }
+
+      abortActiveRequest(transcriptAbortRef)
+      const requestId = transcriptRequestId.current + 1
+      const abortController = new AbortController()
+      const transcriptStartedAt = readTimestamp()
+      transcriptRequestId.current = requestId
+      transcriptAbortRef.current = abortController
+      transcriptViewportKeyRef.current = requestKey
+      queueMicrotask(() => {
+        if (transcriptRequestId.current === requestId) {
+          setTranscriptLayerState((current) => {
+            const previousLayer = retainedTranscriptLayerState(current)
+
+            return {
+              status: 'loading',
+              url: loadState.url,
+              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+              ...(previousLayer === undefined ? {} : { previousLayer }),
+            }
+          })
+        }
+      })
+      appendDebugEvent('Native transcript aggregate query started', {
+        coalesceKey: 'transcript-query',
+      })
+
+      void loadTranscriptAggregates(loadState.url, currentViewportDetail.bbox, {
+        signal: abortController.signal,
+        mode: plan.mode,
+        featureNames,
+        maxBins,
+      })
+        .then((result) => {
+          if (transcriptRequestId.current !== requestId) {
+            return
+          }
+
+          const durationMs = Math.max(0, readTimestamp() - transcriptStartedAt)
+
+          setTranscriptLayerState({
+            status: 'aggregate',
+            source: result.source,
+            mode: plan.mode,
+            bins: result.bins,
+            message: transcriptNativeAggregateMessage({
+              mode: plan.mode,
+              selectedFeatureCount: result.selectedFeatureNames.length,
+              binCount: result.bins.length,
+            }),
+            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+            durationMs,
+          })
+          appendDebugEvent(
+            `Native transcript aggregate ready: ${result.bins.length.toLocaleString()} bins in ${formatElapsed(
+              transcriptStartedAt,
+            )}`,
+            { coalesceKey: 'transcript-query' },
+          )
+        })
+        .catch((error) => {
+          if (isAbortError(error) || transcriptRequestId.current !== requestId) {
+            return
+          }
+
+          transcriptViewportKeyRef.current = null
+          setTranscriptLayerState({
+            status: 'error',
+            url: loadState.url,
+            error: createStructuredLoadError('Transcripts', error),
+          })
+          appendDebugEvent('Native transcript aggregate query failed', {
+            coalesceKey: 'transcript-query',
+          })
+        })
+        .finally(() => {
+          if (transcriptAbortRef.current === abortController) {
+            transcriptAbortRef.current = null
+          }
+        })
+
+      return () => {
+        if (transcriptAbortRef.current === abortController) {
+          abortActiveRequest(transcriptAbortRef)
+        }
+      }
+    }
+
+    if (
+      (plan.kind === 'waiting' || plan.kind === 'unavailable') &&
+      !transcriptCapabilityState.capabilities.nativeZarr &&
+      transcriptFeatureFilterMode === 'all' &&
+      visibleTranscriptEstimate > 0
+    ) {
       abortActiveRequest(transcriptAbortRef)
       transcriptRequestId.current += 1
       const aggregateRequestId = transcriptRequestId.current
+      const fallbackMode = transcriptDetailMode === 'bins' ? 'bins' : 'density'
       const bins = buildCellSummaryTranscriptBins(
         overviewCells,
         currentViewportDetail.bbox,
-        plan.mode,
+        fallbackMode,
       )
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
@@ -1877,10 +2006,10 @@ export function App({
           setTranscriptLayerState({
             status: 'aggregate',
             source: 'cell-summary',
-            mode: plan.mode,
+            mode: fallbackMode,
             bins,
             message: transcriptAggregateFallbackMessage({
-              mode: plan.mode,
+              mode: fallbackMode,
               featureFilterMode: transcriptFeatureFilterMode,
               selectedFeatureCount: featureNames.length,
             }),
@@ -2091,6 +2220,7 @@ export function App({
     appendDebugEvent,
     currentViewportDetail,
     loadState,
+    loadTranscriptAggregates,
     loadTranscriptViewport,
     overviewCells,
     selectedGenes,
@@ -5649,6 +5779,7 @@ function buildCellSummaryTranscriptBins(
 
       return {
         id: `cell-summary:${mode}:${level}:${bin.binX}:${bin.binY}`,
+        source: 'cell-summary',
         level,
         binX: bin.binX,
         binY: bin.binY,
@@ -5657,9 +5788,28 @@ function buildCellSummaryTranscriptBins(
           y: micrometers(centerY),
         },
         radiusMicrometers,
+        binSizeMicrometers: binSize,
         count: Math.floor(bin.count),
       }
     })
+}
+
+function transcriptNativeAggregateMessage({
+  mode,
+  selectedFeatureCount,
+  binCount,
+}: {
+  readonly mode: 'density' | 'bins'
+  readonly selectedFeatureCount: number
+  readonly binCount: number
+}): string {
+  const modeLabel = mode === 'bins' ? 'binned' : 'density'
+  const featureLabel =
+    selectedFeatureCount > 0
+      ? `${selectedFeatureCount.toLocaleString()} selected-feature`
+      : 'all-transcript'
+
+  return `Showing native ${featureLabel} ${modeLabel} bins from transcripts.zarr.zip (${binCount.toLocaleString()} bins).`
 }
 
 function transcriptAggregateFallbackMessage({
@@ -6769,6 +6919,12 @@ function TranscriptStatusPanel({
               <dt>Layer</dt>
               <dd>{layerState.source === 'cell-summary' ? 'Cell summary' : 'Native'}</dd>
             </div>
+            {layerState.durationMs === undefined ? null : (
+              <div>
+                <dt>Query</dt>
+                <dd>{layerState.durationMs.toLocaleString()} ms</dd>
+              </div>
+            )}
           </>
         ) : null}
       </dl>
@@ -6806,20 +6962,46 @@ function TranscriptStatusPanel({
           <p>{hoveredTranscript.transcript.featureName}</p>
           <dl>
             <div>
-              <dt>Transcript</dt>
-              <dd>{hoveredTranscript.transcript.id}</dd>
+              <dt>ID</dt>
+              <dd>
+                {hoveredTranscript.transcript.transcriptId ??
+                  hoveredTranscript.transcript.id}
+              </dd>
             </div>
             <div>
               <dt>FOV</dt>
               <dd>{hoveredTranscript.transcript.fovName ?? 'Unassigned'}</dd>
             </div>
-            <div>
-              <dt>Cell</dt>
-              <dd>{hoveredTranscript.transcript.cellId ?? 'Unassigned'}</dd>
-            </div>
+            {transcriptCellDisplayLabel(hoveredTranscript.transcript) === null ? null : (
+              <div>
+                <dt>Cell</dt>
+                <dd>{transcriptCellDisplayLabel(hoveredTranscript.transcript)}</dd>
+              </div>
+            )}
             <div>
               <dt>QV</dt>
               <dd>{formatOptionalNumber(hoveredTranscript.transcript.qv)}</dd>
+            </div>
+            <div>
+              <dt>X/Y</dt>
+              <dd>
+                {formatOptionalNumber(hoveredTranscript.transcript.position[0])},{' '}
+                {formatOptionalNumber(
+                  Math.abs(hoveredTranscript.transcript.position[1] ?? 0),
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Z</dt>
+              <dd>{formatOptionalNumber(hoveredTranscript.transcript.zLocation)}</dd>
+            </div>
+            <div>
+              <dt>Nucleus</dt>
+              <dd>{formatBooleanLabel(hoveredTranscript.transcript.overlapsNucleus)}</dd>
+            </div>
+            <div>
+              <dt>Type</dt>
+              <dd>{transcriptGeneStatusLabel(hoveredTranscript.transcript.isGene)}</dd>
             </div>
           </dl>
         </div>
@@ -6836,6 +7018,26 @@ function TranscriptStatusPanel({
               <dd>{hoveredTranscript.aggregate.level.toLocaleString()}</dd>
             </div>
             <div>
+              <dt>Source</dt>
+              <dd>
+                {hoveredTranscript.aggregate.source === 'native-zarr'
+                  ? 'Native'
+                  : 'Cell summary'}
+              </dd>
+            </div>
+            <div>
+              <dt>Bin size</dt>
+              <dd>
+                {formatOptionalNumber(hoveredTranscript.aggregate.binSizeMicrometers)} µm
+              </dd>
+            </div>
+            {hoveredTranscript.aggregate.selectedGeneCount === undefined ? null : (
+              <div>
+                <dt>Selected</dt>
+                <dd>{hoveredTranscript.aggregate.selectedGeneCount.toLocaleString()}</dd>
+              </div>
+            )}
+            <div>
               <dt>Bin</dt>
               <dd>
                 {hoveredTranscript.aggregate.binX.toLocaleString()},{' '}
@@ -6843,6 +7045,17 @@ function TranscriptStatusPanel({
               </dd>
             </div>
           </dl>
+          {hoveredTranscript.aggregate.topFeatures === undefined ||
+          hoveredTranscript.aggregate.topFeatures.length === 0 ? null : (
+            <ol className="transcript-hover-feature-list">
+              {hoveredTranscript.aggregate.topFeatures.map((feature) => (
+                <li key={feature.featureName}>
+                  <span>{feature.featureName}</span>
+                  <strong>{feature.count.toLocaleString()}</strong>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       ) : null}
     </div>
@@ -7606,6 +7819,30 @@ function defaultRoiName(index: number): string {
 
 function formatOptionalNumber(value: number | undefined): string {
   return value === undefined ? 'None' : formatNumber(value)
+}
+
+function transcriptCellDisplayLabel(transcript: TranscriptPointDatum): string | null {
+  if (transcript.cellId !== null) {
+    return transcript.cellId
+  }
+
+  return transcript.cellAssignment === 'unassigned' ? 'Unassigned' : null
+}
+
+function formatBooleanLabel(value: boolean | undefined): string {
+  if (value === undefined) {
+    return 'Unknown'
+  }
+
+  return value ? 'Yes' : 'No'
+}
+
+function transcriptGeneStatusLabel(value: boolean | undefined): string {
+  if (value === undefined) {
+    return 'Unknown'
+  }
+
+  return value ? 'Gene' : 'Control'
 }
 
 function formatNumber(value: number | undefined): string {

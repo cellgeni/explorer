@@ -864,7 +864,9 @@ function parseTranscriptPointRow(row: Record<string, unknown>): TranscriptPoint 
 
   return {
     id: String(transcriptId),
+    transcriptId: String(transcriptId),
     cellId: cellId === null || cellId === undefined ? null : asCellId(cellId),
+    cellAssignment: cellId === null || cellId === undefined ? 'unassigned' : 'known',
     featureName,
     fovName: fovName ?? null,
     position: {

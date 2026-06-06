@@ -2,9 +2,19 @@ import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
 import { micrometers } from './coords'
 import type { BBox } from './coords'
-import type { TranscriptGroupSummary, TranscriptPoint } from './transcriptOverlay'
+import type {
+  TranscriptAggregateBin,
+  TranscriptAggregateFeatureSummary,
+  TranscriptGroupSummary,
+  TranscriptLodLevel,
+  TranscriptPoint,
+} from './transcriptOverlay'
 
 const TRANSCRIPT_ZARR_EXACT_LEVEL = 0
+const TRANSCRIPT_GRID_BASE_SIZE_MICROMETERS = 250
+const TRANSCRIPT_DENSITY_DEFAULT_MAX_BINS = 700
+const TRANSCRIPT_BINS_DEFAULT_MAX_BINS = 1_500
+const TRANSCRIPT_DENSITY_FEATURE_SUMMARY_LIMIT = 4
 const UNKNOWN_GENE_INDEX = 65_535
 const UNKNOWN_CODEWORD_INDEX = 65_535
 
@@ -39,9 +49,33 @@ interface TranscriptZarrMetadata {
   readonly gridSize: number
   readonly gridKeys: readonly string[]
   readonly gridKeySet: ReadonlySet<string>
+  readonly gridLevels: readonly TranscriptGridLevelMetadata[]
+  readonly densityGene: TranscriptDensityGeneMetadata | null
   readonly geneNames: readonly string[]
   readonly codewordGeneNames: readonly string[]
   readonly fovNames: readonly string[]
+  readonly numberRnas?: number
+}
+
+export interface TranscriptGridLevelMetadata {
+  readonly level: number
+  readonly tileSizeMicrometers: number
+  readonly gridKeys: readonly string[]
+  readonly transcriptCounts: readonly number[]
+}
+
+interface TranscriptDensityGeneMetadata {
+  readonly data: ZarrArray
+  readonly indices: ZarrArray
+  readonly indptr: ZarrArray
+  readonly rows: number
+  readonly cols: number
+  readonly gridSizeX: number
+  readonly gridSizeY: number
+  readonly originX: number
+  readonly originY: number
+  readonly geneNames: readonly string[]
+  indptrDataPromise?: Promise<Uint32Array>
 }
 
 interface TranscriptTileArrays {
@@ -53,6 +87,15 @@ interface TranscriptTileArrays {
   readonly codewordIdentity?: NumericMatrix
   readonly rowCount: number
 }
+
+interface TranscriptZarrAggregateOptions {
+  readonly signal?: AbortSignal
+  readonly mode?: 'density' | 'bins'
+  readonly featureNames?: readonly string[]
+  readonly maxBins?: number
+}
+
+type ZarrArray = Awaited<ReturnType<typeof openZarrArray>>
 
 const transcriptZarrMetadataCache = new Map<string, Promise<TranscriptZarrMetadata>>()
 
@@ -87,20 +130,13 @@ export async function loadTranscriptZarrViewport(
     const arrays = await loadTranscriptTileArrays(metadata.root, tileKey, !geneOnly)
 
     for (let row = 0; row < arrays.rowCount; row += 1) {
-      const valid =
-        arrays.valid === undefined
-          ? 1
-          : readMatrixValue(arrays.valid, row, 0)
+      const valid = arrays.valid === undefined ? 1 : readMatrixValue(arrays.valid, row, 0)
 
       if (valid === 0) {
         continue
       }
 
-      const qv = readMatrixValue(
-        arrays.qualityScore,
-        row,
-        0,
-      )
+      const qv = readMatrixValue(arrays.qualityScore, row, 0)
 
       if (qv < minQv) {
         continue
@@ -113,11 +149,7 @@ export async function loadTranscriptZarrViewport(
         continue
       }
 
-      const geneIndex = readMatrixValue(
-        arrays.geneIdentity,
-        row,
-        0,
-      )
+      const geneIndex = readMatrixValue(arrays.geneIdentity, row, 0)
       const isGene =
         Number.isInteger(geneIndex) &&
         geneIndex >= 0 &&
@@ -144,13 +176,15 @@ export async function loadTranscriptZarrViewport(
       const fovIndex = readMatrixValue(arrays.id, row, 1)
       const fovName =
         Number.isInteger(fovIndex) && fovIndex >= 0
-          ? metadata.fovNames[fovIndex] ?? null
+          ? (metadata.fovNames[fovIndex] ?? null)
           : null
       const zLocation = readMatrixValue(arrays.location, row, 2)
 
       points.push({
         id: `${fovName ?? fovIndex}:${transcriptId}`,
+        transcriptId: String(transcriptId),
         cellId: null,
+        cellAssignment: 'unavailable',
         featureName,
         fovName,
         position: {
@@ -182,6 +216,70 @@ export async function loadTranscriptZarrViewport(
   }
 }
 
+export async function loadTranscriptZarrAggregates(
+  url: string,
+  bbox: BBox,
+  options: TranscriptZarrAggregateOptions = {},
+): Promise<{
+  readonly bins: readonly TranscriptAggregateBin[]
+  readonly level: TranscriptLodLevel
+  readonly source: 'native-zarr'
+  readonly selectedFeatureNames: readonly string[]
+}> {
+  const metadata = await cachedTranscriptZarrMetadata(url)
+  throwIfAborted(options.signal)
+
+  const mode = options.mode ?? 'density'
+  const maxBins =
+    options.maxBins ??
+    (mode === 'density'
+      ? TRANSCRIPT_DENSITY_DEFAULT_MAX_BINS
+      : TRANSCRIPT_BINS_DEFAULT_MAX_BINS)
+  const selectedFeatureNames = normalizeFeatureNames(options.featureNames ?? [])
+
+  if (selectedFeatureNames.length > 0) {
+    if (metadata.densityGene === null) {
+      throw new Error(
+        'transcripts.zarr.zip is missing density/gene metadata for selected-feature aggregate bins.',
+      )
+    }
+
+    const densityLevel = transcriptDensityLevelForBbox(bbox, mode, maxBins)
+    const bins = await transcriptZarrDensityGeneBins(metadata, bbox, {
+      mode,
+      maxBins,
+      selectedFeatureNames,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+
+    return {
+      bins,
+      level: transcriptLodLevelFromBins(
+        bins,
+        densityLevel.level,
+        densityLevel.tileSizeMicrometers,
+      ),
+      source: 'native-zarr',
+      selectedFeatureNames,
+    }
+  }
+
+  const level = chooseTranscriptGridLevel(metadata.gridLevels, bbox, maxBins)
+  const bins = transcriptZarrGridLevelBins(level, bbox)
+
+  return {
+    bins,
+    level: {
+      level: level.level,
+      gridSizeMicrometers: level.tileSizeMicrometers,
+      gridKeys: bins.map((bin) => `${bin.binX},${bin.binY}`),
+      transcriptCounts: bins.map((bin) => bin.count),
+    },
+    source: 'native-zarr',
+    selectedFeatureNames,
+  }
+}
+
 export function transcriptZarrTileKeysForViewport(
   bbox: BBox,
   gridSize: number,
@@ -208,6 +306,492 @@ export function transcriptZarrTileKeysForViewport(
   }
 
   return keys
+}
+
+export function chooseTranscriptGridLevel(
+  levels: readonly TranscriptGridLevelMetadata[],
+  bbox: BBox,
+  maxBins: number,
+): TranscriptGridLevelMetadata {
+  if (levels.length === 0) {
+    throw new Error('transcripts.zarr.zip does not expose aggregate grid levels.')
+  }
+
+  const normalizedMaxBins = Math.max(1, Math.floor(maxBins))
+  let fallback = levels[levels.length - 1]
+
+  if (fallback === undefined) {
+    throw new Error('transcripts.zarr.zip does not expose aggregate grid levels.')
+  }
+
+  for (const level of levels) {
+    const visibleCount = countVisibleGridKeys(level, bbox)
+
+    if (visibleCount > 0) {
+      fallback = level
+    }
+
+    if (visibleCount > 0 && visibleCount <= normalizedMaxBins) {
+      return level
+    }
+  }
+
+  return fallback
+}
+
+export function transcriptZarrGridLevelBins(
+  level: TranscriptGridLevelMetadata,
+  bbox: BBox,
+): readonly TranscriptAggregateBin[] {
+  const bins: TranscriptAggregateBin[] = []
+
+  for (let index = 0; index < level.gridKeys.length; index += 1) {
+    const key = level.gridKeys[index]
+    const tile = parseGridKey(key)
+
+    if (tile === null || !gridTileIntersectsBbox(tile, level.tileSizeMicrometers, bbox)) {
+      continue
+    }
+
+    const count = level.transcriptCounts[index] ?? 0
+
+    if (count <= 0) {
+      continue
+    }
+
+    bins.push({
+      id: `native-zarr-grid:${level.level}:${tile.x}:${tile.y}`,
+      source: 'native-zarr',
+      level: level.level,
+      binX: tile.x,
+      binY: tile.y,
+      position: {
+        x: micrometers((tile.x + 0.5) * level.tileSizeMicrometers),
+        y: micrometers((tile.y + 0.5) * level.tileSizeMicrometers),
+      },
+      radiusMicrometers: level.tileSizeMicrometers * 0.42,
+      binSizeMicrometers: level.tileSizeMicrometers,
+      count,
+    })
+  }
+
+  return bins
+}
+
+function countVisibleGridKeys(level: TranscriptGridLevelMetadata, bbox: BBox): number {
+  let visibleCount = 0
+
+  for (const key of level.gridKeys) {
+    const tile = parseGridKey(key)
+
+    if (tile !== null && gridTileIntersectsBbox(tile, level.tileSizeMicrometers, bbox)) {
+      visibleCount += 1
+    }
+  }
+
+  return visibleCount
+}
+
+function parseGridKey(
+  key: string | undefined,
+): { readonly x: number; readonly y: number } | null {
+  if (key === undefined) {
+    return null
+  }
+
+  const [xText, yText] = key.split(',', 2)
+  const x = Number(xText)
+  const y = Number(yText)
+
+  if (!Number.isInteger(x) || !Number.isInteger(y)) {
+    return null
+  }
+
+  return { x, y }
+}
+
+function gridTileIntersectsBbox(
+  tile: { readonly x: number; readonly y: number },
+  tileSizeMicrometers: number,
+  bbox: BBox,
+): boolean {
+  const minX = tile.x * tileSizeMicrometers
+  const minY = tile.y * tileSizeMicrometers
+  const maxX = minX + tileSizeMicrometers
+  const maxY = minY + tileSizeMicrometers
+
+  return minX <= bbox.maxX && maxX >= bbox.minX && minY <= bbox.maxY && maxY >= bbox.minY
+}
+
+async function transcriptZarrDensityGeneBins(
+  metadata: TranscriptZarrMetadata,
+  bbox: BBox,
+  options: {
+    readonly mode: 'density' | 'bins'
+    readonly maxBins: number
+    readonly selectedFeatureNames: readonly string[]
+    readonly signal?: AbortSignal
+  },
+): Promise<readonly TranscriptAggregateBin[]> {
+  const densityGene = metadata.densityGene
+
+  if (densityGene === null) {
+    return []
+  }
+
+  const geneIndexes = selectedGeneIndexes(
+    densityGene.geneNames,
+    options.selectedFeatureNames,
+  )
+
+  if (geneIndexes.length === 0) {
+    return []
+  }
+
+  const densityLevel = transcriptDensityLevelForBbox(bbox, options.mode, options.maxBins)
+  const rowRange = densityRowRangeForBbox(densityGene, bbox)
+  const colRange = densityColRangeForBbox(densityGene, bbox)
+
+  if (rowRange === null || colRange === null) {
+    return []
+  }
+
+  const indptr = await readDensityGeneIndptr(densityGene)
+  throwIfAborted(options.signal)
+
+  const binMap = new Map<
+    string,
+    {
+      binX: number
+      binY: number
+      count: number
+      featureCounts: Map<string, number>
+    }
+  >()
+  const dataChunkCache = new Map<
+    number,
+    Promise<{
+      readonly start: number
+      readonly data: NumericArray
+      readonly indices: NumericArray
+    }>
+  >()
+
+  for (let row = rowRange.start; row <= rowRange.end; row += 1) {
+    throwIfAborted(options.signal)
+
+    for (const gene of geneIndexes) {
+      const pointerIndex = row * densityGene.geneNames.length + gene.index
+      const start = indptr[pointerIndex] ?? 0
+      const end = indptr[pointerIndex + 1] ?? start
+
+      if (end <= start) {
+        continue
+      }
+
+      await addDensityGeneRangeToBins({
+        densityGene,
+        start,
+        end,
+        row,
+        colRange,
+        geneName: gene.name,
+        binSizeMicrometers: densityLevel.tileSizeMicrometers,
+        binMap,
+        dataChunkCache,
+      })
+    }
+  }
+
+  return densityBinMapToAggregateBins(
+    binMap,
+    densityLevel.level,
+    densityLevel.tileSizeMicrometers,
+  )
+}
+
+export function transcriptDensityLevelForBbox(
+  bbox: BBox,
+  _mode: 'density' | 'bins',
+  maxBins: number,
+): { readonly level: number; readonly tileSizeMicrometers: number } {
+  const normalizedMaxBins = Math.max(1, Math.floor(maxBins))
+  const maxLevel = 8
+
+  for (let level = 0; level <= maxLevel; level += 1) {
+    const tileSizeMicrometers = TRANSCRIPT_GRID_BASE_SIZE_MICROMETERS * 2 ** level
+    const xBins = Math.max(1, Math.ceil((bbox.maxX - bbox.minX) / tileSizeMicrometers))
+    const yBins = Math.max(1, Math.ceil((bbox.maxY - bbox.minY) / tileSizeMicrometers))
+    const visibleBins = xBins * yBins
+
+    if (visibleBins <= normalizedMaxBins) {
+      return { level, tileSizeMicrometers }
+    }
+  }
+
+  return {
+    level: maxLevel,
+    tileSizeMicrometers: TRANSCRIPT_GRID_BASE_SIZE_MICROMETERS * 2 ** maxLevel,
+  }
+}
+
+function selectedGeneIndexes(
+  geneNames: readonly string[],
+  selectedFeatureNames: readonly string[],
+): readonly { readonly index: number; readonly name: string }[] {
+  const indexByUpperName = new Map<string, number>()
+
+  for (let index = 0; index < geneNames.length; index += 1) {
+    const geneName = geneNames[index]
+
+    if (geneName !== undefined) {
+      indexByUpperName.set(geneName.toUpperCase(), index)
+    }
+  }
+
+  return selectedFeatureNames.flatMap((featureName) => {
+    const index = indexByUpperName.get(featureName.toUpperCase())
+    const name = index === undefined ? undefined : geneNames[index]
+
+    return index === undefined || name === undefined ? [] : [{ index, name }]
+  })
+}
+
+function densityRowRangeForBbox(
+  densityGene: TranscriptDensityGeneMetadata,
+  bbox: BBox,
+): { readonly start: number; readonly end: number } | null {
+  return boundedDensityRange(
+    bbox.minY,
+    bbox.maxY,
+    densityGene.originY,
+    densityGene.gridSizeY,
+    densityGene.rows,
+  )
+}
+
+function densityColRangeForBbox(
+  densityGene: TranscriptDensityGeneMetadata,
+  bbox: BBox,
+): { readonly start: number; readonly end: number } | null {
+  return boundedDensityRange(
+    bbox.minX,
+    bbox.maxX,
+    densityGene.originX,
+    densityGene.gridSizeX,
+    densityGene.cols,
+  )
+}
+
+function boundedDensityRange(
+  minValue: number,
+  maxValue: number,
+  origin: number,
+  gridSize: number,
+  size: number,
+): { readonly start: number; readonly end: number } | null {
+  if (!Number.isFinite(gridSize) || gridSize <= 0 || size <= 0) {
+    return null
+  }
+
+  const start = Math.max(0, Math.floor((minValue - origin) / gridSize))
+  const end = Math.min(size - 1, Math.floor((maxValue - origin) / gridSize))
+
+  return end < start ? null : { start, end }
+}
+
+async function readDensityGeneIndptr(
+  densityGene: TranscriptDensityGeneMetadata,
+): Promise<Uint32Array> {
+  densityGene.indptrDataPromise ??= readWholeZarrArray(densityGene.indptr).then(
+    (matrix) => {
+      if (!(matrix.data instanceof Uint32Array)) {
+        throw new Error('transcripts.zarr.zip density/gene indptr must be uint32.')
+      }
+
+      return matrix.data
+    },
+  )
+
+  return densityGene.indptrDataPromise
+}
+
+async function addDensityGeneRangeToBins(options: {
+  readonly densityGene: TranscriptDensityGeneMetadata
+  readonly start: number
+  readonly end: number
+  readonly row: number
+  readonly colRange: { readonly start: number; readonly end: number }
+  readonly geneName: string
+  readonly binSizeMicrometers: number
+  readonly binMap: Map<
+    string,
+    {
+      binX: number
+      binY: number
+      count: number
+      featureCounts: Map<string, number>
+    }
+  >
+  readonly dataChunkCache: Map<
+    number,
+    Promise<{
+      readonly start: number
+      readonly data: NumericArray
+      readonly indices: NumericArray
+    }>
+  >
+}): Promise<void> {
+  const chunkSize = options.densityGene.data.chunks[0] ?? 2_000_000
+  const firstChunk = Math.floor(options.start / chunkSize)
+  const lastChunk = Math.floor((options.end - 1) / chunkSize)
+
+  for (let chunkIndex = firstChunk; chunkIndex <= lastChunk; chunkIndex += 1) {
+    const chunk = await readDensityGeneDataChunk(
+      options.densityGene,
+      chunkIndex,
+      options.dataChunkCache,
+    )
+    const localStart = Math.max(options.start, chunk.start)
+    const localEnd = Math.min(options.end, chunk.start + chunk.data.length)
+
+    for (let pointer = localStart; pointer < localEnd; pointer += 1) {
+      const localPointer = pointer - chunk.start
+      const col = chunk.indices[localPointer] ?? -1
+
+      if (col < options.colRange.start || col > options.colRange.end) {
+        continue
+      }
+
+      const count = chunk.data[localPointer] ?? 0
+
+      if (count <= 0) {
+        continue
+      }
+
+      const x = options.densityGene.originX + (col + 0.5) * options.densityGene.gridSizeX
+      const y =
+        options.densityGene.originY + (options.row + 0.5) * options.densityGene.gridSizeY
+      const binX = Math.floor(x / options.binSizeMicrometers)
+      const binY = Math.floor(y / options.binSizeMicrometers)
+      const key = `${binX},${binY}`
+      let bin = options.binMap.get(key)
+
+      if (bin === undefined) {
+        bin = { binX, binY, count: 0, featureCounts: new Map() }
+        options.binMap.set(key, bin)
+      }
+
+      bin.count += count
+      bin.featureCounts.set(
+        options.geneName,
+        (bin.featureCounts.get(options.geneName) ?? 0) + count,
+      )
+    }
+  }
+}
+
+async function readDensityGeneDataChunk(
+  densityGene: TranscriptDensityGeneMetadata,
+  chunkIndex: number,
+  cache: Map<
+    number,
+    Promise<{
+      readonly start: number
+      readonly data: NumericArray
+      readonly indices: NumericArray
+    }>
+  >,
+): Promise<{
+  readonly start: number
+  readonly data: NumericArray
+  readonly indices: NumericArray
+}> {
+  const cached = cache.get(chunkIndex)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const chunkSize = densityGene.data.chunks[0] ?? 2_000_000
+  const start = chunkIndex * chunkSize
+  const dataLength = densityGene.data.shape[0] ?? 0
+  const stop = Math.min(dataLength, start + chunkSize)
+  const promise = Promise.all([
+    zarr.get(densityGene.data, [{ start, stop, step: 1 }]),
+    zarr.get(densityGene.indices, [{ start, stop, step: 1 }]),
+  ]).then(([dataChunk, indicesChunk]) => {
+    const dataResult = dataChunk as { readonly data: unknown }
+    const indicesResult = indicesChunk as { readonly data: unknown }
+
+    return {
+      start,
+      data: expectNumericArray(dataResult.data, densityGene.data.path),
+      indices: expectNumericArray(indicesResult.data, densityGene.indices.path),
+    }
+  })
+
+  cache.set(chunkIndex, promise)
+  return promise
+}
+
+function densityBinMapToAggregateBins(
+  binMap: ReadonlyMap<
+    string,
+    {
+      readonly binX: number
+      readonly binY: number
+      readonly count: number
+      readonly featureCounts: ReadonlyMap<string, number>
+    }
+  >,
+  level: number,
+  binSizeMicrometers: number,
+): readonly TranscriptAggregateBin[] {
+  return [...binMap.entries()]
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    .map(([, bin]) => {
+      const topFeatures = topFeatureSummaries(bin.featureCounts)
+
+      return {
+        id: `native-zarr-density:${level}:${bin.binX}:${bin.binY}`,
+        source: 'native-zarr',
+        level,
+        binX: bin.binX,
+        binY: bin.binY,
+        position: {
+          x: micrometers((bin.binX + 0.5) * binSizeMicrometers),
+          y: micrometers((bin.binY + 0.5) * binSizeMicrometers),
+        },
+        radiusMicrometers: binSizeMicrometers * 0.42,
+        binSizeMicrometers,
+        count: bin.count,
+        selectedGeneCount: bin.count,
+        ...(topFeatures.length === 0 ? {} : { topFeatures }),
+      }
+    })
+}
+
+function transcriptLodLevelFromBins(
+  bins: readonly TranscriptAggregateBin[],
+  level: number,
+  gridSizeMicrometers: number,
+): TranscriptLodLevel {
+  return {
+    level,
+    gridSizeMicrometers,
+    gridKeys: bins.map((bin) => `${bin.binX},${bin.binY}`),
+    transcriptCounts: bins.map((bin) => bin.count),
+  }
+}
+
+function topFeatureSummaries(
+  featureCounts: ReadonlyMap<string, number>,
+): readonly TranscriptAggregateFeatureSummary[] {
+  return [...featureCounts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, TRANSCRIPT_DENSITY_FEATURE_SUMMARY_LIMIT)
+    .map(([featureName, count]) => ({ featureName, count }))
 }
 
 export function transcriptGroupsFromPoints(
@@ -278,6 +862,8 @@ async function loadTranscriptZarrMetadata(url: string): Promise<TranscriptZarrMe
   const grids = await zarr.open(root.resolve('grids'), { kind: 'group' })
   const gridKeysByLevel = readNestedStringArrayAttribute(grids.attrs, 'grid_keys')
   const gridKeys = gridKeysByLevel[TRANSCRIPT_ZARR_EXACT_LEVEL] ?? []
+  const densityGene = await loadDensityGeneMetadata(root)
+  const numberRnas = readOptionalPositiveNumber(root.attrs, 'number_rnas')
 
   if (gridKeys.length === 0) {
     throw new Error('transcripts.zarr.zip does not expose exact transcript grid keys.')
@@ -289,10 +875,72 @@ async function loadTranscriptZarrMetadata(url: string): Promise<TranscriptZarrMe
     gridSize: readGridSize(grids.attrs),
     gridKeys,
     gridKeySet: new Set(gridKeys),
+    gridLevels: readGridLevels(grids.attrs),
+    densityGene,
     geneNames: readStringArrayAttribute(root.attrs, 'gene_names'),
     codewordGeneNames: readStringArrayAttribute(root.attrs, 'codeword_gene_names'),
     fovNames: readStringArrayAttribute(root.attrs, 'fov_names'),
+    ...(numberRnas === undefined ? {} : { numberRnas }),
   }
+}
+
+async function loadDensityGeneMetadata(
+  root: zarr.Group<ZipFileStore>,
+): Promise<TranscriptDensityGeneMetadata | null> {
+  try {
+    const densityGene = await zarr.open(root.resolve('density/gene'), {
+      kind: 'group',
+    })
+    const [data, indices, indptr] = await Promise.all([
+      openZarrArray(root, 'density/gene/data'),
+      openZarrArray(root, 'density/gene/indices'),
+      openZarrArray(root, 'density/gene/indptr'),
+    ])
+    const gridSize = readGridSizePair(densityGene.attrs, 'grid_size')
+    const origin = readOrigin(densityGene.attrs)
+
+    return {
+      data,
+      indices,
+      indptr,
+      rows: readPositiveIntegerAttribute(densityGene.attrs, 'rows'),
+      cols: readPositiveIntegerAttribute(densityGene.attrs, 'cols'),
+      gridSizeX: gridSize.x,
+      gridSizeY: gridSize.y,
+      originX: origin.x,
+      originY: origin.y,
+      geneNames: readStringArrayAttribute(densityGene.attrs, 'gene_names'),
+    }
+  } catch {
+    return null
+  }
+}
+
+function readGridLevels(
+  attrs: Record<string, unknown>,
+): readonly TranscriptGridLevelMetadata[] {
+  const gridKeysByLevel = readNestedStringArrayAttribute(attrs, 'grid_keys')
+  const countsByLevel = readNestedNumberArrayAttribute(attrs, 'grid_number_objects')
+  const baseGridSize = readGridSize(attrs)
+  const levels: TranscriptGridLevelMetadata[] = []
+
+  for (let level = 0; level < gridKeysByLevel.length; level += 1) {
+    const gridKeys = gridKeysByLevel[level] ?? []
+    const transcriptCounts = countsByLevel[level] ?? []
+
+    if (gridKeys.length === 0 || transcriptCounts.length === 0) {
+      continue
+    }
+
+    levels.push({
+      level,
+      tileSizeMicrometers: baseGridSize * 2 ** level,
+      gridKeys,
+      transcriptCounts,
+    })
+  }
+
+  return levels
 }
 
 async function loadTranscriptTileArrays(
@@ -363,9 +1011,7 @@ async function openOptionalZarrArray(root: zarr.Group<ZipFileStore>, path: strin
 
 async function readWholeZarrArray(array: Awaited<ReturnType<typeof openZarrArray>>) {
   const selection =
-    array.shape.length === 1
-      ? [null]
-      : [null, ...array.shape.slice(1).map(() => null)]
+    array.shape.length === 1 ? [null] : [null, ...array.shape.slice(1).map(() => null)]
   const chunk = await zarr.get(array, selection)
 
   return {
@@ -384,11 +1030,7 @@ function featureNameFromCodeword(
     return undefined
   }
 
-  const codewordIndex = readMatrixValue(
-    arrays.codewordIdentity,
-    row,
-    0,
-  )
+  const codewordIndex = readMatrixValue(arrays.codewordIdentity, row, 0)
 
   if (
     !Number.isInteger(codewordIndex) ||
@@ -401,11 +1043,7 @@ function featureNameFromCodeword(
   return metadata.codewordGeneNames[codewordIndex] ?? `Codeword ${codewordIndex}`
 }
 
-function readMatrixValue(
-  matrix: NumericMatrix,
-  row: number,
-  column: number,
-): number {
+function readMatrixValue(matrix: NumericMatrix, row: number, column: number): number {
   const rowStride = matrix.stride[0] ?? 1
   const columnStride = matrix.stride[1] ?? 1
 
@@ -432,6 +1070,70 @@ function readGridSize(attrs: Record<string, unknown>): number {
   return gridSize[0]
 }
 
+function readGridSizePair(
+  attrs: Record<string, unknown>,
+  key: string,
+): { readonly x: number; readonly y: number } {
+  const value = attrs[key]
+
+  if (
+    !Array.isArray(value) ||
+    typeof value[0] !== 'number' ||
+    typeof value[1] !== 'number' ||
+    value[0] <= 0 ||
+    value[1] <= 0
+  ) {
+    throw new Error(`transcripts.zarr.zip is missing ${key} metadata.`)
+  }
+
+  return { x: value[0], y: value[1] }
+}
+
+function readOrigin(attrs: Record<string, unknown>): {
+  readonly x: number
+  readonly y: number
+} {
+  const value = attrs.origin
+
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    typeof (value as { x?: unknown }).x !== 'number' ||
+    typeof (value as { y?: unknown }).y !== 'number'
+  ) {
+    throw new Error('transcripts.zarr.zip density/gene is missing origin metadata.')
+  }
+
+  return {
+    x: (value as { x: number }).x,
+    y: (value as { y: number }).y,
+  }
+}
+
+function readPositiveIntegerAttribute(
+  attrs: Record<string, unknown>,
+  key: string,
+): number {
+  const value = attrs[key]
+
+  if (!Number.isInteger(value) || (value as number) <= 0) {
+    throw new Error(`transcripts.zarr.zip is missing ${key} metadata.`)
+  }
+
+  return value as number
+}
+
+function readOptionalPositiveNumber(
+  attrs: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  const value = attrs[key]
+
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined
+}
+
 function readStringArrayAttribute(
   attrs: Record<string, unknown>,
   key: string,
@@ -439,6 +1141,26 @@ function readStringArrayAttribute(
   const value = attrs[key]
 
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new Error(`transcripts.zarr.zip is missing ${key} metadata.`)
+  }
+
+  return value
+}
+
+function readNestedNumberArrayAttribute(
+  attrs: Record<string, unknown>,
+  key: string,
+): readonly (readonly number[])[] {
+  const value = attrs[key]
+
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (level) =>
+        !Array.isArray(level) ||
+        level.some((item) => typeof item !== 'number' || !Number.isFinite(item)),
+    )
+  ) {
     throw new Error(`transcripts.zarr.zip is missing ${key} metadata.`)
   }
 
@@ -454,8 +1176,7 @@ function readNestedStringArrayAttribute(
   if (
     !Array.isArray(value) ||
     value.some(
-      (level) =>
-        !Array.isArray(level) || level.some((item) => typeof item !== 'string'),
+      (level) => !Array.isArray(level) || level.some((item) => typeof item !== 'string'),
     )
   ) {
     throw new Error(`transcripts.zarr.zip is missing ${key} metadata.`)

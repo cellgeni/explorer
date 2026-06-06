@@ -14,6 +14,7 @@ import {
   type RoiCellsLoader,
   type RoiGeneStatsLoader,
   type RoiTranscriptsLoader,
+  type TranscriptAggregateLoader,
   type TranscriptCapabilitiesLoader,
   type TranscriptViewportLoader,
 } from './App'
@@ -1332,6 +1333,30 @@ describe('App', () => {
       rawParquet: true,
       nativeZarr: true,
     }))
+    const loadTranscriptAggregates: ReturnType<typeof vi.fn<TranscriptAggregateLoader>> =
+      vi.fn(async () => ({
+        source: 'native-zarr',
+        selectedFeatureNames: [],
+        level: {
+          level: 2,
+          gridSizeMicrometers: 1_000,
+          gridKeys: ['0,0'],
+          transcriptCounts: [20],
+        },
+        bins: [
+          {
+            id: 'native-zarr-grid:2:0:0',
+            source: 'native-zarr',
+            level: 2,
+            binX: 0,
+            binY: 0,
+            position: { x: micrometers(500), y: micrometers(500) },
+            radiusMicrometers: 420,
+            binSizeMicrometers: 1_000,
+            count: 20,
+          },
+        ],
+      }))
 
     try {
       render(
@@ -1339,6 +1364,7 @@ describe('App', () => {
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadTranscriptCapabilities={loadTranscriptCapabilities}
+          loadTranscriptAggregates={loadTranscriptAggregates}
         />,
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
@@ -1356,10 +1382,20 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
 
       expect(
-        await screen.findByText(/Showing all-gene cell-summary density bins/),
+        await screen.findByText(/Showing native all-transcript density bins/),
       ).toBeInTheDocument()
-      expect(screen.getByText('Cell summary')).toBeInTheDocument()
+      expect(screen.getByText('Native')).toBeInTheDocument()
       expect(screen.getAllByText(/^[1-9][0-9]* bins$/).length).toBeGreaterThan(0)
+      expect(loadTranscriptAggregates).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        expect.any(Object),
+        expect.objectContaining({
+          mode: 'density',
+          featureNames: [],
+          maxBins: 700,
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
     } finally {
       rectSpy.mockRestore()
       contextSpy.mockRestore()
@@ -1400,6 +1436,30 @@ describe('App', () => {
     }))
     const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> =
       vi.fn(() => pendingPromise())
+    const loadTranscriptAggregates: ReturnType<typeof vi.fn<TranscriptAggregateLoader>> =
+      vi.fn(async () => ({
+        source: 'native-zarr',
+        selectedFeatureNames: [],
+        level: {
+          level: 2,
+          gridSizeMicrometers: 1_000,
+          gridKeys: ['0,0'],
+          transcriptCounts: [8],
+        },
+        bins: [
+          {
+            id: 'native-zarr-grid:2:0:0',
+            source: 'native-zarr',
+            level: 2,
+            binX: 0,
+            binY: 0,
+            position: { x: micrometers(500), y: micrometers(500) },
+            radiusMicrometers: 420,
+            binSizeMicrometers: 1_000,
+            count: 8,
+          },
+        ],
+      }))
 
     try {
       render(
@@ -1407,6 +1467,7 @@ describe('App', () => {
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadTranscriptCapabilities={loadTranscriptCapabilities}
+          loadTranscriptAggregates={loadTranscriptAggregates}
           loadTranscriptViewport={loadTranscriptViewport}
         />,
       )
@@ -1422,9 +1483,10 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
 
       expect(
-        await screen.findByText(/Showing all-gene cell-summary density bins/),
+        await screen.findByText(/Showing native all-transcript density bins/),
       ).toBeInTheDocument()
       expect(screen.getAllByText(/^[1-9][0-9]* bins$/).length).toBeGreaterThan(0)
+      expect(loadTranscriptAggregates).toHaveBeenCalled()
       expect(loadTranscriptViewport).not.toHaveBeenCalled()
     } finally {
       rectSpy.mockRestore()

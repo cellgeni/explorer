@@ -1233,6 +1233,8 @@ function TranscriptHoverTooltip({
     return null
   }
 
+  const transcriptCellLabel = transcriptCellDisplayLabel(transcript)
+
   return (
     <div
       className="transcript-hover-tooltip"
@@ -1245,13 +1247,19 @@ function TranscriptHoverTooltip({
       <p>{transcript.featureName}</p>
       <dl>
         <div>
+          <dt>ID</dt>
+          <dd>{transcript.transcriptId ?? transcript.id}</dd>
+        </div>
+        <div>
           <dt>FOV</dt>
           <dd>{transcript.fovName ?? 'Unassigned'}</dd>
         </div>
-        <div>
-          <dt>Cell</dt>
-          <dd>{transcript.cellId ?? 'Unassigned'}</dd>
-        </div>
+        {transcriptCellLabel === null ? null : (
+          <div>
+            <dt>Cell</dt>
+            <dd>{transcriptCellLabel}</dd>
+          </div>
+        )}
         <div>
           <dt>QV</dt>
           <dd>{formatCoordinateValue(transcript.qv)}</dd>
@@ -1284,6 +1292,14 @@ function TranscriptHoverTooltip({
       </dl>
     </div>
   )
+}
+
+function transcriptCellDisplayLabel(transcript: TranscriptPointDatum): string | null {
+  if (transcript.cellId !== null) {
+    return transcript.cellId
+  }
+
+  return transcript.cellAssignment === 'unassigned' ? 'Unassigned' : null
 }
 
 function magicLensOverlayModel(

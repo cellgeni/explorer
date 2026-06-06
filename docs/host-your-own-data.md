@@ -16,7 +16,10 @@ with `cell_features/csc/*` arrays. Older XOA output falls back to
 Optional but supported files include:
 
 - `cell_boundaries.parquet`
-- `transcripts.parquet`
+- `transcripts.parquet` for exact transcript metadata such as transcript ID,
+  cell ID, QV, nucleus overlap, and gene/control status
+- `transcripts.zarr.zip` for native low/medium zoom transcript density and
+  binned overlays
 - `analysis.zarr.zip`
 - `analysis/umap/gene_expression_2_components/projection.csv`
 - `analysis/tsne/gene_expression_2_components/projection.csv`

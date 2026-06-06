@@ -2,7 +2,12 @@ import type { Color, LayersList, Position } from '@deck.gl/core'
 import { OrthographicView, VERSION as deckVersion } from '@deck.gl/core'
 import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
-import type { TranscriptAggregateBin, TranscriptPoint } from '../data/transcriptOverlay'
+import type {
+  TranscriptAggregateBin,
+  TranscriptAggregateFeatureSummary,
+  TranscriptCellAssignment,
+  TranscriptPoint,
+} from '../data/transcriptOverlay'
 import type { GeneExpressionCell } from '../datasets/xeniumDataset'
 import type { SpatialElement } from '../datasets/spatialDataset'
 import { DEFAULT_LAYER_OPACITY, normalizeLayerOpacity } from './layerOpacity'
@@ -36,10 +41,12 @@ export interface CellBoundaryDatum {
 
 export interface TranscriptPointDatum {
   readonly id: string
+  readonly transcriptId?: string
   readonly position: Position
   readonly featureName: string
   readonly fovName: string | null
   readonly cellId: string | null
+  readonly cellAssignment?: TranscriptCellAssignment
   readonly qv: number
   readonly zLocation?: number
   readonly overlapsNucleus?: boolean
@@ -51,11 +58,15 @@ export interface TranscriptPointDatum {
 export interface TranscriptAggregateDatum {
   readonly id: string
   readonly position: Position
+  readonly source?: 'cell-summary' | 'native-zarr'
   readonly level: number
   readonly binX: number
   readonly binY: number
   readonly count: number
   readonly radiusMicrometers: number
+  readonly binSizeMicrometers?: number
+  readonly selectedGeneCount?: number
+  readonly topFeatures?: readonly TranscriptAggregateFeatureSummary[]
   readonly featureName?: string
   readonly fovName?: string
   readonly fillColor: Color
@@ -481,10 +492,16 @@ export function transcriptPointsToLayerData(
 ): readonly TranscriptPointDatum[] {
   return transcripts.map((transcript) => ({
     id: transcript.id,
+    ...(transcript.transcriptId === undefined
+      ? {}
+      : { transcriptId: transcript.transcriptId }),
     position: [transcript.position.x, -transcript.position.y, 0],
     featureName: transcript.featureName,
     fovName: transcript.fovName,
     cellId: transcript.cellId,
+    ...(transcript.cellAssignment === undefined
+      ? {}
+      : { cellAssignment: transcript.cellAssignment }),
     qv: transcript.qv,
     ...(transcript.zLocation === undefined ? {} : { zLocation: transcript.zLocation }),
     ...(transcript.overlapsNucleus === undefined
@@ -518,11 +535,19 @@ export function transcriptAggregateBinsToLayerData(
     return {
       id: bin.id,
       position: [bin.position.x, -bin.position.y, 0],
+      ...(bin.source === undefined ? {} : { source: bin.source }),
       level: bin.level,
       binX: bin.binX,
       binY: bin.binY,
       count: bin.count,
-      radiusMicrometers: bin.radiusMicrometers,
+      radiusMicrometers: Math.max(4, bin.radiusMicrometers * (0.35 + intensity * 0.65)),
+      ...(bin.binSizeMicrometers === undefined
+        ? {}
+        : { binSizeMicrometers: bin.binSizeMicrometers }),
+      ...(bin.selectedGeneCount === undefined
+        ? {}
+        : { selectedGeneCount: bin.selectedGeneCount }),
+      ...(bin.topFeatures === undefined ? {} : { topFeatures: bin.topFeatures }),
       ...(bin.featureName === undefined ? {} : { featureName: bin.featureName }),
       ...(bin.fovName === undefined ? {} : { fovName: bin.fovName }),
       fillColor: transcriptDensityColor(colorScale, intensity),

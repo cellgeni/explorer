@@ -531,14 +531,13 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
 - [x] Do not scan or fetch raw hundred-million-row transcript data for low-zoom
       overviews. Low/medium zoom needs native Xenium Zarr LOD or an explicitly
       degraded raw-only fallback.
-- [ ] Support two data modes:
-      1. `Raw exact`: query `transcripts.parquet` by viewport bbox, QV, gene
-         filter, and projected columns. Use this only when the visible transcript
-         estimate is inside the exact render budget.
-      2. `Native Xenium LOD`: read official `transcripts.zarr.zip` density and
-         grid-pyramid data. Use these for whole-slide and medium-zoom transcript
-         density/gene bins.
-- [ ] If native LOD is missing, the tab should make that visible. The app can
+- [x] Support two data modes. `Raw exact` queries `transcripts.parquet` or native
+      level-0 grids by viewport bbox, QV, gene filter, and projected columns
+      only when the visible transcript estimate is inside the exact render
+      budget. `Native Xenium LOD` reads official `transcripts.zarr.zip` density
+      and grid-pyramid data for whole-slide and medium-zoom transcript
+      density/gene bins.
+- [x] If native LOD is missing, the tab should make that visible. The app can
       still show exact transcripts after the user zooms far enough, but low zoom
       should show a cell-level transcript-count hint or an unavailable state
       rather than silently scanning the raw transcript file.
@@ -552,10 +551,12 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
 - [x] Option B: cell-derived `transcript_counts` from `cells.parquet`. This is
       cheap and already loaded, but it only approximates transcript density and
       cannot support feature/gene-level hover. Use only as a fallback hint.
-- [ ] Option C, recommended: official `transcripts.zarr.zip`. Use `/density/gene`
-      and `/density/codeword` for binned Q20 count density and `/grids` as the
-      transcript pyramid for downsampled views. This follows 10x's own output
-      contract and avoids inventing a sidecar before exhausting native data.
+- [x] Option C, recommended: official `transcripts.zarr.zip`. Use
+      `/density/gene` for selected-feature binned count density and `/grids` as
+      the transcript pyramid for downsampled all-transcript views. The verified
+      demo zip did not expose a separate `/density/codeword` group, so codeword
+      details remain exact/metadata-driven until a dataset with that group is
+      available.
 - [ ] Option D: browser/GPU screen aggregation after loading raw transcript
       points. This helps visual density once points are already loaded, but it
       does not solve the hundred-million fetch problem and should not be used as
@@ -573,7 +574,7 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       `transcripts.parquet` exact rendering from native `transcripts.zarr.zip`
       LOD availability. Keep the existing boolean compatibility path, but let
       the UI know whether exact-only or full LOD is available.
-- [ ] Read native transcript Zarr metadata from root attributes, `/density`
+- [x] Read native transcript Zarr metadata from root attributes, `/density`
       attributes, and `/grids` attributes: total transcript count, FOV names,
       gene names, density grid size/origin, grid pyramid levels, grid keys, and
       per-grid transcript counts.
@@ -609,22 +610,26 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       pass estimates visible transcript count from already-loaded
       `cells.parquet` transcript-count summaries; native Zarr density counts
       remain the next accuracy improvement.
+- [x] Native transcript aggregate implementation decision: use
+      `grids.grid_keys` plus `grids.grid_number_objects` for all-transcript
+      low/medium zoom bins, and use `density/gene` sparse rows for
+      selected-feature bins. Keep cell-summary bins only as a degraded fallback
+      when native Zarr LOD is missing and the feature filter is `All`.
 
 ### Rendering Behavior
 
 - [x] Add transcript layers to the deck.gl composition without changing the
       morphology canvas path. Keep aggregate bins and exact transcript points as
       distinct layer data so updates do not rebuild cell layers.
-- [ ] Whole-slide/low zoom: draw stable aggregate bins or tile clusters. Encode
+- [x] Whole-slide/low zoom: draw stable aggregate bins or tile clusters. Encode
       count by area/opacity and color by selected feature/gene when a filter is
       active; otherwise use a neutral density color that does not fight cell
       annotation or morphology colors.
-- [x] Initial low-zoom fallback: Density/Bins/Auto now render stable all-gene
-      aggregate bins from loaded cell transcript counts instead of showing a
-      native-LOD message with no layer. The tab labels this as a cell-summary
-      fallback because native `transcripts.zarr.zip` density/grid parsing is
-      still pending.
-- [ ] Medium zoom: use smaller fixed data-space bins. Hover shows aggregate
+- [x] Initial low-zoom fallback: Density/Bins/Auto can render stable all-gene
+      aggregate bins from loaded cell transcript counts when native
+      `transcripts.zarr.zip` LOD is unavailable. Native grid/density parsing is
+      now the preferred path when the zip is present.
+- [x] Medium zoom: use smaller fixed data-space bins. Hover shows aggregate
       count, selected-gene count, top features, bin size, and whether the data is
       exact or aggregated.
 - [x] Closest detail tier: render every visible matching transcript in the
@@ -635,6 +640,22 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
 - [x] Exact transcript points should be pickable. Hover copy should include
       feature/gene, cell id when present, x/y/z location, QV, nucleus overlap,
       gene/control status, and transcript id when present.
+- [x] Verified native exact `transcripts.zarr.zip` grid tile schema on the demo
+      dataset: level-0 tiles expose location, gene/codeword identity, id,
+      quality score, validity/status, uuid, and gene offset arrays, but no
+      per-transcript cell assignment array. Hover must omit the Cell row when no
+      cell ID is present instead of labeling native grid records as unassigned.
+- [x] Official 10x source decision for transcript hover cell assignment:
+      `transcripts.parquet` is the source of truth for transcript-level
+      `cell_id`, `overlaps_nucleus`, `nucleus_distance`, `is_gene`, FOV, QV, and
+      coordinates. `transcripts.zarr.zip` remains the fast visualization source
+      for native grids/density. `cells.zarr.zip` and `cell_feature_matrix.*`
+      cannot provide per-transcript assignment; they contain segmentation/cell
+      IDs and assigned Q20 cell-feature counts respectively.
+- [x] Native exact transcript points now keep a separate display
+      `transcriptId`, then enrich matching points from `transcripts.parquet` by
+      `(fov_name, transcript_id)` so transcript hover can show both transcript ID
+      and confirmed cell ID without per-hover network work.
 - [x] Keep point sizing in screen pixels with a small radius and configurable
       opacity. Panning and zooming should not shift aggregate bin membership
       because bins are anchored in data coordinates.
@@ -658,7 +679,7 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       auto-refresh in `Auto` mode after debounced viewport changes, with visible
       loading state and cancellation. Exact mode may require an explicit
       `Load exact viewport` action when the estimate is near the budget.
-- [ ] Shareable state:
+- [x] Shareable state:
       include transcript overlay enabled, detail mode, min QV, feature filter,
       color mode, opacity, and point size in the URL hash. Keep hashes compact
       and omit defaults.
@@ -673,10 +694,12 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       types, tests, and tab shell with disabled/unavailable states.
 - [x] Slice 2: raw exact viewport query and exact transcript point rendering at
       close zoom, including hover tooltip and exact-budget status.
-- [ ] Slice 3: native `transcripts.zarr.zip` density/grid reader, aggregate bin
+- [x] Slice 3: native `transcripts.zarr.zip` density/grid reader, aggregate bin
       rendering, and aggregate hover summaries.
-      Aggregate bin rendering and hover are present for the cell-summary
-      fallback; the native Zarr reader remains the unchecked part of this slice.
+      Aggregate bin rendering and hover now use native Zarr grid metadata for
+      all-transcript views and native `density/gene` sparse counts for
+      selected-feature views. Cell-summary bins remain only as a degraded
+      fallback when native Zarr is unavailable.
 - [ ] Slice 4: gene/feature filters, QV controls, color/opacity/point-size
       controls, URL/shareable state, diagnostics, and loading indicators.
 - [ ] Slice 5: integration verification against Magic Lens, ROI transcript
@@ -694,7 +717,7 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
 - [x] Exact mode does not silently sample. If the viewport is too dense, or the
       raw exact query exceeds the interactive timeout, the UI explains the
       budget/timeout decision and how to reach exact rendering.
-- [ ] Aggregate bins are stable while panning and zooming across LOD thresholds.
+- [x] Aggregate bins are stable while panning and zooming across LOD thresholds.
 - [ ] Transcript overlay work is abortable and does not block ROI cell lookup,
       ROI transcript export, Magic Lens, or selected-cell detail loading.
 - [ ] Unit tests cover LOD planning, raw SQL/query options, native Zarr metadata

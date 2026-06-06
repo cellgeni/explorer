@@ -429,7 +429,9 @@ describe('XeniumDataset', () => {
       points: [
         {
           id: '12',
+          transcriptId: '12',
           cellId,
+          cellAssignment: 'known',
           featureName: 'Actb',
           fovName: 'FOV-001',
           position: { x: micrometers(2), y: micrometers(3) },

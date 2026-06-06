@@ -1,8 +1,54 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ViewerCore } from './ViewerCore'
 import { scaffoldDeckLayerCount } from './viewerCoreModel'
-import type { OverviewCellDatum } from '../rendering/deckLayers'
+import type { OverviewCellDatum, TranscriptPointDatum } from '../rendering/deckLayers'
+
+type MockDeckHover = (info: {
+  readonly object?: unknown
+  readonly x: number
+  readonly y: number
+}) => void
+
+const deckGlMock = vi.hoisted(() => ({
+  onHover: undefined as MockDeckHover | undefined,
+}))
+
+vi.mock('@deck.gl/react', () => ({
+  DeckGL: ({
+    layers = [],
+    onHover,
+  }: {
+    readonly layers?: readonly unknown[]
+    readonly onHover?: MockDeckHover
+  }) => {
+    deckGlMock.onHover = onHover
+
+    return (
+      <div data-testid="deckgl">
+        {layers.map((layer) => {
+          const candidate = layer as {
+            readonly id?: string
+            readonly props?: {
+              readonly id?: string
+              readonly data?: readonly unknown[]
+            }
+          }
+          const id = candidate.id ?? candidate.props?.id ?? 'unknown-layer'
+          const data = candidate.props?.data ?? []
+
+          return (
+            <div
+              key={id}
+              data-testid={`deck-layer-${id}`}
+              data-count={String(data.length)}
+            />
+          )
+        })}
+      </div>
+    )
+  },
+}))
 
 const rect = {
   x: 0,
@@ -17,6 +63,7 @@ const rect = {
 } as DOMRect
 
 afterEach(() => {
+  deckGlMock.onHover = undefined
   vi.restoreAllMocks()
 })
 
@@ -40,6 +87,62 @@ describe('ViewerCore', () => {
       opacity: '0.4',
     })
   })
+
+  it('omits transcript hover cell details when no cell id is present', () => {
+    const transcript = transcriptDatum({
+      id: 'tx-without-cell',
+      cellId: null,
+    })
+
+    render(<ViewerCore cells={[overviewCellDatum()]} transcriptPoints={[transcript]} />)
+
+    act(() => {
+      deckGlMock.onHover?.({ object: transcript, x: 12, y: 20 })
+    })
+
+    expect(screen.getByText('Actb')).toBeInTheDocument()
+    expect(screen.getByText('ID')).toBeInTheDocument()
+    expect(screen.getByText('tx-without-cell')).toBeInTheDocument()
+    expect(screen.queryByText('Transcript')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cell')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unassigned')).not.toBeInTheDocument()
+  })
+
+  it('shows transcript hover cell details when a cell id is present', () => {
+    const transcript = transcriptDatum({
+      id: 'tx-with-cell',
+      transcriptId: '12',
+      cellId: 'cell-1',
+    })
+
+    render(<ViewerCore cells={[overviewCellDatum()]} transcriptPoints={[transcript]} />)
+
+    act(() => {
+      deckGlMock.onHover?.({ object: transcript, x: 12, y: 20 })
+    })
+
+    expect(screen.getByText('12')).toBeInTheDocument()
+    expect(screen.getByText('Cell')).toBeInTheDocument()
+    expect(screen.getByText('cell-1')).toBeInTheDocument()
+  })
+
+  it('shows transcript hover as unassigned when Parquet confirms no cell id', () => {
+    const transcript = transcriptDatum({
+      id: 'tx-unassigned-cell',
+      cellId: null,
+      cellAssignment: 'unassigned',
+    })
+
+    render(<ViewerCore cells={[overviewCellDatum()]} transcriptPoints={[transcript]} />)
+
+    act(() => {
+      deckGlMock.onHover?.({ object: transcript, x: 12, y: 20 })
+    })
+
+    expect(screen.getByText('Cell')).toBeInTheDocument()
+    expect(screen.getByText('Unassigned')).toBeInTheDocument()
+  })
+
 
   it('reports debounced viewport details for boundary loading', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
@@ -294,3 +397,36 @@ describe('ViewerCore', () => {
     expect(selection.points).toHaveLength(4)
   })
 })
+
+function overviewCellDatum(): OverviewCellDatum {
+  return {
+    id: 'overview-cell-1',
+    position: [0, 0, 0],
+    radiusPixels: 4,
+    fillColor: [215, 63, 124, 220],
+  }
+}
+
+function transcriptDatum({
+  id,
+  transcriptId,
+  cellId,
+  cellAssignment,
+}: {
+  readonly id: string
+  readonly transcriptId?: string
+  readonly cellId: string | null
+  readonly cellAssignment?: TranscriptPointDatum['cellAssignment']
+}): TranscriptPointDatum {
+  return {
+    id,
+    ...(transcriptId === undefined ? {} : { transcriptId }),
+    position: [10, -20, 0],
+    featureName: 'Actb',
+    fovName: 'FOV-1',
+    cellId,
+    ...(cellAssignment === undefined ? {} : { cellAssignment }),
+    qv: 31,
+    fillColor: [255, 200, 80, 220],
+  }
+}
