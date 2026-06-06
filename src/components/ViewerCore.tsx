@@ -36,6 +36,9 @@ import type { AnnotationColorStyle, ObservationColorMode } from '../rendering/ce
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
 const DEFAULT_MICROMETERS_PER_PIXEL = 0.2125
+const SCALE_BAR_TARGET_WIDTH_PIXELS = 96
+const SCALE_BAR_MIN_WIDTH_PIXELS = 44
+const SCALE_BAR_MAX_VIEWPORT_RATIO = 0.5
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 
@@ -302,6 +305,11 @@ interface MouseCoordinate {
   readonly yMicrometers: number
 }
 
+interface ScaleBarModel {
+  readonly label: string
+  readonly widthPixels: number
+}
+
 interface RoiScreenRect {
   readonly left: number
   readonly top: number
@@ -557,6 +565,13 @@ function ViewerSurface({
     !canTrackMouseCoordinates || mouseCoordinate === null
       ? null
       : formatMouseCoordinate(mouseCoordinate, coordinateUnit, micrometersPerPixel)
+  const scaleBar = useMemo(
+    () =>
+      !canTrackMouseCoordinates || viewport.width <= 0 || viewport.height <= 0
+        ? null
+        : scaleBarModel(viewState, viewport, coordinateUnit, micrometersPerPixel),
+    [canTrackMouseCoordinates, coordinateUnit, micrometersPerPixel, viewState, viewport],
+  )
   const flushMouseCoordinate = useCallback(() => {
     mouseCoordinateFrameRef.current = null
     setMouseCoordinate(pendingMouseCoordinateRef.current)
@@ -973,6 +988,7 @@ function ViewerSurface({
           {mouseCoordinateText}
         </p>
       )}
+      {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
       {viewportMessage === null ? null : (
         <p
           className={`viewport-message${viewportMessage.kind === 'error' ? ' viewport-message-error' : ''}`}
@@ -1017,6 +1033,94 @@ function bboxFromCircle(center: DataPoint, radius: number): BBox {
     minY: micrometers(Math.max(0, center.y - radius)),
     maxY: micrometers(center.y + radius),
   }
+}
+
+function ScaleBar({ model }: { readonly model: ScaleBarModel }) {
+  return (
+    <div className="viewport-scale-bar" aria-label={`Scale bar ${model.label}`}>
+      <span className="viewport-scale-bar-label">{model.label}</span>
+      <span
+        className="viewport-scale-bar-track"
+        style={{ width: model.widthPixels }}
+        aria-hidden="true"
+      />
+    </div>
+  )
+}
+
+function scaleBarModel(
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+  unit: ViewerCoordinateUnit,
+  micrometersPerPixel: number,
+): ScaleBarModel | null {
+  const scale = scaleFromZoom(viewState.zoom)
+  const targetWidthPixels = Math.max(
+    SCALE_BAR_MIN_WIDTH_PIXELS,
+    Math.min(
+      SCALE_BAR_TARGET_WIDTH_PIXELS,
+      viewport.width * SCALE_BAR_MAX_VIEWPORT_RATIO,
+    ),
+  )
+
+  if (!Number.isFinite(scale) || scale <= 0 || targetWidthPixels <= 0) {
+    return null
+  }
+
+  const pixelSize =
+    Number.isFinite(micrometersPerPixel) && micrometersPerPixel > 0
+      ? micrometersPerPixel
+      : DEFAULT_MICROMETERS_PER_PIXEL
+  const unitMicrometers = unit === 'px' ? pixelSize : 1
+  const rawUnitDistance = targetWidthPixels / (scale * unitMicrometers)
+  const unitDistance = niceScaleDistance(rawUnitDistance)
+  const widthPixels = unitDistance * unitMicrometers * scale
+
+  return {
+    label: `${formatScaleDistance(unitDistance)} ${unit === 'px' ? 'px' : 'μm'}`,
+    widthPixels,
+  }
+}
+
+function niceScaleDistance(distance: number): number {
+  if (!Number.isFinite(distance) || distance <= 0) {
+    return 1
+  }
+
+  const exponent = Math.floor(Math.log10(distance))
+  const base = 10 ** exponent
+  const normalizedDistance = distance / base
+  const multiplier = normalizedDistance >= 5 ? 5 : normalizedDistance >= 2 ? 2 : 1
+
+  return multiplier * base
+}
+
+function formatScaleDistance(distance: number): string {
+  if (distance >= 100) {
+    return Math.round(distance).toLocaleString()
+  }
+
+  if (distance >= 10) {
+    return formatScaleDistanceWithPrecision(distance, 1)
+  }
+
+  if (distance >= 1) {
+    return formatScaleDistanceWithPrecision(distance, 2)
+  }
+
+  const fractionDigits = Math.min(
+    6,
+    Math.max(2, Math.ceil(Math.abs(Math.log10(distance))) + 1),
+  )
+
+  return formatScaleDistanceWithPrecision(distance, fractionDigits)
+}
+
+function formatScaleDistanceWithPrecision(
+  distance: number,
+  fractionDigits: number,
+): string {
+  return Number(distance.toFixed(fractionDigits)).toLocaleString()
 }
 
 interface MagicLensOverlayModel {

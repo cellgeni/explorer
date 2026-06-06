@@ -2478,6 +2478,51 @@ h2 {
   white-space: nowrap;
 }
 
+.viewport-scale-bar {
+  position: absolute;
+  z-index: 4;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  min-width: 70px;
+  max-width: min(180px, calc(100% - 24px));
+  padding: 5px 7px 6px;
+  margin: 0;
+  border: 1px solid rgba(246, 242, 232, 0.2);
+  border-radius: 6px;
+  background: rgba(23, 21, 17, 0.86);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  color: #fffdf7;
+  font-size: 0.58rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  overflow: hidden;
+  pointer-events: none;
+  text-transform: none;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+}
+
+.viewport-scale-bar-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewport-scale-bar-track {
+  display: block;
+  max-width: 100%;
+  height: 7px;
+  border-right: 2px solid #fffdf7;
+  border-bottom: 2px solid #fffdf7;
+  border-left: 2px solid #fffdf7;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
 .viewport-message {
   position: absolute;
   z-index: 3;

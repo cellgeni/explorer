@@ -148,11 +148,17 @@ describe('ViewerCore', () => {
     const { rerender } = render(<ViewerCore cells={cells} />)
     const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
 
+    expect(await screen.findByLabelText('Scale bar 5 μm')).toBeInTheDocument()
+    expect(document.querySelector('.viewport-scale-bar-track')).toHaveStyle({
+      width: '80px',
+    })
+
     fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
 
     expect(await screen.findByText('X 1234 μm | Y 5678 μm')).toBeInTheDocument()
 
     rerender(<ViewerCore cells={cells} coordinateUnit="px" micrometersPerPixel={0.5} />)
+    expect(await screen.findByLabelText('Scale bar 10 px')).toBeInTheDocument()
     fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
 
     expect(await screen.findByText('X 2468 px | Y 11356 px')).toBeInTheDocument()
