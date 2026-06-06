@@ -1199,12 +1199,20 @@ function TranscriptHoverTooltip({
         }}
         aria-hidden="true"
       >
-        <p>Transcript density bin</p>
+        <p>
+          {aggregate.featureName === undefined ? 'Transcript density bin' : aggregate.featureName}
+        </p>
         <dl>
           <div>
             <dt>Count</dt>
             <dd>{aggregate.count.toLocaleString()}</dd>
           </div>
+          {aggregate.binTotalCount === undefined ? null : (
+            <div>
+              <dt>Total</dt>
+              <dd>{aggregate.binTotalCount.toLocaleString()}</dd>
+            </div>
+          )}
           <div>
             <dt>Level</dt>
             <dd>{aggregate.level.toLocaleString()}</dd>
@@ -1222,6 +1230,12 @@ function TranscriptHoverTooltip({
               {aggregate.binX.toLocaleString()}, {aggregate.binY.toLocaleString()}
             </dd>
           </div>
+          {aggregate.omittedFeatureCount === undefined ? null : (
+            <div>
+              <dt>Hidden</dt>
+              <dd>{aggregate.omittedFeatureCount.toLocaleString()} genes</dd>
+            </div>
+          )}
         </dl>
       </div>
     )

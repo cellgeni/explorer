@@ -96,7 +96,7 @@ describe('App', () => {
       screen.getByRole('button', { name: 'Download diagnostics' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('Download Diagnostics')).not.toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Morphology image' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
     const boundaryLimitInput = screen.getByRole('spinbutton', {
       name: 'Boundary limit',
     })
@@ -151,7 +151,7 @@ describe('App', () => {
     const transcriptExactBudgetInput = screen.getByRole('spinbutton', {
       name: 'Exact budget',
     })
-    expect(transcriptExactBudgetInput).toHaveValue(50_000)
+    expect(transcriptExactBudgetInput).toHaveValue(100_000)
     expect(transcriptExactBudgetInput).toHaveAttribute('max', '1000000')
     expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
       'selected',
@@ -1201,7 +1201,7 @@ describe('App', () => {
     }
   })
 
-  it('loads overview cells without morphology image by default', async () => {
+  it('loads overview cells without morphology image when the option is disabled', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -1224,6 +1224,7 @@ describe('App', () => {
         loadGenePanel={loadGenePanel}
       />,
     )
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Morphology image' }))
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {
@@ -1296,7 +1297,7 @@ describe('App', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('renders density bins when native transcript LOD planning is selected', async () => {
+  it('renders density squares when native transcript LOD planning is selected', async () => {
     const rect = {
       x: 0,
       y: 0,
@@ -1343,6 +1344,7 @@ describe('App', () => {
           gridKeys: ['0,0'],
           transcriptCounts: [20],
         },
+        scaleMax: 100,
         bins: [
           {
             id: 'native-zarr-grid:2:0:0',
@@ -1382,17 +1384,17 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
 
       expect(
-        await screen.findByText(/Showing native all-transcript density bins/),
+        await screen.findByText(/Showing native all-transcript density squares/),
       ).toBeInTheDocument()
       expect(screen.getByText('Native')).toBeInTheDocument()
-      expect(screen.getAllByText(/^[1-9][0-9]* bins$/).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/^[1-9][0-9]* squares$/).length).toBeGreaterThan(0)
       expect(loadTranscriptAggregates).toHaveBeenCalledWith(
         DEMO_DATASET_URL,
         expect.any(Object),
         expect.objectContaining({
           mode: 'density',
           featureNames: [],
-          maxBins: 700,
+          maxBins: 1_500,
           signal: expect.any(AbortSignal) as AbortSignal,
         }),
       )
@@ -1402,7 +1404,211 @@ describe('App', () => {
     }
   })
 
-  it('uses density bins in Auto when native transcript LOD is available', async () => {
+  it('keeps selected-gene transcript Density on all-transcript squares', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'CD74'])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: true,
+    }))
+    const loadTranscriptAggregates: ReturnType<typeof vi.fn<TranscriptAggregateLoader>> =
+      vi.fn(async () => ({
+        source: 'native-zarr',
+        selectedFeatureNames: [],
+        level: {
+          level: 0,
+          gridSizeMicrometers: 40,
+          gridKeys: ['1,1'],
+          transcriptCounts: [13],
+        },
+        scaleMax: 100,
+        bins: [
+          {
+            id: 'native-zarr-density:0:1:1',
+            source: 'native-zarr',
+            glyphType: 'density',
+            level: 0,
+            binX: 1,
+            binY: 1,
+            position: { x: micrometers(60), y: micrometers(60) },
+            radiusMicrometers: 16,
+            binSizeMicrometers: 40,
+            count: 13,
+          },
+        ],
+      }))
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadTranscriptCapabilities={loadTranscriptCapabilities}
+          loadTranscriptAggregates={loadTranscriptAggregates}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+      openHudTab('Genes')
+      expect(await screen.findByText('2 genes')).toBeInTheDocument()
+      fireEvent.change(screen.getByLabelText('Gene selection'), {
+        target: { value: 'act' },
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
+      fireEvent.change(screen.getByLabelText('Gene selection'), {
+        target: { value: 'cd' },
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'CD74' }))
+
+      openHudTab('Transcripts')
+      expect(await screen.findByText('Native LOD + exact')).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Bins' })).not.toBeInTheDocument()
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Detail' }), {
+        target: { value: 'density' },
+      })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
+
+      expect(
+        await screen.findByText(/Showing native all-transcript density squares/),
+      ).toBeInTheDocument()
+      expect(screen.getAllByText(/^[1-9][0-9]* squares$/).length).toBeGreaterThan(0)
+      expect(loadTranscriptAggregates).toHaveBeenLastCalledWith(
+        DEMO_DATASET_URL,
+        expect.any(Object),
+        expect.objectContaining({
+          mode: 'density',
+          featureNames: [],
+          maxBins: 1_500,
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('uses density squares in Auto when the transcript estimate exceeds budget', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 200_000,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: true,
+    }))
+    const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> =
+      vi.fn(() => pendingPromise())
+    const loadTranscriptAggregates: ReturnType<typeof vi.fn<TranscriptAggregateLoader>> =
+      vi.fn(async () => ({
+        source: 'native-zarr',
+        selectedFeatureNames: [],
+        level: {
+          level: 2,
+          gridSizeMicrometers: 1_000,
+          gridKeys: ['0,0'],
+          transcriptCounts: [200_000],
+        },
+        scaleMax: 100,
+        bins: [
+          {
+            id: 'native-zarr-grid:2:0:0',
+            source: 'native-zarr',
+            level: 2,
+            binX: 0,
+            binY: 0,
+            position: { x: micrometers(500), y: micrometers(500) },
+            radiusMicrometers: 420,
+            binSizeMicrometers: 1_000,
+            count: 200_000,
+          },
+        ],
+      }))
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadTranscriptCapabilities={loadTranscriptCapabilities}
+          loadTranscriptAggregates={loadTranscriptAggregates}
+          loadTranscriptViewport={loadTranscriptViewport}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+      openHudTab('Transcripts')
+      expect(await screen.findByText('Native LOD + exact')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
+        target: { value: 'all' },
+      })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
+
+      expect(
+        await screen.findByText(/Showing native all-transcript density squares/),
+      ).toBeInTheDocument()
+      expect(screen.getAllByText(/^[1-9][0-9]* squares$/).length).toBeGreaterThan(0)
+      expect(loadTranscriptAggregates).toHaveBeenCalled()
+      expect(loadTranscriptViewport).not.toHaveBeenCalled()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
+  it('switches Auto to exact transcripts when the estimate is inside budget', async () => {
     const rect = {
       x: 0,
       y: 0,
@@ -1434,8 +1640,6 @@ describe('App', () => {
       rawParquet: true,
       nativeZarr: true,
     }))
-    const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> =
-      vi.fn(() => pendingPromise())
     const loadTranscriptAggregates: ReturnType<typeof vi.fn<TranscriptAggregateLoader>> =
       vi.fn(async () => ({
         source: 'native-zarr',
@@ -1446,19 +1650,26 @@ describe('App', () => {
           gridKeys: ['0,0'],
           transcriptCounts: [8],
         },
-        bins: [
+        scaleMax: 100,
+        bins: [],
+      }))
+    const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> =
+      vi.fn(async () => ({
+        points: [
           {
-            id: 'native-zarr-grid:2:0:0',
-            source: 'native-zarr',
-            level: 2,
-            binX: 0,
-            binY: 0,
-            position: { x: micrometers(500), y: micrometers(500) },
-            radiusMicrometers: 420,
-            binSizeMicrometers: 1_000,
-            count: 8,
+            id: 'F1:101',
+            transcriptId: '101',
+            cellId: null,
+            cellAssignment: 'unavailable',
+            featureName: 'Actb',
+            fovName: 'F1',
+            position: { x: micrometers(10), y: micrometers(20) },
+            qv: 37,
+            isGene: true,
           },
         ],
+        groups: [],
+        hitPointLimit: false,
       }))
 
     try {
@@ -1482,12 +1693,18 @@ describe('App', () => {
       })
       fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
 
-      expect(
-        await screen.findByText(/Showing native all-transcript density bins/),
-      ).toBeInTheDocument()
-      expect(screen.getAllByText(/^[1-9][0-9]* bins$/).length).toBeGreaterThan(0)
-      expect(loadTranscriptAggregates).toHaveBeenCalled()
-      expect(loadTranscriptViewport).not.toHaveBeenCalled()
+      await waitFor(() => {
+        expect(loadTranscriptViewport).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.any(Object),
+          expect.objectContaining({
+            pointLimit: 100_000,
+            featureNames: [],
+          }),
+        )
+      })
+      expect(loadTranscriptAggregates).not.toHaveBeenCalled()
+      expect(await screen.findByText('1 points')).toBeInTheDocument()
     } finally {
       rectSpy.mockRestore()
       contextSpy.mockRestore()
@@ -1701,7 +1918,7 @@ describe('App', () => {
     }
   })
 
-  it('loads morphology image when the option is selected', async () => {
+  it('loads morphology image by default', async () => {
     const dapiChannel = {
       id: 'Channel:0',
       index: 0,
@@ -1757,7 +1974,6 @@ describe('App', () => {
         computeAutoChannelContrast={computeAutoChannelContrast}
       />,
     )
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Morphology image' }))
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {

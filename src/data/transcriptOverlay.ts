@@ -10,14 +10,13 @@ import type { BBox, DataPoint } from './coords'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
 
-export const TRANSCRIPT_EXACT_RENDER_LIMIT = 50_000
+export const TRANSCRIPT_EXACT_RENDER_LIMIT = 100_000
 export const MIN_TRANSCRIPT_EXACT_RENDER_LIMIT = 1
 export const MAX_TRANSCRIPT_EXACT_RENDER_LIMIT = 1_000_000
 export const TRANSCRIPT_GROUP_LIMIT = 18
-export const TRANSCRIPT_EXACT_MIN_ZOOM = 1.2
 export const TRANSCRIPT_METADATA_ENRICH_TIMEOUT_MS = 1_500
 
-export type TranscriptDetailMode = 'auto' | 'density' | 'bins' | 'exact'
+export type TranscriptDetailMode = 'auto' | 'density' | 'exact'
 export type TranscriptFeatureFilterMode = 'all' | 'selected'
 export type TranscriptCellAssignment = 'known' | 'unassigned' | 'unavailable'
 
@@ -53,6 +52,7 @@ export interface TranscriptGroupSummary {
 export interface TranscriptAggregateBin {
   readonly id: string
   readonly source?: 'cell-summary' | 'native-zarr'
+  readonly glyphType?: 'density' | 'feature-circle'
   readonly level: number
   readonly binX: number
   readonly binY: number
@@ -60,7 +60,10 @@ export interface TranscriptAggregateBin {
   readonly radiusMicrometers: number
   readonly binSizeMicrometers?: number
   readonly count: number
+  readonly binTotalCount?: number
   readonly selectedGeneCount?: number
+  readonly omittedFeatureCount?: number
+  readonly omittedTranscriptCount?: number
   readonly topFeatures?: readonly TranscriptAggregateFeatureSummary[]
   readonly featureName?: string
   readonly fovName?: string
@@ -107,6 +110,7 @@ export interface TranscriptAggregateResult {
   readonly level: TranscriptLodLevel
   readonly source: 'native-zarr'
   readonly selectedFeatureNames: readonly string[]
+  readonly scaleMax?: number
 }
 
 export interface TranscriptViewportOptions {
@@ -129,7 +133,7 @@ export interface TranscriptCapabilityOptions {
 export interface TranscriptAggregateOptions {
   readonly validateRangeSupport?: DatasetRangeValidator
   readonly signal?: AbortSignal
-  readonly mode?: 'density' | 'bins'
+  readonly mode?: 'density'
   readonly featureNames?: readonly string[]
   readonly maxBins?: number
 }
@@ -143,7 +147,7 @@ export type TranscriptLodPlan =
     }
   | {
       readonly kind: 'native-zarr'
-      readonly mode: 'density' | 'bins'
+      readonly mode: 'density'
       readonly visibleTranscriptEstimate: number
       readonly exactLimit: number
       readonly message: string
@@ -378,7 +382,7 @@ export async function loadDatasetTranscriptAggregates(
 }
 
 export function planTranscriptLod(
-  input: TranscriptLodPlanningInput,
+  _input: TranscriptLodPlanningInput,
   options: TranscriptLodPlanningOptions,
 ): TranscriptLodPlan {
   const exactLimit = normalizeTranscriptExactPointLimit(options.exactLimit)
@@ -386,15 +390,6 @@ export function planTranscriptLod(
     0,
     Math.floor(options.visibleTranscriptEstimate),
   )
-
-  if (options.hasSelectedFeatureFilter === false) {
-    return {
-      kind: 'waiting',
-      visibleTranscriptEstimate,
-      exactLimit,
-      message: 'Select genes or switch the transcript feature filter to All.',
-    }
-  }
 
   if (!options.hasRawParquet && !options.hasNativeZarr) {
     return {
@@ -405,11 +400,11 @@ export function planTranscriptLod(
     }
   }
 
-  if (options.detailMode === 'density' || options.detailMode === 'bins') {
+  if (options.detailMode === 'density') {
     return options.hasNativeZarr
       ? {
           kind: 'native-zarr',
-          mode: options.detailMode,
+          mode: 'density',
           visibleTranscriptEstimate,
           exactLimit,
           message:
@@ -420,11 +415,27 @@ export function planTranscriptLod(
           visibleTranscriptEstimate,
           exactLimit,
           message:
-            'Density and bin modes need the official transcripts.zarr.zip LOD output.',
+            'Density mode needs the official transcripts.zarr.zip LOD output.',
         }
   }
 
-  if (options.hasNativeZarr && options.detailMode === 'auto') {
+  const hasExactSource = options.hasRawParquet || options.hasNativeZarr
+  const hasSelectedFeatureFilter = options.hasSelectedFeatureFilter !== false
+
+  if (
+    hasExactSource &&
+    hasSelectedFeatureFilter &&
+    visibleTranscriptEstimate <= exactLimit
+  ) {
+    return {
+      kind: 'exact',
+      mode: 'exact',
+      visibleTranscriptEstimate,
+      exactLimit,
+    }
+  }
+
+  if (options.detailMode === 'auto' && options.hasNativeZarr) {
     return {
       kind: 'native-zarr',
       mode: 'density',
@@ -435,24 +446,22 @@ export function planTranscriptLod(
     }
   }
 
-  if (!options.hasRawParquet) {
+  if (!hasSelectedFeatureFilter) {
+    return {
+      kind: 'waiting',
+      visibleTranscriptEstimate,
+      exactLimit,
+      message: 'Select genes or switch the transcript feature filter to All.',
+    }
+  }
+
+  if (!hasExactSource) {
     return {
       kind: 'unavailable',
       visibleTranscriptEstimate,
       exactLimit,
-      message: 'Exact transcript rendering needs range-readable transcripts.parquet.',
-    }
-  }
-
-  if (
-    visibleTranscriptEstimate <= exactLimit &&
-    (options.detailMode === 'exact' || input.viewState.zoom >= TRANSCRIPT_EXACT_MIN_ZOOM)
-  ) {
-    return {
-      kind: 'exact',
-      mode: 'exact',
-      visibleTranscriptEstimate,
-      exactLimit,
+      message:
+        'Exact transcript rendering needs range-readable transcripts.zarr.zip or transcripts.parquet.',
     }
   }
 
@@ -505,7 +514,7 @@ export function transcriptAggregateRequestKey(
   baseUrl: string,
   bbox: BBox,
   options: {
-    readonly mode: 'density' | 'bins'
+    readonly mode: 'density'
     readonly featureNames: readonly string[]
     readonly maxBins: number
   },

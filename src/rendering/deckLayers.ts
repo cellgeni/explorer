@@ -59,13 +59,17 @@ export interface TranscriptAggregateDatum {
   readonly id: string
   readonly position: Position
   readonly source?: 'cell-summary' | 'native-zarr'
+  readonly glyphType?: 'density' | 'feature-circle'
   readonly level: number
   readonly binX: number
   readonly binY: number
   readonly count: number
   readonly radiusMicrometers: number
   readonly binSizeMicrometers?: number
+  readonly binTotalCount?: number
   readonly selectedGeneCount?: number
+  readonly omittedFeatureCount?: number
+  readonly omittedTranscriptCount?: number
   readonly topFeatures?: readonly TranscriptAggregateFeatureSummary[]
   readonly featureName?: string
   readonly fovName?: string
@@ -115,6 +119,10 @@ export interface GeneExpressionScoreModeOption {
 }
 
 export interface GeneExpressionLayerDataOptions {
+  readonly scaleMax?: number
+}
+
+export interface TranscriptAggregateLayerDataOptions {
   readonly scaleMax?: number
 }
 
@@ -258,6 +266,12 @@ export function createOverviewLayers(
   )
   const expressionBoundaryPolygons = options.expressionBoundaryPolygons ?? []
   const transcriptAggregateBins = options.transcriptAggregateBins ?? []
+  const transcriptDensityBins = transcriptAggregateBins.filter(
+    (bin) => bin.glyphType !== 'feature-circle',
+  )
+  const transcriptFeatureCircleBins = transcriptAggregateBins.filter(
+    (bin) => bin.glyphType === 'feature-circle',
+  )
   const transcriptPoints = options.transcriptPoints ?? []
   const hasExpressionPolygons = expressionBoundaryPolygons.length > 0
   const pointCells = cellsWithoutVisibleBoundaries(cells, boundaries)
@@ -358,19 +372,46 @@ export function createOverviewLayers(
     )
   }
 
-  if (transcriptAggregateBins.length > 0) {
+  if (transcriptDensityBins.length > 0) {
+    const transcriptOpacity = normalizeLayerOpacity(
+      options.transcriptOpacity ?? DEFAULT_LAYER_OPACITY,
+    )
+
+    layers.push(
+      new PolygonLayer<TranscriptAggregateDatum>({
+        id: 'transcript-density-bins',
+        data: transcriptDensityBins,
+        pickable: true,
+        stroked: true,
+        filled: true,
+        opacity: 1,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 0.25,
+        getPolygon: transcriptDensitySquarePolygon,
+        getFillColor: (bin) => colorWithOpacity(bin.fillColor, transcriptOpacity),
+        getLineColor: () => colorWithOpacity([255, 253, 247, 120], transcriptOpacity),
+        getLineWidth: 0.25,
+        updateTriggers: {
+          getFillColor: [transcriptOpacity],
+          getLineColor: [transcriptOpacity],
+        },
+      }),
+    )
+  }
+
+  if (transcriptFeatureCircleBins.length > 0) {
     const transcriptOpacity = normalizeLayerOpacity(
       options.transcriptOpacity ?? DEFAULT_LAYER_OPACITY,
     )
 
     layers.push(
       new ScatterplotLayer<TranscriptAggregateDatum>({
-        id: 'transcript-density-bins',
-        data: transcriptAggregateBins,
+        id: 'transcript-feature-circles',
+        data: transcriptFeatureCircleBins,
         pickable: true,
         radiusUnits: 'common',
         radiusMinPixels: 2,
-        radiusMaxPixels: 36,
+        radiusMaxPixels: 18,
         stroked: true,
         filled: true,
         opacity: 1,
@@ -379,7 +420,7 @@ export function createOverviewLayers(
         getPosition: (bin) => bin.position,
         getRadius: (bin) => bin.radiusMicrometers,
         getFillColor: (bin) => colorWithOpacity(bin.fillColor, transcriptOpacity),
-        getLineColor: () => colorWithOpacity([255, 253, 247, 190], transcriptOpacity),
+        getLineColor: () => colorWithOpacity([12, 12, 10, 160], transcriptOpacity),
         getLineWidth: 0.75,
         updateTriggers: {
           getFillColor: [transcriptOpacity],
@@ -518,24 +559,38 @@ export function transcriptPointsToLayerData(
 export function transcriptAggregateBinsToLayerData(
   bins: readonly TranscriptAggregateBin[],
   colorScale: TranscriptDensityColorScale = DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
+  options: TranscriptAggregateLayerDataOptions = {},
 ): readonly TranscriptAggregateDatum[] {
   if (bins.length === 0) {
     return []
   }
 
-  let maxCount = 1
+  let localDensityMax = 1
+  let localFeatureCircleMax = 1
 
   for (const bin of bins) {
-    maxCount = Math.max(maxCount, bin.count)
+    if (bin.glyphType === 'feature-circle') {
+      localFeatureCircleMax = Math.max(localFeatureCircleMax, bin.count)
+    } else {
+      localDensityMax = Math.max(localDensityMax, bin.count)
+    }
   }
 
+  const densityScaleMax =
+    options.scaleMax === undefined || options.scaleMax <= 0
+      ? localDensityMax
+      : options.scaleMax
+
   return bins.map((bin) => {
-    const intensity = Math.sqrt(Math.max(bin.count, 0) / maxCount)
+    const denominator =
+      bin.glyphType === 'feature-circle' ? localFeatureCircleMax : densityScaleMax
+    const intensity = Math.sqrt(Math.max(bin.count, 0) / Math.max(1, denominator))
 
     return {
       id: bin.id,
       position: [bin.position.x, -bin.position.y, 0],
       ...(bin.source === undefined ? {} : { source: bin.source }),
+      ...(bin.glyphType === undefined ? {} : { glyphType: bin.glyphType }),
       level: bin.level,
       binX: bin.binX,
       binY: bin.binY,
@@ -544,15 +599,42 @@ export function transcriptAggregateBinsToLayerData(
       ...(bin.binSizeMicrometers === undefined
         ? {}
         : { binSizeMicrometers: bin.binSizeMicrometers }),
+      ...(bin.binTotalCount === undefined ? {} : { binTotalCount: bin.binTotalCount }),
       ...(bin.selectedGeneCount === undefined
         ? {}
         : { selectedGeneCount: bin.selectedGeneCount }),
+      ...(bin.omittedFeatureCount === undefined
+        ? {}
+        : { omittedFeatureCount: bin.omittedFeatureCount }),
+      ...(bin.omittedTranscriptCount === undefined
+        ? {}
+        : { omittedTranscriptCount: bin.omittedTranscriptCount }),
       ...(bin.topFeatures === undefined ? {} : { topFeatures: bin.topFeatures }),
       ...(bin.featureName === undefined ? {} : { featureName: bin.featureName }),
       ...(bin.fovName === undefined ? {} : { fovName: bin.fovName }),
-      fillColor: transcriptDensityColor(colorScale, intensity),
+      fillColor:
+        bin.glyphType === 'feature-circle' && bin.featureName !== undefined
+          ? transcriptFeatureColor(bin.featureName)
+          : transcriptDensityColor(colorScale, intensity),
     }
   })
+}
+
+function transcriptDensitySquarePolygon(
+  bin: TranscriptAggregateDatum,
+): readonly Position[] {
+  const [x = 0, y = 0, z = 0] = bin.position
+  const halfSize = Math.max(
+    1,
+    (bin.binSizeMicrometers ?? bin.radiusMicrometers * 2) / 2,
+  )
+
+  return [
+    [x - halfSize, y + halfSize, z],
+    [x + halfSize, y + halfSize, z],
+    [x + halfSize, y - halfSize, z],
+    [x - halfSize, y - halfSize, z],
+  ]
 }
 
 export function styleGeneExpressionCellsByScale(

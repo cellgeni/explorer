@@ -435,7 +435,7 @@ describe('deck layer factory', () => {
     })
   })
 
-  it('renders transcript aggregate bins as a pickable density layer', () => {
+  it('renders transcript aggregate bins as pickable density squares', () => {
     const bins = transcriptAggregateBinsToLayerData([
       {
         id: 'bin-1',
@@ -444,6 +444,7 @@ describe('deck layer factory', () => {
         binY: 4,
         position: { x: micrometers(10), y: micrometers(20) },
         radiusMicrometers: 12,
+        binSizeMicrometers: 20,
         count: 25,
       },
     ])
@@ -453,27 +454,27 @@ describe('deck layer factory', () => {
     })
     const aggregateLayer = layers.find(
       (layer) =>
-        layer instanceof ScatterplotLayer && layer.id === 'transcript-density-bins',
+        layer instanceof PolygonLayer && layer.id === 'transcript-density-bins',
     )
 
-    expect(aggregateLayer).toBeInstanceOf(ScatterplotLayer)
+    expect(aggregateLayer).toBeInstanceOf(PolygonLayer)
 
-    if (!(aggregateLayer instanceof ScatterplotLayer)) {
-      throw new Error('Expected transcript aggregate bins to render as ScatterplotLayer.')
+    if (!(aggregateLayer instanceof PolygonLayer)) {
+      throw new Error('Expected transcript aggregate bins to render as PolygonLayer.')
     }
 
     expect(aggregateLayer.props.pickable).toBe(true)
-    expect(aggregateLayer.props.radiusUnits).toBe('common')
 
-    const getPosition = aggregateLayer.props.getPosition as (
+    const getPolygon = aggregateLayer.props.getPolygon as (
       bin: (typeof bins)[number],
-    ) => readonly number[]
-    const getRadius = aggregateLayer.props.getRadius as (
-      bin: (typeof bins)[number],
-    ) => number
+    ) => readonly (readonly number[])[]
 
-    expect(getPosition(bins[0]!)).toEqual([10, -20, 0])
-    expect(getRadius(bins[0]!)).toBe(12)
+    expect(getPolygon(bins[0]!)).toEqual([
+      [0, -10, 0],
+      [20, -10, 0],
+      [20, -30, 0],
+      [0, -30, 0],
+    ])
   })
 
   it('colors transcript aggregate bins with the selected density scale', () => {
@@ -508,6 +509,115 @@ describe('deck layer factory', () => {
 
     expect(thermalBins[0]?.fillColor).toEqual([255, 223, 91, 246])
     expect(viridisBins[0]?.fillColor).toEqual([253, 231, 37, 246])
+  })
+
+  it('keeps transcript density colors on a provided global scale', () => {
+    const [viewportBin] = transcriptAggregateBinsToLayerData(
+      [
+        {
+          id: 'bin-1',
+          glyphType: 'density',
+          level: 2,
+          binX: 3,
+          binY: 4,
+          position: { x: micrometers(10), y: micrometers(20) },
+          radiusMicrometers: 12,
+          count: 25,
+        },
+      ],
+      'thermal',
+      { scaleMax: 100 },
+    )
+    const [globalBin] = transcriptAggregateBinsToLayerData(
+      [
+        {
+          id: 'bin-2',
+          glyphType: 'density',
+          level: 2,
+          binX: 3,
+          binY: 4,
+          position: { x: micrometers(10), y: micrometers(20) },
+          radiusMicrometers: 12,
+          count: 100,
+        },
+      ],
+      'thermal',
+      { scaleMax: 100 },
+    )
+
+    expect(viewportBin?.fillColor).not.toEqual([255, 223, 91, 246])
+    expect(globalBin?.fillColor).toEqual([255, 223, 91, 246])
+  })
+
+  it('colors selected-gene feature circles by gene instead of density scale', () => {
+    const featureCircle = {
+      id: 'circle-1',
+      glyphType: 'feature-circle' as const,
+      level: 0,
+      binX: 3,
+      binY: 4,
+      position: { x: micrometers(10), y: micrometers(20) },
+      radiusMicrometers: 4,
+      count: 7,
+      binTotalCount: 19,
+      omittedFeatureCount: 1,
+      featureName: 'CD74',
+    }
+    const thermalBins = transcriptAggregateBinsToLayerData(
+      [featureCircle],
+      'thermal',
+    )
+    const viridisBins = transcriptAggregateBinsToLayerData(
+      [featureCircle],
+      'viridis',
+    )
+
+    expect(thermalBins[0]).toMatchObject({
+      glyphType: 'feature-circle',
+      featureName: 'CD74',
+      binTotalCount: 19,
+      omittedFeatureCount: 1,
+    })
+    expect(thermalBins[0]?.fillColor).toEqual(viridisBins[0]?.fillColor)
+  })
+
+  it('renders selected-gene feature circles as a separate pickable circle layer', () => {
+    const bins = transcriptAggregateBinsToLayerData([
+      {
+        id: 'circle-1',
+        glyphType: 'feature-circle',
+        level: 0,
+        binX: 3,
+        binY: 4,
+        position: { x: micrometers(10), y: micrometers(20) },
+        radiusMicrometers: 4,
+        count: 7,
+        featureName: 'CD74',
+      },
+    ])
+    const layers = createOverviewLayers(fixtureCells, [], [], {
+      transcriptAggregateBins: bins,
+      transcriptOpacity: 0.5,
+    })
+    const featureCircleLayer = layers.find(
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'transcript-feature-circles',
+    )
+
+    expect(featureCircleLayer).toBeInstanceOf(ScatterplotLayer)
+
+    if (!(featureCircleLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected transcript feature circles to render as ScatterplotLayer.')
+    }
+
+    expect(featureCircleLayer.props.pickable).toBe(true)
+    expect(featureCircleLayer.props.radiusUnits).toBe('common')
+
+    const getRadius = featureCircleLayer.props.getRadius as (
+      bin: (typeof bins)[number],
+    ) => number
+
+    expect(getRadius(bins[0]!)).toBe(4)
   })
 
   it('scores multi-gene expression by mean count', () => {

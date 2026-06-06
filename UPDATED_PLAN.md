@@ -70,10 +70,10 @@ done. This file records execution-level additions requested after work began.
       of being silently swallowed.
 - [x] Live smoke check on `http://127.0.0.1:5173/` loaded 50,000 overview cells
       and verified the morphology canvas had non-transparent decoded pixels.
-- [x] Morphology image loading is now opt-in from the dataset form. The default
-      `Load Dataset` path loads overview cells only and does not start OME-TIFF
-      metadata, range, or JPEG-2000 decode work unless `Morphology image` is
-      selected.
+- [x] Morphology image loading is enabled by default from the dataset form.
+      Users can still disable `Morphology image` before loading when they want
+      the overview-only path without OME-TIFF metadata, range, or JPEG-2000
+      decode work.
 - [x] Overview cell loading now requests all centroid points by default while
       skipping the expensive `cell_id` string column for overview-only drawing.
       The app reads `cell_area` and uses an area-derived radius for cell point
@@ -615,6 +615,23 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       low/medium zoom bins, and use `density/gene` sparse rows for
       selected-feature bins. Keep cell-summary bins only as a degraded fallback
       when native Zarr LOD is missing and the feature filter is `All`.
+- [x] Superseded 10x-style selected-gene density decision: keep `Exact` mode as the
+      record-level transcript view, and use the 10x-like feature-circle overlay
+      only for explicit low/medium zoom selected-gene `Density` from
+      `density/gene`. `Auto` remains an all-transcript density overview: it
+      colors stable density grid squares by transcript count and does not switch
+      to selected-gene feature circles. Emit one feature-circle glyph per
+      `(bin, gene)` for the top genes in each bin, offset those glyphs
+      deterministically within the bin, and cap visible genes per bin at eight
+      with omitted counts exposed in hover metadata.
+- [x] 2026-06-06 transcript LOD UX decision: supersede the selected-gene
+      10x-style feature-circle path for the user-facing transcript overlay.
+      Keep only `Auto`, `Density`, and `Exact` in the transcript detail control.
+      `Density` always uses native `/grids` transcript-count squares with the
+      former `Bins` budget of 1,500 squares. `Auto` uses that Density overview
+      until the visible transcript estimate is inside the exact budget, then
+      switches to exact transcript records. Feature filters are applied by
+      `Exact`, not by the aggregate density overview.
 
 ### Rendering Behavior
 
@@ -625,7 +642,7 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       count by area/opacity and color by selected feature/gene when a filter is
       active; otherwise use a neutral density color that does not fight cell
       annotation or morphology colors.
-- [x] Initial low-zoom fallback: Density/Bins/Auto can render stable all-gene
+- [x] Initial low-zoom fallback: Density/Auto can render stable all-gene
       aggregate bins from loaded cell transcript counts when native
       `transcripts.zarr.zip` LOD is unavailable. Native grid/density parsing is
       now the preferred path when the zip is present.
@@ -659,12 +676,24 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
 - [x] Keep point sizing in screen pixels with a small radius and configurable
       opacity. Panning and zooming should not shift aggregate bin membership
       because bins are anchored in data coordinates.
+- [x] Selected-gene native aggregate rendering was removed from the
+      user-facing transcript modes. Exact transcript points remain the selected
+      feature path; aggregate Density and Auto show all-transcript count squares.
+- [x] Transcript density square color normalization uses a global native LOD
+      count domain instead of the maximum count in the current viewport. This
+      prevents density squares from becoming unexpectedly brighter while panning
+      or zooming into lower-count regions. Feature-circle gene colors remain
+      categorical, and exact transcript points remain unchanged.
+- [x] `Density` now uses the native `/grids` pyramid instead of scanning every
+      gene through `density/gene` at close zoom. This avoids the horizontal
+      banding seen in all-feature density squares while preserving exact
+      transcript behavior.
 
 ### Transcripts Tab UX
 
 - [ ] Controls:
       `Show transcripts` toggle, `Detail` segmented control (`Auto`, `Density`,
-      `Bins`, `Exact`), `Min QV`, `Gene-only` toggle, feature filter
+      `Exact`), `Min QV`, `Gene-only` toggle, feature filter
       (`All genes`, `Selected genes`, search/pick feature), color mode,
       opacity, point size, and aggregate scale.
 - [x] Initial status readout:

@@ -153,8 +153,7 @@ import type {
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS = 12_000
-const TRANSCRIPT_NATIVE_DENSITY_MAX_BINS = 700
-const TRANSCRIPT_NATIVE_BIN_MAX_BINS = 1_500
+const TRANSCRIPT_NATIVE_DENSITY_MAX_BINS = 1_500
 const EMPTY_GENE_LIST: readonly string[] = []
 const EMPTY_TRANSCRIPT_POINTS: readonly TranscriptPoint[] = []
 const EMPTY_TRANSCRIPT_AGGREGATE_BINS: readonly TranscriptAggregateBin[] = []
@@ -248,7 +247,7 @@ export type TranscriptAggregateLoader = (
   bbox: BBox,
   options?: {
     readonly signal?: AbortSignal
-    readonly mode?: 'density' | 'bins'
+    readonly mode?: 'density'
     readonly featureNames?: readonly string[]
     readonly maxBins?: number
   },
@@ -501,9 +500,10 @@ type TranscriptLayerState =
       readonly status: 'aggregate'
       readonly message: string
       readonly source: 'cell-summary' | 'native-zarr'
-      readonly mode: 'density' | 'bins'
+      readonly mode: 'density'
       readonly bins: readonly TranscriptAggregateBin[]
       readonly visibleTranscriptEstimate: number
+      readonly scaleMax?: number
       readonly durationMs?: number
     }
   | {
@@ -540,6 +540,7 @@ type TranscriptRetainedLayerState =
   | {
       readonly kind: 'aggregate'
       readonly bins: readonly TranscriptAggregateBin[]
+      readonly scaleMax?: number
     }
 
 type MagicLensScope = 'cursor' | 'viewport' | 'roi'
@@ -894,7 +895,7 @@ export function App({
   )
   const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(
-    initialShareableState.shouldLoadMorphology ?? false,
+    initialShareableState.shouldLoadMorphology ?? true,
   )
   const [boundaryCellLimit, setBoundaryCellLimit] = useState(() =>
     normalizeBoundaryCellLimit(
@@ -1078,11 +1079,15 @@ export function App({
     [transcriptLayerState],
   )
   const transcriptLayerAggregateBins = useMemo(
-    () =>
-      transcriptAggregateBinsToLayerData(
+    () => {
+      const scaleMax = transcriptAggregateScaleMaxForRendering(transcriptLayerState)
+
+      return transcriptAggregateBinsToLayerData(
         transcriptAggregateBinsForRendering(transcriptLayerState),
         transcriptDensityColorScale,
-      ),
+        scaleMax === undefined ? {} : { scaleMax },
+      )
+    },
     [transcriptDensityColorScale, transcriptLayerState],
   )
   const visibleTranscriptEstimate = useMemo(
@@ -1870,27 +1875,26 @@ export function App({
 
     const featureNames =
       transcriptFeatureFilterMode === 'selected' ? selectedGenes : EMPTY_GENE_LIST
+    const aggregateFeatureNames = EMPTY_GENE_LIST
+    const hasSelectedFeatureFilter =
+      transcriptFeatureFilterMode !== 'selected' || featureNames.length > 0
     const plan = planTranscriptLod(currentViewportDetail, {
       detailMode: transcriptDetailMode,
       visibleTranscriptEstimate,
       exactLimit: transcriptExactPointLimit,
       hasRawParquet: transcriptCapabilityState.capabilities.rawParquet,
       hasNativeZarr: transcriptCapabilityState.capabilities.nativeZarr,
-      hasSelectedFeatureFilter:
-        transcriptFeatureFilterMode !== 'selected' || featureNames.length > 0,
+      hasSelectedFeatureFilter,
     })
 
     if (plan.kind === 'native-zarr') {
-      const maxBins =
-        plan.mode === 'density'
-          ? TRANSCRIPT_NATIVE_DENSITY_MAX_BINS
-          : TRANSCRIPT_NATIVE_BIN_MAX_BINS
+      const maxBins = TRANSCRIPT_NATIVE_DENSITY_MAX_BINS
       const requestKey = transcriptAggregateRequestKey(
         loadState.url,
         currentViewportDetail.bbox,
         {
           mode: plan.mode,
-          featureNames,
+          featureNames: aggregateFeatureNames,
           maxBins,
         },
       )
@@ -1927,7 +1931,7 @@ export function App({
       void loadTranscriptAggregates(loadState.url, currentViewportDetail.bbox, {
         signal: abortController.signal,
         mode: plan.mode,
-        featureNames,
+        featureNames: aggregateFeatureNames,
         maxBins,
       })
         .then((result) => {
@@ -1948,10 +1952,11 @@ export function App({
               binCount: result.bins.length,
             }),
             visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+            ...(result.scaleMax === undefined ? {} : { scaleMax: result.scaleMax }),
             durationMs,
           })
           appendDebugEvent(
-            `Native transcript aggregate ready: ${result.bins.length.toLocaleString()} bins in ${formatElapsed(
+            `Native transcript aggregate ready: ${result.bins.length.toLocaleString()} squares in ${formatElapsed(
               transcriptStartedAt,
             )}`,
             { coalesceKey: 'transcript-query' },
@@ -1988,13 +1993,13 @@ export function App({
     if (
       (plan.kind === 'waiting' || plan.kind === 'unavailable') &&
       !transcriptCapabilityState.capabilities.nativeZarr &&
-      transcriptFeatureFilterMode === 'all' &&
+      transcriptDetailMode !== 'exact' &&
       visibleTranscriptEstimate > 0
     ) {
       abortActiveRequest(transcriptAbortRef)
       transcriptRequestId.current += 1
       const aggregateRequestId = transcriptRequestId.current
-      const fallbackMode = transcriptDetailMode === 'bins' ? 'bins' : 'density'
+      const fallbackMode = 'density'
       const bins = buildCellSummaryTranscriptBins(
         overviewCells,
         currentViewportDetail.bbox,
@@ -2014,6 +2019,7 @@ export function App({
               selectedFeatureCount: featureNames.length,
             }),
             visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+            scaleMax: maxTranscriptAggregateCount(bins),
           })
         }
       })
@@ -4508,7 +4514,6 @@ export function App({
                 >
                   <option value="auto">Auto</option>
                   <option value="density">Density</option>
-                  <option value="bins">Bins</option>
                   <option value="exact">Exact</option>
                 </select>
 
@@ -5440,7 +5445,7 @@ function transcriptStatusCopy(
   }
 
   if (layerState.status === 'aggregate') {
-    return `${layerState.bins.length.toLocaleString()} bins`
+    return transcriptAggregateRenderedLabel(layerState.bins)
   }
 
   if (layerState.status === 'waiting') {
@@ -5486,6 +5491,24 @@ function transcriptAggregateBinsForRendering(
   return EMPTY_TRANSCRIPT_AGGREGATE_BINS
 }
 
+function transcriptAggregateScaleMaxForRendering(
+  layerState: TranscriptLayerState,
+): number | undefined {
+  if (layerState.status === 'aggregate') {
+    return layerState.scaleMax
+  }
+
+  if (layerState.status === 'loading' && layerState.previousLayer?.kind === 'aggregate') {
+    return layerState.previousLayer.scaleMax
+  }
+
+  return undefined
+}
+
+function transcriptAggregateRenderedLabel(bins: readonly TranscriptAggregateBin[]): string {
+  return `${bins.length.toLocaleString()} squares`
+}
+
 function retainedTranscriptLayerState(
   layerState: TranscriptLayerState,
 ): TranscriptRetainedLayerState | undefined {
@@ -5500,6 +5523,7 @@ function retainedTranscriptLayerState(
     return {
       kind: 'aggregate',
       bins: layerState.bins,
+      ...(layerState.scaleMax === undefined ? {} : { scaleMax: layerState.scaleMax }),
     }
   }
 
@@ -5531,7 +5555,7 @@ function isObservationColorMode(value: string): value is ObservationColorMode {
 }
 
 function isTranscriptDetailMode(value: string): value is TranscriptDetailMode {
-  return value === 'auto' || value === 'density' || value === 'bins' || value === 'exact'
+  return value === 'auto' || value === 'density' || value === 'exact'
 }
 
 function isTranscriptFeatureFilterMode(
@@ -5589,6 +5613,10 @@ function parseObservationColorMode(
 function parseTranscriptDetailMode(
   value: string | undefined,
 ): TranscriptDetailMode | undefined {
+  if (value === 'bins') {
+    return 'density'
+  }
+
   return value !== undefined && isTranscriptDetailMode(value) ? value : undefined
 }
 
@@ -5726,12 +5754,12 @@ function estimateVisibleTranscriptsFromCells(
 function buildCellSummaryTranscriptBins(
   cells: readonly OverviewCellDatum[],
   bbox: BBox,
-  mode: 'density' | 'bins',
+  mode: 'density',
 ): readonly TranscriptAggregateBin[] {
   const width = Math.max(1, bbox.maxX - bbox.minX)
   const height = Math.max(1, bbox.maxY - bbox.minY)
-  const targetAxisBins = mode === 'bins' ? 44 : 72
-  const minBinSize = mode === 'bins' ? 24 : 10
+  const targetAxisBins = 44
+  const minBinSize = 24
   const binSize = Math.max(minBinSize, Math.max(width, height) / targetAxisBins)
   const radiusMicrometers = Math.max(3, Math.min(90, binSize * 0.45))
   const level = Math.max(0, Math.floor(Math.log2(Math.max(1, binSize / 10))))
@@ -5794,40 +5822,46 @@ function buildCellSummaryTranscriptBins(
     })
 }
 
+function maxTranscriptAggregateCount(bins: readonly TranscriptAggregateBin[]): number {
+  let maxCount = 0
+
+  for (const bin of bins) {
+    maxCount = Math.max(maxCount, bin.count)
+  }
+
+  return Math.max(1, maxCount)
+}
+
 function transcriptNativeAggregateMessage({
-  mode,
   selectedFeatureCount,
   binCount,
 }: {
-  readonly mode: 'density' | 'bins'
+  readonly mode: 'density'
   readonly selectedFeatureCount: number
   readonly binCount: number
 }): string {
-  const modeLabel = mode === 'bins' ? 'binned' : 'density'
   const featureLabel =
     selectedFeatureCount > 0
       ? `${selectedFeatureCount.toLocaleString()} selected-feature`
       : 'all-transcript'
 
-  return `Showing native ${featureLabel} ${modeLabel} bins from transcripts.zarr.zip (${binCount.toLocaleString()} bins).`
+  return `Showing native ${featureLabel} density squares from transcripts.zarr.zip (${binCount.toLocaleString()} squares).`
 }
 
 function transcriptAggregateFallbackMessage({
-  mode,
   featureFilterMode,
   selectedFeatureCount,
 }: {
-  readonly mode: 'density' | 'bins'
+  readonly mode: 'density'
   readonly featureFilterMode: TranscriptFeatureFilterMode
   readonly selectedFeatureCount: number
 }): string {
-  const modeLabel = mode === 'bins' ? 'binned' : 'density'
   const filterNote =
     featureFilterMode === 'selected' && selectedFeatureCount > 0
-      ? ' Selected-gene isolation needs the native transcript LOD reader.'
+      ? ' Selected-gene filtering is applied by Exact.'
       : ''
 
-  return `Showing all-gene cell-summary ${modeLabel} bins for this viewport. Min QV and gene-only filters need exact points or native transcript LOD.${filterNote}`
+  return `Showing all-gene cell-summary density squares for this viewport. Min QV and gene-only filters need exact points or native transcript LOD.${filterNote}`
 }
 
 function filterGeneOptions(
@@ -6913,7 +6947,7 @@ function TranscriptStatusPanel({
           <>
             <div>
               <dt>Rendered</dt>
-              <dd>{layerState.bins.length.toLocaleString()} bins</dd>
+              <dd>{transcriptAggregateRenderedLabel(layerState.bins)}</dd>
             </div>
             <div>
               <dt>Layer</dt>
@@ -7007,12 +7041,22 @@ function TranscriptStatusPanel({
         </div>
       ) : hoveredTranscript.aggregate !== undefined ? (
         <div className="transcript-hover-panel">
-          <p>Transcript density bin</p>
+          <p>
+            {hoveredTranscript.aggregate.featureName === undefined
+              ? 'Transcript density bin'
+              : hoveredTranscript.aggregate.featureName}
+          </p>
           <dl>
             <div>
               <dt>Count</dt>
               <dd>{hoveredTranscript.aggregate.count.toLocaleString()}</dd>
             </div>
+            {hoveredTranscript.aggregate.binTotalCount === undefined ? null : (
+              <div>
+                <dt>Total</dt>
+                <dd>{hoveredTranscript.aggregate.binTotalCount.toLocaleString()}</dd>
+              </div>
+            )}
             <div>
               <dt>Level</dt>
               <dd>{hoveredTranscript.aggregate.level.toLocaleString()}</dd>
@@ -7035,6 +7079,15 @@ function TranscriptStatusPanel({
               <div>
                 <dt>Selected</dt>
                 <dd>{hoveredTranscript.aggregate.selectedGeneCount.toLocaleString()}</dd>
+              </div>
+            )}
+            {hoveredTranscript.aggregate.omittedFeatureCount === undefined ? null : (
+              <div>
+                <dt>Hidden</dt>
+                <dd>
+                  {hoveredTranscript.aggregate.omittedFeatureCount.toLocaleString()}{' '}
+                  genes
+                </dd>
               </div>
             )}
             <div>

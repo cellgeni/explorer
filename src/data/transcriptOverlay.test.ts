@@ -56,7 +56,7 @@ describe('transcriptOverlay', () => {
     expect(plan.kind).toBe('native-zarr')
   })
 
-  it('keeps auto mode on native LOD when exact would be under budget', () => {
+  it('switches auto mode to exact when the estimate is under budget', () => {
     const plan = planTranscriptLod(
       { viewState: { zoom: 3 } },
       {
@@ -68,7 +68,7 @@ describe('transcriptOverlay', () => {
       },
     )
 
-    expect(plan.kind).toBe('native-zarr')
+    expect(plan.kind).toBe('exact')
   })
 
   it('waits instead of sampling exact rows when native LOD is unavailable', () => {
