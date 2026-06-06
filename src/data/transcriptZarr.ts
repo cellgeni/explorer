@@ -15,6 +15,7 @@ const TRANSCRIPT_GRID_BASE_SIZE_MICROMETERS = 250
 const TRANSCRIPT_DENSITY_DEFAULT_MAX_BINS = 700
 const TRANSCRIPT_BINS_DEFAULT_MAX_BINS = 1_500
 const TRANSCRIPT_DENSITY_FEATURE_SUMMARY_LIMIT = 4
+const TRANSCRIPT_ALL_FEATURE_DENSITY_MAX_POINTER_VISITS = 3_000_000
 const UNKNOWN_GENE_INDEX = 65_535
 const UNKNOWN_CODEWORD_INDEX = 65_535
 
@@ -237,14 +238,22 @@ export async function loadTranscriptZarrAggregates(
       : TRANSCRIPT_BINS_DEFAULT_MAX_BINS)
   const selectedFeatureNames = normalizeFeatureNames(options.featureNames ?? [])
 
-  if (selectedFeatureNames.length > 0) {
+  if (
+    selectedFeatureNames.length > 0 ||
+    (mode === 'density' && shouldUseAllFeatureDensity(metadata.densityGene, bbox))
+  ) {
     if (metadata.densityGene === null) {
       throw new Error(
         'transcripts.zarr.zip is missing density/gene metadata for selected-feature aggregate bins.',
       )
     }
 
-    const densityLevel = transcriptDensityLevelForBbox(bbox, mode, maxBins)
+    const densityLevel = transcriptDensityLevelForBbox(
+      bbox,
+      mode,
+      maxBins,
+      nativeDensityBaseBinSize(metadata.densityGene),
+    )
     const bins = await transcriptZarrDensityGeneBins(metadata, bbox, {
       mode,
       maxBins,
@@ -439,16 +448,21 @@ async function transcriptZarrDensityGeneBins(
     return []
   }
 
-  const geneIndexes = selectedGeneIndexes(
-    densityGene.geneNames,
-    options.selectedFeatureNames,
-  )
+  const geneIndexes =
+    options.selectedFeatureNames.length === 0
+      ? allDensityGeneIndexes(densityGene.geneNames)
+      : selectedGeneIndexes(densityGene.geneNames, options.selectedFeatureNames)
 
   if (geneIndexes.length === 0) {
     return []
   }
 
-  const densityLevel = transcriptDensityLevelForBbox(bbox, options.mode, options.maxBins)
+  const densityLevel = transcriptDensityLevelForBbox(
+    bbox,
+    options.mode,
+    options.maxBins,
+    nativeDensityBaseBinSize(densityGene),
+  )
   const rowRange = densityRowRangeForBbox(densityGene, bbox)
   const colRange = densityColRangeForBbox(densityGene, bbox)
 
@@ -507,6 +521,7 @@ async function transcriptZarrDensityGeneBins(
     binMap,
     densityLevel.level,
     densityLevel.tileSizeMicrometers,
+    options.selectedFeatureNames.length > 0,
   )
 }
 
@@ -514,12 +529,14 @@ export function transcriptDensityLevelForBbox(
   bbox: BBox,
   _mode: 'density' | 'bins',
   maxBins: number,
+  baseBinSizeMicrometers = TRANSCRIPT_GRID_BASE_SIZE_MICROMETERS,
 ): { readonly level: number; readonly tileSizeMicrometers: number } {
   const normalizedMaxBins = Math.max(1, Math.floor(maxBins))
+  const normalizedBaseBinSize = Math.max(1, baseBinSizeMicrometers)
   const maxLevel = 8
 
   for (let level = 0; level <= maxLevel; level += 1) {
-    const tileSizeMicrometers = TRANSCRIPT_GRID_BASE_SIZE_MICROMETERS * 2 ** level
+    const tileSizeMicrometers = normalizedBaseBinSize * 2 ** level
     const xBins = Math.max(1, Math.ceil((bbox.maxX - bbox.minX) / tileSizeMicrometers))
     const yBins = Math.max(1, Math.ceil((bbox.maxY - bbox.minY) / tileSizeMicrometers))
     const visibleBins = xBins * yBins
@@ -531,8 +548,43 @@ export function transcriptDensityLevelForBbox(
 
   return {
     level: maxLevel,
-    tileSizeMicrometers: TRANSCRIPT_GRID_BASE_SIZE_MICROMETERS * 2 ** maxLevel,
+    tileSizeMicrometers: normalizedBaseBinSize * 2 ** maxLevel,
   }
+}
+
+function shouldUseAllFeatureDensity(
+  densityGene: TranscriptDensityGeneMetadata | null,
+  bbox: BBox,
+): boolean {
+  if (densityGene === null) {
+    return false
+  }
+
+  const rowRange = densityRowRangeForBbox(densityGene, bbox)
+  const colRange = densityColRangeForBbox(densityGene, bbox)
+
+  if (rowRange === null || colRange === null) {
+    return false
+  }
+
+  const rowCount = rowRange.end - rowRange.start + 1
+
+  return (
+    rowCount * densityGene.geneNames.length <=
+    TRANSCRIPT_ALL_FEATURE_DENSITY_MAX_POINTER_VISITS
+  )
+}
+
+function nativeDensityBaseBinSize(densityGene: TranscriptDensityGeneMetadata): number {
+  return Math.max(densityGene.gridSizeX, densityGene.gridSizeY, 1)
+}
+
+function allDensityGeneIndexes(
+  geneNames: readonly string[],
+): readonly { readonly index: number; readonly name: string }[] {
+  return geneNames.flatMap((name, index) =>
+    name === undefined ? [] : [{ index, name }],
+  )
 }
 
 function selectedGeneIndexes(
@@ -747,6 +799,7 @@ function densityBinMapToAggregateBins(
   >,
   level: number,
   binSizeMicrometers: number,
+  includeSelectedGeneCount: boolean,
 ): readonly TranscriptAggregateBin[] {
   return [...binMap.entries()]
     .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
@@ -766,7 +819,7 @@ function densityBinMapToAggregateBins(
         radiusMicrometers: binSizeMicrometers * 0.42,
         binSizeMicrometers,
         count: bin.count,
-        selectedGeneCount: bin.count,
+        ...(includeSelectedGeneCount ? { selectedGeneCount: bin.count } : {}),
         ...(topFeatures.length === 0 ? {} : { topFeatures }),
       }
     })

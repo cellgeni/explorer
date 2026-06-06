@@ -111,6 +111,22 @@ describe('transcriptZarr', () => {
       ),
     ).toEqual({ level: 2, tileSizeMicrometers: 1_000 })
   })
+
+  it('uses native density grid size for close transcript density bins', () => {
+    expect(
+      transcriptDensityLevelForBbox(
+        {
+          minX: micrometers(0),
+          minY: micrometers(0),
+          maxX: micrometers(700),
+          maxY: micrometers(700),
+        },
+        'density',
+        700,
+        10,
+      ),
+    ).toEqual({ level: 2, tileSizeMicrometers: 40 })
+  })
 })
 
 function transcriptPoint(
