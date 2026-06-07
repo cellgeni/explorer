@@ -12,6 +12,7 @@ import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import { RoiHudPanel } from './features/control-hud/RoiHudPanel'
 import { TranscriptStatusPanel } from './features/transcripts/TranscriptStatusPanel'
 import { transcriptCapabilityLabel } from './features/transcripts/transcriptLabels'
+import { GeneOptionList } from './features/genes/GeneOptionList'
 import {
   CONTROL_HUD_TABS,
   isObservationColorMode,
@@ -913,7 +914,10 @@ export function App({
     [geneOptions, geneSearch, selectedGenes],
   )
   const filteredTranscriptFeatures = useMemo(
-    () => filterGeneOptions(geneOptions, transcriptFeatureSearch, selectedGenes),
+    () =>
+      filterGeneOptions(geneOptions, transcriptFeatureSearch, selectedGenes, {
+        limit: 24,
+      }),
     [geneOptions, selectedGenes, transcriptFeatureSearch],
   )
   const genePanelCopy = genePanelStatusCopy(genePanelState)
@@ -4116,20 +4120,11 @@ export function App({
                   </div>
                 )}
 
-                <div className="gene-option-list" aria-label="Gene options">
-                  {filteredGenes.map((gene) => (
-                    <button
-                      key={gene}
-                      type="button"
-                      className={selectedGenes.includes(gene) ? 'selected' : undefined}
-                      onClick={() => {
-                        toggleGene(gene)
-                      }}
-                    >
-                      {gene}
-                    </button>
-                  ))}
-                </div>
+                <GeneOptionList
+                  genes={filteredGenes}
+                  selectedGenes={selectedGenes}
+                  onToggleGene={toggleGene}
+                />
 
                 <label htmlFor={geneSetSymbolsInputId}>Gene set symbols</label>
                 <textarea

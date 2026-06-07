@@ -641,6 +641,36 @@ h2 {
   padding-right: 2px;
 }
 
+.gene-option-list.is-virtualized {
+  position: relative;
+  display: block;
+  flex-wrap: nowrap;
+  max-height: none;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.gene-option-list-spacer {
+  position: relative;
+  min-width: 0;
+}
+
+.gene-option-list.is-virtualized button {
+  position: absolute;
+  right: 2px;
+  left: 0;
+  display: block;
+  width: calc(100% - 2px);
+  min-height: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 6px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .option-empty {
   color: #5f5848;
   font-size: 0.64rem;

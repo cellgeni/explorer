@@ -180,6 +180,7 @@ export function filterGeneOptions(
   genes: readonly string[],
   search: string,
   selectedGenes: readonly string[],
+  options: { readonly limit?: number } = {},
 ): readonly string[] {
   const normalizedSearch = search.trim().toLowerCase()
   const selected = new Set(selectedGenes)
@@ -194,7 +195,7 @@ export function filterGeneOptions(
       matches.push(gene)
     }
 
-    if (matches.length >= 24) {
+    if (options.limit !== undefined && matches.length >= options.limit) {
       break
     }
   }
