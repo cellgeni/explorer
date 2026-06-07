@@ -9,20 +9,29 @@ type MockDeckHover = (info: {
   readonly x: number
   readonly y: number
 }) => void
+type MockDeckClick = (info: {
+  readonly object?: unknown
+  readonly x: number
+  readonly y: number
+}) => void
 
 const deckGlMock = vi.hoisted(() => ({
   onHover: undefined as MockDeckHover | undefined,
+  onClick: undefined as MockDeckClick | undefined,
 }))
 
 vi.mock('@deck.gl/react', () => ({
   DeckGL: ({
     layers = [],
     onHover,
+    onClick,
   }: {
     readonly layers?: readonly unknown[]
     readonly onHover?: MockDeckHover
+    readonly onClick?: MockDeckClick
   }) => {
     deckGlMock.onHover = onHover
+    deckGlMock.onClick = onClick
 
     return (
       <div data-testid="deckgl">
@@ -64,6 +73,7 @@ const rect = {
 
 afterEach(() => {
   deckGlMock.onHover = undefined
+  deckGlMock.onClick = undefined
   vi.restoreAllMocks()
 })
 
@@ -141,6 +151,31 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('Cell')).toBeInTheDocument()
     expect(screen.getByText('Unassigned')).toBeInTheDocument()
+  })
+
+  it('notifies when an exact transcript point is clicked', () => {
+    const transcript = transcriptDatum({
+      id: 'tx-clicked',
+      cellId: 'cell-1',
+    })
+    const onTranscriptClick = vi.fn()
+
+    render(
+      <ViewerCore
+        cells={[overviewCellDatum()]}
+        transcriptPoints={[transcript]}
+        onTranscriptClick={onTranscriptClick}
+      />,
+    )
+
+    act(() => {
+      deckGlMock.onClick?.({ object: transcript, x: 14, y: 22 })
+    })
+
+    expect(onTranscriptClick).toHaveBeenCalledWith({
+      transcript,
+      screen: { x: 14, y: 22 },
+    })
   })
 
 

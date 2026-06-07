@@ -36,6 +36,7 @@ describe('shareableState', () => {
       transcriptGeneOnly: true,
       transcriptFeatureFilterMode: 'selected',
       transcriptDensityColorScale: 'viridis',
+      transcriptPointColorMode: 'quality',
       transcriptExactPointLimit: 75_000,
       transcriptOpacity: 0.75,
       transcriptPointSize: 3,
@@ -58,6 +59,7 @@ describe('shareableState', () => {
     expect(state.transcriptGeneOnly).toBe(true)
     expect(state.transcriptFeatureFilterMode).toBe('selected')
     expect(state.transcriptDensityColorScale).toBe('viridis')
+    expect(state.transcriptPointColorMode).toBe('quality')
     expect(state.transcriptExactPointLimit).toBe(75_000)
     expect(state.transcriptOpacity).toBe(0.75)
     expect(state.transcriptPointSize).toBe(3)

@@ -15,6 +15,7 @@ import {
   styleCellBoundariesByCells,
   styleGeneExpressionCellsByScale,
   transcriptAggregateBinsToLayerData,
+  transcriptPointsToLayerData,
 } from './deckLayers'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
 
@@ -579,6 +580,22 @@ describe('deck layer factory', () => {
       omittedFeatureCount: 1,
     })
     expect(thermalBins[0]?.fillColor).toEqual(viridisBins[0]?.fillColor)
+  })
+
+  it('can color exact transcript points by QV instead of feature', () => {
+    const transcript = {
+      id: 'tx-1',
+      cellId: null,
+      featureName: 'Actb',
+      fovName: 'FOV-1',
+      position: { x: micrometers(10), y: micrometers(20) },
+      qv: 10,
+    }
+    const [featureDatum] = transcriptPointsToLayerData([transcript], 'feature')
+    const [qualityDatum] = transcriptPointsToLayerData([transcript], 'quality')
+
+    expect(qualityDatum?.fillColor).toEqual([221, 127, 75, 215])
+    expect(qualityDatum?.fillColor).not.toEqual(featureDatum?.fillColor)
   })
 
   it('renders selected-gene feature circles as a separate pickable circle layer', () => {

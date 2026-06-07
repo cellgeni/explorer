@@ -158,7 +158,9 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
       'all',
     )
+    expect(screen.getByLabelText('Feature search')).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'Density color' })).toHaveValue('thermal')
+    expect(screen.getByRole('combobox', { name: 'Point color' })).toHaveValue('feature')
     expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(20)
     expect(screen.getByRole('checkbox', { name: 'Gene-only calls' })).toBeChecked()
     expect(screen.getByRole('slider', { name: 'Transcript opacity' })).toHaveValue('85')
@@ -1453,6 +1455,128 @@ describe('App', () => {
     expect(
       screen.queryByText('Checking transcript outputs for this dataset.'),
     ).not.toBeInTheDocument()
+  })
+
+  it('adds transcript feature filters from the transcript search control', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1', 'Gad2'])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: false,
+    }))
+
+    render(
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={loadGenePanel}
+        loadTranscriptCapabilities={loadTranscriptCapabilities}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+    openHudTab('Transcripts')
+
+    const featureSearchInput = screen.getByLabelText('Feature search')
+    await waitFor(() => {
+      expect(featureSearchInput).toBeEnabled()
+    })
+    fireEvent.change(featureSearchInput, { target: { value: 'gad' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Gad1' }))
+
+    expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
+      'selected',
+    )
+    expect(screen.getByLabelText('Transcript selected features')).toHaveTextContent(
+      'Gad1',
+    )
+    expect(screen.queryByRole('button', { name: 'Gad2' })).not.toBeInTheDocument()
+  })
+
+  it('requires an explicit load action for near-budget exact transcript viewports', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 80_000,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: false,
+    }))
+    const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> =
+      vi.fn(async () => ({
+        points: [],
+        groups: [],
+        hitPointLimit: false,
+      }))
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadTranscriptCapabilities={loadTranscriptCapabilities}
+          loadTranscriptViewport={loadTranscriptViewport}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+      openHudTab('Transcripts')
+      expect(await screen.findByText('Exact only')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
+
+      expect(
+        await screen.findByText(/Exact transcript viewport is near the 100,000 point budget/),
+      ).toBeInTheDocument()
+      expect(loadTranscriptViewport).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Load exact viewport' }))
+
+      await waitFor(() => {
+        expect(loadTranscriptViewport).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.any(Object),
+          expect.objectContaining({
+            pointLimit: 100_000,
+          }),
+        )
+      })
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
   })
 
   it('renders density squares when native transcript LOD planning is selected', async () => {

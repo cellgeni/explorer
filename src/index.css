@@ -641,6 +641,12 @@ h2 {
   padding-right: 2px;
 }
 
+.option-empty {
+  color: #5f5848;
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
 .gene-set-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1282,6 +1288,34 @@ h2 {
   overflow: hidden;
   color: #2f2b22;
   font-size: 0.68rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transcript-hover-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.transcript-hover-heading button {
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid rgba(215, 63, 124, 0.34);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.78);
+  color: #7f2048;
+  cursor: pointer;
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.transcript-hover-title {
+  overflow: hidden;
+  color: #7f2048;
+  font-size: 0.66rem;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;

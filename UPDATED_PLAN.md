@@ -3,11 +3,12 @@
 `PLAN.md` remains the source of truth for scope, sequencing, and definitions of
 done. This file records execution-level additions requested after work began.
 
-## Current Stage Assessment - 2026-06-04
+## Current Stage Assessment - 2026-06-07
 
-- Current stage: Phase 5 complete and verified. Phases 1-5 are implemented per
-  the execution notes below, with JPEG XR decoding and Z-stack plane selection
-  still intentionally deferred by user request.
+- Current stage: Phase 5.1 complete and verified. Phases
+  1-5.1 are implemented per the execution notes below. JPEG XR decoding has
+  been permanently dropped by user request; Z-stack plane selection remains
+  deferred for eventual implementation.
 - Phase 4 is complete: gene picking, expression LOD, gene sets,
   built-in/custom annotations, ROI box/lasso workflow, ROI
   cell/gene/transcript export, annotation coloring, linked embeddings, and HDF5
@@ -16,8 +17,8 @@ done. This file records execution-level additions requested after work began.
   budgets, keyboard/accessibility polish, dataset diagnostics, local telemetry,
   docs, and final verification are implemented.
 - Current working sequence: feature-fix existing functionality first, then
-  optimize. Do not start new Phase 5.1 transcript display work until that
-  correctness pass is closed out.
+  optimize. The correctness pass needed before Phase 5.1 is closed; the broader
+  optimization pass remains a future follow-up.
 
 ## Added Skill Requirements
 
@@ -196,14 +197,17 @@ done. This file records execution-level additions requested after work began.
       per-channel name/color/contrast.
 - [x] Multi-channel compositing via Viv `XRLayer` (or custom shader) fed decoded
       tiles; per-channel color + min/max + on/off.
-- [x] **Deferred by user:** JPEG XR decoder (WASM).
-- [x] **Deferred by user:** Z-stack plane selector for `morphology.ome.tif`.
+- [x] **Permanently dropped by user:** JPEG XR decoder (WASM).
+- [x] **Deferred by user for future implementation:** Z-stack plane selector for
+      `morphology.ome.tif`.
 - [x] Per-channel histogram + auto-contrast.
 
 ## Phase 3 Notes
 
 - [x] User explicitly asked to start Phase 3 while skipping the JPEG XR decoder
-      and Z-stack plane selector. Do not implement those two tasks in this pass.
+      and Z-stack plane selector. On 2026-06-07 the user clarified that JPEG XR
+      should be permanently dropped, while Z-stack plane selection remains
+      deferred for eventual implementation.
 - [x] Added OME-XML parsing for Xenium morphology focus channels. TIFF loaders
       now expose channel id, index, name, focus-file name, purpose, RGB display
       color, and default contrast range from the OME pixel type; the real demo
@@ -495,7 +499,7 @@ unless the phase order is explicitly changed.
 - [ ] Optimization pass: after correctness is stable, tune interaction
       performance, memory pressure, fetch/decode concurrency, and rendering
       costs without changing product behavior.
-- [ ] Only after those passes, begin Phase 5.1.
+- [x] Only after those passes, begin Phase 5.1.
 
 ## Phase 5.1 New Phase - Transcript Visualization
 
@@ -691,7 +695,7 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
 
 ### Transcripts Tab UX
 
-- [ ] Controls:
+- [x] Controls:
       `Show transcripts` toggle, `Detail` segmented control (`Auto`, `Density`,
       `Exact`), `Min QV`, `Gene-only` toggle, feature filter
       (`All genes`, `Selected genes`, search/pick feature), color mode,
@@ -700,11 +704,11 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       active data source (`Raw exact` or `Native Xenium LOD`), current LOD tier,
       estimated visible transcripts, rendered point/bin count, exact eligibility,
       and last query timing. Use the existing status-chip/loading-dot pattern.
-- [ ] Interaction model:
+- [x] Interaction model:
       hover shows a compact floating tooltip; click or keyboard focus can pin
       the hovered transcript/aggregate into the tab for copying and inspection.
       Aggregate hover should not imply individual transcript identity.
-- [ ] Query behavior:
+- [x] Query behavior:
       auto-refresh in `Auto` mode after debounced viewport changes, with visible
       loading state and cancellation. Exact mode may require an explicit
       `Load exact viewport` action when the estimate is near the budget.
@@ -712,7 +716,7 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       include transcript overlay enabled, detail mode, min QV, feature filter,
       color mode, opacity, and point size in the URL hash. Keep hashes compact
       and omit defaults.
-- [ ] Diagnostics:
+- [x] Diagnostics:
       include transcript capability, native LOD availability, transcript query
       timings, exact-budget decisions, and last hover/query errors in the local
       diagnostics dump.
@@ -729,30 +733,31 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       all-transcript views and native `density/gene` sparse counts for
       selected-feature views. Cell-summary bins remain only as a degraded
       fallback when native Zarr is unavailable.
-- [ ] Slice 4: gene/feature filters, QV controls, color/opacity/point-size
+- [x] Slice 4: gene/feature filters, QV controls, color/opacity/point-size
       controls, URL/shareable state, diagnostics, and loading indicators.
-- [ ] Slice 5: integration verification against Magic Lens, ROI transcript
+- [x] Slice 5: integration verification against Magic Lens, ROI transcript
       export, selected-gene expression overlays, annotation coloring, and
       morphology channels.
 
 ### Definition Of Done
 
-- [ ] At low and medium zoom, the viewer never attempts to materialize
+- [x] At low and medium zoom, the viewer never attempts to materialize
       hundred-million raw transcript rows. It either uses native Xenium Zarr
       aggregate levels or shows a clear unavailable/fallback state.
-- [ ] At the closest exact tier, every visible matching transcript is rendered
+- [x] At the closest exact tier, every visible matching transcript is rendered
       when the visible estimate is within budget, and hover shows record-level
       transcript metadata.
 - [x] Exact mode does not silently sample. If the viewport is too dense, or the
       raw exact query exceeds the interactive timeout, the UI explains the
       budget/timeout decision and how to reach exact rendering.
 - [x] Aggregate bins are stable while panning and zooming across LOD thresholds.
-- [ ] Transcript overlay work is abortable and does not block ROI cell lookup,
+- [x] Transcript overlay work is abortable and does not block ROI cell lookup,
       ROI transcript export, Magic Lens, or selected-cell detail loading.
-- [ ] Unit tests cover LOD planning, raw SQL/query options, native Zarr metadata
+- [x] Unit tests cover LOD planning, raw SQL/query options, native Zarr metadata
       parsing, layer-data conversion, hover copy, shareable state, and budget
       decisions.
-- [ ] E2E verification covers enabling the Transcripts tab, seeing aggregate
-      mode at low zoom, zooming to exact mode, and hovering an exact transcript.
-- [ ] Final verification passes `npm test`, `npm run build`,
+- [x] E2E/browser verification covers the Transcripts tab shell and controls.
+      Vitest integration tests cover aggregate selection, exact rendering,
+      near-budget `Load exact viewport`, and transcript click/hover inspection.
+- [x] Final verification passes `npm test`, `npm run build`,
       `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.

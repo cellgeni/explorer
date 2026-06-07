@@ -102,6 +102,7 @@ export type TranscriptDensityColorScale =
   | 'viridis'
   | 'cividis'
   | 'teal'
+export type TranscriptPointColorMode = 'feature' | 'quality'
 
 export interface GeneExpressionColorScaleOption {
   readonly id: GeneExpressionColorScale
@@ -110,6 +111,11 @@ export interface GeneExpressionColorScaleOption {
 
 export interface TranscriptDensityColorScaleOption {
   readonly id: TranscriptDensityColorScale
+  readonly label: string
+}
+
+export interface TranscriptPointColorModeOption {
+  readonly id: TranscriptPointColorMode
   readonly label: string
 }
 
@@ -132,6 +138,7 @@ export const DEFAULT_GENE_EXPRESSION_COLOR_SCALE: GeneExpressionColorScale = 'pl
 export const DEFAULT_GENE_EXPRESSION_SCORE_MODE: GeneExpressionScoreMode = 'sum'
 export const DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE: TranscriptDensityColorScale =
   'thermal'
+export const DEFAULT_TRANSCRIPT_POINT_COLOR_MODE: TranscriptPointColorMode = 'feature'
 
 export const GENE_EXPRESSION_COLOR_SCALE_OPTIONS: readonly GeneExpressionColorScaleOption[] =
   [
@@ -159,6 +166,12 @@ export const TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS: readonly TranscriptDensityC
     { id: 'viridis', label: 'Viridis' },
     { id: 'cividis', label: 'Cividis' },
     { id: 'teal', label: 'Teal' },
+  ]
+
+export const TRANSCRIPT_POINT_COLOR_MODE_OPTIONS: readonly TranscriptPointColorModeOption[] =
+  [
+    { id: 'feature', label: 'Feature' },
+    { id: 'quality', label: 'QV' },
   ]
 
 const GENE_EXPRESSION_COLOR_STOPS: Record<
@@ -530,6 +543,7 @@ export function geneExpressionCellsToLayerData(
 
 export function transcriptPointsToLayerData(
   transcripts: readonly TranscriptPoint[],
+  colorMode: TranscriptPointColorMode = DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
 ): readonly TranscriptPointDatum[] {
   return transcripts.map((transcript) => ({
     id: transcript.id,
@@ -552,7 +566,10 @@ export function transcriptPointsToLayerData(
     ...(transcript.nucleusDistance === undefined
       ? {}
       : { nucleusDistance: transcript.nucleusDistance }),
-    fillColor: transcriptFeatureColor(transcript.featureName),
+    fillColor:
+      colorMode === 'quality'
+        ? transcriptQualityColor(transcript.qv)
+        : transcriptFeatureColor(transcript.featureName),
   }))
 }
 
@@ -685,6 +702,12 @@ export function isTranscriptDensityColorScale(
   value: string,
 ): value is TranscriptDensityColorScale {
   return TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS.some((option) => option.id === value)
+}
+
+export function isTranscriptPointColorMode(
+  value: string,
+): value is TranscriptPointColorMode {
+  return TRANSCRIPT_POINT_COLOR_MODE_OPTIONS.some((option) => option.id === value)
 }
 
 function scoreExpressionCells(
@@ -928,6 +951,16 @@ function transcriptFeatureColor(featureName: string): Color {
   }
 
   return palette[hash % palette.length] ?? [76, 211, 194, 235]
+}
+
+function transcriptQualityColor(qv: number): Color {
+  const t = Math.max(0, Math.min(1, qv / 40))
+  return interpolateColorStops(
+    [127, 77, 35, 170],
+    [221, 127, 75, 215],
+    [58, 176, 145, 245],
+    Math.sqrt(t),
+  )
 }
 
 function colorWithOpacity(color: Color, opacity: number): Color {

@@ -85,6 +85,7 @@ export interface ViewerCoreProps {
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
+  readonly onTranscriptClick?: (detail: ViewerTranscriptHoverDetail) => void
   readonly onRoiComplete?: (selection: RoiSelection) => void
   readonly onMagicLensMove?: (detail: ViewerMagicLensDetail) => void
   readonly onMagicLensLeave?: () => void
@@ -173,6 +174,7 @@ export function ViewerCore({
   onViewportCellCountChange,
   onCellClick,
   onTranscriptHover,
+  onTranscriptClick,
   onRoiComplete,
   onMagicLensMove,
   onMagicLensLeave,
@@ -226,6 +228,7 @@ export function ViewerCore({
       {...(onViewportCellCountChange === undefined ? {} : { onViewportCellCountChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
       {...(onTranscriptHover === undefined ? {} : { onTranscriptHover })}
+      {...(onTranscriptClick === undefined ? {} : { onTranscriptClick })}
       {...(onRoiComplete === undefined ? {} : { onRoiComplete })}
       {...(onMagicLensMove === undefined ? {} : { onMagicLensMove })}
       {...(onMagicLensLeave === undefined ? {} : { onMagicLensLeave })}
@@ -273,6 +276,7 @@ interface ViewerSurfaceProps {
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
+  readonly onTranscriptClick?: (detail: ViewerTranscriptHoverDetail) => void
   readonly onRoiComplete?: (selection: RoiSelection) => void
   readonly onMagicLensMove?: (detail: ViewerMagicLensDetail) => void
   readonly onMagicLensLeave?: () => void
@@ -357,6 +361,7 @@ function ViewerSurface({
   onViewportCellCountChange,
   onCellClick,
   onTranscriptHover,
+  onTranscriptClick,
   onRoiComplete,
   onMagicLensMove,
   onMagicLensLeave,
@@ -637,7 +642,34 @@ function ViewerSurface({
     [canTrackMouseCoordinates, initialViewState, viewState],
   )
   const handleDeckClick = useCallback(
-    (info: { readonly object?: unknown; readonly coordinate?: readonly number[] }) => {
+    (info: {
+      readonly object?: unknown
+      readonly coordinate?: readonly number[]
+      readonly x?: number
+      readonly y?: number
+    }) => {
+      if (isTranscriptPointDatum(info.object)) {
+        onTranscriptClick?.({
+          transcript: info.object,
+          screen: {
+            x: info.x ?? 0,
+            y: info.y ?? 0,
+          },
+        })
+        return
+      }
+
+      if (isTranscriptAggregateDatum(info.object)) {
+        onTranscriptClick?.({
+          aggregate: info.object,
+          screen: {
+            x: info.x ?? 0,
+            y: info.y ?? 0,
+          },
+        })
+        return
+      }
+
       if (onCellClick === undefined) {
         return
       }
@@ -667,7 +699,7 @@ function ViewerSurface({
         onCellClick(coordinateCell)
       }
     },
-    [cellById, onCellClick, styledBoundaries, visibleCells],
+    [cellById, onCellClick, onTranscriptClick, styledBoundaries, visibleCells],
   )
   const handleDeckHover = useCallback(
     (info: PickingInfo<unknown>) => {
