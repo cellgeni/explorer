@@ -35,6 +35,7 @@ describe('readCellsOverviewWithDuckDb', () => {
         transcript_counts: 30n,
         cell_area: 40,
         nucleus_count: 2n,
+        segmentation_method: 'nucleus_expansion',
       },
     ])
     const close = vi.fn(async () => undefined)
@@ -58,6 +59,7 @@ describe('readCellsOverviewWithDuckDb', () => {
         transcriptCount: 30,
         cellArea: 40,
         nucleusCount: 2,
+        segmentationMethod: 'nucleus_expansion',
       },
     ])
 
@@ -66,6 +68,9 @@ describe('readCellsOverviewWithDuckDb', () => {
     )
     expect(client.conn.prepare).toHaveBeenCalledWith(
       expect.stringContaining('nucleus_count'),
+    )
+    expect(client.conn.prepare).toHaveBeenCalledWith(
+      expect.stringContaining('segmentation_method'),
     )
     expect(client.conn.prepare).toHaveBeenCalledWith(expect.stringContaining('LIMIT ?'))
     expect(statement.params).toEqual(['https://example.test/xenium/cells.parquet', 100])
@@ -138,5 +143,47 @@ describe('readCellsOverviewWithDuckDb', () => {
     ])
     expect(prepare).toHaveBeenCalledTimes(2)
     expect(prepare.mock.calls[1]?.[0]).not.toContain('nucleus_count')
+    expect(prepare.mock.calls[1]?.[0]).toContain('segmentation_method')
+  })
+
+  it('falls back when the optional segmentation method column is unavailable', async () => {
+    const fallbackStatement = new FakeStatement([
+      {
+        cell_id: intToCellId(1, 2),
+        x_centroid: 1,
+        y_centroid: 2,
+        transcript_counts: 3,
+        cell_area: 4,
+        nucleus_count: 2,
+      },
+    ])
+    const prepare = vi.fn(async (sql: string) => {
+      if (sql.includes('segmentation_method')) {
+        throw new Error('Column segmentation_method not found')
+      }
+
+      return fallbackStatement
+    })
+    const client: DuckDbOverviewClientLike = {
+      conn: { prepare },
+    }
+
+    await expect(
+      readCellsOverviewWithDuckDb({
+        url: 'https://example.test/xenium/cells.parquet',
+        createClient: async () => client,
+      }),
+    ).resolves.toEqual([
+      {
+        cellId: intToCellId(1, 2),
+        position: { x: micrometers(1), y: micrometers(2) },
+        transcriptCount: 3,
+        cellArea: 4,
+        nucleusCount: 2,
+      },
+    ])
+    expect(prepare).toHaveBeenCalledTimes(2)
+    expect(prepare.mock.calls[1]?.[0]).toContain('nucleus_count')
+    expect(prepare.mock.calls[1]?.[0]).not.toContain('segmentation_method')
   })
 })

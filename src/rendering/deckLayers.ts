@@ -22,6 +22,7 @@ export interface OverviewCellDatum {
   readonly transcriptCount?: number
   readonly cellArea?: number
   readonly nucleusCount?: number
+  readonly segmentationMethod?: string
   readonly expressionCount?: number
   readonly expressionGenes?: readonly string[]
 }
@@ -502,6 +503,9 @@ export function overviewCellsToLayerData(
       transcriptCount: cell.transcriptCount,
       ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
       ...(cell.nucleusCount === undefined ? {} : { nucleusCount: cell.nucleusCount }),
+      ...(cell.segmentationMethod === undefined
+        ? {}
+        : { segmentationMethod: cell.segmentationMethod }),
     }
   })
 }
@@ -538,6 +542,9 @@ export function geneExpressionCellsToLayerData(
         : { transcriptCount: cell.transcriptCount }),
       ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
       ...(cell.nucleusCount === undefined ? {} : { nucleusCount: cell.nucleusCount }),
+      ...(cell.segmentationMethod === undefined
+        ? {}
+        : { segmentationMethod: cell.segmentationMethod }),
     }
   })
 

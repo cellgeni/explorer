@@ -32,6 +32,7 @@ describe('readCellsOverview', () => {
             transcript_counts: 7n,
             cell_area: 314,
             nucleus_count: 2n,
+            segmentation_method: 'nucleus_expansion',
           },
         ]
       },
@@ -51,6 +52,7 @@ describe('readCellsOverview', () => {
         transcriptCount: 7,
         cellArea: 314,
         nucleusCount: 2,
+        segmentationMethod: 'nucleus_expansion',
       },
     ])
   })
@@ -69,6 +71,7 @@ describe('readCellsOverview', () => {
             transcript_counts: 7,
             cell_area: 314,
             nucleus_count: 1,
+            segmentation_method: 'cellpose',
           },
         ]
       },
@@ -81,6 +84,7 @@ describe('readCellsOverview', () => {
         transcriptCount: 7,
         cellArea: 314,
         nucleusCount: 1,
+        segmentationMethod: 'cellpose',
       },
     ])
   })
@@ -109,12 +113,61 @@ describe('readCellsOverview', () => {
 
     expect(calls.map((call) => call.columns)).toEqual([
       CELL_OVERVIEW_COLUMNS,
-      ['cell_id', 'x_centroid', 'y_centroid', 'transcript_counts', 'cell_area'],
+      [
+        'cell_id',
+        'x_centroid',
+        'y_centroid',
+        'transcript_counts',
+        'cell_area',
+        'segmentation_method',
+      ],
     ])
     expect(rows[0]).toEqual({
       position: { x: micrometers(10), y: micrometers(20) },
       transcriptCount: 7,
       cellArea: 314,
+    })
+  })
+
+  it('falls back when the optional segmentation method column is unavailable', async () => {
+    const calls: HyparquetReadObjectsOptions[] = []
+    const rows = await readCellsOverview({
+      file: fakeFile,
+      readObjects: async (options) => {
+        calls.push(options)
+
+        if (options.columns.includes('segmentation_method')) {
+          throw new Error('Column segmentation_method not found')
+        }
+
+        return [
+          {
+            x_centroid: 10,
+            y_centroid: 20,
+            transcript_counts: 7,
+            cell_area: 314,
+            nucleus_count: 2,
+          },
+        ]
+      },
+    })
+
+    expect(calls.map((call) => call.columns)).toEqual([
+      CELL_OVERVIEW_COLUMNS,
+      [
+        'cell_id',
+        'x_centroid',
+        'y_centroid',
+        'transcript_counts',
+        'cell_area',
+        'nucleus_count',
+      ],
+    ])
+    expect(rows[0]).toEqual({
+      position: { x: micrometers(10), y: micrometers(20) },
+      transcriptCount: 7,
+      cellArea: 314,
+      nucleusCount: 2,
     })
   })
 
@@ -131,7 +184,7 @@ describe('readCellsOverview', () => {
     ).rejects.toMatchObject({
       name: 'ParquetDecodeError',
       message: expect.stringContaining(
-        'Unable to decode cells.parquet while reading overview columns (x_centroid, y_centroid, transcript_counts, cell_area, nucleus_count).',
+        'Unable to decode cells.parquet while reading overview columns (x_centroid, y_centroid, transcript_counts, cell_area, nucleus_count, segmentation_method).',
       ),
     })
   })

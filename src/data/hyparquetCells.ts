@@ -17,6 +17,7 @@ export const CELL_OVERVIEW_COLUMNS = [
   'transcript_counts',
   'cell_area',
   'nucleus_count',
+  'segmentation_method',
 ] as const
 
 export const CELL_OVERVIEW_POINT_COLUMNS = [
@@ -25,22 +26,10 @@ export const CELL_OVERVIEW_POINT_COLUMNS = [
   'transcript_counts',
   'cell_area',
   'nucleus_count',
+  'segmentation_method',
 ] as const
 
-const CELL_OVERVIEW_COLUMNS_WITHOUT_NUCLEUS_COUNT = [
-  'cell_id',
-  'x_centroid',
-  'y_centroid',
-  'transcript_counts',
-  'cell_area',
-] as const
-
-const CELL_OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT = [
-  'x_centroid',
-  'y_centroid',
-  'transcript_counts',
-  'cell_area',
-] as const
+const OPTIONAL_CELL_OVERVIEW_COLUMNS = new Set(['nucleus_count', 'segmentation_method'])
 
 export interface CellOverviewPoint {
   readonly cellId?: CellId
@@ -48,6 +37,7 @@ export interface CellOverviewPoint {
   readonly transcriptCount: number
   readonly cellArea?: number
   readonly nucleusCount?: number
+  readonly segmentationMethod?: string
 }
 
 export interface HyparquetReadObjectsOptions {
@@ -91,10 +81,6 @@ export async function readCellsOverview(
   const rows = await readCellsOverviewRows({
     file,
     columns,
-    fallbackColumns:
-      options.includeCellIds === false
-        ? CELL_OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT
-        : CELL_OVERVIEW_COLUMNS_WITHOUT_NUCLEUS_COUNT,
     rowFormat: 'object',
     compressors,
     ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
@@ -107,19 +93,28 @@ export async function readCellsOverview(
 
 async function readCellsOverviewRows(
   options: HyparquetReadObjectsOptions & {
-    readonly fallbackColumns: readonly string[]
     readonly readObjects: HyparquetObjectReader
     readonly url: string | undefined
   },
 ): Promise<readonly Record<string, unknown>[]> {
-  try {
-    return await readCellsOverviewRowsWithColumns(options, options.columns)
-  } catch (error) {
-    if (!isMissingOptionalNucleusCountReadFailure(error)) {
-      throw error
-    }
+  const missingOptionalColumns = new Set<string>()
 
-    return readCellsOverviewRowsWithColumns(options, options.fallbackColumns)
+  while (true) {
+    const columns = options.columns.filter(
+      (column) => !missingOptionalColumns.has(column),
+    )
+
+    try {
+      return await readCellsOverviewRowsWithColumns(options, columns)
+    } catch (error) {
+      const missingColumn = readMissingOptionalCellOverviewColumn(error)
+
+      if (missingColumn === null || !columns.includes(missingColumn)) {
+        throw error
+      }
+
+      missingOptionalColumns.add(missingColumn)
+    }
   }
 }
 
@@ -196,6 +191,7 @@ export function parseCellOverviewRow(row: Record<string, unknown>): CellOverview
     transcriptCount: readNumericValue(row, 'transcript_counts'),
     ...readOptionalNumericProperty(row, 'cell_area', 'cellArea'),
     ...readOptionalNumericProperty(row, 'nucleus_count', 'nucleusCount'),
+    ...readOptionalSegmentationMethod(row, 'segmentation_method'),
   }
 }
 
@@ -246,6 +242,23 @@ function readOptionalNumericProperty(
   throw new Error(`Expected cells.parquet ${parquetKey} to be numeric.`)
 }
 
+function readOptionalSegmentationMethod(
+  row: Record<string, unknown>,
+  parquetKey: string,
+): { readonly segmentationMethod: string } | Record<string, never> {
+  const value = row[parquetKey]
+
+  if (value === undefined || value === null) {
+    return {}
+  }
+
+  if (typeof value === 'string') {
+    return { segmentationMethod: value }
+  }
+
+  throw new Error(`Expected cells.parquet ${parquetKey} to be a string.`)
+}
+
 function isLowLevelParquetReadFailure(error: unknown): boolean {
   const message = readUnknownErrorMessage(error).toLowerCase()
 
@@ -255,14 +268,24 @@ function isLowLevelParquetReadFailure(error: unknown): boolean {
   )
 }
 
-function isMissingOptionalNucleusCountReadFailure(error: unknown): boolean {
+function readMissingOptionalCellOverviewColumn(error: unknown): string | null {
   if (error instanceof CellsParquetDecodeError) {
-    return false
+    return null
   }
 
   const message = readUnknownErrorMessage(error).toLowerCase()
 
-  return message.includes('nucleus_count') && message.includes('column')
+  if (!message.includes('column')) {
+    return null
+  }
+
+  for (const column of OPTIONAL_CELL_OVERVIEW_COLUMNS) {
+    if (message.includes(column)) {
+      return column
+    }
+  }
+
+  return null
 }
 
 export function isCellsParquetDecodeError(error: unknown): boolean {

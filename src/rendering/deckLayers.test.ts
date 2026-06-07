@@ -401,6 +401,7 @@ describe('deck layer factory', () => {
         transcriptCount: 25,
         cellArea: Math.PI * 16,
         nucleusCount: 2,
+        segmentationMethod: 'nucleus_expansion',
       },
     ])
 
@@ -412,6 +413,7 @@ describe('deck layer factory', () => {
     expect(datum.radiusPixels).toBe(5)
     expect(datum.radiusMicrometers).toBe(4)
     expect(datum.nucleusCount).toBe(2)
+    expect(datum.segmentationMethod).toBe('nucleus_expansion')
     expect(createOverviewViewState([datum]).target).toEqual([10, -20, 0])
   })
 
@@ -425,6 +427,7 @@ describe('deck layer factory', () => {
           transcriptCount: 11,
           cellArea: Math.PI * 9,
           nucleusCount: 1,
+          segmentationMethod: 'cellpose',
         },
       ],
       ['Gad1'],
@@ -437,6 +440,7 @@ describe('deck layer factory', () => {
       expressionGenes: ['Gad1'],
       transcriptCount: 11,
       nucleusCount: 1,
+      segmentationMethod: 'cellpose',
     })
   })
 

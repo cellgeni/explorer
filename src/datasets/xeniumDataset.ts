@@ -85,6 +85,7 @@ export interface GeneExpressionCell {
   readonly transcriptCount?: number
   readonly cellArea?: number
   readonly nucleusCount?: number
+  readonly segmentationMethod?: string
 }
 
 export interface GeneExpressionBatch {
@@ -105,6 +106,7 @@ export interface DatasetCell {
   readonly transcriptCount?: number
   readonly cellArea?: number
   readonly nucleusCount?: number
+  readonly segmentationMethod?: string
   readonly cellFeatureMatrixRow?: number
 }
 
@@ -839,6 +841,7 @@ function parseViewportCellRow(row: Record<string, unknown>): DatasetCell {
     transcriptCount: readNumericRowValue(row, 'transcript_counts'),
     cellArea: readNumericRowValue(row, 'cell_area'),
     ...readOptionalDatasetCellNumericProperty(row, 'nucleus_count'),
+    ...readOptionalDatasetCellStringProperty(row, 'segmentation_method'),
     ...(cellFeatureMatrixRow === undefined ? {} : { cellFeatureMatrixRow }),
   }
 }
@@ -850,6 +853,23 @@ function readOptionalDatasetCellNumericProperty(
   const value = readOptionalNumericRowValue(row, rowKey)
 
   return value === undefined ? {} : { nucleusCount: value }
+}
+
+function readOptionalDatasetCellStringProperty(
+  row: Record<string, unknown>,
+  rowKey: string,
+): Pick<DatasetCell, 'segmentationMethod'> | Record<string, never> {
+  const value = row[rowKey]
+
+  if (value === null || value === undefined) {
+    return {}
+  }
+
+  if (typeof value === 'string') {
+    return { segmentationMethod: value }
+  }
+
+  throw new Error(`Expected row.${rowKey} to be a string.`)
 }
 
 function parseTranscriptExportRow(row: Record<string, unknown>): DatasetTranscript {

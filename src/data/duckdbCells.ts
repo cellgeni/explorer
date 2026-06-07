@@ -25,19 +25,11 @@ const OVERVIEW_POINT_COLUMNS = [
   'transcript_counts',
   'cell_area',
   'nucleus_count',
+  'segmentation_method',
 ] as const
 
 const OVERVIEW_WITH_ID_COLUMNS = ['cell_id', ...OVERVIEW_POINT_COLUMNS] as const
-const OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT = [
-  'x_centroid',
-  'y_centroid',
-  'transcript_counts',
-  'cell_area',
-] as const
-const OVERVIEW_WITH_ID_COLUMNS_WITHOUT_NUCLEUS_COUNT = [
-  'cell_id',
-  ...OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT,
-] as const
+const OPTIONAL_OVERVIEW_COLUMNS = new Set(['nucleus_count', 'segmentation_method'])
 
 export async function readCellsOverviewWithDuckDb(
   options: ReadCellsOverviewWithDuckDbOptions,
@@ -56,16 +48,7 @@ export async function readCellsOverviewWithDuckDb(
 
     const columns =
       options.includeCellIds === false ? OVERVIEW_POINT_COLUMNS : OVERVIEW_WITH_ID_COLUMNS
-    const fallbackColumns =
-      options.includeCellIds === false
-        ? OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT
-        : OVERVIEW_WITH_ID_COLUMNS_WITHOUT_NUCLEUS_COUNT
-    const table = await queryOverviewRowsWithFallback(
-      client,
-      columns,
-      fallbackColumns,
-      options,
-    )
+    const table = await queryOverviewRowsWithFallback(client, columns, options)
 
     throwIfAborted(options.signal)
     return table.toArray().map(parseCellOverviewRow)
@@ -77,17 +60,24 @@ export async function readCellsOverviewWithDuckDb(
 async function queryOverviewRowsWithFallback(
   client: DuckDbOverviewClientLike,
   columns: readonly string[],
-  fallbackColumns: readonly string[],
   options: ReadCellsOverviewWithDuckDbOptions,
 ): Promise<ArrowTableLike> {
-  try {
-    return await queryOverviewRowsForColumns(client, columns, options)
-  } catch (error) {
-    if (!isMissingOptionalNucleusCountReadFailure(error)) {
-      throw error
-    }
+  const missingOptionalColumns = new Set<string>()
 
-    return queryOverviewRowsForColumns(client, fallbackColumns, options)
+  while (true) {
+    const currentColumns = columns.filter((column) => !missingOptionalColumns.has(column))
+
+    try {
+      return await queryOverviewRowsForColumns(client, currentColumns, options)
+    } catch (error) {
+      const missingColumn = readMissingOptionalOverviewColumn(error)
+
+      if (missingColumn === null || !currentColumns.includes(missingColumn)) {
+        throw error
+      }
+
+      missingOptionalColumns.add(missingColumn)
+    }
   }
 }
 
@@ -138,8 +128,18 @@ function abortError(signal: AbortSignal): Error {
   return error
 }
 
-function isMissingOptionalNucleusCountReadFailure(error: unknown): boolean {
+function readMissingOptionalOverviewColumn(error: unknown): string | null {
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
 
-  return message.includes('nucleus_count') && message.includes('column')
+  if (!message.includes('column')) {
+    return null
+  }
+
+  for (const column of OPTIONAL_OVERVIEW_COLUMNS) {
+    if (message.includes(column)) {
+      return column
+    }
+  }
+
+  return null
 }

@@ -7,18 +7,23 @@ describe('CellInfoPanel', () => {
   it('shows the selected cell nuclei count when available', () => {
     render(
       <CellInfoPanel
-        cell={cellDatum({ nucleusCount: 2 })}
+        cell={cellDatum({
+          nucleusCount: 2,
+          segmentationMethod: 'nucleus_expansion',
+        })}
         state={{ status: 'idle' }}
         transcriptDistributionState={{ status: 'idle' }}
       />,
     )
 
     const nucleiTerm = screen.getByText('Nuclei')
+    const segmentationTerm = screen.getByText('Segmentation')
 
     expect(nucleiTerm.nextElementSibling).toHaveTextContent('2')
+    expect(segmentationTerm.nextElementSibling).toHaveTextContent('nucleus_expansion')
   })
 
-  it('shows an unavailable value when the nuclei count is absent', () => {
+  it('shows unavailable values when optional cell metadata is absent', () => {
     render(
       <CellInfoPanel
         cell={cellDatum()}
@@ -28,8 +33,10 @@ describe('CellInfoPanel', () => {
     )
 
     const nucleiTerm = screen.getByText('Nuclei')
+    const segmentationTerm = screen.getByText('Segmentation')
 
     expect(nucleiTerm.nextElementSibling).toHaveTextContent('None')
+    expect(segmentationTerm.nextElementSibling).toHaveTextContent('None')
   })
 })
 

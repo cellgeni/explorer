@@ -75,6 +75,10 @@ export function CellInfoPanel({
           <dd>{formatOptionalNumber(cell.nucleusCount)}</dd>
         </div>
         <div>
+          <dt>Segmentation</dt>
+          <dd>{formatOptionalText(cell.segmentationMethod)}</dd>
+        </div>
+        <div>
           <dt>Cell Area</dt>
           <dd>{formatMetric(shape?.areaMicrometersSquared, 'um2')}</dd>
         </div>
@@ -346,6 +350,12 @@ function formatZValue(value: number | undefined): string {
 
 function formatOptionalNumber(value: number | undefined): string {
   return value === undefined ? 'None' : formatNumber(value)
+}
+
+function formatOptionalText(value: string | undefined): string {
+  const normalized = value?.trim()
+
+  return normalized === undefined || normalized.length === 0 ? 'None' : normalized
 }
 
 function formatNumber(value: number | undefined): string {
