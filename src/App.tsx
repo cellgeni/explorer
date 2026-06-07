@@ -1,10 +1,89 @@
-import type { CSSProperties, FormEvent, PointerEvent } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   ViewerCore,
   type ViewerCoordinateUnit,
   type ViewerTranscriptHoverDetail,
 } from './components/ViewerCore'
+import { LoadingIndicator } from './components/AppStatusPanels'
+import { DatasetHudPanel } from './features/control-hud/DatasetHudPanel'
+import { LayerHudPanel } from './features/control-hud/LayerHudPanel'
+import { CellHudPanel } from './features/control-hud/CellHudPanel'
+import { RoiHudPanel } from './features/control-hud/RoiHudPanel'
+import { TranscriptStatusPanel } from './features/transcripts/TranscriptStatusPanel'
+import { transcriptCapabilityLabel } from './features/transcripts/transcriptLabels'
+import {
+  TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
+  TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS,
+  TRANSCRIPT_NATIVE_DENSITY_MAX_BINS,
+  buildCellSummaryTranscriptBins,
+  estimateVisibleTranscriptsFromCells,
+  isTranscriptDetailMode,
+  isTranscriptExactManualLoadRequired,
+  isTranscriptFeatureFilterMode,
+  maxTranscriptAggregateCount,
+  parseTranscriptDensityColorScale,
+  parseTranscriptDetailMode,
+  parseTranscriptFeatureFilterMode,
+  parseTranscriptPointColorMode,
+  retainedTranscriptLayerState,
+  transcriptAggregateBinsForRendering,
+  transcriptAggregateFallbackMessage,
+  transcriptAggregateScaleMaxForRendering,
+  transcriptDensityScaleAriaLabel,
+  transcriptDensityScaleValueLabels,
+  transcriptExactManualLoadMessage,
+  transcriptNativeAggregateMessage,
+  transcriptPointsForRendering,
+  transcriptStatusCopy,
+  type TranscriptCapabilityState,
+  type TranscriptLayerState,
+} from './features/transcripts/transcriptLayerModel'
+import {
+  CELL_GENE_EXPRESSION_LIMIT,
+  cellExpressionSummaryFromStats,
+  overviewCellToDatasetCell,
+  selectedCellBoundaryBbox,
+  summarizeCellShape,
+  type CellGeneExpressionSummary,
+  type CellShapeMetrics,
+} from './features/cells/cellDetailModel'
+import {
+  createMorphologyChannelSettings,
+  morphologyPatchLabel,
+  normalizeChannelContrast,
+  type MorphologyChannelSetting,
+} from './features/morphology/morphologyChannels'
+import { MagicLensPanel } from './features/roi/RoiPanels'
+import {
+  magicLensScopeLabel,
+  type MagicLensScope,
+  type MagicLensSummary,
+} from './features/roi/magicLensModel'
+import { createDiagnosticsDump } from './features/diagnostics/diagnosticsDump'
+import {
+  annotationStatusCopy,
+  colorsForAnnotations,
+  customAnnotationFilePrefix,
+  hasReadyAnnotationsAfterRemove,
+  mergeImportedAnnotations,
+  removeAnnotationColor,
+  removeAnnotationColorsByPrefix,
+} from './features/annotations/annotationModel'
+import {
+  defaultGeneSetName,
+  filterGeneOptions,
+  geneExpressionModeLabel,
+  geneExpressionScaleKeyFor,
+  geneExpressionStatusCopy,
+  genePanelStatusCopy,
+  isGeneExpressionDetailMode,
+  parseGeneExpressionColorScale,
+  parseGeneExpressionDetailMode,
+  parseGeneExpressionScoreMode,
+  parseGeneSetSymbols,
+} from './features/genes/geneControlsModel'
+import { slug } from './utils/slug'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import {
   ALL_ANNOTATION_GROUP_ID,
@@ -39,7 +118,6 @@ import {
   CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
   DEFAULT_CELL_TRANSCRIPT_MIN_QV,
   loadDatasetCellTranscriptDistribution as defaultLoadDatasetCellTranscriptDistribution,
-  type CellTranscriptZBin,
   type CellTranscriptZDistribution,
 } from './data/cellTranscripts'
 import {
@@ -54,7 +132,6 @@ import {
   planTranscriptLod,
   transcriptViewportRequestKey,
   type TranscriptCapabilities,
-  type TranscriptAggregateBin,
   type TranscriptAggregateResult,
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
@@ -123,7 +200,7 @@ import {
 import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { BBox, DataPoint } from './data/coords'
-import type { ChannelAutoContrast, ChannelHistogram } from './data/morphologyContrast'
+import type { ChannelAutoContrast } from './data/morphologyContrast'
 import type {
   DatasetCell,
   DatasetTranscript,
@@ -133,11 +210,7 @@ import type { CellOverviewPoint } from './data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
 import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
 import type { AnnotationColorStyle, ObservationColorMode } from './rendering/cellStyling'
-import type {
-  AnalysisEmbedding,
-  AnalysisEmbeddingKind,
-  AnalysisEmbeddingPoint,
-} from './data/analysisEmbeddings'
+import type { AnalysisEmbedding, AnalysisEmbeddingKind } from './data/analysisEmbeddings'
 import type {
   AnnotationGroupOption,
   LoadDatasetAnnotationsOptions,
@@ -154,7 +227,7 @@ import type {
   TranscriptPointColorMode,
 } from './rendering/deckLayers'
 import type { RoiGeneStats } from './data/roiGeneStats'
-import type { OverviewCellDatum, TranscriptPointDatum } from './rendering/deckLayers'
+import type { OverviewCellDatum } from './rendering/deckLayers'
 import type {
   RoiDrawMode,
   ViewerMagicLensDetail,
@@ -162,21 +235,12 @@ import type {
   ViewerViewportDetail,
 } from './components/ViewerCore'
 
-const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
-const TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS = 12_000
-const TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO = 0.8
-const TRANSCRIPT_NATIVE_DENSITY_MAX_BINS = 1_500
 const EMPTY_GENE_LIST: readonly string[] = []
-const EMPTY_TRANSCRIPT_POINTS: readonly TranscriptPoint[] = []
-const EMPTY_TRANSCRIPT_AGGREGATE_BINS: readonly TranscriptAggregateBin[] = []
-const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 const DEBUG_LOG_LIMIT = 32
 const MAGIC_LENS_CELL_LIMIT = 25_000
 const MAGIC_LENS_TOP_GENE_LIMIT = 8
 const MAGIC_LENS_GENE_STATS_LIMIT = 10_000
-const CELL_GENE_EXPRESSION_LIMIT = 100_000
-const CELL_DETAIL_BOUNDARY_RADIUS_MICROMETERS = 25
 const ROI_GENE_STATS_PREVIEW_CELL_LIMIT = 32
 const ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT = 5_000
 const ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS = 120
@@ -498,78 +562,6 @@ type RoiTranscriptExportState =
       readonly error: StructuredLoadError
     }
 
-type TranscriptCapabilityState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly capabilities: TranscriptCapabilities
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type TranscriptLayerState =
-  | { readonly status: 'idle' }
-  | {
-      readonly status: 'waiting'
-      readonly message: string
-      readonly visibleTranscriptEstimate: number
-      readonly exactLoadRequestKey?: string
-      readonly exactLoadEstimate?: number
-    }
-  | {
-      readonly status: 'aggregate'
-      readonly message: string
-      readonly source: 'cell-summary' | 'native-zarr'
-      readonly mode: 'density'
-      readonly bins: readonly TranscriptAggregateBin[]
-      readonly visibleTranscriptEstimate: number
-      readonly scaleMax?: number
-      readonly durationMs?: number
-    }
-  | {
-      readonly status: 'unavailable'
-      readonly message: string
-      readonly visibleTranscriptEstimate: number
-    }
-  | {
-      readonly status: 'loading'
-      readonly url: string
-      readonly visibleTranscriptEstimate: number
-      readonly previousLayer?: TranscriptRetainedLayerState
-    }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly points: readonly TranscriptPoint[]
-      readonly groups: readonly TranscriptGroupSummary[]
-      readonly visibleTranscriptEstimate: number
-      readonly hitPointLimit: boolean
-      readonly durationMs: number
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type TranscriptRetainedLayerState =
-  | {
-      readonly kind: 'exact'
-      readonly points: readonly TranscriptPoint[]
-    }
-  | {
-      readonly kind: 'aggregate'
-      readonly bins: readonly TranscriptAggregateBin[]
-      readonly scaleMax?: number
-    }
-
-type MagicLensScope = 'cursor' | 'viewport' | 'roi'
-
 type MagicLensState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string; readonly scope: MagicLensScope }
@@ -618,31 +610,6 @@ type CellTranscriptDistributionState =
       readonly cellId: string
       readonly error: StructuredLoadError
     }
-
-interface CellGeneExpressionSummary {
-  readonly genes: readonly CellGeneExpressionGene[]
-  readonly totalCount: number
-  readonly hitGeneLimit: boolean
-}
-
-interface CellGeneExpressionGene {
-  readonly gene: string
-  readonly count: number
-  readonly percentTotal: number
-}
-
-interface CellShapeMetrics {
-  readonly areaMicrometersSquared?: number
-  readonly equivalentDiameterMicrometers?: number
-  readonly boundaryAreaMicrometersSquared?: number
-  readonly boundaryEquivalentDiameterMicrometers?: number
-  readonly perimeterMicrometers?: number
-  readonly majorAxisMicrometers?: number
-  readonly minorAxisMicrometers?: number
-  readonly eccentricity?: number
-  readonly circularity?: number
-  readonly boundaryPointCount?: number
-}
 
 type LoadErrorCode =
   | 'network'
@@ -695,15 +662,6 @@ interface LoadingTask {
   readonly detail?: string
 }
 
-interface MorphologyChannelSetting {
-  readonly id: string
-  readonly enabled: boolean
-  readonly color: readonly [number, number, number]
-  readonly contrastMin: number
-  readonly contrastMax: number
-  readonly histogram?: ChannelHistogram
-}
-
 interface SavedGeneSet {
   readonly id: string
   readonly name: string
@@ -720,22 +678,6 @@ interface RoiSummary {
   readonly cellCount: number
   readonly meanTranscriptCount: number
   readonly meanCellArea: number | undefined
-}
-
-interface MagicLensSummary {
-  readonly transcriptCount: number
-  readonly cellCount: number
-  readonly geneCount: number
-  readonly selectedGeneTranscriptCount: number
-  readonly topGenes: readonly MagicLensGeneSummary[]
-  readonly hitLimit: boolean
-}
-
-interface MagicLensGeneSummary {
-  readonly gene: string
-  readonly count: number
-  readonly percentTotal: number
-  readonly selected: boolean
 }
 
 interface MagicLensCircleFilter {
@@ -866,9 +808,12 @@ export function App({
     useState<RoiGeneViewportWarmupState>({ status: 'idle' })
   const [roiTranscriptExportState, setRoiTranscriptExportState] =
     useState<RoiTranscriptExportState>({ status: 'idle' })
-  const [transcriptCapabilityState, setTranscriptCapabilityState] =
-    useState<TranscriptCapabilityState>({ status: 'idle' })
-  const [transcriptLayerState, setTranscriptLayerState] = useState<TranscriptLayerState>({
+  const [transcriptCapabilityState, setTranscriptCapabilityState] = useState<
+    TranscriptCapabilityState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [transcriptLayerState, setTranscriptLayerState] = useState<
+    TranscriptLayerState<StructuredLoadError>
+  >({
     status: 'idle',
   })
   const [magicLensState, setMagicLensState] = useState<MagicLensState>({
@@ -928,8 +873,9 @@ export function App({
     useState<ViewerTranscriptHoverDetail | null>(null)
   const [pinnedTranscript, setPinnedTranscript] =
     useState<ViewerTranscriptHoverDetail | null>(null)
-  const [manualTranscriptExactRequestKey, setManualTranscriptExactRequestKey] =
-    useState<string | null>(null)
+  const [manualTranscriptExactRequestKey, setManualTranscriptExactRequestKey] = useState<
+    string | null
+  >(null)
   const [transcriptFeatureSearch, setTranscriptFeatureSearch] = useState('')
   const [debugLog, setDebugLog] = useState<readonly DebugLogEntry[]>([])
   const [telemetryEvents, setTelemetryEvents] = useState<readonly TelemetryEvent[]>([])
@@ -1151,20 +1097,18 @@ export function App({
   )
   const transcriptDensityScaleMax =
     transcriptAggregateScaleMaxForRendering(transcriptLayerState)
-  const transcriptDensityScaleLabels =
-    transcriptDensityScaleValueLabels(transcriptDensityScaleMax)
-  const transcriptLayerAggregateBins = useMemo(
-    () => {
-      return transcriptAggregateBinsToLayerData(
-        transcriptAggregateBinsForRendering(transcriptLayerState),
-        transcriptDensityColorScale,
-        transcriptDensityScaleMax === undefined
-          ? {}
-          : { scaleMax: transcriptDensityScaleMax },
-      )
-    },
-    [transcriptDensityColorScale, transcriptDensityScaleMax, transcriptLayerState],
+  const transcriptDensityScaleLabels = transcriptDensityScaleValueLabels(
+    transcriptDensityScaleMax,
   )
+  const transcriptLayerAggregateBins = useMemo(() => {
+    return transcriptAggregateBinsToLayerData(
+      transcriptAggregateBinsForRendering(transcriptLayerState),
+      transcriptDensityColorScale,
+      transcriptDensityScaleMax === undefined
+        ? {}
+        : { scaleMax: transcriptDensityScaleMax },
+    )
+  }, [transcriptDensityColorScale, transcriptDensityScaleMax, transcriptLayerState])
   const visibleTranscriptEstimate = useMemo(
     () =>
       currentViewportDetail === null
@@ -3371,6 +3315,7 @@ export function App({
           transcriptDetailMode,
           transcriptDensityColorScale,
           transcriptExactPointLimit,
+          transcriptExactManualLoadRatio: TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
           transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
           transcriptGeneOnly,
           transcriptLayerState,
@@ -3431,7 +3376,9 @@ export function App({
     setManualTranscriptExactRequestKey(null)
     setTranscriptFeatureFilterMode('selected')
     setSelectedGenes((current) =>
-      current.includes(gene) ? current : [...current, gene].sort((a, b) => a.localeCompare(b)),
+      current.includes(gene)
+        ? current
+        : [...current, gene].sort((a, b) => a.localeCompare(b)),
     )
     setTranscriptFeatureSearch('')
   }
@@ -4287,247 +4234,92 @@ export function App({
           </div>
 
           <div className="hud-tab-panels">
-            <div
-              id="hud-panel-dataset"
-              className="hud-tab-panel"
-              role="tabpanel"
-              aria-labelledby="hud-tab-dataset"
-              hidden={activeControlHudTab !== 'dataset'}
-            >
-              <form className="dataset-form" onSubmit={handleDatasetSubmit}>
-                <label htmlFor={datasetInputId}>Dataset URL</label>
-                <input
-                  id={datasetInputId}
-                  name="datasetUrl"
-                  type="url"
-                  inputMode="url"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={datasetUrl}
-                  placeholder="https://bucket.example/output…"
-                  onChange={(event) => {
-                    setDatasetUrl(event.currentTarget.value)
-                  }}
-                />
-                <label className="dataset-toggle" htmlFor={morphologyInputId}>
-                  <input
-                    id={morphologyInputId}
-                    name="loadMorphologyImage"
-                    type="checkbox"
-                    checked={shouldLoadMorphology}
-                    onChange={(event) => {
-                      const checked = event.currentTarget.checked
-                      setShouldLoadMorphology(checked)
-                      appendDebugEvent(
-                        checked
-                          ? 'Morphology image enabled'
-                          : 'Morphology image disabled',
-                      )
-                    }}
-                  />
-                  <span>Morphology image</span>
-                </label>
-                <label htmlFor={boundaryLimitInputId}>Boundary limit</label>
-                <input
-                  id={boundaryLimitInputId}
-                  name="boundaryCellLimit"
-                  type="number"
-                  inputMode="numeric"
-                  min="1"
-                  max={MAX_BOUNDARY_VIEWPORT_CELL_LIMIT}
-                  step="1"
-                  autoComplete="off"
-                  value={boundaryCellLimit}
-                  onChange={(event) => {
-                    const nextLimit = normalizeBoundaryCellLimit(
-                      event.currentTarget.valueAsNumber,
-                    )
-                    setBoundaryCellLimit(nextLimit)
-                    appendDebugEvent(`Boundary limit: ${nextLimit.toLocaleString()}`, {
-                      coalesceKey: 'boundary-limit',
-                    })
-                  }}
-                />
-                <button type="submit" disabled={isLoading}>
-                  {isLoading ? 'Loading…' : 'Load Dataset'}
-                </button>
-              </form>
-              <div className="dataset-action-row">
-                <button
-                  type="button"
-                  className="secondary-action"
-                  disabled={
-                    diagnosticsState.status === 'loading' || datasetUrl.trim() === ''
-                  }
-                  onClick={() => {
-                    void handleRunDatasetDiagnostics()
-                  }}
-                >
-                  {diagnosticsState.status === 'loading'
-                    ? 'Diagnosing...'
-                    : 'Diagnose Dataset'}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-action icon-action"
-                  aria-label="Download diagnostics"
-                  title="Download diagnostics"
-                  onClick={handleDownloadDiagnostics}
-                >
-                  <DownloadIcon />
-                </button>
-              </div>
-              <DatasetDiagnosticsPanel state={diagnosticsState} />
-              <CellFeatureMatrixCompatibilityNotice
-                state={cellFeatureMatrixCapabilityState}
-              />
+            <DatasetHudPanel
+              active={activeControlHudTab === 'dataset'}
+              datasetInputId={datasetInputId}
+              morphologyInputId={morphologyInputId}
+              boundaryLimitInputId={boundaryLimitInputId}
+              datasetUrl={datasetUrl}
+              shouldLoadMorphology={shouldLoadMorphology}
+              boundaryCellLimit={boundaryCellLimit}
+              maxBoundaryCellLimit={MAX_BOUNDARY_VIEWPORT_CELL_LIMIT}
+              isLoading={isLoading}
+              diagnosticsState={diagnosticsState}
+              cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
+              activeErrors={activeErrors}
+              debugLog={debugLog}
+              onSubmit={handleDatasetSubmit}
+              onDatasetUrlChange={setDatasetUrl}
+              onShouldLoadMorphologyChange={(checked) => {
+                setShouldLoadMorphology(checked)
+                appendDebugEvent(
+                  checked ? 'Morphology image enabled' : 'Morphology image disabled',
+                )
+              }}
+              onBoundaryCellLimitChange={(value) => {
+                const nextLimit = normalizeBoundaryCellLimit(value)
+                setBoundaryCellLimit(nextLimit)
+                appendDebugEvent(`Boundary limit: ${nextLimit.toLocaleString()}`, {
+                  coalesceKey: 'boundary-limit',
+                })
+              }}
+              onRunDatasetDiagnostics={() => {
+                void handleRunDatasetDiagnostics()
+              }}
+              onDownloadDiagnostics={handleDownloadDiagnostics}
+              onClearDebugLog={() => {
+                setDebugLog([])
+              }}
+            />
 
-              <ErrorSummary errors={activeErrors} />
-              <ActivityLog
-                entries={debugLog}
-                onClear={() => {
-                  setDebugLog([])
-                }}
-              />
-            </div>
+            <LayerHudPanel
+              active={activeControlHudTab === 'layers'}
+              scaffoldDeckLayerCount={scaffoldDeckLayerCount}
+              bundledDeckVersion={bundledDeckVersion}
+              performanceBudget={performanceBudget}
+              imageOpacityInputId={imageOpacityInputId}
+              cellFillOpacityInputId={cellFillOpacityInputId}
+              cellBoundaryOpacityInputId={cellBoundaryOpacityInputId}
+              coordinateUnitInputId={coordinateUnitInputId}
+              imageLayerOpacity={imageLayerOpacity}
+              cellFillOpacity={cellFillOpacity}
+              cellBoundaryOpacity={cellBoundaryOpacity}
+              coordinateUnit={coordinateUnit}
+              morphologyChannels={morphologyImage?.channelLoaders ?? []}
+              morphologyChannelSettings={morphologyChannelSettings}
+              autoContrastChannelIds={autoContrastChannelIds}
+              onImageLayerOpacityPercentChange={(nextPercent) => {
+                setImageLayerOpacity(percentToOpacity(nextPercent))
+                appendDebugEvent(`Image opacity: ${nextPercent}%`, {
+                  coalesceKey: 'image-opacity',
+                })
+              }}
+              onCellFillOpacityPercentChange={(nextPercent) => {
+                setCellFillOpacity(percentToOpacity(nextPercent))
+                appendDebugEvent(`Cell fill opacity: ${nextPercent}%`, {
+                  coalesceKey: 'cell-fill-opacity',
+                })
+              }}
+              onCellBoundaryOpacityPercentChange={(nextPercent) => {
+                setCellBoundaryOpacity(percentToOpacity(nextPercent))
+                appendDebugEvent(`Cell boundary opacity: ${nextPercent}%`, {
+                  coalesceKey: 'cell-boundary-opacity',
+                })
+              }}
+              onCoordinateUnitChange={(nextUnit) => {
+                if (coordinateUnit === nextUnit) {
+                  return
+                }
 
-            <div
-              id="hud-panel-layers"
-              className="hud-tab-panel"
-              role="tabpanel"
-              aria-labelledby="hud-tab-layers"
-              hidden={activeControlHudTab !== 'layers'}
-            >
-              <section className="layer-section" aria-labelledby="layer-heading">
-                <h2 id="layer-heading">Layer Stack</h2>
-                <p>
-                  {scaffoldDeckLayerCount} Deck Layer - deck.gl {bundledDeckVersion}
-                </p>
-                <p>
-                  Budget {performanceBudget.profile} -{' '}
-                  {performanceBudget.overviewRenderCellLimit.toLocaleString()} cells -{' '}
-                  {performanceBudget.maxConcurrentTileRequests} tile requests
-                </p>
-                <div className="layer-opacity-controls">
-                  <div className="layer-opacity-control">
-                    <div className="layer-opacity-header">
-                      <label htmlFor={imageOpacityInputId}>Image opacity</label>
-                      <span>{opacityToPercent(imageLayerOpacity)}%</span>
-                    </div>
-                    <input
-                      id={imageOpacityInputId}
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="5"
-                      value={opacityToPercent(imageLayerOpacity)}
-                      aria-valuetext={`${opacityToPercent(imageLayerOpacity)}%`}
-                      onChange={(event) => {
-                        const nextPercent = event.currentTarget.valueAsNumber
-                        setImageLayerOpacity(percentToOpacity(nextPercent))
-                        appendDebugEvent(`Image opacity: ${nextPercent}%`, {
-                          coalesceKey: 'image-opacity',
-                        })
-                      }}
-                    />
-                  </div>
-                  <div className="layer-opacity-control">
-                    <div className="layer-opacity-header">
-                      <label htmlFor={cellFillOpacityInputId}>Cell fill opacity</label>
-                      <span>{opacityToPercent(cellFillOpacity)}%</span>
-                    </div>
-                    <input
-                      id={cellFillOpacityInputId}
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="5"
-                      value={opacityToPercent(cellFillOpacity)}
-                      aria-valuetext={`${opacityToPercent(cellFillOpacity)}%`}
-                      onChange={(event) => {
-                        const nextPercent = event.currentTarget.valueAsNumber
-                        setCellFillOpacity(percentToOpacity(nextPercent))
-                        appendDebugEvent(`Cell fill opacity: ${nextPercent}%`, {
-                          coalesceKey: 'cell-fill-opacity',
-                        })
-                      }}
-                    />
-                  </div>
-                  <div className="layer-opacity-control">
-                    <div className="layer-opacity-header">
-                      <label htmlFor={cellBoundaryOpacityInputId}>
-                        Cell boundary opacity
-                      </label>
-                      <span>{opacityToPercent(cellBoundaryOpacity)}%</span>
-                    </div>
-                    <input
-                      id={cellBoundaryOpacityInputId}
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="5"
-                      value={opacityToPercent(cellBoundaryOpacity)}
-                      aria-valuetext={`${opacityToPercent(cellBoundaryOpacity)}%`}
-                      onChange={(event) => {
-                        const nextPercent = event.currentTarget.valueAsNumber
-                        setCellBoundaryOpacity(percentToOpacity(nextPercent))
-                        appendDebugEvent(`Cell boundary opacity: ${nextPercent}%`, {
-                          coalesceKey: 'cell-boundary-opacity',
-                        })
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="coordinate-unit-control">
-                  <span id={coordinateUnitInputId}>Mouse coordinates</span>
-                  <div
-                    className="coordinate-unit-segmented"
-                    role="group"
-                    aria-labelledby={coordinateUnitInputId}
-                  >
-                    <button
-                      type="button"
-                      aria-pressed={coordinateUnit === 'um'}
-                      onClick={() => {
-                        if (coordinateUnit === 'um') {
-                          return
-                        }
-
-                        setCoordinateUnit('um')
-                        appendDebugEvent('Mouse coordinates: μm', {
-                          coalesceKey: 'coordinate-unit',
-                        })
-                      }}
-                    >
-                      μm
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={coordinateUnit === 'px'}
-                      onClick={() => {
-                        if (coordinateUnit === 'px') {
-                          return
-                        }
-
-                        setCoordinateUnit('px')
-                        appendDebugEvent('Mouse coordinates: px', {
-                          coalesceKey: 'coordinate-unit',
-                        })
-                      }}
-                    >
-                      px
-                    </button>
-                  </div>
-                </div>
-                <MorphologyChannelControls
-                  channels={morphologyImage?.channelLoaders ?? []}
-                  settings={morphologyChannelSettings}
-                  autoContrastChannelIds={autoContrastChannelIds}
-                  onAutoContrast={handleAutoContrast}
-                  onUpdate={updateMorphologyChannel}
-                />
-              </section>
-            </div>
+                setCoordinateUnit(nextUnit)
+                appendDebugEvent(
+                  `Mouse coordinates: ${nextUnit === 'um' ? 'μm' : 'px'}`,
+                  { coalesceKey: 'coordinate-unit' },
+                )
+              }}
+              onAutoContrast={handleAutoContrast}
+              onUpdateMorphologyChannel={updateMorphologyChannel}
+            />
 
             <div
               id="hud-panel-genes"
@@ -4884,7 +4676,10 @@ export function App({
                 </select>
 
                 {selectedGenes.length === 0 ? null : (
-                  <div className="gene-chip-row" aria-label="Transcript selected features">
+                  <div
+                    className="gene-chip-row"
+                    aria-label="Transcript selected features"
+                  >
                     {selectedGenes.map((gene) => (
                       <button
                         key={gene}
@@ -5398,237 +5193,57 @@ export function App({
               </section>
             </div>
 
-            <div
-              id="hud-panel-cell"
-              className="hud-tab-panel"
-              role="tabpanel"
-              aria-labelledby="hud-tab-cell"
-              hidden={activeControlHudTab !== 'cell'}
-            >
-              <section className="analysis-section" aria-labelledby="embedding-heading">
-                <div className="section-heading-row">
-                  <h2 id="embedding-heading">UMAP/tSNE</h2>
-                  <span
-                    className={
-                      analysisEmbeddingState.status === 'loading'
-                        ? 'status-chip is-loading'
-                        : 'status-chip'
-                    }
-                    aria-live="polite"
-                  >
-                    {embeddingCopy}
-                  </span>
-                </div>
-                <div className="embedding-controls">
-                  <label htmlFor={embeddingViewInputId}>Embedding view</label>
-                  <select
-                    id={embeddingViewInputId}
-                    value={activeEmbedding?.kind ?? selectedEmbeddingKind}
-                    disabled={
-                      analysisEmbeddingState.status !== 'ready' ||
-                      analysisEmbeddingState.embeddings.length === 0
-                    }
-                    onChange={(event) => {
-                      const nextEmbeddingKind = event.currentTarget
-                        .value as AnalysisEmbeddingKind
-                      setSelectedEmbeddingKind(nextEmbeddingKind)
-                      appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
-                    }}
-                  >
-                    {analysisEmbeddingState.status === 'ready' &&
-                    analysisEmbeddingState.embeddings.length > 0 ? (
-                      analysisEmbeddingState.embeddings.map((embedding) => (
-                        <option key={embedding.kind} value={embedding.kind}>
-                          {embedding.label}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="umap">UMAP</option>
-                        <option value="tsne">t-SNE</option>
-                      </>
-                    )}
-                  </select>
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    disabled={
-                      loadState.status !== 'ready' ||
-                      analysisEmbeddingState.status === 'loading'
-                    }
-                    onClick={handleLoadAnalysisEmbeddings}
-                  >
-                    {analysisEmbeddingState.status === 'loading'
-                      ? 'Loading...'
-                      : 'Load Embeddings'}
-                  </button>
-                </div>
-                <EmbeddingPanel
-                  embedding={activeEmbedding}
-                  roiCellIds={roiCellIds}
-                  selectedCellId={selectedCell?.id ?? null}
-                  onSelectCell={handleEmbeddingCellSelect}
-                />
-              </section>
+            <CellHudPanel
+              active={activeControlHudTab === 'cell'}
+              embeddingViewInputId={embeddingViewInputId}
+              embeddingCopy={embeddingCopy}
+              analysisEmbeddingState={analysisEmbeddingState}
+              activeEmbedding={activeEmbedding}
+              selectedEmbeddingKind={selectedEmbeddingKind}
+              roiCellIds={roiCellIds}
+              selectedCell={selectedCell}
+              cellDetailCopy={cellDetailCopy}
+              cellDetailState={cellDetailState}
+              cellTranscriptDistributionState={cellTranscriptDistributionState}
+              loadEnabled={loadState.status === 'ready'}
+              onEmbeddingKindChange={(nextEmbeddingKind) => {
+                setSelectedEmbeddingKind(nextEmbeddingKind)
+                appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
+              }}
+              onLoadAnalysisEmbeddings={handleLoadAnalysisEmbeddings}
+              onSelectEmbeddingCell={handleEmbeddingCellSelect}
+            />
 
-              <section className="analysis-section" aria-labelledby="cell-info-heading">
-                <div className="section-heading-row">
-                  <h2 id="cell-info-heading">Cell Info</h2>
-                  <span
-                    className={
-                      cellDetailState.status === 'loading'
-                        ? 'status-chip is-loading'
-                        : 'status-chip'
-                    }
-                    aria-live="polite"
-                  >
-                    {cellDetailCopy}
-                  </span>
-                </div>
-                <CellInfoPanel
-                  key={selectedCell?.id ?? 'none'}
-                  cell={selectedCell}
-                  state={cellDetailState}
-                  transcriptDistributionState={cellTranscriptDistributionState}
-                />
-              </section>
-            </div>
-
-            <div
-              id="hud-panel-roi"
-              className="hud-tab-panel"
-              role="tabpanel"
-              aria-labelledby="hud-tab-roi"
-              hidden={activeControlHudTab !== 'roi'}
-            >
-              <section className="analysis-section" aria-labelledby="roi-heading">
-                <div className="section-heading-row">
-                  <h2 id="roi-heading">ROI</h2>
-                  <span
-                    className={isRoiTabLoading ? 'status-chip is-loading' : 'status-chip'}
-                    aria-live="polite"
-                  >
-                    {roiHeaderCopy}
-                  </span>
-                </div>
-                <div className="roi-action-row">
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    disabled={!canDrawRoi}
-                    aria-pressed={roiMode === 'box'}
-                    onClick={() => {
-                      const nextMode = roiMode === 'box' ? 'idle' : 'box'
-                      setRoiMode(nextMode)
-                      appendDebugEvent(
-                        nextMode === 'box'
-                          ? 'ROI draw mode enabled'
-                          : 'ROI draw cancelled',
-                      )
-                    }}
-                  >
-                    {roiMode === 'box' ? 'Drawing Box' : 'Draw Box'}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    disabled={!canDrawRoi}
-                    aria-pressed={roiMode === 'lasso'}
-                    onClick={() => {
-                      const nextMode = roiMode === 'lasso' ? 'idle' : 'lasso'
-                      setRoiMode(nextMode)
-                      appendDebugEvent(
-                        nextMode === 'lasso'
-                          ? 'ROI lasso mode enabled'
-                          : 'ROI draw cancelled',
-                      )
-                    }}
-                  >
-                    {roiMode === 'lasso' ? 'Drawing Lasso' : 'Draw Lasso'}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    disabled={roiState.status === 'idle'}
-                    onClick={handleClearRoi}
-                  >
-                    Clear
-                  </button>
-                </div>
-
-                <label htmlFor={roiNameInputId}>ROI name</label>
-                <input
-                  id={roiNameInputId}
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={roiName}
-                  disabled={loadState.status !== 'ready'}
-                  onChange={(event) => {
-                    setRoiName(event.currentTarget.value)
-                  }}
-                />
-
-                {roiSummary === null ? null : (
-                  <dl className="roi-summary-list" aria-label="ROI summary">
-                    <div>
-                      <dt>Cells</dt>
-                      <dd>
-                        {roiSummary.cellCount.toLocaleString()}
-                        {roiState.status === 'ready' && roiState.hitCellLimit ? '+' : ''}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Mean transcripts</dt>
-                      <dd>{formatNumber(roiSummary.meanTranscriptCount)}</dd>
-                    </div>
-                    <div>
-                      <dt>Mean area</dt>
-                      <dd>{formatNumber(roiSummary.meanCellArea)}</dd>
-                    </div>
-                  </dl>
-                )}
-
-                <RoiGeneStatsPanel copy={roiGeneStatsCopy} state={roiGeneStatsState} />
-
-                <div className="roi-action-row">
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    disabled={roiState.status !== 'ready'}
-                    onClick={handleSaveRoiAnnotation}
-                  >
-                    Save ROI
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    disabled={roiState.status !== 'ready'}
-                    onClick={handleExportRoiCells}
-                  >
-                    Export Cells
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    disabled={
-                      roiState.status !== 'ready' ||
-                      roiTranscriptExportState.status === 'loading'
-                    }
-                    onClick={handleExportRoiTranscripts}
-                  >
-                    {roiTranscriptExportState.status === 'loading'
-                      ? 'Exporting...'
-                      : 'Export Transcripts'}
-                  </button>
-                </div>
-                {roiTranscriptExportState.status === 'loading' ? (
-                  <p className="roi-gene-status" aria-live="polite">
-                    Preparing ROI transcript CSV
-                  </p>
-                ) : null}
-              </section>
-            </div>
+            <RoiHudPanel
+              active={activeControlHudTab === 'roi'}
+              roiNameInputId={roiNameInputId}
+              roiHeaderCopy={roiHeaderCopy}
+              isLoading={isRoiTabLoading}
+              canDrawRoi={canDrawRoi}
+              roiMode={roiMode}
+              roiName={roiName}
+              loadEnabled={loadState.status === 'ready'}
+              roiState={roiState}
+              roiSummary={roiSummary}
+              roiGeneStatsCopy={roiGeneStatsCopy}
+              roiGeneStatsState={roiGeneStatsState}
+              roiTranscriptExportState={roiTranscriptExportState}
+              onRoiModeChange={(nextMode) => {
+                setRoiMode(nextMode)
+                appendDebugEvent(
+                  nextMode === 'idle'
+                    ? 'ROI draw cancelled'
+                    : nextMode === 'box'
+                      ? 'ROI draw mode enabled'
+                      : 'ROI lasso mode enabled',
+                )
+              }}
+              onClearRoi={handleClearRoi}
+              onRoiNameChange={setRoiName}
+              onSaveRoiAnnotation={handleSaveRoiAnnotation}
+              onExportRoiCells={handleExportRoiCells}
+              onExportRoiTranscripts={handleExportRoiTranscripts}
+            />
           </div>
         </div>
       </aside>
@@ -5707,39 +5322,6 @@ async function defaultComputeAutoChannelContrast(
 ): Promise<ChannelAutoContrast> {
   const morphologyContrast = await import('./data/morphologyContrast')
   return morphologyContrast.computeChannelAutoContrast(channel.loader, options)
-}
-
-function genePanelStatusCopy(genePanelState: GenePanelState): string {
-  if (genePanelState.status === 'loading') {
-    return 'Loading'
-  }
-
-  if (genePanelState.status === 'ready') {
-    return `${genePanelState.genes.length.toLocaleString()} genes`
-  }
-
-  if (genePanelState.status === 'error') {
-    return 'Unavailable'
-  }
-
-  return 'Idle'
-}
-
-function annotationStatusCopy(annotationState: AnnotationState): string {
-  if (annotationState.status === 'loading') {
-    return 'Loading'
-  }
-
-  if (annotationState.status === 'ready') {
-    const noun = annotationState.annotations.length === 1 ? 'label' : 'labels'
-    return `${annotationState.annotations.length.toLocaleString()} ${noun}`
-  }
-
-  if (annotationState.status === 'error') {
-    return 'Unavailable'
-  }
-
-  return 'Idle'
 }
 
 function analysisEmbeddingStatusCopy(
@@ -5844,173 +5426,8 @@ function roiGeneStatsStatusCopy(roiGeneStatsState: RoiGeneStatsState): string {
   return 'Genes idle'
 }
 
-function transcriptStatusCopy(
-  capabilityState: TranscriptCapabilityState,
-  layerState: TranscriptLayerState,
-  isEnabled: boolean,
-): string {
-  if (!isEnabled) {
-    return 'Off'
-  }
-
-  if (capabilityState.status === 'loading') {
-    return 'Checking'
-  }
-
-  if (layerState.status === 'loading') {
-    return 'Loading'
-  }
-
-  if (layerState.status === 'ready') {
-    return `${layerState.points.length.toLocaleString()} points`
-  }
-
-  if (layerState.status === 'aggregate') {
-    return transcriptAggregateRenderedLabel(layerState.bins)
-  }
-
-  if (layerState.status === 'waiting') {
-    return 'Waiting'
-  }
-
-  if (layerState.status === 'unavailable' || layerState.status === 'error') {
-    return 'Unavailable'
-  }
-
-  if (capabilityState.status === 'ready') {
-    return transcriptCapabilityLabel(capabilityState.capabilities)
-  }
-
-  return 'Idle'
-}
-
-function transcriptPointsForRendering(
-  layerState: TranscriptLayerState,
-): readonly TranscriptPoint[] {
-  if (layerState.status === 'ready') {
-    return layerState.points
-  }
-
-  if (layerState.status === 'loading' && layerState.previousLayer?.kind === 'exact') {
-    return layerState.previousLayer.points
-  }
-
-  return EMPTY_TRANSCRIPT_POINTS
-}
-
-function transcriptAggregateBinsForRendering(
-  layerState: TranscriptLayerState,
-): readonly TranscriptAggregateBin[] {
-  if (layerState.status === 'aggregate') {
-    return layerState.bins
-  }
-
-  if (layerState.status === 'loading' && layerState.previousLayer?.kind === 'aggregate') {
-    return layerState.previousLayer.bins
-  }
-
-  return EMPTY_TRANSCRIPT_AGGREGATE_BINS
-}
-
-function transcriptAggregateScaleMaxForRendering(
-  layerState: TranscriptLayerState,
-): number | undefined {
-  if (layerState.status === 'aggregate') {
-    return layerState.scaleMax
-  }
-
-  if (layerState.status === 'loading' && layerState.previousLayer?.kind === 'aggregate') {
-    return layerState.previousLayer.scaleMax
-  }
-
-  return undefined
-}
-
-function transcriptDensityScaleValueLabels(
-  scaleMax: number | undefined,
-): readonly [string, string, string] {
-  if (scaleMax === undefined || !Number.isFinite(scaleMax) || scaleMax <= 0) {
-    return ['0', '-', '-']
-  }
-
-  return [
-    '0',
-    formatTranscriptDensityScaleValue(scaleMax * 0.5),
-    formatTranscriptDensityScaleValue(scaleMax),
-  ]
-}
-
-function transcriptDensityScaleAriaLabel(scaleMax: number | undefined): string {
-  if (scaleMax === undefined || !Number.isFinite(scaleMax) || scaleMax <= 0) {
-    return 'Transcript density color scale values unavailable until density renders.'
-  }
-
-  return `Transcript density color scale from 0 to ${formatTranscriptDensityScaleValue(
-    scaleMax,
-  )} transcripts per square.`
-}
-
-function formatTranscriptDensityScaleValue(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 0 })
-}
-
-function transcriptAggregateRenderedLabel(bins: readonly TranscriptAggregateBin[]): string {
-  return `${bins.length.toLocaleString()} squares`
-}
-
-function retainedTranscriptLayerState(
-  layerState: TranscriptLayerState,
-): TranscriptRetainedLayerState | undefined {
-  if (layerState.status === 'ready') {
-    return {
-      kind: 'exact',
-      points: layerState.points,
-    }
-  }
-
-  if (layerState.status === 'aggregate') {
-    return {
-      kind: 'aggregate',
-      bins: layerState.bins,
-      ...(layerState.scaleMax === undefined ? {} : { scaleMax: layerState.scaleMax }),
-    }
-  }
-
-  if (layerState.status === 'loading') {
-    return layerState.previousLayer
-  }
-
-  return undefined
-}
-
-function transcriptCapabilityLabel(capabilities: TranscriptCapabilities): string {
-  if (capabilities.nativeZarr && capabilities.rawParquet) {
-    return 'Native LOD + exact'
-  }
-
-  if (capabilities.nativeZarr) {
-    return 'Native LOD'
-  }
-
-  if (capabilities.rawParquet) {
-    return 'Exact only'
-  }
-
-  return 'No transcripts'
-}
-
 function isObservationColorMode(value: string): value is ObservationColorMode {
   return value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
-}
-
-function isTranscriptDetailMode(value: string): value is TranscriptDetailMode {
-  return value === 'auto' || value === 'density' || value === 'exact'
-}
-
-function isTranscriptFeatureFilterMode(
-  value: string,
-): value is TranscriptFeatureFilterMode {
-  return value === 'all' || value === 'selected'
 }
 
 function readShareableStateFromLocation(): ShareableState {
@@ -6036,147 +5453,10 @@ function parseViewerCoordinateUnit(
   return value === 'um' || value === 'px' ? value : undefined
 }
 
-function parseGeneExpressionColorScale(
-  value: string | undefined,
-): GeneExpressionColorScale | undefined {
-  return value !== undefined && isGeneExpressionColorScale(value) ? value : undefined
-}
-
-function parseGeneExpressionScoreMode(
-  value: string | undefined,
-): GeneExpressionScoreMode | undefined {
-  return value !== undefined && isGeneExpressionScoreMode(value) ? value : undefined
-}
-
-function parseTranscriptDensityColorScale(
-  value: string | undefined,
-): TranscriptDensityColorScale | undefined {
-  return value !== undefined && isTranscriptDensityColorScale(value) ? value : undefined
-}
-
-function parseTranscriptPointColorMode(
-  value: string | undefined,
-): TranscriptPointColorMode | undefined {
-  return value !== undefined && isTranscriptPointColorMode(value) ? value : undefined
-}
-
-function isTranscriptExactManualLoadRequired(
-  estimate: number,
-  exactPointLimit: number,
-): boolean {
-  return estimate >= exactPointLimit * TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO
-}
-
-function transcriptExactManualLoadMessage(
-  estimate: number,
-  exactPointLimit: number,
-): string {
-  return `Exact transcript viewport is near the ${exactPointLimit.toLocaleString()} point budget (${estimate.toLocaleString()} estimated). Load exact viewport to fetch these points intentionally.`
-}
-
-function parseGeneExpressionDetailMode(
-  value: string | undefined,
-): GeneExpressionDetailMode | undefined {
-  return value !== undefined && isGeneExpressionDetailMode(value) ? value : undefined
-}
-
 function parseObservationColorMode(
   value: string | undefined,
 ): ObservationColorMode | undefined {
   return value !== undefined && isObservationColorMode(value) ? value : undefined
-}
-
-function parseTranscriptDetailMode(
-  value: string | undefined,
-): TranscriptDetailMode | undefined {
-  if (value === 'bins') {
-    return 'density'
-  }
-
-  return value !== undefined && isTranscriptDetailMode(value) ? value : undefined
-}
-
-function parseTranscriptFeatureFilterMode(
-  value: string | undefined,
-): TranscriptFeatureFilterMode | undefined {
-  return value !== undefined && isTranscriptFeatureFilterMode(value) ? value : undefined
-}
-
-function hasReadyAnnotationsAfterRemove(
-  annotationState: AnnotationState,
-  annotationId: string,
-): boolean {
-  return (
-    annotationState.status === 'ready' &&
-    annotationState.annotations.some((annotation) => annotation.id !== annotationId)
-  )
-}
-
-function geneExpressionStatusCopy(geneExpressionState: GeneExpressionState): string {
-  if (geneExpressionState.status === 'loading') {
-    return `${geneExpressionModeLabel(geneExpressionState.mode)}: ${geneExpressionState.genes.join(', ')}`
-  }
-
-  if (geneExpressionState.status === 'ready') {
-    const noun = geneExpressionState.cellCount === 1 ? 'cell' : 'cells'
-
-    if (geneExpressionState.mode === 'exact-region') {
-      return `Expression exact region: ${geneExpressionState.cellCount.toLocaleString()} ${noun}`
-    }
-
-    if (geneExpressionState.mode === 'overview-sampled') {
-      return `Expression overview: ${geneExpressionState.cellCount.toLocaleString()} positive ${noun} across ${geneExpressionState.visibleCellCount.toLocaleString()} slide cells`
-    }
-
-    if (
-      geneExpressionState.mode === 'sampled' &&
-      geneExpressionState.visibleCellCount > geneExpressionState.cellCount
-    ) {
-      const visibleNoun = geneExpressionState.visibleCellCount === 1 ? 'cell' : 'cells'
-
-      return `Expression sample: ${geneExpressionState.cellCount.toLocaleString()} of ${geneExpressionState.visibleCellCount.toLocaleString()} visible ${visibleNoun}`
-    }
-
-    return `Expression: ${geneExpressionState.cellCount.toLocaleString()} ${noun}`
-  }
-
-  if (geneExpressionState.status === 'waiting') {
-    return geneExpressionState.message
-  }
-
-  if (geneExpressionState.status === 'error') {
-    return `Expression failed - ${geneExpressionState.error.title}`
-  }
-
-  return 'Expression: none'
-}
-
-function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
-  if (mode === 'overview-sampled') {
-    return 'Expression overview'
-  }
-
-  if (mode === 'sampled') {
-    return 'Expression sample'
-  }
-
-  if (mode === 'exact-region') {
-    return 'Expression exact region'
-  }
-
-  return 'Expression'
-}
-
-function isGeneExpressionDetailMode(value: string): value is GeneExpressionDetailMode {
-  return value === 'auto' || value === 'exact-region'
-}
-
-function geneExpressionScaleKeyFor(
-  datasetUrl: string,
-  scoreMode: GeneExpressionScoreMode,
-  genes: readonly string[],
-): string {
-  return [datasetUrl, scoreMode, genes.join('|')].join('::')
 }
 
 function overviewCellsToBbox(cells: readonly OverviewCellDatum[]): BBox | null {
@@ -6207,925 +5487,6 @@ function overviewCellsToBbox(cells: readonly OverviewCellDatum[]): BBox | null {
   }
 }
 
-function estimateVisibleTranscriptsFromCells(
-  cells: readonly OverviewCellDatum[],
-  bbox: BBox,
-): number {
-  let transcriptCount = 0
-
-  for (const cell of cells) {
-    const [x = 0, deckY = 0] = cell.position
-    const rawY = -deckY
-
-    if (x < bbox.minX || x > bbox.maxX || rawY < bbox.minY || rawY > bbox.maxY) {
-      continue
-    }
-
-    transcriptCount += cell.transcriptCount ?? 0
-  }
-
-  return Math.max(0, Math.floor(transcriptCount))
-}
-
-function buildCellSummaryTranscriptBins(
-  cells: readonly OverviewCellDatum[],
-  bbox: BBox,
-  mode: 'density',
-): readonly TranscriptAggregateBin[] {
-  const width = Math.max(1, bbox.maxX - bbox.minX)
-  const height = Math.max(1, bbox.maxY - bbox.minY)
-  const targetAxisBins = 44
-  const minBinSize = 24
-  const binSize = Math.max(minBinSize, Math.max(width, height) / targetAxisBins)
-  const radiusMicrometers = Math.max(3, Math.min(90, binSize * 0.45))
-  const level = Math.max(0, Math.floor(Math.log2(Math.max(1, binSize / 10))))
-  const bins = new Map<
-    string,
-    {
-      readonly binX: number
-      readonly binY: number
-      count: number
-    }
-  >()
-
-  for (const cell of cells) {
-    const transcriptCount = cell.transcriptCount ?? 0
-
-    if (transcriptCount <= 0) {
-      continue
-    }
-
-    const [x = 0, deckY = 0] = cell.position
-    const y = -deckY
-
-    if (x < bbox.minX || x > bbox.maxX || y < bbox.minY || y > bbox.maxY) {
-      continue
-    }
-
-    const binX = Math.floor((x - bbox.minX) / binSize)
-    const binY = Math.floor((y - bbox.minY) / binSize)
-    const key = `${binX}:${binY}`
-    const existing = bins.get(key)
-
-    if (existing === undefined) {
-      bins.set(key, { binX, binY, count: transcriptCount })
-    } else {
-      existing.count += transcriptCount
-    }
-  }
-
-  return [...bins.values()]
-    .sort((left, right) => right.count - left.count)
-    .slice(0, 4_096)
-    .map((bin) => {
-      const centerX = bbox.minX + (bin.binX + 0.5) * binSize
-      const centerY = bbox.minY + (bin.binY + 0.5) * binSize
-
-      return {
-        id: `cell-summary:${mode}:${level}:${bin.binX}:${bin.binY}`,
-        source: 'cell-summary',
-        level,
-        binX: bin.binX,
-        binY: bin.binY,
-        position: {
-          x: micrometers(centerX),
-          y: micrometers(centerY),
-        },
-        radiusMicrometers,
-        binSizeMicrometers: binSize,
-        count: Math.floor(bin.count),
-      }
-    })
-}
-
-function maxTranscriptAggregateCount(bins: readonly TranscriptAggregateBin[]): number {
-  let maxCount = 0
-
-  for (const bin of bins) {
-    maxCount = Math.max(maxCount, bin.count)
-  }
-
-  return Math.max(1, maxCount)
-}
-
-function transcriptNativeAggregateMessage({
-  selectedFeatureCount,
-  binCount,
-}: {
-  readonly mode: 'density'
-  readonly selectedFeatureCount: number
-  readonly binCount: number
-}): string {
-  const featureLabel =
-    selectedFeatureCount > 0
-      ? `${selectedFeatureCount.toLocaleString()} selected-feature`
-      : 'all-transcript'
-
-  return `Showing native ${featureLabel} density squares from transcripts.zarr.zip (${binCount.toLocaleString()} squares).`
-}
-
-function transcriptAggregateFallbackMessage({
-  featureFilterMode,
-  selectedFeatureCount,
-}: {
-  readonly mode: 'density'
-  readonly featureFilterMode: TranscriptFeatureFilterMode
-  readonly selectedFeatureCount: number
-}): string {
-  const filterNote =
-    featureFilterMode === 'selected' && selectedFeatureCount > 0
-      ? ' Selected-gene filtering is applied by Exact.'
-      : ''
-
-  return `Showing all-gene cell-summary density squares for this viewport. Min QV and gene-only filters need exact points or native transcript LOD.${filterNote}`
-}
-
-function filterGeneOptions(
-  genes: readonly string[],
-  search: string,
-  selectedGenes: readonly string[],
-): readonly string[] {
-  const normalizedSearch = search.trim().toLowerCase()
-  const selected = new Set(selectedGenes)
-  const matches: string[] = []
-
-  for (const gene of genes) {
-    if (selected.has(gene)) {
-      continue
-    }
-
-    if (normalizedSearch.length === 0 || gene.toLowerCase().includes(normalizedSearch)) {
-      matches.push(gene)
-    }
-
-    if (matches.length >= 24) {
-      break
-    }
-  }
-
-  return matches
-}
-
-function parseGeneSetSymbols(
-  value: string,
-  availableGenes: readonly string[],
-): readonly string[] {
-  if (value.trim().length === 0 || availableGenes.length === 0) {
-    return []
-  }
-
-  const availableGenesByNormalizedName = new Map<string, string>()
-
-  for (const gene of availableGenes) {
-    availableGenesByNormalizedName.set(gene.toLowerCase(), gene)
-  }
-
-  const selectedGenes = new Set<string>()
-  const parsedGenes: string[] = []
-
-  for (const symbol of value.split(GENE_SET_SYMBOL_SPLIT_PATTERN)) {
-    const normalizedSymbol = symbol.trim().toLowerCase()
-
-    if (normalizedSymbol.length === 0) {
-      continue
-    }
-
-    const gene = availableGenesByNormalizedName.get(normalizedSymbol)
-
-    if (gene === undefined || selectedGenes.has(gene)) {
-      continue
-    }
-
-    selectedGenes.add(gene)
-    parsedGenes.push(gene)
-  }
-
-  return parsedGenes.sort((left, right) => left.localeCompare(right))
-}
-
-function mergeImportedAnnotations(
-  currentAnnotations: readonly Annotation[],
-  importedAnnotations: readonly Annotation[],
-  importedPrefix: string,
-): readonly Annotation[] {
-  return [
-    ...currentAnnotations.filter(
-      (annotation) => !annotation.id.startsWith(importedPrefix),
-    ),
-    ...importedAnnotations,
-  ]
-}
-
-function colorsForAnnotations(
-  annotations: readonly Annotation[],
-  currentColors: Readonly<Record<string, string>>,
-): Readonly<Record<string, string>> {
-  const nextColors: Record<string, string> = { ...currentColors }
-  let colorIndex = Object.keys(nextColors).length
-
-  for (const annotation of annotations) {
-    if (nextColors[annotation.id] !== undefined) {
-      continue
-    }
-
-    nextColors[annotation.id] = annotationPaletteColor(colorIndex)
-    colorIndex += 1
-  }
-
-  return nextColors
-}
-
-function removeAnnotationColor(
-  colors: Readonly<Record<string, string>>,
-  annotationId: string,
-): Readonly<Record<string, string>> {
-  const remainingColors: Record<string, string> = {}
-
-  for (const [candidateId, color] of Object.entries(colors)) {
-    if (candidateId !== annotationId) {
-      remainingColors[candidateId] = color
-    }
-  }
-
-  return remainingColors
-}
-
-function removeAnnotationColorsByPrefix(
-  colors: Readonly<Record<string, string>>,
-  prefix: string,
-): Readonly<Record<string, string>> {
-  const remainingColors: Record<string, string> = {}
-
-  for (const [annotationId, color] of Object.entries(colors)) {
-    if (!annotationId.startsWith(prefix)) {
-      remainingColors[annotationId] = color
-    }
-  }
-
-  return remainingColors
-}
-
-function customAnnotationFilePrefix(fileName: string): string {
-  return `custom:${slug(fileName)}:`
-}
-
-function slug(value: string): string {
-  const slugged = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-
-  return slugged.length === 0 ? 'annotation' : slugged
-}
-
-function defaultGeneSetName(genes: readonly string[]): string {
-  if (genes.length === 0) {
-    return 'Selected genes'
-  }
-
-  if (genes.length <= 3) {
-    return genes.join(', ')
-  }
-
-  return `${genes.slice(0, 3).join(', ')} +${genes.length - 3}`
-}
-
-const EMBEDDING_RENDER_POINT_LIMIT = 120_000
-const EMBEDDING_PLOT_FALLBACK_WIDTH = 320
-const EMBEDDING_PLOT_FALLBACK_HEIGHT = 190
-const EMBEDDING_PLOT_PADDING = 12
-
-interface EmbeddingBounds {
-  readonly minX: number
-  readonly maxX: number
-  readonly minY: number
-  readonly maxY: number
-}
-
-function EmbeddingPanel({
-  embedding,
-  roiCellIds,
-  selectedCellId,
-  onSelectCell,
-}: {
-  readonly embedding: AnalysisEmbedding | null
-  readonly roiCellIds: readonly string[]
-  readonly selectedCellId: string | null
-  readonly onSelectCell: (cellId: string) => void
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const sampledPoints = useMemo(
-    () =>
-      embedding === null
-        ? []
-        : sampleEmbeddingPoints(embedding.points, EMBEDDING_RENDER_POINT_LIMIT),
-    [embedding],
-  )
-  const bounds = useMemo(
-    () => (embedding === null ? null : embeddingBounds(embedding.points)),
-    [embedding],
-  )
-  const pointByCellId = useMemo(
-    () =>
-      embedding === null
-        ? new Map<string, AnalysisEmbeddingPoint>()
-        : mapEmbeddingPoints(embedding.points),
-    [embedding],
-  )
-  const roiPoints = useMemo(
-    () =>
-      roiCellIds.flatMap((cellId) => {
-        const point = pointByCellId.get(cellId)
-
-        return point === undefined ? [] : [point]
-      }),
-    [pointByCellId, roiCellIds],
-  )
-  const selectedPoint =
-    selectedCellId === null ? undefined : pointByCellId.get(selectedCellId)
-
-  useEffect(() => {
-    if (embedding === null || bounds === null) {
-      return
-    }
-
-    const canvas = canvasRef.current
-
-    if (canvas === null) {
-      return
-    }
-
-    const context = canvas.getContext('2d')
-
-    if (context === null) {
-      return
-    }
-
-    const rect = canvas.getBoundingClientRect()
-    const width = Math.max(
-      1,
-      Math.round(rect.width || canvas.clientWidth || EMBEDDING_PLOT_FALLBACK_WIDTH),
-    )
-    const height = Math.max(
-      1,
-      Math.round(rect.height || canvas.clientHeight || EMBEDDING_PLOT_FALLBACK_HEIGHT),
-    )
-    const pixelRatio = Math.max(1, window.devicePixelRatio || 1)
-
-    canvas.width = Math.round(width * pixelRatio)
-    canvas.height = Math.round(height * pixelRatio)
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
-    drawEmbeddingPlot(context, width, height, bounds, {
-      basePoints: sampledPoints,
-      roiPoints,
-      selectedPoint,
-    })
-  }, [bounds, embedding, roiPoints, sampledPoints, selectedPoint])
-
-  const handlePointerDown = useCallback(
-    (event: PointerEvent<HTMLCanvasElement>) => {
-      if (embedding === null || bounds === null) {
-        return
-      }
-
-      const canvas = canvasRef.current
-
-      if (canvas === null) {
-        return
-      }
-
-      const rect = canvas.getBoundingClientRect()
-      const width = rect.width || canvas.clientWidth || EMBEDDING_PLOT_FALLBACK_WIDTH
-      const height = rect.height || canvas.clientHeight || EMBEDDING_PLOT_FALLBACK_HEIGHT
-      const point = nearestEmbeddingPoint(
-        embedding.points,
-        bounds,
-        event.clientX - rect.left,
-        event.clientY - rect.top,
-        width,
-        height,
-      )
-
-      if (point !== null) {
-        onSelectCell(point.id)
-      }
-    },
-    [bounds, embedding, onSelectCell],
-  )
-
-  if (embedding === null) {
-    return <p className="embedding-empty">No embedding loaded</p>
-  }
-
-  return (
-    <div className="embedding-panel">
-      <div className="embedding-plot-shell">
-        <canvas
-          ref={canvasRef}
-          className="embedding-plot"
-          role="img"
-          aria-label={`${embedding.label} embedding, ${embedding.points.length.toLocaleString()} cells`}
-          onPointerDown={handlePointerDown}
-        />
-      </div>
-      <dl className="embedding-summary" aria-label="Embedding link summary">
-        <div>
-          <dt>Cells</dt>
-          <dd>{embedding.points.length.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Shown</dt>
-          <dd>{sampledPoints.length.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>ROI</dt>
-          <dd>{roiPoints.length.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Selected</dt>
-          <dd>{selectedPoint === undefined ? '0' : '1'}</dd>
-        </div>
-      </dl>
-    </div>
-  )
-}
-
-function sampleEmbeddingPoints(
-  points: readonly AnalysisEmbeddingPoint[],
-  limit: number,
-): readonly AnalysisEmbeddingPoint[] {
-  if (points.length <= limit) {
-    return points
-  }
-
-  const sampledPoints: AnalysisEmbeddingPoint[] = []
-  const step = points.length / limit
-
-  for (let index = 0; index < limit; index += 1) {
-    const point = points[Math.floor((index + 0.5) * step)]
-
-    if (point !== undefined) {
-      sampledPoints.push(point)
-    }
-  }
-
-  return sampledPoints
-}
-
-function mapEmbeddingPoints(
-  points: readonly AnalysisEmbeddingPoint[],
-): ReadonlyMap<string, AnalysisEmbeddingPoint> {
-  const pointByCellId = new Map<string, AnalysisEmbeddingPoint>()
-
-  for (const point of points) {
-    pointByCellId.set(point.id, point)
-  }
-
-  return pointByCellId
-}
-
-function embeddingBounds(points: readonly AnalysisEmbeddingPoint[]): EmbeddingBounds {
-  if (points.length === 0) {
-    return { minX: 0, maxX: 1, minY: 0, maxY: 1 }
-  }
-
-  let minX = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-
-  for (const point of points) {
-    minX = Math.min(minX, point.x)
-    maxX = Math.max(maxX, point.x)
-    minY = Math.min(minY, point.y)
-    maxY = Math.max(maxY, point.y)
-  }
-
-  if (minX === maxX) {
-    minX -= 0.5
-    maxX += 0.5
-  }
-
-  if (minY === maxY) {
-    minY -= 0.5
-    maxY += 0.5
-  }
-
-  return { minX, maxX, minY, maxY }
-}
-
-function drawEmbeddingPlot(
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  bounds: EmbeddingBounds,
-  layers: {
-    readonly basePoints: readonly AnalysisEmbeddingPoint[]
-    readonly roiPoints: readonly AnalysisEmbeddingPoint[]
-    readonly selectedPoint: AnalysisEmbeddingPoint | undefined
-  },
-) {
-  context.clearRect(0, 0, width, height)
-  context.fillStyle = '#171511'
-  context.fillRect(0, 0, width, height)
-
-  context.fillStyle = 'rgba(246, 242, 232, 0.28)'
-  for (const point of layers.basePoints) {
-    const [x, y] = embeddingPointToScreen(point, bounds, width, height)
-    context.fillRect(x, y, 1.2, 1.2)
-  }
-
-  context.fillStyle = 'rgba(240, 200, 75, 0.92)'
-  for (const point of layers.roiPoints) {
-    const [x, y] = embeddingPointToScreen(point, bounds, width, height)
-    context.beginPath()
-    context.arc(x, y, 2.4, 0, Math.PI * 2)
-    context.fill()
-  }
-
-  if (layers.selectedPoint !== undefined) {
-    const [x, y] = embeddingPointToScreen(layers.selectedPoint, bounds, width, height)
-    context.beginPath()
-    context.arc(x, y, 4.4, 0, Math.PI * 2)
-    context.fillStyle = 'rgba(215, 63, 124, 0.98)'
-    context.fill()
-    context.lineWidth = 1.5
-    context.strokeStyle = 'rgba(255, 253, 247, 0.92)'
-    context.stroke()
-  }
-}
-
-function nearestEmbeddingPoint(
-  points: readonly AnalysisEmbeddingPoint[],
-  bounds: EmbeddingBounds,
-  screenX: number,
-  screenY: number,
-  width: number,
-  height: number,
-): AnalysisEmbeddingPoint | null {
-  let nearestPoint: AnalysisEmbeddingPoint | null = null
-  let nearestDistanceSquared = 9 * 9
-
-  for (const point of points) {
-    const [x, y] = embeddingPointToScreen(point, bounds, width, height)
-    const dx = x - screenX
-    const dy = y - screenY
-    const distanceSquared = dx * dx + dy * dy
-
-    if (distanceSquared < nearestDistanceSquared) {
-      nearestDistanceSquared = distanceSquared
-      nearestPoint = point
-    }
-  }
-
-  return nearestPoint
-}
-
-function embeddingPointToScreen(
-  point: AnalysisEmbeddingPoint,
-  bounds: EmbeddingBounds,
-  width: number,
-  height: number,
-): readonly [number, number] {
-  const plotWidth = Math.max(1, width - EMBEDDING_PLOT_PADDING * 2)
-  const plotHeight = Math.max(1, height - EMBEDDING_PLOT_PADDING * 2)
-  const xRatio = (point.x - bounds.minX) / Math.max(1e-9, bounds.maxX - bounds.minX)
-  const yRatio = (point.y - bounds.minY) / Math.max(1e-9, bounds.maxY - bounds.minY)
-
-  return [
-    EMBEDDING_PLOT_PADDING + xRatio * plotWidth,
-    EMBEDDING_PLOT_PADDING + (1 - yRatio) * plotHeight,
-  ]
-}
-
-function CellInfoPanel({
-  cell,
-  state,
-  transcriptDistributionState,
-}: {
-  readonly cell: OverviewCellDatum | null
-  readonly state: CellDetailState
-  readonly transcriptDistributionState: CellTranscriptDistributionState
-}) {
-  const geneSearchInputId = useId()
-  const [geneSearch, setGeneSearch] = useState('')
-  const readyState =
-    cell !== null && state.status === 'ready' && state.cellId === cell.id ? state : null
-  const loadingState =
-    cell !== null && state.status === 'loading' && state.cellId === cell.id ? state : null
-  const errorState =
-    cell !== null && state.status === 'error' && state.cellId === cell.id ? state : null
-  const shape =
-    readyState === null || cell === null
-      ? cell === null
-        ? null
-        : summarizeCellShape(cell, null)
-      : readyState.shape
-  const expression = readyState?.expression ?? null
-  const filteredGenes = useMemo(
-    () =>
-      expression === null ? [] : filterCellExpressionGenes(expression.genes, geneSearch),
-    [expression, geneSearch],
-  )
-  const maxExpressionCount =
-    expression?.genes.reduce((max, gene) => Math.max(max, gene.count), 0) ?? 0
-
-  if (cell === null) {
-    return <p className="cell-info-empty">No cell selected</p>
-  }
-
-  return (
-    <div className="cell-detail-panel">
-      <dl className="cell-info-list">
-        <div>
-          <dt>ID</dt>
-          <dd>{cell.id}</dd>
-        </div>
-        <div>
-          <dt>Position</dt>
-          <dd>
-            {formatNumber(cell.position[0])}, {formatNumber(-(cell.position[1] ?? 0))}
-          </dd>
-        </div>
-        <div>
-          <dt>Transcripts</dt>
-          <dd>{formatOptionalNumber(cell.transcriptCount)}</dd>
-        </div>
-        <div>
-          <dt>Cell Area</dt>
-          <dd>{formatMetric(shape?.areaMicrometersSquared, 'um2')}</dd>
-        </div>
-        <div>
-          <dt>Diameter</dt>
-          <dd>{formatMetric(shape?.equivalentDiameterMicrometers, 'um')}</dd>
-        </div>
-        <div>
-          <dt>Eccentricity</dt>
-          <dd>{formatMetric(shape?.eccentricity)}</dd>
-        </div>
-        <div>
-          <dt>Major Axis</dt>
-          <dd>{formatMetric(shape?.majorAxisMicrometers, 'um')}</dd>
-        </div>
-        <div>
-          <dt>Minor Axis</dt>
-          <dd>{formatMetric(shape?.minorAxisMicrometers, 'um')}</dd>
-        </div>
-        <div>
-          <dt>Perimeter</dt>
-          <dd>{formatMetric(shape?.perimeterMicrometers, 'um')}</dd>
-        </div>
-        <div>
-          <dt>Circularity</dt>
-          <dd>{formatMetric(shape?.circularity)}</dd>
-        </div>
-      </dl>
-
-      <CellTranscriptZDistributionPanel
-        cell={cell}
-        state={transcriptDistributionState}
-      />
-
-      <div className="cell-expression-panel">
-        <div className="cell-expression-heading">
-          <span>Gene expression</span>
-          <small>
-            {expression === null
-              ? loadingState === null
-                ? 'Waiting'
-                : 'Loading'
-              : `${expression.totalCount.toLocaleString()} counts`}
-          </small>
-        </div>
-
-        {loadingState === null ? null : (
-          <p className="cell-expression-status" aria-live="polite">
-            Loading full cell expression
-          </p>
-        )}
-
-        {errorState === null ? null : (
-          <p className="cell-expression-status is-error" aria-live="polite">
-            {formatStructuredError(errorState.error)}
-          </p>
-        )}
-
-        {expression === null ? null : (
-          <>
-            <label className="cell-expression-filter" htmlFor={geneSearchInputId}>
-              Gene filter
-            </label>
-            <input
-              id={geneSearchInputId}
-              className="cell-expression-search"
-              type="search"
-              autoComplete="off"
-              spellCheck={false}
-              value={geneSearch}
-              placeholder="Search expressed genes"
-              onChange={(event) => {
-                setGeneSearch(event.currentTarget.value)
-              }}
-            />
-            {expression.genes.length === 0 ? (
-              <p className="cell-expression-status">No expressed genes found</p>
-            ) : filteredGenes.length === 0 ? (
-              <p className="cell-expression-status">No matching genes</p>
-            ) : (
-              <ol className="cell-expression-list" aria-label="Cell gene expression">
-                {filteredGenes.map((gene) => (
-                  <li
-                    key={gene.gene}
-                    style={
-                      {
-                        '--cell-gene-width': `${expressionBarWidth(
-                          gene.count,
-                          maxExpressionCount,
-                        )}%`,
-                      } as CSSProperties
-                    }
-                  >
-                    <div className="cell-expression-row">
-                      <span>{gene.gene}</span>
-                      <strong>{gene.count.toLocaleString()}</strong>
-                    </div>
-                    <div className="cell-expression-bar" aria-hidden="true" />
-                    <small>{formatPercent(gene.percentTotal)} total</small>
-                  </li>
-                ))}
-              </ol>
-            )}
-            {expression.hitGeneLimit ? (
-              <p className="cell-expression-status">
-                Showing first {CELL_GENE_EXPRESSION_LIMIT.toLocaleString()} genes
-              </p>
-            ) : null}
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function CellTranscriptZDistributionPanel({
-  cell,
-  state,
-}: {
-  readonly cell: OverviewCellDatum
-  readonly state: CellTranscriptDistributionState
-}) {
-  const matchingState = state.status !== 'idle' && state.cellId === cell.id ? state : null
-  const readyState =
-    matchingState !== null && matchingState.status === 'ready' ? matchingState : null
-  const loadingState =
-    matchingState !== null && matchingState.status === 'loading' ? matchingState : null
-  const errorState =
-    matchingState !== null && matchingState.status === 'error' ? matchingState : null
-  const distribution = readyState?.distribution ?? null
-  const chartLabel =
-    distribution === null
-      ? undefined
-      : cellTranscriptZDistributionAriaLabel(distribution)
-  const statusCopy =
-    distribution === null
-      ? loadingState === null
-        ? errorState === null
-          ? 'Waiting'
-          : 'Unavailable'
-        : 'Loading'
-      : `${distribution.zCount.toLocaleString()} z records`
-
-  return (
-    <div className="cell-z-panel" aria-label="Cell transcript z-axis distribution">
-      <div className="cell-expression-heading">
-        <span>Z-axis transcripts</span>
-        <small>{statusCopy}</small>
-      </div>
-
-      {loadingState === null ? null : (
-        <p className="cell-expression-status" aria-live="polite">
-          Loading transcript z locations…
-        </p>
-      )}
-
-      {errorState === null ? null : (
-        <p className="cell-expression-status is-error" aria-live="polite">
-          {formatStructuredError(errorState.error)}
-        </p>
-      )}
-
-      {distribution === null ? null : distribution.bins.length === 0 ? (
-        <p className="cell-expression-status">
-          No transcript z locations found at QV {formatNumber(distribution.minQv)} or
-          higher
-        </p>
-      ) : (
-        <>
-          <div
-            className="cell-z-bars"
-            role="img"
-            aria-label={chartLabel}
-            style={
-              {
-                '--cell-z-bin-count': String(distribution.bins.length),
-              } as CSSProperties
-            }
-          >
-            {distribution.bins.map((bin) => (
-              <span
-                className="cell-z-bar"
-                key={`${bin.minZ}:${bin.maxZ}`}
-                title={`${formatZRange(bin)}: ${bin.count.toLocaleString()} transcripts`}
-                style={
-                  {
-                    '--cell-z-height': `${cellTranscriptZBarHeight(
-                      bin,
-                      distribution.maxBinCount,
-                    )}%`,
-                  } as CSSProperties
-                }
-              />
-            ))}
-          </div>
-          <div className="cell-z-axis" aria-hidden="true">
-            <span>{formatZValue(distribution.minZ)}</span>
-            <span>Z location (um)</span>
-            <span>{formatZValue(distribution.maxZ)}</span>
-          </div>
-          <p className="cell-z-caption">
-            {distribution.transcriptCount.toLocaleString()} transcript rows · QV{' '}
-            {formatNumber(distribution.minQv)}+
-            {distribution.missingZCount === 0
-              ? ''
-              : ` · ${distribution.missingZCount.toLocaleString()} without z`}
-            {distribution.hitTranscriptLimit
-              ? ` · limited to ${CELL_TRANSCRIPT_DISTRIBUTION_LIMIT.toLocaleString()}`
-              : ''}
-          </p>
-        </>
-      )}
-    </div>
-  )
-}
-
-function cellTranscriptZBarHeight(bin: CellTranscriptZBin, maxBinCount: number): number {
-  if (maxBinCount <= 0 || bin.count <= 0) {
-    return 0
-  }
-
-  return Math.max(8, (bin.count / maxBinCount) * 100)
-}
-
-function cellTranscriptZDistributionAriaLabel(
-  distribution: CellTranscriptZDistribution,
-): string {
-  const zRange =
-    distribution.minZ === undefined || distribution.maxZ === undefined
-      ? 'unknown z range'
-      : `${formatZValue(distribution.minZ)} to ${formatZValue(distribution.maxZ)} um`
-
-  return `${distribution.zCount.toLocaleString()} transcript z locations across ${distribution.bins.length.toLocaleString()} bins from ${zRange}.`
-}
-
-function formatZRange(bin: CellTranscriptZBin): string {
-  if (bin.minZ === bin.maxZ) {
-    return `${formatZValue(bin.minZ)} um`
-  }
-
-  return `${formatZValue(bin.minZ)}-${formatZValue(bin.maxZ)} um`
-}
-
-function formatZValue(value: number | undefined): string {
-  if (value === undefined || !Number.isFinite(value)) {
-    return 'Unknown'
-  }
-
-  return value.toLocaleString(undefined, {
-    maximumFractionDigits: value < 1 ? 2 : 1,
-  })
-}
-
-function overviewCellToDatasetCell(cell: OverviewCellDatum): DatasetCell {
-  return {
-    id: asCellId(cell.id),
-    position: overviewCellToDataPoint(cell),
-    ...(cell.transcriptCount === undefined
-      ? {}
-      : { transcriptCount: cell.transcriptCount }),
-    ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
-  }
-}
-
-function overviewCellToDataPoint(cell: OverviewCellDatum): DataPoint {
-  const [x = 0, deckY = 0] = cell.position
-
-  return {
-    x: micrometers(x),
-    y: micrometers(-deckY),
-  }
-}
-
 async function loadSelectedCellBoundary(
   baseUrl: string,
   cell: OverviewCellDatum,
@@ -7151,819 +5512,10 @@ async function loadSelectedCellBoundary(
   }
 }
 
-function selectedCellBoundaryBbox(cell: OverviewCellDatum): BBox {
-  const center = overviewCellToDataPoint(cell)
-  const cellRadius =
-    cell.radiusMicrometers ??
-    optionalHalf(cellAreaToEquivalentDiameterMicrometers(cell.cellArea))
-  const radius = Math.max(CELL_DETAIL_BOUNDARY_RADIUS_MICROMETERS, cellRadius ?? 0)
-
-  return {
-    minX: micrometers(center.x - radius),
-    maxX: micrometers(center.x + radius),
-    minY: micrometers(center.y - radius),
-    maxY: micrometers(center.y + radius),
-  }
-}
-
-function cellExpressionSummaryFromStats(stats: RoiGeneStats): CellGeneExpressionSummary {
-  return {
-    genes: stats.genes.map((gene) => ({
-      gene: gene.gene,
-      count: gene.count,
-      percentTotal: gene.percentTotal,
-    })),
-    totalCount: stats.totalCount,
-    hitGeneLimit: stats.genes.length >= CELL_GENE_EXPRESSION_LIMIT,
-  }
-}
-
-function filterCellExpressionGenes(
-  genes: readonly CellGeneExpressionGene[],
-  search: string,
-): readonly CellGeneExpressionGene[] {
-  const normalizedSearch = search.trim().toLowerCase()
-
-  if (normalizedSearch.length === 0) {
-    return genes
-  }
-
-  return genes.filter((gene) => gene.gene.toLowerCase().includes(normalizedSearch))
-}
-
-function expressionBarWidth(count: number, maxCount: number): number {
-  if (maxCount <= 0) {
-    return 0
-  }
-
-  return Math.max(2, Math.min(100, (count / maxCount) * 100))
-}
-
-function summarizeCellShape(
-  cell: OverviewCellDatum,
-  boundaryElement: SpatialElement | null,
-): CellShapeMetrics {
-  const boundaryMetrics = polygonShapeMetrics(boundaryElement)
-  const area = cell.cellArea ?? boundaryMetrics?.boundaryAreaMicrometersSquared
-
-  return {
-    ...(area === undefined ? {} : { areaMicrometersSquared: area }),
-    ...optionalMetric(
-      'equivalentDiameterMicrometers',
-      cellAreaToEquivalentDiameterMicrometers(area),
-    ),
-    ...(boundaryMetrics ?? {}),
-  }
-}
-
-function polygonShapeMetrics(
-  boundaryElement: SpatialElement | null,
-): CellShapeMetrics | null {
-  if (
-    boundaryElement === null ||
-    boundaryElement.geometry.kind !== 'polygon' ||
-    boundaryElement.geometry.rings.length === 0
-  ) {
-    return null
-  }
-
-  const ring = boundaryElement.geometry.rings[0]
-
-  if (ring === undefined || ring.length < 3) {
-    return null
-  }
-
-  return polygonRingShapeMetrics(ring)
-}
-
-function polygonRingShapeMetrics(points: readonly DataPoint[]): CellShapeMetrics | null {
-  let twiceSignedArea = 0
-  let centroidXNumerator = 0
-  let centroidYNumerator = 0
-  let ixxNumerator = 0
-  let iyyNumerator = 0
-  let ixyNumerator = 0
-  let perimeter = 0
-
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index]
-    const next = points[(index + 1) % points.length]
-
-    if (current === undefined || next === undefined) {
-      continue
-    }
-
-    const cross = current.x * next.y - next.x * current.y
-    twiceSignedArea += cross
-    centroidXNumerator += (current.x + next.x) * cross
-    centroidYNumerator += (current.y + next.y) * cross
-    ixxNumerator += (current.y * current.y + current.y * next.y + next.y * next.y) * cross
-    iyyNumerator += (current.x * current.x + current.x * next.x + next.x * next.x) * cross
-    ixyNumerator +=
-      (2 * current.x * current.y +
-        current.x * next.y +
-        next.x * current.y +
-        2 * next.x * next.y) *
-      cross
-    perimeter += Math.hypot(next.x - current.x, next.y - current.y)
-  }
-
-  const signedArea = twiceSignedArea / 2
-  const boundaryArea = Math.abs(signedArea)
-
-  if (boundaryArea <= 0 || perimeter <= 0) {
-    return null
-  }
-
-  const centroidX = centroidXNumerator / (6 * signedArea)
-  const centroidY = centroidYNumerator / (6 * signedArea)
-  const ixx = ixxNumerator / 12
-  const iyy = iyyNumerator / 12
-  const ixy = ixyNumerator / 24
-  const varianceX = Math.max(0, iyy / signedArea - centroidX * centroidX)
-  const varianceY = Math.max(0, ixx / signedArea - centroidY * centroidY)
-  const covarianceXY = ixy / signedArea - centroidX * centroidY
-  const discriminant = Math.sqrt(
-    Math.max(
-      0,
-      (varianceX - varianceY) * (varianceX - varianceY) + 4 * covarianceXY * covarianceXY,
-    ),
-  )
-  const majorVariance = Math.max(0, (varianceX + varianceY + discriminant) / 2)
-  const minorVariance = Math.max(0, (varianceX + varianceY - discriminant) / 2)
-  const majorAxis = majorVariance > 0 ? 4 * Math.sqrt(majorVariance) : undefined
-  const minorAxis = minorVariance > 0 ? 4 * Math.sqrt(minorVariance) : undefined
-  const eccentricity =
-    majorVariance > 0
-      ? Math.sqrt(Math.max(0, 1 - minorVariance / majorVariance))
-      : undefined
-
-  return {
-    boundaryAreaMicrometersSquared: boundaryArea,
-    ...optionalMetric(
-      'boundaryEquivalentDiameterMicrometers',
-      cellAreaToEquivalentDiameterMicrometers(boundaryArea),
-    ),
-    perimeterMicrometers: perimeter,
-    ...optionalMetric('majorAxisMicrometers', majorAxis),
-    ...optionalMetric('minorAxisMicrometers', minorAxis),
-    ...optionalMetric('eccentricity', eccentricity),
-    circularity: (4 * Math.PI * boundaryArea) / (perimeter * perimeter),
-    boundaryPointCount: points.length,
-  }
-}
-
-function cellAreaToEquivalentDiameterMicrometers(
-  area: number | undefined,
-): number | undefined {
-  if (area === undefined || area <= 0 || !Number.isFinite(area)) {
-    return undefined
-  }
-
-  return Math.sqrt((4 * area) / Math.PI)
-}
-
-function optionalHalf(value: number | undefined): number | undefined {
-  return value === undefined ? undefined : value / 2
-}
-
-function optionalMetric<Key extends keyof CellShapeMetrics>(
-  key: Key,
-  value: CellShapeMetrics[Key] | undefined,
-): Pick<CellShapeMetrics, Key> | Record<string, never> {
-  return value === undefined || !Number.isFinite(Number(value))
-    ? {}
-    : ({ [key]: value } as Pick<CellShapeMetrics, Key>)
-}
-
 function throwAbortError(message: string): never {
   const error = new Error(message)
   error.name = 'AbortError'
   throw error
-}
-
-function formatMetric(value: number | undefined, unit?: string): string {
-  if (value === undefined || !Number.isFinite(value)) {
-    return 'Unavailable'
-  }
-
-  const formatted = value.toLocaleString(undefined, {
-    maximumFractionDigits: value < 1 ? 3 : 1,
-  })
-
-  return unit === undefined ? formatted : `${formatted} ${unit}`
-}
-
-function MorphologyChannelControls({
-  autoContrastChannelIds,
-  channels,
-  onAutoContrast,
-  settings,
-  onUpdate,
-}: {
-  readonly autoContrastChannelIds: readonly string[]
-  readonly channels: readonly MorphologyImageChannel[]
-  readonly onAutoContrast: (channel: MorphologyImageChannel) => void
-  readonly settings: readonly MorphologyChannelSetting[]
-  readonly onUpdate: (
-    id: string,
-    patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
-  ) => void
-}) {
-  if (channels.length === 0) {
-    return null
-  }
-
-  return (
-    <div className="channel-controls" aria-label="Image channels">
-      {channels.map((channel) => {
-        const setting = settings.find((candidate) => candidate.id === channel.info.id)
-        const color = setting?.color ?? channel.info.color
-        const contrastMin = setting?.contrastMin ?? channel.info.contrast.min
-        const contrastMax = setting?.contrastMax ?? channel.info.contrast.max
-        const isAutoContrastLoading = autoContrastChannelIds.includes(channel.info.id)
-        const histogram = setting?.histogram
-
-        return (
-          <div className="channel-control" key={channel.info.id}>
-            <label className="channel-toggle">
-              <input
-                type="checkbox"
-                checked={setting?.enabled ?? false}
-                onChange={(event) => {
-                  onUpdate(channel.info.id, { enabled: event.currentTarget.checked })
-                }}
-              />
-              <span>{channel.info.name}</span>
-            </label>
-            <input
-              className="channel-color"
-              type="color"
-              aria-label={`${channel.info.name} color`}
-              value={rgbToHex(color)}
-              onChange={(event) => {
-                onUpdate(channel.info.id, { color: hexToRgb(event.currentTarget.value) })
-              }}
-            />
-            <button
-              className="channel-auto-button"
-              type="button"
-              aria-label={`${channel.info.name} auto contrast`}
-              disabled={isAutoContrastLoading}
-              onClick={() => {
-                onAutoContrast(channel)
-              }}
-            >
-              {isAutoContrastLoading ? '...' : 'Auto'}
-            </button>
-            <div className="channel-contrast">
-              <input
-                type="number"
-                inputMode="numeric"
-                aria-label={`${channel.info.name} minimum`}
-                value={contrastMin}
-                onChange={(event) => {
-                  onUpdate(channel.info.id, {
-                    contrastMin: event.currentTarget.valueAsNumber,
-                  })
-                }}
-              />
-              <input
-                type="number"
-                inputMode="numeric"
-                aria-label={`${channel.info.name} maximum`}
-                value={contrastMax}
-                onChange={(event) => {
-                  onUpdate(channel.info.id, {
-                    contrastMax: event.currentTarget.valueAsNumber,
-                  })
-                }}
-              />
-            </div>
-            <ChannelHistogramView histogram={histogram} label={channel.info.name} />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function ChannelHistogramView({
-  histogram,
-  label,
-}: {
-  readonly histogram: ChannelHistogram | undefined
-  readonly label: string
-}) {
-  const bins = histogram?.bins ?? EMPTY_HISTOGRAM_BINS
-  const maxCount = histogram?.maxCount ?? 1
-
-  return (
-    <div
-      className="channel-histogram"
-      aria-label={`${label} histogram`}
-      title={
-        histogram === undefined
-          ? `${label} histogram`
-          : `${label} histogram, ${histogram.sampleCount.toLocaleString()} samples`
-      }
-    >
-      {bins.map((count, index) => (
-        <span
-          className="channel-histogram-bar"
-          key={index}
-          style={{ transform: `scaleY(${Math.max(0.04, count / maxCount)})` }}
-        />
-      ))}
-    </div>
-  )
-}
-
-function DownloadIcon() {
-  return (
-    <svg className="button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M12 3v11" />
-      <path d="m7 10 5 5 5-5" />
-      <path d="M5 19h14" />
-    </svg>
-  )
-}
-
-function CellFeatureMatrixCompatibilityNotice({
-  state,
-}: {
-  readonly state: CellFeatureMatrixCapabilityState
-}) {
-  if (state.status !== 'ready' || state.hasCellMajorCsc) {
-    return null
-  }
-
-  return (
-    <section
-      className="cell-feature-matrix-notice"
-      role="status"
-      aria-label="Cell-feature matrix warning"
-    >
-      <h2>Matrix Warning</h2>
-      <p>
-        <code>cell_feature_matrix.zarr.zip</code> is not in CSC format. Selected-gene
-        reads may use the older feature-major Zarr layout; ROI gene stats will fall back
-        to <code>cell_feature_matrix.h5</code>.
-      </p>
-    </section>
-  )
-}
-
-function TranscriptStatusPanel({
-  capabilityState,
-  layerState,
-  exactPointLimit,
-  visibleTranscriptEstimate,
-  hoveredTranscript,
-  pinnedTranscript,
-  onPinTranscript,
-  onClearPinnedTranscript,
-  onLoadExactViewport,
-}: {
-  readonly capabilityState: TranscriptCapabilityState
-  readonly layerState: TranscriptLayerState
-  readonly exactPointLimit: number
-  readonly visibleTranscriptEstimate: number
-  readonly hoveredTranscript: ViewerTranscriptHoverDetail | null
-  readonly pinnedTranscript: ViewerTranscriptHoverDetail | null
-  readonly onPinTranscript: (detail: ViewerTranscriptHoverDetail) => void
-  readonly onClearPinnedTranscript: () => void
-  readonly onLoadExactViewport: (requestKey: string) => void
-}) {
-  const capabilities =
-    capabilityState.status === 'ready' ? capabilityState.capabilities : null
-  const exactLoadRequestKey =
-    layerState.status === 'waiting' ? layerState.exactLoadRequestKey : undefined
-
-  return (
-    <div className="transcript-status-panel">
-      <dl className="transcript-summary-list" aria-label="Transcript overlay summary">
-        <div>
-          <dt>Source</dt>
-          <dd>
-            {capabilities === null
-              ? capabilityStateLabel(capabilityState)
-              : transcriptCapabilityLabel(capabilities)}
-          </dd>
-        </div>
-        <div>
-          <dt>Estimate</dt>
-          <dd>{visibleTranscriptEstimate.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Exact budget</dt>
-          <dd>{exactPointLimit.toLocaleString()}</dd>
-        </div>
-        {layerState.status === 'ready' ? (
-          <>
-            <div>
-              <dt>Rendered</dt>
-              <dd>
-                {layerState.points.length.toLocaleString()}
-                {layerState.hitPointLimit ? '+' : ''}
-              </dd>
-            </div>
-            <div>
-              <dt>Query</dt>
-              <dd>{layerState.durationMs.toLocaleString()} ms</dd>
-            </div>
-          </>
-        ) : null}
-        {layerState.status === 'aggregate' ? (
-          <>
-            <div>
-              <dt>Rendered</dt>
-              <dd>{transcriptAggregateRenderedLabel(layerState.bins)}</dd>
-            </div>
-            <div>
-              <dt>Layer</dt>
-              <dd>{layerState.source === 'cell-summary' ? 'Cell summary' : 'Native'}</dd>
-            </div>
-            {layerState.durationMs === undefined ? null : (
-              <div>
-                <dt>Query</dt>
-                <dd>{layerState.durationMs.toLocaleString()} ms</dd>
-              </div>
-            )}
-          </>
-        ) : null}
-      </dl>
-
-      {layerState.status === 'waiting' ||
-      layerState.status === 'aggregate' ||
-      layerState.status === 'unavailable' ? (
-        <p className="transcript-status-message">{layerState.message}</p>
-      ) : null}
-      {layerState.status === 'error' ? (
-        <p className="transcript-status-message">{layerState.error.message}</p>
-      ) : null}
-      {exactLoadRequestKey === undefined ? null : (
-        <button
-          type="button"
-          className="secondary-action"
-          onClick={() => {
-            onLoadExactViewport(exactLoadRequestKey)
-          }}
-        >
-          Load exact viewport
-        </button>
-      )}
-
-      {layerState.status === 'ready' && layerState.groups.length > 0 ? (
-        <div className="transcript-group-panel">
-          <div className="transcript-group-heading">
-            <span>Gene</span>
-            <span>FOV</span>
-            <span>Count</span>
-          </div>
-          <ol className="transcript-group-list" aria-label="Top transcript groups">
-            {layerState.groups.map((group) => (
-              <li key={`${group.featureName}:${group.fovName ?? 'none'}`}>
-                <span>{group.featureName}</span>
-                <span>{group.fovName ?? 'Unassigned'}</span>
-                <strong>{group.count.toLocaleString()}</strong>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-
-      {pinnedTranscript === null ? null : (
-        <TranscriptInspectionPanel
-          detail={pinnedTranscript}
-          title={transcriptInspectionTitle('Pinned', pinnedTranscript)}
-          actionLabel="Clear"
-          onAction={onClearPinnedTranscript}
-        />
-      )}
-      {hoveredTranscript === null ? null : (
-        <TranscriptInspectionPanel
-          detail={hoveredTranscript}
-          title={transcriptInspectionTitle('Hovered', hoveredTranscript)}
-          actionLabel="Pin"
-          onAction={() => {
-            onPinTranscript(hoveredTranscript)
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-function TranscriptInspectionPanel({
-  detail,
-  title,
-  actionLabel,
-  onAction,
-}: {
-  readonly detail: ViewerTranscriptHoverDetail
-  readonly title: string
-  readonly actionLabel: string
-  readonly onAction: () => void
-}) {
-  if (detail.transcript !== undefined) {
-    const transcript = detail.transcript
-    const cellLabel = transcriptCellDisplayLabel(transcript)
-
-    return (
-      <div className="transcript-hover-panel">
-        <div className="transcript-hover-heading">
-          <p>{title}</p>
-          <button type="button" onClick={onAction}>
-            {actionLabel}
-          </button>
-        </div>
-        <strong className="transcript-hover-title">{transcript.featureName}</strong>
-        <dl>
-          <div>
-            <dt>ID</dt>
-            <dd>{transcript.transcriptId ?? transcript.id}</dd>
-          </div>
-          <div>
-            <dt>FOV</dt>
-            <dd>{transcript.fovName ?? 'Unassigned'}</dd>
-          </div>
-          {cellLabel === null ? null : (
-            <div>
-              <dt>Cell</dt>
-              <dd>{cellLabel}</dd>
-            </div>
-          )}
-          <div>
-            <dt>QV</dt>
-            <dd>{formatOptionalNumber(transcript.qv)}</dd>
-          </div>
-          <div>
-            <dt>X/Y</dt>
-            <dd>
-              {formatOptionalNumber(transcript.position[0])},{' '}
-              {formatOptionalNumber(Math.abs(transcript.position[1] ?? 0))}
-            </dd>
-          </div>
-          <div>
-            <dt>Z</dt>
-            <dd>{formatOptionalNumber(transcript.zLocation)}</dd>
-          </div>
-          <div>
-            <dt>Nucleus</dt>
-            <dd>{formatBooleanLabel(transcript.overlapsNucleus)}</dd>
-          </div>
-          <div>
-            <dt>Type</dt>
-            <dd>{transcriptGeneStatusLabel(transcript.isGene)}</dd>
-          </div>
-        </dl>
-      </div>
-    )
-  }
-
-  if (detail.aggregate === undefined) {
-    return null
-  }
-
-  const aggregate = detail.aggregate
-
-  return (
-    <div className="transcript-hover-panel">
-      <div className="transcript-hover-heading">
-        <p>{title}</p>
-        <button type="button" onClick={onAction}>
-          {actionLabel}
-        </button>
-      </div>
-      <strong className="transcript-hover-title">
-        {aggregate.featureName === undefined
-          ? 'Transcript density bin'
-          : aggregate.featureName}
-      </strong>
-      <dl>
-        <div>
-          <dt>Count</dt>
-          <dd>{aggregate.count.toLocaleString()}</dd>
-        </div>
-        {aggregate.binTotalCount === undefined ? null : (
-          <div>
-            <dt>Total</dt>
-            <dd>{aggregate.binTotalCount.toLocaleString()}</dd>
-          </div>
-        )}
-        <div>
-          <dt>Level</dt>
-          <dd>{aggregate.level.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Source</dt>
-          <dd>{aggregate.source === 'native-zarr' ? 'Native' : 'Cell summary'}</dd>
-        </div>
-        <div>
-          <dt>Bin size</dt>
-          <dd>{formatOptionalNumber(aggregate.binSizeMicrometers)} µm</dd>
-        </div>
-        {aggregate.selectedGeneCount === undefined ? null : (
-          <div>
-            <dt>Selected</dt>
-            <dd>{aggregate.selectedGeneCount.toLocaleString()}</dd>
-          </div>
-        )}
-        {aggregate.omittedFeatureCount === undefined ? null : (
-          <div>
-            <dt>Hidden</dt>
-            <dd>{aggregate.omittedFeatureCount.toLocaleString()} genes</dd>
-          </div>
-        )}
-        <div>
-          <dt>Bin</dt>
-          <dd>
-            {aggregate.binX.toLocaleString()}, {aggregate.binY.toLocaleString()}
-          </dd>
-        </div>
-      </dl>
-      {aggregate.topFeatures === undefined || aggregate.topFeatures.length === 0 ? null : (
-        <ol className="transcript-hover-feature-list">
-          {aggregate.topFeatures.map((feature) => (
-            <li key={feature.featureName}>
-              <span>{feature.featureName}</span>
-              <strong>{feature.count.toLocaleString()}</strong>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
-  )
-}
-
-function transcriptInspectionTitle(
-  prefix: 'Hovered' | 'Pinned',
-  detail: ViewerTranscriptHoverDetail,
-): string {
-  if (detail.transcript !== undefined) {
-    return `${prefix} transcript`
-  }
-
-  if (detail.aggregate?.featureName === undefined) {
-    return `${prefix} density bin`
-  }
-
-  return `${prefix} feature bin`
-}
-
-function capabilityStateLabel(state: TranscriptCapabilityState): string {
-  if (state.status === 'loading') {
-    return 'Checking'
-  }
-
-  if (state.status === 'error') {
-    return 'Unavailable'
-  }
-
-  return 'Not checked'
-}
-
-function ErrorSummary({ errors }: { readonly errors: readonly StructuredLoadError[] }) {
-  if (errors.length === 0) {
-    return null
-  }
-
-  return (
-    <section className="error-summary" role="alert" aria-label="Load issues">
-      <h2>Issues</h2>
-      <ul>
-        {errors.map((error) => (
-          <li key={`${error.source}:${error.code}:${error.message}`}>
-            <div className="error-summary-heading">
-              <strong>{error.source}</strong>
-              <span>{error.title}</span>
-            </div>
-            <p>{error.message}</p>
-            <p>{error.action}</p>
-            {error.detail === undefined ? null : <p>{error.detail}</p>}
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
-
-function DatasetDiagnosticsPanel({ state }: { readonly state: DatasetDiagnosticsState }) {
-  if (state.status === 'idle') {
-    return null
-  }
-
-  if (state.status === 'loading') {
-    return (
-      <section className="dataset-diagnostics-panel" aria-label="Dataset diagnostics">
-        <h2>Diagnostics</h2>
-        <p role="status">Running checks</p>
-      </section>
-    )
-  }
-
-  if (state.status === 'error') {
-    return (
-      <section className="dataset-diagnostics-panel" aria-label="Dataset diagnostics">
-        <h2>Diagnostics</h2>
-        <p>{state.error.title}</p>
-      </section>
-    )
-  }
-
-  return (
-    <section className="dataset-diagnostics-panel" aria-label="Dataset diagnostics">
-      <div className="dataset-diagnostics-heading">
-        <h2>Diagnostics</h2>
-        <span>{summarizeDatasetDiagnostics(state.report)}</span>
-      </div>
-      <ol>
-        {state.report.checks.map((check) => (
-          <li key={check.id} className={`diagnostic-check-${check.status}`}>
-            <span>{check.label}</span>
-            <strong>{check.status}</strong>
-          </li>
-        ))}
-      </ol>
-    </section>
-  )
-}
-
-function LoadingIndicator({ tasks }: { readonly tasks: readonly LoadingTask[] }) {
-  if (tasks.length === 0) {
-    return null
-  }
-
-  const primaryTask = tasks[0]
-  const secondaryTasks = tasks.slice(1)
-
-  if (primaryTask === undefined) {
-    return null
-  }
-
-  const visibleSecondaryTasks = secondaryTasks.slice(0, 3)
-  const hiddenTaskCount = secondaryTasks.length - visibleSecondaryTasks.length
-
-  return (
-    <section
-      className="loading-indicator"
-      role="status"
-      aria-label="Active loading tasks"
-      aria-live="polite"
-      aria-atomic="true"
-    >
-      <div className="loading-indicator-primary">
-        <span className="loading-spinner" aria-hidden="true" />
-        <span>{primaryTask.label}</span>
-        {primaryTask.detail === undefined ? null : <small>{primaryTask.detail}</small>}
-      </div>
-      {visibleSecondaryTasks.length === 0 ? null : (
-        <ol aria-label="Additional loading tasks">
-          {visibleSecondaryTasks.map((task) => (
-            <li key={task.id}>
-              <span>{task.label}</span>
-              {task.detail === undefined ? null : <small>{task.detail}</small>}
-            </li>
-          ))}
-          {hiddenTaskCount > 0 ? <li>+{hiddenTaskCount} more</li> : null}
-        </ol>
-      )}
-    </section>
-  )
-}
-
-function ActivityLog({
-  entries,
-  onClear,
-}: {
-  readonly entries: readonly DebugLogEntry[]
-  readonly onClear: () => void
-}) {
-  return (
-    <section className="activity-log" aria-label="Activity log">
-      <div className="activity-log-heading">
-        <h2>Log</h2>
-        <button type="button" disabled={entries.length === 0} onClick={onClear}>
-          Clear
-        </button>
-      </div>
-      {entries.length === 0 ? (
-        <p>Idle</p>
-      ) : (
-        <ol>
-          {entries.map((entry) => (
-            <li key={entry.id}>
-              <time dateTime={new Date(entry.timestamp).toISOString()}>
-                {formatDebugTimestamp(entry.timestamp)}
-              </time>
-              <span title={entry.message}>{entry.message}</span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
-  )
 }
 
 function summarizeRoiCells(cells: readonly DatasetCell[]): RoiSummary {
@@ -7993,174 +5545,6 @@ function summarizeRoiCells(cells: readonly DatasetCell[]): RoiSummary {
     meanTranscriptCount: transcriptTotal / cells.length,
     meanCellArea: cellAreaCount === 0 ? undefined : cellAreaTotal / cellAreaCount,
   }
-}
-
-function MagicLensPanel({ state }: { readonly state: MagicLensState }) {
-  if (state.status === 'idle') {
-    return null
-  }
-
-  if (state.status === 'loading') {
-    return (
-      <p className="magic-lens-status" aria-live="polite">
-        Scanning {magicLensScopeLabel(state.scope).toLowerCase()}
-      </p>
-    )
-  }
-
-  if (state.status === 'error') {
-    return (
-      <p className="magic-lens-status" aria-live="polite">
-        {state.error.title}
-      </p>
-    )
-  }
-
-  const maxCount = Math.max(
-    ...state.summary.topGenes.map((geneSummary) => geneSummary.count),
-    1,
-  )
-
-  return (
-    <section className="magic-lens-results" aria-label="Magic lens results">
-      <dl className="magic-lens-summary-list">
-        <div>
-          <dt>Scope</dt>
-          <dd>{magicLensScopeLabel(state.scope)}</dd>
-        </div>
-        <div>
-          <dt>Transcripts</dt>
-          <dd>
-            {state.summary.transcriptCount.toLocaleString()}
-            {state.summary.hitLimit ? '+' : ''}
-          </dd>
-        </div>
-        <div>
-          <dt>Cells</dt>
-          <dd>{state.summary.cellCount.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Genes</dt>
-          <dd>{state.summary.geneCount.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Selected</dt>
-          <dd>{state.summary.selectedGeneTranscriptCount.toLocaleString()}</dd>
-        </div>
-      </dl>
-
-      {state.summary.topGenes.length === 0 ? (
-        <p className="magic-lens-status">No detected gene transcripts</p>
-      ) : (
-        <section
-          className="magic-lens-gene-panel"
-          aria-label="Magic lens gene distribution"
-        >
-          <div className="magic-lens-gene-heading">
-            <span>Top lens genes</span>
-            <small>{state.summary.topGenes.length.toLocaleString()}</small>
-          </div>
-          <ol className="magic-lens-gene-list">
-            {state.summary.topGenes.map((geneSummary) => (
-              <li
-                key={geneSummary.gene}
-                className={geneSummary.selected ? 'is-selected' : undefined}
-                style={
-                  {
-                    '--magic-lens-gene-width': `${Math.max(
-                      4,
-                      (geneSummary.count / maxCount) * 100,
-                    )}%`,
-                  } as CSSProperties
-                }
-              >
-                <div className="magic-lens-gene-row">
-                  <span>{geneSummary.gene}</span>
-                  <strong>{geneSummary.count.toLocaleString()}</strong>
-                </div>
-                <div className="magic-lens-gene-bar" aria-hidden="true" />
-                <small>{formatPercent(geneSummary.percentTotal)} total</small>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-    </section>
-  )
-}
-
-function RoiGeneStatsPanel({
-  copy,
-  state,
-}: {
-  readonly copy: string
-  readonly state: RoiGeneStatsState
-}) {
-  if (state.status === 'idle') {
-    return null
-  }
-
-  if (state.status === 'loading') {
-    return (
-      <p className="roi-gene-status" aria-live="polite">
-        {copy}
-      </p>
-    )
-  }
-
-  if (state.status === 'error') {
-    return (
-      <p className="roi-gene-status" aria-live="polite">
-        {copy}
-      </p>
-    )
-  }
-
-  if (state.stats.genes.length === 0) {
-    return (
-      <p className="roi-gene-status" aria-live="polite">
-        No detected ROI gene expression
-      </p>
-    )
-  }
-
-  const maxCount = Math.max(...state.stats.genes.map((gene) => gene.count), 1)
-
-  return (
-    <section className="roi-gene-panel" aria-label="ROI gene distribution">
-      <div className="roi-gene-heading">
-        <span>Top ROI genes</span>
-        <small>
-          {state.stats.hitCellLimit
-            ? `${state.stats.sampledCellCount.toLocaleString()} sampled`
-            : `${state.stats.sampledCellCount.toLocaleString()} cells`}
-        </small>
-      </div>
-      <ol className="roi-gene-list">
-        {state.stats.genes.map((gene) => (
-          <li
-            key={gene.gene}
-            style={
-              {
-                '--roi-gene-width': `${Math.max(4, (gene.count / maxCount) * 100)}%`,
-              } as CSSProperties
-            }
-          >
-            <div className="roi-gene-row">
-              <span>{gene.gene}</span>
-              <strong>{gene.count.toLocaleString()}</strong>
-            </div>
-            <div className="roi-gene-bar" aria-hidden="true" />
-            <small>
-              {formatPercent(gene.percentTotal)} total ·{' '}
-              {formatPercent(gene.percentCells)} cells · {formatNumber(gene.meanPerCell)}
-              /cell
-            </small>
-          </li>
-        ))}
-      </ol>
-    </section>
-  )
 }
 
 function emptyRoiGeneStats(): RoiGeneStats {
@@ -8257,14 +5641,6 @@ function summarizeMagicLensCells(
     topGenes,
     hitLimit: options.hitLimit ?? false,
   }
-}
-
-function magicLensScopeLabel(scope: MagicLensScope): string {
-  if (scope === 'cursor') {
-    return 'Cursor'
-  }
-
-  return scope === 'roi' ? 'ROI' : 'Viewport'
 }
 
 function magicLensStatusCopy(
@@ -8428,216 +5804,6 @@ function downloadTextFile(
   URL.revokeObjectURL(url)
 }
 
-interface DiagnosticsDumpOptions {
-  readonly activeControlHudTab: ControlHudTab
-  readonly activeErrors: readonly StructuredLoadError[]
-  readonly boundaryCellLimit: number
-  readonly coordinateUnit: ViewerCoordinateUnit
-  readonly datasetUrl: string
-  readonly debugLog: readonly DebugLogEntry[]
-  readonly diagnosticsState: DatasetDiagnosticsState
-  readonly geneExpressionColorScale: GeneExpressionColorScale
-  readonly geneExpressionDetailMode: GeneExpressionDetailMode
-  readonly geneExpressionScoreMode: GeneExpressionScoreMode
-  readonly hoveredTranscript: ViewerTranscriptHoverDetail | null
-  readonly loadState: DatasetLoadState
-  readonly manualTranscriptExactRequestKey: string | null
-  readonly observationColorMode: ObservationColorMode
-  readonly performanceBudget: PerformanceBudget
-  readonly pinnedTranscript: ViewerTranscriptHoverDetail | null
-  readonly selectedGenes: readonly string[]
-  readonly shareableViewState: ShareableViewState | undefined
-  readonly shouldLoadMorphology: boolean
-  readonly telemetryEvents: readonly TelemetryEvent[]
-  readonly showTranscriptOverlay: boolean
-  readonly transcriptCapabilityState: TranscriptCapabilityState
-  readonly transcriptDetailMode: TranscriptDetailMode
-  readonly transcriptDensityColorScale: TranscriptDensityColorScale
-  readonly transcriptExactPointLimit: number
-  readonly transcriptFeatureFilterMode: TranscriptFeatureFilterMode
-  readonly transcriptGeneOnly: boolean
-  readonly transcriptLayerState: TranscriptLayerState
-  readonly transcriptMinQv: number
-  readonly transcriptOpacity: number
-  readonly transcriptPointColorMode: TranscriptPointColorMode
-  readonly transcriptPointSize: number
-}
-
-function createDiagnosticsDump(options: DiagnosticsDumpOptions): Record<string, unknown> {
-  return {
-    generatedAt: new Date().toISOString(),
-    datasetUrl: options.datasetUrl,
-    location: readCurrentLocation(),
-    performanceBudget: options.performanceBudget,
-    controls: {
-      activeControlHudTab: options.activeControlHudTab,
-      boundaryCellLimit: options.boundaryCellLimit,
-      coordinateUnit: options.coordinateUnit,
-      geneExpressionColorScale: options.geneExpressionColorScale,
-      geneExpressionDetailMode: options.geneExpressionDetailMode,
-      geneExpressionScoreMode: options.geneExpressionScoreMode,
-      observationColorMode: options.observationColorMode,
-      selectedGenes: options.selectedGenes,
-      shareableViewState: options.shareableViewState,
-      shouldLoadMorphology: options.shouldLoadMorphology,
-      showTranscriptOverlay: options.showTranscriptOverlay,
-      transcriptDetailMode: options.transcriptDetailMode,
-      transcriptDensityColorScale: options.transcriptDensityColorScale,
-      transcriptPointColorMode: options.transcriptPointColorMode,
-      transcriptExactPointLimit: options.transcriptExactPointLimit,
-      transcriptFeatureFilterMode: options.transcriptFeatureFilterMode,
-      transcriptGeneOnly: options.transcriptGeneOnly,
-      transcriptMinQv: options.transcriptMinQv,
-      transcriptOpacity: options.transcriptOpacity,
-      transcriptPointSize: options.transcriptPointSize,
-    },
-    states: {
-      dataset: summarizeDatasetLoadState(options.loadState),
-      diagnostics: summarizeDiagnosticsState(options.diagnosticsState),
-      transcripts: {
-        capability: options.transcriptCapabilityState,
-        layer: options.transcriptLayerState,
-        exactBudget: summarizeTranscriptExactBudgetDecision(
-          options.transcriptLayerState,
-          options.transcriptExactPointLimit,
-          options.manualTranscriptExactRequestKey,
-        ),
-        hovered: summarizeTranscriptInspection(options.hoveredTranscript),
-        pinned: summarizeTranscriptInspection(options.pinnedTranscript),
-      },
-    },
-    activeErrors: options.activeErrors,
-    activityLog: options.debugLog,
-    telemetryEvents: options.telemetryEvents,
-  }
-}
-
-function summarizeTranscriptInspection(
-  detail: ViewerTranscriptHoverDetail | null,
-): Record<string, unknown> | null {
-  if (detail === null) {
-    return null
-  }
-
-  if (detail.transcript !== undefined) {
-    return {
-      kind: 'transcript',
-      id: detail.transcript.id,
-      transcriptId: detail.transcript.transcriptId,
-      featureName: detail.transcript.featureName,
-      fovName: detail.transcript.fovName,
-      cellId: detail.transcript.cellId,
-      qv: detail.transcript.qv,
-      zLocation: detail.transcript.zLocation,
-      screen: detail.screen,
-    }
-  }
-
-  if (detail.aggregate !== undefined) {
-    return {
-      kind: detail.aggregate.featureName === undefined ? 'density-bin' : 'feature-bin',
-      id: detail.aggregate.id,
-      featureName: detail.aggregate.featureName,
-      count: detail.aggregate.count,
-      binTotalCount: detail.aggregate.binTotalCount,
-      source: detail.aggregate.source,
-      level: detail.aggregate.level,
-      binX: detail.aggregate.binX,
-      binY: detail.aggregate.binY,
-      screen: detail.screen,
-    }
-  }
-
-  return null
-}
-
-function summarizeTranscriptExactBudgetDecision(
-  layerState: TranscriptLayerState,
-  exactPointLimit: number,
-  manualRequestKey: string | null,
-): Record<string, unknown> {
-  const visibleTranscriptEstimate =
-    'visibleTranscriptEstimate' in layerState
-      ? layerState.visibleTranscriptEstimate
-      : undefined
-
-  return {
-    status: layerState.status,
-    exactPointLimit,
-    manualRequestKey,
-    visibleTranscriptEstimate,
-    manualLoadThreshold: exactPointLimit * TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
-    ...(layerState.status === 'waiting'
-      ? {
-          exactLoadEstimate: layerState.exactLoadEstimate,
-          hasExactLoadAction: layerState.exactLoadRequestKey !== undefined,
-          message: layerState.message,
-        }
-      : {}),
-    ...(layerState.status === 'ready'
-      ? {
-          renderedPointCount: layerState.points.length,
-          hitPointLimit: layerState.hitPointLimit,
-          durationMs: layerState.durationMs,
-        }
-      : {}),
-    ...(layerState.status === 'aggregate'
-      ? {
-          renderedBinCount: layerState.bins.length,
-          source: layerState.source,
-          durationMs: layerState.durationMs,
-        }
-      : {}),
-  }
-}
-
-function summarizeDatasetLoadState(state: DatasetLoadState): Record<string, unknown> {
-  if (state.status === 'ready') {
-    return {
-      status: state.status,
-      url: state.url,
-      cellCount: state.cellCount,
-    }
-  }
-
-  if (state.status === 'loading' || state.status === 'error') {
-    return {
-      status: state.status,
-      url: state.url,
-      ...(state.status === 'error' ? { error: state.error } : {}),
-    }
-  }
-
-  return { status: state.status }
-}
-
-function summarizeDiagnosticsState(
-  state: DatasetDiagnosticsState,
-): Record<string, unknown> {
-  if (state.status === 'ready') {
-    return {
-      status: state.status,
-      url: state.url,
-      summary: summarizeDatasetDiagnostics(state.report),
-      report: state.report,
-    }
-  }
-
-  if (state.status === 'loading' || state.status === 'error') {
-    return {
-      status: state.status,
-      url: state.url,
-      ...(state.status === 'error' ? { error: state.error } : {}),
-    }
-  }
-
-  return { status: state.status }
-}
-
-function readCurrentLocation(): string | undefined {
-  return typeof window === 'undefined' ? undefined : window.location.href
-}
-
 function readTimestamp(): number {
   return Date.now()
 }
@@ -8658,44 +5824,6 @@ function defaultRoiName(index: number): string {
   return `ROI ${index}`
 }
 
-function formatOptionalNumber(value: number | undefined): string {
-  return value === undefined ? 'None' : formatNumber(value)
-}
-
-function transcriptCellDisplayLabel(transcript: TranscriptPointDatum): string | null {
-  if (transcript.cellId !== null) {
-    return transcript.cellId
-  }
-
-  return transcript.cellAssignment === 'unassigned' ? 'Unassigned' : null
-}
-
-function formatBooleanLabel(value: boolean | undefined): string {
-  if (value === undefined) {
-    return 'Unknown'
-  }
-
-  return value ? 'Yes' : 'No'
-}
-
-function transcriptGeneStatusLabel(value: boolean | undefined): string {
-  if (value === undefined) {
-    return 'Unknown'
-  }
-
-  return value ? 'Gene' : 'Control'
-}
-
-function formatNumber(value: number | undefined): string {
-  return value === undefined
-    ? '0'
-    : value.toLocaleString(undefined, { maximumFractionDigits: 1 })
-}
-
-function formatPercent(value: number): string {
-  return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
-}
-
 function formatGeneScaleValue(value: number): string {
   if (!Number.isFinite(value) || value <= 0) {
     return '0'
@@ -8703,15 +5831,6 @@ function formatGeneScaleValue(value: number): string {
 
   return value.toLocaleString(undefined, {
     maximumFractionDigits: value < 10 ? 2 : 1,
-  })
-}
-
-function formatDebugTimestamp(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
   })
 }
 
@@ -8735,24 +5854,6 @@ function shortIdentifier(value: string): string {
   return `${normalized.slice(0, 10)}...${normalized.slice(-8)}`
 }
 
-function morphologyPatchLabel(
-  patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
-): string {
-  if ('enabled' in patch) {
-    return patch.enabled ? 'Channel enabled' : 'Channel disabled'
-  }
-
-  if ('color' in patch) {
-    return 'Channel color'
-  }
-
-  if ('contrastMin' in patch || 'contrastMax' in patch) {
-    return 'Channel contrast'
-  }
-
-  return 'Channel updated'
-}
-
 function abortActiveRequest(ref: { current: AbortController | null }): void {
   ref.current?.abort()
   ref.current = null
@@ -8764,50 +5865,6 @@ function clearTimeoutRef(ref: { current: number | null }): void {
   }
 
   ref.current = null
-}
-
-function createMorphologyChannelSettings(
-  image: MorphologyImage,
-): readonly MorphologyChannelSetting[] {
-  return image.channelLoaders.map((channel, index) => ({
-    id: channel.info.id,
-    enabled: index === 0,
-    color: channel.info.color,
-    contrastMin: channel.info.contrast.min,
-    contrastMax: channel.info.contrast.max,
-  }))
-}
-
-function normalizeChannelContrast(options: {
-  readonly min: number
-  readonly max: number
-}): { readonly lo: number; readonly hi: number } {
-  const lo = Number.isFinite(options.min) ? options.min : 0
-  const hi = Number.isFinite(options.max) ? options.max : lo + 1
-
-  return hi > lo ? { lo, hi } : { lo, hi: lo + 1 }
-}
-
-function rgbToHex(color: readonly [number, number, number]): string {
-  return `#${color.map((channel) => clampColorChannel(channel).toString(16).padStart(2, '0')).join('')}`
-}
-
-function hexToRgb(value: string): readonly [number, number, number] {
-  const normalized = value.trim().replace(/^#/, '')
-
-  if (!/^[\da-f]{6}$/i.test(normalized)) {
-    return [255, 255, 255]
-  }
-
-  return [
-    Number.parseInt(normalized.slice(0, 2), 16),
-    Number.parseInt(normalized.slice(2, 4), 16),
-    Number.parseInt(normalized.slice(4, 6), 16),
-  ]
-}
-
-function clampColorChannel(value: number): number {
-  return Math.max(0, Math.min(255, Math.round(value)))
 }
 
 function isAbortError(error: unknown): boolean {
