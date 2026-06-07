@@ -369,6 +369,114 @@ describe('XeniumDataset', () => {
     ])
   })
 
+  it('loads selected-cell transcript z distribution with aggregate SQL', async () => {
+    const cellId = intToCellId(1, 1)
+    const conn = new FakeConnection([
+      [
+        {
+          transcript_count: 4,
+          z_count: 3,
+          missing_z_count: 1,
+          min_z: 0,
+          max_z: 2,
+          bin_index: 0,
+          bin_count: 2,
+        },
+        {
+          transcript_count: 4,
+          z_count: 3,
+          missing_z_count: 1,
+          min_z: 0,
+          max_z: 2,
+          bin_index: 1,
+          bin_count: 1,
+        },
+      ],
+    ])
+    const dataset = makeDataset(conn)
+
+    await expect(
+      dataset.cellTranscriptZDistributionForCellId(cellId, {
+        limit: 500,
+        minQv: 30,
+        binCount: 2,
+      }),
+    ).resolves.toEqual({
+      bins: [
+        { minZ: 0, maxZ: 1, count: 2, percent: 66.66666666666666 },
+        { minZ: 1, maxZ: 2, count: 1, percent: 33.33333333333333 },
+      ],
+      transcriptCount: 4,
+      zCount: 3,
+      missingZCount: 1,
+      minZ: 0,
+      maxZ: 2,
+      maxBinCount: 2,
+      hitTranscriptLimit: false,
+      minQv: 30,
+    })
+    expect(conn.preparedSql[0]).toContain('SELECT z_location')
+    expect(conn.preparedSql[0]).toContain('COUNT(z_location) AS z_count')
+    expect(conn.preparedSql[0]).toContain('GROUP BY bin_index')
+    expect(conn.preparedSql[0]).not.toContain('feature_name')
+    expect(conn.preparedSql[0]).not.toContain('x_location')
+    expect(conn.preparedSql[0]).not.toContain('ORDER BY z_location')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/transcripts.parquet',
+      cellId,
+      30,
+      500,
+      2,
+      2,
+    ])
+  })
+
+  it('adds spatial predicates to selected-cell transcript z distribution queries', async () => {
+    const cellId = intToCellId(1, 1)
+    const conn = new FakeConnection([
+      [
+        {
+          transcript_count: 2,
+          z_count: 2,
+          missing_z_count: 0,
+          min_z: 1,
+          max_z: 2,
+          bin_index: 0,
+          bin_count: 2,
+        },
+      ],
+    ])
+    const dataset = makeDataset(conn)
+
+    await dataset.cellTranscriptZDistributionForCellId(cellId, {
+      limit: 500,
+      minQv: 30,
+      binCount: 2,
+      bbox: {
+        minX: micrometers(10),
+        maxX: micrometers(20),
+        minY: micrometers(30),
+        maxY: micrometers(40),
+      },
+    })
+
+    expect(conn.preparedSql[0]).toContain('cell_id = ?')
+    expect(conn.preparedSql[0]).toContain('x_location BETWEEN ? AND ?')
+    expect(conn.preparedSql[0]).toContain('y_location BETWEEN ? AND ?')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/transcripts.parquet',
+      cellId,
+      30,
+      micrometers(10),
+      micrometers(20),
+      micrometers(30),
+      micrometers(40),
+      500,
+      2,
+      2,
+    ])
+  })
+
   it('loads raw transcript rows within a lasso ROI for exact export', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([

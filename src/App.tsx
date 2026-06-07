@@ -279,7 +279,7 @@ import {
 } from './rendering/annotationPalette'
 import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
-import type { BBox } from './data/coords'
+import type { BBox, DataPoint } from './data/coords'
 import type { ChannelAutoContrast } from './data/morphologyContrast'
 import type {
   DatasetCell,
@@ -381,6 +381,8 @@ export type CellTranscriptDistributionLoader = (
     readonly limit?: number
     readonly minQv?: number
     readonly binCount?: number
+    readonly bbox?: BBox
+    readonly boundaryPolygon?: readonly DataPoint[]
   },
 ) => Promise<CellTranscriptZDistribution>
 export type TranscriptCapabilitiesLoader = (
@@ -2333,6 +2335,7 @@ export function App({
         cellId: selectedCell.id,
         expression: cellExpressionSummaryFromStats(stats),
         shape: summarizeCellShape(selectedCell, boundaryElement),
+        boundary: boundaryElement,
       })
       appendDebugEvent(
         `Cell details ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
@@ -2382,6 +2385,67 @@ export function App({
       return
     }
 
+    if (cellDetailState.status === 'error' && cellDetailState.cellId === selectedCell.id) {
+      abortActiveRequest(cellTranscriptDistributionAbortRef)
+      cellTranscriptDistributionRequestId.current += 1
+      const requestId = cellTranscriptDistributionRequestId.current
+      const error = new Error(
+        'Cell details failed before the selected-cell transcript z distribution could load.',
+      )
+      queueMicrotask(() => {
+        if (cellTranscriptDistributionRequestId.current === requestId) {
+          setCellTranscriptDistributionState({
+            status: 'error',
+            url: loadState.url,
+            cellId: selectedCell.id,
+            error: createStructuredLoadError('Cell transcripts', error),
+          })
+        }
+      })
+      return
+    }
+
+    if (cellDetailState.status !== 'ready' || cellDetailState.cellId !== selectedCell.id) {
+      abortActiveRequest(cellTranscriptDistributionAbortRef)
+      cellTranscriptDistributionRequestId.current += 1
+      const requestId = cellTranscriptDistributionRequestId.current
+      queueMicrotask(() => {
+        if (cellTranscriptDistributionRequestId.current === requestId) {
+          setCellTranscriptDistributionState({
+            status: 'loading',
+            url: loadState.url,
+            cellId: selectedCell.id,
+          })
+        }
+      })
+      return
+    }
+
+    const boundaryPolygon =
+      cellDetailState.boundary?.geometry.kind === 'polygon'
+        ? (cellDetailState.boundary.geometry.rings[0] ?? null)
+        : null
+
+    if (boundaryPolygon === null || boundaryPolygon.length < 3) {
+      abortActiveRequest(cellTranscriptDistributionAbortRef)
+      cellTranscriptDistributionRequestId.current += 1
+      const requestId = cellTranscriptDistributionRequestId.current
+      const error = new Error(
+        'Selected cell boundary is unavailable, so cell-only transcript z locations cannot be computed.',
+      )
+      queueMicrotask(() => {
+        if (cellTranscriptDistributionRequestId.current === requestId) {
+          setCellTranscriptDistributionState({
+            status: 'error',
+            url: loadState.url,
+            cellId: selectedCell.id,
+            error: createStructuredLoadError('Cell transcripts', error),
+          })
+        }
+      })
+      return
+    }
+
     const requestId = cellTranscriptDistributionRequestId.current + 1
     const distributionStartedAt = readTimestamp()
     const abortController = new AbortController()
@@ -2413,6 +2477,7 @@ export function App({
       limit: CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
       minQv: DEFAULT_CELL_TRANSCRIPT_MIN_QV,
       binCount: CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
+      boundaryPolygon,
     })
       .then((distribution) => {
         if (
@@ -2467,7 +2532,13 @@ export function App({
         abortActiveRequest(cellTranscriptDistributionAbortRef)
       }
     }
-  }, [appendDebugEvent, loadCellTranscriptDistribution, loadState, selectedCell])
+  }, [
+    appendDebugEvent,
+    cellDetailState,
+    loadCellTranscriptDistribution,
+    loadState,
+    selectedCell,
+  ])
 
   useEffect(() => {
     return () => {

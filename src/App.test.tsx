@@ -1171,6 +1171,12 @@ describe('App', () => {
             minQv: 20,
             binCount: 16,
             signal: expect.any(AbortSignal) as AbortSignal,
+            boundaryPolygon: expect.arrayContaining([
+              expect.objectContaining({
+                x: micrometers(-2),
+                y: micrometers(-2),
+              }) as object,
+            ]) as object,
           }),
         )
       })

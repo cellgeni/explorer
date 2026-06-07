@@ -20,6 +20,10 @@ import type { CellId } from '../data/cellid'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
+import type {
+  CellTranscriptZBin,
+  CellTranscriptZDistribution,
+} from '../data/cellTranscripts'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type {
   DuckDbPreparedStatementLike,
@@ -125,6 +129,11 @@ export interface TranscriptQueryOptions {
   readonly minQv?: number
 }
 
+export interface CellTranscriptZDistributionQueryOptions extends TranscriptQueryOptions {
+  readonly binCount?: number
+  readonly bbox?: BBox
+}
+
 export interface TranscriptViewportQueryOptions {
   readonly pointLimit?: number
   readonly groupLimit?: number
@@ -143,6 +152,9 @@ const DEFAULT_XENIUM_UNITS: UnitsDescriptor = {
 
 const BOUNDARY_VERTEX_FETCH_MARGIN_MICROMETERS = 150
 const BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS = 75
+const DEFAULT_TRANSCRIPT_QUERY_LIMIT = 100_000
+const DEFAULT_TRANSCRIPT_MIN_QV = 20
+const DEFAULT_TRANSCRIPT_Z_DISTRIBUTION_BIN_COUNT = 16
 
 export class XeniumDataset implements SpatialDataset {
   private readonly baseUrl: string
@@ -346,6 +358,103 @@ LIMIT ?
     )
 
     return result.toArray().map(parseTranscriptExportRow)
+  }
+
+  async cellTranscriptZDistributionForCellId(
+    cellId: CellId,
+    options: CellTranscriptZDistributionQueryOptions = {},
+  ): Promise<CellTranscriptZDistribution> {
+    const conn = await this.conn()
+    const limit = normalizePositiveInteger(
+      options.limit,
+      DEFAULT_TRANSCRIPT_QUERY_LIMIT,
+    )
+    const minQv = normalizeMinQv(options.minQv)
+    const binCount = normalizePositiveInteger(
+      options.binCount,
+      DEFAULT_TRANSCRIPT_Z_DISTRIBUTION_BIN_COUNT,
+    )
+    const bboxFilter =
+      options.bbox === undefined
+        ? ''
+        : `
+    AND x_location BETWEEN ? AND ?
+    AND y_location BETWEEN ? AND ?`
+    const bboxParams: SqlParameter[] =
+      options.bbox === undefined
+        ? []
+        : [
+            options.bbox.minX,
+            options.bbox.maxX,
+            options.bbox.minY,
+            options.bbox.maxY,
+          ]
+    const stmt = await conn.prepare(`
+WITH selected AS (
+  SELECT z_location
+  FROM read_parquet( ? )
+  WHERE cell_id = ?
+    AND qv >= ?
+${bboxFilter}
+  LIMIT ?
+),
+stats AS (
+  SELECT COUNT(*) AS transcript_count,
+         COUNT(z_location) AS z_count,
+         COUNT(*) - COUNT(z_location) AS missing_z_count,
+         MIN(z_location) AS min_z,
+         MAX(z_location) AS max_z
+  FROM selected
+),
+binned AS (
+  SELECT CASE
+           WHEN stats.min_z = stats.max_z THEN 0
+           ELSE LEAST(
+             ? - 1,
+             GREATEST(
+               0,
+               CAST(
+                 FLOOR(
+                   ((selected.z_location - stats.min_z) * ?) /
+                   NULLIF(stats.max_z - stats.min_z, 0)
+                 ) AS INTEGER
+               )
+             )
+           )
+         END AS bin_index,
+         COUNT(*) AS bin_count
+  FROM selected
+  CROSS JOIN stats
+  WHERE selected.z_location IS NOT NULL
+    AND stats.z_count > 0
+  GROUP BY bin_index
+)
+SELECT stats.transcript_count,
+       stats.z_count,
+       stats.missing_z_count,
+       stats.min_z,
+       stats.max_z,
+       binned.bin_index,
+       binned.bin_count
+FROM stats
+LEFT JOIN binned ON true
+ORDER BY binned.bin_index
+`)
+    const result = await stmt.query(
+      this.urlFor('transcripts.parquet'),
+      cellId,
+      minQv,
+      ...bboxParams,
+      limit,
+      binCount,
+      binCount,
+    )
+
+    return parseCellTranscriptZDistributionRows(result.toArray(), {
+      limit,
+      minQv,
+      binCount,
+    })
   }
 
   overviewCells(limit?: number): Promise<readonly CellOverviewPoint[]> {
@@ -796,6 +905,22 @@ function normalizeSampleStride(sampleStride: number | undefined): number {
   return Math.max(1, Math.floor(sampleStride))
 }
 
+function normalizePositiveInteger(value: number | undefined, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value) || value < 1) {
+    return fallback
+  }
+
+  return Math.max(1, Math.floor(value))
+}
+
+function normalizeMinQv(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value) || value < 0) {
+    return DEFAULT_TRANSCRIPT_MIN_QV
+  }
+
+  return value
+}
+
 function parseExtentRow(row: Record<string, unknown>): BBox {
   return {
     minX: micrometers(readNumericRowValue(row, 'minX')),
@@ -896,6 +1021,116 @@ function parseTranscriptExportRow(row: Record<string, unknown>): DatasetTranscri
     overlapsNucleus: readOptionalBooleanRowValue(row, 'overlaps_nucleus'),
     isGene: readOptionalBooleanRowValue(row, 'is_gene'),
   }
+}
+
+function parseCellTranscriptZDistributionRows(
+  rows: readonly Record<string, unknown>[],
+  options: {
+    readonly limit: number
+    readonly minQv: number
+    readonly binCount: number
+  },
+): CellTranscriptZDistribution {
+  const first = rows[0]
+
+  if (first === undefined) {
+    return {
+      bins: [],
+      transcriptCount: 0,
+      zCount: 0,
+      missingZCount: 0,
+      maxBinCount: 0,
+      hitTranscriptLimit: false,
+      minQv: options.minQv,
+    }
+  }
+
+  const transcriptCount = readNumericRowValue(first, 'transcript_count')
+  const zCount = readNumericRowValue(first, 'z_count')
+  const missingZCount = readNumericRowValue(first, 'missing_z_count')
+  const minZ = readOptionalNumericRowValue(first, 'min_z')
+  const maxZ = readOptionalNumericRowValue(first, 'max_z')
+
+  if (zCount <= 0 || minZ === undefined || maxZ === undefined) {
+    return {
+      bins: [],
+      transcriptCount,
+      zCount,
+      missingZCount,
+      maxBinCount: 0,
+      hitTranscriptLimit: transcriptCount >= options.limit,
+      minQv: options.minQv,
+    }
+  }
+
+  if (minZ === maxZ) {
+    const count = distributionRowCount(rows[0]) ?? zCount
+
+    return {
+      bins: [
+        {
+          minZ,
+          maxZ,
+          count,
+          percent: 100,
+        },
+      ],
+      transcriptCount,
+      zCount,
+      missingZCount,
+      minZ,
+      maxZ,
+      maxBinCount: count,
+      hitTranscriptLimit: transcriptCount >= options.limit,
+      minQv: options.minQv,
+    }
+  }
+
+  const counts = Array.from({ length: options.binCount }, () => 0)
+
+  for (const row of rows) {
+    const binIndex = readOptionalIntegerRowValue(row, 'bin_index')
+    const count = distributionRowCount(row)
+
+    if (
+      binIndex === undefined ||
+      count === undefined ||
+      binIndex < 0 ||
+      binIndex >= counts.length
+    ) {
+      continue
+    }
+
+    counts[binIndex] = count
+  }
+
+  const binSize = (maxZ - minZ) / options.binCount
+  let maxBinCount = 0
+  const bins = counts.map((count, index): CellTranscriptZBin => {
+    maxBinCount = Math.max(maxBinCount, count)
+    return {
+      minZ: minZ + binSize * index,
+      maxZ: index === options.binCount - 1 ? maxZ : minZ + binSize * (index + 1),
+      count,
+      percent: (count / zCount) * 100,
+    }
+  })
+
+  return {
+    bins,
+    transcriptCount,
+    zCount,
+    missingZCount,
+    minZ,
+    maxZ,
+    maxBinCount,
+    hitTranscriptLimit: transcriptCount >= options.limit,
+    minQv: options.minQv,
+  }
+}
+
+function distributionRowCount(row: Record<string, unknown> | undefined): number | undefined {
+  return row === undefined ? undefined : readOptionalNumericRowValue(row, 'bin_count')
 }
 
 function parseTranscriptPointRow(row: Record<string, unknown>): TranscriptPoint {

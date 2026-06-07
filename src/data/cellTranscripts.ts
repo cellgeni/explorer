@@ -1,8 +1,11 @@
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
+import { loadTranscriptZarrViewport } from './transcriptZarr'
 import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
 import type { CellId } from './cellid'
+import { micrometers, type BBox, type DataPoint } from './coords'
 import type { DatasetRangeValidator } from './datasetOverview'
+import type { TranscriptPoint } from './transcriptOverlay'
 import type { DatasetTranscript, XeniumDataset } from '../datasets/xeniumDataset'
 
 export const CELL_TRANSCRIPT_DISTRIBUTION_LIMIT = 100_000
@@ -30,11 +33,15 @@ export interface CellTranscriptZDistribution {
 
 export interface LoadDatasetCellTranscriptDistributionOptions {
   readonly getDataset?: (baseUrl: string) => XeniumDataset | Promise<XeniumDataset>
+  readonly loadTranscriptViewport?: typeof loadTranscriptZarrViewport
   readonly validateRangeSupport?: DatasetRangeValidator
   readonly signal?: AbortSignal
   readonly limit?: number
   readonly minQv?: number
   readonly binCount?: number
+  readonly bbox?: BBox
+  readonly boundaryPolygon?: readonly DataPoint[]
+  readonly allowSlowCellIdScan?: boolean
 }
 
 export async function loadDatasetCellTranscriptDistribution(
@@ -43,6 +50,55 @@ export async function loadDatasetCellTranscriptDistribution(
   options: LoadDatasetCellTranscriptDistributionOptions = {},
 ): Promise<CellTranscriptZDistribution> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
+  const limit = normalizePositiveInteger(
+    options.limit,
+    CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
+  )
+  const minQv = normalizeMinQv(options.minQv)
+  const binCount = normalizePositiveInteger(
+    options.binCount,
+    CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
+  )
+
+  if (options.boundaryPolygon !== undefined) {
+    const boundaryPolygon = options.boundaryPolygon
+    const bbox = options.bbox ?? polygonBbox(boundaryPolygon)
+    const url = datasetFileUrl(baseUrl, 'transcripts.zarr.zip')
+
+    await validateRangeSupport(url, {
+      label: 'transcripts.zarr.zip',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+    throwIfAborted(options.signal)
+
+    const result = await (options.loadTranscriptViewport ?? loadTranscriptZarrViewport)(
+      url,
+      bbox,
+      {
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+        pointLimit: limit,
+        groupLimit: 1,
+        minQv,
+        geneOnly: false,
+      },
+    )
+    throwIfAborted(options.signal)
+
+    return summarizeTranscriptPointZDistribution(
+      result.points.filter((point) => pointInPolygon(point.position, boundaryPolygon)),
+      {
+        hitTranscriptLimit: result.hitPointLimit,
+        minQv,
+        binCount,
+      },
+    )
+  }
+
+  if (options.allowSlowCellIdScan !== true) {
+    throw new Error(
+      'Cell transcript z distribution needs a selected-cell boundary polygon. Cell-id scans over transcripts.parquet are disabled for interactive loading.',
+    )
+  }
 
   await validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {
     label: 'transcripts.parquet',
@@ -56,21 +112,25 @@ export async function loadDatasetCellTranscriptDistribution(
       : await options.getDataset(baseUrl)
   throwIfAborted(options.signal)
 
-  const limit = normalizePositiveInteger(
-    options.limit,
-    CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
-  )
-  const minQv = normalizeMinQv(options.minQv)
-  const transcripts = await dataset.transcriptsForCellId(cellId, {
-    limit,
-    minQv,
-  })
+  if (typeof dataset.cellTranscriptZDistributionForCellId === 'function') {
+    const distribution = await dataset.cellTranscriptZDistributionForCellId(cellId, {
+      limit,
+      minQv,
+      binCount,
+      ...(options.bbox === undefined ? {} : { bbox: options.bbox }),
+    })
+
+    throwIfAborted(options.signal)
+    return distribution
+  }
+
+  const transcripts = await dataset.transcriptsForCellId(cellId, { limit, minQv })
   throwIfAborted(options.signal)
 
   return summarizeCellTranscriptZDistribution(transcripts, {
     hitTranscriptLimit: transcripts.length >= limit,
     minQv,
-    ...(options.binCount === undefined ? {} : { binCount: options.binCount }),
+    binCount,
   })
 }
 
@@ -82,25 +142,72 @@ export function summarizeCellTranscriptZDistribution(
     readonly minQv?: number
   } = {},
 ): CellTranscriptZDistribution {
-  const zValues: number[] = []
+  return summarizeZValues(
+    transcripts.map((transcript) => transcript.zLocation),
+    {
+      transcriptCount: transcripts.length,
+      missingZCount: transcripts.filter(
+        (transcript) =>
+          transcript.zLocation === undefined || !Number.isFinite(transcript.zLocation),
+      ).length,
+      hitTranscriptLimit: options.hitTranscriptLimit ?? false,
+      minQv: normalizeMinQv(options.minQv),
+      binCount: normalizePositiveInteger(
+        options.binCount,
+        CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
+      ),
+    },
+  )
+}
 
-  for (const transcript of transcripts) {
-    const zLocation = transcript.zLocation
+function summarizeTranscriptPointZDistribution(
+  points: readonly TranscriptPoint[],
+  options: {
+    readonly hitTranscriptLimit: boolean
+    readonly minQv: number
+    readonly binCount: number
+  },
+): CellTranscriptZDistribution {
+  const missingZCount = points.filter(
+    (point) => point.zLocation === undefined || !Number.isFinite(point.zLocation),
+  ).length
 
-    if (zLocation !== undefined && Number.isFinite(zLocation)) {
-      zValues.push(zLocation)
-    }
-  }
+  return summarizeZValues(
+    points.map((point) => point.zLocation),
+    {
+      transcriptCount: points.length,
+      missingZCount,
+      hitTranscriptLimit: options.hitTranscriptLimit,
+      minQv: options.minQv,
+      binCount: options.binCount,
+    },
+  )
+}
+
+function summarizeZValues(
+  values: readonly (number | undefined)[],
+  options: {
+    readonly transcriptCount: number
+    readonly missingZCount: number
+    readonly hitTranscriptLimit: boolean
+    readonly minQv: number
+    readonly binCount: number
+  },
+): CellTranscriptZDistribution {
+  const zValues = values.filter(
+    (zLocation): zLocation is number =>
+      zLocation !== undefined && Number.isFinite(zLocation),
+  )
 
   if (zValues.length === 0) {
     return {
       bins: [],
-      transcriptCount: transcripts.length,
+      transcriptCount: options.transcriptCount,
       zCount: 0,
-      missingZCount: transcripts.length,
+      missingZCount: options.missingZCount,
       maxBinCount: 0,
-      hitTranscriptLimit: options.hitTranscriptLimit ?? false,
-      minQv: normalizeMinQv(options.minQv),
+      hitTranscriptLimit: options.hitTranscriptLimit,
+      minQv: options.minQv,
     }
   }
 
@@ -124,21 +231,18 @@ export function summarizeCellTranscriptZDistribution(
           percent: 100,
         },
       ],
-      transcriptCount: transcripts.length,
+      transcriptCount: options.transcriptCount,
       zCount: zValues.length,
-      missingZCount: transcripts.length - zValues.length,
+      missingZCount: options.missingZCount,
       minZ,
       maxZ,
       maxBinCount: zValues.length,
-      hitTranscriptLimit: options.hitTranscriptLimit ?? false,
-      minQv: normalizeMinQv(options.minQv),
+      hitTranscriptLimit: options.hitTranscriptLimit,
+      minQv: options.minQv,
     }
   }
 
-  const binCount = normalizePositiveInteger(
-    options.binCount,
-    CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
-  )
+  const binCount = options.binCount
   const binSize = (maxZ - minZ) / binCount
   const counts = Array.from({ length: binCount }, () => 0)
 
@@ -162,14 +266,14 @@ export function summarizeCellTranscriptZDistribution(
 
   return {
     bins,
-    transcriptCount: transcripts.length,
+    transcriptCount: options.transcriptCount,
     zCount: zValues.length,
-    missingZCount: transcripts.length - zValues.length,
+    missingZCount: options.missingZCount,
     minZ,
     maxZ,
     maxBinCount,
-    hitTranscriptLimit: options.hitTranscriptLimit ?? false,
-    minQv: normalizeMinQv(options.minQv),
+    hitTranscriptLimit: options.hitTranscriptLimit,
+    minQv: options.minQv,
   }
 }
 
@@ -187,6 +291,70 @@ function normalizeMinQv(value: number | undefined): number {
   }
 
   return value
+}
+
+function polygonBbox(points: readonly DataPoint[]): BBox {
+  if (points.length === 0) {
+    throw new Error('Cell transcript z distribution needs a non-empty boundary polygon.')
+  }
+
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const point of points) {
+    minX = Math.min(minX, point.x)
+    maxX = Math.max(maxX, point.x)
+    minY = Math.min(minY, point.y)
+    maxY = Math.max(maxY, point.y)
+  }
+
+  return {
+    minX: micrometers(minX),
+    maxX: micrometers(maxX),
+    minY: micrometers(minY),
+    maxY: micrometers(maxY),
+  }
+}
+
+function pointInPolygon(point: DataPoint, polygon: readonly DataPoint[]): boolean {
+  if (polygon.length < 3) {
+    return false
+  }
+
+  let inside = false
+
+  for (
+    let currentIndex = 0, previousIndex = polygon.length - 1;
+    currentIndex < polygon.length;
+    previousIndex = currentIndex, currentIndex += 1
+  ) {
+    const current = polygon[currentIndex]
+    const previous = polygon[previousIndex]
+
+    if (current === undefined || previous === undefined) {
+      continue
+    }
+
+    const crossesY =
+      (current.y > point.y && previous.y <= point.y) ||
+      (previous.y > point.y && current.y <= point.y)
+
+    if (!crossesY) {
+      continue
+    }
+
+    const intersectionX =
+      current.x + ((point.y - current.y) * (previous.x - current.x)) /
+        (previous.y - current.y)
+
+    if (intersectionX >= point.x) {
+      inside = !inside
+    }
+  }
+
+  return inside
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

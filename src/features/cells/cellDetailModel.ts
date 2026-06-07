@@ -56,6 +56,7 @@ export type CellDetailState<
       readonly cellId: string
       readonly expression: CellGeneExpressionSummary
       readonly shape: CellShapeMetrics
+      readonly boundary: SpatialElement | null
     }
   | {
       readonly status: 'error'
@@ -103,11 +104,15 @@ function overviewCellToDataPoint(cell: OverviewCellDatum): DataPoint {
 }
 
 export function selectedCellBoundaryBbox(cell: OverviewCellDatum): BBox {
+  return selectedCellBbox(cell, CELL_DETAIL_BOUNDARY_RADIUS_MICROMETERS)
+}
+
+function selectedCellBbox(cell: OverviewCellDatum, minRadiusMicrometers: number): BBox {
   const center = overviewCellToDataPoint(cell)
   const cellRadius =
     cell.radiusMicrometers ??
     optionalHalf(cellAreaToEquivalentDiameterMicrometers(cell.cellArea))
-  const radius = Math.max(CELL_DETAIL_BOUNDARY_RADIUS_MICROMETERS, cellRadius ?? 0)
+  const radius = Math.max(minRadiusMicrometers, cellRadius ?? 0)
 
   return {
     minX: micrometers(center.x - radius),
