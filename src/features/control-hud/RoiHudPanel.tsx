@@ -1,27 +1,11 @@
-import type { ComponentProps } from 'react'
 import type { RoiDrawMode } from '../../components/ViewerCore'
 import { RoiGeneStatsPanel } from '../roi/RoiPanels'
-
-type RoiGeneStatsState = ComponentProps<typeof RoiGeneStatsPanel>['state']
-
-interface RoiSummaryDisplay {
-  readonly cellCount: number
-  readonly meanTranscriptCount: number
-  readonly meanCellArea: number | undefined
-}
-
-type RoiDisplayState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'drawing' }
-  | { readonly status: 'loading' }
-  | { readonly status: 'ready'; readonly hitCellLimit: boolean }
-  | { readonly status: 'error' }
-
-type RoiTranscriptExportDisplayState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading' }
-  | { readonly status: 'ready' }
-  | { readonly status: 'error' }
+import type {
+  RoiGeneStatsState,
+  RoiState,
+  RoiSummary,
+  RoiTranscriptExportState,
+} from '../roi/roiModel'
 
 interface RoiHudPanelProps {
   readonly active: boolean
@@ -32,11 +16,11 @@ interface RoiHudPanelProps {
   readonly roiMode: RoiDrawMode
   readonly roiName: string
   readonly loadEnabled: boolean
-  readonly roiState: RoiDisplayState
-  readonly roiSummary: RoiSummaryDisplay | null
+  readonly roiState: RoiState
+  readonly roiSummary: RoiSummary | null
   readonly roiGeneStatsCopy: string
   readonly roiGeneStatsState: RoiGeneStatsState
-  readonly roiTranscriptExportState: RoiTranscriptExportDisplayState
+  readonly roiTranscriptExportState: RoiTranscriptExportState
   readonly onRoiModeChange: (mode: RoiDrawMode) => void
   readonly onClearRoi: () => void
   readonly onRoiNameChange: (name: string) => void

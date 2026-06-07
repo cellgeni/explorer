@@ -56,10 +56,39 @@ import {
 } from './features/morphology/morphologyChannels'
 import { MagicLensPanel } from './features/roi/RoiPanels'
 import {
+  MAGIC_LENS_CELL_LIMIT,
+  MAGIC_LENS_GENE_STATS_LIMIT,
   magicLensScopeLabel,
+  filterCellsForCircle,
+  magicLensDetailQueryKey,
+  magicLensStatusCopy,
+  normalizeMagicLensMinQv,
+  normalizeMagicLensRadius,
+  resolveMagicLensSelection,
+  summarizeMagicLensCells,
+  type MagicLensCircleFilter,
   type MagicLensScope,
-  type MagicLensSummary,
+  type MagicLensState,
 } from './features/roi/magicLensModel'
+import {
+  ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
+  ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT,
+  ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS,
+  defaultRoiName,
+  deferRoiGeneRefinement,
+  emptyRoiGeneStats,
+  roiCellsToCsv,
+  roiGeneStatsStatusCopy,
+  roiGeneViewportWarmupKey,
+  roiSelectionLabel,
+  roiStatusCopy,
+  roiTranscriptsToCsv,
+  summarizeRoiCells,
+  type RoiGeneStatsState,
+  type RoiGeneViewportWarmupState,
+  type RoiState,
+  type RoiTranscriptExportState,
+} from './features/roi/roiModel'
 import { createDiagnosticsDump } from './features/diagnostics/diagnosticsDump'
 import {
   annotationStatusCopy,
@@ -83,6 +112,13 @@ import {
   parseGeneExpressionScoreMode,
   parseGeneSetSymbols,
 } from './features/genes/geneControlsModel'
+import {
+  createStructuredLoadError,
+  formatStructuredError,
+  isStructuredLoadError,
+  readErrorMessage,
+  type StructuredLoadError,
+} from './features/errors/loadErrorModel'
 import { slug } from './utils/slug'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import {
@@ -199,7 +235,7 @@ import {
 } from './rendering/annotationPalette'
 import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
-import type { BBox, DataPoint } from './data/coords'
+import type { BBox } from './data/coords'
 import type { ChannelAutoContrast } from './data/morphologyContrast'
 import type {
   DatasetCell,
@@ -238,12 +274,6 @@ import type {
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_GENE_LIST: readonly string[] = []
 const DEBUG_LOG_LIMIT = 32
-const MAGIC_LENS_CELL_LIMIT = 25_000
-const MAGIC_LENS_TOP_GENE_LIMIT = 8
-const MAGIC_LENS_GENE_STATS_LIMIT = 10_000
-const ROI_GENE_STATS_PREVIEW_CELL_LIMIT = 32
-const ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT = 5_000
-const ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS = 120
 const CONTROL_HUD_TABS = [
   { id: 'dataset', label: 'Dataset' },
   { id: 'layers', label: 'Layers' },
@@ -509,75 +539,6 @@ type GeneExpressionState =
       readonly error: StructuredLoadError
     }
 
-type RoiState =
-  | { readonly status: 'idle' }
-  | {
-      readonly status: 'loading'
-      readonly url: string
-      readonly bbox: BBox
-      readonly selection: RoiSelection
-    }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly bbox: BBox
-      readonly selection: RoiSelection
-      readonly cells: readonly DatasetCell[]
-      readonly hitCellLimit: boolean
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly bbox: BBox
-      readonly selection: RoiSelection
-      readonly error: StructuredLoadError
-    }
-
-type RoiGeneStatsState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string; readonly cellCount: number }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly stats: RoiGeneStats
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type RoiGeneViewportWarmupState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly key: string }
-  | { readonly status: 'ready'; readonly key: string }
-  | { readonly status: 'error'; readonly key: string }
-
-type RoiTranscriptExportState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type MagicLensState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string; readonly scope: MagicLensScope }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly scope: MagicLensScope
-      readonly summary: MagicLensSummary
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly scope: MagicLensScope
-      readonly error: StructuredLoadError
-    }
-
 type CellDetailState =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string; readonly cellId: string }
@@ -611,43 +572,6 @@ type CellTranscriptDistributionState =
       readonly error: StructuredLoadError
     }
 
-type LoadErrorCode =
-  | 'network'
-  | 'http'
-  | 'range-not-supported'
-  | 'unsupported'
-  | 'parquet-decode'
-  | 'manifest'
-  | 'decode'
-  | 'unknown'
-
-type LoadErrorSource =
-  | 'Dataset overview'
-  | 'Morphology image'
-  | 'Image tiles'
-  | 'Cell boundaries'
-  | 'Gene panel'
-  | 'Annotations'
-  | 'Embeddings'
-  | 'ROI cells'
-  | 'ROI genes'
-  | 'ROI transcripts'
-  | 'Transcripts'
-  | 'Gene expression'
-  | 'Magic lens'
-  | 'Cell details'
-  | 'Cell transcripts'
-  | 'Dataset diagnostics'
-
-interface StructuredLoadError {
-  readonly source: LoadErrorSource
-  readonly code: LoadErrorCode
-  readonly title: string
-  readonly message: string
-  readonly action: string
-  readonly detail?: string
-}
-
 interface DebugLogEntry {
   readonly id: number
   readonly timestamp: number
@@ -672,17 +596,6 @@ interface SavedGeneSet {
 interface GeneExpressionScaleDomain {
   readonly key: string
   readonly max: number
-}
-
-interface RoiSummary {
-  readonly cellCount: number
-  readonly meanTranscriptCount: number
-  readonly meanCellArea: number | undefined
-}
-
-interface MagicLensCircleFilter {
-  readonly center: DataPoint
-  readonly radiusMicrometers: number
 }
 
 export interface AppProps {
@@ -800,14 +713,17 @@ export function App({
   )
   const [selectedEmbeddingKind, setSelectedEmbeddingKind] =
     useState<AnalysisEmbeddingKind>('umap')
-  const [roiState, setRoiState] = useState<RoiState>({ status: 'idle' })
-  const [roiGeneStatsState, setRoiGeneStatsState] = useState<RoiGeneStatsState>({
+  const [roiState, setRoiState] = useState<RoiState<StructuredLoadError>>({
     status: 'idle',
   })
+  const [roiGeneStatsState, setRoiGeneStatsState] = useState<
+    RoiGeneStatsState<StructuredLoadError>
+  >({ status: 'idle' })
   const [roiGeneViewportWarmupState, setRoiGeneViewportWarmupState] =
     useState<RoiGeneViewportWarmupState>({ status: 'idle' })
-  const [roiTranscriptExportState, setRoiTranscriptExportState] =
-    useState<RoiTranscriptExportState>({ status: 'idle' })
+  const [roiTranscriptExportState, setRoiTranscriptExportState] = useState<
+    RoiTranscriptExportState<StructuredLoadError>
+  >({ status: 'idle' })
   const [transcriptCapabilityState, setTranscriptCapabilityState] = useState<
     TranscriptCapabilityState<StructuredLoadError>
   >({ status: 'idle' })
@@ -816,9 +732,9 @@ export function App({
   >({
     status: 'idle',
   })
-  const [magicLensState, setMagicLensState] = useState<MagicLensState>({
-    status: 'idle',
-  })
+  const [magicLensState, setMagicLensState] = useState<
+    MagicLensState<StructuredLoadError>
+  >({ status: 'idle' })
   const [cellDetailState, setCellDetailState] = useState<CellDetailState>({
     status: 'idle',
   })
@@ -5377,55 +5293,6 @@ function cellDetailStatusCopy(
   return 'Selected'
 }
 
-function roiStatusCopy(roiState: RoiState, roiMode: RoiDrawMode): string {
-  if (roiMode === 'box') {
-    return 'Drawing box'
-  }
-
-  if (roiMode === 'lasso') {
-    return 'Drawing lasso'
-  }
-
-  if (roiState.status === 'loading') {
-    return 'Loading'
-  }
-
-  if (roiState.status === 'ready') {
-    const noun = roiState.cells.length === 1 ? 'cell' : 'cells'
-    return `${roiState.cells.length.toLocaleString()}${roiState.hitCellLimit ? '+' : ''} ${noun}`
-  }
-
-  if (roiState.status === 'error') {
-    return 'Unavailable'
-  }
-
-  return 'Idle'
-}
-
-function roiSelectionLabel(selection: RoiSelection): string {
-  return selection.kind === 'lasso' ? 'ROI lasso' : 'ROI box'
-}
-
-function roiGeneStatsStatusCopy(roiGeneStatsState: RoiGeneStatsState): string {
-  if (roiGeneStatsState.status === 'loading') {
-    return `Genes loading for ${roiGeneStatsState.cellCount.toLocaleString()} cells`
-  }
-
-  if (roiGeneStatsState.status === 'ready') {
-    if (roiGeneStatsState.stats.genes.length === 0) {
-      return 'Genes: none'
-    }
-
-    return `Genes: top ${roiGeneStatsState.stats.genes.length}`
-  }
-
-  if (roiGeneStatsState.status === 'error') {
-    return roiGeneStatsState.error.title
-  }
-
-  return 'Genes idle'
-}
-
 function isObservationColorMode(value: string): value is ObservationColorMode {
   return value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
 }
@@ -5518,216 +5385,6 @@ function throwAbortError(message: string): never {
   throw error
 }
 
-function summarizeRoiCells(cells: readonly DatasetCell[]): RoiSummary {
-  if (cells.length === 0) {
-    return {
-      cellCount: 0,
-      meanTranscriptCount: 0,
-      meanCellArea: undefined,
-    }
-  }
-
-  let transcriptTotal = 0
-  let cellAreaTotal = 0
-  let cellAreaCount = 0
-
-  for (const cell of cells) {
-    transcriptTotal += cell.transcriptCount ?? 0
-
-    if (cell.cellArea !== undefined) {
-      cellAreaTotal += cell.cellArea
-      cellAreaCount += 1
-    }
-  }
-
-  return {
-    cellCount: cells.length,
-    meanTranscriptCount: transcriptTotal / cells.length,
-    meanCellArea: cellAreaCount === 0 ? undefined : cellAreaTotal / cellAreaCount,
-  }
-}
-
-function emptyRoiGeneStats(): RoiGeneStats {
-  return {
-    genes: [],
-    cellCount: 0,
-    sampledCellCount: 0,
-    totalCount: 0,
-    hitCellLimit: false,
-  }
-}
-
-function roiGeneViewportWarmupKey(
-  datasetUrl: string,
-  detail: ViewerViewportDetail,
-): string {
-  const coordinateBucketMicrometers = 100
-  const visibleCellBucket = ROI_GENE_STATS_PREVIEW_CELL_LIMIT
-  const { bbox, viewState } = detail
-
-  return [
-    datasetUrl,
-    Math.round(bbox.minX / coordinateBucketMicrometers),
-    Math.round(bbox.maxX / coordinateBucketMicrometers),
-    Math.round(bbox.minY / coordinateBucketMicrometers),
-    Math.round(bbox.maxY / coordinateBucketMicrometers),
-    Math.round(viewState.zoom * 10),
-    Math.round(detail.visibleCellCount / visibleCellBucket),
-  ].join(':')
-}
-
-function deferRoiGeneRefinement(): Promise<void> {
-  if (typeof window === 'undefined') {
-    return Promise.resolve()
-  }
-
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, 0)
-  })
-}
-
-function resolveMagicLensSelection(
-  scope: MagicLensScope,
-  viewportDetail: ViewerViewportDetail | null,
-  roiSelection: RoiSelection | null,
-): RoiSelectionInput | null {
-  if (scope === 'roi') {
-    return roiSelection
-  }
-
-  if (scope === 'cursor') {
-    return null
-  }
-
-  return viewportDetail?.bbox ?? null
-}
-
-function summarizeMagicLensCells(
-  cells: readonly DatasetCell[],
-  stats: RoiGeneStats,
-  selectedGenes: readonly string[],
-  options: {
-    readonly hitLimit?: boolean
-  },
-): MagicLensSummary {
-  const selectedGeneKeys = new Set(selectedGenes.map((gene) => gene.toLocaleLowerCase()))
-  let selectedGeneTranscriptCount = 0
-  let transcriptCount = 0
-
-  for (const cell of cells) {
-    transcriptCount += cell.transcriptCount ?? 0
-  }
-
-  for (const gene of stats.genes) {
-    if (selectedGeneKeys.has(gene.gene.toLocaleLowerCase())) {
-      selectedGeneTranscriptCount += gene.count
-    }
-  }
-
-  const topGenes = stats.genes
-    .map((gene) => ({
-      gene: gene.gene,
-      count: gene.count,
-      percentTotal: gene.percentTotal,
-      selected: selectedGeneKeys.has(gene.gene.toLocaleLowerCase()),
-    }))
-    .slice(0, MAGIC_LENS_TOP_GENE_LIMIT)
-
-  return {
-    transcriptCount,
-    cellCount: cells.length,
-    geneCount: stats.genes.length,
-    selectedGeneTranscriptCount,
-    topGenes,
-    hitLimit: options.hitLimit ?? false,
-  }
-}
-
-function magicLensStatusCopy(
-  state: MagicLensState,
-  scope: MagicLensScope,
-  loadStatus: DatasetLoadState['status'],
-  canScan: boolean,
-  active: boolean,
-): string {
-  if (state.status === 'loading') {
-    return `Scanning ${magicLensScopeLabel(state.scope)}`
-  }
-
-  if (state.status === 'ready') {
-    return `${state.summary.transcriptCount.toLocaleString()} transcripts`
-  }
-
-  if (state.status === 'error') {
-    return state.error.title
-  }
-
-  if (loadStatus !== 'ready') {
-    return 'Load dataset'
-  }
-
-  if (scope === 'cursor') {
-    return active ? 'Move cursor' : 'Lens off'
-  }
-
-  if (canScan) {
-    return 'Ready'
-  }
-
-  return scope === 'roi' ? 'ROI required' : 'Viewport pending'
-}
-
-function filterCellsForCircle(
-  cells: readonly DatasetCell[],
-  filter: MagicLensCircleFilter,
-): readonly DatasetCell[] {
-  const radiusSquared = filter.radiusMicrometers * filter.radiusMicrometers
-
-  return cells.filter((cell) => {
-    const deltaX = cell.position.x - filter.center.x
-    const deltaY = cell.position.y - filter.center.y
-
-    return deltaX * deltaX + deltaY * deltaY <= radiusSquared
-  })
-}
-
-function magicLensDetailQueryKey(
-  detail: ViewerMagicLensDetail,
-  minQv: number,
-  selectedGenes: readonly string[],
-): string {
-  const roundedX = Math.round(detail.center.x / 4)
-  const roundedY = Math.round(detail.center.y / 4)
-  const selectedGeneKey = selectedGenes
-    .map((gene) => gene.toLocaleLowerCase())
-    .sort()
-    .join(',')
-
-  return [
-    roundedX,
-    roundedY,
-    Math.round(detail.radiusMicrometers),
-    minQv,
-    selectedGeneKey,
-  ].join(':')
-}
-
-function normalizeMagicLensRadius(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 80
-  }
-
-  return Math.max(10, Math.min(500, Math.round(value)))
-}
-
-function normalizeMagicLensMinQv(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 20
-  }
-
-  return Math.max(0, Math.min(40, Math.round(value)))
-}
-
 function normalizeTranscriptMinQv(value: number): number {
   if (!Number.isFinite(value)) {
     return 20
@@ -5742,52 +5399,6 @@ function normalizeTranscriptPointSize(value: number): number {
   }
 
   return Math.max(1, Math.min(6, Math.round(value)))
-}
-
-function roiCellsToCsv(cells: readonly DatasetCell[]): string {
-  const rows = [
-    ['cell_id', 'x_centroid', 'y_centroid', 'transcript_counts', 'cell_area'],
-    ...cells.map((cell) => [
-      cell.id,
-      String(cell.position.x),
-      String(cell.position.y),
-      String(cell.transcriptCount ?? ''),
-      String(cell.cellArea ?? ''),
-    ]),
-  ]
-
-  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
-}
-
-function roiTranscriptsToCsv(transcripts: readonly DatasetTranscript[]): string {
-  const rows = [
-    [
-      'cell_id',
-      'feature_name',
-      'x_location',
-      'y_location',
-      'z_location',
-      'qv',
-      'overlaps_nucleus',
-      'is_gene',
-    ],
-    ...transcripts.map((transcript) => [
-      transcript.cellId ?? '',
-      transcript.featureName,
-      String(transcript.position.x),
-      String(transcript.position.y),
-      transcript.zLocation === undefined ? '' : String(transcript.zLocation),
-      String(transcript.qv),
-      transcript.overlapsNucleus === undefined ? '' : String(transcript.overlapsNucleus),
-      transcript.isGene === undefined ? '' : String(transcript.isGene),
-    ]),
-  ]
-
-  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
-}
-
-function csvEscape(value: string): string {
-  return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
 }
 
 function downloadTextFile(
@@ -5818,10 +5429,6 @@ function formatElapsed(startedAt: number): string {
   return `${(elapsedMs / 1_000).toLocaleString(undefined, {
     maximumFractionDigits: 1,
   })} s`
-}
-
-function defaultRoiName(index: number): string {
-  return `ROI ${index}`
 }
 
 function formatGeneScaleValue(value: number): string {
@@ -5869,193 +5476,4 @@ function clearTimeoutRef(ref: { current: number | null }): void {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
-}
-
-function isStructuredLoadError(
-  error: StructuredLoadError | null,
-): error is StructuredLoadError {
-  return error !== null
-}
-
-function formatStructuredError(error: StructuredLoadError): string {
-  return `${error.title}: ${error.message}`
-}
-
-function createStructuredLoadError(
-  source: LoadErrorSource,
-  error: unknown,
-): StructuredLoadError {
-  const message = readErrorMessage(error)
-  const normalizedMessage = message.toLowerCase()
-  const detail = readErrorDetail(error)
-
-  if (
-    normalizedMessage.includes('cannot be range-read') ||
-    normalizedMessage.includes('expected http 206')
-  ) {
-    return withOptionalDetail(
-      {
-        source,
-        code: 'range-not-supported',
-        title: 'Byte-range requests blocked',
-        message,
-        action: 'Configure the host to return HTTP 206 for Range requests.',
-      },
-      detail,
-    )
-  }
-
-  const httpStatus = /\bhttp\s+(\d{3})\b/i.exec(message)?.[1]
-
-  if (httpStatus !== undefined) {
-    return withOptionalDetail(
-      {
-        source,
-        code: 'http',
-        title: `HTTP ${httpStatus} response`,
-        message,
-        action: 'Check the dataset URL and object permissions.',
-      },
-      detail,
-    )
-  }
-
-  if (
-    error instanceof TypeError ||
-    normalizedMessage.includes('failed to fetch') ||
-    normalizedMessage.includes('networkerror')
-  ) {
-    return withOptionalDetail(
-      {
-        source,
-        code: 'network',
-        title: 'Network request failed',
-        message,
-        action: 'Check dataset URL, CORS, and network access.',
-      },
-      detail,
-    )
-  }
-
-  if (isCellsParquetDecodeError(source, normalizedMessage)) {
-    return withOptionalDetail(
-      {
-        source,
-        code: 'parquet-decode',
-        title: 'cells.parquet decode failed',
-        message: normalizedMessage.includes('unable to decode cells.parquet')
-          ? message
-          : `The overview cells.parquet file was reachable, but the browser Parquet reader could not decode it: ${message}.`,
-        action:
-          'Rewrite cells.parquet with a browser-compatible Parquet encoding or use an alternate overview reader for this dataset.',
-      },
-      detail,
-    )
-  }
-
-  if (
-    source === 'ROI genes' &&
-    isUnsupportedRoiGeneStatsError(error, normalizedMessage)
-  ) {
-    return withOptionalDetail(
-      {
-        source,
-        code: 'unsupported',
-        title: 'ROI gene matrix unavailable',
-        message,
-        action:
-          'Host a readable cell_feature_matrix.h5 for older XOA output; native CSC Zarr remains the fast path when available.',
-      },
-      detail,
-    )
-  }
-
-  if (
-    normalizedMessage.includes('experiment.xenium') ||
-    normalizedMessage.includes('no supported xenium ome-tiff')
-  ) {
-    return withOptionalDetail(
-      {
-        source,
-        code: 'manifest',
-        title: 'Dataset manifest is incomplete',
-        message,
-        action: 'Verify experiment.xenium lists the files needed by this layer.',
-      },
-      detail,
-    )
-  }
-
-  if (normalizedMessage.includes('decode') || normalizedMessage.includes('tile')) {
-    return withOptionalDetail(
-      {
-        source,
-        code: 'decode',
-        title: 'Image tile decode failed',
-        message,
-        action: 'Retry at this zoom level or disable the morphology image layer.',
-      },
-      detail,
-    )
-  }
-
-  return withOptionalDetail(
-    {
-      source,
-      code: 'unknown',
-      title: 'Unexpected load error',
-      message,
-      action: 'Retry the request after checking the dataset URL.',
-    },
-    detail,
-  )
-}
-
-function isUnsupportedRoiGeneStatsError(
-  error: unknown,
-  normalizedMessage: string,
-): boolean {
-  return (
-    (error instanceof Error && error.name === 'UnsupportedRoiGeneStatsMatrixError') ||
-    normalizedMessage.includes('native csc arrays in cell_feature_matrix.zarr.zip') ||
-    normalizedMessage.includes('readable cell_feature_matrix.h5 fallback')
-  )
-}
-
-function isCellsParquetDecodeError(
-  source: LoadErrorSource,
-  normalizedMessage: string,
-): boolean {
-  if (source !== 'Dataset overview') {
-    return false
-  }
-
-  return (
-    normalizedMessage.includes('unable to decode cells.parquet') ||
-    normalizedMessage.includes('offset is outside the bounds of the dataview') ||
-    normalizedMessage.includes('invalid typed array length')
-  )
-}
-
-function withOptionalDetail(
-  error: Omit<StructuredLoadError, 'detail'>,
-  detail: string | undefined,
-): StructuredLoadError {
-  return detail === undefined ? error : { ...error, detail }
-}
-
-function readErrorDetail(error: unknown): string | undefined {
-  if (!(error instanceof Error) || error.name === 'Error') {
-    return undefined
-  }
-
-  return error.name
-}
-
-function readErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.length > 0) {
-    return error.message
-  }
-
-  return 'Unknown dataset error'
 }

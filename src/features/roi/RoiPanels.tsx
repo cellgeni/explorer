@@ -1,42 +1,8 @@
 import type { CSSProperties } from 'react'
-import type { RoiGeneStats } from '../../data/roiGeneStats'
-import {
-  magicLensScopeLabel,
-  type MagicLensScope,
-  type MagicLensSummary,
-} from './magicLensModel'
+import { magicLensScopeLabel, type MagicLensState } from './magicLensModel'
+import type { RoiGeneStatsState } from './roiModel'
 
-type MagicLensDisplayState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string; readonly scope: MagicLensScope }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly scope: MagicLensScope
-      readonly summary: MagicLensSummary
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly scope: MagicLensScope
-      readonly error: { readonly title: string }
-    }
-
-type RoiGeneStatsDisplayState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string; readonly cellCount: number }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly stats: RoiGeneStats
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: { readonly title: string }
-    }
-
-export function MagicLensPanel({ state }: { readonly state: MagicLensDisplayState }) {
+export function MagicLensPanel({ state }: { readonly state: MagicLensState }) {
   if (state.status === 'idle') {
     return null
   }
@@ -135,7 +101,7 @@ export function RoiGeneStatsPanel({
   state,
 }: {
   readonly copy: string
-  readonly state: RoiGeneStatsDisplayState
+  readonly state: RoiGeneStatsState
 }) {
   if (state.status === 'idle') {
     return null
