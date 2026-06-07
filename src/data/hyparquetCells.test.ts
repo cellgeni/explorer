@@ -31,6 +31,7 @@ describe('readCellsOverview', () => {
             y_centroid: 20n,
             transcript_counts: 7n,
             cell_area: 314,
+            nucleus_count: 2n,
           },
         ]
       },
@@ -49,6 +50,7 @@ describe('readCellsOverview', () => {
         position: { x: micrometers(10), y: micrometers(20) },
         transcriptCount: 7,
         cellArea: 314,
+        nucleusCount: 2,
       },
     ])
   })
@@ -66,6 +68,7 @@ describe('readCellsOverview', () => {
             y_centroid: 20,
             transcript_counts: 7,
             cell_area: 314,
+            nucleus_count: 1,
           },
         ]
       },
@@ -77,8 +80,42 @@ describe('readCellsOverview', () => {
         position: { x: micrometers(10), y: micrometers(20) },
         transcriptCount: 7,
         cellArea: 314,
+        nucleusCount: 1,
       },
     ])
+  })
+
+  it('falls back when the optional nucleus count column is unavailable', async () => {
+    const calls: HyparquetReadObjectsOptions[] = []
+    const rows = await readCellsOverview({
+      file: fakeFile,
+      readObjects: async (options) => {
+        calls.push(options)
+
+        if (options.columns.includes('nucleus_count')) {
+          throw new Error('Column nucleus_count not found')
+        }
+
+        return [
+          {
+            x_centroid: 10,
+            y_centroid: 20,
+            transcript_counts: 7,
+            cell_area: 314,
+          },
+        ]
+      },
+    })
+
+    expect(calls.map((call) => call.columns)).toEqual([
+      CELL_OVERVIEW_COLUMNS,
+      ['cell_id', 'x_centroid', 'y_centroid', 'transcript_counts', 'cell_area'],
+    ])
+    expect(rows[0]).toEqual({
+      position: { x: micrometers(10), y: micrometers(20) },
+      transcriptCount: 7,
+      cellArea: 314,
+    })
   })
 
   it('wraps low-level parquet page read errors with overview context', async () => {
@@ -94,7 +131,7 @@ describe('readCellsOverview', () => {
     ).rejects.toMatchObject({
       name: 'ParquetDecodeError',
       message: expect.stringContaining(
-        'Unable to decode cells.parquet while reading overview columns (x_centroid, y_centroid, transcript_counts, cell_area).',
+        'Unable to decode cells.parquet while reading overview columns (x_centroid, y_centroid, transcript_counts, cell_area, nucleus_count).',
       ),
     })
   })

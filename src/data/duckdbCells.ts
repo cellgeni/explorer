@@ -24,9 +24,20 @@ const OVERVIEW_POINT_COLUMNS = [
   'y_centroid',
   'transcript_counts',
   'cell_area',
+  'nucleus_count',
 ] as const
 
 const OVERVIEW_WITH_ID_COLUMNS = ['cell_id', ...OVERVIEW_POINT_COLUMNS] as const
+const OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT = [
+  'x_centroid',
+  'y_centroid',
+  'transcript_counts',
+  'cell_area',
+] as const
+const OVERVIEW_WITH_ID_COLUMNS_WITHOUT_NUCLEUS_COUNT = [
+  'cell_id',
+  ...OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT,
+] as const
 
 export async function readCellsOverviewWithDuckDb(
   options: ReadCellsOverviewWithDuckDbOptions,
@@ -45,14 +56,48 @@ export async function readCellsOverviewWithDuckDb(
 
     const columns =
       options.includeCellIds === false ? OVERVIEW_POINT_COLUMNS : OVERVIEW_WITH_ID_COLUMNS
-    const statement = await client.conn.prepare(overviewSql(columns, options.limit))
-    const table = await queryOverviewRows(statement, options)
+    const fallbackColumns =
+      options.includeCellIds === false
+        ? OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT
+        : OVERVIEW_WITH_ID_COLUMNS_WITHOUT_NUCLEUS_COUNT
+    const table = await queryOverviewRowsWithFallback(
+      client,
+      columns,
+      fallbackColumns,
+      options,
+    )
 
     throwIfAborted(options.signal)
     return table.toArray().map(parseCellOverviewRow)
   } finally {
     await client.close?.()
   }
+}
+
+async function queryOverviewRowsWithFallback(
+  client: DuckDbOverviewClientLike,
+  columns: readonly string[],
+  fallbackColumns: readonly string[],
+  options: ReadCellsOverviewWithDuckDbOptions,
+): Promise<ArrowTableLike> {
+  try {
+    return await queryOverviewRowsForColumns(client, columns, options)
+  } catch (error) {
+    if (!isMissingOptionalNucleusCountReadFailure(error)) {
+      throw error
+    }
+
+    return queryOverviewRowsForColumns(client, fallbackColumns, options)
+  }
+}
+
+async function queryOverviewRowsForColumns(
+  client: DuckDbOverviewClientLike,
+  columns: readonly string[],
+  options: ReadCellsOverviewWithDuckDbOptions,
+): Promise<ArrowTableLike> {
+  const statement = await client.conn.prepare(overviewSql(columns, options.limit))
+  return queryOverviewRows(statement, options)
 }
 
 function overviewSql(columns: readonly string[], limit: number | undefined): string {
@@ -91,4 +136,10 @@ function abortError(signal: AbortSignal): Error {
   const error = new Error('DuckDB overview read aborted.')
   error.name = 'AbortError'
   return error
+}
+
+function isMissingOptionalNucleusCountReadFailure(error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
+
+  return message.includes('nucleus_count') && message.includes('column')
 }

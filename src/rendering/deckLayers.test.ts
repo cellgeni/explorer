@@ -400,6 +400,7 @@ describe('deck layer factory', () => {
         position: { x: micrometers(10), y: micrometers(20) },
         transcriptCount: 25,
         cellArea: Math.PI * 16,
+        nucleusCount: 2,
       },
     ])
 
@@ -410,6 +411,7 @@ describe('deck layer factory', () => {
     expect(datum.position).toEqual([10, -20, 0])
     expect(datum.radiusPixels).toBe(5)
     expect(datum.radiusMicrometers).toBe(4)
+    expect(datum.nucleusCount).toBe(2)
     expect(createOverviewViewState([datum]).target).toEqual([10, -20, 0])
   })
 
@@ -422,6 +424,7 @@ describe('deck layer factory', () => {
           count: 4,
           transcriptCount: 11,
           cellArea: Math.PI * 9,
+          nucleusCount: 1,
         },
       ],
       ['Gad1'],
@@ -433,6 +436,7 @@ describe('deck layer factory', () => {
       expressionCount: 4,
       expressionGenes: ['Gad1'],
       transcriptCount: 11,
+      nucleusCount: 1,
     })
   })
 
@@ -454,8 +458,7 @@ describe('deck layer factory', () => {
       transcriptOpacity: 0.5,
     })
     const aggregateLayer = layers.find(
-      (layer) =>
-        layer instanceof PolygonLayer && layer.id === 'transcript-density-bins',
+      (layer) => layer instanceof PolygonLayer && layer.id === 'transcript-density-bins',
     )
 
     expect(aggregateLayer).toBeInstanceOf(PolygonLayer)
@@ -564,14 +567,8 @@ describe('deck layer factory', () => {
       omittedFeatureCount: 1,
       featureName: 'CD74',
     }
-    const thermalBins = transcriptAggregateBinsToLayerData(
-      [featureCircle],
-      'thermal',
-    )
-    const viridisBins = transcriptAggregateBinsToLayerData(
-      [featureCircle],
-      'viridis',
-    )
+    const thermalBins = transcriptAggregateBinsToLayerData([featureCircle], 'thermal')
+    const viridisBins = transcriptAggregateBinsToLayerData([featureCircle], 'viridis')
 
     expect(thermalBins[0]).toMatchObject({
       glyphType: 'feature-circle',
@@ -624,7 +621,9 @@ describe('deck layer factory', () => {
     expect(featureCircleLayer).toBeInstanceOf(ScatterplotLayer)
 
     if (!(featureCircleLayer instanceof ScatterplotLayer)) {
-      throw new Error('Expected transcript feature circles to render as ScatterplotLayer.')
+      throw new Error(
+        'Expected transcript feature circles to render as ScatterplotLayer.',
+      )
     }
 
     expect(featureCircleLayer.props.pickable).toBe(true)

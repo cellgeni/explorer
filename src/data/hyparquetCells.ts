@@ -16,9 +16,26 @@ export const CELL_OVERVIEW_COLUMNS = [
   'y_centroid',
   'transcript_counts',
   'cell_area',
+  'nucleus_count',
 ] as const
 
 export const CELL_OVERVIEW_POINT_COLUMNS = [
+  'x_centroid',
+  'y_centroid',
+  'transcript_counts',
+  'cell_area',
+  'nucleus_count',
+] as const
+
+const CELL_OVERVIEW_COLUMNS_WITHOUT_NUCLEUS_COUNT = [
+  'cell_id',
+  'x_centroid',
+  'y_centroid',
+  'transcript_counts',
+  'cell_area',
+] as const
+
+const CELL_OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT = [
   'x_centroid',
   'y_centroid',
   'transcript_counts',
@@ -30,6 +47,7 @@ export interface CellOverviewPoint {
   readonly position: DataPoint
   readonly transcriptCount: number
   readonly cellArea?: number
+  readonly nucleusCount?: number
 }
 
 export interface HyparquetReadObjectsOptions {
@@ -70,15 +88,55 @@ export async function readCellsOverview(
     options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
   const columns =
     options.includeCellIds === false ? CELL_OVERVIEW_POINT_COLUMNS : CELL_OVERVIEW_COLUMNS
-  let rows: readonly Record<string, unknown>[]
+  const rows = await readCellsOverviewRows({
+    file,
+    columns,
+    fallbackColumns:
+      options.includeCellIds === false
+        ? CELL_OVERVIEW_POINT_COLUMNS_WITHOUT_NUCLEUS_COUNT
+        : CELL_OVERVIEW_COLUMNS_WITHOUT_NUCLEUS_COUNT,
+    rowFormat: 'object',
+    compressors,
+    ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
+    readObjects,
+    url: options.url,
+  })
 
+  return rows.map(parseCellOverviewRow)
+}
+
+async function readCellsOverviewRows(
+  options: HyparquetReadObjectsOptions & {
+    readonly fallbackColumns: readonly string[]
+    readonly readObjects: HyparquetObjectReader
+    readonly url: string | undefined
+  },
+): Promise<readonly Record<string, unknown>[]> {
   try {
-    rows = await readObjects({
-      file,
+    return await readCellsOverviewRowsWithColumns(options, options.columns)
+  } catch (error) {
+    if (!isMissingOptionalNucleusCountReadFailure(error)) {
+      throw error
+    }
+
+    return readCellsOverviewRowsWithColumns(options, options.fallbackColumns)
+  }
+}
+
+async function readCellsOverviewRowsWithColumns(
+  options: HyparquetReadObjectsOptions & {
+    readonly readObjects: HyparquetObjectReader
+    readonly url: string | undefined
+  },
+  columns: readonly string[],
+): Promise<readonly Record<string, unknown>[]> {
+  try {
+    return await options.readObjects({
+      file: options.file,
       columns,
-      rowFormat: 'object',
-      compressors,
-      ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
+      rowFormat: options.rowFormat,
+      ...(options.compressors === undefined ? {} : { compressors: options.compressors }),
+      ...(options.rowEnd === undefined ? {} : { rowEnd: options.rowEnd }),
     })
   } catch (error) {
     if (isLowLevelParquetReadFailure(error)) {
@@ -87,8 +145,6 @@ export async function readCellsOverview(
 
     throw error
   }
-
-  return rows.map(parseCellOverviewRow)
 }
 
 async function fileFromUrl(options: ReadCellsOverviewOptions): Promise<AsyncBuffer> {
@@ -139,6 +195,7 @@ export function parseCellOverviewRow(row: Record<string, unknown>): CellOverview
     },
     transcriptCount: readNumericValue(row, 'transcript_counts'),
     ...readOptionalNumericProperty(row, 'cell_area', 'cellArea'),
+    ...readOptionalNumericProperty(row, 'nucleus_count', 'nucleusCount'),
   }
 }
 
@@ -164,8 +221,11 @@ function readNumericValue(row: Record<string, unknown>, key: string): number {
 function readOptionalNumericProperty(
   row: Record<string, unknown>,
   parquetKey: string,
-  outputKey: 'cellArea',
-): { readonly cellArea: number } | Record<string, never> {
+  outputKey: 'cellArea' | 'nucleusCount',
+):
+  | { readonly cellArea: number }
+  | { readonly nucleusCount: number }
+  | Record<string, never> {
   const value = row[parquetKey]
 
   if (value === undefined || value === null) {
@@ -173,11 +233,14 @@ function readOptionalNumericProperty(
   }
 
   if (typeof value === 'number') {
-    return { [outputKey]: value }
+    return outputKey === 'cellArea' ? { cellArea: value } : { nucleusCount: value }
   }
 
   if (typeof value === 'bigint') {
-    return { [outputKey]: Number(value) }
+    const numericValue = Number(value)
+    return outputKey === 'cellArea'
+      ? { cellArea: numericValue }
+      : { nucleusCount: numericValue }
   }
 
   throw new Error(`Expected cells.parquet ${parquetKey} to be numeric.`)
@@ -190,6 +253,16 @@ function isLowLevelParquetReadFailure(error: unknown): boolean {
     message.includes('offset is outside the bounds of the dataview') ||
     message.includes('invalid typed array length')
   )
+}
+
+function isMissingOptionalNucleusCountReadFailure(error: unknown): boolean {
+  if (error instanceof CellsParquetDecodeError) {
+    return false
+  }
+
+  const message = readUnknownErrorMessage(error).toLowerCase()
+
+  return message.includes('nucleus_count') && message.includes('column')
 }
 
 export function isCellsParquetDecodeError(error: unknown): boolean {

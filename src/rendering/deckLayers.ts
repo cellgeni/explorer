@@ -21,6 +21,7 @@ export interface OverviewCellDatum {
   readonly cellCount?: number
   readonly transcriptCount?: number
   readonly cellArea?: number
+  readonly nucleusCount?: number
   readonly expressionCount?: number
   readonly expressionGenes?: readonly string[]
 }
@@ -500,6 +501,7 @@ export function overviewCellsToLayerData(
       fillColor: [215, 63, 124, 150 + Math.round(intensity * 90)],
       transcriptCount: cell.transcriptCount,
       ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
+      ...(cell.nucleusCount === undefined ? {} : { nucleusCount: cell.nucleusCount }),
     }
   })
 }
@@ -535,6 +537,7 @@ export function geneExpressionCellsToLayerData(
         ? {}
         : { transcriptCount: cell.transcriptCount }),
       ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
+      ...(cell.nucleusCount === undefined ? {} : { nucleusCount: cell.nucleusCount }),
     }
   })
 
@@ -641,10 +644,7 @@ function transcriptDensitySquarePolygon(
   bin: TranscriptAggregateDatum,
 ): readonly Position[] {
   const [x = 0, y = 0, z = 0] = bin.position
-  const halfSize = Math.max(
-    1,
-    (bin.binSizeMicrometers ?? bin.radiusMicrometers * 2) / 2,
-  )
+  const halfSize = Math.max(1, (bin.binSizeMicrometers ?? bin.radiusMicrometers * 2) / 2)
 
   return [
     [x - halfSize, y + halfSize, z],

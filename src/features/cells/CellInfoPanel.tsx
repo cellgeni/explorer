@@ -71,6 +71,10 @@ export function CellInfoPanel({
           <dd>{formatOptionalNumber(cell.transcriptCount)}</dd>
         </div>
         <div>
+          <dt>Nuclei</dt>
+          <dd>{formatOptionalNumber(cell.nucleusCount)}</dd>
+        </div>
+        <div>
           <dt>Cell Area</dt>
           <dd>{formatMetric(shape?.areaMicrometersSquared, 'um2')}</dd>
         </div>

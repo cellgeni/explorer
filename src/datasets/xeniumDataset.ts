@@ -84,6 +84,7 @@ export interface GeneExpressionCell {
   readonly count: number
   readonly transcriptCount?: number
   readonly cellArea?: number
+  readonly nucleusCount?: number
 }
 
 export interface GeneExpressionBatch {
@@ -103,6 +104,7 @@ export interface DatasetCell {
   readonly position: DataPoint
   readonly transcriptCount?: number
   readonly cellArea?: number
+  readonly nucleusCount?: number
   readonly cellFeatureMatrixRow?: number
 }
 
@@ -836,8 +838,18 @@ function parseViewportCellRow(row: Record<string, unknown>): DatasetCell {
     },
     transcriptCount: readNumericRowValue(row, 'transcript_counts'),
     cellArea: readNumericRowValue(row, 'cell_area'),
+    ...readOptionalDatasetCellNumericProperty(row, 'nucleus_count'),
     ...(cellFeatureMatrixRow === undefined ? {} : { cellFeatureMatrixRow }),
   }
+}
+
+function readOptionalDatasetCellNumericProperty(
+  row: Record<string, unknown>,
+  rowKey: string,
+): Pick<DatasetCell, 'nucleusCount'> | Record<string, never> {
+  const value = readOptionalNumericRowValue(row, rowKey)
+
+  return value === undefined ? {} : { nucleusCount: value }
 }
 
 function parseTranscriptExportRow(row: Record<string, unknown>): DatasetTranscript {
@@ -904,7 +916,10 @@ function parseTranscriptPointRow(row: Record<string, unknown>): TranscriptPoint 
       y: micrometers(readNumericRowValue(row, 'y_location')),
     },
     qv: readNumericRowValue(row, 'qv'),
-    ...optionalTranscriptNumber('zLocation', readOptionalNumericRowValue(row, 'z_location')),
+    ...optionalTranscriptNumber(
+      'zLocation',
+      readOptionalNumericRowValue(row, 'z_location'),
+    ),
     ...optionalTranscriptBoolean(
       'overlapsNucleus',
       readOptionalBooleanRowValue(row, 'overlaps_nucleus'),
@@ -917,9 +932,7 @@ function parseTranscriptPointRow(row: Record<string, unknown>): TranscriptPoint 
   }
 }
 
-function parseTranscriptGroupRow(
-  row: Record<string, unknown>,
-): TranscriptGroupSummary {
+function parseTranscriptGroupRow(row: Record<string, unknown>): TranscriptGroupSummary {
   const featureName = row.feature_name
   const fovName = row.fov_name
 
@@ -935,7 +948,10 @@ function parseTranscriptGroupRow(
     featureName,
     fovName: fovName ?? null,
     count: readNumericRowValue(row, 'count'),
-    ...optionalTranscriptGroupNumber('meanQv', readOptionalNumericRowValue(row, 'mean_qv')),
+    ...optionalTranscriptGroupNumber(
+      'meanQv',
+      readOptionalNumericRowValue(row, 'mean_qv'),
+    ),
   }
 }
 
@@ -943,11 +959,7 @@ function transcriptViewportFilterSql(
   bbox: BBox,
   options: TranscriptViewportQueryOptions,
 ): SqlFragment {
-  const clauses = [
-    'x_location BETWEEN ? AND ?',
-    'y_location BETWEEN ? AND ?',
-    'qv >= ?',
-  ]
+  const clauses = ['x_location BETWEEN ? AND ?', 'y_location BETWEEN ? AND ?', 'qv >= ?']
   const params: SqlParameter[] = [
     bbox.minX,
     bbox.maxX,
