@@ -1444,12 +1444,35 @@ h2 {
   min-width: 0;
 }
 
+.transcript-density-scale-preview-wrap {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
 .transcript-density-scale-preview {
   height: 28px;
   min-width: 0;
   border: 1px solid rgba(23, 21, 17, 0.22);
   border-radius: 6px;
   box-shadow: inset 0 0 0 1px rgba(255, 253, 247, 0.4);
+}
+
+.transcript-density-scale-values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  color: #7b4d1d;
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.transcript-density-scale-values span:nth-child(2) {
+  text-align: center;
+}
+
+.transcript-density-scale-values span:last-child {
+  text-align: right;
 }
 
 .transcript-density-scale-preview-thermal {

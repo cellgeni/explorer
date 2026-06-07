@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   App,
@@ -154,7 +155,7 @@ describe('App', () => {
     expect(transcriptExactBudgetInput).toHaveValue(100_000)
     expect(transcriptExactBudgetInput).toHaveAttribute('max', '1000000')
     expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
-      'selected',
+      'all',
     )
     expect(screen.getByRole('combobox', { name: 'Density color' })).toHaveValue('thermal')
     expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(20)
@@ -268,8 +269,14 @@ describe('App', () => {
       '',
       '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px',
     )
+    const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
+      () => pendingPromise(),
+    )
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
 
-    render(<App />)
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
 
     expect(screen.getByRole('tab', { name: 'Genes' })).toHaveAttribute(
       'aria-selected',
@@ -284,6 +291,123 @@ describe('App', () => {
         'https://example.test/xenium',
       )
     })
+    expect(loadDatasetOverview).toHaveBeenCalledWith(
+      'https://example.test/xenium',
+      expect.objectContaining({
+        includeCellIds: true,
+        limit: null,
+        signal: expect.any(AbortSignal) as AbortSignal,
+      }),
+    )
+  })
+
+  it('auto-loads a dataset URL from the query string without waiting for a click', async () => {
+    const queryDatasetUrl = 'https://example.test/query-xenium'
+    window.history.replaceState(
+      null,
+      '',
+      `/?dataset=${encodeURIComponent(queryDatasetUrl)}`,
+    )
+    const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
+      async () => [
+        {
+          cellId: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 8,
+        },
+      ],
+    )
+    const loadGenePanel = vi.fn(async () => [])
+    const loadMorphologyImage = vi.fn(async () => ({
+      url: `${queryDatasetUrl}/morphology_focus/morphology_focus_0000.ome.tif`,
+      loader: {} as TiffPyramidLoader,
+      channels: [],
+      channelLoaders: [],
+    }))
+
+    render(
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={loadGenePanel}
+        loadMorphologyImage={loadMorphologyImage}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(loadDatasetOverview).toHaveBeenCalledWith(
+        queryDatasetUrl,
+        expect.objectContaining({
+          includeCellIds: true,
+          limit: null,
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+    })
+    expect(screen.getByLabelText('Dataset URL')).toHaveValue(queryDatasetUrl)
+
+    fireEvent.change(screen.getByLabelText('Dataset URL'), {
+      target: { value: 'https://example.test/typed' },
+    })
+
+    expect(loadDatasetOverview).toHaveBeenCalledTimes(1)
+  })
+
+  it('restarts query-string auto-load after the StrictMode probe aborts it', async () => {
+    const queryDatasetUrl = 'https://example.test/strict-xenium'
+    window.history.replaceState(
+      null,
+      '',
+      `/?dataset=${encodeURIComponent(queryDatasetUrl)}`,
+    )
+    const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
+      (_baseUrl, options = {}) =>
+        new Promise((resolve, reject) => {
+          const abortError = new Error('Aborted')
+          abortError.name = 'AbortError'
+
+          if (options.signal?.aborted) {
+            reject(abortError)
+            return
+          }
+
+          options.signal?.addEventListener('abort', () => reject(abortError), {
+            once: true,
+          })
+
+          if (loadDatasetOverview.mock.calls.length > 1) {
+            resolve([
+              {
+                cellId: intToCellId(1, 1),
+                position: { x: micrometers(10), y: micrometers(20) },
+                transcriptCount: 8,
+              },
+            ])
+          }
+        }),
+    )
+    const loadGenePanel = vi.fn(async () => [])
+    const loadMorphologyImage = vi.fn(async () => ({
+      url: `${queryDatasetUrl}/morphology_focus/morphology_focus_0000.ome.tif`,
+      loader: {} as TiffPyramidLoader,
+      channels: [],
+      channelLoaders: [],
+    }))
+
+    render(
+      <StrictMode>
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadMorphologyImage={loadMorphologyImage}
+        />
+      </StrictMode>,
+    )
+
+    await waitFor(() => {
+      expect(loadDatasetOverview).toHaveBeenCalledTimes(2)
+    })
+    expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
   })
 
   it('runs dataset diagnostics and summarizes the report', async () => {
@@ -1386,6 +1510,12 @@ describe('App', () => {
       expect(
         await screen.findByText(/Showing native all-transcript density squares/),
       ).toBeInTheDocument()
+      const densityScale = screen.getByLabelText(
+        'Transcript density color scale from 0 to 100 transcripts per square.',
+      )
+      expect(within(densityScale).getByText('0')).toBeInTheDocument()
+      expect(within(densityScale).getByText('50')).toBeInTheDocument()
+      expect(within(densityScale).getByText('100')).toBeInTheDocument()
       expect(screen.getByText('Native')).toBeInTheDocument()
       expect(screen.getAllByText(/^[1-9][0-9]* squares$/).length).toBeGreaterThan(0)
       expect(loadTranscriptAggregates).toHaveBeenCalledWith(
@@ -1590,10 +1720,10 @@ describe('App', () => {
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
       openHudTab('Transcripts')
       expect(await screen.findByText('Native LOD + exact')).toBeInTheDocument()
+      expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
+        'all',
+      )
 
-      fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
-        target: { value: 'all' },
-      })
       fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
 
       expect(

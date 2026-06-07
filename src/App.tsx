@@ -933,6 +933,8 @@ export function App({
   const [selectedGenes, setSelectedGenes] = useState<readonly string[]>(
     initialShareableState.selectedGenes ?? [],
   )
+  const effectiveTranscriptFeatureFilterMode: TranscriptFeatureFilterMode =
+    selectedGenes.length === 0 ? 'all' : transcriptFeatureFilterMode
   const [roiMode, setRoiMode] = useState<RoiDrawMode>('idle')
   const [roiName, setRoiName] = useState('ROI 1')
   const [observationColorMode, setObservationColorMode] = useState<ObservationColorMode>(
@@ -989,6 +991,10 @@ export function App({
     initialShareableState.roiSelection ?? null,
   )
   const didApplyInitialDatasetUrlRef = useRef(false)
+  const startDatasetLoadRef = useRef<
+    ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
+  >(null)
+  const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
   const isLoading = loadState.status === 'loading'
   const annotationStyleColors = useMemo(
     () =>
@@ -1078,17 +1084,21 @@ export function App({
     () => transcriptPointsToLayerData(transcriptPointsForRendering(transcriptLayerState)),
     [transcriptLayerState],
   )
+  const transcriptDensityScaleMax =
+    transcriptAggregateScaleMaxForRendering(transcriptLayerState)
+  const transcriptDensityScaleLabels =
+    transcriptDensityScaleValueLabels(transcriptDensityScaleMax)
   const transcriptLayerAggregateBins = useMemo(
     () => {
-      const scaleMax = transcriptAggregateScaleMaxForRendering(transcriptLayerState)
-
       return transcriptAggregateBinsToLayerData(
         transcriptAggregateBinsForRendering(transcriptLayerState),
         transcriptDensityColorScale,
-        scaleMax === undefined ? {} : { scaleMax },
+        transcriptDensityScaleMax === undefined
+          ? {}
+          : { scaleMax: transcriptDensityScaleMax },
       )
     },
-    [transcriptDensityColorScale, transcriptLayerState],
+    [transcriptDensityColorScale, transcriptDensityScaleMax, transcriptLayerState],
   )
   const visibleTranscriptEstimate = useMemo(
     () =>
@@ -1874,10 +1884,12 @@ export function App({
     }
 
     const featureNames =
-      transcriptFeatureFilterMode === 'selected' ? selectedGenes : EMPTY_GENE_LIST
+      effectiveTranscriptFeatureFilterMode === 'selected'
+        ? selectedGenes
+        : EMPTY_GENE_LIST
     const aggregateFeatureNames = EMPTY_GENE_LIST
     const hasSelectedFeatureFilter =
-      transcriptFeatureFilterMode !== 'selected' || featureNames.length > 0
+      effectiveTranscriptFeatureFilterMode !== 'selected' || featureNames.length > 0
     const plan = planTranscriptLod(currentViewportDetail, {
       detailMode: transcriptDetailMode,
       visibleTranscriptEstimate,
@@ -2015,7 +2027,7 @@ export function App({
             bins,
             message: transcriptAggregateFallbackMessage({
               mode: fallbackMode,
-              featureFilterMode: transcriptFeatureFilterMode,
+              featureFilterMode: effectiveTranscriptFeatureFilterMode,
               selectedFeatureCount: featureNames.length,
             }),
             visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
@@ -2225,6 +2237,7 @@ export function App({
   }, [
     appendDebugEvent,
     currentViewportDetail,
+    effectiveTranscriptFeatureFilterMode,
     loadState,
     loadTranscriptAggregates,
     loadTranscriptViewport,
@@ -2234,7 +2247,6 @@ export function App({
     transcriptCapabilityState,
     transcriptDetailMode,
     transcriptExactPointLimit,
-    transcriptFeatureFilterMode,
     transcriptGeneOnly,
     transcriptMinQv,
     visibleTranscriptEstimate,
@@ -2419,7 +2431,7 @@ export function App({
         transcriptExactPointLimit,
         transcriptMinQv,
         transcriptGeneOnly,
-        transcriptFeatureFilterMode,
+        transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
         transcriptOpacity,
         transcriptPointSize,
       })
@@ -2442,6 +2454,7 @@ export function App({
     boundaryCellLimit,
     coordinateUnit,
     datasetUrl,
+    effectiveTranscriptFeatureFilterMode,
     geneExpressionColorScale,
     geneExpressionDetailMode,
     geneExpressionScoreMode,
@@ -2453,7 +2466,6 @@ export function App({
     transcriptDetailMode,
     transcriptDensityColorScale,
     transcriptExactPointLimit,
-    transcriptFeatureFilterMode,
     transcriptGeneOnly,
     transcriptMinQv,
     transcriptOpacity,
@@ -2571,6 +2583,78 @@ export function App({
     }
   }, [])
 
+  function queueAutoContrast(
+    channels: readonly MorphologyImageChannel[],
+    options: {
+      readonly requestId?: number
+      readonly signal?: AbortSignal
+    } = {},
+  ) {
+    const requestId = options.requestId ?? loadRequestId.current
+    const signal = options.signal ?? datasetAbortRef.current?.signal
+    const channelsToLoad: MorphologyImageChannel[] = []
+
+    for (const channel of channels) {
+      const channelId = channel.info.id
+
+      if (autoContrastChannelIdsRef.current.has(channelId)) {
+        continue
+      }
+
+      autoContrastChannelIdsRef.current.add(channelId)
+      channelsToLoad.push(channel)
+    }
+
+    if (channelsToLoad.length === 0) {
+      return
+    }
+
+    setAutoContrastChannelIds([...autoContrastChannelIdsRef.current])
+
+    for (const channel of channelsToLoad) {
+      startAutoContrast(channel, requestId, signal)
+    }
+  }
+
+  function startAutoContrast(
+    channel: MorphologyImageChannel,
+    requestId: number,
+    signal: AbortSignal | undefined,
+  ) {
+    const channelId = channel.info.id
+    void computeAutoChannelContrast(channel, signal === undefined ? {} : { signal })
+      .then((contrast) => {
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
+        updateMorphologyChannel(channelId, {
+          contrastMin: contrast.min,
+          contrastMax: contrast.max,
+          histogram: contrast.histogram,
+        })
+      })
+      .catch((error) => {
+        if (isAbortError(error) || loadRequestId.current !== requestId) {
+          return
+        }
+
+        setMorphologyState({
+          status: 'error',
+          url: channel.loader.url,
+          error: createStructuredLoadError('Image tiles', error),
+        })
+      })
+      .finally(() => {
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
+        autoContrastChannelIdsRef.current.delete(channelId)
+        setAutoContrastChannelIds([...autoContrastChannelIdsRef.current])
+      })
+  }
+
   function startDatasetWarmup(requestedUrl: string, requestId: number) {
     abortActiveRequest(datasetWarmupAbortRef)
     const warmupStartedAt = readTimestamp()
@@ -2641,15 +2725,10 @@ export function App({
       })
   }
 
-  async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function startDatasetLoad(datasetUrl: string, loadImage: boolean) {
+    const requestedUrl = datasetUrl.trim()
 
-    const formData = new FormData(event.currentTarget)
-    const datasetUrl = formData.get('datasetUrl')
-    const loadImage = formData.get('loadMorphologyImage') === 'on'
-
-    if (typeof datasetUrl === 'string' && datasetUrl.trim().length > 0) {
-      const requestedUrl = datasetUrl.trim()
+    if (requestedUrl !== '') {
       const requestId = loadRequestId.current + 1
       const loadStartedAt = readTimestamp()
       const sharedState = initialShareableStateRef.current
@@ -2659,6 +2738,9 @@ export function App({
       const sharedSelectedGenes = shouldRestoreSharedState
         ? (sharedState.selectedGenes ?? [])
         : []
+      if (!shouldRestoreSharedState) {
+        initialShareableStateRef.current = null
+      }
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(datasetWarmupAbortRef)
@@ -2780,7 +2862,6 @@ export function App({
       initialSharedRoiSelectionRef.current = shouldRestoreSharedState
         ? (sharedState?.roiSelection ?? null)
         : null
-      initialShareableStateRef.current = null
       startDatasetWarmup(requestedUrl, requestId)
 
       void loadGenePanel(requestedUrl, { signal: abortController.signal })
@@ -2853,6 +2934,7 @@ export function App({
         }
 
         setOverviewCells(overviewCellsToLayerData(cells))
+        initialShareableStateRef.current = null
         setLoadState({
           status: 'ready',
           url: requestedUrl,
@@ -2922,6 +3004,7 @@ export function App({
           url: requestedUrl,
           error: createStructuredLoadError('Dataset overview', error),
         })
+        initialShareableStateRef.current = null
         appendDebugEvent('Dataset load failed')
         recordTelemetry(
           telemetryEvent('dataset.load', 'failure', {
@@ -2941,6 +3024,35 @@ export function App({
       }
     }
   }
+
+  async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const formData = new FormData(event.currentTarget)
+    const datasetUrl = formData.get('datasetUrl')
+    const loadImage = formData.get('loadMorphologyImage') === 'on'
+
+    if (typeof datasetUrl === 'string') {
+      await startDatasetLoad(datasetUrl, loadImage)
+    }
+  }
+
+  useEffect(() => {
+    startDatasetLoadRef.current = startDatasetLoad
+  })
+
+  useEffect(() => {
+    const initialDatasetUrl = initialShareableState.datasetUrl?.trim()
+
+    if (initialDatasetUrl === undefined || initialDatasetUrl === '') {
+      return
+    }
+
+    void startDatasetLoadRef.current?.(
+      initialDatasetUrl,
+      initialShouldLoadMorphologyRef.current,
+    )
+  }, [initialShareableState.datasetUrl])
 
   async function handleRunDatasetDiagnostics() {
     const requestedUrl = datasetUrl.trim()
@@ -3025,7 +3137,7 @@ export function App({
           transcriptDetailMode,
           transcriptDensityColorScale,
           transcriptExactPointLimit,
-          transcriptFeatureFilterMode,
+          transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
           transcriptGeneOnly,
           transcriptLayerState,
           transcriptMinQv,
@@ -3834,78 +3946,6 @@ export function App({
     queueAutoContrast([channel])
   }
 
-  function queueAutoContrast(
-    channels: readonly MorphologyImageChannel[],
-    options: {
-      readonly requestId?: number
-      readonly signal?: AbortSignal
-    } = {},
-  ) {
-    const requestId = options.requestId ?? loadRequestId.current
-    const signal = options.signal ?? datasetAbortRef.current?.signal
-    const channelsToLoad: MorphologyImageChannel[] = []
-
-    for (const channel of channels) {
-      const channelId = channel.info.id
-
-      if (autoContrastChannelIdsRef.current.has(channelId)) {
-        continue
-      }
-
-      autoContrastChannelIdsRef.current.add(channelId)
-      channelsToLoad.push(channel)
-    }
-
-    if (channelsToLoad.length === 0) {
-      return
-    }
-
-    setAutoContrastChannelIds([...autoContrastChannelIdsRef.current])
-
-    for (const channel of channelsToLoad) {
-      startAutoContrast(channel, requestId, signal)
-    }
-  }
-
-  function startAutoContrast(
-    channel: MorphologyImageChannel,
-    requestId: number,
-    signal: AbortSignal | undefined,
-  ) {
-    const channelId = channel.info.id
-    void computeAutoChannelContrast(channel, signal === undefined ? {} : { signal })
-      .then((contrast) => {
-        if (loadRequestId.current !== requestId) {
-          return
-        }
-
-        updateMorphologyChannel(channelId, {
-          contrastMin: contrast.min,
-          contrastMax: contrast.max,
-          histogram: contrast.histogram,
-        })
-      })
-      .catch((error) => {
-        if (isAbortError(error) || loadRequestId.current !== requestId) {
-          return
-        }
-
-        setMorphologyState({
-          status: 'error',
-          url: channel.loader.url,
-          error: createStructuredLoadError('Image tiles', error),
-        })
-      })
-      .finally(() => {
-        if (loadRequestId.current !== requestId) {
-          return
-        }
-
-        autoContrastChannelIdsRef.current.delete(channelId)
-        setAutoContrastChannelIds([...autoContrastChannelIdsRef.current])
-      })
-  }
-
   return (
     <main className="app-shell">
       <a className="skip-link" href="#viewer-heading">
@@ -4544,7 +4584,7 @@ export function App({
                 <label htmlFor={transcriptFeatureFilterInputId}>Feature filter</label>
                 <select
                   id={transcriptFeatureFilterInputId}
-                  value={transcriptFeatureFilterMode}
+                  value={effectiveTranscriptFeatureFilterMode}
                   onChange={(event) => {
                     const nextMode = event.currentTarget.value
 
@@ -4557,7 +4597,9 @@ export function App({
                     }
                   }}
                 >
-                  <option value="selected">Selected genes</option>
+                  <option value="selected" disabled={selectedGenes.length === 0}>
+                    Selected genes
+                  </option>
                   <option value="all">All features</option>
                 </select>
 
@@ -4583,10 +4625,22 @@ export function App({
                       </option>
                     ))}
                   </select>
-                  <span
-                    className={`transcript-density-scale-preview transcript-density-scale-preview-${transcriptDensityColorScale}`}
-                    aria-hidden="true"
-                  />
+                  <div
+                    className="transcript-density-scale-preview-wrap"
+                    aria-label={transcriptDensityScaleAriaLabel(
+                      transcriptDensityScaleMax,
+                    )}
+                  >
+                    <span
+                      className={`transcript-density-scale-preview transcript-density-scale-preview-${transcriptDensityColorScale}`}
+                      aria-hidden="true"
+                    />
+                    <span className="transcript-density-scale-values" aria-hidden="true">
+                      <span>{transcriptDensityScaleLabels[0]}</span>
+                      <span>{transcriptDensityScaleLabels[1]}</span>
+                      <span>{transcriptDensityScaleLabels[2]}</span>
+                    </span>
+                  </div>
                 </div>
 
                 <label htmlFor={transcriptMinQvInputId}>Min QV</label>
@@ -5505,6 +5559,34 @@ function transcriptAggregateScaleMaxForRendering(
   return undefined
 }
 
+function transcriptDensityScaleValueLabels(
+  scaleMax: number | undefined,
+): readonly [string, string, string] {
+  if (scaleMax === undefined || !Number.isFinite(scaleMax) || scaleMax <= 0) {
+    return ['0', '-', '-']
+  }
+
+  return [
+    '0',
+    formatTranscriptDensityScaleValue(scaleMax * 0.5),
+    formatTranscriptDensityScaleValue(scaleMax),
+  ]
+}
+
+function transcriptDensityScaleAriaLabel(scaleMax: number | undefined): string {
+  if (scaleMax === undefined || !Number.isFinite(scaleMax) || scaleMax <= 0) {
+    return 'Transcript density color scale values unavailable until density renders.'
+  }
+
+  return `Transcript density color scale from 0 to ${formatTranscriptDensityScaleValue(
+    scaleMax,
+  )} transcripts per square.`
+}
+
+function formatTranscriptDensityScaleValue(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 0 })
+}
+
 function transcriptAggregateRenderedLabel(bins: readonly TranscriptAggregateBin[]): string {
   return `${bins.length.toLocaleString()} squares`
 }
@@ -5565,7 +5647,14 @@ function isTranscriptFeatureFilterMode(
 }
 
 function readShareableStateFromLocation(): ShareableState {
-  return typeof window === 'undefined' ? {} : parseShareableState(window.location.hash)
+  if (typeof window === 'undefined') {
+    return {}
+  }
+
+  return {
+    ...parseShareableState(window.location.search),
+    ...parseShareableState(window.location.hash),
+  }
 }
 
 function parseControlHudTab(value: string | undefined): ControlHudTab | undefined {
