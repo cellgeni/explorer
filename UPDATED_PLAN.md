@@ -20,6 +20,58 @@ done. This file records execution-level additions requested after work began.
   optimize. The correctness pass needed before Phase 5.1 is closed; the broader
   optimization pass remains a future follow-up.
 
+## App Refactor Decisions - 2026-06-07
+
+- [x] Refactor goal: reduce `App.tsx` by extracting coherent feature/domain
+      boundaries, not by splitting randomly by line count. `App.tsx` remains the
+      application orchestration root for cross-feature request flow, effects,
+      and top-level state wiring.
+- [x] Do not move state into Zustand just to make `App.tsx` shorter. The current
+      pass keeps existing React state ownership in place unless a feature has a
+      clear shared-state reason to move later. The existing viewer store remains
+      the only Zustand boundary touched by this refactor.
+- [x] Do not combine the refactor with behavior changes. Model/component moves
+      must preserve product behavior and existing UI copy unless a later task
+      explicitly requests a behavior change.
+- [x] Do not create generic catch-all hooks such as `useAppState`. Extract
+      focused feature models, view components, or small domain helpers instead.
+- [x] Avoid extracting components with very large prop bags. When a UI section
+      needs many values, either keep it in `App.tsx` for now or extract a
+      coherent view/model boundary alongside the component.
+- [x] Component extraction decisions completed so far:
+      `AppStatusPanels`, control HUD panels (`DatasetHudPanel`, `LayerHudPanel`,
+      `CellHudPanel`, `RoiHudPanel`), `EmbeddingPanel`,
+      `CellInfoPanel`, `MorphologyChannelControls`, `MagicLensPanel`,
+      `RoiGeneStatsPanel`, and `TranscriptStatusPanel`. These are concrete UI
+      sections, not arbitrary line-count cuts.
+- [x] Domain/model extraction decisions completed so far:
+      `cellDetailModel`, `morphologyChannels`, `magicLensModel`, `roiModel`,
+      `transcriptLayerModel`, `transcriptLabels`, `geneControlsModel`,
+      `annotationModel`, `diagnosticsDump`, `loadErrorModel`, and shared
+      `slug`. These modules own pure calculations, labels, state unions, and
+      serialization/parsing helpers close to their feature.
+- [x] Shared state model decision: feature state unions can live in feature
+      model modules with generic narrow error bounds. `App.tsx` supplies
+      `StructuredLoadError` where full diagnostics are needed, while panels can
+      depend on narrower display/error shapes.
+- [x] Error handling decision: structured load-error typing and classification
+      are centralized in `features/errors/loadErrorModel.ts`; feature code
+      should reuse that instead of recreating source/code/action mapping.
+- [x] ROI/Magic Lens decision: ROI state, summaries, gene-stat labels, warmup
+      keys, CSV export formatting, Magic Lens summaries, query keys, limits, and
+      normalization are feature-domain concerns. Async request orchestration and
+      cancellation remain in `App.tsx`.
+- [x] Transcript decision: transcript capability/layer state, retained-layer
+      derivation, density labels, detail/filter parsing, budget messages, and
+      cell-summary fallback bins live in `transcriptLayerModel`. Transcript
+      request effects and cross-feature coordination remain in `App.tsx`.
+- [x] Checkpoint commits so far:
+      `a22c90e Refactor app panels and feature models` and
+      `8cdfea2 Extract ROI and load error models`.
+- [x] Verification after the latest checkpoint passed `npm run typecheck`,
+      `npm run lint`, `npm test`, targeted Prettier checks, and
+      `git diff --check`. The Vitest jsdom canvas warning is known and unchanged.
+
 ## Added Skill Requirements
 
 - Use `frontend-design` for Phase 1 UI work, as already required by `PLAN.md`.
