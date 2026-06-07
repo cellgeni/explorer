@@ -13,6 +13,29 @@ import { RoiHudPanel } from './features/control-hud/RoiHudPanel'
 import { TranscriptStatusPanel } from './features/transcripts/TranscriptStatusPanel'
 import { transcriptCapabilityLabel } from './features/transcripts/transcriptLabels'
 import {
+  CONTROL_HUD_TABS,
+  isObservationColorMode,
+  parseControlHudTab,
+  parseObservationColorMode,
+  parseViewerCoordinateUnit,
+  readShareableStateFromLocation,
+  type ControlHudTab,
+} from './features/app-shell/appShellModel'
+import {
+  abortActiveRequest,
+  appendDebugLogEntry,
+  clearTimeoutRef,
+  createDebugLogEntry,
+  formatElapsed,
+  isAbortError,
+  readTimestamp,
+  shortDatasetLabel,
+  shortIdentifier,
+  type DebugLogAppendOptions,
+  type DebugLogEntry,
+  type LoadingTask,
+} from './features/app-shell/appRuntimeModel'
+import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
   TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS,
   TRANSCRIPT_NATIVE_DENSITY_MAX_BINS,
@@ -45,8 +68,9 @@ import {
   CELL_GENE_EXPRESSION_LIMIT,
   cellExpressionSummaryFromStats,
   cellDetailStatusCopy,
+  loadSelectedCellBoundary,
   overviewCellToDatasetCell,
-  selectedCellBoundaryBbox,
+  overviewCellsToBbox,
   summarizeCellShape,
   type CellDetailState,
   type CellTranscriptDistributionState,
@@ -105,19 +129,26 @@ import {
   mergeImportedAnnotations,
   removeAnnotationColor,
   removeAnnotationColorsByPrefix,
+  type AnnotationGroupState,
+  type AnnotationState,
 } from './features/annotations/annotationModel'
 import {
   defaultGeneSetName,
   filterGeneOptions,
+  formatGeneScaleValue,
+  type GeneExpressionScaleDomain,
+  type GeneExpressionState,
   geneExpressionModeLabel,
   geneExpressionScaleKeyFor,
   geneExpressionStatusCopy,
   genePanelStatusCopy,
+  type GenePanelState,
   isGeneExpressionDetailMode,
   parseGeneExpressionColorScale,
   parseGeneExpressionDetailMode,
   parseGeneExpressionScoreMode,
   parseGeneSetSymbols,
+  type SavedGeneSet,
 } from './features/genes/geneControlsModel'
 import {
   createStructuredLoadError,
@@ -126,6 +157,14 @@ import {
   readErrorMessage,
   type StructuredLoadError,
 } from './features/errors/loadErrorModel'
+import type {
+  BoundaryLoadState,
+  CellFeatureMatrixCapabilityState,
+  DatasetDiagnosticsState,
+  DatasetLoadState,
+  DatasetWarmupState,
+  MorphologyLoadState,
+} from './features/dataset/datasetLoadModel'
 import { slug } from './utils/slug'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import {
@@ -181,7 +220,6 @@ import {
   type TranscriptGroupSummary,
   type TranscriptPoint,
 } from './data/transcriptOverlay'
-import { micrometers } from './data/coords'
 import {
   normalizeRoiSelection,
   type RoiSelection,
@@ -191,12 +229,10 @@ import { parseCustomAnnotations } from './data/customAnnotations'
 import {
   runDatasetDiagnostics as defaultRunDatasetDiagnostics,
   summarizeDatasetDiagnostics,
-  type DatasetDiagnosticsReport,
 } from './data/datasetDiagnostics'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
 import {
   formatShareableState,
-  parseShareableState,
   shareableViewStateKey,
   viewStateToShareable,
   type ShareableState,
@@ -259,10 +295,7 @@ import type {
   LoadDatasetAnnotationsOptions,
 } from './data/datasetAnnotations'
 import type { Annotation, ElementBatch, SpatialElement } from './datasets/spatialDataset'
-import type {
-  GeneExpressionDetailMode,
-  GeneExpressionLoadMode,
-} from './data/geneExpressionLod'
+import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
 import type {
   GeneExpressionColorScale,
   GeneExpressionScoreMode,
@@ -280,19 +313,6 @@ import type {
 
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_GENE_LIST: readonly string[] = []
-const DEBUG_LOG_LIMIT = 32
-const CONTROL_HUD_TABS = [
-  { id: 'dataset', label: 'Dataset' },
-  { id: 'layers', label: 'Layers' },
-  { id: 'genes', label: 'Genes' },
-  { id: 'transcripts', label: 'Transcripts' },
-  { id: 'magic-lens', label: 'Magic Lens' },
-  { id: 'annotations', label: 'Annotations' },
-  { id: 'roi', label: 'ROI' },
-  { id: 'cell', label: 'Cell' },
-] as const
-
-type ControlHudTab = (typeof CONTROL_HUD_TABS)[number]['id']
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
@@ -412,152 +432,6 @@ export type DatasetWarmupLoader = (
 ) => Promise<WarmDatasetForRoiResult | void>
 export type DatasetDiagnosticsRunner = typeof defaultRunDatasetDiagnostics
 
-type DatasetLoadState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | { readonly status: 'ready'; readonly url: string; readonly cellCount: number }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type DatasetWarmupState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | { readonly status: 'ready'; readonly url: string }
-  | { readonly status: 'error'; readonly url: string }
-
-type CellFeatureMatrixCapabilityState =
-  | { readonly status: 'idle' }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly hasCellMajorCsc: boolean
-    }
-
-type DatasetDiagnosticsState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly report: DatasetDiagnosticsReport
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type MorphologyLoadState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | { readonly status: 'ready'; readonly url: string }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type BoundaryLoadState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | { readonly status: 'ready'; readonly url: string; readonly cellCount: number }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type GenePanelState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | { readonly status: 'ready'; readonly url: string; readonly genes: readonly string[] }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type AnnotationState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly annotations: readonly Annotation[]
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type AnnotationGroupState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly groups: readonly AnnotationGroupOption[]
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type GeneExpressionState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'waiting'; readonly message: string }
-  | {
-      readonly status: 'loading'
-      readonly url: string
-      readonly genes: readonly string[]
-      readonly mode: GeneExpressionLoadMode
-      readonly visibleCellCount: number
-    }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly genes: readonly string[]
-      readonly cellCount: number
-      readonly mode: GeneExpressionLoadMode
-      readonly visibleCellCount: number
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-interface DebugLogEntry {
-  readonly id: number
-  readonly timestamp: number
-  readonly message: string
-  readonly coalesceKey?: string
-}
-
-interface LoadingTask {
-  readonly id: string
-  readonly tabId: ControlHudTab
-  readonly label: string
-  readonly detail?: string
-}
-
-interface SavedGeneSet {
-  readonly id: string
-  readonly name: string
-  readonly genes: readonly string[]
-  readonly scoreMode: GeneExpressionScoreMode
-}
-
-interface GeneExpressionScaleDomain {
-  readonly key: string
-  readonly max: number
-}
-
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader
   readonly loadMorphologyImage?: MorphologyImageLoader
@@ -635,7 +509,9 @@ export function App({
   const [performanceBudget] = useState<PerformanceBudget>(() => detectPerformanceBudget())
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
-  const [loadState, setLoadState] = useState<DatasetLoadState>({ status: 'idle' })
+  const [loadState, setLoadState] = useState<DatasetLoadState<StructuredLoadError>>({
+    status: 'idle',
+  })
   const [datasetWarmupState, setDatasetWarmupState] = useState<DatasetWarmupState>({
     status: 'idle',
   })
@@ -643,24 +519,28 @@ export function App({
     useState<CellFeatureMatrixCapabilityState>({
       status: 'idle',
     })
-  const [diagnosticsState, setDiagnosticsState] = useState<DatasetDiagnosticsState>({
+  const [diagnosticsState, setDiagnosticsState] = useState<
+    DatasetDiagnosticsState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [morphologyState, setMorphologyState] = useState<
+    MorphologyLoadState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [boundaryState, setBoundaryState] = useState<
+    BoundaryLoadState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [genePanelState, setGenePanelState] = useState<
+    GenePanelState<StructuredLoadError>
+  >({
     status: 'idle',
   })
-  const [morphologyState, setMorphologyState] = useState<MorphologyLoadState>({
+  const [annotationState, setAnnotationState] = useState<
+    AnnotationState<StructuredLoadError>
+  >({
     status: 'idle',
   })
-  const [boundaryState, setBoundaryState] = useState<BoundaryLoadState>({
-    status: 'idle',
-  })
-  const [genePanelState, setGenePanelState] = useState<GenePanelState>({
-    status: 'idle',
-  })
-  const [annotationState, setAnnotationState] = useState<AnnotationState>({
-    status: 'idle',
-  })
-  const [annotationGroupState, setAnnotationGroupState] = useState<AnnotationGroupState>({
-    status: 'idle',
-  })
+  const [annotationGroupState, setAnnotationGroupState] = useState<
+    AnnotationGroupState<StructuredLoadError>
+  >({ status: 'idle' })
   const [analysisEmbeddingState, setAnalysisEmbeddingState] = useState<
     AnalysisEmbeddingState<StructuredLoadError>
   >({
@@ -763,9 +643,9 @@ export function App({
   const [activeControlHudTab, setActiveControlHudTab] = useState<ControlHudTab>(
     () => parseControlHudTab(initialShareableState.activeTab) ?? 'dataset',
   )
-  const [geneExpressionState, setGeneExpressionState] = useState<GeneExpressionState>({
-    status: 'idle',
-  })
+  const [geneExpressionState, setGeneExpressionState] = useState<
+    GeneExpressionState<StructuredLoadError>
+  >({ status: 'idle' })
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
   const [geneExpressionBatch, setGeneExpressionBatch] =
     useState<GeneExpressionBatch | null>(null)
@@ -1332,30 +1212,11 @@ export function App({
     showTranscriptOverlay,
   )
   const appendDebugEvent = useCallback(
-    (message: string, options: { readonly coalesceKey?: string } = {}) => {
+    (message: string, options: DebugLogAppendOptions = {}) => {
       debugLogIdRef.current += 1
-      const entry: DebugLogEntry = {
-        id: debugLogIdRef.current,
-        timestamp: Date.now(),
-        message,
-        ...(options.coalesceKey === undefined
-          ? {}
-          : { coalesceKey: options.coalesceKey }),
-      }
+      const entry = createDebugLogEntry(debugLogIdRef.current, message, options)
 
-      setDebugLog((current) => {
-        const first = current[0]
-
-        if (
-          first !== undefined &&
-          entry.coalesceKey !== undefined &&
-          first.coalesceKey === entry.coalesceKey
-        ) {
-          return [entry, ...current.slice(1)]
-        }
-
-        return [entry, ...current].slice(0, DEBUG_LOG_LIMIT)
-      })
+      setDebugLog((current) => appendDebugLogEntry(current, entry))
     },
     [],
   )
@@ -5204,98 +5065,6 @@ async function defaultComputeAutoChannelContrast(
   return morphologyContrast.computeChannelAutoContrast(channel.loader, options)
 }
 
-function isObservationColorMode(value: string): value is ObservationColorMode {
-  return value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
-}
-
-function readShareableStateFromLocation(): ShareableState {
-  if (typeof window === 'undefined') {
-    return {}
-  }
-
-  return {
-    ...parseShareableState(window.location.search),
-    ...parseShareableState(window.location.hash),
-  }
-}
-
-function parseControlHudTab(value: string | undefined): ControlHudTab | undefined {
-  return CONTROL_HUD_TABS.some((tab) => tab.id === value)
-    ? (value as ControlHudTab)
-    : undefined
-}
-
-function parseViewerCoordinateUnit(
-  value: string | undefined,
-): ViewerCoordinateUnit | undefined {
-  return value === 'um' || value === 'px' ? value : undefined
-}
-
-function parseObservationColorMode(
-  value: string | undefined,
-): ObservationColorMode | undefined {
-  return value !== undefined && isObservationColorMode(value) ? value : undefined
-}
-
-function overviewCellsToBbox(cells: readonly OverviewCellDatum[]): BBox | null {
-  if (cells.length === 0) {
-    return null
-  }
-
-  let minX = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-
-  for (const cell of cells) {
-    const [x = 0, deckY = 0] = cell.position
-    const rawY = -deckY
-
-    minX = Math.min(minX, x)
-    maxX = Math.max(maxX, x)
-    minY = Math.min(minY, rawY)
-    maxY = Math.max(maxY, rawY)
-  }
-
-  return {
-    minX: micrometers(minX),
-    maxX: micrometers(maxX),
-    minY: micrometers(minY),
-    maxY: micrometers(maxY),
-  }
-}
-
-async function loadSelectedCellBoundary(
-  baseUrl: string,
-  cell: OverviewCellDatum,
-  loadBoundaryElements: BoundaryElementsLoader,
-  signal: AbortSignal,
-): Promise<SpatialElement | null> {
-  try {
-    const batch = await loadBoundaryElements(baseUrl, selectedCellBoundaryBbox(cell), {
-      signal,
-    })
-
-    if (signal.aborted) {
-      throwAbortError('Selected cell boundary request aborted.')
-    }
-
-    return batch.elements.find((element) => element.id === cell.id) ?? null
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw error
-    }
-
-    return null
-  }
-}
-
-function throwAbortError(message: string): never {
-  const error = new Error(message)
-  error.name = 'AbortError'
-  throw error
-}
-
 function downloadTextFile(
   fileName: string,
   text: string,
@@ -5308,67 +5077,4 @@ function downloadTextFile(
   link.download = fileName
   link.click()
   URL.revokeObjectURL(url)
-}
-
-function readTimestamp(): number {
-  return Date.now()
-}
-
-function formatElapsed(startedAt: number): string {
-  const elapsedMs = Math.max(0, readTimestamp() - startedAt)
-
-  if (elapsedMs < 1_000) {
-    return `${Math.round(elapsedMs)} ms`
-  }
-
-  return `${(elapsedMs / 1_000).toLocaleString(undefined, {
-    maximumFractionDigits: 1,
-  })} s`
-}
-
-function formatGeneScaleValue(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) {
-    return '0'
-  }
-
-  return value.toLocaleString(undefined, {
-    maximumFractionDigits: value < 10 ? 2 : 1,
-  })
-}
-
-function shortDatasetLabel(url: string): string {
-  try {
-    const parsed = new URL(url)
-    const lastPathSegment = parsed.pathname.split('/').filter(Boolean).at(-1)
-    return shortIdentifier(lastPathSegment ?? parsed.host)
-  } catch {
-    return shortIdentifier(url)
-  }
-}
-
-function shortIdentifier(value: string): string {
-  const normalized = value.trim()
-
-  if (normalized.length <= 24) {
-    return normalized
-  }
-
-  return `${normalized.slice(0, 10)}...${normalized.slice(-8)}`
-}
-
-function abortActiveRequest(ref: { current: AbortController | null }): void {
-  ref.current?.abort()
-  ref.current = null
-}
-
-function clearTimeoutRef(ref: { current: number | null }): void {
-  if (ref.current !== null && typeof window !== 'undefined') {
-    window.clearTimeout(ref.current)
-  }
-
-  ref.current = null
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
 }

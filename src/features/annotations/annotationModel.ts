@@ -1,8 +1,9 @@
+import type { AnnotationGroupOption } from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
 import { slug } from '../../utils/slug'
 
-type AnnotationDisplayState =
+export type AnnotationState<ErrorType = unknown> =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
   | {
@@ -10,9 +11,21 @@ type AnnotationDisplayState =
       readonly url: string
       readonly annotations: readonly Annotation[]
     }
-  | { readonly status: 'error'; readonly url: string; readonly error: unknown }
+  | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
 
-export function annotationStatusCopy(annotationState: AnnotationDisplayState): string {
+export type AnnotationGroupState<ErrorType = unknown> =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly groups: readonly AnnotationGroupOption[]
+    }
+  | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
+
+export function annotationStatusCopy<ErrorType>(
+  annotationState: AnnotationState<ErrorType>,
+): string {
   if (annotationState.status === 'loading') {
     return 'Loading'
   }
@@ -30,7 +43,7 @@ export function annotationStatusCopy(annotationState: AnnotationDisplayState): s
 }
 
 export function hasReadyAnnotationsAfterRemove(
-  annotationState: AnnotationDisplayState,
+  annotationState: AnnotationState,
   annotationId: string,
 ): boolean {
   return (

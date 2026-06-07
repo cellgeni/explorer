@@ -11,27 +11,32 @@ import {
 
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 
-type GenePanelDisplayState =
+export type GenePanelState<ErrorType = unknown> =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
   | { readonly status: 'ready'; readonly url: string; readonly genes: readonly string[] }
-  | { readonly status: 'error'; readonly url: string; readonly error: unknown }
+  | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
 
-type GeneExpressionDisplayState =
+export interface GeneExpressionLoadErrorSummary {
+  readonly title: string
+}
+
+export type GeneExpressionState<
+  ErrorType extends GeneExpressionLoadErrorSummary = GeneExpressionLoadErrorSummary,
+> =
   | { readonly status: 'idle' }
+  | { readonly status: 'waiting'; readonly message: string }
   | {
       readonly status: 'loading'
       readonly url: string
-      readonly mode: GeneExpressionLoadMode
       readonly genes: readonly string[]
-    }
-  | {
-      readonly status: 'waiting'
-      readonly message: string
+      readonly mode: GeneExpressionLoadMode
+      readonly visibleCellCount: number
     }
   | {
       readonly status: 'ready'
       readonly url: string
+      readonly genes: readonly string[]
       readonly mode: GeneExpressionLoadMode
       readonly cellCount: number
       readonly visibleCellCount: number
@@ -39,10 +44,24 @@ type GeneExpressionDisplayState =
   | {
       readonly status: 'error'
       readonly url: string
-      readonly error: { readonly title: string }
+      readonly error: ErrorType
     }
 
-export function genePanelStatusCopy(genePanelState: GenePanelDisplayState): string {
+export interface SavedGeneSet {
+  readonly id: string
+  readonly name: string
+  readonly genes: readonly string[]
+  readonly scoreMode: GeneExpressionScoreMode
+}
+
+export interface GeneExpressionScaleDomain {
+  readonly key: string
+  readonly max: number
+}
+
+export function genePanelStatusCopy<ErrorType>(
+  genePanelState: GenePanelState<ErrorType>,
+): string {
   if (genePanelState.status === 'loading') {
     return 'Loading'
   }
@@ -58,9 +77,9 @@ export function genePanelStatusCopy(genePanelState: GenePanelDisplayState): stri
   return 'Idle'
 }
 
-export function geneExpressionStatusCopy(
-  geneExpressionState: GeneExpressionDisplayState,
-): string {
+export function geneExpressionStatusCopy<
+  ErrorType extends GeneExpressionLoadErrorSummary,
+>(geneExpressionState: GeneExpressionState<ErrorType>): string {
   if (geneExpressionState.status === 'loading') {
     return `${geneExpressionModeLabel(geneExpressionState.mode)}: ${geneExpressionState.genes.join(', ')}`
   }
@@ -145,6 +164,16 @@ export function parseGeneExpressionDetailMode(
   value: string | undefined,
 ): GeneExpressionDetailMode | undefined {
   return value !== undefined && isGeneExpressionDetailMode(value) ? value : undefined
+}
+
+export function formatGeneScaleValue(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0'
+  }
+
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: value < 10 ? 2 : 1,
+  })
 }
 
 export function filterGeneOptions(

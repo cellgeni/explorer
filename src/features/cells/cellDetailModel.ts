@@ -2,8 +2,8 @@ import { asCellId } from '../../data/cellid'
 import type { CellTranscriptZDistribution } from '../../data/cellTranscripts'
 import { micrometers, type BBox, type DataPoint } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
+import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type { DatasetCell } from '../../datasets/xeniumDataset'
-import type { SpatialElement } from '../../datasets/spatialDataset'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 
 export const CELL_GENE_EXPRESSION_LIMIT = 100_000
@@ -33,6 +33,12 @@ export interface CellShapeMetrics {
   readonly circularity?: number
   readonly boundaryPointCount?: number
 }
+
+export type CellBoundaryElementsLoader = (
+  baseUrl: string,
+  bbox: BBox,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<ElementBatch>
 
 export interface CellLoadErrorSummary {
   readonly title: string
@@ -108,6 +114,59 @@ export function selectedCellBoundaryBbox(cell: OverviewCellDatum): BBox {
     maxX: micrometers(center.x + radius),
     minY: micrometers(center.y - radius),
     maxY: micrometers(center.y + radius),
+  }
+}
+
+export function overviewCellsToBbox(cells: readonly OverviewCellDatum[]): BBox | null {
+  if (cells.length === 0) {
+    return null
+  }
+
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const cell of cells) {
+    const [x = 0, deckY = 0] = cell.position
+    const rawY = -deckY
+
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, rawY)
+    maxY = Math.max(maxY, rawY)
+  }
+
+  return {
+    minX: micrometers(minX),
+    maxX: micrometers(maxX),
+    minY: micrometers(minY),
+    maxY: micrometers(maxY),
+  }
+}
+
+export async function loadSelectedCellBoundary(
+  baseUrl: string,
+  cell: OverviewCellDatum,
+  loadBoundaryElements: CellBoundaryElementsLoader,
+  signal: AbortSignal,
+): Promise<SpatialElement | null> {
+  try {
+    const batch = await loadBoundaryElements(baseUrl, selectedCellBoundaryBbox(cell), {
+      signal,
+    })
+
+    if (signal.aborted) {
+      throwCellBoundaryAbortError('Selected cell boundary request aborted.')
+    }
+
+    return batch.elements.find((element) => element.id === cell.id) ?? null
+  } catch (error) {
+    if (isCellBoundaryAbortError(error)) {
+      throw error
+    }
+
+    return null
   }
 }
 
@@ -261,6 +320,16 @@ function polygonRingShapeMetrics(points: readonly DataPoint[]): CellShapeMetrics
     circularity: (4 * Math.PI * boundaryArea) / (perimeter * perimeter),
     boundaryPointCount: points.length,
   }
+}
+
+function throwCellBoundaryAbortError(message: string): never {
+  const error = new Error(message)
+  error.name = 'AbortError'
+  throw error
+}
+
+function isCellBoundaryAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 function cellAreaToEquivalentDiameterMicrometers(
