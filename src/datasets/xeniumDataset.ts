@@ -314,6 +314,36 @@ ORDER BY b.cell_id, b.file_row_number
     )
   }
 
+  async transcriptsForCellId(
+    cellId: CellId,
+    options: TranscriptQueryOptions = {},
+  ): Promise<readonly DatasetTranscript[]> {
+    const conn = await this.conn()
+    const stmt = await conn.prepare(`
+SELECT cell_id,
+       feature_name,
+       x_location,
+       y_location,
+       z_location,
+       qv,
+       overlaps_nucleus,
+       is_gene
+FROM read_parquet( ? )
+WHERE cell_id = ?
+  AND qv >= ?
+ORDER BY z_location, feature_name
+LIMIT ?
+`)
+    const result = await stmt.query(
+      this.urlFor('transcripts.parquet'),
+      cellId,
+      options.minQv ?? 20,
+      options.limit ?? 100_000,
+    )
+
+    return result.toArray().map(parseTranscriptExportRow)
+  }
+
   overviewCells(limit?: number): Promise<readonly CellOverviewPoint[]> {
     return this.overviewReader(this.urlFor('cells.parquet'), limit)
   }

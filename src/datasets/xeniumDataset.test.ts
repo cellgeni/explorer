@@ -328,6 +328,47 @@ describe('XeniumDataset', () => {
     ])
   })
 
+  it('loads raw transcript rows for a selected cell', async () => {
+    const cellId = intToCellId(1, 1)
+    const conn = new FakeConnection([
+      [
+        {
+          cell_id: cellId,
+          feature_name: 'Actb',
+          x_location: 2,
+          y_location: 3,
+          z_location: 1,
+          qv: 35,
+          overlaps_nucleus: true,
+          is_gene: true,
+        },
+      ],
+    ])
+    const dataset = makeDataset(conn)
+
+    await expect(
+      dataset.transcriptsForCellId(cellId, { limit: 500, minQv: 30 }),
+    ).resolves.toEqual([
+      {
+        cellId,
+        featureName: 'Actb',
+        position: { x: micrometers(2), y: micrometers(3) },
+        zLocation: 1,
+        qv: 35,
+        overlapsNucleus: true,
+        isGene: true,
+      },
+    ])
+    expect(conn.preparedSql[0]).toContain('cell_id = ?')
+    expect(conn.preparedSql[0]).toContain('ORDER BY z_location, feature_name')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/transcripts.parquet',
+      cellId,
+      30,
+      500,
+    ])
+  })
+
   it('loads raw transcript rows within a lasso ROI for exact export', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([

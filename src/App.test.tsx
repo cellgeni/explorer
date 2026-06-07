@@ -7,6 +7,7 @@ import {
   type AnnotationGroupLoader,
   type AnnotationLoader,
   type BoundaryElementsLoader,
+  type CellTranscriptDistributionLoader,
   type DatasetDiagnosticsRunner,
   type DatasetOverviewLoader,
   type DatasetWarmupLoader,
@@ -1096,6 +1097,22 @@ describe('App', () => {
         hitCellLimit: false,
       }),
     )
+    const loadCellTranscriptDistribution: ReturnType<
+      typeof vi.fn<CellTranscriptDistributionLoader>
+    > = vi.fn(async () => ({
+      bins: [
+        { minZ: 0, maxZ: 1, count: 5, percent: 62.5 },
+        { minZ: 1, maxZ: 2, count: 3, percent: 37.5 },
+      ],
+      transcriptCount: 8,
+      zCount: 8,
+      missingZCount: 0,
+      minZ: 0,
+      maxZ: 2,
+      maxBinCount: 5,
+      hitTranscriptLimit: false,
+      minQv: 20,
+    }))
 
     try {
       render(
@@ -1105,6 +1122,7 @@ describe('App', () => {
           loadAnalysisEmbeddings={loadAnalysisEmbeddings}
           loadBoundaryElements={loadBoundaryElements}
           loadRoiGeneStats={loadRoiGeneStats}
+          loadCellTranscriptDistribution={loadCellTranscriptDistribution}
         />,
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
@@ -1142,8 +1160,24 @@ describe('App', () => {
         }) as object,
         expect.objectContaining({ signal: expect.any(AbortSignal) as AbortSignal }),
       )
+      await waitFor(() => {
+        expect(loadCellTranscriptDistribution).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          cellId,
+          expect.objectContaining({
+            limit: 100_000,
+            minQv: 20,
+            binCount: 16,
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
 
       const expressionList = await screen.findByLabelText('Cell gene expression')
+      expect(
+        await screen.findByLabelText('Cell transcript z-axis distribution'),
+      ).toHaveTextContent('8 z records')
+      expect(screen.getByText('Z location (um)')).toBeInTheDocument()
       expect(expressionList).toHaveTextContent('Actb')
       expect(expressionList).toHaveTextContent('Gad1')
       expect(screen.getByText('10 counts')).toBeInTheDocument()

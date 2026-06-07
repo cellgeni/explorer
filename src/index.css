@@ -1910,6 +1910,69 @@ h2 {
   gap: 5px;
 }
 
+.cell-z-panel {
+  display: grid;
+  gap: 5px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(23, 21, 17, 0.1);
+}
+
+.cell-z-bars {
+  display: grid;
+  grid-template-columns: repeat(var(--cell-z-bin-count, 16), minmax(0, 1fr));
+  align-items: end;
+  gap: 2px;
+  height: 54px;
+  padding: 5px 5px 3px;
+  border: 1px solid rgba(23, 21, 17, 0.12);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(23, 21, 17, 0.08) 1px, transparent 1px),
+    rgba(255, 253, 247, 0.72);
+  background-size: 100% 16px;
+}
+
+.cell-z-bar {
+  display: block;
+  width: 100%;
+  height: var(--cell-z-height);
+  min-height: 1px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(180deg, #d73f7c, #174d3e);
+}
+
+.cell-z-axis {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 5px;
+  align-items: center;
+  color: #5f5848;
+  font-size: 0.56rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-z-axis span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-z-axis span:last-child {
+  text-align: right;
+}
+
+.cell-z-caption {
+  min-width: 0;
+  margin: 0;
+  color: #5f5848;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .cell-expression-heading,
 .cell-expression-row {
   display: grid;

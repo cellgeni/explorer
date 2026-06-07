@@ -31,9 +31,17 @@ import {
   ROI_CELL_EXPORT_LIMIT,
   loadDatasetRoiCells as defaultLoadDatasetRoiCells,
 } from './data/roiCells'
-import { asCellId } from './data/cellid'
+import { asCellId, type CellId } from './data/cellid'
 import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
 import { loadDatasetRoiTranscripts as defaultLoadDatasetRoiTranscripts } from './data/roiTranscripts'
+import {
+  CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
+  CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
+  DEFAULT_CELL_TRANSCRIPT_MIN_QV,
+  loadDatasetCellTranscriptDistribution as defaultLoadDatasetCellTranscriptDistribution,
+  type CellTranscriptZBin,
+  type CellTranscriptZDistribution,
+} from './data/cellTranscripts'
 import {
   MAX_TRANSCRIPT_EXACT_RENDER_LIMIT,
   MIN_TRANSCRIPT_EXACT_RENDER_LIMIT,
@@ -238,6 +246,16 @@ export type RoiTranscriptsLoader = (
     readonly minQv?: number
   },
 ) => Promise<readonly DatasetTranscript[]>
+export type CellTranscriptDistributionLoader = (
+  baseUrl: string,
+  cellId: CellId,
+  options?: {
+    readonly signal?: AbortSignal
+    readonly limit?: number
+    readonly minQv?: number
+    readonly binCount?: number
+  },
+) => Promise<CellTranscriptZDistribution>
 export type TranscriptCapabilitiesLoader = (
   baseUrl: string,
   options?: { readonly signal?: AbortSignal },
@@ -578,6 +596,22 @@ type CellDetailState =
       readonly error: StructuredLoadError
     }
 
+type CellTranscriptDistributionState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string; readonly cellId: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly cellId: string
+      readonly distribution: CellTranscriptZDistribution
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly cellId: string
+      readonly error: StructuredLoadError
+    }
+
 interface CellGeneExpressionSummary {
   readonly genes: readonly CellGeneExpressionGene[]
   readonly totalCount: number
@@ -628,6 +662,7 @@ type LoadErrorSource =
   | 'Gene expression'
   | 'Magic lens'
   | 'Cell details'
+  | 'Cell transcripts'
   | 'Dataset diagnostics'
 
 interface StructuredLoadError {
@@ -712,6 +747,7 @@ export interface AppProps {
   readonly loadRoiCells?: RoiCellsLoader
   readonly loadRoiGeneStats?: RoiGeneStatsLoader
   readonly loadRoiTranscripts?: RoiTranscriptsLoader
+  readonly loadCellTranscriptDistribution?: CellTranscriptDistributionLoader
   readonly loadTranscriptCapabilities?: TranscriptCapabilitiesLoader
   readonly loadTranscriptAggregates?: TranscriptAggregateLoader
   readonly loadTranscriptViewport?: TranscriptViewportLoader
@@ -732,6 +768,7 @@ export function App({
   loadRoiCells = defaultLoadDatasetRoiCells,
   loadRoiGeneStats = defaultLoadDatasetRoiGeneStats,
   loadRoiTranscripts = defaultLoadDatasetRoiTranscripts,
+  loadCellTranscriptDistribution = defaultLoadDatasetCellTranscriptDistribution,
   loadTranscriptCapabilities = defaultLoadDatasetTranscriptCapabilities,
   loadTranscriptAggregates = defaultLoadDatasetTranscriptAggregates,
   loadTranscriptViewport = defaultLoadDatasetTranscriptViewport,
@@ -831,6 +868,8 @@ export function App({
   const [cellDetailState, setCellDetailState] = useState<CellDetailState>({
     status: 'idle',
   })
+  const [cellTranscriptDistributionState, setCellTranscriptDistributionState] =
+    useState<CellTranscriptDistributionState>({ status: 'idle' })
   const [magicLensScope, setMagicLensScope] = useState<MagicLensScope>('cursor')
   const [magicLensActive, setMagicLensActive] = useState(false)
   const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(80)
@@ -959,6 +998,7 @@ export function App({
   const transcriptRequestId = useRef(0)
   const magicLensRequestId = useRef(0)
   const cellDetailRequestId = useRef(0)
+  const cellTranscriptDistributionRequestId = useRef(0)
   const magicLensDebounceRef = useRef<number | null>(null)
   const magicLensLastDetailRef = useRef<ViewerMagicLensDetail | null>(null)
   const magicLensLastQueryKeyRef = useRef<string | null>(null)
@@ -979,6 +1019,7 @@ export function App({
   const cellFeatureMatrixCapabilityKeyRef = useRef<string | null>(null)
   const magicLensAbortRef = useRef<AbortController | null>(null)
   const cellDetailAbortRef = useRef<AbortController | null>(null)
+  const cellTranscriptDistributionAbortRef = useRef<AbortController | null>(null)
   const autoContrastChannelIdsRef = useRef<Set<string>>(new Set())
   const geneSetIdRef = useRef(0)
   const roiIdRef = useRef(0)
@@ -1324,6 +1365,15 @@ export function App({
       })
     }
 
+    if (cellTranscriptDistributionState.status === 'loading') {
+      tasks.push({
+        id: 'cell-transcripts',
+        tabId: 'cell',
+        label: 'Loading cell z distribution',
+        detail: shortIdentifier(cellTranscriptDistributionState.cellId),
+      })
+    }
+
     if (roiState.status === 'loading') {
       tasks.push({ id: 'roi-cells', tabId: 'roi', label: 'Querying ROI cells' })
     }
@@ -1371,6 +1421,7 @@ export function App({
     autoContrastChannelIds,
     boundaryState,
     cellDetailState,
+    cellTranscriptDistributionState,
     datasetWarmupState,
     diagnosticsState,
     geneExpressionState,
@@ -1497,6 +1548,9 @@ export function App({
         transcriptLayerState.status === 'error' ? transcriptLayerState.error : null,
         magicLensState.status === 'error' ? magicLensState.error : null,
         cellDetailState.status === 'error' ? cellDetailState.error : null,
+        cellTranscriptDistributionState.status === 'error'
+          ? cellTranscriptDistributionState.error
+          : null,
       ].filter(isStructuredLoadError),
     [
       annotationState,
@@ -1504,6 +1558,7 @@ export function App({
       analysisEmbeddingState,
       boundaryState,
       cellDetailState,
+      cellTranscriptDistributionState,
       diagnosticsState,
       geneExpressionState,
       genePanelState,
@@ -2564,6 +2619,106 @@ export function App({
   }, [appendDebugEvent, loadBoundaryElements, loadRoiGeneStats, loadState, selectedCell])
 
   useEffect(() => {
+    if (selectedCell === null || loadState.status !== 'ready') {
+      abortActiveRequest(cellTranscriptDistributionAbortRef)
+      cellTranscriptDistributionRequestId.current += 1
+      const requestId = cellTranscriptDistributionRequestId.current
+      queueMicrotask(() => {
+        if (cellTranscriptDistributionRequestId.current === requestId) {
+          setCellTranscriptDistributionState({ status: 'idle' })
+        }
+      })
+      return
+    }
+
+    const requestId = cellTranscriptDistributionRequestId.current + 1
+    const distributionStartedAt = readTimestamp()
+    const abortController = new AbortController()
+    abortActiveRequest(cellTranscriptDistributionAbortRef)
+    cellTranscriptDistributionRequestId.current = requestId
+    cellTranscriptDistributionAbortRef.current = abortController
+
+    queueMicrotask(() => {
+      if (
+        abortController.signal.aborted ||
+        cellTranscriptDistributionRequestId.current !== requestId
+      ) {
+        return
+      }
+
+      setCellTranscriptDistributionState({
+        status: 'loading',
+        url: loadState.url,
+        cellId: selectedCell.id,
+      })
+    })
+    appendDebugEvent(
+      `Cell transcript z distribution started: ${shortIdentifier(selectedCell.id)}`,
+      { coalesceKey: 'cell-transcripts' },
+    )
+
+    void loadCellTranscriptDistribution(loadState.url, asCellId(selectedCell.id), {
+      signal: abortController.signal,
+      limit: CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
+      minQv: DEFAULT_CELL_TRANSCRIPT_MIN_QV,
+      binCount: CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
+    })
+      .then((distribution) => {
+        if (
+          abortController.signal.aborted ||
+          cellTranscriptDistributionRequestId.current !== requestId
+        ) {
+          return
+        }
+
+        setCellTranscriptDistributionState({
+          status: 'ready',
+          url: loadState.url,
+          cellId: selectedCell.id,
+          distribution,
+        })
+        appendDebugEvent(
+          `Cell transcript z distribution ready: ${distribution.zCount.toLocaleString()} z records in ${formatElapsed(
+            distributionStartedAt,
+          )}`,
+          { coalesceKey: 'cell-transcripts' },
+        )
+      })
+      .catch((error) => {
+        if (
+          isAbortError(error) ||
+          cellTranscriptDistributionRequestId.current !== requestId
+        ) {
+          return
+        }
+
+        setCellTranscriptDistributionState({
+          status: 'error',
+          url: loadState.url,
+          cellId: selectedCell.id,
+          error: createStructuredLoadError('Cell transcripts', error),
+        })
+        appendDebugEvent(
+          `Cell transcript z distribution failed (${formatElapsed(
+            distributionStartedAt,
+          )})`,
+          { coalesceKey: 'cell-transcripts' },
+        )
+      })
+      .finally(() => {
+        if (cellTranscriptDistributionAbortRef.current === abortController) {
+          cellTranscriptDistributionAbortRef.current = null
+        }
+      })
+
+    return () => {
+      if (cellTranscriptDistributionAbortRef.current === abortController) {
+        abortActiveRequest(cellTranscriptDistributionAbortRef)
+      }
+    }
+  }, [appendDebugEvent, loadCellTranscriptDistribution, loadState, selectedCell])
+
+  useEffect(() => {
     return () => {
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(datasetWarmupAbortRef)
@@ -2578,6 +2733,7 @@ export function App({
       abortActiveRequest(roiGeneViewportWarmupAbortRef)
       abortActiveRequest(magicLensAbortRef)
       abortActiveRequest(cellDetailAbortRef)
+      abortActiveRequest(cellTranscriptDistributionAbortRef)
       clearTimeoutRef(magicLensDebounceRef)
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
     }
@@ -2755,6 +2911,7 @@ export function App({
       abortActiveRequest(roiGeneViewportWarmupAbortRef)
       abortActiveRequest(magicLensAbortRef)
       abortActiveRequest(cellDetailAbortRef)
+      abortActiveRequest(cellTranscriptDistributionAbortRef)
       clearTimeoutRef(magicLensDebounceRef)
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
       roiGeneViewportWarmupKeyRef.current = null
@@ -2831,6 +2988,7 @@ export function App({
       setTranscriptLayerState({ status: 'idle' })
       setMagicLensState({ status: 'idle' })
       setCellDetailState({ status: 'idle' })
+      setCellTranscriptDistributionState({ status: 'idle' })
       setMagicLensActive(false)
       setSelectedCell(null)
       setCurrentViewportDetail(null)
@@ -2853,6 +3011,7 @@ export function App({
       transcriptRequestId.current += 1
       magicLensRequestId.current += 1
       cellDetailRequestId.current += 1
+      cellTranscriptDistributionRequestId.current += 1
       magicLensLastDetailRef.current = null
       magicLensLastQueryKeyRef.current = null
       boundaryViewportKeyRef.current = null
@@ -5124,6 +5283,7 @@ export function App({
                   key={selectedCell?.id ?? 'none'}
                   cell={selectedCell}
                   state={cellDetailState}
+                  transcriptDistributionState={cellTranscriptDistributionState}
                 />
               </section>
             </div>
@@ -6415,9 +6575,11 @@ function embeddingPointToScreen(
 function CellInfoPanel({
   cell,
   state,
+  transcriptDistributionState,
 }: {
   readonly cell: OverviewCellDatum | null
   readonly state: CellDetailState
+  readonly transcriptDistributionState: CellTranscriptDistributionState
 }) {
   const geneSearchInputId = useId()
   const [geneSearch, setGeneSearch] = useState('')
@@ -6492,6 +6654,11 @@ function CellInfoPanel({
           <dd>{formatMetric(shape?.circularity)}</dd>
         </div>
       </dl>
+
+      <CellTranscriptZDistributionPanel
+        cell={cell}
+        state={transcriptDistributionState}
+      />
 
       <div className="cell-expression-panel">
         <div className="cell-expression-heading">
@@ -6572,6 +6739,144 @@ function CellInfoPanel({
       </div>
     </div>
   )
+}
+
+function CellTranscriptZDistributionPanel({
+  cell,
+  state,
+}: {
+  readonly cell: OverviewCellDatum
+  readonly state: CellTranscriptDistributionState
+}) {
+  const matchingState = state.status !== 'idle' && state.cellId === cell.id ? state : null
+  const readyState =
+    matchingState !== null && matchingState.status === 'ready' ? matchingState : null
+  const loadingState =
+    matchingState !== null && matchingState.status === 'loading' ? matchingState : null
+  const errorState =
+    matchingState !== null && matchingState.status === 'error' ? matchingState : null
+  const distribution = readyState?.distribution ?? null
+  const chartLabel =
+    distribution === null
+      ? undefined
+      : cellTranscriptZDistributionAriaLabel(distribution)
+  const statusCopy =
+    distribution === null
+      ? loadingState === null
+        ? errorState === null
+          ? 'Waiting'
+          : 'Unavailable'
+        : 'Loading'
+      : `${distribution.zCount.toLocaleString()} z records`
+
+  return (
+    <div className="cell-z-panel" aria-label="Cell transcript z-axis distribution">
+      <div className="cell-expression-heading">
+        <span>Z-axis transcripts</span>
+        <small>{statusCopy}</small>
+      </div>
+
+      {loadingState === null ? null : (
+        <p className="cell-expression-status" aria-live="polite">
+          Loading transcript z locations…
+        </p>
+      )}
+
+      {errorState === null ? null : (
+        <p className="cell-expression-status is-error" aria-live="polite">
+          {formatStructuredError(errorState.error)}
+        </p>
+      )}
+
+      {distribution === null ? null : distribution.bins.length === 0 ? (
+        <p className="cell-expression-status">
+          No transcript z locations found at QV {formatNumber(distribution.minQv)} or
+          higher
+        </p>
+      ) : (
+        <>
+          <div
+            className="cell-z-bars"
+            role="img"
+            aria-label={chartLabel}
+            style={
+              {
+                '--cell-z-bin-count': String(distribution.bins.length),
+              } as CSSProperties
+            }
+          >
+            {distribution.bins.map((bin) => (
+              <span
+                className="cell-z-bar"
+                key={`${bin.minZ}:${bin.maxZ}`}
+                title={`${formatZRange(bin)}: ${bin.count.toLocaleString()} transcripts`}
+                style={
+                  {
+                    '--cell-z-height': `${cellTranscriptZBarHeight(
+                      bin,
+                      distribution.maxBinCount,
+                    )}%`,
+                  } as CSSProperties
+                }
+              />
+            ))}
+          </div>
+          <div className="cell-z-axis" aria-hidden="true">
+            <span>{formatZValue(distribution.minZ)}</span>
+            <span>Z location (um)</span>
+            <span>{formatZValue(distribution.maxZ)}</span>
+          </div>
+          <p className="cell-z-caption">
+            {distribution.transcriptCount.toLocaleString()} transcript rows · QV{' '}
+            {formatNumber(distribution.minQv)}+
+            {distribution.missingZCount === 0
+              ? ''
+              : ` · ${distribution.missingZCount.toLocaleString()} without z`}
+            {distribution.hitTranscriptLimit
+              ? ` · limited to ${CELL_TRANSCRIPT_DISTRIBUTION_LIMIT.toLocaleString()}`
+              : ''}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
+function cellTranscriptZBarHeight(bin: CellTranscriptZBin, maxBinCount: number): number {
+  if (maxBinCount <= 0 || bin.count <= 0) {
+    return 0
+  }
+
+  return Math.max(8, (bin.count / maxBinCount) * 100)
+}
+
+function cellTranscriptZDistributionAriaLabel(
+  distribution: CellTranscriptZDistribution,
+): string {
+  const zRange =
+    distribution.minZ === undefined || distribution.maxZ === undefined
+      ? 'unknown z range'
+      : `${formatZValue(distribution.minZ)} to ${formatZValue(distribution.maxZ)} um`
+
+  return `${distribution.zCount.toLocaleString()} transcript z locations across ${distribution.bins.length.toLocaleString()} bins from ${zRange}.`
+}
+
+function formatZRange(bin: CellTranscriptZBin): string {
+  if (bin.minZ === bin.maxZ) {
+    return `${formatZValue(bin.minZ)} um`
+  }
+
+  return `${formatZValue(bin.minZ)}-${formatZValue(bin.maxZ)} um`
+}
+
+function formatZValue(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return 'Unknown'
+  }
+
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: value < 1 ? 2 : 1,
+  })
 }
 
 function overviewCellToDatasetCell(cell: OverviewCellDatum): DatasetCell {
