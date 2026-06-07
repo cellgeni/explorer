@@ -4203,7 +4203,7 @@ export function App({
                   className="gene-set-symbols"
                   autoComplete="off"
                   spellCheck={false}
-                  rows={3}
+                  rows={1}
                   value={geneSetSymbols}
                   disabled={genePanelState.status !== 'ready'}
                   placeholder="Actb, Gad1, Slc17a7"

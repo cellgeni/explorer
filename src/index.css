@@ -435,6 +435,12 @@ h2 {
   line-height: 1.25;
 }
 
+.analysis-section textarea.gene-set-symbols {
+  height: 24px;
+  min-height: 24px;
+  padding-block: 3px;
+}
+
 .analysis-section select {
   appearance: none;
   background:
