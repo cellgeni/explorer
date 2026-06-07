@@ -17,9 +17,10 @@ Optional but supported files include:
 
 - `cell_boundaries.parquet`
 - `transcripts.parquet` for exact transcript metadata such as transcript ID,
-  cell ID, QV, nucleus overlap, and gene/control status
-- `transcripts.zarr.zip` for native low/medium zoom transcript density and
-  binned overlays
+  cell ID, QV, nucleus overlap, gene/control status, exact fallback reads, ROI
+  transcript export, and selected-cell transcript z-axis distributions
+- `transcripts.zarr.zip` for native low/medium zoom transcript density,
+  aggregate count squares, and preferred exact transcript grid reads
 - `analysis.zarr.zip`
 - `analysis/umap/gene_expression_2_components/projection.csv`
 - `analysis/tsne/gene_expression_2_components/projection.csv`
@@ -38,6 +39,10 @@ Important rules:
 - Do not serve Parquet, TIFF, Zarr zip, or HDF5 with transfer
   `Content-Encoding`.
 - Keep object paths immutable when possible so browser/CDN caches stay useful.
+- Expect Range validation for optional workflows too, including
+  `transcripts.parquet`, `transcripts.zarr.zip`, `cell_feature_matrix.zarr.zip`,
+  `cell_feature_matrix.h5`, OME-TIFFs, and analysis files when those workflows
+  are used.
 
 ## Quick Validation
 

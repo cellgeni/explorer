@@ -43,6 +43,11 @@ colored by the number of transcripts in each grid cell. `Auto` switches from
 the density overview to exact transcript points when the visible transcript
 estimate is inside the exact point budget.
 
+Use `Show transcripts` to enable the overlay. `Detail` selects `Auto`,
+`Density`, or `Exact`; `Exact budget` caps how many exact points the viewport
+may load; `Min QV` and `Gene-only calls` filter exact transcript records.
+`Opacity` and `Point size` affect only the transcript overlay.
+
 Density square colors are normalized against the native dataset/LOD count domain
 rather than only the currently visible viewport, so the color scale stays stable
 while panning and zooming.
@@ -51,9 +56,21 @@ while panning and zooming.
 the current viewport. Feature filters are applied by `Exact`, where individual
 transcript records can be loaded and inspected.
 
-Transcript hover details show transcript IDs. Cell IDs are filled from
-`transcripts.parquet` when that file is available for per-transcript assignment
-metadata.
+Use `Feature filter` to switch between all features and the currently selected
+genes. `Feature search` can add genes directly from the transcript tab. The
+`Point color` control colors exact transcript points either by feature identity
+or by QV.
+
+When exact mode is close to the configured point budget, the tab shows
+`Load exact viewport` instead of starting the fetch automatically. Use it when
+you intentionally want to load that dense exact viewport.
+
+Transcript hover details show transcript IDs. Click a transcript point or
+aggregate bin to pin the same inspection details in the Transcripts tab; use
+`Pin` from a hover panel or `Clear` on the pinned panel to manage the pinned
+entry. Aggregate bins show aggregate identity and counts, not individual
+transcript identity. Cell IDs are filled from `transcripts.parquet` when that
+file is available for per-transcript assignment metadata.
 
 If `transcripts.zarr.zip` is unavailable, all-feature views can still show a
 cell-summary transcript-count hint. Exact molecule points require a readable
@@ -67,10 +84,16 @@ export ROI cells or transcripts, and inspect top ROI genes.
 
 The `Cell` tab loads UMAP/t-SNE projections when the dataset provides standard
 analysis CSVs. Clicking an embedding point selects the matching spatial cell.
+Selecting a spatial or embedding cell also loads single-cell metadata,
+expression, shape metrics when boundary geometry is available, and a compact
+z-axis distribution of molecules/transcripts assigned to that cell.
 
 ## Diagnostics
 
 `Diagnose Dataset` checks the manifest and required byte-range reads, then
 summarizes optional dataset assets. `Download Diagnostics` writes a local JSON
 dump with current controls, active errors, diagnostics, performance budget, and
-local telemetry events. No telemetry is sent off-device by the app.
+local telemetry events. Transcript diagnostics include detected transcript
+capabilities, native LOD availability, current transcript controls, exact-budget
+decisions, and summarized hovered or pinned transcript/bin inspection state. No
+telemetry is sent off-device by the app.

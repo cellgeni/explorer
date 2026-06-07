@@ -29,7 +29,8 @@ TIFF reads will either fail or silently become full-file downloads.
 ## Manual Range Check
 
 Run this against key files such as `cells.parquet`, `cell_boundaries.parquet`,
-`transcripts.parquet`, and image TIFFs:
+`transcripts.parquet`, `transcripts.zarr.zip`, cell-feature matrix files, and
+image TIFFs:
 
 ```sh
 curl -r 0-0 -i https://bucket.example/path/to/cells.parquet
@@ -41,7 +42,9 @@ Expected result:
 - A `Content-Range` header such as `bytes 0-0/123456789`.
 - No `Content-Encoding` header.
 
-The app performs the same one-byte Range probe before loading `cells.parquet` and
-before loading `cell_boundaries.parquet`. If the probe returns HTTP `200`, lacks
-an exposed `Content-Range`, or fails due to CORS, loading stops with an
-actionable error in the viewer.
+The app performs the same one-byte Range probe before loading large remote
+assets, including overview cells, boundaries, transcript Parquet, transcript
+Zarr, cell-feature matrices, ROI transcript exports, selected-cell transcript
+summaries, diagnostics checks, and image TIFFs. If the probe returns HTTP `200`,
+lacks an exposed `Content-Range`, or fails due to CORS, that workflow stops with
+an actionable error in the viewer.

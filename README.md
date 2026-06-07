@@ -3,13 +3,14 @@
 Browser-based explorer for 10x Xenium spatial transcriptomics output. The app
 loads hosted Xenium output folders directly from object storage, renders spatial
 cells and morphology imagery, and supports gene expression overlays,
-annotations, embeddings, ROI queries, shareable view state, and dataset
-diagnostics without a server-side data service.
+transcript density/exact overlays, annotations, embeddings, ROI queries,
+shareable view state, and dataset diagnostics without a server-side data
+service.
 
 The implementation is a Vite + React application. It uses deck.gl for spatial
 rendering, DuckDB WASM and Hyparquet for browser-side Parquet queries, GeoTIFF
 and JPEG2000 decoding for morphology tiles, and Zarr/HDF5 readers for
-cell-feature matrix access.
+cell-feature matrix and native transcript LOD access.
 
 ## Quick Start
 
@@ -62,9 +63,9 @@ headers needed by the browser-side WASM and decoding paths.
 The viewer expects a Xenium output directory URL containing at least
 `experiment.xenium`, `cells.parquet`, and a readable cell-feature matrix
 (`cell_feature_matrix.zarr.zip` or `cell_feature_matrix.h5`). Optional files
-such as `cell_boundaries.parquet`, `transcripts.parquet`, `analysis.zarr.zip`,
-UMAP/t-SNE projections, and morphology OME-TIFFs enable additional layers and
-workflows.
+such as `cell_boundaries.parquet`, `transcripts.zarr.zip`,
+`transcripts.parquet`, `analysis.zarr.zip`, UMAP/t-SNE projections, and
+morphology OME-TIFFs enable additional layers and workflows.
 
 Because data is read directly by the browser, hosted datasets must support CORS
 and HTTP byte-range requests. The in-app `Diagnose Dataset` action checks the
@@ -73,7 +74,8 @@ manifest and key byte-range reads before loading optional assets.
 ## Additional Docs And Decisions
 
 - [User guide](docs/user-guide.md): loading data, navigation, layers, genes,
-  annotations, ROI tools, embeddings, diagnostics, and shareable URLs.
+  transcript overlays, annotations, ROI tools, embeddings, diagnostics, and
+  shareable URLs.
 - [Host your own data](docs/host-your-own-data.md): required and optional
   Xenium files, HTTP requirements, and quick validation commands.
 - [S3/CORS hosting playbook](docs/s3-cors-playbook.md): exact CORS headers,
