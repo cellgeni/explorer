@@ -287,6 +287,22 @@ export function parseTranscriptFeatureFilterMode(
   return value !== undefined && isTranscriptFeatureFilterMode(value) ? value : undefined
 }
 
+export function normalizeTranscriptMinQv(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 20
+  }
+
+  return Math.max(0, Math.min(40, Math.round(value)))
+}
+
+export function normalizeTranscriptPointSize(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 2
+  }
+
+  return Math.max(1, Math.min(6, Math.round(value)))
+}
+
 export function estimateVisibleTranscriptsFromCells(
   cells: readonly OverviewCellDatum[],
   bbox: BBox,

@@ -22,6 +22,8 @@ import {
   isTranscriptExactManualLoadRequired,
   isTranscriptFeatureFilterMode,
   maxTranscriptAggregateCount,
+  normalizeTranscriptMinQv,
+  normalizeTranscriptPointSize,
   parseTranscriptDensityColorScale,
   parseTranscriptDetailMode,
   parseTranscriptFeatureFilterMode,
@@ -42,12 +44,17 @@ import {
 import {
   CELL_GENE_EXPRESSION_LIMIT,
   cellExpressionSummaryFromStats,
+  cellDetailStatusCopy,
   overviewCellToDatasetCell,
   selectedCellBoundaryBbox,
   summarizeCellShape,
-  type CellGeneExpressionSummary,
-  type CellShapeMetrics,
+  type CellDetailState,
+  type CellTranscriptDistributionState,
 } from './features/cells/cellDetailModel'
+import {
+  analysisEmbeddingStatusCopy,
+  type AnalysisEmbeddingState,
+} from './features/analysis/analysisEmbeddingModel'
 import {
   createMorphologyChannelSettings,
   morphologyPatchLabel,
@@ -501,20 +508,6 @@ type AnnotationGroupState =
       readonly error: StructuredLoadError
     }
 
-type AnalysisEmbeddingState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly embeddings: readonly AnalysisEmbedding[]
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly error: StructuredLoadError
-    }
-
 type GeneExpressionState =
   | { readonly status: 'idle' }
   | { readonly status: 'waiting'; readonly message: string }
@@ -536,39 +529,6 @@ type GeneExpressionState =
   | {
       readonly status: 'error'
       readonly url: string
-      readonly error: StructuredLoadError
-    }
-
-type CellDetailState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string; readonly cellId: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly cellId: string
-      readonly expression: CellGeneExpressionSummary
-      readonly shape: CellShapeMetrics
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly cellId: string
-      readonly error: StructuredLoadError
-    }
-
-type CellTranscriptDistributionState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string; readonly cellId: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly cellId: string
-      readonly distribution: CellTranscriptZDistribution
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly cellId: string
       readonly error: StructuredLoadError
     }
 
@@ -701,10 +661,11 @@ export function App({
   const [annotationGroupState, setAnnotationGroupState] = useState<AnnotationGroupState>({
     status: 'idle',
   })
-  const [analysisEmbeddingState, setAnalysisEmbeddingState] =
-    useState<AnalysisEmbeddingState>({
-      status: 'idle',
-    })
+  const [analysisEmbeddingState, setAnalysisEmbeddingState] = useState<
+    AnalysisEmbeddingState<StructuredLoadError>
+  >({
+    status: 'idle',
+  })
   const [annotationColors, setAnnotationColors] = useState<
     Readonly<Record<string, string>>
   >({})
@@ -735,11 +696,14 @@ export function App({
   const [magicLensState, setMagicLensState] = useState<
     MagicLensState<StructuredLoadError>
   >({ status: 'idle' })
-  const [cellDetailState, setCellDetailState] = useState<CellDetailState>({
+  const [cellDetailState, setCellDetailState] = useState<
+    CellDetailState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [cellTranscriptDistributionState, setCellTranscriptDistributionState] = useState<
+    CellTranscriptDistributionState<StructuredLoadError>
+  >({
     status: 'idle',
   })
-  const [cellTranscriptDistributionState, setCellTranscriptDistributionState] =
-    useState<CellTranscriptDistributionState>({ status: 'idle' })
   const [magicLensScope, setMagicLensScope] = useState<MagicLensScope>('cursor')
   const [magicLensActive, setMagicLensActive] = useState(false)
   const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(80)
@@ -5240,59 +5204,6 @@ async function defaultComputeAutoChannelContrast(
   return morphologyContrast.computeChannelAutoContrast(channel.loader, options)
 }
 
-function analysisEmbeddingStatusCopy(
-  state: AnalysisEmbeddingState,
-  activeEmbedding: AnalysisEmbedding | null,
-  roiCellIds: readonly string[],
-  selectedCell: OverviewCellDatum | null,
-): string {
-  if (state.status === 'loading') {
-    return 'Loading'
-  }
-
-  if (state.status === 'ready') {
-    if (activeEmbedding === null) {
-      return 'No projection'
-    }
-
-    const linkedCount = roiCellIds.length + (selectedCell === null ? 0 : 1)
-
-    return linkedCount === 0
-      ? `${activeEmbedding.label}: ${activeEmbedding.points.length.toLocaleString()} cells`
-      : `${activeEmbedding.label}: ${linkedCount.toLocaleString()} linked`
-  }
-
-  if (state.status === 'error') {
-    return 'Unavailable'
-  }
-
-  return 'Idle'
-}
-
-function cellDetailStatusCopy(
-  state: CellDetailState,
-  selectedCell: OverviewCellDatum | null,
-): string {
-  if (selectedCell === null) {
-    return 'No selection'
-  }
-
-  if (state.status === 'loading' && state.cellId === selectedCell.id) {
-    return 'Loading'
-  }
-
-  if (state.status === 'ready' && state.cellId === selectedCell.id) {
-    const noun = state.expression.genes.length === 1 ? 'gene' : 'genes'
-    return `${state.expression.genes.length.toLocaleString()} ${noun}`
-  }
-
-  if (state.status === 'error' && state.cellId === selectedCell.id) {
-    return state.error.title
-  }
-
-  return 'Selected'
-}
-
 function isObservationColorMode(value: string): value is ObservationColorMode {
   return value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
 }
@@ -5383,22 +5294,6 @@ function throwAbortError(message: string): never {
   const error = new Error(message)
   error.name = 'AbortError'
   throw error
-}
-
-function normalizeTranscriptMinQv(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 20
-  }
-
-  return Math.max(0, Math.min(40, Math.round(value)))
-}
-
-function normalizeTranscriptPointSize(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 2
-  }
-
-  return Math.max(1, Math.min(6, Math.round(value)))
 }
 
 function downloadTextFile(

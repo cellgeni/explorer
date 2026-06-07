@@ -1,32 +1,21 @@
-import type { ComponentProps } from 'react'
 import { EmbeddingPanel } from '../analysis/EmbeddingPanel'
 import { CellInfoPanel } from '../cells/CellInfoPanel'
+import type { AnalysisEmbeddingState } from '../analysis/analysisEmbeddingModel'
+import type {
+  CellDetailState,
+  CellTranscriptDistributionState,
+} from '../cells/cellDetailModel'
 import type {
   AnalysisEmbedding,
   AnalysisEmbeddingKind,
 } from '../../data/analysisEmbeddings'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 
-type CellDetailState = ComponentProps<typeof CellInfoPanel>['state']
-type CellTranscriptDistributionState = ComponentProps<
-  typeof CellInfoPanel
->['transcriptDistributionState']
-
-type AnalysisEmbeddingDisplayState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly embeddings: readonly AnalysisEmbedding[]
-    }
-  | { readonly status: 'error'; readonly url: string; readonly error: unknown }
-
 interface CellHudPanelProps {
   readonly active: boolean
   readonly embeddingViewInputId: string
   readonly embeddingCopy: string
-  readonly analysisEmbeddingState: AnalysisEmbeddingDisplayState
+  readonly analysisEmbeddingState: AnalysisEmbeddingState
   readonly activeEmbedding: AnalysisEmbedding | null
   readonly selectedEmbeddingKind: AnalysisEmbeddingKind
   readonly roiCellIds: readonly string[]

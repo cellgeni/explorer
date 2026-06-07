@@ -1,4 +1,5 @@
 import { asCellId } from '../../data/cellid'
+import type { CellTranscriptZDistribution } from '../../data/cellTranscripts'
 import { micrometers, type BBox, type DataPoint } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { DatasetCell } from '../../datasets/xeniumDataset'
@@ -32,6 +33,48 @@ export interface CellShapeMetrics {
   readonly circularity?: number
   readonly boundaryPointCount?: number
 }
+
+export interface CellLoadErrorSummary {
+  readonly title: string
+  readonly message: string
+}
+
+export type CellDetailState<
+  ErrorType extends CellLoadErrorSummary = CellLoadErrorSummary,
+> =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string; readonly cellId: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly cellId: string
+      readonly expression: CellGeneExpressionSummary
+      readonly shape: CellShapeMetrics
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly cellId: string
+      readonly error: ErrorType
+    }
+
+export type CellTranscriptDistributionState<
+  ErrorType extends CellLoadErrorSummary = CellLoadErrorSummary,
+> =
+  | { readonly status: 'idle' }
+  | { readonly status: 'loading'; readonly url: string; readonly cellId: string }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly cellId: string
+      readonly distribution: CellTranscriptZDistribution
+    }
+  | {
+      readonly status: 'error'
+      readonly url: string
+      readonly cellId: string
+      readonly error: ErrorType
+    }
 
 export function overviewCellToDatasetCell(cell: OverviewCellDatum): DatasetCell {
   return {
@@ -80,6 +123,30 @@ export function cellExpressionSummaryFromStats(
     totalCount: stats.totalCount,
     hitGeneLimit: stats.genes.length >= CELL_GENE_EXPRESSION_LIMIT,
   }
+}
+
+export function cellDetailStatusCopy<ErrorType extends CellLoadErrorSummary>(
+  state: CellDetailState<ErrorType>,
+  selectedCell: OverviewCellDatum | null,
+): string {
+  if (selectedCell === null) {
+    return 'No selection'
+  }
+
+  if (state.status === 'loading' && state.cellId === selectedCell.id) {
+    return 'Loading'
+  }
+
+  if (state.status === 'ready' && state.cellId === selectedCell.id) {
+    const noun = state.expression.genes.length === 1 ? 'gene' : 'genes'
+    return `${state.expression.genes.length.toLocaleString()} ${noun}`
+  }
+
+  if (state.status === 'error' && state.cellId === selectedCell.id) {
+    return state.error.title
+  }
+
+  return 'Selected'
 }
 
 export function summarizeCellShape(

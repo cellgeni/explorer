@@ -8,54 +8,17 @@ import {
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import {
   CELL_GENE_EXPRESSION_LIMIT,
+  type CellDetailState,
+  type CellLoadErrorSummary,
   summarizeCellShape,
+  type CellTranscriptDistributionState,
   type CellGeneExpressionGene,
-  type CellGeneExpressionSummary,
-  type CellShapeMetrics,
 } from './cellDetailModel'
-
-interface CellLoadErrorSummary {
-  readonly title: string
-  readonly message: string
-}
-
-type CellDetailDisplayState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string; readonly cellId: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly cellId: string
-      readonly expression: CellGeneExpressionSummary
-      readonly shape: CellShapeMetrics
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly cellId: string
-      readonly error: CellLoadErrorSummary
-    }
-
-type CellTranscriptDistributionDisplayState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string; readonly cellId: string }
-  | {
-      readonly status: 'ready'
-      readonly url: string
-      readonly cellId: string
-      readonly distribution: CellTranscriptZDistribution
-    }
-  | {
-      readonly status: 'error'
-      readonly url: string
-      readonly cellId: string
-      readonly error: CellLoadErrorSummary
-    }
 
 interface CellInfoPanelProps {
   readonly cell: OverviewCellDatum | null
-  readonly state: CellDetailDisplayState
-  readonly transcriptDistributionState: CellTranscriptDistributionDisplayState
+  readonly state: CellDetailState
+  readonly transcriptDistributionState: CellTranscriptDistributionState
 }
 
 export function CellInfoPanel({
@@ -225,7 +188,7 @@ function CellTranscriptZDistributionPanel({
   state,
 }: {
   readonly cell: OverviewCellDatum
-  readonly state: CellTranscriptDistributionDisplayState
+  readonly state: CellTranscriptDistributionState
 }) {
   const matchingState = state.status !== 'idle' && state.cellId === cell.id ? state : null
   const readyState =
