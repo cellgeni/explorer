@@ -71,9 +71,9 @@ import {
 } from './features/analysis/analysisEmbeddingModel'
 import {
   createMorphologyChannelSettings,
-  morphologyPatchLabel,
   type MorphologyChannelSetting,
 } from './features/morphology/morphologyChannels'
+import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
   magicLensScopeLabel,
@@ -197,7 +197,7 @@ import {
 import { percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
-import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
+import type { MorphologyImage } from './data/morphologyImage'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
 import type { Annotation, SpatialElement } from './datasets/spatialDataset'
@@ -1196,6 +1196,18 @@ export function App({
     setMeasurementResetKey,
   })
 
+  const { handleAutoContrast, queueAutoContrast, updateMorphologyChannel } =
+    useMorphologyWorkflow({
+      appendDebugEvent,
+      autoContrastChannelIdsRef,
+      computeAutoChannelContrast,
+      datasetAbortRef,
+      loadRequestIdRef: loadRequestId,
+      setAutoContrastChannelIds,
+      setMorphologyChannelSettings,
+      setMorphologyState,
+    })
+
   useEffect(() => {
     if (didApplyInitialDatasetUrlRef.current) {
       return
@@ -1567,78 +1579,6 @@ export function App({
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
     }
   }, [])
-
-  function queueAutoContrast(
-    channels: readonly MorphologyImageChannel[],
-    options: {
-      readonly requestId?: number
-      readonly signal?: AbortSignal
-    } = {},
-  ) {
-    const requestId = options.requestId ?? loadRequestId.current
-    const signal = options.signal ?? datasetAbortRef.current?.signal
-    const channelsToLoad: MorphologyImageChannel[] = []
-
-    for (const channel of channels) {
-      const channelId = channel.info.id
-
-      if (autoContrastChannelIdsRef.current.has(channelId)) {
-        continue
-      }
-
-      autoContrastChannelIdsRef.current.add(channelId)
-      channelsToLoad.push(channel)
-    }
-
-    if (channelsToLoad.length === 0) {
-      return
-    }
-
-    setAutoContrastChannelIds([...autoContrastChannelIdsRef.current])
-
-    for (const channel of channelsToLoad) {
-      startAutoContrast(channel, requestId, signal)
-    }
-  }
-
-  function startAutoContrast(
-    channel: MorphologyImageChannel,
-    requestId: number,
-    signal: AbortSignal | undefined,
-  ) {
-    const channelId = channel.info.id
-    void computeAutoChannelContrast(channel, signal === undefined ? {} : { signal })
-      .then((contrast) => {
-        if (loadRequestId.current !== requestId) {
-          return
-        }
-
-        updateMorphologyChannel(channelId, {
-          contrastMin: contrast.min,
-          contrastMax: contrast.max,
-          histogram: contrast.histogram,
-        })
-      })
-      .catch((error) => {
-        if (isAbortError(error) || loadRequestId.current !== requestId) {
-          return
-        }
-
-        setMorphologyState({
-          status: 'error',
-          url: channel.loader.url,
-          error: createStructuredLoadError('Image tiles', error),
-        })
-      })
-      .finally(() => {
-        if (loadRequestId.current !== requestId) {
-          return
-        }
-
-        autoContrastChannelIdsRef.current.delete(channelId)
-        setAutoContrastChannelIds([...autoContrastChannelIdsRef.current])
-      })
-  }
 
   function startDatasetWarmup(requestedUrl: string, requestId: number) {
     abortActiveRequest(datasetWarmupAbortRef)
@@ -2645,23 +2585,6 @@ export function App({
     }))
     setObservationColorMode('annotations')
     setRoiName(defaultRoiName(roiIdRef.current + 1))
-  }
-
-  function updateMorphologyChannel(
-    id: string,
-    patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
-  ) {
-    setMorphologyChannelSettings((current) =>
-      current.map((setting) => (setting.id === id ? { ...setting, ...patch } : setting)),
-    )
-    appendDebugEvent(`${morphologyPatchLabel(patch)} ${shortIdentifier(id)}`, {
-      coalesceKey: `morphology-channel:${id}`,
-    })
-  }
-
-  function handleAutoContrast(channel: MorphologyImageChannel) {
-    appendDebugEvent(`Auto contrast ${shortIdentifier(channel.info.id)}`)
-    queueAutoContrast([channel])
   }
 
   return (
