@@ -76,25 +76,16 @@ import {
 } from './features/morphology/morphologyChannels'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
-  MAGIC_LENS_CELL_LIMIT,
-  MAGIC_LENS_GENE_STATS_LIMIT,
   magicLensScopeLabel,
-  filterCellsForCircle,
-  magicLensDetailQueryKey,
   magicLensStatusCopy,
-  normalizeMagicLensMinQv,
-  normalizeMagicLensRadius,
-  resolveMagicLensSelection,
-  summarizeMagicLensCells,
-  type MagicLensCircleFilter,
   type MagicLensScope,
   type MagicLensState,
 } from './features/roi/magicLensModel'
+import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import {
   ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
   defaultRoiName,
-  emptyRoiGeneStats,
   roiGeneStatsStatusCopy,
   roiGeneViewportWarmupKey,
   roiStatusCopy,
@@ -168,11 +159,7 @@ import {
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
 } from './data/transcriptOverlay'
-import {
-  normalizeRoiSelection,
-  type RoiSelection,
-  type RoiSelectionInput,
-} from './data/roiSelection'
+import { type RoiSelection } from './data/roiSelection'
 import { parseCustomAnnotations } from './data/customAnnotations'
 import { summarizeDatasetDiagnostics } from './data/datasetDiagnostics'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
@@ -1174,6 +1161,39 @@ export function App({
     setRoiName,
     setRoiState,
     setRoiTranscriptExportState,
+  })
+
+  const {
+    handleMagicLensCursorActiveChange,
+    handleMagicLensLeave,
+    handleMagicLensMinQvChange,
+    handleMagicLensMove,
+    handleMagicLensRadiusChange,
+    handleMagicLensScopeChange,
+    handleRunMagicLens,
+  } = useMagicLensWorkflow({
+    activeRoiSelection,
+    appendDebugEvent,
+    currentViewportDetail,
+    loadRoiCells,
+    loadRoiGeneStats,
+    loadState,
+    magicLensAbortRef,
+    magicLensActive,
+    magicLensDebounceRef,
+    magicLensLastDetailRef,
+    magicLensLastQueryKeyRef,
+    magicLensMinQv,
+    magicLensRequestIdRef: magicLensRequestId,
+    magicLensScope,
+    selectedGenes,
+    setMagicLensActive,
+    setMagicLensMinQv,
+    setMagicLensRadiusMicrometers,
+    setMagicLensScope,
+    setMagicLensState,
+    setMeasurementEnabled,
+    setMeasurementResetKey,
   })
 
   useEffect(() => {
@@ -2625,239 +2645,6 @@ export function App({
     }))
     setObservationColorMode('annotations')
     setRoiName(defaultRoiName(roiIdRef.current + 1))
-  }
-
-  function runMagicLensQuery(
-    selection: RoiSelectionInput,
-    scope: MagicLensScope,
-    circleFilter: MagicLensCircleFilter | null = null,
-  ) {
-    if (loadState.status !== 'ready') {
-      return
-    }
-
-    const requestId = magicLensRequestId.current + 1
-    abortActiveRequest(magicLensAbortRef)
-    const abortController = new AbortController()
-    magicLensRequestId.current = requestId
-    magicLensAbortRef.current = abortController
-    setMagicLensState({
-      status: 'loading',
-      url: loadState.url,
-      scope,
-    })
-    appendDebugEvent(
-      `Scanning magic lens ${magicLensScopeLabel(scope)}`,
-      scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-scan' } : {},
-    )
-
-    const normalizedSelection = normalizeRoiSelection(selection)
-
-    void loadRoiCells(loadState.url, normalizedSelection, {
-      signal: abortController.signal,
-      limit: MAGIC_LENS_CELL_LIMIT,
-    })
-      .then((cells) => {
-        if (magicLensRequestId.current !== requestId) {
-          return undefined
-        }
-
-        const lensCells =
-          circleFilter === null ? cells : filterCellsForCircle(cells, circleFilter)
-
-        if (lensCells.length === 0) {
-          setMagicLensState({
-            status: 'ready',
-            url: loadState.url,
-            scope,
-            summary: summarizeMagicLensCells(
-              lensCells,
-              emptyRoiGeneStats(),
-              selectedGenes,
-              {
-                hitLimit: cells.length >= MAGIC_LENS_CELL_LIMIT,
-              },
-            ),
-          })
-          appendDebugEvent(
-            'Magic lens ready: 0 cells',
-            scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-ready' } : {},
-          )
-          return undefined
-        }
-
-        return loadRoiGeneStats(loadState.url, lensCells, {
-          signal: abortController.signal,
-          cellLimit: MAGIC_LENS_CELL_LIMIT,
-          geneLimit: MAGIC_LENS_GENE_STATS_LIMIT,
-        }).then((stats) => {
-          if (magicLensRequestId.current !== requestId) {
-            return
-          }
-
-          setMagicLensState({
-            status: 'ready',
-            url: loadState.url,
-            scope,
-            summary: summarizeMagicLensCells(lensCells, stats, selectedGenes, {
-              hitLimit: cells.length >= MAGIC_LENS_CELL_LIMIT || stats.hitCellLimit,
-            }),
-          })
-          appendDebugEvent(
-            `Magic lens ready: ${lensCells.length.toLocaleString()} cells`,
-            scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-ready' } : {},
-          )
-        })
-      })
-      .catch((error) => {
-        if (isAbortError(error) || magicLensRequestId.current !== requestId) {
-          return
-        }
-
-        setMagicLensState({
-          status: 'error',
-          url: loadState.url,
-          scope,
-          error: createStructuredLoadError('Magic lens', error),
-        })
-        appendDebugEvent('Magic lens failed')
-      })
-      .finally(() => {
-        if (magicLensAbortRef.current === abortController) {
-          magicLensAbortRef.current = null
-        }
-      })
-  }
-
-  function handleRunMagicLens() {
-    if (loadState.status !== 'ready') {
-      return
-    }
-
-    const selection = resolveMagicLensSelection(
-      magicLensScope,
-      currentViewportDetail,
-      activeRoiSelection,
-    )
-
-    if (selection === null) {
-      appendDebugEvent('Magic lens scope unavailable')
-      return
-    }
-
-    runMagicLensQuery(selection, magicLensScope)
-  }
-
-  function handleMagicLensScopeChange(nextScope: MagicLensScope) {
-    if (nextScope === 'cursor') {
-      setMagicLensScope('cursor')
-      setMagicLensState({ status: 'idle' })
-      magicLensLastQueryKeyRef.current = null
-      appendDebugEvent('Magic lens scope: cursor', {
-        coalesceKey: 'magic-lens-scope',
-      })
-      return
-    }
-
-    handleMagicLensLeave()
-    setMagicLensActive(false)
-    setMagicLensScope(nextScope)
-    appendDebugEvent(
-      nextScope === 'viewport' ? 'Magic lens scope: viewport' : 'Magic lens scope: ROI',
-      { coalesceKey: 'magic-lens-scope' },
-    )
-  }
-
-  function handleMagicLensRadiusChange(value: number) {
-    const nextRadius = normalizeMagicLensRadius(value)
-
-    setMagicLensRadiusMicrometers(nextRadius)
-    magicLensLastQueryKeyRef.current = null
-    appendDebugEvent(`Magic lens radius: ${nextRadius} um`, {
-      coalesceKey: 'magic-lens-radius',
-    })
-  }
-
-  function handleMagicLensMinQvChange(value: number) {
-    const nextMinQv = normalizeMagicLensMinQv(value)
-
-    setMagicLensMinQv(nextMinQv)
-    magicLensLastQueryKeyRef.current = null
-    appendDebugEvent(`Magic lens min QV: ${nextMinQv}`, {
-      coalesceKey: 'magic-lens-min-qv',
-    })
-  }
-
-  function handleMagicLensCursorActiveChange(nextActive: boolean) {
-    setMagicLensActive(nextActive)
-
-    if (!nextActive) {
-      handleMagicLensLeave()
-      return
-    }
-
-    setMeasurementEnabled(false)
-    setMeasurementResetKey((current) => current + 1)
-    setMagicLensState({ status: 'idle' })
-    magicLensLastQueryKeyRef.current = null
-    appendDebugEvent('Magic lens enabled')
-  }
-
-  function handleMagicLensMove(detail: ViewerMagicLensDetail) {
-    if (loadState.status !== 'ready' || magicLensScope !== 'cursor' || !magicLensActive) {
-      return
-    }
-
-    magicLensLastDetailRef.current = detail
-    const queryKey = magicLensDetailQueryKey(detail, magicLensMinQv, selectedGenes)
-
-    if (magicLensLastQueryKeyRef.current === queryKey) {
-      return
-    }
-
-    clearTimeoutRef(magicLensDebounceRef)
-
-    if (typeof window === 'undefined') {
-      magicLensLastQueryKeyRef.current = queryKey
-      runMagicLensQuery(detail.bbox, 'cursor', {
-        center: detail.center,
-        radiusMicrometers: detail.radiusMicrometers,
-      })
-      return
-    }
-
-    magicLensDebounceRef.current = window.setTimeout(() => {
-      const latestDetail = magicLensLastDetailRef.current
-
-      if (latestDetail === null) {
-        return
-      }
-
-      const latestQueryKey = magicLensDetailQueryKey(
-        latestDetail,
-        magicLensMinQv,
-        selectedGenes,
-      )
-      magicLensLastQueryKeyRef.current = latestQueryKey
-      runMagicLensQuery(latestDetail.bbox, 'cursor', {
-        center: latestDetail.center,
-        radiusMicrometers: latestDetail.radiusMicrometers,
-      })
-    }, 320)
-  }
-
-  function handleMagicLensLeave() {
-    clearTimeoutRef(magicLensDebounceRef)
-    magicLensLastDetailRef.current = null
-    magicLensLastQueryKeyRef.current = null
-
-    if (magicLensScope !== 'cursor') {
-      return
-    }
-
-    abortActiveRequest(magicLensAbortRef)
-    magicLensRequestId.current += 1
-    setMagicLensState({ status: 'idle' })
   }
 
   function updateMorphologyChannel(
