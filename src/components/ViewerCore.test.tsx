@@ -178,7 +178,6 @@ describe('ViewerCore', () => {
     })
   })
 
-
   it('reports debounced viewport details for boundary loading', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
@@ -305,6 +304,73 @@ describe('ViewerCore', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('X 2468 px | Y 11356 px')).not.toBeInTheDocument()
+    })
+  })
+
+  it('draws and clears a distance measurement in micrometers and image pixels', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+    const { rerender } = render(
+      <ViewerCore
+        cells={cells}
+        measurementEnabled
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: -4 }}
+      />,
+    )
+    const measurementLayer = document.querySelector('.measurement-draw-layer')
+
+    if (!(measurementLayer instanceof HTMLElement)) {
+      throw new Error('Expected measurement draw layer.')
+    }
+
+    fireEvent.pointerDown(measurementLayer, {
+      clientX: 100,
+      clientY: 50,
+      pointerId: 1,
+    })
+    fireEvent.pointerMove(measurementLayer, {
+      clientX: 116,
+      clientY: 50,
+      pointerId: 1,
+    })
+
+    expect(await screen.findByText('256 μm')).toBeInTheDocument()
+
+    fireEvent.pointerUp(measurementLayer, {
+      clientX: 116,
+      clientY: 50,
+      pointerId: 1,
+    })
+
+    expect(screen.getByText('256 μm')).toBeInTheDocument()
+
+    rerender(
+      <ViewerCore
+        cells={cells}
+        measurementEnabled
+        measurementUnit="px"
+        measurementResetKey={0}
+        micrometersPerPixel={0.5}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: -4 }}
+      />,
+    )
+
+    expect(await screen.findByText('512 px')).toBeInTheDocument()
+
+    rerender(
+      <ViewerCore
+        cells={cells}
+        measurementEnabled
+        measurementUnit="px"
+        measurementResetKey={1}
+        micrometersPerPixel={0.5}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: -4 }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText('512 px')).not.toBeInTheDocument()
     })
   })
 

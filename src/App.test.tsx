@@ -128,6 +128,20 @@ describe('App', () => {
     expect(
       within(coordinateUnitGroup).getByRole('button', { name: 'px' }),
     ).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Distance measure' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    const measurementUnitGroup = screen.getByRole('group', {
+      name: 'Measure unit',
+    })
+    expect(
+      within(measurementUnitGroup).getByRole('button', { name: 'μm' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      within(measurementUnitGroup).getByRole('button', { name: 'px' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Clear Measurement' })).toBeInTheDocument()
     const layerStack = screen.getByRole('region', { name: 'Layer Stack' })
     expect(within(layerStack).queryByText('cells')).not.toBeInTheDocument()
     expect(within(layerStack).queryByText('boundaries')).not.toBeInTheDocument()
@@ -155,9 +169,7 @@ describe('App', () => {
     })
     expect(transcriptExactBudgetInput).toHaveValue(100_000)
     expect(transcriptExactBudgetInput).toHaveAttribute('max', '1000000')
-    expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
-      'all',
-    )
+    expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue('all')
     expect(screen.getByLabelText('Feature search')).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'Density color' })).toHaveValue('thermal')
     expect(screen.getByRole('combobox', { name: 'Point color' })).toHaveValue('feature')
@@ -233,11 +245,19 @@ describe('App', () => {
     fireEvent.change(screen.getByRole('slider', { name: 'Image opacity' }), {
       target: { value: '45' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'px' }))
+    const coordinateUnitGroup = screen.getByRole('group', {
+      name: 'Mouse coordinates',
+    })
+    fireEvent.click(within(coordinateUnitGroup).getByRole('button', { name: 'px' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Distance measure' }))
+    const measurementUnitGroup = screen.getByRole('group', { name: 'Measure unit' })
+    fireEvent.click(within(measurementUnitGroup).getByRole('button', { name: 'px' }))
 
     openHudTab('Dataset')
     expect(within(activityLog).getByText('Image opacity: 45%')).toBeInTheDocument()
     expect(within(activityLog).getByText('Mouse coordinates: px')).toBeInTheDocument()
+    expect(within(activityLog).getByText('Distance measure enabled')).toBeInTheDocument()
+    expect(within(activityLog).getByText('Measure unit: px')).toBeInTheDocument()
 
     fireEvent.click(within(activityLog).getByRole('button', { name: 'Clear' }))
 
@@ -1564,7 +1584,9 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
 
       expect(
-        await screen.findByText(/Exact transcript viewport is near the 100,000 point budget/),
+        await screen.findByText(
+          /Exact transcript viewport is near the 100,000 point budget/,
+        ),
       ).toBeInTheDocument()
       expect(loadTranscriptViewport).not.toHaveBeenCalled()
 
@@ -1884,9 +1906,7 @@ describe('App', () => {
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
       openHudTab('Transcripts')
       expect(await screen.findByText('Native LOD + exact')).toBeInTheDocument()
-      expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
-        'all',
-      )
+      expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue('all')
 
       fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
 

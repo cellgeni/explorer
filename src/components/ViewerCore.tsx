@@ -64,6 +64,9 @@ export interface ViewerCoreProps {
   readonly observationColorMode?: ObservationColorMode
   readonly annotationStyleColors?: readonly AnnotationColorStyle[]
   readonly coordinateUnit?: ViewerCoordinateUnit
+  readonly measurementEnabled?: boolean
+  readonly measurementUnit?: ViewerCoordinateUnit
+  readonly measurementResetKey?: number
   readonly micrometersPerPixel?: number
   readonly status?: ViewerLoadStatus
   readonly imageStatus?: ViewerLoadStatus
@@ -153,6 +156,9 @@ export function ViewerCore({
   observationColorMode = 'transcript-count',
   annotationStyleColors = EMPTY_ANNOTATION_STYLE_COLORS,
   coordinateUnit = 'um',
+  measurementEnabled = false,
+  measurementUnit = 'um',
+  measurementResetKey = 0,
   micrometersPerPixel = DEFAULT_MICROMETERS_PER_PIXEL,
   status = 'idle',
   imageStatus = 'idle',
@@ -207,6 +213,9 @@ export function ViewerCore({
       observationColorMode={observationColorMode}
       annotationStyleColors={annotationStyleColors}
       coordinateUnit={coordinateUnit}
+      measurementEnabled={measurementEnabled}
+      measurementUnit={measurementUnit}
+      measurementResetKey={measurementResetKey}
       micrometersPerPixel={micrometersPerPixel}
       initialViewState={initialViewState}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
@@ -255,6 +264,9 @@ interface ViewerSurfaceProps {
   readonly observationColorMode: ObservationColorMode
   readonly annotationStyleColors: readonly AnnotationColorStyle[]
   readonly coordinateUnit: ViewerCoordinateUnit
+  readonly measurementEnabled: boolean
+  readonly measurementUnit: ViewerCoordinateUnit
+  readonly measurementResetKey: number
   readonly micrometersPerPixel: number
   readonly initialViewState: OverviewViewState
   readonly overviewRenderCellLimit?: number
@@ -297,6 +309,22 @@ type RoiDraft =
       readonly current: DataPoint
     }
 
+interface MeasurementLine {
+  readonly start: DataPoint
+  readonly end: DataPoint
+}
+
+interface MeasurementDraft {
+  readonly start: DataPoint
+  readonly current: DataPoint
+}
+
+interface MeasurementState {
+  readonly resetKey: number
+  readonly draft: MeasurementDraft | null
+  readonly line: MeasurementLine | null
+}
+
 interface ScreenPoint {
   readonly x: number
   readonly y: number
@@ -315,6 +343,14 @@ interface MouseCoordinate {
 interface ScaleBarModel {
   readonly label: string
   readonly widthPixels: number
+}
+
+interface MeasurementOverlayModel {
+  readonly start: ScreenPoint
+  readonly end: ScreenPoint
+  readonly label: string
+  readonly labelStyle: CSSProperties
+  readonly isDraft: boolean
 }
 
 interface RoiScreenRect {
@@ -340,6 +376,9 @@ function ViewerSurface({
   observationColorMode,
   annotationStyleColors,
   coordinateUnit,
+  measurementEnabled,
+  measurementUnit,
+  measurementResetKey,
   micrometersPerPixel,
   initialViewState,
   overviewRenderCellLimit,
@@ -377,6 +416,11 @@ function ViewerSurface({
     height: 0,
   })
   const [roiDraft, setRoiDraft] = useState<RoiDraft | null>(null)
+  const [measurementState, setMeasurementState] = useState<MeasurementState>(() => ({
+    resetKey: measurementResetKey,
+    draft: null,
+    line: null,
+  }))
   const [mouseCoordinate, setMouseCoordinate] = useState<MouseCoordinate | null>(null)
   const [magicLensScreen, setMagicLensScreen] = useState<ScreenPoint | null>(null)
   const [transcriptHover, setTranscriptHover] =
@@ -446,8 +490,7 @@ function ViewerSurface({
     [expressionCells, shouldUseExpressionPointBins],
   )
   const expressionStyledRenderCells = useMemo(
-    () =>
-      styleCellsByGeneExpression(renderCells, geneExpressionPointStyleIndex),
+    () => styleCellsByGeneExpression(renderCells, geneExpressionPointStyleIndex),
     [geneExpressionPointStyleIndex, renderCells],
   )
   const cellById = useMemo(() => {
@@ -577,6 +620,49 @@ function ViewerSurface({
       viewport,
     ],
   )
+  const activeMeasurementDraft =
+    measurementEnabled && measurementState.resetKey === measurementResetKey
+      ? measurementState.draft
+      : null
+  const activeMeasurementLine =
+    measurementState.resetKey === measurementResetKey ? measurementState.line : null
+  const measurementOverlay = useMemo(() => {
+    if (viewport.width <= 0 || viewport.height <= 0) {
+      return null
+    }
+
+    const activeMeasurement =
+      activeMeasurementDraft === null
+        ? activeMeasurementLine === null
+          ? null
+          : {
+              start: activeMeasurementLine.start,
+              end: activeMeasurementLine.end,
+              isDraft: false,
+            }
+        : {
+            start: activeMeasurementDraft.start,
+            end: activeMeasurementDraft.current,
+            isDraft: true,
+          }
+
+    return activeMeasurement === null
+      ? null
+      : measurementOverlayModel(
+          activeMeasurement,
+          viewState,
+          viewport,
+          measurementUnit,
+          micrometersPerPixel,
+        )
+  }, [
+    activeMeasurementDraft,
+    activeMeasurementLine,
+    measurementUnit,
+    micrometersPerPixel,
+    viewState,
+    viewport,
+  ])
   const viewportMessage = readViewportMessage(status, imageStatus, boundaryStatus, {
     ...(errorMessage === undefined ? {} : { errorMessage }),
     ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
@@ -767,7 +853,7 @@ function ViewerSurface({
         yMicrometers: point.y,
       })
 
-      if (magicLensActive && roiMode === 'idle') {
+      if (magicLensActive && roiMode === 'idle' && !measurementEnabled) {
         const rect = event.currentTarget.getBoundingClientRect()
         const screen = {
           x: event.clientX - rect.left,
@@ -787,6 +873,7 @@ function ViewerSurface({
       canTrackMouseCoordinates,
       magicLensActive,
       magicLensRadiusMicrometers,
+      measurementEnabled,
       onMagicLensMove,
       roiMode,
       scheduleMouseCoordinate,
@@ -869,6 +956,87 @@ function ViewerSurface({
     },
     [onRoiComplete, roiDraft, viewState, viewport],
   )
+  const handleMeasurementPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (
+        !measurementEnabled ||
+        !canTrackMouseCoordinates ||
+        viewport.width <= 0 ||
+        viewport.height <= 0
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+      const point = pointerEventToDataPoint(event, viewState, viewport)
+      setMeasurementState({
+        resetKey: measurementResetKey,
+        draft: { start: point, current: point },
+        line: null,
+      })
+    },
+    [
+      canTrackMouseCoordinates,
+      measurementEnabled,
+      measurementResetKey,
+      viewState,
+      viewport,
+    ],
+  )
+  const handleMeasurementPointerMove = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (
+        activeMeasurementDraft === null ||
+        viewport.width <= 0 ||
+        viewport.height <= 0
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      const point = pointerEventToDataPoint(event, viewState, viewport)
+      setMeasurementState((currentState) =>
+        currentState.resetKey !== measurementResetKey || currentState.draft === null
+          ? currentState
+          : {
+              ...currentState,
+              draft: { ...currentState.draft, current: point },
+            },
+      )
+    },
+    [activeMeasurementDraft, measurementResetKey, viewState, viewport],
+  )
+  const handleMeasurementPointerUp = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (
+        activeMeasurementDraft === null ||
+        viewport.width <= 0 ||
+        viewport.height <= 0
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      const point = pointerEventToDataPoint(event, viewState, viewport)
+      const nextMeasurement = { start: activeMeasurementDraft.start, end: point }
+      setMeasurementState({
+        resetKey: measurementResetKey,
+        draft: null,
+        line: hasMinimumMeasurementDistance(nextMeasurement, viewState)
+          ? nextMeasurement
+          : null,
+      })
+    },
+    [activeMeasurementDraft, measurementResetKey, viewState, viewport],
+  )
+  const handleMeasurementPointerCancel = useCallback(() => {
+    setMeasurementState((currentState) =>
+      currentState.resetKey !== measurementResetKey
+        ? currentState
+        : { ...currentState, draft: null },
+    )
+  }, [measurementResetKey])
 
   useEffect(() => {
     const frame = frameRef.current
@@ -947,7 +1115,13 @@ function ViewerSurface({
   return (
     <div
       ref={frameRef}
-      className={`viewport-frame${magicLensActive ? ' is-magic-lens-active' : ''}`}
+      className={[
+        'viewport-frame',
+        magicLensActive ? 'is-magic-lens-active' : '',
+        measurementEnabled ? 'is-measuring-distance' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       role="img"
       aria-label="Spatial viewer canvas area"
       aria-describedby={keyboardHelpId}
@@ -959,6 +1133,7 @@ function ViewerSurface({
     >
       <p id={keyboardHelpId} className="visually-hidden">
         Use arrow keys to pan, plus or minus to zoom, and Home to reset the spatial view.
+        When measuring is enabled, drag across the spatial view to measure a distance.
       </p>
       {!hasImage ? <div className="viewport-grid" aria-hidden="true" /> : null}
       <MorphologyCanvas
@@ -1011,6 +1186,18 @@ function ViewerSurface({
               height: roiScreenRect.height,
             }}
           />
+        )}
+      </div>
+      <div
+        className={`measurement-draw-layer${measurementEnabled ? ' active' : ''}`}
+        aria-hidden="true"
+        onPointerDown={handleMeasurementPointerDown}
+        onPointerMove={handleMeasurementPointerMove}
+        onPointerUp={handleMeasurementPointerUp}
+        onPointerCancel={handleMeasurementPointerCancel}
+      >
+        {measurementOverlay === null ? null : (
+          <MeasurementOverlay model={measurementOverlay} />
         )}
       </div>
       {magicLensOverlay === null ? null : (
@@ -1096,6 +1283,103 @@ function ScaleBar({ model }: { readonly model: ScaleBarModel }) {
   )
 }
 
+function MeasurementOverlay({ model }: { readonly model: MeasurementOverlayModel }) {
+  return (
+    <div className="measurement-overlay">
+      <svg className="measurement-svg" focusable="false" aria-hidden="true">
+        <line
+          className={`measurement-line${model.isDraft ? ' is-draft' : ''}`}
+          x1={model.start.x}
+          y1={model.start.y}
+          x2={model.end.x}
+          y2={model.end.y}
+        />
+        <circle
+          className="measurement-endpoint"
+          cx={model.start.x}
+          cy={model.start.y}
+          r="3"
+        />
+        <circle
+          className="measurement-endpoint"
+          cx={model.end.x}
+          cy={model.end.y}
+          r="3"
+        />
+      </svg>
+      <span
+        className={`measurement-label${model.isDraft ? ' is-draft' : ''}`}
+        style={model.labelStyle}
+      >
+        {model.label}
+      </span>
+    </div>
+  )
+}
+
+function measurementOverlayModel(
+  measurement: {
+    readonly start: DataPoint
+    readonly end: DataPoint
+    readonly isDraft: boolean
+  },
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+  unit: ViewerCoordinateUnit,
+  micrometersPerPixel: number,
+): MeasurementOverlayModel {
+  const start = rawDataPointToScreen(measurement.start, viewState, viewport)
+  const end = rawDataPointToScreen(measurement.end, viewState, viewport)
+  const midpoint = {
+    x: (start.x + end.x) / 2,
+    y: (start.y + end.y) / 2,
+  }
+
+  return {
+    start,
+    end,
+    isDraft: measurement.isDraft,
+    label: formatMeasurementDistance(
+      measurementDistanceMicrometers(measurement),
+      unit,
+      micrometersPerPixel,
+    ),
+    labelStyle: {
+      left: Math.max(8, Math.min(viewport.width - 8, midpoint.x)),
+      top: Math.max(24, Math.min(viewport.height - 8, midpoint.y - 8)),
+    },
+  }
+}
+
+function hasMinimumMeasurementDistance(
+  measurement: MeasurementLine,
+  viewState: OverviewViewState,
+): boolean {
+  return measurementDistanceMicrometers(measurement) * scaleFromZoom(viewState.zoom) >= 3
+}
+
+function measurementDistanceMicrometers(measurement: {
+  readonly start: DataPoint
+  readonly end: DataPoint
+}): number {
+  return Math.hypot(
+    measurement.end.x - measurement.start.x,
+    measurement.end.y - measurement.start.y,
+  )
+}
+
+function formatMeasurementDistance(
+  distanceMicrometers: number,
+  unit: ViewerCoordinateUnit,
+  micrometersPerPixel: number,
+): string {
+  if (unit === 'px') {
+    return `${formatScaleDistance(distanceMicrometers / safeMicrometersPerPixel(micrometersPerPixel))} px`
+  }
+
+  return `${formatScaleDistance(distanceMicrometers)} μm`
+}
+
 function scaleBarModel(
   viewState: OverviewViewState,
   viewport: CssViewportSize,
@@ -1115,10 +1399,7 @@ function scaleBarModel(
     return null
   }
 
-  const pixelSize =
-    Number.isFinite(micrometersPerPixel) && micrometersPerPixel > 0
-      ? micrometersPerPixel
-      : DEFAULT_MICROMETERS_PER_PIXEL
+  const pixelSize = safeMicrometersPerPixel(micrometersPerPixel)
   const unitMicrometers = unit === 'px' ? pixelSize : 1
   const rawUnitDistance = targetWidthPixels / (scale * unitMicrometers)
   const unitDistance = niceScaleDistance(rawUnitDistance)
@@ -1248,7 +1529,9 @@ function TranscriptHoverTooltip({
         aria-hidden="true"
       >
         <p>
-          {aggregate.featureName === undefined ? 'Transcript density bin' : aggregate.featureName}
+          {aggregate.featureName === undefined
+            ? 'Transcript density bin'
+            : aggregate.featureName}
         </p>
         <dl>
           <div>
@@ -1568,15 +1851,18 @@ function formatMouseCoordinate(
   micrometersPerPixel: number,
 ): string {
   if (unit === 'px') {
-    const pixelSize =
-      Number.isFinite(micrometersPerPixel) && micrometersPerPixel > 0
-        ? micrometersPerPixel
-        : DEFAULT_MICROMETERS_PER_PIXEL
+    const pixelSize = safeMicrometersPerPixel(micrometersPerPixel)
 
     return `X ${formatCoordinateValue(coordinate.xMicrometers / pixelSize)} px | Y ${formatCoordinateValue(coordinate.yMicrometers / pixelSize)} px`
   }
 
   return `X ${formatCoordinateValue(coordinate.xMicrometers)} μm | Y ${formatCoordinateValue(coordinate.yMicrometers)} μm`
+}
+
+function safeMicrometersPerPixel(micrometersPerPixel: number): number {
+  return Number.isFinite(micrometersPerPixel) && micrometersPerPixel > 0
+    ? micrometersPerPixel
+    : DEFAULT_MICROMETERS_PER_PIXEL
 }
 
 function formatCoordinateValue(value: number): string {

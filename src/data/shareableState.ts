@@ -19,6 +19,7 @@ export interface ShareableState {
   readonly geneExpressionDetailMode?: string
   readonly observationColorMode?: string
   readonly coordinateUnit?: string
+  readonly measurementUnit?: string
   readonly shouldLoadMorphology?: boolean
   readonly boundaryCellLimit?: number
   readonly transcriptOverlay?: boolean
@@ -56,6 +57,7 @@ export function parseShareableState(hash: string): ShareableState {
   const geneExpressionDetailMode = readString(params, 'detail')
   const observationColorMode = readString(params, 'cellColor')
   const coordinateUnit = readString(params, 'coord')
+  const measurementUnit = readString(params, 'measureUnit')
   const shouldLoadMorphology = parseBoolean(params.get('morphology'))
   const boundaryCellLimit = parsePositiveInteger(params.get('boundaryLimit'))
   const transcriptOverlay = parseBoolean(params.get('tx'))
@@ -107,6 +109,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (coordinateUnit !== undefined) {
     state.coordinateUnit = coordinateUnit
+  }
+
+  if (measurementUnit !== undefined) {
+    state.measurementUnit = measurementUnit
   }
 
   if (shouldLoadMorphology !== undefined) {
@@ -187,6 +193,7 @@ export function formatShareableState(state: ShareableState): string {
   setOptionalString(params, 'detail', state.geneExpressionDetailMode)
   setOptionalString(params, 'cellColor', state.observationColorMode)
   setOptionalString(params, 'coord', state.coordinateUnit)
+  setOptionalString(params, 'measureUnit', state.measurementUnit)
 
   if (state.shouldLoadMorphology !== undefined) {
     params.set('morphology', state.shouldLoadMorphology ? '1' : '0')

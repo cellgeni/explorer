@@ -70,6 +70,8 @@ export interface DiagnosticsDumpOptions {
   readonly hoveredTranscript: TranscriptDiagnosticInspection | null
   readonly loadState: DatasetLoadDiagnosticState
   readonly manualTranscriptExactRequestKey: string | null
+  readonly measurementEnabled: boolean
+  readonly measurementUnit: string
   readonly observationColorMode: string
   readonly performanceBudget: unknown
   readonly pinnedTranscript: TranscriptDiagnosticInspection | null
@@ -107,6 +109,8 @@ export function createDiagnosticsDump(
       geneExpressionColorScale: options.geneExpressionColorScale,
       geneExpressionDetailMode: options.geneExpressionDetailMode,
       geneExpressionScoreMode: options.geneExpressionScoreMode,
+      measurementEnabled: options.measurementEnabled,
+      measurementUnit: options.measurementUnit,
       observationColorMode: options.observationColorMode,
       selectedGenes: options.selectedGenes,
       shareableViewState: options.shareableViewState,

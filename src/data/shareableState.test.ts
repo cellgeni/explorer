@@ -28,6 +28,7 @@ describe('shareableState', () => {
       geneExpressionDetailMode: 'auto',
       observationColorMode: 'transcript-count',
       coordinateUnit: 'px',
+      measurementUnit: 'um',
       shouldLoadMorphology: true,
       boundaryCellLimit: 2500,
       transcriptOverlay: true,
@@ -51,6 +52,7 @@ describe('shareableState', () => {
     expect(state.activeTab).toBe('genes')
     expect(state.geneExpressionColorScale).toBe('plasma')
     expect(state.coordinateUnit).toBe('px')
+    expect(state.measurementUnit).toBe('um')
     expect(state.shouldLoadMorphology).toBe(true)
     expect(state.boundaryCellLimit).toBe(2500)
     expect(state.transcriptOverlay).toBe(true)

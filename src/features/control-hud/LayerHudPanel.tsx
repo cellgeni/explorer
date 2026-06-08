@@ -14,10 +14,14 @@ interface LayerHudPanelProps {
   readonly cellFillOpacityInputId: string
   readonly cellBoundaryOpacityInputId: string
   readonly coordinateUnitInputId: string
+  readonly measurementModeInputId: string
+  readonly measurementUnitInputId: string
   readonly imageLayerOpacity: number
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
   readonly coordinateUnit: ViewerCoordinateUnit
+  readonly measurementEnabled: boolean
+  readonly measurementUnit: ViewerCoordinateUnit
   readonly morphologyChannels: readonly MorphologyImageChannel[]
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
   readonly autoContrastChannelIds: readonly string[]
@@ -25,6 +29,9 @@ interface LayerHudPanelProps {
   readonly onCellFillOpacityPercentChange: (percent: number) => void
   readonly onCellBoundaryOpacityPercentChange: (percent: number) => void
   readonly onCoordinateUnitChange: (unit: ViewerCoordinateUnit) => void
+  readonly onMeasurementEnabledChange: (enabled: boolean) => void
+  readonly onMeasurementUnitChange: (unit: ViewerCoordinateUnit) => void
+  readonly onClearMeasurement: () => void
   readonly onAutoContrast: (channel: MorphologyImageChannel) => void
   readonly onUpdateMorphologyChannel: (
     id: string,
@@ -41,10 +48,14 @@ export function LayerHudPanel({
   cellFillOpacityInputId,
   cellBoundaryOpacityInputId,
   coordinateUnitInputId,
+  measurementModeInputId,
+  measurementUnitInputId,
   imageLayerOpacity,
   cellFillOpacity,
   cellBoundaryOpacity,
   coordinateUnit,
+  measurementEnabled,
+  measurementUnit,
   morphologyChannels,
   morphologyChannelSettings,
   autoContrastChannelIds,
@@ -52,6 +63,9 @@ export function LayerHudPanel({
   onCellFillOpacityPercentChange,
   onCellBoundaryOpacityPercentChange,
   onCoordinateUnitChange,
+  onMeasurementEnabledChange,
+  onMeasurementUnitChange,
+  onClearMeasurement,
   onAutoContrast,
   onUpdateMorphologyChannel,
 }: LayerHudPanelProps) {
@@ -159,6 +173,55 @@ export function LayerHudPanel({
               px
             </button>
           </div>
+        </div>
+        <div className="measurement-control">
+          <div className="measurement-control-header">
+            <span id={measurementModeInputId}>Distance measure</span>
+            <button
+              type="button"
+              aria-pressed={measurementEnabled}
+              aria-labelledby={measurementModeInputId}
+              onClick={() => {
+                onMeasurementEnabledChange(!measurementEnabled)
+              }}
+            >
+              {measurementEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+          <div className="coordinate-unit-control">
+            <span id={measurementUnitInputId}>Measure unit</span>
+            <div
+              className="coordinate-unit-segmented"
+              role="group"
+              aria-labelledby={measurementUnitInputId}
+            >
+              <button
+                type="button"
+                aria-pressed={measurementUnit === 'um'}
+                onClick={() => {
+                  onMeasurementUnitChange('um')
+                }}
+              >
+                μm
+              </button>
+              <button
+                type="button"
+                aria-pressed={measurementUnit === 'px'}
+                onClick={() => {
+                  onMeasurementUnitChange('px')
+                }}
+              >
+                px
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="secondary-action measurement-clear-action"
+            onClick={onClearMeasurement}
+          >
+            Clear Measurement
+          </button>
         </div>
         <MorphologyChannelControls
           channels={morphologyChannels}

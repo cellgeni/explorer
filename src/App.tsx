@@ -483,6 +483,8 @@ export function App({
   const cellFillOpacityInputId = useId()
   const cellBoundaryOpacityInputId = useId()
   const coordinateUnitInputId = useId()
+  const measurementModeInputId = useId()
+  const measurementUnitInputId = useId()
   const geneSearchInputId = useId()
   const geneSetSymbolsInputId = useId()
   const geneSetNameInputId = useId()
@@ -676,6 +678,14 @@ export function App({
   const [coordinateUnit, setCoordinateUnit] = useState<ViewerCoordinateUnit>(
     () => parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ?? 'um',
   )
+  const [measurementEnabled, setMeasurementEnabled] = useState(false)
+  const [measurementUnit, setMeasurementUnit] = useState<ViewerCoordinateUnit>(
+    () =>
+      parseViewerCoordinateUnit(initialShareableState.measurementUnit) ??
+      parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ??
+      'um',
+  )
+  const [measurementResetKey, setMeasurementResetKey] = useState(0)
   const [geneSearch, setGeneSearch] = useState('')
   const [geneSetSymbols, setGeneSetSymbols] = useState('')
   const [geneSetName, setGeneSetName] = useState('')
@@ -2312,6 +2322,7 @@ export function App({
         geneExpressionDetailMode,
         observationColorMode,
         coordinateUnit,
+        measurementUnit,
         shouldLoadMorphology,
         boundaryCellLimit,
         transcriptOverlay: showTranscriptOverlay,
@@ -2348,6 +2359,7 @@ export function App({
     geneExpressionColorScale,
     geneExpressionDetailMode,
     geneExpressionScoreMode,
+    measurementUnit,
     observationColorMode,
     selectedGenes,
     shareableViewState,
@@ -2468,7 +2480,10 @@ export function App({
       return
     }
 
-    if (cellDetailState.status === 'error' && cellDetailState.cellId === selectedCell.id) {
+    if (
+      cellDetailState.status === 'error' &&
+      cellDetailState.cellId === selectedCell.id
+    ) {
       abortActiveRequest(cellTranscriptDistributionAbortRef)
       cellTranscriptDistributionRequestId.current += 1
       const requestId = cellTranscriptDistributionRequestId.current
@@ -2488,7 +2503,10 @@ export function App({
       return
     }
 
-    if (cellDetailState.status !== 'ready' || cellDetailState.cellId !== selectedCell.id) {
+    if (
+      cellDetailState.status !== 'ready' ||
+      cellDetailState.cellId !== selectedCell.id
+    ) {
       abortActiveRequest(cellTranscriptDistributionAbortRef)
       cellTranscriptDistributionRequestId.current += 1
       const requestId = cellTranscriptDistributionRequestId.current
@@ -2894,6 +2912,8 @@ export function App({
       )
       setSelectedGenes(sharedSelectedGenes)
       setRoiMode('idle')
+      setMeasurementEnabled(false)
+      setMeasurementResetKey((current) => current + 1)
       setRoiName('ROI 1')
       setRoiState({ status: 'idle' })
       setRoiGeneStatsState({ status: 'idle' })
@@ -3202,6 +3222,8 @@ export function App({
           hoveredTranscript,
           loadState,
           manualTranscriptExactRequestKey,
+          measurementEnabled,
+          measurementUnit,
           observationColorMode,
           performanceBudget,
           pinnedTranscript,
@@ -4180,10 +4202,14 @@ export function App({
               cellFillOpacityInputId={cellFillOpacityInputId}
               cellBoundaryOpacityInputId={cellBoundaryOpacityInputId}
               coordinateUnitInputId={coordinateUnitInputId}
+              measurementModeInputId={measurementModeInputId}
+              measurementUnitInputId={measurementUnitInputId}
               imageLayerOpacity={imageLayerOpacity}
               cellFillOpacity={cellFillOpacity}
               cellBoundaryOpacity={cellBoundaryOpacity}
               coordinateUnit={coordinateUnit}
+              measurementEnabled={measurementEnabled}
+              measurementUnit={measurementUnit}
               morphologyChannels={morphologyImage?.channelLoaders ?? []}
               morphologyChannelSettings={morphologyChannelSettings}
               autoContrastChannelIds={autoContrastChannelIds}
@@ -4215,6 +4241,42 @@ export function App({
                   `Mouse coordinates: ${nextUnit === 'um' ? 'μm' : 'px'}`,
                   { coalesceKey: 'coordinate-unit' },
                 )
+              }}
+              onMeasurementEnabledChange={(nextEnabled) => {
+                if (measurementEnabled === nextEnabled) {
+                  return
+                }
+
+                setMeasurementEnabled(nextEnabled)
+
+                if (nextEnabled) {
+                  setRoiMode('idle')
+                  setMagicLensActive(false)
+                  handleMagicLensLeave()
+                } else {
+                  setMeasurementResetKey((current) => current + 1)
+                }
+
+                appendDebugEvent(
+                  nextEnabled ? 'Distance measure enabled' : 'Distance measure disabled',
+                  { coalesceKey: 'measurement-mode' },
+                )
+              }}
+              onMeasurementUnitChange={(nextUnit) => {
+                if (measurementUnit === nextUnit) {
+                  return
+                }
+
+                setMeasurementUnit(nextUnit)
+                appendDebugEvent(`Measure unit: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
+                  coalesceKey: 'measurement-unit',
+                })
+              }}
+              onClearMeasurement={() => {
+                setMeasurementResetKey((current) => current + 1)
+                appendDebugEvent('Distance measure cleared', {
+                  coalesceKey: 'measurement-clear',
+                })
               }}
               onAutoContrast={handleAutoContrast}
               onUpdateMorphologyChannel={updateMorphologyChannel}
@@ -4931,6 +4993,8 @@ export function App({
                       if (!nextActive) {
                         handleMagicLensLeave()
                       } else {
+                        setMeasurementEnabled(false)
+                        setMeasurementResetKey((current) => current + 1)
                         setMagicLensState({ status: 'idle' })
                         magicLensLastQueryKeyRef.current = null
                         appendDebugEvent('Magic lens enabled')
@@ -5119,6 +5183,11 @@ export function App({
               roiGeneStatsState={roiGeneStatsState}
               roiTranscriptExportState={roiTranscriptExportState}
               onRoiModeChange={(nextMode) => {
+                if (nextMode !== 'idle') {
+                  setMeasurementEnabled(false)
+                  setMeasurementResetKey((current) => current + 1)
+                }
+
                 setRoiMode(nextMode)
                 appendDebugEvent(
                   nextMode === 'idle'
@@ -5159,6 +5228,9 @@ export function App({
           observationColorMode={viewerObservationColorMode}
           annotationStyleColors={activeAnnotationStyleColors}
           coordinateUnit={coordinateUnit}
+          measurementEnabled={measurementEnabled}
+          measurementUnit={measurementUnit}
+          measurementResetKey={measurementResetKey}
           status={loadState.status}
           imageStatus={morphologyState.status}
           boundaryStatus={boundaryState.status}
