@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react'
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ViewerCore,
   type ViewerCoordinateUnit,
@@ -25,6 +25,7 @@ import {
   defaultAppDependencies,
   type AppProps,
 } from './features/app-shell/appDependencies'
+import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import {
   abortActiveRequest,
@@ -32,6 +33,7 @@ import {
   clearTimeoutRef,
   createLoadingTasks,
   createDebugLogEntry,
+  downloadTextFile,
   formatElapsed,
   isAbortError,
   readTimestamp,
@@ -130,6 +132,7 @@ import {
 import {
   defaultGeneSetName,
   filterGeneOptions,
+  formatGeneExpressionTiming,
   type GeneExpressionScaleDomain,
   type GeneExpressionState,
   geneExpressionModeLabel,
@@ -287,38 +290,7 @@ export function App({
   runDatasetDiagnostics = defaultAppDependencies.runDatasetDiagnostics,
   computeAutoChannelContrast = defaultAppDependencies.computeAutoChannelContrast,
 }: AppProps) {
-  const datasetInputId = useId()
-  const morphologyInputId = useId()
-  const boundaryLimitInputId = useId()
-  const imageOpacityInputId = useId()
-  const cellFillOpacityInputId = useId()
-  const cellBoundaryOpacityInputId = useId()
-  const coordinateUnitInputId = useId()
-  const measurementModeInputId = useId()
-  const measurementUnitInputId = useId()
-  const geneSearchInputId = useId()
-  const geneSetSymbolsInputId = useId()
-  const geneSetNameInputId = useId()
-  const geneSetScoreInputId = useId()
-  const geneScaleInputId = useId()
-  const geneExpressionDetailInputId = useId()
-  const annotationImportInputId = useId()
-  const annotationGroupInputId = useId()
-  const embeddingViewInputId = useId()
-  const roiNameInputId = useId()
-  const observationModeInputId = useId()
-  const transcriptDetailInputId = useId()
-  const transcriptDensityScaleInputId = useId()
-  const transcriptPointColorInputId = useId()
-  const transcriptPointBudgetInputId = useId()
-  const transcriptMinQvInputId = useId()
-  const transcriptFeatureFilterInputId = useId()
-  const transcriptFeatureSearchInputId = useId()
-  const transcriptOpacityInputId = useId()
-  const transcriptPointSizeInputId = useId()
-  const magicLensScopeInputId = useId()
-  const magicLensRadiusInputId = useId()
-  const magicLensMinQvInputId = useId()
+  const controlIds = useAppControlIds()
   const [initialShareableState] = useState<ShareableState>(() =>
     readShareableStateFromLocation(),
   )
@@ -3858,9 +3830,9 @@ export function App({
       >
         <DatasetHudPanel
           active={activeControlHudTab === 'dataset'}
-          datasetInputId={datasetInputId}
-          morphologyInputId={morphologyInputId}
-          boundaryLimitInputId={boundaryLimitInputId}
+          datasetInputId={controlIds.datasetInputId}
+          morphologyInputId={controlIds.morphologyInputId}
+          boundaryLimitInputId={controlIds.boundaryLimitInputId}
           datasetUrl={datasetUrl}
           shouldLoadMorphology={shouldLoadMorphology}
           boundaryCellLimit={boundaryCellLimit}
@@ -3899,12 +3871,12 @@ export function App({
           scaffoldDeckLayerCount={scaffoldDeckLayerCount}
           bundledDeckVersion={bundledDeckVersion}
           performanceBudget={performanceBudget}
-          imageOpacityInputId={imageOpacityInputId}
-          cellFillOpacityInputId={cellFillOpacityInputId}
-          cellBoundaryOpacityInputId={cellBoundaryOpacityInputId}
-          coordinateUnitInputId={coordinateUnitInputId}
-          measurementModeInputId={measurementModeInputId}
-          measurementUnitInputId={measurementUnitInputId}
+          imageOpacityInputId={controlIds.imageOpacityInputId}
+          cellFillOpacityInputId={controlIds.cellFillOpacityInputId}
+          cellBoundaryOpacityInputId={controlIds.cellBoundaryOpacityInputId}
+          coordinateUnitInputId={controlIds.coordinateUnitInputId}
+          measurementModeInputId={controlIds.measurementModeInputId}
+          measurementUnitInputId={controlIds.measurementUnitInputId}
           imageLayerOpacity={imageLayerOpacity}
           cellFillOpacity={cellFillOpacity}
           cellBoundaryOpacity={cellBoundaryOpacity}
@@ -3984,13 +3956,13 @@ export function App({
 
         <GeneHudPanel
           active={activeControlHudTab === 'genes'}
-          geneSearchInputId={geneSearchInputId}
-          geneSetSymbolsInputId={geneSetSymbolsInputId}
-          geneSetNameInputId={geneSetNameInputId}
-          geneSetScoreInputId={geneSetScoreInputId}
-          geneScaleInputId={geneScaleInputId}
-          geneExpressionDetailInputId={geneExpressionDetailInputId}
-          observationModeInputId={observationModeInputId}
+          geneSearchInputId={controlIds.geneSearchInputId}
+          geneSetSymbolsInputId={controlIds.geneSetSymbolsInputId}
+          geneSetNameInputId={controlIds.geneSetNameInputId}
+          geneSetScoreInputId={controlIds.geneSetScoreInputId}
+          geneScaleInputId={controlIds.geneScaleInputId}
+          geneExpressionDetailInputId={controlIds.geneExpressionDetailInputId}
+          observationModeInputId={controlIds.observationModeInputId}
           analysisHeaderCopy={analysisHeaderCopy}
           geneExpressionCopy={geneExpressionCopy}
           genePanelState={genePanelState}
@@ -4023,15 +3995,15 @@ export function App({
 
         <TranscriptHudPanel
           active={activeControlHudTab === 'transcripts'}
-          transcriptDetailInputId={transcriptDetailInputId}
-          transcriptDensityScaleInputId={transcriptDensityScaleInputId}
-          transcriptPointColorInputId={transcriptPointColorInputId}
-          transcriptPointBudgetInputId={transcriptPointBudgetInputId}
-          transcriptMinQvInputId={transcriptMinQvInputId}
-          transcriptFeatureFilterInputId={transcriptFeatureFilterInputId}
-          transcriptFeatureSearchInputId={transcriptFeatureSearchInputId}
-          transcriptOpacityInputId={transcriptOpacityInputId}
-          transcriptPointSizeInputId={transcriptPointSizeInputId}
+          transcriptDetailInputId={controlIds.transcriptDetailInputId}
+          transcriptDensityScaleInputId={controlIds.transcriptDensityScaleInputId}
+          transcriptPointColorInputId={controlIds.transcriptPointColorInputId}
+          transcriptPointBudgetInputId={controlIds.transcriptPointBudgetInputId}
+          transcriptMinQvInputId={controlIds.transcriptMinQvInputId}
+          transcriptFeatureFilterInputId={controlIds.transcriptFeatureFilterInputId}
+          transcriptFeatureSearchInputId={controlIds.transcriptFeatureSearchInputId}
+          transcriptOpacityInputId={controlIds.transcriptOpacityInputId}
+          transcriptPointSizeInputId={controlIds.transcriptPointSizeInputId}
           transcriptCopy={transcriptCopy}
           loadEnabled={loadState.status === 'ready'}
           featureSearchEnabled={genePanelState.status === 'ready'}
@@ -4077,9 +4049,9 @@ export function App({
 
         <MagicLensHudPanel
           active={activeControlHudTab === 'magic-lens'}
-          magicLensScopeInputId={magicLensScopeInputId}
-          magicLensRadiusInputId={magicLensRadiusInputId}
-          magicLensMinQvInputId={magicLensMinQvInputId}
+          magicLensScopeInputId={controlIds.magicLensScopeInputId}
+          magicLensRadiusInputId={controlIds.magicLensRadiusInputId}
+          magicLensMinQvInputId={controlIds.magicLensMinQvInputId}
           magicLensCopy={magicLensCopy}
           loadEnabled={loadState.status === 'ready'}
           roiAvailable={activeRoiSelection !== null}
@@ -4098,8 +4070,8 @@ export function App({
 
         <AnnotationHudPanel
           active={activeControlHudTab === 'annotations'}
-          annotationGroupInputId={annotationGroupInputId}
-          annotationImportInputId={annotationImportInputId}
+          annotationGroupInputId={controlIds.annotationGroupInputId}
+          annotationImportInputId={controlIds.annotationImportInputId}
           annotationHeaderCopy={annotationHeaderCopy}
           loadEnabled={loadState.status === 'ready'}
           selectedAnnotationGroupId={selectedAnnotationGroupId}
@@ -4119,7 +4091,7 @@ export function App({
 
         <CellHudPanel
           active={activeControlHudTab === 'cell'}
-          embeddingViewInputId={embeddingViewInputId}
+          embeddingViewInputId={controlIds.embeddingViewInputId}
           embeddingCopy={embeddingCopy}
           analysisEmbeddingState={analysisEmbeddingState}
           activeEmbedding={activeEmbedding}
@@ -4140,7 +4112,7 @@ export function App({
 
         <RoiHudPanel
           active={activeControlHudTab === 'roi'}
-          roiNameInputId={roiNameInputId}
+          roiNameInputId={controlIds.roiNameInputId}
           roiHeaderCopy={roiHeaderCopy}
           isLoading={isRoiTabLoading}
           canDrawRoi={canDrawRoi}
@@ -4244,33 +4216,4 @@ export function App({
       </section>
     </main>
   )
-}
-
-function formatGeneExpressionTiming(
-  timing: GeneExpressionBatch['timing'] | undefined,
-): string {
-  if (timing === undefined) {
-    return 'timing unavailable'
-  }
-
-  return [
-    `total ${Math.round(timing.totalMs)} ms`,
-    `viewport ${Math.round(timing.viewportCellsMs)} ms`,
-    `matrix ${Math.round(timing.matrixReadMs)} ms`,
-    `score ${Math.round(timing.scoreCellsMs)} ms`,
-  ].join(', ')
-}
-
-function downloadTextFile(
-  fileName: string,
-  text: string,
-  mimeType = 'text/csv;charset=utf-8',
-): void {
-  const url = URL.createObjectURL(new Blob([text], { type: mimeType }))
-  const link = document.createElement('a')
-
-  link.href = url
-  link.download = fileName
-  link.click()
-  URL.revokeObjectURL(url)
 }

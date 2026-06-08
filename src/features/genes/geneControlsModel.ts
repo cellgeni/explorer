@@ -2,6 +2,7 @@ import type {
   GeneExpressionDetailMode,
   GeneExpressionLoadMode,
 } from '../../data/geneExpressionLod'
+import type { GeneExpressionBatchTiming } from '../../datasets/xeniumDataset'
 import {
   isGeneExpressionColorScale,
   isGeneExpressionScoreMode,
@@ -132,6 +133,21 @@ export function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
   }
 
   return 'Expression'
+}
+
+export function formatGeneExpressionTiming(
+  timing: GeneExpressionBatchTiming | undefined,
+): string {
+  if (timing === undefined) {
+    return 'timing unavailable'
+  }
+
+  return [
+    `total ${Math.round(timing.totalMs)} ms`,
+    `viewport ${Math.round(timing.viewportCellsMs)} ms`,
+    `matrix ${Math.round(timing.matrixReadMs)} ms`,
+    `score ${Math.round(timing.scoreCellsMs)} ms`,
+  ].join(', ')
 }
 
 export function isGeneExpressionDetailMode(

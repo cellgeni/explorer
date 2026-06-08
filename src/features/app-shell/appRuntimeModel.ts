@@ -297,6 +297,20 @@ export function formatElapsed(startedAt: number): string {
   })} s`
 }
 
+export function downloadTextFile(
+  fileName: string,
+  text: string,
+  mimeType = 'text/csv;charset=utf-8',
+): void {
+  const url = URL.createObjectURL(new Blob([text], { type: mimeType }))
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export function shortDatasetLabel(url: string): string {
   try {
     const parsed = new URL(url)
