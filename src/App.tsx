@@ -34,10 +34,6 @@ import {
   appendDebugLogEntry,
   createLoadingTasks,
   createDebugLogEntry,
-  downloadTextFile,
-  isAbortError,
-  readTimestamp,
-  shortDatasetLabel,
   type DebugLogAppendOptions,
   type DebugLogEntry,
 } from './features/app-shell/appRuntimeModel'
@@ -86,7 +82,7 @@ import {
   type RoiState,
   type RoiTranscriptExportState,
 } from './features/roi/roiModel'
-import { createDiagnosticsDump } from './features/diagnostics/diagnosticsDump'
+import { useDatasetDiagnosticsWorkflow } from './features/diagnostics/useDatasetDiagnosticsWorkflow'
 import {
   annotationStatusCopy,
   type AnnotationGroupState,
@@ -113,7 +109,6 @@ import {
   collectStructuredLoadErrors,
   createStructuredLoadError,
   formatStructuredError,
-  readErrorMessage,
   type StructuredLoadError,
 } from './features/errors/loadErrorModel'
 import type {
@@ -132,7 +127,6 @@ import {
   type TranscriptFeatureFilterMode,
 } from './data/transcriptOverlay'
 import { type RoiSelection } from './data/roiSelection'
-import { summarizeDatasetDiagnostics } from './data/datasetDiagnostics'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
 import {
   formatShareableState,
@@ -794,6 +788,49 @@ export function App({
       transcriptLayerState,
     ],
   )
+  const { handleDownloadDiagnostics, handleRunDatasetDiagnostics } =
+    useDatasetDiagnosticsWorkflow({
+      activeControlHudTab,
+      activeErrors,
+      appendDebugEvent,
+      boundaryCellLimit,
+      coordinateUnit,
+      datasetUrl,
+      debugLog,
+      diagnosticsAbortRef,
+      diagnosticsState,
+      geneExpressionColorScale,
+      geneExpressionDetailMode,
+      geneExpressionScoreMode,
+      hoveredTranscript,
+      loadState,
+      manualTranscriptExactRequestKey,
+      measurementEnabled,
+      measurementUnit,
+      observationColorMode,
+      performanceBudget,
+      pinnedTranscript,
+      recordTelemetry,
+      runDatasetDiagnostics,
+      selectedGenes,
+      setDiagnosticsState,
+      shareableViewState,
+      shouldLoadMorphology,
+      showTranscriptOverlay,
+      telemetryEvents,
+      transcriptCapabilityState,
+      transcriptDensityColorScale,
+      transcriptDetailMode,
+      transcriptExactManualLoadRatio: TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
+      transcriptExactPointLimit,
+      transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
+      transcriptGeneOnly,
+      transcriptLayerState,
+      transcriptMinQv,
+      transcriptOpacity,
+      transcriptPointColorMode,
+      transcriptPointSize,
+    })
   const handleImageTileError = useCallback((error: Error) => {
     setMorphologyState((current) => {
       if (current.status !== 'ready') {
@@ -1206,111 +1243,6 @@ export function App({
     transcriptPointColorMode,
     transcriptPointSize,
   ])
-
-  async function handleRunDatasetDiagnostics() {
-    const requestedUrl = datasetUrl.trim()
-
-    if (requestedUrl === '') {
-      return
-    }
-
-    const diagnosticsStartedAt = readTimestamp()
-    abortActiveRequest(diagnosticsAbortRef)
-    const abortController = new AbortController()
-    diagnosticsAbortRef.current = abortController
-    setDiagnosticsState({ status: 'loading', url: requestedUrl })
-    appendDebugEvent(`Diagnosing dataset ${shortDatasetLabel(requestedUrl)}`)
-
-    try {
-      const report = await runDatasetDiagnostics(requestedUrl, {
-        signal: abortController.signal,
-      })
-
-      if (diagnosticsAbortRef.current !== abortController) {
-        return
-      }
-
-      const summary = summarizeDatasetDiagnostics(report)
-      setDiagnosticsState({ status: 'ready', url: requestedUrl, report })
-      appendDebugEvent(`Diagnostics: ${summary}`)
-      recordTelemetry(
-        telemetryEvent('dataset.diagnostics', 'success', {
-          startedAt: diagnosticsStartedAt,
-          detail: summary,
-        }),
-      )
-    } catch (error) {
-      if (isAbortError(error) || diagnosticsAbortRef.current !== abortController) {
-        return
-      }
-
-      setDiagnosticsState({
-        status: 'error',
-        url: requestedUrl,
-        error: createStructuredLoadError('Dataset diagnostics', error),
-      })
-      appendDebugEvent('Diagnostics failed')
-      recordTelemetry(
-        telemetryEvent('dataset.diagnostics', 'failure', {
-          startedAt: diagnosticsStartedAt,
-          detail: readErrorMessage(error),
-        }),
-      )
-    } finally {
-      if (diagnosticsAbortRef.current === abortController) {
-        diagnosticsAbortRef.current = null
-      }
-    }
-  }
-
-  function handleDownloadDiagnostics() {
-    downloadTextFile(
-      'xenium-diagnostics.json',
-      JSON.stringify(
-        createDiagnosticsDump({
-          activeControlHudTab,
-          activeErrors,
-          boundaryCellLimit,
-          coordinateUnit,
-          datasetUrl,
-          debugLog,
-          diagnosticsState,
-          geneExpressionColorScale,
-          geneExpressionDetailMode,
-          geneExpressionScoreMode,
-          hoveredTranscript,
-          loadState,
-          manualTranscriptExactRequestKey,
-          measurementEnabled,
-          measurementUnit,
-          observationColorMode,
-          performanceBudget,
-          pinnedTranscript,
-          selectedGenes,
-          shareableViewState,
-          shouldLoadMorphology,
-          telemetryEvents,
-          showTranscriptOverlay,
-          transcriptCapabilityState,
-          transcriptDetailMode,
-          transcriptDensityColorScale,
-          transcriptExactPointLimit,
-          transcriptExactManualLoadRatio: TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
-          transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
-          transcriptGeneOnly,
-          transcriptLayerState,
-          transcriptMinQv,
-          transcriptOpacity,
-          transcriptPointColorMode,
-          transcriptPointSize,
-        }),
-        null,
-        2,
-      ),
-      'application/json;charset=utf-8',
-    )
-    appendDebugEvent('Downloaded diagnostics')
-  }
 
   function toggleGene(gene: string) {
     const isSelected = selectedGenes.includes(gene)
