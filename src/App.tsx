@@ -5,7 +5,7 @@ import {
   type ViewerCoordinateUnit,
   type ViewerTranscriptHoverDetail,
 } from './components/ViewerCore'
-import { LoadingIndicator } from './components/AppStatusPanels'
+import { ControlHudShell } from './features/control-hud/ControlHudShell'
 import { DatasetHudPanel } from './features/control-hud/DatasetHudPanel'
 import { LayerHudPanel } from './features/control-hud/LayerHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
@@ -15,7 +15,6 @@ import { transcriptCapabilityLabel } from './features/transcripts/transcriptLabe
 import { GeneHudPanel } from './features/genes/GeneHudPanel'
 import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import {
-  CONTROL_HUD_TABS,
   parseControlHudTab,
   parseObservationColorMode,
   parseViewerCoordinateUnit,
@@ -4096,390 +4095,340 @@ export function App({
       <a className="skip-link" href="#viewer-heading">
         Skip To Spatial View
       </a>
-      <aside
-        className={`control-hud${isControlHudCollapsed ? ' is-collapsed' : ''}`}
-        aria-label="Dataset controls"
+      <ControlHudShell
+        collapsed={isControlHudCollapsed}
+        activeTab={activeControlHudTab}
+        loadingTabIds={loadingTabIds}
+        loadingTasks={loadingTasks}
+        onCollapsedChange={(nextCollapsed) => {
+          setIsControlHudCollapsed(nextCollapsed)
+          appendDebugEvent(nextCollapsed ? 'HUD collapsed' : 'HUD expanded')
+        }}
+        onActiveTabChange={(tabId, tabLabel) => {
+          setActiveControlHudTab(tabId)
+          appendDebugEvent(`HUD tab: ${tabLabel}`, {
+            coalesceKey: 'hud-tab',
+          })
+        }}
       >
-        <div className="hud-top-bar">
-          <LoadingIndicator tasks={loadingTasks} />
-          <button
-            type="button"
-            className="hud-toggle"
-            aria-controls="control-hud-content"
-            aria-expanded={!isControlHudCollapsed}
-            onClick={() => {
-              const nextCollapsed = !isControlHudCollapsed
-              setIsControlHudCollapsed(nextCollapsed)
-              appendDebugEvent(nextCollapsed ? 'HUD collapsed' : 'HUD expanded')
-            }}
-          >
-            {isControlHudCollapsed ? 'Show Controls' : 'Hide Controls'}
-          </button>
-        </div>
-        <div
-          id="control-hud-content"
-          className="control-hud-content"
-          hidden={isControlHudCollapsed}
-        >
-          <div className="hud-tab-list" role="tablist" aria-label="Control categories">
-            {CONTROL_HUD_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                id={`hud-tab-${tab.id}`}
-                type="button"
-                role="tab"
-                aria-selected={activeControlHudTab === tab.id}
-                aria-controls={`hud-panel-${tab.id}`}
-                aria-busy={loadingTabIds.has(tab.id)}
-                className={
-                  [
-                    activeControlHudTab === tab.id ? 'active' : '',
-                    loadingTabIds.has(tab.id) ? 'is-loading' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ') || undefined
-                }
-                onClick={() => {
-                  setActiveControlHudTab(tab.id)
-                  appendDebugEvent(`HUD tab: ${tab.label}`, {
-                    coalesceKey: 'hud-tab',
-                  })
-                }}
-              >
-                <span>{tab.label}</span>
-                {loadingTabIds.has(tab.id) ? (
-                  <span className="tab-loading-dot" aria-hidden="true" />
-                ) : null}
-              </button>
-            ))}
-          </div>
+        <DatasetHudPanel
+          active={activeControlHudTab === 'dataset'}
+          datasetInputId={datasetInputId}
+          morphologyInputId={morphologyInputId}
+          boundaryLimitInputId={boundaryLimitInputId}
+          datasetUrl={datasetUrl}
+          shouldLoadMorphology={shouldLoadMorphology}
+          boundaryCellLimit={boundaryCellLimit}
+          maxBoundaryCellLimit={MAX_BOUNDARY_VIEWPORT_CELL_LIMIT}
+          isLoading={isLoading}
+          diagnosticsState={diagnosticsState}
+          cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
+          activeErrors={activeErrors}
+          debugLog={debugLog}
+          onSubmit={handleDatasetSubmit}
+          onDatasetUrlChange={setDatasetUrl}
+          onShouldLoadMorphologyChange={(checked) => {
+            setShouldLoadMorphology(checked)
+            appendDebugEvent(
+              checked ? 'Morphology image enabled' : 'Morphology image disabled',
+            )
+          }}
+          onBoundaryCellLimitChange={(value) => {
+            const nextLimit = normalizeBoundaryCellLimit(value)
+            setBoundaryCellLimit(nextLimit)
+            appendDebugEvent(`Boundary limit: ${nextLimit.toLocaleString()}`, {
+              coalesceKey: 'boundary-limit',
+            })
+          }}
+          onRunDatasetDiagnostics={() => {
+            void handleRunDatasetDiagnostics()
+          }}
+          onDownloadDiagnostics={handleDownloadDiagnostics}
+          onClearDebugLog={() => {
+            setDebugLog([])
+          }}
+        />
 
-          <div className="hud-tab-panels">
-            <DatasetHudPanel
-              active={activeControlHudTab === 'dataset'}
-              datasetInputId={datasetInputId}
-              morphologyInputId={morphologyInputId}
-              boundaryLimitInputId={boundaryLimitInputId}
-              datasetUrl={datasetUrl}
-              shouldLoadMorphology={shouldLoadMorphology}
-              boundaryCellLimit={boundaryCellLimit}
-              maxBoundaryCellLimit={MAX_BOUNDARY_VIEWPORT_CELL_LIMIT}
-              isLoading={isLoading}
-              diagnosticsState={diagnosticsState}
-              cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
-              activeErrors={activeErrors}
-              debugLog={debugLog}
-              onSubmit={handleDatasetSubmit}
-              onDatasetUrlChange={setDatasetUrl}
-              onShouldLoadMorphologyChange={(checked) => {
-                setShouldLoadMorphology(checked)
-                appendDebugEvent(
-                  checked ? 'Morphology image enabled' : 'Morphology image disabled',
-                )
-              }}
-              onBoundaryCellLimitChange={(value) => {
-                const nextLimit = normalizeBoundaryCellLimit(value)
-                setBoundaryCellLimit(nextLimit)
-                appendDebugEvent(`Boundary limit: ${nextLimit.toLocaleString()}`, {
-                  coalesceKey: 'boundary-limit',
-                })
-              }}
-              onRunDatasetDiagnostics={() => {
-                void handleRunDatasetDiagnostics()
-              }}
-              onDownloadDiagnostics={handleDownloadDiagnostics}
-              onClearDebugLog={() => {
-                setDebugLog([])
-              }}
-            />
+        <LayerHudPanel
+          active={activeControlHudTab === 'layers'}
+          scaffoldDeckLayerCount={scaffoldDeckLayerCount}
+          bundledDeckVersion={bundledDeckVersion}
+          performanceBudget={performanceBudget}
+          imageOpacityInputId={imageOpacityInputId}
+          cellFillOpacityInputId={cellFillOpacityInputId}
+          cellBoundaryOpacityInputId={cellBoundaryOpacityInputId}
+          coordinateUnitInputId={coordinateUnitInputId}
+          measurementModeInputId={measurementModeInputId}
+          measurementUnitInputId={measurementUnitInputId}
+          imageLayerOpacity={imageLayerOpacity}
+          cellFillOpacity={cellFillOpacity}
+          cellBoundaryOpacity={cellBoundaryOpacity}
+          coordinateUnit={coordinateUnit}
+          measurementEnabled={measurementEnabled}
+          measurementUnit={measurementUnit}
+          morphologyChannels={morphologyImage?.channelLoaders ?? []}
+          morphologyChannelSettings={morphologyChannelSettings}
+          autoContrastChannelIds={autoContrastChannelIds}
+          onImageLayerOpacityPercentChange={(nextPercent) => {
+            setImageLayerOpacity(percentToOpacity(nextPercent))
+            appendDebugEvent(`Image opacity: ${nextPercent}%`, {
+              coalesceKey: 'image-opacity',
+            })
+          }}
+          onCellFillOpacityPercentChange={(nextPercent) => {
+            setCellFillOpacity(percentToOpacity(nextPercent))
+            appendDebugEvent(`Cell fill opacity: ${nextPercent}%`, {
+              coalesceKey: 'cell-fill-opacity',
+            })
+          }}
+          onCellBoundaryOpacityPercentChange={(nextPercent) => {
+            setCellBoundaryOpacity(percentToOpacity(nextPercent))
+            appendDebugEvent(`Cell boundary opacity: ${nextPercent}%`, {
+              coalesceKey: 'cell-boundary-opacity',
+            })
+          }}
+          onCoordinateUnitChange={(nextUnit) => {
+            if (coordinateUnit === nextUnit) {
+              return
+            }
 
-            <LayerHudPanel
-              active={activeControlHudTab === 'layers'}
-              scaffoldDeckLayerCount={scaffoldDeckLayerCount}
-              bundledDeckVersion={bundledDeckVersion}
-              performanceBudget={performanceBudget}
-              imageOpacityInputId={imageOpacityInputId}
-              cellFillOpacityInputId={cellFillOpacityInputId}
-              cellBoundaryOpacityInputId={cellBoundaryOpacityInputId}
-              coordinateUnitInputId={coordinateUnitInputId}
-              measurementModeInputId={measurementModeInputId}
-              measurementUnitInputId={measurementUnitInputId}
-              imageLayerOpacity={imageLayerOpacity}
-              cellFillOpacity={cellFillOpacity}
-              cellBoundaryOpacity={cellBoundaryOpacity}
-              coordinateUnit={coordinateUnit}
-              measurementEnabled={measurementEnabled}
-              measurementUnit={measurementUnit}
-              morphologyChannels={morphologyImage?.channelLoaders ?? []}
-              morphologyChannelSettings={morphologyChannelSettings}
-              autoContrastChannelIds={autoContrastChannelIds}
-              onImageLayerOpacityPercentChange={(nextPercent) => {
-                setImageLayerOpacity(percentToOpacity(nextPercent))
-                appendDebugEvent(`Image opacity: ${nextPercent}%`, {
-                  coalesceKey: 'image-opacity',
-                })
-              }}
-              onCellFillOpacityPercentChange={(nextPercent) => {
-                setCellFillOpacity(percentToOpacity(nextPercent))
-                appendDebugEvent(`Cell fill opacity: ${nextPercent}%`, {
-                  coalesceKey: 'cell-fill-opacity',
-                })
-              }}
-              onCellBoundaryOpacityPercentChange={(nextPercent) => {
-                setCellBoundaryOpacity(percentToOpacity(nextPercent))
-                appendDebugEvent(`Cell boundary opacity: ${nextPercent}%`, {
-                  coalesceKey: 'cell-boundary-opacity',
-                })
-              }}
-              onCoordinateUnitChange={(nextUnit) => {
-                if (coordinateUnit === nextUnit) {
-                  return
-                }
+            setCoordinateUnit(nextUnit)
+            appendDebugEvent(`Mouse coordinates: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
+              coalesceKey: 'coordinate-unit',
+            })
+          }}
+          onMeasurementEnabledChange={(nextEnabled) => {
+            if (measurementEnabled === nextEnabled) {
+              return
+            }
 
-                setCoordinateUnit(nextUnit)
-                appendDebugEvent(
-                  `Mouse coordinates: ${nextUnit === 'um' ? 'μm' : 'px'}`,
-                  { coalesceKey: 'coordinate-unit' },
-                )
-              }}
-              onMeasurementEnabledChange={(nextEnabled) => {
-                if (measurementEnabled === nextEnabled) {
-                  return
-                }
+            setMeasurementEnabled(nextEnabled)
 
-                setMeasurementEnabled(nextEnabled)
+            if (nextEnabled) {
+              setRoiMode('idle')
+              setMagicLensActive(false)
+              handleMagicLensLeave()
+            } else {
+              setMeasurementResetKey((current) => current + 1)
+            }
 
-                if (nextEnabled) {
-                  setRoiMode('idle')
-                  setMagicLensActive(false)
-                  handleMagicLensLeave()
-                } else {
-                  setMeasurementResetKey((current) => current + 1)
-                }
+            appendDebugEvent(
+              nextEnabled ? 'Distance measure enabled' : 'Distance measure disabled',
+              { coalesceKey: 'measurement-mode' },
+            )
+          }}
+          onMeasurementUnitChange={(nextUnit) => {
+            if (measurementUnit === nextUnit) {
+              return
+            }
 
-                appendDebugEvent(
-                  nextEnabled ? 'Distance measure enabled' : 'Distance measure disabled',
-                  { coalesceKey: 'measurement-mode' },
-                )
-              }}
-              onMeasurementUnitChange={(nextUnit) => {
-                if (measurementUnit === nextUnit) {
-                  return
-                }
+            setMeasurementUnit(nextUnit)
+            appendDebugEvent(`Measure unit: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
+              coalesceKey: 'measurement-unit',
+            })
+          }}
+          onClearMeasurement={() => {
+            setMeasurementResetKey((current) => current + 1)
+            appendDebugEvent('Distance measure cleared', {
+              coalesceKey: 'measurement-clear',
+            })
+          }}
+          onAutoContrast={handleAutoContrast}
+          onUpdateMorphologyChannel={updateMorphologyChannel}
+        />
 
-                setMeasurementUnit(nextUnit)
-                appendDebugEvent(`Measure unit: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
-                  coalesceKey: 'measurement-unit',
-                })
-              }}
-              onClearMeasurement={() => {
-                setMeasurementResetKey((current) => current + 1)
-                appendDebugEvent('Distance measure cleared', {
-                  coalesceKey: 'measurement-clear',
-                })
-              }}
-              onAutoContrast={handleAutoContrast}
-              onUpdateMorphologyChannel={updateMorphologyChannel}
-            />
+        <GeneHudPanel
+          active={activeControlHudTab === 'genes'}
+          geneSearchInputId={geneSearchInputId}
+          geneSetSymbolsInputId={geneSetSymbolsInputId}
+          geneSetNameInputId={geneSetNameInputId}
+          geneSetScoreInputId={geneSetScoreInputId}
+          geneScaleInputId={geneScaleInputId}
+          geneExpressionDetailInputId={geneExpressionDetailInputId}
+          observationModeInputId={observationModeInputId}
+          analysisHeaderCopy={analysisHeaderCopy}
+          geneExpressionCopy={geneExpressionCopy}
+          genePanelState={genePanelState}
+          geneExpressionState={geneExpressionState}
+          geneSearch={geneSearch}
+          geneSetSymbols={geneSetSymbols}
+          geneSetName={geneSetName}
+          geneExpressionScoreMode={geneExpressionScoreMode}
+          savedGeneSets={savedGeneSets}
+          selectedGenes={selectedGenes}
+          filteredGenes={filteredGenes}
+          geneExpressionColorScale={geneExpressionColorScale}
+          geneExpressionScaleMax={geneExpressionScaleMax}
+          geneExpressionDetailMode={geneExpressionDetailMode}
+          observationColorMode={observationColorMode}
+          hasAnnotationColors={annotationStyleColors.length > 0}
+          onGeneSearchChange={setGeneSearch}
+          onToggleGene={toggleGene}
+          onGeneSetSymbolsChange={setGeneSetSymbols}
+          onApplyGeneSetSymbols={applyGeneSetSymbols}
+          onSaveSelectedGeneSet={saveSelectedGeneSet}
+          onGeneSetNameChange={setGeneSetName}
+          onGeneExpressionScoreModeChange={handleGeneExpressionScoreModeChange}
+          onApplySavedGeneSet={applySavedGeneSet}
+          onRemoveSavedGeneSet={removeSavedGeneSet}
+          onGeneExpressionColorScaleChange={handleGeneExpressionColorScaleChange}
+          onGeneExpressionDetailModeChange={handleGeneExpressionDetailModeChange}
+          onObservationColorModeChange={handleObservationColorModeChange}
+        />
 
-            <GeneHudPanel
-              active={activeControlHudTab === 'genes'}
-              geneSearchInputId={geneSearchInputId}
-              geneSetSymbolsInputId={geneSetSymbolsInputId}
-              geneSetNameInputId={geneSetNameInputId}
-              geneSetScoreInputId={geneSetScoreInputId}
-              geneScaleInputId={geneScaleInputId}
-              geneExpressionDetailInputId={geneExpressionDetailInputId}
-              observationModeInputId={observationModeInputId}
-              analysisHeaderCopy={analysisHeaderCopy}
-              geneExpressionCopy={geneExpressionCopy}
-              genePanelState={genePanelState}
-              geneExpressionState={geneExpressionState}
-              geneSearch={geneSearch}
-              geneSetSymbols={geneSetSymbols}
-              geneSetName={geneSetName}
-              geneExpressionScoreMode={geneExpressionScoreMode}
-              savedGeneSets={savedGeneSets}
-              selectedGenes={selectedGenes}
-              filteredGenes={filteredGenes}
-              geneExpressionColorScale={geneExpressionColorScale}
-              geneExpressionScaleMax={geneExpressionScaleMax}
-              geneExpressionDetailMode={geneExpressionDetailMode}
-              observationColorMode={observationColorMode}
-              hasAnnotationColors={annotationStyleColors.length > 0}
-              onGeneSearchChange={setGeneSearch}
-              onToggleGene={toggleGene}
-              onGeneSetSymbolsChange={setGeneSetSymbols}
-              onApplyGeneSetSymbols={applyGeneSetSymbols}
-              onSaveSelectedGeneSet={saveSelectedGeneSet}
-              onGeneSetNameChange={setGeneSetName}
-              onGeneExpressionScoreModeChange={handleGeneExpressionScoreModeChange}
-              onApplySavedGeneSet={applySavedGeneSet}
-              onRemoveSavedGeneSet={removeSavedGeneSet}
-              onGeneExpressionColorScaleChange={handleGeneExpressionColorScaleChange}
-              onGeneExpressionDetailModeChange={handleGeneExpressionDetailModeChange}
-              onObservationColorModeChange={handleObservationColorModeChange}
-            />
+        <TranscriptHudPanel
+          active={activeControlHudTab === 'transcripts'}
+          transcriptDetailInputId={transcriptDetailInputId}
+          transcriptDensityScaleInputId={transcriptDensityScaleInputId}
+          transcriptPointColorInputId={transcriptPointColorInputId}
+          transcriptPointBudgetInputId={transcriptPointBudgetInputId}
+          transcriptMinQvInputId={transcriptMinQvInputId}
+          transcriptFeatureFilterInputId={transcriptFeatureFilterInputId}
+          transcriptFeatureSearchInputId={transcriptFeatureSearchInputId}
+          transcriptOpacityInputId={transcriptOpacityInputId}
+          transcriptPointSizeInputId={transcriptPointSizeInputId}
+          transcriptCopy={transcriptCopy}
+          loadEnabled={loadState.status === 'ready'}
+          featureSearchEnabled={genePanelState.status === 'ready'}
+          showTranscriptOverlay={showTranscriptOverlay}
+          transcriptDetailMode={transcriptDetailMode}
+          transcriptExactPointLimit={transcriptExactPointLimit}
+          effectiveTranscriptFeatureFilterMode={effectiveTranscriptFeatureFilterMode}
+          selectedGenes={selectedGenes}
+          transcriptFeatureSearch={transcriptFeatureSearch}
+          filteredTranscriptFeatures={filteredTranscriptFeatures}
+          transcriptDensityColorScale={transcriptDensityColorScale}
+          transcriptDensityScaleMax={transcriptDensityScaleMax}
+          transcriptDensityScaleLabels={transcriptDensityScaleLabels}
+          transcriptPointColorMode={transcriptPointColorMode}
+          transcriptMinQv={transcriptMinQv}
+          transcriptGeneOnly={transcriptGeneOnly}
+          transcriptOpacity={transcriptOpacity}
+          transcriptPointSize={transcriptPointSize}
+          transcriptCapabilityState={transcriptCapabilityState}
+          transcriptLayerState={transcriptLayerState}
+          visibleTranscriptEstimate={visibleTranscriptEstimate}
+          hoveredTranscript={hoveredTranscript}
+          pinnedTranscript={pinnedTranscript}
+          onShowTranscriptOverlayChange={handleTranscriptOverlayChange}
+          onTranscriptDetailModeChange={handleTranscriptDetailModeChange}
+          onTranscriptExactPointLimitChange={handleTranscriptExactPointLimitChange}
+          onTranscriptFeatureFilterModeChange={handleTranscriptFeatureFilterModeChange}
+          onToggleSelectedFeature={handleToggleTranscriptSelectedFeature}
+          onTranscriptFeatureSearchChange={setTranscriptFeatureSearch}
+          onPickTranscriptFeature={pickTranscriptFeature}
+          onTranscriptDensityColorScaleChange={handleTranscriptDensityColorScaleChange}
+          onTranscriptPointColorModeChange={handleTranscriptPointColorModeChange}
+          onTranscriptMinQvChange={handleTranscriptMinQvChange}
+          onTranscriptGeneOnlyChange={handleTranscriptGeneOnlyChange}
+          onTranscriptOpacityPercentChange={handleTranscriptOpacityPercentChange}
+          onTranscriptPointSizeChange={handleTranscriptPointSizeChange}
+          onPinTranscript={handlePinTranscript}
+          onClearPinnedTranscript={() => {
+            setPinnedTranscript(null)
+          }}
+          onLoadExactViewport={handleLoadExactViewport}
+        />
 
-            <TranscriptHudPanel
-              active={activeControlHudTab === 'transcripts'}
-              transcriptDetailInputId={transcriptDetailInputId}
-              transcriptDensityScaleInputId={transcriptDensityScaleInputId}
-              transcriptPointColorInputId={transcriptPointColorInputId}
-              transcriptPointBudgetInputId={transcriptPointBudgetInputId}
-              transcriptMinQvInputId={transcriptMinQvInputId}
-              transcriptFeatureFilterInputId={transcriptFeatureFilterInputId}
-              transcriptFeatureSearchInputId={transcriptFeatureSearchInputId}
-              transcriptOpacityInputId={transcriptOpacityInputId}
-              transcriptPointSizeInputId={transcriptPointSizeInputId}
-              transcriptCopy={transcriptCopy}
-              loadEnabled={loadState.status === 'ready'}
-              featureSearchEnabled={genePanelState.status === 'ready'}
-              showTranscriptOverlay={showTranscriptOverlay}
-              transcriptDetailMode={transcriptDetailMode}
-              transcriptExactPointLimit={transcriptExactPointLimit}
-              effectiveTranscriptFeatureFilterMode={effectiveTranscriptFeatureFilterMode}
-              selectedGenes={selectedGenes}
-              transcriptFeatureSearch={transcriptFeatureSearch}
-              filteredTranscriptFeatures={filteredTranscriptFeatures}
-              transcriptDensityColorScale={transcriptDensityColorScale}
-              transcriptDensityScaleMax={transcriptDensityScaleMax}
-              transcriptDensityScaleLabels={transcriptDensityScaleLabels}
-              transcriptPointColorMode={transcriptPointColorMode}
-              transcriptMinQv={transcriptMinQv}
-              transcriptGeneOnly={transcriptGeneOnly}
-              transcriptOpacity={transcriptOpacity}
-              transcriptPointSize={transcriptPointSize}
-              transcriptCapabilityState={transcriptCapabilityState}
-              transcriptLayerState={transcriptLayerState}
-              visibleTranscriptEstimate={visibleTranscriptEstimate}
-              hoveredTranscript={hoveredTranscript}
-              pinnedTranscript={pinnedTranscript}
-              onShowTranscriptOverlayChange={handleTranscriptOverlayChange}
-              onTranscriptDetailModeChange={handleTranscriptDetailModeChange}
-              onTranscriptExactPointLimitChange={handleTranscriptExactPointLimitChange}
-              onTranscriptFeatureFilterModeChange={
-                handleTranscriptFeatureFilterModeChange
-              }
-              onToggleSelectedFeature={handleToggleTranscriptSelectedFeature}
-              onTranscriptFeatureSearchChange={setTranscriptFeatureSearch}
-              onPickTranscriptFeature={pickTranscriptFeature}
-              onTranscriptDensityColorScaleChange={
-                handleTranscriptDensityColorScaleChange
-              }
-              onTranscriptPointColorModeChange={handleTranscriptPointColorModeChange}
-              onTranscriptMinQvChange={handleTranscriptMinQvChange}
-              onTranscriptGeneOnlyChange={handleTranscriptGeneOnlyChange}
-              onTranscriptOpacityPercentChange={handleTranscriptOpacityPercentChange}
-              onTranscriptPointSizeChange={handleTranscriptPointSizeChange}
-              onPinTranscript={handlePinTranscript}
-              onClearPinnedTranscript={() => {
-                setPinnedTranscript(null)
-              }}
-              onLoadExactViewport={handleLoadExactViewport}
-            />
+        <MagicLensHudPanel
+          active={activeControlHudTab === 'magic-lens'}
+          magicLensScopeInputId={magicLensScopeInputId}
+          magicLensRadiusInputId={magicLensRadiusInputId}
+          magicLensMinQvInputId={magicLensMinQvInputId}
+          magicLensCopy={magicLensCopy}
+          loadEnabled={loadState.status === 'ready'}
+          roiAvailable={activeRoiSelection !== null}
+          magicLensScope={magicLensScope}
+          magicLensState={magicLensState}
+          magicLensRadiusMicrometers={magicLensRadiusMicrometers}
+          magicLensMinQv={magicLensMinQv}
+          magicLensIsCursorActive={magicLensIsCursorActive}
+          magicLensCanScan={magicLensCanScan}
+          onScopeChange={handleMagicLensScopeChange}
+          onRadiusChange={handleMagicLensRadiusChange}
+          onMinQvChange={handleMagicLensMinQvChange}
+          onCursorActiveChange={handleMagicLensCursorActiveChange}
+          onRunMagicLens={handleRunMagicLens}
+        />
 
-            <MagicLensHudPanel
-              active={activeControlHudTab === 'magic-lens'}
-              magicLensScopeInputId={magicLensScopeInputId}
-              magicLensRadiusInputId={magicLensRadiusInputId}
-              magicLensMinQvInputId={magicLensMinQvInputId}
-              magicLensCopy={magicLensCopy}
-              loadEnabled={loadState.status === 'ready'}
-              roiAvailable={activeRoiSelection !== null}
-              magicLensScope={magicLensScope}
-              magicLensState={magicLensState}
-              magicLensRadiusMicrometers={magicLensRadiusMicrometers}
-              magicLensMinQv={magicLensMinQv}
-              magicLensIsCursorActive={magicLensIsCursorActive}
-              magicLensCanScan={magicLensCanScan}
-              onScopeChange={handleMagicLensScopeChange}
-              onRadiusChange={handleMagicLensRadiusChange}
-              onMinQvChange={handleMagicLensMinQvChange}
-              onCursorActiveChange={handleMagicLensCursorActiveChange}
-              onRunMagicLens={handleRunMagicLens}
-            />
+        <AnnotationHudPanel
+          active={activeControlHudTab === 'annotations'}
+          annotationGroupInputId={annotationGroupInputId}
+          annotationImportInputId={annotationImportInputId}
+          annotationHeaderCopy={annotationHeaderCopy}
+          loadEnabled={loadState.status === 'ready'}
+          selectedAnnotationGroupId={selectedAnnotationGroupId}
+          annotationGroupOptions={annotationGroupOptions}
+          annotationState={annotationState}
+          annotationGroupState={annotationGroupState}
+          annotationColors={annotationColors}
+          onAnnotationGroupChange={handleAnnotationGroupChange}
+          onLoadAnnotations={handleLoadAnnotations}
+          onClearAnnotations={handleClearAnnotations}
+          onImportAnnotations={(file) => {
+            void handleImportAnnotations(file)
+          }}
+          onAnnotationColorChange={handleAnnotationColorChange}
+          onRemoveAnnotation={handleRemoveAnnotation}
+        />
 
-            <AnnotationHudPanel
-              active={activeControlHudTab === 'annotations'}
-              annotationGroupInputId={annotationGroupInputId}
-              annotationImportInputId={annotationImportInputId}
-              annotationHeaderCopy={annotationHeaderCopy}
-              loadEnabled={loadState.status === 'ready'}
-              selectedAnnotationGroupId={selectedAnnotationGroupId}
-              annotationGroupOptions={annotationGroupOptions}
-              annotationState={annotationState}
-              annotationGroupState={annotationGroupState}
-              annotationColors={annotationColors}
-              onAnnotationGroupChange={handleAnnotationGroupChange}
-              onLoadAnnotations={handleLoadAnnotations}
-              onClearAnnotations={handleClearAnnotations}
-              onImportAnnotations={(file) => {
-                void handleImportAnnotations(file)
-              }}
-              onAnnotationColorChange={handleAnnotationColorChange}
-              onRemoveAnnotation={handleRemoveAnnotation}
-            />
+        <CellHudPanel
+          active={activeControlHudTab === 'cell'}
+          embeddingViewInputId={embeddingViewInputId}
+          embeddingCopy={embeddingCopy}
+          analysisEmbeddingState={analysisEmbeddingState}
+          activeEmbedding={activeEmbedding}
+          selectedEmbeddingKind={selectedEmbeddingKind}
+          roiCellIds={roiCellIds}
+          selectedCell={selectedCell}
+          cellDetailCopy={cellDetailCopy}
+          cellDetailState={cellDetailState}
+          cellTranscriptDistributionState={cellTranscriptDistributionState}
+          loadEnabled={loadState.status === 'ready'}
+          onEmbeddingKindChange={(nextEmbeddingKind) => {
+            setSelectedEmbeddingKind(nextEmbeddingKind)
+            appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
+          }}
+          onLoadAnalysisEmbeddings={handleLoadAnalysisEmbeddings}
+          onSelectEmbeddingCell={handleEmbeddingCellSelect}
+        />
 
-            <CellHudPanel
-              active={activeControlHudTab === 'cell'}
-              embeddingViewInputId={embeddingViewInputId}
-              embeddingCopy={embeddingCopy}
-              analysisEmbeddingState={analysisEmbeddingState}
-              activeEmbedding={activeEmbedding}
-              selectedEmbeddingKind={selectedEmbeddingKind}
-              roiCellIds={roiCellIds}
-              selectedCell={selectedCell}
-              cellDetailCopy={cellDetailCopy}
-              cellDetailState={cellDetailState}
-              cellTranscriptDistributionState={cellTranscriptDistributionState}
-              loadEnabled={loadState.status === 'ready'}
-              onEmbeddingKindChange={(nextEmbeddingKind) => {
-                setSelectedEmbeddingKind(nextEmbeddingKind)
-                appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
-              }}
-              onLoadAnalysisEmbeddings={handleLoadAnalysisEmbeddings}
-              onSelectEmbeddingCell={handleEmbeddingCellSelect}
-            />
+        <RoiHudPanel
+          active={activeControlHudTab === 'roi'}
+          roiNameInputId={roiNameInputId}
+          roiHeaderCopy={roiHeaderCopy}
+          isLoading={isRoiTabLoading}
+          canDrawRoi={canDrawRoi}
+          roiMode={roiMode}
+          roiName={roiName}
+          loadEnabled={loadState.status === 'ready'}
+          roiState={roiState}
+          roiSummary={roiSummary}
+          roiGeneStatsCopy={roiGeneStatsCopy}
+          roiGeneStatsState={roiGeneStatsState}
+          roiTranscriptExportState={roiTranscriptExportState}
+          onRoiModeChange={(nextMode) => {
+            if (nextMode !== 'idle') {
+              setMeasurementEnabled(false)
+              setMeasurementResetKey((current) => current + 1)
+            }
 
-            <RoiHudPanel
-              active={activeControlHudTab === 'roi'}
-              roiNameInputId={roiNameInputId}
-              roiHeaderCopy={roiHeaderCopy}
-              isLoading={isRoiTabLoading}
-              canDrawRoi={canDrawRoi}
-              roiMode={roiMode}
-              roiName={roiName}
-              loadEnabled={loadState.status === 'ready'}
-              roiState={roiState}
-              roiSummary={roiSummary}
-              roiGeneStatsCopy={roiGeneStatsCopy}
-              roiGeneStatsState={roiGeneStatsState}
-              roiTranscriptExportState={roiTranscriptExportState}
-              onRoiModeChange={(nextMode) => {
-                if (nextMode !== 'idle') {
-                  setMeasurementEnabled(false)
-                  setMeasurementResetKey((current) => current + 1)
-                }
-
-                setRoiMode(nextMode)
-                appendDebugEvent(
-                  nextMode === 'idle'
-                    ? 'ROI draw cancelled'
-                    : nextMode === 'box'
-                      ? 'ROI draw mode enabled'
-                      : 'ROI lasso mode enabled',
-                )
-              }}
-              onClearRoi={handleClearRoi}
-              onRoiNameChange={setRoiName}
-              onSaveRoiAnnotation={handleSaveRoiAnnotation}
-              onExportRoiCells={handleExportRoiCells}
-              onExportRoiTranscripts={handleExportRoiTranscripts}
-            />
-          </div>
-        </div>
-      </aside>
+            setRoiMode(nextMode)
+            appendDebugEvent(
+              nextMode === 'idle'
+                ? 'ROI draw cancelled'
+                : nextMode === 'box'
+                  ? 'ROI draw mode enabled'
+                  : 'ROI lasso mode enabled',
+            )
+          }}
+          onClearRoi={handleClearRoi}
+          onRoiNameChange={setRoiName}
+          onSaveRoiAnnotation={handleSaveRoiAnnotation}
+          onExportRoiCells={handleExportRoiCells}
+          onExportRoiTranscripts={handleExportRoiTranscripts}
+        />
+      </ControlHudShell>
 
       <section className="viewer-region" aria-labelledby="viewer-heading">
         <h2 id="viewer-heading" className="visually-hidden">
