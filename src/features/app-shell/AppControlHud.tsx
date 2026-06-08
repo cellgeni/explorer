@@ -45,7 +45,6 @@ import type {
   DatasetDiagnosticsState,
 } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
-import { GeneHudPanel } from '../genes/GeneHudPanel'
 import type {
   GeneExpressionState,
   GenePanelState,
@@ -60,13 +59,14 @@ import type {
   RoiSummary,
   RoiTranscriptExportState,
 } from '../roi/roiModel'
-import { TranscriptHudPanel } from '../transcripts/TranscriptHudPanel'
 import type {
   TranscriptCapabilityState,
   TranscriptLayerState,
 } from '../transcripts/transcriptLayerModel'
 import { AppDatasetHudPanel } from './AppDatasetHudPanel'
+import { AppGeneHudPanel } from './AppGeneHudPanel'
 import { AppLayerHudPanel } from './AppLayerHudPanel'
+import { AppTranscriptHudPanel } from './AppTranscriptHudPanel'
 
 interface AppControlHudProps {
   readonly activeControlHudTab: ControlHudTab
@@ -472,97 +472,81 @@ export function AppControlHud({
         updateMorphologyChannel={updateMorphologyChannel}
       />
 
-      <GeneHudPanel
+      <AppGeneHudPanel
         active={activeControlHudTab === 'genes'}
-        geneSearchInputId={controlIds.geneSearchInputId}
-        geneSetSymbolsInputId={controlIds.geneSetSymbolsInputId}
-        geneSetNameInputId={controlIds.geneSetNameInputId}
-        geneSetScoreInputId={controlIds.geneSetScoreInputId}
-        geneScaleInputId={controlIds.geneScaleInputId}
-        geneExpressionDetailInputId={controlIds.geneExpressionDetailInputId}
-        observationModeInputId={controlIds.observationModeInputId}
         analysisHeaderCopy={analysisHeaderCopy}
-        geneExpressionCopy={geneExpressionCopy}
-        genePanelState={genePanelState}
-        geneExpressionState={geneExpressionState}
-        geneSearch={geneSearch}
-        geneSetSymbols={geneSetSymbols}
-        geneSetName={geneSetName}
-        geneExpressionScoreMode={geneExpressionScoreMode}
-        savedGeneSets={savedGeneSets}
-        selectedGenes={selectedGenes}
+        applyGeneSetSymbols={applyGeneSetSymbols}
+        applySavedGeneSet={applySavedGeneSet}
+        controlIds={controlIds}
         filteredGenes={filteredGenes}
         geneExpressionColorScale={geneExpressionColorScale}
-        geneExpressionScaleMax={geneExpressionScaleMax}
+        geneExpressionCopy={geneExpressionCopy}
         geneExpressionDetailMode={geneExpressionDetailMode}
-        observationColorMode={observationColorMode}
+        geneExpressionScaleMax={geneExpressionScaleMax}
+        geneExpressionScoreMode={geneExpressionScoreMode}
+        geneExpressionState={geneExpressionState}
+        genePanelState={genePanelState}
+        geneSearch={geneSearch}
+        geneSetName={geneSetName}
+        geneSetSymbols={geneSetSymbols}
+        handleGeneExpressionColorScaleChange={handleGeneExpressionColorScaleChange}
+        handleGeneExpressionDetailModeChange={handleGeneExpressionDetailModeChange}
+        handleGeneExpressionScoreModeChange={handleGeneExpressionScoreModeChange}
+        handleObservationColorModeChange={handleObservationColorModeChange}
         hasAnnotationColors={hasAnnotationColors}
-        onGeneSearchChange={setGeneSearch}
-        onToggleGene={toggleGene}
-        onGeneSetSymbolsChange={setGeneSetSymbols}
-        onApplyGeneSetSymbols={applyGeneSetSymbols}
-        onSaveSelectedGeneSet={saveSelectedGeneSet}
-        onGeneSetNameChange={setGeneSetName}
-        onGeneExpressionScoreModeChange={handleGeneExpressionScoreModeChange}
-        onApplySavedGeneSet={applySavedGeneSet}
-        onRemoveSavedGeneSet={removeSavedGeneSet}
-        onGeneExpressionColorScaleChange={handleGeneExpressionColorScaleChange}
-        onGeneExpressionDetailModeChange={handleGeneExpressionDetailModeChange}
-        onObservationColorModeChange={handleObservationColorModeChange}
+        observationColorMode={observationColorMode}
+        removeSavedGeneSet={removeSavedGeneSet}
+        savedGeneSets={savedGeneSets}
+        saveSelectedGeneSet={saveSelectedGeneSet}
+        selectedGenes={selectedGenes}
+        setGeneSearch={setGeneSearch}
+        setGeneSetName={setGeneSetName}
+        setGeneSetSymbols={setGeneSetSymbols}
+        toggleGene={toggleGene}
       />
 
-      <TranscriptHudPanel
+      <AppTranscriptHudPanel
         active={activeControlHudTab === 'transcripts'}
-        transcriptDetailInputId={controlIds.transcriptDetailInputId}
-        transcriptDensityScaleInputId={controlIds.transcriptDensityScaleInputId}
-        transcriptPointColorInputId={controlIds.transcriptPointColorInputId}
-        transcriptPointBudgetInputId={controlIds.transcriptPointBudgetInputId}
-        transcriptMinQvInputId={controlIds.transcriptMinQvInputId}
-        transcriptFeatureFilterInputId={controlIds.transcriptFeatureFilterInputId}
-        transcriptFeatureSearchInputId={controlIds.transcriptFeatureSearchInputId}
-        transcriptOpacityInputId={controlIds.transcriptOpacityInputId}
-        transcriptPointSizeInputId={controlIds.transcriptPointSizeInputId}
-        transcriptCopy={transcriptCopy}
+        controlIds={controlIds}
+        effectiveTranscriptFeatureFilterMode={effectiveTranscriptFeatureFilterMode}
+        filteredTranscriptFeatures={filteredTranscriptFeatures}
+        genePanelState={genePanelState}
+        handleLoadExactViewport={handleLoadExactViewport}
+        handlePinTranscript={handlePinTranscript}
+        handleToggleTranscriptSelectedFeature={handleToggleTranscriptSelectedFeature}
+        handleTranscriptDensityColorScaleChange={handleTranscriptDensityColorScaleChange}
+        handleTranscriptDetailModeChange={handleTranscriptDetailModeChange}
+        handleTranscriptExactPointLimitChange={handleTranscriptExactPointLimitChange}
+        handleTranscriptFeatureFilterModeChange={handleTranscriptFeatureFilterModeChange}
+        handleTranscriptGeneOnlyChange={handleTranscriptGeneOnlyChange}
+        handleTranscriptMinQvChange={handleTranscriptMinQvChange}
+        handleTranscriptOpacityPercentChange={handleTranscriptOpacityPercentChange}
+        handleTranscriptOverlayChange={handleTranscriptOverlayChange}
+        handleTranscriptPointColorModeChange={handleTranscriptPointColorModeChange}
+        handleTranscriptPointSizeChange={handleTranscriptPointSizeChange}
+        hoveredTranscript={hoveredTranscript}
         loadEnabled={loadEnabled}
-        featureSearchEnabled={genePanelState.status === 'ready'}
+        pickTranscriptFeature={pickTranscriptFeature}
+        pinnedTranscript={pinnedTranscript}
+        selectedGenes={selectedGenes}
+        setPinnedTranscript={setPinnedTranscript}
+        setTranscriptFeatureSearch={setTranscriptFeatureSearch}
         showTranscriptOverlay={showTranscriptOverlay}
+        transcriptCapabilityState={transcriptCapabilityState}
+        transcriptCopy={transcriptCopy}
+        transcriptDensityColorScale={transcriptDensityColorScale}
+        transcriptDensityScaleLabels={transcriptDensityScaleLabels}
+        transcriptDensityScaleMax={transcriptDensityScaleMax}
         transcriptDetailMode={transcriptDetailMode}
         transcriptExactPointLimit={transcriptExactPointLimit}
-        effectiveTranscriptFeatureFilterMode={effectiveTranscriptFeatureFilterMode}
-        selectedGenes={selectedGenes}
         transcriptFeatureSearch={transcriptFeatureSearch}
-        filteredTranscriptFeatures={filteredTranscriptFeatures}
-        transcriptDensityColorScale={transcriptDensityColorScale}
-        transcriptDensityScaleMax={transcriptDensityScaleMax}
-        transcriptDensityScaleLabels={transcriptDensityScaleLabels}
-        transcriptPointColorMode={transcriptPointColorMode}
-        transcriptMinQv={transcriptMinQv}
         transcriptGeneOnly={transcriptGeneOnly}
-        transcriptOpacity={transcriptOpacity}
-        transcriptPointSize={transcriptPointSize}
-        transcriptCapabilityState={transcriptCapabilityState}
         transcriptLayerState={transcriptLayerState}
+        transcriptMinQv={transcriptMinQv}
+        transcriptOpacity={transcriptOpacity}
+        transcriptPointColorMode={transcriptPointColorMode}
+        transcriptPointSize={transcriptPointSize}
         visibleTranscriptEstimate={visibleTranscriptEstimate}
-        hoveredTranscript={hoveredTranscript}
-        pinnedTranscript={pinnedTranscript}
-        onShowTranscriptOverlayChange={handleTranscriptOverlayChange}
-        onTranscriptDetailModeChange={handleTranscriptDetailModeChange}
-        onTranscriptExactPointLimitChange={handleTranscriptExactPointLimitChange}
-        onTranscriptFeatureFilterModeChange={handleTranscriptFeatureFilterModeChange}
-        onToggleSelectedFeature={handleToggleTranscriptSelectedFeature}
-        onTranscriptFeatureSearchChange={setTranscriptFeatureSearch}
-        onPickTranscriptFeature={pickTranscriptFeature}
-        onTranscriptDensityColorScaleChange={handleTranscriptDensityColorScaleChange}
-        onTranscriptPointColorModeChange={handleTranscriptPointColorModeChange}
-        onTranscriptMinQvChange={handleTranscriptMinQvChange}
-        onTranscriptGeneOnlyChange={handleTranscriptGeneOnlyChange}
-        onTranscriptOpacityPercentChange={handleTranscriptOpacityPercentChange}
-        onTranscriptPointSizeChange={handleTranscriptPointSizeChange}
-        onPinTranscript={handlePinTranscript}
-        onClearPinnedTranscript={() => {
-          setPinnedTranscript(null)
-        }}
-        onLoadExactViewport={handleLoadExactViewport}
       />
 
       <MagicLensHudPanel
