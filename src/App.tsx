@@ -10,6 +10,7 @@ import { LayerHudPanel } from './features/control-hud/LayerHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import { RoiHudPanel } from './features/control-hud/RoiHudPanel'
 import { TranscriptHudPanel } from './features/transcripts/TranscriptHudPanel'
+import { useTranscriptControlsWorkflow } from './features/transcripts/useTranscriptControlsWorkflow'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { GeneHudPanel } from './features/genes/GeneHudPanel'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
@@ -39,8 +40,6 @@ import {
 } from './features/app-shell/appRuntimeModel'
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
-  normalizeTranscriptMinQv,
-  normalizeTranscriptPointSize,
   parseTranscriptDensityColorScale,
   parseTranscriptDetailMode,
   parseTranscriptFeatureFilterMode,
@@ -901,6 +900,43 @@ export function App({
     setSelectedGenes,
     transcriptViewportKeyRef,
   })
+  const {
+    handleLoadExactViewport,
+    handlePinTranscript,
+    handleToggleTranscriptSelectedFeature,
+    handleTranscriptDensityColorScaleChange,
+    handleTranscriptDetailModeChange,
+    handleTranscriptExactPointLimitChange,
+    handleTranscriptFeatureFilterModeChange,
+    handleTranscriptGeneOnlyChange,
+    handleTranscriptMinQvChange,
+    handleTranscriptOpacityPercentChange,
+    handleTranscriptOverlayChange,
+    handleTranscriptPointColorModeChange,
+    handleTranscriptPointSizeChange,
+    pickTranscriptFeature,
+  } = useTranscriptControlsWorkflow({
+    appendDebugEvent,
+    geneOptions,
+    resetGeneExpressionSelectionState,
+    setActiveControlHudTab,
+    setManualTranscriptExactRequestKey,
+    setPinnedTranscript,
+    setSelectedGenes,
+    setShowTranscriptOverlay,
+    setTranscriptDensityColorScale,
+    setTranscriptDetailMode,
+    setTranscriptExactPointLimit,
+    setTranscriptFeatureFilterMode,
+    setTranscriptFeatureSearch,
+    setTranscriptGeneOnly,
+    setTranscriptMinQv,
+    setTranscriptOpacity,
+    setTranscriptPointColorMode,
+    setTranscriptPointSize,
+    toggleGene,
+    transcriptViewportKeyRef,
+  })
   const { handleViewportChange } = useViewportDataWorkflow({
     appendDebugEvent,
     boundaryAbortRef,
@@ -1280,144 +1316,6 @@ export function App({
     transcriptPointColorMode,
     transcriptPointSize,
   ])
-
-  function handleLoadExactViewport(requestKey: string) {
-    setManualTranscriptExactRequestKey(requestKey)
-    transcriptViewportKeyRef.current = null
-    appendDebugEvent('Transcript exact viewport manually approved', {
-      coalesceKey: 'transcript-query',
-    })
-  }
-
-  function resetTranscriptViewportRequest() {
-    transcriptViewportKeyRef.current = null
-    setManualTranscriptExactRequestKey(null)
-  }
-
-  function handlePinTranscript(detail: ViewerTranscriptHoverDetail) {
-    setPinnedTranscript(detail)
-    setActiveControlHudTab('transcripts')
-    appendDebugEvent(
-      detail.transcript === undefined
-        ? 'Pinned transcript density bin'
-        : `Pinned transcript ${detail.transcript.transcriptId ?? detail.transcript.id}`,
-      { coalesceKey: 'transcript-pin' },
-    )
-  }
-
-  function handleTranscriptOverlayChange(checked: boolean) {
-    setShowTranscriptOverlay(checked)
-    appendDebugEvent(
-      checked ? 'Transcript overlay enabled' : 'Transcript overlay disabled',
-      { coalesceKey: 'transcript-overlay-toggle' },
-    )
-  }
-
-  function handleTranscriptDetailModeChange(nextMode: TranscriptDetailMode) {
-    setTranscriptDetailMode(nextMode)
-    resetTranscriptViewportRequest()
-    appendDebugEvent(`Transcript detail: ${nextMode}`, {
-      coalesceKey: 'transcript-detail',
-    })
-  }
-
-  function handleTranscriptExactPointLimitChange(value: number) {
-    const nextLimit = normalizeTranscriptExactPointLimit(value)
-
-    setTranscriptExactPointLimit(nextLimit)
-    resetTranscriptViewportRequest()
-    appendDebugEvent(`Transcript exact budget: ${nextLimit.toLocaleString()}`, {
-      coalesceKey: 'transcript-exact-budget',
-    })
-  }
-
-  function handleTranscriptFeatureFilterModeChange(
-    nextMode: TranscriptFeatureFilterMode,
-  ) {
-    setTranscriptFeatureFilterMode(nextMode)
-    resetTranscriptViewportRequest()
-    appendDebugEvent(`Transcript feature filter: ${nextMode}`, {
-      coalesceKey: 'transcript-feature-filter',
-    })
-  }
-
-  function handleToggleTranscriptSelectedFeature(gene: string) {
-    toggleGene(gene)
-    transcriptViewportKeyRef.current = null
-  }
-
-  function handleTranscriptDensityColorScaleChange(
-    nextScale: TranscriptDensityColorScale,
-  ) {
-    setTranscriptDensityColorScale(nextScale)
-    appendDebugEvent(`Transcript density color: ${nextScale}`, {
-      coalesceKey: 'transcript-density-color',
-    })
-  }
-
-  function handleTranscriptPointColorModeChange(nextMode: TranscriptPointColorMode) {
-    setTranscriptPointColorMode(nextMode)
-    appendDebugEvent(`Transcript point color: ${nextMode}`, {
-      coalesceKey: 'transcript-point-color',
-    })
-  }
-
-  function handleTranscriptMinQvChange(value: number) {
-    const nextMinQv = normalizeTranscriptMinQv(value)
-
-    setTranscriptMinQv(nextMinQv)
-    resetTranscriptViewportRequest()
-    appendDebugEvent(`Transcript min QV: ${nextMinQv}`, {
-      coalesceKey: 'transcript-min-qv',
-    })
-  }
-
-  function handleTranscriptGeneOnlyChange(checked: boolean) {
-    setTranscriptGeneOnly(checked)
-    resetTranscriptViewportRequest()
-    appendDebugEvent(
-      checked
-        ? 'Transcript gene-only filter enabled'
-        : 'Transcript gene-only filter disabled',
-      { coalesceKey: 'transcript-gene-only' },
-    )
-  }
-
-  function handleTranscriptOpacityPercentChange(nextPercent: number) {
-    setTranscriptOpacity(percentToOpacity(nextPercent))
-    appendDebugEvent(`Transcript opacity: ${nextPercent}%`, {
-      coalesceKey: 'transcript-opacity',
-    })
-  }
-
-  function handleTranscriptPointSizeChange(value: number) {
-    const nextSize = normalizeTranscriptPointSize(value)
-
-    setTranscriptPointSize(nextSize)
-    appendDebugEvent(`Transcript point size: ${nextSize}px`, {
-      coalesceKey: 'transcript-point-size',
-    })
-  }
-
-  function pickTranscriptFeature(gene: string) {
-    if (!geneOptions.includes(gene)) {
-      return
-    }
-
-    appendDebugEvent(`Transcript feature filter added ${gene}`, {
-      coalesceKey: 'transcript-feature-picker',
-    })
-    resetGeneExpressionSelectionState()
-    transcriptViewportKeyRef.current = null
-    setManualTranscriptExactRequestKey(null)
-    setTranscriptFeatureFilterMode('selected')
-    setSelectedGenes((current) =>
-      current.includes(gene)
-        ? current
-        : [...current, gene].sort((a, b) => a.localeCompare(b)),
-    )
-    setTranscriptFeatureSearch('')
-  }
 
   return (
     <main className="app-shell">
