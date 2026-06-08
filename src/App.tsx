@@ -64,6 +64,7 @@ import {
   analysisEmbeddingStatusCopy,
   type AnalysisEmbeddingState,
 } from './features/analysis/analysisEmbeddingModel'
+import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import {
   createMorphologyChannelSettings,
   type MorphologyChannelSetting,
@@ -1183,6 +1184,21 @@ export function App({
     setSelectedAnnotationGroupId,
   })
 
+  const { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings } =
+    useAnalysisEmbeddingWorkflow({
+      analysisEmbeddingAbortRef,
+      analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
+      analysisEmbeddingState,
+      appendDebugEvent,
+      loadAnalysisEmbeddings,
+      loadState,
+      overviewCellById,
+      selectedEmbeddingKind,
+      setAnalysisEmbeddingState,
+      setSelectedCell,
+      setSelectedEmbeddingKind,
+    })
+
   const {
     handleMagicLensCursorActiveChange,
     handleMagicLensLeave,
@@ -2103,66 +2119,6 @@ export function App({
     }
 
     setSavedGeneSets((current) => current.filter((geneSet) => geneSet.id !== id))
-  }
-
-  function handleLoadAnalysisEmbeddings() {
-    if (loadState.status !== 'ready' || analysisEmbeddingState.status === 'loading') {
-      return
-    }
-
-    const requestId = analysisEmbeddingRequestId.current + 1
-    abortActiveRequest(analysisEmbeddingAbortRef)
-    const abortController = new AbortController()
-    analysisEmbeddingRequestId.current = requestId
-    analysisEmbeddingAbortRef.current = abortController
-    setAnalysisEmbeddingState({ status: 'loading', url: loadState.url })
-    appendDebugEvent('Loading embeddings')
-
-    void loadAnalysisEmbeddings(loadState.url, { signal: abortController.signal })
-      .then((embeddings) => {
-        if (analysisEmbeddingRequestId.current !== requestId) {
-          return
-        }
-
-        setAnalysisEmbeddingState({
-          status: 'ready',
-          url: loadState.url,
-          embeddings,
-        })
-
-        if (
-          embeddings.length > 0 &&
-          !embeddings.some((embedding) => embedding.kind === selectedEmbeddingKind)
-        ) {
-          setSelectedEmbeddingKind(embeddings[0]?.kind ?? 'umap')
-        }
-        appendDebugEvent(`Embeddings loaded: ${embeddings.length.toLocaleString()} views`)
-      })
-      .catch((error) => {
-        if (isAbortError(error) || analysisEmbeddingRequestId.current !== requestId) {
-          return
-        }
-
-        setAnalysisEmbeddingState({
-          status: 'error',
-          url: loadState.url,
-          error: createStructuredLoadError('Embeddings', error),
-        })
-        appendDebugEvent('Embeddings failed')
-      })
-      .finally(() => {
-        if (analysisEmbeddingAbortRef.current === abortController) {
-          analysisEmbeddingAbortRef.current = null
-        }
-      })
-  }
-
-  function handleEmbeddingCellSelect(cellId: string) {
-    const cell = overviewCellById.get(cellId)
-
-    if (cell !== undefined) {
-      setSelectedCell(cell)
-    }
   }
 
   return (
