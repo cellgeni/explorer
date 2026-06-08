@@ -13,6 +13,7 @@ import { RoiHudPanel } from './features/control-hud/RoiHudPanel'
 import { TranscriptHudPanel } from './features/transcripts/TranscriptHudPanel'
 import { transcriptCapabilityLabel } from './features/transcripts/transcriptLabels'
 import { GeneHudPanel } from './features/genes/GeneHudPanel'
+import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
 import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import {
   parseControlHudTab,
@@ -815,50 +816,15 @@ export function App({
     },
     [recordTelemetry],
   )
-  useEffect(() => {
-    if (geneExpressionBatch === null || geneExpressionState.status !== 'ready') {
-      geneExpressionLayerTimingKeyRef.current = null
-      return
-    }
-
-    const timingKey = [
-      geneExpressionState.url,
-      geneExpressionState.mode,
-      geneExpressionState.visibleCellCount,
-      geneExpressionState.cellCount,
-      geneExpressionState.genes.join('|'),
-      geneExpressionLayerDataDurationMs,
-      geneExpressionRestyleDurationMs,
-    ].join(':')
-
-    if (timingKey === geneExpressionLayerTimingKeyRef.current) {
-      return
-    }
-
-    geneExpressionLayerTimingKeyRef.current = timingKey
-    const detail = [
-      `layer ${Math.round(geneExpressionLayerDataDurationMs)} ms`,
-      `restyle ${Math.round(geneExpressionRestyleDurationMs)} ms`,
-      formatGeneExpressionTiming(geneExpressionBatch.timing),
-    ].join(', ')
-
-    recordTelemetry(
-      telemetryEvent('gene-expression.layer-data', 'info', {
-        detail,
-      }),
-    )
-    appendDebugEvent(
-      `Expression layer data ready: ${geneExpressionState.cellCount.toLocaleString()} cells (${detail})`,
-      { coalesceKey: 'gene-expression-layer-data' },
-    )
-  }, [
+  useGeneExpressionLayerTelemetry({
     appendDebugEvent,
     geneExpressionBatch,
     geneExpressionLayerDataDurationMs,
     geneExpressionRestyleDurationMs,
     geneExpressionState,
     recordTelemetry,
-  ])
+    timingKeyRef: geneExpressionLayerTimingKeyRef,
+  })
   const activeErrors = useMemo(
     () =>
       collectStructuredLoadErrors([
