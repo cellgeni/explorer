@@ -41,6 +41,19 @@ export function isStructuredLoadError(
   return error !== null
 }
 
+export function collectStructuredLoadErrors(
+  states: readonly ErrorStateSummary[],
+): readonly StructuredLoadError[] {
+  return states.flatMap((state) =>
+    state.status === 'error' && state.error !== undefined ? [state.error] : [],
+  )
+}
+
+interface ErrorStateSummary {
+  readonly status: string
+  readonly error?: StructuredLoadError
+}
+
 export function formatStructuredError(error: StructuredLoadError): string {
   return `${error.title}: ${error.message}`
 }

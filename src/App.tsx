@@ -150,9 +150,9 @@ import {
   type SavedGeneSet,
 } from './features/genes/geneControlsModel'
 import {
+  collectStructuredLoadErrors,
   createStructuredLoadError,
   formatStructuredError,
-  isStructuredLoadError,
   readErrorMessage,
   type StructuredLoadError,
 } from './features/errors/loadErrorModel'
@@ -1016,31 +1016,25 @@ export function App({
   ])
   const activeErrors = useMemo(
     () =>
-      [
-        loadState.status === 'error' ? loadState.error : null,
-        diagnosticsState.status === 'error' ? diagnosticsState.error : null,
-        morphologyState.status === 'error' ? morphologyState.error : null,
-        boundaryState.status === 'error' ? boundaryState.error : null,
-        genePanelState.status === 'error' ? genePanelState.error : null,
-        annotationState.status === 'error' ? annotationState.error : null,
-        annotationGroupState.status === 'error' ? annotationGroupState.error : null,
-        analysisEmbeddingState.status === 'error' ? analysisEmbeddingState.error : null,
-        roiState.status === 'error' ? roiState.error : null,
-        roiGeneStatsState.status === 'error' ? roiGeneStatsState.error : null,
-        roiTranscriptExportState.status === 'error'
-          ? roiTranscriptExportState.error
-          : null,
-        geneExpressionState.status === 'error' ? geneExpressionState.error : null,
-        transcriptCapabilityState.status === 'error'
-          ? transcriptCapabilityState.error
-          : null,
-        transcriptLayerState.status === 'error' ? transcriptLayerState.error : null,
-        magicLensState.status === 'error' ? magicLensState.error : null,
-        cellDetailState.status === 'error' ? cellDetailState.error : null,
-        cellTranscriptDistributionState.status === 'error'
-          ? cellTranscriptDistributionState.error
-          : null,
-      ].filter(isStructuredLoadError),
+      collectStructuredLoadErrors([
+        loadState,
+        diagnosticsState,
+        morphologyState,
+        boundaryState,
+        genePanelState,
+        annotationState,
+        annotationGroupState,
+        analysisEmbeddingState,
+        roiState,
+        roiGeneStatsState,
+        roiTranscriptExportState,
+        geneExpressionState,
+        transcriptCapabilityState,
+        transcriptLayerState,
+        magicLensState,
+        cellDetailState,
+        cellTranscriptDistributionState,
+      ]),
     [
       annotationState,
       annotationGroupState,
