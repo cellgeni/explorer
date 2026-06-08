@@ -13,6 +13,7 @@ import { TranscriptHudPanel } from './features/transcripts/TranscriptHudPanel'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { GeneHudPanel } from './features/genes/GeneHudPanel'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
+import { useGeneControlsWorkflow } from './features/genes/useGeneControlsWorkflow'
 import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import {
   parseControlHudTab,
@@ -30,7 +31,6 @@ import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import {
-  abortActiveRequest,
   appendDebugLogEntry,
   createLoadingTasks,
   createDebugLogEntry,
@@ -90,19 +90,16 @@ import {
 } from './features/annotations/annotationModel'
 import { useAnnotationWorkflow } from './features/annotations/useAnnotationWorkflow'
 import {
-  defaultGeneSetName,
   filterGeneOptions,
   type GeneExpressionScaleDomain,
   type GeneExpressionState,
   geneExpressionModeLabel,
-  geneExpressionScaleKeyFor,
   geneExpressionStatusCopy,
   genePanelStatusCopy,
   type GenePanelState,
   parseGeneExpressionColorScale,
   parseGeneExpressionDetailMode,
   parseGeneExpressionScoreMode,
-  parseGeneSetSymbols,
   type SavedGeneSet,
 } from './features/genes/geneControlsModel'
 import {
@@ -864,6 +861,46 @@ export function App({
     },
     [],
   )
+  const {
+    applyGeneSetSymbols,
+    applySavedGeneSet,
+    handleGeneExpressionColorScaleChange,
+    handleGeneExpressionDetailModeChange,
+    handleGeneExpressionScoreModeChange,
+    handleObservationColorModeChange,
+    removeSavedGeneSet,
+    resetGeneExpressionSelectionState,
+    saveSelectedGeneSet,
+    toggleGene,
+  } = useGeneControlsWorkflow({
+    appendDebugEvent,
+    geneExpressionAbortRef,
+    geneExpressionBatch,
+    geneExpressionRequestIdRef: geneExpressionRequestId,
+    geneExpressionScaleDatasetUrl,
+    geneExpressionScoreMode,
+    geneExpressionViewportKeyRef,
+    geneOptions,
+    geneSetIdRef,
+    geneSetName,
+    geneSetSymbols,
+    rememberGeneExpressionScaleMax,
+    savedGeneSets,
+    selectedGenes,
+    setGeneExpressionBatch,
+    setGeneExpressionColorScale,
+    setGeneExpressionDetailMode,
+    setGeneExpressionScaleDomain,
+    setGeneExpressionScoreMode,
+    setGeneExpressionState,
+    setGeneSearch,
+    setGeneSetName,
+    setManualTranscriptExactRequestKey,
+    setObservationColorMode,
+    setSavedGeneSets,
+    setSelectedGenes,
+    transcriptViewportKeyRef,
+  })
   const { handleViewportChange } = useViewportDataWorkflow({
     appendDebugEvent,
     boundaryAbortRef,
@@ -1244,18 +1281,6 @@ export function App({
     transcriptPointSize,
   ])
 
-  function toggleGene(gene: string) {
-    const isSelected = selectedGenes.includes(gene)
-    appendDebugEvent(isSelected ? `Cleared gene ${gene}` : `Highlight gene ${gene}`)
-    resetGeneExpressionSelectionState()
-    setManualTranscriptExactRequestKey(null)
-    setSelectedGenes((current) =>
-      isSelected
-        ? current.filter((selectedGene) => selectedGene !== gene)
-        : [...current, gene].sort((a, b) => a.localeCompare(b)),
-    )
-  }
-
   function handleLoadExactViewport(requestKey: string) {
     setManualTranscriptExactRequestKey(requestKey)
     transcriptViewportKeyRef.current = null
@@ -1392,108 +1417,6 @@ export function App({
         : [...current, gene].sort((a, b) => a.localeCompare(b)),
     )
     setTranscriptFeatureSearch('')
-  }
-
-  function applyGeneSetSymbols() {
-    const genes = parseGeneSetSymbols(geneSetSymbols, geneOptions)
-
-    if (genes.length === 0) {
-      return
-    }
-
-    appendDebugEvent(`Applied symbols: ${genes.length.toLocaleString()} genes`)
-    setSelectedGenes(genes)
-    resetGeneExpressionSelectionState()
-    transcriptViewportKeyRef.current = null
-    setManualTranscriptExactRequestKey(null)
-    setGeneSearch('')
-  }
-
-  function saveSelectedGeneSet() {
-    if (selectedGenes.length === 0) {
-      return
-    }
-
-    const name = geneSetName.trim() || defaultGeneSetName(selectedGenes)
-    const normalizedName = name.toLowerCase()
-    const savedSet: SavedGeneSet = {
-      id: `gene-set-${geneSetIdRef.current + 1}`,
-      name,
-      genes: selectedGenes,
-      scoreMode: geneExpressionScoreMode,
-    }
-
-    geneSetIdRef.current += 1
-    appendDebugEvent(`Saved gene set ${name}`)
-    setSavedGeneSets((current) => [
-      savedSet,
-      ...current.filter((geneSet) => geneSet.name.toLowerCase() !== normalizedName),
-    ])
-    setGeneSetName('')
-  }
-
-  function applySavedGeneSet(geneSet: SavedGeneSet) {
-    appendDebugEvent(`Applied gene set ${geneSet.name}`)
-    resetGeneExpressionSelectionState()
-    transcriptViewportKeyRef.current = null
-    setManualTranscriptExactRequestKey(null)
-    setSelectedGenes(geneSet.genes)
-    setGeneExpressionScoreMode(geneSet.scoreMode)
-    setGeneSearch('')
-  }
-
-  function handleGeneExpressionScoreModeChange(nextScoreMode: GeneExpressionScoreMode) {
-    appendDebugEvent(`Signature score: ${nextScoreMode}`)
-    setGeneExpressionScoreMode(nextScoreMode)
-
-    if (geneExpressionBatch === null) {
-      setGeneExpressionScaleDomain({ key: '', max: 0 })
-      return
-    }
-
-    rememberGeneExpressionScaleMax(
-      geneExpressionScaleKeyFor(
-        geneExpressionScaleDatasetUrl,
-        nextScoreMode,
-        selectedGenes,
-      ),
-      geneExpressionBatch,
-      nextScoreMode,
-    )
-  }
-
-  function handleGeneExpressionColorScaleChange(nextScale: GeneExpressionColorScale) {
-    setGeneExpressionColorScale(nextScale)
-    appendDebugEvent(`Gene scale: ${nextScale}`)
-  }
-
-  function handleGeneExpressionDetailModeChange(nextMode: GeneExpressionDetailMode) {
-    setGeneExpressionDetailMode(nextMode)
-    appendDebugEvent(`Expression detail: ${nextMode}`)
-  }
-
-  function handleObservationColorModeChange(nextMode: ObservationColorMode) {
-    setObservationColorMode(nextMode)
-    appendDebugEvent(`Cell color: ${nextMode}`)
-  }
-
-  function resetGeneExpressionSelectionState() {
-    abortActiveRequest(geneExpressionAbortRef)
-    geneExpressionRequestId.current += 1
-    geneExpressionViewportKeyRef.current = null
-    setGeneExpressionBatch(null)
-    setGeneExpressionScaleDomain({ key: '', max: 0 })
-    setGeneExpressionState({ status: 'idle' })
-  }
-
-  function removeSavedGeneSet(id: string) {
-    const removedSet = savedGeneSets.find((geneSet) => geneSet.id === id)
-
-    if (removedSet !== undefined) {
-      appendDebugEvent(`Removed gene set ${removedSet.name}`)
-    }
-
-    setSavedGeneSets((current) => current.filter((geneSet) => geneSet.id !== id))
   }
 
   return (
