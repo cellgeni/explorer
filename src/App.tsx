@@ -1,4 +1,3 @@
-import type { FormEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ViewerCore,
@@ -28,10 +27,10 @@ import {
 } from './features/app-shell/appDependencies'
 import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
+import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
 import {
   abortActiveRequest,
   appendDebugLogEntry,
-  clearTimeoutRef,
   createLoadingTasks,
   createDebugLogEntry,
   downloadTextFile,
@@ -65,10 +64,7 @@ import {
   type AnalysisEmbeddingState,
 } from './features/analysis/analysisEmbeddingModel'
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
-import {
-  createMorphologyChannelSettings,
-  type MorphologyChannelSetting,
-} from './features/morphology/morphologyChannels'
+import type { MorphologyChannelSetting } from './features/morphology/morphologyChannels'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
@@ -131,7 +127,6 @@ import type {
 } from './features/dataset/datasetLoadModel'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
-import type { WarmDatasetForRoiResult } from './data/datasetWarmup'
 import {
   geneExpressionRequestKey,
   geneExpressionWaitingKey,
@@ -169,7 +164,6 @@ import {
   DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
   DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
   geneExpressionScoreDomainMax,
-  overviewCellsToLayerData,
   bundledDeckVersion,
 } from './rendering/deckLayers'
 import { percentToOpacity } from './rendering/layerOpacity'
@@ -1244,20 +1238,117 @@ export function App({
       setMorphologyState,
     })
 
-  useEffect(() => {
-    if (didApplyInitialDatasetUrlRef.current) {
-      return
-    }
-
-    didApplyInitialDatasetUrlRef.current = true
-
-    if (
-      initialShareableState.datasetUrl !== undefined &&
-      initialShareableState.datasetUrl.trim() !== ''
-    ) {
-      setDatasetUrl(initialShareableState.datasetUrl)
-    }
-  }, [initialShareableState.datasetUrl, setDatasetUrl])
+  const { handleDatasetSubmit } = useDatasetLifecycle({
+    analysisEmbeddingAbortRef,
+    analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
+    appendDebugEvent,
+    autoContrastChannelIdsRef,
+    boundaryAbortRef,
+    boundaryRequestIdRef: boundaryRequestId,
+    boundaryViewportKeyRef,
+    cellDetailAbortRef,
+    cellDetailRequestIdRef: cellDetailRequestId,
+    cellFeatureMatrixCapabilityKeyRef,
+    cellTranscriptDistributionAbortRef,
+    cellTranscriptDistributionRequestIdRef: cellTranscriptDistributionRequestId,
+    datasetAbortRef,
+    datasetWarmupAbortRef,
+    diagnosticsAbortRef,
+    didApplyInitialDatasetUrlRef,
+    geneExpressionAbortRef,
+    geneExpressionColorScale,
+    geneExpressionRequestIdRef: geneExpressionRequestId,
+    geneExpressionViewportKeyRef,
+    initialShareableState,
+    initialShareableStateRef,
+    initialSharedRoiSelectionRef,
+    initialShouldLoadMorphologyRef,
+    lastViewportDetailRef,
+    loadAnnotationGroups,
+    loadDatasetOverview,
+    loadGenePanel,
+    loadMorphologyImage,
+    loadRequestIdRef: loadRequestId,
+    magicLensAbortRef,
+    magicLensDebounceRef,
+    magicLensLastDetailRef,
+    magicLensLastQueryKeyRef,
+    magicLensRequestIdRef: magicLensRequestId,
+    queueAutoContrast,
+    recordTelemetry,
+    roiAbortRef,
+    roiGeneViewportWarmupAbortRef,
+    roiGeneViewportWarmupKeyRef,
+    roiGeneViewportWarmupTimeoutRef,
+    roiRequestIdRef: roiRequestId,
+    roiTranscriptExportAbortRef,
+    roiTranscriptExportRequestIdRef: roiTranscriptExportRequestId,
+    setAnalysisEmbeddingState,
+    setAnnotationColors,
+    setAnnotationGroupState,
+    setAnnotationState,
+    setAutoContrastChannelIds,
+    setBoundaryElements,
+    setBoundaryState,
+    setCellDetailState,
+    setCellFeatureMatrixCapabilityState,
+    setCellTranscriptDistributionState,
+    setCurrentViewportDetail,
+    setDatasetUrl,
+    setDatasetWarmupState,
+    setDiagnosticsState,
+    setGeneExpressionBatch,
+    setGeneExpressionColorScale,
+    setGeneExpressionDetailMode,
+    setGeneExpressionScaleDomain,
+    setGeneExpressionScoreMode,
+    setGeneExpressionState,
+    setGenePanelState,
+    setGeneSearch,
+    setGeneSetName,
+    setGeneSetSymbols,
+    setHoveredTranscript,
+    setLoadState,
+    setMagicLensActive,
+    setMagicLensState,
+    setManualTranscriptExactRequestKey,
+    setMeasurementEnabled,
+    setMeasurementResetKey,
+    setMorphologyChannelSettings,
+    setMorphologyImage,
+    setMorphologyState,
+    setObservationColorMode,
+    setOverviewCells,
+    setPinnedTranscript,
+    setRoiGeneStatsState,
+    setRoiGeneViewportWarmupState,
+    setRoiMode,
+    setRoiName,
+    setRoiState,
+    setRoiTranscriptExportState,
+    setSavedGeneSets,
+    setSelectedAnnotationGroupId,
+    setSelectedCell,
+    setSelectedEmbeddingKind,
+    setSelectedGenes,
+    setTranscriptCapabilityState,
+    setTranscriptDensityColorScale,
+    setTranscriptExactPointLimit,
+    setTranscriptFeatureSearch,
+    setTranscriptLayerState,
+    setTranscriptPointColorMode,
+    setViewportCellCount,
+    startDatasetLoadRef,
+    transcriptAbortRef,
+    transcriptCapabilityAbortRef,
+    transcriptCapabilityRequestIdRef: transcriptCapabilityRequestId,
+    transcriptDensityColorScale,
+    transcriptExactPointLimit,
+    transcriptPointColorMode,
+    transcriptRequestIdRef: transcriptRequestId,
+    transcriptViewportKeyRef,
+    warmDatasetForRoi,
+  })
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1328,441 +1419,6 @@ export function App({
     transcriptPointColorMode,
     transcriptPointSize,
   ])
-
-  useEffect(() => {
-    return () => {
-      abortActiveRequest(datasetAbortRef)
-      abortActiveRequest(datasetWarmupAbortRef)
-      abortActiveRequest(diagnosticsAbortRef)
-      abortActiveRequest(analysisEmbeddingAbortRef)
-      abortActiveRequest(boundaryAbortRef)
-      abortActiveRequest(geneExpressionAbortRef)
-      abortActiveRequest(roiAbortRef)
-      abortActiveRequest(roiTranscriptExportAbortRef)
-      abortActiveRequest(transcriptCapabilityAbortRef)
-      abortActiveRequest(transcriptAbortRef)
-      abortActiveRequest(roiGeneViewportWarmupAbortRef)
-      abortActiveRequest(magicLensAbortRef)
-      abortActiveRequest(cellDetailAbortRef)
-      abortActiveRequest(cellTranscriptDistributionAbortRef)
-      clearTimeoutRef(magicLensDebounceRef)
-      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-    }
-  }, [])
-
-  function startDatasetWarmup(requestedUrl: string, requestId: number) {
-    abortActiveRequest(datasetWarmupAbortRef)
-    const warmupStartedAt = readTimestamp()
-    const abortController = new AbortController()
-    datasetWarmupAbortRef.current = abortController
-    setDatasetWarmupState({ status: 'loading', url: requestedUrl })
-    appendDebugEvent('Dataset prep started')
-    const applyCellFeatureMatrixCapability = (result: WarmDatasetForRoiResult | void) => {
-      const capability = result?.cellFeatureMatrix
-
-      if (
-        capability === undefined ||
-        capability === null ||
-        loadRequestId.current !== requestId ||
-        abortController.signal.aborted
-      ) {
-        return
-      }
-
-      const capabilityKey = `${requestedUrl}:${capability.hasCellMajorCsc}`
-
-      if (cellFeatureMatrixCapabilityKeyRef.current === capabilityKey) {
-        return
-      }
-
-      cellFeatureMatrixCapabilityKeyRef.current = capabilityKey
-      setCellFeatureMatrixCapabilityState({
-        status: 'ready',
-        url: requestedUrl,
-        hasCellMajorCsc: capability.hasCellMajorCsc,
-      })
-
-      if (!capability.hasCellMajorCsc) {
-        appendDebugEvent(
-          'Cell-feature matrix is not CSC; ROI gene stats will use H5 fallback when needed',
-          { coalesceKey: 'cell-feature-matrix-csc' },
-        )
-      }
-    }
-
-    void warmDatasetForRoi(requestedUrl, {
-      signal: abortController.signal,
-      onCellFeatureMatrixCapability: (capability) => {
-        applyCellFeatureMatrixCapability({ cellFeatureMatrix: capability })
-      },
-    })
-      .then((result) => {
-        if (loadRequestId.current !== requestId) {
-          return
-        }
-
-        applyCellFeatureMatrixCapability(result)
-        setDatasetWarmupState({ status: 'ready', url: requestedUrl })
-        appendDebugEvent(`Dataset prep ready (${formatElapsed(warmupStartedAt)})`)
-      })
-      .catch((error) => {
-        if (isAbortError(error) || loadRequestId.current !== requestId) {
-          return
-        }
-
-        setDatasetWarmupState({ status: 'error', url: requestedUrl })
-        appendDebugEvent(`Dataset prep incomplete (${formatElapsed(warmupStartedAt)})`)
-      })
-      .finally(() => {
-        if (datasetWarmupAbortRef.current === abortController) {
-          datasetWarmupAbortRef.current = null
-        }
-      })
-  }
-
-  async function startDatasetLoad(datasetUrl: string, loadImage: boolean) {
-    const requestedUrl = datasetUrl.trim()
-
-    if (requestedUrl !== '') {
-      const requestId = loadRequestId.current + 1
-      const loadStartedAt = readTimestamp()
-      const sharedState = initialShareableStateRef.current
-      const shouldRestoreSharedState =
-        sharedState?.datasetUrl !== undefined &&
-        sharedState.datasetUrl.trim() === requestedUrl
-      const sharedSelectedGenes = shouldRestoreSharedState
-        ? (sharedState.selectedGenes ?? [])
-        : []
-      if (!shouldRestoreSharedState) {
-        initialShareableStateRef.current = null
-      }
-      appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
-      abortActiveRequest(datasetAbortRef)
-      abortActiveRequest(datasetWarmupAbortRef)
-      abortActiveRequest(diagnosticsAbortRef)
-      abortActiveRequest(analysisEmbeddingAbortRef)
-      abortActiveRequest(boundaryAbortRef)
-      abortActiveRequest(geneExpressionAbortRef)
-      abortActiveRequest(roiAbortRef)
-      abortActiveRequest(roiTranscriptExportAbortRef)
-      abortActiveRequest(transcriptCapabilityAbortRef)
-      abortActiveRequest(transcriptAbortRef)
-      abortActiveRequest(roiGeneViewportWarmupAbortRef)
-      abortActiveRequest(magicLensAbortRef)
-      abortActiveRequest(cellDetailAbortRef)
-      abortActiveRequest(cellTranscriptDistributionAbortRef)
-      clearTimeoutRef(magicLensDebounceRef)
-      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-      roiGeneViewportWarmupKeyRef.current = null
-      const abortController = new AbortController()
-      loadRequestId.current = requestId
-      datasetAbortRef.current = abortController
-
-      setDatasetUrl(requestedUrl)
-      setDatasetWarmupState({ status: 'idle' })
-      setCellFeatureMatrixCapabilityState({ status: 'idle' })
-      cellFeatureMatrixCapabilityKeyRef.current = null
-      setOverviewCells([])
-      setGeneExpressionBatch(null)
-      setGeneExpressionScaleDomain({ key: '', max: 0 })
-      setMorphologyImage(null)
-      setMorphologyChannelSettings([])
-      autoContrastChannelIdsRef.current.clear()
-      setAutoContrastChannelIds([])
-      setBoundaryElements([])
-      setGeneSearch('')
-      setGeneSetSymbols('')
-      setGeneSetName('')
-      setSavedGeneSets([])
-      setTranscriptFeatureSearch('')
-      setHoveredTranscript(null)
-      setPinnedTranscript(null)
-      setManualTranscriptExactRequestKey(null)
-      setAnnotationColors({})
-      setAnnotationGroupState({ status: 'loading', url: requestedUrl })
-      setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
-      setAnalysisEmbeddingState({ status: 'idle' })
-      setSelectedEmbeddingKind('umap')
-      setObservationColorMode(
-        shouldRestoreSharedState
-          ? (parseObservationColorMode(sharedState?.observationColorMode) ??
-              'transcript-count')
-          : 'transcript-count',
-      )
-      setGeneExpressionScoreMode(
-        shouldRestoreSharedState
-          ? (parseGeneExpressionScoreMode(sharedState?.geneExpressionScoreMode) ??
-              DEFAULT_GENE_EXPRESSION_SCORE_MODE)
-          : DEFAULT_GENE_EXPRESSION_SCORE_MODE,
-      )
-      setGeneExpressionDetailMode(
-        shouldRestoreSharedState
-          ? (parseGeneExpressionDetailMode(sharedState?.geneExpressionDetailMode) ??
-              'auto')
-          : 'auto',
-      )
-      setGeneExpressionColorScale(
-        shouldRestoreSharedState
-          ? (parseGeneExpressionColorScale(sharedState?.geneExpressionColorScale) ??
-              geneExpressionColorScale)
-          : geneExpressionColorScale,
-      )
-      setTranscriptDensityColorScale(
-        shouldRestoreSharedState
-          ? (parseTranscriptDensityColorScale(sharedState?.transcriptDensityColorScale) ??
-              transcriptDensityColorScale)
-          : transcriptDensityColorScale,
-      )
-      setTranscriptPointColorMode(
-        shouldRestoreSharedState
-          ? (parseTranscriptPointColorMode(sharedState?.transcriptPointColorMode) ??
-              transcriptPointColorMode)
-          : transcriptPointColorMode,
-      )
-      setTranscriptExactPointLimit(
-        shouldRestoreSharedState
-          ? sharedState?.transcriptExactPointLimit === undefined
-            ? transcriptExactPointLimit
-            : normalizeTranscriptExactPointLimit(sharedState.transcriptExactPointLimit)
-          : transcriptExactPointLimit,
-      )
-      setSelectedGenes(sharedSelectedGenes)
-      setRoiMode('idle')
-      setMeasurementEnabled(false)
-      setMeasurementResetKey((current) => current + 1)
-      setRoiName('ROI 1')
-      setRoiState({ status: 'idle' })
-      setRoiGeneStatsState({ status: 'idle' })
-      setRoiGeneViewportWarmupState({ status: 'idle' })
-      setRoiTranscriptExportState({ status: 'idle' })
-      setTranscriptCapabilityState({ status: 'idle' })
-      setTranscriptLayerState({ status: 'idle' })
-      setMagicLensState({ status: 'idle' })
-      setCellDetailState({ status: 'idle' })
-      setCellTranscriptDistributionState({ status: 'idle' })
-      setMagicLensActive(false)
-      setSelectedCell(null)
-      setCurrentViewportDetail(null)
-      setViewportCellCount(null)
-      setLoadState({ status: 'loading', url: requestedUrl })
-      setMorphologyState(
-        loadImage ? { status: 'loading', url: requestedUrl } : { status: 'idle' },
-      )
-      setDiagnosticsState({ status: 'idle' })
-      setBoundaryState({ status: 'idle' })
-      setGenePanelState({ status: 'loading', url: requestedUrl })
-      setAnnotationState({ status: 'idle' })
-      setGeneExpressionState({ status: 'idle' })
-      boundaryRequestId.current += 1
-      analysisEmbeddingRequestId.current += 1
-      geneExpressionRequestId.current += 1
-      roiRequestId.current += 1
-      roiTranscriptExportRequestId.current += 1
-      transcriptCapabilityRequestId.current += 1
-      transcriptRequestId.current += 1
-      magicLensRequestId.current += 1
-      cellDetailRequestId.current += 1
-      cellTranscriptDistributionRequestId.current += 1
-      magicLensLastDetailRef.current = null
-      magicLensLastQueryKeyRef.current = null
-      boundaryViewportKeyRef.current = null
-      geneExpressionViewportKeyRef.current = null
-      transcriptViewportKeyRef.current = null
-      lastViewportDetailRef.current = null
-      initialSharedRoiSelectionRef.current = shouldRestoreSharedState
-        ? (sharedState?.roiSelection ?? null)
-        : null
-      startDatasetWarmup(requestedUrl, requestId)
-
-      void loadGenePanel(requestedUrl, { signal: abortController.signal })
-        .then((genes) => {
-          if (loadRequestId.current !== requestId) {
-            return
-          }
-
-          setGenePanelState({ status: 'ready', url: requestedUrl, genes })
-          appendDebugEvent(`Gene panel ready: ${genes.length.toLocaleString()} genes`)
-        })
-        .catch((error) => {
-          if (isAbortError(error)) {
-            return
-          }
-
-          if (loadRequestId.current !== requestId) {
-            return
-          }
-
-          setGenePanelState({
-            status: 'error',
-            url: requestedUrl,
-            error: createStructuredLoadError('Gene panel', error),
-          })
-          appendDebugEvent('Gene panel failed')
-        })
-
-      void loadAnnotationGroups(requestedUrl, { signal: abortController.signal })
-        .then((groups) => {
-          if (loadRequestId.current !== requestId) {
-            return
-          }
-
-          setAnnotationGroupState({
-            status: 'ready',
-            url: requestedUrl,
-            groups,
-          })
-          appendDebugEvent(
-            `Annotation sets ready: ${groups.length.toLocaleString()} groups`,
-          )
-        })
-        .catch((error) => {
-          if (isAbortError(error)) {
-            return
-          }
-
-          if (loadRequestId.current !== requestId) {
-            return
-          }
-
-          setAnnotationGroupState({
-            status: 'error',
-            url: requestedUrl,
-            error: createStructuredLoadError('Annotations', error),
-          })
-          appendDebugEvent('Annotation sets failed')
-        })
-
-      try {
-        const cells = await loadDatasetOverview(requestedUrl, {
-          includeCellIds: true,
-          limit: null,
-          signal: abortController.signal,
-        })
-
-        if (loadRequestId.current !== requestId) {
-          return
-        }
-
-        setOverviewCells(overviewCellsToLayerData(cells))
-        initialShareableStateRef.current = null
-        setLoadState({
-          status: 'ready',
-          url: requestedUrl,
-          cellCount: cells.length,
-        })
-        appendDebugEvent(
-          `Dataset ready: ${cells.length.toLocaleString()} cells in ${formatElapsed(
-            loadStartedAt,
-          )}`,
-        )
-        recordTelemetry(
-          telemetryEvent('dataset.load', 'success', {
-            startedAt: loadStartedAt,
-            detail: `${cells.length.toLocaleString()} cells`,
-          }),
-        )
-
-        if (!loadImage) {
-          return
-        }
-
-        void loadMorphologyImage(requestedUrl, { signal: abortController.signal })
-          .then((image) => {
-            if (loadRequestId.current !== requestId) {
-              return
-            }
-
-            setMorphologyImage(image)
-            setMorphologyChannelSettings(createMorphologyChannelSettings(image))
-            setMorphologyState({
-              status: 'ready',
-              url: image.url,
-            })
-            appendDebugEvent('Morphology image ready')
-            queueAutoContrast(image.channelLoaders, {
-              requestId,
-              signal: abortController.signal,
-            })
-          })
-          .catch((error) => {
-            if (isAbortError(error)) {
-              return
-            }
-
-            if (loadRequestId.current !== requestId) {
-              return
-            }
-
-            setMorphologyState({
-              status: 'error',
-              url: requestedUrl,
-              error: createStructuredLoadError('Morphology image', error),
-            })
-            appendDebugEvent('Morphology image failed')
-          })
-      } catch (error) {
-        if (isAbortError(error)) {
-          return
-        }
-
-        if (loadRequestId.current !== requestId) {
-          return
-        }
-
-        setLoadState({
-          status: 'error',
-          url: requestedUrl,
-          error: createStructuredLoadError('Dataset overview', error),
-        })
-        initialShareableStateRef.current = null
-        appendDebugEvent('Dataset load failed')
-        recordTelemetry(
-          telemetryEvent('dataset.load', 'failure', {
-            startedAt: loadStartedAt,
-            detail: readErrorMessage(error),
-          }),
-        )
-        abortActiveRequest(datasetWarmupAbortRef)
-        setDatasetWarmupState({ status: 'idle' })
-        setCellFeatureMatrixCapabilityState({ status: 'idle' })
-        cellFeatureMatrixCapabilityKeyRef.current = null
-        setMorphologyState({ status: 'idle' })
-        setGenePanelState({ status: 'idle' })
-        setAnnotationGroupState({ status: 'idle' })
-        setTranscriptCapabilityState({ status: 'idle' })
-        setTranscriptLayerState({ status: 'idle' })
-      }
-    }
-  }
-
-  async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const formData = new FormData(event.currentTarget)
-    const datasetUrl = formData.get('datasetUrl')
-    const loadImage = formData.get('loadMorphologyImage') === 'on'
-
-    if (typeof datasetUrl === 'string') {
-      await startDatasetLoad(datasetUrl, loadImage)
-    }
-  }
-
-  useEffect(() => {
-    startDatasetLoadRef.current = startDatasetLoad
-  })
-
-  useEffect(() => {
-    const initialDatasetUrl = initialShareableState.datasetUrl?.trim()
-
-    if (initialDatasetUrl === undefined || initialDatasetUrl === '') {
-      return
-    }
-
-    void startDatasetLoadRef.current?.(
-      initialDatasetUrl,
-      initialShouldLoadMorphologyRef.current,
-    )
-  }, [initialShareableState.datasetUrl])
 
   async function handleRunDatasetDiagnostics() {
     const requestedUrl = datasetUrl.trim()
