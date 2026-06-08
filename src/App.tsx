@@ -25,6 +25,7 @@ import {
   defaultAppDependencies,
   type AppProps,
 } from './features/app-shell/appDependencies'
+import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import {
   abortActiveRequest,
   appendDebugLogEntry,
@@ -44,7 +45,6 @@ import {
   TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS,
   TRANSCRIPT_NATIVE_DENSITY_MAX_BINS,
   buildCellSummaryTranscriptBins,
-  estimateVisibleTranscriptsFromCells,
   isTranscriptExactManualLoadRequired,
   maxTranscriptAggregateCount,
   normalizeTranscriptMinQv,
@@ -54,13 +54,9 @@ import {
   parseTranscriptFeatureFilterMode,
   parseTranscriptPointColorMode,
   retainedTranscriptLayerState,
-  transcriptAggregateBinsForRendering,
   transcriptAggregateFallbackMessage,
-  transcriptAggregateScaleMaxForRendering,
-  transcriptDensityScaleValueLabels,
   transcriptExactManualLoadMessage,
   transcriptNativeAggregateMessage,
-  transcriptPointsForRendering,
   transcriptStatusCopy,
   type TranscriptCapabilityState,
   type TranscriptLayerState,
@@ -71,7 +67,6 @@ import {
   cellDetailStatusCopy,
   loadSelectedCellBoundary,
   overviewCellToDatasetCell,
-  overviewCellsToBbox,
   summarizeCellShape,
   type CellDetailState,
   type CellTranscriptDistributionState,
@@ -83,7 +78,6 @@ import {
 import {
   createMorphologyChannelSettings,
   morphologyPatchLabel,
-  normalizeChannelContrast,
   type MorphologyChannelSetting,
 } from './features/morphology/morphologyChannels'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
@@ -216,20 +210,14 @@ import {
   shouldLoadBoundaryPolygons,
 } from './rendering/boundaryViewport'
 import {
-  boundaryElementsToLayerData,
   DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
   DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
   DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
-  geneExpressionCellsToLayerData,
   geneExpressionScoreDomainMax,
   overviewCellsToLayerData,
-  styleGeneExpressionCellsByScale,
-  transcriptAggregateBinsToLayerData,
-  transcriptPointsToLayerData,
   bundledDeckVersion,
 } from './rendering/deckLayers'
-import { styleOverviewCellsByObservation } from './rendering/cellStyling'
 import {
   annotationPaletteColor,
   normalizeAnnotationColor,
@@ -238,8 +226,7 @@ import { percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
-import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
-import type { AnnotationColorStyle, ObservationColorMode } from './rendering/cellStyling'
+import type { ObservationColorMode } from './rendering/cellStyling'
 import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
 import type { Annotation, SpatialElement } from './datasets/spatialDataset'
 import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
@@ -278,7 +265,6 @@ export type {
   TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
 
-const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_GENE_LIST: readonly string[] = []
 
 export function App({
@@ -602,159 +588,46 @@ export function App({
   >(null)
   const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
   const isLoading = loadState.status === 'loading'
-  const annotationStyleColors = useMemo(
-    () =>
-      annotationState.status === 'ready'
-        ? annotationState.annotations.map((annotation, annotationIndex) => ({
-            id: annotation.id,
-            cellIds: annotation.cellIds,
-            color:
-              annotationColors[annotation.id] ?? annotationPaletteColor(annotationIndex),
-          }))
-        : [],
-    [annotationColors, annotationState],
-  )
-  const activeAnnotationStyleColors =
-    observationColorMode === 'annotations'
-      ? annotationStyleColors
-      : EMPTY_ANNOTATION_STYLE_COLORS
-  const viewerObservationColorMode: ObservationColorMode =
-    observationColorMode === 'annotations' ? 'annotations' : 'transcript-count'
-  const styledOverviewCells = useMemo(() => {
-    if (observationColorMode !== 'cell-area') {
-      return overviewCells
-    }
-
-    return styleOverviewCellsByObservation(overviewCells, 'cell-area')
-  }, [observationColorMode, overviewCells])
-  const overviewExtent = useMemo(
-    () => overviewCellsToBbox(overviewCells),
-    [overviewCells],
-  )
   const geneExpressionScaleDatasetUrl =
     loadState.status === 'ready' ? loadState.url : datasetUrl
-  const geneExpressionScaleKey = useMemo(
-    () =>
-      geneExpressionScaleKeyFor(
-        geneExpressionScaleDatasetUrl,
-        geneExpressionScoreMode,
-        selectedGenes,
-      ),
-    [geneExpressionScaleDatasetUrl, geneExpressionScoreMode, selectedGenes],
-  )
-  const currentGeneExpressionScaleMax = useMemo(
-    () =>
-      geneExpressionBatch === null
-        ? 0
-        : geneExpressionScoreDomainMax(
-            geneExpressionBatch.cells,
-            geneExpressionBatch.genes,
-            geneExpressionScoreMode,
-          ),
-    [geneExpressionBatch, geneExpressionScoreMode],
-  )
-  const storedGeneExpressionScaleMax =
-    geneExpressionScaleDomain.key === geneExpressionScaleKey
-      ? geneExpressionScaleDomain.max
-      : 0
-  const geneExpressionScaleMax = Math.max(
-    storedGeneExpressionScaleMax,
-    currentGeneExpressionScaleMax,
-  )
-  const geneExpressionLayerData = useMemo(() => {
-    if (geneExpressionBatch === null) {
-      return { cells: [], durationMs: 0 }
-    }
-
-    const startedAt = readTimestamp()
-    const cells = geneExpressionCellsToLayerData(
-      geneExpressionBatch.cells,
-      geneExpressionBatch.genes,
-      geneExpressionColorScale,
-      geneExpressionScoreMode,
-      { scaleMax: geneExpressionScaleMax },
-    )
-
-    return { cells, durationMs: Math.max(0, readTimestamp() - startedAt) }
-  }, [
+  const {
+    activeAnnotationStyleColors,
+    annotationStyleColors,
+    boundaryLayerData,
+    geneExpressionLayerDataDurationMs,
+    geneExpressionRestyleDurationMs,
+    geneExpressionScaleKey,
+    geneExpressionScaleMax,
+    morphologyCanvasChannels,
+    morphologyMicrometersPerPixel,
+    overviewExtent,
+    styledGeneExpressionCells,
+    styledOverviewCells,
+    transcriptDensityScaleLabels,
+    transcriptDensityScaleMax,
+    transcriptLayerAggregateBins,
+    transcriptLayerPoints,
+    viewerObservationColorMode,
+    visibleTranscriptEstimate,
+  } = useViewerLayerData({
+    annotationColors,
+    annotationState,
+    boundaryElements,
+    currentViewportBbox: currentViewportDetail?.bbox ?? null,
     geneExpressionBatch,
     geneExpressionColorScale,
-    geneExpressionScaleMax,
+    geneExpressionScaleDatasetUrl,
+    geneExpressionScaleDomain,
     geneExpressionScoreMode,
-  ])
-  const geneExpressionCells = geneExpressionLayerData.cells
-  const geneExpressionLayerDataDurationMs = geneExpressionLayerData.durationMs
-  const styledGeneExpressionLayerData = useMemo(() => {
-    const startedAt = readTimestamp()
-    const cells = styleGeneExpressionCellsByScale(
-      geneExpressionCells,
-      geneExpressionColorScale,
-      {
-        scaleMax: geneExpressionScaleMax,
-      },
-    )
-
-    return { cells, durationMs: Math.max(0, readTimestamp() - startedAt) }
-  }, [geneExpressionCells, geneExpressionColorScale, geneExpressionScaleMax])
-  const styledGeneExpressionCells = styledGeneExpressionLayerData.cells
-  const geneExpressionRestyleDurationMs = styledGeneExpressionLayerData.durationMs
-  const transcriptLayerPoints = useMemo(
-    () =>
-      transcriptPointsToLayerData(
-        transcriptPointsForRendering(transcriptLayerState),
-        transcriptPointColorMode,
-      ),
-    [transcriptLayerState, transcriptPointColorMode],
-  )
-  const transcriptDensityScaleMax =
-    transcriptAggregateScaleMaxForRendering(transcriptLayerState)
-  const transcriptDensityScaleLabels = transcriptDensityScaleValueLabels(
-    transcriptDensityScaleMax,
-  )
-  const transcriptLayerAggregateBins = useMemo(() => {
-    return transcriptAggregateBinsToLayerData(
-      transcriptAggregateBinsForRendering(transcriptLayerState),
-      transcriptDensityColorScale,
-      transcriptDensityScaleMax === undefined
-        ? {}
-        : { scaleMax: transcriptDensityScaleMax },
-    )
-  }, [transcriptDensityColorScale, transcriptDensityScaleMax, transcriptLayerState])
-  const visibleTranscriptEstimate = useMemo(
-    () =>
-      currentViewportDetail === null
-        ? 0
-        : estimateVisibleTranscriptsFromCells(overviewCells, currentViewportDetail.bbox),
-    [currentViewportDetail, overviewCells],
-  )
-  const morphologyCanvasChannels = useMemo<readonly MorphologyCanvasChannel[]>(
-    () =>
-      morphologyImage === null
-        ? []
-        : morphologyImage.channelLoaders.map((channel) => {
-            const setting = morphologyChannelSettings.find(
-              (candidate) => candidate.id === channel.info.id,
-            )
-            const contrast = normalizeChannelContrast({
-              min: setting?.contrastMin ?? channel.info.contrast.min,
-              max: setting?.contrastMax ?? channel.info.contrast.max,
-            })
-
-            return {
-              id: channel.info.id,
-              loader: channel.loader,
-              enabled: setting?.enabled ?? false,
-              color: setting?.color ?? channel.info.color,
-              contrast,
-            }
-          }),
-    [morphologyChannelSettings, morphologyImage],
-  )
-  const morphologyMicrometersPerPixel = morphologyImage?.loader.units?.micrometersPerPixel
-  const boundaryLayerData = useMemo(
-    () => boundaryElementsToLayerData(boundaryElements),
-    [boundaryElements],
-  )
+    morphologyChannelSettings,
+    morphologyImage,
+    observationColorMode,
+    overviewCells,
+    selectedGenes,
+    transcriptDensityColorScale,
+    transcriptLayerState,
+    transcriptPointColorMode,
+  })
   const geneOptions = useMemo(
     () => (genePanelState.status === 'ready' ? genePanelState.genes : []),
     [genePanelState],
