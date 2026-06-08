@@ -11,7 +11,7 @@ import { LayerHudPanel } from './features/control-hud/LayerHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import { RoiHudPanel } from './features/control-hud/RoiHudPanel'
 import { TranscriptHudPanel } from './features/transcripts/TranscriptHudPanel'
-import { transcriptCapabilityLabel } from './features/transcripts/transcriptLabels'
+import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { GeneHudPanel } from './features/genes/GeneHudPanel'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
 import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
@@ -45,21 +45,12 @@ import {
 } from './features/app-shell/appRuntimeModel'
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
-  TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS,
-  TRANSCRIPT_NATIVE_DENSITY_MAX_BINS,
-  buildCellSummaryTranscriptBins,
-  isTranscriptExactManualLoadRequired,
-  maxTranscriptAggregateCount,
   normalizeTranscriptMinQv,
   normalizeTranscriptPointSize,
   parseTranscriptDensityColorScale,
   parseTranscriptDetailMode,
   parseTranscriptFeatureFilterMode,
   parseTranscriptPointColorMode,
-  retainedTranscriptLayerState,
-  transcriptAggregateFallbackMessage,
-  transcriptExactManualLoadMessage,
-  transcriptNativeAggregateMessage,
   transcriptStatusCopy,
   type TranscriptCapabilityState,
   type TranscriptLayerState,
@@ -179,11 +170,7 @@ import {
   DEFAULT_CELL_TRANSCRIPT_MIN_QV,
 } from './data/cellTranscripts'
 import {
-  TRANSCRIPT_GROUP_LIMIT,
   normalizeTranscriptExactPointLimit,
-  transcriptAggregateRequestKey,
-  planTranscriptLod,
-  transcriptViewportRequestKey,
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
 } from './data/transcriptOverlay'
@@ -268,8 +255,6 @@ export type {
   TranscriptCapabilitiesLoader,
   TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
-
-const EMPTY_GENE_LIST: readonly string[] = []
 
 export function App({
   loadDatasetOverview = defaultAppDependencies.loadDatasetOverview,
@@ -1130,534 +1115,34 @@ export function App({
     }
   }, [handleViewportChange])
 
-  useEffect(() => {
-    if (
-      loadState.status !== 'ready' ||
-      transcriptCapabilityState.status !== 'idle' ||
-      (!showTranscriptOverlay && activeControlHudTab !== 'transcripts')
-    ) {
-      return
-    }
-
-    const requestedUrl = loadState.url
-    const requestId = loadRequestId.current
-    const abortController = new AbortController()
-    const transcriptStartedAt = readTimestamp()
-    abortActiveRequest(transcriptCapabilityAbortRef)
-    transcriptCapabilityRequestId.current += 1
-    transcriptCapabilityAbortRef.current = abortController
-    queueMicrotask(() => {
-      if (transcriptCapabilityAbortRef.current === abortController) {
-        setTranscriptCapabilityState({ status: 'loading', url: requestedUrl })
-      }
-    })
-    appendDebugEvent('Transcript output check started')
-
-    void loadTranscriptCapabilities(requestedUrl, {
-      signal: abortController.signal,
-    })
-      .then((capabilities) => {
-        if (loadRequestId.current !== requestId || abortController.signal.aborted) {
-          return
-        }
-
-        setTranscriptCapabilityState({
-          status: 'ready',
-          url: requestedUrl,
-          capabilities,
-        })
-        appendDebugEvent(
-          `Transcript outputs: ${transcriptCapabilityLabel(capabilities)} (${formatElapsed(
-            transcriptStartedAt,
-          )})`,
-          { coalesceKey: 'transcript-capability' },
-        )
-      })
-      .catch((error) => {
-        if (isAbortError(error) || loadRequestId.current !== requestId) {
-          return
-        }
-
-        setTranscriptCapabilityState({
-          status: 'error',
-          url: requestedUrl,
-          error: createStructuredLoadError('Transcripts', error),
-        })
-        appendDebugEvent('Transcript output check failed', {
-          coalesceKey: 'transcript-capability',
-        })
-      })
-      .finally(() => {
-        if (transcriptCapabilityAbortRef.current === abortController) {
-          transcriptCapabilityAbortRef.current = null
-        }
-      })
-  }, [
+  useTranscriptWorkflow({
     activeControlHudTab,
-    appendDebugEvent,
-    loadState,
-    loadTranscriptCapabilities,
-    showTranscriptOverlay,
-    transcriptCapabilityState.status,
-  ])
-
-  useEffect(() => {
-    if (
-      !showTranscriptOverlay ||
-      loadState.status !== 'ready' ||
-      currentViewportDetail === null
-    ) {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestId.current += 1
-      const clearRequestId = transcriptRequestId.current
-      transcriptViewportKeyRef.current = null
-      queueMicrotask(() => {
-        if (transcriptRequestId.current === clearRequestId) {
-          setTranscriptLayerState((current) =>
-            current.status === 'idle' ? current : { status: 'idle' },
-          )
-        }
-      })
-      return
-    }
-
-    if (
-      transcriptCapabilityState.status === 'idle' ||
-      transcriptCapabilityState.status === 'loading'
-    ) {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestId.current += 1
-      const waitingRequestId = transcriptRequestId.current
-      transcriptViewportKeyRef.current = null
-      queueMicrotask(() => {
-        if (transcriptRequestId.current === waitingRequestId) {
-          setTranscriptLayerState({
-            status: 'waiting',
-            message: 'Checking transcript outputs for this dataset.',
-            visibleTranscriptEstimate,
-          })
-        }
-      })
-      return
-    }
-
-    if (transcriptCapabilityState.status === 'error') {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestId.current += 1
-      const errorRequestId = transcriptRequestId.current
-      transcriptViewportKeyRef.current = null
-      queueMicrotask(() => {
-        if (transcriptRequestId.current === errorRequestId) {
-          setTranscriptLayerState({
-            status: 'error',
-            url: loadState.url,
-            error: transcriptCapabilityState.error,
-          })
-        }
-      })
-      return
-    }
-
-    const featureNames =
-      effectiveTranscriptFeatureFilterMode === 'selected'
-        ? selectedGenes
-        : EMPTY_GENE_LIST
-    const aggregateFeatureNames = EMPTY_GENE_LIST
-    const hasSelectedFeatureFilter =
-      effectiveTranscriptFeatureFilterMode !== 'selected' || featureNames.length > 0
-    const plan = planTranscriptLod(currentViewportDetail, {
-      detailMode: transcriptDetailMode,
-      visibleTranscriptEstimate,
-      exactLimit: transcriptExactPointLimit,
-      hasRawParquet: transcriptCapabilityState.capabilities.rawParquet,
-      hasNativeZarr: transcriptCapabilityState.capabilities.nativeZarr,
-      hasSelectedFeatureFilter,
-    })
-
-    if (plan.kind === 'native-zarr') {
-      const maxBins = TRANSCRIPT_NATIVE_DENSITY_MAX_BINS
-      const requestKey = transcriptAggregateRequestKey(
-        loadState.url,
-        currentViewportDetail.bbox,
-        {
-          mode: plan.mode,
-          featureNames: aggregateFeatureNames,
-          maxBins,
-        },
-      )
-
-      if (requestKey === transcriptViewportKeyRef.current) {
-        return
-      }
-
-      abortActiveRequest(transcriptAbortRef)
-      const requestId = transcriptRequestId.current + 1
-      const abortController = new AbortController()
-      const transcriptStartedAt = readTimestamp()
-      transcriptRequestId.current = requestId
-      transcriptAbortRef.current = abortController
-      transcriptViewportKeyRef.current = requestKey
-      queueMicrotask(() => {
-        if (transcriptRequestId.current === requestId) {
-          setTranscriptLayerState((current) => {
-            const previousLayer = retainedTranscriptLayerState(current)
-
-            return {
-              status: 'loading',
-              url: loadState.url,
-              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-              ...(previousLayer === undefined ? {} : { previousLayer }),
-            }
-          })
-        }
-      })
-      appendDebugEvent('Native transcript aggregate query started', {
-        coalesceKey: 'transcript-query',
-      })
-
-      void loadTranscriptAggregates(loadState.url, currentViewportDetail.bbox, {
-        signal: abortController.signal,
-        mode: plan.mode,
-        featureNames: aggregateFeatureNames,
-        maxBins,
-      })
-        .then((result) => {
-          if (transcriptRequestId.current !== requestId) {
-            return
-          }
-
-          const durationMs = Math.max(0, readTimestamp() - transcriptStartedAt)
-
-          setTranscriptLayerState({
-            status: 'aggregate',
-            source: result.source,
-            mode: plan.mode,
-            bins: result.bins,
-            message: transcriptNativeAggregateMessage({
-              mode: plan.mode,
-              selectedFeatureCount: result.selectedFeatureNames.length,
-              binCount: result.bins.length,
-            }),
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            ...(result.scaleMax === undefined ? {} : { scaleMax: result.scaleMax }),
-            durationMs,
-          })
-          appendDebugEvent(
-            `Native transcript aggregate ready: ${result.bins.length.toLocaleString()} squares in ${formatElapsed(
-              transcriptStartedAt,
-            )}`,
-            { coalesceKey: 'transcript-query' },
-          )
-        })
-        .catch((error) => {
-          if (isAbortError(error) || transcriptRequestId.current !== requestId) {
-            return
-          }
-
-          transcriptViewportKeyRef.current = null
-          setTranscriptLayerState({
-            status: 'error',
-            url: loadState.url,
-            error: createStructuredLoadError('Transcripts', error),
-          })
-          appendDebugEvent('Native transcript aggregate query failed', {
-            coalesceKey: 'transcript-query',
-          })
-        })
-        .finally(() => {
-          if (transcriptAbortRef.current === abortController) {
-            transcriptAbortRef.current = null
-          }
-        })
-
-      return () => {
-        if (transcriptAbortRef.current === abortController) {
-          abortActiveRequest(transcriptAbortRef)
-        }
-      }
-    }
-
-    if (
-      (plan.kind === 'waiting' || plan.kind === 'unavailable') &&
-      !transcriptCapabilityState.capabilities.nativeZarr &&
-      transcriptDetailMode !== 'exact' &&
-      visibleTranscriptEstimate > 0
-    ) {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestId.current += 1
-      const aggregateRequestId = transcriptRequestId.current
-      const fallbackMode = 'density'
-      const bins = buildCellSummaryTranscriptBins(
-        overviewCells,
-        currentViewportDetail.bbox,
-        fallbackMode,
-      )
-      transcriptViewportKeyRef.current = null
-      queueMicrotask(() => {
-        if (transcriptRequestId.current === aggregateRequestId) {
-          setTranscriptLayerState({
-            status: 'aggregate',
-            source: 'cell-summary',
-            mode: fallbackMode,
-            bins,
-            message: transcriptAggregateFallbackMessage({
-              mode: fallbackMode,
-              featureFilterMode: effectiveTranscriptFeatureFilterMode,
-              selectedFeatureCount: featureNames.length,
-            }),
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            scaleMax: maxTranscriptAggregateCount(bins),
-          })
-        }
-      })
-      return
-    }
-
-    if (plan.kind === 'waiting') {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestId.current += 1
-      const waitingRequestId = transcriptRequestId.current
-      transcriptViewportKeyRef.current = null
-      queueMicrotask(() => {
-        if (transcriptRequestId.current === waitingRequestId) {
-          setTranscriptLayerState({
-            status: 'waiting',
-            message: plan.message,
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-          })
-        }
-      })
-      return
-    }
-
-    if (plan.kind === 'unavailable') {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestId.current += 1
-      const unavailableRequestId = transcriptRequestId.current
-      transcriptViewportKeyRef.current = null
-      queueMicrotask(() => {
-        if (transcriptRequestId.current === unavailableRequestId) {
-          setTranscriptLayerState({
-            status: 'unavailable',
-            message: plan.message,
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-          })
-        }
-      })
-      return
-    }
-
-    const requestKey = transcriptViewportRequestKey(
-      loadState.url,
-      currentViewportDetail.bbox,
-      {
-        minQv: transcriptMinQv,
-        geneOnly: transcriptGeneOnly,
-        featureNames,
-        pointLimit: transcriptExactPointLimit,
-      },
-    )
-
-    if (
-      isTranscriptExactManualLoadRequired(
-        plan.visibleTranscriptEstimate,
-        transcriptExactPointLimit,
-      ) &&
-      manualTranscriptExactRequestKey !== requestKey
-    ) {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestId.current += 1
-      const waitingRequestId = transcriptRequestId.current
-      transcriptViewportKeyRef.current = null
-      queueMicrotask(() => {
-        if (transcriptRequestId.current === waitingRequestId) {
-          setTranscriptLayerState({
-            status: 'waiting',
-            message: transcriptExactManualLoadMessage(
-              plan.visibleTranscriptEstimate,
-              transcriptExactPointLimit,
-            ),
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            exactLoadRequestKey: requestKey,
-            exactLoadEstimate: plan.visibleTranscriptEstimate,
-          })
-        }
-      })
-      appendDebugEvent('Transcript exact query waiting for manual viewport load', {
-        coalesceKey: 'transcript-query',
-      })
-      return
-    }
-
-    if (requestKey === transcriptViewportKeyRef.current) {
-      return
-    }
-
-    abortActiveRequest(transcriptAbortRef)
-    const requestId = transcriptRequestId.current + 1
-    const abortController = new AbortController()
-    const transcriptStartedAt = readTimestamp()
-    transcriptRequestId.current = requestId
-    transcriptAbortRef.current = abortController
-    transcriptViewportKeyRef.current = requestKey
-    queueMicrotask(() => {
-      if (transcriptRequestId.current === requestId) {
-        setTranscriptLayerState((current) => {
-          const previousLayer = retainedTranscriptLayerState(current)
-
-          return {
-            status: 'loading',
-            url: loadState.url,
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            ...(previousLayer === undefined ? {} : { previousLayer }),
-          }
-        })
-      }
-    })
-    appendDebugEvent(
-      `Transcript exact query started: ${plan.visibleTranscriptEstimate.toLocaleString()} estimated`,
-      { coalesceKey: 'transcript-query' },
-    )
-
-    let didExactQueryTimeOut = false
-    let exactQueryTimeout: number | null = null
-    const startTimeout = window.setTimeout(() => {
-      exactQueryTimeout = window.setTimeout(() => {
-        if (transcriptRequestId.current !== requestId) {
-          return
-        }
-
-        didExactQueryTimeOut = true
-        transcriptViewportKeyRef.current = null
-
-        if (transcriptAbortRef.current === abortController) {
-          transcriptAbortRef.current = null
-        }
-
-        abortController.abort()
-        setTranscriptLayerState({
-          status: 'waiting',
-          message:
-            'Exact transcript loading exceeded 12 seconds. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.',
-          visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-        })
-        appendDebugEvent('Transcript exact query timed out', {
-          coalesceKey: 'transcript-query',
-        })
-      }, TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS)
-
-      void loadTranscriptViewport(loadState.url, currentViewportDetail.bbox, {
-        signal: abortController.signal,
-        pointLimit: transcriptExactPointLimit,
-        groupLimit: TRANSCRIPT_GROUP_LIMIT,
-        minQv: transcriptMinQv,
-        geneOnly: transcriptGeneOnly,
-        featureNames,
-      })
-        .then((result) => {
-          if (didExactQueryTimeOut || transcriptRequestId.current !== requestId) {
-            return
-          }
-
-          if (exactQueryTimeout !== null) {
-            window.clearTimeout(exactQueryTimeout)
-            exactQueryTimeout = null
-          }
-
-          const durationMs = Math.max(0, readTimestamp() - transcriptStartedAt)
-
-          if (result.hitPointLimit) {
-            transcriptViewportKeyRef.current = null
-            setTranscriptLayerState({
-              status: 'waiting',
-              message: `Exact transcript viewport exceeded the ${transcriptExactPointLimit.toLocaleString()} point budget. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.`,
-              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            })
-            appendDebugEvent('Transcript exact query exceeded point budget', {
-              coalesceKey: 'transcript-query',
-            })
-            return
-          }
-
-          setTranscriptLayerState({
-            status: 'ready',
-            url: loadState.url,
-            points: result.points,
-            groups: result.groups,
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            hitPointLimit: result.hitPointLimit,
-            durationMs,
-          })
-          appendDebugEvent(
-            `Transcript exact query ready: ${result.points.length.toLocaleString()} points in ${formatElapsed(
-              transcriptStartedAt,
-            )}`,
-            { coalesceKey: 'transcript-query' },
-          )
-        })
-        .catch((error) => {
-          if (
-            didExactQueryTimeOut ||
-            isAbortError(error) ||
-            transcriptRequestId.current !== requestId
-          ) {
-            return
-          }
-
-          if (exactQueryTimeout !== null) {
-            window.clearTimeout(exactQueryTimeout)
-            exactQueryTimeout = null
-          }
-
-          setTranscriptLayerState({
-            status: 'error',
-            url: loadState.url,
-            error: createStructuredLoadError('Transcripts', error),
-          })
-          appendDebugEvent('Transcript query failed', {
-            coalesceKey: 'transcript-query',
-          })
-        })
-        .finally(() => {
-          if (exactQueryTimeout !== null) {
-            window.clearTimeout(exactQueryTimeout)
-            exactQueryTimeout = null
-          }
-
-          if (transcriptAbortRef.current === abortController) {
-            transcriptAbortRef.current = null
-          }
-        })
-    }, 220)
-
-    return () => {
-      window.clearTimeout(startTimeout)
-      if (exactQueryTimeout !== null) {
-        window.clearTimeout(exactQueryTimeout)
-      }
-
-      if (transcriptAbortRef.current === abortController) {
-        abortActiveRequest(transcriptAbortRef)
-      }
-    }
-  }, [
     appendDebugEvent,
     currentViewportDetail,
     effectiveTranscriptFeatureFilterMode,
+    loadRequestIdRef: loadRequestId,
     loadState,
     loadTranscriptAggregates,
+    loadTranscriptCapabilities,
     loadTranscriptViewport,
     manualTranscriptExactRequestKey,
     overviewCells,
     selectedGenes,
+    setTranscriptCapabilityState,
+    setTranscriptLayerState,
     showTranscriptOverlay,
+    transcriptAbortRef,
+    transcriptCapabilityAbortRef,
+    transcriptCapabilityRequestIdRef: transcriptCapabilityRequestId,
     transcriptCapabilityState,
     transcriptDetailMode,
     transcriptExactPointLimit,
     transcriptGeneOnly,
     transcriptMinQv,
+    transcriptRequestIdRef: transcriptRequestId,
+    transcriptViewportKeyRef,
     visibleTranscriptEstimate,
-  ])
+  })
 
   useEffect(() => {
     if (typeof window === 'undefined') {
