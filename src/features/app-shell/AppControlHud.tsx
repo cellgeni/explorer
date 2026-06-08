@@ -4,27 +4,20 @@ import type {
   ViewerCoordinateUnit,
   ViewerTranscriptHoverDetail,
 } from '../../components/ViewerCore'
-import { scaffoldDeckLayerCount } from '../../components/viewerCoreModel'
 import type {
   AnalysisEmbedding,
   AnalysisEmbeddingKind,
 } from '../../data/analysisEmbeddings'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { PerformanceBudget } from '../../data/performanceBudget'
-import {
-  MAX_BOUNDARY_VIEWPORT_CELL_LIMIT,
-  normalizeBoundaryCellLimit,
-} from '../../rendering/boundaryViewport'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
-import {
-  bundledDeckVersion,
-  type GeneExpressionColorScale,
-  type GeneExpressionScoreMode,
-  type TranscriptDensityColorScale,
-  type TranscriptPointColorMode,
+import type {
+  GeneExpressionColorScale,
+  GeneExpressionScoreMode,
+  OverviewCellDatum,
+  TranscriptDensityColorScale,
+  TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
-import { percentToOpacity } from '../../rendering/layerOpacity'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import type { AnnotationGroupOption } from '../../data/datasetAnnotations'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import type {
@@ -46,8 +39,6 @@ import type {
 } from '../cells/cellDetailModel'
 import { CellHudPanel } from '../control-hud/CellHudPanel'
 import { ControlHudShell } from '../control-hud/ControlHudShell'
-import { DatasetHudPanel } from '../control-hud/DatasetHudPanel'
-import { LayerHudPanel } from '../control-hud/LayerHudPanel'
 import { RoiHudPanel } from '../control-hud/RoiHudPanel'
 import type {
   CellFeatureMatrixCapabilityState,
@@ -74,6 +65,8 @@ import type {
   TranscriptCapabilityState,
   TranscriptLayerState,
 } from '../transcripts/transcriptLayerModel'
+import { AppDatasetHudPanel } from './AppDatasetHudPanel'
+import { AppLayerHudPanel } from './AppLayerHudPanel'
 
 interface AppControlHudProps {
   readonly activeControlHudTab: ControlHudTab
@@ -430,130 +423,53 @@ export function AppControlHud({
         })
       }}
     >
-      <DatasetHudPanel
+      <AppDatasetHudPanel
         active={activeControlHudTab === 'dataset'}
-        datasetInputId={controlIds.datasetInputId}
-        morphologyInputId={controlIds.morphologyInputId}
-        boundaryLimitInputId={controlIds.boundaryLimitInputId}
-        datasetUrl={datasetUrl}
-        shouldLoadMorphology={shouldLoadMorphology}
-        boundaryCellLimit={boundaryCellLimit}
-        maxBoundaryCellLimit={MAX_BOUNDARY_VIEWPORT_CELL_LIMIT}
-        isLoading={isLoading}
-        diagnosticsState={diagnosticsState}
-        cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
         activeErrors={activeErrors}
+        appendDebugEvent={appendDebugEvent}
+        boundaryCellLimit={boundaryCellLimit}
+        cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
+        controlIds={controlIds}
+        datasetUrl={datasetUrl}
         debugLog={debugLog}
-        onSubmit={handleDatasetSubmit}
-        onDatasetUrlChange={setDatasetUrl}
-        onShouldLoadMorphologyChange={(checked) => {
-          setShouldLoadMorphology(checked)
-          appendDebugEvent(
-            checked ? 'Morphology image enabled' : 'Morphology image disabled',
-          )
-        }}
-        onBoundaryCellLimitChange={(value) => {
-          const nextLimit = normalizeBoundaryCellLimit(value)
-          setBoundaryCellLimit(nextLimit)
-          appendDebugEvent(`Boundary limit: ${nextLimit.toLocaleString()}`, {
-            coalesceKey: 'boundary-limit',
-          })
-        }}
-        onRunDatasetDiagnostics={() => {
-          void handleRunDatasetDiagnostics()
-        }}
-        onDownloadDiagnostics={handleDownloadDiagnostics}
-        onClearDebugLog={() => {
-          setDebugLog([])
-        }}
+        diagnosticsState={diagnosticsState}
+        handleDatasetSubmit={handleDatasetSubmit}
+        handleDownloadDiagnostics={handleDownloadDiagnostics}
+        handleRunDatasetDiagnostics={handleRunDatasetDiagnostics}
+        isLoading={isLoading}
+        setBoundaryCellLimit={setBoundaryCellLimit}
+        setDatasetUrl={setDatasetUrl}
+        setDebugLog={setDebugLog}
+        setShouldLoadMorphology={setShouldLoadMorphology}
+        shouldLoadMorphology={shouldLoadMorphology}
       />
 
-      <LayerHudPanel
+      <AppLayerHudPanel
         active={activeControlHudTab === 'layers'}
-        scaffoldDeckLayerCount={scaffoldDeckLayerCount}
-        bundledDeckVersion={bundledDeckVersion}
-        performanceBudget={performanceBudget}
-        imageOpacityInputId={controlIds.imageOpacityInputId}
-        cellFillOpacityInputId={controlIds.cellFillOpacityInputId}
-        cellBoundaryOpacityInputId={controlIds.cellBoundaryOpacityInputId}
-        coordinateUnitInputId={controlIds.coordinateUnitInputId}
-        measurementModeInputId={controlIds.measurementModeInputId}
-        measurementUnitInputId={controlIds.measurementUnitInputId}
-        imageLayerOpacity={imageLayerOpacity}
-        cellFillOpacity={cellFillOpacity}
+        appendDebugEvent={appendDebugEvent}
+        autoContrastChannelIds={autoContrastChannelIds}
         cellBoundaryOpacity={cellBoundaryOpacity}
+        cellFillOpacity={cellFillOpacity}
+        controlIds={controlIds}
         coordinateUnit={coordinateUnit}
+        handleAutoContrast={handleAutoContrast}
+        handleMagicLensLeave={handleMagicLensLeave}
+        imageLayerOpacity={imageLayerOpacity}
         measurementEnabled={measurementEnabled}
         measurementUnit={measurementUnit}
-        morphologyChannels={morphologyChannels}
         morphologyChannelSettings={morphologyChannelSettings}
-        autoContrastChannelIds={autoContrastChannelIds}
-        onImageLayerOpacityPercentChange={(nextPercent) => {
-          setImageLayerOpacity(percentToOpacity(nextPercent))
-          appendDebugEvent(`Image opacity: ${nextPercent}%`, {
-            coalesceKey: 'image-opacity',
-          })
-        }}
-        onCellFillOpacityPercentChange={(nextPercent) => {
-          setCellFillOpacity(percentToOpacity(nextPercent))
-          appendDebugEvent(`Cell fill opacity: ${nextPercent}%`, {
-            coalesceKey: 'cell-fill-opacity',
-          })
-        }}
-        onCellBoundaryOpacityPercentChange={(nextPercent) => {
-          setCellBoundaryOpacity(percentToOpacity(nextPercent))
-          appendDebugEvent(`Cell boundary opacity: ${nextPercent}%`, {
-            coalesceKey: 'cell-boundary-opacity',
-          })
-        }}
-        onCoordinateUnitChange={(nextUnit) => {
-          if (coordinateUnit === nextUnit) {
-            return
-          }
-
-          setCoordinateUnit(nextUnit)
-          appendDebugEvent(`Mouse coordinates: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
-            coalesceKey: 'coordinate-unit',
-          })
-        }}
-        onMeasurementEnabledChange={(nextEnabled) => {
-          if (measurementEnabled === nextEnabled) {
-            return
-          }
-
-          setMeasurementEnabled(nextEnabled)
-
-          if (nextEnabled) {
-            setRoiMode('idle')
-            setMagicLensActive(false)
-            handleMagicLensLeave()
-          } else {
-            setMeasurementResetKey((current) => current + 1)
-          }
-
-          appendDebugEvent(
-            nextEnabled ? 'Distance measure enabled' : 'Distance measure disabled',
-            { coalesceKey: 'measurement-mode' },
-          )
-        }}
-        onMeasurementUnitChange={(nextUnit) => {
-          if (measurementUnit === nextUnit) {
-            return
-          }
-
-          setMeasurementUnit(nextUnit)
-          appendDebugEvent(`Measure unit: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
-            coalesceKey: 'measurement-unit',
-          })
-        }}
-        onClearMeasurement={() => {
-          setMeasurementResetKey((current) => current + 1)
-          appendDebugEvent('Distance measure cleared', {
-            coalesceKey: 'measurement-clear',
-          })
-        }}
-        onAutoContrast={handleAutoContrast}
-        onUpdateMorphologyChannel={updateMorphologyChannel}
+        morphologyChannels={morphologyChannels}
+        performanceBudget={performanceBudget}
+        setCellBoundaryOpacity={setCellBoundaryOpacity}
+        setCellFillOpacity={setCellFillOpacity}
+        setCoordinateUnit={setCoordinateUnit}
+        setImageLayerOpacity={setImageLayerOpacity}
+        setMagicLensActive={setMagicLensActive}
+        setMeasurementEnabled={setMeasurementEnabled}
+        setMeasurementResetKey={setMeasurementResetKey}
+        setMeasurementUnit={setMeasurementUnit}
+        setRoiMode={setRoiMode}
+        updateMorphologyChannel={updateMorphologyChannel}
       />
 
       <GeneHudPanel
