@@ -663,19 +663,27 @@ describe('XeniumDataset', () => {
         ['Slc17a7', 'Gad1', 'Gad1'],
         { limit: 100 },
       ),
-    ).resolves.toEqual({
-      genes: ['Gad1', 'Slc17a7'],
-      maxCount: 5,
-      cells: [
-        {
-          id: cellId,
-          position: { x: micrometers(2), y: micrometers(3) },
-          transcriptCount: 25,
-          cellArea: 40,
-          count: 5,
+    ).resolves.toEqual(
+      expect.objectContaining({
+        genes: ['Gad1', 'Slc17a7'],
+        maxCount: 5,
+        cells: [
+          {
+            id: cellId,
+            position: { x: micrometers(2), y: micrometers(3) },
+            transcriptCount: 25,
+            cellArea: 40,
+            count: 5,
+          },
+        ],
+        timing: {
+          viewportCellsMs: expect.any(Number),
+          matrixReadMs: expect.any(Number),
+          scoreCellsMs: expect.any(Number),
+          totalMs: expect.any(Number),
         },
-      ],
-    })
+      }),
+    )
 
     expect(conn.preparedSql[0]).toContain('SELECT cell_id')
     expect(conn.preparedSql[0]).toContain('ORDER BY file_row_number')

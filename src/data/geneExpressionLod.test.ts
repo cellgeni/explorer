@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers } from './coords'
 import {
+  GENE_EXPRESSION_EXACT_CELL_LIMIT,
   GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT,
   GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
+  GENE_EXPRESSION_SAMPLE_CELL_LIMIT,
   geneExpressionRequestKey,
   planGeneExpressionLod,
 } from './geneExpressionLod'
@@ -94,6 +96,29 @@ describe('gene expression LOD planner', () => {
     })
   })
 
+  it('uses exact visible expression in auto mode up to the exact cap', () => {
+    expect(
+      planGeneExpressionLod(
+        detail({
+          visibleCellCount: GENE_EXPRESSION_EXACT_CELL_LIMIT,
+          viewState: { target: [150, -250, 0], zoom: 0 },
+        }),
+        {
+          detailMode: 'auto',
+          slideBbox,
+          totalCellCount: 60_000,
+        },
+      ),
+    ).toEqual({
+      kind: 'request',
+      mode: 'exact',
+      bbox: viewportBbox,
+      cellLimit: GENE_EXPRESSION_EXACT_CELL_LIMIT,
+      sampleStride: 1,
+      sourceCellCount: GENE_EXPRESSION_EXACT_CELL_LIMIT,
+    })
+  })
+
   it('keeps whole-slide request keys independent from pan and zoom buckets', () => {
     const plan = planGeneExpressionLod(
       detail({
@@ -103,7 +128,7 @@ describe('gene expression LOD planner', () => {
       {
         detailMode: 'auto',
         slideBbox,
-        totalCellCount: 60_000,
+        totalCellCount: 120_000,
       },
     )
 
@@ -134,16 +159,16 @@ describe('gene expression LOD planner', () => {
     )
   })
 
-  it('uses padded sampled viewport requests between overview and exact modes', () => {
+  it('uses padded sampled viewport requests above the exact cap outside overview zooms', () => {
     const plan = planGeneExpressionLod(
       detail({
-        visibleCellCount: 12_000,
+        visibleCellCount: 75_000,
         viewState: { target: [150, -250, 0], zoom: 0 },
       }),
       {
         detailMode: 'auto',
         slideBbox,
-        totalCellCount: 60_000,
+        totalCellCount: 120_000,
       },
     )
 
@@ -156,9 +181,9 @@ describe('gene expression LOD planner', () => {
         minY: micrometers(160),
         maxY: micrometers(440),
       },
-      cellLimit: 5_000,
-      sampleStride: 3,
-      sourceCellCount: 12_000,
+      cellLimit: GENE_EXPRESSION_SAMPLE_CELL_LIMIT,
+      sampleStride: 5,
+      sourceCellCount: 75_000,
     })
   })
 })

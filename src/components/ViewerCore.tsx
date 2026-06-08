@@ -3,14 +3,17 @@ import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import {
+  createGeneExpressionCellStyleIndex,
   createOverviewLayers,
   createOverviewViewState,
-  expressionCellsToBoundaryLayerData,
   spatialOverviewView,
   styleCellBoundariesByCells,
+  styleCellBoundariesByGeneExpression,
+  styleCellsByGeneExpression,
 } from '../rendering/deckLayers'
 import {
-  aggregateExpressionCells,
+  EXPRESSION_AGGREGATION_BIN_MICROMETERS,
+  EXPRESSION_AGGREGATION_EXACT_ZOOM,
   estimateOverviewCellCountInBbox,
   overviewCellsExtentBbox,
   overviewCellsInBbox,
@@ -424,12 +427,28 @@ function ViewerSurface({
           ),
     [annotationStyleColors, boundaries.length, observationColorMode, visibleCells],
   )
-  const displayExpressionCells = useMemo(
+  const visibleExpressionCells = useMemo(
     () =>
-      aggregateExpressionCells(expressionCells, viewState, {
-        ...(viewportBbox === null ? {} : { bbox: viewportBbox }),
-      }),
-    [expressionCells, viewState, viewportBbox],
+      boundaries.length === 0 || viewportBbox === null
+        ? expressionCells
+        : overviewCellsInBbox(expressionCells, viewportBbox),
+    [boundaries.length, expressionCells, viewportBbox],
+  )
+  const shouldUseExpressionPointBins = viewState.zoom < EXPRESSION_AGGREGATION_EXACT_ZOOM
+  const geneExpressionPointStyleIndex = useMemo(
+    () =>
+      createGeneExpressionCellStyleIndex(
+        expressionCells,
+        shouldUseExpressionPointBins
+          ? { binMicrometers: EXPRESSION_AGGREGATION_BIN_MICROMETERS }
+          : {},
+      ),
+    [expressionCells, shouldUseExpressionPointBins],
+  )
+  const expressionStyledRenderCells = useMemo(
+    () =>
+      styleCellsByGeneExpression(renderCells, geneExpressionPointStyleIndex),
+    [geneExpressionPointStyleIndex, renderCells],
   )
   const cellById = useMemo(() => {
     const nextCellById = new Map<string, OverviewCellDatum>()
@@ -441,19 +460,18 @@ function ViewerSurface({
     return nextCellById
   }, [cells])
   const styledBoundaries = useMemo(
-    () => styleCellBoundariesByCells(boundaries, boundaryStyleCells),
-    [boundaries, boundaryStyleCells],
-  )
-  const expressionBoundaryPolygons = useMemo(
-    () => expressionCellsToBoundaryLayerData(styledBoundaries, displayExpressionCells),
-    [displayExpressionCells, styledBoundaries],
+    () =>
+      styleCellBoundariesByGeneExpression(
+        styleCellBoundariesByCells(boundaries, boundaryStyleCells),
+        visibleExpressionCells,
+      ),
+    [boundaries, boundaryStyleCells, visibleExpressionCells],
   )
   const layers = useMemo(
     () =>
-      createOverviewLayers(renderCells, styledBoundaries, displayExpressionCells, {
+      createOverviewLayers(expressionStyledRenderCells, styledBoundaries, {
         cellFillOpacity,
         cellBoundaryOpacity,
-        expressionBoundaryPolygons,
         transcriptAggregateBins,
         transcriptPoints,
         transcriptOpacity,
@@ -462,9 +480,7 @@ function ViewerSurface({
     [
       cellBoundaryOpacity,
       cellFillOpacity,
-      expressionBoundaryPolygons,
-      displayExpressionCells,
-      renderCells,
+      expressionStyledRenderCells,
       styledBoundaries,
       transcriptAggregateBins,
       transcriptOpacity,

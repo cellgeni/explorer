@@ -96,6 +96,14 @@ export interface GeneExpressionBatch {
   readonly cells: readonly GeneExpressionCell[]
   readonly genes: readonly string[]
   readonly maxCount: number
+  readonly timing?: GeneExpressionBatchTiming
+}
+
+export interface GeneExpressionBatchTiming {
+  readonly viewportCellsMs: number
+  readonly matrixReadMs: number
+  readonly scoreCellsMs: number
+  readonly totalMs: number
 }
 
 export interface GeneExpressionQueryOptions {
@@ -600,6 +608,7 @@ LIMIT ?
     genes: readonly string[],
     options: GeneExpressionQueryOptions = {},
   ): Promise<GeneExpressionBatch> {
+    const totalStartedAt = Date.now()
     const selectedGenes = normalizeGeneList(genes)
 
     if (selectedGenes.length === 0) {
@@ -613,7 +622,9 @@ LIMIT ?
     const limit = options.limit ?? 5_000
     const sampleStride = normalizeSampleStride(options.sampleStride)
     throwIfAborted(options.signal)
+    const viewportCellsStartedAt = Date.now()
     const viewportCells = await this.cellsForBbox(bbox, limit, sampleStride)
+    const viewportCellsMs = elapsedMs(viewportCellsStartedAt)
     throwIfAborted(options.signal)
 
     if (viewportCells.length === 0) {
@@ -621,15 +632,24 @@ LIMIT ?
         cells: [],
         genes: selectedGenes,
         maxCount: 0,
+        timing: {
+          viewportCellsMs,
+          matrixReadMs: 0,
+          scoreCellsMs: 0,
+          totalMs: elapsedMs(totalStartedAt),
+        },
       }
     }
 
+    const matrixReadStartedAt = Date.now()
     const matrix = await this.geneExpressionMatrixReader(
       this.urlFor('cell_feature_matrix.zarr.zip'),
       viewportCells.map((cell) => cell.id),
       selectedGenes,
     )
+    const matrixReadMs = elapsedMs(matrixReadStartedAt)
     throwIfAborted(options.signal)
+    const scoreCellsStartedAt = Date.now()
     const selectedGeneSet = new Set(selectedGenes)
     const cells: GeneExpressionCell[] = []
     let maxCount = 0
@@ -653,11 +673,18 @@ LIMIT ?
       })
       maxCount = Math.max(maxCount, count)
     }
+    const scoreCellsMs = elapsedMs(scoreCellsStartedAt)
 
     return {
       cells,
       genes: selectedGenes,
       maxCount,
+      timing: {
+        viewportCellsMs,
+        matrixReadMs,
+        scoreCellsMs,
+        totalMs: elapsedMs(totalStartedAt),
+      },
     }
   }
 
@@ -881,6 +908,10 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw abortError(signal)
   }
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.max(0, Date.now() - startedAt)
 }
 
 function abortError(signal: AbortSignal): Error {

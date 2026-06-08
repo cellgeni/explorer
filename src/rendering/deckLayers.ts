@@ -81,7 +81,6 @@ export interface TranscriptAggregateDatum {
 export interface OverviewLayerOptions {
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
-  readonly expressionBoundaryPolygons?: readonly CellBoundaryDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
   readonly transcriptOpacity?: number
@@ -130,11 +129,32 @@ export interface GeneExpressionLayerDataOptions {
   readonly scaleMax?: number
 }
 
+export interface GeneExpressionCellStyleOptions {
+  readonly binMicrometers?: number
+}
+
+export interface GeneExpressionCellStyleIndex {
+  readonly expressionByCellId: ReadonlyMap<string, OverviewCellDatum>
+  readonly expressionByBinKey?: ReadonlyMap<string, OverviewCellDatum>
+  readonly binMicrometers?: number
+}
+
 export interface TranscriptAggregateLayerDataOptions {
   readonly scaleMax?: number
 }
 
 type ColorStop = readonly [number, number, number, number]
+
+interface GeneExpressionBinStyle {
+  count: number
+  maxAlpha: number
+  sumRed: number
+  sumGreen: number
+  sumBlue: number
+  sumExpressionCount: number
+  hasExpressionCount: boolean
+  expressionGenes: readonly string[] | undefined
+}
 
 export const DEFAULT_GENE_EXPRESSION_COLOR_SCALE: GeneExpressionColorScale = 'plasma'
 export const DEFAULT_GENE_EXPRESSION_SCORE_MODE: GeneExpressionScoreMode = 'sum'
@@ -270,7 +290,6 @@ export const bundledDeckVersion = deckVersion
 export function createOverviewLayers(
   cells: readonly OverviewCellDatum[],
   boundaries: readonly CellBoundaryDatum[] = [],
-  expressionCells: readonly OverviewCellDatum[] = [],
   options: OverviewLayerOptions = {},
 ): LayersList {
   const cellFillOpacity = normalizeLayerOpacity(
@@ -279,7 +298,6 @@ export function createOverviewLayers(
   const cellBoundaryOpacity = normalizeLayerOpacity(
     options.cellBoundaryOpacity ?? DEFAULT_LAYER_OPACITY,
   )
-  const expressionBoundaryPolygons = options.expressionBoundaryPolygons ?? []
   const transcriptAggregateBins = options.transcriptAggregateBins ?? []
   const transcriptDensityBins = transcriptAggregateBins.filter(
     (bin) => bin.glyphType !== 'feature-circle',
@@ -288,7 +306,6 @@ export function createOverviewLayers(
     (bin) => bin.glyphType === 'feature-circle',
   )
   const transcriptPoints = options.transcriptPoints ?? []
-  const hasExpressionPolygons = expressionBoundaryPolygons.length > 0
   const pointCells = cellsWithoutVisibleBoundaries(cells, boundaries)
   const cellPointLayer = new ScatterplotLayer<OverviewCellDatum>({
     id: 'cells-overview-scatter',
@@ -337,55 +354,6 @@ export function createOverviewLayers(
   }
 
   layers.push(cellPointLayer)
-
-  if (expressionCells.length > 0 && !hasExpressionPolygons) {
-    layers.push(
-      new ScatterplotLayer<OverviewCellDatum>({
-        id: 'gene-expression-scatter',
-        data: expressionCells,
-        pickable: false,
-        radiusUnits: 'common',
-        radiusMinPixels: 3,
-        radiusMaxPixels: 18,
-        stroked: true,
-        filled: false,
-        lineWidthUnits: 'pixels',
-        lineWidthMinPixels: 1.5,
-        opacity: 1,
-        getPosition: (cell) => cell.position,
-        getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
-        getLineColor: (cell) =>
-          colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
-        getLineWidth: 1.5,
-        updateTriggers: {
-          getLineColor: [cellBoundaryOpacity],
-        },
-      }),
-    )
-  }
-
-  if (expressionBoundaryPolygons.length > 0) {
-    layers.push(
-      new PolygonLayer<CellBoundaryDatum>({
-        id: 'gene-expression-polygons',
-        data: expressionBoundaryPolygons,
-        pickable: false,
-        stroked: true,
-        filled: true,
-        lineWidthUnits: 'pixels',
-        lineWidthMinPixels: 1,
-        opacity: 1,
-        getPolygon: (cell) => cell.polygon,
-        getFillColor: (cell) => colorWithOpacity(cell.fillColor, cellFillOpacity),
-        getLineColor: (cell) => colorWithOpacity(cell.lineColor, cellBoundaryOpacity),
-        getLineWidth: 1,
-        updateTriggers: {
-          getFillColor: [cellFillOpacity],
-          getLineColor: [cellBoundaryOpacity],
-        },
-      }),
-    )
-  }
 
   if (transcriptDensityBins.length > 0) {
     const transcriptOpacity = normalizeLayerOpacity(
@@ -844,7 +812,7 @@ export function boundaryElementsToLayerData(
       id: element.id,
       polygon: ring.map((point) => [point.x, -point.y, 0]),
       fillColor: [32, 102, 83, 34],
-      lineColor: [246, 242, 232, 210],
+      lineColor: [32, 102, 83, 190],
     })
   }
 
@@ -880,12 +848,172 @@ export function styleCellBoundariesByCells(
   })
 }
 
-export function expressionCellsToBoundaryLayerData(
+export function styleCellsByGeneExpression(
+  cells: readonly OverviewCellDatum[],
+  expressionSource:
+    | readonly OverviewCellDatum[]
+    | GeneExpressionCellStyleIndex,
+  options: GeneExpressionCellStyleOptions = {},
+): readonly OverviewCellDatum[] {
+  if (cells.length === 0) {
+    return cells
+  }
+
+  const styleIndex = isOverviewCellDatumArray(expressionSource)
+    ? createGeneExpressionCellStyleIndex(expressionSource, options)
+    : expressionSource
+
+  if (
+    styleIndex.expressionByCellId.size === 0 &&
+    (styleIndex.expressionByBinKey?.size ?? 0) === 0
+  ) {
+    return cells
+  }
+
+  let hasExpressionMatch = false
+  const styledCells = cells.map((cell) => {
+    const expressionCell =
+      styleIndex.expressionByCellId.get(cell.id) ??
+      (styleIndex.expressionByBinKey === undefined ||
+      styleIndex.binMicrometers === undefined
+        ? undefined
+        : styleIndex.expressionByBinKey.get(
+            positionBinKey(cell.position, styleIndex.binMicrometers),
+          ))
+
+    if (expressionCell === undefined) {
+      return cell
+    }
+
+    hasExpressionMatch = true
+    return {
+      ...cell,
+      fillColor: expressionCell.fillColor,
+      ...(expressionCell.expressionCount === undefined
+        ? {}
+        : { expressionCount: expressionCell.expressionCount }),
+      ...(expressionCell.expressionGenes === undefined
+        ? {}
+        : { expressionGenes: expressionCell.expressionGenes }),
+    }
+  })
+
+  return hasExpressionMatch ? styledCells : cells
+}
+
+export function createGeneExpressionCellStyleIndex(
+  expressionCells: readonly OverviewCellDatum[],
+  options: GeneExpressionCellStyleOptions = {},
+): GeneExpressionCellStyleIndex {
+  const expressionByCellId = new Map<string, OverviewCellDatum>()
+  const binMicrometers = normalizeGeneExpressionBinMicrometers(options.binMicrometers)
+
+  for (const cell of expressionCells) {
+    expressionByCellId.set(cell.id, cell)
+  }
+
+  if (binMicrometers === undefined) {
+    return { expressionByCellId }
+  }
+
+  return {
+    expressionByCellId,
+    expressionByBinKey: expressionBinStylesByKey(expressionCells, binMicrometers),
+    binMicrometers,
+  }
+}
+
+function isOverviewCellDatumArray(
+  value: readonly OverviewCellDatum[] | GeneExpressionCellStyleIndex,
+): value is readonly OverviewCellDatum[] {
+  return Array.isArray(value)
+}
+
+function expressionBinStylesByKey(
+  expressionCells: readonly OverviewCellDatum[],
+  binMicrometers: number,
+): ReadonlyMap<string, OverviewCellDatum> {
+  const bins = new Map<string, GeneExpressionBinStyle>()
+
+  for (const cell of expressionCells) {
+    const key = positionBinKey(cell.position, binMicrometers)
+    const bin = bins.get(key)
+    const alpha = cell.fillColor[3] ?? 220
+    const red = cell.fillColor[0] ?? 0
+    const green = cell.fillColor[1] ?? 0
+    const blue = cell.fillColor[2] ?? 0
+    const expressionCount = cell.expressionCount ?? 0
+
+    if (bin === undefined) {
+      bins.set(key, {
+        count: 1,
+        maxAlpha: alpha,
+        sumRed: red,
+        sumGreen: green,
+        sumBlue: blue,
+        sumExpressionCount: expressionCount,
+        hasExpressionCount: cell.expressionCount !== undefined,
+        expressionGenes: cell.expressionGenes,
+      })
+      continue
+    }
+
+    bin.count += 1
+    bin.maxAlpha = Math.max(bin.maxAlpha, alpha)
+    bin.sumRed += red
+    bin.sumGreen += green
+    bin.sumBlue += blue
+    bin.sumExpressionCount += expressionCount
+    bin.hasExpressionCount = bin.hasExpressionCount || cell.expressionCount !== undefined
+    bin.expressionGenes ??= cell.expressionGenes
+  }
+
+  const styles = new Map<string, OverviewCellDatum>()
+
+  for (const [key, bin] of bins) {
+    styles.set(key, {
+      id: `expression-style-bin:${key}`,
+      position: [0, 0, 0],
+      radiusPixels: 0,
+      fillColor: [
+        Math.round(bin.sumRed / bin.count),
+        Math.round(bin.sumGreen / bin.count),
+        Math.round(bin.sumBlue / bin.count),
+        Math.min(245, bin.maxAlpha + bin.count * 2),
+      ],
+      ...(bin.hasExpressionCount ? { expressionCount: bin.sumExpressionCount } : {}),
+      ...(bin.expressionGenes === undefined
+        ? {}
+        : { expressionGenes: bin.expressionGenes }),
+    })
+  }
+
+  return styles
+}
+
+function positionBinKey(position: Position, binMicrometers: number): string {
+  const [x = 0, deckY = 0] = position
+  const rawY = -deckY
+
+  return `${Math.floor(x / binMicrometers)}:${Math.floor(rawY / binMicrometers)}`
+}
+
+function normalizeGeneExpressionBinMicrometers(
+  binMicrometers: number | undefined,
+): number | undefined {
+  if (binMicrometers === undefined || !Number.isFinite(binMicrometers)) {
+    return undefined
+  }
+
+  return binMicrometers > 0 ? binMicrometers : undefined
+}
+
+export function styleCellBoundariesByGeneExpression(
   boundaries: readonly CellBoundaryDatum[],
   expressionCells: readonly OverviewCellDatum[],
 ): readonly CellBoundaryDatum[] {
   if (boundaries.length === 0 || expressionCells.length === 0) {
-    return []
+    return boundaries
   }
 
   const expressionByCellId = new Map<string, OverviewCellDatum>()
@@ -894,23 +1022,23 @@ export function expressionCellsToBoundaryLayerData(
     expressionByCellId.set(cell.id, cell)
   }
 
-  const expressionBoundaries: CellBoundaryDatum[] = []
-
-  for (const boundary of boundaries) {
+  let hasExpressionMatch = false
+  const styledBoundaries = boundaries.map((boundary) => {
     const expressionCell = expressionByCellId.get(boundary.id)
 
     if (expressionCell === undefined) {
-      continue
+      return boundary
     }
 
-    expressionBoundaries.push({
+    hasExpressionMatch = true
+    return {
       ...boundary,
       fillColor: expressionCell.fillColor,
-      lineColor: [255, 253, 247, 210],
-    })
-  }
+      lineColor: boundaryLineColor(expressionCell.fillColor),
+    }
+  })
 
-  return expressionBoundaries
+  return hasExpressionMatch ? styledBoundaries : boundaries
 }
 
 function boundaryFillColor(color: Color): Color {

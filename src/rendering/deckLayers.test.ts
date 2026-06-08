@@ -5,14 +5,16 @@ import { micrometers } from '../data/coords'
 import {
   bundledDeckVersion,
   boundaryElementsToLayerData,
+  createGeneExpressionCellStyleIndex,
   createOverviewLayers,
   createOverviewViewState,
-  expressionCellsToBoundaryLayerData,
   geneExpressionCellsToLayerData,
   geneExpressionScoreDomainMax,
   overviewCellsToLayerData,
   spatialOverviewView,
   styleCellBoundariesByCells,
+  styleCellBoundariesByGeneExpression,
+  styleCellsByGeneExpression,
   styleGeneExpressionCellsByScale,
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
@@ -103,7 +105,7 @@ describe('deck layer factory', () => {
         lineColor: [246, 242, 232, 210],
       },
     ]
-    const layers = createOverviewLayers(fixtureCells, boundaries, [], {
+    const layers = createOverviewLayers(fixtureCells, boundaries, {
       cellFillOpacity: 0.35,
       cellBoundaryOpacity: 0.6,
     })
@@ -155,7 +157,7 @@ describe('deck layer factory', () => {
         lineColor: [246, 242, 232, 210],
       },
     ]
-    const layers = createOverviewLayers(fixtureCells, boundaries, [], {
+    const layers = createOverviewLayers(fixtureCells, boundaries, {
       cellFillOpacity: 0,
       cellBoundaryOpacity: 0.5,
     })
@@ -210,49 +212,134 @@ describe('deck layer factory', () => {
     expect(pointLayer.props.data).toEqual([cells[1]])
   })
 
-  it('adds a gene expression overlay layer', () => {
+  it('merges gene expression color into the existing point layer', () => {
     const expressionCells: readonly OverviewCellDatum[] = [
       {
-        id: 'cell-2',
-        position: [12, -24, 0],
+        id: 'cell-1',
+        position: [10, -20, 0],
         radiusPixels: 6,
         fillColor: [240, 128, 120, 220],
         expressionCount: 5,
+        expressionGenes: ['A2ML1'],
       },
     ]
-    const layers = createOverviewLayers(fixtureCells, [], expressionCells, {
+    const expressionStyledCells = styleCellsByGeneExpression(
+      fixtureCells,
+      expressionCells,
+    )
+    const layers = createOverviewLayers(expressionStyledCells, [], {
       cellFillOpacity: 0.45,
       cellBoundaryOpacity: 0.4,
     })
 
-    expect(layers).toHaveLength(2)
-    expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
+    expect(layers).toHaveLength(1)
+    expect(layers[0]).toBeInstanceOf(ScatterplotLayer)
 
-    const expressionLayer = layers[1]
+    const cellLayer = layers[0]
 
-    if (!(expressionLayer instanceof ScatterplotLayer)) {
-      throw new Error('Expected expression layer to be a ScatterplotLayer.')
+    if (!(cellLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected overview cell layer to be a ScatterplotLayer.')
     }
 
-    expect(expressionLayer.id).toBe('gene-expression-scatter')
-    expect(expressionLayer.props.opacity).toBe(1)
-    expect(expressionLayer.props.pickable).toBe(false)
-    expect(expressionLayer.props.filled).toBe(false)
-    expect(expressionLayer.props.stroked).toBe(true)
-    expect(expressionLayer.props.lineWidthUnits).toBe('pixels')
-    expect(expressionLayer.props.lineWidthMinPixels).toBe(1.5)
-    expect(expressionLayer.props.updateTriggers).toMatchObject({
+    expect(expressionStyledCells[0]).toMatchObject({
+      fillColor: [240, 128, 120, 220],
+      expressionCount: 5,
+      expressionGenes: ['A2ML1'],
+    })
+    expect(cellLayer.id).toBe('cells-overview-scatter')
+    expect(cellLayer.props.pickable).toBe(true)
+    expect(cellLayer.props.lineWidthMinPixels).toBe(1)
+    expect(cellLayer.props.updateTriggers).toMatchObject({
       getLineColor: [0.4],
     })
 
-    const getLineColor = expressionLayer.props.getLineColor as (
+    const getLineColor = cellLayer.props.getLineColor as (
       cell: OverviewCellDatum,
     ) => readonly number[]
 
-    expect(getLineColor(expressionCells[0]!)).toEqual([240, 128, 120, 88])
+    expect(getLineColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 88])
   })
 
-  it('uses expression-filled true boundaries instead of scatter when matching polygons exist', () => {
+  it('merges gene expression color into sampled overview points by spatial bin', () => {
+    const cells: readonly OverviewCellDatum[] = [
+      {
+        id: 'sampled-cell-1',
+        position: [65, -70, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      },
+      {
+        id: 'sampled-cell-2',
+        position: [230, -230, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      },
+    ]
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-42',
+        position: [40, -45, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 7,
+        expressionGenes: ['A2ML1'],
+      },
+    ]
+
+    const expressionStyleIndex = createGeneExpressionCellStyleIndex(expressionCells, {
+      binMicrometers: 100,
+    })
+    const expressionStyledCells = styleCellsByGeneExpression(
+      cells,
+      expressionStyleIndex,
+    )
+
+    expect(expressionStyledCells[0]).toMatchObject({
+      id: 'sampled-cell-1',
+      fillColor: [240, 128, 120, 222],
+      expressionCount: 7,
+      expressionGenes: ['A2ML1'],
+    })
+    expect(expressionStyledCells[1]).toBe(cells[1])
+  })
+
+  it('prefers exact gene expression matches over spatial-bin fallback colors', () => {
+    const cells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-1',
+        position: [65, -70, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      },
+    ]
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-1',
+        position: [65, -70, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 7,
+      },
+      {
+        id: 'cell-2',
+        position: [40, -45, 0],
+        radiusPixels: 6,
+        fillColor: [30, 180, 150, 220],
+        expressionCount: 3,
+      },
+    ]
+
+    const expressionStyledCells = styleCellsByGeneExpression(cells, expressionCells, {
+      binMicrometers: 100,
+    })
+
+    expect(expressionStyledCells[0]).toMatchObject({
+      fillColor: [240, 128, 120, 220],
+      expressionCount: 7,
+    })
+  })
+
+  it('merges gene expression color into the existing boundary layer', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {
         id: 'cell-2',
@@ -274,21 +361,20 @@ describe('deck layer factory', () => {
         expressionCount: 5,
       },
     ]
-    const expressionBoundaryPolygons = expressionCellsToBoundaryLayerData(
+    const expressionStyledBoundaries = styleCellBoundariesByGeneExpression(
       boundaries,
       expressionCells,
     )
-    const layers = createOverviewLayers(fixtureCells, boundaries, expressionCells, {
+    const layers = createOverviewLayers(fixtureCells, expressionStyledBoundaries, {
       cellFillOpacity: 0.5,
       cellBoundaryOpacity: 0.25,
-      expressionBoundaryPolygons,
     })
 
-    expect(expressionBoundaryPolygons).toMatchObject([
+    expect(expressionStyledBoundaries).toMatchObject([
       {
         id: 'cell-2',
         fillColor: [240, 128, 120, 220],
-        lineColor: [255, 253, 247, 210],
+        lineColor: [240, 128, 120, 220],
       },
     ])
     expect(
@@ -297,32 +383,38 @@ describe('deck layer factory', () => {
           layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter',
       ),
     ).toBe(false)
+    expect(
+      layers.some(
+        (layer) => layer instanceof PolygonLayer && layer.id === 'gene-expression-polygons',
+      ),
+    ).toBe(false)
 
-    const expressionLayer = layers[2]
+    const boundaryLayer = layers[0]
 
-    if (!(expressionLayer instanceof PolygonLayer)) {
-      throw new Error('Expected expression boundary layer to be a PolygonLayer.')
+    if (!(boundaryLayer instanceof PolygonLayer)) {
+      throw new Error('Expected boundary layer to be a PolygonLayer.')
     }
 
-    expect(expressionLayer.id).toBe('gene-expression-polygons')
-    expect(expressionLayer.props.opacity).toBe(1)
-    expect(expressionLayer.props.updateTriggers).toMatchObject({
+    expect(boundaryLayer.id).toBe('cell-boundary-polygons')
+    expect(boundaryLayer.props.opacity).toBe(1)
+    expect(boundaryLayer.props.pickable).toBe(true)
+    expect(boundaryLayer.props.updateTriggers).toMatchObject({
       getFillColor: [0.5],
       getLineColor: [0.25],
     })
 
-    const getFillColor = expressionLayer.props.getFillColor as (
+    const getFillColor = boundaryLayer.props.getFillColor as (
       cell: CellBoundaryDatum,
     ) => readonly number[]
-    const getLineColor = expressionLayer.props.getLineColor as (
+    const getLineColor = boundaryLayer.props.getLineColor as (
       cell: CellBoundaryDatum,
     ) => readonly number[]
 
-    expect(getFillColor(expressionBoundaryPolygons[0]!)).toEqual([240, 128, 120, 110])
-    expect(getLineColor(expressionBoundaryPolygons[0]!)).toEqual([255, 253, 247, 53])
+    expect(getFillColor(expressionStyledBoundaries[0]!)).toEqual([240, 128, 120, 110])
+    expect(getLineColor(expressionStyledBoundaries[0]!)).toEqual([240, 128, 120, 55])
   })
 
-  it('keeps expression polygon fills transparent when cell fill opacity is zero', () => {
+  it('keeps expression-styled boundary fills transparent when cell fill opacity is zero', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {
         id: 'cell-2',
@@ -344,32 +436,31 @@ describe('deck layer factory', () => {
         expressionCount: 5,
       },
     ]
-    const expressionBoundaryPolygons = expressionCellsToBoundaryLayerData(
+    const expressionStyledBoundaries = styleCellBoundariesByGeneExpression(
       boundaries,
       expressionCells,
     )
-    const layers = createOverviewLayers(fixtureCells, boundaries, expressionCells, {
+    const layers = createOverviewLayers(fixtureCells, expressionStyledBoundaries, {
       cellFillOpacity: 0,
       cellBoundaryOpacity: 0.5,
-      expressionBoundaryPolygons,
     })
-    const expressionLayer = layers[2]
+    const boundaryLayer = layers[0]
 
-    if (!(expressionLayer instanceof PolygonLayer)) {
-      throw new Error('Expected expression boundary layer to be a PolygonLayer.')
+    if (!(boundaryLayer instanceof PolygonLayer)) {
+      throw new Error('Expected boundary layer to be a PolygonLayer.')
     }
 
-    const getFillColor = expressionLayer.props.getFillColor as (
+    const getFillColor = boundaryLayer.props.getFillColor as (
       cell: CellBoundaryDatum,
     ) => readonly number[]
-    const getLineColor = expressionLayer.props.getLineColor as (
+    const getLineColor = boundaryLayer.props.getLineColor as (
       cell: CellBoundaryDatum,
     ) => readonly number[]
 
-    expect(expressionLayer.props.filled).toBe(true)
-    expect(expressionLayer.props.stroked).toBe(true)
-    expect(getFillColor(expressionBoundaryPolygons[0]!)).toEqual([240, 128, 120, 0])
-    expect(getLineColor(expressionBoundaryPolygons[0]!)).toEqual([255, 253, 247, 105])
+    expect(boundaryLayer.props.filled).toBe(true)
+    expect(boundaryLayer.props.stroked).toBe(true)
+    expect(getFillColor(expressionStyledBoundaries[0]!)).toEqual([240, 128, 120, 0])
+    expect(getLineColor(expressionStyledBoundaries[0]!)).toEqual([240, 128, 120, 110])
   })
 
   it('styles true boundaries from matching visible cell colors', () => {
@@ -457,7 +548,7 @@ describe('deck layer factory', () => {
         count: 25,
       },
     ])
-    const layers = createOverviewLayers(fixtureCells, [], [], {
+    const layers = createOverviewLayers(fixtureCells, [], {
       transcriptAggregateBins: bins,
       transcriptOpacity: 0.5,
     })
@@ -613,7 +704,7 @@ describe('deck layer factory', () => {
         featureName: 'CD74',
       },
     ])
-    const layers = createOverviewLayers(fixtureCells, [], [], {
+    const layers = createOverviewLayers(fixtureCells, [], {
       transcriptAggregateBins: bins,
       transcriptOpacity: 0.5,
     })
@@ -795,6 +886,8 @@ describe('deck layer factory', () => {
     ).toMatchObject([
       {
         id: 'cell-1',
+        fillColor: [32, 102, 83, 34],
+        lineColor: [32, 102, 83, 190],
         polygon: [
           [1, -2, 0],
           [3, -4, 0],

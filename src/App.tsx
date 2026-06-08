@@ -754,6 +754,7 @@ export function App({
   const roiIdRef = useRef(0)
   const boundaryViewportKeyRef = useRef<string | null>(null)
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
+  const geneExpressionLayerTimingKeyRef = useRef<string | null>(null)
   const transcriptViewportKeyRef = useRef<string | null>(null)
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
   const initialShareableStateRef = useRef<ShareableState | null>(initialShareableState)
@@ -825,31 +826,43 @@ export function App({
     storedGeneExpressionScaleMax,
     currentGeneExpressionScaleMax,
   )
-  const geneExpressionCells = useMemo(
-    () =>
-      geneExpressionBatch === null
-        ? []
-        : geneExpressionCellsToLayerData(
-            geneExpressionBatch.cells,
-            geneExpressionBatch.genes,
-            geneExpressionColorScale,
-            geneExpressionScoreMode,
-            { scaleMax: geneExpressionScaleMax },
-          ),
-    [
-      geneExpressionBatch,
+  const geneExpressionLayerData = useMemo(() => {
+    if (geneExpressionBatch === null) {
+      return { cells: [], durationMs: 0 }
+    }
+
+    const startedAt = readTimestamp()
+    const cells = geneExpressionCellsToLayerData(
+      geneExpressionBatch.cells,
+      geneExpressionBatch.genes,
       geneExpressionColorScale,
-      geneExpressionScaleMax,
       geneExpressionScoreMode,
-    ],
-  )
-  const styledGeneExpressionCells = useMemo(
-    () =>
-      styleGeneExpressionCellsByScale(geneExpressionCells, geneExpressionColorScale, {
+      { scaleMax: geneExpressionScaleMax },
+    )
+
+    return { cells, durationMs: Math.max(0, readTimestamp() - startedAt) }
+  }, [
+    geneExpressionBatch,
+    geneExpressionColorScale,
+    geneExpressionScaleMax,
+    geneExpressionScoreMode,
+  ])
+  const geneExpressionCells = geneExpressionLayerData.cells
+  const geneExpressionLayerDataDurationMs = geneExpressionLayerData.durationMs
+  const styledGeneExpressionLayerData = useMemo(() => {
+    const startedAt = readTimestamp()
+    const cells = styleGeneExpressionCellsByScale(
+      geneExpressionCells,
+      geneExpressionColorScale,
+      {
         scaleMax: geneExpressionScaleMax,
-      }),
-    [geneExpressionCells, geneExpressionColorScale, geneExpressionScaleMax],
-  )
+      },
+    )
+
+    return { cells, durationMs: Math.max(0, readTimestamp() - startedAt) }
+  }, [geneExpressionCells, geneExpressionColorScale, geneExpressionScaleMax])
+  const styledGeneExpressionCells = styledGeneExpressionLayerData.cells
+  const geneExpressionRestyleDurationMs = styledGeneExpressionLayerData.durationMs
   const transcriptLayerPoints = useMemo(
     () =>
       transcriptPointsToLayerData(
@@ -1244,6 +1257,50 @@ export function App({
     },
     [recordTelemetry],
   )
+  useEffect(() => {
+    if (geneExpressionBatch === null || geneExpressionState.status !== 'ready') {
+      geneExpressionLayerTimingKeyRef.current = null
+      return
+    }
+
+    const timingKey = [
+      geneExpressionState.url,
+      geneExpressionState.mode,
+      geneExpressionState.visibleCellCount,
+      geneExpressionState.cellCount,
+      geneExpressionState.genes.join('|'),
+      geneExpressionLayerDataDurationMs,
+      geneExpressionRestyleDurationMs,
+    ].join(':')
+
+    if (timingKey === geneExpressionLayerTimingKeyRef.current) {
+      return
+    }
+
+    geneExpressionLayerTimingKeyRef.current = timingKey
+    const detail = [
+      `layer ${Math.round(geneExpressionLayerDataDurationMs)} ms`,
+      `restyle ${Math.round(geneExpressionRestyleDurationMs)} ms`,
+      formatGeneExpressionTiming(geneExpressionBatch.timing),
+    ].join(', ')
+
+    recordTelemetry(
+      telemetryEvent('gene-expression.layer-data', 'info', {
+        detail,
+      }),
+    )
+    appendDebugEvent(
+      `Expression layer data ready: ${geneExpressionState.cellCount.toLocaleString()} cells (${detail})`,
+      { coalesceKey: 'gene-expression-layer-data' },
+    )
+  }, [
+    appendDebugEvent,
+    geneExpressionBatch,
+    geneExpressionLayerDataDurationMs,
+    geneExpressionRestyleDurationMs,
+    geneExpressionState,
+    recordTelemetry,
+  ])
   const activeErrors = useMemo(
     () =>
       [
@@ -1449,6 +1506,7 @@ export function App({
       const expressionRequestId = geneExpressionRequestId.current + 1
       abortActiveRequest(geneExpressionAbortRef)
       const expressionAbortController = new AbortController()
+      const expressionStartedAt = readTimestamp()
       geneExpressionRequestId.current = expressionRequestId
       geneExpressionAbortRef.current = expressionAbortController
       geneExpressionViewportKeyRef.current = expressionKey
@@ -1470,6 +1528,8 @@ export function App({
             return
           }
 
+          const timingDetail = formatGeneExpressionTiming(batch.timing)
+
           rememberGeneExpressionScaleMax(
             geneExpressionScaleKey,
             batch,
@@ -1484,6 +1544,18 @@ export function App({
             mode: expressionPlan.mode,
             visibleCellCount: expressionPlan.sourceCellCount,
           })
+          recordTelemetry(
+            telemetryEvent('gene-expression.load', 'success', {
+              startedAt: expressionStartedAt,
+              detail: `${geneExpressionModeLabel(expressionPlan.mode)}: ${batch.cells.length.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
+            }),
+          )
+          appendDebugEvent(
+            `${geneExpressionModeLabel(expressionPlan.mode)} ready: ${batch.cells.length.toLocaleString()} positive cells in ${formatElapsed(
+              expressionStartedAt,
+            )} (${timingDetail})`,
+            { coalesceKey: 'gene-expression-query' },
+          )
         })
         .catch((error) => {
           if (isAbortError(error)) {
@@ -1500,6 +1572,15 @@ export function App({
             url: loadState.url,
             error: createStructuredLoadError('Gene expression', error),
           })
+          recordTelemetry(
+            telemetryEvent('gene-expression.load', 'failure', {
+              startedAt: expressionStartedAt,
+              detail: readErrorMessage(error),
+            }),
+          )
+          appendDebugEvent('Gene expression load failed', {
+            coalesceKey: 'gene-expression-query',
+          })
         })
         .finally(() => {
           if (geneExpressionAbortRef.current === expressionAbortController) {
@@ -1508,6 +1589,7 @@ export function App({
         })
     },
     [
+      appendDebugEvent,
       boundaryCellLimit,
       geneExpressionScaleKey,
       geneExpressionScoreMode,
@@ -1516,6 +1598,7 @@ export function App({
       loadState,
       geneExpressionDetailMode,
       overviewExtent,
+      recordTelemetry,
       rememberGeneExpressionScaleMax,
       selectedGenes,
     ],
@@ -5121,6 +5204,21 @@ export function App({
       </section>
     </main>
   )
+}
+
+function formatGeneExpressionTiming(
+  timing: GeneExpressionBatch['timing'] | undefined,
+): string {
+  if (timing === undefined) {
+    return 'timing unavailable'
+  }
+
+  return [
+    `total ${Math.round(timing.totalMs)} ms`,
+    `viewport ${Math.round(timing.viewportCellsMs)} ms`,
+    `matrix ${Math.round(timing.matrixReadMs)} ms`,
+    `score ${Math.round(timing.scoreCellsMs)} ms`,
+  ].join(', ')
 }
 
 async function defaultComputeAutoChannelContrast(
