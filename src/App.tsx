@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   ViewerCore,
   type ViewerCoordinateUnit,
@@ -31,6 +31,7 @@ import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
+import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
 import {
   appendDebugLogEntry,
   createLoadingTasks,
@@ -124,11 +125,7 @@ import {
 } from './data/transcriptOverlay'
 import { type RoiSelection } from './data/roiSelection'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
-import {
-  formatShareableState,
-  type ShareableState,
-  type ShareableViewState,
-} from './data/shareableState'
+import { type ShareableState, type ShareableViewState } from './data/shareableState'
 import {
   appendTelemetryEvent,
   telemetryEvent,
@@ -1247,57 +1244,12 @@ export function App({
     warmDatasetForRoi,
   })
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    const timeout = window.setTimeout(() => {
-      const hash = formatShareableState({
-        datasetUrl,
-        selectedGenes,
-        ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
-        ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
-        activeTab: activeControlHudTab,
-        geneExpressionColorScale,
-        geneExpressionScoreMode,
-        geneExpressionDetailMode,
-        observationColorMode,
-        coordinateUnit,
-        measurementUnit,
-        shouldLoadMorphology,
-        boundaryCellLimit,
-        transcriptOverlay: showTranscriptOverlay,
-        transcriptDetailMode,
-        transcriptDensityColorScale,
-        transcriptPointColorMode,
-        transcriptExactPointLimit,
-        transcriptMinQv,
-        transcriptGeneOnly,
-        transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
-        transcriptOpacity,
-        transcriptPointSize,
-      })
-
-      if (window.location.hash !== hash) {
-        window.history.replaceState(
-          null,
-          '',
-          `${window.location.pathname}${window.location.search}${hash}`,
-        )
-      }
-    }, 160)
-
-    return () => {
-      window.clearTimeout(timeout)
-    }
-  }, [
+  useShareableUrlHash({
     activeControlHudTab,
     activeRoiSelection,
     boundaryCellLimit,
     coordinateUnit,
     datasetUrl,
-    effectiveTranscriptFeatureFilterMode,
     geneExpressionColorScale,
     geneExpressionDetailMode,
     geneExpressionScoreMode,
@@ -1310,12 +1262,13 @@ export function App({
     transcriptDetailMode,
     transcriptDensityColorScale,
     transcriptExactPointLimit,
+    transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
     transcriptGeneOnly,
     transcriptMinQv,
     transcriptOpacity,
     transcriptPointColorMode,
     transcriptPointSize,
-  ])
+  })
 
   return (
     <main className="app-shell">
