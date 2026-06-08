@@ -90,19 +90,14 @@ import {
   type MagicLensScope,
   type MagicLensState,
 } from './features/roi/magicLensModel'
+import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import {
   ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
-  ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT,
-  ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS,
   defaultRoiName,
-  deferRoiGeneRefinement,
   emptyRoiGeneStats,
-  roiCellsToCsv,
   roiGeneStatsStatusCopy,
   roiGeneViewportWarmupKey,
-  roiSelectionLabel,
   roiStatusCopy,
-  roiTranscriptsToCsv,
   summarizeRoiCells,
   type RoiGeneStatsState,
   type RoiGeneViewportWarmupState,
@@ -162,7 +157,6 @@ import {
   geneExpressionWaitingKey,
   planGeneExpressionLod,
 } from './data/geneExpressionLod'
-import { ROI_CELL_EXPORT_LIMIT } from './data/roiCells'
 import { asCellId } from './data/cellid'
 import {
   CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
@@ -1144,144 +1138,43 @@ export function App({
     visibleTranscriptEstimate,
   })
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    const detail = currentViewportDetail
-    const readyDatasetUrl = loadState.status === 'ready' ? loadState.url : null
-
-    if (
-      readyDatasetUrl === null ||
-      detail === null ||
-      roiState.status !== 'idle' ||
-      detail.visibleCellCount <= ROI_GENE_STATS_PREVIEW_CELL_LIMIT
-    ) {
-      const hadPendingWarmup =
-        roiGeneViewportWarmupTimeoutRef.current !== null ||
-        roiGeneViewportWarmupAbortRef.current !== null
-      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-      abortActiveRequest(roiGeneViewportWarmupAbortRef)
-
-      if (hadPendingWarmup) {
-        roiGeneViewportWarmupKeyRef.current = null
-      }
-
-      return
-    }
-
-    const warmupKey = roiGeneViewportWarmupKey(readyDatasetUrl, detail)
-
-    if (warmupKey === roiGeneViewportWarmupKeyRef.current) {
-      return
-    }
-
-    clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-    abortActiveRequest(roiGeneViewportWarmupAbortRef)
-    setRoiGeneViewportWarmupState({ status: 'loading', key: warmupKey })
-
-    roiGeneViewportWarmupTimeoutRef.current = window.setTimeout(() => {
-      const abortController = new AbortController()
-      const selection = { kind: 'box' as const, bbox: detail.bbox }
-      const warmupStartedAt = readTimestamp()
-      roiGeneViewportWarmupAbortRef.current = abortController
-      roiGeneViewportWarmupKeyRef.current = warmupKey
-
-      void (async () => {
-        try {
-          const cellsStartedAt = readTimestamp()
-          appendDebugEvent(
-            `ROI warmup cells started: ${detail.visibleCellCount.toLocaleString()} visible, limit ${ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT.toLocaleString()}`,
-          )
-          const cells = await loadRoiCells(readyDatasetUrl, selection, {
-            signal: abortController.signal,
-            limit: ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT,
-          })
-
-          if (abortController.signal.aborted) {
-            return
-          }
-
-          appendDebugEvent(
-            `ROI warmup cells ready: ${cells.length.toLocaleString()} in ${formatElapsed(cellsStartedAt)}`,
-          )
-
-          if (cells.length === 0) {
-            appendDebugEvent(
-              `ROI gene viewport warmup ready: no cells (${formatElapsed(warmupStartedAt)})`,
-              {
-                coalesceKey: 'roi-gene-warmup',
-              },
-            )
-            setRoiGeneViewportWarmupState({ status: 'ready', key: warmupKey })
-            return
-          }
-
-          const genesStartedAt = readTimestamp()
-          appendDebugEvent(
-            `ROI warmup genes started: sample ${Math.min(
-              cells.length,
-              ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
-            ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
-          )
-          const stats = await loadRoiGeneStats(readyDatasetUrl, cells, {
-            signal: abortController.signal,
-            cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
-            sampleStrategy: 'head',
-          })
-
-          if (abortController.signal.aborted) {
-            return
-          }
-
-          appendDebugEvent(
-            `ROI warmup genes ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
-              genesStartedAt,
-            )}`,
-          )
-          appendDebugEvent(
-            `ROI gene viewport warmup ready (${formatElapsed(warmupStartedAt)})`,
-            {
-              coalesceKey: 'roi-gene-warmup',
-            },
-          )
-          setRoiGeneViewportWarmupState({ status: 'ready', key: warmupKey })
-        } catch (error) {
-          if (isAbortError(error)) {
-            return
-          }
-
-          if (roiGeneViewportWarmupKeyRef.current === warmupKey) {
-            roiGeneViewportWarmupKeyRef.current = null
-          }
-
-          appendDebugEvent(
-            `ROI gene viewport warmup skipped (${formatElapsed(warmupStartedAt)})`,
-            {
-              coalesceKey: 'roi-gene-warmup',
-            },
-          )
-          setRoiGeneViewportWarmupState({ status: 'error', key: warmupKey })
-        } finally {
-          if (roiGeneViewportWarmupAbortRef.current === abortController) {
-            roiGeneViewportWarmupAbortRef.current = null
-          }
-        }
-      })()
-    }, ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
-
-    return () => {
-      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-    }
-  }, [
+  const {
+    handleClearRoi,
+    handleExportRoiCells,
+    handleExportRoiTranscripts,
+    handleRoiComplete,
+  } = useRoiWorkflow({
     appendDebugEvent,
     currentViewportDetail,
+    initialSharedRoiSelectionRef,
     loadRoiCells,
     loadRoiGeneStats,
+    loadRoiTranscripts,
     loadState,
-    roiState.status,
-  ])
+    magicLensAbortRef,
+    magicLensDebounceRef,
+    magicLensLastDetailRef,
+    magicLensLastQueryKeyRef,
+    magicLensRequestIdRef: magicLensRequestId,
+    magicLensScope,
+    roiAbortRef,
+    roiGeneViewportWarmupAbortRef,
+    roiGeneViewportWarmupKeyRef,
+    roiGeneViewportWarmupTimeoutRef,
+    roiIdRef,
+    roiName,
+    roiRequestIdRef: roiRequestId,
+    roiState,
+    roiTranscriptExportAbortRef,
+    roiTranscriptExportRequestIdRef: roiTranscriptExportRequestId,
+    setMagicLensState,
+    setRoiGeneStatsState,
+    setRoiGeneViewportWarmupState,
+    setRoiMode,
+    setRoiName,
+    setRoiState,
+    setRoiTranscriptExportState,
+  })
 
   useEffect(() => {
     if (didApplyInitialDatasetUrlRef.current) {
@@ -2704,220 +2597,6 @@ export function App({
     appendDebugEvent('Cleared annotations')
   }
 
-  const handleRoiComplete = useCallback(
-    (selection: RoiSelection) => {
-      if (loadState.status !== 'ready') {
-        return
-      }
-
-      const bbox = selection.bbox
-      const requestId = roiRequestId.current + 1
-      const roiStartedAt = readTimestamp()
-      const roiCellsStartedAt = roiStartedAt
-      abortActiveRequest(roiAbortRef)
-      clearTimeoutRef(magicLensDebounceRef)
-      magicLensLastDetailRef.current = null
-      magicLensLastQueryKeyRef.current = null
-      abortActiveRequest(magicLensAbortRef)
-      magicLensRequestId.current += 1
-      const abortController = new AbortController()
-      roiRequestId.current = requestId
-      roiAbortRef.current = abortController
-      setRoiMode('idle')
-      setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
-      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-      abortActiveRequest(roiGeneViewportWarmupAbortRef)
-      roiGeneViewportWarmupKeyRef.current = null
-      setRoiGeneViewportWarmupState({ status: 'idle' })
-      setRoiState({ status: 'loading', url: loadState.url, bbox, selection })
-      setRoiGeneStatsState({ status: 'idle' })
-      setRoiTranscriptExportState({ status: 'idle' })
-      setMagicLensState({ status: 'idle' })
-      appendDebugEvent(`${roiSelectionLabel(selection)} drawn: ROI cells started`)
-
-      void loadRoiCells(loadState.url, selection, { signal: abortController.signal })
-        .then((cells) => {
-          if (roiRequestId.current !== requestId) {
-            return
-          }
-
-          setRoiState({
-            status: 'ready',
-            url: loadState.url,
-            bbox,
-            selection,
-            cells,
-            hitCellLimit: cells.length >= ROI_CELL_EXPORT_LIMIT,
-          })
-          appendDebugEvent(
-            `ROI cells ready: ${cells.length.toLocaleString()}${
-              cells.length >= ROI_CELL_EXPORT_LIMIT ? '+' : ''
-            } in ${formatElapsed(roiCellsStartedAt)}`,
-          )
-
-          if (cells.length === 0) {
-            setRoiGeneStatsState({
-              status: 'ready',
-              url: loadState.url,
-              stats: emptyRoiGeneStats(),
-            })
-            return undefined
-          }
-
-          setRoiGeneStatsState({
-            status: 'loading',
-            url: loadState.url,
-            cellCount: cells.length,
-          })
-          const previewStartedAt = readTimestamp()
-          appendDebugEvent(
-            `ROI genes preview started: sample ${Math.min(
-              cells.length,
-              ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
-            ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
-          )
-
-          return loadRoiGeneStats(loadState.url, cells, {
-            signal: abortController.signal,
-            cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
-            sampleStrategy: 'head',
-          })
-            .then((previewStats) => {
-              if (roiRequestId.current !== requestId) {
-                return
-              }
-
-              setRoiGeneStatsState({
-                status: 'ready',
-                url: loadState.url,
-                stats: previewStats,
-              })
-              appendDebugEvent(
-                `ROI genes preview ready: ${previewStats.genes.length.toLocaleString()} genes in ${formatElapsed(
-                  previewStartedAt,
-                )}`,
-              )
-
-              if (cells.length <= ROI_GENE_STATS_PREVIEW_CELL_LIMIT) {
-                return undefined
-              }
-
-              const refinementStartedAt = readTimestamp()
-              appendDebugEvent(
-                `ROI genes refinement started: ${cells.length.toLocaleString()} cells`,
-              )
-              return deferRoiGeneRefinement()
-                .then(() => {
-                  if (roiRequestId.current !== requestId) {
-                    return undefined
-                  }
-
-                  return loadRoiGeneStats(loadState.url, cells, {
-                    signal: abortController.signal,
-                  })
-                })
-                .then((stats) => {
-                  if (roiRequestId.current !== requestId) {
-                    return
-                  }
-
-                  if (stats === undefined) {
-                    return
-                  }
-
-                  setRoiGeneStatsState({
-                    status: 'ready',
-                    url: loadState.url,
-                    stats,
-                  })
-                  appendDebugEvent(
-                    `ROI genes ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
-                      refinementStartedAt,
-                    )} (total ${formatElapsed(roiStartedAt)})`,
-                  )
-                })
-                .catch((error) => {
-                  if (isAbortError(error) || roiRequestId.current !== requestId) {
-                    return
-                  }
-
-                  appendDebugEvent(
-                    `ROI gene refinement failed (${formatElapsed(refinementStartedAt)})`,
-                  )
-                })
-            })
-            .catch((error) => {
-              if (isAbortError(error) || roiRequestId.current !== requestId) {
-                return
-              }
-
-              setRoiGeneStatsState({
-                status: 'error',
-                url: loadState.url,
-                error: createStructuredLoadError('ROI genes', error),
-              })
-              appendDebugEvent(
-                `ROI genes unsupported (${formatElapsed(previewStartedAt)})`,
-              )
-            })
-        })
-        .catch((error) => {
-          if (isAbortError(error) || roiRequestId.current !== requestId) {
-            return
-          }
-
-          setRoiState({
-            status: 'error',
-            url: loadState.url,
-            bbox,
-            selection,
-            error: createStructuredLoadError('ROI cells', error),
-          })
-          setRoiGeneStatsState({ status: 'idle' })
-          appendDebugEvent(`ROI cells failed (${formatElapsed(roiCellsStartedAt)})`)
-        })
-        .finally(() => {
-          if (roiAbortRef.current === abortController) {
-            roiAbortRef.current = null
-          }
-        })
-    },
-    [appendDebugEvent, loadRoiCells, loadRoiGeneStats, loadState],
-  )
-
-  useEffect(() => {
-    const selection = initialSharedRoiSelectionRef.current
-
-    if (
-      selection === null ||
-      loadState.status !== 'ready' ||
-      roiState.status !== 'idle'
-    ) {
-      return
-    }
-
-    initialSharedRoiSelectionRef.current = null
-    setRoiName('Shared ROI')
-    handleRoiComplete(selection)
-  }, [handleRoiComplete, loadState.status, roiState.status])
-
-  function handleClearRoi() {
-    abortActiveRequest(roiAbortRef)
-    abortActiveRequest(roiTranscriptExportAbortRef)
-    if (magicLensScope === 'roi') {
-      abortActiveRequest(magicLensAbortRef)
-      magicLensRequestId.current += 1
-      setMagicLensState({ status: 'idle' })
-    }
-    roiRequestId.current += 1
-    roiTranscriptExportRequestId.current += 1
-    setRoiMode('idle')
-    setRoiState({ status: 'idle' })
-    setRoiGeneStatsState({ status: 'idle' })
-    setRoiTranscriptExportState({ status: 'idle' })
-    appendDebugEvent('Cleared ROI')
-  }
-
   function handleSaveRoiAnnotation() {
     if (loadState.status !== 'ready' || roiState.status !== 'ready') {
       return
@@ -2946,66 +2625,6 @@ export function App({
     }))
     setObservationColorMode('annotations')
     setRoiName(defaultRoiName(roiIdRef.current + 1))
-  }
-
-  function handleExportRoiCells() {
-    if (roiState.status !== 'ready') {
-      return
-    }
-
-    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
-    downloadTextFile(`${slug(name)}-cells.csv`, roiCellsToCsv(roiState.cells))
-    appendDebugEvent(`Exported ROI cells ${name}`)
-  }
-
-  function handleExportRoiTranscripts() {
-    if (roiState.status !== 'ready') {
-      return
-    }
-
-    const requestId = roiTranscriptExportRequestId.current + 1
-    abortActiveRequest(roiTranscriptExportAbortRef)
-    const abortController = new AbortController()
-    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
-    roiTranscriptExportRequestId.current = requestId
-    roiTranscriptExportAbortRef.current = abortController
-    setRoiTranscriptExportState({ status: 'loading', url: roiState.url })
-    appendDebugEvent(`Exporting ROI transcripts ${name}`)
-
-    void loadRoiTranscripts(roiState.url, roiState.selection, {
-      signal: abortController.signal,
-    })
-      .then((transcripts) => {
-        if (roiTranscriptExportRequestId.current !== requestId) {
-          return
-        }
-
-        downloadTextFile(
-          `${slug(name)}-transcripts.csv`,
-          roiTranscriptsToCsv(transcripts),
-        )
-        setRoiTranscriptExportState({ status: 'idle' })
-        appendDebugEvent(
-          `Exported ROI transcripts: ${transcripts.length.toLocaleString()} rows`,
-        )
-      })
-      .catch((error) => {
-        if (isAbortError(error) || roiTranscriptExportRequestId.current !== requestId) {
-          return
-        }
-
-        setRoiTranscriptExportState({
-          status: 'error',
-          url: roiState.url,
-          error: createStructuredLoadError('ROI transcripts', error),
-        })
-        appendDebugEvent('ROI transcript export failed')
-      })
-      .finally(() => {
-        if (roiTranscriptExportAbortRef.current === abortController) {
-          roiTranscriptExportAbortRef.current = null
-        }
-      })
   }
 
   function runMagicLensQuery(
