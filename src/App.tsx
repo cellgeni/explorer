@@ -10,18 +10,21 @@ import { DatasetHudPanel } from './features/control-hud/DatasetHudPanel'
 import { LayerHudPanel } from './features/control-hud/LayerHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import { RoiHudPanel } from './features/control-hud/RoiHudPanel'
-import { TranscriptStatusPanel } from './features/transcripts/TranscriptStatusPanel'
+import { TranscriptHudPanel } from './features/transcripts/TranscriptHudPanel'
 import { transcriptCapabilityLabel } from './features/transcripts/transcriptLabels'
-import { GeneOptionList } from './features/genes/GeneOptionList'
+import { GeneHudPanel } from './features/genes/GeneHudPanel'
 import {
   CONTROL_HUD_TABS,
-  isObservationColorMode,
   parseControlHudTab,
   parseObservationColorMode,
   parseViewerCoordinateUnit,
   readShareableStateFromLocation,
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
+import {
+  defaultAppDependencies,
+  type AppProps,
+} from './features/app-shell/appDependencies'
 import {
   abortActiveRequest,
   appendDebugLogEntry,
@@ -42,9 +45,7 @@ import {
   TRANSCRIPT_NATIVE_DENSITY_MAX_BINS,
   buildCellSummaryTranscriptBins,
   estimateVisibleTranscriptsFromCells,
-  isTranscriptDetailMode,
   isTranscriptExactManualLoadRequired,
-  isTranscriptFeatureFilterMode,
   maxTranscriptAggregateCount,
   normalizeTranscriptMinQv,
   normalizeTranscriptPointSize,
@@ -56,7 +57,6 @@ import {
   transcriptAggregateBinsForRendering,
   transcriptAggregateFallbackMessage,
   transcriptAggregateScaleMaxForRendering,
-  transcriptDensityScaleAriaLabel,
   transcriptDensityScaleValueLabels,
   transcriptExactManualLoadMessage,
   transcriptNativeAggregateMessage,
@@ -136,7 +136,6 @@ import {
 import {
   defaultGeneSetName,
   filterGeneOptions,
-  formatGeneScaleValue,
   type GeneExpressionScaleDomain,
   type GeneExpressionState,
   geneExpressionModeLabel,
@@ -144,7 +143,6 @@ import {
   geneExpressionStatusCopy,
   genePanelStatusCopy,
   type GenePanelState,
-  isGeneExpressionDetailMode,
   parseGeneExpressionColorScale,
   parseGeneExpressionDetailMode,
   parseGeneExpressionScoreMode,
@@ -168,58 +166,28 @@ import type {
 } from './features/dataset/datasetLoadModel'
 import { slug } from './utils/slug'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
-import {
-  ALL_ANNOTATION_GROUP_ID,
-  loadDatasetAnnotationGroups as defaultLoadDatasetAnnotationGroups,
-  loadDatasetAnnotations as defaultLoadDatasetAnnotations,
-} from './data/datasetAnnotations'
-import { loadDatasetBoundaryElements as defaultLoadBoundaryElements } from './data/datasetBoundaries'
-import { loadDatasetAnalysisEmbeddings as defaultLoadAnalysisEmbeddings } from './data/analysisEmbeddings'
-import { loadDatasetGeneExpression as defaultLoadDatasetGeneExpression } from './data/geneExpression'
-import { loadDatasetOverview as defaultLoadDatasetOverview } from './data/datasetOverview'
-import {
-  warmDatasetForRoi as defaultWarmDatasetForRoi,
-  type WarmDatasetForRoiOptions,
-  type WarmDatasetForRoiResult,
-} from './data/datasetWarmup'
-import { loadGenePanel as defaultLoadGenePanel } from './data/genePanel'
+import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
+import type { WarmDatasetForRoiResult } from './data/datasetWarmup'
 import {
   geneExpressionRequestKey,
   geneExpressionWaitingKey,
   planGeneExpressionLod,
 } from './data/geneExpressionLod'
-import { loadMorphologyImage as defaultLoadMorphologyImage } from './data/morphologyImage'
-import {
-  ROI_CELL_EXPORT_LIMIT,
-  loadDatasetRoiCells as defaultLoadDatasetRoiCells,
-} from './data/roiCells'
-import { asCellId, type CellId } from './data/cellid'
-import { loadDatasetRoiGeneStats as defaultLoadDatasetRoiGeneStats } from './data/roiGeneStats'
-import { loadDatasetRoiTranscripts as defaultLoadDatasetRoiTranscripts } from './data/roiTranscripts'
+import { ROI_CELL_EXPORT_LIMIT } from './data/roiCells'
+import { asCellId } from './data/cellid'
 import {
   CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
   CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
   DEFAULT_CELL_TRANSCRIPT_MIN_QV,
-  loadDatasetCellTranscriptDistribution as defaultLoadDatasetCellTranscriptDistribution,
-  type CellTranscriptZDistribution,
 } from './data/cellTranscripts'
 import {
-  MAX_TRANSCRIPT_EXACT_RENDER_LIMIT,
-  MIN_TRANSCRIPT_EXACT_RENDER_LIMIT,
   TRANSCRIPT_GROUP_LIMIT,
-  loadDatasetTranscriptCapabilities as defaultLoadDatasetTranscriptCapabilities,
-  loadDatasetTranscriptAggregates as defaultLoadDatasetTranscriptAggregates,
-  loadDatasetTranscriptViewport as defaultLoadDatasetTranscriptViewport,
   normalizeTranscriptExactPointLimit,
   transcriptAggregateRequestKey,
   planTranscriptLod,
   transcriptViewportRequestKey,
-  type TranscriptCapabilities,
-  type TranscriptAggregateResult,
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
-  type TranscriptGroupSummary,
-  type TranscriptPoint,
 } from './data/transcriptOverlay'
 import {
   normalizeRoiSelection,
@@ -227,10 +195,7 @@ import {
   type RoiSelectionInput,
 } from './data/roiSelection'
 import { parseCustomAnnotations } from './data/customAnnotations'
-import {
-  runDatasetDiagnostics as defaultRunDatasetDiagnostics,
-  summarizeDatasetDiagnostics,
-} from './data/datasetDiagnostics'
+import { summarizeDatasetDiagnostics } from './data/datasetDiagnostics'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
 import {
   formatShareableState,
@@ -256,16 +221,8 @@ import {
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
   DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
   DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
-  GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
-  GENE_EXPRESSION_SCORE_MODE_OPTIONS,
-  TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS,
-  TRANSCRIPT_POINT_COLOR_MODE_OPTIONS,
   geneExpressionCellsToLayerData,
   geneExpressionScoreDomainMax,
-  isGeneExpressionColorScale,
-  isGeneExpressionScoreMode,
-  isTranscriptDensityColorScale,
-  isTranscriptPointColorMode,
   overviewCellsToLayerData,
   styleGeneExpressionCellsByScale,
   transcriptAggregateBinsToLayerData,
@@ -277,25 +234,14 @@ import {
   annotationPaletteColor,
   normalizeAnnotationColor,
 } from './rendering/annotationPalette'
-import { opacityToPercent, percentToOpacity } from './rendering/layerOpacity'
+import { percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
-import type { BBox, DataPoint } from './data/coords'
-import type { ChannelAutoContrast } from './data/morphologyContrast'
-import type {
-  DatasetCell,
-  DatasetTranscript,
-  GeneExpressionBatch,
-} from './datasets/xeniumDataset'
-import type { CellOverviewPoint } from './data/hyparquetCells'
+import type { GeneExpressionBatch } from './datasets/xeniumDataset'
 import type { MorphologyImage, MorphologyImageChannel } from './data/morphologyImage'
 import type { MorphologyCanvasChannel } from './components/MorphologyCanvas'
 import type { AnnotationColorStyle, ObservationColorMode } from './rendering/cellStyling'
-import type { AnalysisEmbedding, AnalysisEmbeddingKind } from './data/analysisEmbeddings'
-import type {
-  AnnotationGroupOption,
-  LoadDatasetAnnotationsOptions,
-} from './data/datasetAnnotations'
-import type { Annotation, ElementBatch, SpatialElement } from './datasets/spatialDataset'
+import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
+import type { Annotation, SpatialElement } from './datasets/spatialDataset'
 import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
 import type {
   GeneExpressionColorScale,
@@ -303,7 +249,6 @@ import type {
   TranscriptDensityColorScale,
   TranscriptPointColorMode,
 } from './rendering/deckLayers'
-import type { RoiGeneStats } from './data/roiGeneStats'
 import type { OverviewCellDatum } from './rendering/deckLayers'
 import type {
   RoiDrawMode,
@@ -312,169 +257,49 @@ import type {
   ViewerViewportDetail,
 } from './components/ViewerCore'
 
+export type {
+  AnalysisEmbeddingsLoader,
+  AnnotationGroupLoader,
+  AnnotationLoader,
+  AutoChannelContrastLoader,
+  BoundaryElementsLoader,
+  CellTranscriptDistributionLoader,
+  DatasetDiagnosticsRunner,
+  DatasetOverviewLoader,
+  DatasetWarmupLoader,
+  GeneExpressionLoader,
+  GenePanelLoader,
+  MorphologyImageLoader,
+  RoiCellsLoader,
+  RoiGeneStatsLoader,
+  RoiTranscriptsLoader,
+  TranscriptAggregateLoader,
+  TranscriptCapabilitiesLoader,
+  TranscriptViewportLoader,
+} from './features/app-shell/appDependencies'
+
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_GENE_LIST: readonly string[] = []
 
-export type DatasetOverviewLoader = (
-  baseUrl: string,
-  options?: {
-    readonly limit?: number | null
-    readonly includeCellIds?: boolean
-    readonly signal?: AbortSignal
-  },
-) => Promise<readonly CellOverviewPoint[]>
-
-export type MorphologyImageLoader = (
-  baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
-) => Promise<MorphologyImage>
-export type BoundaryElementsLoader = (
-  baseUrl: string,
-  bbox: BBox,
-  options?: { readonly signal?: AbortSignal },
-) => Promise<ElementBatch>
-export type GenePanelLoader = (
-  baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
-) => Promise<readonly string[]>
-export type AnnotationLoader = (
-  baseUrl: string,
-  options?: LoadDatasetAnnotationsOptions,
-) => Promise<readonly Annotation[]>
-export type AnnotationGroupLoader = (
-  baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
-) => Promise<readonly AnnotationGroupOption[]>
-export type AnalysisEmbeddingsLoader = (
-  baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
-) => Promise<readonly AnalysisEmbedding[]>
-export type RoiCellsLoader = (
-  baseUrl: string,
-  selection: RoiSelectionInput,
-  options?: { readonly signal?: AbortSignal; readonly limit?: number },
-) => Promise<readonly DatasetCell[]>
-export type RoiGeneStatsLoader = (
-  baseUrl: string,
-  cells: readonly DatasetCell[],
-  options?: {
-    readonly signal?: AbortSignal
-    readonly cellLimit?: number
-    readonly geneLimit?: number
-    readonly sampleStrategy?: 'stratified' | 'head'
-  },
-) => Promise<RoiGeneStats>
-export type RoiTranscriptsLoader = (
-  baseUrl: string,
-  selection: RoiSelectionInput,
-  options?: {
-    readonly signal?: AbortSignal
-    readonly limit?: number
-    readonly minQv?: number
-  },
-) => Promise<readonly DatasetTranscript[]>
-export type CellTranscriptDistributionLoader = (
-  baseUrl: string,
-  cellId: CellId,
-  options?: {
-    readonly signal?: AbortSignal
-    readonly limit?: number
-    readonly minQv?: number
-    readonly binCount?: number
-    readonly bbox?: BBox
-    readonly boundaryPolygon?: readonly DataPoint[]
-  },
-) => Promise<CellTranscriptZDistribution>
-export type TranscriptCapabilitiesLoader = (
-  baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
-) => Promise<TranscriptCapabilities>
-export type TranscriptAggregateLoader = (
-  baseUrl: string,
-  bbox: BBox,
-  options?: {
-    readonly signal?: AbortSignal
-    readonly mode?: 'density'
-    readonly featureNames?: readonly string[]
-    readonly maxBins?: number
-  },
-) => Promise<TranscriptAggregateResult>
-export type TranscriptViewportLoader = (
-  baseUrl: string,
-  bbox: BBox,
-  options?: {
-    readonly signal?: AbortSignal
-    readonly pointLimit?: number
-    readonly groupLimit?: number
-    readonly minQv?: number
-    readonly geneOnly?: boolean
-    readonly featureNames?: readonly string[]
-  },
-) => Promise<{
-  readonly points: readonly TranscriptPoint[]
-  readonly groups: readonly TranscriptGroupSummary[]
-  readonly hitPointLimit: boolean
-}>
-export type GeneExpressionLoader = (
-  baseUrl: string,
-  bbox: BBox,
-  genes: readonly string[],
-  options?: {
-    readonly limit?: number
-    readonly sampleStride?: number
-    readonly signal?: AbortSignal
-  },
-) => Promise<GeneExpressionBatch>
-export type AutoChannelContrastLoader = (
-  channel: MorphologyImageChannel,
-  options?: { readonly signal?: AbortSignal },
-) => Promise<ChannelAutoContrast>
-export type DatasetWarmupLoader = (
-  baseUrl: string,
-  options?: Pick<WarmDatasetForRoiOptions, 'signal' | 'onCellFeatureMatrixCapability'>,
-) => Promise<WarmDatasetForRoiResult | void>
-export type DatasetDiagnosticsRunner = typeof defaultRunDatasetDiagnostics
-
-export interface AppProps {
-  readonly loadDatasetOverview?: DatasetOverviewLoader
-  readonly loadMorphologyImage?: MorphologyImageLoader
-  readonly loadBoundaryElements?: BoundaryElementsLoader
-  readonly loadGenePanel?: GenePanelLoader
-  readonly loadAnnotations?: AnnotationLoader
-  readonly loadAnnotationGroups?: AnnotationGroupLoader
-  readonly loadAnalysisEmbeddings?: AnalysisEmbeddingsLoader
-  readonly loadRoiCells?: RoiCellsLoader
-  readonly loadRoiGeneStats?: RoiGeneStatsLoader
-  readonly loadRoiTranscripts?: RoiTranscriptsLoader
-  readonly loadCellTranscriptDistribution?: CellTranscriptDistributionLoader
-  readonly loadTranscriptCapabilities?: TranscriptCapabilitiesLoader
-  readonly loadTranscriptAggregates?: TranscriptAggregateLoader
-  readonly loadTranscriptViewport?: TranscriptViewportLoader
-  readonly loadGeneExpression?: GeneExpressionLoader
-  readonly warmDatasetForRoi?: DatasetWarmupLoader
-  readonly runDatasetDiagnostics?: DatasetDiagnosticsRunner
-  readonly computeAutoChannelContrast?: AutoChannelContrastLoader
-}
-
 export function App({
-  loadDatasetOverview = defaultLoadDatasetOverview,
-  loadMorphologyImage = defaultLoadMorphologyImage,
-  loadBoundaryElements = defaultLoadBoundaryElements,
-  loadGenePanel = defaultLoadGenePanel,
-  loadAnnotations = defaultLoadDatasetAnnotations,
-  loadAnnotationGroups = defaultLoadDatasetAnnotationGroups,
-  loadAnalysisEmbeddings = defaultLoadAnalysisEmbeddings,
-  loadRoiCells = defaultLoadDatasetRoiCells,
-  loadRoiGeneStats = defaultLoadDatasetRoiGeneStats,
-  loadRoiTranscripts = defaultLoadDatasetRoiTranscripts,
-  loadCellTranscriptDistribution = defaultLoadDatasetCellTranscriptDistribution,
-  loadTranscriptCapabilities = defaultLoadDatasetTranscriptCapabilities,
-  loadTranscriptAggregates = defaultLoadDatasetTranscriptAggregates,
-  loadTranscriptViewport = defaultLoadDatasetTranscriptViewport,
-  loadGeneExpression = defaultLoadDatasetGeneExpression,
-  warmDatasetForRoi = defaultWarmDatasetForRoi,
-  runDatasetDiagnostics = defaultRunDatasetDiagnostics,
-  computeAutoChannelContrast = defaultComputeAutoChannelContrast,
+  loadDatasetOverview = defaultAppDependencies.loadDatasetOverview,
+  loadMorphologyImage = defaultAppDependencies.loadMorphologyImage,
+  loadBoundaryElements = defaultAppDependencies.loadBoundaryElements,
+  loadGenePanel = defaultAppDependencies.loadGenePanel,
+  loadAnnotations = defaultAppDependencies.loadAnnotations,
+  loadAnnotationGroups = defaultAppDependencies.loadAnnotationGroups,
+  loadAnalysisEmbeddings = defaultAppDependencies.loadAnalysisEmbeddings,
+  loadRoiCells = defaultAppDependencies.loadRoiCells,
+  loadRoiGeneStats = defaultAppDependencies.loadRoiGeneStats,
+  loadRoiTranscripts = defaultAppDependencies.loadRoiTranscripts,
+  loadCellTranscriptDistribution = defaultAppDependencies.loadCellTranscriptDistribution,
+  loadTranscriptCapabilities = defaultAppDependencies.loadTranscriptCapabilities,
+  loadTranscriptAggregates = defaultAppDependencies.loadTranscriptAggregates,
+  loadTranscriptViewport = defaultAppDependencies.loadTranscriptViewport,
+  loadGeneExpression = defaultAppDependencies.loadGeneExpression,
+  warmDatasetForRoi = defaultAppDependencies.warmDatasetForRoi,
+  runDatasetDiagnostics = defaultAppDependencies.runDatasetDiagnostics,
+  computeAutoChannelContrast = defaultAppDependencies.computeAutoChannelContrast,
 }: AppProps) {
   const datasetInputId = useId()
   const morphologyInputId = useId()
@@ -3273,6 +3098,11 @@ export function App({
     })
   }
 
+  function resetTranscriptViewportRequest() {
+    transcriptViewportKeyRef.current = null
+    setManualTranscriptExactRequestKey(null)
+  }
+
   function handlePinTranscript(detail: ViewerTranscriptHoverDetail) {
     setPinnedTranscript(detail)
     setActiveControlHudTab('transcripts')
@@ -3282,6 +3112,100 @@ export function App({
         : `Pinned transcript ${detail.transcript.transcriptId ?? detail.transcript.id}`,
       { coalesceKey: 'transcript-pin' },
     )
+  }
+
+  function handleTranscriptOverlayChange(checked: boolean) {
+    setShowTranscriptOverlay(checked)
+    appendDebugEvent(
+      checked ? 'Transcript overlay enabled' : 'Transcript overlay disabled',
+      { coalesceKey: 'transcript-overlay-toggle' },
+    )
+  }
+
+  function handleTranscriptDetailModeChange(nextMode: TranscriptDetailMode) {
+    setTranscriptDetailMode(nextMode)
+    resetTranscriptViewportRequest()
+    appendDebugEvent(`Transcript detail: ${nextMode}`, {
+      coalesceKey: 'transcript-detail',
+    })
+  }
+
+  function handleTranscriptExactPointLimitChange(value: number) {
+    const nextLimit = normalizeTranscriptExactPointLimit(value)
+
+    setTranscriptExactPointLimit(nextLimit)
+    resetTranscriptViewportRequest()
+    appendDebugEvent(`Transcript exact budget: ${nextLimit.toLocaleString()}`, {
+      coalesceKey: 'transcript-exact-budget',
+    })
+  }
+
+  function handleTranscriptFeatureFilterModeChange(
+    nextMode: TranscriptFeatureFilterMode,
+  ) {
+    setTranscriptFeatureFilterMode(nextMode)
+    resetTranscriptViewportRequest()
+    appendDebugEvent(`Transcript feature filter: ${nextMode}`, {
+      coalesceKey: 'transcript-feature-filter',
+    })
+  }
+
+  function handleToggleTranscriptSelectedFeature(gene: string) {
+    toggleGene(gene)
+    transcriptViewportKeyRef.current = null
+  }
+
+  function handleTranscriptDensityColorScaleChange(
+    nextScale: TranscriptDensityColorScale,
+  ) {
+    setTranscriptDensityColorScale(nextScale)
+    appendDebugEvent(`Transcript density color: ${nextScale}`, {
+      coalesceKey: 'transcript-density-color',
+    })
+  }
+
+  function handleTranscriptPointColorModeChange(nextMode: TranscriptPointColorMode) {
+    setTranscriptPointColorMode(nextMode)
+    appendDebugEvent(`Transcript point color: ${nextMode}`, {
+      coalesceKey: 'transcript-point-color',
+    })
+  }
+
+  function handleTranscriptMinQvChange(value: number) {
+    const nextMinQv = normalizeTranscriptMinQv(value)
+
+    setTranscriptMinQv(nextMinQv)
+    resetTranscriptViewportRequest()
+    appendDebugEvent(`Transcript min QV: ${nextMinQv}`, {
+      coalesceKey: 'transcript-min-qv',
+    })
+  }
+
+  function handleTranscriptGeneOnlyChange(checked: boolean) {
+    setTranscriptGeneOnly(checked)
+    resetTranscriptViewportRequest()
+    appendDebugEvent(
+      checked
+        ? 'Transcript gene-only filter enabled'
+        : 'Transcript gene-only filter disabled',
+      { coalesceKey: 'transcript-gene-only' },
+    )
+  }
+
+  function handleTranscriptOpacityPercentChange(nextPercent: number) {
+    setTranscriptOpacity(percentToOpacity(nextPercent))
+    appendDebugEvent(`Transcript opacity: ${nextPercent}%`, {
+      coalesceKey: 'transcript-opacity',
+    })
+  }
+
+  function handleTranscriptPointSizeChange(value: number) {
+    const nextSize = normalizeTranscriptPointSize(value)
+
+    setTranscriptPointSize(nextSize)
+    appendDebugEvent(`Transcript point size: ${nextSize}px`, {
+      coalesceKey: 'transcript-point-size',
+    })
   }
 
   function pickTranscriptFeature(gene: string) {
@@ -3370,6 +3294,21 @@ export function App({
       geneExpressionBatch,
       nextScoreMode,
     )
+  }
+
+  function handleGeneExpressionColorScaleChange(nextScale: GeneExpressionColorScale) {
+    setGeneExpressionColorScale(nextScale)
+    appendDebugEvent(`Gene scale: ${nextScale}`)
+  }
+
+  function handleGeneExpressionDetailModeChange(nextMode: GeneExpressionDetailMode) {
+    setGeneExpressionDetailMode(nextMode)
+    appendDebugEvent(`Expression detail: ${nextMode}`)
+  }
+
+  function handleObservationColorModeChange(nextMode: ObservationColorMode) {
+    setObservationColorMode(nextMode)
+    appendDebugEvent(`Cell color: ${nextMode}`)
   }
 
   function resetGeneExpressionSelectionState() {
@@ -4282,577 +4221,102 @@ export function App({
               onUpdateMorphologyChannel={updateMorphologyChannel}
             />
 
-            <div
-              id="hud-panel-genes"
-              className="hud-tab-panel"
-              role="tabpanel"
-              aria-labelledby="hud-tab-genes"
-              hidden={activeControlHudTab !== 'genes'}
-            >
-              <section className="analysis-section" aria-labelledby="analysis-heading">
-                <div className="section-heading-row">
-                  <h2 id="analysis-heading">Analysis</h2>
-                  <span
-                    className={
-                      genePanelState.status === 'loading' ||
-                      geneExpressionState.status === 'loading'
-                        ? 'status-chip is-loading'
-                        : 'status-chip'
-                    }
-                    aria-live="polite"
-                  >
-                    {analysisHeaderCopy}
-                  </span>
-                </div>
+            <GeneHudPanel
+              active={activeControlHudTab === 'genes'}
+              geneSearchInputId={geneSearchInputId}
+              geneSetSymbolsInputId={geneSetSymbolsInputId}
+              geneSetNameInputId={geneSetNameInputId}
+              geneSetScoreInputId={geneSetScoreInputId}
+              geneScaleInputId={geneScaleInputId}
+              geneExpressionDetailInputId={geneExpressionDetailInputId}
+              observationModeInputId={observationModeInputId}
+              analysisHeaderCopy={analysisHeaderCopy}
+              geneExpressionCopy={geneExpressionCopy}
+              genePanelState={genePanelState}
+              geneExpressionState={geneExpressionState}
+              geneSearch={geneSearch}
+              geneSetSymbols={geneSetSymbols}
+              geneSetName={geneSetName}
+              geneExpressionScoreMode={geneExpressionScoreMode}
+              savedGeneSets={savedGeneSets}
+              selectedGenes={selectedGenes}
+              filteredGenes={filteredGenes}
+              geneExpressionColorScale={geneExpressionColorScale}
+              geneExpressionScaleMax={geneExpressionScaleMax}
+              geneExpressionDetailMode={geneExpressionDetailMode}
+              observationColorMode={observationColorMode}
+              hasAnnotationColors={annotationStyleColors.length > 0}
+              onGeneSearchChange={setGeneSearch}
+              onToggleGene={toggleGene}
+              onGeneSetSymbolsChange={setGeneSetSymbols}
+              onApplyGeneSetSymbols={applyGeneSetSymbols}
+              onSaveSelectedGeneSet={saveSelectedGeneSet}
+              onGeneSetNameChange={setGeneSetName}
+              onGeneExpressionScoreModeChange={handleGeneExpressionScoreModeChange}
+              onApplySavedGeneSet={applySavedGeneSet}
+              onRemoveSavedGeneSet={removeSavedGeneSet}
+              onGeneExpressionColorScaleChange={handleGeneExpressionColorScaleChange}
+              onGeneExpressionDetailModeChange={handleGeneExpressionDetailModeChange}
+              onObservationColorModeChange={handleObservationColorModeChange}
+            />
 
-                <label htmlFor={geneSearchInputId}>Gene selection</label>
-                <input
-                  id={geneSearchInputId}
-                  type="search"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={geneSearch}
-                  disabled={genePanelState.status !== 'ready'}
-                  placeholder="Search genes"
-                  onChange={(event) => {
-                    setGeneSearch(event.currentTarget.value)
-                  }}
-                />
-
-                {selectedGenes.length === 0 ? null : (
-                  <div className="gene-chip-row" aria-label="Selected genes">
-                    {selectedGenes.map((gene) => (
-                      <button
-                        key={gene}
-                        type="button"
-                        className="gene-chip"
-                        onClick={() => {
-                          toggleGene(gene)
-                        }}
-                      >
-                        {gene}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <GeneOptionList
-                  genes={filteredGenes}
-                  selectedGenes={selectedGenes}
-                  onToggleGene={toggleGene}
-                />
-
-                <label htmlFor={geneSetSymbolsInputId}>Gene set symbols</label>
-                <textarea
-                  id={geneSetSymbolsInputId}
-                  className="gene-set-symbols"
-                  autoComplete="off"
-                  spellCheck={false}
-                  rows={1}
-                  value={geneSetSymbols}
-                  disabled={genePanelState.status !== 'ready'}
-                  placeholder="Actb, Gad1, Slc17a7"
-                  onChange={(event) => {
-                    setGeneSetSymbols(event.currentTarget.value)
-                  }}
-                />
-                <div className="gene-set-actions">
-                  <button
-                    type="button"
-                    disabled={
-                      genePanelState.status !== 'ready' || geneSetSymbols.trim() === ''
-                    }
-                    onClick={applyGeneSetSymbols}
-                  >
-                    Apply Symbols
-                  </button>
-                  <button
-                    type="button"
-                    disabled={selectedGenes.length === 0}
-                    onClick={saveSelectedGeneSet}
-                  >
-                    Save Set
-                  </button>
-                </div>
-
-                <label htmlFor={geneSetNameInputId}>Set name</label>
-                <input
-                  id={geneSetNameInputId}
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={geneSetName}
-                  placeholder={defaultGeneSetName(selectedGenes)}
-                  onChange={(event) => {
-                    setGeneSetName(event.currentTarget.value)
-                  }}
-                />
-
-                <label htmlFor={geneSetScoreInputId}>Signature score</label>
-                <select
-                  id={geneSetScoreInputId}
-                  value={geneExpressionScoreMode}
-                  onChange={(event) => {
-                    const nextScoreMode = event.currentTarget.value
-
-                    if (isGeneExpressionScoreMode(nextScoreMode)) {
-                      handleGeneExpressionScoreModeChange(nextScoreMode)
-                    }
-                  }}
-                >
-                  {GENE_EXPRESSION_SCORE_MODE_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-
-                {savedGeneSets.length === 0 ? null : (
-                  <div className="gene-set-list" aria-label="Saved gene sets">
-                    {savedGeneSets.map((geneSet) => (
-                      <div key={geneSet.id} className="gene-set-row">
-                        <button
-                          type="button"
-                          className="gene-set-apply"
-                          aria-label={`Apply ${geneSet.name}`}
-                          onClick={() => {
-                            applySavedGeneSet(geneSet)
-                          }}
-                        >
-                          <span>{geneSet.name}</span>
-                          <small>{geneSet.scoreMode}</small>
-                        </button>
-                        <button
-                          type="button"
-                          className="gene-set-remove"
-                          aria-label={`Remove ${geneSet.name}`}
-                          onClick={() => {
-                            removeSavedGeneSet(geneSet.id)
-                          }}
-                        >
-                          x
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <label htmlFor={geneScaleInputId}>Gene scale</label>
-                <div className="gene-scale-control">
-                  <select
-                    id={geneScaleInputId}
-                    value={geneExpressionColorScale}
-                    onChange={(event) => {
-                      const nextScale = event.currentTarget.value
-
-                      if (isGeneExpressionColorScale(nextScale)) {
-                        setGeneExpressionColorScale(nextScale)
-                        appendDebugEvent(`Gene scale: ${nextScale}`)
-                      }
-                    }}
-                  >
-                    {GENE_EXPRESSION_COLOR_SCALE_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span
-                    className={`gene-scale-preview gene-scale-preview-${geneExpressionColorScale}`}
-                    aria-hidden="true"
-                  />
-                  <div className="gene-scale-values" aria-label="Gene scale values">
-                    <span>0</span>
-                    <span>{formatGeneScaleValue(geneExpressionScaleMax / 2)}</span>
-                    <span>{formatGeneScaleValue(geneExpressionScaleMax)}</span>
-                  </div>
-                </div>
-
-                <label htmlFor={geneExpressionDetailInputId}>Expression detail</label>
-                <select
-                  id={geneExpressionDetailInputId}
-                  value={geneExpressionDetailMode}
-                  onChange={(event) => {
-                    const nextMode = event.currentTarget.value
-
-                    if (isGeneExpressionDetailMode(nextMode)) {
-                      setGeneExpressionDetailMode(nextMode)
-                      appendDebugEvent(`Expression detail: ${nextMode}`)
-                    }
-                  }}
-                >
-                  <option value="auto">Auto LOD</option>
-                  <option value="exact-region">Exact region</option>
-                </select>
-
-                <label htmlFor={observationModeInputId}>Cell color</label>
-                <select
-                  id={observationModeInputId}
-                  value={observationColorMode}
-                  onChange={(event) => {
-                    const nextMode = event.currentTarget.value
-
-                    if (isObservationColorMode(nextMode)) {
-                      setObservationColorMode(nextMode)
-                      appendDebugEvent(`Cell color: ${nextMode}`)
-                    }
-                  }}
-                >
-                  <option value="transcript-count">Transcript count</option>
-                  <option value="cell-area">Cell area</option>
-                  {annotationStyleColors.length === 0 ? null : (
-                    <option value="annotations">Annotations</option>
-                  )}
-                </select>
-
-                <p className="analysis-status" aria-live="polite">
-                  {geneExpressionCopy}
-                </p>
-              </section>
-            </div>
-
-            <div
-              id="hud-panel-transcripts"
-              className="hud-tab-panel"
-              role="tabpanel"
-              aria-labelledby="hud-tab-transcripts"
-              hidden={activeControlHudTab !== 'transcripts'}
-            >
-              <section
-                className="analysis-section transcript-section"
-                aria-labelledby="transcript-heading"
-              >
-                <div className="section-heading-row">
-                  <h2 id="transcript-heading">Transcripts</h2>
-                  <span
-                    className={
-                      transcriptCapabilityState.status === 'loading' ||
-                      transcriptLayerState.status === 'loading'
-                        ? 'status-chip is-loading'
-                        : 'status-chip'
-                    }
-                    aria-live="polite"
-                  >
-                    {transcriptCopy}
-                  </span>
-                </div>
-
-                <label className="dataset-toggle" htmlFor="show-transcripts-overlay">
-                  <input
-                    id="show-transcripts-overlay"
-                    type="checkbox"
-                    checked={showTranscriptOverlay}
-                    disabled={loadState.status !== 'ready'}
-                    onChange={(event) => {
-                      const checked = event.currentTarget.checked
-                      setShowTranscriptOverlay(checked)
-                      appendDebugEvent(
-                        checked
-                          ? 'Transcript overlay enabled'
-                          : 'Transcript overlay disabled',
-                        { coalesceKey: 'transcript-overlay-toggle' },
-                      )
-                    }}
-                  />
-                  <span>Show transcripts</span>
-                </label>
-
-                <label htmlFor={transcriptDetailInputId}>Detail</label>
-                <select
-                  id={transcriptDetailInputId}
-                  value={transcriptDetailMode}
-                  onChange={(event) => {
-                    const nextMode = event.currentTarget.value
-
-                    if (isTranscriptDetailMode(nextMode)) {
-                      setTranscriptDetailMode(nextMode)
-                      transcriptViewportKeyRef.current = null
-                      setManualTranscriptExactRequestKey(null)
-                      appendDebugEvent(`Transcript detail: ${nextMode}`, {
-                        coalesceKey: 'transcript-detail',
-                      })
-                    }
-                  }}
-                >
-                  <option value="auto">Auto</option>
-                  <option value="density">Density</option>
-                  <option value="exact">Exact</option>
-                </select>
-
-                <label htmlFor={transcriptPointBudgetInputId}>Exact budget</label>
-                <input
-                  id={transcriptPointBudgetInputId}
-                  type="number"
-                  inputMode="numeric"
-                  min={MIN_TRANSCRIPT_EXACT_RENDER_LIMIT}
-                  max={MAX_TRANSCRIPT_EXACT_RENDER_LIMIT}
-                  step="1000"
-                  value={transcriptExactPointLimit}
-                  onChange={(event) => {
-                    const nextLimit = normalizeTranscriptExactPointLimit(
-                      event.currentTarget.valueAsNumber,
-                    )
-                    setTranscriptExactPointLimit(nextLimit)
-                    transcriptViewportKeyRef.current = null
-                    setManualTranscriptExactRequestKey(null)
-                    appendDebugEvent(
-                      `Transcript exact budget: ${nextLimit.toLocaleString()}`,
-                      {
-                        coalesceKey: 'transcript-exact-budget',
-                      },
-                    )
-                  }}
-                />
-
-                <label htmlFor={transcriptFeatureFilterInputId}>Feature filter</label>
-                <select
-                  id={transcriptFeatureFilterInputId}
-                  value={effectiveTranscriptFeatureFilterMode}
-                  onChange={(event) => {
-                    const nextMode = event.currentTarget.value
-
-                    if (isTranscriptFeatureFilterMode(nextMode)) {
-                      setTranscriptFeatureFilterMode(nextMode)
-                      transcriptViewportKeyRef.current = null
-                      setManualTranscriptExactRequestKey(null)
-                      appendDebugEvent(`Transcript feature filter: ${nextMode}`, {
-                        coalesceKey: 'transcript-feature-filter',
-                      })
-                    }
-                  }}
-                >
-                  <option value="selected" disabled={selectedGenes.length === 0}>
-                    Selected genes
-                  </option>
-                  <option value="all">All features</option>
-                </select>
-
-                {selectedGenes.length === 0 ? null : (
-                  <div
-                    className="gene-chip-row"
-                    aria-label="Transcript selected features"
-                  >
-                    {selectedGenes.map((gene) => (
-                      <button
-                        key={gene}
-                        type="button"
-                        className="gene-chip"
-                        onClick={() => {
-                          toggleGene(gene)
-                          transcriptViewportKeyRef.current = null
-                        }}
-                      >
-                        {gene}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <label htmlFor={transcriptFeatureSearchInputId}>Feature search</label>
-                <input
-                  id={transcriptFeatureSearchInputId}
-                  type="search"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={transcriptFeatureSearch}
-                  disabled={genePanelState.status !== 'ready'}
-                  placeholder="Search transcript features"
-                  onChange={(event) => {
-                    setTranscriptFeatureSearch(event.currentTarget.value)
-                  }}
-                />
-
-                {transcriptFeatureSearch.trim() === '' ? null : (
-                  <div
-                    className="gene-option-list"
-                    aria-label="Transcript feature options"
-                  >
-                    {filteredTranscriptFeatures.length === 0 ? (
-                      <span className="option-empty">No matching features</span>
-                    ) : (
-                      filteredTranscriptFeatures.map((gene) => (
-                        <button
-                          key={gene}
-                          type="button"
-                          onClick={() => {
-                            pickTranscriptFeature(gene)
-                          }}
-                        >
-                          {gene}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                <label htmlFor={transcriptDensityScaleInputId}>Density color</label>
-                <div className="transcript-density-scale-control">
-                  <select
-                    id={transcriptDensityScaleInputId}
-                    value={transcriptDensityColorScale}
-                    onChange={(event) => {
-                      const nextScale = event.currentTarget.value
-
-                      if (isTranscriptDensityColorScale(nextScale)) {
-                        setTranscriptDensityColorScale(nextScale)
-                        appendDebugEvent(`Transcript density color: ${nextScale}`, {
-                          coalesceKey: 'transcript-density-color',
-                        })
-                      }
-                    }}
-                  >
-                    {TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <div
-                    className="transcript-density-scale-preview-wrap"
-                    aria-label={transcriptDensityScaleAriaLabel(
-                      transcriptDensityScaleMax,
-                    )}
-                  >
-                    <span
-                      className={`transcript-density-scale-preview transcript-density-scale-preview-${transcriptDensityColorScale}`}
-                      aria-hidden="true"
-                    />
-                    <span className="transcript-density-scale-values" aria-hidden="true">
-                      <span>{transcriptDensityScaleLabels[0]}</span>
-                      <span>{transcriptDensityScaleLabels[1]}</span>
-                      <span>{transcriptDensityScaleLabels[2]}</span>
-                    </span>
-                  </div>
-                </div>
-
-                <label htmlFor={transcriptPointColorInputId}>Point color</label>
-                <select
-                  id={transcriptPointColorInputId}
-                  value={transcriptPointColorMode}
-                  onChange={(event) => {
-                    const nextMode = event.currentTarget.value
-
-                    if (isTranscriptPointColorMode(nextMode)) {
-                      setTranscriptPointColorMode(nextMode)
-                      appendDebugEvent(`Transcript point color: ${nextMode}`, {
-                        coalesceKey: 'transcript-point-color',
-                      })
-                    }
-                  }}
-                >
-                  {TRANSCRIPT_POINT_COLOR_MODE_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-
-                <label htmlFor={transcriptMinQvInputId}>Min QV</label>
-                <input
-                  id={transcriptMinQvInputId}
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  max="40"
-                  step="1"
-                  value={transcriptMinQv}
-                  onChange={(event) => {
-                    const nextMinQv = normalizeTranscriptMinQv(
-                      event.currentTarget.valueAsNumber,
-                    )
-                    setTranscriptMinQv(nextMinQv)
-                    transcriptViewportKeyRef.current = null
-                    setManualTranscriptExactRequestKey(null)
-                    appendDebugEvent(`Transcript min QV: ${nextMinQv}`, {
-                      coalesceKey: 'transcript-min-qv',
-                    })
-                  }}
-                />
-
-                <label className="dataset-toggle" htmlFor="transcript-gene-only">
-                  <input
-                    id="transcript-gene-only"
-                    type="checkbox"
-                    checked={transcriptGeneOnly}
-                    onChange={(event) => {
-                      const checked = event.currentTarget.checked
-                      setTranscriptGeneOnly(checked)
-                      transcriptViewportKeyRef.current = null
-                      setManualTranscriptExactRequestKey(null)
-                      appendDebugEvent(
-                        checked
-                          ? 'Transcript gene-only filter enabled'
-                          : 'Transcript gene-only filter disabled',
-                        { coalesceKey: 'transcript-gene-only' },
-                      )
-                    }}
-                  />
-                  <span>Gene-only calls</span>
-                </label>
-
-                <div className="layer-opacity-control">
-                  <div className="layer-opacity-header">
-                    <label htmlFor={transcriptOpacityInputId}>Transcript opacity</label>
-                    <span>{opacityToPercent(transcriptOpacity)}%</span>
-                  </div>
-                  <input
-                    id={transcriptOpacityInputId}
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={opacityToPercent(transcriptOpacity)}
-                    aria-valuetext={`${opacityToPercent(transcriptOpacity)}%`}
-                    onChange={(event) => {
-                      const nextPercent = event.currentTarget.valueAsNumber
-                      setTranscriptOpacity(percentToOpacity(nextPercent))
-                      appendDebugEvent(`Transcript opacity: ${nextPercent}%`, {
-                        coalesceKey: 'transcript-opacity',
-                      })
-                    }}
-                  />
-                </div>
-
-                <div className="layer-opacity-control">
-                  <div className="layer-opacity-header">
-                    <label htmlFor={transcriptPointSizeInputId}>Point size</label>
-                    <span>{transcriptPointSize}px</span>
-                  </div>
-                  <input
-                    id={transcriptPointSizeInputId}
-                    type="range"
-                    min="1"
-                    max="6"
-                    step="1"
-                    value={transcriptPointSize}
-                    aria-valuetext={`${transcriptPointSize}px`}
-                    onChange={(event) => {
-                      const nextSize = normalizeTranscriptPointSize(
-                        event.currentTarget.valueAsNumber,
-                      )
-                      setTranscriptPointSize(nextSize)
-                      appendDebugEvent(`Transcript point size: ${nextSize}px`, {
-                        coalesceKey: 'transcript-point-size',
-                      })
-                    }}
-                  />
-                </div>
-
-                <TranscriptStatusPanel
-                  capabilityState={transcriptCapabilityState}
-                  layerState={transcriptLayerState}
-                  exactPointLimit={transcriptExactPointLimit}
-                  visibleTranscriptEstimate={visibleTranscriptEstimate}
-                  hoveredTranscript={hoveredTranscript}
-                  pinnedTranscript={pinnedTranscript}
-                  onPinTranscript={handlePinTranscript}
-                  onClearPinnedTranscript={() => {
-                    setPinnedTranscript(null)
-                  }}
-                  onLoadExactViewport={handleLoadExactViewport}
-                />
-              </section>
-            </div>
+            <TranscriptHudPanel
+              active={activeControlHudTab === 'transcripts'}
+              transcriptDetailInputId={transcriptDetailInputId}
+              transcriptDensityScaleInputId={transcriptDensityScaleInputId}
+              transcriptPointColorInputId={transcriptPointColorInputId}
+              transcriptPointBudgetInputId={transcriptPointBudgetInputId}
+              transcriptMinQvInputId={transcriptMinQvInputId}
+              transcriptFeatureFilterInputId={transcriptFeatureFilterInputId}
+              transcriptFeatureSearchInputId={transcriptFeatureSearchInputId}
+              transcriptOpacityInputId={transcriptOpacityInputId}
+              transcriptPointSizeInputId={transcriptPointSizeInputId}
+              transcriptCopy={transcriptCopy}
+              loadEnabled={loadState.status === 'ready'}
+              featureSearchEnabled={genePanelState.status === 'ready'}
+              showTranscriptOverlay={showTranscriptOverlay}
+              transcriptDetailMode={transcriptDetailMode}
+              transcriptExactPointLimit={transcriptExactPointLimit}
+              effectiveTranscriptFeatureFilterMode={effectiveTranscriptFeatureFilterMode}
+              selectedGenes={selectedGenes}
+              transcriptFeatureSearch={transcriptFeatureSearch}
+              filteredTranscriptFeatures={filteredTranscriptFeatures}
+              transcriptDensityColorScale={transcriptDensityColorScale}
+              transcriptDensityScaleMax={transcriptDensityScaleMax}
+              transcriptDensityScaleLabels={transcriptDensityScaleLabels}
+              transcriptPointColorMode={transcriptPointColorMode}
+              transcriptMinQv={transcriptMinQv}
+              transcriptGeneOnly={transcriptGeneOnly}
+              transcriptOpacity={transcriptOpacity}
+              transcriptPointSize={transcriptPointSize}
+              transcriptCapabilityState={transcriptCapabilityState}
+              transcriptLayerState={transcriptLayerState}
+              visibleTranscriptEstimate={visibleTranscriptEstimate}
+              hoveredTranscript={hoveredTranscript}
+              pinnedTranscript={pinnedTranscript}
+              onShowTranscriptOverlayChange={handleTranscriptOverlayChange}
+              onTranscriptDetailModeChange={handleTranscriptDetailModeChange}
+              onTranscriptExactPointLimitChange={handleTranscriptExactPointLimitChange}
+              onTranscriptFeatureFilterModeChange={
+                handleTranscriptFeatureFilterModeChange
+              }
+              onToggleSelectedFeature={handleToggleTranscriptSelectedFeature}
+              onTranscriptFeatureSearchChange={setTranscriptFeatureSearch}
+              onPickTranscriptFeature={pickTranscriptFeature}
+              onTranscriptDensityColorScaleChange={
+                handleTranscriptDensityColorScaleChange
+              }
+              onTranscriptPointColorModeChange={handleTranscriptPointColorModeChange}
+              onTranscriptMinQvChange={handleTranscriptMinQvChange}
+              onTranscriptGeneOnlyChange={handleTranscriptGeneOnlyChange}
+              onTranscriptOpacityPercentChange={handleTranscriptOpacityPercentChange}
+              onTranscriptPointSizeChange={handleTranscriptPointSizeChange}
+              onPinTranscript={handlePinTranscript}
+              onClearPinnedTranscript={() => {
+                setPinnedTranscript(null)
+              }}
+              onLoadExactViewport={handleLoadExactViewport}
+            />
 
             <div
               id="hud-panel-magic-lens"
@@ -5291,14 +4755,6 @@ function formatGeneExpressionTiming(
     `matrix ${Math.round(timing.matrixReadMs)} ms`,
     `score ${Math.round(timing.scoreCellsMs)} ms`,
   ].join(', ')
-}
-
-async function defaultComputeAutoChannelContrast(
-  channel: MorphologyImageChannel,
-  options: { readonly signal?: AbortSignal } = {},
-): Promise<ChannelAutoContrast> {
-  const morphologyContrast = await import('./data/morphologyContrast')
-  return morphologyContrast.computeChannelAutoContrast(channel.loader, options)
 }
 
 function downloadTextFile(
