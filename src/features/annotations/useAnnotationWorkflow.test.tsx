@@ -1,0 +1,186 @@
+import { act, render } from '@testing-library/react'
+import * as React from 'react'
+import { describe, expect, it, vi } from 'vitest'
+import { asCellId } from '../../data/cellid'
+import { micrometers } from '../../data/coords'
+import type { Annotation } from '../../datasets/spatialDataset'
+import type { ObservationColorMode } from '../../rendering/cellStyling'
+import type { DatasetLoadState } from '../dataset/datasetLoadModel'
+import type { StructuredLoadError } from '../errors/loadErrorModel'
+import type { RoiState } from '../roi/roiModel'
+import type { AnnotationState } from './annotationModel'
+import { useAnnotationWorkflow } from './useAnnotationWorkflow'
+
+interface Snapshot {
+  readonly annotationColors: Readonly<Record<string, string>>
+  readonly annotationState: AnnotationState<StructuredLoadError>
+  readonly debugMessages: readonly string[]
+  readonly observationColorMode: ObservationColorMode
+  readonly roiName: string
+  readonly selectedAnnotationGroupId: string
+}
+
+let api: ReturnType<typeof useAnnotationWorkflow>
+let snapshot: Snapshot
+
+function Probe({
+  loadAnnotations,
+  onReady,
+  roiState = { status: 'idle' },
+  selectedAnnotationGroupId = 'cluster-a',
+}: {
+  readonly loadAnnotations: Parameters<typeof useAnnotationWorkflow>[0]['loadAnnotations']
+  readonly onReady: (
+    nextApi: ReturnType<typeof useAnnotationWorkflow>,
+    nextSnapshot: Snapshot,
+  ) => void
+  readonly roiState?: RoiState<StructuredLoadError>
+  readonly selectedAnnotationGroupId?: string
+}) {
+  const [annotationColors, setAnnotationColors] = React.useState<
+    Readonly<Record<string, string>>
+  >({})
+  const [annotationState, setAnnotationState] = React.useState<
+    AnnotationState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [observationColorMode, setObservationColorMode] =
+    React.useState<ObservationColorMode>('transcript-count')
+  const [roiName, setRoiName] = React.useState('Marker ROI')
+  const [groupId, setSelectedAnnotationGroupId] = React.useState(
+    selectedAnnotationGroupId,
+  )
+  const debugMessagesRef = React.useRef<string[]>([])
+  const datasetAbortRef = React.useRef<AbortController | null>(new AbortController())
+  const loadRequestIdRef = React.useRef(7)
+  const roiIdRef = React.useRef(0)
+  const loadState: DatasetLoadState<StructuredLoadError> = {
+    status: 'ready',
+    url: 'https://example.test/output',
+    cellCount: 2,
+  }
+
+  const nextApi = useAnnotationWorkflow({
+    annotationState,
+    appendDebugEvent: (message) => {
+      debugMessagesRef.current.push(message)
+    },
+    datasetAbortRef,
+    datasetUrl: 'https://example.test/output',
+    loadAnnotations,
+    loadRequestIdRef,
+    loadState,
+    roiIdRef,
+    roiName,
+    roiState,
+    selectedAnnotationGroupId: groupId,
+    setAnnotationColors,
+    setAnnotationState,
+    setObservationColorMode,
+    setRoiName,
+    setSelectedAnnotationGroupId,
+  })
+
+  React.useEffect(() => {
+    onReady(nextApi, {
+      annotationColors,
+      annotationState,
+      debugMessages: debugMessagesRef.current,
+      observationColorMode,
+      roiName,
+      selectedAnnotationGroupId: groupId,
+    })
+  })
+
+  return null
+}
+
+describe('useAnnotationWorkflow', () => {
+  it('loads annotation groups and activates annotation coloring', async () => {
+    const annotations: readonly Annotation[] = [
+      { id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] },
+    ]
+    const loadAnnotations = vi.fn(async () => annotations)
+
+    render(
+      <Probe
+        loadAnnotations={loadAnnotations}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleLoadAnnotations()
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(loadAnnotations).toHaveBeenCalledWith(
+      'https://example.test/output',
+      expect.objectContaining({
+        groupId: 'cluster-a',
+        signal: expect.any(AbortSignal),
+      }),
+    )
+    expect(snapshot.annotationState).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      annotations,
+    })
+    expect(snapshot.observationColorMode).toBe('annotations')
+    expect(snapshot.annotationColors.a).toBe('#1f77b4')
+    expect(snapshot.debugMessages).toContain('Annotations loaded: 1 labels')
+  })
+
+  it('saves ready ROI cells as an annotation', () => {
+    const selection = {
+      kind: 'box' as const,
+      bbox: {
+        minX: micrometers(1),
+        minY: micrometers(2),
+        maxX: micrometers(3),
+        maxY: micrometers(4),
+      },
+    }
+    const roiState: RoiState<StructuredLoadError> = {
+      status: 'ready',
+      url: 'https://example.test/output',
+      bbox: selection.bbox,
+      selection,
+      cells: [
+        {
+          id: asCellId('aaaaaaaa-1'),
+          position: { x: micrometers(1), y: micrometers(2) },
+        },
+      ],
+      hitCellLimit: false,
+    }
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+        roiState={roiState}
+      />,
+    )
+
+    act(() => {
+      api.handleSaveRoiAnnotation()
+    })
+
+    expect(snapshot.annotationState.status).toBe('ready')
+    expect(
+      snapshot.annotationState.status === 'ready'
+        ? snapshot.annotationState.annotations[0]?.id
+        : '',
+    ).toBe('roi:1:marker-roi')
+    expect(snapshot.observationColorMode).toBe('annotations')
+    expect(snapshot.roiName).toBe('ROI 2')
+  })
+})
