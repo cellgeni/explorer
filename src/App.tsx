@@ -39,7 +39,6 @@ import {
   isAbortError,
   readTimestamp,
   shortDatasetLabel,
-  shortIdentifier,
   type DebugLogAppendOptions,
   type DebugLogEntry,
 } from './features/app-shell/appRuntimeModel'
@@ -81,7 +80,6 @@ import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import {
   ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
-  defaultRoiName,
   roiGeneStatsStatusCopy,
   roiGeneViewportWarmupKey,
   roiStatusCopy,
@@ -94,15 +92,10 @@ import {
 import { createDiagnosticsDump } from './features/diagnostics/diagnosticsDump'
 import {
   annotationStatusCopy,
-  colorsForAnnotations,
-  customAnnotationFilePrefix,
-  hasReadyAnnotationsAfterRemove,
-  mergeImportedAnnotations,
-  removeAnnotationColor,
-  removeAnnotationColorsByPrefix,
   type AnnotationGroupState,
   type AnnotationState,
 } from './features/annotations/annotationModel'
+import { useAnnotationWorkflow } from './features/annotations/useAnnotationWorkflow'
 import {
   defaultGeneSetName,
   filterGeneOptions,
@@ -135,7 +128,6 @@ import type {
   DatasetWarmupState,
   MorphologyLoadState,
 } from './features/dataset/datasetLoadModel'
-import { slug } from './utils/slug'
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import type { WarmDatasetForRoiResult } from './data/datasetWarmup'
@@ -150,7 +142,6 @@ import {
   type TranscriptFeatureFilterMode,
 } from './data/transcriptOverlay'
 import { type RoiSelection } from './data/roiSelection'
-import { parseCustomAnnotations } from './data/customAnnotations'
 import { summarizeDatasetDiagnostics } from './data/datasetDiagnostics'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
 import {
@@ -180,17 +171,13 @@ import {
   overviewCellsToLayerData,
   bundledDeckVersion,
 } from './rendering/deckLayers'
-import {
-  annotationPaletteColor,
-  normalizeAnnotationColor,
-} from './rendering/annotationPalette'
 import { percentToOpacity } from './rendering/layerOpacity'
 import { useViewerStore } from './store/viewerStore'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
 import type { MorphologyImage } from './data/morphologyImage'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
-import type { Annotation, SpatialElement } from './datasets/spatialDataset'
+import type { SpatialElement } from './datasets/spatialDataset'
 import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
 import type {
   GeneExpressionColorScale,
@@ -1170,6 +1157,33 @@ export function App({
   })
 
   const {
+    handleAnnotationColorChange,
+    handleAnnotationGroupChange,
+    handleClearAnnotations,
+    handleImportAnnotations,
+    handleLoadAnnotations,
+    handleRemoveAnnotation,
+    handleSaveRoiAnnotation,
+  } = useAnnotationWorkflow({
+    annotationState,
+    appendDebugEvent,
+    datasetAbortRef,
+    datasetUrl,
+    loadAnnotations,
+    loadRequestIdRef: loadRequestId,
+    loadState,
+    roiIdRef,
+    roiName,
+    roiState,
+    selectedAnnotationGroupId,
+    setAnnotationColors,
+    setAnnotationState,
+    setObservationColorMode,
+    setRoiName,
+    setSelectedAnnotationGroupId,
+  })
+
+  const {
     handleMagicLensCursorActiveChange,
     handleMagicLensLeave,
     handleMagicLensMinQvChange,
@@ -2091,63 +2105,6 @@ export function App({
     setSavedGeneSets((current) => current.filter((geneSet) => geneSet.id !== id))
   }
 
-  function handleLoadAnnotations() {
-    if (loadState.status !== 'ready' || annotationState.status === 'loading') {
-      return
-    }
-
-    const requestId = loadRequestId.current
-    const signal = datasetAbortRef.current?.signal
-    const groupId =
-      selectedAnnotationGroupId === ALL_ANNOTATION_GROUP_ID
-        ? undefined
-        : selectedAnnotationGroupId
-    appendDebugEvent(
-      groupId === undefined ? 'Loading annotations' : `Loading annotations ${groupId}`,
-    )
-    setAnnotationState({ status: 'loading', url: loadState.url })
-
-    void loadAnnotations(loadState.url, {
-      ...(signal === undefined ? {} : { signal }),
-      ...(groupId === undefined ? {} : { groupId }),
-    })
-      .then((annotations) => {
-        if (loadRequestId.current !== requestId) {
-          return
-        }
-
-        setAnnotationState({
-          status: 'ready',
-          url: loadState.url,
-          annotations,
-        })
-        setAnnotationColors((current) => colorsForAnnotations(annotations, current))
-        if (annotations.length > 0) {
-          setObservationColorMode('annotations')
-        }
-        appendDebugEvent(
-          `Annotations loaded: ${annotations.length.toLocaleString()} labels`,
-        )
-      })
-      .catch((error) => {
-        if (isAbortError(error) || loadRequestId.current !== requestId) {
-          return
-        }
-
-        setAnnotationState({
-          status: 'error',
-          url: loadState.url,
-          error: createStructuredLoadError('Annotations', error),
-        })
-        appendDebugEvent('Annotations failed')
-      })
-  }
-
-  function handleAnnotationGroupChange(nextGroupId: string) {
-    setSelectedAnnotationGroupId(nextGroupId)
-    appendDebugEvent(`Annotation set: ${shortIdentifier(nextGroupId)}`)
-  }
-
   function handleLoadAnalysisEmbeddings() {
     if (loadState.status !== 'ready' || analysisEmbeddingState.status === 'loading') {
       return
@@ -2206,125 +2163,6 @@ export function App({
     if (cell !== undefined) {
       setSelectedCell(cell)
     }
-  }
-
-  async function handleImportAnnotations(file: File | null) {
-    if (file === null) {
-      return
-    }
-
-    try {
-      const importedAnnotations = parseCustomAnnotations(await file.text(), file.name)
-      const importedPrefix = customAnnotationFilePrefix(file.name)
-
-      setAnnotationState((current) => ({
-        status: 'ready',
-        url: loadState.status === 'ready' ? loadState.url : datasetUrl,
-        annotations: mergeImportedAnnotations(
-          current.status === 'ready' ? current.annotations : [],
-          importedAnnotations,
-          importedPrefix,
-        ),
-      }))
-      setAnnotationColors((current) =>
-        colorsForAnnotations(
-          importedAnnotations,
-          removeAnnotationColorsByPrefix(current, importedPrefix),
-        ),
-      )
-      if (importedAnnotations.length > 0) {
-        setObservationColorMode('annotations')
-      }
-      appendDebugEvent(
-        `Imported annotations: ${importedAnnotations.length.toLocaleString()} labels`,
-      )
-    } catch (error) {
-      setAnnotationState({
-        status: 'error',
-        url: loadState.status === 'ready' ? loadState.url : datasetUrl,
-        error: createStructuredLoadError('Annotations', error),
-      })
-      appendDebugEvent('Annotation import failed')
-    }
-  }
-
-  function handleAnnotationColorChange(annotationId: string, color: string) {
-    const normalizedColor = normalizeAnnotationColor(color)
-
-    if (normalizedColor === null) {
-      return
-    }
-
-    setAnnotationColors((current) => ({ ...current, [annotationId]: normalizedColor }))
-    appendDebugEvent(`Annotation color ${shortIdentifier(annotationId)}`, {
-      coalesceKey: `annotation-color:${annotationId}`,
-    })
-  }
-
-  function handleRemoveAnnotation(annotationId: string) {
-    const removedAnnotation =
-      annotationState.status === 'ready'
-        ? annotationState.annotations.find((annotation) => annotation.id === annotationId)
-        : undefined
-
-    setAnnotationState((current) => {
-      if (current.status !== 'ready') {
-        return current
-      }
-
-      const annotations = current.annotations.filter(
-        (annotation) => annotation.id !== annotationId,
-      )
-
-      return annotations.length === 0 ? { status: 'idle' } : { ...current, annotations }
-    })
-    setAnnotationColors((current) => removeAnnotationColor(current, annotationId))
-    setObservationColorMode((current) =>
-      hasReadyAnnotationsAfterRemove(annotationState, annotationId)
-        ? current
-        : 'transcript-count',
-    )
-
-    appendDebugEvent(
-      `Removed annotation ${removedAnnotation?.label ?? shortIdentifier(annotationId)}`,
-    )
-  }
-
-  function handleClearAnnotations() {
-    setAnnotationState({ status: 'idle' })
-    setAnnotationColors({})
-    setObservationColorMode('transcript-count')
-    appendDebugEvent('Cleared annotations')
-  }
-
-  function handleSaveRoiAnnotation() {
-    if (loadState.status !== 'ready' || roiState.status !== 'ready') {
-      return
-    }
-
-    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
-    const annotation: Annotation = {
-      id: `roi:${roiIdRef.current + 1}:${slug(name)}`,
-      label: name,
-      cellIds: roiState.cells.map((cell) => cell.id),
-    }
-
-    roiIdRef.current += 1
-    appendDebugEvent(`Saved ROI annotation ${name}`)
-    setAnnotationState((current) => ({
-      status: 'ready',
-      url: loadState.url,
-      annotations: [
-        annotation,
-        ...(current.status === 'ready' ? current.annotations : []),
-      ],
-    }))
-    setAnnotationColors((current) => ({
-      ...current,
-      [annotation.id]: annotationPaletteColor(Object.keys(current).length),
-    }))
-    setObservationColorMode('annotations')
-    setRoiName(defaultRoiName(roiIdRef.current + 1))
   }
 
   return (
