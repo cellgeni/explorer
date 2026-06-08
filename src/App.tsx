@@ -1,4 +1,4 @@
-import type { CSSProperties, FormEvent } from 'react'
+import type { FormEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   ViewerCore,
@@ -13,6 +13,7 @@ import { RoiHudPanel } from './features/control-hud/RoiHudPanel'
 import { TranscriptHudPanel } from './features/transcripts/TranscriptHudPanel'
 import { transcriptCapabilityLabel } from './features/transcripts/transcriptLabels'
 import { GeneHudPanel } from './features/genes/GeneHudPanel'
+import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import {
   CONTROL_HUD_TABS,
   parseControlHudTab,
@@ -86,7 +87,7 @@ import {
   normalizeChannelContrast,
   type MorphologyChannelSetting,
 } from './features/morphology/morphologyChannels'
-import { MagicLensPanel } from './features/roi/RoiPanels'
+import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
   MAGIC_LENS_CELL_LIMIT,
   MAGIC_LENS_GENE_STATS_LIMIT,
@@ -3382,6 +3383,11 @@ export function App({
       })
   }
 
+  function handleAnnotationGroupChange(nextGroupId: string) {
+    setSelectedAnnotationGroupId(nextGroupId)
+    appendDebugEvent(`Annotation set: ${shortIdentifier(nextGroupId)}`)
+  }
+
   function handleLoadAnalysisEmbeddings() {
     if (loadState.status !== 'ready' || analysisEmbeddingState.status === 'loading') {
       return
@@ -3956,6 +3962,61 @@ export function App({
     runMagicLensQuery(selection, magicLensScope)
   }
 
+  function handleMagicLensScopeChange(nextScope: MagicLensScope) {
+    if (nextScope === 'cursor') {
+      setMagicLensScope('cursor')
+      setMagicLensState({ status: 'idle' })
+      magicLensLastQueryKeyRef.current = null
+      appendDebugEvent('Magic lens scope: cursor', {
+        coalesceKey: 'magic-lens-scope',
+      })
+      return
+    }
+
+    handleMagicLensLeave()
+    setMagicLensActive(false)
+    setMagicLensScope(nextScope)
+    appendDebugEvent(
+      nextScope === 'viewport' ? 'Magic lens scope: viewport' : 'Magic lens scope: ROI',
+      { coalesceKey: 'magic-lens-scope' },
+    )
+  }
+
+  function handleMagicLensRadiusChange(value: number) {
+    const nextRadius = normalizeMagicLensRadius(value)
+
+    setMagicLensRadiusMicrometers(nextRadius)
+    magicLensLastQueryKeyRef.current = null
+    appendDebugEvent(`Magic lens radius: ${nextRadius} um`, {
+      coalesceKey: 'magic-lens-radius',
+    })
+  }
+
+  function handleMagicLensMinQvChange(value: number) {
+    const nextMinQv = normalizeMagicLensMinQv(value)
+
+    setMagicLensMinQv(nextMinQv)
+    magicLensLastQueryKeyRef.current = null
+    appendDebugEvent(`Magic lens min QV: ${nextMinQv}`, {
+      coalesceKey: 'magic-lens-min-qv',
+    })
+  }
+
+  function handleMagicLensCursorActiveChange(nextActive: boolean) {
+    setMagicLensActive(nextActive)
+
+    if (!nextActive) {
+      handleMagicLensLeave()
+      return
+    }
+
+    setMeasurementEnabled(false)
+    setMeasurementResetKey((current) => current + 1)
+    setMagicLensState({ status: 'idle' })
+    magicLensLastQueryKeyRef.current = null
+    appendDebugEvent('Magic lens enabled')
+  }
+
   function handleMagicLensMove(detail: ViewerMagicLensDetail) {
     if (loadState.status !== 'ready' || magicLensScope !== 'cursor' || !magicLensActive) {
       return
@@ -4318,298 +4379,47 @@ export function App({
               onLoadExactViewport={handleLoadExactViewport}
             />
 
-            <div
-              id="hud-panel-magic-lens"
-              className="hud-tab-panel"
-              role="tabpanel"
-              aria-labelledby="hud-tab-magic-lens"
-              hidden={activeControlHudTab !== 'magic-lens'}
-            >
-              <section
-                className="analysis-section magic-lens-section"
-                aria-labelledby="magic-lens-heading"
-              >
-                <div className="section-heading-row">
-                  <h2 id="magic-lens-heading">Magic Lens</h2>
-                  <span
-                    className={
-                      magicLensState.status === 'loading'
-                        ? 'status-chip is-loading'
-                        : 'status-chip'
-                    }
-                    aria-live="polite"
-                  >
-                    {magicLensCopy}
-                  </span>
-                </div>
+            <MagicLensHudPanel
+              active={activeControlHudTab === 'magic-lens'}
+              magicLensScopeInputId={magicLensScopeInputId}
+              magicLensRadiusInputId={magicLensRadiusInputId}
+              magicLensMinQvInputId={magicLensMinQvInputId}
+              magicLensCopy={magicLensCopy}
+              loadEnabled={loadState.status === 'ready'}
+              roiAvailable={activeRoiSelection !== null}
+              magicLensScope={magicLensScope}
+              magicLensState={magicLensState}
+              magicLensRadiusMicrometers={magicLensRadiusMicrometers}
+              magicLensMinQv={magicLensMinQv}
+              magicLensIsCursorActive={magicLensIsCursorActive}
+              magicLensCanScan={magicLensCanScan}
+              onScopeChange={handleMagicLensScopeChange}
+              onRadiusChange={handleMagicLensRadiusChange}
+              onMinQvChange={handleMagicLensMinQvChange}
+              onCursorActiveChange={handleMagicLensCursorActiveChange}
+              onRunMagicLens={handleRunMagicLens}
+            />
 
-                <div className="magic-lens-scope">
-                  <span id={magicLensScopeInputId}>Scope</span>
-                  <div
-                    className="magic-lens-scope-segmented"
-                    role="group"
-                    aria-labelledby={magicLensScopeInputId}
-                  >
-                    <button
-                      type="button"
-                      aria-pressed={magicLensScope === 'cursor'}
-                      onClick={() => {
-                        setMagicLensScope('cursor')
-                        setMagicLensState({ status: 'idle' })
-                        magicLensLastQueryKeyRef.current = null
-                        appendDebugEvent('Magic lens scope: cursor', {
-                          coalesceKey: 'magic-lens-scope',
-                        })
-                      }}
-                    >
-                      Cursor
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={magicLensScope === 'viewport'}
-                      onClick={() => {
-                        handleMagicLensLeave()
-                        setMagicLensActive(false)
-                        setMagicLensScope('viewport')
-                        appendDebugEvent('Magic lens scope: viewport', {
-                          coalesceKey: 'magic-lens-scope',
-                        })
-                      }}
-                    >
-                      Viewport
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={magicLensScope === 'roi'}
-                      disabled={activeRoiSelection === null}
-                      onClick={() => {
-                        handleMagicLensLeave()
-                        setMagicLensActive(false)
-                        setMagicLensScope('roi')
-                        appendDebugEvent('Magic lens scope: ROI', {
-                          coalesceKey: 'magic-lens-scope',
-                        })
-                      }}
-                    >
-                      ROI
-                    </button>
-                  </div>
-                </div>
-
-                <label htmlFor={magicLensRadiusInputId}>Radius</label>
-                <div className="magic-lens-radius-control">
-                  <input
-                    id={magicLensRadiusInputId}
-                    type="range"
-                    min="10"
-                    max="500"
-                    step="10"
-                    value={magicLensRadiusMicrometers}
-                    disabled={magicLensScope !== 'cursor'}
-                    onChange={(event) => {
-                      const nextRadius = normalizeMagicLensRadius(
-                        event.currentTarget.valueAsNumber,
-                      )
-                      setMagicLensRadiusMicrometers(nextRadius)
-                      magicLensLastQueryKeyRef.current = null
-                      appendDebugEvent(`Magic lens radius: ${nextRadius} um`, {
-                        coalesceKey: 'magic-lens-radius',
-                      })
-                    }}
-                  />
-                  <output htmlFor={magicLensRadiusInputId}>
-                    {magicLensRadiusMicrometers.toLocaleString()} um
-                  </output>
-                </div>
-
-                <label htmlFor={magicLensMinQvInputId}>Min QV</label>
-                <input
-                  id={magicLensMinQvInputId}
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  max="40"
-                  step="1"
-                  value={magicLensMinQv}
-                  onChange={(event) => {
-                    const nextMinQv = normalizeMagicLensMinQv(
-                      event.currentTarget.valueAsNumber,
-                    )
-                    setMagicLensMinQv(nextMinQv)
-                    magicLensLastQueryKeyRef.current = null
-                    appendDebugEvent(`Magic lens min QV: ${nextMinQv}`, {
-                      coalesceKey: 'magic-lens-min-qv',
-                    })
-                  }}
-                />
-
-                {magicLensScope === 'cursor' ? (
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    aria-pressed={magicLensIsCursorActive}
-                    disabled={loadState.status !== 'ready'}
-                    onClick={() => {
-                      const nextActive = !magicLensActive
-
-                      setMagicLensActive(nextActive)
-
-                      if (!nextActive) {
-                        handleMagicLensLeave()
-                      } else {
-                        setMeasurementEnabled(false)
-                        setMeasurementResetKey((current) => current + 1)
-                        setMagicLensState({ status: 'idle' })
-                        magicLensLastQueryKeyRef.current = null
-                        appendDebugEvent('Magic lens enabled')
-                      }
-                    }}
-                  >
-                    {magicLensIsCursorActive ? 'Disable Lens' : 'Enable Lens'}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    disabled={!magicLensCanScan}
-                    onClick={handleRunMagicLens}
-                  >
-                    {magicLensState.status === 'loading' ? 'Scanning...' : 'Scan Lens'}
-                  </button>
-                )}
-
-                <MagicLensPanel state={magicLensState} />
-              </section>
-            </div>
-
-            <div
-              id="hud-panel-annotations"
-              className="hud-tab-panel"
-              role="tabpanel"
-              aria-labelledby="hud-tab-annotations"
-              hidden={activeControlHudTab !== 'annotations'}
-            >
-              <section className="analysis-section" aria-labelledby="annotation-heading">
-                <div className="section-heading-row">
-                  <h2 id="annotation-heading">Annotations</h2>
-                  <span
-                    className={
-                      annotationState.status === 'loading' ||
-                      annotationGroupState.status === 'loading'
-                        ? 'status-chip is-loading'
-                        : 'status-chip'
-                    }
-                    aria-live="polite"
-                  >
-                    {annotationHeaderCopy}
-                  </span>
-                </div>
-                <label htmlFor={annotationGroupInputId}>Annotation set</label>
-                <select
-                  id={annotationGroupInputId}
-                  value={selectedAnnotationGroupId}
-                  disabled={loadState.status !== 'ready'}
-                  onChange={(event) => {
-                    const nextGroupId = event.currentTarget.value
-                    setSelectedAnnotationGroupId(nextGroupId)
-                    appendDebugEvent(`Annotation set: ${shortIdentifier(nextGroupId)}`)
-                  }}
-                >
-                  <option value={ALL_ANNOTATION_GROUP_ID}>All</option>
-                  {annotationGroupOptions.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="secondary-action"
-                  disabled={
-                    loadState.status !== 'ready' || annotationState.status === 'loading'
-                  }
-                  onClick={handleLoadAnnotations}
-                >
-                  {annotationState.status === 'loading' ? 'Loading…' : 'Load Annotations'}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-action"
-                  disabled={annotationState.status !== 'ready'}
-                  onClick={handleClearAnnotations}
-                >
-                  Clear Annotations
-                </button>
-                <label
-                  className="secondary-file-action"
-                  htmlFor={annotationImportInputId}
-                >
-                  Import File
-                </label>
-                <input
-                  id={annotationImportInputId}
-                  className="visually-hidden-file"
-                  type="file"
-                  accept=".csv,.json,application/json,text/csv"
-                  disabled={loadState.status !== 'ready'}
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0] ?? null
-                    void handleImportAnnotations(file)
-                    event.currentTarget.value = ''
-                  }}
-                />
-                {annotationState.status === 'ready' &&
-                annotationState.annotations.length > 0 ? (
-                  <ul className="annotation-list" aria-label="Loaded annotations">
-                    {annotationState.annotations.map((annotation, annotationIndex) => {
-                      const annotationColor =
-                        annotationColors[annotation.id] ??
-                        annotationPaletteColor(annotationIndex)
-
-                      return (
-                        <li key={annotation.id}>
-                          <label
-                            className="annotation-color-picker"
-                            style={
-                              { '--annotation-color': annotationColor } as CSSProperties
-                            }
-                          >
-                            <input
-                              className="annotation-color-input"
-                              type="color"
-                              aria-label={`${annotation.label} color`}
-                              value={annotationColor}
-                              onChange={(event) => {
-                                handleAnnotationColorChange(
-                                  annotation.id,
-                                  event.currentTarget.value,
-                                )
-                              }}
-                            />
-                            <span
-                              className="annotation-color-swatch"
-                              aria-hidden="true"
-                            />
-                          </label>
-                          <span>{annotation.label}</span>
-                          <small>{annotation.cellIds.length.toLocaleString()}</small>
-                          <button
-                            type="button"
-                            className="annotation-remove"
-                            aria-label={`Remove ${annotation.label}`}
-                            onClick={() => {
-                              handleRemoveAnnotation(annotation.id)
-                            }}
-                          >
-                            x
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                ) : null}
-              </section>
-            </div>
+            <AnnotationHudPanel
+              active={activeControlHudTab === 'annotations'}
+              annotationGroupInputId={annotationGroupInputId}
+              annotationImportInputId={annotationImportInputId}
+              annotationHeaderCopy={annotationHeaderCopy}
+              loadEnabled={loadState.status === 'ready'}
+              selectedAnnotationGroupId={selectedAnnotationGroupId}
+              annotationGroupOptions={annotationGroupOptions}
+              annotationState={annotationState}
+              annotationGroupState={annotationGroupState}
+              annotationColors={annotationColors}
+              onAnnotationGroupChange={handleAnnotationGroupChange}
+              onLoadAnnotations={handleLoadAnnotations}
+              onClearAnnotations={handleClearAnnotations}
+              onImportAnnotations={(file) => {
+                void handleImportAnnotations(file)
+              }}
+              onAnnotationColorChange={handleAnnotationColorChange}
+              onRemoveAnnotation={handleRemoveAnnotation}
+            />
 
             <CellHudPanel
               active={activeControlHudTab === 'cell'}
