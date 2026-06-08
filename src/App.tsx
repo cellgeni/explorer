@@ -28,13 +28,13 @@ import {
 import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
+import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import {
   abortActiveRequest,
   appendDebugLogEntry,
   createLoadingTasks,
   createDebugLogEntry,
   downloadTextFile,
-  formatElapsed,
   isAbortError,
   readTimestamp,
   shortDatasetLabel,
@@ -96,7 +96,6 @@ import { useAnnotationWorkflow } from './features/annotations/useAnnotationWorkf
 import {
   defaultGeneSetName,
   filterGeneOptions,
-  formatGeneExpressionTiming,
   type GeneExpressionScaleDomain,
   type GeneExpressionState,
   geneExpressionModeLabel,
@@ -128,11 +127,6 @@ import type {
 import { scaffoldDeckLayerCount } from './components/viewerCoreModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import {
-  geneExpressionRequestKey,
-  geneExpressionWaitingKey,
-  planGeneExpressionLod,
-} from './data/geneExpressionLod'
-import {
   normalizeTranscriptExactPointLimit,
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
@@ -142,8 +136,6 @@ import { summarizeDatasetDiagnostics } from './data/datasetDiagnostics'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
 import {
   formatShareableState,
-  shareableViewStateKey,
-  viewStateToShareable,
   type ShareableState,
   type ShareableViewState,
 } from './data/shareableState'
@@ -154,9 +146,7 @@ import {
 } from './data/telemetry'
 import {
   MAX_BOUNDARY_VIEWPORT_CELL_LIMIT,
-  boundaryViewportKey,
   normalizeBoundaryCellLimit,
-  shouldLoadBoundaryPolygons,
 } from './rendering/boundaryViewport'
 import {
   DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
@@ -837,236 +827,33 @@ export function App({
     },
     [],
   )
-  const handleViewportChange = useCallback(
-    (detail: ViewerViewportDetail) => {
-      if (loadState.status !== 'ready') {
-        return
-      }
-
-      lastViewportDetailRef.current = detail
-      setCurrentViewportDetail(detail)
-      const nextShareableViewState = viewStateToShareable(detail.viewState)
-      setShareableViewState((current) =>
-        shareableViewStateKey(current) === shareableViewStateKey(nextShareableViewState)
-          ? current
-          : nextShareableViewState,
-      )
-
-      if (!shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })) {
-        abortActiveRequest(boundaryAbortRef)
-        boundaryRequestId.current += 1
-        boundaryViewportKeyRef.current = null
-        setBoundaryElements((current) => (current.length === 0 ? current : []))
-        setBoundaryState((current) =>
-          current.status === 'idle' ? current : { status: 'idle' },
-        )
-      } else {
-        const requestKey = boundaryViewportKey(loadState.url, detail.bbox)
-
-        if (requestKey !== boundaryViewportKeyRef.current) {
-          abortActiveRequest(boundaryAbortRef)
-          const requestId = boundaryRequestId.current + 1
-          const abortController = new AbortController()
-          boundaryRequestId.current = requestId
-          boundaryAbortRef.current = abortController
-          boundaryViewportKeyRef.current = requestKey
-          setBoundaryState({ status: 'loading', url: loadState.url })
-
-          void loadBoundaryElements(loadState.url, detail.bbox, {
-            signal: abortController.signal,
-          })
-            .then((batch) => {
-              if (boundaryRequestId.current !== requestId) {
-                return
-              }
-
-              setBoundaryElements(batch.elements)
-              setBoundaryState({
-                status: 'ready',
-                url: loadState.url,
-                cellCount: batch.elements.length,
-              })
-            })
-            .catch((error) => {
-              if (isAbortError(error)) {
-                return
-              }
-
-              if (boundaryRequestId.current !== requestId) {
-                return
-              }
-
-              setBoundaryElements([])
-              setBoundaryState({
-                status: 'error',
-                url: loadState.url,
-                error: createStructuredLoadError('Cell boundaries', error),
-              })
-            })
-            .finally(() => {
-              if (boundaryAbortRef.current === abortController) {
-                boundaryAbortRef.current = null
-              }
-            })
-        }
-      }
-
-      if (selectedGenes.length === 0) {
-        abortActiveRequest(geneExpressionAbortRef)
-        geneExpressionRequestId.current += 1
-        geneExpressionViewportKeyRef.current = null
-        setGeneExpressionBatch(null)
-        setGeneExpressionState((current) =>
-          current.status === 'idle' ? current : { status: 'idle' },
-        )
-        return
-      }
-
-      const expressionPlan = planGeneExpressionLod(detail, {
-        detailMode: geneExpressionDetailMode,
-        slideBbox: overviewExtent,
-        totalCellCount: loadState.cellCount,
-      })
-
-      if (expressionPlan.kind === 'waiting') {
-        const waitingKey = geneExpressionWaitingKey(
-          loadState.url,
-          detail,
-          selectedGenes,
-          geneExpressionDetailMode,
-        )
-
-        if (waitingKey === geneExpressionViewportKeyRef.current) {
-          return
-        }
-
-        abortActiveRequest(geneExpressionAbortRef)
-        geneExpressionRequestId.current += 1
-        geneExpressionViewportKeyRef.current = waitingKey
-        setGeneExpressionBatch(null)
-        setGeneExpressionState({ status: 'waiting', message: expressionPlan.message })
-        return
-      }
-
-      const expressionKey = geneExpressionRequestKey(
-        loadState.url,
-        detail,
-        expressionPlan,
-        selectedGenes,
-      )
-
-      if (expressionKey === geneExpressionViewportKeyRef.current) {
-        return
-      }
-
-      const expressionRequestId = geneExpressionRequestId.current + 1
-      abortActiveRequest(geneExpressionAbortRef)
-      const expressionAbortController = new AbortController()
-      const expressionStartedAt = readTimestamp()
-      geneExpressionRequestId.current = expressionRequestId
-      geneExpressionAbortRef.current = expressionAbortController
-      geneExpressionViewportKeyRef.current = expressionKey
-      setGeneExpressionState({
-        status: 'loading',
-        url: loadState.url,
-        genes: selectedGenes,
-        mode: expressionPlan.mode,
-        visibleCellCount: expressionPlan.sourceCellCount,
-      })
-
-      void loadGeneExpression(loadState.url, expressionPlan.bbox, selectedGenes, {
-        signal: expressionAbortController.signal,
-        limit: expressionPlan.cellLimit,
-        sampleStride: expressionPlan.sampleStride,
-      })
-        .then((batch) => {
-          if (geneExpressionRequestId.current !== expressionRequestId) {
-            return
-          }
-
-          const timingDetail = formatGeneExpressionTiming(batch.timing)
-
-          rememberGeneExpressionScaleMax(
-            geneExpressionScaleKey,
-            batch,
-            geneExpressionScoreMode,
-          )
-          setGeneExpressionBatch(batch)
-          setGeneExpressionState({
-            status: 'ready',
-            url: loadState.url,
-            genes: batch.genes,
-            cellCount: batch.cells.length,
-            mode: expressionPlan.mode,
-            visibleCellCount: expressionPlan.sourceCellCount,
-          })
-          recordTelemetry(
-            telemetryEvent('gene-expression.load', 'success', {
-              startedAt: expressionStartedAt,
-              detail: `${geneExpressionModeLabel(expressionPlan.mode)}: ${batch.cells.length.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
-            }),
-          )
-          appendDebugEvent(
-            `${geneExpressionModeLabel(expressionPlan.mode)} ready: ${batch.cells.length.toLocaleString()} positive cells in ${formatElapsed(
-              expressionStartedAt,
-            )} (${timingDetail})`,
-            { coalesceKey: 'gene-expression-query' },
-          )
-        })
-        .catch((error) => {
-          if (isAbortError(error)) {
-            return
-          }
-
-          if (geneExpressionRequestId.current !== expressionRequestId) {
-            return
-          }
-
-          setGeneExpressionBatch(null)
-          setGeneExpressionState({
-            status: 'error',
-            url: loadState.url,
-            error: createStructuredLoadError('Gene expression', error),
-          })
-          recordTelemetry(
-            telemetryEvent('gene-expression.load', 'failure', {
-              startedAt: expressionStartedAt,
-              detail: readErrorMessage(error),
-            }),
-          )
-          appendDebugEvent('Gene expression load failed', {
-            coalesceKey: 'gene-expression-query',
-          })
-        })
-        .finally(() => {
-          if (geneExpressionAbortRef.current === expressionAbortController) {
-            geneExpressionAbortRef.current = null
-          }
-        })
-    },
-    [
-      appendDebugEvent,
-      boundaryCellLimit,
-      geneExpressionScaleKey,
-      geneExpressionScoreMode,
-      loadBoundaryElements,
-      loadGeneExpression,
-      loadState,
-      geneExpressionDetailMode,
-      overviewExtent,
-      recordTelemetry,
-      rememberGeneExpressionScaleMax,
-      selectedGenes,
-    ],
-  )
-
-  useEffect(() => {
-    const detail = lastViewportDetailRef.current
-
-    if (detail !== null) {
-      handleViewportChange(detail)
-    }
-  }, [handleViewportChange])
+  const { handleViewportChange } = useViewportDataWorkflow({
+    appendDebugEvent,
+    boundaryAbortRef,
+    boundaryCellLimit,
+    boundaryRequestIdRef: boundaryRequestId,
+    boundaryViewportKeyRef,
+    geneExpressionAbortRef,
+    geneExpressionDetailMode,
+    geneExpressionRequestIdRef: geneExpressionRequestId,
+    geneExpressionScaleKey,
+    geneExpressionScoreMode,
+    geneExpressionViewportKeyRef,
+    lastViewportDetailRef,
+    loadBoundaryElements,
+    loadGeneExpression,
+    loadState,
+    overviewExtent,
+    recordTelemetry,
+    rememberGeneExpressionScaleMax,
+    selectedGenes,
+    setBoundaryElements,
+    setBoundaryState,
+    setCurrentViewportDetail,
+    setGeneExpressionBatch,
+    setGeneExpressionState,
+    setShareableViewState,
+  })
 
   useTranscriptWorkflow({
     activeControlHudTab,
