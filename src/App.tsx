@@ -29,6 +29,7 @@ import {
   abortActiveRequest,
   appendDebugLogEntry,
   clearTimeoutRef,
+  createLoadingTasks,
   createDebugLogEntry,
   formatElapsed,
   isAbortError,
@@ -37,7 +38,6 @@ import {
   shortIdentifier,
   type DebugLogAppendOptions,
   type DebugLogEntry,
-  type LoadingTask,
 } from './features/app-shell/appRuntimeModel'
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
@@ -845,183 +845,61 @@ export function App({
     () => (roiState.status === 'ready' ? summarizeRoiCells(roiState.cells) : null),
     [roiState],
   )
-  const loadingTasks = useMemo<readonly LoadingTask[]>(() => {
-    const tasks: LoadingTask[] = []
-
-    if (loadState.status === 'loading') {
-      tasks.push({
-        id: 'dataset',
-        tabId: 'dataset',
-        label: 'Loading dataset',
-        detail: shortDatasetLabel(loadState.url),
-      })
-    }
-
-    if (datasetWarmupState.status === 'loading') {
-      tasks.push({
-        id: 'dataset-warmup',
-        tabId: 'dataset',
-        label: 'Preparing dataset',
-        detail: shortDatasetLabel(datasetWarmupState.url),
-      })
-    }
-
-    if (diagnosticsState.status === 'loading') {
-      tasks.push({
-        id: 'dataset-diagnostics',
-        tabId: 'dataset',
-        label: 'Diagnosing dataset',
-        detail: shortDatasetLabel(diagnosticsState.url),
-      })
-    }
-
-    if (genePanelState.status === 'loading') {
-      tasks.push({ id: 'gene-panel', tabId: 'genes', label: 'Loading gene panel' })
-    }
-
-    if (morphologyState.status === 'loading') {
-      tasks.push({ id: 'morphology', tabId: 'layers', label: 'Loading image' })
-    }
-
-    if (annotationGroupState.status === 'loading') {
-      tasks.push({
-        id: 'annotation-sets',
-        tabId: 'annotations',
-        label: 'Loading annotation sets',
-      })
-    }
-
-    if (boundaryState.status === 'loading') {
-      tasks.push({ id: 'boundaries', tabId: 'layers', label: 'Loading boundaries' })
-    }
-
-    if (geneExpressionState.status === 'loading') {
-      tasks.push({
-        id: 'gene-expression',
-        tabId: 'genes',
-        label: geneExpressionModeLabel(geneExpressionState.mode),
-        detail: geneExpressionState.genes.join(', '),
-      })
-    }
-
-    if (transcriptCapabilityState.status === 'loading') {
-      tasks.push({
-        id: 'transcript-capabilities',
-        tabId: 'transcripts',
-        label: 'Checking transcripts',
-      })
-    }
-
-    if (transcriptLayerState.status === 'loading') {
-      tasks.push({
-        id: 'transcript-overlay',
-        tabId: 'transcripts',
-        label: 'Loading transcripts',
-        detail: `${transcriptLayerState.visibleTranscriptEstimate.toLocaleString()} estimated`,
-      })
-    }
-
-    if (magicLensState.status === 'loading') {
-      tasks.push({
-        id: 'magic-lens',
-        tabId: 'magic-lens',
-        label: 'Scanning magic lens',
-        detail: magicLensScopeLabel(magicLensState.scope),
-      })
-    }
-
-    if (annotationState.status === 'loading') {
-      tasks.push({
-        id: 'annotations',
-        tabId: 'annotations',
-        label: 'Loading annotations',
-      })
-    }
-
-    if (analysisEmbeddingState.status === 'loading') {
-      tasks.push({ id: 'embeddings', tabId: 'cell', label: 'Loading embeddings' })
-    }
-
-    if (cellDetailState.status === 'loading') {
-      tasks.push({
-        id: 'cell-details',
-        tabId: 'cell',
-        label: 'Loading cell details',
-        detail: shortIdentifier(cellDetailState.cellId),
-      })
-    }
-
-    if (cellTranscriptDistributionState.status === 'loading') {
-      tasks.push({
-        id: 'cell-transcripts',
-        tabId: 'cell',
-        label: 'Loading cell z distribution',
-        detail: shortIdentifier(cellTranscriptDistributionState.cellId),
-      })
-    }
-
-    if (roiState.status === 'loading') {
-      tasks.push({ id: 'roi-cells', tabId: 'roi', label: 'Querying ROI cells' })
-    }
-
-    if (isRoiGeneViewportWarmupLoading) {
-      tasks.push({
-        id: 'roi-gene-warmup',
-        tabId: 'roi',
-        label: 'Preparing ROI genes',
-      })
-    }
-
-    if (roiGeneStatsState.status === 'loading') {
-      tasks.push({
-        id: 'roi-genes',
-        tabId: 'roi',
-        label: 'Querying ROI genes',
-        detail: `${roiGeneStatsState.cellCount.toLocaleString()} cells`,
-      })
-    }
-
-    if (roiTranscriptExportState.status === 'loading') {
-      tasks.push({
-        id: 'roi-transcripts',
-        tabId: 'roi',
-        label: 'Exporting ROI transcripts',
-      })
-    }
-
-    if (autoContrastChannelIds.length > 0) {
-      const channelNoun = autoContrastChannelIds.length === 1 ? 'channel' : 'channels'
-      tasks.push({
-        id: 'auto-contrast',
-        tabId: 'layers',
-        label: 'Auto contrast',
-        detail: `${autoContrastChannelIds.length.toLocaleString()} ${channelNoun}`,
-      })
-    }
-
-    return tasks
-  }, [
-    analysisEmbeddingState,
-    annotationGroupState,
-    annotationState,
-    autoContrastChannelIds,
-    boundaryState,
-    cellDetailState,
-    cellTranscriptDistributionState,
-    datasetWarmupState,
-    diagnosticsState,
-    geneExpressionState,
-    genePanelState,
-    loadState,
-    magicLensState,
-    morphologyState,
-    roiGeneStatsState,
-    isRoiGeneViewportWarmupLoading,
-    roiState,
-    roiTranscriptExportState,
-    transcriptCapabilityState,
-    transcriptLayerState,
-  ])
+  const loadingTasks = useMemo(
+    () =>
+      createLoadingTasks({
+        analysisEmbeddingState,
+        annotationGroupState,
+        annotationState,
+        autoContrastChannelCount: autoContrastChannelIds.length,
+        boundaryState,
+        cellDetailState,
+        cellTranscriptDistributionState,
+        datasetWarmupState,
+        diagnosticsState,
+        geneExpressionState,
+        geneExpressionLoadingLabel:
+          geneExpressionState.status === 'loading'
+            ? geneExpressionModeLabel(geneExpressionState.mode)
+            : undefined,
+        genePanelState,
+        isRoiGeneViewportWarmupLoading,
+        loadState,
+        magicLensState,
+        magicLensLoadingScopeLabel:
+          magicLensState.status === 'loading'
+            ? magicLensScopeLabel(magicLensState.scope)
+            : undefined,
+        morphologyState,
+        roiGeneStatsState,
+        roiState,
+        roiTranscriptExportState,
+        transcriptCapabilityState,
+        transcriptLayerState,
+      }),
+    [
+      analysisEmbeddingState,
+      annotationGroupState,
+      annotationState,
+      autoContrastChannelIds.length,
+      boundaryState,
+      cellDetailState,
+      cellTranscriptDistributionState,
+      datasetWarmupState,
+      diagnosticsState,
+      geneExpressionState,
+      genePanelState,
+      isRoiGeneViewportWarmupLoading,
+      loadState,
+      magicLensState,
+      morphologyState,
+      roiGeneStatsState,
+      roiState,
+      roiTranscriptExportState,
+      transcriptCapabilityState,
+      transcriptLayerState,
+    ],
+  )
   const loadingTabIds = useMemo(
     () => new Set(loadingTasks.map((task) => task.tabId)),
     [loadingTasks],
