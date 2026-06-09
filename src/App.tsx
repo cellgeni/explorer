@@ -71,9 +71,8 @@ import {
 import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import {
-  ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
+  roiGeneDatasetWarmupKey,
   roiGeneStatsStatusCopy,
-  roiGeneViewportWarmupKey,
   roiStatusCopy,
   summarizeRoiCells,
   type RoiGeneStatsState,
@@ -550,11 +549,7 @@ export function App({
   const annotationHeaderCopy =
     annotationGroupState.status === 'loading' ? 'Loading sets' : annotationCopy
   const roiGeneViewportWarmupRequiredKey =
-    loadState.status === 'ready' &&
-    currentViewportDetail !== null &&
-    currentViewportDetail.visibleCellCount > ROI_GENE_STATS_PREVIEW_CELL_LIMIT
-      ? roiGeneViewportWarmupKey(loadState.url, currentViewportDetail)
-      : null
+    loadState.status === 'ready' ? roiGeneDatasetWarmupKey(loadState.url) : null
   const isRoiGeneViewportWarmupLoading =
     roiGeneViewportWarmupRequiredKey !== null &&
     roiGeneViewportWarmupState.status === 'loading' &&

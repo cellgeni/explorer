@@ -548,6 +548,10 @@ unless the phase order is explicitly changed.
       now declare deck.gl `updateTriggers` for color accessors so sliders update
       the active layers immediately without waiting for boundary data or other
       layer data to re-render.
+- [x] Changed ROI gene warmup from viewport-keyed to dataset-keyed. The app now
+      prewarms ROI gene stats once per loaded dataset from the first eligible
+      viewport sample, and later camera movement no longer aborts/restarts the
+      warmup or repeatedly surfaces `Preparing ROI genes`.
 - [ ] Optimization pass: after correctness is stable, tune interaction
       performance, memory pressure, fetch/decode concurrency, and rendering
       costs without changing product behavior.

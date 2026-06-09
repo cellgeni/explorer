@@ -1,10 +1,15 @@
 import { act, render } from '@testing-library/react'
 import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import type { RoiDrawMode, ViewerMagicLensDetail } from '../../components/ViewerCore'
+import type {
+  RoiDrawMode,
+  ViewerMagicLensDetail,
+  ViewerViewportDetail,
+} from '../../components/ViewerCore'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { RoiSelection } from '../../data/roiSelection'
+import type { RoiCellsLoader, RoiGeneStatsLoader } from '../app-shell/appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { MagicLensScope, MagicLensState } from './magicLensModel'
@@ -14,6 +19,7 @@ import type {
   RoiState,
   RoiTranscriptExportState,
 } from './roiModel'
+import { ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS } from './roiModel'
 import { useRoiWorkflow } from './useRoiWorkflow'
 
 const selection: RoiSelection = {
@@ -156,6 +162,141 @@ function Probe({
   return null
 }
 
+const warmupCells = [
+  {
+    id: asCellId('aaaaaaaa-1'),
+    position: { x: micrometers(1), y: micrometers(2) },
+    transcriptCount: 12,
+    cellArea: 20,
+  },
+]
+
+const firstViewportDetail: ViewerViewportDetail = {
+  bbox: {
+    minX: micrometers(0),
+    minY: micrometers(0),
+    maxX: micrometers(100),
+    maxY: micrometers(100),
+  },
+  visibleCellCount: 120,
+  viewState: { target: [0, 0, 0], zoom: 1, minZoom: -8, maxZoom: 8 },
+}
+
+const movedViewportDetail: ViewerViewportDetail = {
+  bbox: {
+    minX: micrometers(300),
+    minY: micrometers(300),
+    maxX: micrometers(450),
+    maxY: micrometers(450),
+  },
+  visibleCellCount: 260,
+  viewState: { target: [375, 375, 0], zoom: 1.8, minZoom: -8, maxZoom: 8 },
+}
+
+function WarmupProbe({
+  currentViewportDetail,
+  datasetUrl = 'https://example.test/output',
+  loadRoiCells,
+  loadRoiGeneStats,
+}: {
+  readonly currentViewportDetail: ViewerViewportDetail | null
+  readonly datasetUrl?: string
+  readonly loadRoiCells: RoiCellsLoader
+  readonly loadRoiGeneStats: RoiGeneStatsLoader
+}) {
+  const [magicLensState, setMagicLensState] = React.useState<
+    MagicLensState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [roiGeneStatsState, setRoiGeneStatsState] = React.useState<
+    RoiGeneStatsState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [roiGeneViewportWarmupState, setRoiGeneViewportWarmupState] =
+    React.useState<RoiGeneViewportWarmupState>({ status: 'idle' })
+  const [roiMode, setRoiMode] = React.useState<RoiDrawMode>('idle')
+  const [roiName, setRoiName] = React.useState('ROI 1')
+  const [roiState, setRoiState] = React.useState<RoiState<StructuredLoadError>>({
+    status: 'idle',
+  })
+  const [roiTranscriptExportState, setRoiTranscriptExportState] = React.useState<
+    RoiTranscriptExportState<StructuredLoadError>
+  >({ status: 'idle' })
+  const initialSharedRoiSelectionRef = React.useRef<RoiSelection | null>(null)
+  const magicLensAbortRef = React.useRef<AbortController | null>(null)
+  const magicLensDebounceRef = React.useRef<number | null>(null)
+  const magicLensLastDetailRef = React.useRef<ViewerMagicLensDetail | null>(null)
+  const magicLensLastQueryKeyRef = React.useRef<string | null>(null)
+  const magicLensRequestIdRef = React.useRef(0)
+  const roiAbortRef = React.useRef<AbortController | null>(null)
+  const roiGeneViewportWarmupAbortRef = React.useRef<AbortController | null>(null)
+  const roiGeneViewportWarmupKeyRef = React.useRef<string | null>(null)
+  const roiGeneViewportWarmupTimeoutRef = React.useRef<number | null>(null)
+  const roiIdRef = React.useRef(0)
+  const roiRequestIdRef = React.useRef(0)
+  const roiTranscriptExportAbortRef = React.useRef<AbortController | null>(null)
+  const roiTranscriptExportRequestIdRef = React.useRef(0)
+  const loadState: DatasetLoadState<StructuredLoadError> = {
+    status: 'ready',
+    url: datasetUrl,
+    cellCount: 1_000,
+  }
+  const loadRoiTranscripts = React.useCallback(async () => [], [])
+
+  useRoiWorkflow({
+    appendDebugEvent: vi.fn(),
+    currentViewportDetail,
+    initialSharedRoiSelectionRef,
+    loadRoiCells,
+    loadRoiGeneStats,
+    loadRoiTranscripts,
+    loadState,
+    magicLensAbortRef,
+    magicLensDebounceRef,
+    magicLensLastDetailRef,
+    magicLensLastQueryKeyRef,
+    magicLensRequestIdRef,
+    magicLensScope: 'roi',
+    roiAbortRef,
+    roiGeneViewportWarmupAbortRef,
+    roiGeneViewportWarmupKeyRef,
+    roiGeneViewportWarmupTimeoutRef,
+    roiIdRef,
+    roiName,
+    roiRequestIdRef,
+    roiState,
+    roiTranscriptExportAbortRef,
+    roiTranscriptExportRequestIdRef,
+    setMagicLensState,
+    setRoiGeneStatsState,
+    setRoiGeneViewportWarmupState,
+    setRoiMode,
+    setRoiName,
+    setRoiState,
+    setRoiTranscriptExportState,
+  })
+
+  void magicLensState
+  void roiGeneStatsState
+  void roiGeneViewportWarmupState
+  void roiMode
+  void roiTranscriptExportState
+
+  return null
+}
+
+function roiCellsLoader(): ReturnType<typeof vi.fn<RoiCellsLoader>> {
+  return vi.fn(async () => warmupCells)
+}
+
+function roiGeneStatsLoader(): ReturnType<typeof vi.fn<RoiGeneStatsLoader>> {
+  return vi.fn(async () => ({
+    genes: [],
+    cellCount: warmupCells.length,
+    sampledCellCount: warmupCells.length,
+    totalCount: 0,
+    hitCellLimit: false,
+  }))
+}
+
 describe('useRoiWorkflow', () => {
   it('clears ROI state and dependent exports/lens state', () => {
     render(
@@ -178,5 +319,98 @@ describe('useRoiWorkflow', () => {
     expect(snapshot.magicLensState).toEqual({ status: 'idle' })
     expect(snapshot.roiRequestId).toBe(5)
     expect(snapshot.debugMessages).toContain('Cleared ROI')
+  })
+
+  it('keeps ROI gene warmup scoped to the dataset while the viewport moves', async () => {
+    vi.useFakeTimers()
+    const loadRoiCells = roiCellsLoader()
+    const loadRoiGeneStats = roiGeneStatsLoader()
+
+    try {
+      const view = render(
+        <WarmupProbe
+          currentViewportDetail={firstViewportDetail}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+
+      view.rerender(
+        <WarmupProbe
+          currentViewportDetail={movedViewportDetail}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
+      })
+
+      expect(loadRoiCells).toHaveBeenCalledTimes(1)
+      expect(loadRoiCells).toHaveBeenCalledWith(
+        'https://example.test/output',
+        expect.objectContaining({ bbox: firstViewportDetail.bbox }),
+        expect.objectContaining({ limit: 5_000, signal: expect.any(AbortSignal) }),
+      )
+      expect(loadRoiGeneStats).toHaveBeenCalledTimes(1)
+
+      view.rerender(
+        <WarmupProbe
+          currentViewportDetail={movedViewportDetail}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
+      })
+
+      expect(loadRoiCells).toHaveBeenCalledTimes(1)
+      expect(loadRoiGeneStats).toHaveBeenCalledTimes(1)
+      view.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('runs ROI gene warmup again after the dataset URL changes', async () => {
+    vi.useFakeTimers()
+    const loadRoiCells = roiCellsLoader()
+    const loadRoiGeneStats = roiGeneStatsLoader()
+
+    try {
+      const view = render(
+        <WarmupProbe
+          currentViewportDetail={firstViewportDetail}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
+      })
+
+      view.rerender(
+        <WarmupProbe
+          currentViewportDetail={movedViewportDetail}
+          datasetUrl="https://example.test/other-output"
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
+      })
+
+      expect(loadRoiCells).toHaveBeenCalledTimes(2)
+      expect(loadRoiGeneStats).toHaveBeenCalledTimes(2)
+      view.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

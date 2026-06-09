@@ -75,12 +75,6 @@ export interface RoiSummary {
   readonly meanCellArea: number | undefined
 }
 
-interface RoiViewportWarmupDetail {
-  readonly bbox: BBox
-  readonly viewState: { readonly zoom: number }
-  readonly visibleCellCount: number
-}
-
 export function roiStatusCopy<ErrorType extends RoiLoadErrorSummary>(
   roiState: RoiState<ErrorType>,
   roiMode: RoiDrawMode,
@@ -174,23 +168,8 @@ export function emptyRoiGeneStats(): RoiGeneStats {
   }
 }
 
-export function roiGeneViewportWarmupKey(
-  datasetUrl: string,
-  detail: RoiViewportWarmupDetail,
-): string {
-  const coordinateBucketMicrometers = 100
-  const visibleCellBucket = ROI_GENE_STATS_PREVIEW_CELL_LIMIT
-  const { bbox, viewState } = detail
-
-  return [
-    datasetUrl,
-    Math.round(bbox.minX / coordinateBucketMicrometers),
-    Math.round(bbox.maxX / coordinateBucketMicrometers),
-    Math.round(bbox.minY / coordinateBucketMicrometers),
-    Math.round(bbox.maxY / coordinateBucketMicrometers),
-    Math.round(viewState.zoom * 10),
-    Math.round(detail.visibleCellCount / visibleCellBucket),
-  ].join(':')
+export function roiGeneDatasetWarmupKey(datasetUrl: string): string {
+  return `${datasetUrl}:roi-gene-warmup`
 }
 
 export function deferRoiGeneRefinement(): Promise<void> {

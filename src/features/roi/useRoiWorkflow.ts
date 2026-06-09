@@ -34,7 +34,7 @@ import {
   deferRoiGeneRefinement,
   emptyRoiGeneStats,
   roiCellsToCsv,
-  roiGeneViewportWarmupKey,
+  roiGeneDatasetWarmupKey,
   roiSelectionLabel,
   roiTranscriptsToCsv,
   type RoiGeneStatsState,
@@ -128,6 +128,19 @@ export function useRoiWorkflow({
   setRoiState,
   setRoiTranscriptExportState,
 }: UseRoiWorkflowOptions): UseRoiWorkflowResult {
+  useEffect(
+    () => () => {
+      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
+      abortActiveRequest(roiGeneViewportWarmupAbortRef)
+      roiGeneViewportWarmupKeyRef.current = null
+    },
+    [
+      roiGeneViewportWarmupAbortRef,
+      roiGeneViewportWarmupKeyRef,
+      roiGeneViewportWarmupTimeoutRef,
+    ],
+  )
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return
@@ -150,12 +163,13 @@ export function useRoiWorkflow({
 
       if (hadPendingWarmup) {
         roiGeneViewportWarmupKeyRef.current = null
+        setRoiGeneViewportWarmupState({ status: 'idle' })
       }
 
       return
     }
 
-    const warmupKey = roiGeneViewportWarmupKey(readyDatasetUrl, detail)
+    const warmupKey = roiGeneDatasetWarmupKey(readyDatasetUrl)
 
     if (warmupKey === roiGeneViewportWarmupKeyRef.current) {
       return
@@ -163,14 +177,15 @@ export function useRoiWorkflow({
 
     clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
     abortActiveRequest(roiGeneViewportWarmupAbortRef)
+    roiGeneViewportWarmupKeyRef.current = warmupKey
     setRoiGeneViewportWarmupState({ status: 'loading', key: warmupKey })
 
     roiGeneViewportWarmupTimeoutRef.current = window.setTimeout(() => {
+      roiGeneViewportWarmupTimeoutRef.current = null
       const abortController = new AbortController()
       const selection = { kind: 'box' as const, bbox: detail.bbox }
       const warmupStartedAt = readTimestamp()
       roiGeneViewportWarmupAbortRef.current = abortController
-      roiGeneViewportWarmupKeyRef.current = warmupKey
 
       void (async () => {
         try {
@@ -193,7 +208,7 @@ export function useRoiWorkflow({
 
           if (cells.length === 0) {
             appendDebugEvent(
-              `ROI gene viewport warmup ready: no cells (${formatElapsed(warmupStartedAt)})`,
+              `ROI gene warmup ready: no cells (${formatElapsed(warmupStartedAt)})`,
               {
                 coalesceKey: 'roi-gene-warmup',
               },
@@ -224,24 +239,17 @@ export function useRoiWorkflow({
               genesStartedAt,
             )}`,
           )
-          appendDebugEvent(
-            `ROI gene viewport warmup ready (${formatElapsed(warmupStartedAt)})`,
-            {
-              coalesceKey: 'roi-gene-warmup',
-            },
-          )
+          appendDebugEvent(`ROI gene warmup ready (${formatElapsed(warmupStartedAt)})`, {
+            coalesceKey: 'roi-gene-warmup',
+          })
           setRoiGeneViewportWarmupState({ status: 'ready', key: warmupKey })
         } catch (error) {
           if (isAbortError(error)) {
             return
           }
 
-          if (roiGeneViewportWarmupKeyRef.current === warmupKey) {
-            roiGeneViewportWarmupKeyRef.current = null
-          }
-
           appendDebugEvent(
-            `ROI gene viewport warmup skipped (${formatElapsed(warmupStartedAt)})`,
+            `ROI gene warmup skipped (${formatElapsed(warmupStartedAt)})`,
             {
               coalesceKey: 'roi-gene-warmup',
             },
@@ -254,10 +262,6 @@ export function useRoiWorkflow({
         }
       })()
     }, ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
-
-    return () => {
-      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-    }
   }, [
     appendDebugEvent,
     currentViewportDetail,
@@ -294,7 +298,6 @@ export function useRoiWorkflow({
       setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
       abortActiveRequest(roiGeneViewportWarmupAbortRef)
-      roiGeneViewportWarmupKeyRef.current = null
       setRoiGeneViewportWarmupState({ status: 'idle' })
       setRoiState({ status: 'loading', url: loadState.url, bbox, selection })
       setRoiGeneStatsState({ status: 'idle' })
@@ -461,7 +464,6 @@ export function useRoiWorkflow({
       magicLensRequestIdRef,
       roiAbortRef,
       roiGeneViewportWarmupAbortRef,
-      roiGeneViewportWarmupKeyRef,
       roiGeneViewportWarmupTimeoutRef,
       roiIdRef,
       roiRequestIdRef,

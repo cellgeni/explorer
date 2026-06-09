@@ -6,8 +6,8 @@ import {
   defaultRoiName,
   emptyRoiGeneStats,
   roiCellsToCsv,
+  roiGeneDatasetWarmupKey,
   roiGeneStatsStatusCopy,
-  roiGeneViewportWarmupKey,
   roiSelectionLabel,
   roiStatusCopy,
   roiTranscriptsToCsv,
@@ -113,18 +113,9 @@ describe('roiModel', () => {
       totalCount: 0,
       hitCellLimit: false,
     })
-    expect(
-      roiGeneViewportWarmupKey('https://example.test/output', {
-        bbox: {
-          minX: micrometers(49),
-          maxX: micrometers(151),
-          minY: micrometers(249),
-          maxY: micrometers(351),
-        },
-        viewState: { zoom: 1.24 },
-        visibleCellCount: 65,
-      }),
-    ).toBe('https://example.test/output:0:2:2:4:12:2')
+    expect(roiGeneDatasetWarmupKey('https://example.test/output')).toBe(
+      'https://example.test/output:roi-gene-warmup',
+    )
   })
 
   it('serializes ROI cells and transcripts as escaped CSV', () => {
