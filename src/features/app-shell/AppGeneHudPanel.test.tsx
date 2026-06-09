@@ -5,19 +5,11 @@ import { AppGeneHudPanel } from './AppGeneHudPanel'
 
 type Props = ComponentProps<typeof AppGeneHudPanel>
 
-const savedGeneSet = {
-  id: 'set-1',
-  name: 'Marker set',
-  genes: ['Actb'],
-  scoreMode: 'sum' as const,
-}
-
 function baseProps(overrides: Partial<Props> = {}): Props {
   return {
     active: true,
     analysisHeaderCopy: '2 genes',
-    applyGeneSetSymbols: vi.fn(),
-    applySavedGeneSet: vi.fn(),
+    appendDebugEvent: vi.fn(),
     controlIds: {
       geneExpressionDetailInputId: 'gene-detail',
       geneScaleInputId: 'gene-scale',
@@ -27,41 +19,40 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       geneSetSymbolsInputId: 'gene-set-symbols',
       observationModeInputId: 'cell-color',
     },
-    filteredGenes: ['Gad1'],
+    geneExpressionBatch: null,
     geneExpressionColorScale: 'plasma',
     geneExpressionCopy: 'Expression ready',
     geneExpressionDetailMode: 'auto',
+    geneExpressionScaleDatasetUrl: 'https://example.test/output',
     geneExpressionScaleMax: 12,
     geneExpressionScoreMode: 'sum',
     geneExpressionState: { status: 'idle' },
+    geneOptions: ['Actb', 'Gad1'],
     genePanelState: {
       status: 'ready',
       url: 'https://example.test/output',
       genes: ['Actb', 'Gad1'],
     },
-    geneSearch: '',
-    geneSetName: '',
-    geneSetSymbols: 'Actb',
-    handleGeneExpressionColorScaleChange: vi.fn(),
-    handleGeneExpressionDetailModeChange: vi.fn(),
-    handleGeneExpressionScoreModeChange: vi.fn(),
-    handleObservationColorModeChange: vi.fn(),
     hasAnnotationColors: true,
     observationColorMode: 'transcript-count',
-    removeSavedGeneSet: vi.fn(),
-    savedGeneSets: [savedGeneSet],
-    saveSelectedGeneSet: vi.fn(),
+    rememberGeneExpressionScaleMax: vi.fn(),
+    resetGeneExpressionSelectionState: vi.fn(),
     selectedGenes: ['Actb'],
-    setGeneSearch: vi.fn(),
-    setGeneSetName: vi.fn(),
-    setGeneSetSymbols: vi.fn(),
+    setGeneExpressionColorScale: vi.fn(),
+    setGeneExpressionDetailMode: vi.fn(),
+    setGeneExpressionScaleDomain: vi.fn(),
+    setGeneExpressionScoreMode: vi.fn(),
+    setManualTranscriptExactRequestKey: vi.fn(),
+    setObservationColorMode: vi.fn(),
+    setSelectedGenes: vi.fn(),
     toggleGene: vi.fn(),
+    transcriptViewportKeyRef: { current: 'transcript-view' },
     ...overrides,
   }
 }
 
 describe('AppGeneHudPanel', () => {
-  it('wires gene controls to app state and workflow handlers', () => {
+  it('owns local gene form state and wires shared controls to app state', () => {
     const props = baseProps()
 
     render(<AppGeneHudPanel {...props} />)
@@ -74,10 +65,10 @@ describe('AppGeneHudPanel', () => {
       target: { value: 'Actb Gad1' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Apply Symbols' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save Set' }))
     fireEvent.change(screen.getByLabelText('Set name'), {
-      target: { value: 'New set' },
+      target: { value: 'Marker set' },
     })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Set' }))
     fireEvent.change(screen.getByLabelText('Signature score'), {
       target: { value: 'mean' },
     })
@@ -93,19 +84,41 @@ describe('AppGeneHudPanel', () => {
       target: { value: 'annotations' },
     })
 
-    expect(props.setGeneSearch).toHaveBeenCalledWith('gad')
     expect(props.toggleGene).toHaveBeenCalledWith('Gad1')
-    expect(props.setGeneSetSymbols).toHaveBeenCalledWith('Actb Gad1')
-    expect(props.applyGeneSetSymbols).toHaveBeenCalledTimes(1)
-    expect(props.saveSelectedGeneSet).toHaveBeenCalledTimes(1)
-    expect(props.setGeneSetName).toHaveBeenCalledWith('New set')
-    expect(props.handleGeneExpressionScoreModeChange).toHaveBeenCalledWith('mean')
-    expect(props.applySavedGeneSet).toHaveBeenCalledWith(savedGeneSet)
-    expect(props.removeSavedGeneSet).toHaveBeenCalledWith('set-1')
-    expect(props.handleGeneExpressionColorScaleChange).toHaveBeenCalledWith('viridis')
-    expect(props.handleGeneExpressionDetailModeChange).toHaveBeenCalledWith(
-      'exact-region',
+    expect(props.setSelectedGenes).toHaveBeenCalledWith(['Actb', 'Gad1'])
+    expect(props.setSelectedGenes).toHaveBeenCalledWith(['Actb'])
+    expect(props.setGeneExpressionScoreMode).toHaveBeenCalledWith('sum')
+    expect(props.setGeneExpressionScoreMode).toHaveBeenCalledWith('mean')
+    expect(props.setGeneExpressionColorScale).toHaveBeenCalledWith('viridis')
+    expect(props.setGeneExpressionDetailMode).toHaveBeenCalledWith('exact-region')
+    expect(props.setObservationColorMode).toHaveBeenCalledWith('annotations')
+    expect(props.appendDebugEvent).toHaveBeenCalledWith('Saved gene set Marker set')
+    expect(props.appendDebugEvent).toHaveBeenCalledWith('Removed gene set Marker set')
+  })
+
+  it('resets local gene controls when a new gene panel load starts', () => {
+    const props = baseProps()
+    const { rerender } = render(<AppGeneHudPanel {...props} />)
+
+    fireEvent.change(screen.getByLabelText('Gene selection'), {
+      target: { value: 'gad' },
+    })
+    fireEvent.change(screen.getByLabelText('Gene set symbols'), {
+      target: { value: 'Actb' },
+    })
+    fireEvent.change(screen.getByLabelText('Set name'), {
+      target: { value: 'Marker set' },
+    })
+
+    rerender(
+      <AppGeneHudPanel
+        {...props}
+        genePanelState={{ status: 'loading', url: 'https://example.test/next' }}
+      />,
     )
-    expect(props.handleObservationColorModeChange).toHaveBeenCalledWith('annotations')
+
+    expect(screen.getByLabelText('Gene selection')).toHaveValue('')
+    expect(screen.getByLabelText('Gene set symbols')).toHaveValue('')
+    expect(screen.getByLabelText('Set name')).toHaveValue('')
   })
 })

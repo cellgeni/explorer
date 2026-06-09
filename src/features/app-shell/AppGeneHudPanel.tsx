@@ -1,17 +1,29 @@
-import type { Dispatch, SetStateAction } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
+import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type {
   GeneExpressionColorScale,
   GeneExpressionScoreMode,
 } from '../../rendering/deckLayers'
 import { GeneHudPanel } from '../genes/GeneHudPanel'
+import { useGeneControlsWorkflow } from '../genes/useGeneControlsWorkflow'
 import type {
+  GeneExpressionScaleDomain,
   GeneExpressionState,
   GenePanelState,
   SavedGeneSet,
 } from '../genes/geneControlsModel'
+import { filterGeneOptions } from '../genes/geneControlsModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
+import type { DebugLogAppendOptions } from './appRuntimeModel'
 import type { AppControlIds } from './useAppControlIds'
 
 type AppGeneControlIds = Pick<
@@ -28,68 +40,134 @@ type AppGeneControlIds = Pick<
 export interface AppGeneHudPanelProps {
   readonly active: boolean
   readonly analysisHeaderCopy: string
-  readonly applyGeneSetSymbols: () => void
-  readonly applySavedGeneSet: (geneSet: SavedGeneSet) => void
+  readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly controlIds: AppGeneControlIds
-  readonly filteredGenes: readonly string[]
   readonly geneExpressionColorScale: GeneExpressionColorScale
+  readonly geneExpressionBatch: GeneExpressionBatch | null
   readonly geneExpressionCopy: string
   readonly geneExpressionDetailMode: GeneExpressionDetailMode
   readonly geneExpressionScaleMax: number
+  readonly geneExpressionScaleDatasetUrl: string
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
   readonly geneExpressionState: GeneExpressionState<StructuredLoadError>
   readonly genePanelState: GenePanelState<StructuredLoadError>
-  readonly geneSearch: string
-  readonly geneSetName: string
-  readonly geneSetSymbols: string
-  readonly handleGeneExpressionColorScaleChange: (scale: GeneExpressionColorScale) => void
-  readonly handleGeneExpressionDetailModeChange: (mode: GeneExpressionDetailMode) => void
-  readonly handleGeneExpressionScoreModeChange: (mode: GeneExpressionScoreMode) => void
-  readonly handleObservationColorModeChange: (mode: ObservationColorMode) => void
+  readonly geneOptions: readonly string[]
   readonly hasAnnotationColors: boolean
   readonly observationColorMode: ObservationColorMode
-  readonly removeSavedGeneSet: (id: string) => void
-  readonly savedGeneSets: readonly SavedGeneSet[]
-  readonly saveSelectedGeneSet: () => void
+  readonly rememberGeneExpressionScaleMax: (
+    key: string,
+    batch: GeneExpressionBatch,
+    scoreMode: GeneExpressionScoreMode,
+  ) => void
+  readonly resetGeneExpressionSelectionState: () => void
   readonly selectedGenes: readonly string[]
-  readonly setGeneSearch: Dispatch<SetStateAction<string>>
-  readonly setGeneSetName: Dispatch<SetStateAction<string>>
-  readonly setGeneSetSymbols: Dispatch<SetStateAction<string>>
+  readonly setGeneExpressionColorScale: Dispatch<SetStateAction<GeneExpressionColorScale>>
+  readonly setGeneExpressionDetailMode: Dispatch<SetStateAction<GeneExpressionDetailMode>>
+  readonly setGeneExpressionScaleDomain: Dispatch<
+    SetStateAction<GeneExpressionScaleDomain>
+  >
+  readonly setGeneExpressionScoreMode: Dispatch<SetStateAction<GeneExpressionScoreMode>>
+  readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
+  readonly setObservationColorMode: Dispatch<SetStateAction<ObservationColorMode>>
+  readonly setSelectedGenes: Dispatch<SetStateAction<readonly string[]>>
   readonly toggleGene: (gene: string) => void
+  readonly transcriptViewportKeyRef: { current: string | null }
 }
 
 export function AppGeneHudPanel({
   active,
   analysisHeaderCopy,
-  applyGeneSetSymbols,
-  applySavedGeneSet,
+  appendDebugEvent,
   controlIds,
-  filteredGenes,
   geneExpressionColorScale,
+  geneExpressionBatch,
   geneExpressionCopy,
   geneExpressionDetailMode,
   geneExpressionScaleMax,
+  geneExpressionScaleDatasetUrl,
   geneExpressionScoreMode,
   geneExpressionState,
   genePanelState,
-  geneSearch,
-  geneSetName,
-  geneSetSymbols,
-  handleGeneExpressionColorScaleChange,
-  handleGeneExpressionDetailModeChange,
-  handleGeneExpressionScoreModeChange,
-  handleObservationColorModeChange,
+  geneOptions,
   hasAnnotationColors,
   observationColorMode,
-  removeSavedGeneSet,
-  savedGeneSets,
-  saveSelectedGeneSet,
+  rememberGeneExpressionScaleMax,
+  resetGeneExpressionSelectionState,
   selectedGenes,
-  setGeneSearch,
-  setGeneSetName,
-  setGeneSetSymbols,
+  setGeneExpressionColorScale,
+  setGeneExpressionDetailMode,
+  setGeneExpressionScaleDomain,
+  setGeneExpressionScoreMode,
+  setManualTranscriptExactRequestKey,
+  setObservationColorMode,
+  setSelectedGenes,
   toggleGene,
+  transcriptViewportKeyRef,
 }: AppGeneHudPanelProps) {
+  const [geneSearch, setGeneSearch] = useState('')
+  const [geneSetSymbols, setGeneSetSymbols] = useState('')
+  const [geneSetName, setGeneSetName] = useState('')
+  const [savedGeneSets, setSavedGeneSets] = useState<readonly SavedGeneSet[]>([])
+  const geneSetIdRef = useRef(0)
+  const lastGenePanelLoadingUrlRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (
+      genePanelState.status !== 'loading' ||
+      genePanelState.url === lastGenePanelLoadingUrlRef.current
+    ) {
+      return
+    }
+
+    lastGenePanelLoadingUrlRef.current = genePanelState.url
+    geneSetIdRef.current = 0
+    setGeneSearch('')
+    setGeneSetSymbols('')
+    setGeneSetName('')
+    setSavedGeneSets([])
+  }, [genePanelState])
+
+  const filteredGenes = useMemo(
+    () => filterGeneOptions(geneOptions, geneSearch, selectedGenes),
+    [geneOptions, geneSearch, selectedGenes],
+  )
+
+  const {
+    applyGeneSetSymbols,
+    applySavedGeneSet,
+    handleGeneExpressionColorScaleChange,
+    handleGeneExpressionDetailModeChange,
+    handleGeneExpressionScoreModeChange,
+    handleObservationColorModeChange,
+    removeSavedGeneSet,
+    saveSelectedGeneSet,
+  } = useGeneControlsWorkflow({
+    appendDebugEvent,
+    geneExpressionBatch,
+    geneExpressionScaleDatasetUrl,
+    geneExpressionScoreMode,
+    geneOptions,
+    geneSetIdRef,
+    geneSetName,
+    geneSetSymbols,
+    rememberGeneExpressionScaleMax,
+    savedGeneSets,
+    selectedGenes,
+    setGeneExpressionColorScale,
+    setGeneExpressionDetailMode,
+    setGeneExpressionScaleDomain,
+    setGeneExpressionScoreMode,
+    setGeneSearch,
+    setGeneSetName,
+    setManualTranscriptExactRequestKey,
+    setObservationColorMode,
+    setSavedGeneSets,
+    setSelectedGenes,
+    transcriptViewportKeyRef,
+    resetGeneExpressionSelectionState,
+    toggleGene,
+  })
+
   return (
     <GeneHudPanel
       active={active}

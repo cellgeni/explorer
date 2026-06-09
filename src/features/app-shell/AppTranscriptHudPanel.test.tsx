@@ -25,6 +25,7 @@ const pinnedTranscript: ViewerTranscriptHoverDetail = {
 function baseProps(overrides: Partial<Props> = {}): Props {
   return {
     active: true,
+    appendDebugEvent: vi.fn(),
     controlIds: {
       transcriptDensityScaleInputId: 'tx-density',
       transcriptDetailInputId: 'tx-detail',
@@ -37,33 +38,33 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       transcriptPointSizeInputId: 'tx-size',
     },
     effectiveTranscriptFeatureFilterMode: 'selected',
-    filteredTranscriptFeatures: ['Gad1'],
+    geneOptions: ['Actb', 'Gad1'],
     genePanelState: {
       status: 'ready',
       url: 'https://example.test/output',
       genes: ['Actb', 'Gad1'],
     },
-    handleLoadExactViewport: vi.fn(),
     handlePinTranscript: vi.fn(),
-    handleToggleTranscriptSelectedFeature: vi.fn(),
-    handleTranscriptDensityColorScaleChange: vi.fn(),
-    handleTranscriptDetailModeChange: vi.fn(),
-    handleTranscriptExactPointLimitChange: vi.fn(),
-    handleTranscriptFeatureFilterModeChange: vi.fn(),
-    handleTranscriptGeneOnlyChange: vi.fn(),
-    handleTranscriptMinQvChange: vi.fn(),
-    handleTranscriptOpacityPercentChange: vi.fn(),
-    handleTranscriptOverlayChange: vi.fn(),
-    handleTranscriptPointColorModeChange: vi.fn(),
-    handleTranscriptPointSizeChange: vi.fn(),
     hoveredTranscript: null,
     loadEnabled: true,
-    pickTranscriptFeature: vi.fn(),
     pinnedTranscript: null,
+    resetGeneExpressionSelectionState: vi.fn(),
     selectedGenes: ['Actb'],
+    setManualTranscriptExactRequestKey: vi.fn(),
     setPinnedTranscript: vi.fn(),
-    setTranscriptFeatureSearch: vi.fn(),
+    setSelectedGenes: vi.fn(),
+    setShowTranscriptOverlay: vi.fn(),
+    setTranscriptDensityColorScale: vi.fn(),
+    setTranscriptDetailMode: vi.fn(),
+    setTranscriptExactPointLimit: vi.fn(),
+    setTranscriptFeatureFilterMode: vi.fn(),
+    setTranscriptGeneOnly: vi.fn(),
+    setTranscriptMinQv: vi.fn(),
+    setTranscriptOpacity: vi.fn(),
+    setTranscriptPointColorMode: vi.fn(),
+    setTranscriptPointSize: vi.fn(),
     showTranscriptOverlay: true,
+    toggleGene: vi.fn(),
     transcriptCapabilityState: {
       status: 'ready',
       url: 'https://example.test/output',
@@ -75,13 +76,13 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     transcriptDensityScaleMax: 50,
     transcriptDetailMode: 'auto',
     transcriptExactPointLimit: 100_000,
-    transcriptFeatureSearch: 'ga',
     transcriptGeneOnly: true,
     transcriptLayerState: { status: 'idle' },
     transcriptMinQv: 20,
     transcriptOpacity: 0.7,
     transcriptPointColorMode: 'feature',
     transcriptPointSize: 2,
+    transcriptViewportKeyRef: { current: 'transcript-view' },
     visibleTranscriptEstimate: 50,
     ...overrides,
   }
@@ -108,7 +109,7 @@ describe('AppTranscriptHudPanel', () => {
     expect(screen.getByLabelText('Feature search')).toBeEnabled()
   })
 
-  it('wires transcript controls and clears pinned transcript state', () => {
+  it('owns feature search while wiring transcript controls to shared state', () => {
     const props = baseProps({ pinnedTranscript })
 
     render(<AppTranscriptHudPanel {...props} />)
@@ -126,11 +127,31 @@ describe('AppTranscriptHudPanel', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
 
-    expect(props.handleTranscriptOverlayChange).toHaveBeenCalledWith(false)
-    expect(props.handleTranscriptDetailModeChange).toHaveBeenCalledWith('density')
-    expect(props.setTranscriptFeatureSearch).toHaveBeenCalledWith('gad')
-    expect(props.pickTranscriptFeature).toHaveBeenCalledWith('Gad1')
-    expect(props.handleTranscriptOpacityPercentChange).toHaveBeenCalledWith(55)
+    expect(props.setShowTranscriptOverlay).toHaveBeenCalledWith(false)
+    expect(props.setTranscriptDetailMode).toHaveBeenCalledWith('density')
+    expect(screen.getByLabelText('Feature search')).toHaveValue('')
+    expect(props.resetGeneExpressionSelectionState).toHaveBeenCalledTimes(1)
+    expect(props.setTranscriptFeatureFilterMode).toHaveBeenCalledWith('selected')
+    expect(props.setSelectedGenes).toHaveBeenCalled()
+    expect(props.setTranscriptOpacity).toHaveBeenCalledWith(0.55)
     expect(props.setPinnedTranscript).toHaveBeenCalledWith(null)
+  })
+
+  it('resets local feature search when a new gene panel load starts', () => {
+    const props = baseProps()
+    const { rerender } = render(<AppTranscriptHudPanel {...props} />)
+
+    fireEvent.change(screen.getByLabelText('Feature search'), {
+      target: { value: 'gad' },
+    })
+
+    rerender(
+      <AppTranscriptHudPanel
+        {...props}
+        genePanelState={{ status: 'loading', url: 'https://example.test/next' }}
+      />,
+    )
+
+    expect(screen.getByLabelText('Feature search')).toHaveValue('')
   })
 })

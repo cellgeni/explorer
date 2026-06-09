@@ -1,4 +1,11 @@
-import type { Dispatch, SetStateAction } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import type { ViewerTranscriptHoverDetail } from '../../components/ViewerCore'
 import type {
   TranscriptDetailMode,
@@ -9,12 +16,15 @@ import type {
   TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
 import type { GenePanelState } from '../genes/geneControlsModel'
+import { filterGeneOptions } from '../genes/geneControlsModel'
 import { TranscriptHudPanel } from '../transcripts/TranscriptHudPanel'
+import { useTranscriptControlsWorkflow } from '../transcripts/useTranscriptControlsWorkflow'
 import type {
   TranscriptCapabilityState,
   TranscriptLayerState,
 } from '../transcripts/transcriptLayerModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
+import type { DebugLogAppendOptions } from './appRuntimeModel'
 import type { AppControlIds } from './useAppControlIds'
 
 type AppTranscriptControlIds = Pick<
@@ -32,37 +42,38 @@ type AppTranscriptControlIds = Pick<
 
 export interface AppTranscriptHudPanelProps {
   readonly active: boolean
+  readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly controlIds: AppTranscriptControlIds
   readonly effectiveTranscriptFeatureFilterMode: TranscriptFeatureFilterMode
-  readonly filteredTranscriptFeatures: readonly string[]
+  readonly geneOptions: readonly string[]
   readonly genePanelState: GenePanelState<StructuredLoadError>
-  readonly handleLoadExactViewport: (requestKey: string) => void
   readonly handlePinTranscript: (detail: ViewerTranscriptHoverDetail) => void
-  readonly handleToggleTranscriptSelectedFeature: (feature: string) => void
-  readonly handleTranscriptDensityColorScaleChange: (
-    scale: TranscriptDensityColorScale,
-  ) => void
-  readonly handleTranscriptDetailModeChange: (mode: TranscriptDetailMode) => void
-  readonly handleTranscriptExactPointLimitChange: (limit: number) => void
-  readonly handleTranscriptFeatureFilterModeChange: (
-    mode: TranscriptFeatureFilterMode,
-  ) => void
-  readonly handleTranscriptGeneOnlyChange: (enabled: boolean) => void
-  readonly handleTranscriptMinQvChange: (minQv: number) => void
-  readonly handleTranscriptOpacityPercentChange: (percent: number) => void
-  readonly handleTranscriptOverlayChange: (enabled: boolean) => void
-  readonly handleTranscriptPointColorModeChange: (mode: TranscriptPointColorMode) => void
-  readonly handleTranscriptPointSizeChange: (pointSize: number) => void
   readonly hoveredTranscript: ViewerTranscriptHoverDetail | null
   readonly loadEnabled: boolean
-  readonly pickTranscriptFeature: (feature: string) => void
   readonly pinnedTranscript: ViewerTranscriptHoverDetail | null
+  readonly resetGeneExpressionSelectionState: () => void
   readonly selectedGenes: readonly string[]
+  readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
   readonly setPinnedTranscript: Dispatch<
     SetStateAction<ViewerTranscriptHoverDetail | null>
   >
-  readonly setTranscriptFeatureSearch: Dispatch<SetStateAction<string>>
+  readonly setSelectedGenes: Dispatch<SetStateAction<readonly string[]>>
+  readonly setShowTranscriptOverlay: Dispatch<SetStateAction<boolean>>
+  readonly setTranscriptDensityColorScale: Dispatch<
+    SetStateAction<TranscriptDensityColorScale>
+  >
+  readonly setTranscriptDetailMode: Dispatch<SetStateAction<TranscriptDetailMode>>
+  readonly setTranscriptExactPointLimit: Dispatch<SetStateAction<number>>
+  readonly setTranscriptFeatureFilterMode: Dispatch<
+    SetStateAction<TranscriptFeatureFilterMode>
+  >
+  readonly setTranscriptGeneOnly: Dispatch<SetStateAction<boolean>>
+  readonly setTranscriptMinQv: Dispatch<SetStateAction<number>>
+  readonly setTranscriptOpacity: Dispatch<SetStateAction<number>>
+  readonly setTranscriptPointColorMode: Dispatch<SetStateAction<TranscriptPointColorMode>>
+  readonly setTranscriptPointSize: Dispatch<SetStateAction<number>>
   readonly showTranscriptOverlay: boolean
+  readonly toggleGene: (gene: string) => void
   readonly transcriptCapabilityState: TranscriptCapabilityState<StructuredLoadError>
   readonly transcriptCopy: string
   readonly transcriptDensityColorScale: TranscriptDensityColorScale
@@ -70,43 +81,44 @@ export interface AppTranscriptHudPanelProps {
   readonly transcriptDensityScaleMax: number | undefined
   readonly transcriptDetailMode: TranscriptDetailMode
   readonly transcriptExactPointLimit: number
-  readonly transcriptFeatureSearch: string
   readonly transcriptGeneOnly: boolean
   readonly transcriptLayerState: TranscriptLayerState<StructuredLoadError>
   readonly transcriptMinQv: number
   readonly transcriptOpacity: number
   readonly transcriptPointColorMode: TranscriptPointColorMode
   readonly transcriptPointSize: number
+  readonly transcriptViewportKeyRef: { current: string | null }
   readonly visibleTranscriptEstimate: number
 }
 
 export function AppTranscriptHudPanel({
   active,
+  appendDebugEvent,
   controlIds,
   effectiveTranscriptFeatureFilterMode,
-  filteredTranscriptFeatures,
+  geneOptions,
   genePanelState,
-  handleLoadExactViewport,
   handlePinTranscript,
-  handleToggleTranscriptSelectedFeature,
-  handleTranscriptDensityColorScaleChange,
-  handleTranscriptDetailModeChange,
-  handleTranscriptExactPointLimitChange,
-  handleTranscriptFeatureFilterModeChange,
-  handleTranscriptGeneOnlyChange,
-  handleTranscriptMinQvChange,
-  handleTranscriptOpacityPercentChange,
-  handleTranscriptOverlayChange,
-  handleTranscriptPointColorModeChange,
-  handleTranscriptPointSizeChange,
   hoveredTranscript,
   loadEnabled,
-  pickTranscriptFeature,
   pinnedTranscript,
+  resetGeneExpressionSelectionState,
   selectedGenes,
+  setManualTranscriptExactRequestKey,
   setPinnedTranscript,
-  setTranscriptFeatureSearch,
+  setSelectedGenes,
+  setShowTranscriptOverlay,
+  setTranscriptDensityColorScale,
+  setTranscriptDetailMode,
+  setTranscriptExactPointLimit,
+  setTranscriptFeatureFilterMode,
+  setTranscriptGeneOnly,
+  setTranscriptMinQv,
+  setTranscriptOpacity,
+  setTranscriptPointColorMode,
+  setTranscriptPointSize,
   showTranscriptOverlay,
+  toggleGene,
   transcriptCapabilityState,
   transcriptCopy,
   transcriptDensityColorScale,
@@ -114,15 +126,73 @@ export function AppTranscriptHudPanel({
   transcriptDensityScaleMax,
   transcriptDetailMode,
   transcriptExactPointLimit,
-  transcriptFeatureSearch,
   transcriptGeneOnly,
   transcriptLayerState,
   transcriptMinQv,
   transcriptOpacity,
   transcriptPointColorMode,
   transcriptPointSize,
+  transcriptViewportKeyRef,
   visibleTranscriptEstimate,
 }: AppTranscriptHudPanelProps) {
+  const [transcriptFeatureSearch, setTranscriptFeatureSearch] = useState('')
+  const lastGenePanelLoadingUrlRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (
+      genePanelState.status !== 'loading' ||
+      genePanelState.url === lastGenePanelLoadingUrlRef.current
+    ) {
+      return
+    }
+
+    lastGenePanelLoadingUrlRef.current = genePanelState.url
+    setTranscriptFeatureSearch('')
+  }, [genePanelState])
+
+  const filteredTranscriptFeatures = useMemo(
+    () =>
+      filterGeneOptions(geneOptions, transcriptFeatureSearch, selectedGenes, {
+        limit: 24,
+      }),
+    [geneOptions, selectedGenes, transcriptFeatureSearch],
+  )
+
+  const {
+    handleLoadExactViewport,
+    handleToggleTranscriptSelectedFeature,
+    handleTranscriptDensityColorScaleChange,
+    handleTranscriptDetailModeChange,
+    handleTranscriptExactPointLimitChange,
+    handleTranscriptFeatureFilterModeChange,
+    handleTranscriptGeneOnlyChange,
+    handleTranscriptMinQvChange,
+    handleTranscriptOpacityPercentChange,
+    handleTranscriptOverlayChange,
+    handleTranscriptPointColorModeChange,
+    handleTranscriptPointSizeChange,
+    pickTranscriptFeature,
+  } = useTranscriptControlsWorkflow({
+    appendDebugEvent,
+    geneOptions,
+    resetGeneExpressionSelectionState,
+    setManualTranscriptExactRequestKey,
+    setSelectedGenes,
+    setShowTranscriptOverlay,
+    setTranscriptDensityColorScale,
+    setTranscriptDetailMode,
+    setTranscriptExactPointLimit,
+    setTranscriptFeatureFilterMode,
+    setTranscriptFeatureSearch,
+    setTranscriptGeneOnly,
+    setTranscriptMinQv,
+    setTranscriptOpacity,
+    setTranscriptPointColorMode,
+    setTranscriptPointSize,
+    toggleGene,
+    transcriptViewportKeyRef,
+  })
+
   return (
     <TranscriptHudPanel
       active={active}

@@ -6,17 +6,12 @@ import type {
   GeneExpressionColorScale,
   GeneExpressionScoreMode,
 } from '../../rendering/deckLayers'
-import {
-  abortActiveRequest,
-  type DebugLogAppendOptions,
-} from '../app-shell/appRuntimeModel'
-import type { StructuredLoadError } from '../errors/loadErrorModel'
+import type { DebugLogAppendOptions } from '../app-shell/appRuntimeModel'
 import {
   defaultGeneSetName,
   geneExpressionScaleKeyFor,
   parseGeneSetSymbols,
   type GeneExpressionScaleDomain,
-  type GeneExpressionState,
   type SavedGeneSet,
 } from './geneControlsModel'
 
@@ -26,12 +21,9 @@ interface MutableRef<T> {
 
 interface UseGeneControlsWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly geneExpressionAbortRef: MutableRef<AbortController | null>
   readonly geneExpressionBatch: GeneExpressionBatch | null
-  readonly geneExpressionRequestIdRef: MutableRef<number>
   readonly geneExpressionScaleDatasetUrl: string
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
-  readonly geneExpressionViewportKeyRef: MutableRef<string | null>
   readonly geneOptions: readonly string[]
   readonly geneSetIdRef: MutableRef<number>
   readonly geneSetName: string
@@ -43,16 +35,12 @@ interface UseGeneControlsWorkflowOptions {
   ) => void
   readonly savedGeneSets: readonly SavedGeneSet[]
   readonly selectedGenes: readonly string[]
-  readonly setGeneExpressionBatch: Dispatch<SetStateAction<GeneExpressionBatch | null>>
   readonly setGeneExpressionColorScale: Dispatch<SetStateAction<GeneExpressionColorScale>>
   readonly setGeneExpressionDetailMode: Dispatch<SetStateAction<GeneExpressionDetailMode>>
   readonly setGeneExpressionScaleDomain: Dispatch<
     SetStateAction<GeneExpressionScaleDomain>
   >
   readonly setGeneExpressionScoreMode: Dispatch<SetStateAction<GeneExpressionScoreMode>>
-  readonly setGeneExpressionState: Dispatch<
-    SetStateAction<GeneExpressionState<StructuredLoadError>>
-  >
   readonly setGeneSearch: Dispatch<SetStateAction<string>>
   readonly setGeneSetName: Dispatch<SetStateAction<string>>
   readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
@@ -60,6 +48,8 @@ interface UseGeneControlsWorkflowOptions {
   readonly setSavedGeneSets: Dispatch<SetStateAction<readonly SavedGeneSet[]>>
   readonly setSelectedGenes: Dispatch<SetStateAction<readonly string[]>>
   readonly transcriptViewportKeyRef: MutableRef<string | null>
+  readonly resetGeneExpressionSelectionState: () => void
+  readonly toggleGene: (gene: string) => void
 }
 
 interface UseGeneControlsWorkflowResult {
@@ -76,19 +66,15 @@ interface UseGeneControlsWorkflowResult {
   ) => void
   readonly handleObservationColorModeChange: (nextMode: ObservationColorMode) => void
   readonly removeSavedGeneSet: (id: string) => void
-  readonly resetGeneExpressionSelectionState: () => void
   readonly saveSelectedGeneSet: () => void
   readonly toggleGene: (gene: string) => void
 }
 
 export function useGeneControlsWorkflow({
   appendDebugEvent,
-  geneExpressionAbortRef,
   geneExpressionBatch,
-  geneExpressionRequestIdRef,
   geneExpressionScaleDatasetUrl,
   geneExpressionScoreMode,
-  geneExpressionViewportKeyRef,
   geneOptions,
   geneSetIdRef,
   geneSetName,
@@ -96,12 +82,10 @@ export function useGeneControlsWorkflow({
   rememberGeneExpressionScaleMax,
   savedGeneSets,
   selectedGenes,
-  setGeneExpressionBatch,
   setGeneExpressionColorScale,
   setGeneExpressionDetailMode,
   setGeneExpressionScaleDomain,
   setGeneExpressionScoreMode,
-  setGeneExpressionState,
   setGeneSearch,
   setGeneSetName,
   setManualTranscriptExactRequestKey,
@@ -109,44 +93,9 @@ export function useGeneControlsWorkflow({
   setSavedGeneSets,
   setSelectedGenes,
   transcriptViewportKeyRef,
+  resetGeneExpressionSelectionState,
+  toggleGene,
 }: UseGeneControlsWorkflowOptions): UseGeneControlsWorkflowResult {
-  const resetGeneExpressionSelectionState = useCallback(() => {
-    abortActiveRequest(geneExpressionAbortRef)
-    geneExpressionRequestIdRef.current += 1
-    geneExpressionViewportKeyRef.current = null
-    setGeneExpressionBatch(null)
-    setGeneExpressionScaleDomain({ key: '', max: 0 })
-    setGeneExpressionState({ status: 'idle' })
-  }, [
-    geneExpressionAbortRef,
-    geneExpressionRequestIdRef,
-    geneExpressionViewportKeyRef,
-    setGeneExpressionBatch,
-    setGeneExpressionScaleDomain,
-    setGeneExpressionState,
-  ])
-
-  const toggleGene = useCallback(
-    (gene: string) => {
-      const isSelected = selectedGenes.includes(gene)
-      appendDebugEvent(isSelected ? `Cleared gene ${gene}` : `Highlight gene ${gene}`)
-      resetGeneExpressionSelectionState()
-      setManualTranscriptExactRequestKey(null)
-      setSelectedGenes((current) =>
-        isSelected
-          ? current.filter((selectedGene) => selectedGene !== gene)
-          : [...current, gene].sort((a, b) => a.localeCompare(b)),
-      )
-    },
-    [
-      appendDebugEvent,
-      resetGeneExpressionSelectionState,
-      selectedGenes,
-      setManualTranscriptExactRequestKey,
-      setSelectedGenes,
-    ],
-  )
-
   const applyGeneSetSymbols = useCallback(() => {
     const genes = parseGeneSetSymbols(geneSetSymbols, geneOptions)
 
@@ -299,7 +248,6 @@ export function useGeneControlsWorkflow({
     handleGeneExpressionScoreModeChange,
     handleObservationColorModeChange,
     removeSavedGeneSet,
-    resetGeneExpressionSelectionState,
     saveSelectedGeneSet,
     toggleGene,
   }

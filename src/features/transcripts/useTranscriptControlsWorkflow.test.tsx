@@ -1,7 +1,6 @@
 import { act, render } from '@testing-library/react'
 import * as React from 'react'
 import { describe, expect, it } from 'vitest'
-import type { ViewerTranscriptHoverDetail } from '../../components/ViewerCore'
 import type {
   TranscriptDetailMode,
   TranscriptFeatureFilterMode,
@@ -10,14 +9,11 @@ import type {
   TranscriptDensityColorScale,
   TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
-import type { ControlHudTab } from '../app-shell/appShellModel'
 import { useTranscriptControlsWorkflow } from './useTranscriptControlsWorkflow'
 
 interface TranscriptControlsSnapshot {
-  readonly activeTab: ControlHudTab
   readonly debugMessages: readonly string[]
   readonly manualTranscriptExactRequestKey: string | null
-  readonly pinnedTranscript: ViewerTranscriptHoverDetail | null
   readonly resetGeneExpressionCount: number
   readonly selectedGenes: readonly string[]
   readonly transcriptExactPointLimit: number
@@ -42,11 +38,8 @@ interface TranscriptControlsProbeProps {
 }
 
 function TranscriptControlsProbe({ onReady }: TranscriptControlsProbeProps) {
-  const [activeTab, setActiveControlHudTab] = React.useState<ControlHudTab>('dataset')
   const [manualTranscriptExactRequestKey, setManualTranscriptExactRequestKey] =
     React.useState<string | null>('manual-request')
-  const [pinnedTranscript, setPinnedTranscript] =
-    React.useState<ViewerTranscriptHoverDetail | null>(null)
   const [selectedGenes, setSelectedGenes] = React.useState<readonly string[]>([])
   const [showTranscriptOverlay, setShowTranscriptOverlay] = React.useState(false)
   const [transcriptDensityColorScale, setTranscriptDensityColorScale] =
@@ -77,9 +70,7 @@ function TranscriptControlsProbe({ onReady }: TranscriptControlsProbeProps) {
     resetGeneExpressionSelectionState: () => {
       resetGeneExpressionCountRef.current += 1
     },
-    setActiveControlHudTab,
     setManualTranscriptExactRequestKey,
-    setPinnedTranscript,
     setSelectedGenes,
     setShowTranscriptOverlay,
     setTranscriptDensityColorScale,
@@ -100,10 +91,8 @@ function TranscriptControlsProbe({ onReady }: TranscriptControlsProbeProps) {
 
   React.useEffect(() => {
     onReady(api, {
-      activeTab,
       debugMessages: debugMessagesRef.current,
       manualTranscriptExactRequestKey,
-      pinnedTranscript,
       resetGeneExpressionCount: resetGeneExpressionCountRef.current,
       selectedGenes,
       transcriptExactPointLimit,
@@ -150,7 +139,7 @@ describe('useTranscriptControlsWorkflow', () => {
     )
   })
 
-  it('picks transcript features and pins transcript details', () => {
+  it('picks transcript features', () => {
     render(
       <TranscriptControlsProbe
         onReady={(nextApi, nextSnapshot) => {
@@ -169,28 +158,6 @@ describe('useTranscriptControlsWorkflow', () => {
     expect(transcriptControlsSnapshot.transcriptFeatureSearch).toBe('')
     expect(transcriptControlsSnapshot.resetGeneExpressionCount).toBe(1)
     expect(transcriptControlsSnapshot.manualTranscriptExactRequestKey).toBeNull()
-
-    const detail: ViewerTranscriptHoverDetail = {
-      transcript: {
-        id: 'tx-1',
-        transcriptId: '12',
-        featureName: 'Gad1',
-        fovName: null,
-        cellId: null,
-        position: [1, 2, 0],
-        qv: 40,
-        fillColor: [255, 0, 0],
-      },
-      screen: { x: 10, y: 20 },
-    }
-
-    act(() => {
-      transcriptControlsApi.handlePinTranscript(detail)
-    })
-
-    expect(transcriptControlsSnapshot.pinnedTranscript).toBe(detail)
-    expect(transcriptControlsSnapshot.activeTab).toBe('transcripts')
-    expect(transcriptControlsSnapshot.debugMessages).toContain('Pinned transcript 12')
   })
 
   it('delegates chip toggles to the gene workflow while invalidating transcript data', () => {

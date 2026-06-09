@@ -88,17 +88,39 @@ function GeneControlsProbe({
   const geneSetIdRef = React.useRef(0)
   const transcriptViewportKeyRef = React.useRef<string | null>('transcript-view')
   const debugMessagesRef = React.useRef<string[]>([])
+  const resetGeneExpressionSelectionState = React.useCallback(() => {
+    geneExpressionAbortRef.current?.abort()
+    geneExpressionRequestIdRef.current += 1
+    geneExpressionViewportKeyRef.current = null
+    setGeneExpressionBatch(null)
+    setGeneExpressionScaleDomain({ key: '', max: 0 })
+    setGeneExpressionState({ status: 'idle' })
+  }, [])
+  const toggleGene = React.useCallback(
+    (gene: string) => {
+      const isSelected = selectedGenes.includes(gene)
+
+      debugMessagesRef.current.push(
+        isSelected ? `Cleared gene ${gene}` : `Highlight gene ${gene}`,
+      )
+      resetGeneExpressionSelectionState()
+      setManualTranscriptExactRequestKey(null)
+      setSelectedGenes((current) =>
+        isSelected
+          ? current.filter((selectedGene) => selectedGene !== gene)
+          : [...current, gene].sort((a, b) => a.localeCompare(b)),
+      )
+    },
+    [resetGeneExpressionSelectionState, selectedGenes],
+  )
 
   const api = useGeneControlsWorkflow({
     appendDebugEvent: (message) => {
       debugMessagesRef.current.push(message)
     },
-    geneExpressionAbortRef,
     geneExpressionBatch,
-    geneExpressionRequestIdRef,
     geneExpressionScaleDatasetUrl: 'https://example.test/output',
     geneExpressionScoreMode,
-    geneExpressionViewportKeyRef,
     geneOptions: ['Actb', 'Gad1', 'Slc17a7'],
     geneSetIdRef,
     geneSetName,
@@ -106,12 +128,10 @@ function GeneControlsProbe({
     rememberGeneExpressionScaleMax: vi.fn(),
     savedGeneSets,
     selectedGenes,
-    setGeneExpressionBatch,
     setGeneExpressionColorScale,
     setGeneExpressionDetailMode,
     setGeneExpressionScaleDomain,
     setGeneExpressionScoreMode,
-    setGeneExpressionState,
     setGeneSearch,
     setGeneSetName,
     setManualTranscriptExactRequestKey,
@@ -119,6 +139,8 @@ function GeneControlsProbe({
     setSavedGeneSets,
     setSelectedGenes,
     transcriptViewportKeyRef,
+    resetGeneExpressionSelectionState,
+    toggleGene,
   })
 
   React.useEffect(() => {

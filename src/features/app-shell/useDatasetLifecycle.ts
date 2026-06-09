@@ -39,7 +39,6 @@ import type {
   GeneExpressionScaleDomain,
   GeneExpressionState,
   GenePanelState,
-  SavedGeneSet,
 } from '../genes/geneControlsModel'
 import {
   parseGeneExpressionColorScale,
@@ -178,9 +177,6 @@ interface UseDatasetLifecycleOptions {
   readonly setGeneExpressionScoreMode: Setter<GeneExpressionScoreMode>
   readonly setGeneExpressionState: Setter<GeneExpressionState<StructuredLoadError>>
   readonly setGenePanelState: Setter<GenePanelState<StructuredLoadError>>
-  readonly setGeneSearch: Setter<string>
-  readonly setGeneSetName: Setter<string>
-  readonly setGeneSetSymbols: Setter<string>
   readonly setHoveredTranscript: Setter<ViewerTranscriptHoverDetail | null>
   readonly setLoadState: Setter<DatasetLoadState<StructuredLoadError>>
   readonly setMagicLensActive: Setter<boolean>
@@ -202,7 +198,6 @@ interface UseDatasetLifecycleOptions {
   readonly setRoiTranscriptExportState: Setter<
     RoiTranscriptExportState<StructuredLoadError>
   >
-  readonly setSavedGeneSets: Setter<readonly SavedGeneSet[]>
   readonly setSelectedAnnotationGroupId: Setter<string>
   readonly setSelectedCell: Setter<OverviewCellDatum | null>
   readonly setSelectedEmbeddingKind: Setter<AnalysisEmbeddingKind>
@@ -212,7 +207,6 @@ interface UseDatasetLifecycleOptions {
   >
   readonly setTranscriptDensityColorScale: Setter<TranscriptDensityColorScale>
   readonly setTranscriptExactPointLimit: Setter<number>
-  readonly setTranscriptFeatureSearch: Setter<string>
   readonly setTranscriptLayerState: Setter<TranscriptLayerState<StructuredLoadError>>
   readonly setTranscriptPointColorMode: Setter<TranscriptPointColorMode>
   readonly setViewportCellCount: Setter<number | null>
@@ -300,9 +294,6 @@ export function useDatasetLifecycle({
   setGeneExpressionScoreMode,
   setGeneExpressionState,
   setGenePanelState,
-  setGeneSearch,
-  setGeneSetName,
-  setGeneSetSymbols,
   setHoveredTranscript,
   setLoadState,
   setMagicLensActive,
@@ -322,7 +313,6 @@ export function useDatasetLifecycle({
   setRoiName,
   setRoiState,
   setRoiTranscriptExportState,
-  setSavedGeneSets,
   setSelectedAnnotationGroupId,
   setSelectedCell,
   setSelectedEmbeddingKind,
@@ -330,7 +320,6 @@ export function useDatasetLifecycle({
   setTranscriptCapabilityState,
   setTranscriptDensityColorScale,
   setTranscriptExactPointLimit,
-  setTranscriptFeatureSearch,
   setTranscriptLayerState,
   setTranscriptPointColorMode,
   setViewportCellCount,
@@ -518,11 +507,6 @@ export function useDatasetLifecycle({
       autoContrastChannelIdsRef.current.clear()
       setAutoContrastChannelIds([])
       setBoundaryElements([])
-      setGeneSearch('')
-      setGeneSetSymbols('')
-      setGeneSetName('')
-      setSavedGeneSets([])
-      setTranscriptFeatureSearch('')
       setHoveredTranscript(null)
       setPinnedTranscript(null)
       setManualTranscriptExactRequestKey(null)

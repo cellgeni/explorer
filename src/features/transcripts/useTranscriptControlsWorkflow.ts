@@ -1,11 +1,9 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
-import type { ViewerTranscriptHoverDetail } from '../../components/ViewerCore'
 import {
   normalizeTranscriptExactPointLimit,
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
 } from '../../data/transcriptOverlay'
-import type { ControlHudTab } from '../app-shell/appShellModel'
 import type { DebugLogAppendOptions } from '../app-shell/appRuntimeModel'
 import { percentToOpacity } from '../../rendering/layerOpacity'
 import type {
@@ -25,11 +23,7 @@ interface UseTranscriptControlsWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly geneOptions: readonly string[]
   readonly resetGeneExpressionSelectionState: () => void
-  readonly setActiveControlHudTab: Dispatch<SetStateAction<ControlHudTab>>
   readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
-  readonly setPinnedTranscript: Dispatch<
-    SetStateAction<ViewerTranscriptHoverDetail | null>
-  >
   readonly setSelectedGenes: Dispatch<SetStateAction<readonly string[]>>
   readonly setShowTranscriptOverlay: Dispatch<SetStateAction<boolean>>
   readonly setTranscriptDensityColorScale: Dispatch<
@@ -52,7 +46,6 @@ interface UseTranscriptControlsWorkflowOptions {
 
 interface UseTranscriptControlsWorkflowResult {
   readonly handleLoadExactViewport: (requestKey: string) => void
-  readonly handlePinTranscript: (detail: ViewerTranscriptHoverDetail) => void
   readonly handleToggleTranscriptSelectedFeature: (gene: string) => void
   readonly handleTranscriptDensityColorScaleChange: (
     nextScale: TranscriptDensityColorScale,
@@ -77,9 +70,7 @@ export function useTranscriptControlsWorkflow({
   appendDebugEvent,
   geneOptions,
   resetGeneExpressionSelectionState,
-  setActiveControlHudTab,
   setManualTranscriptExactRequestKey,
-  setPinnedTranscript,
   setSelectedGenes,
   setShowTranscriptOverlay,
   setTranscriptDensityColorScale,
@@ -109,20 +100,6 @@ export function useTranscriptControlsWorkflow({
       })
     },
     [appendDebugEvent, setManualTranscriptExactRequestKey, transcriptViewportKeyRef],
-  )
-
-  const handlePinTranscript = useCallback(
-    (detail: ViewerTranscriptHoverDetail) => {
-      setPinnedTranscript(detail)
-      setActiveControlHudTab('transcripts')
-      appendDebugEvent(
-        detail.transcript === undefined
-          ? 'Pinned transcript density bin'
-          : `Pinned transcript ${detail.transcript.transcriptId ?? detail.transcript.id}`,
-        { coalesceKey: 'transcript-pin' },
-      )
-    },
-    [appendDebugEvent, setActiveControlHudTab, setPinnedTranscript],
   )
 
   const handleTranscriptOverlayChange = useCallback(
@@ -282,7 +259,6 @@ export function useTranscriptControlsWorkflow({
 
   return {
     handleLoadExactViewport,
-    handlePinTranscript,
     handleToggleTranscriptSelectedFeature,
     handleTranscriptDensityColorScaleChange,
     handleTranscriptDetailModeChange,
