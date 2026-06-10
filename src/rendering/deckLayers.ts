@@ -280,6 +280,8 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
   maxZoom: 10,
 }
 
+const CELL_PROXY_FILL_OPACITY = 0.35
+
 export const spatialOverviewView = new OrthographicView({
   id: 'spatial-overview',
   flipY: false,
@@ -313,18 +315,21 @@ export function createOverviewLayers(
     pickable: true,
     radiusUnits: 'common',
     radiusMinPixels: 0.12,
-    radiusMaxPixels: 6,
+    radiusMaxPixels: 24,
     stroked: true,
-    filled: false,
+    filled: true,
     opacity: 1,
     lineWidthUnits: 'pixels',
     lineWidthMinPixels: 1,
     getPosition: (cell) => cell.position,
     getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
+    getFillColor: (cell) =>
+      colorWithOpacity(cell.fillColor, cellFillOpacity * CELL_PROXY_FILL_OPACITY),
     getLineColor: (cell) =>
       colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
     getLineWidth: 1,
     updateTriggers: {
+      getFillColor: [cellFillOpacity],
       getLineColor: [cellBoundaryOpacity],
     },
   })
@@ -850,9 +855,7 @@ export function styleCellBoundariesByCells(
 
 export function styleCellsByGeneExpression(
   cells: readonly OverviewCellDatum[],
-  expressionSource:
-    | readonly OverviewCellDatum[]
-    | GeneExpressionCellStyleIndex,
+  expressionSource: readonly OverviewCellDatum[] | GeneExpressionCellStyleIndex,
   options: GeneExpressionCellStyleOptions = {},
 ): readonly OverviewCellDatum[] {
   if (cells.length === 0) {

@@ -47,20 +47,26 @@ describe('deck layer factory', () => {
     }
 
     expect(layer.id).toBe('cells-overview-scatter')
-    expect(layer.props.filled).toBe(false)
+    expect(layer.props.filled).toBe(true)
     expect(layer.props.stroked).toBe(true)
     expect(layer.props.lineWidthUnits).toBe('pixels')
     expect(layer.props.lineWidthMinPixels).toBe(1)
     expect(layer.props.radiusMinPixels).toBe(0.12)
+    expect(layer.props.radiusMaxPixels).toBe(24)
     expect(layer.props.opacity).toBe(1)
     expect(layer.props.updateTriggers).toMatchObject({
+      getFillColor: [1],
       getLineColor: [1],
     })
 
+    const getFillColor = layer.props.getFillColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
     const getLineColor = layer.props.getLineColor as (
       cell: OverviewCellDatum,
     ) => readonly number[]
 
+    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 77])
     expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 220])
   })
 
@@ -126,6 +132,7 @@ describe('deck layer factory', () => {
       getLineColor: [0.6],
     })
     expect(pointLayer.props.updateTriggers).toMatchObject({
+      getFillColor: [0.35],
       getLineColor: [0.6],
     })
 
@@ -135,12 +142,16 @@ describe('deck layer factory', () => {
     const getBoundaryLineColor = boundaryLayer.props.getLineColor as (
       cell: CellBoundaryDatum,
     ) => readonly number[]
+    const getPointFillColor = pointLayer.props.getFillColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
     const getPointLineColor = pointLayer.props.getLineColor as (
       cell: OverviewCellDatum,
     ) => readonly number[]
 
     expect(getBoundaryFillColor(boundaries[0]!)).toEqual([32, 102, 83, 12])
     expect(getBoundaryLineColor(boundaries[0]!)).toEqual([246, 242, 232, 126])
+    expect(getPointFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 27])
     expect(getPointLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 132])
   })
 
@@ -250,13 +261,18 @@ describe('deck layer factory', () => {
     expect(cellLayer.props.pickable).toBe(true)
     expect(cellLayer.props.lineWidthMinPixels).toBe(1)
     expect(cellLayer.props.updateTriggers).toMatchObject({
+      getFillColor: [0.45],
       getLineColor: [0.4],
     })
 
+    const getFillColor = cellLayer.props.getFillColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
     const getLineColor = cellLayer.props.getLineColor as (
       cell: OverviewCellDatum,
     ) => readonly number[]
 
+    expect(getFillColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 35])
     expect(getLineColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 88])
   })
 
@@ -289,10 +305,7 @@ describe('deck layer factory', () => {
     const expressionStyleIndex = createGeneExpressionCellStyleIndex(expressionCells, {
       binMicrometers: 100,
     })
-    const expressionStyledCells = styleCellsByGeneExpression(
-      cells,
-      expressionStyleIndex,
-    )
+    const expressionStyledCells = styleCellsByGeneExpression(cells, expressionStyleIndex)
 
     expect(expressionStyledCells[0]).toMatchObject({
       id: 'sampled-cell-1',
@@ -385,7 +398,8 @@ describe('deck layer factory', () => {
     ).toBe(false)
     expect(
       layers.some(
-        (layer) => layer instanceof PolygonLayer && layer.id === 'gene-expression-polygons',
+        (layer) =>
+          layer instanceof PolygonLayer && layer.id === 'gene-expression-polygons',
       ),
     ).toBe(false)
 
