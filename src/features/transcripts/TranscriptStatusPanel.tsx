@@ -103,6 +103,7 @@ export function TranscriptStatusPanel({
         <button
           type="button"
           className="secondary-action"
+          title="Load exact transcript viewport"
           onClick={() => {
             onLoadExactViewport(exactLoadRequestKey)
           }}
@@ -171,7 +172,7 @@ function TranscriptInspectionPanel({
       <div className="transcript-hover-panel">
         <div className="transcript-hover-heading">
           <p>{title}</p>
-          <button type="button" onClick={onAction}>
+          <button type="button" title={`${actionLabel} transcript`} onClick={onAction}>
             {actionLabel}
           </button>
         </div>
@@ -229,7 +230,7 @@ function TranscriptInspectionPanel({
     <div className="transcript-hover-panel">
       <div className="transcript-hover-heading">
         <p>{title}</p>
-        <button type="button" onClick={onAction}>
+        <button type="button" title={`${actionLabel} transcript bin`} onClick={onAction}>
           {actionLabel}
         </button>
       </div>

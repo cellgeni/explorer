@@ -105,6 +105,7 @@ export function LayerHudPanel({
               step="5"
               value={imageOpacityPercent}
               aria-valuetext={`${imageOpacityPercent}%`}
+              title="Image opacity"
               onChange={(event) => {
                 onImageLayerOpacityPercentChange(event.currentTarget.valueAsNumber)
               }}
@@ -123,6 +124,7 @@ export function LayerHudPanel({
               step="5"
               value={cellFillOpacityPercent}
               aria-valuetext={`${cellFillOpacityPercent}%`}
+              title="Cell fill opacity"
               onChange={(event) => {
                 onCellFillOpacityPercentChange(event.currentTarget.valueAsNumber)
               }}
@@ -141,6 +143,7 @@ export function LayerHudPanel({
               step="5"
               value={cellBoundaryOpacityPercent}
               aria-valuetext={`${cellBoundaryOpacityPercent}%`}
+              title="Cell boundary opacity"
               onChange={(event) => {
                 onCellBoundaryOpacityPercentChange(event.currentTarget.valueAsNumber)
               }}
@@ -157,6 +160,7 @@ export function LayerHudPanel({
             <button
               type="button"
               aria-pressed={coordinateUnit === 'um'}
+              title="Show mouse coordinates in micrometers"
               onClick={() => {
                 onCoordinateUnitChange('um')
               }}
@@ -166,6 +170,7 @@ export function LayerHudPanel({
             <button
               type="button"
               aria-pressed={coordinateUnit === 'px'}
+              title="Show mouse coordinates in pixels"
               onClick={() => {
                 onCoordinateUnitChange('px')
               }}
@@ -181,6 +186,11 @@ export function LayerHudPanel({
               type="button"
               aria-pressed={measurementEnabled}
               aria-labelledby={measurementModeInputId}
+              title={
+                measurementEnabled
+                  ? 'Disable distance measure'
+                  : 'Enable distance measure'
+              }
               onClick={() => {
                 onMeasurementEnabledChange(!measurementEnabled)
               }}
@@ -198,6 +208,7 @@ export function LayerHudPanel({
               <button
                 type="button"
                 aria-pressed={measurementUnit === 'um'}
+                title="Measure distances in micrometers"
                 onClick={() => {
                   onMeasurementUnitChange('um')
                 }}
@@ -207,6 +218,7 @@ export function LayerHudPanel({
               <button
                 type="button"
                 aria-pressed={measurementUnit === 'px'}
+                title="Measure distances in pixels"
                 onClick={() => {
                   onMeasurementUnitChange('px')
                 }}
@@ -218,6 +230,7 @@ export function LayerHudPanel({
           <button
             type="button"
             className="secondary-action measurement-clear-action"
+            title="Clear measurement"
             onClick={onClearMeasurement}
           >
             Clear Measurement

@@ -163,6 +163,7 @@ export function TranscriptHudPanel({
             type="checkbox"
             checked={showTranscriptOverlay}
             disabled={!loadEnabled}
+            title="Show transcript overlay"
             onChange={(event) => {
               onShowTranscriptOverlayChange(event.currentTarget.checked)
             }}
@@ -174,6 +175,7 @@ export function TranscriptHudPanel({
         <select
           id={transcriptDetailInputId}
           value={transcriptDetailMode}
+          title="Transcript detail"
           onChange={(event) => {
             const nextMode = event.currentTarget.value
 
@@ -196,6 +198,7 @@ export function TranscriptHudPanel({
           max={MAX_TRANSCRIPT_EXACT_RENDER_LIMIT}
           step="1000"
           value={transcriptExactPointLimit}
+          title="Transcript exact point budget"
           onChange={(event) => {
             onTranscriptExactPointLimitChange(event.currentTarget.valueAsNumber)
           }}
@@ -205,6 +208,7 @@ export function TranscriptHudPanel({
         <select
           id={transcriptFeatureFilterInputId}
           value={effectiveTranscriptFeatureFilterMode}
+          title="Transcript feature filter"
           onChange={(event) => {
             const nextMode = event.currentTarget.value
 
@@ -226,6 +230,7 @@ export function TranscriptHudPanel({
                 key={gene}
                 type="button"
                 className="gene-chip"
+                title={`Remove ${gene} from transcript features`}
                 onClick={() => {
                   onToggleSelectedFeature(gene)
                 }}
@@ -245,6 +250,7 @@ export function TranscriptHudPanel({
           value={transcriptFeatureSearch}
           disabled={!featureSearchEnabled}
           placeholder="Search transcript features"
+          title="Transcript feature search"
           onChange={(event) => {
             onTranscriptFeatureSearchChange(event.currentTarget.value)
           }}
@@ -259,6 +265,7 @@ export function TranscriptHudPanel({
                 <button
                   key={gene}
                   type="button"
+                  title={gene}
                   onClick={() => {
                     onPickTranscriptFeature(gene)
                   }}
@@ -275,6 +282,7 @@ export function TranscriptHudPanel({
           <select
             id={transcriptDensityScaleInputId}
             value={transcriptDensityColorScale}
+            title="Transcript density color"
             onChange={(event) => {
               const nextScale = event.currentTarget.value
 
@@ -292,6 +300,7 @@ export function TranscriptHudPanel({
           <div
             className="transcript-density-scale-preview-wrap"
             aria-label={transcriptDensityScaleAriaLabel(transcriptDensityScaleMax)}
+            title={transcriptDensityScaleAriaLabel(transcriptDensityScaleMax)}
           >
             <span
               className={`transcript-density-scale-preview transcript-density-scale-preview-${transcriptDensityColorScale}`}
@@ -309,6 +318,7 @@ export function TranscriptHudPanel({
         <select
           id={transcriptPointColorInputId}
           value={transcriptPointColorMode}
+          title="Transcript point color"
           onChange={(event) => {
             const nextMode = event.currentTarget.value
 
@@ -333,6 +343,7 @@ export function TranscriptHudPanel({
           max="40"
           step="1"
           value={transcriptMinQv}
+          title="Transcript minimum QV"
           onChange={(event) => {
             onTranscriptMinQvChange(event.currentTarget.valueAsNumber)
           }}
@@ -343,6 +354,7 @@ export function TranscriptHudPanel({
             id="transcript-gene-only"
             type="checkbox"
             checked={transcriptGeneOnly}
+            title="Gene-only transcript calls"
             onChange={(event) => {
               onTranscriptGeneOnlyChange(event.currentTarget.checked)
             }}
@@ -363,6 +375,7 @@ export function TranscriptHudPanel({
             step="5"
             value={transcriptOpacityPercent}
             aria-valuetext={`${transcriptOpacityPercent}%`}
+            title="Transcript opacity"
             onChange={(event) => {
               onTranscriptOpacityPercentChange(event.currentTarget.valueAsNumber)
             }}
@@ -382,6 +395,7 @@ export function TranscriptHudPanel({
             step="1"
             value={transcriptPointSize}
             aria-valuetext={`${transcriptPointSize}px`}
+            title="Transcript point size"
             onChange={(event) => {
               onTranscriptPointSizeChange(event.currentTarget.valueAsNumber)
             }}

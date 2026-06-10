@@ -40,6 +40,7 @@ export class AppErrorBoundary extends Component<
           <p>{this.state.error.message}</p>
           <button
             type="button"
+            title="Retry application"
             onClick={() => {
               this.setState({ error: null })
             }}

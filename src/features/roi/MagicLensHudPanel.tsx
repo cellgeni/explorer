@@ -78,6 +78,7 @@ export function MagicLensHudPanel({
             <button
               type="button"
               aria-pressed={magicLensScope === 'cursor'}
+              title="Use cursor magic lens scope"
               onClick={() => {
                 onScopeChange('cursor')
               }}
@@ -87,6 +88,7 @@ export function MagicLensHudPanel({
             <button
               type="button"
               aria-pressed={magicLensScope === 'viewport'}
+              title="Use viewport magic lens scope"
               onClick={() => {
                 onScopeChange('viewport')
               }}
@@ -97,6 +99,7 @@ export function MagicLensHudPanel({
               type="button"
               aria-pressed={magicLensScope === 'roi'}
               disabled={!roiAvailable}
+              title="Use ROI magic lens scope"
               onClick={() => {
                 onScopeChange('roi')
               }}
@@ -116,6 +119,7 @@ export function MagicLensHudPanel({
             step="10"
             value={magicLensRadiusMicrometers}
             disabled={magicLensScope !== 'cursor'}
+            title="Magic lens radius"
             onChange={(event) => {
               onRadiusChange(event.currentTarget.valueAsNumber)
             }}
@@ -134,6 +138,7 @@ export function MagicLensHudPanel({
           max="40"
           step="1"
           value={magicLensMinQv}
+          title="Magic lens minimum QV"
           onChange={(event) => {
             onMinQvChange(event.currentTarget.valueAsNumber)
           }}
@@ -145,6 +150,7 @@ export function MagicLensHudPanel({
             className="secondary-action"
             aria-pressed={magicLensIsCursorActive}
             disabled={!loadEnabled}
+            title={magicLensIsCursorActive ? 'Disable magic lens' : 'Enable magic lens'}
             onClick={() => {
               onCursorActiveChange(!magicLensIsCursorActive)
             }}
@@ -156,6 +162,7 @@ export function MagicLensHudPanel({
             type="button"
             className="secondary-action"
             disabled={!magicLensCanScan}
+            title="Scan magic lens"
             onClick={onRunMagicLens}
           >
             {magicLensState.status === 'loading' ? 'Scanning...' : 'Scan Lens'}

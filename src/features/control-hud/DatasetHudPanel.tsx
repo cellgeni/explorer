@@ -78,6 +78,7 @@ export function DatasetHudPanel({
           spellCheck={false}
           value={datasetUrl}
           placeholder="https://bucket.example/output…"
+          title="Dataset URL"
           onChange={(event) => {
             onDatasetUrlChange(event.currentTarget.value)
           }}
@@ -88,6 +89,7 @@ export function DatasetHudPanel({
             name="loadMorphologyImage"
             type="checkbox"
             checked={shouldLoadMorphology}
+            title="Toggle morphology image loading"
             onChange={(event) => {
               onShouldLoadMorphologyChange(event.currentTarget.checked)
             }}
@@ -105,11 +107,12 @@ export function DatasetHudPanel({
           step="1"
           autoComplete="off"
           value={boundaryCellLimit}
+          title="Boundary cell limit"
           onChange={(event) => {
             onBoundaryCellLimitChange(event.currentTarget.valueAsNumber)
           }}
         />
-        <button type="submit" disabled={isLoading}>
+        <button type="submit" disabled={isLoading} title="Load dataset">
           {isLoading ? 'Loading…' : 'Load Dataset'}
         </button>
       </form>
@@ -118,6 +121,7 @@ export function DatasetHudPanel({
           type="button"
           className="secondary-action"
           disabled={diagnosticsState.status === 'loading' || datasetUrl.trim() === ''}
+          title="Diagnose dataset"
           onClick={onRunDatasetDiagnostics}
         >
           {diagnosticsState.status === 'loading' ? 'Diagnosing...' : 'Diagnose Dataset'}

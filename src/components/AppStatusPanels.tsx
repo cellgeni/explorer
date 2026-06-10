@@ -210,7 +210,12 @@ export function ActivityLog({
     <section className="activity-log" aria-label="Activity log">
       <div className="activity-log-heading">
         <h2>Log</h2>
-        <button type="button" disabled={entries.length === 0} onClick={onClear}>
+        <button
+          type="button"
+          disabled={entries.length === 0}
+          title="Clear activity log"
+          onClick={onClear}
+        >
           Clear
         </button>
       </div>

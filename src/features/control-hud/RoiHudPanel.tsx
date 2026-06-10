@@ -74,6 +74,7 @@ export function RoiHudPanel({
             className="secondary-action"
             disabled={!canDrawRoi}
             aria-pressed={roiMode === 'box'}
+            title={roiMode === 'box' ? 'Stop drawing box ROI' : 'Draw box ROI'}
             onClick={() => {
               onRoiModeChange(roiMode === 'box' ? 'idle' : 'box')
             }}
@@ -85,6 +86,7 @@ export function RoiHudPanel({
             className="secondary-action"
             disabled={!canDrawRoi}
             aria-pressed={roiMode === 'lasso'}
+            title={roiMode === 'lasso' ? 'Stop drawing lasso ROI' : 'Draw lasso ROI'}
             onClick={() => {
               onRoiModeChange(roiMode === 'lasso' ? 'idle' : 'lasso')
             }}
@@ -95,6 +97,7 @@ export function RoiHudPanel({
             type="button"
             className="secondary-action"
             disabled={roiState.status === 'idle'}
+            title="Clear ROI"
             onClick={onClearRoi}
           >
             Clear
@@ -109,6 +112,7 @@ export function RoiHudPanel({
           spellCheck={false}
           value={roiName}
           disabled={!loadEnabled}
+          title="ROI name"
           onChange={(event) => {
             onRoiNameChange(event.currentTarget.value)
           }}
@@ -141,6 +145,7 @@ export function RoiHudPanel({
             type="button"
             className="secondary-action"
             disabled={roiState.status !== 'ready'}
+            title="Save ROI as annotation"
             onClick={onSaveRoiAnnotation}
           >
             Save ROI
@@ -149,6 +154,7 @@ export function RoiHudPanel({
             type="button"
             className="secondary-action"
             disabled={roiState.status !== 'ready'}
+            title="Export ROI cells"
             onClick={onExportRoiCells}
           >
             Export Cells
@@ -159,6 +165,7 @@ export function RoiHudPanel({
             disabled={
               roiState.status !== 'ready' || roiTranscriptExportState.status === 'loading'
             }
+            title="Export ROI transcripts"
             onClick={onExportRoiTranscripts}
           >
             {roiTranscriptExportState.status === 'loading'

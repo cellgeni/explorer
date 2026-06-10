@@ -142,6 +142,7 @@ export function EmbeddingPanel({
           className="embedding-plot"
           role="img"
           aria-label={`${embedding.label} embedding, ${embedding.points.length.toLocaleString()} cells`}
+          title={`${embedding.label} embedding, ${embedding.points.length.toLocaleString()} cells`}
           onPointerDown={handlePointerDown}
         />
       </div>

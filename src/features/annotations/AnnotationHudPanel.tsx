@@ -69,6 +69,7 @@ export function AnnotationHudPanel({
           id={annotationGroupInputId}
           value={selectedAnnotationGroupId}
           disabled={!loadEnabled}
+          title="Annotation set"
           onChange={(event) => {
             onAnnotationGroupChange(event.currentTarget.value)
           }}
@@ -84,6 +85,7 @@ export function AnnotationHudPanel({
           type="button"
           className="secondary-action"
           disabled={!loadEnabled || annotationState.status === 'loading'}
+          title="Load annotations"
           onClick={onLoadAnnotations}
         >
           {annotationState.status === 'loading' ? 'Loading…' : 'Load Annotations'}
@@ -92,11 +94,16 @@ export function AnnotationHudPanel({
           type="button"
           className="secondary-action"
           disabled={annotationState.status !== 'ready'}
+          title="Clear annotations"
           onClick={onClearAnnotations}
         >
           Clear Annotations
         </button>
-        <label className="secondary-file-action" htmlFor={annotationImportInputId}>
+        <label
+          className="secondary-file-action"
+          htmlFor={annotationImportInputId}
+          title="Import annotation file"
+        >
           Import File
         </label>
         <input
@@ -128,6 +135,7 @@ export function AnnotationHudPanel({
                       type="color"
                       aria-label={`${annotation.label} color`}
                       value={annotationColor}
+                      title={`${annotation.label} color`}
                       onChange={(event) => {
                         onAnnotationColorChange(annotation.id, event.currentTarget.value)
                       }}
@@ -140,6 +148,7 @@ export function AnnotationHudPanel({
                     type="button"
                     className="annotation-remove"
                     aria-label={`Remove ${annotation.label}`}
+                    title={`Remove ${annotation.label}`}
                     onClick={() => {
                       onRemoveAnnotation(annotation.id)
                     }}

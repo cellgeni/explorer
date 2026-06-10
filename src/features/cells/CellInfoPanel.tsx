@@ -163,6 +163,7 @@ export function CellInfoPanel({
               spellCheck={false}
               value={geneSearch}
               placeholder="Search expressed genes"
+              title="Gene expression filter"
               onChange={(event) => {
                 setGeneSearch(event.currentTarget.value)
               }}

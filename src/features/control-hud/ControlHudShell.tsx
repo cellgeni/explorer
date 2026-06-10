@@ -34,6 +34,7 @@ export function ControlHudShell({
           className="hud-toggle"
           aria-controls="control-hud-content"
           aria-expanded={!collapsed}
+          title={collapsed ? 'Show controls' : 'Hide controls'}
           onClick={() => {
             onCollapsedChange(!collapsed)
           }}
@@ -52,6 +53,7 @@ export function ControlHudShell({
               aria-selected={activeTab === tab.id}
               aria-controls={`hud-panel-${tab.id}`}
               aria-busy={loadingTabIds.has(tab.id)}
+              title={`Show ${tab.label.toLowerCase()} controls`}
               className={
                 [
                   activeTab === tab.id ? 'active' : '',

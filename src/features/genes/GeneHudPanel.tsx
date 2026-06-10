@@ -128,6 +128,7 @@ export function GeneHudPanel({
           value={geneSearch}
           disabled={!isGenePanelReady}
           placeholder="Search genes"
+          title="Gene selection search"
           onChange={(event) => {
             onGeneSearchChange(event.currentTarget.value)
           }}
@@ -140,6 +141,7 @@ export function GeneHudPanel({
                 key={gene}
                 type="button"
                 className="gene-chip"
+                title={`Remove ${gene}`}
                 onClick={() => {
                   onToggleGene(gene)
                 }}
@@ -166,6 +168,7 @@ export function GeneHudPanel({
           value={geneSetSymbols}
           disabled={!isGenePanelReady}
           placeholder="Actb, Gad1, Slc17a7"
+          title="Gene set symbols"
           onChange={(event) => {
             onGeneSetSymbolsChange(event.currentTarget.value)
           }}
@@ -174,6 +177,7 @@ export function GeneHudPanel({
           <button
             type="button"
             disabled={!isGenePanelReady || geneSetSymbols.trim() === ''}
+            title="Apply gene set symbols"
             onClick={onApplyGeneSetSymbols}
           >
             Apply Symbols
@@ -181,6 +185,7 @@ export function GeneHudPanel({
           <button
             type="button"
             disabled={selectedGenes.length === 0}
+            title="Save selected genes as a set"
             onClick={onSaveSelectedGeneSet}
           >
             Save Set
@@ -195,6 +200,7 @@ export function GeneHudPanel({
           spellCheck={false}
           value={geneSetName}
           placeholder={defaultGeneSetName(selectedGenes)}
+          title="Gene set name"
           onChange={(event) => {
             onGeneSetNameChange(event.currentTarget.value)
           }}
@@ -204,6 +210,7 @@ export function GeneHudPanel({
         <select
           id={geneSetScoreInputId}
           value={geneExpressionScoreMode}
+          title="Signature score"
           onChange={(event) => {
             const nextScoreMode = event.currentTarget.value
 
@@ -227,6 +234,7 @@ export function GeneHudPanel({
                   type="button"
                   className="gene-set-apply"
                   aria-label={`Apply ${geneSet.name}`}
+                  title={`Apply ${geneSet.name}`}
                   onClick={() => {
                     onApplySavedGeneSet(geneSet)
                   }}
@@ -238,6 +246,7 @@ export function GeneHudPanel({
                   type="button"
                   className="gene-set-remove"
                   aria-label={`Remove ${geneSet.name}`}
+                  title={`Remove ${geneSet.name}`}
                   onClick={() => {
                     onRemoveSavedGeneSet(geneSet.id)
                   }}
@@ -254,6 +263,7 @@ export function GeneHudPanel({
           <select
             id={geneScaleInputId}
             value={geneExpressionColorScale}
+            title="Gene scale"
             onChange={(event) => {
               const nextScale = event.currentTarget.value
 
@@ -283,6 +293,7 @@ export function GeneHudPanel({
         <select
           id={geneExpressionDetailInputId}
           value={geneExpressionDetailMode}
+          title="Expression detail"
           onChange={(event) => {
             const nextMode = event.currentTarget.value
 
@@ -299,6 +310,7 @@ export function GeneHudPanel({
         <select
           id={observationModeInputId}
           value={observationColorMode}
+          title="Cell color"
           onChange={(event) => {
             const nextMode = event.currentTarget.value
 

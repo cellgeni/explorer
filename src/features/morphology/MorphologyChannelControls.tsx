@@ -42,6 +42,7 @@ export function MorphologyChannelControls({
               <input
                 type="checkbox"
                 checked={setting?.enabled ?? false}
+                title={`Toggle ${channel.info.name} channel`}
                 onChange={(event) => {
                   onUpdate(channel.info.id, { enabled: event.currentTarget.checked })
                 }}
@@ -53,6 +54,7 @@ export function MorphologyChannelControls({
               type="color"
               aria-label={`${channel.info.name} color`}
               value={rgbToHex(color)}
+              title={`${channel.info.name} color`}
               onChange={(event) => {
                 onUpdate(channel.info.id, { color: hexToRgb(event.currentTarget.value) })
               }}
@@ -62,6 +64,7 @@ export function MorphologyChannelControls({
               type="button"
               aria-label={`${channel.info.name} auto contrast`}
               disabled={isAutoContrastLoading}
+              title={`${channel.info.name} auto contrast`}
               onClick={() => {
                 onAutoContrast(channel)
               }}
@@ -74,6 +77,7 @@ export function MorphologyChannelControls({
                 inputMode="numeric"
                 aria-label={`${channel.info.name} minimum`}
                 value={contrastMin}
+                title={`${channel.info.name} minimum contrast`}
                 onChange={(event) => {
                   onUpdate(channel.info.id, {
                     contrastMin: event.currentTarget.valueAsNumber,
@@ -85,6 +89,7 @@ export function MorphologyChannelControls({
                 inputMode="numeric"
                 aria-label={`${channel.info.name} maximum`}
                 value={contrastMax}
+                title={`${channel.info.name} maximum contrast`}
                 onChange={(event) => {
                   onUpdate(channel.info.id, {
                     contrastMax: event.currentTarget.valueAsNumber,

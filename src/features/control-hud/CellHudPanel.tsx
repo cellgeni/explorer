@@ -79,6 +79,7 @@ export function CellHudPanel({
               analysisEmbeddingState.status !== 'ready' ||
               analysisEmbeddingState.embeddings.length === 0
             }
+            title="Embedding view"
             onChange={(event) => {
               onEmbeddingKindChange(event.currentTarget.value as AnalysisEmbeddingKind)
             }}
@@ -101,6 +102,7 @@ export function CellHudPanel({
             type="button"
             className="secondary-action"
             disabled={!loadEnabled || analysisEmbeddingState.status === 'loading'}
+            title="Load analysis embeddings"
             onClick={onLoadAnalysisEmbeddings}
           >
             {analysisEmbeddingState.status === 'loading'
