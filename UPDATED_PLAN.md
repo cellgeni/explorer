@@ -552,6 +552,10 @@ unless the phase order is explicitly changed.
       prewarms ROI gene stats once per loaded dataset from the first eligible
       viewport sample, and later camera movement no longer aborts/restarts the
       warmup or repeatedly surfaces `Preparing ROI genes`.
+- [x] Fixed imported annotation labels that slug to the same id. Custom CSV/JSON
+      annotations now keep unique ids when labels such as `CD16+ NK cells` and
+      `CD16- NK cells` collide after slugging, preventing duplicate React keys
+      and corrupted annotation rows after removals.
 - [ ] Optimization pass: after correctness is stable, tune interaction
       performance, memory pressure, fetch/decode concurrency, and rendering
       costs without changing product behavior.

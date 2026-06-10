@@ -2602,6 +2602,61 @@ describe('App', () => {
     )
   })
 
+  it('keeps imported annotations with colliding label slugs removable independently', async () => {
+    const cd16Positive = intToCellId(1, 1)
+    const cd16Negative = intToCellId(2, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: cd16Positive,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+      {
+        cellId: cd16Negative,
+        position: { x: micrometers(30), y: micrometers(40) },
+        transcriptCount: 12,
+        cellArea: 18,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const file = new File(
+      [
+        `cell_id,label
+${cd16Positive},CD16+ NK cells
+${cd16Negative},CD16- NK cells`,
+      ],
+      'celltypist.csv',
+      { type: 'text/csv' },
+    )
+
+    render(
+      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    openHudTab('Annotations')
+    await waitFor(() => {
+      expect(screen.getByLabelText('Import File')).toBeEnabled()
+    })
+    fireEvent.change(screen.getByLabelText('Import File'), {
+      target: { files: [file] },
+    })
+
+    const annotationList = await screen.findByLabelText('Loaded annotations')
+    expect(annotationList).toHaveTextContent('CD16+ NK cells')
+    expect(annotationList).toHaveTextContent('CD16- NK cells')
+    expect(screen.getByText('2 labels')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove CD16+ NK cells' }))
+
+    expect(screen.queryByText('CD16+ NK cells')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent(
+      'CD16- NK cells',
+    )
+    expect(screen.getByText('1 label')).toBeInTheDocument()
+  })
+
   it('shows ROI query loading while drawn ROI cells are pending', async () => {
     const rect = {
       x: 0,

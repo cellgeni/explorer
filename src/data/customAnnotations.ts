@@ -17,6 +17,11 @@ export function parseCustomAnnotations(
     : parseCsvAnnotations(trimmedText, fileName)
 }
 
+interface CustomAnnotationEntry {
+  readonly label: string
+  readonly cellIds: readonly CellId[]
+}
+
 function parseJsonAnnotations(text: string, fileName: string): readonly Annotation[] {
   const value: unknown = JSON.parse(text)
 
@@ -36,7 +41,7 @@ function annotationsFromJsonRows(
   fileName: string,
 ): readonly Annotation[] {
   const grouped = new Map<string, CellId[]>()
-  const directAnnotations: Annotation[] = []
+  const directAnnotations: CustomAnnotationEntry[] = []
 
   for (const row of rows) {
     if (!isRecord(row)) {
@@ -47,7 +52,7 @@ function annotationsFromJsonRows(
     const cellIds = readCellIdArrayField(row, ['cellIds', 'cell_ids', 'cells'])
 
     if (label !== undefined && cellIds !== undefined) {
-      directAnnotations.push(createCustomAnnotation(fileName, label, cellIds))
+      directAnnotations.push({ label, cellIds })
       continue
     }
 
@@ -62,36 +67,36 @@ function annotationsFromJsonRows(
     appendGroupedCell(grouped, label, asCellId(cellId))
   }
 
-  return [...directAnnotations, ...annotationsFromGroupedCells(grouped, fileName)]
+  return createCustomAnnotations(fileName, [
+    ...directAnnotations,
+    ...annotationEntriesFromGroupedCells(grouped),
+  ])
 }
 
 function annotationsFromJsonRecord(
   record: Readonly<Record<string, unknown>>,
   fileName: string,
 ): readonly Annotation[] {
-  const annotations: Annotation[] = []
+  const annotations: CustomAnnotationEntry[] = []
 
   for (const [label, value] of Object.entries(record)) {
     if (!Array.isArray(value)) {
       throw new Error('JSON annotation object values must be cell-id arrays.')
     }
 
-    annotations.push(
-      createCustomAnnotation(
-        fileName,
-        label,
-        value.map((cellId) => {
-          if (typeof cellId !== 'string') {
-            throw new Error('JSON annotation cell ids must be strings.')
-          }
+    annotations.push({
+      label,
+      cellIds: value.map((cellId) => {
+        if (typeof cellId !== 'string') {
+          throw new Error('JSON annotation cell ids must be strings.')
+        }
 
-          return asCellId(cellId)
-        }),
-      ),
-    )
+        return asCellId(cellId)
+      }),
+    })
   }
 
-  return annotations
+  return createCustomAnnotations(fileName, annotations)
 }
 
 function parseCsvAnnotations(text: string, fileName: string): readonly Annotation[] {
@@ -126,7 +131,7 @@ function parseCsvAnnotations(text: string, fileName: string): readonly Annotatio
     appendGroupedCell(grouped, label, asCellId(cellId))
   }
 
-  return annotationsFromGroupedCells(grouped, fileName)
+  return createCustomAnnotations(fileName, annotationEntriesFromGroupedCells(grouped))
 }
 
 function parseCsvRows(text: string): readonly (readonly string[])[] {
@@ -177,25 +182,43 @@ function parseCsvRows(text: string): readonly (readonly string[])[] {
   return rows.filter((candidate) => candidate.some((value) => value.trim().length > 0))
 }
 
-function annotationsFromGroupedCells(
+function annotationEntriesFromGroupedCells(
   grouped: ReadonlyMap<string, readonly CellId[]>,
-  fileName: string,
-): readonly Annotation[] {
-  return [...grouped.entries()].map(([label, cellIds]) =>
-    createCustomAnnotation(fileName, label, cellIds),
-  )
+): readonly CustomAnnotationEntry[] {
+  return [...grouped.entries()].map(([label, cellIds]) => ({ label, cellIds }))
 }
 
-function createCustomAnnotation(
+function createCustomAnnotations(
   fileName: string,
-  label: string,
-  cellIds: readonly CellId[],
-): Annotation {
-  return {
-    id: `custom:${slug(fileName)}:${slug(label)}`,
-    label,
-    cellIds,
+  entries: readonly CustomAnnotationEntry[],
+): readonly Annotation[] {
+  const usedIds = new Set<string>()
+
+  return entries.map(({ label, cellIds }) => {
+    const baseId = `custom:${slug(fileName)}:${slug(label)}`
+    const id = uniqueAnnotationId(baseId, usedIds)
+    usedIds.add(id)
+
+    return {
+      id,
+      label,
+      cellIds,
+    }
+  })
+}
+
+function uniqueAnnotationId(baseId: string, usedIds: ReadonlySet<string>): string {
+  if (!usedIds.has(baseId)) {
+    return baseId
   }
+
+  let suffix = 2
+
+  while (usedIds.has(`${baseId}-${suffix}`)) {
+    suffix += 1
+  }
+
+  return `${baseId}-${suffix}`
 }
 
 function appendGroupedCell(
