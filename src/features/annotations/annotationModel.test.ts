@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import type { Annotation } from '../../datasets/spatialDataset'
 import {
+  annotationLabelsForCell,
   annotationStatusCopy,
   colorsForAnnotations,
   customAnnotationFilePrefix,
@@ -63,6 +64,23 @@ describe('annotationModel', () => {
       ),
     ).toBe(false)
     expect(hasReadyAnnotationsAfterRemove({ status: 'idle' }, 'a')).toBe(false)
+  })
+
+  it('lists annotation labels for a selected cell', () => {
+    expect(
+      annotationLabelsForCell(
+        {
+          status: 'ready',
+          url: 'https://example.test',
+          annotations: [
+            ...annotations,
+            { id: 'c', label: 'Layer 1', cellIds: [asCellId('aaaaaaaa-1')] },
+          ],
+        },
+        'aaaaaaaa-1',
+      ),
+    ).toEqual(['Astrocytes', 'Layer 1'])
+    expect(annotationLabelsForCell({ status: 'idle' }, 'aaaaaaaa-1')).toEqual([])
   })
 
   it('merges imported annotations by prefix and maintains palette colors', () => {

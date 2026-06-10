@@ -42,6 +42,25 @@ export function annotationStatusCopy<ErrorType>(
   return 'Idle'
 }
 
+export function annotationLabelsForCell<ErrorType>(
+  annotationState: AnnotationState<ErrorType>,
+  cellId: string,
+): readonly string[] {
+  if (annotationState.status !== 'ready') {
+    return []
+  }
+
+  const labels: string[] = []
+
+  for (const annotation of annotationState.annotations) {
+    if (annotation.cellIds.some((candidateCellId) => candidateCellId === cellId)) {
+      labels.push(annotation.label)
+    }
+  }
+
+  return labels
+}
+
 export function hasReadyAnnotationsAfterRemove(
   annotationState: AnnotationState,
   annotationId: string,

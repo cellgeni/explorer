@@ -1064,6 +1064,12 @@ describe('App', () => {
       },
     ])
     const loadGenePanel = vi.fn(async () => [])
+    const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(
+      async () => [
+        { id: 'annotation:t-cell', label: 'T cells', cellIds: [cellId] },
+        { id: 'annotation:other', label: 'Other cells', cellIds: [intToCellId(2, 1)] },
+      ],
+    )
     const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
       vi.fn(async () => [
         {
@@ -1141,6 +1147,7 @@ describe('App', () => {
         <App
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
+          loadAnnotations={loadAnnotations}
           loadAnalysisEmbeddings={loadAnalysisEmbeddings}
           loadBoundaryElements={loadBoundaryElements}
           loadRoiGeneStats={loadRoiGeneStats}
@@ -1148,6 +1155,12 @@ describe('App', () => {
         />,
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('Annotations')
+      fireEvent.click(await screen.findByRole('button', { name: 'Load Annotations' }))
+      expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
+        'T cells',
+      )
 
       openHudTab('Cell')
       fireEvent.click(await screen.findByRole('button', { name: 'Load Embeddings' }))
@@ -1212,6 +1225,10 @@ describe('App', () => {
       expect(screen.getByText('5.3 um')).toBeInTheDocument()
       expect(screen.getByText('Eccentricity')).toBeInTheDocument()
       expect(screen.getAllByText('0').length).toBeGreaterThan(0)
+      const cellInfoSection = screen.getByRole('region', { name: 'Cell Info' })
+      const annotationsTerm = within(cellInfoSection).getByText('Annotations')
+      expect(annotationsTerm.nextElementSibling).toHaveTextContent('T cells')
+      expect(annotationsTerm.nextElementSibling).not.toHaveTextContent('Other cells')
     } finally {
       rectSpy.mockRestore()
       contextSpy.mockRestore()

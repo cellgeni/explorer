@@ -38,6 +38,7 @@ describe('CellHudPanel', () => {
         selectedEmbeddingKind="umap"
         roiCellIds={[]}
         selectedCell={null}
+        selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"
         cellDetailState={{ status: 'idle' }}
         cellTranscriptDistributionState={{ status: 'idle' }}

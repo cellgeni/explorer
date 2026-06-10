@@ -1975,6 +1975,29 @@ h2 {
   white-space: nowrap;
 }
 
+.cell-info-list dd.cell-annotation-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.cell-annotation-chip {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(28, 96, 77, 0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: rgba(28, 96, 77, 0.08);
+  color: #1c604d;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cell-expression-panel {
   display: grid;
   gap: 5px;

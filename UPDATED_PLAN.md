@@ -556,6 +556,9 @@ unless the phase order is explicitly changed.
       annotations now keep unique ids when labels such as `CD16+ NK cells` and
       `CD16- NK cells` collide after slugging, preventing duplicate React keys
       and corrupted annotation rows after removals.
+- [x] Added selected-cell annotation membership to the Cell Info panel. When a
+      cell is selected, the metadata list now includes an `Annotations` row
+      derived from currently loaded/imported annotation cell-id membership.
 - [ ] Optimization pass: after correctness is stable, tune interaction
       performance, memory pressure, fetch/decode concurrency, and rendering
       costs without changing product behavior.

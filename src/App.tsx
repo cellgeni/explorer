@@ -82,6 +82,7 @@ import {
 } from './features/roi/roiModel'
 import { useDatasetDiagnosticsWorkflow } from './features/diagnostics/useDatasetDiagnosticsWorkflow'
 import {
+  annotationLabelsForCell,
   annotationStatusCopy,
   type AnnotationGroupState,
   type AnnotationState,
@@ -539,6 +540,13 @@ export function App({
     selectedCell,
   )
   const cellDetailCopy = cellDetailStatusCopy(cellDetailState, selectedCell)
+  const selectedCellAnnotationLabels = useMemo(
+    () =>
+      selectedCell === null
+        ? []
+        : annotationLabelsForCell(annotationState, selectedCell.id),
+    [annotationState, selectedCell],
+  )
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const roiCopy = roiStatusCopy(roiState, roiMode)
   const roiGeneStatsCopy = roiGeneStatsStatusCopy(roiGeneStatsState)
@@ -1384,6 +1392,7 @@ export function App({
           selectedEmbeddingKind={selectedEmbeddingKind}
           roiCellIds={roiCellIds}
           selectedCell={selectedCell}
+          selectedCellAnnotationLabels={selectedCellAnnotationLabels}
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
           cellTranscriptDistributionState={cellTranscriptDistributionState}

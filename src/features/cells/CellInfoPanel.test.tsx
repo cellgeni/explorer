@@ -38,6 +38,37 @@ describe('CellInfoPanel', () => {
     expect(nucleiTerm.nextElementSibling).toHaveTextContent('None')
     expect(segmentationTerm.nextElementSibling).toHaveTextContent('None')
   })
+
+  it('shows selected-cell annotation labels when present', () => {
+    render(
+      <CellInfoPanel
+        cell={cellDatum()}
+        annotationLabels={['CD16+ NK cells', 'Portal macrophages']}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+      />,
+    )
+
+    const annotationsTerm = screen.getByText('Annotations')
+
+    expect(annotationsTerm.nextElementSibling).toHaveTextContent('CD16+ NK cells')
+    expect(annotationsTerm.nextElementSibling).toHaveTextContent('Portal macrophages')
+  })
+
+  it('shows no selected-cell annotations when none match', () => {
+    render(
+      <CellInfoPanel
+        cell={cellDatum()}
+        annotationLabels={[]}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+      />,
+    )
+
+    const annotationsTerm = screen.getByText('Annotations')
+
+    expect(annotationsTerm.nextElementSibling).toHaveTextContent('None')
+  })
 })
 
 function cellDatum(values: Partial<OverviewCellDatum> = {}): OverviewCellDatum {

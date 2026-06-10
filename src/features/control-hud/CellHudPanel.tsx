@@ -20,6 +20,7 @@ interface CellHudPanelProps {
   readonly selectedEmbeddingKind: AnalysisEmbeddingKind
   readonly roiCellIds: readonly string[]
   readonly selectedCell: OverviewCellDatum | null
+  readonly selectedCellAnnotationLabels: readonly string[]
   readonly cellDetailCopy: string
   readonly cellDetailState: CellDetailState
   readonly cellTranscriptDistributionState: CellTranscriptDistributionState
@@ -38,6 +39,7 @@ export function CellHudPanel({
   selectedEmbeddingKind,
   roiCellIds,
   selectedCell,
+  selectedCellAnnotationLabels,
   cellDetailCopy,
   cellDetailState,
   cellTranscriptDistributionState,
@@ -131,6 +133,7 @@ export function CellHudPanel({
         <CellInfoPanel
           key={selectedCell?.id ?? 'none'}
           cell={selectedCell}
+          annotationLabels={selectedCellAnnotationLabels}
           state={cellDetailState}
           transcriptDistributionState={cellTranscriptDistributionState}
         />

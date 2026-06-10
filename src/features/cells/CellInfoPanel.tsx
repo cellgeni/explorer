@@ -17,12 +17,16 @@ import {
 
 interface CellInfoPanelProps {
   readonly cell: OverviewCellDatum | null
+  readonly annotationLabels?: readonly string[]
   readonly state: CellDetailState
   readonly transcriptDistributionState: CellTranscriptDistributionState
 }
 
+const EMPTY_ANNOTATION_LABELS: readonly string[] = []
+
 export function CellInfoPanel({
   cell,
+  annotationLabels = EMPTY_ANNOTATION_LABELS,
   state,
   transcriptDistributionState,
 }: CellInfoPanelProps) {
@@ -77,6 +81,18 @@ export function CellInfoPanel({
         <div>
           <dt>Segmentation</dt>
           <dd>{formatOptionalText(cell.segmentationMethod)}</dd>
+        </div>
+        <div>
+          <dt>Annotations</dt>
+          <dd className="cell-annotation-values">
+            {annotationLabels.length === 0
+              ? 'None'
+              : annotationLabels.map((label, labelIndex) => (
+                  <span className="cell-annotation-chip" key={`${label}:${labelIndex}`}>
+                    {label}
+                  </span>
+                ))}
+          </dd>
         </div>
         <div>
           <dt>Cell Area</dt>
