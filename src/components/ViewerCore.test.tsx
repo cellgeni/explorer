@@ -2,7 +2,13 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ViewerCore } from './ViewerCore'
 import { scaffoldDeckLayerCount } from './viewerCoreModel'
-import type { OverviewCellDatum, TranscriptPointDatum } from '../rendering/deckLayers'
+import type {
+  CellBoundaryDatum,
+  OverviewViewState,
+  OverviewCellDatum,
+  TranscriptPointDatum,
+} from '../rendering/deckLayers'
+import { asCellId } from '../data/cellid'
 
 type MockDeckHover = (info: {
   readonly object?: unknown
@@ -14,10 +20,14 @@ type MockDeckClick = (info: {
   readonly x: number
   readonly y: number
 }) => void
+type MockDeckViewStateChange = (info: { readonly viewState: OverviewViewState }) => void
 
 const deckGlMock = vi.hoisted(() => ({
   onHover: undefined as MockDeckHover | undefined,
   onClick: undefined as MockDeckClick | undefined,
+  onViewStateChange: undefined as MockDeckViewStateChange | undefined,
+  layers: [] as readonly unknown[],
+  viewState: undefined as OverviewViewState | undefined,
 }))
 
 vi.mock('@deck.gl/react', () => ({
@@ -25,13 +35,20 @@ vi.mock('@deck.gl/react', () => ({
     layers = [],
     onHover,
     onClick,
+    onViewStateChange,
+    viewState,
   }: {
     readonly layers?: readonly unknown[]
     readonly onHover?: MockDeckHover
     readonly onClick?: MockDeckClick
+    readonly onViewStateChange?: MockDeckViewStateChange
+    readonly viewState?: OverviewViewState
   }) => {
     deckGlMock.onHover = onHover
     deckGlMock.onClick = onClick
+    deckGlMock.onViewStateChange = onViewStateChange
+    deckGlMock.layers = layers
+    deckGlMock.viewState = viewState
 
     return (
       <div data-testid="deckgl">
@@ -71,9 +88,53 @@ const rect = {
   toJSON: () => ({}),
 } as DOMRect
 
+function boundaryPathLayerData(): {
+  readonly startIndices?: Uint32Array
+  readonly attributes?: {
+    readonly getColor?: {
+      readonly value?: Uint8Array
+    }
+  }
+} {
+  const pathLayer = deckGlMock.layers.find((layer) => {
+    const candidate = layer as { readonly id?: string }
+
+    return candidate.id === 'cell-boundary-paths'
+  }) as
+    | {
+        readonly props?: {
+          readonly data?: {
+            readonly startIndices?: Uint32Array
+            readonly attributes?: {
+              readonly getColor?: {
+                readonly value?: Uint8Array
+              }
+            }
+          }
+        }
+      }
+    | undefined
+
+  return pathLayer?.props?.data ?? {}
+}
+
+function boundaryPathColorAt(pathIndex: number): readonly number[] {
+  const data = boundaryPathLayerData()
+  const vertexIndex = data.startIndices?.[pathIndex] ?? 0
+  const colorStart = vertexIndex * 4
+
+  return Array.from(
+    data.attributes?.getColor?.value?.slice(colorStart, colorStart + 4) ?? [],
+  )
+}
+
 afterEach(() => {
   deckGlMock.onHover = undefined
   deckGlMock.onClick = undefined
+  deckGlMock.onViewStateChange = undefined
+  deckGlMock.layers = []
+  deckGlMock.viewState = undefined
+  vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
@@ -203,6 +264,225 @@ describe('ViewerCore', () => {
     expect(onViewportChange.mock.calls[0]?.[0]).toMatchObject({
       visibleCellCount: 1,
     })
+  })
+
+  it('keeps overview cell proxies outline-only without active annotations', () => {
+    render(<ViewerCore cells={[overviewCellDatum()]} />)
+
+    const cellLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'cells-overview-scatter'
+    }) as { readonly props?: { readonly filled?: boolean } } | undefined
+
+    expect(cellLayer?.props?.filled).toBe(false)
+  })
+
+  it('fills fallback overview cell proxies for active annotation styling without boundaries', () => {
+    const annotatedCell: OverviewCellDatum = {
+      ...overviewCellDatum(),
+      id: asCellId('aaaaaaaa-1'),
+    }
+
+    render(
+      <ViewerCore
+        cells={[annotatedCell]}
+        observationColorMode="annotations"
+        annotationStyleColors={[
+          {
+            id: 'annotation-1',
+            cellIds: [asCellId('aaaaaaaa-1')],
+            color: '#1f9b8f',
+          },
+        ]}
+      />,
+    )
+
+    const cellLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'cells-overview-scatter'
+    }) as { readonly props?: { readonly filled?: boolean } } | undefined
+
+    expect(cellLayer?.props?.filled).toBe(true)
+  })
+
+  it('fills annotated cell boundaries instead of boundary-overlapping proxies', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const annotatedCellId = asCellId('aaaaaaaa-1')
+    const annotatedCell: OverviewCellDatum = {
+      ...overviewCellDatum(),
+      id: annotatedCellId,
+    }
+    const boundary: CellBoundaryDatum = {
+      id: annotatedCellId,
+      polygon: [
+        [-5, -5, 0],
+        [5, -5, 0],
+        [5, 5, 0],
+        [-5, 5, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+
+    render(
+      <ViewerCore
+        cells={[annotatedCell]}
+        boundaries={[boundary]}
+        observationColorMode="annotations"
+        annotationStyleColors={[
+          {
+            id: 'annotation-1',
+            cellIds: [annotatedCellId],
+            color: '#1f9b8f',
+          },
+        ]}
+      />,
+    )
+
+    await act(async () => {
+      vi.advanceTimersByTime(200)
+    })
+
+    const fillLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'cell-boundary-fills'
+    }) as
+      | {
+          readonly props?: {
+            readonly data?: {
+              readonly attributes?: {
+                readonly getFillColor?: { readonly value?: Uint8Array }
+              }
+            }
+          }
+        }
+      | undefined
+    const cellLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'cells-overview-scatter'
+    }) as
+      | {
+          readonly props?: {
+            readonly data?: readonly unknown[]
+            readonly filled?: boolean
+          }
+        }
+      | undefined
+
+    expect(fillLayer).toBeDefined()
+    expect(
+      Array.from(
+        fillLayer?.props?.data?.attributes?.getFillColor?.value?.slice(0, 4) ?? [],
+      ),
+    ).toEqual([31, 155, 143, 44])
+    expect(cellLayer?.props?.filled).toBe(true)
+    expect(cellLayer?.props?.data).toEqual([])
+  })
+
+  it('defers boundary expression restyling until viewport movement is idle', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-1',
+        position: [0, 0, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      },
+      {
+        id: 'cell-2',
+        position: [1000, 0, 0],
+        radiusPixels: 4,
+        fillColor: [44, 132, 168, 210],
+      },
+    ]
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [-5, -5, 0],
+          [5, -5, 0],
+          [5, 5, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+      {
+        id: 'cell-2',
+        polygon: [
+          [995, -5, 0],
+          [1005, -5, 0],
+          [1005, 5, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        ...cells[0]!,
+        fillColor: [240, 128, 120, 220],
+      },
+      {
+        ...cells[1]!,
+        fillColor: [63, 165, 91, 220],
+      },
+    ]
+
+    render(
+      <ViewerCore
+        cells={cells}
+        boundaries={boundaries}
+        expressionCells={expressionCells}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: 0 }}
+      />,
+    )
+
+    await act(async () => {
+      vi.advanceTimersByTime(200)
+    })
+
+    expect(boundaryPathColorAt(0)).toEqual([240, 128, 120, 220])
+    expect(boundaryPathColorAt(1)).toEqual([44, 132, 168, 210])
+
+    const currentViewState = deckGlMock.viewState
+
+    if (currentViewState === undefined) {
+      throw new Error('Expected DeckGL view state.')
+    }
+
+    await act(async () => {
+      deckGlMock.onViewStateChange?.({
+        viewState: {
+          ...currentViewState,
+          target: [1000, 0, 0],
+        },
+      })
+    })
+
+    expect(boundaryPathColorAt(0)).toEqual([240, 128, 120, 220])
+    expect(boundaryPathColorAt(1)).toEqual([44, 132, 168, 210])
+
+    await act(async () => {
+      vi.advanceTimersByTime(159)
+    })
+
+    expect(boundaryPathColorAt(0)).toEqual([240, 128, 120, 220])
+    expect(boundaryPathColorAt(1)).toEqual([44, 132, 168, 210])
+
+    await act(async () => {
+      vi.advanceTimersByTime(1)
+    })
+
+    expect(boundaryPathColorAt(0)).toEqual([215, 63, 124, 220])
+    expect(boundaryPathColorAt(1)).toEqual([63, 165, 91, 220])
   })
 
   it('supports keyboard panning and zooming on the spatial view', async () => {

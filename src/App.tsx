@@ -128,6 +128,7 @@ import {
   type TelemetryEvent,
 } from './data/telemetry'
 import { normalizeBoundaryCellLimit } from './rendering/boundaryViewport'
+import { DEFAULT_CELL_FILL_OPACITY } from './rendering/layerOpacity'
 import {
   DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
@@ -362,7 +363,7 @@ export function App({
     ),
   )
   const [imageLayerOpacity, setImageLayerOpacity] = useState(1)
-  const [cellFillOpacity, setCellFillOpacity] = useState(1)
+  const [cellFillOpacity, setCellFillOpacity] = useState(DEFAULT_CELL_FILL_OPACITY)
   const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(1)
   const [coordinateUnit, setCoordinateUnit] = useState<ViewerCoordinateUnit>(
     () => parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ?? 'um',

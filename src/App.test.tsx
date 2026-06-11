@@ -115,7 +115,7 @@ describe('App', () => {
 
     openHudTab('Layers')
     expect(screen.getByRole('slider', { name: 'Image opacity' })).toHaveValue('100')
-    expect(screen.getByRole('slider', { name: 'Cell fill opacity' })).toHaveValue('100')
+    expect(screen.getByRole('slider', { name: 'Cell fill opacity' })).toHaveValue('50')
     expect(screen.getByRole('slider', { name: 'Cell boundary opacity' })).toHaveValue(
       '100',
     )
@@ -224,6 +224,8 @@ describe('App', () => {
     const cellBoundaryOpacityInput = screen.getByRole('slider', {
       name: 'Cell boundary opacity',
     })
+
+    expect(cellFillOpacityInput).toHaveValue('50')
 
     fireEvent.change(imageOpacityInput, { target: { value: '45' } })
     fireEvent.change(cellFillOpacityInput, { target: { value: '70' } })
@@ -375,7 +377,7 @@ describe('App', () => {
     expect(loadDatasetOverview).toHaveBeenCalledTimes(1)
   })
 
-  it('restarts query-string auto-load after the StrictMode probe aborts it', async () => {
+  it('starts query-string auto-load once after the StrictMode probe settles', async () => {
     const queryDatasetUrl = 'https://example.test/strict-xenium'
     window.history.replaceState(
       null,
@@ -383,30 +385,13 @@ describe('App', () => {
       `/?dataset=${encodeURIComponent(queryDatasetUrl)}`,
     )
     const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
-      (_baseUrl, options = {}) =>
-        new Promise((resolve, reject) => {
-          const abortError = new Error('Aborted')
-          abortError.name = 'AbortError'
-
-          if (options.signal?.aborted) {
-            reject(abortError)
-            return
-          }
-
-          options.signal?.addEventListener('abort', () => reject(abortError), {
-            once: true,
-          })
-
-          if (loadDatasetOverview.mock.calls.length > 1) {
-            resolve([
-              {
-                cellId: intToCellId(1, 1),
-                position: { x: micrometers(10), y: micrometers(20) },
-                transcriptCount: 8,
-              },
-            ])
-          }
-        }),
+      async () => [
+        {
+          cellId: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 8,
+        },
+      ],
     )
     const loadGenePanel = vi.fn(async () => [])
     const loadMorphologyImage = vi.fn(async () => ({
@@ -427,7 +412,7 @@ describe('App', () => {
     )
 
     await waitFor(() => {
-      expect(loadDatasetOverview).toHaveBeenCalledTimes(2)
+      expect(loadDatasetOverview).toHaveBeenCalledTimes(1)
     })
     expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()

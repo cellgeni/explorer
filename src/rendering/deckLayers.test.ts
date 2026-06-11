@@ -1,10 +1,17 @@
-import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
+import {
+  PathLayer,
+  PolygonLayer,
+  ScatterplotLayer,
+  SolidPolygonLayer,
+} from '@deck.gl/layers'
 import { describe, expect, it } from 'vitest'
 import { intToCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
 import {
   bundledDeckVersion,
   boundaryElementsToLayerData,
+  createCellBoundaryLayerGeometry,
+  createCellBoundaryLayerStyle,
   createGeneExpressionCellStyleIndex,
   createOverviewLayers,
   createOverviewViewState,
@@ -30,6 +37,44 @@ const fixtureCells: readonly OverviewCellDatum[] = [
   },
 ]
 
+interface BoundaryPathLayerData {
+  readonly length: number
+  readonly startIndices: Uint32Array
+  readonly attributes: {
+    readonly getPath: {
+      readonly value: Float32Array
+      readonly size: number
+    }
+    readonly getColor: {
+      readonly value: Uint8Array
+      readonly size: number
+    }
+  }
+}
+
+interface BoundaryFillLayerData {
+  readonly length: number
+  readonly startIndices: Uint32Array
+  readonly attributes: {
+    readonly getPolygon: {
+      readonly value: Float32Array
+      readonly size: number
+    }
+    readonly getFillColor: {
+      readonly value: Uint8Array
+      readonly size: number
+    }
+  }
+}
+
+function getBoundaryPathData(layer: PathLayer): BoundaryPathLayerData {
+  return layer.props.data as unknown as BoundaryPathLayerData
+}
+
+function getBoundaryFillData(layer: SolidPolygonLayer): BoundaryFillLayerData {
+  return layer.props.data as unknown as BoundaryFillLayerData
+}
+
 describe('deck layer factory', () => {
   it('creates the scaffolded cell overview layer', () => {
     const layers = createOverviewLayers(fixtureCells)
@@ -47,7 +92,7 @@ describe('deck layer factory', () => {
     }
 
     expect(layer.id).toBe('cells-overview-scatter')
-    expect(layer.props.filled).toBe(true)
+    expect(layer.props.filled).toBe(false)
     expect(layer.props.stroked).toBe(true)
     expect(layer.props.lineWidthUnits).toBe('pixels')
     expect(layer.props.lineWidthMinPixels).toBe(1)
@@ -55,7 +100,7 @@ describe('deck layer factory', () => {
     expect(layer.props.radiusMaxPixels).toBe(24)
     expect(layer.props.opacity).toBe(1)
     expect(layer.props.updateTriggers).toMatchObject({
-      getFillColor: [1],
+      getFillColor: [0.5],
       getLineColor: [1],
     })
 
@@ -66,11 +111,31 @@ describe('deck layer factory', () => {
       cell: OverviewCellDatum,
     ) => readonly number[]
 
-    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 77])
+    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 39])
     expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 220])
   })
 
-  it('adds a polygon layer when boundary data is available', () => {
+  it('fills fallback overview cell proxies when boundary fill is enabled without boundary data', () => {
+    const layers = createOverviewLayers(fixtureCells, [], {
+      cellFillOpacity: 0.5,
+      cellBoundaryFillEnabled: true,
+    })
+    const [layer] = layers
+
+    if (!(layer instanceof ScatterplotLayer)) {
+      throw new Error('Expected first overview layer to be a ScatterplotLayer.')
+    }
+
+    expect(layer.props.filled).toBe(true)
+
+    const getFillColor = layer.props.getFillColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
+
+    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 39])
+  })
+
+  it('adds a binary path layer when boundary data is available', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {
         id: 'cell-1',
@@ -86,15 +151,37 @@ describe('deck layer factory', () => {
     const layers = createOverviewLayers(fixtureCells, boundaries)
 
     expect(layers).toHaveLength(2)
-    expect(layers[0]).toBeInstanceOf(PolygonLayer)
+    expect(layers[0]).toBeInstanceOf(PathLayer)
     expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
 
-    const [, pointLayer] = layers
+    const [boundaryLayer, pointLayer] = layers
+
+    if (!(boundaryLayer instanceof PathLayer)) {
+      throw new Error('Expected first overview layer to be a PathLayer.')
+    }
 
     if (!(pointLayer instanceof ScatterplotLayer)) {
       throw new Error('Expected second overview layer to be a ScatterplotLayer.')
     }
 
+    expect(boundaryLayer.id).toBe('cell-boundary-paths')
+    expect(boundaryLayer.props.pickable).toBe(false)
+    expect(boundaryLayer.props._pathType).toBe('loop')
+    expect(boundaryLayer.props.widthUnits).toBe('pixels')
+    expect(boundaryLayer.props.widthMinPixels).toBe(1)
+
+    const boundaryData = getBoundaryPathData(boundaryLayer)
+
+    expect(boundaryData.length).toBe(1)
+    expect(Array.from(boundaryData.startIndices)).toEqual([0, 3])
+    expect(boundaryData.attributes.getPath.size).toBe(3)
+    expect(Array.from(boundaryData.attributes.getPath.value)).toEqual([
+      0, 0, 0, 10, 0, 0, 10, -10, 0,
+    ])
+    expect(boundaryData.attributes.getColor.size).toBe(4)
+    expect(Array.from(boundaryData.attributes.getColor.value)).toEqual([
+      246, 242, 232, 210, 246, 242, 232, 210, 246, 242, 232, 210,
+    ])
     expect(pointLayer.props.data).toEqual([])
   })
 
@@ -114,34 +201,44 @@ describe('deck layer factory', () => {
     const layers = createOverviewLayers(fixtureCells, boundaries, {
       cellFillOpacity: 0.35,
       cellBoundaryOpacity: 0.6,
+      cellBoundaryFillEnabled: true,
     })
-    const [boundaryLayer, pointLayer] = layers
+    const [fillLayer, boundaryLayer, pointLayer] = layers
 
-    if (!(boundaryLayer instanceof PolygonLayer)) {
-      throw new Error('Expected first overview layer to be a PolygonLayer.')
+    if (!(fillLayer instanceof SolidPolygonLayer)) {
+      throw new Error('Expected first overview layer to be a SolidPolygonLayer.')
+    }
+
+    if (!(boundaryLayer instanceof PathLayer)) {
+      throw new Error('Expected second overview layer to be a PathLayer.')
     }
 
     if (!(pointLayer instanceof ScatterplotLayer)) {
-      throw new Error('Expected second overview layer to be a ScatterplotLayer.')
+      throw new Error('Expected third overview layer to be a ScatterplotLayer.')
     }
 
+    expect(fillLayer.id).toBe('cell-boundary-fills')
+    expect(fillLayer.props.pickable).toBe(false)
+    expect(fillLayer.props._normalize).toBe(false)
+    expect(fillLayer.props.updateTriggers?.getFillColor).toEqual([
+      0.35,
+      expect.any(Object),
+    ])
     expect(boundaryLayer.props.opacity).toBe(1)
     expect(pointLayer.props.opacity).toBe(1)
-    expect(boundaryLayer.props.updateTriggers).toMatchObject({
-      getFillColor: [0.35],
-      getLineColor: [0.6],
-    })
+    expect(boundaryLayer.props.updateTriggers?.getColor).toEqual([
+      0.6,
+      expect.any(Object),
+    ])
     expect(pointLayer.props.updateTriggers).toMatchObject({
       getFillColor: [0.35],
       getLineColor: [0.6],
     })
+    expect(pointLayer.props.filled).toBe(true)
+    expect(pointLayer.props.data).toEqual([])
 
-    const getBoundaryFillColor = boundaryLayer.props.getFillColor as (
-      cell: CellBoundaryDatum,
-    ) => readonly number[]
-    const getBoundaryLineColor = boundaryLayer.props.getLineColor as (
-      cell: CellBoundaryDatum,
-    ) => readonly number[]
+    const fillData = getBoundaryFillData(fillLayer)
+    const boundaryData = getBoundaryPathData(boundaryLayer)
     const getPointFillColor = pointLayer.props.getFillColor as (
       cell: OverviewCellDatum,
     ) => readonly number[]
@@ -149,13 +246,23 @@ describe('deck layer factory', () => {
       cell: OverviewCellDatum,
     ) => readonly number[]
 
-    expect(getBoundaryFillColor(boundaries[0]!)).toEqual([32, 102, 83, 12])
-    expect(getBoundaryLineColor(boundaries[0]!)).toEqual([246, 242, 232, 126])
+    expect(fillData.length).toBe(1)
+    expect(Array.from(fillData.startIndices)).toEqual([0, 4])
+    expect(fillData.attributes.getPolygon.size).toBe(3)
+    expect(Array.from(fillData.attributes.getPolygon.value)).toEqual([
+      0, 0, 0, 10, 0, 0, 10, -10, 0, 0, 0, 0,
+    ])
+    expect(Array.from(fillData.attributes.getFillColor.value.slice(0, 4))).toEqual([
+      32, 102, 83, 12,
+    ])
+    expect(Array.from(boundaryData.attributes.getColor.value.slice(0, 4))).toEqual([
+      246, 242, 232, 126,
+    ])
     expect(getPointFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 27])
     expect(getPointLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 132])
   })
 
-  it('keeps transparent polygon fills pickable when cell fill opacity is zero', () => {
+  it('keeps boundary path outlines visible when cell fill opacity is zero', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {
         id: 'cell-1',
@@ -174,21 +281,16 @@ describe('deck layer factory', () => {
     })
     const [boundaryLayer] = layers
 
-    if (!(boundaryLayer instanceof PolygonLayer)) {
-      throw new Error('Expected first overview layer to be a PolygonLayer.')
+    if (!(boundaryLayer instanceof PathLayer)) {
+      throw new Error('Expected first overview layer to be a PathLayer.')
     }
 
-    const getFillColor = boundaryLayer.props.getFillColor as (
-      cell: CellBoundaryDatum,
-    ) => readonly number[]
-    const getLineColor = boundaryLayer.props.getLineColor as (
-      cell: CellBoundaryDatum,
-    ) => readonly number[]
+    const boundaryData = getBoundaryPathData(boundaryLayer)
 
-    expect(boundaryLayer.props.filled).toBe(true)
-    expect(boundaryLayer.props.stroked).toBe(true)
-    expect(getFillColor(boundaries[0]!)).toEqual([32, 102, 83, 0])
-    expect(getLineColor(boundaries[0]!)).toEqual([246, 242, 232, 105])
+    expect(boundaryLayer.props.pickable).toBe(false)
+    expect(Array.from(boundaryData.attributes.getColor.value.slice(0, 4))).toEqual([
+      246, 242, 232, 105,
+    ])
   })
 
   it('keeps overview points for cells without visible boundaries', () => {
@@ -241,6 +343,7 @@ describe('deck layer factory', () => {
     const layers = createOverviewLayers(expressionStyledCells, [], {
       cellFillOpacity: 0.45,
       cellBoundaryOpacity: 0.4,
+      cellBoundaryFillEnabled: true,
     })
 
     expect(layers).toHaveLength(1)
@@ -398,37 +501,32 @@ describe('deck layer factory', () => {
     ).toBe(false)
     expect(
       layers.some(
-        (layer) =>
-          layer instanceof PolygonLayer && layer.id === 'gene-expression-polygons',
+        (layer) => layer instanceof PathLayer && layer.id === 'gene-expression-paths',
       ),
     ).toBe(false)
 
     const boundaryLayer = layers[0]
 
-    if (!(boundaryLayer instanceof PolygonLayer)) {
-      throw new Error('Expected boundary layer to be a PolygonLayer.')
+    if (!(boundaryLayer instanceof PathLayer)) {
+      throw new Error('Expected boundary layer to be a PathLayer.')
     }
 
-    expect(boundaryLayer.id).toBe('cell-boundary-polygons')
+    expect(boundaryLayer.id).toBe('cell-boundary-paths')
     expect(boundaryLayer.props.opacity).toBe(1)
-    expect(boundaryLayer.props.pickable).toBe(true)
-    expect(boundaryLayer.props.updateTriggers).toMatchObject({
-      getFillColor: [0.5],
-      getLineColor: [0.25],
-    })
+    expect(boundaryLayer.props.pickable).toBe(false)
+    expect(boundaryLayer.props.updateTriggers?.getColor).toEqual([
+      0.25,
+      expect.any(Object),
+    ])
 
-    const getFillColor = boundaryLayer.props.getFillColor as (
-      cell: CellBoundaryDatum,
-    ) => readonly number[]
-    const getLineColor = boundaryLayer.props.getLineColor as (
-      cell: CellBoundaryDatum,
-    ) => readonly number[]
+    const boundaryData = getBoundaryPathData(boundaryLayer)
 
-    expect(getFillColor(expressionStyledBoundaries[0]!)).toEqual([240, 128, 120, 110])
-    expect(getLineColor(expressionStyledBoundaries[0]!)).toEqual([240, 128, 120, 55])
+    expect(Array.from(boundaryData.attributes.getColor.value.slice(0, 4))).toEqual([
+      240, 128, 120, 55,
+    ])
   })
 
-  it('keeps expression-styled boundary fills transparent when cell fill opacity is zero', () => {
+  it('keeps expression-styled boundary outlines visible when cell fill opacity is zero', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {
         id: 'cell-2',
@@ -460,21 +558,143 @@ describe('deck layer factory', () => {
     })
     const boundaryLayer = layers[0]
 
-    if (!(boundaryLayer instanceof PolygonLayer)) {
-      throw new Error('Expected boundary layer to be a PolygonLayer.')
+    if (!(boundaryLayer instanceof PathLayer)) {
+      throw new Error('Expected boundary layer to be a PathLayer.')
     }
 
-    const getFillColor = boundaryLayer.props.getFillColor as (
-      cell: CellBoundaryDatum,
-    ) => readonly number[]
-    const getLineColor = boundaryLayer.props.getLineColor as (
-      cell: CellBoundaryDatum,
-    ) => readonly number[]
+    const boundaryData = getBoundaryPathData(boundaryLayer)
 
-    expect(boundaryLayer.props.filled).toBe(true)
-    expect(boundaryLayer.props.stroked).toBe(true)
-    expect(getFillColor(expressionStyledBoundaries[0]!)).toEqual([240, 128, 120, 0])
-    expect(getLineColor(expressionStyledBoundaries[0]!)).toEqual([240, 128, 120, 110])
+    expect(boundaryLayer.props.pickable).toBe(false)
+    expect(boundaryLayer.props._pathType).toBe('loop')
+    expect(Array.from(boundaryData.attributes.getColor.value.slice(0, 4))).toEqual([
+      240, 128, 120, 110,
+    ])
+  })
+
+  it('reuses boundary geometry buffers when expression boundary style changes', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const geometry = createCellBoundaryLayerGeometry(boundaries, {
+      includeFill: true,
+    })
+    const styleA = createCellBoundaryLayerStyle(
+      geometry,
+      [],
+      [
+        {
+          id: 'cell-1',
+          position: [10, -20, 0],
+          radiusPixels: 6,
+          fillColor: [240, 128, 120, 220],
+        },
+      ],
+    )
+    const styleB = createCellBoundaryLayerStyle(
+      geometry,
+      [],
+      [
+        {
+          id: 'cell-1',
+          position: [10, -20, 0],
+          radiusPixels: 6,
+          fillColor: [63, 165, 91, 220],
+        },
+      ],
+    )
+    const layersA = createOverviewLayers(fixtureCells, boundaries, {
+      cellBoundaryGeometry: geometry,
+      cellBoundaryStyle: styleA,
+      cellBoundaryFillEnabled: true,
+      cellFillOpacity: 0.5,
+      cellBoundaryOpacity: 0.75,
+    })
+    const layersARepeat = createOverviewLayers(fixtureCells, boundaries, {
+      cellBoundaryGeometry: geometry,
+      cellBoundaryStyle: styleA,
+      cellBoundaryFillEnabled: true,
+      cellFillOpacity: 0.5,
+      cellBoundaryOpacity: 0.75,
+    })
+    const layersB = createOverviewLayers(fixtureCells, boundaries, {
+      cellBoundaryGeometry: geometry,
+      cellBoundaryStyle: styleB,
+      cellBoundaryFillEnabled: true,
+      cellFillOpacity: 0.5,
+      cellBoundaryOpacity: 0.75,
+    })
+    const [fillLayerA, pathLayerA] = layersA
+    const [fillLayerARepeat, pathLayerARepeat] = layersARepeat
+    const [fillLayerB, pathLayerB] = layersB
+
+    if (
+      !(fillLayerA instanceof SolidPolygonLayer) ||
+      !(fillLayerARepeat instanceof SolidPolygonLayer) ||
+      !(fillLayerB instanceof SolidPolygonLayer)
+    ) {
+      throw new Error('Expected boundary fill layers.')
+    }
+
+    if (
+      !(pathLayerA instanceof PathLayer) ||
+      !(pathLayerARepeat instanceof PathLayer) ||
+      !(pathLayerB instanceof PathLayer)
+    ) {
+      throw new Error('Expected boundary path layers.')
+    }
+
+    const fillDataA = getBoundaryFillData(fillLayerA)
+    const fillDataARepeat = getBoundaryFillData(fillLayerARepeat)
+    const fillDataB = getBoundaryFillData(fillLayerB)
+    const pathDataA = getBoundaryPathData(pathLayerA)
+    const pathDataARepeat = getBoundaryPathData(pathLayerARepeat)
+    const pathDataB = getBoundaryPathData(pathLayerB)
+    const fillDataComparator = fillLayerA.props.dataComparator as (
+      data: unknown,
+      oldData?: unknown,
+    ) => boolean
+    const pathDataComparator = pathLayerA.props.dataComparator as (
+      data: unknown,
+      oldData?: unknown,
+    ) => boolean
+
+    expect(fillDataARepeat).toBe(fillDataA)
+    expect(pathDataARepeat).toBe(pathDataA)
+    expect(fillDataA.startIndices).toBe(fillDataB.startIndices)
+    expect(fillDataA.attributes.getPolygon.value).toBe(
+      fillDataB.attributes.getPolygon.value,
+    )
+    expect(pathDataA.startIndices).toBe(pathDataB.startIndices)
+    expect(pathDataA.attributes.getPath.value).toBe(pathDataB.attributes.getPath.value)
+    expect(fillDataA.attributes.getFillColor.value).not.toBe(
+      fillDataB.attributes.getFillColor.value,
+    )
+    expect(pathDataA.attributes.getColor.value).not.toBe(
+      pathDataB.attributes.getColor.value,
+    )
+    expect(Array.from(fillDataA.attributes.getFillColor.value.slice(0, 4))).toEqual([
+      240, 128, 120, 110,
+    ])
+    expect(Array.from(fillDataB.attributes.getFillColor.value.slice(0, 4))).toEqual([
+      63, 165, 91, 110,
+    ])
+    expect(Array.from(pathDataA.attributes.getColor.value.slice(0, 4))).toEqual([
+      240, 128, 120, 165,
+    ])
+    expect(Array.from(pathDataB.attributes.getColor.value.slice(0, 4))).toEqual([
+      63, 165, 91, 165,
+    ])
+    expect(fillDataComparator(fillDataB, fillDataA)).toBe(true)
+    expect(pathDataComparator(pathDataB, pathDataA)).toBe(true)
   })
 
   it('styles true boundaries from matching visible cell colors', () => {

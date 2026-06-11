@@ -3,12 +3,12 @@ import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import {
+  createCellBoundaryLayerGeometry,
+  createCellBoundaryLayerStyle,
   createGeneExpressionCellStyleIndex,
   createOverviewLayers,
   createOverviewViewState,
   spatialOverviewView,
-  styleCellBoundariesByCells,
-  styleCellBoundariesByGeneExpression,
   styleCellsByGeneExpression,
 } from '../rendering/deckLayers'
 import {
@@ -35,9 +35,11 @@ import type {
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
+import { DEFAULT_CELL_FILL_OPACITY } from '../rendering/layerOpacity'
 import type { AnnotationColorStyle, ObservationColorMode } from '../rendering/cellStyling'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
+const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
 const DEFAULT_MICROMETERS_PER_PIXEL = 0.2125
 const SCALE_BAR_TARGET_WIDTH_PIXELS = 96
 const SCALE_BAR_MIN_WIDTH_PIXELS = 44
@@ -149,7 +151,7 @@ export function ViewerCore({
   imageLoader = null,
   imageChannels = [],
   imageOpacity = 1,
-  cellFillOpacity = 1,
+  cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
   cellBoundaryOpacity = 1,
   transcriptOpacity = 1,
   transcriptPointSize = 2,
@@ -325,6 +327,11 @@ interface MeasurementState {
   readonly line: MeasurementLine | null
 }
 
+interface BoundaryStyleViewport {
+  readonly bbox: BBox
+  readonly zoom: number
+}
+
 interface ScreenPoint {
   readonly x: number
   readonly y: number
@@ -425,6 +432,8 @@ function ViewerSurface({
   const [magicLensScreen, setMagicLensScreen] = useState<ScreenPoint | null>(null)
   const [transcriptHover, setTranscriptHover] =
     useState<ViewerTranscriptHoverDetail | null>(null)
+  const [boundaryStyleViewport, setBoundaryStyleViewport] =
+    useState<BoundaryStyleViewport | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
   const mouseCoordinateFrameRef = useRef<number | null>(null)
   const cellExtentBbox = useMemo(() => overviewCellsExtentBbox(cells), [cells])
@@ -460,24 +469,6 @@ function ViewerSurface({
       ),
     [annotationStyleColors, observationColorMode, renderSourceCells],
   )
-  const boundaryStyleCells = useMemo(
-    () =>
-      boundaries.length === 0
-        ? EMPTY_OVERVIEW_CELLS
-        : styleCellsForObservation(
-            visibleCells,
-            observationColorMode,
-            annotationStyleColors,
-          ),
-    [annotationStyleColors, boundaries.length, observationColorMode, visibleCells],
-  )
-  const visibleExpressionCells = useMemo(
-    () =>
-      boundaries.length === 0 || viewportBbox === null
-        ? expressionCells
-        : overviewCellsInBbox(expressionCells, viewportBbox),
-    [boundaries.length, expressionCells, viewportBbox],
-  )
   const shouldUseExpressionPointBins = viewState.zoom < EXPRESSION_AGGREGATION_EXACT_ZOOM
   const geneExpressionPointStyleIndex = useMemo(
     () =>
@@ -502,19 +493,60 @@ function ViewerSurface({
 
     return nextCellById
   }, [cells])
-  const styledBoundaries = useMemo(
+  const cellBoundaryFillEnabled =
+    observationColorMode === 'annotations' && annotationStyleColors.length > 0
+  const boundaryLayerGeometry = useMemo(
     () =>
-      styleCellBoundariesByGeneExpression(
-        styleCellBoundariesByCells(boundaries, boundaryStyleCells),
-        visibleExpressionCells,
+      createCellBoundaryLayerGeometry(boundaries, {
+        includeFill: cellBoundaryFillEnabled,
+      }),
+    [boundaries, cellBoundaryFillEnabled],
+  )
+  const boundaryStyleCells = useMemo(() => {
+    if (boundaryLayerGeometry.boundaryCellIds.size === 0) {
+      return EMPTY_OVERVIEW_CELLS
+    }
+
+    const boundaryCells: OverviewCellDatum[] = []
+
+    for (const cellId of boundaryLayerGeometry.boundaryCellIds) {
+      const cell = cellById.get(cellId)
+
+      if (cell !== undefined) {
+        boundaryCells.push(cell)
+      }
+    }
+
+    return styleCellsForObservation(
+      boundaryCells,
+      observationColorMode,
+      annotationStyleColors,
+    )
+  }, [annotationStyleColors, boundaryLayerGeometry, cellById, observationColorMode])
+  const boundaryExpressionCells = useMemo(
+    () =>
+      boundaries.length === 0 || boundaryStyleViewport === null
+        ? EMPTY_OVERVIEW_CELLS
+        : overviewCellsInBbox(expressionCells, boundaryStyleViewport.bbox),
+    [boundaries.length, boundaryStyleViewport, expressionCells],
+  )
+  const boundaryLayerStyle = useMemo(
+    () =>
+      createCellBoundaryLayerStyle(
+        boundaryLayerGeometry,
+        boundaryStyleCells,
+        boundaryExpressionCells,
       ),
-    [boundaries, boundaryStyleCells, visibleExpressionCells],
+    [boundaryExpressionCells, boundaryLayerGeometry, boundaryStyleCells],
   )
   const layers = useMemo(
     () =>
-      createOverviewLayers(expressionStyledRenderCells, styledBoundaries, {
+      createOverviewLayers(expressionStyledRenderCells, boundaries, {
         cellFillOpacity,
         cellBoundaryOpacity,
+        cellBoundaryFillEnabled,
+        cellBoundaryGeometry: boundaryLayerGeometry,
+        cellBoundaryStyle: boundaryLayerStyle,
         transcriptAggregateBins,
         transcriptPoints,
         transcriptOpacity,
@@ -523,8 +555,11 @@ function ViewerSurface({
     [
       cellBoundaryOpacity,
       cellFillOpacity,
+      cellBoundaryFillEnabled,
+      boundaryLayerGeometry,
+      boundaryLayerStyle,
+      boundaries,
       expressionStyledRenderCells,
-      styledBoundaries,
       transcriptAggregateBins,
       transcriptOpacity,
       transcriptPointSize,
@@ -792,7 +827,7 @@ function ViewerSurface({
 
       const coordinateCell = cellForDeckCoordinate(
         info.coordinate,
-        styledBoundaries,
+        boundaries,
         visibleCells,
         cellById,
       )
@@ -801,7 +836,7 @@ function ViewerSurface({
         onCellClick(coordinateCell)
       }
     },
-    [cellById, onCellClick, onTranscriptClick, styledBoundaries, visibleCells],
+    [boundaries, cellById, onCellClick, onTranscriptClick, visibleCells],
   )
   const handleDeckHover = useCallback(
     (info: PickingInfo<unknown>) => {
@@ -1079,6 +1114,28 @@ function ViewerSurface({
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (boundaries.length === 0 || viewportBbox === null) {
+      return
+    }
+
+    const nextViewport = {
+      bbox: viewportBbox,
+      zoom: viewState.zoom,
+    }
+    const timeout = window.setTimeout(() => {
+      setBoundaryStyleViewport((currentViewport) =>
+        equivalentBoundaryStyleViewport(currentViewport, nextViewport)
+          ? currentViewport
+          : nextViewport,
+      )
+    }, BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [boundaries.length, viewState.zoom, viewportBbox])
 
   useEffect(() => {
     if (onViewportCellCountChange === undefined || !hasCells) {
@@ -2022,6 +2079,20 @@ function equivalentViewportSize(left: CssViewportSize, right: CssViewportSize): 
   return (
     nearlyEqual(left.width, right.width, 0.5) &&
     nearlyEqual(left.height, right.height, 0.5)
+  )
+}
+
+function equivalentBoundaryStyleViewport(
+  left: BoundaryStyleViewport | null,
+  right: BoundaryStyleViewport,
+): boolean {
+  return (
+    left !== null &&
+    nearlyEqual(left.zoom, right.zoom, 0.001) &&
+    nearlyEqual(left.bbox.minX, right.bbox.minX, 0.5) &&
+    nearlyEqual(left.bbox.maxX, right.bbox.maxX, 0.5) &&
+    nearlyEqual(left.bbox.minY, right.bbox.minY, 0.5) &&
+    nearlyEqual(left.bbox.maxY, right.bbox.maxY, 0.5)
   )
 }
 

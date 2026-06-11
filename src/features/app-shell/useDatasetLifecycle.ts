@@ -790,10 +790,16 @@ export function useDatasetLifecycle({
       return
     }
 
-    void startDatasetLoadRef.current?.(
-      initialDatasetUrl,
-      initialShouldLoadMorphologyRef.current,
-    )
+    const timeout = window.setTimeout(() => {
+      void startDatasetLoadRef.current?.(
+        initialDatasetUrl,
+        initialShouldLoadMorphologyRef.current,
+      )
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
   }, [
     initialShareableState.datasetUrl,
     initialShouldLoadMorphologyRef,

@@ -1,6 +1,11 @@
-import type { Color, LayersList, Position } from '@deck.gl/core'
+import type { BinaryAttribute, Color, LayersList, Position } from '@deck.gl/core'
 import { OrthographicView, VERSION as deckVersion } from '@deck.gl/core'
-import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
+import {
+  PathLayer,
+  PolygonLayer,
+  ScatterplotLayer,
+  SolidPolygonLayer,
+} from '@deck.gl/layers'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type {
   TranscriptAggregateBin,
@@ -10,7 +15,11 @@ import type {
 } from '../data/transcriptOverlay'
 import type { GeneExpressionCell } from '../datasets/xeniumDataset'
 import type { SpatialElement } from '../datasets/spatialDataset'
-import { DEFAULT_LAYER_OPACITY, normalizeLayerOpacity } from './layerOpacity'
+import {
+  DEFAULT_CELL_FILL_OPACITY,
+  DEFAULT_LAYER_OPACITY,
+  normalizeLayerOpacity,
+} from './layerOpacity'
 
 export interface OverviewCellDatum {
   readonly id: string
@@ -39,6 +48,55 @@ export interface CellBoundaryDatum {
   readonly polygon: readonly Position[]
   readonly fillColor: Color
   readonly lineColor: Color
+}
+
+export interface CellBoundaryLayerGeometryOptions {
+  readonly includeFill?: boolean
+}
+
+interface CellBoundaryPathGeometryData {
+  readonly length: number
+  readonly startIndices: Uint32Array
+  readonly attributes: {
+    readonly getPath: BinaryAttribute
+  }
+}
+
+interface CellBoundaryFillGeometryData {
+  readonly length: number
+  readonly startIndices: Uint32Array
+  readonly attributes: {
+    readonly getPolygon: BinaryAttribute
+  }
+}
+
+export interface CellBoundaryLayerGeometry {
+  readonly pathLayerData: CellBoundaryPathGeometryData
+  readonly fillLayerData: CellBoundaryFillGeometryData
+  readonly pathCellIds: readonly string[]
+  readonly fillCellIds: readonly string[]
+  readonly pathLineColors: readonly Color[]
+  readonly fillColors: readonly Color[]
+  readonly boundaryCellIds: ReadonlySet<string>
+}
+
+export interface CellBoundaryLayerStyle {
+  readonly fillColorByCellId: ReadonlyMap<string, Color>
+  readonly lineColorByCellId: ReadonlyMap<string, Color>
+}
+
+interface CellBoundaryPathLayerData {
+  readonly length: number
+  readonly startIndices: Uint32Array
+  readonly geometryKey: CellBoundaryPathGeometryData
+  readonly attributes: Record<string, BinaryAttribute>
+}
+
+interface CellBoundaryFillLayerData {
+  readonly length: number
+  readonly startIndices: Uint32Array
+  readonly geometryKey: CellBoundaryFillGeometryData
+  readonly attributes: Record<string, BinaryAttribute>
 }
 
 export interface TranscriptPointDatum {
@@ -81,6 +139,9 @@ export interface TranscriptAggregateDatum {
 export interface OverviewLayerOptions {
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
+  readonly cellBoundaryFillEnabled?: boolean
+  readonly cellBoundaryGeometry?: CellBoundaryLayerGeometry
+  readonly cellBoundaryStyle?: CellBoundaryLayerStyle
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
   readonly transcriptOpacity?: number
@@ -281,6 +342,45 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
 }
 
 const CELL_PROXY_FILL_OPACITY = 0.35
+const EMPTY_CELL_BOUNDARY_PATH_GEOMETRY: CellBoundaryPathGeometryData = {
+  length: 0,
+  startIndices: new Uint32Array(1),
+  attributes: {
+    getPath: { value: new Float32Array(0), size: 3 },
+  },
+}
+const EMPTY_CELL_BOUNDARY_FILL_GEOMETRY: CellBoundaryFillGeometryData = {
+  length: 0,
+  startIndices: new Uint32Array(1),
+  attributes: {
+    getPolygon: { value: new Float32Array(0), size: 3 },
+  },
+}
+const EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY: CellBoundaryLayerGeometry = {
+  pathLayerData: EMPTY_CELL_BOUNDARY_PATH_GEOMETRY,
+  fillLayerData: EMPTY_CELL_BOUNDARY_FILL_GEOMETRY,
+  pathCellIds: [],
+  fillCellIds: [],
+  pathLineColors: [],
+  fillColors: [],
+  boundaryCellIds: new Set<string>(),
+}
+const EMPTY_CELL_BOUNDARY_LAYER_STYLE: CellBoundaryLayerStyle = {
+  fillColorByCellId: new Map<string, Color>(),
+  lineColorByCellId: new Map<string, Color>(),
+}
+interface CellBoundaryLayerDataCache {
+  fillData?: CellBoundaryFillLayerData
+  fillOpacity?: number
+  fillStyle?: CellBoundaryLayerStyle
+  pathData?: CellBoundaryPathLayerData
+  pathOpacity?: number
+  pathStyle?: CellBoundaryLayerStyle
+}
+const cellBoundaryLayerDataCache = new WeakMap<
+  CellBoundaryLayerGeometry,
+  CellBoundaryLayerDataCache
+>()
 
 export const spatialOverviewView = new OrthographicView({
   id: 'spatial-overview',
@@ -295,11 +395,20 @@ export function createOverviewLayers(
   options: OverviewLayerOptions = {},
 ): LayersList {
   const cellFillOpacity = normalizeLayerOpacity(
-    options.cellFillOpacity ?? DEFAULT_LAYER_OPACITY,
+    options.cellFillOpacity ?? DEFAULT_CELL_FILL_OPACITY,
   )
   const cellBoundaryOpacity = normalizeLayerOpacity(
     options.cellBoundaryOpacity ?? DEFAULT_LAYER_OPACITY,
   )
+  const cellBoundaryFillEnabled = options.cellBoundaryFillEnabled ?? false
+  const cellBoundaryGeometry =
+    options.cellBoundaryGeometry ??
+    (boundaries.length > 0
+      ? createCellBoundaryLayerGeometry(boundaries, {
+          includeFill: cellBoundaryFillEnabled,
+        })
+      : EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY)
+  const cellBoundaryStyle = options.cellBoundaryStyle ?? EMPTY_CELL_BOUNDARY_LAYER_STYLE
   const transcriptAggregateBins = options.transcriptAggregateBins ?? []
   const transcriptDensityBins = transcriptAggregateBins.filter(
     (bin) => bin.glyphType !== 'feature-circle',
@@ -308,7 +417,10 @@ export function createOverviewLayers(
     (bin) => bin.glyphType === 'feature-circle',
   )
   const transcriptPoints = options.transcriptPoints ?? []
-  const pointCells = cellsWithoutVisibleBoundaries(cells, boundaries)
+  const pointCells = cellsWithoutVisibleBoundaryIds(
+    cells,
+    cellBoundaryGeometry.boundaryCellIds,
+  )
   const cellPointLayer = new ScatterplotLayer<OverviewCellDatum>({
     id: 'cells-overview-scatter',
     data: pointCells,
@@ -317,7 +429,7 @@ export function createOverviewLayers(
     radiusMinPixels: 0.12,
     radiusMaxPixels: 24,
     stroked: true,
-    filled: true,
+    filled: cellBoundaryFillEnabled,
     opacity: 1,
     lineWidthUnits: 'pixels',
     lineWidthMinPixels: 1,
@@ -335,27 +447,61 @@ export function createOverviewLayers(
   })
   const layers: LayersList = []
 
-  if (boundaries.length > 0) {
-    layers.push(
-      new PolygonLayer<CellBoundaryDatum>({
-        id: 'cell-boundary-polygons',
-        data: boundaries,
-        pickable: true,
-        stroked: true,
-        filled: true,
-        opacity: 1,
-        lineWidthUnits: 'pixels',
-        lineWidthMinPixels: 1,
-        getPolygon: (cell) => cell.polygon,
-        getFillColor: (cell) => colorWithOpacity(cell.fillColor, cellFillOpacity),
-        getLineColor: (cell) => colorWithOpacity(cell.lineColor, cellBoundaryOpacity),
-        getLineWidth: 1,
-        updateTriggers: {
-          getFillColor: [cellFillOpacity],
-          getLineColor: [cellBoundaryOpacity],
-        },
-      }),
+  if (cellBoundaryGeometry.pathLayerData.length > 0) {
+    if (cellBoundaryFillEnabled) {
+      const boundaryFillData = cellBoundaryFillLayerDataWithColors(
+        cellBoundaryGeometry,
+        cellBoundaryStyle,
+        cellFillOpacity,
+      )
+
+      if (boundaryFillData.length > 0) {
+        layers.push(
+          new SolidPolygonLayer<unknown>({
+            id: 'cell-boundary-fills',
+            data: boundaryFillData,
+            dataComparator: hasSameCellBoundaryLayerGeometry,
+            pickable: false,
+            filled: true,
+            extruded: false,
+            _normalize: false,
+            opacity: 1,
+            getPolygon: () => [],
+            getFillColor: [32, 102, 83, 34],
+            updateTriggers: {
+              getFillColor: [cellFillOpacity, cellBoundaryStyle],
+            },
+          }),
+        )
+      }
+    }
+
+    const boundaryPathData = cellBoundaryPathLayerDataWithColors(
+      cellBoundaryGeometry,
+      cellBoundaryStyle,
+      cellBoundaryOpacity,
     )
+
+    if (boundaryPathData.length > 0) {
+      layers.push(
+        new PathLayer<unknown>({
+          id: 'cell-boundary-paths',
+          data: boundaryPathData,
+          dataComparator: hasSameCellBoundaryLayerGeometry,
+          pickable: false,
+          _pathType: 'loop',
+          opacity: 1,
+          widthUnits: 'pixels',
+          widthMinPixels: 1,
+          getPath: () => [],
+          getColor: [32, 102, 83, 190],
+          getWidth: 1,
+          updateTriggers: {
+            getColor: [cellBoundaryOpacity, cellBoundaryStyle],
+          },
+        }),
+      )
+    }
   }
 
   layers.push(cellPointLayer)
@@ -448,6 +594,376 @@ export function createOverviewLayers(
   }
 
   return layers
+}
+
+export function createCellBoundaryLayerGeometry(
+  boundaries: readonly CellBoundaryDatum[],
+  options: CellBoundaryLayerGeometryOptions = {},
+): CellBoundaryLayerGeometry {
+  if (boundaries.length === 0) {
+    return EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY
+  }
+
+  const includeFill = options.includeFill ?? true
+  const pathLayerData = cellBoundariesToPathLayerGeometry(boundaries)
+  const fillLayerData = includeFill
+    ? cellBoundariesToFillLayerGeometry(boundaries)
+    : {
+        layerData: EMPTY_CELL_BOUNDARY_FILL_GEOMETRY,
+        cellIds: [],
+        colors: [],
+      }
+  const boundaryCellIds = new Set<string>()
+
+  for (const cellId of pathLayerData.cellIds) {
+    boundaryCellIds.add(cellId)
+  }
+
+  if (boundaryCellIds.size === 0) {
+    return EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY
+  }
+
+  return {
+    pathLayerData: pathLayerData.layerData,
+    fillLayerData: fillLayerData.layerData,
+    pathCellIds: pathLayerData.cellIds,
+    fillCellIds: fillLayerData.cellIds,
+    pathLineColors: pathLayerData.colors,
+    fillColors: fillLayerData.colors,
+    boundaryCellIds,
+  }
+}
+
+export function createCellBoundaryLayerStyle(
+  geometry: CellBoundaryLayerGeometry,
+  cells: readonly OverviewCellDatum[],
+  expressionCells: readonly OverviewCellDatum[],
+): CellBoundaryLayerStyle {
+  if (
+    geometry.boundaryCellIds.size === 0 ||
+    (cells.length === 0 && expressionCells.length === 0)
+  ) {
+    return EMPTY_CELL_BOUNDARY_LAYER_STYLE
+  }
+
+  const fillColorByCellId = new Map<string, Color>()
+  const lineColorByCellId = new Map<string, Color>()
+
+  for (const cell of cells) {
+    if (!geometry.boundaryCellIds.has(cell.id)) {
+      continue
+    }
+
+    fillColorByCellId.set(cell.id, boundaryFillColor(cell.fillColor))
+    lineColorByCellId.set(cell.id, boundaryLineColor(cell.fillColor))
+  }
+
+  for (const cell of expressionCells) {
+    if (!geometry.boundaryCellIds.has(cell.id)) {
+      continue
+    }
+
+    fillColorByCellId.set(cell.id, cell.fillColor)
+    lineColorByCellId.set(cell.id, boundaryLineColor(cell.fillColor))
+  }
+
+  if (fillColorByCellId.size === 0 && lineColorByCellId.size === 0) {
+    return EMPTY_CELL_BOUNDARY_LAYER_STYLE
+  }
+
+  return { fillColorByCellId, lineColorByCellId }
+}
+
+interface CellBoundaryGeometryBuildResult<
+  LayerData extends CellBoundaryPathGeometryData | CellBoundaryFillGeometryData,
+> {
+  readonly layerData: LayerData
+  readonly cellIds: readonly string[]
+  readonly colors: readonly Color[]
+}
+
+function cellBoundariesToFillLayerGeometry(
+  boundaries: readonly CellBoundaryDatum[],
+): CellBoundaryGeometryBuildResult<CellBoundaryFillGeometryData> {
+  let polygonCount = 0
+  let vertexCount = 0
+
+  for (const boundary of boundaries) {
+    if (boundary.polygon.length < 3) {
+      continue
+    }
+
+    polygonCount += 1
+    vertexCount += boundary.polygon.length
+
+    if (!isClosedBoundaryPolygon(boundary.polygon)) {
+      vertexCount += 1
+    }
+  }
+
+  const startIndices = new Uint32Array(polygonCount + 1)
+  const positions = new Float32Array(vertexCount * 3)
+  const cellIds: string[] = []
+  const colors: Color[] = []
+
+  let polygonIndex = 0
+  let vertexIndex = 0
+  let positionIndex = 0
+
+  for (const boundary of boundaries) {
+    if (boundary.polygon.length < 3) {
+      continue
+    }
+
+    startIndices[polygonIndex] = vertexIndex
+    cellIds.push(boundary.id)
+    colors.push(boundary.fillColor)
+
+    for (const point of boundary.polygon) {
+      positions[positionIndex] = point[0] ?? 0
+      positions[positionIndex + 1] = point[1] ?? 0
+      positions[positionIndex + 2] = point[2] ?? 0
+      positionIndex += 3
+      vertexIndex += 1
+    }
+
+    if (!isClosedBoundaryPolygon(boundary.polygon)) {
+      const firstPoint = boundary.polygon[0]!
+      positions[positionIndex] = firstPoint[0] ?? 0
+      positions[positionIndex + 1] = firstPoint[1] ?? 0
+      positions[positionIndex + 2] = firstPoint[2] ?? 0
+      positionIndex += 3
+      vertexIndex += 1
+    }
+
+    polygonIndex += 1
+  }
+
+  startIndices[polygonIndex] = vertexIndex
+
+  return {
+    layerData: {
+      length: polygonCount,
+      startIndices,
+      attributes: {
+        getPolygon: { value: positions, size: 3 },
+      },
+    },
+    cellIds,
+    colors,
+  }
+}
+
+function cellBoundariesToPathLayerGeometry(
+  boundaries: readonly CellBoundaryDatum[],
+): CellBoundaryGeometryBuildResult<CellBoundaryPathGeometryData> {
+  let pathCount = 0
+  let vertexCount = 0
+
+  for (const boundary of boundaries) {
+    if (boundary.polygon.length < 3) {
+      continue
+    }
+
+    pathCount += 1
+    vertexCount += boundary.polygon.length
+  }
+
+  const startIndices = new Uint32Array(pathCount + 1)
+  const positions = new Float32Array(vertexCount * 3)
+  const cellIds: string[] = []
+  const colors: Color[] = []
+
+  let pathIndex = 0
+  let vertexIndex = 0
+  let positionIndex = 0
+
+  for (const boundary of boundaries) {
+    if (boundary.polygon.length < 3) {
+      continue
+    }
+
+    startIndices[pathIndex] = vertexIndex
+    cellIds.push(boundary.id)
+    colors.push(boundary.lineColor)
+
+    for (const point of boundary.polygon) {
+      positions[positionIndex] = point[0] ?? 0
+      positions[positionIndex + 1] = point[1] ?? 0
+      positions[positionIndex + 2] = point[2] ?? 0
+      positionIndex += 3
+      vertexIndex += 1
+    }
+
+    pathIndex += 1
+  }
+
+  startIndices[pathIndex] = vertexIndex
+
+  return {
+    layerData: {
+      length: pathCount,
+      startIndices,
+      attributes: {
+        getPath: { value: positions, size: 3 },
+      },
+    },
+    cellIds,
+    colors,
+  }
+}
+
+function cellBoundaryFillLayerDataWithColors(
+  geometry: CellBoundaryLayerGeometry,
+  style: CellBoundaryLayerStyle,
+  cellFillOpacity: number,
+): CellBoundaryFillLayerData {
+  const cache = cellBoundaryLayerDataCacheForGeometry(geometry)
+
+  if (
+    cache.fillData !== undefined &&
+    cache.fillStyle === style &&
+    cache.fillOpacity === cellFillOpacity
+  ) {
+    return cache.fillData
+  }
+
+  const colors = cellBoundaryColorBuffer(
+    geometry.fillLayerData.startIndices,
+    geometry.fillCellIds,
+    geometry.fillColors,
+    style.fillColorByCellId,
+    cellFillOpacity,
+  )
+  const data = {
+    length: geometry.fillLayerData.length,
+    startIndices: geometry.fillLayerData.startIndices,
+    geometryKey: geometry.fillLayerData,
+    attributes: {
+      ...geometry.fillLayerData.attributes,
+      getFillColor: { value: colors, size: 4 },
+    },
+  }
+
+  cache.fillData = data
+  cache.fillStyle = style
+  cache.fillOpacity = cellFillOpacity
+
+  return data
+}
+
+function cellBoundaryPathLayerDataWithColors(
+  geometry: CellBoundaryLayerGeometry,
+  style: CellBoundaryLayerStyle,
+  cellBoundaryOpacity: number,
+): CellBoundaryPathLayerData {
+  const cache = cellBoundaryLayerDataCacheForGeometry(geometry)
+
+  if (
+    cache.pathData !== undefined &&
+    cache.pathStyle === style &&
+    cache.pathOpacity === cellBoundaryOpacity
+  ) {
+    return cache.pathData
+  }
+
+  const colors = cellBoundaryColorBuffer(
+    geometry.pathLayerData.startIndices,
+    geometry.pathCellIds,
+    geometry.pathLineColors,
+    style.lineColorByCellId,
+    cellBoundaryOpacity,
+  )
+  const data = {
+    length: geometry.pathLayerData.length,
+    startIndices: geometry.pathLayerData.startIndices,
+    geometryKey: geometry.pathLayerData,
+    attributes: {
+      ...geometry.pathLayerData.attributes,
+      getColor: { value: colors, size: 4 },
+    },
+  }
+
+  cache.pathData = data
+  cache.pathStyle = style
+  cache.pathOpacity = cellBoundaryOpacity
+
+  return data
+}
+
+function cellBoundaryLayerDataCacheForGeometry(
+  geometry: CellBoundaryLayerGeometry,
+): CellBoundaryLayerDataCache {
+  let cache = cellBoundaryLayerDataCache.get(geometry)
+
+  if (cache === undefined) {
+    cache = {}
+    cellBoundaryLayerDataCache.set(geometry, cache)
+  }
+
+  return cache
+}
+
+function cellBoundaryColorBuffer(
+  startIndices: Uint32Array,
+  cellIds: readonly string[],
+  baseColors: readonly Color[],
+  styleColorByCellId: ReadonlyMap<string, Color>,
+  opacity: number,
+): Uint8Array {
+  const vertexCount = startIndices[startIndices.length - 1] ?? 0
+  const colors = new Uint8Array(vertexCount * 4)
+
+  for (let cellIndex = 0; cellIndex < cellIds.length; cellIndex += 1) {
+    const startIndex = startIndices[cellIndex] ?? 0
+    const endIndex = startIndices[cellIndex + 1] ?? startIndex
+    const cellId = cellIds[cellIndex] ?? ''
+    const baseColor = baseColors[cellIndex] ?? [0, 0, 0, 255]
+    const color = colorWithOpacity(styleColorByCellId.get(cellId) ?? baseColor, opacity)
+
+    for (let vertexIndex = startIndex; vertexIndex < endIndex; vertexIndex += 1) {
+      const colorIndex = vertexIndex * 4
+      colors[colorIndex] = color[0] ?? 0
+      colors[colorIndex + 1] = color[1] ?? 0
+      colors[colorIndex + 2] = color[2] ?? 0
+      colors[colorIndex + 3] = color[3] ?? 255
+    }
+  }
+
+  return colors
+}
+
+function hasSameCellBoundaryLayerGeometry(data: unknown, oldData?: unknown): boolean {
+  return (
+    cellBoundaryLayerGeometryKey(data) !== undefined &&
+    cellBoundaryLayerGeometryKey(data) === cellBoundaryLayerGeometryKey(oldData)
+  )
+}
+
+function cellBoundaryLayerGeometryKey(
+  data: unknown,
+): CellBoundaryPathGeometryData | CellBoundaryFillGeometryData | undefined {
+  if (data === null || typeof data !== 'object') {
+    return undefined
+  }
+
+  return (data as Partial<CellBoundaryPathLayerData | CellBoundaryFillLayerData>)
+    .geometryKey
+}
+
+function isClosedBoundaryPolygon(polygon: readonly Position[]): boolean {
+  const firstPoint = polygon[0]
+  const lastPoint = polygon.at(-1)
+
+  if (firstPoint === undefined || lastPoint === undefined) {
+    return false
+  }
+
+  return (
+    (firstPoint[0] ?? 0) === (lastPoint[0] ?? 0) &&
+    (firstPoint[1] ?? 0) === (lastPoint[1] ?? 0) &&
+    (firstPoint[2] ?? 0) === (lastPoint[2] ?? 0)
+  )
 }
 
 export function overviewCellsToLayerData(
@@ -1112,21 +1628,11 @@ function colorWithOpacity(color: Color, opacity: number): Color {
   ]
 }
 
-function cellsWithoutVisibleBoundaries(
+function cellsWithoutVisibleBoundaryIds(
   cells: readonly OverviewCellDatum[],
-  boundaries: readonly CellBoundaryDatum[],
+  boundaryCellIds: ReadonlySet<string>,
 ): readonly OverviewCellDatum[] {
-  if (cells.length === 0 || boundaries.length === 0) {
-    return cells
-  }
-
-  const boundaryCellIds = new Set<string>()
-
-  for (const boundary of boundaries) {
-    boundaryCellIds.add(boundary.id)
-  }
-
-  if (boundaryCellIds.size === 0) {
+  if (cells.length === 0 || boundaryCellIds.size === 0) {
     return cells
   }
 
