@@ -25,6 +25,7 @@ interface UseAnalysisEmbeddingWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly loadAnalysisEmbeddings: AnalysisEmbeddingsLoader
   readonly loadState: DatasetLoadState<StructuredLoadError>
+  readonly onSelectedCellFocus?: (cell: OverviewCellDatum) => void
   readonly overviewCellById: ReadonlyMap<string, OverviewCellDatum>
   readonly selectedEmbeddingKind: AnalysisEmbeddingKind
   readonly setAnalysisEmbeddingState: Dispatch<
@@ -46,6 +47,7 @@ export function useAnalysisEmbeddingWorkflow({
   appendDebugEvent,
   loadAnalysisEmbeddings,
   loadState,
+  onSelectedCellFocus,
   overviewCellById,
   selectedEmbeddingKind,
   setAnalysisEmbeddingState,
@@ -120,9 +122,10 @@ export function useAnalysisEmbeddingWorkflow({
 
       if (cell !== undefined) {
         setSelectedCell(cell)
+        onSelectedCellFocus?.(cell)
       }
     },
-    [overviewCellById, setSelectedCell],
+    [onSelectedCellFocus, overviewCellById, setSelectedCell],
   )
 
   return { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings }

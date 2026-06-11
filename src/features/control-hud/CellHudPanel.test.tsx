@@ -35,6 +35,7 @@ describe('CellHudPanel', () => {
           embeddings,
         }}
         activeEmbedding={null}
+        annotationStyles={[]}
         selectedEmbeddingKind="umap"
         roiCellIds={[]}
         selectedCell={null}

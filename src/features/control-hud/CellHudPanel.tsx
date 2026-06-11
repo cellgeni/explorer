@@ -10,6 +10,7 @@ import type {
   AnalysisEmbeddingKind,
 } from '../../data/analysisEmbeddings'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 
 interface CellHudPanelProps {
   readonly active: boolean
@@ -17,6 +18,7 @@ interface CellHudPanelProps {
   readonly embeddingCopy: string
   readonly analysisEmbeddingState: AnalysisEmbeddingState
   readonly activeEmbedding: AnalysisEmbedding | null
+  readonly annotationStyles: readonly AnnotationColorStyle[]
   readonly selectedEmbeddingKind: AnalysisEmbeddingKind
   readonly roiCellIds: readonly string[]
   readonly selectedCell: OverviewCellDatum | null
@@ -36,6 +38,7 @@ export function CellHudPanel({
   embeddingCopy,
   analysisEmbeddingState,
   activeEmbedding,
+  annotationStyles,
   selectedEmbeddingKind,
   roiCellIds,
   selectedCell,
@@ -112,6 +115,7 @@ export function CellHudPanel({
         </div>
         <EmbeddingPanel
           embedding={activeEmbedding}
+          annotationStyles={annotationStyles}
           roiCellIds={roiCellIds}
           selectedCellId={selectedCell?.id ?? null}
           onSelectCell={onSelectEmbeddingCell}

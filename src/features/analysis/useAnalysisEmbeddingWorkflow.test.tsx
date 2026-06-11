@@ -28,12 +28,14 @@ let snapshot: Snapshot
 
 function Probe({
   onReady,
+  onSelectedCellFocus,
   loadAnalysisEmbeddings,
 }: {
   readonly onReady: (
     nextApi: ReturnType<typeof useAnalysisEmbeddingWorkflow>,
     nextSnapshot: Snapshot,
   ) => void
+  readonly onSelectedCellFocus?: (cell: OverviewCellDatum) => void
   readonly loadAnalysisEmbeddings: Parameters<
     typeof useAnalysisEmbeddingWorkflow
   >[0]['loadAnalysisEmbeddings']
@@ -62,6 +64,7 @@ function Probe({
     },
     loadAnalysisEmbeddings,
     loadState,
+    ...(onSelectedCellFocus === undefined ? {} : { onSelectedCellFocus }),
     overviewCellById: new Map([[cell.id, cell]]),
     selectedEmbeddingKind,
     setAnalysisEmbeddingState,
@@ -119,9 +122,12 @@ describe('useAnalysisEmbeddingWorkflow', () => {
   })
 
   it('selects overview cells from embedding clicks', () => {
+    const onSelectedCellFocus = vi.fn()
+
     render(
       <Probe
         loadAnalysisEmbeddings={vi.fn(async () => [])}
+        onSelectedCellFocus={onSelectedCellFocus}
         onReady={(nextApi, nextSnapshot) => {
           api = nextApi
           snapshot = nextSnapshot
@@ -134,5 +140,6 @@ describe('useAnalysisEmbeddingWorkflow', () => {
     })
 
     expect(snapshot.selectedCell).toBe(cell)
+    expect(onSelectedCellFocus).toHaveBeenCalledWith(cell)
   })
 })

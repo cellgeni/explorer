@@ -14,8 +14,14 @@ const embedding: AnalysisEmbedding = {
   ],
 }
 
-function canvasContext(): CanvasRenderingContext2D {
-  return {
+interface MockCanvasContext extends CanvasRenderingContext2D {
+  readonly fillStyles: string[]
+}
+
+function canvasContext(): MockCanvasContext {
+  const fillStyles: string[] = []
+  const context = {
+    fillStyles,
     setTransform: vi.fn(),
     clearRect: vi.fn(),
     fillRect: vi.fn(),
@@ -23,7 +29,16 @@ function canvasContext(): CanvasRenderingContext2D {
     arc: vi.fn(),
     fill: vi.fn(),
     stroke: vi.fn(),
-  } as unknown as CanvasRenderingContext2D
+  } as unknown as MockCanvasContext
+
+  Object.defineProperty(context, 'fillStyle', {
+    get: () => fillStyles[fillStyles.length - 1] ?? '',
+    set: (value: string) => {
+      fillStyles.push(value)
+    },
+  })
+
+  return context
 }
 
 describe('EmbeddingPanel', () => {
@@ -50,6 +65,7 @@ describe('EmbeddingPanel', () => {
     render(
       <EmbeddingPanel
         embedding={null}
+        annotationStyles={[]}
         roiCellIds={[]}
         selectedCellId={null}
         onSelectCell={vi.fn()}
@@ -65,6 +81,7 @@ describe('EmbeddingPanel', () => {
     render(
       <EmbeddingPanel
         embedding={embedding}
+        annotationStyles={[]}
         roiCellIds={['aaaaaaaa-1']}
         selectedCellId="bbbbbbbb-2"
         onSelectCell={onSelectCell}
@@ -80,5 +97,29 @@ describe('EmbeddingPanel', () => {
     fireEvent.pointerDown(screen.getByRole('img'), { clientX: 308, clientY: 12 })
 
     expect(onSelectCell).toHaveBeenCalledWith('bbbbbbbb-2')
+  })
+
+  it('draws sampled embedding points with loaded annotation colors', () => {
+    const context = canvasContext()
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(context)
+
+    render(
+      <EmbeddingPanel
+        embedding={embedding}
+        annotationStyles={[
+          {
+            id: 'annotation:t-cell',
+            cellIds: [asCellId('aaaaaaaa-1')],
+            color: '#123456',
+          },
+        ]}
+        roiCellIds={[]}
+        selectedCellId={null}
+        onSelectCell={vi.fn()}
+      />,
+    )
+
+    expect(context.fillStyles).toContain('rgba(18, 52, 86, 0.82)')
+    expect(context.fillStyles).toContain('rgba(72, 68, 58, 0.34)')
   })
 })

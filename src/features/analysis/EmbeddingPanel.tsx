@@ -4,11 +4,14 @@ import type {
   AnalysisEmbedding,
   AnalysisEmbeddingPoint,
 } from '../../data/analysisEmbeddings'
+import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 
 const EMBEDDING_RENDER_POINT_LIMIT = 120_000
 const EMBEDDING_PLOT_FALLBACK_WIDTH = 320
 const EMBEDDING_PLOT_FALLBACK_HEIGHT = 190
 const EMBEDDING_PLOT_PADDING = 12
+const EMPTY_ANNOTATION_STYLES: readonly AnnotationColorStyle[] = []
+const UNANNOTATED_EMBEDDING_COLOR = 'rgba(72, 68, 58, 0.34)'
 
 interface EmbeddingBounds {
   readonly minX: number
@@ -19,6 +22,7 @@ interface EmbeddingBounds {
 
 interface EmbeddingPanelProps {
   readonly embedding: AnalysisEmbedding | null
+  readonly annotationStyles?: readonly AnnotationColorStyle[]
   readonly roiCellIds: readonly string[]
   readonly selectedCellId: string | null
   readonly onSelectCell: (cellId: string) => void
@@ -26,6 +30,7 @@ interface EmbeddingPanelProps {
 
 export function EmbeddingPanel({
   embedding,
+  annotationStyles = EMPTY_ANNOTATION_STYLES,
   roiCellIds,
   selectedCellId,
   onSelectCell,
@@ -57,6 +62,13 @@ export function EmbeddingPanel({
         return point === undefined ? [] : [point]
       }),
     [pointByCellId, roiCellIds],
+  )
+  const annotationPointGroups = useMemo(
+    () =>
+      annotationStyles.length === 0
+        ? []
+        : groupEmbeddingPointsByAnnotationColor(sampledPoints, annotationStyles),
+    [annotationStyles, sampledPoints],
   )
   const selectedPoint =
     selectedCellId === null ? undefined : pointByCellId.get(selectedCellId)
@@ -94,10 +106,20 @@ export function EmbeddingPanel({
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
     drawEmbeddingPlot(context, width, height, bounds, {
       basePoints: sampledPoints,
+      annotationPointGroups,
+      hasAnnotationStyles: annotationStyles.length > 0,
       roiPoints,
       selectedPoint,
     })
-  }, [bounds, embedding, roiPoints, sampledPoints, selectedPoint])
+  }, [
+    annotationPointGroups,
+    annotationStyles.length,
+    bounds,
+    embedding,
+    roiPoints,
+    sampledPoints,
+    selectedPoint,
+  ])
 
   const handlePointerDown = useCallback(
     (event: PointerEvent<HTMLCanvasElement>) => {
@@ -202,6 +224,60 @@ function mapEmbeddingPoints(
   return pointByCellId
 }
 
+interface EmbeddingPointColorGroup {
+  readonly color: string
+  readonly points: readonly AnalysisEmbeddingPoint[]
+}
+
+function groupEmbeddingPointsByAnnotationColor(
+  points: readonly AnalysisEmbeddingPoint[],
+  annotations: readonly AnnotationColorStyle[],
+): readonly EmbeddingPointColorGroup[] {
+  if (points.length === 0 || annotations.length === 0) {
+    return []
+  }
+
+  const unstyledPointIds = new Set(points.map((point) => point.id))
+  const colorByCellId = new Map<string, string>()
+
+  for (const annotation of annotations) {
+    const color = hexToCanvasRgba(annotation.color, 0.82)
+
+    for (const cellId of annotation.cellIds) {
+      if (unstyledPointIds.has(cellId)) {
+        colorByCellId.set(cellId, color)
+        unstyledPointIds.delete(cellId)
+      }
+
+      if (unstyledPointIds.size === 0) {
+        break
+      }
+    }
+
+    if (unstyledPointIds.size === 0) {
+      break
+    }
+  }
+
+  const pointsByColor = new Map<string, AnalysisEmbeddingPoint[]>()
+
+  for (const point of points) {
+    const color = colorByCellId.get(point.id) ?? UNANNOTATED_EMBEDDING_COLOR
+    const colorPoints = pointsByColor.get(color)
+
+    if (colorPoints === undefined) {
+      pointsByColor.set(color, [point])
+    } else {
+      colorPoints.push(point)
+    }
+  }
+
+  return Array.from(pointsByColor, ([color, colorPoints]) => ({
+    color,
+    points: colorPoints,
+  }))
+}
+
 function embeddingBounds(points: readonly AnalysisEmbeddingPoint[]): EmbeddingBounds {
   if (points.length === 0) {
     return { minX: 0, maxX: 1, minY: 0, maxY: 1 }
@@ -239,6 +315,8 @@ function drawEmbeddingPlot(
   bounds: EmbeddingBounds,
   layers: {
     readonly basePoints: readonly AnalysisEmbeddingPoint[]
+    readonly annotationPointGroups: readonly EmbeddingPointColorGroup[]
+    readonly hasAnnotationStyles: boolean
     readonly roiPoints: readonly AnalysisEmbeddingPoint[]
     readonly selectedPoint: AnalysisEmbeddingPoint | undefined
   },
@@ -247,10 +325,22 @@ function drawEmbeddingPlot(
   context.fillStyle = '#171511'
   context.fillRect(0, 0, width, height)
 
-  context.fillStyle = 'rgba(246, 242, 232, 0.28)'
-  for (const point of layers.basePoints) {
-    const [x, y] = embeddingPointToScreen(point, bounds, width, height)
-    context.fillRect(x, y, 1.2, 1.2)
+  if (layers.hasAnnotationStyles) {
+    for (const group of layers.annotationPointGroups) {
+      context.fillStyle = group.color
+
+      for (const point of group.points) {
+        const [x, y] = embeddingPointToScreen(point, bounds, width, height)
+        context.fillRect(x, y, 1.2, 1.2)
+      }
+    }
+  } else {
+    context.fillStyle = 'rgba(246, 242, 232, 0.28)'
+
+    for (const point of layers.basePoints) {
+      const [x, y] = embeddingPointToScreen(point, bounds, width, height)
+      context.fillRect(x, y, 1.2, 1.2)
+    }
   }
 
   context.fillStyle = 'rgba(240, 200, 75, 0.92)'
@@ -314,4 +404,17 @@ function embeddingPointToScreen(
     EMBEDDING_PLOT_PADDING + xRatio * plotWidth,
     EMBEDDING_PLOT_PADDING + (1 - yRatio) * plotHeight,
   ]
+}
+
+function hexToCanvasRgba(hexColor: string, alpha: number): string {
+  const normalized = hexColor.trim().replace(/^#/, '')
+
+  if (!/^[\da-f]{6}$/i.test(normalized)) {
+    return `rgba(215, 63, 124, ${alpha})`
+  }
+
+  return `rgba(${Number.parseInt(normalized.slice(0, 2), 16)}, ${Number.parseInt(
+    normalized.slice(2, 4),
+    16,
+  )}, ${Number.parseInt(normalized.slice(4, 6), 16)}, ${alpha})`
 }

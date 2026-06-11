@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   ViewerCore,
   type ViewerCoordinateUnit,
+  type ViewerFocusRequest,
   type ViewerTranscriptHoverDetail,
 } from './components/ViewerCore'
 import { LoadingIndicator } from './components/AppStatusPanels'
@@ -411,6 +412,8 @@ export function App({
     ShareableViewState | undefined
   >(initialShareableState.viewState)
   const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
+  const [spatialFocusRequest, setSpatialFocusRequest] =
+    useState<ViewerFocusRequest | null>(null)
   const [currentViewportDetail, setCurrentViewportDetail] =
     useState<ViewerViewportDetail | null>(null)
   const [, setViewportCellCount] = useState<number | null>(null)
@@ -443,6 +446,7 @@ export function App({
   const roiGeneViewportWarmupTimeoutRef = useRef<number | null>(null)
   const roiGeneViewportWarmupKeyRef = useRef<string | null>(null)
   const cellFeatureMatrixCapabilityKeyRef = useRef<string | null>(null)
+  const spatialFocusRequestIdRef = useRef(0)
   const magicLensAbortRef = useRef<AbortController | null>(null)
   const cellDetailAbortRef = useRef<AbortController | null>(null)
   const cellTranscriptDistributionAbortRef = useRef<AbortController | null>(null)
@@ -549,6 +553,13 @@ export function App({
         : annotationLabelsForCell(annotationState, selectedCell.id),
     [annotationState, selectedCell],
   )
+  const focusSpatialViewOnCell = useCallback((cell: OverviewCellDatum) => {
+    spatialFocusRequestIdRef.current += 1
+    setSpatialFocusRequest({
+      key: spatialFocusRequestIdRef.current,
+      target: [cell.position[0] ?? 0, cell.position[1] ?? 0, cell.position[2] ?? 0],
+    })
+  }, [])
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const roiCopy = roiStatusCopy(roiState, roiMode)
   const roiGeneStatsCopy = roiGeneStatsStatusCopy(roiGeneStatsState)
@@ -1019,6 +1030,7 @@ export function App({
       appendDebugEvent,
       loadAnalysisEmbeddings,
       loadState,
+      onSelectedCellFocus: focusSpatialViewOnCell,
       overviewCellById,
       selectedEmbeddingKind,
       setAnalysisEmbeddingState,
@@ -1391,6 +1403,7 @@ export function App({
           embeddingCopy={embeddingCopy}
           analysisEmbeddingState={analysisEmbeddingState}
           activeEmbedding={activeEmbedding}
+          annotationStyles={annotationStyleColors}
           selectedEmbeddingKind={selectedEmbeddingKind}
           roiCellIds={roiCellIds}
           selectedCell={selectedCell}
@@ -1480,6 +1493,7 @@ export function App({
           magicLensRadiusMicrometers={magicLensRadiusMicrometers}
           magicLensStatus={magicLensViewerStatus}
           magicLensSummary={magicLensViewerSummary}
+          focusRequest={spatialFocusRequest}
           onImageTileError={handleImageTileError}
           onTileCacheEviction={handleTileCacheEviction}
           onViewportCellCountChange={setViewportCellCount}

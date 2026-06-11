@@ -266,6 +266,38 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('centers the spatial view when a focus request is received', async () => {
+    const cells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-1',
+        position: [0, 0, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      },
+      {
+        id: 'cell-2',
+        position: [100, -80, 0],
+        radiusPixels: 4,
+        fillColor: [44, 132, 168, 210],
+      },
+    ]
+    const { rerender } = render(
+      <ViewerCore cells={cells} focusRequest={{ key: 1, target: [25, -30, 0] }} />,
+    )
+
+    await waitFor(() => {
+      expect(deckGlMock.viewState?.target).toEqual([25, -30, 0])
+    })
+
+    rerender(
+      <ViewerCore cells={cells} focusRequest={{ key: 2, target: [100, -80, 0] }} />,
+    )
+
+    await waitFor(() => {
+      expect(deckGlMock.viewState?.target).toEqual([100, -80, 0])
+    })
+  })
+
   it('keeps overview cell proxies outline-only without active annotations', () => {
     render(<ViewerCore cells={[overviewCellDatum()]} />)
 

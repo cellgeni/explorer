@@ -84,6 +84,7 @@ export interface ViewerCoreProps {
   readonly magicLensStatus?: ViewerMagicLensStatus
   readonly magicLensSummary?: ViewerMagicLensSummary | null
   readonly initialViewStateOverride?: InitialViewStateOverride
+  readonly focusRequest?: ViewerFocusRequest | null
   readonly overviewRenderCellLimit?: number
   readonly maxConcurrentTileRequests?: number
   readonly tileCacheMaxTiles?: number
@@ -102,6 +103,11 @@ export interface ViewerCoreProps {
 export interface InitialViewStateOverride {
   readonly target?: readonly [number, number, number]
   readonly zoom?: number
+}
+
+export interface ViewerFocusRequest {
+  readonly key: number
+  readonly target: readonly [number, number, number]
 }
 
 export type ViewerMagicLensStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -176,6 +182,7 @@ export function ViewerCore({
   magicLensStatus = 'idle',
   magicLensSummary = null,
   initialViewStateOverride,
+  focusRequest = null,
   overviewRenderCellLimit,
   maxConcurrentTileRequests,
   tileCacheMaxTiles,
@@ -220,6 +227,7 @@ export function ViewerCore({
       measurementResetKey={measurementResetKey}
       micrometersPerPixel={micrometersPerPixel}
       initialViewState={initialViewState}
+      focusRequest={focusRequest}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
       {...(maxConcurrentTileRequests === undefined ? {} : { maxConcurrentTileRequests })}
       {...(tileCacheMaxTiles === undefined ? {} : { tileCacheMaxTiles })}
@@ -271,6 +279,7 @@ interface ViewerSurfaceProps {
   readonly measurementResetKey: number
   readonly micrometersPerPixel: number
   readonly initialViewState: OverviewViewState
+  readonly focusRequest: ViewerFocusRequest | null
   readonly overviewRenderCellLimit?: number
   readonly maxConcurrentTileRequests?: number
   readonly tileCacheMaxTiles?: number
@@ -388,6 +397,7 @@ function ViewerSurface({
   measurementResetKey,
   micrometersPerPixel,
   initialViewState,
+  focusRequest,
   overviewRenderCellLimit,
   maxConcurrentTileRequests,
   tileCacheMaxTiles,
@@ -436,7 +446,28 @@ function ViewerSurface({
     useState<BoundaryStyleViewport | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
   const mouseCoordinateFrameRef = useRef<number | null>(null)
+  const lastAppliedFocusRequestKeyRef = useRef<number | null>(null)
   const cellExtentBbox = useMemo(() => overviewCellsExtentBbox(cells), [cells])
+  useEffect(() => {
+    if (
+      focusRequest === null ||
+      lastAppliedFocusRequestKeyRef.current === focusRequest.key
+    ) {
+      return
+    }
+
+    lastAppliedFocusRequestKeyRef.current = focusRequest.key
+    setViewState((currentViewState) => {
+      const nextViewState: OverviewViewState = {
+        ...currentViewState,
+        target: [focusRequest.target[0], focusRequest.target[1], focusRequest.target[2]],
+      }
+
+      return equivalentViewState(currentViewState, nextViewState)
+        ? currentViewState
+        : nextViewState
+    })
+  }, [focusRequest])
   const viewportBbox = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
       return null
