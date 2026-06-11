@@ -31,7 +31,7 @@ type DatasetDiagnosticsPanelState =
       readonly error: { readonly title: string }
     }
 
-interface LoadingTaskSummary {
+export interface LoadingTaskSummary {
   readonly id: string
   readonly label: string
   readonly detail?: string

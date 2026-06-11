@@ -159,6 +159,24 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('renders loading tasks and viewport status in the same notification stack', () => {
+    render(
+      <ViewerCore
+        loadingTasks={[{ id: 'dataset', label: 'Loading dataset' }]}
+        boundaryStatus="loading"
+      />,
+    )
+
+    const loadingStatus = screen.getByRole('status', {
+      name: 'Active loading tasks',
+    })
+    const viewportStatus = screen.getByText('Loading cell boundaries…')
+    const stack = loadingStatus.closest('.viewport-notification-stack')
+
+    expect(stack).not.toBeNull()
+    expect(viewportStatus.closest('.viewport-notification-stack')).toBe(stack)
+  })
+
   it('omits transcript hover cell details when no cell id is present', () => {
     const transcript = transcriptDatum({
       id: 'tx-without-cell',

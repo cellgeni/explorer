@@ -868,6 +868,8 @@ describe('App', () => {
       queuedTaskList.querySelectorAll('li').length,
     )
     expect(loadingStatus.closest('.control-hud')).toBeNull()
+    expect(loadingStatus.closest('.viewport-notification-stack')).not.toBeNull()
+    expect(loadingStatus.closest('.viewer-region')).not.toBeNull()
     expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
       'aria-busy',
       'true',

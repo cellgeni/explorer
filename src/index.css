@@ -189,12 +189,8 @@ textarea:focus-visible {
 }
 
 .loading-indicator {
-  position: absolute;
-  z-index: 11;
-  top: max(12px, env(safe-area-inset-top));
-  left: max(12px, env(safe-area-inset-left));
   min-width: 0;
-  max-width: min(420px, calc(100vw - 36px));
+  width: 100%;
   padding: 8px 10px;
   border: 1px solid rgba(246, 242, 232, 0.18);
   border-radius: 6px;
@@ -2868,11 +2864,7 @@ h2 {
 }
 
 .viewport-message {
-  position: absolute;
-  z-index: 3;
-  left: 12px;
-  bottom: 12px;
-  max-width: min(420px, calc(100% - 36px));
+  width: 100%;
   padding: 8px 10px;
   margin: 0;
   border: 1px solid rgba(246, 242, 232, 0.18);
@@ -2882,10 +2874,22 @@ h2 {
   font-size: 0.78rem;
   font-weight: 700;
   overflow-wrap: anywhere;
+  pointer-events: none;
 }
 
 .viewport-message-error {
   border-color: rgba(215, 63, 124, 0.55);
+}
+
+.viewport-notification-stack {
+  position: absolute;
+  z-index: 5;
+  left: 12px;
+  bottom: 12px;
+  display: grid;
+  width: min(420px, calc(100% - 36px));
+  gap: 6px;
+  pointer-events: none;
 }
 
 @media (max-width: 860px) {
@@ -2924,10 +2928,10 @@ h2 {
     text-align: center;
   }
 
-  .loading-indicator {
-    top: max(8px, env(safe-area-inset-top));
+  .viewport-notification-stack {
     left: max(8px, env(safe-area-inset-left));
-    max-width: min(420px, calc(100vw - 16px));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: min(420px, calc(100% - 16px));
   }
 
   .viewer-region {

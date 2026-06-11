@@ -2,6 +2,7 @@ import { DeckGL } from '@deck.gl/react'
 import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
+import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
 import {
   createCellBoundaryLayerGeometry,
   createCellBoundaryLayerStyle,
@@ -65,6 +66,7 @@ export interface ViewerCoreProps {
   readonly transcriptPointSize?: number
   readonly observationColorMode?: ObservationColorMode
   readonly annotationStyleColors?: readonly AnnotationColorStyle[]
+  readonly loadingTasks?: readonly LoadingTaskSummary[]
   readonly coordinateUnit?: ViewerCoordinateUnit
   readonly measurementEnabled?: boolean
   readonly measurementUnit?: ViewerCoordinateUnit
@@ -163,6 +165,7 @@ export function ViewerCore({
   transcriptPointSize = 2,
   observationColorMode = 'transcript-count',
   annotationStyleColors = EMPTY_ANNOTATION_STYLE_COLORS,
+  loadingTasks = [],
   coordinateUnit = 'um',
   measurementEnabled = false,
   measurementUnit = 'um',
@@ -221,6 +224,7 @@ export function ViewerCore({
       transcriptPointSize={transcriptPointSize}
       observationColorMode={observationColorMode}
       annotationStyleColors={annotationStyleColors}
+      loadingTasks={loadingTasks}
       coordinateUnit={coordinateUnit}
       measurementEnabled={measurementEnabled}
       measurementUnit={measurementUnit}
@@ -273,6 +277,7 @@ interface ViewerSurfaceProps {
   readonly transcriptPointSize: number
   readonly observationColorMode: ObservationColorMode
   readonly annotationStyleColors: readonly AnnotationColorStyle[]
+  readonly loadingTasks: readonly LoadingTaskSummary[]
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
   readonly measurementUnit: ViewerCoordinateUnit
@@ -391,6 +396,7 @@ function ViewerSurface({
   transcriptPointSize,
   observationColorMode,
   annotationStyleColors,
+  loadingTasks,
   coordinateUnit,
   measurementEnabled,
   measurementUnit,
@@ -1312,13 +1318,18 @@ function ViewerSurface({
         </p>
       )}
       {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
-      {viewportMessage === null ? null : (
-        <p
-          className={`viewport-message${viewportMessage.kind === 'error' ? ' viewport-message-error' : ''}`}
-          aria-live={viewportMessage.kind === 'error' ? 'assertive' : 'polite'}
-        >
-          {viewportMessage.text}
-        </p>
+      {loadingTasks.length === 0 && viewportMessage === null ? null : (
+        <div className="viewport-notification-stack">
+          <LoadingIndicator tasks={loadingTasks} />
+          {viewportMessage === null ? null : (
+            <p
+              className={`viewport-message${viewportMessage.kind === 'error' ? ' viewport-message-error' : ''}`}
+              aria-live={viewportMessage.kind === 'error' ? 'assertive' : 'polite'}
+            >
+              {viewportMessage.text}
+            </p>
+          )}
+        </div>
       )}
     </div>
   )
