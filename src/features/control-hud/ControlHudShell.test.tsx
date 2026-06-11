@@ -12,7 +12,6 @@ describe('ControlHudShell', () => {
         collapsed={false}
         activeTab="dataset"
         loadingTabIds={new Set(['genes'])}
-        loadingTasks={[{ id: 'gene-panel', tabId: 'genes', label: 'Loading gene panel' }]}
         onCollapsedChange={onCollapsedChange}
         onActiveTabChange={onActiveTabChange}
       >
@@ -20,9 +19,6 @@ describe('ControlHudShell', () => {
       </ControlHudShell>,
     )
 
-    expect(
-      screen.getByRole('status', { name: 'Active loading tasks' }),
-    ).toHaveTextContent('Loading gene panel')
     expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
       'aria-selected',
       'true',

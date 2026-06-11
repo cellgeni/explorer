@@ -4,6 +4,7 @@ import {
   type ViewerCoordinateUnit,
   type ViewerTranscriptHoverDetail,
 } from './components/ViewerCore'
+import { LoadingIndicator } from './components/AppStatusPanels'
 import { AppControlHud } from './features/app-shell/AppControlHud'
 import { AppDatasetHudPanel } from './features/app-shell/AppDatasetHudPanel'
 import { AppGeneHudPanel } from './features/app-shell/AppGeneHudPanel'
@@ -1208,12 +1209,12 @@ export function App({
       <a className="skip-link" href="#viewer-heading">
         Skip To Spatial View
       </a>
+      <LoadingIndicator tasks={loadingTasks} />
       <AppControlHud
         activeControlHudTab={activeControlHudTab}
         appendDebugEvent={appendDebugEvent}
         isControlHudCollapsed={isControlHudCollapsed}
         loadingTabIds={loadingTabIds}
-        loadingTasks={loadingTasks}
         setActiveControlHudTab={setActiveControlHudTab}
         setIsControlHudCollapsed={setIsControlHudCollapsed}
       >

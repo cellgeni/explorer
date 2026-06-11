@@ -1,13 +1,10 @@
 import type { ReactNode } from 'react'
-import { LoadingIndicator } from '../../components/AppStatusPanels'
 import { CONTROL_HUD_TABS, type ControlHudTab } from '../app-shell/appShellModel'
-import type { LoadingTask } from '../app-shell/appRuntimeModel'
 
 interface ControlHudShellProps {
   readonly collapsed: boolean
   readonly activeTab: ControlHudTab
   readonly loadingTabIds: ReadonlySet<ControlHudTab>
-  readonly loadingTasks: readonly LoadingTask[]
   readonly children: ReactNode
   readonly onCollapsedChange: (collapsed: boolean) => void
   readonly onActiveTabChange: (tabId: ControlHudTab, tabLabel: string) => void
@@ -17,7 +14,6 @@ export function ControlHudShell({
   collapsed,
   activeTab,
   loadingTabIds,
-  loadingTasks,
   children,
   onCollapsedChange,
   onActiveTabChange,
@@ -28,7 +24,6 @@ export function ControlHudShell({
       aria-label="Dataset controls"
     >
       <div className="hud-top-bar">
-        <LoadingIndicator tasks={loadingTasks} />
         <button
           type="button"
           className="hud-toggle"

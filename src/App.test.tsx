@@ -860,6 +860,14 @@ describe('App', () => {
     expect(within(loadingStatus).getByText('Loading dataset')).toBeInTheDocument()
     expect(within(loadingStatus).getByText('Loading gene panel')).toBeInTheDocument()
     expect(within(loadingStatus).getByText('Loading annotation sets')).toBeInTheDocument()
+    const queuedTaskList = within(loadingStatus).getByRole('list', {
+      name: 'Additional loading tasks',
+    })
+
+    expect(queuedTaskList.querySelectorAll('.loading-task-bullet')).toHaveLength(
+      queuedTaskList.querySelectorAll('li').length,
+    )
+    expect(loadingStatus.closest('.control-hud')).toBeNull()
     expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
       'aria-busy',
       'true',

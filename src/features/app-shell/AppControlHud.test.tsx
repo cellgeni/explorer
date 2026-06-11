@@ -12,7 +12,6 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     children: <div data-testid="hud-child">Dataset controls</div>,
     isControlHudCollapsed: false,
     loadingTabIds: new Set(),
-    loadingTasks: [],
     setActiveControlHudTab: vi.fn(),
     setIsControlHudCollapsed: vi.fn(),
     ...overrides,

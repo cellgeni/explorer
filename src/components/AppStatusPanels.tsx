@@ -181,18 +181,24 @@ export function LoadingIndicator({
     >
       <div className="loading-indicator-primary">
         <span className="loading-spinner" aria-hidden="true" />
-        <span>{primaryTask.label}</span>
+        <span className="loading-task-label">{primaryTask.label}</span>
         {primaryTask.detail === undefined ? null : <small>{primaryTask.detail}</small>}
       </div>
       {visibleSecondaryTasks.length === 0 ? null : (
         <ol aria-label="Additional loading tasks">
           {visibleSecondaryTasks.map((task) => (
             <li key={task.id}>
-              <span>{task.label}</span>
+              <span className="loading-task-bullet" aria-hidden="true" />
+              <span className="loading-task-label">{task.label}</span>
               {task.detail === undefined ? null : <small>{task.detail}</small>}
             </li>
           ))}
-          {hiddenTaskCount > 0 ? <li>+{hiddenTaskCount} more</li> : null}
+          {hiddenTaskCount > 0 ? (
+            <li>
+              <span className="loading-task-bullet" aria-hidden="true" />
+              <span className="loading-task-label">+{hiddenTaskCount} more</span>
+            </li>
+          ) : null}
         </ol>
       )}
     </section>
