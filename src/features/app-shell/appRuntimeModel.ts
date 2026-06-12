@@ -216,7 +216,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'roi-gene-warmup',
       tabId: 'roi',
-      label: 'Preparing ROI genes',
+      label: 'Preparing cell feature matrix',
     })
   }
 

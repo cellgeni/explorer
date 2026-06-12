@@ -3070,7 +3070,9 @@ ${cd16Negative},CD16- NK cells`,
       const loadingStatus = await screen.findByRole('status', {
         name: 'Active loading tasks',
       })
-      expect(within(loadingStatus).getByText('Preparing ROI genes')).toBeInTheDocument()
+      expect(
+        within(loadingStatus).getByText('Preparing cell feature matrix'),
+      ).toBeInTheDocument()
     } finally {
       rectSpy.mockRestore()
       contextSpy.mockRestore()
