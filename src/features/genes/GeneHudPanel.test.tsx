@@ -17,6 +17,7 @@ describe('GeneHudPanel', () => {
       onGeneExpressionColorScaleChange: vi.fn(),
       onGeneExpressionDetailModeChange: vi.fn(),
       onObservationColorModeChange: vi.fn(),
+      onCellMetadataTrackChange: vi.fn(),
     }
     const savedGeneSet = {
       id: 'set-1',
@@ -35,6 +36,7 @@ describe('GeneHudPanel', () => {
         geneScaleInputId="gene-scale"
         geneExpressionDetailInputId="gene-detail"
         observationModeInputId="cell-color"
+        cellMetadataTrackInputId="metadata-track"
         analysisHeaderCopy="2 genes"
         geneExpressionCopy="Expression ready"
         genePanelState={{
@@ -53,8 +55,25 @@ describe('GeneHudPanel', () => {
         geneExpressionColorScale="plasma"
         geneExpressionScaleMax={12}
         geneExpressionDetailMode="auto"
-        observationColorMode="transcript-count"
+        observationColorMode="metadata"
         hasAnnotationColors
+        cellMetadataTracks={[
+          {
+            id: 'metadata:confidence',
+            label: 'confidence',
+            values: [],
+            min: 0,
+            max: 1,
+          },
+          {
+            id: 'metadata:pseudotime',
+            label: 'pseudotime',
+            values: [],
+            min: 0.1,
+            max: 0.9,
+          },
+        ]}
+        selectedCellMetadataTrackId="metadata:confidence"
         {...handlers}
       />,
     )
@@ -84,6 +103,9 @@ describe('GeneHudPanel', () => {
     fireEvent.change(screen.getByLabelText('Cell color'), {
       target: { value: 'annotations' },
     })
+    fireEvent.change(screen.getByLabelText('Metadata track'), {
+      target: { value: 'metadata:pseudotime' },
+    })
 
     expect(handlers.onGeneSearchChange).toHaveBeenCalledWith('gad')
     expect(handlers.onToggleGene).toHaveBeenCalledWith('Actb')
@@ -98,5 +120,6 @@ describe('GeneHudPanel', () => {
     expect(handlers.onGeneExpressionColorScaleChange).toHaveBeenCalledWith('viridis')
     expect(handlers.onGeneExpressionDetailModeChange).toHaveBeenCalledWith('all-cells')
     expect(handlers.onObservationColorModeChange).toHaveBeenCalledWith('annotations')
+    expect(handlers.onCellMetadataTrackChange).toHaveBeenCalledWith('metadata:pseudotime')
   })
 })

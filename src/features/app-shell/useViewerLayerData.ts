@@ -6,6 +6,7 @@ import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { SpatialElement } from '../../datasets/spatialDataset'
 import type {
   AnnotationColorStyle,
+  CellMetadataColorStyle,
   ObservationColorMode,
 } from '../../rendering/cellStyling'
 import { styleOverviewCellsByObservation } from '../../rendering/cellStyling'
@@ -49,6 +50,7 @@ const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 interface UseViewerLayerDataOptions {
   readonly annotationState: AnnotationState<StructuredLoadError>
   readonly annotationColors: Readonly<Record<string, string>>
+  readonly cellMetadataTrack: CellMetadataColorStyle | null
   readonly observationColorMode: ObservationColorMode
   readonly overviewCells: readonly OverviewCellDatum[]
   readonly currentViewportBbox: BBox | null
@@ -69,6 +71,7 @@ interface UseViewerLayerDataOptions {
 export function useViewerLayerData({
   annotationState,
   annotationColors,
+  cellMetadataTrack,
   observationColorMode,
   overviewCells,
   currentViewportBbox,
@@ -101,8 +104,14 @@ export function useViewerLayerData({
     observationColorMode === 'annotations'
       ? annotationStyleColors
       : EMPTY_ANNOTATION_STYLE_COLORS
+  const activeCellMetadataTrack =
+    observationColorMode === 'metadata' ? cellMetadataTrack : null
   const viewerObservationColorMode: ObservationColorMode =
-    observationColorMode === 'annotations' ? 'annotations' : 'transcript-count'
+    observationColorMode === 'annotations' && activeAnnotationStyleColors.length > 0
+      ? 'annotations'
+      : observationColorMode === 'metadata' && activeCellMetadataTrack !== null
+        ? 'metadata'
+        : 'transcript-count'
   const styledOverviewCells = useMemo(() => {
     if (observationColorMode !== 'cell-area') {
       return overviewCells
@@ -239,6 +248,7 @@ export function useViewerLayerData({
 
   return {
     activeAnnotationStyleColors,
+    activeCellMetadataTrack,
     annotationStyleColors,
     boundaryLayerData,
     geneExpressionLayerDataDurationMs,

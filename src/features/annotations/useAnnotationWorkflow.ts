@@ -1,5 +1,9 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
-import { parseCustomAnnotations } from '../../data/customAnnotations'
+import {
+  customCellMetadataFilePrefix,
+  parseCustomAnnotationImport,
+  type ContinuousCellMetadataTrack,
+} from '../../data/customAnnotations'
 import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import {
@@ -39,6 +43,7 @@ interface UseAnnotationWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly datasetAbortRef: MutableRef<AbortController | null>
   readonly datasetUrl: string
+  readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly loadAnnotations: AnnotationLoader
   readonly loadRequestIdRef: MutableRef<number>
   readonly loadState: DatasetLoadState<StructuredLoadError>
@@ -47,12 +52,16 @@ interface UseAnnotationWorkflowOptions {
   readonly roiState: RoiState<StructuredLoadError>
   readonly selectedAnnotationGroupId: string
   readonly setAnnotationColors: Dispatch<SetStateAction<Readonly<Record<string, string>>>>
+  readonly setCellMetadataTracks: Dispatch<
+    SetStateAction<readonly ContinuousCellMetadataTrack[]>
+  >
   readonly setAnnotationState: Dispatch<
     SetStateAction<AnnotationState<StructuredLoadError>>
   >
   readonly setObservationColorMode: Dispatch<SetStateAction<ObservationColorMode>>
   readonly setRoiName: Dispatch<SetStateAction<string>>
   readonly setSelectedAnnotationGroupId: Dispatch<SetStateAction<string>>
+  readonly setSelectedCellMetadataTrackId: Dispatch<SetStateAction<string | null>>
 }
 
 interface UseAnnotationWorkflowResult {
@@ -62,6 +71,7 @@ interface UseAnnotationWorkflowResult {
   readonly handleImportAnnotations: (file: File | null) => Promise<void>
   readonly handleImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly handleLoadAnnotations: () => void
+  readonly handleRemoveCellMetadataTrack: (trackId: string) => void
   readonly handleRemoveAnnotation: (annotationId: string) => void
   readonly handleSaveRoiAnnotation: () => void
 }
@@ -74,6 +84,7 @@ interface AnnotationImportUrl {
 export function useAnnotationWorkflow({
   annotationState,
   appendDebugEvent,
+  cellMetadataTracks,
   datasetAbortRef,
   datasetUrl,
   loadAnnotations,
@@ -84,10 +95,12 @@ export function useAnnotationWorkflow({
   roiState,
   selectedAnnotationGroupId,
   setAnnotationColors,
+  setCellMetadataTracks,
   setAnnotationState,
   setObservationColorMode,
   setRoiName,
   setSelectedAnnotationGroupId,
+  setSelectedCellMetadataTrackId,
 }: UseAnnotationWorkflowOptions): UseAnnotationWorkflowResult {
   const handleLoadAnnotations = useCallback(() => {
     if (loadState.status !== 'ready' || annotationState.status === 'loading') {
@@ -162,8 +175,15 @@ export function useAnnotationWorkflow({
 
   const importCustomAnnotationText = useCallback(
     (text: string, sourceName: string, sourceLabel: string) => {
-      const importedAnnotations = parseCustomAnnotations(text, sourceName)
+      const { annotations: importedAnnotations, metadataTracks: importedMetadataTracks } =
+        parseCustomAnnotationImport(text, sourceName)
       const importedPrefix = customAnnotationFilePrefix(sourceName)
+      const importedMetadataPrefix = customCellMetadataFilePrefix(sourceName)
+      const nextCellMetadataTracks = mergeImportedCellMetadataTracks(
+        cellMetadataTracks,
+        importedMetadataTracks,
+        importedMetadataPrefix,
+      )
 
       setAnnotationState((current) => ({
         status: 'ready',
@@ -180,20 +200,42 @@ export function useAnnotationWorkflow({
           removeAnnotationColorsByPrefix(current, importedPrefix),
         ),
       )
+      setCellMetadataTracks(nextCellMetadataTracks)
+      setSelectedCellMetadataTrackId((current) => {
+        if (nextCellMetadataTracks.length === 0) {
+          return null
+        }
+
+        if (
+          current !== null &&
+          nextCellMetadataTracks.some((track) => track.id === current)
+        ) {
+          return current
+        }
+
+        return importedMetadataTracks[0]?.id ?? nextCellMetadataTracks[0]?.id ?? null
+      })
       if (importedAnnotations.length > 0) {
         setObservationColorMode('annotations')
+      } else if (importedMetadataTracks.length > 0) {
+        setObservationColorMode('metadata')
       }
       appendDebugEvent(
-        `${sourceLabel}: ${importedAnnotations.length.toLocaleString()} labels`,
+        importedMetadataTracks.length === 0
+          ? `${sourceLabel}: ${importedAnnotations.length.toLocaleString()} labels`
+          : `${sourceLabel}: ${importedAnnotations.length.toLocaleString()} labels, ${importedMetadataTracks.length.toLocaleString()} metadata tracks`,
       )
     },
     [
       appendDebugEvent,
+      cellMetadataTracks,
       datasetUrl,
       loadState,
       setAnnotationColors,
       setAnnotationState,
+      setCellMetadataTracks,
       setObservationColorMode,
+      setSelectedCellMetadataTrackId,
     ],
   )
 
@@ -313,7 +355,9 @@ export function useAnnotationWorkflow({
       setObservationColorMode((current) =>
         hasReadyAnnotationsAfterRemove(annotationState, annotationId)
           ? current
-          : 'transcript-count',
+          : cellMetadataTracks.length > 0
+            ? 'metadata'
+            : 'transcript-count',
       )
 
       appendDebugEvent(
@@ -323,18 +367,69 @@ export function useAnnotationWorkflow({
     [
       annotationState,
       appendDebugEvent,
+      cellMetadataTracks,
       setAnnotationColors,
       setAnnotationState,
       setObservationColorMode,
     ],
   )
 
+  const handleRemoveCellMetadataTrack = useCallback(
+    (trackId: string) => {
+      const removedTrack = cellMetadataTracks.find((track) => track.id === trackId)
+      const nextCellMetadataTracks = cellMetadataTracks.filter(
+        (track) => track.id !== trackId,
+      )
+
+      setCellMetadataTracks(nextCellMetadataTracks)
+      setSelectedCellMetadataTrackId((current) => {
+        if (nextCellMetadataTracks.length === 0) {
+          return null
+        }
+
+        if (
+          current !== null &&
+          current !== trackId &&
+          nextCellMetadataTracks.some((track) => track.id === current)
+        ) {
+          return current
+        }
+
+        return nextCellMetadataTracks[0]?.id ?? null
+      })
+      setObservationColorMode((current) =>
+        current === 'metadata' && nextCellMetadataTracks.length === 0
+          ? 'transcript-count'
+          : current,
+      )
+      appendDebugEvent(
+        `Removed metadata track ${removedTrack?.label ?? shortIdentifier(trackId)}`,
+      )
+    },
+    [
+      appendDebugEvent,
+      cellMetadataTracks,
+      setCellMetadataTracks,
+      setObservationColorMode,
+      setSelectedCellMetadataTrackId,
+    ],
+  )
+
   const handleClearAnnotations = useCallback(() => {
     setAnnotationState({ status: 'idle' })
     setAnnotationColors({})
+    setCellMetadataTracks([])
+    setSelectedCellMetadataTrackId(null)
     setObservationColorMode('transcript-count')
     appendDebugEvent('Cleared annotations')
-  }, [appendDebugEvent, setAnnotationColors, setAnnotationState, setObservationColorMode])
+  }, [
+    appendDebugEvent,
+    setAnnotationColors,
+    setAnnotationState,
+    setCellMetadataTracks,
+    setObservationColorMode,
+    setSelectedCellMetadataTrackId,
+  ])
 
   const handleSaveRoiAnnotation = useCallback(() => {
     if (loadState.status !== 'ready' || roiState.status !== 'ready') {
@@ -383,9 +478,21 @@ export function useAnnotationWorkflow({
     handleImportAnnotations,
     handleImportAnnotationUrl,
     handleLoadAnnotations,
+    handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
   }
+}
+
+function mergeImportedCellMetadataTracks(
+  currentTracks: readonly ContinuousCellMetadataTrack[],
+  importedTracks: readonly ContinuousCellMetadataTrack[],
+  importedPrefix: string,
+): readonly ContinuousCellMetadataTrack[] {
+  return [
+    ...currentTracks.filter((track) => !track.id.startsWith(importedPrefix)),
+    ...importedTracks,
+  ]
 }
 
 function annotationImportUrl(rawUrl: string): AnnotationImportUrl {

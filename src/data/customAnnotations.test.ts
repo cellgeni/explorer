@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { intToCellId } from './cellid'
-import { parseCustomAnnotations } from './customAnnotations'
+import { parseCustomAnnotationImport, parseCustomAnnotations } from './customAnnotations'
 
 describe('custom annotations', () => {
   it('groups CSV rows by label', () => {
@@ -95,6 +95,69 @@ ${cellC},T cell,0,`,
         cellIds: [cellA, cellB],
       },
     ])
+  })
+
+  it('imports continuous wide CSV columns as metadata tracks', () => {
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(2, 1)
+    const cellC = intToCellId(3, 1)
+
+    const imported = parseCustomAnnotationImport(
+      `cell_id,cell_type,leiden,confidence,pseudotime
+${cellA},T cell,0,0.97,0.1
+${cellB},B cell,1,0.83,0.5
+${cellC},T cell,0,,0.9`,
+      'metadata.csv',
+    )
+
+    expect(imported.annotations).toEqual([
+      {
+        id: 'custom:metadata-csv:cell-type:t-cell',
+        label: 'cell_type: T cell',
+        cellIds: [cellA, cellC],
+      },
+      {
+        id: 'custom:metadata-csv:cell-type:b-cell',
+        label: 'cell_type: B cell',
+        cellIds: [cellB],
+      },
+      {
+        id: 'custom:metadata-csv:leiden:0',
+        label: 'leiden: 0',
+        cellIds: [cellA, cellC],
+      },
+      {
+        id: 'custom:metadata-csv:leiden:1',
+        label: 'leiden: 1',
+        cellIds: [cellB],
+      },
+    ])
+    expect(imported.metadataTracks).toEqual([
+      {
+        id: 'metadata:metadata-csv:confidence',
+        label: 'confidence',
+        values: [
+          { cellId: cellA, value: 0.97 },
+          { cellId: cellB, value: 0.83 },
+        ],
+        min: 0.83,
+        max: 0.97,
+      },
+      {
+        id: 'metadata:metadata-csv:pseudotime',
+        label: 'pseudotime',
+        values: [
+          { cellId: cellA, value: 0.1 },
+          { cellId: cellB, value: 0.5 },
+          { cellId: cellC, value: 0.9 },
+        ],
+        min: 0.1,
+        max: 0.9,
+      },
+    ])
+    expect(
+      parseCustomAnnotations(`cell_id,confidence\n${cellA},0.5`, 'score.csv'),
+    ).toEqual([])
   })
 
   it('reads JSON label-to-cells objects', () => {

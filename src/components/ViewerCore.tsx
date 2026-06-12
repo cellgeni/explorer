@@ -38,7 +38,11 @@ import type {
 } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
 import { DEFAULT_CELL_FILL_OPACITY } from '../rendering/layerOpacity'
-import type { AnnotationColorStyle, ObservationColorMode } from '../rendering/cellStyling'
+import type {
+  AnnotationColorStyle,
+  CellMetadataColorStyle,
+  ObservationColorMode,
+} from '../rendering/cellStyling'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
 const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
@@ -71,6 +75,7 @@ export interface ViewerCoreProps {
   readonly transcriptPointSize?: number
   readonly observationColorMode?: ObservationColorMode
   readonly annotationStyleColors?: readonly AnnotationColorStyle[]
+  readonly cellMetadataTrack?: CellMetadataColorStyle | null
   readonly loadingTasks?: readonly LoadingTaskSummary[]
   readonly coordinateUnit?: ViewerCoordinateUnit
   readonly measurementEnabled?: boolean
@@ -171,6 +176,7 @@ export function ViewerCore({
   transcriptPointSize = 2,
   observationColorMode = 'transcript-count',
   annotationStyleColors = EMPTY_ANNOTATION_STYLE_COLORS,
+  cellMetadataTrack = null,
   loadingTasks = [],
   coordinateUnit = 'um',
   measurementEnabled = false,
@@ -231,6 +237,7 @@ export function ViewerCore({
       transcriptPointSize={transcriptPointSize}
       observationColorMode={observationColorMode}
       annotationStyleColors={annotationStyleColors}
+      cellMetadataTrack={cellMetadataTrack}
       loadingTasks={loadingTasks}
       coordinateUnit={coordinateUnit}
       measurementEnabled={measurementEnabled}
@@ -285,6 +292,7 @@ interface ViewerSurfaceProps {
   readonly transcriptPointSize: number
   readonly observationColorMode: ObservationColorMode
   readonly annotationStyleColors: readonly AnnotationColorStyle[]
+  readonly cellMetadataTrack: CellMetadataColorStyle | null
   readonly loadingTasks: readonly LoadingTaskSummary[]
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
@@ -405,6 +413,7 @@ function ViewerSurface({
   transcriptPointSize,
   observationColorMode,
   annotationStyleColors,
+  cellMetadataTrack,
   loadingTasks,
   coordinateUnit,
   measurementEnabled,
@@ -512,8 +521,9 @@ function ViewerSurface({
         renderSourceCells,
         observationColorMode,
         annotationStyleColors,
+        cellMetadataTrack,
       ),
-    [annotationStyleColors, observationColorMode, renderSourceCells],
+    [annotationStyleColors, cellMetadataTrack, observationColorMode, renderSourceCells],
   )
   const shouldUseExpressionPointBins = viewState.zoom < EXPRESSION_AGGREGATION_EXACT_ZOOM
   const geneExpressionPointStyleIndex = useMemo(
@@ -553,6 +563,7 @@ function ViewerSurface({
   }, [cells])
   const cellBoundaryFillEnabled =
     (observationColorMode === 'annotations' && annotationStyleColors.length > 0) ||
+    (observationColorMode === 'metadata' && cellMetadataTrack !== null) ||
     geneExpressionActive
   const boundaryLayerGeometry = useMemo(
     () =>
@@ -587,6 +598,7 @@ function ViewerSurface({
       boundaryCells,
       observationColorMode,
       annotationStyleColors,
+      cellMetadataTrack,
     )
 
     return styleCellsByGeneExpression(observationStyledCells, boundaryExpressionCells, {
@@ -597,6 +609,7 @@ function ViewerSurface({
     boundaryExpressionCells,
     boundaryLayerGeometry,
     cellById,
+    cellMetadataTrack,
     geneExpressionActive,
     observationColorMode,
   ])
@@ -2003,6 +2016,7 @@ function styleCellsForObservation(
   cells: readonly OverviewCellDatum[],
   observationColorMode: ObservationColorMode,
   annotationStyleColors: readonly AnnotationColorStyle[],
+  cellMetadataTrack: CellMetadataColorStyle | null,
 ): readonly OverviewCellDatum[] {
   if (observationColorMode === 'transcript-count') {
     return cells
@@ -2010,6 +2024,7 @@ function styleCellsForObservation(
 
   return styleOverviewCellsByObservation(cells, observationColorMode, {
     annotations: annotationStyleColors,
+    metadataTrack: cellMetadataTrack,
   })
 }
 

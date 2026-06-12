@@ -13,6 +13,7 @@ describe('AnnotationHudPanel', () => {
     const onImportAnnotationUrl = vi.fn(async () => true)
     const onAnnotationColorChange = vi.fn()
     const onRemoveAnnotation = vi.fn()
+    const onRemoveCellMetadataTrack = vi.fn()
 
     render(
       <AnnotationHudPanel
@@ -49,6 +50,18 @@ describe('AnnotationHudPanel', () => {
           groups: [],
         }}
         annotationColors={{ astro: '#123456' }}
+        cellMetadataTracks={[
+          {
+            id: 'metadata:confidence',
+            label: 'confidence',
+            values: [
+              { cellId: asCellId('aaaaaaaa-1'), value: 0.5 },
+              { cellId: asCellId('bbbbbbbb-2'), value: 0.7 },
+            ],
+            min: 0.5,
+            max: 0.7,
+          },
+        ]}
         onAnnotationGroupChange={onAnnotationGroupChange}
         onLoadAnnotations={onLoadAnnotations}
         onClearAnnotations={onClearAnnotations}
@@ -57,6 +70,7 @@ describe('AnnotationHudPanel', () => {
         onImportAnnotationUrl={onImportAnnotationUrl}
         onAnnotationColorChange={onAnnotationColorChange}
         onRemoveAnnotation={onRemoveAnnotation}
+        onRemoveCellMetadataTrack={onRemoveCellMetadataTrack}
       />,
     )
 
@@ -69,6 +83,7 @@ describe('AnnotationHudPanel', () => {
       target: { value: '#abcdef' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Remove Astrocytes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove confidence' }))
     fireEvent.change(screen.getByLabelText('Import File'), {
       target: {
         files: [new File(['cell_id,label\n'], 'labels.csv', { type: 'text/csv' })],
@@ -87,6 +102,7 @@ describe('AnnotationHudPanel', () => {
     expect(onClearAnnotations).toHaveBeenCalledTimes(1)
     expect(onAnnotationColorChange).toHaveBeenCalledWith('astro', '#abcdef')
     expect(onRemoveAnnotation).toHaveBeenCalledWith('astro')
+    expect(onRemoveCellMetadataTrack).toHaveBeenCalledWith('metadata:confidence')
     expect(onImportAnnotations).toHaveBeenCalledWith(expect.any(File))
     await waitFor(() => {
       expect(onImportAnnotationUrl).toHaveBeenCalledWith(
@@ -100,6 +116,9 @@ describe('AnnotationHudPanel', () => {
     expect(screen.getByLabelText('Loaded annotations cell counts')).toHaveTextContent(
       'Astrocytes',
     )
+    expect(
+      screen.getByRole('list', { name: 'Loaded metadata tracks' }),
+    ).toHaveTextContent('confidence')
   })
 
   it('renders annotation size plots grouped by annotation set', () => {
@@ -145,6 +164,7 @@ describe('AnnotationHudPanel', () => {
           groups: [],
         }}
         annotationColors={{ 'analysis:0:1': '#abcdef' }}
+        cellMetadataTracks={[]}
         onAnnotationGroupChange={vi.fn()}
         onLoadAnnotations={vi.fn()}
         onClearAnnotations={vi.fn()}
@@ -153,6 +173,7 @@ describe('AnnotationHudPanel', () => {
         onImportAnnotationUrl={vi.fn(async () => true)}
         onAnnotationColorChange={vi.fn()}
         onRemoveAnnotation={vi.fn()}
+        onRemoveCellMetadataTrack={vi.fn()}
       />,
     )
 

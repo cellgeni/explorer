@@ -7,6 +7,7 @@ import {
   type SetStateAction,
 } from 'react'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
+import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type {
@@ -35,6 +36,7 @@ type AppGeneControlIds = Pick<
   | 'geneScaleInputId'
   | 'geneExpressionDetailInputId'
   | 'observationModeInputId'
+  | 'cellMetadataTrackInputId'
 >
 
 export interface AppGeneHudPanelProps {
@@ -53,6 +55,8 @@ export interface AppGeneHudPanelProps {
   readonly genePanelState: GenePanelState<StructuredLoadError>
   readonly geneOptions: readonly string[]
   readonly hasAnnotationColors: boolean
+  readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
+  readonly selectedCellMetadataTrackId: string | null
   readonly observationColorMode: ObservationColorMode
   readonly rememberGeneExpressionScaleMax: (
     key: string,
@@ -68,6 +72,7 @@ export interface AppGeneHudPanelProps {
   >
   readonly setGeneExpressionScoreMode: Dispatch<SetStateAction<GeneExpressionScoreMode>>
   readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
+  readonly setSelectedCellMetadataTrackId: Dispatch<SetStateAction<string | null>>
   readonly setObservationColorMode: Dispatch<SetStateAction<ObservationColorMode>>
   readonly setSelectedGenes: Dispatch<SetStateAction<readonly string[]>>
   readonly toggleGene: (gene: string) => void
@@ -90,6 +95,8 @@ export function AppGeneHudPanel({
   genePanelState,
   geneOptions,
   hasAnnotationColors,
+  cellMetadataTracks,
+  selectedCellMetadataTrackId,
   observationColorMode,
   rememberGeneExpressionScaleMax,
   resetGeneExpressionSelectionState,
@@ -99,6 +106,7 @@ export function AppGeneHudPanel({
   setGeneExpressionScaleDomain,
   setGeneExpressionScoreMode,
   setManualTranscriptExactRequestKey,
+  setSelectedCellMetadataTrackId,
   setObservationColorMode,
   setSelectedGenes,
   toggleGene,
@@ -178,6 +186,7 @@ export function AppGeneHudPanel({
       geneScaleInputId={controlIds.geneScaleInputId}
       geneExpressionDetailInputId={controlIds.geneExpressionDetailInputId}
       observationModeInputId={controlIds.observationModeInputId}
+      cellMetadataTrackInputId={controlIds.cellMetadataTrackInputId}
       analysisHeaderCopy={analysisHeaderCopy}
       geneExpressionCopy={geneExpressionCopy}
       genePanelState={genePanelState}
@@ -194,6 +203,8 @@ export function AppGeneHudPanel({
       geneExpressionDetailMode={geneExpressionDetailMode}
       observationColorMode={observationColorMode}
       hasAnnotationColors={hasAnnotationColors}
+      cellMetadataTracks={cellMetadataTracks}
+      selectedCellMetadataTrackId={selectedCellMetadataTrackId}
       onGeneSearchChange={setGeneSearch}
       onToggleGene={toggleGene}
       onGeneSetSymbolsChange={setGeneSetSymbols}
@@ -206,6 +217,7 @@ export function AppGeneHudPanel({
       onGeneExpressionColorScaleChange={handleGeneExpressionColorScaleChange}
       onGeneExpressionDetailModeChange={handleGeneExpressionDetailModeChange}
       onObservationColorModeChange={handleObservationColorModeChange}
+      onCellMetadataTrackChange={setSelectedCellMetadataTrackId}
     />
   )
 }

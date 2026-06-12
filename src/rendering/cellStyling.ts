@@ -2,7 +2,11 @@ import type { Color } from '@deck.gl/core'
 import type { CellId } from '../data/cellid'
 import type { OverviewCellDatum } from './deckLayers'
 
-export type ObservationColorMode = 'transcript-count' | 'cell-area' | 'annotations'
+export type ObservationColorMode =
+  | 'transcript-count'
+  | 'cell-area'
+  | 'annotations'
+  | 'metadata'
 
 export interface AnnotationColorStyle {
   readonly id: string
@@ -10,8 +14,19 @@ export interface AnnotationColorStyle {
   readonly color: string
 }
 
+export interface CellMetadataColorStyle {
+  readonly id: string
+  readonly values: readonly {
+    readonly cellId: CellId
+    readonly value: number
+  }[]
+  readonly min: number
+  readonly max: number
+}
+
 export interface ObservationStyleOptions {
   readonly annotations?: readonly AnnotationColorStyle[]
+  readonly metadataTrack?: CellMetadataColorStyle | null
 }
 
 export function styleOverviewCellsByObservation(
@@ -25,6 +40,10 @@ export function styleOverviewCellsByObservation(
 
   if (mode === 'annotations') {
     return styleOverviewCellsByAnnotations(cells, options.annotations ?? [])
+  }
+
+  if (mode === 'metadata') {
+    return styleOverviewCellsByMetadata(cells, options.metadataTrack ?? null)
   }
 
   let maxValue = 1
@@ -83,6 +102,33 @@ function styleOverviewCellsByAnnotations(
   }))
 }
 
+function styleOverviewCellsByMetadata(
+  cells: readonly OverviewCellDatum[],
+  metadataTrack: CellMetadataColorStyle | null,
+): readonly OverviewCellDatum[] {
+  if (metadataTrack === null || metadataTrack.values.length === 0) {
+    return cells
+  }
+
+  const valueByCellId = new Map<string, number>()
+
+  for (const value of metadataTrack.values) {
+    valueByCellId.set(value.cellId, value.value)
+  }
+
+  return cells.map((cell) => {
+    const value = valueByCellId.get(cell.id)
+
+    return {
+      ...cell,
+      fillColor:
+        value === undefined
+          ? [72, 68, 58, 44]
+          : metadataColor(value, metadataTrack.min, metadataTrack.max),
+    }
+  })
+}
+
 function readObservationValue(
   cell: OverviewCellDatum,
   mode: ObservationColorMode,
@@ -115,6 +161,30 @@ function observationColor(
     Math.round(82 + intensity * 118),
     Math.round(105 - intensity * 30),
     145 + Math.round(intensity * 95),
+  ]
+}
+
+function metadataColor(value: number, min: number, max: number): Color {
+  const intensity =
+    max <= min ? 0.5 : Math.min(1, Math.max(0, (value - min) / (max - min)))
+  const low: Color = [68, 1, 84, 160]
+  const mid: Color = [33, 145, 140, 220]
+  const high: Color = [253, 231, 37, 245]
+
+  return intensity <= 0.5
+    ? interpolateColor(low, mid, intensity * 2)
+    : interpolateColor(mid, high, (intensity - 0.5) * 2)
+}
+
+function interpolateColor(start: Color, end: Color, fraction: number): Color {
+  const startAlpha = start[3] ?? 255
+  const endAlpha = end[3] ?? 255
+
+  return [
+    Math.round(start[0] + (end[0] - start[0]) * fraction),
+    Math.round(start[1] + (end[1] - start[1]) * fraction),
+    Math.round(start[2] + (end[2] - start[2]) * fraction),
+    Math.round(startAlpha + (endAlpha - startAlpha) * fraction),
   ]
 }
 

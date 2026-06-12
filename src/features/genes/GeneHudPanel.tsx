@@ -1,4 +1,5 @@
 import type { ObservationColorMode } from '../../rendering/cellStyling'
+import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import {
   GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
   GENE_EXPRESSION_SCORE_MODE_OPTIONS,
@@ -28,6 +29,7 @@ interface GeneHudPanelProps {
   readonly geneScaleInputId: string
   readonly geneExpressionDetailInputId: string
   readonly observationModeInputId: string
+  readonly cellMetadataTrackInputId: string
   readonly analysisHeaderCopy: string
   readonly geneExpressionCopy: string
   readonly genePanelState: GenePanelState
@@ -44,6 +46,8 @@ interface GeneHudPanelProps {
   readonly geneExpressionDetailMode: GeneExpressionDetailMode
   readonly observationColorMode: ObservationColorMode
   readonly hasAnnotationColors: boolean
+  readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
+  readonly selectedCellMetadataTrackId: string | null
   readonly onGeneSearchChange: (search: string) => void
   readonly onToggleGene: (gene: string) => void
   readonly onGeneSetSymbolsChange: (symbols: string) => void
@@ -56,6 +60,7 @@ interface GeneHudPanelProps {
   readonly onGeneExpressionColorScaleChange: (scale: GeneExpressionColorScale) => void
   readonly onGeneExpressionDetailModeChange: (mode: GeneExpressionDetailMode) => void
   readonly onObservationColorModeChange: (mode: ObservationColorMode) => void
+  readonly onCellMetadataTrackChange: (trackId: string) => void
 }
 
 export function GeneHudPanel({
@@ -67,6 +72,7 @@ export function GeneHudPanel({
   geneScaleInputId,
   geneExpressionDetailInputId,
   observationModeInputId,
+  cellMetadataTrackInputId,
   analysisHeaderCopy,
   geneExpressionCopy,
   genePanelState,
@@ -83,6 +89,8 @@ export function GeneHudPanel({
   geneExpressionDetailMode,
   observationColorMode,
   hasAnnotationColors,
+  cellMetadataTracks,
+  selectedCellMetadataTrackId,
   onGeneSearchChange,
   onToggleGene,
   onGeneSetSymbolsChange,
@@ -95,10 +103,13 @@ export function GeneHudPanel({
   onGeneExpressionColorScaleChange,
   onGeneExpressionDetailModeChange,
   onObservationColorModeChange,
+  onCellMetadataTrackChange,
 }: GeneHudPanelProps) {
   const isGenePanelReady = genePanelState.status === 'ready'
   const isGeneWorkLoading =
     genePanelState.status === 'loading' || geneExpressionState.status === 'loading'
+  const activeCellMetadataTrackId =
+    selectedCellMetadataTrackId ?? cellMetadataTracks[0]?.id ?? ''
 
   return (
     <div
@@ -323,7 +334,30 @@ export function GeneHudPanel({
           <option value="transcript-count">Transcript count</option>
           <option value="cell-area">Cell area</option>
           {hasAnnotationColors ? <option value="annotations">Annotations</option> : null}
+          {cellMetadataTracks.length > 0 ? (
+            <option value="metadata">Metadata</option>
+          ) : null}
         </select>
+
+        {cellMetadataTracks.length > 0 && observationColorMode === 'metadata' ? (
+          <>
+            <label htmlFor={cellMetadataTrackInputId}>Metadata track</label>
+            <select
+              id={cellMetadataTrackInputId}
+              value={activeCellMetadataTrackId}
+              title="Metadata track"
+              onChange={(event) => {
+                onCellMetadataTrackChange(event.currentTarget.value)
+              }}
+            >
+              {cellMetadataTracks.map((track) => (
+                <option key={track.id} value={track.id}>
+                  {metadataTrackOptionLabel(track)}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : null}
 
         <p className="analysis-status" aria-live="polite">
           {geneExpressionCopy}
@@ -331,4 +365,14 @@ export function GeneHudPanel({
       </section>
     </div>
   )
+}
+
+function metadataTrackOptionLabel(track: ContinuousCellMetadataTrack): string {
+  return `${track.label} (${formatMetadataValue(track.min)}-${formatMetadataValue(
+    track.max,
+  )})`
+}
+
+function formatMetadataValue(value: number): string {
+  return Number.isInteger(value) ? value.toLocaleString() : value.toPrecision(3)
 }

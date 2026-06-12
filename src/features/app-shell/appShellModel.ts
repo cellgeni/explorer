@@ -39,7 +39,12 @@ export function parseViewerCoordinateUnit(
 }
 
 export function isObservationColorMode(value: string): value is ObservationColorMode {
-  return value === 'transcript-count' || value === 'cell-area' || value === 'annotations'
+  return (
+    value === 'transcript-count' ||
+    value === 'cell-area' ||
+    value === 'annotations' ||
+    value === 'metadata'
+  )
 }
 
 export function parseObservationColorMode(

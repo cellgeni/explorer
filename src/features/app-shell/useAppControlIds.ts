@@ -19,6 +19,7 @@ export interface AppControlIds {
   readonly annotationImportInputId: string
   readonly annotationImportUrlInputId: string
   readonly annotationGroupInputId: string
+  readonly cellMetadataTrackInputId: string
   readonly embeddingViewInputId: string
   readonly roiNameInputId: string
   readonly observationModeInputId: string
@@ -56,6 +57,7 @@ export function useAppControlIds(): AppControlIds {
     annotationImportInputId: useId(),
     annotationImportUrlInputId: useId(),
     annotationGroupInputId: useId(),
+    cellMetadataTrackInputId: useId(),
     embeddingViewInputId: useId(),
     roiNameInputId: useId(),
     observationModeInputId: useId(),

@@ -40,6 +40,7 @@ function Probe({ onReady }: { readonly onReady: (nextResult: Result) => void }) 
       url: 'https://example.test/output',
       annotations: [{ id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] }],
     },
+    cellMetadataTrack: null,
     boundaryElements: [],
     currentViewportBbox: {
       minX: micrometers(0),
@@ -85,5 +86,56 @@ describe('useViewerLayerData', () => {
     expect(result.geneExpressionScaleMax).toBeGreaterThan(0)
     expect(result.overviewExtent).not.toBeNull()
     expect(result.visibleTranscriptEstimate).toBe(4)
+  })
+
+  it('activates metadata coloring when a selected metadata track exists', () => {
+    function MetadataProbe({
+      onReady,
+    }: {
+      readonly onReady: (nextResult: Result) => void
+    }) {
+      const nextResult = useViewerLayerData({
+        annotationColors: {},
+        annotationState: { status: 'idle' },
+        cellMetadataTrack: {
+          id: 'metadata:confidence',
+          values: [{ cellId: asCellId('aaaaaaaa-1'), value: 0.5 }],
+          min: 0,
+          max: 1,
+        },
+        boundaryElements: [],
+        currentViewportBbox: null,
+        geneExpressionBatch: null,
+        geneExpressionColorScale: 'plasma',
+        geneExpressionScaleDatasetUrl: 'https://example.test/output',
+        geneExpressionScaleDomain: { key: '', max: 0 },
+        geneExpressionScoreMode: 'sum',
+        morphologyChannelSettings: [],
+        morphologyImage: null,
+        observationColorMode: 'metadata',
+        overviewCells,
+        selectedGenes: [],
+        transcriptDensityColorScale: 'thermal',
+        transcriptLayerState: { status: 'idle' },
+        transcriptPointColorMode: 'feature',
+      })
+
+      React.useEffect(() => {
+        onReady(nextResult)
+      })
+
+      return null
+    }
+
+    render(
+      <MetadataProbe
+        onReady={(nextResult) => {
+          result = nextResult
+        }}
+      />,
+    )
+
+    expect(result.viewerObservationColorMode).toBe('metadata')
+    expect(result.activeCellMetadataTrack?.id).toBe('metadata:confidence')
   })
 })

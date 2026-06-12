@@ -3,6 +3,7 @@ import {
   ALL_ANNOTATION_GROUP_ID,
   type AnnotationGroupOption,
 } from '../../data/datasetAnnotations'
+import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
 import type { Annotation } from '../../datasets/spatialDataset'
 import {
@@ -25,6 +26,7 @@ interface AnnotationHudPanelProps {
   readonly annotationState: AnnotationState
   readonly annotationGroupState: AnnotationGroupState
   readonly annotationColors: Readonly<Record<string, string>>
+  readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly onAnnotationGroupChange: (groupId: string) => void
   readonly onLoadAnnotations: () => void
   readonly onClearAnnotations: () => void
@@ -33,6 +35,7 @@ interface AnnotationHudPanelProps {
   readonly onImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly onAnnotationColorChange: (annotationId: string, color: string) => void
   readonly onRemoveAnnotation: (annotationId: string) => void
+  readonly onRemoveCellMetadataTrack: (trackId: string) => void
 }
 
 export function AnnotationHudPanel({
@@ -48,6 +51,7 @@ export function AnnotationHudPanel({
   annotationState,
   annotationGroupState,
   annotationColors,
+  cellMetadataTracks,
   onAnnotationGroupChange,
   onLoadAnnotations,
   onClearAnnotations,
@@ -56,6 +60,7 @@ export function AnnotationHudPanel({
   onImportAnnotationUrl,
   onAnnotationColorChange,
   onRemoveAnnotation,
+  onRemoveCellMetadataTrack,
 }: AnnotationHudPanelProps) {
   const [isImportingAnnotationUrl, setIsImportingAnnotationUrl] = useState(false)
   const isAnnotationLoading =
@@ -130,7 +135,7 @@ export function AnnotationHudPanel({
         <button
           type="button"
           className="secondary-action"
-          disabled={annotationState.status !== 'ready'}
+          disabled={annotationState.status !== 'ready' && cellMetadataTracks.length === 0}
           title="Clear annotations"
           onClick={onClearAnnotations}
         >
@@ -245,9 +250,50 @@ export function AnnotationHudPanel({
             </ul>
           </>
         ) : null}
+        {cellMetadataTracks.length > 0 ? (
+          <section
+            className="annotation-size-panel"
+            aria-labelledby="metadata-track-heading"
+          >
+            <div className="annotation-size-heading">
+              <h3 id="metadata-track-heading">Metadata tracks</h3>
+              <small>{cellMetadataTracks.length.toLocaleString()} loaded</small>
+            </div>
+            <ul className="metadata-track-list" aria-label="Loaded metadata tracks">
+              {cellMetadataTracks.map((track) => (
+                <li key={track.id}>
+                  <span>{track.label}</span>
+                  <small>
+                    {track.values.length.toLocaleString()} cells |{' '}
+                    {formatMetadataTrackDomain(track)}
+                  </small>
+                  <button
+                    type="button"
+                    className="annotation-remove"
+                    aria-label={`Remove ${track.label}`}
+                    title={`Remove ${track.label}`}
+                    onClick={() => {
+                      onRemoveCellMetadataTrack(track.id)
+                    }}
+                  >
+                    x
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </section>
     </div>
   )
+}
+
+function formatMetadataTrackDomain(track: ContinuousCellMetadataTrack): string {
+  return `${formatMetadataValue(track.min)}-${formatMetadataValue(track.max)}`
+}
+
+function formatMetadataValue(value: number): string {
+  return Number.isInteger(value) ? value.toLocaleString() : value.toPrecision(3)
 }
 
 function AnnotationSizeCharts({

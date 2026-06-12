@@ -15,6 +15,7 @@ describe('appShellModel', () => {
     expect(parseViewerCoordinateUnit('px')).toBe('px')
     expect(parseViewerCoordinateUnit('meters')).toBeUndefined()
     expect(isObservationColorMode('annotations')).toBe(true)
+    expect(isObservationColorMode('metadata')).toBe(true)
     expect(parseObservationColorMode('cell-area')).toBe('cell-area')
     expect(parseObservationColorMode('quality')).toBeUndefined()
   })

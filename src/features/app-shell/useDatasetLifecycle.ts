@@ -16,6 +16,7 @@ import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { AnalysisEmbeddingKind } from '../../data/analysisEmbeddings'
+import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import {
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
@@ -158,6 +159,8 @@ interface UseDatasetLifecycleOptions {
   readonly setAnnotationColors: Setter<Readonly<Record<string, string>>>
   readonly setAnnotationGroupState: Setter<AnnotationGroupState<StructuredLoadError>>
   readonly setAnnotationState: Setter<AnnotationState<StructuredLoadError>>
+  readonly setCellMetadataTracks: Setter<readonly ContinuousCellMetadataTrack[]>
+  readonly setSelectedCellMetadataTrackId: Setter<string | null>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
   readonly setBoundaryState: Setter<BoundaryLoadState<StructuredLoadError>>
@@ -277,6 +280,8 @@ export function useDatasetLifecycle({
   setAnnotationColors,
   setAnnotationGroupState,
   setAnnotationState,
+  setCellMetadataTracks,
+  setSelectedCellMetadataTrackId,
   setAutoContrastChannelIds,
   setBoundaryElements,
   setBoundaryState,
@@ -511,6 +516,8 @@ export function useDatasetLifecycle({
       setPinnedTranscript(null)
       setManualTranscriptExactRequestKey(null)
       setAnnotationColors({})
+      setCellMetadataTracks([])
+      setSelectedCellMetadataTrackId(null)
       setAnnotationGroupState({ status: 'loading', url: requestedUrl })
       setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
       setAnalysisEmbeddingState({ status: 'idle' })

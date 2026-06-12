@@ -80,4 +80,18 @@ describe('cell observation styling', () => {
 
     expect(styled[0]?.fillColor).toEqual([31, 119, 180, 230])
   })
+
+  it('colors matching cells by continuous metadata values', () => {
+    const styled = styleOverviewCellsByObservation(cells, 'metadata', {
+      metadataTrack: {
+        id: 'metadata:confidence',
+        values: [{ cellId: cellB, value: 0.75 }],
+        min: 0,
+        max: 1,
+      },
+    })
+
+    expect(styled[0]?.fillColor).toEqual([72, 68, 58, 44])
+    expect(styled[1]?.fillColor).not.toEqual(cells[1]?.fillColor)
+  })
 })

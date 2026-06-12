@@ -124,6 +124,7 @@ import {
   type TranscriptFeatureFilterMode,
 } from './data/transcriptOverlay'
 import { type RoiSelection } from './data/roiSelection'
+import type { ContinuousCellMetadataTrack } from './data/customAnnotations'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
 import { type ShareableState, type ShareableViewState } from './data/shareableState'
 import {
@@ -258,6 +259,12 @@ export function App({
   const [annotationImportUrl, setAnnotationImportUrl] = useState(
     initialShareableState.annotationUrl ?? '',
   )
+  const [cellMetadataTracks, setCellMetadataTracks] = useState<
+    readonly ContinuousCellMetadataTrack[]
+  >([])
+  const [selectedCellMetadataTrackId, setSelectedCellMetadataTrackId] = useState<
+    string | null
+  >(null)
   const [selectedEmbeddingKind, setSelectedEmbeddingKind] =
     useState<AnalysisEmbeddingKind>('umap')
   const [roiState, setRoiState] = useState<RoiState<StructuredLoadError>>({
@@ -493,8 +500,16 @@ export function App({
   const isLoading = loadState.status === 'loading'
   const geneExpressionScaleDatasetUrl =
     loadState.status === 'ready' ? loadState.url : datasetUrl
+  const selectedCellMetadataTrack = useMemo(
+    () =>
+      cellMetadataTracks.find((track) => track.id === selectedCellMetadataTrackId) ??
+      cellMetadataTracks[0] ??
+      null,
+    [cellMetadataTracks, selectedCellMetadataTrackId],
+  )
   const {
     activeAnnotationStyleColors,
+    activeCellMetadataTrack,
     annotationStyleColors,
     boundaryLayerData,
     geneExpressionLayerDataDurationMs,
@@ -516,6 +531,7 @@ export function App({
     annotationColors,
     annotationState,
     boundaryElements,
+    cellMetadataTrack: selectedCellMetadataTrack,
     currentViewportBbox: currentViewportDetail?.bbox ?? null,
     geneExpressionBatch,
     geneExpressionColorScale,
@@ -1043,11 +1059,13 @@ export function App({
     handleImportAnnotationUrl,
     handleImportAnnotations,
     handleLoadAnnotations,
+    handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
   } = useAnnotationWorkflow({
     annotationState,
     appendDebugEvent,
+    cellMetadataTracks,
     datasetAbortRef,
     datasetUrl,
     loadAnnotations,
@@ -1058,10 +1076,12 @@ export function App({
     roiState,
     selectedAnnotationGroupId,
     setAnnotationColors,
+    setCellMetadataTracks,
     setAnnotationState,
     setObservationColorMode,
     setRoiName,
     setSelectedAnnotationGroupId,
+    setSelectedCellMetadataTrackId,
   })
 
   const { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings } =
@@ -1174,6 +1194,8 @@ export function App({
     setAnnotationColors,
     setAnnotationGroupState,
     setAnnotationState,
+    setCellMetadataTracks,
+    setSelectedCellMetadataTrackId,
     setAutoContrastChannelIds,
     setBoundaryElements,
     setBoundaryState,
@@ -1345,6 +1367,8 @@ export function App({
           genePanelState={genePanelState}
           geneOptions={geneOptions}
           hasAnnotationColors={annotationStyleColors.length > 0}
+          cellMetadataTracks={cellMetadataTracks}
+          selectedCellMetadataTrackId={selectedCellMetadataTrack?.id ?? null}
           observationColorMode={observationColorMode}
           rememberGeneExpressionScaleMax={rememberGeneExpressionScaleMax}
           resetGeneExpressionSelectionState={resetGeneExpressionSelectionState}
@@ -1354,6 +1378,7 @@ export function App({
           setGeneExpressionScaleDomain={setGeneExpressionScaleDomain}
           setGeneExpressionScoreMode={setGeneExpressionScoreMode}
           setManualTranscriptExactRequestKey={setManualTranscriptExactRequestKey}
+          setSelectedCellMetadataTrackId={setSelectedCellMetadataTrackId}
           setObservationColorMode={setObservationColorMode}
           setSelectedGenes={setSelectedGenes}
           toggleGene={toggleGene}
@@ -1439,6 +1464,7 @@ export function App({
           annotationState={annotationState}
           annotationGroupState={annotationGroupState}
           annotationColors={annotationColors}
+          cellMetadataTracks={cellMetadataTracks}
           onAnnotationGroupChange={handleAnnotationGroupChange}
           onLoadAnnotations={handleLoadAnnotations}
           onClearAnnotations={handleClearAnnotations}
@@ -1449,6 +1475,7 @@ export function App({
           onImportAnnotationUrl={handleImportAnnotationUrl}
           onAnnotationColorChange={handleAnnotationColorChange}
           onRemoveAnnotation={handleRemoveAnnotation}
+          onRemoveCellMetadataTrack={handleRemoveCellMetadataTrack}
         />
 
         <CellHudPanel
@@ -1535,6 +1562,7 @@ export function App({
           transcriptPointSize={transcriptPointSize}
           observationColorMode={viewerObservationColorMode}
           annotationStyleColors={activeAnnotationStyleColors}
+          cellMetadataTrack={activeCellMetadataTrack}
           loadingTasks={loadingTasks}
           coordinateUnit={coordinateUnit}
           measurementEnabled={measurementEnabled}

@@ -3,6 +3,7 @@ import * as React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
+import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
@@ -14,6 +15,7 @@ import { useAnnotationWorkflow } from './useAnnotationWorkflow'
 interface Snapshot {
   readonly annotationColors: Readonly<Record<string, string>>
   readonly annotationState: AnnotationState<StructuredLoadError>
+  readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly debugMessages: readonly string[]
   readonly observationColorMode: ObservationColorMode
   readonly roiName: string
@@ -43,6 +45,10 @@ function Probe({
   const [annotationState, setAnnotationState] = React.useState<
     AnnotationState<StructuredLoadError>
   >({ status: 'idle' })
+  const [cellMetadataTracks, setCellMetadataTracks] = React.useState<
+    readonly ContinuousCellMetadataTrack[]
+  >([])
+  const [, setSelectedCellMetadataTrackId] = React.useState<string | null>(null)
   const [observationColorMode, setObservationColorMode] =
     React.useState<ObservationColorMode>('transcript-count')
   const [roiName, setRoiName] = React.useState('Marker ROI')
@@ -64,6 +70,7 @@ function Probe({
     appendDebugEvent: (message) => {
       debugMessagesRef.current.push(message)
     },
+    cellMetadataTracks,
     datasetAbortRef,
     datasetUrl: 'https://example.test/output',
     loadAnnotations,
@@ -74,16 +81,19 @@ function Probe({
     roiState,
     selectedAnnotationGroupId: groupId,
     setAnnotationColors,
+    setCellMetadataTracks,
     setAnnotationState,
     setObservationColorMode,
     setRoiName,
     setSelectedAnnotationGroupId,
+    setSelectedCellMetadataTrackId,
   })
 
   React.useEffect(() => {
     onReady(nextApi, {
       annotationColors,
       annotationState,
+      cellMetadataTracks,
       debugMessages: debugMessagesRef.current,
       observationColorMode,
       roiName,
@@ -229,5 +239,45 @@ describe('useAnnotationWorkflow', () => {
     expect(snapshot.annotationColors['custom:manual-csv:remote-roi']).toBe('#1f77b4')
     expect(snapshot.observationColorMode).toBe('annotations')
     expect(snapshot.debugMessages).toContain('Imported URL annotations: 1 labels')
+  })
+
+  it('imports continuous CSV values as metadata tracks and activates metadata coloring', async () => {
+    const cellId = asCellId('aaaaaaaa-1')
+    const file = new File([`cell_id,confidence\n${cellId},0.82`], 'scores.csv', {
+      type: 'text/csv',
+    })
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(file)
+    })
+
+    expect(snapshot.annotationState).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      annotations: [],
+    })
+    expect(snapshot.cellMetadataTracks).toEqual([
+      {
+        id: 'metadata:scores-csv:confidence',
+        label: 'confidence',
+        values: [{ cellId, value: 0.82 }],
+        min: 0.82,
+        max: 0.82,
+      },
+    ])
+    expect(snapshot.observationColorMode).toBe('metadata')
+    expect(snapshot.debugMessages).toContain(
+      'Imported annotations: 0 labels, 1 metadata tracks',
+    )
   })
 })
