@@ -58,6 +58,25 @@ describe('morphologyChannels', () => {
         contrastMax: 150,
       },
     ])
+
+    expect(
+      createMorphologyChannelSettings(image, { enabledChannelIds: ['protein'] }),
+    ).toEqual([
+      {
+        id: 'dapi',
+        enabled: false,
+        color: [80, 120, 255],
+        contrastMin: 10,
+        contrastMax: 200,
+      },
+      {
+        id: 'protein',
+        enabled: true,
+        color: [255, 80, 120],
+        contrastMin: 5,
+        contrastMax: 150,
+      },
+    ])
   })
 
   it('normalizes contrast ranges', () => {

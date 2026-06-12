@@ -31,6 +31,10 @@ describe('shareableState', () => {
       measurementUnit: 'um',
       shouldLoadMorphology: true,
       boundaryCellLimit: 2500,
+      imageOpacity: 0.45,
+      cellFillOpacity: 0.7,
+      cellBoundaryOpacity: 0.35,
+      morphologyEnabledChannelIds: ['Channel:1', 'Channel:3'],
       transcriptOverlay: true,
       transcriptDetailMode: 'exact',
       transcriptMinQv: 25,
@@ -41,6 +45,10 @@ describe('shareableState', () => {
       transcriptExactPointLimit: 75_000,
       transcriptOpacity: 0.75,
       transcriptPointSize: 3,
+      magicLensScope: 'cursor',
+      magicLensActive: true,
+      magicLensRadiusMicrometers: 120,
+      magicLensMinQv: 18,
     })
 
     const state = parseShareableState(hash)
@@ -55,6 +63,10 @@ describe('shareableState', () => {
     expect(state.measurementUnit).toBe('um')
     expect(state.shouldLoadMorphology).toBe(true)
     expect(state.boundaryCellLimit).toBe(2500)
+    expect(state.imageOpacity).toBe(0.45)
+    expect(state.cellFillOpacity).toBe(0.7)
+    expect(state.cellBoundaryOpacity).toBe(0.35)
+    expect(state.morphologyEnabledChannelIds).toEqual(['Channel:1', 'Channel:3'])
     expect(state.transcriptOverlay).toBe(true)
     expect(state.transcriptDetailMode).toBe('exact')
     expect(state.transcriptMinQv).toBe(25)
@@ -65,6 +77,19 @@ describe('shareableState', () => {
     expect(state.transcriptExactPointLimit).toBe(75_000)
     expect(state.transcriptOpacity).toBe(0.75)
     expect(state.transcriptPointSize).toBe(3)
+    expect(state.magicLensScope).toBe('cursor')
+    expect(state.magicLensActive).toBe(true)
+    expect(state.magicLensRadiusMicrometers).toBe(120)
+    expect(state.magicLensMinQv).toBe(18)
+  })
+
+  it('round-trips all morphology channels disabled', () => {
+    const hash = formatShareableState({
+      morphologyEnabledChannelIds: [],
+    })
+
+    expect(hash).toContain('channels=')
+    expect(parseShareableState(hash).morphologyEnabledChannelIds).toEqual([])
   })
 
   it('keeps a compact key for rounded view state comparisons', () => {

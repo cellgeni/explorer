@@ -292,15 +292,64 @@ describe('App', () => {
     window.history.replaceState(
       null,
       '',
-      '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px',
+      '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px&imgOpacity=0.45&cellFill=0.7&cellBoundary=0.35&channels=Channel%3A1&lensScope=cursor&lens=1&lensRadius=120&lensQv=18',
     )
+    const dapiChannel = {
+      id: 'Channel:0',
+      index: 0,
+      name: 'DAPI',
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+      fileName: 'morphology_focus_0000.ome.tif',
+    }
+    const boundaryChannel = {
+      id: 'Channel:1',
+      index: 1,
+      name: 'Boundary',
+      color: [32, 166, 122] as const,
+      contrast: { min: 0, max: 65_535 },
+      fileName: 'morphology_focus_0001.ome.tif',
+    }
+    const dapiLoader = {} as TiffPyramidLoader
+    const boundaryLoader = {} as TiffPyramidLoader
     const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
-      () => pendingPromise(),
+      async () => [
+        {
+          cellId: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 8,
+        },
+      ],
     )
     const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+    const loadMorphologyImage = vi.fn(async () => ({
+      url: 'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+      loader: dapiLoader,
+      channels: [dapiChannel, boundaryChannel],
+      channelLoaders: [
+        { info: dapiChannel, loader: dapiLoader },
+        { info: boundaryChannel, loader: boundaryLoader },
+      ],
+    }))
+    const computeAutoChannelContrast = vi.fn(async () => ({
+      min: 0,
+      max: 1,
+      histogram: {
+        bins: Array.from({ length: 32 }, () => 1),
+        maxCount: 1,
+        min: 0,
+        max: 1,
+        sampleCount: 32,
+      },
+    }))
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={loadGenePanel}
+        loadMorphologyImage={loadMorphologyImage}
+        computeAutoChannelContrast={computeAutoChannelContrast}
+      />,
     )
 
     expect(screen.getByRole('tab', { name: 'Genes' })).toHaveAttribute(
@@ -324,6 +373,20 @@ describe('App', () => {
         signal: expect.any(AbortSignal) as AbortSignal,
       }),
     )
+
+    openHudTab('Layers')
+    expect(screen.getByRole('slider', { name: 'Image opacity' })).toHaveValue('45')
+    expect(screen.getByRole('slider', { name: 'Cell fill opacity' })).toHaveValue('70')
+    expect(screen.getByRole('slider', { name: 'Cell boundary opacity' })).toHaveValue(
+      '35',
+    )
+    expect(await screen.findByRole('checkbox', { name: 'DAPI' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Boundary' })).toBeChecked()
+
+    openHudTab('Magic Lens')
+    expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(18)
+    expect(screen.getByRole('slider', { name: 'Radius' })).toHaveValue('120')
+    expect(screen.getByRole('button', { name: 'Disable Lens' })).toBeEnabled()
   })
 
   it('auto-loads a dataset URL from the query string without waiting for a click', async () => {

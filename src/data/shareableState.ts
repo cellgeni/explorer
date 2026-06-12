@@ -22,6 +22,10 @@ export interface ShareableState {
   readonly measurementUnit?: string
   readonly shouldLoadMorphology?: boolean
   readonly boundaryCellLimit?: number
+  readonly imageOpacity?: number
+  readonly cellFillOpacity?: number
+  readonly cellBoundaryOpacity?: number
+  readonly morphologyEnabledChannelIds?: readonly string[]
   readonly transcriptOverlay?: boolean
   readonly transcriptDetailMode?: string
   readonly transcriptMinQv?: number
@@ -32,6 +36,10 @@ export interface ShareableState {
   readonly transcriptExactPointLimit?: number
   readonly transcriptOpacity?: number
   readonly transcriptPointSize?: number
+  readonly magicLensScope?: string
+  readonly magicLensActive?: boolean
+  readonly magicLensRadiusMicrometers?: number
+  readonly magicLensMinQv?: number
 }
 
 type MutableShareableState = {
@@ -60,6 +68,10 @@ export function parseShareableState(hash: string): ShareableState {
   const measurementUnit = readString(params, 'measureUnit')
   const shouldLoadMorphology = parseBoolean(params.get('morphology'))
   const boundaryCellLimit = parsePositiveInteger(params.get('boundaryLimit'))
+  const imageOpacity = parseUnitNumber(params.get('imgOpacity'))
+  const cellFillOpacity = parseUnitNumber(params.get('cellFill'))
+  const cellBoundaryOpacity = parseUnitNumber(params.get('cellBoundary'))
+  const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')
   const transcriptOverlay = parseBoolean(params.get('tx'))
   const transcriptDetailMode = readString(params, 'txDetail')
   const transcriptMinQv = parseNonNegativeInteger(params.get('txQv'))
@@ -70,6 +82,10 @@ export function parseShareableState(hash: string): ShareableState {
   const transcriptExactPointLimit = parsePositiveInteger(params.get('txBudget'))
   const transcriptOpacity = parseUnitNumber(params.get('txOpacity'))
   const transcriptPointSize = parsePositiveInteger(params.get('txSize'))
+  const magicLensScope = readString(params, 'lensScope')
+  const magicLensActive = parseBoolean(params.get('lens'))
+  const magicLensRadiusMicrometers = parsePositiveInteger(params.get('lensRadius'))
+  const magicLensMinQv = parseNonNegativeInteger(params.get('lensQv'))
 
   if (datasetUrl !== undefined) {
     state.datasetUrl = datasetUrl
@@ -123,6 +139,22 @@ export function parseShareableState(hash: string): ShareableState {
     state.boundaryCellLimit = boundaryCellLimit
   }
 
+  if (imageOpacity !== undefined) {
+    state.imageOpacity = imageOpacity
+  }
+
+  if (cellFillOpacity !== undefined) {
+    state.cellFillOpacity = cellFillOpacity
+  }
+
+  if (cellBoundaryOpacity !== undefined) {
+    state.cellBoundaryOpacity = cellBoundaryOpacity
+  }
+
+  if (morphologyEnabledChannelIds !== undefined) {
+    state.morphologyEnabledChannelIds = morphologyEnabledChannelIds
+  }
+
   if (transcriptOverlay !== undefined) {
     state.transcriptOverlay = transcriptOverlay
   }
@@ -161,6 +193,22 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (transcriptPointSize !== undefined) {
     state.transcriptPointSize = transcriptPointSize
+  }
+
+  if (magicLensScope !== undefined) {
+    state.magicLensScope = magicLensScope
+  }
+
+  if (magicLensActive !== undefined) {
+    state.magicLensActive = magicLensActive
+  }
+
+  if (magicLensRadiusMicrometers !== undefined) {
+    state.magicLensRadiusMicrometers = magicLensRadiusMicrometers
+  }
+
+  if (magicLensMinQv !== undefined) {
+    state.magicLensMinQv = magicLensMinQv
   }
 
   return state
@@ -206,6 +254,25 @@ export function formatShareableState(state: ShareableState): string {
     )
   }
 
+  if (state.imageOpacity !== undefined && Number.isFinite(state.imageOpacity)) {
+    params.set('imgOpacity', roundForHash(state.imageOpacity).toString())
+  }
+
+  if (state.cellFillOpacity !== undefined && Number.isFinite(state.cellFillOpacity)) {
+    params.set('cellFill', roundForHash(state.cellFillOpacity).toString())
+  }
+
+  if (
+    state.cellBoundaryOpacity !== undefined &&
+    Number.isFinite(state.cellBoundaryOpacity)
+  ) {
+    params.set('cellBoundary', roundForHash(state.cellBoundaryOpacity).toString())
+  }
+
+  if (state.morphologyEnabledChannelIds !== undefined) {
+    params.set('channels', state.morphologyEnabledChannelIds.join(','))
+  }
+
   if (state.transcriptOverlay !== undefined) {
     params.set('tx', state.transcriptOverlay ? '1' : '0')
   }
@@ -243,6 +310,26 @@ export function formatShareableState(state: ShareableState): string {
     Number.isFinite(state.transcriptPointSize)
   ) {
     params.set('txSize', Math.max(1, Math.floor(state.transcriptPointSize)).toString())
+  }
+
+  setOptionalString(params, 'lensScope', state.magicLensScope)
+
+  if (state.magicLensActive !== undefined) {
+    params.set('lens', state.magicLensActive ? '1' : '0')
+  }
+
+  if (
+    state.magicLensRadiusMicrometers !== undefined &&
+    Number.isFinite(state.magicLensRadiusMicrometers)
+  ) {
+    params.set(
+      'lensRadius',
+      Math.max(1, Math.floor(state.magicLensRadiusMicrometers)).toString(),
+    )
+  }
+
+  if (state.magicLensMinQv !== undefined && Number.isFinite(state.magicLensMinQv)) {
+    params.set('lensQv', Math.max(0, Math.floor(state.magicLensMinQv)).toString())
   }
 
   const text = params.toString()
@@ -289,6 +376,26 @@ function readCsv(params: URLSearchParams, name: string): readonly string[] | und
     .filter((entry) => entry.length > 0)
 
   return entries.length === 0 ? undefined : entries
+}
+
+function readCsvAllowEmpty(
+  params: URLSearchParams,
+  name: string,
+): readonly string[] | undefined {
+  const value = params.get(name)
+
+  if (value === null) {
+    return undefined
+  }
+
+  if (value.trim() === '') {
+    return []
+  }
+
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
 }
 
 function setOptionalString(

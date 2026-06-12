@@ -66,6 +66,9 @@ import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkfl
 import {
   magicLensScopeLabel,
   magicLensStatusCopy,
+  normalizeMagicLensMinQv,
+  normalizeMagicLensRadius,
+  parseMagicLensScope,
   type MagicLensScope,
   type MagicLensState,
 } from './features/roi/magicLensModel'
@@ -129,7 +132,10 @@ import {
   type TelemetryEvent,
 } from './data/telemetry'
 import { normalizeBoundaryCellLimit } from './rendering/boundaryViewport'
-import { DEFAULT_CELL_FILL_OPACITY } from './rendering/layerOpacity'
+import {
+  DEFAULT_CELL_FILL_OPACITY,
+  normalizeLayerOpacity,
+} from './rendering/layerOpacity'
 import {
   DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
@@ -281,10 +287,18 @@ export function App({
   >({
     status: 'idle',
   })
-  const [magicLensScope, setMagicLensScope] = useState<MagicLensScope>('cursor')
-  const [magicLensActive, setMagicLensActive] = useState(false)
-  const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(80)
-  const [magicLensMinQv, setMagicLensMinQv] = useState(20)
+  const [magicLensScope, setMagicLensScope] = useState<MagicLensScope>(
+    () => parseMagicLensScope(initialShareableState.magicLensScope) ?? 'cursor',
+  )
+  const [magicLensActive, setMagicLensActive] = useState(
+    initialShareableState.magicLensActive ?? false,
+  )
+  const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(() =>
+    normalizeMagicLensRadius(initialShareableState.magicLensRadiusMicrometers ?? 80),
+  )
+  const [magicLensMinQv, setMagicLensMinQv] = useState(() =>
+    normalizeMagicLensMinQv(initialShareableState.magicLensMinQv ?? 20),
+  )
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(
     initialShareableState.transcriptOverlay ?? false,
   )
@@ -363,9 +377,17 @@ export function App({
       initialShareableState.boundaryCellLimit ?? performanceBudget.boundaryCellLimit,
     ),
   )
-  const [imageLayerOpacity, setImageLayerOpacity] = useState(1)
-  const [cellFillOpacity, setCellFillOpacity] = useState(DEFAULT_CELL_FILL_OPACITY)
-  const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(1)
+  const [imageLayerOpacity, setImageLayerOpacity] = useState(() =>
+    normalizeLayerOpacity(initialShareableState.imageOpacity ?? 1),
+  )
+  const [cellFillOpacity, setCellFillOpacity] = useState(() =>
+    normalizeLayerOpacity(
+      initialShareableState.cellFillOpacity ?? DEFAULT_CELL_FILL_OPACITY,
+    ),
+  )
+  const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(() =>
+    normalizeLayerOpacity(initialShareableState.cellBoundaryOpacity ?? 1),
+  )
   const [coordinateUnit, setCoordinateUnit] = useState<ViewerCoordinateUnit>(
     () => parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ?? 'um',
   )
@@ -655,6 +677,21 @@ export function App({
     [loadingTasks],
   )
   const activeRoiSelection = roiState.status === 'idle' ? null : roiState.selection
+  const shareableMorphologyEnabledChannelIds = useMemo(() => {
+    if (morphologyChannelSettings.length > 0) {
+      return morphologyChannelSettings
+        .filter((setting) => setting.enabled)
+        .map((setting) => setting.id)
+    }
+
+    return morphologyState.status === 'loading'
+      ? initialShareableState.morphologyEnabledChannelIds
+      : undefined
+  }, [
+    initialShareableState.morphologyEnabledChannelIds,
+    morphologyChannelSettings,
+    morphologyState.status,
+  ])
   const magicLensIsCursorActive =
     magicLensScope === 'cursor' && magicLensActive && loadState.status === 'ready'
   const magicLensCanScan =
@@ -1200,6 +1237,14 @@ export function App({
     geneExpressionColorScale,
     geneExpressionDetailMode,
     geneExpressionScoreMode,
+    imageOpacity: imageLayerOpacity,
+    cellFillOpacity,
+    cellBoundaryOpacity,
+    morphologyEnabledChannelIds: shareableMorphologyEnabledChannelIds,
+    magicLensActive,
+    magicLensMinQv,
+    magicLensRadiusMicrometers,
+    magicLensScope,
     measurementUnit,
     observationColorMode,
     selectedGenes,

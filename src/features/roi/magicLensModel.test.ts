@@ -11,6 +11,7 @@ import {
   magicLensStatusCopy,
   normalizeMagicLensMinQv,
   normalizeMagicLensRadius,
+  parseMagicLensScope,
   resolveMagicLensSelection,
   summarizeMagicLensCells,
 } from './magicLensModel'
@@ -65,6 +66,10 @@ describe('magicLensModel', () => {
     expect(magicLensScopeLabel('cursor')).toBe('Cursor')
     expect(magicLensScopeLabel('viewport')).toBe('Viewport')
     expect(magicLensScopeLabel('roi')).toBe('ROI')
+    expect(parseMagicLensScope('cursor')).toBe('cursor')
+    expect(parseMagicLensScope('viewport')).toBe('viewport')
+    expect(parseMagicLensScope('roi')).toBe('roi')
+    expect(parseMagicLensScope('bad')).toBeNull()
     expect(resolveMagicLensSelection('roi', null, roiSelection)).toBe(roiSelection)
     expect(
       resolveMagicLensSelection('cursor', { bbox: roiSelection }, roiSelection),

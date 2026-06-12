@@ -572,7 +572,9 @@ export function useDatasetLifecycle({
       setMagicLensState({ status: 'idle' })
       setCellDetailState({ status: 'idle' })
       setCellTranscriptDistributionState({ status: 'idle' })
-      setMagicLensActive(false)
+      setMagicLensActive(
+        shouldRestoreSharedState ? (sharedState?.magicLensActive ?? false) : false,
+      )
       setSelectedCell(null)
       setCurrentViewportDetail(null)
       setViewportCellCount(null)
@@ -704,8 +706,17 @@ export function useDatasetLifecycle({
               return
             }
 
+            const enabledChannelIds = shouldRestoreSharedState
+              ? sharedState?.morphologyEnabledChannelIds
+              : undefined
+
             setMorphologyImage(image)
-            setMorphologyChannelSettings(createMorphologyChannelSettings(image))
+            setMorphologyChannelSettings(
+              createMorphologyChannelSettings(
+                image,
+                enabledChannelIds === undefined ? {} : { enabledChannelIds },
+              ),
+            )
             setMorphologyState({
               status: 'ready',
               url: image.url,

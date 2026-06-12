@@ -21,6 +21,14 @@ function ShareableUrlHashProbe() {
     geneExpressionColorScale: 'plasma',
     geneExpressionDetailMode: 'auto',
     geneExpressionScoreMode: 'sum',
+    imageOpacity: 0.45,
+    cellFillOpacity: 0.7,
+    cellBoundaryOpacity: 0.35,
+    morphologyEnabledChannelIds: ['Channel:1'],
+    magicLensActive: true,
+    magicLensMinQv: 18,
+    magicLensRadiusMicrometers: 120,
+    magicLensScope: 'cursor',
     measurementUnit: 'um',
     observationColorMode: 'transcript-count',
     selectedGenes: ['Actb', 'Gad1'],
@@ -63,6 +71,12 @@ describe('useShareableUrlHash', () => {
     expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Foutput')
     expect(window.location.hash).toContain('genes=Actb%2CGad1')
     expect(window.location.hash).toContain('tab=genes')
+    expect(window.location.hash).toContain('imgOpacity=0.45')
+    expect(window.location.hash).toContain('cellFill=0.7')
+    expect(window.location.hash).toContain('cellBoundary=0.35')
+    expect(window.location.hash).toContain('channels=Channel%3A1')
+    expect(window.location.hash).toContain('lens=1')
+    expect(window.location.hash).toContain('lensRadius=120')
     expect(window.location.hash).toContain('txFilter=selected')
   })
 })

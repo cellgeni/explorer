@@ -65,6 +65,14 @@ export function magicLensScopeLabel(scope: MagicLensScope): string {
   return scope === 'roi' ? 'ROI' : 'Viewport'
 }
 
+export function parseMagicLensScope(value: string | undefined): MagicLensScope | null {
+  if (value === 'cursor' || value === 'viewport' || value === 'roi') {
+    return value
+  }
+
+  return null
+}
+
 export function resolveMagicLensSelection(
   scope: MagicLensScope,
   viewportDetail: { readonly bbox: BBox } | null,

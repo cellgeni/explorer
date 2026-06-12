@@ -11,6 +11,14 @@ interface UseShareableUrlHashOptions {
   readonly geneExpressionColorScale: string
   readonly geneExpressionDetailMode: string
   readonly geneExpressionScoreMode: string
+  readonly imageOpacity: number
+  readonly cellFillOpacity: number
+  readonly cellBoundaryOpacity: number
+  readonly morphologyEnabledChannelIds: readonly string[] | undefined
+  readonly magicLensActive: boolean
+  readonly magicLensMinQv: number
+  readonly magicLensRadiusMicrometers: number
+  readonly magicLensScope: string
   readonly measurementUnit: string
   readonly observationColorMode: string
   readonly selectedGenes: readonly string[]
@@ -37,6 +45,14 @@ export function useShareableUrlHash({
   geneExpressionColorScale,
   geneExpressionDetailMode,
   geneExpressionScoreMode,
+  imageOpacity,
+  cellFillOpacity,
+  cellBoundaryOpacity,
+  morphologyEnabledChannelIds,
+  magicLensActive,
+  magicLensMinQv,
+  magicLensRadiusMicrometers,
+  magicLensScope,
   measurementUnit,
   observationColorMode,
   selectedGenes,
@@ -73,6 +89,12 @@ export function useShareableUrlHash({
         measurementUnit,
         shouldLoadMorphology,
         boundaryCellLimit,
+        imageOpacity,
+        cellFillOpacity,
+        cellBoundaryOpacity,
+        ...(morphologyEnabledChannelIds === undefined
+          ? {}
+          : { morphologyEnabledChannelIds }),
         transcriptOverlay: showTranscriptOverlay,
         transcriptDetailMode,
         transcriptDensityColorScale,
@@ -83,6 +105,10 @@ export function useShareableUrlHash({
         transcriptFeatureFilterMode,
         transcriptOpacity,
         transcriptPointSize,
+        magicLensScope,
+        magicLensActive,
+        magicLensRadiusMicrometers,
+        magicLensMinQv,
       })
 
       if (window.location.hash !== hash) {
@@ -106,6 +132,14 @@ export function useShareableUrlHash({
     geneExpressionColorScale,
     geneExpressionDetailMode,
     geneExpressionScoreMode,
+    imageOpacity,
+    cellFillOpacity,
+    cellBoundaryOpacity,
+    morphologyEnabledChannelIds,
+    magicLensActive,
+    magicLensMinQv,
+    magicLensRadiusMicrometers,
+    magicLensScope,
     measurementUnit,
     observationColorMode,
     selectedGenes,

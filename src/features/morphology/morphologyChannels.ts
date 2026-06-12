@@ -30,10 +30,15 @@ export function morphologyPatchLabel(
 
 export function createMorphologyChannelSettings(
   image: MorphologyImage,
+  options: { readonly enabledChannelIds?: readonly string[] } = {},
 ): readonly MorphologyChannelSetting[] {
+  const enabledChannelIds =
+    options.enabledChannelIds === undefined ? null : new Set(options.enabledChannelIds)
+
   return image.channelLoaders.map((channel, index) => ({
     id: channel.info.id,
-    enabled: index === 0,
+    enabled:
+      enabledChannelIds === null ? index === 0 : enabledChannelIds.has(channel.info.id),
     color: channel.info.color,
     contrastMin: channel.info.contrast.min,
     contrastMax: channel.info.contrast.max,
