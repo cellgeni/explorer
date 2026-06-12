@@ -97,11 +97,7 @@ export function createStructuredLoadError(
     )
   }
 
-  if (
-    error instanceof TypeError ||
-    normalizedMessage.includes('failed to fetch') ||
-    normalizedMessage.includes('networkerror')
-  ) {
+  if (isTypeErrorLike(error) || isNetworkErrorMessage(normalizedMessage)) {
     return withOptionalDetail(
       {
         source,
@@ -185,6 +181,24 @@ export function createStructuredLoadError(
       action: 'Retry the request after checking the dataset URL.',
     },
     detail,
+  )
+}
+
+function isTypeErrorLike(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'name' in error &&
+    error.name === 'TypeError'
+  )
+}
+
+function isNetworkErrorMessage(normalizedMessage: string): boolean {
+  return (
+    normalizedMessage.includes('failed to fetch') ||
+    normalizedMessage.includes('load failed') ||
+    normalizedMessage.includes('network request failed') ||
+    normalizedMessage.includes('networkerror')
   )
 }
 

@@ -142,6 +142,8 @@ export interface OverviewLayerOptions {
   readonly cellBoundaryFillEnabled?: boolean
   readonly cellBoundaryGeometry?: CellBoundaryLayerGeometry
   readonly cellBoundaryStyle?: CellBoundaryLayerStyle
+  readonly geneExpressionActive?: boolean
+  readonly geneExpressionOverlayCells?: readonly OverviewCellDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
   readonly transcriptOpacity?: number
@@ -192,6 +194,7 @@ export interface GeneExpressionLayerDataOptions {
 
 export interface GeneExpressionCellStyleOptions {
   readonly binMicrometers?: number
+  readonly styleUnmatchedCells?: boolean
 }
 
 export interface GeneExpressionCellStyleIndex {
@@ -342,6 +345,8 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
 }
 
 const CELL_PROXY_FILL_OPACITY = 0.35
+const GENE_EXPRESSION_ZERO_FILL_COLOR: Color = [72, 68, 58, 84]
+const GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY = 0.5
 const EMPTY_CELL_BOUNDARY_PATH_GEOMETRY: CellBoundaryPathGeometryData = {
   length: 0,
   startIndices: new Uint32Array(1),
@@ -417,10 +422,17 @@ export function createOverviewLayers(
     (bin) => bin.glyphType === 'feature-circle',
   )
   const transcriptPoints = options.transcriptPoints ?? []
+  const geneExpressionOverlayCells = options.geneExpressionOverlayCells ?? []
   const pointCells = cellsWithoutVisibleBoundaryIds(
     cells,
     cellBoundaryGeometry.boundaryCellIds,
   )
+  const geneExpressionActive =
+    options.geneExpressionActive ??
+    (geneExpressionOverlayCells.length > 0 || pointCells.some(hasGeneExpressionStyle))
+  const cellPointFillOpacity = geneExpressionActive
+    ? Math.max(cellFillOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
+    : cellFillOpacity * CELL_PROXY_FILL_OPACITY
   const cellPointLayer = new ScatterplotLayer<OverviewCellDatum>({
     id: 'cells-overview-scatter',
     data: pointCells,
@@ -429,19 +441,18 @@ export function createOverviewLayers(
     radiusMinPixels: 0.12,
     radiusMaxPixels: 24,
     stroked: true,
-    filled: cellBoundaryFillEnabled,
+    filled: cellBoundaryFillEnabled || geneExpressionActive,
     opacity: 1,
     lineWidthUnits: 'pixels',
     lineWidthMinPixels: 1,
     getPosition: (cell) => cell.position,
     getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
-    getFillColor: (cell) =>
-      colorWithOpacity(cell.fillColor, cellFillOpacity * CELL_PROXY_FILL_OPACITY),
+    getFillColor: (cell) => colorWithOpacity(cell.fillColor, cellPointFillOpacity),
     getLineColor: (cell) =>
       colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
     getLineWidth: 1,
     updateTriggers: {
-      getFillColor: [cellFillOpacity],
+      getFillColor: [cellPointFillOpacity],
       getLineColor: [cellBoundaryOpacity],
     },
   })
@@ -505,6 +516,39 @@ export function createOverviewLayers(
   }
 
   layers.push(cellPointLayer)
+
+  if (geneExpressionOverlayCells.length > 0) {
+    const expressionFillOpacity = Math.max(
+      cellFillOpacity,
+      GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY,
+    )
+
+    layers.push(
+      new ScatterplotLayer<OverviewCellDatum>({
+        id: 'gene-expression-scatter',
+        data: geneExpressionOverlayCells,
+        pickable: false,
+        radiusUnits: 'common',
+        radiusMinPixels: 1.5,
+        radiusMaxPixels: 28,
+        stroked: true,
+        filled: true,
+        opacity: 1,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 1,
+        getPosition: (cell) => cell.position,
+        getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
+        getFillColor: (cell) => colorWithOpacity(cell.fillColor, expressionFillOpacity),
+        getLineColor: (cell) =>
+          colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
+        getLineWidth: 1,
+        updateTriggers: {
+          getFillColor: [expressionFillOpacity],
+          getLineColor: [cellBoundaryOpacity],
+        },
+      }),
+    )
+  }
 
   if (transcriptDensityBins.length > 0) {
     const transcriptOpacity = normalizeLayerOpacity(
@@ -1381,15 +1425,17 @@ export function styleCellsByGeneExpression(
   const styleIndex = isOverviewCellDatumArray(expressionSource)
     ? createGeneExpressionCellStyleIndex(expressionSource, options)
     : expressionSource
+  const styleUnmatchedCells = options.styleUnmatchedCells ?? false
 
   if (
     styleIndex.expressionByCellId.size === 0 &&
-    (styleIndex.expressionByBinKey?.size ?? 0) === 0
+    (styleIndex.expressionByBinKey?.size ?? 0) === 0 &&
+    !styleUnmatchedCells
   ) {
     return cells
   }
 
-  let hasExpressionMatch = false
+  let hasExpressionStyle = false
   const styledCells = cells.map((cell) => {
     const expressionCell =
       styleIndex.expressionByCellId.get(cell.id) ??
@@ -1401,10 +1447,20 @@ export function styleCellsByGeneExpression(
           ))
 
     if (expressionCell === undefined) {
-      return cell
+      if (!styleUnmatchedCells) {
+        return cell
+      }
+
+      hasExpressionStyle = true
+
+      return {
+        ...cell,
+        fillColor: GENE_EXPRESSION_ZERO_FILL_COLOR,
+        expressionCount: 0,
+      }
     }
 
-    hasExpressionMatch = true
+    hasExpressionStyle = true
     return {
       ...cell,
       fillColor: expressionCell.fillColor,
@@ -1417,7 +1473,11 @@ export function styleCellsByGeneExpression(
     }
   })
 
-  return hasExpressionMatch ? styledCells : cells
+  return hasExpressionStyle ? styledCells : cells
+}
+
+function hasGeneExpressionStyle(cell: OverviewCellDatum): boolean {
+  return cell.expressionCount !== undefined || cell.expressionGenes !== undefined
 }
 
 export function createGeneExpressionCellStyleIndex(

@@ -162,7 +162,7 @@ describe('ViewerCore', () => {
   it('renders loading tasks and viewport status in the same notification stack', () => {
     render(
       <ViewerCore
-        loadingTasks={[{ id: 'dataset', label: 'Loading dataset' }]}
+        loadingTasks={[{ id: 'gene-panel', label: 'Loading gene panel' }]}
         boundaryStatus="loading"
       />,
     )
@@ -175,6 +175,72 @@ describe('ViewerCore', () => {
 
     expect(stack).not.toBeNull()
     expect(viewportStatus.closest('.viewport-notification-stack')).toBe(stack)
+  })
+
+  it('does not duplicate boundary loading between queued tasks and viewport status', () => {
+    render(
+      <ViewerCore
+        loadingTasks={[{ id: 'boundaries', label: 'Loading boundaries' }]}
+        boundaryStatus="loading"
+      />,
+    )
+
+    expect(screen.getByText('Loading boundaries')).toBeInTheDocument()
+    expect(screen.queryByText('Loading cell boundaries…')).not.toBeInTheDocument()
+  })
+
+  it('draws positive gene expression cells even when an overview proxy is already styled', () => {
+    render(
+      <ViewerCore
+        cells={[
+          {
+            id: 'overview-cell-1',
+            position: [0, 0, 0],
+            radiusPixels: 4,
+            fillColor: [215, 63, 124, 220],
+          },
+        ]}
+        geneExpressionActive
+        expressionCells={[
+          {
+            id: 'overview-cell-1',
+            position: [0, 0, 0],
+            radiusPixels: 6,
+            fillColor: [240, 128, 120, 220],
+            expressionCount: 5,
+            expressionGenes: ['COL4A1'],
+          },
+        ]}
+      />,
+    )
+
+    const expressionLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'gene-expression-scatter'
+    }) as
+      | {
+          readonly props?: {
+            readonly data?: readonly unknown[]
+            readonly pickable?: boolean
+          }
+        }
+      | undefined
+    const cellLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'cells-overview-scatter'
+    }) as
+      | {
+          readonly props?: {
+            readonly filled?: boolean
+          }
+        }
+      | undefined
+
+    expect(expressionLayer?.props?.data).toHaveLength(1)
+    expect(expressionLayer?.props?.pickable).toBe(false)
+    expect(cellLayer?.props?.filled).toBe(true)
   })
 
   it('omits transcript hover cell details when no cell id is present', () => {

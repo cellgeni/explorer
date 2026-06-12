@@ -213,6 +213,66 @@ describe('useViewportDataWorkflow', () => {
     })
   })
 
+  it('retries retryable gene expression load failures once', async () => {
+    const loadGeneExpression = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Network request failed'))
+      .mockResolvedValueOnce(batch)
+
+    render(
+      <Probe
+        loadBoundaryElements={vi.fn(async () => ({ elements: [] }))}
+        loadGeneExpression={loadGeneExpression}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(detailWithoutBoundaryLoad)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadGeneExpression).toHaveBeenCalledTimes(2)
+    expect(snapshot.geneExpressionState.status).toBe('ready')
+    expect(snapshot.geneExpressionBatch).toBe(batch)
+    expect(snapshot.debugMessages).toContain('Gene expression load failed; retrying')
+  })
+
+  it('does not retry nonretryable gene expression load failures', async () => {
+    const loadGeneExpression = vi.fn(async () => {
+      throw new Error('matrix unavailable')
+    })
+
+    render(
+      <Probe
+        loadBoundaryElements={vi.fn(async () => ({ elements: [] }))}
+        loadGeneExpression={loadGeneExpression}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(detailWithoutBoundaryLoad)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadGeneExpression).toHaveBeenCalledTimes(1)
+    expect(snapshot.geneExpressionState.status).toBe('error')
+  })
+
   it('clears gene expression state when no genes are selected', () => {
     const loadGeneExpression = vi.fn(async () => batch)
 

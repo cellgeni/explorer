@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { micrometers } from './coords'
 import {
   GENE_EXPRESSION_EXACT_CELL_LIMIT,
-  GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT,
   GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
   GENE_EXPRESSION_SAMPLE_CELL_LIMIT,
   geneExpressionRequestKey,
@@ -57,10 +56,41 @@ describe('gene expression LOD planner', () => {
     })
   })
 
-  it('waits instead of requesting exact region expression above the cap', () => {
+  it('falls back to sampled expression above the exact region cap', () => {
     expect(
       planGeneExpressionLod(
-        detail({ visibleCellCount: GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT + 1 }),
+        detail({
+          visibleCellCount: 75_000,
+          viewState: { target: [150, -250, 0], zoom: 0 },
+        }),
+        {
+          detailMode: 'exact-region',
+          slideBbox,
+          totalCellCount: 120_000,
+        },
+      ),
+    ).toEqual({
+      kind: 'request',
+      mode: 'sampled',
+      bbox: {
+        minX: micrometers(60),
+        maxX: micrometers(340),
+        minY: micrometers(160),
+        maxY: micrometers(440),
+      },
+      cellLimit: GENE_EXPRESSION_SAMPLE_CELL_LIMIT,
+      sampleStride: 5,
+      sourceCellCount: 75_000,
+    })
+  })
+
+  it('falls back to whole-slide overview expression from exact region at broad zoom', () => {
+    expect(
+      planGeneExpressionLod(
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: -3 },
+        }),
         {
           detailMode: 'exact-region',
           slideBbox,
@@ -68,8 +98,12 @@ describe('gene expression LOD planner', () => {
         },
       ),
     ).toEqual({
-      kind: 'waiting',
-      message: 'Exact region needs 50,000 or fewer visible cells',
+      kind: 'request',
+      mode: 'overview-sampled',
+      bbox: slideBbox,
+      cellLimit: GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
+      sampleStride: 4,
+      sourceCellCount: 60_000,
     })
   })
 

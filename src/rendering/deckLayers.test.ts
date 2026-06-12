@@ -100,7 +100,7 @@ describe('deck layer factory', () => {
     expect(layer.props.radiusMaxPixels).toBe(24)
     expect(layer.props.opacity).toBe(1)
     expect(layer.props.updateTriggers).toMatchObject({
-      getFillColor: [0.5],
+      getFillColor: [0.175],
       getLineColor: [1],
     })
 
@@ -231,7 +231,7 @@ describe('deck layer factory', () => {
       expect.any(Object),
     ])
     expect(pointLayer.props.updateTriggers).toMatchObject({
-      getFillColor: [0.35],
+      getFillColor: [0.12249999999999998],
       getLineColor: [0.6],
     })
     expect(pointLayer.props.filled).toBe(true)
@@ -362,9 +362,10 @@ describe('deck layer factory', () => {
     })
     expect(cellLayer.id).toBe('cells-overview-scatter')
     expect(cellLayer.props.pickable).toBe(true)
+    expect(cellLayer.props.filled).toBe(true)
     expect(cellLayer.props.lineWidthMinPixels).toBe(1)
     expect(cellLayer.props.updateTriggers).toMatchObject({
-      getFillColor: [0.45],
+      getFillColor: [0.5],
       getLineColor: [0.4],
     })
 
@@ -375,8 +376,84 @@ describe('deck layer factory', () => {
       cell: OverviewCellDatum,
     ) => readonly number[]
 
-    expect(getFillColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 35])
+    expect(getFillColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 110])
     expect(getLineColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 88])
+  })
+
+  it('styles unmatched visible cells as expression-zero cells while expression is active', () => {
+    const cells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-without-expression',
+        position: [10, -20, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      },
+    ]
+    const expressionStyledCells = styleCellsByGeneExpression(cells, [], {
+      styleUnmatchedCells: true,
+    })
+    const layers = createOverviewLayers(expressionStyledCells, [], {
+      cellFillOpacity: 0.45,
+      cellBoundaryOpacity: 0.4,
+      geneExpressionActive: true,
+    })
+
+    expect(expressionStyledCells[0]).toMatchObject({
+      id: 'cell-without-expression',
+      fillColor: [72, 68, 58, 84],
+      expressionCount: 0,
+    })
+
+    const cellLayer = layers[0]
+
+    if (!(cellLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected overview cell layer to be a ScatterplotLayer.')
+    }
+
+    const getFillColor = cellLayer.props.getFillColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
+
+    expect(cellLayer.props.filled).toBe(true)
+    expect(getFillColor(expressionStyledCells[0]!)).toEqual([72, 68, 58, 42])
+  })
+
+  it('adds a non-pickable gene expression overlay when expression cells need direct drawing', () => {
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        id: 'expression-cell-1',
+        position: [120, -140, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 5,
+        expressionGenes: ['A2ML1'],
+      },
+    ]
+    const layers = createOverviewLayers(fixtureCells, [], {
+      cellFillOpacity: 0.45,
+      cellBoundaryOpacity: 0.4,
+      geneExpressionOverlayCells: expressionCells,
+    })
+
+    expect(layers).toHaveLength(2)
+    expect(layers[0]).toBeInstanceOf(ScatterplotLayer)
+    expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
+
+    const expressionLayer = layers[1]
+
+    if (!(expressionLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected expression overlay to be a ScatterplotLayer.')
+    }
+
+    expect(expressionLayer.id).toBe('gene-expression-scatter')
+    expect(expressionLayer.props.data).toBe(expressionCells)
+    expect(expressionLayer.props.pickable).toBe(false)
+    expect(expressionLayer.props.filled).toBe(true)
+    expect(expressionLayer.props.radiusMinPixels).toBe(1.5)
+    expect(expressionLayer.props.updateTriggers).toMatchObject({
+      getFillColor: [0.5],
+      getLineColor: [0.4],
+    })
   })
 
   it('merges gene expression color into sampled overview points by spatial bin', () => {

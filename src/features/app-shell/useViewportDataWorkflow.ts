@@ -246,11 +246,41 @@ export function useViewportDataWorkflow({
         visibleCellCount: expressionPlan.sourceCellCount,
       })
 
-      void loadGeneExpression(loadState.url, expressionPlan.bbox, selectedGenes, {
+      const expressionOptions = {
         signal: expressionAbortController.signal,
         limit: expressionPlan.cellLimit,
         sampleStride: expressionPlan.sampleStride,
-      })
+      }
+      const loadExpressionBatch = async (): Promise<GeneExpressionBatch> => {
+        try {
+          return await loadGeneExpression(
+            loadState.url,
+            expressionPlan.bbox,
+            selectedGenes,
+            expressionOptions,
+          )
+        } catch (error) {
+          if (
+            expressionAbortController.signal.aborted ||
+            !isRetryableExpressionLoadError(error)
+          ) {
+            throw error
+          }
+
+          appendDebugEvent('Gene expression load failed; retrying', {
+            coalesceKey: 'gene-expression-query',
+          })
+
+          return loadGeneExpression(
+            loadState.url,
+            expressionPlan.bbox,
+            selectedGenes,
+            expressionOptions,
+          )
+        }
+      }
+
+      void loadExpressionBatch()
         .then((batch) => {
           if (geneExpressionRequestIdRef.current !== expressionRequestId) {
             return
@@ -354,4 +384,29 @@ export function useViewportDataWorkflow({
   }, [handleViewportChange, lastViewportDetailRef])
 
   return { handleViewportChange }
+}
+
+function isRetryableExpressionLoadError(error: unknown): boolean {
+  if (isAbortError(error)) {
+    return false
+  }
+
+  const message = readErrorMessage(error).toLowerCase()
+
+  return (
+    isTypeErrorLike(error) ||
+    message.includes('failed to fetch') ||
+    message.includes('load failed') ||
+    message.includes('network request failed') ||
+    message.includes('networkerror')
+  )
+}
+
+function isTypeErrorLike(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'name' in error &&
+    error.name === 'TypeError'
+  )
 }

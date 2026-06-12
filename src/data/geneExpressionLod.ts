@@ -2,8 +2,7 @@ import { micrometers } from './coords'
 import type { BBox } from './coords'
 
 export const GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT = 50_000
-export const GENE_EXPRESSION_EXACT_CELL_LIMIT =
-  GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT
+export const GENE_EXPRESSION_EXACT_CELL_LIMIT = GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT
 export const GENE_EXPRESSION_SAMPLE_CELL_LIMIT = 15_000
 export const GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT = 15_000
 export const GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO = 0.2
@@ -50,15 +49,8 @@ export function planGeneExpressionLod(
 ): GeneExpressionLodPlan {
   if (
     options.detailMode === 'exact-region' &&
-    detail.visibleCellCount > GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT
+    detail.visibleCellCount <= GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT
   ) {
-    return {
-      kind: 'waiting',
-      message: `Exact region needs ${GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT.toLocaleString()} or fewer visible cells`,
-    }
-  }
-
-  if (options.detailMode === 'exact-region') {
     return {
       kind: 'request',
       mode: 'exact-region',

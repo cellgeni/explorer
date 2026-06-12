@@ -15,6 +15,7 @@ import {
 import {
   EXPRESSION_AGGREGATION_BIN_MICROMETERS,
   EXPRESSION_AGGREGATION_EXACT_ZOOM,
+  aggregateExpressionCells,
   estimateOverviewCellCountInBbox,
   overviewCellsExtentBbox,
   overviewCellsInBbox,
@@ -47,6 +48,9 @@ const SCALE_BAR_MIN_WIDTH_PIXELS = 44
 const SCALE_BAR_MAX_VIEWPORT_RATIO = 0.5
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
+const DATASET_LOADING_TASK_ID = 'dataset'
+const MORPHOLOGY_LOADING_TASK_ID = 'morphology'
+const BOUNDARY_LOADING_TASK_ID = 'boundaries'
 
 export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type ViewerCoordinateUnit = 'um' | 'px'
@@ -54,6 +58,7 @@ export type ViewerCoordinateUnit = 'um' | 'px'
 export interface ViewerCoreProps {
   readonly cells?: readonly OverviewCellDatum[]
   readonly expressionCells?: readonly OverviewCellDatum[]
+  readonly geneExpressionActive?: boolean
   readonly boundaries?: readonly CellBoundaryDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
@@ -153,6 +158,7 @@ export type RoiDrawMode = 'idle' | 'box' | 'lasso'
 export function ViewerCore({
   cells = [],
   expressionCells = [],
+  geneExpressionActive = false,
   boundaries = [],
   transcriptAggregateBins = [],
   transcriptPoints = [],
@@ -212,6 +218,7 @@ export function ViewerCore({
       key={resetKey}
       cells={cells}
       expressionCells={expressionCells}
+      geneExpressionActive={geneExpressionActive}
       boundaries={boundaries}
       transcriptAggregateBins={transcriptAggregateBins}
       transcriptPoints={transcriptPoints}
@@ -265,6 +272,7 @@ export function ViewerCore({
 interface ViewerSurfaceProps {
   readonly cells: readonly OverviewCellDatum[]
   readonly expressionCells: readonly OverviewCellDatum[]
+  readonly geneExpressionActive: boolean
   readonly boundaries: readonly CellBoundaryDatum[]
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints: readonly TranscriptPointDatum[]
@@ -384,6 +392,7 @@ interface RoiScreenRect {
 function ViewerSurface({
   cells,
   expressionCells,
+  geneExpressionActive,
   boundaries,
   transcriptAggregateBins,
   transcriptPoints,
@@ -518,8 +527,20 @@ function ViewerSurface({
     [expressionCells, shouldUseExpressionPointBins],
   )
   const expressionStyledRenderCells = useMemo(
-    () => styleCellsByGeneExpression(renderCells, geneExpressionPointStyleIndex),
-    [geneExpressionPointStyleIndex, renderCells],
+    () =>
+      styleCellsByGeneExpression(renderCells, geneExpressionPointStyleIndex, {
+        styleUnmatchedCells: geneExpressionActive,
+      }),
+    [geneExpressionActive, geneExpressionPointStyleIndex, renderCells],
+  )
+  const geneExpressionOverlayCells = useMemo(
+    () =>
+      expressionOverlayCellsForRendering({
+        expressionCells,
+        viewState,
+        viewportBbox,
+      }),
+    [expressionCells, viewState, viewportBbox],
   )
   const cellById = useMemo(() => {
     const nextCellById = new Map<string, OverviewCellDatum>()
@@ -584,6 +605,8 @@ function ViewerSurface({
         cellBoundaryFillEnabled,
         cellBoundaryGeometry: boundaryLayerGeometry,
         cellBoundaryStyle: boundaryLayerStyle,
+        geneExpressionActive,
+        geneExpressionOverlayCells,
         transcriptAggregateBins,
         transcriptPoints,
         transcriptOpacity,
@@ -597,6 +620,8 @@ function ViewerSurface({
       boundaryLayerStyle,
       boundaries,
       expressionStyledRenderCells,
+      geneExpressionActive,
+      geneExpressionOverlayCells,
       transcriptAggregateBins,
       transcriptOpacity,
       transcriptPointSize,
@@ -735,11 +760,21 @@ function ViewerSurface({
     viewState,
     viewport,
   ])
-  const viewportMessage = readViewportMessage(status, imageStatus, boundaryStatus, {
-    ...(errorMessage === undefined ? {} : { errorMessage }),
-    ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
-    ...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage }),
-  })
+  const loadingTaskIds = useMemo(
+    () => new Set(loadingTasks.map((task) => task.id)),
+    [loadingTasks],
+  )
+  const viewportMessage = readViewportMessage(
+    status,
+    imageStatus,
+    boundaryStatus,
+    {
+      ...(errorMessage === undefined ? {} : { errorMessage }),
+      ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
+      ...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage }),
+    },
+    loadingTaskIds,
+  )
   const mouseCoordinateText =
     !canTrackMouseCoordinates || mouseCoordinate === null
       ? null
@@ -1333,6 +1368,28 @@ function ViewerSurface({
       )}
     </div>
   )
+}
+
+function expressionOverlayCellsForRendering({
+  expressionCells,
+  viewState,
+  viewportBbox,
+}: {
+  readonly expressionCells: readonly OverviewCellDatum[]
+  readonly viewState: OverviewViewState
+  readonly viewportBbox: BBox | null
+}): readonly OverviewCellDatum[] {
+  if (expressionCells.length === 0) {
+    return EMPTY_OVERVIEW_CELLS
+  }
+
+  const overlayCells = aggregateExpressionCells(expressionCells, viewState, {
+    ...(viewportBbox === null ? {} : { bbox: viewportBbox }),
+    binMicrometers: EXPRESSION_AGGREGATION_BIN_MICROMETERS,
+    exactZoom: EXPRESSION_AGGREGATION_EXACT_ZOOM,
+  })
+
+  return overlayCells.length === 0 ? EMPTY_OVERVIEW_CELLS : overlayCells
 }
 
 function pointerEventToDataPoint(
@@ -1980,8 +2037,9 @@ function readViewportMessage(
     readonly imageErrorMessage?: string
     readonly boundaryErrorMessage?: string
   },
+  loadingTaskIds: ReadonlySet<string>,
 ): { readonly kind: 'info' | 'error'; readonly text: string } | null {
-  if (status === 'loading') {
+  if (status === 'loading' && !loadingTaskIds.has(DATASET_LOADING_TASK_ID)) {
     return { kind: 'info', text: 'Loading overview cells…' }
   }
 
@@ -1992,7 +2050,7 @@ function readViewportMessage(
     }
   }
 
-  if (imageStatus === 'loading') {
+  if (imageStatus === 'loading' && !loadingTaskIds.has(MORPHOLOGY_LOADING_TASK_ID)) {
     return { kind: 'info', text: 'Reading OME-TIFF image…' }
   }
 
@@ -2003,7 +2061,7 @@ function readViewportMessage(
     }
   }
 
-  if (boundaryStatus === 'loading') {
+  if (boundaryStatus === 'loading' && !loadingTaskIds.has(BOUNDARY_LOADING_TASK_ID)) {
     return { kind: 'info', text: 'Loading cell boundaries…' }
   }
 

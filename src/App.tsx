@@ -1463,6 +1463,7 @@ export function App({
         <ViewerCore
           cells={styledOverviewCells}
           expressionCells={styledGeneExpressionCells}
+          geneExpressionActive={geneExpressionState.status === 'ready'}
           boundaries={boundaryLayerData}
           transcriptAggregateBins={transcriptLayerAggregateBins}
           transcriptPoints={transcriptLayerPoints}
