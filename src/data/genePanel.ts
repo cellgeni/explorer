@@ -1,8 +1,13 @@
 import { isGeneFeature } from './gex'
 import { datasetFileUrl } from './datasetFiles'
+import { loadTranscriptZarrGenePanel as loadTranscriptZarrGenePanelFromZip } from './transcriptZarr'
 
 export interface LoadGenePanelOptions {
   readonly fetcher?: typeof fetch
+  readonly loadTranscriptZarrGenePanel?: (
+    url: string,
+    options?: { readonly signal?: AbortSignal },
+  ) => Promise<readonly string[]>
   readonly signal?: AbortSignal
 }
 
@@ -16,16 +21,25 @@ export async function loadGenePanel(
 ): Promise<readonly string[]> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
   const url = datasetFileUrl(baseUrl, 'gene_panel.json')
-  const response =
-    options.signal === undefined
-      ? await fetcher(url)
-      : await fetcher(url, { signal: options.signal })
 
-  if (!response.ok) {
-    throw new Error(`Unable to load gene_panel.json: HTTP ${response.status}.`)
+  try {
+    const response =
+      options.signal === undefined
+        ? await fetcher(url)
+        : await fetcher(url, { signal: options.signal })
+
+    if (!response.ok) {
+      throw new Error(`Unable to load gene_panel.json: HTTP ${response.status}.`)
+    }
+
+    return parseGenePanel(await response.json())
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error
+    }
+
+    return loadGenePanelFromTranscriptZarr(baseUrl, error, options)
   }
-
-  return parseGenePanel(await response.json())
 }
 
 export function parseGenePanel(json: unknown): readonly string[] {
@@ -142,4 +156,43 @@ function readFirstStringProperty(
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null
+}
+
+async function loadGenePanelFromTranscriptZarr(
+  baseUrl: string,
+  genePanelError: unknown,
+  options: LoadGenePanelOptions,
+): Promise<readonly string[]> {
+  const loader = options.loadTranscriptZarrGenePanel ?? loadTranscriptZarrGenePanelFromZip
+  const url = datasetFileUrl(baseUrl, 'transcripts.zarr.zip')
+  const loaderOptions =
+    options.signal === undefined ? undefined : { signal: options.signal }
+
+  try {
+    return await loader(url, loaderOptions)
+  } catch (transcriptZarrError) {
+    if (isAbortError(transcriptZarrError)) {
+      throw transcriptZarrError
+    }
+
+    throw new Error(
+      `Unable to load gene panel from gene_panel.json (${errorMessage(
+        genePanelError,
+      )}) or transcripts.zarr.zip (${errorMessage(transcriptZarrError)}).`,
+      { cause: transcriptZarrError },
+    )
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    error.name === 'AbortError'
+  )
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

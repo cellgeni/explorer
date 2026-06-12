@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   chooseTranscriptGridLevel,
+  parseTranscriptZarrGenePanelAttrs,
   transcriptDensityLevelForBbox,
   transcriptFeatureCircleOffset,
   transcriptGroupsFromPoints,
@@ -138,6 +139,23 @@ describe('transcriptZarr', () => {
     const cappedOffset = transcriptFeatureCircleOffset(8, 12, 100)
     expect(cappedOffset.x).toBeCloseTo(0)
     expect(cappedOffset.y).toBeCloseTo(-28)
+  })
+
+  it('extracts gene panel names from transcript Zarr root attributes', () => {
+    expect(
+      parseTranscriptZarrGenePanelAttrs({
+        gene_names: ['Gad1', 'NegControlProbe_001', 'Slc17a7', 'BLANK_0001', 'Actb'],
+        gene_category: ['Gene', 'Gene', 'Gene Expression', 'Blank Codeword', 'Gene'],
+      }),
+    ).toEqual(['Actb', 'Gad1', 'Slc17a7'])
+  })
+
+  it('uses transcript Zarr gene names without categories when needed', () => {
+    expect(
+      parseTranscriptZarrGenePanelAttrs({
+        gene_names: ['Actb', 'NegControlCodeword_001', 'Gad1'],
+      }),
+    ).toEqual(['Actb', 'Gad1'])
   })
 })
 

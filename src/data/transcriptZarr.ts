@@ -2,6 +2,7 @@ import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
 import { micrometers } from './coords'
 import type { BBox } from './coords'
+import { isGeneFeature } from './gex'
 import type {
   TranscriptAggregateBin,
   TranscriptAggregateFeatureSummary,
@@ -41,6 +42,10 @@ export interface TranscriptZarrViewportOptions {
   readonly minQv?: number
   readonly geneOnly?: boolean
   readonly featureNames?: readonly string[]
+}
+
+export interface TranscriptZarrGenePanelOptions {
+  readonly signal?: AbortSignal
 }
 
 interface TranscriptZarrMetadata {
@@ -221,6 +226,62 @@ export async function loadTranscriptZarrViewport(
     groups: transcriptGroupsFromPoints(renderedPoints, groupLimit),
     hitPointLimit,
   }
+}
+
+export async function loadTranscriptZarrGenePanel(
+  url: string,
+  options: TranscriptZarrGenePanelOptions = {},
+): Promise<readonly string[]> {
+  const store = ZipFileStore.fromUrl(
+    url,
+    options.signal === undefined ? {} : { overrides: { signal: options.signal } },
+  )
+  const root = await zarr.open(store, { kind: 'group' })
+  const rootGenes = parseTranscriptZarrGenePanelAttrs(root.attrs)
+
+  if (rootGenes.length > 0) {
+    return rootGenes
+  }
+
+  try {
+    const densityGene = await zarr.open(root.resolve('density/gene'), {
+      kind: 'group',
+    })
+    const densityGenes = parseTranscriptZarrGenePanelAttrs(densityGene.attrs)
+
+    if (densityGenes.length > 0) {
+      return densityGenes
+    }
+  } catch {
+    // Root attributes are the primary source; density/gene is only a fallback.
+  }
+
+  throw new Error('transcripts.zarr.zip does not expose gene_names metadata.')
+}
+
+export function parseTranscriptZarrGenePanelAttrs(
+  attrs: Record<string, unknown>,
+): readonly string[] {
+  const geneNames = readOptionalStringArrayAttribute(attrs, 'gene_names')
+
+  if (geneNames.length === 0) {
+    return []
+  }
+
+  const geneCategories = readOptionalGeneCategoryAttribute(attrs, geneNames.length)
+  const genes = new Set<string>()
+
+  for (let index = 0; index < geneNames.length; index += 1) {
+    const name = geneNames[index]
+    const category = geneCategories[index]
+    const normalizedName = name?.trim() ?? ''
+
+    if (normalizedName.length > 0 && isGeneFeature(normalizedName, category)) {
+      genes.add(normalizedName)
+    }
+  }
+
+  return [...genes].sort((left, right) => left.localeCompare(right))
 }
 
 export async function loadTranscriptZarrAggregates(
@@ -612,9 +673,7 @@ function nativeDensityBaseBinSize(densityGene: TranscriptDensityGeneMetadata): n
 function allDensityGeneIndexes(
   geneNames: readonly string[],
 ): readonly { readonly index: number; readonly name: string }[] {
-  return geneNames.flatMap((name, index) =>
-    name === undefined ? [] : [{ index, name }],
-  )
+  return geneNames.flatMap((name, index) => (name === undefined ? [] : [{ index, name }]))
 }
 
 function selectedGeneIndexes(
@@ -1481,6 +1540,41 @@ function readStringArrayAttribute(
   }
 
   return value
+}
+
+function readOptionalStringArrayAttribute(
+  attrs: Record<string, unknown>,
+  key: string,
+): readonly string[] {
+  const value = attrs[key]
+
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+    ? value
+    : []
+}
+
+function readOptionalGeneCategoryAttribute(
+  attrs: Record<string, unknown>,
+  geneCount: number,
+): readonly (string | undefined)[] {
+  const categoryKeys = [
+    'gene_category',
+    'gene_categories',
+    'feature_type',
+    'feature_types',
+    'category',
+    'categories',
+  ] as const
+
+  for (const key of categoryKeys) {
+    const categories = readOptionalStringArrayAttribute(attrs, key)
+
+    if (categories.length === geneCount) {
+      return categories
+    }
+  }
+
+  return []
 }
 
 function readNestedNumberArrayAttribute(
