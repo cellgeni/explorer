@@ -29,7 +29,8 @@ Optional but supported files include:
 ## HTTP Requirements
 
 The app reads large files directly in the browser, so hosting must support
-byte-range `GET` requests and CORS for the app origin. See
+byte-range `GET` requests and CORS for the app origin. AWS S3 and S3-compatible
+services such as Ceph RADOS Gateway (RGW) can work when configured this way. See
 [`docs/s3-cors-playbook.md`](./s3-cors-playbook.md) for the exact headers.
 
 Important rules:

@@ -76,6 +76,9 @@ manifest and key byte-range reads before loading optional assets.
 - [User guide](docs/user-guide.md): loading data, navigation, layers, genes,
   transcript overlays, annotations, ROI tools, embeddings, diagnostics, and
   shareable URLs.
+- [Deploy the React app to S3-compatible object storage](docs/deploy-to-s3.md):
+  build the Vite app, upload `dist/` to AWS S3 or Ceph RGW-style storage,
+  configure edge headers, and validate production.
 - [Host your own data](docs/host-your-own-data.md): required and optional
   Xenium files, HTTP requirements, and quick validation commands.
 - [S3/CORS hosting playbook](docs/s3-cors-playbook.md): exact CORS headers,
