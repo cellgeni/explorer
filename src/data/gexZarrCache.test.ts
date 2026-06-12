@@ -431,11 +431,57 @@ describe('Zarr cell feature matrix cache', () => {
     )
     expect(roiCellIdReads).toHaveLength(0)
   })
+
+  it('uses feature-major selected-gene reads for large target cell sets', async () => {
+    const cellCount = 50_001
+    const cellIds = Array.from({ length: cellCount }, (_value, index) =>
+      intToCellId(1, index + 1),
+    )
+    const cellIdPairs = Uint32Array.from({ length: cellCount * 2 }, (_value, index) =>
+      index % 2 === 0 ? 1 : Math.floor(index / 2) + 1,
+    )
+
+    setupZarrMatrixMock({
+      cellIdPairs,
+      indptr: new Uint32Array([0, 1, 2]),
+      featureIndptr: new Uint32Array([0, 2, 2]),
+      featureIndices: new Uint32Array([0, cellCount - 1]),
+      featureData: new Uint32Array([9, 4]),
+    })
+
+    const { gexFromCellFeatureMatrixZarrSelectedGenes } = await import('./gex')
+    const url =
+      'https://example.test/xenium/feature-major-large/cell_feature_matrix.zarr.zip'
+    const result = await gexFromCellFeatureMatrixZarrSelectedGenes(url, cellIds, ['Actb'])
+
+    expect(result.geneNames).toEqual(['Actb'])
+    expect(result.cells.get(cellIds[0] ?? intToCellId(0, 0))).toEqual({
+      geneNames: ['Actb'],
+      counts: [9],
+    })
+    expect(result.cells.get(cellIds[cellCount - 1] ?? intToCellId(0, 0))).toEqual({
+      geneNames: ['Actb'],
+      counts: [4],
+    })
+
+    const featureMajorReads = zarrMock.get.mock.calls
+      .filter(([target]) => target.path === 'cell_features/indices')
+      .map(([, ranges]) => readRange(ranges))
+    const cellMajorIndexReads = zarrMock.get.mock.calls.filter(
+      ([target]) => target.path === 'cell_features/csc/indices',
+    )
+
+    expect(featureMajorReads).toEqual([{ start: 0, end: 2 }])
+    expect(cellMajorIndexReads).toHaveLength(0)
+  })
 })
 
 function setupZarrMatrixMock(options: {
   readonly cellIdPairs: Uint32Array
   readonly indptr: Uint32Array
+  readonly featureIndptr?: Uint32Array
+  readonly featureIndices?: Uint32Array
+  readonly featureData?: Uint32Array
   readonly hasCellMajorCsc?: boolean
 }): void {
   const root = node('')
@@ -477,6 +523,27 @@ function setupZarrMatrixMock(options: {
       const { start, end } = readRange(ranges, options.indptr.length)
 
       return { data: options.indptr.slice(start, end) }
+    }
+
+    if (target.path === 'cell_features/indptr') {
+      const indptr = options.featureIndptr ?? new Uint32Array([0, 0, 0])
+      const { start, end } = readRange(ranges, indptr.length)
+
+      return { data: indptr.slice(start, end) }
+    }
+
+    if (target.path === 'cell_features/indices') {
+      const indices = options.featureIndices ?? new Uint32Array(0)
+      const { start, end } = readRange(ranges, indices.length)
+
+      return { data: indices.slice(start, end) }
+    }
+
+    if (target.path === 'cell_features/data') {
+      const data = options.featureData ?? new Uint32Array(0)
+      const { start, end } = readRange(ranges, data.length)
+
+      return { data: data.slice(start, end) }
     }
 
     if (target.path === 'cell_features/csc/indices') {

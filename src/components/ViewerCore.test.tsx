@@ -243,6 +243,77 @@ describe('ViewerCore', () => {
     expect(cellLayer?.props?.filled).toBe(true)
   })
 
+  it('paints visible boundary polygons for gene expression instead of drawing duplicate points', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cell: OverviewCellDatum = {
+      id: 'cell-1',
+      position: [0, 0, 0],
+      radiusPixels: 4,
+      fillColor: [215, 63, 124, 220],
+    }
+    const boundary: CellBoundaryDatum = {
+      id: 'cell-1',
+      polygon: [
+        [-5, -5, 0],
+        [5, -5, 0],
+        [5, 5, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+
+    render(
+      <ViewerCore
+        cells={[cell]}
+        boundaries={[boundary]}
+        geneExpressionActive
+        expressionCells={[
+          {
+            ...cell,
+            fillColor: [240, 128, 120, 220],
+            expressionCount: 5,
+            expressionGenes: ['COL4A1'],
+          },
+        ]}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: 0 }}
+      />,
+    )
+
+    await act(async () => {
+      vi.advanceTimersByTime(200)
+    })
+
+    const fillLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'cell-boundary-fills'
+    }) as
+      | {
+          readonly props?: {
+            readonly data?: {
+              readonly attributes?: {
+                readonly getFillColor?: { readonly value?: Uint8Array }
+              }
+            }
+          }
+        }
+      | undefined
+    const expressionLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'gene-expression-scatter'
+    })
+
+    expect(
+      Array.from(
+        fillLayer?.props?.data?.attributes?.getFillColor?.value?.slice(0, 4) ?? [],
+      ),
+    ).toEqual([240, 128, 120, 110])
+    expect(expressionLayer).toBeUndefined()
+  })
+
   it('omits transcript hover cell details when no cell id is present', () => {
     const transcript = transcriptDatum({
       id: 'tx-without-cell',

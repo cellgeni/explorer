@@ -138,6 +138,8 @@ const CELL_MAJOR_INDPTR_FETCH_CONCURRENCY = 8
 const CELL_MAJOR_FULL_INDPTR_TARGET_THRESHOLD = 64
 const CELL_MAJOR_FULL_INDPTR_MAX_LENGTH = 6_000_000
 const CELL_MAJOR_ROI_WARMUP_ROW_COUNT = 128
+const SELECTED_GENE_FEATURE_MAJOR_CELL_THRESHOLD = 50_000
+const SELECTED_GENE_FEATURE_MAJOR_GENE_THRESHOLD = 128
 const h5MatrixCache = new Map<string, Promise<H5MatrixCache>>()
 const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
 const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
@@ -597,11 +599,32 @@ export async function gexFromCellFeatureMatrixZarrSelectedGenes(
 
   const matrix = await loadZarrMatrixWithCellIds(url)
 
-  if (hasCellMajorCsc(matrix)) {
+  if (
+    hasCellMajorCsc(matrix) &&
+    shouldUseCellMajorSelectedGeneRead(cellIds, selectedGenes)
+  ) {
     return gexFromCellFeatureMatrixZarr(url, cellIds)
   }
 
-  return gexFromFeatureMajorCellFeatureMatrix(matrix, cellIds, selectedGenes)
+  try {
+    return await gexFromFeatureMajorCellFeatureMatrix(matrix, cellIds, selectedGenes)
+  } catch (error) {
+    if (hasCellMajorCsc(matrix) && isZarrNotFoundError(error)) {
+      return gexFromCellFeatureMatrixZarr(url, cellIds)
+    }
+
+    throw error
+  }
+}
+
+function shouldUseCellMajorSelectedGeneRead(
+  cellIds: readonly CellId[],
+  selectedGenes: readonly string[],
+): boolean {
+  return (
+    cellIds.length <= SELECTED_GENE_FEATURE_MAJOR_CELL_THRESHOLD ||
+    selectedGenes.length > SELECTED_GENE_FEATURE_MAJOR_GENE_THRESHOLD
+  )
 }
 
 export function gexFromFeatureMajorSparseArrays(options: {

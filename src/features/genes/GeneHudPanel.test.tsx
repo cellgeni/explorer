@@ -79,7 +79,7 @@ describe('GeneHudPanel', () => {
       target: { value: 'viridis' },
     })
     fireEvent.change(screen.getByLabelText('Expression detail'), {
-      target: { value: 'exact-region' },
+      target: { value: 'all-cells' },
     })
     fireEvent.change(screen.getByLabelText('Cell color'), {
       target: { value: 'annotations' },
@@ -96,7 +96,7 @@ describe('GeneHudPanel', () => {
     expect(handlers.onApplySavedGeneSet).toHaveBeenCalledWith(savedGeneSet)
     expect(handlers.onRemoveSavedGeneSet).toHaveBeenCalledWith('set-1')
     expect(handlers.onGeneExpressionColorScaleChange).toHaveBeenCalledWith('viridis')
-    expect(handlers.onGeneExpressionDetailModeChange).toHaveBeenCalledWith('exact-region')
+    expect(handlers.onGeneExpressionDetailModeChange).toHaveBeenCalledWith('all-cells')
     expect(handlers.onObservationColorModeChange).toHaveBeenCalledWith('annotations')
   })
 })

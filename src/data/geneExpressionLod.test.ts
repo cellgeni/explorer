@@ -39,6 +39,29 @@ function detail(
 }
 
 describe('gene expression LOD planner', () => {
+  it('requests every slide cell when all-cells mode is selected', () => {
+    expect(
+      planGeneExpressionLod(
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: -3 },
+        }),
+        {
+          detailMode: 'all-cells',
+          slideBbox,
+          totalCellCount: 120_000,
+        },
+      ),
+    ).toEqual({
+      kind: 'request',
+      mode: 'all-cells',
+      bbox: slideBbox,
+      cellLimit: 120_000,
+      sampleStride: 1,
+      sourceCellCount: 120_000,
+    })
+  })
+
   it('uses exact region mode when the requested viewport is below the cap', () => {
     expect(
       planGeneExpressionLod(detail({ visibleCellCount: 6_000 }), {
@@ -161,6 +184,46 @@ describe('gene expression LOD planner', () => {
       }),
       {
         detailMode: 'auto',
+        slideBbox,
+        totalCellCount: 120_000,
+      },
+    )
+
+    if (plan.kind !== 'request') {
+      throw new Error('Expected an expression request plan.')
+    }
+
+    expect(
+      geneExpressionRequestKey(
+        'https://example.test/xenium/',
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: -3 },
+        }),
+        plan,
+        ['Actb'],
+      ),
+    ).toBe(
+      geneExpressionRequestKey(
+        'https://example.test/xenium/',
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [500, -900, 0], zoom: -2.75 },
+        }),
+        plan,
+        ['Actb'],
+      ),
+    )
+  })
+
+  it('keeps all-cell request keys independent from pan and zoom buckets', () => {
+    const plan = planGeneExpressionLod(
+      detail({
+        visibleCellCount: 60_000,
+        viewState: { target: [150, -250, 0], zoom: -3 },
+      }),
+      {
+        detailMode: 'all-cells',
         slideBbox,
         totalCellCount: 120_000,
       },

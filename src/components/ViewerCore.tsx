@@ -552,13 +552,21 @@ function ViewerSurface({
     return nextCellById
   }, [cells])
   const cellBoundaryFillEnabled =
-    observationColorMode === 'annotations' && annotationStyleColors.length > 0
+    (observationColorMode === 'annotations' && annotationStyleColors.length > 0) ||
+    geneExpressionActive
   const boundaryLayerGeometry = useMemo(
     () =>
       createCellBoundaryLayerGeometry(boundaries, {
         includeFill: cellBoundaryFillEnabled,
       }),
     [boundaries, cellBoundaryFillEnabled],
+  )
+  const boundaryExpressionCells = useMemo(
+    () =>
+      boundaries.length === 0 || boundaryStyleViewport === null
+        ? EMPTY_OVERVIEW_CELLS
+        : overviewCellsInBbox(expressionCells, boundaryStyleViewport.bbox),
+    [boundaries.length, boundaryStyleViewport, expressionCells],
   )
   const boundaryStyleCells = useMemo(() => {
     if (boundaryLayerGeometry.boundaryCellIds.size === 0) {
@@ -575,19 +583,23 @@ function ViewerSurface({
       }
     }
 
-    return styleCellsForObservation(
+    const observationStyledCells = styleCellsForObservation(
       boundaryCells,
       observationColorMode,
       annotationStyleColors,
     )
-  }, [annotationStyleColors, boundaryLayerGeometry, cellById, observationColorMode])
-  const boundaryExpressionCells = useMemo(
-    () =>
-      boundaries.length === 0 || boundaryStyleViewport === null
-        ? EMPTY_OVERVIEW_CELLS
-        : overviewCellsInBbox(expressionCells, boundaryStyleViewport.bbox),
-    [boundaries.length, boundaryStyleViewport, expressionCells],
-  )
+
+    return styleCellsByGeneExpression(observationStyledCells, boundaryExpressionCells, {
+      styleUnmatchedCells: geneExpressionActive,
+    })
+  }, [
+    annotationStyleColors,
+    boundaryExpressionCells,
+    boundaryLayerGeometry,
+    cellById,
+    geneExpressionActive,
+    observationColorMode,
+  ])
   const boundaryLayerStyle = useMemo(
     () =>
       createCellBoundaryLayerStyle(

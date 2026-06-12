@@ -96,6 +96,10 @@ export function geneExpressionStatusCopy<
       return `Expression overview: ${geneExpressionState.cellCount.toLocaleString()} positive ${noun} across ${geneExpressionState.visibleCellCount.toLocaleString()} slide cells`
     }
 
+    if (geneExpressionState.mode === 'all-cells') {
+      return `Expression all cells: ${geneExpressionState.cellCount.toLocaleString()} positive ${noun} across ${geneExpressionState.visibleCellCount.toLocaleString()} slide cells`
+    }
+
     if (
       geneExpressionState.mode === 'sampled' &&
       geneExpressionState.visibleCellCount > geneExpressionState.cellCount
@@ -132,6 +136,10 @@ export function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
     return 'Expression exact region'
   }
 
+  if (mode === 'all-cells') {
+    return 'Expression all cells'
+  }
+
   return 'Expression'
 }
 
@@ -153,7 +161,7 @@ export function formatGeneExpressionTiming(
 export function isGeneExpressionDetailMode(
   value: string,
 ): value is GeneExpressionDetailMode {
-  return value === 'auto' || value === 'exact-region'
+  return value === 'auto' || value === 'exact-region' || value === 'all-cells'
 }
 
 export function geneExpressionScaleKeyFor(

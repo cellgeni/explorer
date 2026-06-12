@@ -44,6 +44,16 @@ describe('geneControlsModel', () => {
         visibleCellCount: 1000,
       }),
     ).toBe('Expression overview: 25 positive cells across 1,000 slide cells')
+    expect(
+      geneExpressionStatusCopy({
+        status: 'ready',
+        url: 'https://example.test/output',
+        genes: ['Actb'],
+        mode: 'all-cells',
+        cellCount: 25,
+        visibleCellCount: 1000,
+      }),
+    ).toBe('Expression all cells: 25 positive cells across 1,000 slide cells')
     expect(geneExpressionStatusCopy({ status: 'waiting', message: 'Zoom in' })).toBe(
       'Zoom in',
     )
@@ -58,6 +68,7 @@ describe('geneControlsModel', () => {
 
   it('formats modes, timings, scales, and parser values', () => {
     expect(geneExpressionModeLabel('exact')).toBe('Expression')
+    expect(geneExpressionModeLabel('all-cells')).toBe('Expression all cells')
     expect(
       formatGeneExpressionTiming({
         totalMs: 10.4,
@@ -74,6 +85,7 @@ describe('geneControlsModel', () => {
     expect(parseGeneExpressionColorScale('rainbow')).toBeUndefined()
     expect(parseGeneExpressionScoreMode('z-score')).toBe('z-score')
     expect(parseGeneExpressionDetailMode('exact-region')).toBe('exact-region')
+    expect(parseGeneExpressionDetailMode('all-cells')).toBe('all-cells')
     expect(formatGeneScaleValue(0)).toBe('0')
     expect(formatGeneScaleValue(4.123)).toBe('4.12')
   })

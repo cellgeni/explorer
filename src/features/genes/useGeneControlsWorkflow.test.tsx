@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react'
 import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayers'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
@@ -52,9 +53,8 @@ function GeneControlsProbe({
     React.useState<GeneExpressionBatch | null>(null)
   const [geneExpressionColorScale, setGeneExpressionColorScale] =
     React.useState<GeneExpressionColorScale>('plasma')
-  const [geneExpressionDetailMode, setGeneExpressionDetailMode] = React.useState<
-    'auto' | 'exact-region'
-  >('auto')
+  const [geneExpressionDetailMode, setGeneExpressionDetailMode] =
+    React.useState<GeneExpressionDetailMode>('auto')
   const [geneExpressionScaleDomain, setGeneExpressionScaleDomain] =
     React.useState<GeneExpressionScaleDomain>({ key: 'active', max: 12 })
   const [geneExpressionScoreMode, setGeneExpressionScoreMode] = React.useState<

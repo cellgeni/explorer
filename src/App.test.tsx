@@ -1399,6 +1399,90 @@ describe('App', () => {
     }
   })
 
+  it('can request gene expression across all slide cells without sampling', async () => {
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 1000,
+      height: 1000,
+      top: 0,
+      right: 1000,
+      bottom: 1000,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const overviewCells = Array.from({ length: 50_001 }, (_value, index) => ({
+      cellId: intToCellId(1, index + 1),
+      position: {
+        x: micrometers((index % 250) * 40),
+        y: micrometers(Math.floor(index / 250) * 40),
+      },
+      transcriptCount: 8,
+      cellArea: 22,
+    }))
+    const loadDatasetOverview = vi.fn(async () => overviewCells)
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadGeneExpression: ReturnType<typeof vi.fn<GeneExpressionLoader>> = vi.fn(
+      async () => ({
+        cells: [],
+        genes: ['Actb'],
+        maxCount: 0,
+      }),
+    )
+
+    try {
+      render(
+        <App
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadGeneExpression={loadGeneExpression}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openHudTab('Genes')
+      expect(await screen.findByText('1 genes')).toBeInTheDocument()
+      fireEvent.change(screen.getByRole('combobox', { name: 'Expression detail' }), {
+        target: { value: 'all-cells' },
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
+
+      await waitFor(() => {
+        expect(loadGeneExpression).toHaveBeenCalled()
+      })
+
+      const lastCall = loadGeneExpression.mock.calls.at(-1)
+      expect(lastCall?.[1]).toEqual({
+        minX: micrometers(0),
+        maxX: micrometers(9_960),
+        minY: micrometers(0),
+        maxY: micrometers(8_000),
+      })
+      expect(lastCall?.[2]).toEqual(['Actb'])
+      expect(lastCall?.[3]).toEqual(
+        expect.objectContaining({
+          limit: 50_001,
+          sampleStride: 1,
+          signal: expect.any(AbortSignal) as AbortSignal,
+        }),
+      )
+      expect(
+        await screen.findByText(
+          'Expression all cells: 0 positive cells across 50,001 slide cells',
+        ),
+      ).toBeInTheDocument()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
   it('loads overview cells without morphology image when the option is disabled', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {

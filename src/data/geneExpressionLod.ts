@@ -14,7 +14,8 @@ export type GeneExpressionLoadMode =
   | 'sampled'
   | 'overview-sampled'
   | 'exact-region'
-export type GeneExpressionDetailMode = 'auto' | 'exact-region'
+  | 'all-cells'
+export type GeneExpressionDetailMode = 'auto' | 'exact-region' | 'all-cells'
 
 export interface GeneExpressionViewportDetail {
   readonly bbox: BBox
@@ -47,6 +48,20 @@ export function planGeneExpressionLod(
     readonly totalCellCount: number
   },
 ): GeneExpressionLodPlan {
+  if (options.detailMode === 'all-cells') {
+    const sourceCellCount =
+      options.slideBbox === null ? detail.visibleCellCount : options.totalCellCount
+
+    return {
+      kind: 'request',
+      mode: 'all-cells',
+      bbox: options.slideBbox ?? detail.bbox,
+      cellLimit: Math.max(1, sourceCellCount),
+      sampleStride: 1,
+      sourceCellCount,
+    }
+  }
+
   if (
     options.detailMode === 'exact-region' &&
     detail.visibleCellCount <= GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT
@@ -110,7 +125,7 @@ export function geneExpressionRequestKey(
   plan: Extract<GeneExpressionLodPlan, { readonly kind: 'request' }>,
   genes: readonly string[],
 ): string {
-  if (plan.mode === 'overview-sampled') {
+  if (plan.mode === 'overview-sampled' || plan.mode === 'all-cells') {
     return [
       baseUrl.replace(/\/+$/, ''),
       plan.mode,

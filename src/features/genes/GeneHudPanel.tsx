@@ -304,6 +304,7 @@ export function GeneHudPanel({
         >
           <option value="auto">Auto LOD</option>
           <option value="exact-region">Exact region</option>
+          <option value="all-cells">All cells</option>
         </select>
 
         <label htmlFor={observationModeInputId}>Cell color</label>

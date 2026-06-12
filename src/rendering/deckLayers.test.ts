@@ -456,6 +456,70 @@ describe('deck layer factory', () => {
     })
   })
 
+  it('paints expression-matched boundary polygons instead of overlaying points', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const expressionCells: readonly OverviewCellDatum[] = [
+      {
+        id: 'cell-1',
+        position: [10, -20, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 5,
+      },
+      {
+        id: 'expression-cell-2',
+        position: [120, -140, 0],
+        radiusPixels: 6,
+        fillColor: [63, 165, 91, 220],
+        expressionCount: 3,
+      },
+    ]
+    const geometry = createCellBoundaryLayerGeometry(boundaries, {
+      includeFill: true,
+    })
+    const style = createCellBoundaryLayerStyle(geometry, [], expressionCells)
+    const layers = createOverviewLayers(fixtureCells, boundaries, {
+      cellFillOpacity: 0.45,
+      cellBoundaryOpacity: 0.4,
+      cellBoundaryGeometry: geometry,
+      cellBoundaryStyle: style,
+      geneExpressionActive: true,
+      geneExpressionOverlayCells: expressionCells,
+    })
+    const fillLayer = layers.find((layer) => {
+      return layer instanceof SolidPolygonLayer && layer.id === 'cell-boundary-fills'
+    })
+    const expressionLayer = layers.find((layer) => {
+      return layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter'
+    })
+
+    if (!(fillLayer instanceof SolidPolygonLayer)) {
+      throw new Error('Expected expression boundary fill layer.')
+    }
+
+    if (!(expressionLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected remaining expression overlay layer.')
+    }
+
+    const fillData = getBoundaryFillData(fillLayer)
+
+    expect(Array.from(fillData.attributes.getFillColor.value.slice(0, 4))).toEqual([
+      240, 128, 120, 99,
+    ])
+    expect(expressionLayer.props.data).toEqual([expressionCells[1]])
+  })
+
   it('merges gene expression color into sampled overview points by spatial bin', () => {
     const cells: readonly OverviewCellDatum[] = [
       {

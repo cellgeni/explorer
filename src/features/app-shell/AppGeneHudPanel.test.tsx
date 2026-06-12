@@ -78,7 +78,7 @@ describe('AppGeneHudPanel', () => {
       target: { value: 'viridis' },
     })
     fireEvent.change(screen.getByLabelText('Expression detail'), {
-      target: { value: 'exact-region' },
+      target: { value: 'all-cells' },
     })
     fireEvent.change(screen.getByLabelText('Cell color'), {
       target: { value: 'annotations' },
@@ -90,7 +90,7 @@ describe('AppGeneHudPanel', () => {
     expect(props.setGeneExpressionScoreMode).toHaveBeenCalledWith('sum')
     expect(props.setGeneExpressionScoreMode).toHaveBeenCalledWith('mean')
     expect(props.setGeneExpressionColorScale).toHaveBeenCalledWith('viridis')
-    expect(props.setGeneExpressionDetailMode).toHaveBeenCalledWith('exact-region')
+    expect(props.setGeneExpressionDetailMode).toHaveBeenCalledWith('all-cells')
     expect(props.setObservationColorMode).toHaveBeenCalledWith('annotations')
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Saved gene set Marker set')
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Removed gene set Marker set')
