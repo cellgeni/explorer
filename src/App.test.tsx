@@ -1224,6 +1224,13 @@ describe('App', () => {
       const annotationsTerm = within(cellInfoSection).getByText('Annotations')
       expect(annotationsTerm.nextElementSibling).toHaveTextContent('T cells')
       expect(annotationsTerm.nextElementSibling).not.toHaveTextContent('Other cells')
+
+      fireEvent.click(within(cellInfoSection).getByRole('button', { name: 'Clear Cell' }))
+
+      expect(within(cellInfoSection).getByText('No cell selected')).toBeInTheDocument()
+      expect(
+        within(cellInfoSection).queryByRole('button', { name: 'Clear Cell' }),
+      ).not.toBeInTheDocument()
     } finally {
       rectSpy.mockRestore()
       contextSpy.mockRestore()

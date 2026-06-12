@@ -1415,6 +1415,9 @@ export function App({
             appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
           }}
           onLoadAnalysisEmbeddings={handleLoadAnalysisEmbeddings}
+          onClearSelectedCell={() => {
+            setSelectedCell(null)
+          }}
           onSelectEmbeddingCell={handleEmbeddingCellSelect}
         />
 

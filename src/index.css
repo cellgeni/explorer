@@ -593,6 +593,20 @@ h2 {
   min-width: 0;
 }
 
+.section-heading-actions {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.section-heading-actions .secondary-action {
+  flex: 0 0 auto;
+  min-height: 24px;
+  padding: 3px 6px;
+}
+
 .section-heading-row .status-chip.is-loading::before {
   display: inline-block;
   flex: 0 0 auto;

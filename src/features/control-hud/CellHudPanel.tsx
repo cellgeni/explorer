@@ -29,6 +29,7 @@ interface CellHudPanelProps {
   readonly loadEnabled: boolean
   readonly onEmbeddingKindChange: (kind: AnalysisEmbeddingKind) => void
   readonly onLoadAnalysisEmbeddings: () => void
+  readonly onClearSelectedCell: () => void
   readonly onSelectEmbeddingCell: (cellId: string) => void
 }
 
@@ -49,6 +50,7 @@ export function CellHudPanel({
   loadEnabled,
   onEmbeddingKindChange,
   onLoadAnalysisEmbeddings,
+  onClearSelectedCell,
   onSelectEmbeddingCell,
 }: CellHudPanelProps) {
   return (
@@ -125,16 +127,28 @@ export function CellHudPanel({
       <section className="analysis-section" aria-labelledby="cell-info-heading">
         <div className="section-heading-row">
           <h2 id="cell-info-heading">Cell Info</h2>
-          <span
-            className={
-              cellDetailState.status === 'loading'
-                ? 'status-chip is-loading'
-                : 'status-chip'
-            }
-            aria-live="polite"
-          >
-            {cellDetailCopy}
-          </span>
+          <div className="section-heading-actions">
+            <span
+              className={
+                cellDetailState.status === 'loading'
+                  ? 'status-chip is-loading'
+                  : 'status-chip'
+              }
+              aria-live="polite"
+            >
+              {cellDetailCopy}
+            </span>
+            {selectedCell === null ? null : (
+              <button
+                type="button"
+                className="secondary-action"
+                title="Clear selected cell"
+                onClick={onClearSelectedCell}
+              >
+                Clear Cell
+              </button>
+            )}
+          </div>
         </div>
         <CellInfoPanel
           key={selectedCell?.id ?? 'none'}
