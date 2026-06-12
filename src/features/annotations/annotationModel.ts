@@ -76,6 +76,23 @@ export function annotationLabelsForCell<ErrorType>(
   return labels
 }
 
+export function filterAnnotationsByVisibleSets(
+  annotations: readonly Annotation[],
+  hiddenSetIds: ReadonlySet<string>,
+): readonly Annotation[] {
+  if (hiddenSetIds.size === 0) {
+    return annotations
+  }
+
+  return annotations.filter(
+    (annotation) => !hiddenSetIds.has(annotationSetIdForAnnotation(annotation)),
+  )
+}
+
+export function annotationSetIdForAnnotation(annotation: Annotation): string {
+  return annotationSizeGrouping(annotation).id
+}
+
 export function annotationSizePlots(
   annotations: readonly Annotation[],
 ): readonly AnnotationSizePlot[] {

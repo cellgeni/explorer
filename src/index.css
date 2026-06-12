@@ -960,6 +960,42 @@ h2 {
   background: rgba(255, 253, 247, 0.66);
 }
 
+.annotation-size-plot.is-hidden {
+  background: rgba(255, 253, 247, 0.36);
+}
+
+.annotation-size-plot.is-hidden .annotation-size-list {
+  opacity: 0.48;
+}
+
+.annotation-size-plot-actions,
+.annotation-set-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.annotation-set-toggle {
+  cursor: pointer;
+}
+
+.annotation-set-toggle input {
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  padding: 0;
+  accent-color: #206653;
+}
+
+.annotation-set-toggle span {
+  color: #7b4d1d;
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .annotation-size-axis,
 .annotation-size-row {
   display: grid;

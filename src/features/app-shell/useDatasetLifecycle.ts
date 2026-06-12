@@ -159,6 +159,7 @@ interface UseDatasetLifecycleOptions {
   readonly setAnnotationColors: Setter<Readonly<Record<string, string>>>
   readonly setAnnotationGroupState: Setter<AnnotationGroupState<StructuredLoadError>>
   readonly setAnnotationState: Setter<AnnotationState<StructuredLoadError>>
+  readonly setHiddenAnnotationSetIds: Setter<readonly string[]>
   readonly setCellMetadataTracks: Setter<readonly ContinuousCellMetadataTrack[]>
   readonly setSelectedCellMetadataTrackId: Setter<string | null>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
@@ -280,6 +281,7 @@ export function useDatasetLifecycle({
   setAnnotationColors,
   setAnnotationGroupState,
   setAnnotationState,
+  setHiddenAnnotationSetIds,
   setCellMetadataTracks,
   setSelectedCellMetadataTrackId,
   setAutoContrastChannelIds,
@@ -516,6 +518,7 @@ export function useDatasetLifecycle({
       setPinnedTranscript(null)
       setManualTranscriptExactRequestKey(null)
       setAnnotationColors({})
+      setHiddenAnnotationSetIds([])
       setCellMetadataTracks([])
       setSelectedCellMetadataTrackId(null)
       setAnnotationGroupState({ status: 'loading', url: requestedUrl })

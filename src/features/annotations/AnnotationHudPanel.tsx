@@ -26,6 +26,7 @@ interface AnnotationHudPanelProps {
   readonly annotationState: AnnotationState
   readonly annotationGroupState: AnnotationGroupState
   readonly annotationColors: Readonly<Record<string, string>>
+  readonly hiddenAnnotationSetIds: readonly string[]
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly onAnnotationGroupChange: (groupId: string) => void
   readonly onLoadAnnotations: () => void
@@ -34,6 +35,7 @@ interface AnnotationHudPanelProps {
   readonly onAnnotationImportUrlChange: (url: string) => void
   readonly onImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly onAnnotationColorChange: (annotationId: string, color: string) => void
+  readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
   readonly onRemoveAnnotation: (annotationId: string) => void
   readonly onRemoveCellMetadataTrack: (trackId: string) => void
 }
@@ -51,6 +53,7 @@ export function AnnotationHudPanel({
   annotationState,
   annotationGroupState,
   annotationColors,
+  hiddenAnnotationSetIds,
   cellMetadataTracks,
   onAnnotationGroupChange,
   onLoadAnnotations,
@@ -59,6 +62,7 @@ export function AnnotationHudPanel({
   onAnnotationImportUrlChange,
   onImportAnnotationUrl,
   onAnnotationColorChange,
+  onAnnotationSetVisibilityChange,
   onRemoveAnnotation,
   onRemoveCellMetadataTrack,
 }: AnnotationHudPanelProps) {
@@ -203,6 +207,8 @@ export function AnnotationHudPanel({
             <AnnotationSizeCharts
               annotations={loadedAnnotations}
               annotationColors={annotationColors}
+              hiddenAnnotationSetIds={hiddenAnnotationSetIds}
+              onAnnotationSetVisibilityChange={onAnnotationSetVisibilityChange}
             />
             <ul className="annotation-list" aria-label="Loaded annotations">
               {annotationState.annotations.map((annotation, annotationIndex) => {
@@ -299,11 +305,19 @@ function formatMetadataValue(value: number): string {
 function AnnotationSizeCharts({
   annotations,
   annotationColors,
+  hiddenAnnotationSetIds,
+  onAnnotationSetVisibilityChange,
 }: {
   readonly annotations: readonly Annotation[]
   readonly annotationColors: Readonly<Record<string, string>>
+  readonly hiddenAnnotationSetIds: readonly string[]
+  readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
 }) {
   const plots = useMemo(() => annotationSizePlots(annotations), [annotations])
+  const hiddenAnnotationSetIdSet = useMemo(
+    () => new Set(hiddenAnnotationSetIds),
+    [hiddenAnnotationSetIds],
+  )
   const annotationIndexById = useMemo(() => {
     const indexes = new Map<string, number>()
 
@@ -336,6 +350,8 @@ function AnnotationSizeCharts({
             plot={plot}
             annotationColors={annotationColors}
             annotationIndexById={annotationIndexById}
+            visible={!hiddenAnnotationSetIdSet.has(plot.id)}
+            onVisibilityChange={onAnnotationSetVisibilityChange}
           />
         ))}
       </div>
@@ -347,18 +363,39 @@ function AnnotationSizePlotView({
   plot,
   annotationColors,
   annotationIndexById,
+  visible,
+  onVisibilityChange,
 }: {
   readonly plot: AnnotationSizePlot
   readonly annotationColors: Readonly<Record<string, string>>
   readonly annotationIndexById: ReadonlyMap<string, number>
+  readonly visible: boolean
+  readonly onVisibilityChange: (setId: string, visible: boolean) => void
 }) {
   const headingId = `annotation-size-${plot.id.replaceAll(':', '-')}`
 
   return (
-    <article className="annotation-size-plot" aria-label={`${plot.label} size plot`}>
+    <article
+      className={visible ? 'annotation-size-plot' : 'annotation-size-plot is-hidden'}
+      aria-label={`${plot.label} size plot`}
+    >
       <div className="annotation-size-plot-heading">
         <h4 id={headingId}>{plot.label}</h4>
-        <small>{plot.totalCellAssignments.toLocaleString()}</small>
+        <div className="annotation-size-plot-actions">
+          <small>{plot.totalCellAssignments.toLocaleString()}</small>
+          <label className="annotation-set-toggle">
+            <input
+              type="checkbox"
+              checked={visible}
+              aria-label={`${plot.label} visible`}
+              title={`${plot.label} visible`}
+              onChange={(event) => {
+                onVisibilityChange(plot.id, event.currentTarget.checked)
+              }}
+            />
+            <span>Visible</span>
+          </label>
+        </div>
       </div>
       <div className="annotation-size-axis" aria-hidden="true">
         <span>0</span>

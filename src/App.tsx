@@ -88,6 +88,7 @@ import { useDatasetDiagnosticsWorkflow } from './features/diagnostics/useDataset
 import {
   annotationLabelsForCell,
   annotationStatusCopy,
+  filterAnnotationsByVisibleSets,
   type AnnotationGroupState,
   type AnnotationState,
 } from './features/annotations/annotationModel'
@@ -258,6 +259,9 @@ export function App({
   )
   const [annotationImportUrl, setAnnotationImportUrl] = useState(
     initialShareableState.annotationUrl ?? '',
+  )
+  const [hiddenAnnotationSetIds, setHiddenAnnotationSetIds] = useState<readonly string[]>(
+    [],
   )
   const [cellMetadataTracks, setCellMetadataTracks] = useState<
     readonly ContinuousCellMetadataTrack[]
@@ -507,6 +511,23 @@ export function App({
       null,
     [cellMetadataTracks, selectedCellMetadataTrackId],
   )
+  const hiddenAnnotationSetIdSet = useMemo(
+    () => new Set(hiddenAnnotationSetIds),
+    [hiddenAnnotationSetIds],
+  )
+  const visibleAnnotationState = useMemo<AnnotationState<StructuredLoadError>>(
+    () =>
+      annotationState.status === 'ready'
+        ? {
+            ...annotationState,
+            annotations: filterAnnotationsByVisibleSets(
+              annotationState.annotations,
+              hiddenAnnotationSetIdSet,
+            ),
+          }
+        : annotationState,
+    [annotationState, hiddenAnnotationSetIdSet],
+  )
   const {
     activeAnnotationStyleColors,
     activeCellMetadataTrack,
@@ -529,7 +550,7 @@ export function App({
     visibleTranscriptEstimate,
   } = useViewerLayerData({
     annotationColors,
-    annotationState,
+    annotationState: visibleAnnotationState,
     boundaryElements,
     cellMetadataTrack: selectedCellMetadataTrack,
     currentViewportBbox: currentViewportDetail?.bbox ?? null,
@@ -590,8 +611,20 @@ export function App({
     () =>
       selectedCell === null
         ? []
-        : annotationLabelsForCell(annotationState, selectedCell.id),
-    [annotationState, selectedCell],
+        : annotationLabelsForCell(visibleAnnotationState, selectedCell.id),
+    [selectedCell, visibleAnnotationState],
+  )
+  const handleAnnotationSetVisibilityChange = useCallback(
+    (setId: string, visible: boolean) => {
+      setHiddenAnnotationSetIds((current) => {
+        if (visible) {
+          return current.filter((hiddenSetId) => hiddenSetId !== setId)
+        }
+
+        return current.includes(setId) ? current : [...current, setId]
+      })
+    },
+    [],
   )
   const focusSpatialViewOnCell = useCallback((cell: OverviewCellDatum) => {
     spatialFocusRequestIdRef.current += 1
@@ -1076,6 +1109,7 @@ export function App({
     roiState,
     selectedAnnotationGroupId,
     setAnnotationColors,
+    setHiddenAnnotationSetIds,
     setCellMetadataTracks,
     setAnnotationState,
     setObservationColorMode,
@@ -1194,6 +1228,7 @@ export function App({
     setAnnotationColors,
     setAnnotationGroupState,
     setAnnotationState,
+    setHiddenAnnotationSetIds,
     setCellMetadataTracks,
     setSelectedCellMetadataTrackId,
     setAutoContrastChannelIds,
@@ -1366,7 +1401,9 @@ export function App({
           geneExpressionState={geneExpressionState}
           genePanelState={genePanelState}
           geneOptions={geneOptions}
-          hasAnnotationColors={annotationStyleColors.length > 0}
+          hasAnnotationColors={
+            annotationState.status === 'ready' && annotationState.annotations.length > 0
+          }
           cellMetadataTracks={cellMetadataTracks}
           selectedCellMetadataTrackId={selectedCellMetadataTrack?.id ?? null}
           observationColorMode={observationColorMode}
@@ -1464,6 +1501,7 @@ export function App({
           annotationState={annotationState}
           annotationGroupState={annotationGroupState}
           annotationColors={annotationColors}
+          hiddenAnnotationSetIds={hiddenAnnotationSetIds}
           cellMetadataTracks={cellMetadataTracks}
           onAnnotationGroupChange={handleAnnotationGroupChange}
           onLoadAnnotations={handleLoadAnnotations}
@@ -1474,6 +1512,7 @@ export function App({
           onAnnotationImportUrlChange={setAnnotationImportUrl}
           onImportAnnotationUrl={handleImportAnnotationUrl}
           onAnnotationColorChange={handleAnnotationColorChange}
+          onAnnotationSetVisibilityChange={handleAnnotationSetVisibilityChange}
           onRemoveAnnotation={handleRemoveAnnotation}
           onRemoveCellMetadataTrack={handleRemoveCellMetadataTrack}
         />

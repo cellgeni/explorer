@@ -7,6 +7,7 @@ import {
   annotationStatusCopy,
   colorsForAnnotations,
   customAnnotationFilePrefix,
+  filterAnnotationsByVisibleSets,
   hasReadyAnnotationsAfterRemove,
   mergeImportedAnnotations,
   removeAnnotationColor,
@@ -147,6 +148,26 @@ describe('annotationModel', () => {
         ],
       },
     ])
+  })
+
+  it('filters annotations by hidden annotation set id', () => {
+    const visible = {
+      id: 'custom:metadata-csv:cell-type:t-cell',
+      label: 'cell_type: T cell',
+      cellIds: [asCellId('aaaaaaaa-1')],
+    }
+    const hidden = {
+      id: 'custom:metadata-csv:leiden:0',
+      label: 'leiden: 0',
+      cellIds: [asCellId('bbbbbbbb-2')],
+    }
+
+    expect(
+      filterAnnotationsByVisibleSets(
+        [visible, hidden],
+        new Set(['custom:metadata-csv:leiden']),
+      ),
+    ).toEqual([visible])
   })
 
   it('merges imported annotations by prefix and maintains palette colors', () => {

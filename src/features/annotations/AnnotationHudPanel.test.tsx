@@ -12,6 +12,7 @@ describe('AnnotationHudPanel', () => {
     const onAnnotationImportUrlChange = vi.fn()
     const onImportAnnotationUrl = vi.fn(async () => true)
     const onAnnotationColorChange = vi.fn()
+    const onAnnotationSetVisibilityChange = vi.fn()
     const onRemoveAnnotation = vi.fn()
     const onRemoveCellMetadataTrack = vi.fn()
 
@@ -50,6 +51,7 @@ describe('AnnotationHudPanel', () => {
           groups: [],
         }}
         annotationColors={{ astro: '#123456' }}
+        hiddenAnnotationSetIds={[]}
         cellMetadataTracks={[
           {
             id: 'metadata:confidence',
@@ -69,6 +71,7 @@ describe('AnnotationHudPanel', () => {
         onAnnotationImportUrlChange={onAnnotationImportUrlChange}
         onImportAnnotationUrl={onImportAnnotationUrl}
         onAnnotationColorChange={onAnnotationColorChange}
+        onAnnotationSetVisibilityChange={onAnnotationSetVisibilityChange}
         onRemoveAnnotation={onRemoveAnnotation}
         onRemoveCellMetadataTrack={onRemoveCellMetadataTrack}
       />,
@@ -82,6 +85,7 @@ describe('AnnotationHudPanel', () => {
     fireEvent.change(screen.getByLabelText('Astrocytes color'), {
       target: { value: '#abcdef' },
     })
+    fireEvent.click(screen.getByLabelText('Loaded annotations visible'))
     fireEvent.click(screen.getByRole('button', { name: 'Remove Astrocytes' }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove confidence' }))
     fireEvent.change(screen.getByLabelText('Import File'), {
@@ -101,6 +105,10 @@ describe('AnnotationHudPanel', () => {
     expect(onLoadAnnotations).toHaveBeenCalledTimes(1)
     expect(onClearAnnotations).toHaveBeenCalledTimes(1)
     expect(onAnnotationColorChange).toHaveBeenCalledWith('astro', '#abcdef')
+    expect(onAnnotationSetVisibilityChange).toHaveBeenCalledWith(
+      'loaded-annotations',
+      false,
+    )
     expect(onRemoveAnnotation).toHaveBeenCalledWith('astro')
     expect(onRemoveCellMetadataTrack).toHaveBeenCalledWith('metadata:confidence')
     expect(onImportAnnotations).toHaveBeenCalledWith(expect.any(File))
@@ -164,6 +172,7 @@ describe('AnnotationHudPanel', () => {
           groups: [],
         }}
         annotationColors={{ 'analysis:0:1': '#abcdef' }}
+        hiddenAnnotationSetIds={['analysis:graphclust']}
         cellMetadataTracks={[]}
         onAnnotationGroupChange={vi.fn()}
         onLoadAnnotations={vi.fn()}
@@ -172,6 +181,7 @@ describe('AnnotationHudPanel', () => {
         onAnnotationImportUrlChange={vi.fn()}
         onImportAnnotationUrl={vi.fn(async () => true)}
         onAnnotationColorChange={vi.fn()}
+        onAnnotationSetVisibilityChange={vi.fn()}
         onRemoveAnnotation={vi.fn()}
         onRemoveCellMetadataTrack={vi.fn()}
       />,
@@ -190,5 +200,7 @@ describe('AnnotationHudPanel', () => {
     expect(graphclustRows[1]).toHaveTextContent('33%')
     expect(kmeansRows[0]).toHaveTextContent('Cluster 1')
     expect(kmeansRows[0]).toHaveTextContent('100%')
+    expect(screen.getByLabelText('graphclust visible')).not.toBeChecked()
+    expect(screen.getByLabelText('kmeans 3 visible')).toBeChecked()
   })
 })

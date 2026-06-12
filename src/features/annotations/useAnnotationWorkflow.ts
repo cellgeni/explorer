@@ -52,6 +52,7 @@ interface UseAnnotationWorkflowOptions {
   readonly roiState: RoiState<StructuredLoadError>
   readonly selectedAnnotationGroupId: string
   readonly setAnnotationColors: Dispatch<SetStateAction<Readonly<Record<string, string>>>>
+  readonly setHiddenAnnotationSetIds: Dispatch<SetStateAction<readonly string[]>>
   readonly setCellMetadataTracks: Dispatch<
     SetStateAction<readonly ContinuousCellMetadataTrack[]>
   >
@@ -95,6 +96,7 @@ export function useAnnotationWorkflow({
   roiState,
   selectedAnnotationGroupId,
   setAnnotationColors,
+  setHiddenAnnotationSetIds,
   setCellMetadataTracks,
   setAnnotationState,
   setObservationColorMode,
@@ -418,6 +420,7 @@ export function useAnnotationWorkflow({
   const handleClearAnnotations = useCallback(() => {
     setAnnotationState({ status: 'idle' })
     setAnnotationColors({})
+    setHiddenAnnotationSetIds([])
     setCellMetadataTracks([])
     setSelectedCellMetadataTrackId(null)
     setObservationColorMode('transcript-count')
@@ -426,6 +429,7 @@ export function useAnnotationWorkflow({
     appendDebugEvent,
     setAnnotationColors,
     setAnnotationState,
+    setHiddenAnnotationSetIds,
     setCellMetadataTracks,
     setObservationColorMode,
     setSelectedCellMetadataTrackId,

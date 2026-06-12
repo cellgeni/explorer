@@ -45,6 +45,7 @@ function Probe({
   const [annotationState, setAnnotationState] = React.useState<
     AnnotationState<StructuredLoadError>
   >({ status: 'idle' })
+  const [, setHiddenAnnotationSetIds] = React.useState<readonly string[]>([])
   const [cellMetadataTracks, setCellMetadataTracks] = React.useState<
     readonly ContinuousCellMetadataTrack[]
   >([])
@@ -81,6 +82,7 @@ function Probe({
     roiState,
     selectedAnnotationGroupId: groupId,
     setAnnotationColors,
+    setHiddenAnnotationSetIds,
     setCellMetadataTracks,
     setAnnotationState,
     setObservationColorMode,

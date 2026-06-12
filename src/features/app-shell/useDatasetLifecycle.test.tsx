@@ -72,6 +72,7 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     setAnnotationColors: noopSetter,
     setAnnotationGroupState: noopSetter,
     setAnnotationState: noopSetter,
+    setHiddenAnnotationSetIds: noopSetter,
     setCellMetadataTracks: noopSetter,
     setSelectedCellMetadataTrackId: noopSetter,
     setAutoContrastChannelIds: noopSetter,
