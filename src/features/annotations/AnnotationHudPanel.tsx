@@ -1,10 +1,16 @@
-import type { CSSProperties } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import {
   ALL_ANNOTATION_GROUP_ID,
   type AnnotationGroupOption,
 } from '../../data/datasetAnnotations'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
-import type { AnnotationGroupState, AnnotationState } from './annotationModel'
+import type { Annotation } from '../../datasets/spatialDataset'
+import {
+  annotationSizePlots,
+  type AnnotationGroupState,
+  type AnnotationSizePlot,
+  type AnnotationState,
+} from './annotationModel'
 
 interface AnnotationHudPanelProps {
   readonly active: boolean
@@ -45,6 +51,8 @@ export function AnnotationHudPanel({
 }: AnnotationHudPanelProps) {
   const isAnnotationLoading =
     annotationState.status === 'loading' || annotationGroupState.status === 'loading'
+  const loadedAnnotations =
+    annotationState.status === 'ready' ? annotationState.annotations : []
 
   return (
     <div
@@ -119,48 +127,163 @@ export function AnnotationHudPanel({
           }}
         />
         {annotationState.status === 'ready' && annotationState.annotations.length > 0 ? (
-          <ul className="annotation-list" aria-label="Loaded annotations">
-            {annotationState.annotations.map((annotation, annotationIndex) => {
-              const annotationColor =
-                annotationColors[annotation.id] ?? annotationPaletteColor(annotationIndex)
+          <>
+            <AnnotationSizeCharts
+              annotations={loadedAnnotations}
+              annotationColors={annotationColors}
+            />
+            <ul className="annotation-list" aria-label="Loaded annotations">
+              {annotationState.annotations.map((annotation, annotationIndex) => {
+                const annotationColor =
+                  annotationColors[annotation.id] ??
+                  annotationPaletteColor(annotationIndex)
 
-              return (
-                <li key={annotation.id}>
-                  <label
-                    className="annotation-color-picker"
-                    style={{ '--annotation-color': annotationColor } as CSSProperties}
-                  >
-                    <input
-                      className="annotation-color-input"
-                      type="color"
-                      aria-label={`${annotation.label} color`}
-                      value={annotationColor}
-                      title={`${annotation.label} color`}
-                      onChange={(event) => {
-                        onAnnotationColorChange(annotation.id, event.currentTarget.value)
+                return (
+                  <li key={annotation.id}>
+                    <label
+                      className="annotation-color-picker"
+                      style={{ '--annotation-color': annotationColor } as CSSProperties}
+                    >
+                      <input
+                        className="annotation-color-input"
+                        type="color"
+                        aria-label={`${annotation.label} color`}
+                        value={annotationColor}
+                        title={`${annotation.label} color`}
+                        onChange={(event) => {
+                          onAnnotationColorChange(
+                            annotation.id,
+                            event.currentTarget.value,
+                          )
+                        }}
+                      />
+                      <span className="annotation-color-swatch" aria-hidden="true" />
+                    </label>
+                    <span>{annotation.label}</span>
+                    <small>{annotation.cellIds.length.toLocaleString()}</small>
+                    <button
+                      type="button"
+                      className="annotation-remove"
+                      aria-label={`Remove ${annotation.label}`}
+                      title={`Remove ${annotation.label}`}
+                      onClick={() => {
+                        onRemoveAnnotation(annotation.id)
                       }}
-                    />
-                    <span className="annotation-color-swatch" aria-hidden="true" />
-                  </label>
-                  <span>{annotation.label}</span>
-                  <small>{annotation.cellIds.length.toLocaleString()}</small>
-                  <button
-                    type="button"
-                    className="annotation-remove"
-                    aria-label={`Remove ${annotation.label}`}
-                    title={`Remove ${annotation.label}`}
-                    onClick={() => {
-                      onRemoveAnnotation(annotation.id)
-                    }}
-                  >
-                    x
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+                    >
+                      x
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </>
         ) : null}
       </section>
     </div>
   )
+}
+
+function AnnotationSizeCharts({
+  annotations,
+  annotationColors,
+}: {
+  readonly annotations: readonly Annotation[]
+  readonly annotationColors: Readonly<Record<string, string>>
+}) {
+  const plots = useMemo(() => annotationSizePlots(annotations), [annotations])
+  const annotationIndexById = useMemo(() => {
+    const indexes = new Map<string, number>()
+
+    annotations.forEach((annotation, index) => {
+      indexes.set(annotation.id, index)
+    })
+
+    return indexes
+  }, [annotations])
+
+  if (plots.length === 0) {
+    return null
+  }
+
+  const totalAssignments = plots.reduce(
+    (total, plot) => total + plot.totalCellAssignments,
+    0,
+  )
+
+  return (
+    <section className="annotation-size-panel" aria-labelledby="annotation-size-heading">
+      <div className="annotation-size-heading">
+        <h3 id="annotation-size-heading">Set sizes</h3>
+        <small>{totalAssignments.toLocaleString()} cell assignments</small>
+      </div>
+      <div className="annotation-size-plots">
+        {plots.map((plot) => (
+          <AnnotationSizePlotView
+            key={plot.id}
+            plot={plot}
+            annotationColors={annotationColors}
+            annotationIndexById={annotationIndexById}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function AnnotationSizePlotView({
+  plot,
+  annotationColors,
+  annotationIndexById,
+}: {
+  readonly plot: AnnotationSizePlot
+  readonly annotationColors: Readonly<Record<string, string>>
+  readonly annotationIndexById: ReadonlyMap<string, number>
+}) {
+  const headingId = `annotation-size-${plot.id.replaceAll(':', '-')}`
+
+  return (
+    <article className="annotation-size-plot" aria-label={`${plot.label} size plot`}>
+      <div className="annotation-size-plot-heading">
+        <h4 id={headingId}>{plot.label}</h4>
+        <small>{plot.totalCellAssignments.toLocaleString()}</small>
+      </div>
+      <div className="annotation-size-axis" aria-hidden="true">
+        <span>0</span>
+        <span>{plot.maxCellCount.toLocaleString()} cells</span>
+      </div>
+      <ol className="annotation-size-list" aria-label={`${plot.label} cell counts`}>
+        {plot.rows.map((row, rowIndex) => {
+          const width =
+            plot.maxCellCount === 0 ? 0 : (row.cellCount / plot.maxCellCount) * 100
+          const annotationColor =
+            annotationColors[row.id] ??
+            annotationPaletteColor(annotationIndexById.get(row.id) ?? rowIndex)
+
+          return (
+            <li
+              key={row.id}
+              className="annotation-size-row"
+              style={
+                {
+                  '--annotation-color': annotationColor,
+                  '--annotation-size-width': `${width}%`,
+                } as CSSProperties
+              }
+            >
+              <span className="annotation-size-label">{row.label}</span>
+              <span className="annotation-size-track" aria-hidden="true">
+                <span className="annotation-size-bar" />
+              </span>
+              <strong>{row.cellCount.toLocaleString()}</strong>
+              <small>{formatAnnotationFraction(row.fraction)}</small>
+            </li>
+          )
+        })}
+      </ol>
+    </article>
+  )
+}
+
+function formatAnnotationFraction(fraction: number): string {
+  return `${(fraction * 100).toFixed(fraction >= 0.1 ? 0 : 1)}%`
 }

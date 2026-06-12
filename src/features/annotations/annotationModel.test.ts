@@ -3,6 +3,7 @@ import { asCellId } from '../../data/cellid'
 import type { Annotation } from '../../datasets/spatialDataset'
 import {
   annotationLabelsForCell,
+  annotationSizePlots,
   annotationStatusCopy,
   colorsForAnnotations,
   customAnnotationFilePrefix,
@@ -81,6 +82,53 @@ describe('annotationModel', () => {
       ),
     ).toEqual(['Astrocytes', 'Layer 1'])
     expect(annotationLabelsForCell({ status: 'idle' }, 'aaaaaaaa-1')).toEqual([])
+  })
+
+  it('summarizes annotation size plots by analysis grouping', () => {
+    const plots = annotationSizePlots([
+      {
+        id: 'analysis:0:0',
+        label: 'graphclust: 1',
+        cellIds: [asCellId('aaaaaaaa-1')],
+      },
+      {
+        id: 'analysis:0:1',
+        label: 'graphclust: 2',
+        cellIds: [asCellId('aaaaaaaa-1'), asCellId('bbbbbbbb-2')],
+      },
+      {
+        id: 'analysis:1:0',
+        label: 'kmeans 3: Cluster 1',
+        cellIds: [asCellId('aaaaaaaa-1'), asCellId('bbbbbbbb-2'), asCellId('cccccccc-3')],
+      },
+      {
+        id: 'custom:labels:astro',
+        label: 'Astrocytes',
+        cellIds: [asCellId('aaaaaaaa-1')],
+      },
+    ])
+
+    expect(plots).toMatchObject([
+      {
+        label: 'graphclust',
+        totalCellAssignments: 3,
+        maxCellCount: 2,
+        rows: [
+          { label: '2', cellCount: 2, fraction: 2 / 3 },
+          { label: '1', cellCount: 1, fraction: 1 / 3 },
+        ],
+      },
+      {
+        label: 'kmeans 3',
+        totalCellAssignments: 3,
+        rows: [{ label: 'Cluster 1', cellCount: 3, fraction: 1 }],
+      },
+      {
+        label: 'Loaded annotations',
+        totalCellAssignments: 1,
+        rows: [{ label: 'Astrocytes', cellCount: 1, fraction: 1 }],
+      },
+    ])
   })
 
   it('merges imported annotations by prefix and maintains palette colors', () => {

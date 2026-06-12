@@ -76,7 +76,76 @@ describe('AnnotationHudPanel', () => {
     expect(onRemoveAnnotation).toHaveBeenCalledWith('astro')
     expect(onImportAnnotations).toHaveBeenCalledWith(expect.any(File))
     expect(
-      within(screen.getByLabelText('Loaded annotations')).getByText('1'),
+      within(screen.getByRole('list', { name: 'Loaded annotations' })).getByText('1'),
     ).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Set sizes' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Loaded annotations cell counts')).toHaveTextContent(
+      'Astrocytes',
+    )
+  })
+
+  it('renders annotation size plots grouped by annotation set', () => {
+    render(
+      <AnnotationHudPanel
+        active
+        annotationGroupInputId="annotation-group"
+        annotationImportInputId="annotation-import"
+        annotationHeaderCopy="3 labels"
+        loadEnabled
+        selectedAnnotationGroupId="all"
+        annotationGroupOptions={[]}
+        annotationState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          annotations: [
+            {
+              id: 'analysis:0:0',
+              label: 'graphclust: 1',
+              cellIds: [asCellId('aaaaaaaa-1')],
+            },
+            {
+              id: 'analysis:0:1',
+              label: 'graphclust: 2',
+              cellIds: [asCellId('aaaaaaaa-1'), asCellId('bbbbbbbb-2')],
+            },
+            {
+              id: 'analysis:1:0',
+              label: 'kmeans 3: Cluster 1',
+              cellIds: [
+                asCellId('aaaaaaaa-1'),
+                asCellId('bbbbbbbb-2'),
+                asCellId('cccccccc-3'),
+              ],
+            },
+          ],
+        }}
+        annotationGroupState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          groups: [],
+        }}
+        annotationColors={{ 'analysis:0:1': '#abcdef' }}
+        onAnnotationGroupChange={vi.fn()}
+        onLoadAnnotations={vi.fn()}
+        onClearAnnotations={vi.fn()}
+        onImportAnnotations={vi.fn()}
+        onAnnotationColorChange={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+      />,
+    )
+
+    const graphclustRows = within(
+      screen.getByLabelText('graphclust cell counts'),
+    ).getAllByRole('listitem')
+    const kmeansRows = within(screen.getByLabelText('kmeans 3 cell counts')).getAllByRole(
+      'listitem',
+    )
+
+    expect(graphclustRows[0]).toHaveTextContent('2')
+    expect(graphclustRows[0]).toHaveTextContent('67%')
+    expect(graphclustRows[1]).toHaveTextContent('1')
+    expect(graphclustRows[1]).toHaveTextContent('33%')
+    expect(kmeansRows[0]).toHaveTextContent('Cluster 1')
+    expect(kmeansRows[0]).toHaveTextContent('100%')
   })
 })

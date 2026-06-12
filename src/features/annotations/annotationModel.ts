@@ -23,6 +23,21 @@ export type AnnotationGroupState<ErrorType = unknown> =
     }
   | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
 
+export interface AnnotationSizeRow {
+  readonly id: string
+  readonly label: string
+  readonly cellCount: number
+  readonly fraction: number
+}
+
+export interface AnnotationSizePlot {
+  readonly id: string
+  readonly label: string
+  readonly totalCellAssignments: number
+  readonly maxCellCount: number
+  readonly rows: readonly AnnotationSizeRow[]
+}
+
 export function annotationStatusCopy<ErrorType>(
   annotationState: AnnotationState<ErrorType>,
 ): string {
@@ -59,6 +74,60 @@ export function annotationLabelsForCell<ErrorType>(
   }
 
   return labels
+}
+
+export function annotationSizePlots(
+  annotations: readonly Annotation[],
+): readonly AnnotationSizePlot[] {
+  const groups = new Map<
+    string,
+    {
+      readonly label: string
+      rows: AnnotationSizeRow[]
+      totalCellAssignments: number
+      maxCellCount: number
+    }
+  >()
+
+  for (const annotation of annotations) {
+    const grouping = annotationSizeGrouping(annotation)
+    const current = groups.get(grouping.id) ?? {
+      label: grouping.label,
+      rows: [],
+      totalCellAssignments: 0,
+      maxCellCount: 0,
+    }
+    const cellCount = annotation.cellIds.length
+
+    current.rows.push({
+      id: annotation.id,
+      label: grouping.rowLabel,
+      cellCount,
+      fraction: 0,
+    })
+    current.totalCellAssignments += cellCount
+    current.maxCellCount = Math.max(current.maxCellCount, cellCount)
+    groups.set(grouping.id, current)
+  }
+
+  return [...groups.entries()].map(([id, group]) => ({
+    id,
+    label: group.label,
+    totalCellAssignments: group.totalCellAssignments,
+    maxCellCount: group.maxCellCount,
+    rows: group.rows
+      .map((row) => ({
+        ...row,
+        fraction:
+          group.totalCellAssignments === 0
+            ? 0
+            : row.cellCount / group.totalCellAssignments,
+      }))
+      .sort((left, right) => {
+        const countDelta = right.cellCount - left.cellCount
+        return countDelta === 0 ? left.label.localeCompare(right.label) : countDelta
+      }),
+  }))
 }
 
 export function hasReadyAnnotationsAfterRemove(
@@ -135,4 +204,33 @@ export function removeAnnotationColorsByPrefix(
 
 export function customAnnotationFilePrefix(fileName: string): string {
   return `custom:${slug(fileName)}:`
+}
+
+function annotationSizeGrouping(annotation: Annotation): {
+  readonly id: string
+  readonly label: string
+  readonly rowLabel: string
+} {
+  if (annotation.id.startsWith('analysis:')) {
+    const match = /^([^:]+):\s*(.+)$/.exec(annotation.label)
+
+    if (match !== null) {
+      const label = match[1]?.trim() ?? ''
+      const rowLabel = match[2]?.trim() ?? ''
+
+      if (label !== '' && rowLabel !== '') {
+        return {
+          id: `analysis:${slug(label)}`,
+          label,
+          rowLabel,
+        }
+      }
+    }
+  }
+
+  return {
+    id: 'loaded-annotations',
+    label: 'Loaded annotations',
+    rowLabel: annotation.label,
+  }
 }
