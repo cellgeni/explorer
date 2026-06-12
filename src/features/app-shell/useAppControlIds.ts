@@ -17,6 +17,7 @@ export interface AppControlIds {
   readonly geneScaleInputId: string
   readonly geneExpressionDetailInputId: string
   readonly annotationImportInputId: string
+  readonly annotationImportUrlInputId: string
   readonly annotationGroupInputId: string
   readonly embeddingViewInputId: string
   readonly roiNameInputId: string
@@ -53,6 +54,7 @@ export function useAppControlIds(): AppControlIds {
     geneScaleInputId: useId(),
     geneExpressionDetailInputId: useId(),
     annotationImportInputId: useId(),
+    annotationImportUrlInputId: useId(),
     annotationGroupInputId: useId(),
     embeddingViewInputId: useId(),
     roiNameInputId: useId(),

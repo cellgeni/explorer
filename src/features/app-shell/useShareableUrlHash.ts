@@ -5,6 +5,7 @@ import { formatShareableState, type ShareableViewState } from '../../data/sharea
 interface UseShareableUrlHashOptions {
   readonly activeControlHudTab: string
   readonly activeRoiSelection: RoiSelection | null
+  readonly annotationUrl: string
   readonly boundaryCellLimit: number
   readonly coordinateUnit: string
   readonly datasetUrl: string
@@ -39,6 +40,7 @@ interface UseShareableUrlHashOptions {
 export function useShareableUrlHash({
   activeControlHudTab,
   activeRoiSelection,
+  annotationUrl,
   boundaryCellLimit,
   coordinateUnit,
   datasetUrl,
@@ -77,6 +79,7 @@ export function useShareableUrlHash({
     const timeout = window.setTimeout(() => {
       const hash = formatShareableState({
         datasetUrl,
+        annotationUrl,
         selectedGenes,
         ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
         ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
@@ -126,6 +129,7 @@ export function useShareableUrlHash({
   }, [
     activeControlHudTab,
     activeRoiSelection,
+    annotationUrl,
     boundaryCellLimit,
     coordinateUnit,
     datasetUrl,

@@ -55,6 +55,48 @@ ${cd16Negative},CD16- NK cells`,
     ])
   })
 
+  it('imports wide CSV annotation columns as separate annotation sets', () => {
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(2, 1)
+    const cellC = intToCellId(3, 1)
+
+    expect(
+      parseCustomAnnotations(
+        `cell_id,cell_type,leiden,broad_type
+${cellA},T cell,0,Lymphoid
+${cellB},B cell,1,Lymphoid
+${cellC},T cell,0,`,
+        'metadata.csv',
+      ),
+    ).toEqual([
+      {
+        id: 'custom:metadata-csv:cell-type:t-cell',
+        label: 'cell_type: T cell',
+        cellIds: [cellA, cellC],
+      },
+      {
+        id: 'custom:metadata-csv:cell-type:b-cell',
+        label: 'cell_type: B cell',
+        cellIds: [cellB],
+      },
+      {
+        id: 'custom:metadata-csv:leiden:0',
+        label: 'leiden: 0',
+        cellIds: [cellA, cellC],
+      },
+      {
+        id: 'custom:metadata-csv:leiden:1',
+        label: 'leiden: 1',
+        cellIds: [cellB],
+      },
+      {
+        id: 'custom:metadata-csv:broad-type:lymphoid',
+        label: 'broad_type: Lymphoid',
+        cellIds: [cellA, cellB],
+      },
+    ])
+  })
+
   it('reads JSON label-to-cells objects', () => {
     const cellA = intToCellId(1, 1)
 

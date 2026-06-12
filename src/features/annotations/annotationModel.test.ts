@@ -106,6 +106,16 @@ describe('annotationModel', () => {
         label: 'Astrocytes',
         cellIds: [asCellId('aaaaaaaa-1')],
       },
+      {
+        id: 'custom:metadata-csv:cell-type:t-cell',
+        label: 'cell_type: T cell',
+        cellIds: [asCellId('aaaaaaaa-1'), asCellId('bbbbbbbb-2')],
+      },
+      {
+        id: 'custom:metadata-csv:cell-type:b-cell',
+        label: 'cell_type: B cell',
+        cellIds: [asCellId('cccccccc-3')],
+      },
     ])
 
     expect(plots).toMatchObject([
@@ -127,6 +137,14 @@ describe('annotationModel', () => {
         label: 'Loaded annotations',
         totalCellAssignments: 1,
         rows: [{ label: 'Astrocytes', cellCount: 1, fraction: 1 }],
+      },
+      {
+        label: 'cell_type',
+        totalCellAssignments: 3,
+        rows: [
+          { label: 'T cell', cellCount: 2, fraction: 2 / 3 },
+          { label: 'B cell', cellCount: 1, fraction: 1 / 3 },
+        ],
       },
     ])
   })

@@ -792,6 +792,23 @@ h2 {
   list-style: none;
 }
 
+.annotation-url-import {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.annotation-url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px;
+  min-width: 0;
+}
+
+.annotation-url-row input {
+  min-width: 0;
+}
+
 .annotation-list li {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto 22px;

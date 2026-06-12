@@ -228,6 +228,26 @@ function annotationSizeGrouping(annotation: Annotation): {
     }
   }
 
+  if (annotation.id.startsWith('custom:')) {
+    const idMatch = /^custom:([^:]+):([^:]+):/.exec(annotation.id)
+    const labelMatch = /^([^:]+):\s*(.+)$/.exec(annotation.label)
+
+    if (idMatch !== null && labelMatch !== null) {
+      const fileSlug = idMatch[1]?.trim() ?? ''
+      const setSlug = idMatch[2]?.trim() ?? ''
+      const label = labelMatch[1]?.trim() ?? ''
+      const rowLabel = labelMatch[2]?.trim() ?? ''
+
+      if (fileSlug !== '' && setSlug !== '' && label !== '' && rowLabel !== '') {
+        return {
+          id: `custom:${fileSlug}:${setSlug}`,
+          label,
+          rowLabel,
+        }
+      }
+    }
+  }
+
   return {
     id: 'loaded-annotations',
     label: 'Loaded annotations',

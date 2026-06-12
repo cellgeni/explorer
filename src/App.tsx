@@ -255,6 +255,9 @@ export function App({
   const [selectedAnnotationGroupId, setSelectedAnnotationGroupId] = useState(
     ALL_ANNOTATION_GROUP_ID,
   )
+  const [annotationImportUrl, setAnnotationImportUrl] = useState(
+    initialShareableState.annotationUrl ?? '',
+  )
   const [selectedEmbeddingKind, setSelectedEmbeddingKind] =
     useState<AnalysisEmbeddingKind>('umap')
   const [roiState, setRoiState] = useState<RoiState<StructuredLoadError>>({
@@ -1037,6 +1040,7 @@ export function App({
     handleAnnotationColorChange,
     handleAnnotationGroupChange,
     handleClearAnnotations,
+    handleImportAnnotationUrl,
     handleImportAnnotations,
     handleLoadAnnotations,
     handleRemoveAnnotation,
@@ -1231,6 +1235,7 @@ export function App({
   useShareableUrlHash({
     activeControlHudTab,
     activeRoiSelection,
+    annotationUrl: annotationImportUrl,
     boundaryCellLimit,
     coordinateUnit,
     datasetUrl,
@@ -1425,6 +1430,8 @@ export function App({
           active={activeControlHudTab === 'annotations'}
           annotationGroupInputId={controlIds.annotationGroupInputId}
           annotationImportInputId={controlIds.annotationImportInputId}
+          annotationImportUrlInputId={controlIds.annotationImportUrlInputId}
+          annotationImportUrl={annotationImportUrl}
           annotationHeaderCopy={annotationHeaderCopy}
           loadEnabled={loadState.status === 'ready'}
           selectedAnnotationGroupId={selectedAnnotationGroupId}
@@ -1438,6 +1445,8 @@ export function App({
           onImportAnnotations={(file) => {
             void handleImportAnnotations(file)
           }}
+          onAnnotationImportUrlChange={setAnnotationImportUrl}
+          onImportAnnotationUrl={handleImportAnnotationUrl}
           onAnnotationColorChange={handleAnnotationColorChange}
           onRemoveAnnotation={handleRemoveAnnotation}
         />

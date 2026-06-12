@@ -10,6 +10,7 @@ export interface ShareableViewState {
 
 export interface ShareableState {
   readonly datasetUrl?: string
+  readonly annotationUrl?: string
   readonly selectedGenes?: readonly string[]
   readonly viewState?: ShareableViewState
   readonly roiSelection?: RoiSelection
@@ -56,6 +57,7 @@ export function parseShareableState(hash: string): ShareableState {
   const params = new URLSearchParams(rawHash)
   const state: MutableShareableState = {}
   const datasetUrl = readString(params, 'dataset')
+  const annotationUrl = readString(params, 'annotationUrl')
   const selectedGenes = readCsv(params, 'genes')
   const viewState = parseViewState(params.get('view'))
   const roiSelection = parseRoiSelection(params.get('roi'))
@@ -89,6 +91,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (datasetUrl !== undefined) {
     state.datasetUrl = datasetUrl
+  }
+
+  if (annotationUrl !== undefined) {
+    state.annotationUrl = annotationUrl
   }
 
   if (selectedGenes !== undefined) {
@@ -222,6 +228,8 @@ export function formatShareableState(state: ShareableState): string {
   if (state.datasetUrl !== undefined && state.datasetUrl.trim() !== '') {
     params.set('dataset', state.datasetUrl.trim())
   }
+
+  setOptionalString(params, 'annotationUrl', state.annotationUrl)
 
   if (state.selectedGenes !== undefined && state.selectedGenes.length > 0) {
     params.set('genes', state.selectedGenes.join(','))

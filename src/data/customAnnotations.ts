@@ -20,6 +20,7 @@ export function parseCustomAnnotations(
 interface CustomAnnotationEntry {
   readonly label: string
   readonly cellIds: readonly CellId[]
+  readonly setName?: string
 }
 
 function parseJsonAnnotations(text: string, fileName: string): readonly Annotation[] {
@@ -114,10 +115,23 @@ function parseCsvAnnotations(text: string, fileName: string): readonly Annotatio
     ['label', 'annotation', 'group', 'cluster'].includes(column.trim().toLowerCase()),
   )
 
-  if (cellIdIndex < 0 || labelIndex < 0) {
-    throw new Error('CSV annotations need cell_id and label columns.')
+  if (cellIdIndex < 0) {
+    throw new Error('CSV annotations need a cell_id column.')
   }
 
+  if (labelIndex >= 0) {
+    return parseCsvSingleLabelAnnotations(rows, cellIdIndex, labelIndex, fileName)
+  }
+
+  return parseCsvWideAnnotations(rows, header, cellIdIndex, fileName)
+}
+
+function parseCsvSingleLabelAnnotations(
+  rows: readonly (readonly string[])[],
+  cellIdIndex: number,
+  labelIndex: number,
+  fileName: string,
+): readonly Annotation[] {
   const grouped = new Map<string, CellId[]>()
 
   for (const row of rows.slice(1)) {
@@ -132,6 +146,52 @@ function parseCsvAnnotations(text: string, fileName: string): readonly Annotatio
   }
 
   return createCustomAnnotations(fileName, annotationEntriesFromGroupedCells(grouped))
+}
+
+function parseCsvWideAnnotations(
+  rows: readonly (readonly string[])[],
+  header: readonly string[],
+  cellIdIndex: number,
+  fileName: string,
+): readonly Annotation[] {
+  const annotationColumns = header
+    .map((column, index) => ({ index, name: column.trim() }))
+    .filter(({ index, name }) => index !== cellIdIndex && name.length > 0)
+
+  if (annotationColumns.length === 0) {
+    throw new Error('CSV annotations need cell_id plus label or annotation columns.')
+  }
+
+  const annotations: CustomAnnotationEntry[] = []
+
+  for (const { index, name } of annotationColumns) {
+    const grouped = new Map<string, CellId[]>()
+
+    for (const row of rows.slice(1)) {
+      const cellId = row[cellIdIndex]?.trim()
+      const label = row[index]?.trim()
+
+      if (
+        cellId === undefined ||
+        cellId.length === 0 ||
+        label === undefined ||
+        label.length === 0
+      ) {
+        continue
+      }
+
+      appendGroupedCell(grouped, label, asCellId(cellId))
+    }
+
+    annotations.push(
+      ...annotationEntriesFromGroupedCells(grouped).map((entry) => ({
+        ...entry,
+        setName: name,
+      })),
+    )
+  }
+
+  return createCustomAnnotations(fileName, annotations)
 }
 
 function parseCsvRows(text: string): readonly (readonly string[])[] {
@@ -194,14 +254,18 @@ function createCustomAnnotations(
 ): readonly Annotation[] {
   const usedIds = new Set<string>()
 
-  return entries.map(({ label, cellIds }) => {
-    const baseId = `custom:${slug(fileName)}:${slug(label)}`
+  return entries.map(({ label, cellIds, setName }) => {
+    const displayLabel = setName === undefined ? label : `${setName}: ${label}`
+    const baseId =
+      setName === undefined
+        ? `custom:${slug(fileName)}:${slug(label)}`
+        : `custom:${slug(fileName)}:${slug(setName)}:${slug(label)}`
     const id = uniqueAnnotationId(baseId, usedIds)
     usedIds.add(id)
 
     return {
       id,
-      label,
+      label: displayLabel,
       cellIds,
     }
   })

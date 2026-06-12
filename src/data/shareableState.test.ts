@@ -11,6 +11,7 @@ describe('shareableState', () => {
   it('round-trips dataset, genes, view, ROI, and controls', () => {
     const hash = formatShareableState({
       datasetUrl: 'https://example.test/output',
+      annotationUrl: 'https://example.test/annotations/manual.csv',
       selectedGenes: ['Actb', 'Gad1'],
       viewState: { target: [12.3456, 78.9123, 0], zoom: 1.23456 },
       roiSelection: {
@@ -54,6 +55,7 @@ describe('shareableState', () => {
     const state = parseShareableState(hash)
 
     expect(state.datasetUrl).toBe('https://example.test/output')
+    expect(state.annotationUrl).toBe('https://example.test/annotations/manual.csv')
     expect(state.selectedGenes).toEqual(['Actb', 'Gad1'])
     expect(state.viewState).toEqual({ target: [12.346, 78.912, 0], zoom: 1.235 })
     expect(state.roiSelection?.kind).toBe('box')

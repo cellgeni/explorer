@@ -15,6 +15,7 @@ function ShareableUrlHashProbe() {
         maxY: micrometers(4),
       },
     },
+    annotationUrl: 'https://example.test/annotations/manual.csv',
     boundaryCellLimit: 2500,
     coordinateUnit: 'px',
     datasetUrl: 'https://example.test/output',
@@ -69,6 +70,9 @@ describe('useShareableUrlHash', () => {
     })
 
     expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Foutput')
+    expect(window.location.hash).toContain(
+      'annotationUrl=https%3A%2F%2Fexample.test%2Fannotations%2Fmanual.csv',
+    )
     expect(window.location.hash).toContain('genes=Actb%2CGad1')
     expect(window.location.hash).toContain('tab=genes')
     expect(window.location.hash).toContain('imgOpacity=0.45')

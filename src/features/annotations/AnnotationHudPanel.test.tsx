@@ -1,14 +1,16 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { AnnotationHudPanel } from './AnnotationHudPanel'
 
 describe('AnnotationHudPanel', () => {
-  it('renders annotation controls and forwards user actions', () => {
+  it('renders annotation controls and forwards user actions', async () => {
     const onAnnotationGroupChange = vi.fn()
     const onLoadAnnotations = vi.fn()
     const onClearAnnotations = vi.fn()
     const onImportAnnotations = vi.fn()
+    const onAnnotationImportUrlChange = vi.fn()
+    const onImportAnnotationUrl = vi.fn(async () => true)
     const onAnnotationColorChange = vi.fn()
     const onRemoveAnnotation = vi.fn()
 
@@ -17,6 +19,8 @@ describe('AnnotationHudPanel', () => {
         active
         annotationGroupInputId="annotation-group"
         annotationImportInputId="annotation-import"
+        annotationImportUrlInputId="annotation-import-url"
+        annotationImportUrl="https://example.test/labels.csv"
         annotationHeaderCopy="1 label"
         loadEnabled
         selectedAnnotationGroupId="cluster-a"
@@ -49,6 +53,8 @@ describe('AnnotationHudPanel', () => {
         onLoadAnnotations={onLoadAnnotations}
         onClearAnnotations={onClearAnnotations}
         onImportAnnotations={onImportAnnotations}
+        onAnnotationImportUrlChange={onAnnotationImportUrlChange}
+        onImportAnnotationUrl={onImportAnnotationUrl}
         onAnnotationColorChange={onAnnotationColorChange}
         onRemoveAnnotation={onRemoveAnnotation}
       />,
@@ -68,6 +74,13 @@ describe('AnnotationHudPanel', () => {
         files: [new File(['cell_id,label\n'], 'labels.csv', { type: 'text/csv' })],
       },
     })
+    fireEvent.change(screen.getByLabelText('Annotation URL'), {
+      target: { value: 'https://example.test/other-labels.csv' },
+    })
+    expect(onAnnotationImportUrlChange).toHaveBeenCalledWith(
+      'https://example.test/other-labels.csv',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Import URL' }))
 
     expect(onAnnotationGroupChange).toHaveBeenCalledWith('all')
     expect(onLoadAnnotations).toHaveBeenCalledTimes(1)
@@ -75,6 +88,11 @@ describe('AnnotationHudPanel', () => {
     expect(onAnnotationColorChange).toHaveBeenCalledWith('astro', '#abcdef')
     expect(onRemoveAnnotation).toHaveBeenCalledWith('astro')
     expect(onImportAnnotations).toHaveBeenCalledWith(expect.any(File))
+    await waitFor(() => {
+      expect(onImportAnnotationUrl).toHaveBeenCalledWith(
+        'https://example.test/labels.csv',
+      )
+    })
     expect(
       within(screen.getByRole('list', { name: 'Loaded annotations' })).getByText('1'),
     ).toBeInTheDocument()
@@ -90,6 +108,8 @@ describe('AnnotationHudPanel', () => {
         active
         annotationGroupInputId="annotation-group"
         annotationImportInputId="annotation-import"
+        annotationImportUrlInputId="annotation-import-url"
+        annotationImportUrl=""
         annotationHeaderCopy="3 labels"
         loadEnabled
         selectedAnnotationGroupId="all"
@@ -129,6 +149,8 @@ describe('AnnotationHudPanel', () => {
         onLoadAnnotations={vi.fn()}
         onClearAnnotations={vi.fn()}
         onImportAnnotations={vi.fn()}
+        onAnnotationImportUrlChange={vi.fn()}
+        onImportAnnotationUrl={vi.fn(async () => true)}
         onAnnotationColorChange={vi.fn()}
         onRemoveAnnotation={vi.fn()}
       />,

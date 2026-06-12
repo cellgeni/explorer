@@ -1,6 +1,6 @@
 import { act, render } from '@testing-library/react'
 import * as React from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { Annotation } from '../../datasets/spatialDataset'
@@ -95,6 +95,11 @@ function Probe({
 }
 
 describe('useAnnotationWorkflow', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
   it('loads annotation groups and activates annotation coloring', async () => {
     const annotations: readonly Annotation[] = [
       { id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] },
@@ -182,5 +187,47 @@ describe('useAnnotationWorkflow', () => {
     ).toBe('roi:1:marker-roi')
     expect(snapshot.observationColorMode).toBe('annotations')
     expect(snapshot.roiName).toBe('ROI 2')
+  })
+
+  it('imports custom annotations from a URL', async () => {
+    const cellId = asCellId('aaaaaaaa-1')
+    const fetcher = vi.fn(async () => new Response(`cell_id,label\n${cellId},Remote ROI`))
+    vi.stubGlobal('fetch', fetcher)
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      const imported = await api.handleImportAnnotationUrl(
+        'https://github.com/cellgeni/example/blob/main/annotations/manual.csv?plain=1',
+      )
+      expect(imported).toBe(true)
+    })
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://raw.githubusercontent.com/cellgeni/example/main/annotations/manual.csv',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(snapshot.annotationState).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      annotations: [
+        {
+          id: 'custom:manual-csv:remote-roi',
+          label: 'Remote ROI',
+          cellIds: [cellId],
+        },
+      ],
+    })
+    expect(snapshot.annotationColors['custom:manual-csv:remote-roi']).toBe('#1f77b4')
+    expect(snapshot.observationColorMode).toBe('annotations')
+    expect(snapshot.debugMessages).toContain('Imported URL annotations: 1 labels')
   })
 })

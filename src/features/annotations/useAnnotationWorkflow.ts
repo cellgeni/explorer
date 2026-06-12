@@ -60,9 +60,15 @@ interface UseAnnotationWorkflowResult {
   readonly handleAnnotationGroupChange: (groupId: string) => void
   readonly handleClearAnnotations: () => void
   readonly handleImportAnnotations: (file: File | null) => Promise<void>
+  readonly handleImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly handleLoadAnnotations: () => void
   readonly handleRemoveAnnotation: (annotationId: string) => void
   readonly handleSaveRoiAnnotation: () => void
+}
+
+interface AnnotationImportUrl {
+  readonly sourceName: string
+  readonly url: string
 }
 
 export function useAnnotationWorkflow({
@@ -154,6 +160,43 @@ export function useAnnotationWorkflow({
     [appendDebugEvent, setSelectedAnnotationGroupId],
   )
 
+  const importCustomAnnotationText = useCallback(
+    (text: string, sourceName: string, sourceLabel: string) => {
+      const importedAnnotations = parseCustomAnnotations(text, sourceName)
+      const importedPrefix = customAnnotationFilePrefix(sourceName)
+
+      setAnnotationState((current) => ({
+        status: 'ready',
+        url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+        annotations: mergeImportedAnnotations(
+          current.status === 'ready' ? current.annotations : [],
+          importedAnnotations,
+          importedPrefix,
+        ),
+      }))
+      setAnnotationColors((current) =>
+        colorsForAnnotations(
+          importedAnnotations,
+          removeAnnotationColorsByPrefix(current, importedPrefix),
+        ),
+      )
+      if (importedAnnotations.length > 0) {
+        setObservationColorMode('annotations')
+      }
+      appendDebugEvent(
+        `${sourceLabel}: ${importedAnnotations.length.toLocaleString()} labels`,
+      )
+    },
+    [
+      appendDebugEvent,
+      datasetUrl,
+      loadState,
+      setAnnotationColors,
+      setAnnotationState,
+      setObservationColorMode,
+    ],
+  )
+
   const handleImportAnnotations = useCallback(
     async (file: File | null) => {
       if (file === null) {
@@ -161,30 +204,7 @@ export function useAnnotationWorkflow({
       }
 
       try {
-        const importedAnnotations = parseCustomAnnotations(await file.text(), file.name)
-        const importedPrefix = customAnnotationFilePrefix(file.name)
-
-        setAnnotationState((current) => ({
-          status: 'ready',
-          url: loadState.status === 'ready' ? loadState.url : datasetUrl,
-          annotations: mergeImportedAnnotations(
-            current.status === 'ready' ? current.annotations : [],
-            importedAnnotations,
-            importedPrefix,
-          ),
-        }))
-        setAnnotationColors((current) =>
-          colorsForAnnotations(
-            importedAnnotations,
-            removeAnnotationColorsByPrefix(current, importedPrefix),
-          ),
-        )
-        if (importedAnnotations.length > 0) {
-          setObservationColorMode('annotations')
-        }
-        appendDebugEvent(
-          `Imported annotations: ${importedAnnotations.length.toLocaleString()} labels`,
-        )
+        importCustomAnnotationText(await file.text(), file.name, 'Imported annotations')
       } catch (error) {
         setAnnotationState({
           status: 'error',
@@ -197,10 +217,59 @@ export function useAnnotationWorkflow({
     [
       appendDebugEvent,
       datasetUrl,
+      importCustomAnnotationText,
       loadState,
-      setAnnotationColors,
       setAnnotationState,
-      setObservationColorMode,
+    ],
+  )
+
+  const handleImportAnnotationUrl = useCallback(
+    async (url: string) => {
+      const requestId = loadRequestIdRef.current
+
+      try {
+        const { sourceName, url: fetchUrl } = annotationImportUrl(url)
+        appendDebugEvent(`Importing annotation URL ${shortIdentifier(sourceName)}`)
+        const signal = datasetAbortRef.current?.signal
+        const response = await fetch(
+          fetchUrl,
+          signal === undefined ? undefined : { signal },
+        )
+
+        if (!response.ok) {
+          throw new Error(`Annotation URL returned HTTP ${response.status}.`)
+        }
+
+        const text = await response.text()
+
+        if (loadRequestIdRef.current !== requestId) {
+          return false
+        }
+
+        importCustomAnnotationText(text, sourceName, 'Imported URL annotations')
+        return true
+      } catch (error) {
+        if (isAbortError(error) || loadRequestIdRef.current !== requestId) {
+          return false
+        }
+
+        setAnnotationState({
+          status: 'error',
+          url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+          error: createStructuredLoadError('Annotations', error),
+        })
+        appendDebugEvent('Annotation URL import failed')
+        return false
+      }
+    },
+    [
+      appendDebugEvent,
+      datasetAbortRef,
+      datasetUrl,
+      importCustomAnnotationText,
+      loadRequestIdRef,
+      loadState,
+      setAnnotationState,
     ],
   )
 
@@ -312,8 +381,65 @@ export function useAnnotationWorkflow({
     handleAnnotationGroupChange,
     handleClearAnnotations,
     handleImportAnnotations,
+    handleImportAnnotationUrl,
     handleLoadAnnotations,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
+  }
+}
+
+function annotationImportUrl(rawUrl: string): AnnotationImportUrl {
+  const trimmedUrl = rawUrl.trim()
+  const url = normalizeAnnotationFetchUrl(new URL(trimmedUrl))
+
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error('Annotation URL must start with http:// or https://.')
+  }
+
+  return {
+    sourceName: annotationSourceNameFromUrl(url),
+    url: url.toString(),
+  }
+}
+
+function normalizeAnnotationFetchUrl(url: URL): URL {
+  if (url.hostname !== 'github.com') {
+    return url
+  }
+
+  const segments = url.pathname.split('/').filter((segment) => segment.length > 0)
+  const [owner, repo, action, branch, ...pathParts] = segments
+
+  if (
+    owner === undefined ||
+    repo === undefined ||
+    branch === undefined ||
+    pathParts.length === 0 ||
+    (action !== 'blob' && action !== 'raw')
+  ) {
+    return url
+  }
+
+  return new URL(
+    `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pathParts
+      .map(encodeURIComponent)
+      .join('/')}`,
+  )
+}
+
+function annotationSourceNameFromUrl(url: URL): string {
+  const lastSegment = url.pathname
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .at(-1)
+
+  if (lastSegment === undefined) {
+    return url.hostname
+  }
+
+  try {
+    return decodeURIComponent(lastSegment)
+  } catch {
+    return lastSegment
   }
 }

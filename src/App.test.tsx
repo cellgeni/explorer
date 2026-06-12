@@ -292,7 +292,7 @@ describe('App', () => {
     window.history.replaceState(
       null,
       '',
-      '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px&imgOpacity=0.45&cellFill=0.7&cellBoundary=0.35&channels=Channel%3A1&lensScope=cursor&lens=1&lensRadius=120&lensQv=18',
+      '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&annotationUrl=https%3A%2F%2Fexample.test%2Fannotations%2Fmanual.csv&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px&imgOpacity=0.45&cellFill=0.7&cellBoundary=0.35&channels=Channel%3A1&lensScope=cursor&lens=1&lensRadius=120&lensQv=18',
     )
     const dapiChannel = {
       id: 'Channel:0',
@@ -387,6 +387,11 @@ describe('App', () => {
     expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(18)
     expect(screen.getByRole('slider', { name: 'Radius' })).toHaveValue('120')
     expect(screen.getByRole('button', { name: 'Disable Lens' })).toBeEnabled()
+
+    openHudTab('Annotations')
+    expect(screen.getByLabelText('Annotation URL')).toHaveValue(
+      'https://example.test/annotations/manual.csv',
+    )
   })
 
   it('auto-loads a dataset URL from the query string without waiting for a click', async () => {

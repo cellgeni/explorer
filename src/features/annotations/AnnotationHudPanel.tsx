@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import {
   ALL_ANNOTATION_GROUP_ID,
   type AnnotationGroupOption,
@@ -16,6 +16,8 @@ interface AnnotationHudPanelProps {
   readonly active: boolean
   readonly annotationGroupInputId: string
   readonly annotationImportInputId: string
+  readonly annotationImportUrlInputId: string
+  readonly annotationImportUrl: string
   readonly annotationHeaderCopy: string
   readonly loadEnabled: boolean
   readonly selectedAnnotationGroupId: string
@@ -27,6 +29,8 @@ interface AnnotationHudPanelProps {
   readonly onLoadAnnotations: () => void
   readonly onClearAnnotations: () => void
   readonly onImportAnnotations: (file: File | null) => void
+  readonly onAnnotationImportUrlChange: (url: string) => void
+  readonly onImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly onAnnotationColorChange: (annotationId: string, color: string) => void
   readonly onRemoveAnnotation: (annotationId: string) => void
 }
@@ -35,6 +39,8 @@ export function AnnotationHudPanel({
   active,
   annotationGroupInputId,
   annotationImportInputId,
+  annotationImportUrlInputId,
+  annotationImportUrl,
   annotationHeaderCopy,
   loadEnabled,
   selectedAnnotationGroupId,
@@ -46,13 +52,36 @@ export function AnnotationHudPanel({
   onLoadAnnotations,
   onClearAnnotations,
   onImportAnnotations,
+  onAnnotationImportUrlChange,
+  onImportAnnotationUrl,
   onAnnotationColorChange,
   onRemoveAnnotation,
 }: AnnotationHudPanelProps) {
+  const [isImportingAnnotationUrl, setIsImportingAnnotationUrl] = useState(false)
   const isAnnotationLoading =
     annotationState.status === 'loading' || annotationGroupState.status === 'loading'
   const loadedAnnotations =
     annotationState.status === 'ready' ? annotationState.annotations : []
+  const trimmedAnnotationImportUrl = annotationImportUrl.trim()
+
+  async function handleAnnotationUrlSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!loadEnabled || trimmedAnnotationImportUrl.length === 0) {
+      return
+    }
+
+    setIsImportingAnnotationUrl(true)
+    try {
+      const imported = await onImportAnnotationUrl(trimmedAnnotationImportUrl)
+
+      if (imported) {
+        onAnnotationImportUrlChange(trimmedAnnotationImportUrl)
+      }
+    } finally {
+      setIsImportingAnnotationUrl(false)
+    }
+  }
 
   return (
     <div
@@ -126,6 +155,44 @@ export function AnnotationHudPanel({
             event.currentTarget.value = ''
           }}
         />
+        <form
+          className="annotation-url-import"
+          aria-label="Import annotation URL"
+          onSubmit={(event) => {
+            void handleAnnotationUrlSubmit(event)
+          }}
+        >
+          <label htmlFor={annotationImportUrlInputId}>Annotation URL</label>
+          <div className="annotation-url-row">
+            <input
+              id={annotationImportUrlInputId}
+              type="url"
+              name="annotation-url"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="https://example.org/labels.csv…"
+              title="Annotation URL"
+              value={annotationImportUrl}
+              disabled={!loadEnabled || isImportingAnnotationUrl}
+              onChange={(event) => {
+                onAnnotationImportUrlChange(event.currentTarget.value)
+              }}
+            />
+            <button
+              type="submit"
+              className="secondary-action"
+              disabled={
+                !loadEnabled ||
+                isImportingAnnotationUrl ||
+                trimmedAnnotationImportUrl.length === 0
+              }
+              title="Import annotation URL"
+            >
+              {isImportingAnnotationUrl ? 'Importing…' : 'Import URL'}
+            </button>
+          </div>
+        </form>
         {annotationState.status === 'ready' && annotationState.annotations.length > 0 ? (
           <>
             <AnnotationSizeCharts
