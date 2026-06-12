@@ -878,6 +878,7 @@ describe('deck layer factory', () => {
     expect(datum.position).toEqual([10, -20, 0])
     expect(datum.radiusPixels).toBe(5)
     expect(datum.radiusMicrometers).toBe(4)
+    expect(datum.fillColor).toEqual([72, 68, 58, 240])
     expect(datum.nucleusCount).toBe(2)
     expect(datum.segmentationMethod).toBe('nucleus_expansion')
     expect(createOverviewViewState([datum]).target).toEqual([10, -20, 0])

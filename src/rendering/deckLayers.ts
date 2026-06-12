@@ -345,7 +345,11 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
 }
 
 const CELL_PROXY_FILL_OPACITY = 0.35
-const GENE_EXPRESSION_ZERO_FILL_COLOR: Color = [72, 68, 58, 84]
+const DEFAULT_OVERVIEW_CELL_FILL_RGB = [72, 68, 58] as const
+const GENE_EXPRESSION_ZERO_FILL_COLOR: Color = [
+  ...DEFAULT_OVERVIEW_CELL_FILL_RGB,
+  84,
+]
 const GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY = 0.5
 const EMPTY_CELL_BOUNDARY_PATH_GEOMETRY: CellBoundaryPathGeometryData = {
   length: 0,
@@ -1044,7 +1048,10 @@ export function overviewCellsToLayerData(
       position: [cell.position.x, -cell.position.y, 0],
       radiusPixels: 2 + intensity * 3,
       ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
-      fillColor: [215, 63, 124, 150 + Math.round(intensity * 90)],
+      fillColor: [
+        ...DEFAULT_OVERVIEW_CELL_FILL_RGB,
+        150 + Math.round(intensity * 90),
+      ],
       transcriptCount: cell.transcriptCount,
       ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
       ...(cell.nucleusCount === undefined ? {} : { nucleusCount: cell.nucleusCount }),
