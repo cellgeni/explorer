@@ -6,6 +6,7 @@ import {
   planGeneExpressionLod,
   type GeneExpressionDetailMode,
 } from '../../data/geneExpressionLod'
+import { formatGeneExpressionStageTiming } from '../../data/geneExpressionTiming'
 import {
   shareableViewStateKey,
   viewStateToShareable,
@@ -245,11 +246,28 @@ export function useViewportDataWorkflow({
         mode: expressionPlan.mode,
         visibleCellCount: expressionPlan.sourceCellCount,
       })
+      appendDebugEvent(
+        `${geneExpressionModeLabel(expressionPlan.mode)} started: ${selectedGenes.join(', ')}; ${expressionPlan.sourceCellCount.toLocaleString()} source cells, limit ${expressionPlan.cellLimit.toLocaleString()}, stride ${expressionPlan.sampleStride.toLocaleString()}`,
+        { coalesceKey: 'gene-expression-query' },
+      )
 
-      const expressionOptions = {
+      const expressionOptions: Parameters<GeneExpressionLoader>[3] = {
         signal: expressionAbortController.signal,
         limit: expressionPlan.cellLimit,
         sampleStride: expressionPlan.sampleStride,
+        onStageTiming: (timing) => {
+          if (
+            expressionAbortController.signal.aborted ||
+            geneExpressionRequestIdRef.current !== expressionRequestId
+          ) {
+            return
+          }
+
+          appendDebugEvent(
+            `Expression stage: ${formatGeneExpressionStageTiming(timing)}`,
+            { coalesceKey: `gene-expression-stage-${timing.stage}` },
+          )
+        },
       }
       const loadExpressionBatch = async (): Promise<GeneExpressionBatch> => {
         try {

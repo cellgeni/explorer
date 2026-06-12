@@ -6,8 +6,10 @@ import {
   fetchByteRangeWithCache,
   ZARR_ZIP_CACHE_NAMESPACE,
 } from './persistentByteRangeCache'
+import { geneExpressionStageTiming } from './geneExpressionTiming'
 import type { CellId } from './cellid'
 import type { DataPoint, Micrometers } from './coords'
+import type { GeneExpressionStageTimingHandler } from './geneExpressionTiming'
 import type { PersistentByteRangeCache } from './persistentByteRangeCache'
 import type { Array as ZarrArray, DataType, Group as ZarrGroup } from 'zarrita'
 
@@ -39,6 +41,7 @@ export interface GexResult {
 
 export interface CellFeatureMatrixReadOptions {
   readonly signal?: AbortSignal
+  readonly onStageTiming?: GeneExpressionStageTimingHandler
 }
 
 export interface AggregatedGene {
@@ -138,8 +141,8 @@ const CELL_MAJOR_INDPTR_FETCH_CONCURRENCY = 8
 const CELL_MAJOR_FULL_INDPTR_TARGET_THRESHOLD = 64
 const CELL_MAJOR_FULL_INDPTR_MAX_LENGTH = 6_000_000
 const CELL_MAJOR_ROI_WARMUP_ROW_COUNT = 128
-const SELECTED_GENE_FEATURE_MAJOR_CELL_THRESHOLD = 50_000
-const SELECTED_GENE_FEATURE_MAJOR_GENE_THRESHOLD = 128
+const SELECTED_GENE_CELL_MAJOR_CELL_THRESHOLD = 2_000
+const SELECTED_GENE_CELL_MAJOR_GENE_THRESHOLD = 32
 const h5MatrixCache = new Map<string, Promise<H5MatrixCache>>()
 const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
 const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
@@ -352,20 +355,31 @@ function cellIdWhereClause(cellIds: readonly CellId[]): SqlFragment {
 export async function gexFromCellFeatureMatrixZarr(
   url: string,
   cellIds: readonly CellId[],
+  options: CellFeatureMatrixReadOptions = {},
 ): Promise<GexResult> {
+  const indexStartedAt = Date.now()
   const matrix = await loadZarrMatrixWithCellIds(url)
+  options.onStageTiming?.(
+    geneExpressionStageTiming(
+      'matrix-cell-id-index',
+      'Matrix cell-id index',
+      indexStartedAt,
+      `${matrix.cellIdRows.size.toLocaleString()} rows`,
+    ),
+  )
 
   const targets = cellIds
     .map((cellId) => ({ id: cellId, row: matrix.cellIdRows.get(cellId) ?? -1 }))
     .filter((target) => target.row >= 0)
     .sort((a, b) => a.row - b.row)
 
-  return gexFromCellFeatureMatrixZarrTargets(matrix, targets, cellIds)
+  return gexFromCellFeatureMatrixZarrTargets(matrix, targets, cellIds, options)
 }
 
 export async function gexFromCellFeatureMatrixZarrRows(
   url: string,
   targets: readonly CellFeatureMatrixRowTarget[],
+  options: CellFeatureMatrixReadOptions = {},
 ): Promise<GexResult> {
   const matrix = await loadZarrMatrixMetadata(url)
   const rowTargets = targets
@@ -376,6 +390,7 @@ export async function gexFromCellFeatureMatrixZarrRows(
     matrix,
     rowTargets,
     targets.map((target) => target.id),
+    options,
   )
 }
 
@@ -383,6 +398,7 @@ async function gexFromCellFeatureMatrixZarrTargets(
   matrix: ZarrMatrixCache,
   targets: readonly CellFeatureMatrixRowTarget[],
   cellIds: readonly CellId[],
+  options: CellFeatureMatrixReadOptions = {},
 ): Promise<GexResult> {
   if (targets.length === 0) {
     return {
@@ -408,10 +424,21 @@ async function gexFromCellFeatureMatrixZarrTargets(
       kind: 'array',
     }))
   const cells = new Map<CellId, { geneNames: string[]; counts: number[] }>()
+  const indptrStartedAt = Date.now()
   const ranges = await zarrCellMajorSparseRanges(matrix.cscIndptrArray, targets, cells)
+  options.onStageTiming?.(
+    geneExpressionStageTiming(
+      'matrix-cell-major-indptr',
+      'Matrix row pointer ranges',
+      indptrStartedAt,
+      `${targets.length.toLocaleString()} targets, ${ranges.length.toLocaleString()} non-empty rows`,
+    ),
+  )
+  const rangeGroups = coalesceCellMajorRanges(ranges)
 
+  const sparseStartedAt = Date.now()
   await mapWithConcurrency(
-    coalesceCellMajorRanges(ranges),
+    rangeGroups,
     CELL_MAJOR_RANGE_FETCH_CONCURRENCY,
     async (rangeGroup) => {
       const [indicesChunk, dataChunk] = await Promise.all([
@@ -446,6 +473,14 @@ async function gexFromCellFeatureMatrixZarrTargets(
         cells.set(target.id, { geneNames: sparseGenes, counts: sparseCounts })
       }
     },
+  )
+  options.onStageTiming?.(
+    geneExpressionStageTiming(
+      'matrix-cell-major-ranges',
+      'Matrix sparse value ranges',
+      sparseStartedAt,
+      `${rangeGroups.length.toLocaleString()} range groups`,
+    ),
   )
 
   for (const cellId of cellIds) {
@@ -587,6 +622,7 @@ export async function gexFromCellFeatureMatrixZarrSelectedGenes(
   url: string,
   cellIds: readonly CellId[],
   genes: readonly string[],
+  options: CellFeatureMatrixReadOptions = {},
 ): Promise<GexResult> {
   const selectedGenes = normalizeSelectedGeneList(genes)
 
@@ -597,20 +633,53 @@ export async function gexFromCellFeatureMatrixZarrSelectedGenes(
     }
   }
 
+  const indexStartedAt = Date.now()
   const matrix = await loadZarrMatrixWithCellIds(url)
+  options.onStageTiming?.(
+    geneExpressionStageTiming(
+      'matrix-cell-id-index',
+      'Matrix cell-id index',
+      indexStartedAt,
+      `${matrix.cellIdRows.size.toLocaleString()} rows`,
+    ),
+  )
 
   if (
     hasCellMajorCsc(matrix) &&
     shouldUseCellMajorSelectedGeneRead(cellIds, selectedGenes)
   ) {
-    return gexFromCellFeatureMatrixZarr(url, cellIds)
+    const targets = cellIds
+      .map((cellId) => ({ id: cellId, row: matrix.cellIdRows.get(cellId) ?? -1 }))
+      .filter((target) => target.row >= 0)
+      .sort((a, b) => a.row - b.row)
+
+    return gexFromCellFeatureMatrixZarrTargets(matrix, targets, cellIds, options)
   }
 
   try {
-    return await gexFromFeatureMajorCellFeatureMatrix(matrix, cellIds, selectedGenes)
+    const featureMajorStartedAt = Date.now()
+    const result = await gexFromFeatureMajorCellFeatureMatrix(
+      matrix,
+      cellIds,
+      selectedGenes,
+    )
+    options.onStageTiming?.(
+      geneExpressionStageTiming(
+        'matrix-feature-major-selected-genes',
+        'Matrix selected-gene columns',
+        featureMajorStartedAt,
+        `${selectedGenes.length.toLocaleString()} genes, ${cellIds.length.toLocaleString()} cells`,
+      ),
+    )
+    return result
   } catch (error) {
     if (hasCellMajorCsc(matrix) && isZarrNotFoundError(error)) {
-      return gexFromCellFeatureMatrixZarr(url, cellIds)
+      const targets = cellIds
+        .map((cellId) => ({ id: cellId, row: matrix.cellIdRows.get(cellId) ?? -1 }))
+        .filter((target) => target.row >= 0)
+        .sort((a, b) => a.row - b.row)
+
+      return gexFromCellFeatureMatrixZarrTargets(matrix, targets, cellIds, options)
     }
 
     throw error
@@ -622,8 +691,8 @@ function shouldUseCellMajorSelectedGeneRead(
   selectedGenes: readonly string[],
 ): boolean {
   return (
-    cellIds.length <= SELECTED_GENE_FEATURE_MAJOR_CELL_THRESHOLD ||
-    selectedGenes.length > SELECTED_GENE_FEATURE_MAJOR_GENE_THRESHOLD
+    cellIds.length <= SELECTED_GENE_CELL_MAJOR_CELL_THRESHOLD ||
+    selectedGenes.length > SELECTED_GENE_CELL_MAJOR_GENE_THRESHOLD
   )
 }
 

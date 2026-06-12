@@ -26,6 +26,7 @@ import type {
 } from '../data/cellTranscripts'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type {
+  CellFeatureMatrixReadOptions,
   DuckDbPreparedStatementLike,
   GexCell,
   GexResult,
@@ -35,6 +36,10 @@ import type {
   TranscriptDuckDbConnection,
   TranscriptScope,
 } from '../data/gex'
+import type {
+  GeneExpressionStageTiming,
+  GeneExpressionStageTimingHandler,
+} from '../data/geneExpressionTiming'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type {
   Annotation,
@@ -60,6 +65,7 @@ export interface XeniumDatasetOptions {
     url: string,
     ids: readonly CellId[],
     genes: readonly string[],
+    options?: CellFeatureMatrixReadOptions,
   ) => Promise<GexResult>
   readonly transcriptReader?: typeof gexFromTranscriptsParquet
   readonly overviewReader?: (
@@ -104,12 +110,15 @@ export interface GeneExpressionBatchTiming {
   readonly matrixReadMs: number
   readonly scoreCellsMs: number
   readonly totalMs: number
+  readonly stageTimings?: readonly GeneExpressionStageTiming[]
+  readonly stageSummary?: string
 }
 
 export interface GeneExpressionQueryOptions {
   readonly limit?: number
   readonly sampleStride?: number
   readonly signal?: AbortSignal
+  readonly onStageTiming?: GeneExpressionStageTimingHandler
 }
 
 export interface DatasetCell {
@@ -180,6 +189,7 @@ export class XeniumDataset implements SpatialDataset {
     url: string,
     ids: readonly CellId[],
     genes: readonly string[],
+    options?: CellFeatureMatrixReadOptions,
   ) => Promise<GexResult>
   private readonly transcriptReader: typeof gexFromTranscriptsParquet
   private readonly overviewReader: (
@@ -625,6 +635,12 @@ LIMIT ?
     const viewportCellsStartedAt = Date.now()
     const viewportCells = await this.cellsForBbox(bbox, limit, sampleStride)
     const viewportCellsMs = elapsedMs(viewportCellsStartedAt)
+    options.onStageTiming?.({
+      stage: 'viewport-cells',
+      label: 'Viewport cell query',
+      durationMs: viewportCellsMs,
+      detail: `${viewportCells.length.toLocaleString()} cells, limit ${limit.toLocaleString()}, stride ${sampleStride.toLocaleString()}`,
+    })
     throwIfAborted(options.signal)
 
     if (viewportCells.length === 0) {
@@ -646,8 +662,20 @@ LIMIT ?
       this.urlFor('cell_feature_matrix.zarr.zip'),
       viewportCells.map((cell) => cell.id),
       selectedGenes,
+      {
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+        ...(options.onStageTiming === undefined
+          ? {}
+          : { onStageTiming: options.onStageTiming }),
+      },
     )
     const matrixReadMs = elapsedMs(matrixReadStartedAt)
+    options.onStageTiming?.({
+      stage: 'matrix-read',
+      label: 'Expression matrix read',
+      durationMs: matrixReadMs,
+      detail: `${selectedGenes.length.toLocaleString()} genes, ${viewportCells.length.toLocaleString()} cells`,
+    })
     throwIfAborted(options.signal)
     const scoreCellsStartedAt = Date.now()
     const selectedGeneSet = new Set(selectedGenes)
@@ -674,6 +702,12 @@ LIMIT ?
       maxCount = Math.max(maxCount, count)
     }
     const scoreCellsMs = elapsedMs(scoreCellsStartedAt)
+    options.onStageTiming?.({
+      stage: 'score-cells',
+      label: 'Expression scoring',
+      durationMs: scoreCellsMs,
+      detail: `${cells.length.toLocaleString()} positive cells`,
+    })
 
     return {
       cells,

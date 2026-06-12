@@ -34,6 +34,7 @@ import {
 import { runDatasetDiagnostics } from '../../data/datasetDiagnostics'
 import type { BBox, DataPoint } from '../../data/coords'
 import type { CellId } from '../../data/cellid'
+import type { GeneExpressionStageTimingHandler } from '../../data/geneExpressionTiming'
 import type { ChannelAutoContrast } from '../../data/morphologyContrast'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
@@ -167,6 +168,7 @@ export type GeneExpressionLoader = (
     readonly limit?: number
     readonly sampleStride?: number
     readonly signal?: AbortSignal
+    readonly onStageTiming?: GeneExpressionStageTimingHandler
   },
 ) => Promise<GeneExpressionBatch>
 

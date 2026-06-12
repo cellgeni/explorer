@@ -1,4 +1,9 @@
 import { datasetFileUrl } from './datasetFiles'
+import {
+  formatGeneExpressionStageTiming,
+  geneExpressionStageTiming,
+  type GeneExpressionStageTiming,
+} from './geneExpressionTiming'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
 import type { BBox } from './coords'
@@ -28,21 +33,58 @@ export async function loadDatasetGeneExpression(
   }
 
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
+  const stageTimings: GeneExpressionStageTiming[] = []
+  const onStageTiming = (timing: GeneExpressionStageTiming) => {
+    stageTimings.push(timing)
+    options.onStageTiming?.(timing)
+  }
 
+  const rangeStartedAt = Date.now()
   await validateRangeSupport(datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip'), {
     label: 'cell_feature_matrix.zarr.zip',
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
+  onStageTiming(
+    geneExpressionStageTiming(
+      'range-check',
+      'Feature matrix Range check',
+      rangeStartedAt,
+      'cell_feature_matrix.zarr.zip',
+    ),
+  )
   throwIfAborted(options.signal)
 
+  const datasetStartedAt = Date.now()
   const dataset = await cachedXeniumDataset(baseUrl)
+  onStageTiming(
+    geneExpressionStageTiming(
+      'dataset-cache',
+      'Cached dataset lookup',
+      datasetStartedAt,
+      baseUrl.replace(/\/+$/, ''),
+    ),
+  )
   throwIfAborted(options.signal)
 
-  return dataset.geneExpression(bbox, genes, {
+  const batch = await dataset.geneExpression(bbox, genes, {
     ...(options.limit === undefined ? {} : { limit: options.limit }),
     ...(options.sampleStride === undefined ? {} : { sampleStride: options.sampleStride }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
+    onStageTiming,
   })
+
+  if (batch.timing === undefined) {
+    return batch
+  }
+
+  return {
+    ...batch,
+    timing: {
+      ...batch.timing,
+      stageTimings,
+      stageSummary: stageTimings.map(formatGeneExpressionStageTiming).join('; '),
+    },
+  }
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

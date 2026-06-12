@@ -2,6 +2,7 @@ import {
   summarizeDatasetDiagnostics,
   type DatasetDiagnosticsReport,
 } from '../../data/datasetDiagnostics'
+import type { GeneExpressionBatchTiming } from '../../datasets/xeniumDataset'
 
 interface DatasetLoadDiagnosticState {
   readonly status: string
@@ -31,6 +32,24 @@ interface TranscriptDiagnosticLayerState {
   readonly durationMs?: number
   readonly bins?: readonly unknown[]
   readonly source?: string
+}
+
+interface GeneExpressionDiagnosticState {
+  readonly status: string
+  readonly url?: string
+  readonly genes?: readonly string[]
+  readonly mode?: string
+  readonly cellCount?: number
+  readonly visibleCellCount?: number
+  readonly message?: string
+  readonly error?: unknown
+}
+
+interface GeneExpressionDiagnosticBatch {
+  readonly cells: readonly unknown[]
+  readonly genes: readonly string[]
+  readonly maxCount: number
+  readonly timing?: GeneExpressionBatchTiming
 }
 
 interface TranscriptDiagnosticInspection {
@@ -65,8 +84,10 @@ export interface DiagnosticsDumpOptions {
   readonly debugLog: readonly unknown[]
   readonly diagnosticsState: DatasetDiagnosticsDiagnosticState
   readonly geneExpressionColorScale: string
+  readonly geneExpressionBatch: GeneExpressionDiagnosticBatch | null
   readonly geneExpressionDetailMode: string
   readonly geneExpressionScoreMode: string
+  readonly geneExpressionState: GeneExpressionDiagnosticState
   readonly hoveredTranscript: TranscriptDiagnosticInspection | null
   readonly loadState: DatasetLoadDiagnosticState
   readonly manualTranscriptExactRequestKey: string | null
@@ -129,6 +150,10 @@ export function createDiagnosticsDump(
     states: {
       dataset: summarizeDatasetLoadState(options.loadState),
       diagnostics: summarizeDiagnosticsState(options.diagnosticsState),
+      geneExpression: summarizeGeneExpressionState(
+        options.geneExpressionState,
+        options.geneExpressionBatch,
+      ),
       transcripts: {
         capability: options.transcriptCapabilityState,
         layer: options.transcriptLayerState,
@@ -146,6 +171,51 @@ export function createDiagnosticsDump(
     activityLog: options.debugLog,
     telemetryEvents: options.telemetryEvents,
   }
+}
+
+function summarizeGeneExpressionState(
+  state: GeneExpressionDiagnosticState,
+  batch: GeneExpressionDiagnosticBatch | null,
+): Record<string, unknown> {
+  return {
+    status: state.status,
+    url: state.url,
+    mode: state.mode,
+    genes: state.genes,
+    cellCount: state.cellCount,
+    visibleCellCount: state.visibleCellCount,
+    message: state.message,
+    error: summarizeUnknownError(state.error),
+    ...(batch === null
+      ? {}
+      : {
+          batch: {
+            positiveCellCount: batch.cells.length,
+            genes: batch.genes,
+            maxCount: batch.maxCount,
+            timing: batch.timing,
+          },
+        }),
+  }
+}
+
+function summarizeUnknownError(error: unknown): Record<string, unknown> | undefined {
+  if (error === undefined) {
+    return undefined
+  }
+
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    }
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    return error as Record<string, unknown>
+  }
+
+  return { message: String(error) }
 }
 
 function summarizeTranscriptInspection(

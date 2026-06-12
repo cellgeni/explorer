@@ -150,12 +150,16 @@ export function formatGeneExpressionTiming(
     return 'timing unavailable'
   }
 
-  return [
+  const summary = [
     `total ${Math.round(timing.totalMs)} ms`,
     `viewport ${Math.round(timing.viewportCellsMs)} ms`,
     `matrix ${Math.round(timing.matrixReadMs)} ms`,
     `score ${Math.round(timing.scoreCellsMs)} ms`,
   ].join(', ')
+
+  return timing.stageSummary === undefined
+    ? summary
+    : `${summary}; stages ${timing.stageSummary}`
 }
 
 export function isGeneExpressionDetailMode(

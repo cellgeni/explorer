@@ -36,9 +36,29 @@ describe('createDiagnosticsDump', () => {
           url: 'https://example.test/output',
           report,
         },
+        geneExpressionBatch: {
+          cells: [{ id: 'aaaaaaaa-1' }],
+          genes: ['Actb'],
+          maxCount: 4,
+          timing: {
+            viewportCellsMs: 1,
+            matrixReadMs: 2,
+            scoreCellsMs: 3,
+            totalMs: 6,
+            stageSummary: 'Viewport cell query 1 ms',
+          },
+        },
         geneExpressionColorScale: 'plasma',
         geneExpressionDetailMode: 'auto',
         geneExpressionScoreMode: 'sum',
+        geneExpressionState: {
+          status: 'ready',
+          url: 'https://example.test/output',
+          genes: ['Actb'],
+          mode: 'exact',
+          cellCount: 1,
+          visibleCellCount: 12,
+        },
         hoveredTranscript: {
           transcript: {
             id: 'tx-1',
@@ -115,6 +135,20 @@ describe('createDiagnosticsDump', () => {
           status: 'ready',
           summary: 'All checks passed',
           report,
+        },
+        geneExpression: {
+          status: 'ready',
+          mode: 'exact',
+          genes: ['Actb'],
+          cellCount: 1,
+          visibleCellCount: 12,
+          batch: {
+            positiveCellCount: 1,
+            maxCount: 4,
+            timing: {
+              stageSummary: 'Viewport cell query 1 ms',
+            },
+          },
         },
         transcripts: {
           exactBudget: {
