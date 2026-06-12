@@ -1351,7 +1351,7 @@ function ViewerSurface({
       {transcriptHover === null ? null : (
         <TranscriptHoverTooltip detail={transcriptHover} />
       )}
-      {!hasCells ? (
+      {!hasCells && status === 'idle' ? (
         <div className="viewport-empty-state" aria-hidden="true">
           Please load a dataset
         </div>

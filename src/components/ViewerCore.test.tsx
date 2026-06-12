@@ -151,6 +151,13 @@ describe('ViewerCore', () => {
     expect(document.querySelector('canvas.morphology-canvas')).toBeInTheDocument()
   })
 
+  it('hides the empty dataset prompt while a dataset is loading', () => {
+    render(<ViewerCore status="loading" />)
+
+    expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
+    expect(screen.getByText('Loading overview cells…')).toBeInTheDocument()
+  })
+
   it('applies image opacity to the morphology canvas', () => {
     render(<ViewerCore imageOpacity={0.4} />)
 
