@@ -100,7 +100,7 @@ describe('deck layer factory', () => {
     expect(layer.props.radiusMaxPixels).toBe(24)
     expect(layer.props.opacity).toBe(1)
     expect(layer.props.updateTriggers).toMatchObject({
-      getFillColor: [0.175],
+      getFillColor: [0.5],
       getLineColor: [1],
     })
 
@@ -111,7 +111,7 @@ describe('deck layer factory', () => {
       cell: OverviewCellDatum,
     ) => readonly number[]
 
-    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 39])
+    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 128])
     expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 220])
   })
 
@@ -132,7 +132,25 @@ describe('deck layer factory', () => {
       cell: OverviewCellDatum,
     ) => readonly number[]
 
-    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 39])
+    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 128])
+  })
+
+  it('renders cell fills as fully opaque when cell fill opacity is 100%', () => {
+    const layers = createOverviewLayers(fixtureCells, [], {
+      cellFillOpacity: 1,
+      cellBoundaryFillEnabled: true,
+    })
+    const [layer] = layers
+
+    if (!(layer instanceof ScatterplotLayer)) {
+      throw new Error('Expected first overview layer to be a ScatterplotLayer.')
+    }
+
+    const getFillColor = layer.props.getFillColor as (
+      cell: OverviewCellDatum,
+    ) => readonly number[]
+
+    expect(getFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 255])
   })
 
   it('adds a binary path layer when boundary data is available', () => {
@@ -231,7 +249,7 @@ describe('deck layer factory', () => {
       expect.any(Object),
     ])
     expect(pointLayer.props.updateTriggers).toMatchObject({
-      getFillColor: [0.12249999999999998],
+      getFillColor: [0.35],
       getLineColor: [0.6],
     })
     expect(pointLayer.props.filled).toBe(true)
@@ -253,12 +271,12 @@ describe('deck layer factory', () => {
       0, 0, 0, 10, 0, 0, 10, -10, 0, 0, 0, 0,
     ])
     expect(Array.from(fillData.attributes.getFillColor.value.slice(0, 4))).toEqual([
-      32, 102, 83, 12,
+      32, 102, 83, 89,
     ])
     expect(Array.from(boundaryData.attributes.getColor.value.slice(0, 4))).toEqual([
       246, 242, 232, 126,
     ])
-    expect(getPointFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 27])
+    expect(getPointFillColor(fixtureCells[0]!)).toEqual([215, 63, 124, 89])
     expect(getPointLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 132])
   })
 
@@ -376,7 +394,7 @@ describe('deck layer factory', () => {
       cell: OverviewCellDatum,
     ) => readonly number[]
 
-    expect(getFillColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 110])
+    expect(getFillColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 128])
     expect(getLineColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 88])
   })
 
@@ -415,7 +433,7 @@ describe('deck layer factory', () => {
     ) => readonly number[]
 
     expect(cellLayer.props.filled).toBe(true)
-    expect(getFillColor(expressionStyledCells[0]!)).toEqual([72, 68, 58, 42])
+    expect(getFillColor(expressionStyledCells[0]!)).toEqual([72, 68, 58, 128])
   })
 
   it('adds a non-pickable gene expression overlay when expression cells need direct drawing', () => {
@@ -515,7 +533,7 @@ describe('deck layer factory', () => {
     const fillData = getBoundaryFillData(fillLayer)
 
     expect(Array.from(fillData.attributes.getFillColor.value.slice(0, 4))).toEqual([
-      240, 128, 120, 99,
+      240, 128, 120, 115,
     ])
     expect(expressionLayer.props.data).toEqual([expressionCells[1]])
   })
@@ -823,10 +841,10 @@ describe('deck layer factory', () => {
       pathDataB.attributes.getColor.value,
     )
     expect(Array.from(fillDataA.attributes.getFillColor.value.slice(0, 4))).toEqual([
-      240, 128, 120, 110,
+      240, 128, 120, 128,
     ])
     expect(Array.from(fillDataB.attributes.getFillColor.value.slice(0, 4))).toEqual([
-      63, 165, 91, 110,
+      63, 165, 91, 128,
     ])
     expect(Array.from(pathDataA.attributes.getColor.value.slice(0, 4))).toEqual([
       240, 128, 120, 165,

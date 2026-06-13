@@ -344,12 +344,8 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
   maxZoom: 10,
 }
 
-const CELL_PROXY_FILL_OPACITY = 0.35
 const DEFAULT_OVERVIEW_CELL_FILL_RGB = [72, 68, 58] as const
-const GENE_EXPRESSION_ZERO_FILL_COLOR: Color = [
-  ...DEFAULT_OVERVIEW_CELL_FILL_RGB,
-  84,
-]
+const GENE_EXPRESSION_ZERO_FILL_COLOR: Color = [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 84]
 const GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY = 0.5
 const EMPTY_CELL_BOUNDARY_PATH_GEOMETRY: CellBoundaryPathGeometryData = {
   length: 0,
@@ -448,7 +444,7 @@ export function createOverviewLayers(
   const effectiveBoundaryFillEnabled = boundaryFillLayerEnabled || geneExpressionActive
   const cellPointFillOpacity = geneExpressionActive
     ? Math.max(cellFillOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
-    : cellFillOpacity * CELL_PROXY_FILL_OPACITY
+    : cellFillOpacity
   const cellPointLayer = new ScatterplotLayer<OverviewCellDatum>({
     id: 'cells-overview-scatter',
     data: pointCells,
@@ -463,7 +459,7 @@ export function createOverviewLayers(
     lineWidthMinPixels: 1,
     getPosition: (cell) => cell.position,
     getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
-    getFillColor: (cell) => colorWithOpacity(cell.fillColor, cellPointFillOpacity),
+    getFillColor: (cell) => colorWithFillOpacity(cell.fillColor, cellPointFillOpacity),
     getLineColor: (cell) =>
       colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
     getLineWidth: 1,
@@ -554,7 +550,8 @@ export function createOverviewLayers(
         lineWidthMinPixels: 1,
         getPosition: (cell) => cell.position,
         getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
-        getFillColor: (cell) => colorWithOpacity(cell.fillColor, expressionFillOpacity),
+        getFillColor: (cell) =>
+          colorWithFillOpacity(cell.fillColor, expressionFillOpacity),
         getLineColor: (cell) =>
           colorWithOpacity(cellPointOutlineColor(cell.fillColor), cellBoundaryOpacity),
         getLineWidth: 1,
@@ -894,6 +891,7 @@ function cellBoundaryFillLayerDataWithColors(
     geometry.fillColors,
     style.fillColorByCellId,
     cellFillOpacity,
+    { finalAlpha: true },
   )
   const data = {
     length: geometry.fillLayerData.length,
@@ -970,6 +968,7 @@ function cellBoundaryColorBuffer(
   baseColors: readonly Color[],
   styleColorByCellId: ReadonlyMap<string, Color>,
   opacity: number,
+  options: { readonly finalAlpha?: boolean } = {},
 ): Uint8Array {
   const vertexCount = startIndices[startIndices.length - 1] ?? 0
   const colors = new Uint8Array(vertexCount * 4)
@@ -979,7 +978,11 @@ function cellBoundaryColorBuffer(
     const endIndex = startIndices[cellIndex + 1] ?? startIndex
     const cellId = cellIds[cellIndex] ?? ''
     const baseColor = baseColors[cellIndex] ?? [0, 0, 0, 255]
-    const color = colorWithOpacity(styleColorByCellId.get(cellId) ?? baseColor, opacity)
+    const styleColor = styleColorByCellId.get(cellId) ?? baseColor
+    const color =
+      options.finalAlpha === true
+        ? colorWithFillOpacity(styleColor, opacity)
+        : colorWithOpacity(styleColor, opacity)
 
     for (let vertexIndex = startIndex; vertexIndex < endIndex; vertexIndex += 1) {
       const colorIndex = vertexIndex * 4
@@ -1048,10 +1051,7 @@ export function overviewCellsToLayerData(
       position: [cell.position.x, -cell.position.y, 0],
       radiusPixels: 2 + intensity * 3,
       ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
-      fillColor: [
-        ...DEFAULT_OVERVIEW_CELL_FILL_RGB,
-        150 + Math.round(intensity * 90),
-      ],
+      fillColor: [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 150 + Math.round(intensity * 90)],
       transcriptCount: cell.transcriptCount,
       ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
       ...(cell.nucleusCount === undefined ? {} : { nucleusCount: cell.nucleusCount }),
@@ -1704,6 +1704,17 @@ function colorWithOpacity(color: Color, opacity: number): Color {
     color[1] ?? 0,
     color[2] ?? 0,
     Math.round((color[3] ?? 255) * normalizedOpacity),
+  ]
+}
+
+function colorWithFillOpacity(color: Color, opacity: number): Color {
+  const normalizedOpacity = normalizeLayerOpacity(opacity)
+
+  return [
+    color[0] ?? 0,
+    color[1] ?? 0,
+    color[2] ?? 0,
+    Math.round(255 * normalizedOpacity),
   ]
 }
 

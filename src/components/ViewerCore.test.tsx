@@ -317,7 +317,7 @@ describe('ViewerCore', () => {
       Array.from(
         fillLayer?.props?.data?.attributes?.getFillColor?.value?.slice(0, 4) ?? [],
       ),
-    ).toEqual([240, 128, 120, 110])
+    ).toEqual([240, 128, 120, 128])
     expect(expressionLayer).toBeUndefined()
   })
 
@@ -574,7 +574,7 @@ describe('ViewerCore', () => {
       Array.from(
         fillLayer?.props?.data?.attributes?.getFillColor?.value?.slice(0, 4) ?? [],
       ),
-    ).toEqual([31, 155, 143, 44])
+    ).toEqual([31, 155, 143, 128])
     expect(cellLayer?.props?.filled).toBe(true)
     expect(cellLayer?.props?.data).toEqual([])
   })
