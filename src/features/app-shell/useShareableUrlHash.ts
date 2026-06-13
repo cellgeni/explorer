@@ -8,6 +8,7 @@ interface UseShareableUrlHashOptions {
   readonly annotationUrl: string
   readonly boundaryCellLimit: number
   readonly coordinateUnit: string
+  readonly customImageUrls: readonly string[]
   readonly datasetUrl: string
   readonly geneExpressionColorScale: string
   readonly geneExpressionDetailMode: string
@@ -43,6 +44,7 @@ export function useShareableUrlHash({
   annotationUrl,
   boundaryCellLimit,
   coordinateUnit,
+  customImageUrls,
   datasetUrl,
   geneExpressionColorScale,
   geneExpressionDetailMode,
@@ -80,6 +82,7 @@ export function useShareableUrlHash({
       const hash = formatShareableState({
         datasetUrl,
         annotationUrl,
+        customImageUrls,
         selectedGenes,
         ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
         ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
@@ -132,6 +135,7 @@ export function useShareableUrlHash({
     annotationUrl,
     boundaryCellLimit,
     coordinateUnit,
+    customImageUrls,
     datasetUrl,
     geneExpressionColorScale,
     geneExpressionDetailMode,

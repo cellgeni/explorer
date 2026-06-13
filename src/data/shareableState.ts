@@ -11,6 +11,7 @@ export interface ShareableViewState {
 export interface ShareableState {
   readonly datasetUrl?: string
   readonly annotationUrl?: string
+  readonly customImageUrls?: readonly string[]
   readonly selectedGenes?: readonly string[]
   readonly viewState?: ShareableViewState
   readonly roiSelection?: RoiSelection
@@ -58,6 +59,7 @@ export function parseShareableState(hash: string): ShareableState {
   const state: MutableShareableState = {}
   const datasetUrl = readString(params, 'dataset')
   const annotationUrl = readString(params, 'annotationUrl')
+  const customImageUrls = readStrings(params, 'customImageUrl')
   const selectedGenes = readCsv(params, 'genes')
   const viewState = parseViewState(params.get('view'))
   const roiSelection = parseRoiSelection(params.get('roi'))
@@ -95,6 +97,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (annotationUrl !== undefined) {
     state.annotationUrl = annotationUrl
+  }
+
+  if (customImageUrls !== undefined) {
+    state.customImageUrls = customImageUrls
   }
 
   if (selectedGenes !== undefined) {
@@ -230,6 +236,12 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   setOptionalString(params, 'annotationUrl', state.annotationUrl)
+
+  if (state.customImageUrls !== undefined) {
+    for (const customImageUrl of state.customImageUrls) {
+      setOptionalString(params, 'customImageUrl', customImageUrl, 'append')
+    }
+  }
 
   if (state.selectedGenes !== undefined && state.selectedGenes.length > 0) {
     params.set('genes', state.selectedGenes.join(','))
@@ -371,6 +383,18 @@ function readString(params: URLSearchParams, name: string): string | undefined {
   return value === null || value.trim() === '' ? undefined : value
 }
 
+function readStrings(
+  params: URLSearchParams,
+  name: string,
+): readonly string[] | undefined {
+  const values = params
+    .getAll(name)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+
+  return values.length === 0 ? undefined : values
+}
+
 function readCsv(params: URLSearchParams, name: string): readonly string[] | undefined {
   const value = params.get(name)
 
@@ -410,8 +434,14 @@ function setOptionalString(
   params: URLSearchParams,
   name: string,
   value: string | undefined,
+  mode: 'set' | 'append' = 'set',
 ): void {
   if (value !== undefined && value.trim() !== '') {
+    if (mode === 'append') {
+      params.append(name, value.trim())
+      return
+    }
+
     params.set(name, value.trim())
   }
 }

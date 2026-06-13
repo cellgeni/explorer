@@ -299,12 +299,20 @@ describe('App', () => {
       'https://example.test/layers/remote.ome.tif',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
+    await waitFor(() => {
+      expect(window.location.hash).toContain(
+        'customImageUrl=https%3A%2F%2Fexample.test%2Flayers%2Fremote.ome.tif',
+      )
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove remote.ome.tif' }))
 
     expect(
       screen.queryByRole('checkbox', { name: 'remote.ome.tif / Custom DAPI' }),
     ).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(window.location.hash).not.toContain('customImageUrl=')
+    })
   })
 
   it('records compact debug activity entries', () => {
@@ -363,7 +371,7 @@ describe('App', () => {
     window.history.replaceState(
       null,
       '',
-      '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&annotationUrl=https%3A%2F%2Fexample.test%2Fannotations%2Fmanual.csv&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px&imgOpacity=0.45&cellFill=0.7&cellBoundary=0.35&channels=Channel%3A1&lensScope=cursor&lens=1&lensRadius=120&lensQv=18',
+      '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&annotationUrl=https%3A%2F%2Fexample.test%2Fannotations%2Fmanual.csv&customImageUrl=https%3A%2F%2Fexample.test%2Flayers%2Fhe.ome.tif&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px&imgOpacity=0.45&cellFill=0.7&cellBoundary=0.35&channels=Channel%3A1&lensScope=cursor&lens=1&lensRadius=120&lensQv=18',
     )
     const dapiChannel = {
       id: 'Channel:0',
@@ -383,6 +391,14 @@ describe('App', () => {
     }
     const dapiLoader = {} as TiffPyramidLoader
     const boundaryLoader = {} as TiffPyramidLoader
+    const customLoader = {} as TiffPyramidLoader
+    const customChannel = {
+      id: 'Channel:0',
+      index: 0,
+      name: 'H&E',
+      color: [255, 255, 255] as const,
+      contrast: { min: 0, max: 255 },
+    }
     const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
       async () => [
         {
@@ -402,6 +418,14 @@ describe('App', () => {
         { info: boundaryChannel, loader: boundaryLoader },
       ],
     }))
+    const loadCustomMorphologyLayer: ReturnType<
+      typeof vi.fn<CustomMorphologyLayerLoader>
+    > = vi.fn(async (url) => ({
+      url,
+      loader: customLoader,
+      channels: [customChannel],
+      channelLoaders: [{ info: customChannel, loader: customLoader }],
+    }))
     const computeAutoChannelContrast = vi.fn(async () => ({
       min: 0,
       max: 1,
@@ -419,6 +443,7 @@ describe('App', () => {
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={loadGenePanel}
         loadMorphologyImage={loadMorphologyImage}
+        loadCustomMorphologyLayer={loadCustomMorphologyLayer}
         computeAutoChannelContrast={computeAutoChannelContrast}
       />,
     )
@@ -453,6 +478,13 @@ describe('App', () => {
     )
     expect(await screen.findByRole('checkbox', { name: 'DAPI' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Boundary' })).toBeChecked()
+    expect(
+      await screen.findByRole('checkbox', { name: 'he.ome.tif / H&E' }),
+    ).toBeChecked()
+    expect(loadCustomMorphologyLayer).toHaveBeenCalledWith(
+      'https://example.test/layers/he.ome.tif',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
 
     openHudTab('Magic Lens')
     expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(18)

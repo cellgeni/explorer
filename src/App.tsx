@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ViewerCore,
   type ViewerCoordinateUnit,
@@ -517,8 +517,12 @@ export function App({
   const startDatasetLoadRef = useRef<
     ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
   >(null)
+  const initialCustomImageUrlsRef = useRef<readonly string[]>(
+    initialShareableState.customImageUrls ?? [],
+  )
   const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
   const isLoading = loadState.status === 'loading'
+  const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
   const geneExpressionScaleDatasetUrl =
     loadState.status === 'ready' ? loadState.url : datasetUrl
   const selectedCellMetadataTrack = useMemo(
@@ -551,6 +555,10 @@ export function App({
       ...customMorphologyLayerChannels(customMorphologyLayers),
     ],
     [customMorphologyLayers, morphologyImage],
+  )
+  const customImageUrls = useMemo(
+    () => customMorphologyLayers.map((layer) => layer.image.url),
+    [customMorphologyLayers],
   )
   const baseMorphologyChannelIds = useMemo(
     () =>
@@ -1243,6 +1251,31 @@ export function App({
       setMorphologyChannelSettings,
     })
 
+  useEffect(() => {
+    if (loadedDatasetUrl === null || initialCustomImageUrlsRef.current.length === 0) {
+      return
+    }
+
+    const initialDatasetUrl = initialShareableState.datasetUrl?.trim()
+
+    if (
+      initialDatasetUrl !== undefined &&
+      initialDatasetUrl !== '' &&
+      initialDatasetUrl !== loadedDatasetUrl
+    ) {
+      return
+    }
+
+    const customImageUrls = initialCustomImageUrlsRef.current
+    initialCustomImageUrlsRef.current = []
+
+    void (async () => {
+      for (const customImageUrl of customImageUrls) {
+        await handleLoadCustomLayer(customImageUrl)
+      }
+    })()
+  }, [handleLoadCustomLayer, initialShareableState.datasetUrl, loadedDatasetUrl])
+
   const { handleDatasetSubmit } = useDatasetLifecycle({
     analysisEmbeddingAbortRef,
     analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
@@ -1363,6 +1396,7 @@ export function App({
     annotationUrl: annotationImportUrl,
     boundaryCellLimit,
     coordinateUnit,
+    customImageUrls,
     datasetUrl,
     geneExpressionColorScale,
     geneExpressionDetailMode,
