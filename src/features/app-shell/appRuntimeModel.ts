@@ -26,6 +26,7 @@ interface LoadingTaskStateInputs {
   readonly diagnosticsState: LoadingUrlState
   readonly genePanelState: LoadingStatusState
   readonly morphologyState: LoadingStatusState
+  readonly customMorphologyLayerState: LoadingStatusState
   readonly annotationGroupState: LoadingStatusState
   readonly boundaryState: LoadingStatusState
   readonly geneExpressionState: LoadingGeneExpressionState
@@ -75,6 +76,7 @@ export function createLoadingTasks({
   diagnosticsState,
   genePanelState,
   morphologyState,
+  customMorphologyLayerState,
   annotationGroupState,
   boundaryState,
   geneExpressionState,
@@ -128,6 +130,14 @@ export function createLoadingTasks({
 
   if (morphologyState.status === 'loading') {
     tasks.push({ id: 'morphology', tabId: 'layers', label: 'Loading image' })
+  }
+
+  if (customMorphologyLayerState.status === 'loading') {
+    tasks.push({
+      id: 'custom-morphology-layer',
+      tabId: 'layers',
+      label: 'Loading custom layer',
+    })
   }
 
   if (annotationGroupState.status === 'loading') {

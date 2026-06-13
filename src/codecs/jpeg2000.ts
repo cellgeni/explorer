@@ -40,6 +40,18 @@ export async function decodeJpeg2000(bytes: Uint8Array): Promise<DecodedJpeg2000
 
   const frameInfo = decoder.getFrameInfo()
   const raw = decoder.getDecodedBuffer()
+  if (
+    !Number.isFinite(frameInfo.width) ||
+    !Number.isFinite(frameInfo.height) ||
+    frameInfo.width <= 0 ||
+    frameInfo.height <= 0
+  ) {
+    decoder.delete?.()
+    throw new Error(
+      `JPEG-2000 decode returned invalid dimensions ${frameInfo.width}x${frameInfo.height}.`,
+    )
+  }
+
   const expectedPixels = frameInfo.width * frameInfo.height
   const buffer = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)
   const pixels =

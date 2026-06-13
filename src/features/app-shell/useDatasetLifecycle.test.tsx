@@ -34,6 +34,8 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     cellFeatureMatrixCapabilityKeyRef: stringRef(),
     cellTranscriptDistributionAbortRef: refs.cellTranscriptDistributionAbortRef,
     cellTranscriptDistributionRequestIdRef: numberRef(),
+    customMorphologyLayerAbortRef: refs.customMorphologyLayerAbortRef,
+    customMorphologyLayerRequestIdRef: numberRef(),
     datasetAbortRef: refs.datasetAbortRef,
     datasetWarmupAbortRef: refs.datasetWarmupAbortRef,
     diagnosticsAbortRef: refs.diagnosticsAbortRef,
@@ -82,6 +84,8 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     setCellFeatureMatrixCapabilityState: noopSetter,
     setCellTranscriptDistributionState: noopSetter,
     setCurrentViewportDetail: noopSetter,
+    setCustomMorphologyLayerState: noopSetter,
+    setCustomMorphologyLayers: noopSetter,
     setDatasetUrl: vi.fn(),
     setDatasetWarmupState: noopSetter,
     setDiagnosticsState: noopSetter,
@@ -142,6 +146,7 @@ function createLifecycleRefs() {
     boundaryAbortRef: abortRef(),
     cellDetailAbortRef: abortRef(),
     cellTranscriptDistributionAbortRef: abortRef(),
+    customMorphologyLayerAbortRef: abortRef(),
     datasetAbortRef: abortRef(),
     datasetWarmupAbortRef: abortRef(),
     diagnosticsAbortRef: abortRef(),
@@ -178,5 +183,6 @@ describe('useDatasetLifecycle', () => {
     expect(refs.magicLensAbortRef.current).toBeNull()
     expect(refs.cellDetailAbortRef.current).toBeNull()
     expect(refs.cellTranscriptDistributionAbortRef.current).toBeNull()
+    expect(refs.customMorphologyLayerAbortRef.current).toBeNull()
   })
 })

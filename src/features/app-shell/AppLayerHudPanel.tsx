@@ -1,6 +1,10 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { RoiDrawMode, ViewerCoordinateUnit } from '../../components/ViewerCore'
 import { scaffoldDeckLayerCount } from '../../components/viewerCoreModel'
+import type {
+  CustomMorphologyLayer,
+  CustomMorphologyLayerLoadState,
+} from '../morphology/customMorphologyLayers'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { PerformanceBudget } from '../../data/performanceBudget'
 import { bundledDeckVersion } from '../../rendering/deckLayers'
@@ -28,9 +32,14 @@ export interface AppLayerHudPanelProps {
   readonly cellFillOpacity: number
   readonly controlIds: AppLayerControlIds
   readonly coordinateUnit: ViewerCoordinateUnit
+  readonly customLayerLoadState: CustomMorphologyLayerLoadState
+  readonly customLayers: readonly CustomMorphologyLayer[]
   readonly handleAutoContrast: (channel: MorphologyImageChannel) => void
   readonly handleMagicLensLeave: () => void
+  readonly handleLoadCustomLayer: (url: string) => Promise<boolean>
+  readonly handleRemoveCustomLayer: (layerId: string) => void
   readonly imageLayerOpacity: number
+  readonly loadEnabled: boolean
   readonly measurementEnabled: boolean
   readonly measurementUnit: ViewerCoordinateUnit
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
@@ -59,9 +68,14 @@ export function AppLayerHudPanel({
   cellFillOpacity,
   controlIds,
   coordinateUnit,
+  customLayerLoadState,
+  customLayers,
   handleAutoContrast,
   handleMagicLensLeave,
+  handleLoadCustomLayer,
+  handleRemoveCustomLayer,
   imageLayerOpacity,
+  loadEnabled,
   measurementEnabled,
   measurementUnit,
   morphologyChannelSettings,
@@ -90,6 +104,9 @@ export function AppLayerHudPanel({
       coordinateUnitInputId={controlIds.coordinateUnitInputId}
       measurementModeInputId={controlIds.measurementModeInputId}
       measurementUnitInputId={controlIds.measurementUnitInputId}
+      customLayerLoadState={customLayerLoadState}
+      customLayers={customLayers}
+      loadEnabled={loadEnabled}
       imageLayerOpacity={imageLayerOpacity}
       cellFillOpacity={cellFillOpacity}
       cellBoundaryOpacity={cellBoundaryOpacity}
@@ -164,6 +181,8 @@ export function AppLayerHudPanel({
         })
       }}
       onAutoContrast={handleAutoContrast}
+      onLoadCustomLayer={handleLoadCustomLayer}
+      onRemoveCustomLayer={handleRemoveCustomLayer}
       onUpdateMorphologyChannel={updateMorphologyChannel}
     />
   )

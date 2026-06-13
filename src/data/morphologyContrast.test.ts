@@ -69,12 +69,44 @@ describe('computeChannelAutoContrast', () => {
       },
     })
   })
+
+  it('uses TIFF tile decode metadata when no test decoder is provided', async () => {
+    const loader = fakeLoader({
+      bytes: new Uint8Array([5, 10, 15, 20]),
+      numLevels: 1,
+      sourceHeight: 1,
+      sourceWidth: 4,
+      tileDecodeOptions: () => ({
+        bitsPerSample: [8],
+        compression: 1,
+        samplesPerPixel: 1,
+        tileHeight: 1,
+        tileWidth: 4,
+      }),
+      tiles: [{ col: 0, row: 0 }],
+    })
+
+    await expect(
+      computeChannelAutoContrast(loader, {
+        highPercentile: 100,
+        lowPercentile: 0,
+      }),
+    ).resolves.toMatchObject({
+      histogram: {
+        sampleCount: 4,
+      },
+      max: 20,
+      min: 5,
+    })
+  })
 })
 
 function fakeLoader(options: {
+  readonly bytes?: Uint8Array
   readonly numLevels: number
   readonly sourceHeight: number
   readonly sourceWidth: number
+  readonly tileDecodeOptions?: AutoContrastTileLoader['tileDecodeOptions']
   readonly tiles: readonly { readonly col: number; readonly row: number }[]
 }): AutoContrastTileLoader & {
   readonly requestedTiles: {
@@ -93,13 +125,16 @@ function fakeLoader(options: {
     numLevels: options.numLevels,
     requestedTiles,
     tilesForLevel: () => options.tiles,
+    ...(options.tileDecodeOptions === undefined
+      ? {}
+      : { tileDecodeOptions: options.tileDecodeOptions }),
     tileSourceSize: () => ({
       width: imagePixels(options.sourceWidth),
       height: imagePixels(options.sourceHeight),
     }),
     async fetchTileBytes(level, col, row) {
       requestedTiles.push({ level, col, row })
-      return new Uint8Array([1, 2, 3])
+      return options.bytes ?? new Uint8Array([1, 2, 3])
     },
   }
 }

@@ -1,5 +1,6 @@
 import { createWorkerTileDecoder } from '../workers/tileDecodePool'
 import type { DisplayWindow } from '../codecs/jpeg2000'
+import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { BBox, ImagePixels } from '../data/coords'
 import type { TileBitmapDecoder } from '../workers/tileDecodePool'
 
@@ -12,6 +13,7 @@ export interface TileSource {
     row: number,
     signal?: AbortSignal,
   ): Promise<Uint8Array>
+  tileDecodeOptions?(level: number, col: number, row: number): TiffTileDecodeMetadata
 }
 
 export interface TileSourceSize {
@@ -189,7 +191,10 @@ export class TileCache {
       throwIfAborted(signal)
       const bytes = await loader.fetchTileBytes(level, col, row, signal)
       throwIfAborted(signal)
-      const decoded = await this.decodeTile(bytes, this.decodeOptions())
+      const decoded = await this.decodeTile(
+        bytes,
+        this.decodeOptions(loader, level, col, row),
+      )
 
       if (signal?.aborted) {
         decoded.bitmap.close()
@@ -288,8 +293,14 @@ export class TileCache {
     return entry?.state === 'loading' && entry.signal === signal
   }
 
-  private decodeOptions(): Parameters<TileBitmapDecoder>[1] {
+  private decodeOptions(
+    loader: TileSource,
+    level: number,
+    col: number,
+    row: number,
+  ): Parameters<TileBitmapDecoder>[1] {
     return {
+      ...loader.tileDecodeOptions?.(level, col, row),
       ...(this.displayWindow === undefined ? {} : { displayWindow: this.displayWindow }),
       ...(this.color === undefined ? {} : { color: this.color }),
       ...(this.alphaFromIntensity === undefined

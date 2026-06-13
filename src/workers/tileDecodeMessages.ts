@@ -1,15 +1,13 @@
 import type { DisplayWindow, RgbaRenderOptions } from '../codecs/jpeg2000'
+import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 
-export interface TileDecodeOptions extends RgbaRenderOptions {
+export interface TileDecodeOptions extends RgbaRenderOptions, TiffTileDecodeMetadata {
   readonly displayWindow?: DisplayWindow
 }
 
-export interface TileDecodeRequest {
+export interface TileDecodeRequest extends TileDecodeOptions {
   readonly id: number
   readonly bytes: ArrayBuffer
-  readonly displayWindow?: DisplayWindow
-  readonly color?: readonly [number, number, number]
-  readonly alphaFromIntensity?: boolean
 }
 
 export type TileDecodeResponse = TileDecodeSuccess | TileDecodeFailure

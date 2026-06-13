@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { datasetFileUrl } from './datasetFiles'
 import {
+  loadCustomMorphologyLayer,
   loadMorphologyImage,
   morphologyImagePathsFromExperiment,
+  normalizeCustomMorphologyLayerUrl,
 } from './morphologyImage'
 import type { TiffPyramidLoader } from '../tiff/loader'
 
@@ -115,6 +117,62 @@ describe('morphology image loader', () => {
     )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology_focus/morphology_focus_0001.ome.tif',
+    )
+  })
+
+  it('opens a custom morphology layer directly from a remote URL', async () => {
+    const channel0 = {
+      id: 'Channel:0',
+      index: 0,
+      name: 'Custom DAPI',
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+      fileName: 'custom_0000.ome.tif',
+    }
+    const channel1 = {
+      id: 'Channel:1',
+      index: 1,
+      name: 'Custom marker',
+      color: [215, 63, 124] as const,
+      contrast: { min: 0, max: 65_535 },
+      fileName: 'custom_0001.ome.tif',
+    }
+    const loader0 = { channels: [channel0, channel1] } as unknown as TiffPyramidLoader
+    const loader1 = { channels: [channel0, channel1] } as unknown as TiffPyramidLoader
+    const openImage = vi.fn(async (url: string) =>
+      url.endsWith('custom_0001.ome.tif') ? loader1 : loader0,
+    )
+
+    await expect(
+      loadCustomMorphologyLayer(' https://example.test/layers/custom_0000.ome.tif ', {
+        openImage,
+      }),
+    ).resolves.toEqual({
+      url: 'https://example.test/layers/custom_0000.ome.tif',
+      loader: loader0,
+      channels: [channel0, channel1],
+      channelLoaders: [
+        { info: channel0, loader: loader0 },
+        { info: channel1, loader: loader1 },
+      ],
+    })
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/layers/custom_0000.ome.tif',
+    )
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/layers/custom_0001.ome.tif',
+    )
+  })
+
+  it('normalizes custom morphology layer URLs', () => {
+    expect(
+      normalizeCustomMorphologyLayerUrl(' https://example.test/layers/custom.ome.tif '),
+    ).toBe('https://example.test/layers/custom.ome.tif')
+    expect(() => normalizeCustomMorphologyLayerUrl('')).toThrow(
+      'Enter a custom image layer URL.',
+    )
+    expect(() => normalizeCustomMorphologyLayerUrl('file:///tmp/custom.ome.tif')).toThrow(
+      'Custom image layer URLs must use HTTP or HTTPS.',
     )
   })
 

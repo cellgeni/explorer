@@ -22,6 +22,11 @@ export interface LoadMorphologyImageOptions {
   readonly signal?: AbortSignal
 }
 
+export interface LoadCustomMorphologyLayerOptions {
+  readonly openImage?: (url: string, signal?: AbortSignal) => Promise<TiffPyramidLoader>
+  readonly signal?: AbortSignal
+}
+
 const EXPERIMENT_MANIFEST_FILE = 'experiment.xenium'
 
 const MORPHOLOGY_IMAGE_PATH_KEY_GROUPS = [
@@ -63,6 +68,68 @@ export async function loadMorphologyImage(
   }
 
   throw new Error('No supported Xenium OME-TIFF image was found.')
+}
+
+export async function loadCustomMorphologyLayer(
+  imageUrl: string,
+  options: LoadCustomMorphologyLayerOptions = {},
+): Promise<MorphologyImage> {
+  const url = normalizeCustomMorphologyLayerUrl(imageUrl)
+  const openImage = options.openImage ?? openTiff
+
+  return loadMorphologyImageFromUrl(url, {
+    openImage,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+}
+
+export function normalizeCustomMorphologyLayerUrl(imageUrl: string): string {
+  const trimmedUrl = imageUrl.trim()
+
+  if (trimmedUrl.length === 0) {
+    throw new Error('Enter a custom image layer URL.')
+  }
+
+  let url: URL
+
+  try {
+    url = new URL(trimmedUrl)
+  } catch {
+    throw new Error('Enter a valid custom image layer URL.')
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Custom image layer URLs must use HTTP or HTTPS.')
+  }
+
+  return url.toString()
+}
+
+interface LoadMorphologyImageFromUrlOptions {
+  readonly openImage: NonNullable<LoadMorphologyImageOptions['openImage']>
+  readonly signal?: AbortSignal
+}
+
+async function loadMorphologyImageFromUrl(
+  url: string,
+  options: LoadMorphologyImageFromUrlOptions,
+): Promise<MorphologyImage> {
+  const loader =
+    options.signal === undefined
+      ? await options.openImage(url)
+      : await options.openImage(url, options.signal)
+
+  return {
+    url,
+    loader,
+    channels: loader.channels ?? [],
+    channelLoaders: await loadMorphologyChannelLoaders({
+      imageUrl: url,
+      loader,
+      openImage: options.openImage,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    }),
+  }
 }
 
 interface LoadMorphologyChannelLoadersOptions {

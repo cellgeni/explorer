@@ -31,6 +31,9 @@ describe('LayerHudPanel', () => {
         coordinateUnitInputId="coordinate-unit"
         measurementModeInputId="measurement-mode"
         measurementUnitInputId="measurement-unit"
+        customLayerLoadState={{ status: 'idle' }}
+        customLayers={[]}
+        loadEnabled
         imageLayerOpacity={0.8}
         cellFillOpacity={0.6}
         cellBoundaryOpacity={0.4}
@@ -48,6 +51,8 @@ describe('LayerHudPanel', () => {
         onMeasurementUnitChange={onMeasurementUnitChange}
         onClearMeasurement={onClearMeasurement}
         onAutoContrast={vi.fn()}
+        onLoadCustomLayer={vi.fn(async () => true)}
+        onRemoveCustomLayer={vi.fn()}
         onUpdateMorphologyChannel={vi.fn()}
       />,
     )

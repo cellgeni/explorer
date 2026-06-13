@@ -1,5 +1,6 @@
-import { decodeJpeg2000 } from '../codecs/jpeg2000'
+import { decodeTiffTilePixels } from '../codecs/tiffTile'
 import type { DecodedJpeg2000, Jpeg2000Pixels } from '../codecs/jpeg2000'
+import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { ImagePixels, TileIndex } from './coords'
 
 export interface ChannelAutoContrast {
@@ -30,6 +31,7 @@ export interface AutoContrastTileLoader {
     row: number,
     signal?: AbortSignal,
   ): Promise<Uint8Array>
+  tileDecodeOptions?(level: number, col: number, row: number): TiffTileDecodeMetadata
 }
 
 export interface ComputeChannelAutoContrastOptions {
@@ -54,7 +56,7 @@ export async function computeChannelAutoContrast(
   const maxSamples = Math.max(1, options.maxSamples ?? DEFAULT_MAX_SAMPLES)
   const totalPixels = countVisiblePixels(loader, level, tiles)
   const sampleStride = Math.max(1, Math.ceil(totalPixels / maxSamples))
-  const decodeTile = options.decodeTile ?? decodeJpeg2000
+  const decodeTile = options.decodeTile
   const samples: number[] = []
   let pixelIndex = 0
 
@@ -62,7 +64,13 @@ export async function computeChannelAutoContrast(
     throwIfAborted(options.signal)
 
     const bytes = await loader.fetchTileBytes(level, tile.col, tile.row, options.signal)
-    const decoded = await decodeTile(bytes)
+    const decoded =
+      decodeTile === undefined
+        ? await decodeTiffTilePixels(
+            bytes,
+            loader.tileDecodeOptions?.(level, tile.col, tile.row),
+          )
+        : await decodeTile(bytes)
     const sourceSize = loader.tileSourceSize(level, tile.col, tile.row)
     const width = Math.min(sourceSize.width, decoded.width)
     const height = Math.min(sourceSize.height, decoded.height)

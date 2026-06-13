@@ -14,7 +14,10 @@ import {
   type WarmDatasetForRoiResult,
 } from '../../data/datasetWarmup'
 import { loadGenePanel } from '../../data/genePanel'
-import { loadMorphologyImage } from '../../data/morphologyImage'
+import {
+  loadCustomMorphologyLayer,
+  loadMorphologyImage,
+} from '../../data/morphologyImage'
 import { loadDatasetRoiCells } from '../../data/roiCells'
 import { loadDatasetRoiGeneStats, type RoiGeneStats } from '../../data/roiGeneStats'
 import { loadDatasetRoiTranscripts } from '../../data/roiTranscripts'
@@ -58,6 +61,11 @@ export type DatasetOverviewLoader = (
 
 export type MorphologyImageLoader = (
   baseUrl: string,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<MorphologyImage>
+
+export type CustomMorphologyLayerLoader = (
+  imageUrl: string,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<MorphologyImage>
 
@@ -187,6 +195,7 @@ export type DatasetDiagnosticsRunner = typeof runDatasetDiagnostics
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader
   readonly loadMorphologyImage?: MorphologyImageLoader
+  readonly loadCustomMorphologyLayer?: CustomMorphologyLayerLoader
   readonly loadBoundaryElements?: BoundaryElementsLoader
   readonly loadGenePanel?: GenePanelLoader
   readonly loadAnnotations?: AnnotationLoader
@@ -208,6 +217,7 @@ export interface AppProps {
 export const defaultAppDependencies = {
   loadDatasetOverview,
   loadMorphologyImage,
+  loadCustomMorphologyLayer,
   loadBoundaryElements: loadDatasetBoundaryElements,
   loadGenePanel,
   loadAnnotations: loadDatasetAnnotations,

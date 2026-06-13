@@ -41,15 +41,25 @@ describe('TileDecodeWorkerPool', () => {
     const { pool, workers } = makePool({ size: 1 })
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap
     const promise = pool.decode(new Uint8Array([1, 2, 3]), {
+      bitsPerSample: [8],
+      compression: 5,
       displayWindow: { lo: 0, hi: 100 },
       color: [80, 160, 240],
       alphaFromIntensity: true,
+      samplesPerPixel: 1,
+      tileHeight: 1,
+      tileWidth: 2,
     })
     const request = workers[0]?.posted[0]
 
+    expect(request?.bitsPerSample).toEqual([8])
+    expect(request?.compression).toBe(5)
     expect(request?.displayWindow).toEqual({ lo: 0, hi: 100 })
     expect(request?.color).toEqual([80, 160, 240])
     expect(request?.alphaFromIntensity).toBe(true)
+    expect(request?.samplesPerPixel).toBe(1)
+    expect(request?.tileHeight).toBe(1)
+    expect(request?.tileWidth).toBe(2)
     expect(request?.bytes.byteLength).toBe(3)
 
     workers[0]?.resolve({

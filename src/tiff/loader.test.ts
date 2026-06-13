@@ -7,6 +7,7 @@ import {
 import {
   parsePhysicalSizeMicrometersPerPixel,
   readNumberArrayTag,
+  readOptionalNumberTag,
   readOptionalStringTag,
   readRequiredNumberTag,
   TiffPyramidLoader,
@@ -37,6 +38,7 @@ describe('TIFF metadata parsing', () => {
     const directory = {
       async loadValue(tagIdentifier: string | number): Promise<unknown> {
         const values: Readonly<Record<string, unknown>> = {
+          Compression: 5,
           ImageDescription: 'PhysicalSizeX="0.2125"',
           ImageWidth: 51294,
           TileOffsets: new BigUint64Array([128n, 256n]),
@@ -50,6 +52,7 @@ describe('TIFF metadata parsing', () => {
       'PhysicalSizeX="0.2125"',
     )
     await expect(readRequiredNumberTag(directory, 'ImageWidth')).resolves.toBe(51294)
+    await expect(readOptionalNumberTag(directory, 'Compression')).resolves.toBe(5)
     await expect(readNumberArrayTag(directory, 'TileOffsets')).resolves.toEqual([
       128, 256,
     ])
@@ -129,6 +132,40 @@ describe('TiffPyramidLoader', () => {
     expect(loader.tileSourceSize(0, 2, 1)).toEqual({
       width: imagePixels(60),
       height: imagePixels(80),
+    })
+  })
+
+  it('exposes TIFF tile decode metadata for workers', () => {
+    const levels = new Map<number, TiffLevelMeta>([
+      [0, { width: imagePixels(300), height: imagePixels(200), nCols: 3, nRows: 2 }],
+    ])
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/image.ome.tif',
+      bitsPerSample: [8],
+      chunkIndex: new Map<string, TiffChunk>(),
+      compression: 5,
+      imageHeight: imagePixels(200),
+      imageWidth: imagePixels(300),
+      levelMeta: levels,
+      littleEndian: true,
+      numLevels: 1,
+      planarConfiguration: 1,
+      predictor: 1,
+      samplesPerPixel: 1,
+      tileHeight: imagePixels(100),
+      tileWidth: imagePixels(100),
+      units,
+    })
+
+    expect(loader.tileDecodeOptions()).toEqual({
+      bitsPerSample: [8],
+      compression: 5,
+      littleEndian: true,
+      planarConfiguration: 1,
+      predictor: 1,
+      samplesPerPixel: 1,
+      tileHeight: imagePixels(100),
+      tileWidth: imagePixels(100),
     })
   })
 

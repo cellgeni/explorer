@@ -28,6 +28,20 @@ class FakeTileSource implements TileSource {
   }
 }
 
+class MetadataTileSource extends FakeTileSource {
+  tileDecodeOptions() {
+    return {
+      bitsPerSample: [8],
+      compression: 5,
+      planarConfiguration: 1,
+      predictor: 1,
+      samplesPerPixel: 1,
+      tileHeight: 1,
+      tileWidth: 2,
+    }
+  }
+}
+
 describe('TileCache', () => {
   it('loads, caches, and returns ready tiles', async () => {
     const source = new FakeTileSource()
@@ -67,6 +81,35 @@ describe('TileCache', () => {
         sourceHeight: imagePixels(1),
       },
     ])
+  })
+
+  it('forwards loader-specific tile decode metadata to the decoder', async () => {
+    const source = new MetadataTileSource()
+    const bitmap = { close: vi.fn() } as unknown as ImageBitmap
+    const decodeTile = vi.fn(async () => ({
+      bitmap,
+      width: 2,
+      height: 1,
+      lo: 0,
+      hi: 100,
+    }))
+    const cache = new TileCache({
+      color: [80, 160, 240],
+      decodeTile,
+    })
+
+    await cache.request(source, 0, 1, 2)
+
+    expect(decodeTile).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]), {
+      bitsPerSample: [8],
+      color: [80, 160, 240],
+      compression: 5,
+      planarConfiguration: 1,
+      predictor: 1,
+      samplesPerPixel: 1,
+      tileHeight: 1,
+      tileWidth: 2,
+    })
   })
 
   it('keeps configured decode options after clearing cached tiles', async () => {

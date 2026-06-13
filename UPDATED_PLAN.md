@@ -559,6 +559,24 @@ unless the phase order is explicitly changed.
 - [x] Added selected-cell annotation membership to the Cell Info panel. When a
       cell is selected, the metadata list now includes an `Annotations` row
       derived from currently loaded/imported annotation cell-id membership.
+- [x] Added custom image layers from remote OME-TIFF URLs. The Layers tab now
+      accepts a custom image URL, opens it through the existing TIFF/channel
+      loader path, prefixes custom channel IDs to avoid collisions with dataset
+      morphology channels, renders the custom channels through the existing
+      morphology canvas, and lets users remove loaded custom layers. Browser
+      smoke verified the default dataset can load
+      `Sob23-BRA-0-FFPE-5-S30-i.ome.tif` as a custom layer with three channels
+      and no active load errors.
+- [x] Fixed custom image tile decoding for LZW-compressed OME-TIFF layers. TIFF
+      loaders now pass compression/sample metadata through the tile cache to the
+      worker, LZW/uncompressed grayscale tiles decode through GeoTIFF.js, and
+      invalid JPEG-2000 decodes now fail with an explicit dimension error
+      instead of surfacing as `ImageData` width/height failures.
+- [x] Fixed renderer crashes when displaying large LZW custom image layers. The
+      common no-predictor LZW path now decodes into a preallocated byte buffer
+      instead of expanding through a large temporary JS number array, and large
+      raw/LZW tiles use a lower initial tile/cache/concurrency budget so custom
+      OME-TIFFs render progressively without overwhelming the tab.
 - [ ] Optimization pass: after correctness is stable, tune interaction
       performance, memory pressure, fetch/decode concurrency, and rendering
       costs without changing product behavior.

@@ -11,6 +11,7 @@ describe('defaultAppDependencies', () => {
         'loadAnnotations',
         'loadBoundaryElements',
         'loadCellTranscriptDistribution',
+        'loadCustomMorphologyLayer',
         'loadDatasetOverview',
         'loadGeneExpression',
         'loadGenePanel',

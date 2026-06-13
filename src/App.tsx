@@ -64,6 +64,12 @@ import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmb
 import type { MorphologyChannelSetting } from './features/morphology/morphologyChannels'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
 import {
+  customMorphologyLayerChannels,
+  type CustomMorphologyLayer,
+  type CustomMorphologyLayerLoadState,
+} from './features/morphology/customMorphologyLayers'
+import { useCustomMorphologyLayerWorkflow } from './features/morphology/useCustomMorphologyLayerWorkflow'
+import {
   magicLensScopeLabel,
   magicLensStatusCopy,
   normalizeMagicLensMinQv,
@@ -179,6 +185,7 @@ export type {
   GeneExpressionLoader,
   GenePanelLoader,
   MorphologyImageLoader,
+  CustomMorphologyLayerLoader,
   RoiCellsLoader,
   RoiGeneStatsLoader,
   RoiTranscriptsLoader,
@@ -190,6 +197,7 @@ export type {
 export function App({
   loadDatasetOverview = defaultAppDependencies.loadDatasetOverview,
   loadMorphologyImage = defaultAppDependencies.loadMorphologyImage,
+  loadCustomMorphologyLayer = defaultAppDependencies.loadCustomMorphologyLayer,
   loadBoundaryElements = defaultAppDependencies.loadBoundaryElements,
   loadGenePanel = defaultAppDependencies.loadGenePanel,
   loadAnnotations = defaultAppDependencies.loadAnnotations,
@@ -376,6 +384,12 @@ export function App({
   const [geneExpressionScaleDomain, setGeneExpressionScaleDomain] =
     useState<GeneExpressionScaleDomain>({ key: '', max: 0 })
   const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
+  const [customMorphologyLayers, setCustomMorphologyLayers] = useState<
+    readonly CustomMorphologyLayer[]
+  >([])
+  const [customMorphologyLayerState, setCustomMorphologyLayerState] = useState<
+    CustomMorphologyLayerLoadState<StructuredLoadError>
+  >({ status: 'idle' })
   const [morphologyChannelSettings, setMorphologyChannelSettings] = useState<
     readonly MorphologyChannelSetting[]
   >([])
@@ -485,7 +499,10 @@ export function App({
   const magicLensAbortRef = useRef<AbortController | null>(null)
   const cellDetailAbortRef = useRef<AbortController | null>(null)
   const cellTranscriptDistributionAbortRef = useRef<AbortController | null>(null)
+  const customMorphologyLayerAbortRef = useRef<AbortController | null>(null)
   const autoContrastChannelIdsRef = useRef<Set<string>>(new Set())
+  const customMorphologyLayerIdRef = useRef(0)
+  const customMorphologyLayerRequestIdRef = useRef(0)
   const roiIdRef = useRef(0)
   const boundaryViewportKeyRef = useRef<string | null>(null)
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
@@ -528,6 +545,18 @@ export function App({
         : annotationState,
     [annotationState, hiddenAnnotationSetIdSet],
   )
+  const morphologyChannels = useMemo(
+    () => [
+      ...(morphologyImage?.channelLoaders ?? []),
+      ...customMorphologyLayerChannels(customMorphologyLayers),
+    ],
+    [customMorphologyLayers, morphologyImage],
+  )
+  const baseMorphologyChannelIds = useMemo(
+    () =>
+      new Set((morphologyImage?.channelLoaders ?? []).map((channel) => channel.info.id)),
+    [morphologyImage],
+  )
   const {
     activeAnnotationStyleColors,
     activeCellMetadataTrack,
@@ -560,6 +589,7 @@ export function App({
     geneExpressionScaleDomain,
     geneExpressionScoreMode,
     morphologyChannelSettings,
+    morphologyChannels,
     morphologyImage,
     observationColorMode,
     overviewCells,
@@ -568,6 +598,18 @@ export function App({
     transcriptLayerState,
     transcriptPointColorMode,
   })
+  const viewerImageStatus =
+    customMorphologyLayerState.status === 'error' ||
+    (customMorphologyLayerState.status === 'loading' &&
+      morphologyState.status !== 'loading')
+      ? customMorphologyLayerState.status
+      : morphologyState.status
+  const viewerImageError =
+    customMorphologyLayerState.status === 'error'
+      ? customMorphologyLayerState.error
+      : morphologyState.status === 'error'
+        ? morphologyState.error
+        : null
   const geneOptions = useMemo(
     () => (genePanelState.status === 'ready' ? genePanelState.genes : []),
     [genePanelState],
@@ -695,6 +737,7 @@ export function App({
             ? magicLensScopeLabel(magicLensState.scope)
             : undefined,
         morphologyState,
+        customMorphologyLayerState,
         roiGeneStatsState,
         roiState,
         roiTranscriptExportState,
@@ -717,6 +760,7 @@ export function App({
       loadState,
       magicLensState,
       morphologyState,
+      customMorphologyLayerState,
       roiGeneStatsState,
       roiState,
       roiTranscriptExportState,
@@ -730,9 +774,13 @@ export function App({
   )
   const activeRoiSelection = roiState.status === 'idle' ? null : roiState.selection
   const shareableMorphologyEnabledChannelIds = useMemo(() => {
+    if (baseMorphologyChannelIds.size === 0) {
+      return undefined
+    }
+
     if (morphologyChannelSettings.length > 0) {
       return morphologyChannelSettings
-        .filter((setting) => setting.enabled)
+        .filter((setting) => setting.enabled && baseMorphologyChannelIds.has(setting.id))
         .map((setting) => setting.id)
     }
 
@@ -741,6 +789,7 @@ export function App({
       : undefined
   }, [
     initialShareableState.morphologyEnabledChannelIds,
+    baseMorphologyChannelIds,
     morphologyChannelSettings,
     morphologyState.status,
   ])
@@ -824,6 +873,7 @@ export function App({
         loadState,
         diagnosticsState,
         morphologyState,
+        customMorphologyLayerState,
         boundaryState,
         genePanelState,
         annotationState,
@@ -852,6 +902,7 @@ export function App({
       loadState,
       magicLensState,
       morphologyState,
+      customMorphologyLayerState,
       roiState,
       roiGeneStatsState,
       roiTranscriptExportState,
@@ -1178,6 +1229,19 @@ export function App({
       setMorphologyChannelSettings,
       setMorphologyState,
     })
+  const { handleLoadCustomLayer, handleRemoveCustomLayer } =
+    useCustomMorphologyLayerWorkflow({
+      appendDebugEvent,
+      customLayers: customMorphologyLayers,
+      customLayerAbortRef: customMorphologyLayerAbortRef,
+      customLayerIdRef: customMorphologyLayerIdRef,
+      customLayerRequestIdRef: customMorphologyLayerRequestIdRef,
+      loadCustomMorphologyLayer,
+      loadRequestIdRef: loadRequestId,
+      setCustomLayerLoadState: setCustomMorphologyLayerState,
+      setCustomLayers: setCustomMorphologyLayers,
+      setMorphologyChannelSettings,
+    })
 
   const { handleDatasetSubmit } = useDatasetLifecycle({
     analysisEmbeddingAbortRef,
@@ -1192,6 +1256,8 @@ export function App({
     cellFeatureMatrixCapabilityKeyRef,
     cellTranscriptDistributionAbortRef,
     cellTranscriptDistributionRequestIdRef: cellTranscriptDistributionRequestId,
+    customMorphologyLayerAbortRef,
+    customMorphologyLayerRequestIdRef,
     datasetAbortRef,
     datasetWarmupAbortRef,
     diagnosticsAbortRef,
@@ -1238,6 +1304,8 @@ export function App({
     setCellFeatureMatrixCapabilityState,
     setCellTranscriptDistributionState,
     setCurrentViewportDetail,
+    setCustomMorphologyLayerState,
+    setCustomMorphologyLayers,
     setDatasetUrl,
     setDatasetWarmupState,
     setDiagnosticsState,
@@ -1366,13 +1434,18 @@ export function App({
           cellFillOpacity={cellFillOpacity}
           controlIds={controlIds}
           coordinateUnit={coordinateUnit}
+          customLayerLoadState={customMorphologyLayerState}
+          customLayers={customMorphologyLayers}
           handleAutoContrast={handleAutoContrast}
+          handleLoadCustomLayer={handleLoadCustomLayer}
           handleMagicLensLeave={handleMagicLensLeave}
+          handleRemoveCustomLayer={handleRemoveCustomLayer}
           imageLayerOpacity={imageLayerOpacity}
+          loadEnabled={loadState.status === 'ready'}
           measurementEnabled={measurementEnabled}
           measurementUnit={measurementUnit}
           morphologyChannelSettings={morphologyChannelSettings}
-          morphologyChannels={morphologyImage?.channelLoaders ?? []}
+          morphologyChannels={morphologyChannels}
           performanceBudget={performanceBudget}
           setCellBoundaryOpacity={setCellBoundaryOpacity}
           setCellFillOpacity={setCellFillOpacity}
@@ -1608,7 +1681,7 @@ export function App({
           measurementUnit={measurementUnit}
           measurementResetKey={measurementResetKey}
           status={loadState.status}
-          imageStatus={morphologyState.status}
+          imageStatus={viewerImageStatus}
           boundaryStatus={boundaryState.status}
           overviewRenderCellLimit={performanceBudget.overviewRenderCellLimit}
           maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
@@ -1638,9 +1711,9 @@ export function App({
           {...(loadState.status === 'error'
             ? { errorMessage: formatStructuredError(loadState.error) }
             : {})}
-          {...(morphologyState.status === 'error'
-            ? { imageErrorMessage: formatStructuredError(morphologyState.error) }
-            : {})}
+          {...(viewerImageError === null
+            ? {}
+            : { imageErrorMessage: formatStructuredError(viewerImageError) })}
           {...(morphologyMicrometersPerPixel === undefined
             ? {}
             : {

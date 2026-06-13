@@ -21,9 +21,14 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       measurementUnitInputId: 'measurement-unit',
     },
     coordinateUnit: 'um',
+    customLayerLoadState: { status: 'idle' },
+    customLayers: [],
     handleAutoContrast: vi.fn(),
     handleMagicLensLeave: vi.fn(),
+    handleLoadCustomLayer: vi.fn(async () => true),
+    handleRemoveCustomLayer: vi.fn(),
     imageLayerOpacity: 1,
+    loadEnabled: true,
     measurementEnabled: false,
     measurementUnit: 'um',
     morphologyChannelSettings: [],
@@ -110,5 +115,36 @@ describe('AppLayerHudPanel', () => {
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Mouse coordinates: px', {
       coalesceKey: 'coordinate-unit',
     })
+  })
+
+  it('forwards custom layer load and remove actions', async () => {
+    const props = baseProps({
+      customLayers: [
+        {
+          id: 'custom-layer:1',
+          label: 'remote.ome.tif',
+          image: {
+            url: 'https://example.test/remote.ome.tif',
+            loader: {},
+            channels: [],
+            channelLoaders: [],
+          } as never,
+          channels: [],
+        },
+      ],
+    })
+
+    render(<AppLayerHudPanel {...props} />)
+
+    fireEvent.change(screen.getByLabelText('Custom image URL'), {
+      target: { value: 'https://example.test/new.ome.tif' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Layer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove remote.ome.tif' }))
+
+    expect(props.handleLoadCustomLayer).toHaveBeenCalledWith(
+      'https://example.test/new.ome.tif',
+    )
+    expect(props.handleRemoveCustomLayer).toHaveBeenCalledWith('custom-layer:1')
   })
 })

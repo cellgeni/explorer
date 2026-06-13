@@ -1,5 +1,5 @@
 import type { ChannelHistogram } from '../../data/morphologyContrast'
-import type { MorphologyImage } from '../../data/morphologyImage'
+import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 
 export interface MorphologyChannelSetting {
   readonly id: string
@@ -32,10 +32,17 @@ export function createMorphologyChannelSettings(
   image: MorphologyImage,
   options: { readonly enabledChannelIds?: readonly string[] } = {},
 ): readonly MorphologyChannelSetting[] {
+  return createMorphologyChannelSettingsFromChannels(image.channelLoaders, options)
+}
+
+export function createMorphologyChannelSettingsFromChannels(
+  channels: readonly MorphologyImageChannel[],
+  options: { readonly enabledChannelIds?: readonly string[] } = {},
+): readonly MorphologyChannelSetting[] {
   const enabledChannelIds =
     options.enabledChannelIds === undefined ? null : new Set(options.enabledChannelIds)
 
-  return image.channelLoaders.map((channel, index) => ({
+  return channels.map((channel, index) => ({
     id: channel.info.id,
     enabled:
       enabledChannelIds === null ? index === 0 : enabledChannelIds.has(channel.info.id),

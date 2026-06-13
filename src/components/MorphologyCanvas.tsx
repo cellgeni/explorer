@@ -6,6 +6,7 @@ import {
   morphologyViewportBbox,
   selectCenteredTiles,
 } from '../rendering/morphologyCanvas'
+import { tileSchedulingForLoader } from '../rendering/morphologyTileScheduling'
 import { TileCache } from '../tiff/tileCache'
 import type { DisplayWindow } from '../codecs/jpeg2000'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
@@ -13,9 +14,7 @@ import type { TiffPyramidLoader } from '../tiff/loader'
 import type { TileCacheEntry } from '../tiff/tileCache'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
-const MAX_INITIAL_TILE_REQUESTS = 96
 const MAX_CONCURRENT_TILE_REQUESTS = 4
-const PREFETCH_SCREEN_MARGIN_PIXELS = 256
 
 export interface MorphologyCanvasProps {
   readonly loader?: TiffPyramidLoader | null
@@ -108,28 +107,23 @@ export function MorphologyCanvas({
     }
 
     const bbox = morphologyViewportBbox(viewState, viewport)
-    const tileRequestBbox = expandBboxByScreenPixels(
-      bbox,
-      viewState.zoom,
-      PREFETCH_SCREEN_MARGIN_PIXELS,
+    const basePerChannelConcurrency = Math.max(
+      1,
+      Math.floor(maxConcurrentTileRequests / renderChannels.length),
     )
     const channelRequests = renderChannels.map((channel) =>
       prepareChannelRequest({
         bbox,
+        baseMaxConcurrentRequests: basePerChannelConcurrency,
         channel,
         cacheRecords: cacheRecordsRef.current,
         maxCacheTiles: tileCacheMaxTiles,
         ...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction }),
-        tileRequestBbox,
         viewState,
         ...(onTileError === undefined ? {} : { onTileError }),
       }),
     )
     const activeKeys = new Set(channelRequests.map((request) => request.cacheKey))
-    const perChannelConcurrency = Math.max(
-      1,
-      Math.floor(maxConcurrentTileRequests / renderChannels.length),
-    )
     const abortController = new AbortController()
     let cancelled = false
 
@@ -160,7 +154,7 @@ export function MorphologyCanvas({
           cache: request.cache,
           level: request.level,
           loader: request.channel.loader,
-          maxConcurrentRequests: perChannelConcurrency,
+          maxConcurrentRequests: request.maxConcurrentRequests,
           onTileSettled: drawReadyTiles,
           signal: abortController.signal,
           tiles: request.tiles,
@@ -239,6 +233,7 @@ interface ChannelRequest {
   readonly cacheKey: string
   readonly channel: MorphologyCanvasChannel
   readonly level: number
+  readonly maxConcurrentRequests: number
   readonly tiles: readonly TileIndex[]
 }
 
@@ -266,26 +261,39 @@ function visibleMorphologyChannels(
 }
 
 function prepareChannelRequest(options: {
+  readonly baseMaxConcurrentRequests: number
   readonly bbox: BBox
   readonly channel: MorphologyCanvasChannel
   readonly cacheRecords: Map<string, ChannelCacheRecord>
   readonly maxCacheTiles: number
   readonly onTileCacheEviction?: (evictedTileCount: number) => void
   readonly onTileError?: (error: Error) => void
-  readonly tileRequestBbox: BBox
   readonly viewState: OverviewViewState
 }): ChannelRequest {
   const level = options.channel.loader.bestLevel(2 ** options.viewState.zoom)
+  const scheduling = tileSchedulingForLoader(options.channel.loader, {
+    baseMaxCacheTiles: options.maxCacheTiles,
+    baseMaxConcurrentRequests: options.baseMaxConcurrentRequests,
+  })
+  const requestBbox =
+    scheduling.prefetchScreenMarginPixels <= 0
+      ? options.bbox
+      : expandBboxByScreenPixels(
+          options.bbox,
+          options.viewState.zoom,
+          scheduling.prefetchScreenMarginPixels,
+        )
   const cacheKey = channelCacheKey(options.channel)
   let record = options.cacheRecords.get(cacheKey)
 
   if (record === undefined) {
+    const normalMaxTiles = Math.max(
+      24,
+      Math.floor(options.maxCacheTiles / Math.max(1, options.cacheRecords.size + 1)),
+    )
     record = {
       cache: new TileCache({
-        maxTiles: Math.max(
-          24,
-          Math.floor(options.maxCacheTiles / Math.max(1, options.cacheRecords.size + 1)),
-        ),
+        maxTiles: Math.min(scheduling.maxCacheTiles, normalMaxTiles),
         color: options.channel.color,
         alphaFromIntensity: true,
         ...(options.channel.contrast === undefined
@@ -305,9 +313,10 @@ function prepareChannelRequest(options: {
     cacheKey,
     channel: options.channel,
     level,
+    maxConcurrentRequests: scheduling.maxConcurrentRequests,
     tiles: selectCenteredTiles(
-      options.channel.loader.tilesForBbox(level, options.tileRequestBbox),
-      MAX_INITIAL_TILE_REQUESTS,
+      options.channel.loader.tilesForBbox(level, requestBbox),
+      scheduling.maxInitialTileRequests,
       options.bbox,
       (tile) => options.channel.loader.tileBounds(level, tile.col, tile.row),
     ),

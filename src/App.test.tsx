@@ -8,6 +8,7 @@ import {
   type AnnotationLoader,
   type BoundaryElementsLoader,
   type CellTranscriptDistributionLoader,
+  type CustomMorphologyLayerLoader,
   type DatasetDiagnosticsRunner,
   type DatasetOverviewLoader,
   type DatasetWarmupLoader,
@@ -142,6 +143,8 @@ describe('App', () => {
       within(measurementUnitGroup).getByRole('button', { name: 'px' }),
     ).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'Clear Measurement' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Custom image URL')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Load Layer' })).toBeDisabled()
     const layerStack = screen.getByRole('region', { name: 'Layer Stack' })
     expect(within(layerStack).queryByText('cells')).not.toBeInTheDocument()
     expect(within(layerStack).queryByText('boundaries')).not.toBeInTheDocument()
@@ -234,6 +237,74 @@ describe('App', () => {
     expect(imageOpacityInput).toHaveValue('45')
     expect(cellFillOpacityInput).toHaveValue('70')
     expect(cellBoundaryOpacityInput).toHaveValue('35')
+  })
+
+  it('loads a custom morphology layer from a URL', async () => {
+    const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
+      async () => [
+        {
+          cellId: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 8,
+        },
+      ],
+    )
+    const baseLoader = {} as TiffPyramidLoader
+    const customLoader = {} as TiffPyramidLoader
+    const customChannel = {
+      id: 'Channel:0',
+      index: 0,
+      name: 'Custom DAPI',
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+    }
+    const loadCustomMorphologyLayer: ReturnType<
+      typeof vi.fn<CustomMorphologyLayerLoader>
+    > = vi.fn(async (url) => ({
+      url,
+      loader: customLoader,
+      channels: [customChannel],
+      channelLoaders: [{ info: customChannel, loader: customLoader }],
+    }))
+    render(
+      <App
+        loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={vi.fn(async () => [])}
+        loadMorphologyImage={vi.fn(async () => ({
+          url: 'https://example.test/xenium/morphology_focus_0000.ome.tif',
+          loader: baseLoader,
+          channels: [],
+          channelLoaders: [],
+        }))}
+        loadCustomMorphologyLayer={loadCustomMorphologyLayer}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    openHudTab('Layers')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Custom image URL')).toBeEnabled()
+    })
+
+    fireEvent.change(screen.getByLabelText('Custom image URL'), {
+      target: { value: 'https://example.test/layers/remote.ome.tif' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Layer' }))
+
+    expect(
+      await screen.findByRole('checkbox', { name: 'remote.ome.tif / Custom DAPI' }),
+    ).toBeChecked()
+    expect(loadCustomMorphologyLayer).toHaveBeenCalledWith(
+      'https://example.test/layers/remote.ome.tif',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove remote.ome.tif' }))
+
+    expect(
+      screen.queryByRole('checkbox', { name: 'remote.ome.tif / Custom DAPI' }),
+    ).not.toBeInTheDocument()
   })
 
   it('records compact debug activity entries', () => {

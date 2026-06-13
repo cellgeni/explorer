@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
-import { decodeJpeg2000, normaliseToRgba } from '../codecs/jpeg2000'
+import { normaliseToRgba } from '../codecs/jpeg2000'
+import { decodeTiffTilePixels } from '../codecs/tiffTile'
 import type { TileDecodeRequest, TileDecodeResponse } from './tileDecodeMessages'
 
 const workerScope = self as DedicatedWorkerGlobalScope
@@ -11,7 +12,7 @@ workerScope.onmessage = (event: MessageEvent<TileDecodeRequest>) => {
 
 async function decodeTile(request: TileDecodeRequest): Promise<void> {
   try {
-    const decoded = await decodeJpeg2000(new Uint8Array(request.bytes))
+    const decoded = await decodeTiffTilePixels(new Uint8Array(request.bytes), request)
     const rgba = normaliseToRgba(
       decoded.pixels,
       decoded.width,

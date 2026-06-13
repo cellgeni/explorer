@@ -22,6 +22,7 @@ function loadingInputs(overrides: Partial<LoadingInputs> = {}): LoadingInputs {
     diagnosticsState: { status: 'idle' },
     genePanelState: { status: 'idle' },
     morphologyState: { status: 'idle' },
+    customMorphologyLayerState: { status: 'idle' },
     annotationGroupState: { status: 'idle' },
     boundaryState: { status: 'idle' },
     geneExpressionState: { status: 'idle' },

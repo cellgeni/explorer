@@ -1,4 +1,9 @@
+import { useId, useState, type FormEvent } from 'react'
 import type { ViewerCoordinateUnit } from '../../components/ViewerCore'
+import type {
+  CustomMorphologyLayer,
+  CustomMorphologyLayerLoadState,
+} from '../morphology/customMorphologyLayers'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { PerformanceBudget } from '../../data/performanceBudget'
 import { MorphologyChannelControls } from '../morphology/MorphologyChannelControls'
@@ -16,6 +21,9 @@ interface LayerHudPanelProps {
   readonly coordinateUnitInputId: string
   readonly measurementModeInputId: string
   readonly measurementUnitInputId: string
+  readonly customLayerLoadState: CustomMorphologyLayerLoadState
+  readonly customLayers: readonly CustomMorphologyLayer[]
+  readonly loadEnabled: boolean
   readonly imageLayerOpacity: number
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
@@ -33,6 +41,8 @@ interface LayerHudPanelProps {
   readonly onMeasurementUnitChange: (unit: ViewerCoordinateUnit) => void
   readonly onClearMeasurement: () => void
   readonly onAutoContrast: (channel: MorphologyImageChannel) => void
+  readonly onLoadCustomLayer: (url: string) => Promise<boolean>
+  readonly onRemoveCustomLayer: (layerId: string) => void
   readonly onUpdateMorphologyChannel: (
     id: string,
     patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
@@ -50,6 +60,9 @@ export function LayerHudPanel({
   coordinateUnitInputId,
   measurementModeInputId,
   measurementUnitInputId,
+  customLayerLoadState,
+  customLayers,
+  loadEnabled,
   imageLayerOpacity,
   cellFillOpacity,
   cellBoundaryOpacity,
@@ -67,11 +80,31 @@ export function LayerHudPanel({
   onMeasurementUnitChange,
   onClearMeasurement,
   onAutoContrast,
+  onLoadCustomLayer,
+  onRemoveCustomLayer,
   onUpdateMorphologyChannel,
 }: LayerHudPanelProps) {
+  const customLayerUrlInputId = useId()
+  const [customLayerUrl, setCustomLayerUrl] = useState('')
   const imageOpacityPercent = opacityToPercent(imageLayerOpacity)
   const cellFillOpacityPercent = opacityToPercent(cellFillOpacity)
   const cellBoundaryOpacityPercent = opacityToPercent(cellBoundaryOpacity)
+  const trimmedCustomLayerUrl = customLayerUrl.trim()
+  const isCustomLayerLoading = customLayerLoadState.status === 'loading'
+
+  async function handleCustomLayerSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!loadEnabled || trimmedCustomLayerUrl.length === 0 || isCustomLayerLoading) {
+      return
+    }
+
+    const loaded = await onLoadCustomLayer(trimmedCustomLayerUrl)
+
+    if (loaded) {
+      setCustomLayerUrl('')
+    }
+  }
 
   return (
     <div
@@ -243,6 +276,63 @@ export function LayerHudPanel({
           onAutoContrast={onAutoContrast}
           onUpdate={onUpdateMorphologyChannel}
         />
+        <form
+          className="custom-layer-form"
+          aria-label="Add custom image layer"
+          onSubmit={(event) => {
+            void handleCustomLayerSubmit(event)
+          }}
+        >
+          <label htmlFor={customLayerUrlInputId}>Custom image URL</label>
+          <div className="custom-layer-row">
+            <input
+              id={customLayerUrlInputId}
+              type="url"
+              name="custom-image-layer-url"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="https://example.org/image.ome.tif"
+              title="Custom image URL"
+              value={customLayerUrl}
+              disabled={!loadEnabled || isCustomLayerLoading}
+              onChange={(event) => {
+                setCustomLayerUrl(event.currentTarget.value)
+              }}
+            />
+            <button
+              type="submit"
+              className="secondary-action"
+              disabled={
+                !loadEnabled || isCustomLayerLoading || trimmedCustomLayerUrl.length === 0
+              }
+              title="Load custom image layer"
+            >
+              {isCustomLayerLoading ? 'Loading...' : 'Load Layer'}
+            </button>
+          </div>
+        </form>
+        {customLayers.length > 0 ? (
+          <ul className="custom-layer-list" aria-label="Custom image layers">
+            {customLayers.map((layer) => (
+              <li key={layer.id}>
+                <span>{layer.label}</span>
+                <small>{layer.channels.length.toLocaleString()} channels</small>
+                <button
+                  type="button"
+                  className="custom-layer-remove"
+                  aria-label={`Remove ${layer.label}`}
+                  title={`Remove ${layer.label}`}
+                  onClick={() => {
+                    onRemoveCustomLayer(layer.id)
+                  }}
+                >
+                  x
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
     </div>
   )

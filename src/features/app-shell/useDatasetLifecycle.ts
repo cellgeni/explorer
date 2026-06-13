@@ -50,6 +50,10 @@ import {
   createMorphologyChannelSettings,
   type MorphologyChannelSetting,
 } from '../morphology/morphologyChannels'
+import type {
+  CustomMorphologyLayer,
+  CustomMorphologyLayerLoadState,
+} from '../morphology/customMorphologyLayers'
 import type { MagicLensState } from '../roi/magicLensModel'
 import type {
   RoiGeneStatsState,
@@ -123,6 +127,8 @@ interface UseDatasetLifecycleOptions {
   readonly cellFeatureMatrixCapabilityKeyRef: MutableRef<string | null>
   readonly cellTranscriptDistributionAbortRef: MutableRef<AbortController | null>
   readonly cellTranscriptDistributionRequestIdRef: MutableRef<number>
+  readonly customMorphologyLayerAbortRef: MutableRef<AbortController | null>
+  readonly customMorphologyLayerRequestIdRef: MutableRef<number>
   readonly datasetAbortRef: MutableRef<AbortController | null>
   readonly datasetWarmupAbortRef: MutableRef<AbortController | null>
   readonly diagnosticsAbortRef: MutableRef<AbortController | null>
@@ -171,6 +177,10 @@ interface UseDatasetLifecycleOptions {
     CellTranscriptDistributionState<StructuredLoadError>
   >
   readonly setCurrentViewportDetail: Setter<ViewerViewportDetail | null>
+  readonly setCustomMorphologyLayerState: Setter<
+    CustomMorphologyLayerLoadState<StructuredLoadError>
+  >
+  readonly setCustomMorphologyLayers: Setter<readonly CustomMorphologyLayer[]>
   readonly setDatasetUrl: (datasetUrl: string) => void
   readonly setDatasetWarmupState: Setter<DatasetWarmupState>
   readonly setDiagnosticsState: Setter<DatasetDiagnosticsState<StructuredLoadError>>
@@ -245,6 +255,8 @@ export function useDatasetLifecycle({
   cellFeatureMatrixCapabilityKeyRef,
   cellTranscriptDistributionAbortRef,
   cellTranscriptDistributionRequestIdRef,
+  customMorphologyLayerAbortRef,
+  customMorphologyLayerRequestIdRef,
   datasetAbortRef,
   datasetWarmupAbortRef,
   diagnosticsAbortRef,
@@ -291,6 +303,8 @@ export function useDatasetLifecycle({
   setCellFeatureMatrixCapabilityState,
   setCellTranscriptDistributionState,
   setCurrentViewportDetail,
+  setCustomMorphologyLayerState,
+  setCustomMorphologyLayers,
   setDatasetUrl,
   setDatasetWarmupState,
   setDiagnosticsState,
@@ -372,6 +386,7 @@ export function useDatasetLifecycle({
       abortActiveRequest(magicLensAbortRef)
       abortActiveRequest(cellDetailAbortRef)
       abortActiveRequest(cellTranscriptDistributionAbortRef)
+      abortActiveRequest(customMorphologyLayerAbortRef)
       clearTimeoutRef(magicLensDebounceRef)
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
     }
@@ -390,6 +405,7 @@ export function useDatasetLifecycle({
     roiGeneViewportWarmupAbortRef,
     roiGeneViewportWarmupTimeoutRef,
     roiTranscriptExportAbortRef,
+    customMorphologyLayerAbortRef,
     transcriptAbortRef,
     transcriptCapabilityAbortRef,
   ])
@@ -495,6 +511,7 @@ export function useDatasetLifecycle({
       abortActiveRequest(magicLensAbortRef)
       abortActiveRequest(cellDetailAbortRef)
       abortActiveRequest(cellTranscriptDistributionAbortRef)
+      abortActiveRequest(customMorphologyLayerAbortRef)
       clearTimeoutRef(magicLensDebounceRef)
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
       roiGeneViewportWarmupKeyRef.current = null
@@ -510,6 +527,8 @@ export function useDatasetLifecycle({
       setGeneExpressionBatch(null)
       setGeneExpressionScaleDomain({ key: '', max: 0 })
       setMorphologyImage(null)
+      setCustomMorphologyLayers([])
+      setCustomMorphologyLayerState({ status: 'idle' })
       setMorphologyChannelSettings([])
       autoContrastChannelIdsRef.current.clear()
       setAutoContrastChannelIds([])
@@ -607,6 +626,7 @@ export function useDatasetLifecycle({
       magicLensRequestIdRef.current += 1
       cellDetailRequestIdRef.current += 1
       cellTranscriptDistributionRequestIdRef.current += 1
+      customMorphologyLayerRequestIdRef.current += 1
       magicLensLastDetailRef.current = null
       magicLensLastQueryKeyRef.current = null
       boundaryViewportKeyRef.current = null

@@ -61,13 +61,7 @@ export class TileDecodeWorkerPool {
       const request: TileDecodeRequest = {
         id,
         bytes: payload,
-        ...(options?.displayWindow === undefined
-          ? {}
-          : { displayWindow: options.displayWindow }),
-        ...(options?.color === undefined ? {} : { color: options.color }),
-        ...(options?.alphaFromIntensity === undefined
-          ? {}
-          : { alphaFromIntensity: options.alphaFromIntensity }),
+        ...(options ?? {}),
       }
 
       try {

@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { MorphologyCanvasChannel } from '../../components/MorphologyCanvas'
 import type { BBox } from '../../data/coords'
-import type { MorphologyImage } from '../../data/morphologyImage'
+import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { SpatialElement } from '../../datasets/spatialDataset'
 import type {
@@ -64,6 +64,7 @@ interface UseViewerLayerDataOptions {
   readonly transcriptPointColorMode: TranscriptPointColorMode
   readonly transcriptDensityColorScale: TranscriptDensityColorScale
   readonly morphologyImage: MorphologyImage | null
+  readonly morphologyChannels: readonly MorphologyImageChannel[]
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
   readonly boundaryElements: readonly SpatialElement[]
 }
@@ -85,6 +86,7 @@ export function useViewerLayerData({
   transcriptPointColorMode,
   transcriptDensityColorScale,
   morphologyImage,
+  morphologyChannels,
   morphologyChannelSettings,
   boundaryElements,
 }: UseViewerLayerDataOptions) {
@@ -219,26 +221,24 @@ export function useViewerLayerData({
   )
   const morphologyCanvasChannels = useMemo<readonly MorphologyCanvasChannel[]>(
     () =>
-      morphologyImage === null
-        ? []
-        : morphologyImage.channelLoaders.map((channel) => {
-            const setting = morphologyChannelSettings.find(
-              (candidate) => candidate.id === channel.info.id,
-            )
-            const contrast = normalizeChannelContrast({
-              min: setting?.contrastMin ?? channel.info.contrast.min,
-              max: setting?.contrastMax ?? channel.info.contrast.max,
-            })
+      morphologyChannels.map((channel) => {
+        const setting = morphologyChannelSettings.find(
+          (candidate) => candidate.id === channel.info.id,
+        )
+        const contrast = normalizeChannelContrast({
+          min: setting?.contrastMin ?? channel.info.contrast.min,
+          max: setting?.contrastMax ?? channel.info.contrast.max,
+        })
 
-            return {
-              id: channel.info.id,
-              loader: channel.loader,
-              enabled: setting?.enabled ?? false,
-              color: setting?.color ?? channel.info.color,
-              contrast,
-            }
-          }),
-    [morphologyChannelSettings, morphologyImage],
+        return {
+          id: channel.info.id,
+          loader: channel.loader,
+          enabled: setting?.enabled ?? false,
+          color: setting?.color ?? channel.info.color,
+          contrast,
+        }
+      }),
+    [morphologyChannelSettings, morphologyChannels],
   )
   const morphologyMicrometersPerPixel = morphologyImage?.loader.units?.micrometersPerPixel
   const boundaryLayerData = useMemo(

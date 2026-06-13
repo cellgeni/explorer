@@ -23,6 +23,7 @@ import type {
   UnitsDescriptor,
 } from '../data/coords'
 import type { TileSourceSize } from './tileCache'
+import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type { TiffChannelInfo } from './omeMetadata'
 
@@ -49,6 +50,12 @@ export interface TiffPyramidLoaderOptions {
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
   readonly channels?: readonly TiffChannelInfo[]
+  readonly compression?: number
+  readonly bitsPerSample?: readonly number[]
+  readonly samplesPerPixel?: number
+  readonly predictor?: number
+  readonly planarConfiguration?: number
+  readonly littleEndian?: boolean
   readonly fetcher?: typeof fetch
   readonly byteRangeCache?: PersistentByteRangeCache | null
 }
@@ -95,6 +102,7 @@ export async function openTiff(
   const imageHeight = imagePixels(firstImage.getHeight())
   const tileWidth = imagePixels(firstImage.getTileWidth() || 256)
   const tileHeight = imagePixels(firstImage.getTileHeight() || 256)
+  const decodeMetadata = await readTileDecodeMetadata(tiff, firstDirectory)
   const units: UnitsDescriptor = {
     dataUnit: 'micrometer',
     imageUnit: 'pixel',
@@ -139,6 +147,7 @@ export async function openTiff(
 
   return new TiffPyramidLoader({
     url,
+    ...decodeMetadata,
     chunkIndex,
     levelMeta,
     units,
@@ -161,6 +170,29 @@ function channelIndexForUrl(url: string, channels: readonly TiffChannelInfo[]): 
   return channels.find((channel) => channel.fileName === fileName)?.index ?? 0
 }
 
+async function readTileDecodeMetadata(
+  tiff: GeoTIFF,
+  directory: ImageFileDirectory,
+): Promise<TiffTileDecodeMetadata> {
+  const compression = await readOptionalNumberTag(directory, 'Compression')
+  const bitsPerSample = await readNumberArrayTag(directory, 'BitsPerSample')
+  const samplesPerPixel = await readOptionalNumberTag(directory, 'SamplesPerPixel')
+  const predictor = await readOptionalNumberTag(directory, 'Predictor')
+  const planarConfiguration = await readOptionalNumberTag(
+    directory,
+    'PlanarConfiguration',
+  )
+
+  return {
+    ...(compression === undefined ? {} : { compression }),
+    ...(bitsPerSample.length === 0 ? {} : { bitsPerSample }),
+    ...(samplesPerPixel === undefined ? {} : { samplesPerPixel }),
+    ...(predictor === undefined ? {} : { predictor }),
+    ...(planarConfiguration === undefined ? {} : { planarConfiguration }),
+    littleEndian: tiff.littleEndian,
+  }
+}
+
 export class TiffPyramidLoader {
   readonly url: string
   readonly units: UnitsDescriptor
@@ -170,6 +202,12 @@ export class TiffPyramidLoader {
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
   readonly channels: readonly TiffChannelInfo[]
+  private readonly compression: number | undefined
+  private readonly bitsPerSample: readonly number[] | undefined
+  private readonly samplesPerPixel: number | undefined
+  private readonly predictor: number | undefined
+  private readonly planarConfiguration: number | undefined
+  private readonly littleEndian: boolean | undefined
   private readonly chunks: ReadonlyMap<string, TiffChunk>
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly fetcher: typeof fetch
@@ -186,6 +224,12 @@ export class TiffPyramidLoader {
     this.imageWidth = options.imageWidth
     this.imageHeight = options.imageHeight
     this.channels = options.channels ?? []
+    this.compression = options.compression
+    this.bitsPerSample = options.bitsPerSample
+    this.samplesPerPixel = options.samplesPerPixel
+    this.predictor = options.predictor
+    this.planarConfiguration = options.planarConfiguration
+    this.littleEndian = options.littleEndian
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.byteRangeCache =
       options.byteRangeCache === undefined
@@ -241,6 +285,23 @@ export class TiffPyramidLoader {
     )
 
     return { width, height }
+  }
+
+  tileDecodeOptions(): TiffTileDecodeMetadata {
+    return {
+      ...(this.compression === undefined ? {} : { compression: this.compression }),
+      tileWidth: this.tileWidth,
+      tileHeight: this.tileHeight,
+      ...(this.bitsPerSample === undefined ? {} : { bitsPerSample: this.bitsPerSample }),
+      ...(this.samplesPerPixel === undefined
+        ? {}
+        : { samplesPerPixel: this.samplesPerPixel }),
+      ...(this.predictor === undefined ? {} : { predictor: this.predictor }),
+      ...(this.planarConfiguration === undefined
+        ? {}
+        : { planarConfiguration: this.planarConfiguration }),
+      ...(this.littleEndian === undefined ? {} : { littleEndian: this.littleEndian }),
+    }
   }
 
   async fetchTileBytes(
@@ -394,6 +455,23 @@ export async function readRequiredNumberTag(
   key: string,
 ): Promise<number> {
   const value = await directory.loadValue(key)
+
+  if (!isNumberLike(value)) {
+    throw new Error(`Expected TIFF tag ${key} to be a number.`)
+  }
+
+  return numberLikeToNumber(value, key)
+}
+
+export async function readOptionalNumberTag(
+  directory: TiffDirectoryValueLoader,
+  key: string,
+): Promise<number | undefined> {
+  const value = await directory.loadValue(key)
+
+  if (value === undefined) {
+    return undefined
+  }
 
   if (!isNumberLike(value)) {
     throw new Error(`Expected TIFF tag ${key} to be a number.`)
