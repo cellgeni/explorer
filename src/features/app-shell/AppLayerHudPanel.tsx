@@ -34,6 +34,7 @@ export interface AppLayerHudPanelProps {
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly customLayerLoadState: CustomMorphologyLayerLoadState
   readonly customLayers: readonly CustomMorphologyLayer[]
+  readonly customLayerOpacities: Readonly<Record<string, number>>
   readonly handleAutoContrast: (channel: MorphologyImageChannel) => void
   readonly handleMagicLensLeave: () => void
   readonly handleLoadCustomLayer: (url: string) => Promise<boolean>
@@ -48,6 +49,7 @@ export interface AppLayerHudPanelProps {
   readonly setCellBoundaryOpacity: Dispatch<SetStateAction<number>>
   readonly setCellFillOpacity: Dispatch<SetStateAction<number>>
   readonly setCoordinateUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
+  readonly setCustomLayerOpacity: (imageUrl: string, opacity: number) => void
   readonly setImageLayerOpacity: Dispatch<SetStateAction<number>>
   readonly setMagicLensActive: Dispatch<SetStateAction<boolean>>
   readonly setMeasurementEnabled: Dispatch<SetStateAction<boolean>>
@@ -70,6 +72,7 @@ export function AppLayerHudPanel({
   coordinateUnit,
   customLayerLoadState,
   customLayers,
+  customLayerOpacities,
   handleAutoContrast,
   handleMagicLensLeave,
   handleLoadCustomLayer,
@@ -84,6 +87,7 @@ export function AppLayerHudPanel({
   setCellBoundaryOpacity,
   setCellFillOpacity,
   setCoordinateUnit,
+  setCustomLayerOpacity,
   setImageLayerOpacity,
   setMagicLensActive,
   setMeasurementEnabled,
@@ -106,6 +110,7 @@ export function AppLayerHudPanel({
       measurementUnitInputId={controlIds.measurementUnitInputId}
       customLayerLoadState={customLayerLoadState}
       customLayers={customLayers}
+      customLayerOpacities={customLayerOpacities}
       loadEnabled={loadEnabled}
       imageLayerOpacity={imageLayerOpacity}
       cellFillOpacity={cellFillOpacity}
@@ -118,8 +123,14 @@ export function AppLayerHudPanel({
       autoContrastChannelIds={autoContrastChannelIds}
       onImageLayerOpacityPercentChange={(nextPercent) => {
         setImageLayerOpacity(percentToOpacity(nextPercent))
-        appendDebugEvent(`Image opacity: ${nextPercent}%`, {
+        appendDebugEvent(`Dataset image opacity: ${nextPercent}%`, {
           coalesceKey: 'image-opacity',
+        })
+      }}
+      onCustomLayerOpacityPercentChange={(imageUrl, nextPercent) => {
+        setCustomLayerOpacity(imageUrl, percentToOpacity(nextPercent))
+        appendDebugEvent(`Custom image opacity: ${nextPercent}%`, {
+          coalesceKey: `custom-image-opacity:${imageUrl}`,
         })
       }}
       onCellFillOpacityPercentChange={(nextPercent) => {

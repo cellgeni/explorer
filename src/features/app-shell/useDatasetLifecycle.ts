@@ -181,6 +181,7 @@ interface UseDatasetLifecycleOptions {
     CustomMorphologyLayerLoadState<StructuredLoadError>
   >
   readonly setCustomMorphologyLayers: Setter<readonly CustomMorphologyLayer[]>
+  readonly setCustomImageLayerOpacities: Setter<Readonly<Record<string, number>>>
   readonly setDatasetUrl: (datasetUrl: string) => void
   readonly setDatasetWarmupState: Setter<DatasetWarmupState>
   readonly setDiagnosticsState: Setter<DatasetDiagnosticsState<StructuredLoadError>>
@@ -305,6 +306,7 @@ export function useDatasetLifecycle({
   setCurrentViewportDetail,
   setCustomMorphologyLayerState,
   setCustomMorphologyLayers,
+  setCustomImageLayerOpacities,
   setDatasetUrl,
   setDatasetWarmupState,
   setDiagnosticsState,
@@ -528,6 +530,7 @@ export function useDatasetLifecycle({
       setGeneExpressionScaleDomain({ key: '', max: 0 })
       setMorphologyImage(null)
       setCustomMorphologyLayers([])
+      setCustomImageLayerOpacities({})
       setCustomMorphologyLayerState({ status: 'idle' })
       setMorphologyChannelSettings([])
       autoContrastChannelIdsRef.current.clear()

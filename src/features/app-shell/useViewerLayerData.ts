@@ -46,6 +46,7 @@ import type { AnnotationState } from '../annotations/annotationModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
+const EMPTY_MORPHOLOGY_CHANNEL_OPACITIES: ReadonlyMap<string, number> = new Map()
 
 interface UseViewerLayerDataOptions {
   readonly annotationState: AnnotationState<StructuredLoadError>
@@ -66,6 +67,7 @@ interface UseViewerLayerDataOptions {
   readonly morphologyImage: MorphologyImage | null
   readonly morphologyChannels: readonly MorphologyImageChannel[]
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
+  readonly morphologyChannelOpacities?: ReadonlyMap<string, number>
   readonly boundaryElements: readonly SpatialElement[]
 }
 
@@ -88,6 +90,7 @@ export function useViewerLayerData({
   morphologyImage,
   morphologyChannels,
   morphologyChannelSettings,
+  morphologyChannelOpacities = EMPTY_MORPHOLOGY_CHANNEL_OPACITIES,
   boundaryElements,
 }: UseViewerLayerDataOptions) {
   const annotationStyleColors = useMemo(
@@ -236,12 +239,13 @@ export function useViewerLayerData({
           enabled: setting?.enabled ?? false,
           color: setting?.color ?? channel.info.color,
           contrast,
+          opacity: morphologyChannelOpacities.get(channel.info.id) ?? 1,
           ...(channel.info.alphaFromIntensity === undefined
             ? {}
             : { alphaFromIntensity: channel.info.alphaFromIntensity }),
         }
       }),
-    [morphologyChannelSettings, morphologyChannels],
+    [morphologyChannelOpacities, morphologyChannelSettings, morphologyChannels],
   )
   const morphologyMicrometersPerPixel = morphologyImage?.loader.units?.micrometersPerPixel
   const boundaryLayerData = useMemo(

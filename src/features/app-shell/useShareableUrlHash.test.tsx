@@ -18,6 +18,7 @@ function ShareableUrlHashProbe() {
     annotationUrl: 'https://example.test/annotations/manual.csv',
     boundaryCellLimit: 2500,
     coordinateUnit: 'px',
+    customImageOpacities: [0.35],
     customImageUrls: ['https://example.test/images/he.ome.tif'],
     datasetUrl: 'https://example.test/output',
     geneExpressionColorScale: 'plasma',
@@ -77,6 +78,7 @@ describe('useShareableUrlHash', () => {
     expect(window.location.hash).toContain(
       'customImageUrl=https%3A%2F%2Fexample.test%2Fimages%2Fhe.ome.tif',
     )
+    expect(window.location.hash).toContain('customImageOpacity=0.35')
     expect(window.location.hash).toContain('genes=Actb%2CGad1')
     expect(window.location.hash).toContain('tab=genes')
     expect(window.location.hash).toContain('imgOpacity=0.45')

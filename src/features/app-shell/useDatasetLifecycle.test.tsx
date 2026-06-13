@@ -86,6 +86,7 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     setCurrentViewportDetail: noopSetter,
     setCustomMorphologyLayerState: noopSetter,
     setCustomMorphologyLayers: noopSetter,
+    setCustomImageLayerOpacities: noopSetter,
     setDatasetUrl: vi.fn(),
     setDatasetWarmupState: noopSetter,
     setDiagnosticsState: noopSetter,

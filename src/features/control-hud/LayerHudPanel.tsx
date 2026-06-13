@@ -23,6 +23,7 @@ interface LayerHudPanelProps {
   readonly measurementUnitInputId: string
   readonly customLayerLoadState: CustomMorphologyLayerLoadState
   readonly customLayers: readonly CustomMorphologyLayer[]
+  readonly customLayerOpacities: Readonly<Record<string, number>>
   readonly loadEnabled: boolean
   readonly imageLayerOpacity: number
   readonly cellFillOpacity: number
@@ -34,6 +35,7 @@ interface LayerHudPanelProps {
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
   readonly autoContrastChannelIds: readonly string[]
   readonly onImageLayerOpacityPercentChange: (percent: number) => void
+  readonly onCustomLayerOpacityPercentChange: (imageUrl: string, percent: number) => void
   readonly onCellFillOpacityPercentChange: (percent: number) => void
   readonly onCellBoundaryOpacityPercentChange: (percent: number) => void
   readonly onCoordinateUnitChange: (unit: ViewerCoordinateUnit) => void
@@ -62,6 +64,7 @@ export function LayerHudPanel({
   measurementUnitInputId,
   customLayerLoadState,
   customLayers,
+  customLayerOpacities,
   loadEnabled,
   imageLayerOpacity,
   cellFillOpacity,
@@ -73,6 +76,7 @@ export function LayerHudPanel({
   morphologyChannelSettings,
   autoContrastChannelIds,
   onImageLayerOpacityPercentChange,
+  onCustomLayerOpacityPercentChange,
   onCellFillOpacityPercentChange,
   onCellBoundaryOpacityPercentChange,
   onCoordinateUnitChange,
@@ -127,7 +131,7 @@ export function LayerHudPanel({
         <div className="layer-opacity-controls">
           <div className="layer-opacity-control">
             <div className="layer-opacity-header">
-              <label htmlFor={imageOpacityInputId}>Image opacity</label>
+              <label htmlFor={imageOpacityInputId}>Dataset image opacity</label>
               <span>{imageOpacityPercent}%</span>
             </div>
             <input
@@ -138,7 +142,7 @@ export function LayerHudPanel({
               step="5"
               value={imageOpacityPercent}
               aria-valuetext={`${imageOpacityPercent}%`}
-              title="Image opacity"
+              title="Dataset image opacity"
               onChange={(event) => {
                 onImageLayerOpacityPercentChange(event.currentTarget.valueAsNumber)
               }}
@@ -314,23 +318,54 @@ export function LayerHudPanel({
         </form>
         {customLayers.length > 0 ? (
           <ul className="custom-layer-list" aria-label="Custom image layers">
-            {customLayers.map((layer) => (
-              <li key={layer.id}>
-                <span>{layer.label}</span>
-                <small>{layer.channels.length.toLocaleString()} channels</small>
-                <button
-                  type="button"
-                  className="custom-layer-remove"
-                  aria-label={`Remove ${layer.label}`}
-                  title={`Remove ${layer.label}`}
-                  onClick={() => {
-                    onRemoveCustomLayer(layer.id)
-                  }}
-                >
-                  x
-                </button>
-              </li>
-            ))}
+            {customLayers.map((layer) => {
+              const customOpacityPercent = opacityToPercent(
+                customLayerOpacities[layer.image.url] ?? 1,
+              )
+              const customOpacityInputId = `${customLayerUrlInputId}-${layer.id}-opacity`
+
+              return (
+                <li key={layer.id}>
+                  <div className="custom-layer-summary">
+                    <span>{layer.label}</span>
+                    <small>{layer.channels.length.toLocaleString()} channels</small>
+                    <button
+                      type="button"
+                      className="custom-layer-remove"
+                      aria-label={`Remove ${layer.label}`}
+                      title={`Remove ${layer.label}`}
+                      onClick={() => {
+                        onRemoveCustomLayer(layer.id)
+                      }}
+                    >
+                      x
+                    </button>
+                  </div>
+                  <div className="layer-opacity-control custom-layer-opacity-control">
+                    <div className="layer-opacity-header">
+                      <label htmlFor={customOpacityInputId}>{layer.label} opacity</label>
+                      <span>{customOpacityPercent}%</span>
+                    </div>
+                    <input
+                      id={customOpacityInputId}
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={customOpacityPercent}
+                      aria-valuetext={`${customOpacityPercent}%`}
+                      title={`${layer.label} opacity`}
+                      onChange={(event) => {
+                        onCustomLayerOpacityPercentChange(
+                          layer.image.url,
+                          event.currentTarget.valueAsNumber,
+                        )
+                      }}
+                    />
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         ) : null}
       </section>

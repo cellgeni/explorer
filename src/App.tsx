@@ -153,7 +153,10 @@ import {
 } from './rendering/deckLayers'
 import { useViewerStore } from './store/viewerStore'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
-import type { MorphologyImage } from './data/morphologyImage'
+import {
+  normalizeCustomMorphologyLayerUrl,
+  type MorphologyImage,
+} from './data/morphologyImage'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
 import type { SpatialElement } from './datasets/spatialDataset'
@@ -390,6 +393,9 @@ export function App({
   const [customMorphologyLayerState, setCustomMorphologyLayerState] = useState<
     CustomMorphologyLayerLoadState<StructuredLoadError>
   >({ status: 'idle' })
+  const [customImageLayerOpacities, setCustomImageLayerOpacities] = useState<
+    Readonly<Record<string, number>>
+  >({})
   const [morphologyChannelSettings, setMorphologyChannelSettings] = useState<
     readonly MorphologyChannelSetting[]
   >([])
@@ -520,6 +526,9 @@ export function App({
   const initialCustomImageUrlsRef = useRef<readonly string[]>(
     initialShareableState.customImageUrls ?? [],
   )
+  const initialCustomImageOpacitiesRef = useRef<readonly number[]>(
+    initialShareableState.customImageOpacities ?? [],
+  )
   const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
   const isLoading = loadState.status === 'loading'
   const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
@@ -560,6 +569,41 @@ export function App({
     () => customMorphologyLayers.map((layer) => layer.image.url),
     [customMorphologyLayers],
   )
+  const customImageOpacities = useMemo(() => {
+    if (customMorphologyLayers.length === 0) {
+      return undefined
+    }
+
+    const opacities = customMorphologyLayers.map((layer) =>
+      normalizeLayerOpacity(customImageLayerOpacities[layer.image.url] ?? 1),
+    )
+
+    return opacities.some((opacity) => opacity !== 1) ? opacities : undefined
+  }, [customImageLayerOpacities, customMorphologyLayers])
+  const morphologyChannelOpacities = useMemo(() => {
+    const opacities = new Map<string, number>()
+
+    for (const channel of morphologyImage?.channelLoaders ?? []) {
+      opacities.set(channel.info.id, imageLayerOpacity)
+    }
+
+    for (const layer of customMorphologyLayers) {
+      const opacity = normalizeLayerOpacity(
+        customImageLayerOpacities[layer.image.url] ?? 1,
+      )
+
+      for (const channel of layer.channels) {
+        opacities.set(channel.info.id, opacity)
+      }
+    }
+
+    return opacities
+  }, [
+    customImageLayerOpacities,
+    customMorphologyLayers,
+    imageLayerOpacity,
+    morphologyImage,
+  ])
   const baseMorphologyChannelIds = useMemo(
     () =>
       new Set((morphologyImage?.channelLoaders ?? []).map((channel) => channel.info.id)),
@@ -597,6 +641,7 @@ export function App({
     geneExpressionScaleDomain,
     geneExpressionScoreMode,
     morphologyChannelSettings,
+    morphologyChannelOpacities,
     morphologyChannels,
     morphologyImage,
     observationColorMode,
@@ -1250,6 +1295,32 @@ export function App({
       setCustomLayers: setCustomMorphologyLayers,
       setMorphologyChannelSettings,
     })
+  const handleCustomImageLayerOpacityChange = useCallback(
+    (imageUrl: string, opacity: number) => {
+      setCustomImageLayerOpacities((current) => ({
+        ...current,
+        [imageUrl]: normalizeLayerOpacity(opacity),
+      }))
+    },
+    [],
+  )
+  const handleRemoveCustomImageLayer = useCallback(
+    (layerId: string) => {
+      const layer = customMorphologyLayers.find((candidate) => candidate.id === layerId)
+      handleRemoveCustomLayer(layerId)
+
+      if (layer === undefined) {
+        return
+      }
+
+      setCustomImageLayerOpacities((current) => {
+        const remaining = { ...current }
+        delete remaining[layer.image.url]
+        return remaining
+      })
+    },
+    [customMorphologyLayers, handleRemoveCustomLayer],
+  )
 
   useEffect(() => {
     if (loadedDatasetUrl === null || initialCustomImageUrlsRef.current.length === 0) {
@@ -1267,14 +1338,33 @@ export function App({
     }
 
     const customImageUrls = initialCustomImageUrlsRef.current
+    const customImageOpacities = initialCustomImageOpacitiesRef.current
     initialCustomImageUrlsRef.current = []
+    initialCustomImageOpacitiesRef.current = []
 
     void (async () => {
-      for (const customImageUrl of customImageUrls) {
-        await handleLoadCustomLayer(customImageUrl)
+      for (const [index, customImageUrl] of customImageUrls.entries()) {
+        const loaded = await handleLoadCustomLayer(customImageUrl)
+        const opacity = customImageOpacities[index]
+
+        if (!loaded || opacity === undefined) {
+          continue
+        }
+
+        try {
+          const normalizedUrl = normalizeCustomMorphologyLayerUrl(customImageUrl)
+          handleCustomImageLayerOpacityChange(normalizedUrl, opacity)
+        } catch {
+          // The load workflow already surfaced invalid URLs.
+        }
       }
     })()
-  }, [handleLoadCustomLayer, initialShareableState.datasetUrl, loadedDatasetUrl])
+  }, [
+    handleCustomImageLayerOpacityChange,
+    handleLoadCustomLayer,
+    initialShareableState.datasetUrl,
+    loadedDatasetUrl,
+  ])
 
   const { handleDatasetSubmit } = useDatasetLifecycle({
     analysisEmbeddingAbortRef,
@@ -1339,6 +1429,7 @@ export function App({
     setCurrentViewportDetail,
     setCustomMorphologyLayerState,
     setCustomMorphologyLayers,
+    setCustomImageLayerOpacities,
     setDatasetUrl,
     setDatasetWarmupState,
     setDiagnosticsState,
@@ -1396,6 +1487,7 @@ export function App({
     annotationUrl: annotationImportUrl,
     boundaryCellLimit,
     coordinateUnit,
+    customImageOpacities,
     customImageUrls,
     datasetUrl,
     geneExpressionColorScale,
@@ -1470,10 +1562,11 @@ export function App({
           coordinateUnit={coordinateUnit}
           customLayerLoadState={customMorphologyLayerState}
           customLayers={customMorphologyLayers}
+          customLayerOpacities={customImageLayerOpacities}
           handleAutoContrast={handleAutoContrast}
           handleLoadCustomLayer={handleLoadCustomLayer}
           handleMagicLensLeave={handleMagicLensLeave}
-          handleRemoveCustomLayer={handleRemoveCustomLayer}
+          handleRemoveCustomLayer={handleRemoveCustomImageLayer}
           imageLayerOpacity={imageLayerOpacity}
           loadEnabled={loadState.status === 'ready'}
           measurementEnabled={measurementEnabled}
@@ -1484,6 +1577,7 @@ export function App({
           setCellBoundaryOpacity={setCellBoundaryOpacity}
           setCellFillOpacity={setCellFillOpacity}
           setCoordinateUnit={setCoordinateUnit}
+          setCustomLayerOpacity={handleCustomImageLayerOpacityChange}
           setImageLayerOpacity={setImageLayerOpacity}
           setMagicLensActive={setMagicLensActive}
           setMeasurementEnabled={setMeasurementEnabled}
@@ -1701,7 +1795,7 @@ export function App({
           transcriptPoints={transcriptLayerPoints}
           imageLoader={morphologyImage?.loader ?? null}
           imageChannels={morphologyCanvasChannels}
-          imageOpacity={imageLayerOpacity}
+          imageOpacity={morphologyCanvasChannels.length === 0 ? imageLayerOpacity : 1}
           cellFillOpacity={cellFillOpacity}
           cellBoundaryOpacity={cellBoundaryOpacity}
           transcriptOpacity={transcriptOpacity}

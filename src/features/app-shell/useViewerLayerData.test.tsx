@@ -186,6 +186,7 @@ describe('useViewerLayerData', () => {
         geneExpressionScaleDomain: { key: '', max: 0 },
         geneExpressionScoreMode: 'sum',
         morphologyChannelSettings,
+        morphologyChannelOpacities: new Map([['custom-layer:1:Channel:0:0', 0.35]]),
         morphologyChannels,
         morphologyImage: null,
         observationColorMode: 'annotations',
@@ -214,6 +215,7 @@ describe('useViewerLayerData', () => {
     expect(result.morphologyCanvasChannels[0]).toMatchObject({
       id: 'custom-layer:1:Channel:0:0',
       enabled: true,
+      opacity: 0.35,
       alphaFromIntensity: false,
     })
   })

@@ -12,6 +12,7 @@ export interface ShareableState {
   readonly datasetUrl?: string
   readonly annotationUrl?: string
   readonly customImageUrls?: readonly string[]
+  readonly customImageOpacities?: readonly number[]
   readonly selectedGenes?: readonly string[]
   readonly viewState?: ShareableViewState
   readonly roiSelection?: RoiSelection
@@ -60,6 +61,7 @@ export function parseShareableState(hash: string): ShareableState {
   const datasetUrl = readString(params, 'dataset')
   const annotationUrl = readString(params, 'annotationUrl')
   const customImageUrls = readStrings(params, 'customImageUrl')
+  const customImageOpacities = readUnitNumbers(params, 'customImageOpacity')
   const selectedGenes = readCsv(params, 'genes')
   const viewState = parseViewState(params.get('view'))
   const roiSelection = parseRoiSelection(params.get('roi'))
@@ -101,6 +103,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (customImageUrls !== undefined) {
     state.customImageUrls = customImageUrls
+  }
+
+  if (customImageOpacities !== undefined) {
+    state.customImageOpacities = customImageOpacities
   }
 
   if (selectedGenes !== undefined) {
@@ -240,6 +246,14 @@ export function formatShareableState(state: ShareableState): string {
   if (state.customImageUrls !== undefined) {
     for (const customImageUrl of state.customImageUrls) {
       setOptionalString(params, 'customImageUrl', customImageUrl, 'append')
+    }
+  }
+
+  if (state.customImageOpacities !== undefined) {
+    for (const customImageOpacity of state.customImageOpacities) {
+      if (Number.isFinite(customImageOpacity)) {
+        params.append('customImageOpacity', roundForHash(customImageOpacity).toString())
+      }
     }
   }
 
@@ -391,6 +405,18 @@ function readStrings(
     .getAll(name)
     .map((value) => value.trim())
     .filter((value) => value.length > 0)
+
+  return values.length === 0 ? undefined : values
+}
+
+function readUnitNumbers(
+  params: URLSearchParams,
+  name: string,
+): readonly number[] | undefined {
+  const values = params
+    .getAll(name)
+    .map((value) => parseUnitNumber(value))
+    .filter((value): value is number => value !== undefined)
 
   return values.length === 0 ? undefined : values
 }

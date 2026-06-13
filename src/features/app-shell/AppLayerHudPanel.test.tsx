@@ -23,6 +23,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     coordinateUnit: 'um',
     customLayerLoadState: { status: 'idle' },
     customLayers: [],
+    customLayerOpacities: {},
     handleAutoContrast: vi.fn(),
     handleMagicLensLeave: vi.fn(),
     handleLoadCustomLayer: vi.fn(async () => true),
@@ -44,6 +45,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     setCellBoundaryOpacity: vi.fn(),
     setCellFillOpacity: vi.fn(),
     setCoordinateUnit: vi.fn(),
+    setCustomLayerOpacity: vi.fn(),
     setImageLayerOpacity: vi.fn(),
     setMagicLensActive: vi.fn(),
     setMeasurementEnabled: vi.fn(),
@@ -61,7 +63,7 @@ describe('AppLayerHudPanel', () => {
 
     render(<AppLayerHudPanel {...props} />)
 
-    fireEvent.change(screen.getByRole('slider', { name: 'Image opacity' }), {
+    fireEvent.change(screen.getByRole('slider', { name: 'Dataset image opacity' }), {
       target: { value: '45' },
     })
     fireEvent.change(screen.getByRole('slider', { name: 'Cell fill opacity' }), {
@@ -74,7 +76,7 @@ describe('AppLayerHudPanel', () => {
     expect(props.setImageLayerOpacity).toHaveBeenCalledWith(0.45)
     expect(props.setCellFillOpacity).toHaveBeenCalledWith(0.35)
     expect(props.setCellBoundaryOpacity).toHaveBeenCalledWith(0.25)
-    expect(props.appendDebugEvent).toHaveBeenCalledWith('Image opacity: 45%', {
+    expect(props.appendDebugEvent).toHaveBeenCalledWith('Dataset image opacity: 45%', {
       coalesceKey: 'image-opacity',
     })
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Cell fill opacity: 35%', {
@@ -132,10 +134,16 @@ describe('AppLayerHudPanel', () => {
           channels: [],
         },
       ],
+      customLayerOpacities: {
+        'https://example.test/remote.ome.tif': 0.6,
+      },
     })
 
     render(<AppLayerHudPanel {...props} />)
 
+    fireEvent.change(screen.getByRole('slider', { name: 'remote.ome.tif opacity' }), {
+      target: { value: '35' },
+    })
     fireEvent.change(screen.getByLabelText('Custom image URL'), {
       target: { value: 'https://example.test/new.ome.tif' },
     })
@@ -145,6 +153,13 @@ describe('AppLayerHudPanel', () => {
     expect(props.handleLoadCustomLayer).toHaveBeenCalledWith(
       'https://example.test/new.ome.tif',
     )
+    expect(props.setCustomLayerOpacity).toHaveBeenCalledWith(
+      'https://example.test/remote.ome.tif',
+      0.35,
+    )
+    expect(props.appendDebugEvent).toHaveBeenCalledWith('Custom image opacity: 35%', {
+      coalesceKey: 'custom-image-opacity:https://example.test/remote.ome.tif',
+    })
     expect(props.handleRemoveCustomLayer).toHaveBeenCalledWith('custom-layer:1')
   })
 })

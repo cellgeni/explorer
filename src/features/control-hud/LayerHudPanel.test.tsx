@@ -5,6 +5,7 @@ import { LayerHudPanel } from './LayerHudPanel'
 describe('LayerHudPanel', () => {
   it('renders layer controls and forwards display setting updates', () => {
     const onImageLayerOpacityPercentChange = vi.fn()
+    const onCustomLayerOpacityPercentChange = vi.fn()
     const onCellFillOpacityPercentChange = vi.fn()
     const onCellBoundaryOpacityPercentChange = vi.fn()
     const onCoordinateUnitChange = vi.fn()
@@ -32,7 +33,20 @@ describe('LayerHudPanel', () => {
         measurementModeInputId="measurement-mode"
         measurementUnitInputId="measurement-unit"
         customLayerLoadState={{ status: 'idle' }}
-        customLayers={[]}
+        customLayers={[
+          {
+            id: 'custom-layer:1',
+            label: 'remote.ome.tif',
+            image: {
+              url: 'https://example.test/remote.ome.tif',
+              loader: {},
+              channels: [],
+              channelLoaders: [],
+            } as never,
+            channels: [],
+          },
+        ]}
+        customLayerOpacities={{ 'https://example.test/remote.ome.tif': 0.6 }}
         loadEnabled
         imageLayerOpacity={0.8}
         cellFillOpacity={0.6}
@@ -44,6 +58,7 @@ describe('LayerHudPanel', () => {
         morphologyChannelSettings={[]}
         autoContrastChannelIds={[]}
         onImageLayerOpacityPercentChange={onImageLayerOpacityPercentChange}
+        onCustomLayerOpacityPercentChange={onCustomLayerOpacityPercentChange}
         onCellFillOpacityPercentChange={onCellFillOpacityPercentChange}
         onCellBoundaryOpacityPercentChange={onCellBoundaryOpacityPercentChange}
         onCoordinateUnitChange={onCoordinateUnitChange}
@@ -57,7 +72,12 @@ describe('LayerHudPanel', () => {
       />,
     )
 
-    fireEvent.change(screen.getByLabelText('Image opacity'), { target: { value: '45' } })
+    fireEvent.change(screen.getByLabelText('Dataset image opacity'), {
+      target: { value: '45' },
+    })
+    fireEvent.change(screen.getByLabelText('remote.ome.tif opacity'), {
+      target: { value: '35' },
+    })
     fireEvent.change(screen.getByLabelText('Cell fill opacity'), {
       target: { value: '55' },
     })
@@ -79,6 +99,10 @@ describe('LayerHudPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear Measurement' }))
 
     expect(onImageLayerOpacityPercentChange).toHaveBeenCalledWith(45)
+    expect(onCustomLayerOpacityPercentChange).toHaveBeenCalledWith(
+      'https://example.test/remote.ome.tif',
+      35,
+    )
     expect(onCellFillOpacityPercentChange).toHaveBeenCalledWith(55)
     expect(onCellBoundaryOpacityPercentChange).toHaveBeenCalledWith(65)
     expect(onCoordinateUnitChange).toHaveBeenCalledWith('px')

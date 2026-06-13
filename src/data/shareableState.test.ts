@@ -16,6 +16,7 @@ describe('shareableState', () => {
         'https://example.test/images/he.ome.tif',
         'https://example.test/images/if.ome.tif',
       ],
+      customImageOpacities: [0.35, 0.8],
       selectedGenes: ['Actb', 'Gad1'],
       viewState: { target: [12.3456, 78.9123, 0], zoom: 1.23456 },
       roiSelection: {
@@ -64,6 +65,7 @@ describe('shareableState', () => {
       'https://example.test/images/he.ome.tif',
       'https://example.test/images/if.ome.tif',
     ])
+    expect(state.customImageOpacities).toEqual([0.35, 0.8])
     expect(state.selectedGenes).toEqual(['Actb', 'Gad1'])
     expect(state.viewState).toEqual({ target: [12.346, 78.912, 0], zoom: 1.235 })
     expect(state.roiSelection?.kind).toBe('box')

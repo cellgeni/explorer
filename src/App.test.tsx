@@ -115,7 +115,9 @@ describe('App', () => {
     )
 
     openHudTab('Layers')
-    expect(screen.getByRole('slider', { name: 'Image opacity' })).toHaveValue('100')
+    expect(screen.getByRole('slider', { name: 'Dataset image opacity' })).toHaveValue(
+      '100',
+    )
     expect(screen.getByRole('slider', { name: 'Cell fill opacity' })).toHaveValue('50')
     expect(screen.getByRole('slider', { name: 'Cell boundary opacity' })).toHaveValue(
       '100',
@@ -219,7 +221,7 @@ describe('App', () => {
     openHudTab('Layers')
 
     const imageOpacityInput = screen.getByRole('slider', {
-      name: 'Image opacity',
+      name: 'Dataset image opacity',
     })
     const cellFillOpacityInput = screen.getByRole('slider', {
       name: 'Cell fill opacity',
@@ -295,6 +297,9 @@ describe('App', () => {
     expect(
       await screen.findByRole('checkbox', { name: 'remote.ome.tif / Custom DAPI' }),
     ).toBeChecked()
+    fireEvent.change(screen.getByRole('slider', { name: 'remote.ome.tif opacity' }), {
+      target: { value: '35' },
+    })
     expect(loadCustomMorphologyLayer).toHaveBeenCalledWith(
       'https://example.test/layers/remote.ome.tif',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -303,6 +308,9 @@ describe('App', () => {
       expect(window.location.hash).toContain(
         'customImageUrl=https%3A%2F%2Fexample.test%2Flayers%2Fremote.ome.tif',
       )
+    })
+    await waitFor(() => {
+      expect(window.location.hash).toContain('customImageOpacity=0.35')
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove remote.ome.tif' }))
@@ -313,6 +321,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(window.location.hash).not.toContain('customImageUrl=')
     })
+    expect(window.location.hash).not.toContain('customImageOpacity=')
   })
 
   it('records compact debug activity entries', () => {
@@ -323,7 +332,7 @@ describe('App', () => {
     expect(within(activityLog).getByText('Idle')).toBeInTheDocument()
 
     openHudTab('Layers')
-    fireEvent.change(screen.getByRole('slider', { name: 'Image opacity' }), {
+    fireEvent.change(screen.getByRole('slider', { name: 'Dataset image opacity' }), {
       target: { value: '45' },
     })
     const coordinateUnitGroup = screen.getByRole('group', {
@@ -335,7 +344,9 @@ describe('App', () => {
     fireEvent.click(within(measurementUnitGroup).getByRole('button', { name: 'px' }))
 
     openHudTab('Dataset')
-    expect(within(activityLog).getByText('Image opacity: 45%')).toBeInTheDocument()
+    expect(
+      within(activityLog).getByText('Dataset image opacity: 45%'),
+    ).toBeInTheDocument()
     expect(within(activityLog).getByText('Mouse coordinates: px')).toBeInTheDocument()
     expect(within(activityLog).getByText('Distance measure enabled')).toBeInTheDocument()
     expect(within(activityLog).getByText('Measure unit: px')).toBeInTheDocument()
@@ -371,7 +382,7 @@ describe('App', () => {
     window.history.replaceState(
       null,
       '',
-      '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&annotationUrl=https%3A%2F%2Fexample.test%2Fannotations%2Fmanual.csv&customImageUrl=https%3A%2F%2Fexample.test%2Flayers%2Fhe.ome.tif&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px&imgOpacity=0.45&cellFill=0.7&cellBoundary=0.35&channels=Channel%3A1&lensScope=cursor&lens=1&lensRadius=120&lensQv=18',
+      '/#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&annotationUrl=https%3A%2F%2Fexample.test%2Fannotations%2Fmanual.csv&customImageUrl=https%3A%2F%2Fexample.test%2Flayers%2Fhe.ome.tif&customImageOpacity=0.35&tab=genes&genes=Actb%2CGad1&scale=viridis&coord=px&imgOpacity=0.45&cellFill=0.7&cellBoundary=0.35&channels=Channel%3A1&lensScope=cursor&lens=1&lensRadius=120&lensQv=18',
     )
     const dapiChannel = {
       id: 'Channel:0',
@@ -471,7 +482,9 @@ describe('App', () => {
     )
 
     openHudTab('Layers')
-    expect(screen.getByRole('slider', { name: 'Image opacity' })).toHaveValue('45')
+    expect(screen.getByRole('slider', { name: 'Dataset image opacity' })).toHaveValue(
+      '45',
+    )
     expect(screen.getByRole('slider', { name: 'Cell fill opacity' })).toHaveValue('70')
     expect(screen.getByRole('slider', { name: 'Cell boundary opacity' })).toHaveValue(
       '35',
@@ -481,6 +494,7 @@ describe('App', () => {
     expect(
       await screen.findByRole('checkbox', { name: 'he.ome.tif / H&E' }),
     ).toBeChecked()
+    expect(screen.getByRole('slider', { name: 'he.ome.tif opacity' })).toHaveValue('35')
     expect(loadCustomMorphologyLayer).toHaveBeenCalledWith(
       'https://example.test/layers/he.ome.tif',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
