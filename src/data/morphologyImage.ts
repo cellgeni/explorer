@@ -1,4 +1,4 @@
-import { openTiff } from '../tiff/loader'
+import { openTiff, tiffImageSelectionUrl } from '../tiff/loader'
 import { datasetFileUrl } from './datasetFiles'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { TiffChannelInfo } from '../tiff/omeMetadata'
@@ -154,10 +154,7 @@ async function loadMorphologyChannelLoaders(
 
   return Promise.all(
     channels.map(async (channel) => {
-      const channelUrl =
-        channel.fileName === undefined
-          ? options.imageUrl
-          : new URL(channel.fileName, options.imageUrl).toString()
+      const channelUrl = morphologyChannelImageUrl(options.imageUrl, channel)
       let loader = loaderByUrl.get(channelUrl)
 
       if (loader === undefined) {
@@ -174,6 +171,36 @@ async function loadMorphologyChannelLoaders(
       }
     }),
   )
+}
+
+function morphologyChannelImageUrl(imageUrl: string, channel: TiffChannelInfo): string {
+  if (channel.fileName !== undefined) {
+    const channelUrl = new URL(channel.fileName, imageUrl).toString()
+
+    if (
+      channel.ifdIndex !== undefined &&
+      channel.ifdIndex > 0 &&
+      urlsReferToSameImage(channelUrl, imageUrl)
+    ) {
+      return tiffImageSelectionUrl(imageUrl, channel.ifdIndex)
+    }
+
+    return channelUrl
+  }
+
+  if (channel.ifdIndex !== undefined && channel.ifdIndex > 0) {
+    return tiffImageSelectionUrl(imageUrl, channel.ifdIndex)
+  }
+
+  return imageUrl
+}
+
+function urlsReferToSameImage(left: string, right: string): boolean {
+  const leftUrl = new URL(left)
+  const rightUrl = new URL(right)
+  leftUrl.hash = ''
+  rightUrl.hash = ''
+  return leftUrl.toString() === rightUrl.toString()
 }
 
 export async function loadMorphologyImageCandidatesFromManifest(

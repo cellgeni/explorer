@@ -41,6 +41,7 @@ export interface TiffLevelMeta {
 
 export interface TiffPyramidLoaderOptions {
   readonly url: string
+  readonly sourceUrl?: string
   readonly chunkIndex: ReadonlyMap<string, TiffChunk>
   readonly levelMeta: ReadonlyMap<number, TiffLevelMeta>
   readonly units: UnitsDescriptor
@@ -65,16 +66,18 @@ export async function openTiff(
   url: string,
   signal?: AbortSignal,
 ): Promise<TiffPyramidLoader> {
-  const tiff = await fromUrl(url, { allowFullFile: false }, signal)
-  const firstImage = await tiff.getImage(0)
-  const firstDirectory = firstImage.getFileDirectory()
+  const selection = parseTiffImageSelection(url)
+  const tiff = await fromUrl(selection.sourceUrl, { allowFullFile: false }, signal)
+  const metadataImage = await tiff.getImage(0)
+  const metadataDirectory = metadataImage.getFileDirectory()
   const omeMetadata = parseOmeTiffMetadata(
-    await readOptionalStringTag(firstDirectory, 'ImageDescription'),
+    await readOptionalStringTag(metadataDirectory, 'ImageDescription'),
   )
-  const channelIndex = channelIndexForUrl(url, omeMetadata.channels)
+  const channelIndex =
+    selection.ifdIndex ?? channelIndexForUrl(selection.sourceUrl, omeMetadata.channels)
 
   const zchunkStoreOptions = await loadZchunkStorePyramidOptions(
-    url,
+    selection.sourceUrl,
     signal,
     globalThis.fetch.bind(globalThis),
     channelIndex,
@@ -89,6 +92,7 @@ export async function openTiff(
   if (zchunkStoreOptions !== null) {
     return new TiffPyramidLoader({
       url,
+      sourceUrl: selection.sourceUrl,
       ...zchunkStoreOptions,
       units: {
         ...zchunkStoreOptions.units,
@@ -98,6 +102,8 @@ export async function openTiff(
     })
   }
 
+  const firstImage = await tiff.getImage(selection.ifdIndex ?? 0)
+  const firstDirectory = firstImage.getFileDirectory()
   const imageWidth = imagePixels(firstImage.getWidth())
   const imageHeight = imagePixels(firstImage.getHeight())
   const tileWidth = imagePixels(firstImage.getTileWidth() || 256)
@@ -147,6 +153,7 @@ export async function openTiff(
 
   return new TiffPyramidLoader({
     url,
+    sourceUrl: selection.sourceUrl,
     ...decodeMetadata,
     chunkIndex,
     levelMeta,
@@ -168,6 +175,35 @@ function channelIndexForUrl(url: string, channels: readonly TiffChannelInfo[]): 
   }
 
   return channels.find((channel) => channel.fileName === fileName)?.index ?? 0
+}
+
+export function tiffImageSelectionUrl(url: string, ifdIndex: number): string {
+  const parsedUrl = new URL(url)
+  parsedUrl.hash = `ifd=${ifdIndex.toString()}`
+  return parsedUrl.toString()
+}
+
+function parseTiffImageSelection(url: string): {
+  readonly sourceUrl: string
+  readonly ifdIndex?: number
+} {
+  const parsedUrl = new URL(url)
+  const hash = parsedUrl.hash.startsWith('#') ? parsedUrl.hash.slice(1) : parsedUrl.hash
+  const params = new URLSearchParams(hash)
+  const rawIfdIndex = params.get('ifd')
+  parsedUrl.hash = ''
+
+  if (rawIfdIndex === null) {
+    return { sourceUrl: parsedUrl.toString() }
+  }
+
+  const ifdIndex = Number(rawIfdIndex)
+
+  if (!Number.isInteger(ifdIndex) || ifdIndex < 0) {
+    return { sourceUrl: parsedUrl.toString() }
+  }
+
+  return { sourceUrl: parsedUrl.toString(), ifdIndex }
 }
 
 async function readTileDecodeMetadata(
@@ -211,10 +247,12 @@ export class TiffPyramidLoader {
   private readonly chunks: ReadonlyMap<string, TiffChunk>
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly fetcher: typeof fetch
+  private readonly sourceUrl: string
   private readonly byteRangeCache: PersistentByteRangeCache | null
 
   constructor(options: TiffPyramidLoaderOptions) {
     this.url = options.url
+    this.sourceUrl = options.sourceUrl ?? options.url
     this.chunks = options.chunkIndex
     this.levels = options.levelMeta
     this.units = options.units
@@ -322,7 +360,7 @@ export class TiffPyramidLoader {
     return fetchByteRangeWithCache({
       cache: this.byteRangeCache,
       namespace: TIFF_TILE_CACHE_NAMESPACE,
-      url: this.url,
+      url: this.sourceUrl,
       start,
       end,
       ...(signal === undefined ? {} : { signal }),
@@ -337,7 +375,7 @@ export class TiffPyramidLoader {
           requestInit.signal = rangeSignal
         }
 
-        const response = await this.fetcher(this.url, requestInit)
+        const response = await this.fetcher(this.sourceUrl, requestInit)
 
         if (response.status !== 206) {
           throw new Error(

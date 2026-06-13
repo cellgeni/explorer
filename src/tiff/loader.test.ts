@@ -10,6 +10,7 @@ import {
   readOptionalNumberTag,
   readOptionalStringTag,
   readRequiredNumberTag,
+  tiffImageSelectionUrl,
   TiffPyramidLoader,
 } from './loader'
 import type { TiffChunk, TiffLevelMeta } from './loader'
@@ -110,6 +111,37 @@ describe('TiffPyramidLoader', () => {
 
     expect(requests).toHaveLength(0)
     expect(mutableRequests[0]?.headers).toEqual({ Range: 'bytes=10-13' })
+  })
+
+  it('uses the source TIFF URL for range fetches from selected IFD loaders', async () => {
+    const chunks = new Map<string, TiffChunk>([['0/0/0', { offset: 20, length: 3 }]])
+    const levels = new Map<number, TiffLevelMeta>([
+      [0, { width: imagePixels(100), height: imagePixels(100), nCols: 1, nRows: 1 }],
+    ])
+    const requestedUrls: string[] = []
+    const loader = new TiffPyramidLoader({
+      url: tiffImageSelectionUrl('https://example.test/image.ome.tif', 2),
+      sourceUrl: 'https://example.test/image.ome.tif',
+      chunkIndex: chunks,
+      levelMeta: levels,
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 1,
+      imageWidth: imagePixels(100),
+      imageHeight: imagePixels(100),
+      byteRangeCache: null,
+      fetcher: async (input) => {
+        requestedUrls.push(String(input))
+        return new Response(new Uint8Array([1, 2, 3]), { status: 206 })
+      },
+    })
+
+    expect(loader.url).toBe('https://example.test/image.ome.tif#ifd=2')
+    await expect(loader.fetchTileBytes(0, 0, 0)).resolves.toEqual(
+      new Uint8Array([1, 2, 3]),
+    )
+    expect(requestedUrls).toEqual(['https://example.test/image.ome.tif'])
   })
 
   it('reports cropped source dimensions for edge tiles', () => {

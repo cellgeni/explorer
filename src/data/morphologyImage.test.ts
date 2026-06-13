@@ -120,6 +120,78 @@ describe('morphology image loader', () => {
     )
   })
 
+  it('opens same-file OME channels from their declared IFD indices', async () => {
+    const channel0 = {
+      id: 'Channel:0:0',
+      index: 0,
+      name: 'Channel 1',
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 255 },
+      fileName: 'rgb.ome.tif',
+      ifdIndex: 0,
+    }
+    const channel1 = {
+      id: 'Channel:0:1',
+      index: 1,
+      name: 'Channel 2',
+      color: [32, 166, 122] as const,
+      contrast: { min: 0, max: 255 },
+      fileName: 'rgb.ome.tif',
+      ifdIndex: 1,
+    }
+    const channel2 = {
+      id: 'Channel:0:2',
+      index: 2,
+      name: 'Channel 3',
+      color: [240, 200, 75] as const,
+      contrast: { min: 0, max: 255 },
+      fileName: 'rgb.ome.tif',
+      ifdIndex: 2,
+    }
+    const loader0 = {
+      channels: [channel0, channel1, channel2],
+    } as unknown as TiffPyramidLoader
+    const loader1 = {
+      channels: [channel0, channel1, channel2],
+    } as unknown as TiffPyramidLoader
+    const loader2 = {
+      channels: [channel0, channel1, channel2],
+    } as unknown as TiffPyramidLoader
+    const openImage = vi.fn(async (url: string) => {
+      if (url.endsWith('#ifd=1')) {
+        return loader1
+      }
+
+      if (url.endsWith('#ifd=2')) {
+        return loader2
+      }
+
+      return loader0
+    })
+
+    await expect(
+      loadCustomMorphologyLayer('https://example.test/layers/rgb.ome.tif', {
+        openImage,
+      }),
+    ).resolves.toEqual({
+      url: 'https://example.test/layers/rgb.ome.tif',
+      loader: loader0,
+      channels: [channel0, channel1, channel2],
+      channelLoaders: [
+        { info: channel0, loader: loader0 },
+        { info: channel1, loader: loader1 },
+        { info: channel2, loader: loader2 },
+      ],
+    })
+    expect(openImage).toHaveBeenCalledWith('https://example.test/layers/rgb.ome.tif')
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/layers/rgb.ome.tif#ifd=1',
+    )
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/layers/rgb.ome.tif#ifd=2',
+    )
+  })
+
   it('opens a custom morphology layer directly from a remote URL', async () => {
     const channel0 = {
       id: 'Channel:0',

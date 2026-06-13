@@ -236,6 +236,9 @@ export function useViewerLayerData({
           enabled: setting?.enabled ?? false,
           color: setting?.color ?? channel.info.color,
           contrast,
+          ...(channel.info.alphaFromIntensity === undefined
+            ? {}
+            : { alphaFromIntensity: channel.info.alphaFromIntensity }),
         }
       }),
     [morphologyChannelSettings, morphologyChannels],

@@ -103,6 +103,27 @@ describe('OME-TIFF metadata parsing', () => {
     ])
   })
 
+  it('maps OME TiffData plane runs to per-channel IFD indices', () => {
+    const metadata = parseOmeTiffMetadata(`
+<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZCT" Type="uint8" SizeZ="1" SizeT="1" SizeC="3" PhysicalSizeX="0.5">
+      <Channel ID="Channel:0:0" SamplesPerPixel="1"/>
+      <Channel ID="Channel:0:1" SamplesPerPixel="1"/>
+      <Channel ID="Channel:0:2" SamplesPerPixel="1"/>
+      <TiffData IFD="0" PlaneCount="3"/>
+    </Pixels>
+  </Image>
+</OME>`)
+
+    expect(metadata.channels.map((channel) => channel.ifdIndex)).toEqual([0, 1, 2])
+    expect(metadata.channels.map((channel) => channel.name)).toEqual([
+      'Channel 1',
+      'Channel 2',
+      'Channel 3',
+    ])
+  })
+
   it('falls back to the Xenium pixel size when OME metadata is missing', () => {
     expect(parseOmeTiffMetadata(undefined)).toEqual({
       micrometersPerPixel: 0.2125,

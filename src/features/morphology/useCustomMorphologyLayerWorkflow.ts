@@ -16,6 +16,7 @@ import {
 } from './morphologyChannels'
 import {
   createCustomMorphologyLayer,
+  customMorphologyLayerDefaultEnabledChannelIds,
   customMorphologyLayerChannelIds,
   isCustomMorphologyLayerChannelId,
   type CustomMorphologyLayer,
@@ -111,7 +112,9 @@ export function useCustomMorphologyLayerWorkflow({
           `custom-layer:${customLayerIdRef.current}`,
           image,
         )
-        const settings = createMorphologyChannelSettingsFromChannels(layer.channels)
+        const settings = createMorphologyChannelSettingsFromChannels(layer.channels, {
+          enabledChannelIds: customMorphologyLayerDefaultEnabledChannelIds(layer),
+        })
 
         setCustomLayers((current) =>
           current.some((candidate) => candidate.image.url === image.url)

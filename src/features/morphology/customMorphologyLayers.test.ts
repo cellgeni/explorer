@@ -4,6 +4,7 @@ import type { TiffPyramidLoader } from '../../tiff/loader'
 import {
   createCustomMorphologyLayer,
   customMorphologyLayerChannels,
+  customMorphologyLayerDefaultEnabledChannelIds,
   isCustomMorphologyLayerChannelId,
 } from './customMorphologyLayers'
 
@@ -60,5 +61,75 @@ describe('customMorphologyLayers', () => {
       name: 'plain.ome.tif',
       color: [255, 255, 255],
     })
+  })
+
+  it('treats generic three-plane uint8 custom images as native RGB', () => {
+    const loader0 = {} as TiffPyramidLoader
+    const loader1 = {} as TiffPyramidLoader
+    const loader2 = {} as TiffPyramidLoader
+    const layer = createCustomMorphologyLayer('custom-layer:3', {
+      url: 'https://example.test/layers/rgb.ome.tif',
+      loader: loader0,
+      channels: [],
+      channelLoaders: [
+        {
+          info: {
+            id: 'Channel:0:0',
+            index: 0,
+            name: 'Channel 1',
+            color: [88, 144, 255],
+            contrast: { min: 0, max: 255 },
+            fileName: 'rgb.ome.tif',
+            ifdIndex: 0,
+          },
+          loader: loader0,
+        },
+        {
+          info: {
+            id: 'Channel:0:1',
+            index: 1,
+            name: 'Channel 2',
+            color: [32, 166, 122],
+            contrast: { min: 0, max: 255 },
+            fileName: 'rgb.ome.tif',
+            ifdIndex: 1,
+          },
+          loader: loader1,
+        },
+        {
+          info: {
+            id: 'Channel:0:2',
+            index: 2,
+            name: 'Channel 3',
+            color: [240, 200, 75],
+            contrast: { min: 0, max: 255 },
+            fileName: 'rgb.ome.tif',
+            ifdIndex: 2,
+          },
+          loader: loader2,
+        },
+      ],
+    })
+
+    expect(layer.channels.map((channel) => channel.info.name)).toEqual([
+      'rgb.ome.tif / Red',
+      'rgb.ome.tif / Green',
+      'rgb.ome.tif / Blue',
+    ])
+    expect(layer.channels.map((channel) => channel.info.color)).toEqual([
+      [255, 0, 0],
+      [0, 255, 0],
+      [0, 0, 255],
+    ])
+    expect(layer.channels.map((channel) => channel.info.alphaFromIntensity)).toEqual([
+      false,
+      false,
+      false,
+    ])
+    expect(customMorphologyLayerDefaultEnabledChannelIds(layer)).toEqual([
+      'custom-layer:3:Channel:0:0',
+      'custom-layer:3:Channel:0:1',
+      'custom-layer:3:Channel:0:2',
+    ])
   })
 })

@@ -10,6 +10,8 @@ export interface TiffChannelInfo {
   readonly color: readonly [number, number, number]
   readonly contrast: TiffChannelContrast
   readonly fileName?: string
+  readonly ifdIndex?: number
+  readonly alphaFromIntensity?: boolean
   readonly purpose?: string
 }
 
@@ -57,13 +59,13 @@ export function parseOmeTiffMetadata(description: string | undefined): OmeTiffMe
 
   const contrast = contrastForPixelType(pixels.getAttribute('Type'))
   const purposes = readAnnotationPurposes(document)
-  const fileNamesByChannel = readChannelFileNames(pixels)
+  const tiffDataByChannel = readChannelTiffData(pixels)
   const channels = elements(pixels, 'Channel').map((channel, index) => {
     const channelIndex = readChannelIndex(channel, index)
     const purpose = readChannelPurpose(channel, purposes)
     const name =
       readOptionalAttribute(channel, 'Name') ?? purpose ?? `Channel ${channelIndex + 1}`
-    const fileName = fileNamesByChannel.get(channelIndex)
+    const tiffData = tiffDataByChannel.get(channelIndex)
     const color =
       parseOmeColor(channel.getAttribute('Color')) ??
       defaultChannelColor({
@@ -78,7 +80,8 @@ export function parseOmeTiffMetadata(description: string | undefined): OmeTiffMe
       name,
       color,
       contrast,
-      ...(fileName === undefined ? {} : { fileName }),
+      ...(tiffData?.fileName === undefined ? {} : { fileName: tiffData.fileName }),
+      ...(tiffData?.ifdIndex === undefined ? {} : { ifdIndex: tiffData.ifdIndex }),
       ...(purpose === undefined ? {} : { purpose }),
     }
   })
@@ -163,25 +166,46 @@ function readChannelPurpose(
   return undefined
 }
 
-function readChannelFileNames(pixels: Element): ReadonlyMap<number, string> {
-  const fileNames = new Map<number, string>()
+interface ChannelTiffData {
+  readonly fileName?: string
+  readonly ifdIndex?: number
+}
+
+function readChannelTiffData(pixels: Element): ReadonlyMap<number, ChannelTiffData> {
+  const tiffDataByChannel = new Map<number, ChannelTiffData>()
+  const sizeC = readIntegerAttribute(pixels, 'SizeC') ?? 1
+  const sizeZ = readIntegerAttribute(pixels, 'SizeZ') ?? 1
+  const sizeT = readIntegerAttribute(pixels, 'SizeT') ?? 1
 
   for (const tiffData of elements(pixels, 'TiffData')) {
-    const firstC = readIntegerAttribute(tiffData, 'FirstC')
-
-    if (firstC === undefined) {
-      continue
-    }
-
+    const firstC = readIntegerAttribute(tiffData, 'FirstC') ?? 0
+    const firstIfd = readIntegerAttribute(tiffData, 'IFD')
+    const planeCount = readIntegerAttribute(tiffData, 'PlaneCount') ?? 1
+    const channelsInPlaneRun =
+      sizeZ === 1 && sizeT === 1 ? Math.min(planeCount, sizeC - firstC) : 1
     const uuid = firstElement(tiffData, 'UUID')
     const fileName = uuid?.getAttribute('FileName')?.trim()
 
-    if (fileName !== undefined && fileName.length > 0) {
-      fileNames.set(firstC, fileName)
+    if (channelsInPlaneRun <= 0) {
+      continue
+    }
+
+    for (let offset = 0; offset < channelsInPlaneRun; offset += 1) {
+      const channelIndex = firstC + offset
+      const current = tiffDataByChannel.get(channelIndex)
+      const next = {
+        ...(current ?? {}),
+        ...(fileName === undefined || fileName.length === 0 ? {} : { fileName }),
+        ...(firstIfd === undefined ? {} : { ifdIndex: firstIfd + offset }),
+      }
+
+      if (Object.keys(next).length > 0) {
+        tiffDataByChannel.set(channelIndex, next)
+      }
     }
   }
 
-  return fileNames
+  return tiffDataByChannel
 }
 
 function readChannelIndex(channel: Element, fallback: number): number {

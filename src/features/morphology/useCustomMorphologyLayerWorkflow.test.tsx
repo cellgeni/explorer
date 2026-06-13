@@ -134,6 +134,88 @@ describe('useCustomMorphologyLayerWorkflow', () => {
     expect(snapshot.morphologyChannelSettings).toHaveLength(0)
   })
 
+  it('enables all native RGB custom channels when loaded', async () => {
+    const loader = {} as TiffPyramidLoader
+    const image: MorphologyImage = {
+      url: 'https://example.test/layers/rgb.ome.tif',
+      loader,
+      channels: [],
+      channelLoaders: [
+        {
+          info: {
+            id: 'Channel:0:0',
+            index: 0,
+            name: 'Channel 1',
+            color: [88, 144, 255],
+            contrast: { min: 0, max: 255 },
+            fileName: 'rgb.ome.tif',
+            ifdIndex: 0,
+          },
+          loader,
+        },
+        {
+          info: {
+            id: 'Channel:0:1',
+            index: 1,
+            name: 'Channel 2',
+            color: [32, 166, 122],
+            contrast: { min: 0, max: 255 },
+            fileName: 'rgb.ome.tif',
+            ifdIndex: 1,
+          },
+          loader,
+        },
+        {
+          info: {
+            id: 'Channel:0:2',
+            index: 2,
+            name: 'Channel 3',
+            color: [240, 200, 75],
+            contrast: { min: 0, max: 255 },
+            fileName: 'rgb.ome.tif',
+            ifdIndex: 2,
+          },
+          loader,
+        },
+      ],
+    }
+
+    render(
+      <Probe
+        loadCustomMorphologyLayer={vi.fn(async () => image)}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      const loaded = await api.handleLoadCustomLayer(
+        'https://example.test/layers/rgb.ome.tif',
+      )
+      expect(loaded).toBe(true)
+    })
+
+    expect(snapshot.morphologyChannelSettings).toEqual([
+      expect.objectContaining({
+        id: 'custom-layer:1:Channel:0:0',
+        enabled: true,
+        color: [255, 0, 0],
+      }),
+      expect.objectContaining({
+        id: 'custom-layer:1:Channel:0:1',
+        enabled: true,
+        color: [0, 255, 0],
+      }),
+      expect.objectContaining({
+        id: 'custom-layer:1:Channel:0:2',
+        enabled: true,
+        color: [0, 0, 255],
+      }),
+    ])
+  })
+
   it('surfaces invalid custom layer URLs', async () => {
     render(
       <Probe

@@ -1,5 +1,11 @@
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 
+const RGB_CHANNELS = [
+  { name: 'Red', color: [255, 0, 0] },
+  { name: 'Green', color: [0, 255, 0] },
+  { name: 'Blue', color: [0, 0, 255] },
+] as const
+
 export interface CustomMorphologyLayer {
   readonly id: string
   readonly label: string
@@ -42,6 +48,17 @@ export function customMorphologyLayerChannelIds(
   return layer.channels.map((channel) => channel.info.id)
 }
 
+export function customMorphologyLayerDefaultEnabledChannelIds(
+  layer: CustomMorphologyLayer,
+): readonly string[] {
+  if (isNativeRgbCustomMorphologyLayer(layer)) {
+    return layer.channels.map((channel) => channel.info.id)
+  }
+
+  const firstChannelId = layer.channels[0]?.info.id
+  return firstChannelId === undefined ? [] : [firstChannelId]
+}
+
 export function isCustomMorphologyLayerChannelId(
   layerId: string,
   channelId: string,
@@ -62,6 +79,26 @@ function prefixedCustomLayerChannels(
   label: string,
   image: MorphologyImage,
 ): readonly MorphologyImageChannel[] {
+  if (isNativeRgbCustomMorphologyImage(image)) {
+    return image.channelLoaders.map((channel, index) => {
+      const rgbChannel = RGB_CHANNELS[index]
+
+      return {
+        loader: channel.loader,
+        info: {
+          ...channel.info,
+          id: `${layerId}:${channel.info.id}`,
+          name:
+            rgbChannel === undefined
+              ? `${label} / ${channel.info.name}`
+              : `${label} / ${rgbChannel.name}`,
+          color: rgbChannel?.color ?? channel.info.color,
+          alphaFromIntensity: false,
+        },
+      }
+    })
+  }
+
   if (image.channelLoaders.length === 0) {
     return [
       {
@@ -85,4 +122,59 @@ function prefixedCustomLayerChannels(
       name: `${label} / ${channel.info.name}`,
     },
   }))
+}
+
+function isNativeRgbCustomMorphologyLayer(layer: CustomMorphologyLayer): boolean {
+  return (
+    layer.channels.length === RGB_CHANNELS.length &&
+    layer.channels.every(
+      (channel, index) =>
+        channel.info.alphaFromIntensity === false &&
+        colorsEqual(channel.info.color, RGB_CHANNELS[index]?.color),
+    )
+  )
+}
+
+function isNativeRgbCustomMorphologyImage(image: MorphologyImage): boolean {
+  return (
+    image.channelLoaders.length === RGB_CHANNELS.length &&
+    image.channelLoaders.every((channel, index) => {
+      const expectedName = `channel ${index + 1}`
+
+      return (
+        channel.info.contrast.min === 0 &&
+        channel.info.contrast.max === 255 &&
+        channelFileNameMatchesImage(image.url, channel.info.fileName) &&
+        channel.info.name.trim().toLowerCase() === expectedName &&
+        (channel.info.ifdIndex === undefined || channel.info.ifdIndex === index)
+      )
+    })
+  )
+}
+
+function channelFileNameMatchesImage(
+  imageUrl: string,
+  fileName: string | undefined,
+): boolean {
+  if (fileName === undefined) {
+    return true
+  }
+
+  const channelUrl = new URL(fileName, imageUrl)
+  const sourceUrl = new URL(imageUrl)
+  channelUrl.hash = ''
+  sourceUrl.hash = ''
+  return channelUrl.toString() === sourceUrl.toString()
+}
+
+function colorsEqual(
+  left: readonly [number, number, number],
+  right: readonly [number, number, number] | undefined,
+): boolean {
+  return (
+    right !== undefined &&
+    left[0] === right[0] &&
+    left[1] === right[1] &&
+    left[2] === right[2]
+  )
 }

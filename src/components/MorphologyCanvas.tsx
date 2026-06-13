@@ -33,6 +33,7 @@ export interface MorphologyCanvasChannel {
   readonly enabled: boolean
   readonly color: readonly [number, number, number]
   readonly contrast?: DisplayWindow
+  readonly alphaFromIntensity?: boolean
   readonly opacity?: number
 }
 
@@ -295,7 +296,7 @@ function prepareChannelRequest(options: {
       cache: new TileCache({
         maxTiles: Math.min(scheduling.maxCacheTiles, normalMaxTiles),
         color: options.channel.color,
-        alphaFromIntensity: true,
+        alphaFromIntensity: options.channel.alphaFromIntensity ?? true,
         ...(options.channel.contrast === undefined
           ? {}
           : { displayWindow: options.channel.contrast }),
@@ -328,7 +329,8 @@ function channelCacheKey(channel: MorphologyCanvasChannel): string {
     channel.contrast === undefined
       ? 'auto'
       : `${channel.contrast.lo.toString()}:${channel.contrast.hi.toString()}`
-  return `${channel.id}:${channel.loader.url}:${contrastKey}`
+  const alphaKey = channel.alphaFromIntensity === false ? 'opaque' : 'intensity-alpha'
+  return `${channel.id}:${channel.loader.url}:${contrastKey}:${alphaKey}`
 }
 
 function pruneInactiveCacheRecords(

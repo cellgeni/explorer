@@ -6,6 +6,9 @@ import { micrometers } from '../../data/coords'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import { useViewerLayerData } from './useViewerLayerData'
+import type { MorphologyImageChannel } from '../../data/morphologyImage'
+import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
+import type { TiffPyramidLoader } from '../../tiff/loader'
 
 const overviewCells: readonly OverviewCellDatum[] = [
   {
@@ -139,5 +142,79 @@ describe('useViewerLayerData', () => {
 
     expect(result.viewerObservationColorMode).toBe('metadata')
     expect(result.activeCellMetadataTrack?.id).toBe('metadata:confidence')
+  })
+
+  it('passes morphology channel alpha rendering metadata to the canvas model', () => {
+    const loader = {} as TiffPyramidLoader
+    const morphologyChannels: readonly MorphologyImageChannel[] = [
+      {
+        info: {
+          id: 'custom-layer:1:Channel:0:0',
+          index: 0,
+          name: 'rgb.ome.tif / Red',
+          color: [255, 0, 0],
+          contrast: { min: 0, max: 255 },
+          alphaFromIntensity: false,
+        },
+        loader,
+      },
+    ]
+    const morphologyChannelSettings: readonly MorphologyChannelSetting[] = [
+      {
+        id: 'custom-layer:1:Channel:0:0',
+        enabled: true,
+        color: [255, 0, 0],
+        contrastMin: 0,
+        contrastMax: 255,
+      },
+    ]
+
+    function MorphologyProbe({
+      onReady,
+    }: {
+      readonly onReady: (nextResult: Result) => void
+    }) {
+      const nextResult = useViewerLayerData({
+        annotationColors: {},
+        annotationState: { status: 'idle' },
+        cellMetadataTrack: null,
+        boundaryElements: [],
+        currentViewportBbox: null,
+        geneExpressionBatch: null,
+        geneExpressionColorScale: 'plasma',
+        geneExpressionScaleDatasetUrl: 'https://example.test/output',
+        geneExpressionScaleDomain: { key: '', max: 0 },
+        geneExpressionScoreMode: 'sum',
+        morphologyChannelSettings,
+        morphologyChannels,
+        morphologyImage: null,
+        observationColorMode: 'annotations',
+        overviewCells,
+        selectedGenes: [],
+        transcriptDensityColorScale: 'thermal',
+        transcriptLayerState: { status: 'idle' },
+        transcriptPointColorMode: 'feature',
+      })
+
+      React.useEffect(() => {
+        onReady(nextResult)
+      })
+
+      return null
+    }
+
+    render(
+      <MorphologyProbe
+        onReady={(nextResult) => {
+          result = nextResult
+        }}
+      />,
+    )
+
+    expect(result.morphologyCanvasChannels[0]).toMatchObject({
+      id: 'custom-layer:1:Channel:0:0',
+      enabled: true,
+      alphaFromIntensity: false,
+    })
   })
 })
