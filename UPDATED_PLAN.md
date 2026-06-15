@@ -1192,6 +1192,14 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       `tissue_positions.parquet`. The disabled reason now names the intended
       budgeted strategies: filtered matrix barcodes with a derived affine grid
       or viewport/tiled position loading.
+- [x] Continued Slice 7 by adding the filtered-matrix barcode sidecar path.
+      Space Ranger square barcodes such as `s_002um_*_*` can now be parsed into
+      barcode, bin size, row, and column fields; `VisiumHdDataset` can load and
+      cache `filtered_feature_bc_matrix/barcodes.tsv.gz`; and pure helpers can
+      derive finer affine grid bases from coarser loaded tiers and build
+      columnar binned overviews from filtered barcodes without reading the full
+      2 µm `tissue_positions.parquet`. The UI still keeps 2 µm rendering
+      disabled until a viewport or barcode-count budget is wired in.
 
 ### Definition Of Done For The First Visium HD MVP
 

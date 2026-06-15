@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { micrometers } from '../data/coords'
 import {
   deriveNestedGridBasis,
+  deriveSubdividedGridBasis,
   fitGridBasis,
   gridCellCenter,
   gridCellCorners,
@@ -84,5 +85,29 @@ describe('spatial grid geometry', () => {
       x: micrometers(0),
       y: micrometers(8),
     })
+  })
+
+  it('derives subdivided finer grid bases from a coarser-tier basis', () => {
+    const coarserBasis: SpatialGridBasis = {
+      origin: { x: micrometers(3), y: micrometers(3) },
+      rowStep: { x: micrometers(8), y: micrometers(0) },
+      colStep: { x: micrometers(0), y: micrometers(8) },
+    }
+
+    const finestBasis = deriveSubdividedGridBasis(coarserBasis, 4)
+
+    expect(finestBasis.origin).toEqual({
+      x: micrometers(0),
+      y: micrometers(0),
+    })
+    expect(finestBasis.rowStep).toEqual({
+      x: micrometers(2),
+      y: micrometers(0),
+    })
+    expect(finestBasis.colStep).toEqual({
+      x: micrometers(0),
+      y: micrometers(2),
+    })
+    expect(deriveNestedGridBasis(finestBasis, 4)).toEqual(coarserBasis)
   })
 })

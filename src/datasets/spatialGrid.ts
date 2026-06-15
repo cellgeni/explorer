@@ -99,13 +99,11 @@ export function deriveNestedGridBasis(
   finestBasis: SpatialGridBasis,
   scaleFactor: number,
 ): SpatialGridBasis {
-  if (!Number.isInteger(scaleFactor) || scaleFactor < 1) {
-    throw new RangeError(
-      `Nested grid scale factor must be a positive integer, received ${scaleFactor}.`,
-    )
-  }
+  assertPositiveIntegerScale(scaleFactor, 'Nested grid scale factor')
 
   const centerOffset = (scaleFactor - 1) / 2
+  const rowStep = scaleVector(finestBasis.rowStep, scaleFactor)
+  const colStep = scaleVector(finestBasis.colStep, scaleFactor)
 
   return {
     origin: {
@@ -118,8 +116,28 @@ export function deriveNestedGridBasis(
           centerOffset * (finestBasis.rowStep.y + finestBasis.colStep.y),
       ),
     },
-    rowStep: scaleVector(finestBasis.rowStep, scaleFactor),
-    colStep: scaleVector(finestBasis.colStep, scaleFactor),
+    rowStep,
+    colStep,
+  }
+}
+
+export function deriveSubdividedGridBasis(
+  coarserBasis: SpatialGridBasis,
+  scaleFactor: number,
+): SpatialGridBasis {
+  assertPositiveIntegerScale(scaleFactor, 'Subdivided grid scale factor')
+
+  const rowStep = divideVector(coarserBasis.rowStep, scaleFactor)
+  const colStep = divideVector(coarserBasis.colStep, scaleFactor)
+  const centerOffset = (scaleFactor - 1) / 2
+
+  return {
+    origin: {
+      x: micrometers(coarserBasis.origin.x - centerOffset * (rowStep.x + colStep.x)),
+      y: micrometers(coarserBasis.origin.y - centerOffset * (rowStep.y + colStep.y)),
+    },
+    rowStep,
+    colStep,
   }
 }
 
@@ -161,6 +179,22 @@ function scaleVector(
   return {
     x: micrometers(vector.x * scale),
     y: micrometers(vector.y * scale),
+  }
+}
+
+function divideVector(
+  vector: { readonly x: Micrometers; readonly y: Micrometers },
+  divisor: number,
+): { readonly x: Micrometers; readonly y: Micrometers } {
+  return {
+    x: micrometers(vector.x / divisor),
+    y: micrometers(vector.y / divisor),
+  }
+}
+
+function assertPositiveIntegerScale(value: number, label: string): void {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new RangeError(`${label} must be a positive integer, received ${value}.`)
   }
 }
 

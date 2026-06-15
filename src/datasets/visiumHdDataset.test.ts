@@ -7,6 +7,7 @@ import {
   VISIUM_HD_TISSUE_POSITION_COLUMNS,
   VisiumHdDataset,
   createVisiumHdBinnedOverview,
+  createVisiumHdBinnedOverviewFromSquareBarcodes,
   parseVisiumHdFeatureRows,
   parseVisiumHdScalefactors,
   parseVisiumHdTissuePositionRows,
@@ -138,6 +139,47 @@ describe('Visium HD dataset readers', () => {
     expect(featureGenePanelReader).toHaveBeenCalledWith(
       'https://example.test/visium',
       bin16,
+      { fetcher },
+    )
+  })
+
+  it('loads and caches filtered matrix barcodes for the selected bin', async () => {
+    const fetcher = vi.fn(async () => new Response('unused'))
+    const filteredMatrixBarcodeReader = vi.fn(async () => [
+      {
+        barcode: 's_002um_000001_000002-1',
+        binSizeMicrometers: 2 as const,
+        row: 1,
+        col: 2,
+      },
+    ])
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin2],
+      fetcher,
+      filteredMatrixBarcodeReader,
+    })
+
+    await expect(dataset.filteredMatrixBarcodes(2)).resolves.toEqual([
+      {
+        barcode: 's_002um_000001_000002-1',
+        binSizeMicrometers: 2,
+        row: 1,
+        col: 2,
+      },
+    ])
+    await expect(dataset.filteredMatrixBarcodes(2)).resolves.toEqual([
+      {
+        barcode: 's_002um_000001_000002-1',
+        binSizeMicrometers: 2,
+        row: 1,
+        col: 2,
+      },
+    ])
+    expect(filteredMatrixBarcodeReader).toHaveBeenCalledTimes(1)
+    expect(filteredMatrixBarcodeReader).toHaveBeenCalledWith(
+      'https://example.test/visium',
+      bin2,
       { fetcher },
     )
   })
@@ -274,6 +316,75 @@ describe('Visium HD dataset readers', () => {
     expect(tissuePositionsReader).not.toHaveBeenCalled()
   })
 
+  it('creates a binned overview from filtered matrix square barcodes and a derived basis', () => {
+    const overview = createVisiumHdBinnedOverviewFromSquareBarcodes(
+      bin2,
+      [
+        {
+          barcode: 's_002um_000001_000002-1',
+          binSizeMicrometers: 2,
+          row: 1,
+          col: 2,
+        },
+        {
+          barcode: 's_002um_000003_000004-1',
+          binSizeMicrometers: 2,
+          row: 3,
+          col: 4,
+        },
+      ],
+      { ...scalefactors, binSizeMicrometers: 2 },
+      {
+        origin: { x: micrometers(0), y: micrometers(0) },
+        rowStep: { x: micrometers(0), y: micrometers(2) },
+        colStep: { x: micrometers(2), y: micrometers(0) },
+      },
+    )
+
+    expect(overview.binSizeMicrometers).toBe(2)
+    expect(overview.grid.id).toBe('visium-hd-square-002um')
+    expect(overview.grid.bounds).toEqual({
+      minRow: 1,
+      maxRow: 3,
+      minCol: 2,
+      maxCol: 4,
+    })
+    expect(overview.gridCells.ids).toEqual([
+      's_002um_000001_000002-1',
+      's_002um_000003_000004-1',
+    ])
+    expect(Array.from(overview.gridCells.rows)).toEqual([1, 3])
+    expect(Array.from(overview.gridCells.cols)).toEqual([2, 4])
+    expect(Array.from(overview.fullresRows)).toEqual([4, 12])
+    expect(Array.from(overview.fullresCols)).toEqual([8, 16])
+    expect(Array.from(overview.inTissue)).toEqual([1, 1])
+    expect(overview.sourcePaths.filteredMatrixBarcodes).toBe(
+      'binned_outputs/square_002um/filtered_feature_bc_matrix/barcodes.tsv.gz',
+    )
+  })
+
+  it('rejects filtered barcode overviews when barcode tiers are mixed', () => {
+    expect(() =>
+      createVisiumHdBinnedOverviewFromSquareBarcodes(
+        bin2,
+        [
+          {
+            barcode: 's_008um_000001_000002-1',
+            binSizeMicrometers: 8,
+            row: 1,
+            col: 2,
+          },
+        ],
+        scalefactors,
+        {
+          origin: { x: micrometers(0), y: micrometers(0) },
+          rowStep: { x: micrometers(0), y: micrometers(2) },
+          colStep: { x: micrometers(2), y: micrometers(0) },
+        },
+      ),
+    ).toThrow('Expected 2 µm barcode, received 8 µm')
+  })
+
   it('does not choose 2 µm as a first-paint default tier', async () => {
     const tissuePositionsReader = vi.fn(async () =>
       parseVisiumHdTissuePositionRows([
@@ -309,14 +420,32 @@ describe('Visium HD dataset readers', () => {
     expect(tissuePositionsReader).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects 2 µm-only datasets until a budgeted first-paint strategy exists', () => {
-    expect(
-      () =>
-        new VisiumHdDataset({
-          baseUrl: 'https://example.test/visium/',
-          bins: [bin2],
-        }),
-    ).toThrow(VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON)
+  it('allows 2 µm-only datasets to construct while rejecting unsafe overview reads', async () => {
+    const filteredMatrixBarcodeReader = vi.fn(async () => [
+      {
+        barcode: 's_002um_000001_000002-1',
+        binSizeMicrometers: 2 as const,
+        row: 1,
+        col: 2,
+      },
+    ])
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin2],
+      filteredMatrixBarcodeReader,
+    })
+
+    await expect(dataset.readBinnedOverview()).rejects.toThrow(
+      VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
+    )
+    await expect(dataset.filteredMatrixBarcodes()).resolves.toEqual([
+      {
+        barcode: 's_002um_000001_000002-1',
+        binSizeMicrometers: 2,
+        row: 1,
+        col: 2,
+      },
+    ])
   })
 
   it('reads binned matrix rows by Visium HD barcode', async () => {

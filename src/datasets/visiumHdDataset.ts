@@ -12,6 +12,12 @@ import {
   type VisiumFeatureSliceReadOptions,
   type VisiumFeatureSliceTarget,
 } from '../data/visiumFeatureSlice'
+import { readMaybeGzipText } from '../data/readMaybeGzipText'
+import {
+  readVisiumHdFilteredMatrixBarcodes,
+  type ReadVisiumHdFilteredMatrixBarcodesOptions,
+  type VisiumHdSquareBarcode,
+} from './visiumHdBarcodes'
 import {
   VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
   VisiumHdTwoMicrometerOverviewDisabledError,
@@ -32,6 +38,7 @@ import type {
   GridCellBatch,
   ImageSource,
   SpatialGrid,
+  SpatialGridBasis,
   SpatialDataset,
   SpatialElementId,
 } from './spatialDataset'
@@ -64,6 +71,11 @@ export interface VisiumHdDatasetOptions {
     bin: VisiumHdBinDescriptor,
     options: ReadVisiumHdFeatureGenePanelOptions,
   ) => Promise<readonly string[]>
+  readonly filteredMatrixBarcodeReader?: (
+    baseUrl: string,
+    bin: VisiumHdBinDescriptor,
+    options: ReadVisiumHdFilteredMatrixBarcodesOptions,
+  ) => Promise<readonly VisiumHdSquareBarcode[]>
   readonly featureMatrixReader?: (
     url: string,
     ids: readonly SpatialElementId[],
@@ -110,6 +122,7 @@ export interface VisiumHdBinnedOverview {
     readonly tissueHiresImage: string
     readonly tissueLowresImage: string
     readonly filteredMatrixH5: string
+    readonly filteredMatrixBarcodes?: string
   }
 }
 
@@ -218,6 +231,11 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     bin: VisiumHdBinDescriptor,
     options: ReadVisiumHdFeatureGenePanelOptions,
   ) => Promise<readonly string[]>
+  private readonly filteredMatrixBarcodeReader: (
+    baseUrl: string,
+    bin: VisiumHdBinDescriptor,
+    options: ReadVisiumHdFilteredMatrixBarcodesOptions,
+  ) => Promise<readonly VisiumHdSquareBarcode[]>
   private readonly featureMatrixReader: (
     url: string,
     ids: readonly SpatialElementId[],
@@ -243,6 +261,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     VisiumHdBinSizeMicrometers,
     Promise<readonly string[]>
   >()
+  private readonly filteredMatrixBarcodePromises = new Map<
+    VisiumHdBinSizeMicrometers,
+    Promise<readonly VisiumHdSquareBarcode[]>
+  >()
 
   constructor(options: VisiumHdDatasetOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl)
@@ -255,6 +277,8 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     this.scalefactorsReader = options.scalefactorsReader ?? readVisiumHdScalefactors
     this.featureGenePanelReader =
       options.featureGenePanelReader ?? readVisiumHdFeatureGenePanel
+    this.filteredMatrixBarcodeReader =
+      options.filteredMatrixBarcodeReader ?? readVisiumHdFilteredMatrixBarcodes
     this.featureMatrixReader =
       options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
@@ -345,6 +369,35 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
 
   annotations(): Promise<readonly Annotation<SpatialElementId>[]> {
     return Promise.reject(visiumHdNotImplementedError('annotation loading'))
+  }
+
+  filteredMatrixBarcodes(
+    binSizeMicrometers = this.defaultBinSizeMicrometers,
+    options: ReadVisiumHdFilteredMatrixBarcodesOptions = {},
+  ): Promise<readonly VisiumHdSquareBarcode[]> {
+    const existing = this.filteredMatrixBarcodePromises.get(binSizeMicrometers)
+
+    if (existing !== undefined && options.signal === undefined) {
+      return existing
+    }
+
+    const bin = findBin(this.bins, binSizeMicrometers)
+    const promise = this.filteredMatrixBarcodeReader(this.baseUrl, bin, {
+      fetcher: this.fetcher,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    }).catch((error: unknown) => {
+      if (this.filteredMatrixBarcodePromises.get(binSizeMicrometers) === promise) {
+        this.filteredMatrixBarcodePromises.delete(binSizeMicrometers)
+      }
+
+      throw error
+    })
+
+    if (options.signal === undefined) {
+      this.filteredMatrixBarcodePromises.set(binSizeMicrometers, promise)
+    }
+
+    return promise
   }
 
   async image(
@@ -814,6 +867,94 @@ export function createVisiumHdBinnedOverview(
       tissueHiresImage: `${bin.outputPath}/spatial/tissue_hires_image.png`,
       tissueLowresImage: `${bin.outputPath}/spatial/tissue_lowres_image.png`,
       filteredMatrixH5: bin.filteredMatrixH5Path,
+      filteredMatrixBarcodes: `${bin.outputPath}/filtered_feature_bc_matrix/barcodes.tsv.gz`,
+    },
+  }
+}
+
+export function createVisiumHdBinnedOverviewFromSquareBarcodes(
+  bin: VisiumHdBinDescriptor,
+  barcodes: readonly VisiumHdSquareBarcode[],
+  scalefactors: VisiumHdScalefactors,
+  basis: SpatialGridBasis,
+): VisiumHdBinnedOverview {
+  if (barcodes.length === 0) {
+    throw new Error(
+      'No Visium HD filtered matrix barcodes were available for the binned overview.',
+    )
+  }
+
+  const ids = new Array<SpatialElementId>(barcodes.length)
+  const rows = new Int32Array(barcodes.length)
+  const cols = new Int32Array(barcodes.length)
+  const fullresRows = new Float64Array(barcodes.length)
+  const fullresCols = new Float64Array(barcodes.length)
+  const inTissue = new Uint8Array(barcodes.length)
+  let minRow = Number.POSITIVE_INFINITY
+  let maxRow = Number.NEGATIVE_INFINITY
+  let minCol = Number.POSITIVE_INFINITY
+  let maxCol = Number.NEGATIVE_INFINITY
+
+  for (let index = 0; index < barcodes.length; index += 1) {
+    const barcode = barcodes[index]
+
+    if (barcode === undefined) {
+      throw new Error(`Missing Visium HD barcode row ${index}.`)
+    }
+
+    if (barcode.binSizeMicrometers !== bin.binSizeMicrometers) {
+      throw new Error(
+        `Expected ${bin.binSizeMicrometers} µm barcode, received ${barcode.binSizeMicrometers} µm: ${barcode.barcode}`,
+      )
+    }
+
+    const center = gridCellCenter(basis, barcode.row, barcode.col)
+
+    ids[index] = barcode.barcode
+    rows[index] = barcode.row
+    cols[index] = barcode.col
+    fullresRows[index] = dataPointToFullresRow(center, scalefactors)
+    fullresCols[index] = dataPointToFullresCol(center, scalefactors)
+    inTissue[index] = 1
+    minRow = Math.min(minRow, barcode.row)
+    maxRow = Math.max(maxRow, barcode.row)
+    minCol = Math.min(minCol, barcode.col)
+    maxCol = Math.max(maxCol, barcode.col)
+  }
+
+  const grid: SpatialGrid = {
+    id: visiumHdGridId(bin.binSizeMicrometers),
+    binSizeMicrometers: micrometers(bin.binSizeMicrometers),
+    basis,
+    bounds: {
+      minRow,
+      maxRow,
+      minCol,
+      maxCol,
+    },
+  }
+
+  return {
+    binSizeMicrometers: bin.binSizeMicrometers,
+    scalefactors,
+    grid,
+    gridCells: {
+      kind: 'grid-cells',
+      gridId: grid.id,
+      ids,
+      rows,
+      cols,
+    },
+    fullresRows,
+    fullresCols,
+    inTissue,
+    sourcePaths: {
+      tissuePositions: bin.tissuePositionsPath,
+      scalefactors: bin.scalefactorsPath,
+      tissueHiresImage: `${bin.outputPath}/spatial/tissue_hires_image.png`,
+      tissueLowresImage: `${bin.outputPath}/spatial/tissue_lowres_image.png`,
+      filteredMatrixH5: bin.filteredMatrixH5Path,
+      filteredMatrixBarcodes: `${bin.outputPath}/filtered_feature_bc_matrix/barcodes.tsv.gz`,
     },
   }
 }
@@ -839,25 +980,6 @@ function visiumHdNotImplementedError(capability: string): Error {
   return new Error(`Visium HD ${capability} is not implemented yet.`)
 }
 
-async function readMaybeGzipText(response: Response): Promise<string> {
-  const bytes = new Uint8Array(await response.arrayBuffer())
-
-  if (!hasGzipHeader(bytes)) {
-    return new TextDecoder().decode(bytes)
-  }
-
-  if (typeof DecompressionStream !== 'function') {
-    throw new Error('This browser does not support gzip decompression.')
-  }
-
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
-  return new Response(stream).text()
-}
-
-function hasGzipHeader(bytes: Uint8Array): boolean {
-  return bytes[0] === 0x1f && bytes[1] === 0x8b
-}
-
 function preferredDefaultBinSize(
   bins: readonly VisiumHdBinDescriptor[],
 ): VisiumHdBinSizeMicrometers {
@@ -873,9 +995,7 @@ function preferredDefaultBinSize(
     return 8
   }
 
-  throw new VisiumHdTwoMicrometerOverviewDisabledError(
-    VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
-  )
+  return bins[0]?.binSizeMicrometers ?? 16
 }
 
 function findBin(
@@ -1053,6 +1173,20 @@ function fullresPixelCenterToDataPoint(
     x: micrometers(fullresCol * scalefactors.micronsPerPixel),
     y: micrometers(fullresRow * scalefactors.micronsPerPixel),
   }
+}
+
+function dataPointToFullresRow(
+  point: DataPoint,
+  scalefactors: VisiumHdScalefactors,
+): number {
+  return point.y / scalefactors.micronsPerPixel
+}
+
+function dataPointToFullresCol(
+  point: DataPoint,
+  scalefactors: VisiumHdScalefactors,
+): number {
+  return point.x / scalefactors.micronsPerPixel
 }
 
 function countRetainedPositions(
