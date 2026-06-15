@@ -173,7 +173,7 @@ const DEFAULT_TRANSCRIPT_QUERY_LIMIT = 100_000
 const DEFAULT_TRANSCRIPT_MIN_QV = 20
 const DEFAULT_TRANSCRIPT_Z_DISTRIBUTION_BIN_COUNT = 16
 
-export class XeniumDataset implements SpatialDataset {
+export class XeniumDataset implements SpatialDataset<CellId> {
   private readonly baseUrl: string
   private readonly fetcher: typeof fetch
   private readonly duckFactory: () => Promise<DuckDbClientLike>
@@ -245,7 +245,7 @@ export class XeniumDataset implements SpatialDataset {
     await this.conn()
   }
 
-  async elements(bbox: BBox): Promise<ElementBatch> {
+  async elements(bbox: BBox): Promise<ElementBatch<CellId>> {
     const conn = await this.conn()
     const margin = Math.max(
       (bbox.maxX - bbox.minX) * 0.05,
@@ -383,10 +383,7 @@ LIMIT ?
     options: CellTranscriptZDistributionQueryOptions = {},
   ): Promise<CellTranscriptZDistribution> {
     const conn = await this.conn()
-    const limit = normalizePositiveInteger(
-      options.limit,
-      DEFAULT_TRANSCRIPT_QUERY_LIMIT,
-    )
+    const limit = normalizePositiveInteger(options.limit, DEFAULT_TRANSCRIPT_QUERY_LIMIT)
     const minQv = normalizeMinQv(options.minQv)
     const binCount = normalizePositiveInteger(
       options.binCount,
@@ -401,12 +398,7 @@ LIMIT ?
     const bboxParams: SqlParameter[] =
       options.bbox === undefined
         ? []
-        : [
-            options.bbox.minX,
-            options.bbox.maxX,
-            options.bbox.minY,
-            options.bbox.maxY,
-          ]
+        : [options.bbox.minX, options.bbox.maxX, options.bbox.minY, options.bbox.maxY]
     const stmt = await conn.prepare(`
 WITH selected AS (
   SELECT z_location
@@ -1194,7 +1186,9 @@ function parseCellTranscriptZDistributionRows(
   }
 }
 
-function distributionRowCount(row: Record<string, unknown> | undefined): number | undefined {
+function distributionRowCount(
+  row: Record<string, unknown> | undefined,
+): number | undefined {
   return row === undefined ? undefined : readOptionalNumericRowValue(row, 'bin_count')
 }
 

@@ -19,6 +19,11 @@ export interface DataPoint {
   readonly y: Micrometers
 }
 
+export interface DataVector {
+  readonly x: Micrometers
+  readonly y: Micrometers
+}
+
 export interface ScreenPoint {
   readonly x: ScreenPixels
   readonly y: ScreenPixels

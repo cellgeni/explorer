@@ -34,9 +34,9 @@ export interface GexCell {
   readonly counts: readonly number[]
 }
 
-export interface GexResult {
+export interface GexResult<ElementId extends string = CellId> {
   readonly geneNames: readonly string[]
-  readonly cells: ReadonlyMap<CellId, GexCell>
+  readonly cells: ReadonlyMap<ElementId, GexCell>
 }
 
 export interface CellFeatureMatrixReadOptions {

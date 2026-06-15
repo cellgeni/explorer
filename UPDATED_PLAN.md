@@ -842,3 +842,215 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       near-budget `Load exact viewport`, and transcript click/hover inspection.
 - [x] Final verification passes `npm test`, `npm run build`,
       `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.
+
+## Phase 6 New Phase - Visium HD Visualization
+
+User-added requirement: extend the viewer beyond Xenium so it can visualize
+Visium HD Space Ranger output directly from a hosted `outs/` directory.
+`PLAN.md` already anticipated Visium through the capability-based
+`SpatialDataset` interface; record the concrete Visium HD work here.
+
+### Reference Dataset
+
+- [x] Use this public Visium HD fixture for development and smoke tests:
+      `https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f`
+- [x] Fixture top-level files/directories supplied by the user:
+      `binned_outputs/`, `segmented_outputs/`, `spatial/`,
+      `barcode_mappings.parquet`, `feature_slice.h5`, `metrics_summary.csv`,
+      `molecule_info.h5`, `probe_set.csv`, and `web_summary.html`.
+- [x] HTTP probes confirmed binned Visium HD outputs are byte-range readable.
+      Key observed sizes:
+      16 µm `tissue_positions.parquet` 3.3 MB, 8 µm 11.3 MB, 2 µm 171.2 MB;
+      16 µm `filtered_feature_bc_matrix.h5` 121.6 MB, 8 µm 160.3 MB,
+      2 µm 236.5 MB; root `molecule_info.h5` 989.0 MB; high-res tissue PNG
+      37.6 MB; low-res tissue PNG 230.7 KB.
+- [x] 2026-06-15 re-probe after fixture update: root `feature_slice.h5` is
+      present and byte-range readable at 503.2 MB, root
+      `barcode_mappings.parquet` is present and byte-range readable at
+      109.8 MB, root `spatial/tissue_hires_image.png` and
+      `spatial/tissue_lowres_image.png` are present, and root
+      `spatial/scalefactors_json.json` still returns 404. Continue to use
+      binned or segmented `spatial/scalefactors_json.json` for image/bin or
+      image/cell alignment.
+- [x] Root `barcode_mappings.parquet` schema:
+      `square_002um`, `square_008um`, `square_016um`, `cell_id`,
+      `in_nucleus`, `in_cell`; 11,222,500 rows across 1,123 row groups. This is
+      the bridge for relating 2 µm bins to 8/16 µm bins and segmented cell
+      assignments.
+- [x] Position Parquet schema is consistent across 16/8/2 µm:
+      `barcode`, `in_tissue`, `array_row`, `array_col`,
+      `pxl_row_in_fullres`, `pxl_col_in_fullres`. Each file currently has one
+      Parquet row group, so viewport row-group pruning is not available for
+      these position files.
+- [x] Filtered matrix barcode counts from TSV sidecars:
+      54,504 at 16 µm, 215,320 at 8 µm, and 3,443,936 at 2 µm, with 18,085
+      gene-expression features. These matrix barcodes are the in-tissue bin set
+      and should be preferred over all-grid 2 µm position rows when possible.
+- [x] Scalefactors paths are present at
+      `binned_outputs/square_002um/spatial/scalefactors_json.json`,
+      `binned_outputs/square_008um/spatial/scalefactors_json.json`,
+      `binned_outputs/square_016um/spatial/scalefactors_json.json`, and
+      `segmented_outputs/spatial/scalefactors_json.json`. Binned
+      `scalefactors_json.json` reports
+      `microns_per_pixel = 0.22133875377751464`; `spot_diameter_fullres` is
+      72.287 px at 16 µm, 36.144 px at 8 µm, and 9.036 px at 2 µm. The tissue
+      image is 6000 x 5143 at high resolution and 600 x 514 at low resolution.
+      Segmented scalefactors report the same image scale fields but do not
+      include `bin_size_um` or `spot_diameter_fullres`.
+- [x] The array-row/array-column to full-resolution image coordinate transform
+      is affine with a small residual when derived from the first row/column
+      samples. For 16 µm the approximate deltas are:
+      column step `(row_px +0.2023, col_px -72.2784)` and row step
+      `(row_px +72.2785, col_px +0.2035)`. Use `tissue_positions.parquet` as
+      the source of truth for 16/8 µm, and consider deriving the 2 µm transform
+      from a small position sample plus filtered barcodes to avoid materializing
+      all 11.2M grid positions.
+
+### Product Decisions
+
+- [ ] Implement a real `VisiumHdDataset` rather than adding Visium branches
+      inside `XeniumDataset`.
+- [ ] Add a dataset factory/detector so app dependencies can resolve a generic
+      `SpatialDataset` from a URL. The current URL helpers and caches should
+      stop assuming Xenium file names such as `cells.parquet`,
+      `cell_feature_matrix.zarr.zip`, `transcripts.parquet`, and
+      `experiment.xenium`.
+- [ ] Treat Visium HD renderable units as square bins, not cells. Use barcode
+      IDs as element IDs and expose bin size as a first-class dataset setting.
+- [ ] Represent Visium HD bins as an indexed affine grid, not as per-bin
+      polygons and not as axis-aligned squares in image/render space. Add a
+      dataset-level grid basis with `origin`, `rowStep`, and `colStep`; the
+      axis-aligned square is only the degenerate basis where the steps align
+      with the render axes.
+- [ ] Keep `ElementGeometry` as the logical/addressing view for picking,
+      tooltip, selection, and inspected elements only. Do not use an array of
+      `{ kind: 'grid-cell', gridId, row, col }` objects as the bulk storage for
+      a Visium HD tier. Grid-tier payloads must stay columnar, for example
+      `Int32Array` rows, `Int32Array` cols, and one interned `gridId`, with
+      logical elements reconstructed on demand.
+- [ ] Define `SpatialGrid` invariants up front: `origin` is the center of bin
+      `(0, 0)`; `rowStep` and `colStep` are center-to-center pitches in the
+      same render coordinate space as polygon rings and image alignment;
+      `row`/`col` match Space Ranger `array_row`/`array_col`; grid-cell corners
+      use the contiguous-square `±0.5` rule in array space. Occupancy is not
+      part of the grid basis; it comes from emitted/loaded bins, with optional
+      row/col bounds only for cheap culling.
+- [ ] Separate nominal and measured geometry. `binSizeMicrometers` is the
+      declared tier size used for labels, tier selection, and scale logic;
+      `rowStep`/`colStep` are the measured render geometry after registration.
+      Small differences between nominal size and measured step length are
+      expected and should not be treated as bugs.
+- [ ] Fit or read the finest reliable grid basis once, then derive coarser
+      binned tiers by integer scaling of the same origin and step vectors when
+      possible. Avoid independently fitting 2/8/16 µm tiers in a way that
+      introduces slightly different orientations and breaks exact cross-tier
+      nesting needed by `barcode_mappings.parquet`.
+- [ ] Start with binned output visualization (`square_016um` and
+      `square_008um`) before Feature Slice H5 and segmented-output support.
+      The 2 µm layer is valuable but must be handled as a high-density mode with
+      explicit budgets.
+- [ ] Hide or disable Xenium-only workflows for Visium HD until equivalent data
+      exists: transcript overlay, raw transcript hover, Magic Lens transcript
+      scans, Xenium cell boundaries, and Xenium `analysis.zarr.zip`
+      annotations.
+- [ ] Use binned `tissue_hires_image.png`/`tissue_lowres_image.png` plus
+      `scalefactors_json.json` for the image underlay. This requires finishing
+      the existing `ImageSource.kind === 'flat'` path in the viewer.
+- [ ] Keep coordinates internally in micrometers where possible, but explicitly
+      model Visium HD full-resolution image pixels and scalefactors. Do not
+      assume Xenium's OME-TIFF pyramid units or Y-axis handling in shared code.
+
+### Implementation Slices
+
+- [ ] Slice 1: dataset detection and capability plumbing.
+      Add `VisiumHdDataset`, generic dataset cache helpers, and platform-aware
+      diagnostics. Detect Visium HD from `binned_outputs/square_*um` and binned
+      `spatial/tissue_positions.parquet`/`scalefactors_json.json`; detect Xenium
+      from `experiment.xenium` as today. In the same slice, add the generic
+      `SpatialElementId`/barcode-keyed expression contract and the indexed
+      affine-grid contract before implementing Visium readers.
+- [ ] Slice 2: binned overview reader.
+      Read 16 µm `tissue_positions.parquet`, filter `in_tissue = 1`, convert
+      full-resolution pixel coordinates through `microns_per_pixel`, and return
+      columnar grid-cell payloads with barcode IDs, bin size, array row/column,
+      and tissue position metadata. Add 8 µm support behind a bin-size selector.
+- [ ] Slice 3: square-bin rendering.
+      Extend renderer layer data so indexed affine grid cells draw through a
+      dedicated grid layer instead of being dropped by the current polygon-only
+      boundary conversion. Compute corners from the shared basis, keep winding
+      correct for left-handed image-space bases, and reconstruct logical
+      `ElementGeometry` only for hovered, clicked, or selected bins. Hover and
+      selection should show barcode, bin size, array row/column, full-res pixel
+      coordinate, and any loaded expression summary.
+- [ ] Slice 4: flat tissue image underlay.
+      Implement `ImageSource.kind === 'flat'` in the viewer with PNG loading,
+      scale-factor alignment, opacity, and fallback from high-res to low-res.
+      Verify visual alignment against 16 µm and 8 µm bins.
+- [ ] Slice 5: binned gene panel and expression.
+      Add a generic feature-barcode matrix reader for Visium HD barcodes. Use
+      `filtered_feature_bc_matrix/features.tsv.gz` for the gene panel first, and
+      evaluate whether `filtered_feature_bc_matrix.h5` can serve interactive
+      selected-gene counts without downloading unacceptable amounts of data.
+      Avoid the Xenium cell-id integer codec in all Visium paths.
+- [ ] Slice 6: ROI and embedding compatibility.
+      Reuse ROI geometry for bin selection and export selected barcodes. Load
+      binned `analysis/umap/gene_expression_2_components/projection.csv` when
+      present, keyed by barcode rather than cell ID.
+- [ ] Slice 7: 2 µm strategy.
+      Do not load all 11.2M position rows for first paint. Prefer filtered
+      matrix barcodes plus the derived affine array-to-image transform, or a
+      separate viewport/tiled strategy, before enabling 2 µm rendering.
+- [ ] Slice 8: Feature Slice and segmented outputs.
+      After the binned MVP is stable, use available root `feature_slice.h5` and
+      `barcode_mappings.parquet` for Feature Slice gene/UMI image slices and
+      bin-to-cell mapping. Re-probe `segmented_outputs/` geometry paths before
+      segmented cell/nucleus rendering; the fixture currently exposes
+      `segmented_outputs/filtered_feature_cell_matrix.h5`, but common GeoJSON
+      segmentation paths still return 404.
+
+### Phase 6 Execution Notes
+
+- [x] Foundation pass started Slice 1: added generic `SpatialElementId`
+      plumbing, generic `GexResult<ElementId>`, `SpatialGrid`/`SpatialGridBasis`,
+      columnar `GridCellBatch`, and logical `grid-cell` element geometry while
+      keeping existing Xenium behavior typed as `SpatialDataset<CellId>`.
+- [x] Added affine-grid helper coverage for center/corner derivation, winding
+      normalization, least-squares basis fitting, and nested coarser-tier basis
+      derivation. This keeps the render contract aligned with the 2 µm scaling
+      plan instead of materializing per-bin quadrilateral objects.
+- [x] Added Visium HD detection/cache scaffolding and a `VisiumHdDataset` stub.
+      Detection recognizes Xenium through `experiment.xenium` and Visium HD
+      through binned `tissue_positions.parquet`, `scalefactors_json.json`, and
+      `filtered_feature_bc_matrix.h5`, with optional segmented scalefactors.
+- [ ] Remaining Slice 1 work before reader implementation: platform-aware
+      diagnostics and app-dependency routing through the generic detector/cache
+      without regressing existing Xenium loaders.
+- [x] Current dev state before checkpoint commit: the foundation contracts,
+      affine-grid helpers, detector scaffolding, `VisiumHdDataset` stub, and
+      focused tests are implemented locally. The app still loads through the
+      existing Xenium-specific dependency path; Visium HD detection is not wired
+      into the UI lifecycle yet. Pre-existing untracked `PLAN.md` and `old/`
+      remain outside this Phase 6 change.
+
+### Definition Of Done For The First Visium HD MVP
+
+- [ ] Loading the reference URL renders a tissue image plus aligned 16 µm square
+      bins without requiring any Xenium files.
+- [ ] The user can switch between 16 µm and 8 µm binned outputs; 2 µm is either
+      explicitly unavailable with a reason or enabled through a budgeted path.
+- [ ] The UI clearly labels the dataset as Visium HD and disables transcript,
+      Magic Lens, and Xenium cell-boundary controls instead of surfacing
+      misleading errors.
+- [ ] Hover/click on a bin shows barcode, bin size, tissue status, array
+      row/column, image coordinate, and expression details once expression
+      loading is implemented.
+- [ ] Dataset diagnostics check the Visium HD files that actually matter for
+      the selected mode: binned positions, binned scalefactors, binned tissue
+      image, filtered feature-barcode matrix, and optional analysis projection.
+- [ ] Unit tests cover Visium HD path detection, scalefactor parsing,
+      tissue-position parsing, affine transform derivation, square-bin layer
+      conversion, and platform capability gating.
+- [ ] Browser/E2E smoke covers the reference dataset through at least image plus
+      16 µm bins.
+- [ ] Final verification passes `npm test`, `npm run build`,
+      `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.

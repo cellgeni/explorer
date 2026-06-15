@@ -1,10 +1,35 @@
-import type { BBox, DataPoint, Micrometers, UnitsDescriptor } from '../data/coords'
+import type {
+  BBox,
+  DataPoint,
+  DataVector,
+  Micrometers,
+  UnitsDescriptor,
+} from '../data/coords'
 import type { CellId } from '../data/cellid'
 import type { GexResult, Selection, TranscriptScope } from '../data/gex'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 
 export type Platform = 'xenium' | 'visium' | 'visium-hd'
+export type SpatialElementId = string
+
+export interface SpatialGridBasis {
+  readonly origin: DataPoint
+  readonly rowStep: DataVector
+  readonly colStep: DataVector
+}
+
+export interface SpatialGrid {
+  readonly id: string
+  readonly binSizeMicrometers: Micrometers
+  readonly basis: SpatialGridBasis
+  readonly bounds?: {
+    readonly minRow: number
+    readonly maxRow: number
+    readonly minCol: number
+    readonly maxCol: number
+  }
+}
 
 export type ElementGeometry =
   | { readonly kind: 'polygon'; readonly rings: readonly (readonly DataPoint[])[] }
@@ -14,14 +39,29 @@ export type ElementGeometry =
       readonly diameter: Micrometers
     }
   | { readonly kind: 'square'; readonly origin: DataPoint; readonly size: Micrometers }
+  | {
+      readonly kind: 'grid-cell'
+      readonly gridId: string
+      readonly row: number
+      readonly col: number
+    }
 
-export interface SpatialElement {
-  readonly id: string
+export interface SpatialElement<ElementId extends SpatialElementId = SpatialElementId> {
+  readonly id: ElementId
   readonly geometry: ElementGeometry
 }
 
-export interface ElementBatch {
-  readonly elements: readonly SpatialElement[]
+export interface GridCellBatch<ElementId extends SpatialElementId = SpatialElementId> {
+  readonly kind: 'grid-cells'
+  readonly gridId: string
+  readonly ids: readonly ElementId[]
+  readonly rows: Int32Array
+  readonly cols: Int32Array
+}
+
+export interface ElementBatch<ElementId extends SpatialElementId = SpatialElementId> {
+  readonly elements: readonly SpatialElement<ElementId>[]
+  readonly gridCells?: readonly GridCellBatch<ElementId>[]
 }
 
 export interface ChannelInfo {
@@ -48,6 +88,7 @@ export interface DatasetMeta {
     readonly multiChannel: boolean
   }
   readonly channels?: readonly ChannelInfo[]
+  readonly grids?: readonly SpatialGrid[]
 }
 
 export type ImageSource =
@@ -59,21 +100,23 @@ export type ImageSource =
       readonly size: readonly [number, number]
     }
 
-export interface Annotation {
+export interface Annotation<ElementId extends SpatialElementId = CellId> {
   readonly id: string
   readonly label: string
-  readonly cellIds: readonly CellId[]
+  readonly cellIds: readonly ElementId[]
 }
 
-export interface SpatialDataset {
+export interface SpatialDataset<ElementId extends SpatialElementId = SpatialElementId> {
   meta(): Promise<DatasetMeta>
-  elements(bbox: BBox): Promise<ElementBatch>
-  matrix(ids: readonly CellId[]): Promise<GexResult>
-  annotations(options?: AnalysisAnnotationQueryOptions): Promise<readonly Annotation[]>
+  elements(bbox: BBox): Promise<ElementBatch<ElementId>>
+  matrix(ids: readonly ElementId[]): Promise<GexResult<ElementId>>
+  annotations(
+    options?: AnalysisAnnotationQueryOptions,
+  ): Promise<readonly Annotation<ElementId>[]>
   image(): Promise<ImageSource | null>
   transcripts?(
     selection: Selection,
     scope: TranscriptScope,
     minQv: number,
-  ): Promise<GexResult>
+  ): Promise<GexResult<ElementId>>
 }
