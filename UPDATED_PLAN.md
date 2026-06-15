@@ -1022,15 +1022,67 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       Detection recognizes Xenium through `experiment.xenium` and Visium HD
       through binned `tissue_positions.parquet`, `scalefactors_json.json`, and
       `filtered_feature_bc_matrix.h5`, with optional segmented scalefactors.
-- [ ] Remaining Slice 1 work before reader implementation: platform-aware
-      diagnostics and app-dependency routing through the generic detector/cache
-      without regressing existing Xenium loaders.
+- [x] Added platform-aware diagnostics. Diagnostics now run dataset detection
+      first, keep the Xenium manifest/range checks on Xenium datasets, and
+      check Visium HD binned positions, binned scalefactors, binned filtered
+      matrices, binned tissue images, root `feature_slice.h5`, root
+      `barcode_mappings.parquet`, and segmented scalefactors when present.
+- [x] Added app-dependency routing scaffolding for `detectSpatialDataset` and
+      `getSpatialDataset` through the generic detector/cache. `App.tsx` still
+      follows the existing Xenium-specific load lifecycle until the Visium HD
+      binned reader and UI capability gating are ready.
+- [x] Added the first Visium HD binned-overview payload contract: nominal bin
+      size, measured `SpatialGrid`, columnar `GridCellBatch`, full-resolution
+      position columns, tissue flags, and source-path provenance.
+- [x] Added the first executable Visium HD binned overview reader. It parses
+      Space Ranger scalefactors, reads `tissue_positions.parquet` through a
+      projected hyparquet object-row path, filters out-of-tissue rows by
+      default, converts full-resolution row/column centers into micrometer
+      render coordinates, fits the shared affine grid basis, and exposes
+      `VisiumHdDataset.meta()`/`elements(bbox)` over columnar grid-cell batches.
+- [x] Remaining Slice 1 integration work: wire the app lifecycle through
+      generic dataset detection/capabilities without regressing existing Xenium
+      loaders.
 - [x] Current dev state before checkpoint commit: the foundation contracts,
       affine-grid helpers, detector scaffolding, `VisiumHdDataset` stub, and
       focused tests are implemented locally. The app still loads through the
       existing Xenium-specific dependency path; Visium HD detection is not wired
       into the UI lifecycle yet. Pre-existing untracked `PLAN.md` and `old/`
       remain outside this Phase 6 change.
+- [x] Current dev state after diagnostics/dependency pass: TypeScript, ESLint,
+      focused Phase 6 tests, full Vitest, and production build pass locally.
+      The Visium HD reader, flat tissue image layer, grid-cell renderer, and
+      platform capability gating remain the next implementation work.
+- [x] Current dev state after binned-reader pass: scalefactor parsing,
+      tissue-position parsing, in-tissue filtering, affine basis fitting,
+      dataset metadata, and bbox-filtered `GridCellBatch` emission are covered
+      by focused unit tests. The reader is not connected to the app UI yet.
+- [x] Added rendering primitives for Visium HD bins and flat tissue PNGs.
+      Columnar `GridCellBatch` data can now be reconstructed into deck.gl
+      grid-cell polygons at the render boundary, `ViewerCore` renders
+      grid-cell-only scenes without requiring Xenium overview points, and
+      `VisiumHdDataset.image()` returns the high-resolution binned tissue PNG
+      as a flat `ImageSource`. Added canvas projection math for drawing a
+      downsampled flat image across its full-resolution micrometer extent.
+- [x] Added the first app-lifecycle integration for Visium HD. Dataset loading
+      now probes platform before starting Xenium warmup/gene/annotation work,
+      routes Visium HD through `getSpatialDataset()`, reads the default binned
+      overview as affine grid cells, renders the flat high-resolution tissue
+      PNG through `MorphologyCanvas`, and disables Xenium-only viewport
+      boundary/expression, transcript, ROI, Magic Lens, annotation, and cell
+      detail workflows while Visium HD is loaded. Focused tests cover the
+      Visium lifecycle branch, disabled viewport detail loaders, and grid-only
+      viewer fitting.
+- [x] Browser-smoked the supplied Space Ranger 4.0.1 Visium HD reference URL
+      through the local app. The dataset loaded 54,504 16 µm bins and the
+      high-resolution tissue PNG rendered under the grid. The smoke exposed
+      that this dataset omits `tissue_hires_image_width`/height in
+      `scalefactors_json.json`; the flat image contract now treats dimensions
+      as optional and falls back to the browser image's natural size.
+- [x] Current dev state after app-integration pass: `tsc -b`, ESLint, full
+      Vitest, production build, `git diff --check`, and a local browser smoke
+      of the supplied Visium HD URL all pass. Build still reports the existing
+      browser-externalized dependency and large chunk warnings.
 
 ### Definition Of Done For The First Visium HD MVP
 

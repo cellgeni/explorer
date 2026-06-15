@@ -73,6 +73,8 @@ let api: ReturnType<typeof useViewportDataWorkflow>
 let snapshot: Snapshot
 
 function Probe({
+  boundaryLoadingEnabled = true,
+  geneExpressionLoadingEnabled = true,
   loadBoundaryElements,
   loadGeneExpression,
   onReady,
@@ -81,6 +83,8 @@ function Probe({
   readonly loadBoundaryElements: Parameters<
     typeof useViewportDataWorkflow
   >[0]['loadBoundaryElements']
+  readonly boundaryLoadingEnabled?: boolean
+  readonly geneExpressionLoadingEnabled?: boolean
   readonly loadGeneExpression: Parameters<
     typeof useViewportDataWorkflow
   >[0]['loadGeneExpression']
@@ -127,10 +131,12 @@ function Probe({
     appendDebugEvent,
     boundaryAbortRef,
     boundaryCellLimit: 10,
+    boundaryLoadingEnabled,
     boundaryRequestIdRef,
     boundaryViewportKeyRef,
     geneExpressionAbortRef,
     geneExpressionDetailMode: 'auto',
+    geneExpressionLoadingEnabled,
     geneExpressionRequestIdRef,
     geneExpressionScaleKey: 'scale-key',
     geneExpressionScoreMode: 'sum',
@@ -170,6 +176,38 @@ function Probe({
 }
 
 describe('useViewportDataWorkflow', () => {
+  it('records viewport state without loading Xenium detail layers when disabled', async () => {
+    const loadBoundaryElements = vi.fn(async () => ({ elements: [] }))
+    const loadGeneExpression = vi.fn(async () => batch)
+
+    render(
+      <Probe
+        boundaryLoadingEnabled={false}
+        geneExpressionLoadingEnabled={false}
+        loadBoundaryElements={loadBoundaryElements}
+        loadGeneExpression={loadGeneExpression}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(detail)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(snapshot.currentViewportDetail).toBe(detail)
+    expect(snapshot.shareableViewState).toEqual({ target: [50, 50, 0], zoom: 0 })
+    expect(loadBoundaryElements).not.toHaveBeenCalled()
+    expect(loadGeneExpression).not.toHaveBeenCalled()
+    expect(snapshot.boundaryState).toEqual({ status: 'idle' })
+    expect(snapshot.geneExpressionState).toEqual({ status: 'idle' })
+  })
+
   it('loads boundary elements and gene expression for a new viewport', async () => {
     const element: SpatialElement = {
       id: 'boundary-1',

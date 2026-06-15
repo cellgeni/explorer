@@ -1,5 +1,13 @@
-import { render } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { micrometers } from '../../data/coords'
+import type {
+  DatasetMeta,
+  GridCellBatch,
+  SpatialGrid,
+} from '../../datasets/spatialDataset'
+import type { VisiumHdBinnedOverview } from '../../datasets/visiumHdDataset'
+import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
 import { useDatasetLifecycle } from './useDatasetLifecycle'
 
 function abortRef() {
@@ -18,7 +26,43 @@ function timeoutRef() {
   return { current: null as number | null }
 }
 
-function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs> }) {
+type LifecycleOptions = Parameters<typeof useDatasetLifecycle>[0]
+
+function Probe({
+  refs,
+  detectSpatialDataset = vi.fn(async () => ({
+    platform: 'xenium' as const,
+    baseUrl: 'https://example.test/output',
+    checked: [],
+  })),
+  getSpatialDataset = vi.fn(async () => {
+    throw new Error('unused')
+  }),
+  loadAnnotationGroups = vi.fn(async () => []),
+  loadDatasetOverview = vi.fn(async () => []),
+  loadGenePanel = vi.fn(async () => []),
+  setDatasetPlatform = vi.fn(),
+  setFlatMorphologyImage = vi.fn(),
+  setLoadState = vi.fn(),
+  setMorphologyState = vi.fn(),
+  setSpatialGridCells = vi.fn(),
+  startDatasetLoadRef = { current: null },
+  warmDatasetForRoi = vi.fn(async () => undefined),
+}: {
+  readonly refs: ReturnType<typeof createLifecycleRefs>
+  readonly detectSpatialDataset?: LifecycleOptions['detectSpatialDataset']
+  readonly getSpatialDataset?: LifecycleOptions['getSpatialDataset']
+  readonly loadAnnotationGroups?: LifecycleOptions['loadAnnotationGroups']
+  readonly loadDatasetOverview?: LifecycleOptions['loadDatasetOverview']
+  readonly loadGenePanel?: LifecycleOptions['loadGenePanel']
+  readonly setDatasetPlatform?: LifecycleOptions['setDatasetPlatform']
+  readonly setFlatMorphologyImage?: LifecycleOptions['setFlatMorphologyImage']
+  readonly setLoadState?: LifecycleOptions['setLoadState']
+  readonly setMorphologyState?: LifecycleOptions['setMorphologyState']
+  readonly setSpatialGridCells?: LifecycleOptions['setSpatialGridCells']
+  readonly startDatasetLoadRef?: LifecycleOptions['startDatasetLoadRef']
+  readonly warmDatasetForRoi?: LifecycleOptions['warmDatasetForRoi']
+}) {
   const noopSetter = vi.fn()
 
   useDatasetLifecycle({
@@ -49,9 +93,11 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     initialSharedRoiSelectionRef: { current: null },
     initialShouldLoadMorphologyRef: { current: false },
     lastViewportDetailRef: { current: null },
-    loadAnnotationGroups: vi.fn(async () => []),
-    loadDatasetOverview: vi.fn(async () => []),
-    loadGenePanel: vi.fn(async () => []),
+    detectSpatialDataset,
+    getSpatialDataset,
+    loadAnnotationGroups,
+    loadDatasetOverview,
+    loadGenePanel,
     loadMorphologyImage: vi.fn(async () => {
       throw new Error('unused')
     }),
@@ -88,6 +134,7 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     setCustomMorphologyLayers: noopSetter,
     setCustomImageLayerOpacities: noopSetter,
     setDatasetUrl: vi.fn(),
+    setDatasetPlatform,
     setDatasetWarmupState: noopSetter,
     setDiagnosticsState: noopSetter,
     setGeneExpressionBatch: noopSetter,
@@ -98,7 +145,7 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     setGeneExpressionState: noopSetter,
     setGenePanelState: noopSetter,
     setHoveredTranscript: noopSetter,
-    setLoadState: noopSetter,
+    setLoadState,
     setMagicLensActive: noopSetter,
     setMagicLensState: noopSetter,
     setManualTranscriptExactRequestKey: noopSetter,
@@ -106,7 +153,8 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     setMeasurementResetKey: noopSetter,
     setMorphologyChannelSettings: noopSetter,
     setMorphologyImage: noopSetter,
-    setMorphologyState: noopSetter,
+    setFlatMorphologyImage,
+    setMorphologyState,
     setObservationColorMode: noopSetter,
     setOverviewCells: noopSetter,
     setPinnedTranscript: noopSetter,
@@ -120,13 +168,14 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     setSelectedCell: noopSetter,
     setSelectedEmbeddingKind: noopSetter,
     setSelectedGenes: noopSetter,
+    setSpatialGridCells,
     setTranscriptCapabilityState: noopSetter,
     setTranscriptDensityColorScale: noopSetter,
     setTranscriptExactPointLimit: noopSetter,
     setTranscriptLayerState: noopSetter,
     setTranscriptPointColorMode: noopSetter,
     setViewportCellCount: noopSetter,
-    startDatasetLoadRef: { current: null },
+    startDatasetLoadRef,
     transcriptAbortRef: refs.transcriptAbortRef,
     transcriptCapabilityAbortRef: refs.transcriptCapabilityAbortRef,
     transcriptCapabilityRequestIdRef: numberRef(),
@@ -135,7 +184,7 @@ function Probe({ refs }: { readonly refs: ReturnType<typeof createLifecycleRefs>
     transcriptPointColorMode: 'feature',
     transcriptRequestIdRef: numberRef(),
     transcriptViewportKeyRef: stringRef(),
-    warmDatasetForRoi: vi.fn(async () => undefined),
+    warmDatasetForRoi,
   })
 
   return null
@@ -185,5 +234,165 @@ describe('useDatasetLifecycle', () => {
     expect(refs.cellDetailAbortRef.current).toBeNull()
     expect(refs.cellTranscriptDistributionAbortRef.current).toBeNull()
     expect(refs.customMorphologyLayerAbortRef.current).toBeNull()
+  })
+
+  it('loads Visium HD binned overview without starting Xenium loaders', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const datasetUrl = 'https://example.test/visium'
+    const grid: SpatialGrid = {
+      id: 'visium-hd-square-016um',
+      binSizeMicrometers: micrometers(16),
+      basis: {
+        origin: { x: micrometers(8), y: micrometers(8) },
+        rowStep: { x: micrometers(0), y: micrometers(16) },
+        colStep: { x: micrometers(16), y: micrometers(0) },
+      },
+      bounds: { minRow: 0, maxRow: 0, minCol: 0, maxCol: 0 },
+    }
+    const gridCells: GridCellBatch = {
+      kind: 'grid-cells',
+      gridId: grid.id,
+      ids: ['BC-1'],
+      rows: new Int32Array([0]),
+      cols: new Int32Array([0]),
+    }
+    const meta: DatasetMeta = {
+      platform: 'visium-hd',
+      units: {
+        dataUnit: 'micrometer',
+        imageUnit: 'pixel',
+        micrometersPerPixel: micrometers(0.5),
+        origin: 'top-left',
+        imageYAxis: 'down',
+      },
+      extent: {
+        minX: micrometers(0),
+        maxX: micrometers(16),
+        minY: micrometers(0),
+        maxY: micrometers(16),
+      },
+      capabilities: {
+        transcripts: false,
+        cellBoundaries: false,
+        pyramidImage: false,
+        multiChannel: false,
+      },
+      grids: [grid],
+    }
+    const overview: VisiumHdBinnedOverview = {
+      binSizeMicrometers: 16,
+      scalefactors: {
+        micronsPerPixel: 0.5,
+        tissueHiresScale: 0.2,
+        tissueLowresScale: 0.02,
+      },
+      grid,
+      gridCells,
+      fullresRows: new Float64Array([16]),
+      fullresCols: new Float64Array([16]),
+      inTissue: new Uint8Array([1]),
+      sourcePaths: {
+        tissuePositions: 'binned_outputs/square_016um/spatial/tissue_positions.parquet',
+        scalefactors: 'binned_outputs/square_016um/spatial/scalefactors_json.json',
+        tissueHiresImage: 'binned_outputs/square_016um/spatial/tissue_hires_image.png',
+        tissueLowresImage: 'binned_outputs/square_016um/spatial/tissue_lowres_image.png',
+        filteredMatrixH5: 'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+      },
+    }
+    const dataset = {
+      annotations: vi.fn(async () => []),
+      elements: vi.fn(async () => ({ elements: [] })),
+      image: vi.fn(async () => ({
+        kind: 'flat' as const,
+        url: `${datasetUrl}/binned_outputs/square_016um/spatial/tissue_hires_image.png`,
+        scaleFactor: 0.2,
+        size: [200, 120] as const,
+      })),
+      matrix: vi.fn(async () => {
+        throw new Error('unused')
+      }),
+      meta: vi.fn(async () => meta),
+      readBinnedOverview: vi.fn(async () => overview),
+    }
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'visium-hd' as const,
+      baseUrl: datasetUrl,
+      bins: [],
+      checked: [],
+    }))
+    const getSpatialDataset = vi.fn(async () => dataset)
+    const loadAnnotationGroups = vi.fn(async () => [])
+    const loadDatasetOverview = vi.fn(async () => [])
+    const loadGenePanel = vi.fn(async () => [])
+    const setDatasetPlatform = vi.fn()
+    const setFlatMorphologyImage = vi.fn()
+    const setLoadState = vi.fn()
+    const setMorphologyState = vi.fn()
+    const setSpatialGridCells = vi.fn()
+    const warmDatasetForRoi = vi.fn(async () => undefined)
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={detectSpatialDataset}
+        getSpatialDataset={getSpatialDataset}
+        loadAnnotationGroups={loadAnnotationGroups}
+        loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={loadGenePanel}
+        setDatasetPlatform={setDatasetPlatform}
+        setFlatMorphologyImage={setFlatMorphologyImage}
+        setLoadState={setLoadState}
+        setMorphologyState={setMorphologyState}
+        setSpatialGridCells={setSpatialGridCells}
+        startDatasetLoadRef={startDatasetLoadRef}
+        warmDatasetForRoi={warmDatasetForRoi}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(datasetUrl, true)
+    })
+
+    expect(detectSpatialDataset).toHaveBeenCalledWith(
+      datasetUrl,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl)
+    expect(loadDatasetOverview).not.toHaveBeenCalled()
+    expect(loadGenePanel).not.toHaveBeenCalled()
+    expect(loadAnnotationGroups).not.toHaveBeenCalled()
+    expect(warmDatasetForRoi).not.toHaveBeenCalled()
+    expect(setDatasetPlatform).toHaveBeenCalledWith('visium-hd')
+    expect(setLoadState).toHaveBeenCalledWith({
+      status: 'ready',
+      url: datasetUrl,
+      cellCount: 1,
+    })
+    const gridCellCall = setSpatialGridCells.mock.calls.find(
+      ([value]) => Array.isArray(value) && value.length === 1,
+    )
+    expect(gridCellCall?.[0]).toEqual([
+      expect.objectContaining({
+        id: 'BC-1',
+        gridId: grid.id,
+        row: 0,
+        col: 0,
+      }),
+    ])
+    await waitFor(() => {
+      expect(setFlatMorphologyImage).toHaveBeenCalledWith({
+        url: `${datasetUrl}/binned_outputs/square_016um/spatial/tissue_hires_image.png`,
+        size: [200, 120],
+        scaleFactor: 0.2,
+        micrometersPerPixel: micrometers(0.5),
+      } satisfies FlatMorphologyCanvasImage)
+    })
+    expect(setMorphologyState).toHaveBeenCalledWith({
+      status: 'ready',
+      url: `${datasetUrl}/binned_outputs/square_016um/spatial/tissue_hires_image.png`,
+    })
   })
 })

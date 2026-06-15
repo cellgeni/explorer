@@ -4,6 +4,7 @@ import { createDiagnosticsDump } from './diagnosticsDump'
 
 const report: DatasetDiagnosticsReport = {
   baseUrl: 'https://example.test/output',
+  platform: 'xenium',
   startedAt: '2026-01-01T00:00:00.000Z',
   completedAt: '2026-01-01T00:00:01.000Z',
   checks: [

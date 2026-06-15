@@ -97,7 +97,7 @@ export type ImageSource =
       readonly kind: 'flat'
       readonly url: string
       readonly scaleFactor: number
-      readonly size: readonly [number, number]
+      readonly size?: readonly [number, number]
     }
 
 export interface Annotation<ElementId extends SpatialElementId = CellId> {

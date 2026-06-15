@@ -5,6 +5,7 @@ import type {
   ViewerTranscriptHoverDetail,
   ViewerViewportDetail,
 } from '../../components/ViewerCore'
+import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
 import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import type { WarmDatasetForRoiResult } from '../../data/datasetWarmup'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
@@ -13,14 +14,22 @@ import { type RoiSelection } from '../../data/roiSelection'
 import type { ShareableState } from '../../data/shareableState'
 import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
-import type { SpatialElement } from '../../datasets/spatialDataset'
+import type {
+  DatasetMeta,
+  ImageSource,
+  Platform,
+  SpatialElement,
+} from '../../datasets/spatialDataset'
+import type { VisiumHdBinnedOverview } from '../../datasets/visiumHdDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { AnalysisEmbeddingKind } from '../../data/analysisEmbeddings'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import {
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
+  gridCellBatchesToLayerData,
   overviewCellsToLayerData,
+  type GridCellDatum,
   type GeneExpressionColorScale,
   type GeneExpressionScoreMode,
   type OverviewCellDatum,
@@ -70,6 +79,8 @@ import {
 import type {
   AnnotationGroupLoader,
   DatasetOverviewLoader,
+  SpatialDatasetDetector,
+  SpatialDatasetLoader,
   DatasetWarmupLoader,
   GenePanelLoader,
   MorphologyImageLoader,
@@ -142,6 +153,8 @@ interface UseDatasetLifecycleOptions {
   readonly initialSharedRoiSelectionRef: MutableRef<RoiSelection | null>
   readonly initialShouldLoadMorphologyRef: MutableRef<boolean>
   readonly lastViewportDetailRef: MutableRef<ViewerViewportDetail | null>
+  readonly detectSpatialDataset: SpatialDatasetDetector
+  readonly getSpatialDataset: SpatialDatasetLoader
   readonly loadAnnotationGroups: AnnotationGroupLoader
   readonly loadDatasetOverview: DatasetOverviewLoader
   readonly loadGenePanel: GenePanelLoader
@@ -183,6 +196,7 @@ interface UseDatasetLifecycleOptions {
   readonly setCustomMorphologyLayers: Setter<readonly CustomMorphologyLayer[]>
   readonly setCustomImageLayerOpacities: Setter<Readonly<Record<string, number>>>
   readonly setDatasetUrl: (datasetUrl: string) => void
+  readonly setDatasetPlatform: Setter<Platform | null>
   readonly setDatasetWarmupState: Setter<DatasetWarmupState>
   readonly setDiagnosticsState: Setter<DatasetDiagnosticsState<StructuredLoadError>>
   readonly setGeneExpressionBatch: Setter<GeneExpressionBatch | null>
@@ -199,6 +213,7 @@ interface UseDatasetLifecycleOptions {
   readonly setManualTranscriptExactRequestKey: Setter<string | null>
   readonly setMeasurementEnabled: Setter<boolean>
   readonly setMeasurementResetKey: Setter<number>
+  readonly setFlatMorphologyImage: Setter<FlatMorphologyCanvasImage | null>
   readonly setMorphologyChannelSettings: Setter<readonly MorphologyChannelSetting[]>
   readonly setMorphologyImage: Setter<MorphologyImage | null>
   readonly setMorphologyState: Setter<MorphologyLoadState<StructuredLoadError>>
@@ -217,6 +232,7 @@ interface UseDatasetLifecycleOptions {
   readonly setSelectedCell: Setter<OverviewCellDatum | null>
   readonly setSelectedEmbeddingKind: Setter<AnalysisEmbeddingKind>
   readonly setSelectedGenes: Setter<readonly string[]>
+  readonly setSpatialGridCells: Setter<readonly GridCellDatum[]>
   readonly setTranscriptCapabilityState: Setter<
     TranscriptCapabilityState<StructuredLoadError>
   >
@@ -271,6 +287,8 @@ export function useDatasetLifecycle({
   initialSharedRoiSelectionRef,
   initialShouldLoadMorphologyRef,
   lastViewportDetailRef,
+  detectSpatialDataset,
+  getSpatialDataset,
   loadAnnotationGroups,
   loadDatasetOverview,
   loadGenePanel,
@@ -308,6 +326,7 @@ export function useDatasetLifecycle({
   setCustomMorphologyLayers,
   setCustomImageLayerOpacities,
   setDatasetUrl,
+  setDatasetPlatform,
   setDatasetWarmupState,
   setDiagnosticsState,
   setGeneExpressionBatch,
@@ -324,6 +343,7 @@ export function useDatasetLifecycle({
   setManualTranscriptExactRequestKey,
   setMeasurementEnabled,
   setMeasurementResetKey,
+  setFlatMorphologyImage,
   setMorphologyChannelSettings,
   setMorphologyImage,
   setMorphologyState,
@@ -340,6 +360,7 @@ export function useDatasetLifecycle({
   setSelectedCell,
   setSelectedEmbeddingKind,
   setSelectedGenes,
+  setSpatialGridCells,
   setTranscriptCapabilityState,
   setTranscriptDensityColorScale,
   setTranscriptExactPointLimit,
@@ -522,13 +543,16 @@ export function useDatasetLifecycle({
       datasetAbortRef.current = abortController
 
       setDatasetUrl(requestedUrl)
+      setDatasetPlatform(null)
       setDatasetWarmupState({ status: 'idle' })
       setCellFeatureMatrixCapabilityState({ status: 'idle' })
       cellFeatureMatrixCapabilityKeyRef.current = null
       setOverviewCells([])
+      setSpatialGridCells([])
       setGeneExpressionBatch(null)
       setGeneExpressionScaleDomain({ key: '', max: 0 })
       setMorphologyImage(null)
+      setFlatMorphologyImage(null)
       setCustomMorphologyLayers([])
       setCustomImageLayerOpacities({})
       setCustomMorphologyLayerState({ status: 'idle' })
@@ -543,7 +567,7 @@ export function useDatasetLifecycle({
       setHiddenAnnotationSetIds([])
       setCellMetadataTracks([])
       setSelectedCellMetadataTrackId(null)
-      setAnnotationGroupState({ status: 'loading', url: requestedUrl })
+      setAnnotationGroupState({ status: 'idle' })
       setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
       setAnalysisEmbeddingState({ status: 'idle' })
       setSelectedEmbeddingKind('umap')
@@ -616,7 +640,7 @@ export function useDatasetLifecycle({
       )
       setDiagnosticsState({ status: 'idle' })
       setBoundaryState({ status: 'idle' })
-      setGenePanelState({ status: 'loading', url: requestedUrl })
+      setGenePanelState({ status: 'idle' })
       setAnnotationState({ status: 'idle' })
       setGeneExpressionState({ status: 'idle' })
       boundaryRequestIdRef.current += 1
@@ -639,67 +663,164 @@ export function useDatasetLifecycle({
       initialSharedRoiSelectionRef.current = shouldRestoreSharedState
         ? (sharedState?.roiSelection ?? null)
         : null
-      startDatasetWarmup(requestedUrl, requestId)
-
-      void loadGenePanel(requestedUrl, { signal: abortController.signal })
-        .then((genes) => {
-          if (loadRequestIdRef.current !== requestId) {
-            return
-          }
-
-          setGenePanelState({ status: 'ready', url: requestedUrl, genes })
-          appendDebugEvent(`Gene panel ready: ${genes.length.toLocaleString()} genes`)
-        })
-        .catch((error) => {
-          if (isAbortError(error)) {
-            return
-          }
-
-          if (loadRequestIdRef.current !== requestId) {
-            return
-          }
-
-          setGenePanelState({
-            status: 'error',
-            url: requestedUrl,
-            error: createStructuredLoadError('Gene panel', error),
-          })
-          appendDebugEvent('Gene panel failed')
-        })
-
-      void loadAnnotationGroups(requestedUrl, { signal: abortController.signal })
-        .then((groups) => {
-          if (loadRequestIdRef.current !== requestId) {
-            return
-          }
-
-          setAnnotationGroupState({
-            status: 'ready',
-            url: requestedUrl,
-            groups,
-          })
-          appendDebugEvent(
-            `Annotation sets ready: ${groups.length.toLocaleString()} groups`,
-          )
-        })
-        .catch((error) => {
-          if (isAbortError(error)) {
-            return
-          }
-
-          if (loadRequestIdRef.current !== requestId) {
-            return
-          }
-
-          setAnnotationGroupState({
-            status: 'error',
-            url: requestedUrl,
-            error: createStructuredLoadError('Annotations', error),
-          })
-          appendDebugEvent('Annotation sets failed')
-        })
 
       try {
+        const detection = await detectSpatialDataset(requestedUrl, {
+          signal: abortController.signal,
+        })
+
+        if (loadRequestIdRef.current !== requestId) {
+          return
+        }
+
+        if (detection.platform === 'visium-hd') {
+          setDatasetPlatform('visium-hd')
+          const dataset = await getSpatialDataset(detection.baseUrl)
+
+          if (!isVisiumHdOverviewDataset(dataset)) {
+            throw new Error('Detected Visium HD dataset does not expose binned outputs.')
+          }
+
+          const [overview, meta] = await Promise.all([
+            dataset.readBinnedOverview(),
+            dataset.meta(),
+          ])
+
+          if (loadRequestIdRef.current !== requestId) {
+            return
+          }
+
+          setSpatialGridCells(
+            gridCellBatchesToLayerData([overview.grid], [overview.gridCells]),
+          )
+          initialShareableStateRef.current = null
+          setLoadState({
+            status: 'ready',
+            url: requestedUrl,
+            cellCount: overview.gridCells.ids.length,
+          })
+          appendDebugEvent(
+            `Visium HD ready: ${overview.gridCells.ids.length.toLocaleString()} ${overview.binSizeMicrometers} µm bins in ${formatElapsed(
+              loadStartedAt,
+            )}`,
+          )
+          recordTelemetry(
+            telemetryEvent('dataset.load', 'success', {
+              startedAt: loadStartedAt,
+              detail: `${overview.gridCells.ids.length.toLocaleString()} Visium HD bins`,
+            }),
+          )
+
+          if (loadImage) {
+            void dataset
+              .image()
+              .then((imageSource) => {
+                if (loadRequestIdRef.current !== requestId) {
+                  return
+                }
+
+                const flatImage = flatMorphologyImageFromSource(imageSource, meta)
+
+                if (flatImage === null) {
+                  setMorphologyState({ status: 'idle' })
+                  return
+                }
+
+                setFlatMorphologyImage(flatImage)
+                setMorphologyState({
+                  status: 'ready',
+                  url: flatImage.url,
+                })
+                appendDebugEvent('Visium HD tissue image ready')
+              })
+              .catch((error) => {
+                if (isAbortError(error)) {
+                  return
+                }
+
+                if (loadRequestIdRef.current !== requestId) {
+                  return
+                }
+
+                setMorphologyState({
+                  status: 'error',
+                  url: requestedUrl,
+                  error: createStructuredLoadError('Morphology image', error),
+                })
+                appendDebugEvent('Visium HD tissue image failed')
+              })
+          }
+
+          return
+        }
+
+        if (detection.platform === 'unknown') {
+          throw new Error('Unsupported spatial dataset layout.')
+        }
+
+        setDatasetPlatform('xenium')
+        setAnnotationGroupState({ status: 'loading', url: requestedUrl })
+        setGenePanelState({ status: 'loading', url: requestedUrl })
+        startDatasetWarmup(requestedUrl, requestId)
+
+        void loadGenePanel(requestedUrl, { signal: abortController.signal })
+          .then((genes) => {
+            if (loadRequestIdRef.current !== requestId) {
+              return
+            }
+
+            setGenePanelState({ status: 'ready', url: requestedUrl, genes })
+            appendDebugEvent(`Gene panel ready: ${genes.length.toLocaleString()} genes`)
+          })
+          .catch((error) => {
+            if (isAbortError(error)) {
+              return
+            }
+
+            if (loadRequestIdRef.current !== requestId) {
+              return
+            }
+
+            setGenePanelState({
+              status: 'error',
+              url: requestedUrl,
+              error: createStructuredLoadError('Gene panel', error),
+            })
+            appendDebugEvent('Gene panel failed')
+          })
+
+        void loadAnnotationGroups(requestedUrl, { signal: abortController.signal })
+          .then((groups) => {
+            if (loadRequestIdRef.current !== requestId) {
+              return
+            }
+
+            setAnnotationGroupState({
+              status: 'ready',
+              url: requestedUrl,
+              groups,
+            })
+            appendDebugEvent(
+              `Annotation sets ready: ${groups.length.toLocaleString()} groups`,
+            )
+          })
+          .catch((error) => {
+            if (isAbortError(error)) {
+              return
+            }
+
+            if (loadRequestIdRef.current !== requestId) {
+              return
+            }
+
+            setAnnotationGroupState({
+              status: 'error',
+              url: requestedUrl,
+              error: createStructuredLoadError('Annotations', error),
+            })
+            appendDebugEvent('Annotation sets failed')
+          })
+
         const cells = await loadDatasetOverview(requestedUrl, {
           includeCellIds: true,
           limit: null,
@@ -790,6 +911,9 @@ export function useDatasetLifecycle({
           url: requestedUrl,
           error: createStructuredLoadError('Dataset overview', error),
         })
+        setDatasetPlatform(null)
+        setSpatialGridCells([])
+        setFlatMorphologyImage(null)
         initialShareableStateRef.current = null
         appendDebugEvent('Dataset load failed')
         recordTelemetry(
@@ -851,4 +975,39 @@ export function useDatasetLifecycle({
   ])
 
   return { handleDatasetSubmit }
+}
+
+interface VisiumHdOverviewDataset {
+  meta(): Promise<DatasetMeta>
+  image(): Promise<ImageSource | null>
+  readBinnedOverview(): Promise<VisiumHdBinnedOverview>
+}
+
+function isVisiumHdOverviewDataset(dataset: unknown): dataset is VisiumHdOverviewDataset {
+  return (
+    dataset !== null &&
+    typeof dataset === 'object' &&
+    'readBinnedOverview' in dataset &&
+    typeof dataset.readBinnedOverview === 'function' &&
+    'meta' in dataset &&
+    typeof dataset.meta === 'function' &&
+    'image' in dataset &&
+    typeof dataset.image === 'function'
+  )
+}
+
+function flatMorphologyImageFromSource(
+  source: ImageSource | null,
+  meta: DatasetMeta,
+): FlatMorphologyCanvasImage | null {
+  if (source === null || source.kind !== 'flat') {
+    return null
+  }
+
+  return {
+    url: source.url,
+    scaleFactor: source.scaleFactor,
+    micrometersPerPixel: meta.units.micrometersPerPixel,
+    ...(source.size === undefined ? {} : { size: source.size }),
+  }
 }

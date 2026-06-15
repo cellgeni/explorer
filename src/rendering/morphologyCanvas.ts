@@ -20,6 +20,13 @@ export interface MorphologyChannelTileBatch {
   readonly tiles: readonly ReadyTile[]
 }
 
+export interface FlatImageCanvasSource {
+  readonly image: CanvasImageSource
+  readonly size: readonly [number, number]
+  readonly scaleFactor: number
+  readonly micrometersPerPixel: number
+}
+
 export function morphologyViewportBbox(
   viewState: OverviewViewState,
   viewport: CssViewportSize,
@@ -80,6 +87,33 @@ export function drawMorphologyTileChannels(
 
   context.globalAlpha = 1
   context.globalCompositeOperation = 'source-over'
+}
+
+export function drawFlatImage(
+  context: CanvasRenderingContext2D,
+  source: FlatImageCanvasSource,
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+): void {
+  context.clearRect(0, 0, viewport.width, viewport.height)
+
+  const target = flatImageTargetRect(source, viewState, viewport)
+
+  if (target === null) {
+    return
+  }
+
+  context.drawImage(
+    source.image,
+    0,
+    0,
+    source.size[0],
+    source.size[1],
+    target.x,
+    target.y,
+    target.width,
+    target.height,
+  )
 }
 
 export function selectCenteredTiles(
@@ -187,6 +221,52 @@ function tileTargetRect(
   )
   const bottomRight = deckDataToScreen(
     { x: tile.bounds.maxX, y: -tile.bounds.maxY },
+    viewState,
+    viewport,
+  )
+  const width = bottomRight.x - topLeft.x
+  const height = bottomRight.y - topLeft.y
+
+  if (width <= 0 || height <= 0) {
+    return null
+  }
+
+  return {
+    x: topLeft.x,
+    y: topLeft.y,
+    width,
+    height,
+  }
+}
+
+function flatImageTargetRect(
+  source: FlatImageCanvasSource,
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+): {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+} | null {
+  const [imageWidth, imageHeight] = source.size
+
+  if (
+    imageWidth <= 0 ||
+    imageHeight <= 0 ||
+    source.scaleFactor <= 0 ||
+    source.micrometersPerPixel <= 0
+  ) {
+    return null
+  }
+
+  const fullresWidthMicrometers =
+    (imageWidth / source.scaleFactor) * source.micrometersPerPixel
+  const fullresHeightMicrometers =
+    (imageHeight / source.scaleFactor) * source.micrometersPerPixel
+  const topLeft = deckDataToScreen({ x: 0, y: 0 }, viewState, viewport)
+  const bottomRight = deckDataToScreen(
+    { x: fullresWidthMicrometers, y: -fullresHeightMicrometers },
     viewState,
     viewport,
   )

@@ -51,10 +51,12 @@ interface UseViewportDataWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly boundaryAbortRef: MutableRef<AbortController | null>
   readonly boundaryCellLimit: number
+  readonly boundaryLoadingEnabled?: boolean
   readonly boundaryRequestIdRef: MutableRef<number>
   readonly boundaryViewportKeyRef: MutableRef<string | null>
   readonly geneExpressionAbortRef: MutableRef<AbortController | null>
   readonly geneExpressionDetailMode: GeneExpressionDetailMode
+  readonly geneExpressionLoadingEnabled?: boolean
   readonly geneExpressionRequestIdRef: MutableRef<number>
   readonly geneExpressionScaleKey: string
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
@@ -87,10 +89,12 @@ export function useViewportDataWorkflow({
   appendDebugEvent,
   boundaryAbortRef,
   boundaryCellLimit,
+  boundaryLoadingEnabled = true,
   boundaryRequestIdRef,
   boundaryViewportKeyRef,
   geneExpressionAbortRef,
   geneExpressionDetailMode,
+  geneExpressionLoadingEnabled = true,
   geneExpressionRequestIdRef,
   geneExpressionScaleKey,
   geneExpressionScoreMode,
@@ -125,7 +129,10 @@ export function useViewportDataWorkflow({
           : nextShareableViewState,
       )
 
-      if (!shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })) {
+      if (
+        !boundaryLoadingEnabled ||
+        !shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })
+      ) {
         abortActiveRequest(boundaryAbortRef)
         boundaryRequestIdRef.current += 1
         boundaryViewportKeyRef.current = null
@@ -184,7 +191,7 @@ export function useViewportDataWorkflow({
         }
       }
 
-      if (selectedGenes.length === 0) {
+      if (!geneExpressionLoadingEnabled || selectedGenes.length === 0) {
         abortActiveRequest(geneExpressionAbortRef)
         geneExpressionRequestIdRef.current += 1
         geneExpressionViewportKeyRef.current = null
@@ -368,10 +375,12 @@ export function useViewportDataWorkflow({
       appendDebugEvent,
       boundaryAbortRef,
       boundaryCellLimit,
+      boundaryLoadingEnabled,
       boundaryRequestIdRef,
       boundaryViewportKeyRef,
       geneExpressionAbortRef,
       geneExpressionDetailMode,
+      geneExpressionLoadingEnabled,
       geneExpressionRequestIdRef,
       geneExpressionScaleKey,
       geneExpressionScoreMode,

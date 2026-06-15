@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { micrometers, scaleFromZoom, type BBox, type TileIndex } from '../data/coords'
 import { normalizeLayerOpacity } from '../rendering/layerOpacity'
 import {
+  drawFlatImage,
   drawMorphologyTileChannels,
   morphologyViewportBbox,
   selectCenteredTiles,
@@ -19,6 +20,7 @@ const MAX_CONCURRENT_TILE_REQUESTS = 4
 export interface MorphologyCanvasProps {
   readonly loader?: TiffPyramidLoader | null
   readonly channels?: readonly MorphologyCanvasChannel[]
+  readonly flatImage?: FlatMorphologyCanvasImage | null
   readonly opacity?: number
   readonly viewState: OverviewViewState
   readonly onTileError?: (error: Error) => void
@@ -37,9 +39,28 @@ export interface MorphologyCanvasChannel {
   readonly opacity?: number
 }
 
+export interface FlatMorphologyCanvasImage {
+  readonly url: string
+  readonly size?: readonly [number, number]
+  readonly scaleFactor: number
+  readonly micrometersPerPixel: number
+}
+
+interface LoadedFlatImage {
+  readonly image: HTMLImageElement
+  readonly url: string
+}
+
+function naturalImageSize(image: HTMLImageElement): readonly [number, number] | null {
+  return image.naturalWidth > 0 && image.naturalHeight > 0
+    ? [image.naturalWidth, image.naturalHeight]
+    : null
+}
+
 export function MorphologyCanvas({
   loader,
   channels,
+  flatImage = null,
   opacity = 1,
   viewState,
   onTileError,
@@ -53,6 +74,7 @@ export function MorphologyCanvas({
     width: 0,
     height: 0,
   })
+  const [flatImageElement, setFlatImageElement] = useState<LoadedFlatImage | null>(null)
   const renderChannels = useMemo(
     () => visibleMorphologyChannels(loader, channels),
     [channels, loader],
@@ -87,6 +109,55 @@ export function MorphologyCanvas({
   }, [])
 
   useEffect(() => {
+    if (flatImage === null) {
+      return
+    }
+
+    if (typeof Image === 'undefined') {
+      return
+    }
+
+    let cancelled = false
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+
+    const ready =
+      typeof image.decode === 'function'
+        ? null
+        : new Promise<void>((resolve, reject) => {
+            image.onload = () => resolve()
+            image.onerror = () =>
+              reject(new Error(`Failed to load flat morphology image ${flatImage.url}`))
+          })
+
+    image.src = flatImage.url
+
+    void (ready ?? image.decode())
+      .then(() => {
+        if (!cancelled) {
+          setFlatImageElement({ image, url: flatImage.url })
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return
+        }
+
+        const loadError =
+          error instanceof Error
+            ? error
+            : new Error(`Failed to load flat morphology image ${flatImage.url}`)
+        onTileError?.(loadError)
+      })
+
+    return () => {
+      cancelled = true
+      image.onload = null
+      image.onerror = null
+    }
+  }, [flatImage, onTileError])
+
+  useEffect(() => {
     const canvas = canvasRef.current
 
     if (canvas === null || viewport.width <= 0 || viewport.height <= 0) {
@@ -102,7 +173,31 @@ export function MorphologyCanvas({
     syncCanvasBackingStore(canvas, context, viewport)
 
     if (renderChannels.length === 0) {
-      context.clearRect(0, 0, viewport.width, viewport.height)
+      if (
+        flatImage !== null &&
+        flatImageElement !== null &&
+        flatImageElement.url === flatImage.url
+      ) {
+        const imageSize = flatImage.size ?? naturalImageSize(flatImageElement.image)
+
+        if (imageSize !== null) {
+          drawFlatImage(
+            context,
+            {
+              image: flatImageElement.image,
+              micrometersPerPixel: flatImage.micrometersPerPixel,
+              scaleFactor: flatImage.scaleFactor,
+              size: imageSize,
+            },
+            viewState,
+            viewport,
+          )
+        } else {
+          context.clearRect(0, 0, viewport.width, viewport.height)
+        }
+      } else {
+        context.clearRect(0, 0, viewport.width, viewport.height)
+      }
       clearCacheRecords(cacheRecordsRef.current)
       return
     }
@@ -168,6 +263,8 @@ export function MorphologyCanvas({
       abortController.abort()
     }
   }, [
+    flatImage,
+    flatImageElement,
     maxConcurrentTileRequests,
     onTileCacheEviction,
     onTileError,

@@ -54,6 +54,19 @@ vi.mock('@deck.gl/react', () => ({
   ),
 }))
 
+vi.mock('./datasets/datasetFactory', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./datasets/datasetFactory')>()
+
+  return {
+    ...actual,
+    detectSpatialDataset: vi.fn(async (baseUrl: string) => ({
+      platform: 'xenium' as const,
+      baseUrl: baseUrl.replace(/\/+$/, ''),
+      checked: [],
+    })),
+  }
+})
+
 vi.mock('./data/datasetAnnotations', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./data/datasetAnnotations')>()
 
@@ -607,6 +620,7 @@ describe('App', () => {
     const runDatasetDiagnostics: ReturnType<typeof vi.fn<DatasetDiagnosticsRunner>> =
       vi.fn(async (baseUrl) => ({
         baseUrl,
+        platform: 'xenium',
         startedAt: '2026-06-04T00:00:00.000Z',
         completedAt: '2026-06-04T00:00:01.000Z',
         checks: [

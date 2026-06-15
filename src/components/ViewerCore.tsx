@@ -29,9 +29,13 @@ import type { BBox, DataPoint } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
-import type { MorphologyCanvasChannel } from './MorphologyCanvas'
+import type {
+  FlatMorphologyCanvasImage,
+  MorphologyCanvasChannel,
+} from './MorphologyCanvas'
 import type {
   CellBoundaryDatum,
+  GridCellDatum,
   OverviewCellDatum,
   TranscriptAggregateDatum,
   TranscriptPointDatum,
@@ -64,10 +68,12 @@ export interface ViewerCoreProps {
   readonly expressionCells?: readonly OverviewCellDatum[]
   readonly geneExpressionActive?: boolean
   readonly boundaries?: readonly CellBoundaryDatum[]
+  readonly gridCells?: readonly GridCellDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
   readonly imageLoader?: TiffPyramidLoader | null
   readonly imageChannels?: readonly MorphologyCanvasChannel[]
+  readonly flatImage?: FlatMorphologyCanvasImage | null
   readonly imageOpacity?: number
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
@@ -165,10 +171,12 @@ export function ViewerCore({
   expressionCells = [],
   geneExpressionActive = false,
   boundaries = [],
+  gridCells = [],
   transcriptAggregateBins = [],
   transcriptPoints = [],
   imageLoader = null,
   imageChannels = [],
+  flatImage = null,
   imageOpacity = 1,
   cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
   cellBoundaryOpacity = 1,
@@ -212,7 +220,10 @@ export function ViewerCore({
   onMagicLensMove,
   onMagicLensLeave,
 }: ViewerCoreProps) {
-  const fittedViewState = useMemo(() => createOverviewViewState(cells), [cells])
+  const fittedViewState = useMemo(
+    () => createOverviewViewState(cells, gridCells),
+    [cells, gridCells],
+  )
   const initialViewState = useMemo(
     () => mergeInitialViewState(fittedViewState, initialViewStateOverride),
     [fittedViewState, initialViewStateOverride],
@@ -226,10 +237,12 @@ export function ViewerCore({
       expressionCells={expressionCells}
       geneExpressionActive={geneExpressionActive}
       boundaries={boundaries}
+      gridCells={gridCells}
       transcriptAggregateBins={transcriptAggregateBins}
       transcriptPoints={transcriptPoints}
       imageLoader={imageLoader}
       imageChannels={imageChannels}
+      flatImage={flatImage}
       imageOpacity={imageOpacity}
       cellFillOpacity={cellFillOpacity}
       cellBoundaryOpacity={cellBoundaryOpacity}
@@ -281,10 +294,12 @@ interface ViewerSurfaceProps {
   readonly expressionCells: readonly OverviewCellDatum[]
   readonly geneExpressionActive: boolean
   readonly boundaries: readonly CellBoundaryDatum[]
+  readonly gridCells: readonly GridCellDatum[]
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints: readonly TranscriptPointDatum[]
   readonly imageLoader: TiffPyramidLoader | null
   readonly imageChannels: readonly MorphologyCanvasChannel[]
+  readonly flatImage: FlatMorphologyCanvasImage | null
   readonly imageOpacity: number
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
@@ -402,10 +417,12 @@ function ViewerSurface({
   expressionCells,
   geneExpressionActive,
   boundaries,
+  gridCells,
   transcriptAggregateBins,
   transcriptPoints,
   imageLoader,
   imageChannels,
+  flatImage,
   imageOpacity,
   cellFillOpacity,
   cellBoundaryOpacity,
@@ -628,6 +645,7 @@ function ViewerSurface({
         cellFillOpacity,
         cellBoundaryOpacity,
         cellBoundaryFillEnabled,
+        gridCells,
         cellBoundaryGeometry: boundaryLayerGeometry,
         cellBoundaryStyle: boundaryLayerStyle,
         geneExpressionActive,
@@ -647,6 +665,7 @@ function ViewerSurface({
       expressionStyledRenderCells,
       geneExpressionActive,
       geneExpressionOverlayCells,
+      gridCells,
       transcriptAggregateBins,
       transcriptOpacity,
       transcriptPointSize,
@@ -654,8 +673,10 @@ function ViewerSurface({
     ],
   )
   const hasCells = cells.length > 0
-  const hasImage = imageLoader !== null || imageChannels.length > 0
-  const canTrackMouseCoordinates = hasCells || hasImage
+  const hasGridCells = gridCells.length > 0
+  const hasSpatialData = hasCells || hasGridCells
+  const hasImage = imageLoader !== null || imageChannels.length > 0 || flatImage !== null
+  const canTrackMouseCoordinates = hasSpatialData || hasImage
   const visibleCellCount = visibleCells.length
   const estimatedViewportCellCount = useMemo(() => {
     if (viewportBbox === null) {
@@ -1235,7 +1256,7 @@ function ViewerSurface({
   }, [boundaries.length, viewState.zoom, viewportBbox])
 
   useEffect(() => {
-    if (onViewportCellCountChange === undefined || !hasCells) {
+    if (onViewportCellCountChange === undefined || !hasSpatialData) {
       return
     }
 
@@ -1246,10 +1267,10 @@ function ViewerSurface({
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [estimatedViewportCellCount, hasCells, onViewportCellCountChange])
+  }, [estimatedViewportCellCount, hasSpatialData, onViewportCellCountChange])
 
   useEffect(() => {
-    if (onViewportChange === undefined || !hasCells || viewportBbox === null) {
+    if (onViewportChange === undefined || !hasSpatialData || viewportBbox === null) {
       return
     }
 
@@ -1264,7 +1285,7 @@ function ViewerSurface({
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [hasCells, onViewportChange, viewState, viewportBbox, visibleCellCount])
+  }, [hasSpatialData, onViewportChange, viewState, viewportBbox, visibleCellCount])
 
   return (
     <div
@@ -1292,6 +1313,7 @@ function ViewerSurface({
       {!hasImage ? <div className="viewport-grid" aria-hidden="true" /> : null}
       <MorphologyCanvas
         channels={imageChannels}
+        flatImage={flatImage}
         loader={imageLoader}
         opacity={imageOpacity}
         viewState={viewState}
@@ -1302,7 +1324,7 @@ function ViewerSurface({
         {...(onImageTileError === undefined ? {} : { onTileError: onImageTileError })}
         {...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction })}
       />
-      {hasCells ? (
+      {hasSpatialData ? (
         <div className="deckgl-host" aria-hidden="true">
           <DeckGL
             views={spatialOverviewView}
@@ -1364,7 +1386,7 @@ function ViewerSurface({
       {transcriptHover === null ? null : (
         <TranscriptHoverTooltip detail={transcriptHover} />
       )}
-      {!hasCells && status === 'idle' ? (
+      {!hasSpatialData && status === 'idle' ? (
         <div className="viewport-empty-state" aria-hidden="true">
           Please load a dataset
         </div>

@@ -14,7 +14,12 @@ import type {
   TranscriptPoint,
 } from '../data/transcriptOverlay'
 import type { GeneExpressionCell } from '../datasets/xeniumDataset'
-import type { SpatialElement } from '../datasets/spatialDataset'
+import { gridCellCorners } from '../datasets/spatialGrid'
+import type {
+  GridCellBatch,
+  SpatialElement,
+  SpatialGrid,
+} from '../datasets/spatialDataset'
 import {
   DEFAULT_CELL_FILL_OPACITY,
   DEFAULT_LAYER_OPACITY,
@@ -45,6 +50,16 @@ export interface OverviewViewState {
 
 export interface CellBoundaryDatum {
   readonly id: string
+  readonly polygon: readonly Position[]
+  readonly fillColor: Color
+  readonly lineColor: Color
+}
+
+export interface GridCellDatum {
+  readonly id: string
+  readonly gridId: string
+  readonly row: number
+  readonly col: number
   readonly polygon: readonly Position[]
   readonly fillColor: Color
   readonly lineColor: Color
@@ -140,6 +155,8 @@ export interface OverviewLayerOptions {
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
   readonly cellBoundaryFillEnabled?: boolean
+  readonly gridCells?: readonly GridCellDatum[]
+  readonly gridCellOpacity?: number
   readonly cellBoundaryGeometry?: CellBoundaryLayerGeometry
   readonly cellBoundaryStyle?: CellBoundaryLayerStyle
   readonly geneExpressionActive?: boolean
@@ -420,6 +437,7 @@ export function createOverviewLayers(
       : EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY)
   const cellBoundaryStyle = options.cellBoundaryStyle ?? EMPTY_CELL_BOUNDARY_LAYER_STYLE
   const transcriptAggregateBins = options.transcriptAggregateBins ?? []
+  const gridCells = options.gridCells ?? []
   const transcriptDensityBins = transcriptAggregateBins.filter(
     (bin) => bin.glyphType !== 'feature-circle',
   )
@@ -585,6 +603,33 @@ export function createOverviewLayers(
         updateTriggers: {
           getFillColor: [transcriptOpacity],
           getLineColor: [transcriptOpacity],
+        },
+      }),
+    )
+  }
+
+  if (gridCells.length > 0) {
+    const gridCellOpacity = normalizeLayerOpacity(
+      options.gridCellOpacity ?? DEFAULT_LAYER_OPACITY,
+    )
+
+    layers.push(
+      new PolygonLayer<GridCellDatum>({
+        id: 'spatial-grid-cells',
+        data: gridCells,
+        pickable: true,
+        stroked: true,
+        filled: true,
+        opacity: 1,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 0.25,
+        getPolygon: (cell) => cell.polygon,
+        getFillColor: (cell) => colorWithOpacity(cell.fillColor, gridCellOpacity),
+        getLineColor: (cell) => colorWithOpacity(cell.lineColor, gridCellOpacity),
+        getLineWidth: 0.25,
+        updateTriggers: {
+          getFillColor: [gridCellOpacity],
+          getLineColor: [gridCellOpacity],
         },
       }),
     )
@@ -1403,6 +1448,49 @@ export function boundaryElementsToLayerData(
   return cells
 }
 
+export function gridCellBatchesToLayerData(
+  grids: readonly SpatialGrid[],
+  batches: readonly GridCellBatch[],
+): readonly GridCellDatum[] {
+  if (grids.length === 0 || batches.length === 0) {
+    return []
+  }
+
+  const gridById = new Map(grids.map((grid) => [grid.id, grid]))
+  const cells: GridCellDatum[] = []
+
+  for (const batch of batches) {
+    const grid = gridById.get(batch.gridId)
+
+    if (grid === undefined) {
+      continue
+    }
+
+    for (let index = 0; index < batch.rows.length; index += 1) {
+      const id = batch.ids[index]
+
+      if (id === undefined) {
+        continue
+      }
+
+      const row = batch.rows[index] ?? 0
+      const col = batch.cols[index] ?? 0
+
+      cells.push({
+        id,
+        gridId: grid.id,
+        row,
+        col,
+        polygon: gridCellCorners(grid, row, col).map((point) => [point.x, -point.y, 0]),
+        fillColor: [34, 120, 108, 28],
+        lineColor: [22, 90, 82, 150],
+      })
+    }
+  }
+
+  return cells
+}
+
 export function styleCellBoundariesByCells(
   boundaries: readonly CellBoundaryDatum[],
   cells: readonly OverviewCellDatum[],
@@ -1731,8 +1819,9 @@ function cellsWithoutVisibleBoundaryIds(
 
 export function createOverviewViewState(
   cells: readonly OverviewCellDatum[],
+  gridCells: readonly GridCellDatum[] = [],
 ): OverviewViewState {
-  if (cells.length === 0) {
+  if (cells.length === 0 && gridCells.length === 0) {
     return DEFAULT_OVERVIEW_VIEW_STATE
   }
 
@@ -1747,6 +1836,15 @@ export function createOverviewViewState(
     maxX = Math.max(maxX, x)
     minY = Math.min(minY, y)
     maxY = Math.max(maxY, y)
+  }
+
+  for (const cell of gridCells) {
+    for (const [x = 0, y = 0] of cell.polygon) {
+      minX = Math.min(minX, x)
+      maxX = Math.max(maxX, x)
+      minY = Math.min(minY, y)
+      maxY = Math.max(maxY, y)
+    }
   }
 
   const span = Math.max(maxX - minX, maxY - minY, 1)

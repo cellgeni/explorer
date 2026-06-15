@@ -5,6 +5,7 @@ import {
   type ViewerFocusRequest,
   type ViewerTranscriptHoverDetail,
 } from './components/ViewerCore'
+import type { FlatMorphologyCanvasImage } from './components/MorphologyCanvas'
 import { AppControlHud } from './features/app-shell/AppControlHud'
 import { AppDatasetHudPanel } from './features/app-shell/AppDatasetHudPanel'
 import { AppGeneHudPanel } from './features/app-shell/AppGeneHudPanel'
@@ -159,7 +160,7 @@ import {
 } from './data/morphologyImage'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
-import type { SpatialElement } from './datasets/spatialDataset'
+import type { Platform, SpatialElement } from './datasets/spatialDataset'
 import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
 import type {
   GeneExpressionColorScale,
@@ -167,7 +168,7 @@ import type {
   TranscriptDensityColorScale,
   TranscriptPointColorMode,
 } from './rendering/deckLayers'
-import type { OverviewCellDatum } from './rendering/deckLayers'
+import type { GridCellDatum, OverviewCellDatum } from './rendering/deckLayers'
 import type {
   RoiDrawMode,
   ViewerMagicLensDetail,
@@ -192,6 +193,8 @@ export type {
   RoiCellsLoader,
   RoiGeneStatsLoader,
   RoiTranscriptsLoader,
+  SpatialDatasetDetector,
+  SpatialDatasetLoader,
   TranscriptAggregateLoader,
   TranscriptCapabilitiesLoader,
   TranscriptViewportLoader,
@@ -216,6 +219,8 @@ export function App({
   loadGeneExpression = defaultAppDependencies.loadGeneExpression,
   warmDatasetForRoi = defaultAppDependencies.warmDatasetForRoi,
   runDatasetDiagnostics = defaultAppDependencies.runDatasetDiagnostics,
+  detectSpatialDataset = defaultAppDependencies.detectSpatialDataset,
+  getSpatialDataset = defaultAppDependencies.getSpatialDataset,
   computeAutoChannelContrast = defaultAppDependencies.computeAutoChannelContrast,
 }: AppProps) {
   const controlIds = useAppControlIds()
@@ -382,11 +387,14 @@ export function App({
     GeneExpressionState<StructuredLoadError>
   >({ status: 'idle' })
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
+  const [spatialGridCells, setSpatialGridCells] = useState<readonly GridCellDatum[]>([])
   const [geneExpressionBatch, setGeneExpressionBatch] =
     useState<GeneExpressionBatch | null>(null)
   const [geneExpressionScaleDomain, setGeneExpressionScaleDomain] =
     useState<GeneExpressionScaleDomain>({ key: '', max: 0 })
   const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
+  const [flatMorphologyImage, setFlatMorphologyImage] =
+    useState<FlatMorphologyCanvasImage | null>(null)
   const [customMorphologyLayers, setCustomMorphologyLayers] = useState<
     readonly CustomMorphologyLayer[]
   >([])
@@ -472,6 +480,7 @@ export function App({
   const [currentViewportDetail, setCurrentViewportDetail] =
     useState<ViewerViewportDetail | null>(null)
   const [, setViewportCellCount] = useState<number | null>(null)
+  const [datasetPlatform, setDatasetPlatform] = useState<Platform | null>(null)
   const loadRequestId = useRef(0)
   const analysisEmbeddingRequestId = useRef(0)
   const boundaryRequestId = useRef(0)
@@ -532,6 +541,9 @@ export function App({
   const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
   const isLoading = loadState.status === 'loading'
   const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
+  const isVisiumHdDataset =
+    loadState.status === 'ready' && datasetPlatform === 'visium-hd'
+  const xeniumFeatureLoadEnabled = loadState.status === 'ready' && !isVisiumHdDataset
   const geneExpressionScaleDatasetUrl =
     loadState.status === 'ready' ? loadState.url : datasetUrl
   const selectedCellMetadataTrack = useMemo(
@@ -651,6 +663,8 @@ export function App({
     transcriptLayerState,
     transcriptPointColorMode,
   })
+  const viewerMicrometersPerPixel =
+    morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
   const viewerImageStatus =
     customMorphologyLayerState.status === 'error' ||
     (customMorphologyLayerState.status === 'loading' &&
@@ -745,7 +759,7 @@ export function App({
     roiGeneViewportWarmupState.key === roiGeneViewportWarmupRequiredKey
   const isDatasetPreparationPending =
     loadState.status === 'ready' && datasetWarmupState.status === 'loading'
-  const canDrawRoi = loadState.status === 'ready' && !isDatasetPreparationPending
+  const canDrawRoi = xeniumFeatureLoadEnabled && !isDatasetPreparationPending
   const roiHeaderCopy = isDatasetPreparationPending
     ? 'Preparing'
     : roiGeneStatsState.status === 'loading'
@@ -826,6 +840,7 @@ export function App({
     [loadingTasks],
   )
   const activeRoiSelection = roiState.status === 'idle' ? null : roiState.selection
+  const effectiveShowTranscriptOverlay = showTranscriptOverlay && !isVisiumHdDataset
   const shareableMorphologyEnabledChannelIds = useMemo(() => {
     if (baseMorphologyChannelIds.size === 0) {
       return undefined
@@ -847,9 +862,12 @@ export function App({
     morphologyState.status,
   ])
   const magicLensIsCursorActive =
-    magicLensScope === 'cursor' && magicLensActive && loadState.status === 'ready'
-  const magicLensCanScan =
+    magicLensScope === 'cursor' &&
+    magicLensActive &&
     loadState.status === 'ready' &&
+    !isVisiumHdDataset
+  const magicLensCanScan =
+    xeniumFeatureLoadEnabled &&
     magicLensState.status !== 'loading' &&
     (magicLensScope === 'cursor'
       ? true
@@ -882,7 +900,7 @@ export function App({
   const transcriptCopy = transcriptStatusCopy(
     transcriptCapabilityState,
     transcriptLayerState,
-    showTranscriptOverlay,
+    effectiveShowTranscriptOverlay,
   )
   const appendDebugEvent = useCallback(
     (message: string, options: DebugLogAppendOptions = {}) => {
@@ -993,7 +1011,7 @@ export function App({
       setDiagnosticsState,
       shareableViewState,
       shouldLoadMorphology,
-      showTranscriptOverlay,
+      showTranscriptOverlay: effectiveShowTranscriptOverlay,
       telemetryEvents,
       transcriptCapabilityState,
       transcriptDensityColorScale,
@@ -1082,10 +1100,12 @@ export function App({
     appendDebugEvent,
     boundaryAbortRef,
     boundaryCellLimit,
+    boundaryLoadingEnabled: !isVisiumHdDataset,
     boundaryRequestIdRef: boundaryRequestId,
     boundaryViewportKeyRef,
     geneExpressionAbortRef,
     geneExpressionDetailMode,
+    geneExpressionLoadingEnabled: !isVisiumHdDataset,
     geneExpressionRequestIdRef: geneExpressionRequestId,
     geneExpressionScaleKey,
     geneExpressionScoreMode,
@@ -1121,7 +1141,7 @@ export function App({
     selectedGenes,
     setTranscriptCapabilityState,
     setTranscriptLayerState,
-    showTranscriptOverlay,
+    showTranscriptOverlay: effectiveShowTranscriptOverlay,
     transcriptAbortRef,
     transcriptCapabilityAbortRef,
     transcriptCapabilityRequestIdRef: transcriptCapabilityRequestId,
@@ -1394,6 +1414,8 @@ export function App({
     initialSharedRoiSelectionRef,
     initialShouldLoadMorphologyRef,
     lastViewportDetailRef,
+    detectSpatialDataset,
+    getSpatialDataset,
     loadAnnotationGroups,
     loadDatasetOverview,
     loadGenePanel,
@@ -1431,6 +1453,7 @@ export function App({
     setCustomMorphologyLayers,
     setCustomImageLayerOpacities,
     setDatasetUrl,
+    setDatasetPlatform,
     setDatasetWarmupState,
     setDiagnosticsState,
     setGeneExpressionBatch,
@@ -1447,6 +1470,7 @@ export function App({
     setManualTranscriptExactRequestKey,
     setMeasurementEnabled,
     setMeasurementResetKey,
+    setFlatMorphologyImage,
     setMorphologyChannelSettings,
     setMorphologyImage,
     setMorphologyState,
@@ -1463,6 +1487,7 @@ export function App({
     setSelectedCell,
     setSelectedEmbeddingKind,
     setSelectedGenes,
+    setSpatialGridCells,
     setTranscriptCapabilityState,
     setTranscriptDensityColorScale,
     setTranscriptExactPointLimit,
@@ -1632,7 +1657,7 @@ export function App({
           genePanelState={genePanelState}
           handlePinTranscript={handlePinTranscript}
           hoveredTranscript={hoveredTranscript}
-          loadEnabled={loadState.status === 'ready'}
+          loadEnabled={xeniumFeatureLoadEnabled}
           pinnedTranscript={pinnedTranscript}
           resetGeneExpressionSelectionState={resetGeneExpressionSelectionState}
           selectedGenes={selectedGenes}
@@ -1649,7 +1674,7 @@ export function App({
           setTranscriptOpacity={setTranscriptOpacity}
           setTranscriptPointColorMode={setTranscriptPointColorMode}
           setTranscriptPointSize={setTranscriptPointSize}
-          showTranscriptOverlay={showTranscriptOverlay}
+          showTranscriptOverlay={effectiveShowTranscriptOverlay}
           toggleGene={toggleGene}
           transcriptCapabilityState={transcriptCapabilityState}
           transcriptCopy={transcriptCopy}
@@ -1674,7 +1699,7 @@ export function App({
           magicLensRadiusInputId={controlIds.magicLensRadiusInputId}
           magicLensMinQvInputId={controlIds.magicLensMinQvInputId}
           magicLensCopy={magicLensCopy}
-          loadEnabled={loadState.status === 'ready'}
+          loadEnabled={xeniumFeatureLoadEnabled}
           roiAvailable={activeRoiSelection !== null}
           magicLensScope={magicLensScope}
           magicLensState={magicLensState}
@@ -1696,7 +1721,7 @@ export function App({
           annotationImportUrlInputId={controlIds.annotationImportUrlInputId}
           annotationImportUrl={annotationImportUrl}
           annotationHeaderCopy={annotationHeaderCopy}
-          loadEnabled={loadState.status === 'ready'}
+          loadEnabled={xeniumFeatureLoadEnabled}
           selectedAnnotationGroupId={selectedAnnotationGroupId}
           annotationGroupOptions={annotationGroupOptions}
           annotationState={annotationState}
@@ -1732,7 +1757,7 @@ export function App({
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
           cellTranscriptDistributionState={cellTranscriptDistributionState}
-          loadEnabled={loadState.status === 'ready'}
+          loadEnabled={xeniumFeatureLoadEnabled}
           onEmbeddingKindChange={(nextEmbeddingKind) => {
             setSelectedEmbeddingKind(nextEmbeddingKind)
             appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
@@ -1752,7 +1777,7 @@ export function App({
           canDrawRoi={canDrawRoi}
           roiMode={roiMode}
           roiName={roiName}
-          loadEnabled={loadState.status === 'ready'}
+          loadEnabled={xeniumFeatureLoadEnabled}
           roiState={roiState}
           roiSummary={roiSummary}
           roiGeneStatsCopy={roiGeneStatsCopy}
@@ -1791,10 +1816,12 @@ export function App({
           expressionCells={styledGeneExpressionCells}
           geneExpressionActive={geneExpressionState.status === 'ready'}
           boundaries={boundaryLayerData}
+          gridCells={spatialGridCells}
           transcriptAggregateBins={transcriptLayerAggregateBins}
           transcriptPoints={transcriptLayerPoints}
           imageLoader={morphologyImage?.loader ?? null}
           imageChannels={morphologyCanvasChannels}
+          flatImage={flatMorphologyImage}
           imageOpacity={morphologyCanvasChannels.length === 0 ? imageLayerOpacity : 1}
           cellFillOpacity={cellFillOpacity}
           cellBoundaryOpacity={cellBoundaryOpacity}
@@ -1825,14 +1852,14 @@ export function App({
           onTileCacheEviction={handleTileCacheEviction}
           onViewportCellCountChange={setViewportCellCount}
           onViewportChange={handleViewportChange}
-          onRoiComplete={handleRoiComplete}
           onTranscriptHover={setHoveredTranscript}
           onTranscriptClick={handlePinTranscript}
-          onMagicLensMove={handleMagicLensMove}
-          onMagicLensLeave={handleMagicLensLeave}
           onCellClick={(cell) => {
             setSelectedCell(cell)
           }}
+          {...(isVisiumHdDataset ? {} : { onRoiComplete: handleRoiComplete })}
+          {...(isVisiumHdDataset ? {} : { onMagicLensMove: handleMagicLensMove })}
+          {...(isVisiumHdDataset ? {} : { onMagicLensLeave: handleMagicLensLeave })}
           {...(initialShareableState.viewState === undefined
             ? {}
             : { initialViewStateOverride: initialShareableState.viewState })}
@@ -1842,10 +1869,10 @@ export function App({
           {...(viewerImageError === null
             ? {}
             : { imageErrorMessage: formatStructuredError(viewerImageError) })}
-          {...(morphologyMicrometersPerPixel === undefined
+          {...(viewerMicrometersPerPixel === undefined
             ? {}
             : {
-                micrometersPerPixel: morphologyMicrometersPerPixel,
+                micrometersPerPixel: viewerMicrometersPerPixel,
               })}
           {...(boundaryState.status === 'error'
             ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }

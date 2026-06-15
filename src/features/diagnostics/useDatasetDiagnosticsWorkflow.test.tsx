@@ -10,6 +10,7 @@ import { useDatasetDiagnosticsWorkflow } from './useDatasetDiagnosticsWorkflow'
 
 const successfulReport: DatasetDiagnosticsReport = {
   baseUrl: 'https://example.test/output',
+  platform: 'xenium',
   startedAt: '2026-06-08T00:00:00.000Z',
   completedAt: '2026-06-08T00:00:01.000Z',
   checks: [

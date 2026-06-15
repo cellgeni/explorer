@@ -4,6 +4,7 @@ import { ViewerCore } from './ViewerCore'
 import { scaffoldDeckLayerCount } from './viewerCoreModel'
 import type {
   CellBoundaryDatum,
+  GridCellDatum,
   OverviewViewState,
   OverviewCellDatum,
   TranscriptPointDatum,
@@ -156,6 +157,34 @@ describe('ViewerCore', () => {
 
     expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
     expect(screen.getByText('Loading overview cells…')).toBeInTheDocument()
+  })
+
+  it('renders grid-cell polygons without overview cells', () => {
+    const gridCell: GridCellDatum = {
+      id: 'BC-1',
+      gridId: 'grid-16um',
+      row: 1,
+      col: 2,
+      polygon: [
+        [0, 0, 0],
+        [16, 0, 0],
+        [16, -16, 0],
+        [0, -16, 0],
+      ],
+      fillColor: [34, 120, 108, 28],
+      lineColor: [22, 90, 82, 150],
+    }
+
+    render(<ViewerCore gridCells={[gridCell]} />)
+
+    expect(screen.getByTestId('deckgl')).toBeInTheDocument()
+    expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+      'data-count',
+      '1',
+    )
+    expect(deckGlMock.viewState?.target).toEqual([8, -8, 0])
+    expect(deckGlMock.viewState?.zoom).toBe(4)
+    expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
   })
 
   it('applies image opacity to the morphology canvas', () => {

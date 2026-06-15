@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { imagePixels, micrometers } from '../data/coords'
 import {
   drawMorphologyTiles,
+  drawFlatImage,
   morphologyViewportBbox,
   selectCenteredTiles,
 } from './morphologyCanvas'
@@ -95,6 +96,34 @@ describe('morphology canvas projection', () => {
       expect.any(Number),
       expect.any(Number),
     )
+  })
+
+  it('draws flat downsampled images in full-resolution micrometer coordinates', () => {
+    const image = {} as CanvasImageSource
+    const drawImage = vi.fn()
+    const context = {
+      clearRect: vi.fn(),
+      drawImage,
+    } as unknown as CanvasRenderingContext2D
+
+    drawFlatImage(
+      context,
+      {
+        image,
+        size: [200, 100],
+        scaleFactor: 0.5,
+        micrometersPerPixel: 1,
+      },
+      {
+        target: [100, -100, 0],
+        zoom: 0,
+        minZoom: -10,
+        maxZoom: 10,
+      },
+      { width: 200, height: 200 },
+    )
+
+    expect(drawImage).toHaveBeenCalledWith(image, 0, 0, 200, 100, 0, 0, 400, 200)
   })
 
   it('selects center-nearest tiles before viewport edge tiles', () => {

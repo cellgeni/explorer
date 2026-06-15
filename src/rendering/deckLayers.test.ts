@@ -17,6 +17,7 @@ import {
   createOverviewViewState,
   geneExpressionCellsToLayerData,
   geneExpressionScoreDomainMax,
+  gridCellBatchesToLayerData,
   overviewCellsToLayerData,
   spatialOverviewView,
   styleCellBoundariesByCells,
@@ -27,6 +28,7 @@ import {
   transcriptPointsToLayerData,
 } from './deckLayers'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
+import type { GridCellBatch, SpatialGrid } from '../datasets/spatialDataset'
 
 const fixtureCells: readonly OverviewCellDatum[] = [
   {
@@ -970,6 +972,45 @@ describe('deck layer factory', () => {
     ])
   })
 
+  it('renders affine grid cells as pickable polygons', () => {
+    const gridCells = gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])
+    const layers = createOverviewLayers([], [], {
+      gridCells,
+      gridCellOpacity: 0.5,
+    })
+    const gridLayer = layers.find(
+      (layer) => layer instanceof PolygonLayer && layer.id === 'spatial-grid-cells',
+    )
+
+    expect(gridLayer).toBeInstanceOf(PolygonLayer)
+
+    if (!(gridLayer instanceof PolygonLayer)) {
+      throw new Error('Expected grid cells to render as PolygonLayer.')
+    }
+
+    expect(gridLayer.props.pickable).toBe(true)
+    expect(gridLayer.props.data).toEqual(gridCells)
+
+    const getPolygon = gridLayer.props.getPolygon as (
+      cell: (typeof gridCells)[number],
+    ) => readonly (readonly number[])[]
+    const getFillColor = gridLayer.props.getFillColor as (
+      cell: (typeof gridCells)[number],
+    ) => readonly number[]
+    const getLineColor = gridLayer.props.getLineColor as (
+      cell: (typeof gridCells)[number],
+    ) => readonly number[]
+
+    expect(getPolygon(gridCells[0]!)).toEqual([
+      [4, -15, 0],
+      [16, -15, 0],
+      [16, -25, 0],
+      [4, -25, 0],
+    ])
+    expect(getFillColor(gridCells[0]!)).toEqual([34, 120, 108, 14])
+    expect(getLineColor(gridCells[0]!)).toEqual([22, 90, 82, 75])
+  })
+
   it('colors transcript aggregate bins with the selected density scale', () => {
     const thermalBins = transcriptAggregateBinsToLayerData(
       [
@@ -1290,4 +1331,55 @@ describe('deck layer factory', () => {
       },
     ])
   })
+
+  it('converts columnar affine grid batches into deck.gl polygons', () => {
+    expect(gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])).toEqual([
+      {
+        id: 'BC-1',
+        gridId: 'grid-16um',
+        row: 1,
+        col: 0,
+        fillColor: [34, 120, 108, 28],
+        lineColor: [22, 90, 82, 150],
+        polygon: [
+          [4, -15, 0],
+          [16, -15, 0],
+          [16, -25, 0],
+          [4, -25, 0],
+        ],
+      },
+      {
+        id: 'BC-2',
+        gridId: 'grid-16um',
+        row: 0,
+        col: 1,
+        fillColor: [34, 120, 108, 28],
+        lineColor: [22, 90, 82, 150],
+        polygon: [
+          [16, -5, 0],
+          [28, -5, 0],
+          [28, -15, 0],
+          [16, -15, 0],
+        ],
+      },
+    ])
+  })
 })
+
+const fixtureGrid: SpatialGrid = {
+  id: 'grid-16um',
+  binSizeMicrometers: micrometers(16),
+  basis: {
+    origin: { x: micrometers(10), y: micrometers(10) },
+    rowStep: { x: micrometers(0), y: micrometers(10) },
+    colStep: { x: micrometers(12), y: micrometers(0) },
+  },
+}
+
+const fixtureGridCellBatch: GridCellBatch = {
+  kind: 'grid-cells',
+  gridId: 'grid-16um',
+  ids: ['BC-1', 'BC-2'],
+  rows: new Int32Array([1, 0]),
+  cols: new Int32Array([0, 1]),
+}

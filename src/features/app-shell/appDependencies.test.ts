@@ -6,6 +6,8 @@ describe('defaultAppDependencies', () => {
     expect(Object.keys(defaultAppDependencies).sort()).toEqual(
       [
         'computeAutoChannelContrast',
+        'detectSpatialDataset',
+        'getSpatialDataset',
         'loadAnalysisEmbeddings',
         'loadAnnotationGroups',
         'loadAnnotations',

@@ -35,6 +35,13 @@ import {
   type TranscriptPoint,
 } from '../../data/transcriptOverlay'
 import { runDatasetDiagnostics } from '../../data/datasetDiagnostics'
+import {
+  cachedSpatialDataset,
+  detectSpatialDataset,
+  type AnySpatialDataset,
+  type DetectSpatialDatasetOptions,
+  type SpatialDatasetDetection,
+} from '../../datasets/datasetFactory'
 import type { BBox, DataPoint } from '../../data/coords'
 import type { CellId } from '../../data/cellid'
 import type { GeneExpressionStageTimingHandler } from '../../data/geneExpressionTiming'
@@ -191,6 +198,11 @@ export type DatasetWarmupLoader = (
 ) => Promise<WarmDatasetForRoiResult | void>
 
 export type DatasetDiagnosticsRunner = typeof runDatasetDiagnostics
+export type SpatialDatasetDetector = (
+  baseUrl: string,
+  options?: DetectSpatialDatasetOptions,
+) => Promise<SpatialDatasetDetection>
+export type SpatialDatasetLoader = (baseUrl: string) => Promise<AnySpatialDataset>
 
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader
@@ -211,6 +223,8 @@ export interface AppProps {
   readonly loadGeneExpression?: GeneExpressionLoader
   readonly warmDatasetForRoi?: DatasetWarmupLoader
   readonly runDatasetDiagnostics?: DatasetDiagnosticsRunner
+  readonly detectSpatialDataset?: SpatialDatasetDetector
+  readonly getSpatialDataset?: SpatialDatasetLoader
   readonly computeAutoChannelContrast?: AutoChannelContrastLoader
 }
 
@@ -233,6 +247,8 @@ export const defaultAppDependencies = {
   loadGeneExpression: loadDatasetGeneExpression,
   warmDatasetForRoi,
   runDatasetDiagnostics,
+  detectSpatialDataset,
+  getSpatialDataset: cachedSpatialDataset,
   computeAutoChannelContrast: defaultComputeAutoChannelContrast,
 } satisfies Required<AppProps>
 
