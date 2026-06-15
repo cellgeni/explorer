@@ -1,5 +1,6 @@
 import { datasetFileUrl } from '../data/datasetFiles'
 import { readMaybeGzipText } from '../data/readMaybeGzipText'
+import { VisiumHdFilteredBarcodeBudgetExceededError } from './visiumHdStrategy'
 import type { SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
 
@@ -13,6 +14,7 @@ export interface VisiumHdSquareBarcode {
 export interface ReadVisiumHdFilteredMatrixBarcodesOptions {
   readonly fetcher?: typeof fetch
   readonly signal?: AbortSignal
+  readonly maxBarcodeCount?: number
 }
 
 const VISIUM_HD_SQUARE_BARCODE_PATTERN =
@@ -39,13 +41,20 @@ export async function readVisiumHdFilteredMatrixBarcodes(
 
   return parseVisiumHdFilteredMatrixBarcodes(await readMaybeGzipText(response), {
     binSizeMicrometers: bin.binSizeMicrometers,
+    ...(options.maxBarcodeCount === undefined
+      ? {}
+      : { maxBarcodeCount: options.maxBarcodeCount }),
   })
 }
 
 export function parseVisiumHdFilteredMatrixBarcodes(
   text: string,
-  options: { readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers } = {},
+  options: {
+    readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers
+    readonly maxBarcodeCount?: number
+  } = {},
 ): readonly VisiumHdSquareBarcode[] {
+  const normalizedMaxBarcodeCount = normalizeMaxBarcodeCount(options.maxBarcodeCount)
   const barcodes: VisiumHdSquareBarcode[] = []
 
   for (const [lineIndex, line] of text.split(/\r?\n/).entries()) {
@@ -75,6 +84,17 @@ export function parseVisiumHdFilteredMatrixBarcodes(
     }
 
     barcodes.push(parsed)
+
+    if (
+      normalizedMaxBarcodeCount !== undefined &&
+      barcodes.length > normalizedMaxBarcodeCount
+    ) {
+      throw new VisiumHdFilteredBarcodeBudgetExceededError(
+        parsed.binSizeMicrometers,
+        barcodes.length,
+        normalizedMaxBarcodeCount,
+      )
+    }
   }
 
   return barcodes
@@ -115,4 +135,18 @@ function isVisiumHdBinSize(value: number): value is VisiumHdBinSizeMicrometers {
 
 function isSafeGridIndex(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0
+}
+
+function normalizeMaxBarcodeCount(value: number | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(
+      `Filtered barcode budget must be a non-negative finite number, received ${value}.`,
+    )
+  }
+
+  return Math.floor(value)
 }

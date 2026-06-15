@@ -27,7 +27,7 @@ import {
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
 } from '../data/persistentByteRangeCache'
-import { fitGridBasis, gridCellCenter } from './spatialGrid'
+import { deriveSubdividedGridBasis, fitGridBasis, gridCellCenter } from './spatialGrid'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
@@ -88,6 +88,7 @@ export interface VisiumHdDatasetOptions {
     genes: readonly string[],
     options: VisiumFeatureSliceReadOptions,
   ) => Promise<GexResult<SpatialElementId>>
+  readonly maxTwoMicrometerFilteredBarcodes?: number
   readonly maxInteractiveMatrixBytes?: number
   readonly maxInteractiveFeatureSliceBytes?: number
   readonly readObjects?: VisiumHdParquetObjectReader
@@ -248,6 +249,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     genes: readonly string[],
     options: VisiumFeatureSliceReadOptions,
   ) => Promise<GexResult<SpatialElementId>>
+  private readonly maxTwoMicrometerFilteredBarcodes: number | undefined
   private readonly maxInteractiveMatrixBytes: number
   private readonly maxInteractiveFeatureSliceBytes: number
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
@@ -283,6 +285,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
     this.featureSliceReader = options.featureSliceReader ?? gexFromVisiumFeatureSliceH5
+    this.maxTwoMicrometerFilteredBarcodes = options.maxTwoMicrometerFilteredBarcodes
     this.maxInteractiveMatrixBytes =
       options.maxInteractiveMatrixBytes ??
       DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET
@@ -541,11 +544,15 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     binSizeMicrometers = this.defaultBinSizeMicrometers,
   ): Promise<VisiumHdBinnedOverview> {
     if (binSizeMicrometers === 2) {
-      return Promise.reject(
-        new VisiumHdTwoMicrometerOverviewDisabledError(
-          VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
-        ),
-      )
+      if (this.maxTwoMicrometerFilteredBarcodes === undefined) {
+        return Promise.reject(
+          new VisiumHdTwoMicrometerOverviewDisabledError(
+            VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
+          ),
+        )
+      }
+
+      return this.readTwoMicrometerOverviewFromFilteredBarcodes()
     }
 
     const existing = this.overviewPromises.get(binSizeMicrometers)
@@ -576,6 +583,68 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       throw error
     })
     this.overviewPromises.set(binSizeMicrometers, promise)
+    return promise
+  }
+
+  private readTwoMicrometerOverviewFromFilteredBarcodes(): Promise<VisiumHdBinnedOverview> {
+    const existing = this.overviewPromises.get(2)
+
+    if (existing !== undefined) {
+      return existing
+    }
+
+    const maxBarcodeCount = this.maxTwoMicrometerFilteredBarcodes
+
+    if (maxBarcodeCount === undefined) {
+      return Promise.reject(
+        new VisiumHdTwoMicrometerOverviewDisabledError(
+          VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
+        ),
+      )
+    }
+
+    const bin = findBin(this.bins, 2)
+    const sourceBinSize = preferredBasisSourceBinSize(this.bins)
+
+    if (sourceBinSize === undefined) {
+      return Promise.reject(
+        new VisiumHdTwoMicrometerOverviewDisabledError(
+          '2 µm overview loading requires a detected 8 µm or 16 µm tier to derive the affine grid basis.',
+        ),
+      )
+    }
+
+    const promise = (async () => {
+      const [sourceOverview, scalefactors, barcodes] = await Promise.all([
+        this.readBinnedOverview(sourceBinSize),
+        this.scalefactorsReader(datasetFileUrl(this.baseUrl, bin.scalefactorsPath), {
+          fetcher: this.fetcher,
+        }),
+        this.filteredMatrixBarcodeReader(this.baseUrl, bin, {
+          fetcher: this.fetcher,
+          maxBarcodeCount,
+        }),
+      ])
+      const basis = deriveSubdividedGridBasis(
+        sourceOverview.grid.basis,
+        sourceOverview.binSizeMicrometers / 2,
+      )
+
+      return createVisiumHdBinnedOverviewFromSquareBarcodes(
+        bin,
+        barcodes,
+        scalefactors,
+        basis,
+      )
+    })().catch((error: unknown) => {
+      if (this.overviewPromises.get(2) === promise) {
+        this.overviewPromises.delete(2)
+      }
+
+      throw error
+    })
+
+    this.overviewPromises.set(2, promise)
     return promise
   }
 }
@@ -1011,6 +1080,20 @@ function findBin(
   }
 
   return bin
+}
+
+function preferredBasisSourceBinSize(
+  bins: readonly VisiumHdBinDescriptor[],
+): 8 | 16 | undefined {
+  if (bins.some((bin) => bin.binSizeMicrometers === 16)) {
+    return 16
+  }
+
+  if (bins.some((bin) => bin.binSizeMicrometers === 8)) {
+    return 8
+  }
+
+  return undefined
 }
 
 function unitsFromScalefactors(scalefactors: VisiumHdScalefactors): UnitsDescriptor {

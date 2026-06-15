@@ -1200,6 +1200,13 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       columnar binned overviews from filtered barcodes without reading the full
       2 µm `tissue_positions.parquet`. The UI still keeps 2 µm rendering
       disabled until a viewport or barcode-count budget is wired in.
+- [x] Added the first budgeted 2 µm dataset path and documentation. When
+      `maxTwoMicrometerFilteredBarcodes` is configured, `VisiumHdDataset` can
+      satisfy `readBinnedOverview(2)` from filtered matrix barcodes and a
+      coarser 8/16 µm affine basis; over-budget barcode sidecars fail with a
+      typed `VisiumHdFilteredBarcodeBudgetExceededError`. Documented the
+      current contract and next UI enablement step in
+      `docs/visium-hd-2um-strategy.md`.
 
 ### Definition Of Done For The First Visium HD MVP
 

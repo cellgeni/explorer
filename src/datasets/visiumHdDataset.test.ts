@@ -316,6 +316,54 @@ describe('Visium HD dataset readers', () => {
     expect(tissuePositionsReader).not.toHaveBeenCalled()
   })
 
+  it('loads a 2 µm overview from filtered matrix barcodes when an explicit budget is configured', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const filteredMatrixBarcodeReader = vi.fn(async () => [
+      {
+        barcode: 's_002um_000001_000002-1',
+        binSizeMicrometers: 2 as const,
+        row: 1,
+        col: 2,
+      },
+    ])
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16, bin2],
+      maxTwoMicrometerFilteredBarcodes: 10,
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async (url) =>
+        url.includes('square_002um')
+          ? { ...scalefactors, binSizeMicrometers: 2, spotDiameterFullres: 4 }
+          : scalefactors,
+      filteredMatrixBarcodeReader,
+    })
+
+    const overview = await dataset.readBinnedOverview(2)
+
+    expect(overview.binSizeMicrometers).toBe(2)
+    expect(overview.grid.id).toBe('visium-hd-square-002um')
+    expect(overview.grid.binSizeMicrometers).toBe(micrometers(2))
+    expect(overview.grid.basis.rowStep.x).toBeCloseTo(2)
+    expect(overview.grid.basis.rowStep.y).toBeCloseTo(0.125)
+    expect(overview.grid.basis.colStep.x).toBeCloseTo(0.25)
+    expect(overview.grid.basis.colStep.y).toBeCloseTo(2)
+    expect(overview.gridCells.ids).toEqual(['s_002um_000001_000002-1'])
+    expect(Array.from(overview.gridCells.rows)).toEqual([1])
+    expect(Array.from(overview.gridCells.cols)).toEqual([2])
+    expect(filteredMatrixBarcodeReader).toHaveBeenCalledWith(
+      'https://example.test/visium',
+      bin2,
+      {
+        fetcher: expect.any(Function),
+        maxBarcodeCount: 10,
+      },
+    )
+  })
+
   it('creates a binned overview from filtered matrix square barcodes and a derived basis', () => {
     const overview = createVisiumHdBinnedOverviewFromSquareBarcodes(
       bin2,
@@ -446,6 +494,18 @@ describe('Visium HD dataset readers', () => {
         col: 2,
       },
     ])
+  })
+
+  it('rejects budgeted 2 µm overview reads when no coarser basis source exists', async () => {
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin2],
+      maxTwoMicrometerFilteredBarcodes: 10,
+    })
+
+    await expect(dataset.readBinnedOverview()).rejects.toThrow(
+      '2 µm overview loading requires a detected 8 µm or 16 µm tier',
+    )
   })
 
   it('reads binned matrix rows by Visium HD barcode', async () => {

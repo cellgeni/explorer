@@ -4,6 +4,7 @@ import {
   parseVisiumHdSquareBarcode,
   readVisiumHdFilteredMatrixBarcodes,
 } from './visiumHdBarcodes'
+import { VisiumHdFilteredBarcodeBudgetExceededError } from './visiumHdStrategy'
 import type { VisiumHdBinDescriptor } from './visiumHdDataset'
 
 const bin2: VisiumHdBinDescriptor = {
@@ -64,12 +65,22 @@ describe('Visium HD filtered matrix barcodes', () => {
     ).toThrow('Expected 2 µm barcode on line 1, received 8 µm')
   })
 
+  it('rejects filtered matrix barcode rows beyond the configured budget', () => {
+    expect(() =>
+      parseVisiumHdFilteredMatrixBarcodes(
+        ['s_002um_000001_000002-1', 's_002um_000003_000004-1'].join('\n'),
+        { binSizeMicrometers: 2, maxBarcodeCount: 1 },
+      ),
+    ).toThrow(VisiumHdFilteredBarcodeBudgetExceededError)
+  })
+
   it('loads filtered matrix barcode sidecars from the selected bin output', async () => {
     const fetcher = vi.fn(async () => new Response('s_002um_000001_000002-1\n'))
 
     await expect(
       readVisiumHdFilteredMatrixBarcodes('https://example.test/visium/', bin2, {
         fetcher,
+        maxBarcodeCount: 10,
       }),
     ).resolves.toEqual([
       {
