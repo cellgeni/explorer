@@ -7,6 +7,11 @@ import {
   type GexCell,
   type GexResult,
 } from '../data/gex'
+import {
+  gexFromVisiumFeatureSliceH5,
+  type VisiumFeatureSliceReadOptions,
+  type VisiumFeatureSliceTarget,
+} from '../data/visiumFeatureSlice'
 import { micrometers } from '../data/coords'
 import {
   cacheFooterByteRanges,
@@ -60,7 +65,15 @@ export interface VisiumHdDatasetOptions {
     ids: readonly SpatialElementId[],
     options?: CellFeatureMatrixReadOptions,
   ) => Promise<GexResult<SpatialElementId>>
+  readonly featureSliceH5Path?: string
+  readonly featureSliceReader?: (
+    url: string,
+    targets: readonly VisiumFeatureSliceTarget<SpatialElementId>[],
+    genes: readonly string[],
+    options: VisiumFeatureSliceReadOptions,
+  ) => Promise<GexResult<SpatialElementId>>
   readonly maxInteractiveMatrixBytes?: number
+  readonly maxInteractiveFeatureSliceBytes?: number
   readonly readObjects?: VisiumHdParquetObjectReader
   readonly loadCompressors?: () => Promise<Compressors>
   readonly byteRangeCache?: PersistentByteRangeCache | null
@@ -182,6 +195,7 @@ export class VisiumHdTissuePositionsDecodeError extends Error {
 
 const DEFAULT_VISIUM_HD_MAX_BASIS_FIT_SAMPLES = 10_000
 export const DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET = 64 * 1024 * 1024
+export const DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET = 128 * 1024 * 1024
 
 export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   readonly baseUrl: string
@@ -205,7 +219,15 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     ids: readonly SpatialElementId[],
     options?: CellFeatureMatrixReadOptions,
   ) => Promise<GexResult<SpatialElementId>>
+  private readonly featureSliceH5Path: string
+  private readonly featureSliceReader: (
+    url: string,
+    targets: readonly VisiumFeatureSliceTarget<SpatialElementId>[],
+    genes: readonly string[],
+    options: VisiumFeatureSliceReadOptions,
+  ) => Promise<GexResult<SpatialElementId>>
   private readonly maxInteractiveMatrixBytes: number
+  private readonly maxInteractiveFeatureSliceBytes: number
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
   private readonly loadCompressors: (() => Promise<Compressors>) | undefined
   private readonly byteRangeCache: PersistentByteRangeCache | null | undefined
@@ -231,9 +253,14 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       options.featureGenePanelReader ?? readVisiumHdFeatureGenePanel
     this.featureMatrixReader =
       options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5
+    this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
+    this.featureSliceReader = options.featureSliceReader ?? gexFromVisiumFeatureSliceH5
     this.maxInteractiveMatrixBytes =
       options.maxInteractiveMatrixBytes ??
       DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET
+    this.maxInteractiveFeatureSliceBytes =
+      options.maxInteractiveFeatureSliceBytes ??
+      DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET
     this.readObjects = options.readObjects
     this.loadCompressors = options.loadCompressors
     this.byteRangeCache = options.byteRangeCache
@@ -385,10 +412,13 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     }
 
     const matrixReadStartedAt = Date.now()
-    const matrix = await this.matrix(
-      viewportBins.map((bin) => bin.id),
-      overview.binSizeMicrometers,
+    const matrix = await this.featureSliceReader(
+      datasetFileUrl(this.baseUrl, this.featureSliceH5Path),
+      viewportBins,
+      selectedGenes,
       {
+        binSizeMicrometers: overview.binSizeMicrometers,
+        maxFullFileBytes: this.maxInteractiveFeatureSliceBytes,
         ...(options.signal === undefined ? {} : { signal: options.signal }),
         ...(options.onStageTiming === undefined
           ? {}
@@ -941,6 +971,8 @@ function selectGridCellsInBbox(
 
 interface VisiumHdExpressionBin {
   readonly id: SpatialElementId
+  readonly row: number
+  readonly col: number
   readonly position: DataPoint
 }
 
@@ -978,6 +1010,8 @@ function selectExpressionBinsInBbox(
     if (candidateIndex % options.sampleStride === 0) {
       bins.push({
         id: overview.gridCells.ids[index] ?? '',
+        row,
+        col,
         position: center,
       })
     }

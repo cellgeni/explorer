@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { micrometers } from '../data/coords'
 import {
+  DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
   DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET,
   VISIUM_HD_TISSUE_POSITION_COLUMNS,
   VisiumHdDataset,
@@ -269,7 +270,7 @@ describe('Visium HD dataset readers', () => {
       visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
       visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
     ])
-    const featureMatrixReader = vi.fn(async () => ({
+    const featureSliceReader = vi.fn(async () => ({
       geneNames: ['Actb', 'Gad1'],
       cells: new Map([
         [
@@ -287,7 +288,7 @@ describe('Visium HD dataset readers', () => {
       bins: [bin16],
       tissuePositionsReader: async () => positions,
       scalefactorsReader: async () => scalefactors,
-      featureMatrixReader,
+      featureSliceReader,
     })
 
     const batch = await dataset.geneExpression(
@@ -306,11 +307,19 @@ describe('Visium HD dataset readers', () => {
       },
     )
 
-    expect(featureMatrixReader).toHaveBeenCalledWith(
-      'https://example.test/visium/binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
-      ['BC-0'],
+    expect(featureSliceReader).toHaveBeenCalledWith(
+      'https://example.test/visium/feature_slice.h5',
+      [
+        expect.objectContaining({
+          id: 'BC-0',
+          row: 0,
+          col: 0,
+        }),
+      ],
+      ['Actb', 'Gad1'],
       expect.objectContaining({
-        maxFullFileBytes: DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET,
+        binSizeMicrometers: 16,
+        maxFullFileBytes: DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
         onStageTiming: expect.any(Function),
       }),
     )

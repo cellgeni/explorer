@@ -1156,6 +1156,19 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       selected-gene overlays require the Feature Slice H5 reader. Next work is
       to read `feature_slice.h5` feature COO slices and bin them to the active
       8 µm or 16 µm grid.
+- [x] Added the first Feature Slice H5 reader core. It parses root
+      `metadata_json`, reads `/features/name` and `/features/feature_type`,
+      resolves selected genes to `/feature_slices/{featureIndex}/{row,col,data}`
+      COO arrays, bins 2 µm source coordinates to the active 8/16 µm grid, and
+      returns generic `GexResult<SpatialElementId>` counts for visible binned
+      barcodes. `VisiumHdDataset.geneExpression()` now targets this reader
+      instead of the oversized filtered feature-barcode matrix path. The
+      default h5wasm adapter remains protected by a full-file byte budget, so
+      the UI overlay gate stays in place until a range-capable Feature Slice
+      backend can support the 503 MB hosted fixture interactively.
+- [x] Added structured Feature Slice budget errors so future UI enablement can
+      distinguish "Feature Slice reader exists but this hosted H5 is too large
+      for the current full-file adapter" from generic matrix failures.
 
 ### Definition Of Done For The First Visium HD MVP
 
@@ -1172,7 +1185,7 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [x] Dataset diagnostics check the Visium HD files that actually matter for
       the selected mode: binned positions, binned scalefactors, binned tissue
       image, filtered feature-barcode matrix, and optional analysis projection.
-- [ ] Unit tests cover Visium HD path detection, scalefactor parsing,
+- [x] Unit tests cover Visium HD path detection, scalefactor parsing,
       tissue-position parsing, affine transform derivation, square-bin layer
       conversion, and platform capability gating.
 - [ ] Browser/E2E smoke covers the reference dataset through at least image plus

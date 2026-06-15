@@ -60,6 +60,18 @@ describe('loadErrorModel', () => {
       title: 'Expression matrix over budget',
       detail: 'FullFileMatrixBudgetExceededError',
     })
+    const featureSliceOverBudget = new Error(
+      'Feature Slice H5 is 503.2 MB, exceeding the interactive full-file budget of 128.0 MB.',
+    )
+    featureSliceOverBudget.name = 'FeatureSliceFullFileBudgetExceededError'
+
+    expect(
+      createStructuredLoadError('Gene expression', featureSliceOverBudget),
+    ).toMatchObject({
+      code: 'unsupported',
+      title: 'Feature Slice H5 over budget',
+      detail: 'FeatureSliceFullFileBudgetExceededError',
+    })
     expect(
       createStructuredLoadError(
         'Morphology image',
