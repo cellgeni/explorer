@@ -1103,6 +1103,14 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       matrix, high/low tissue images, and optional UMAP projection rather than
       treating every detected tier as the required mode. Diagnostics still
       check optional root Feature Slice and barcode-mapping files.
+- [x] Started Slice 5 with binned gene-panel loading. `VisiumHdDataset` now
+      reads `filtered_feature_bc_matrix/features.tsv.gz` per selected bin,
+      filters non-gene feature rows with the shared gene-feature rules, caches
+      per-tier panel promises, and wires initial loads plus bin switches into
+      the existing gene-panel state. The H5 sparse matrix reader now also
+      supports generic Space Ranger barcodes, and `VisiumHdDataset` can score
+      selected genes for visible binned barcodes. The viewport/UI expression
+      overlay remains gated off until the grid-cell rendering path is enabled.
 
 ### Definition Of Done For The First Visium HD MVP
 

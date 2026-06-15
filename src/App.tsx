@@ -1530,6 +1530,7 @@ export function App({
     visiumHdControlState,
     visiumHdBinRequestIdRef: visiumHdBinRequestId,
     setFlatMorphologyImage,
+    setGenePanelState,
     setLoadState,
     setMorphologyState,
     setSpatialGridCells,

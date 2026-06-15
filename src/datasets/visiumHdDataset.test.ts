@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { micrometers } from '../data/coords'
 import {
   VISIUM_HD_TISSUE_POSITION_COLUMNS,
   VisiumHdDataset,
   createVisiumHdBinnedOverview,
+  parseVisiumHdFeatureRows,
   parseVisiumHdScalefactors,
   parseVisiumHdTissuePositionRows,
+  readVisiumHdFeatureGenePanel,
   readVisiumHdTissuePositions,
 } from './visiumHdDataset'
 import type { AsyncBuffer } from 'hyparquet'
@@ -70,6 +72,60 @@ describe('Visium HD dataset readers', () => {
       tissueLowresImageHeight: 514,
       registrationTargetImageScale: 0.1,
     })
+  })
+
+  it('parses filtered feature matrix gene names for the Visium HD gene panel', () => {
+    expect(
+      parseVisiumHdFeatureRows(
+        [
+          'ENSG000001\tActb\tGene Expression',
+          'ENSG000002\tNegControlProbe_001\tGene Expression',
+          'ENSG000003\tGad1\tGene Expression',
+          'ENSG000004\tAb1\tAntibody Capture',
+          'ENSG000005\tActb\tGene Expression',
+          '',
+        ].join('\n'),
+      ),
+    ).toEqual(['Actb', 'Gad1'])
+  })
+
+  it('reads Visium HD feature gene panels from filtered matrix features TSV', async () => {
+    const fetcher = vi.fn(async () => {
+      return new Response(
+        ['ENSG000001\tActb\tGene Expression', 'ENSG000002\tGad1\tGene Expression'].join(
+          '\n',
+        ),
+      )
+    })
+
+    await expect(
+      readVisiumHdFeatureGenePanel('https://example.test/visium/', bin16, {
+        fetcher,
+      }),
+    ).resolves.toEqual(['Actb', 'Gad1'])
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/visium/binned_outputs/square_016um/filtered_feature_bc_matrix/features.tsv.gz',
+    )
+  })
+
+  it('loads and caches the Visium HD gene panel for the selected bin', async () => {
+    const fetcher = vi.fn(async () => new Response('unused'))
+    const featureGenePanelReader = vi.fn(async () => ['Actb', 'Gad1'])
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      fetcher,
+      featureGenePanelReader,
+    })
+
+    await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1'])
+    await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1'])
+    expect(featureGenePanelReader).toHaveBeenCalledTimes(1)
+    expect(featureGenePanelReader).toHaveBeenCalledWith(
+      'https://example.test/visium',
+      bin16,
+      { fetcher },
+    )
   })
 
   it('reads tissue_positions.parquet through the Visium HD column projection', async () => {
@@ -182,6 +238,88 @@ describe('Visium HD dataset readers', () => {
     expect(Array.from(batch.gridCells?.[0]?.rows ?? [])).toEqual([0])
     expect(Array.from(batch.gridCells?.[0]?.cols ?? [])).toEqual([0])
     expect(tissuePositionCalls).toHaveLength(1)
+  })
+
+  it('reads binned matrix rows by Visium HD barcode', async () => {
+    const matrixResult = {
+      geneNames: ['Actb'],
+      cells: new Map([['BC-0', { geneNames: ['Actb'], counts: [5] }]]),
+    }
+    const featureMatrixReader = vi.fn(async () => matrixResult)
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      featureMatrixReader,
+    })
+
+    await expect(dataset.matrix(['BC-0'])).resolves.toBe(matrixResult)
+    expect(featureMatrixReader).toHaveBeenCalledWith(
+      'https://example.test/visium/binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+      ['BC-0'],
+      {},
+    )
+  })
+
+  it('scores selected genes for visible Visium HD bins', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const featureMatrixReader = vi.fn(async () => ({
+      geneNames: ['Actb', 'Gad1'],
+      cells: new Map([
+        [
+          'BC-0',
+          {
+            geneNames: ['Actb', 'Gad1'],
+            counts: [5, 3],
+          },
+        ],
+      ]),
+    }))
+    const stageTimings: string[] = []
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+      featureMatrixReader,
+    })
+
+    const batch = await dataset.geneExpression(
+      {
+        minX: micrometers(90),
+        maxX: micrometers(110),
+        minY: micrometers(190),
+        maxY: micrometers(210),
+      },
+      ['Actb', 'Gad1', 'Actb'],
+      {
+        limit: 10,
+        onStageTiming: (timing) => {
+          stageTimings.push(timing.stage)
+        },
+      },
+    )
+
+    expect(featureMatrixReader).toHaveBeenCalledWith(
+      'https://example.test/visium/binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+      ['BC-0'],
+      expect.objectContaining({ onStageTiming: expect.any(Function) }),
+    )
+    expect(batch.genes).toEqual(['Actb', 'Gad1'])
+    expect(batch.maxCount).toBe(8)
+    expect(batch.cells).toEqual([
+      expect.objectContaining({
+        id: 'BC-0',
+        count: 8,
+        cellArea: 256,
+      }),
+    ])
+    expect(batch.cells[0]?.position.x).toBeCloseTo(100)
+    expect(batch.cells[0]?.position.y).toBeCloseTo(200)
+    expect(stageTimings).toEqual(['viewport-cells', 'matrix-read', 'score-cells'])
   })
 
   it('returns the binned high-resolution tissue PNG as a flat image source', async () => {

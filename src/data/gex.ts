@@ -76,7 +76,7 @@ interface H5MatrixCache {
   readonly file: unknown
   readonly geneNames: readonly string[]
   readonly featureTypes: readonly string[]
-  readonly cellIdRows: ReadonlyMap<CellId, number>
+  readonly barcodeRows: ReadonlyMap<string, number>
   readonly indptr: NumericArrayLike
   readonly indicesDataset: SliceableNumericDataset
   readonly dataDataset: SliceableNumericDataset
@@ -500,10 +500,18 @@ export async function gexFromCellFeatureMatrixH5(
   cellIds: readonly CellId[],
   options: CellFeatureMatrixReadOptions = {},
 ): Promise<GexResult> {
-  if (cellIds.length === 0) {
+  return gexFromFeatureBarcodeMatrixH5(url, cellIds, options)
+}
+
+export async function gexFromFeatureBarcodeMatrixH5<ElementId extends string>(
+  url: string,
+  elementIds: readonly ElementId[],
+  options: CellFeatureMatrixReadOptions = {},
+): Promise<GexResult<ElementId>> {
+  if (elementIds.length === 0) {
     return {
       geneNames: [],
-      cells: emptyCellsFor(cellIds),
+      cells: emptyCellsFor(elementIds),
     }
   }
 
@@ -511,25 +519,25 @@ export async function gexFromCellFeatureMatrixH5(
   throwIfAborted(options.signal)
 
   return gexFromCellMajorSparseArrays({
-    cellIds,
+    cellIds: elementIds,
     geneNames: matrix.geneNames,
     featureTypes: matrix.featureTypes,
-    cellIdRows: matrix.cellIdRows,
+    cellIdRows: matrix.barcodeRows,
     indptr: matrix.indptr,
     indicesDataset: matrix.indicesDataset,
     dataDataset: matrix.dataDataset,
   })
 }
 
-export function gexFromCellMajorSparseArrays(options: {
-  readonly cellIds: readonly CellId[]
+export function gexFromCellMajorSparseArrays<ElementId extends string>(options: {
+  readonly cellIds: readonly ElementId[]
   readonly geneNames: readonly string[]
   readonly featureTypes: readonly string[]
-  readonly cellIdRows: ReadonlyMap<CellId, number>
+  readonly cellIdRows: ReadonlyMap<string, number>
   readonly indptr: NumericArrayLike
   readonly indicesDataset: SliceableNumericDataset
   readonly dataDataset: SliceableNumericDataset
-}): GexResult {
+}): GexResult<ElementId> {
   const geneFeatureIndices = createGeneFeatureIndex(
     options.geneNames,
     options.featureTypes,
@@ -549,9 +557,9 @@ export function gexFromCellMajorSparseArrays(options: {
     }
   }
 
-  const cells = new Map<CellId, { geneNames: string[]; counts: number[] }>()
+  const cells = new Map<ElementId, { geneNames: string[]; counts: number[] }>()
   const ranges: {
-    readonly id: CellId
+    readonly id: ElementId
     readonly start: number
     readonly end: number
   }[] = []
@@ -796,13 +804,15 @@ function parseTranscriptRow(row: Record<string, unknown>): TranscriptRow {
   }
 }
 
-function emptyCellsFor(cellIds: readonly CellId[]): ReadonlyMap<CellId, GexCell> {
+function emptyCellsFor<ElementId extends string>(
+  cellIds: readonly ElementId[],
+): ReadonlyMap<ElementId, GexCell> {
   return new Map(cellIds.map((cellId) => [cellId, { geneNames: [], counts: [] }]))
 }
 
-function emptyMutableCellsFor(
-  cellIds: readonly CellId[],
-): Map<CellId, { geneNames: string[]; counts: number[] }> {
+function emptyMutableCellsFor<ElementId extends CellId>(
+  cellIds: readonly ElementId[],
+): Map<ElementId, { geneNames: string[]; counts: number[] }> {
   return new Map(cellIds.map((cellId) => [cellId, { geneNames: [], counts: [] }]))
 }
 
@@ -1434,9 +1444,9 @@ function coalesceIndptrTargetRanges(
   return groups
 }
 
-function coalesceCellMajorRanges(
+function coalesceCellMajorRanges<ElementId extends string>(
   ranges: readonly {
-    readonly id: CellId
+    readonly id: ElementId
     readonly start: number
     readonly end: number
   }[],
@@ -1444,7 +1454,7 @@ function coalesceCellMajorRanges(
   readonly start: number
   readonly end: number
   readonly targets: readonly {
-    readonly id: CellId
+    readonly id: ElementId
     readonly start: number
     readonly end: number
   }[]
@@ -1453,7 +1463,7 @@ function coalesceCellMajorRanges(
     start: number
     end: number
     targets: {
-      readonly id: CellId
+      readonly id: ElementId
       readonly start: number
       readonly end: number
     }[]
@@ -1579,7 +1589,7 @@ async function loadH5MatrixUncached(
         featureTypeDataset.value,
         '/matrix/features/feature_type',
       ),
-      cellIdRows: h5CellIdRows(
+      barcodeRows: h5BarcodeRows(
         expectStringArray(barcodeDataset.value, '/matrix/barcodes'),
       ),
       indptr: expectNumericArrayLike(indptrDataset.value, '/matrix/indptr'),
@@ -1616,8 +1626,8 @@ function expectH5Dataset(
   return value as SliceableNumericDataset & { readonly value: unknown }
 }
 
-function h5CellIdRows(barcodes: readonly string[]): ReadonlyMap<CellId, number> {
-  const rows = new Map<CellId, number>()
+function h5BarcodeRows(barcodes: readonly string[]): ReadonlyMap<string, number> {
+  const rows = new Map<string, number>()
 
   for (let row = 0; row < barcodes.length; row += 1) {
     const barcode = barcodes[row]
@@ -1626,7 +1636,7 @@ function h5CellIdRows(barcodes: readonly string[]): ReadonlyMap<CellId, number> 
       continue
     }
 
-    rows.set(asCellId(barcode), row)
+    rows.set(barcode, row)
   }
 
   return rows

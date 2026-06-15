@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
@@ -20,6 +20,7 @@ function Probe({
   getSpatialDataset,
   onReady,
   setFlatMorphologyImage,
+  setGenePanelState,
   setLoadState,
   setMorphologyState,
   setSelectedGridCell,
@@ -34,6 +35,9 @@ function Probe({
   readonly setFlatMorphologyImage: Parameters<
     typeof useVisiumHdBinWorkflow
   >[0]['setFlatMorphologyImage']
+  readonly setGenePanelState: Parameters<
+    typeof useVisiumHdBinWorkflow
+  >[0]['setGenePanelState']
   readonly setLoadState: Parameters<typeof useVisiumHdBinWorkflow>[0]['setLoadState']
   readonly setMorphologyState: Parameters<
     typeof useVisiumHdBinWorkflow
@@ -55,6 +59,7 @@ function Probe({
     shouldLoadMorphology: true,
     visiumHdControlState: state,
     setFlatMorphologyImage,
+    setGenePanelState,
     setLoadState,
     setMorphologyState,
     setSelectedGridCell,
@@ -106,11 +111,13 @@ describe('useVisiumHdBinWorkflow', () => {
       matrix: vi.fn(async () => {
         throw new Error('unused')
       }),
+      genePanel: vi.fn(async () => ['Actb']),
       meta: vi.fn(async () => meta),
       readBinnedOverview: vi.fn(async () => overview),
     }
     const getSpatialDataset = vi.fn(async () => dataset)
     const setFlatMorphologyImage = vi.fn()
+    const setGenePanelState = vi.fn()
     const setLoadState = vi.fn()
     const setMorphologyState = vi.fn()
     const setSelectedGridCell = vi.fn()
@@ -126,6 +133,7 @@ describe('useVisiumHdBinWorkflow', () => {
           api = nextApi
         }}
         setFlatMorphologyImage={setFlatMorphologyImage}
+        setGenePanelState={setGenePanelState}
         setLoadState={setLoadState}
         setMorphologyState={setMorphologyState}
         setSelectedGridCell={setSelectedGridCell}
@@ -139,6 +147,7 @@ describe('useVisiumHdBinWorkflow', () => {
     })
 
     expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl)
+    expect(dataset.genePanel).toHaveBeenCalledWith(8)
     expect(dataset.readBinnedOverview).toHaveBeenCalledWith(8)
     expect(dataset.meta).toHaveBeenCalledWith(8)
     expect(dataset.image).toHaveBeenCalledWith(8)
@@ -147,6 +156,17 @@ describe('useVisiumHdBinWorkflow', () => {
       status: 'ready',
       url: datasetUrl,
       cellCount: 1,
+    })
+    expect(setGenePanelState).toHaveBeenCalledWith({
+      status: 'loading',
+      url: datasetUrl,
+    })
+    await waitFor(() => {
+      expect(setGenePanelState).toHaveBeenCalledWith({
+        status: 'ready',
+        url: datasetUrl,
+        genes: ['Actb'],
+      })
     })
     expect(setSpatialGridCells).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'BC-8', gridId: grid.id, row: 0, col: 0 }),
@@ -180,6 +200,7 @@ describe('useVisiumHdBinWorkflow', () => {
           api = nextApi
         }}
         setFlatMorphologyImage={vi.fn()}
+        setGenePanelState={vi.fn()}
         setLoadState={vi.fn()}
         setMorphologyState={vi.fn()}
         setSelectedGridCell={vi.fn()}

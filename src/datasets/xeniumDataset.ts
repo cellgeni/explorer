@@ -89,7 +89,7 @@ export interface XeniumDuckDbConnection extends TranscriptDuckDbConnection {
 }
 
 export interface GeneExpressionCell {
-  readonly id: CellId
+  readonly id: string
   readonly position: DataPoint
   readonly count: number
   readonly transcriptCount?: number

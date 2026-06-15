@@ -15,6 +15,7 @@ import {
   updateVisiumHdBinOptionCount,
   type VisiumHdControlState,
 } from '../dataset/visiumHdModel'
+import type { GenePanelState } from '../genes/geneControlsModel'
 import {
   createStructuredLoadError,
   readErrorMessage,
@@ -38,6 +39,10 @@ interface Setter<T> {
 export interface VisiumHdOverviewDataset {
   meta(binSizeMicrometers?: VisiumHdBinSizeMicrometers): Promise<DatasetMeta>
   image(binSizeMicrometers?: VisiumHdBinSizeMicrometers): Promise<ImageSource | null>
+  genePanel?(
+    binSizeMicrometers?: VisiumHdBinSizeMicrometers,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<readonly string[]>
   readBinnedOverview(
     binSizeMicrometers?: VisiumHdBinSizeMicrometers,
   ): Promise<VisiumHdBinnedOverview>
@@ -51,6 +56,7 @@ export interface UseVisiumHdBinWorkflowOptions {
   readonly visiumHdControlState: VisiumHdControlState
   readonly visiumHdBinRequestIdRef?: MutableRef<number>
   readonly setFlatMorphologyImage: Setter<FlatMorphologyCanvasImage | null>
+  readonly setGenePanelState: Setter<GenePanelState<StructuredLoadError>>
   readonly setLoadState: Setter<DatasetLoadState<StructuredLoadError>>
   readonly setMorphologyState: Setter<MorphologyLoadState<StructuredLoadError>>
   readonly setSpatialGridCells: Setter<readonly GridCellDatum[]>
@@ -72,6 +78,7 @@ export function useVisiumHdBinWorkflow({
   visiumHdControlState,
   visiumHdBinRequestIdRef,
   setFlatMorphologyImage,
+  setGenePanelState,
   setLoadState,
   setMorphologyState,
   setSpatialGridCells,
@@ -116,6 +123,34 @@ export function useVisiumHdBinWorkflow({
 
         if (!isVisiumHdOverviewDataset(dataset)) {
           throw new Error('Loaded dataset does not expose Visium HD binned outputs.')
+        }
+
+        if (dataset.genePanel !== undefined) {
+          setGenePanelState({ status: 'loading', url: datasetUrl })
+          void dataset
+            .genePanel(binSize)
+            .then((genes) => {
+              if (requestIdRef.current !== requestId) {
+                return
+              }
+
+              setGenePanelState({ status: 'ready', url: datasetUrl, genes })
+              appendDebugEvent(
+                `Visium HD gene panel ready: ${genes.length.toLocaleString()} genes`,
+              )
+            })
+            .catch((error) => {
+              if (requestIdRef.current !== requestId) {
+                return
+              }
+
+              setGenePanelState({
+                status: 'error',
+                url: datasetUrl,
+                error: createStructuredLoadError('Gene panel', error),
+              })
+              appendDebugEvent('Visium HD gene panel failed')
+            })
         }
 
         const [overview, meta] = await Promise.all([
@@ -216,6 +251,7 @@ export function useVisiumHdBinWorkflow({
       loadedDatasetUrl,
       requestIdRef,
       setFlatMorphologyImage,
+      setGenePanelState,
       setLoadState,
       setMorphologyState,
       setSelectedGridCell,

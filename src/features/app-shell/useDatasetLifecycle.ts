@@ -687,6 +687,38 @@ export function useDatasetLifecycle({
             throw new Error('Detected Visium HD dataset does not expose binned outputs.')
           }
 
+          if (dataset.genePanel !== undefined) {
+            setGenePanelState({ status: 'loading', url: requestedUrl })
+            void dataset
+              .genePanel(undefined, { signal: abortController.signal })
+              .then((genes) => {
+                if (loadRequestIdRef.current !== requestId) {
+                  return
+                }
+
+                setGenePanelState({ status: 'ready', url: requestedUrl, genes })
+                appendDebugEvent(
+                  `Visium HD gene panel ready: ${genes.length.toLocaleString()} genes`,
+                )
+              })
+              .catch((error) => {
+                if (isAbortError(error)) {
+                  return
+                }
+
+                if (loadRequestIdRef.current !== requestId) {
+                  return
+                }
+
+                setGenePanelState({
+                  status: 'error',
+                  url: requestedUrl,
+                  error: createStructuredLoadError('Gene panel', error),
+                })
+                appendDebugEvent('Visium HD gene panel failed')
+              })
+          }
+
           const [overview, meta] = await Promise.all([
             dataset.readBinnedOverview(),
             dataset.meta(),

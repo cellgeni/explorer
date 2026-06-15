@@ -5,6 +5,7 @@ import {
   createGeneFeatureIndex,
   gexFromCellMajorSparseArrays,
   gexFromCellFeatureMatrixH5,
+  gexFromFeatureBarcodeMatrixH5,
   gexFromFeatureMajorSparseArrays,
   gexFromTranscriptsParquet,
   isGeneFeature,
@@ -292,6 +293,38 @@ describe('GEX helpers', () => {
         counts: [2, 3],
       })
       expect(result.cells.get(cellC)).toEqual({ geneNames: [], counts: [] })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('reads generic barcode rows from a feature-barcode matrix H5 file', async () => {
+    const bytes = await createTinyH5CellFeatureMatrix(['AAAC-1', 'TTGG-1'])
+    const body = new ArrayBuffer(bytes.byteLength)
+    new Uint8Array(body).set(bytes)
+    const originalFetch = globalThis.fetch
+
+    globalThis.fetch = async () => new Response(body)
+
+    try {
+      const result = await gexFromFeatureBarcodeMatrixH5(
+        'https://example.test/visium/filtered_feature_bc_matrix.h5',
+        ['TTGG-1', 'missing-barcode', 'AAAC-1'],
+      )
+
+      expect(result.geneNames).toEqual(['Actb', 'Gad1'])
+      expect(result.cells.get('AAAC-1')).toEqual({
+        geneNames: ['Actb'],
+        counts: [5],
+      })
+      expect(result.cells.get('TTGG-1')).toEqual({
+        geneNames: ['Actb', 'Gad1'],
+        counts: [2, 3],
+      })
+      expect(result.cells.get('missing-barcode')).toEqual({
+        geneNames: [],
+        counts: [],
+      })
     } finally {
       globalThis.fetch = originalFetch
     }

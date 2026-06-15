@@ -62,6 +62,7 @@ function Probe({
   loadGenePanel = vi.fn(async () => []),
   setDatasetPlatform = vi.fn(),
   setFlatMorphologyImage = vi.fn(),
+  setGenePanelState = vi.fn(),
   setLoadState = vi.fn(),
   setMorphologyState = vi.fn(),
   setSelectedGridCell = vi.fn(),
@@ -78,6 +79,7 @@ function Probe({
   readonly loadGenePanel?: LifecycleOptions['loadGenePanel']
   readonly setDatasetPlatform?: LifecycleOptions['setDatasetPlatform']
   readonly setFlatMorphologyImage?: LifecycleOptions['setFlatMorphologyImage']
+  readonly setGenePanelState?: LifecycleOptions['setGenePanelState']
   readonly setLoadState?: LifecycleOptions['setLoadState']
   readonly setMorphologyState?: LifecycleOptions['setMorphologyState']
   readonly setSelectedGridCell?: LifecycleOptions['setSelectedGridCell']
@@ -166,7 +168,7 @@ function Probe({
     setGeneExpressionScaleDomain: noopSetter,
     setGeneExpressionScoreMode: noopSetter,
     setGeneExpressionState: noopSetter,
-    setGenePanelState: noopSetter,
+    setGenePanelState,
     setHoveredTranscript: noopSetter,
     setLoadState,
     setMagicLensActive: noopSetter,
@@ -339,6 +341,7 @@ describe('useDatasetLifecycle', () => {
       matrix: vi.fn(async () => {
         throw new Error('unused')
       }),
+      genePanel: vi.fn(async () => ['Actb', 'Gad1']),
       meta: vi.fn(async () => meta),
       readBinnedOverview: vi.fn(async () => overview),
     }
@@ -354,6 +357,7 @@ describe('useDatasetLifecycle', () => {
     const loadGenePanel = vi.fn(async () => [])
     const setDatasetPlatform = vi.fn()
     const setFlatMorphologyImage = vi.fn()
+    const setGenePanelState = vi.fn()
     const setLoadState = vi.fn()
     const setMorphologyState = vi.fn()
     const setSpatialGridCells = vi.fn()
@@ -370,6 +374,7 @@ describe('useDatasetLifecycle', () => {
         loadGenePanel={loadGenePanel}
         setDatasetPlatform={setDatasetPlatform}
         setFlatMorphologyImage={setFlatMorphologyImage}
+        setGenePanelState={setGenePanelState}
         setLoadState={setLoadState}
         setMorphologyState={setMorphologyState}
         setSpatialGridCells={setSpatialGridCells}
@@ -392,6 +397,21 @@ describe('useDatasetLifecycle', () => {
     expect(loadGenePanel).not.toHaveBeenCalled()
     expect(loadAnnotationGroups).not.toHaveBeenCalled()
     expect(warmDatasetForRoi).not.toHaveBeenCalled()
+    expect(dataset.genePanel).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(setGenePanelState).toHaveBeenCalledWith({
+      status: 'loading',
+      url: datasetUrl,
+    })
+    await waitFor(() => {
+      expect(setGenePanelState).toHaveBeenCalledWith({
+        status: 'ready',
+        url: datasetUrl,
+        genes: ['Actb', 'Gad1'],
+      })
+    })
     expect(setDatasetPlatform).toHaveBeenCalledWith('visium-hd')
     expect(setVisiumHdControlState).toHaveBeenCalledWith(
       expect.objectContaining({

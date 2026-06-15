@@ -1,6 +1,12 @@
 import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet'
 import { datasetFileUrl } from '../data/datasetFiles'
-import type { GexResult } from '../data/gex'
+import {
+  gexFromFeatureBarcodeMatrixH5,
+  isGeneFeature,
+  type CellFeatureMatrixReadOptions,
+  type GexCell,
+  type GexResult,
+} from '../data/gex'
 import { micrometers } from '../data/coords'
 import {
   cacheFooterByteRanges,
@@ -20,6 +26,7 @@ import type {
   SpatialDataset,
   SpatialElementId,
 } from './spatialDataset'
+import type { GeneExpressionBatch, GeneExpressionQueryOptions } from './xeniumDataset'
 
 export type VisiumHdBinSizeMicrometers = 2 | 8 | 16
 
@@ -43,6 +50,16 @@ export interface VisiumHdDatasetOptions {
     url: string,
     options: ReadVisiumHdScalefactorsOptions,
   ) => Promise<VisiumHdScalefactors>
+  readonly featureGenePanelReader?: (
+    baseUrl: string,
+    bin: VisiumHdBinDescriptor,
+    options: ReadVisiumHdFeatureGenePanelOptions,
+  ) => Promise<readonly string[]>
+  readonly featureMatrixReader?: (
+    url: string,
+    ids: readonly SpatialElementId[],
+    options?: CellFeatureMatrixReadOptions,
+  ) => Promise<GexResult<SpatialElementId>>
   readonly readObjects?: VisiumHdParquetObjectReader
   readonly loadCompressors?: () => Promise<Compressors>
   readonly byteRangeCache?: PersistentByteRangeCache | null
@@ -102,6 +119,15 @@ export interface ReadVisiumHdTissuePositionsOptions {
   readonly readObjects?: VisiumHdParquetObjectReader
   readonly byteRangeCache?: PersistentByteRangeCache | null
   readonly signal?: AbortSignal
+}
+
+export interface ReadVisiumHdFeatureGenePanelOptions {
+  readonly fetcher?: typeof fetch
+  readonly signal?: AbortSignal
+}
+
+export interface VisiumHdGeneExpressionQueryOptions extends GeneExpressionQueryOptions {
+  readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers
 }
 
 export interface ReadVisiumHdBinnedOverviewOptions {
@@ -167,12 +193,26 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     url: string,
     options: ReadVisiumHdScalefactorsOptions,
   ) => Promise<VisiumHdScalefactors>
+  private readonly featureGenePanelReader: (
+    baseUrl: string,
+    bin: VisiumHdBinDescriptor,
+    options: ReadVisiumHdFeatureGenePanelOptions,
+  ) => Promise<readonly string[]>
+  private readonly featureMatrixReader: (
+    url: string,
+    ids: readonly SpatialElementId[],
+    options?: CellFeatureMatrixReadOptions,
+  ) => Promise<GexResult<SpatialElementId>>
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
   private readonly loadCompressors: (() => Promise<Compressors>) | undefined
   private readonly byteRangeCache: PersistentByteRangeCache | null | undefined
   private readonly overviewPromises = new Map<
     VisiumHdBinSizeMicrometers,
     Promise<VisiumHdBinnedOverview>
+  >()
+  private readonly genePanelPromises = new Map<
+    VisiumHdBinSizeMicrometers,
+    Promise<readonly string[]>
   >()
 
   constructor(options: VisiumHdDatasetOptions) {
@@ -184,6 +224,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     this.tissuePositionsReader =
       options.tissuePositionsReader ?? readVisiumHdTissuePositions
     this.scalefactorsReader = options.scalefactorsReader ?? readVisiumHdScalefactors
+    this.featureGenePanelReader =
+      options.featureGenePanelReader ?? readVisiumHdFeatureGenePanel
+    this.featureMatrixReader =
+      options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5
     this.readObjects = options.readObjects
     this.loadCompressors = options.loadCompressors
     this.byteRangeCache = options.byteRangeCache
@@ -216,8 +260,47 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  matrix(): Promise<GexResult<SpatialElementId>> {
-    return Promise.reject(visiumHdNotImplementedError('matrix loading'))
+  matrix(
+    ids: readonly SpatialElementId[] = [],
+    binSizeMicrometers = this.defaultBinSizeMicrometers,
+    options: CellFeatureMatrixReadOptions = {},
+  ): Promise<GexResult<SpatialElementId>> {
+    const bin = findBin(this.bins, binSizeMicrometers)
+
+    return this.featureMatrixReader(
+      datasetFileUrl(this.baseUrl, bin.filteredMatrixH5Path),
+      ids,
+      options,
+    )
+  }
+
+  genePanel(
+    binSizeMicrometers = this.defaultBinSizeMicrometers,
+    options: ReadVisiumHdFeatureGenePanelOptions = {},
+  ): Promise<readonly string[]> {
+    const existing = this.genePanelPromises.get(binSizeMicrometers)
+
+    if (existing !== undefined && options.signal === undefined) {
+      return existing
+    }
+
+    const bin = findBin(this.bins, binSizeMicrometers)
+    const promise = this.featureGenePanelReader(this.baseUrl, bin, {
+      fetcher: this.fetcher,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    }).catch((error: unknown) => {
+      if (this.genePanelPromises.get(binSizeMicrometers) === promise) {
+        this.genePanelPromises.delete(binSizeMicrometers)
+      }
+
+      throw error
+    })
+
+    if (options.signal === undefined) {
+      this.genePanelPromises.set(binSizeMicrometers, promise)
+    }
+
+    return promise
   }
 
   annotations(): Promise<readonly Annotation<SpatialElementId>[]> {
@@ -242,6 +325,120 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     return Promise.reject(
       new Error('Visium HD output does not provide Xenium-style transcript records.'),
     )
+  }
+
+  async geneExpression(
+    bbox: BBox,
+    genes: readonly string[],
+    options: VisiumHdGeneExpressionQueryOptions = {},
+  ): Promise<GeneExpressionBatch> {
+    const totalStartedAt = Date.now()
+    const selectedGenes = normalizeGeneList(genes)
+
+    if (selectedGenes.length === 0) {
+      return {
+        cells: [],
+        genes: [],
+        maxCount: 0,
+      }
+    }
+
+    const limit = options.limit ?? 5_000
+    const sampleStride = normalizeSampleStride(options.sampleStride)
+    throwIfAborted(options.signal)
+    const viewportBinsStartedAt = Date.now()
+    const overview = await this.readBinnedOverview(options.binSizeMicrometers)
+    const viewportBins = selectExpressionBinsInBbox(overview, bbox, {
+      limit,
+      sampleStride,
+    })
+    const viewportCellsMs = elapsedMs(viewportBinsStartedAt)
+    options.onStageTiming?.({
+      stage: 'viewport-cells',
+      label: 'Viewport bin query',
+      durationMs: viewportCellsMs,
+      detail: `${viewportBins.length.toLocaleString()} bins, limit ${limit.toLocaleString()}, stride ${sampleStride.toLocaleString()}`,
+    })
+    throwIfAborted(options.signal)
+
+    if (viewportBins.length === 0) {
+      return {
+        cells: [],
+        genes: selectedGenes,
+        maxCount: 0,
+        timing: {
+          viewportCellsMs,
+          matrixReadMs: 0,
+          scoreCellsMs: 0,
+          totalMs: elapsedMs(totalStartedAt),
+        },
+      }
+    }
+
+    const matrixReadStartedAt = Date.now()
+    const matrix = await this.matrix(
+      viewportBins.map((bin) => bin.id),
+      overview.binSizeMicrometers,
+      {
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+        ...(options.onStageTiming === undefined
+          ? {}
+          : { onStageTiming: options.onStageTiming }),
+      },
+    )
+    const matrixReadMs = elapsedMs(matrixReadStartedAt)
+    options.onStageTiming?.({
+      stage: 'matrix-read',
+      label: 'Expression matrix read',
+      durationMs: matrixReadMs,
+      detail: `${selectedGenes.length.toLocaleString()} genes, ${viewportBins.length.toLocaleString()} bins`,
+    })
+    throwIfAborted(options.signal)
+    const scoreCellsStartedAt = Date.now()
+    const selectedGeneSet = new Set(selectedGenes)
+    const cells: GeneExpressionBatch['cells'][number][] = []
+    let maxCount = 0
+
+    for (const bin of viewportBins) {
+      const expression = matrix.cells.get(bin.id)
+
+      if (expression === undefined) {
+        continue
+      }
+
+      const count = selectedGeneCount(expression, selectedGeneSet)
+
+      if (count <= 0) {
+        continue
+      }
+
+      cells.push({
+        id: bin.id,
+        position: bin.position,
+        count,
+        cellArea: overview.binSizeMicrometers * overview.binSizeMicrometers,
+      })
+      maxCount = Math.max(maxCount, count)
+    }
+    const scoreCellsMs = elapsedMs(scoreCellsStartedAt)
+    options.onStageTiming?.({
+      stage: 'score-cells',
+      label: 'Expression scoring',
+      durationMs: scoreCellsMs,
+      detail: `${cells.length.toLocaleString()} positive bins`,
+    })
+
+    return {
+      cells,
+      genes: selectedGenes,
+      maxCount,
+      timing: {
+        viewportCellsMs,
+        matrixReadMs,
+        scoreCellsMs,
+        totalMs: elapsedMs(totalStartedAt),
+      },
+    }
   }
 
   readBinnedOverview(
@@ -330,6 +527,50 @@ export async function readVisiumHdScalefactors(
   }
 
   return parseVisiumHdScalefactors(await response.json())
+}
+
+export async function readVisiumHdFeatureGenePanel(
+  baseUrl: string,
+  bin: VisiumHdBinDescriptor,
+  options: ReadVisiumHdFeatureGenePanelOptions = {},
+): Promise<readonly string[]> {
+  const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+  const url = datasetFileUrl(
+    normalizeBaseUrl(baseUrl),
+    `${bin.outputPath}/filtered_feature_bc_matrix/features.tsv.gz`,
+  )
+  const response =
+    options.signal === undefined
+      ? await fetcher(url)
+      : await fetcher(url, { signal: options.signal })
+
+  if (!response.ok) {
+    throw new Error(`Unable to load Visium HD features.tsv.gz: HTTP ${response.status}.`)
+  }
+
+  return parseVisiumHdFeatureRows(await readMaybeGzipText(response))
+}
+
+export function parseVisiumHdFeatureRows(text: string): readonly string[] {
+  const genes = new Set<string>()
+
+  for (const line of text.split(/\r?\n/)) {
+    const trimmedLine = line.trim()
+
+    if (trimmedLine.length === 0 || trimmedLine.startsWith('#')) {
+      continue
+    }
+
+    const columns = trimmedLine.split('\t')
+    const geneName = (columns[1] ?? columns[0] ?? '').trim()
+    const featureType = columns[2]?.trim()
+
+    if (geneName.length > 0 && isGeneFeature(geneName, featureType)) {
+      genes.add(geneName)
+    }
+  }
+
+  return [...genes].sort((a, b) => a.localeCompare(b))
 }
 
 export function parseVisiumHdScalefactors(value: unknown): VisiumHdScalefactors {
@@ -547,6 +788,25 @@ function visiumHdNotImplementedError(capability: string): Error {
   return new Error(`Visium HD ${capability} is not implemented yet.`)
 }
 
+async function readMaybeGzipText(response: Response): Promise<string> {
+  const bytes = new Uint8Array(await response.arrayBuffer())
+
+  if (!hasGzipHeader(bytes)) {
+    return new TextDecoder().decode(bytes)
+  }
+
+  if (typeof DecompressionStream !== 'function') {
+    throw new Error('This browser does not support gzip decompression.')
+  }
+
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
+  return new Response(stream).text()
+}
+
+function hasGzipHeader(bytes: Uint8Array): boolean {
+  return bytes[0] === 0x1f && bytes[1] === 0x8b
+}
+
 function preferredDefaultBinSize(
   bins: readonly VisiumHdBinDescriptor[],
 ): VisiumHdBinSizeMicrometers {
@@ -670,6 +930,59 @@ function selectGridCellsInBbox(
   }
 }
 
+interface VisiumHdExpressionBin {
+  readonly id: SpatialElementId
+  readonly position: DataPoint
+}
+
+function selectExpressionBinsInBbox(
+  overview: VisiumHdBinnedOverview,
+  bbox: BBox,
+  options: {
+    readonly limit: number
+    readonly sampleStride: number
+  },
+): readonly VisiumHdExpressionBin[] {
+  const limit = normalizeLimit(options.limit)
+
+  if (limit === 0) {
+    return []
+  }
+
+  const bins: VisiumHdExpressionBin[] = []
+  let candidateIndex = 0
+
+  for (let index = 0; index < overview.gridCells.rows.length; index += 1) {
+    const row = overview.gridCells.rows[index] ?? 0
+    const col = overview.gridCells.cols[index] ?? 0
+    const center = gridCellCenter(overview.grid, row, col)
+
+    if (
+      center.x < bbox.minX ||
+      center.x > bbox.maxX ||
+      center.y < bbox.minY ||
+      center.y > bbox.maxY
+    ) {
+      continue
+    }
+
+    if (candidateIndex % options.sampleStride === 0) {
+      bins.push({
+        id: overview.gridCells.ids[index] ?? '',
+        position: center,
+      })
+    }
+
+    candidateIndex += 1
+
+    if (bins.length >= limit) {
+      break
+    }
+  }
+
+  return bins
+}
+
 function visiumHdGridId(binSizeMicrometers: VisiumHdBinSizeMicrometers): string {
   return `visium-hd-square-${String(binSizeMicrometers).padStart(3, '0')}um`
 }
@@ -717,6 +1030,81 @@ function basisSampleStride(
   }
 
   return Math.max(1, Math.ceil(retainedCount / maxBasisFitSamples))
+}
+
+function selectedGeneCount(cell: GexCell, selectedGeneSet: ReadonlySet<string>): number {
+  let total = 0
+
+  for (let index = 0; index < cell.geneNames.length; index += 1) {
+    const gene = cell.geneNames[index]
+    const count = cell.counts[index]
+
+    if (
+      gene !== undefined &&
+      count !== undefined &&
+      selectedGeneSet.has(gene) &&
+      Number.isFinite(count)
+    ) {
+      total += count
+    }
+  }
+
+  return total
+}
+
+function normalizeGeneList(genes: readonly string[]): readonly string[] {
+  const selectedGenes: string[] = []
+  const seenGenes = new Set<string>()
+
+  for (const gene of genes) {
+    const normalizedGene = gene.trim()
+    const key = normalizedGene.toLowerCase()
+
+    if (normalizedGene.length === 0 || seenGenes.has(key)) {
+      continue
+    }
+
+    selectedGenes.push(normalizedGene)
+    seenGenes.add(key)
+  }
+
+  return selectedGenes
+}
+
+function normalizeSampleStride(sampleStride: number | undefined): number {
+  if (sampleStride === undefined || !Number.isFinite(sampleStride)) {
+    return 1
+  }
+
+  return Math.max(1, Math.floor(sampleStride))
+}
+
+function normalizeLimit(limit: number): number {
+  if (!Number.isFinite(limit)) {
+    return 5_000
+  }
+
+  return Math.max(0, Math.floor(limit))
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw abortError(signal)
+  }
+}
+
+function elapsedMs(startedAt: number): number {
+  return Date.now() - startedAt
+}
+
+function abortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) {
+    return signal.reason
+  }
+
+  const error = new Error('Visium HD expression request aborted.')
+  error.name = 'AbortError'
+  return error
 }
 
 async function visiumHdFileFromUrl(
