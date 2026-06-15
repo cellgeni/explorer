@@ -1,6 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import { summarizeDatasetDiagnostics } from '../../data/datasetDiagnostics'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
+import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetDiagnosticsRunner } from '../app-shell/appDependencies'
 import {
   abortActiveRequest,
@@ -30,6 +31,7 @@ interface UseDatasetDiagnosticsWorkflowOptions extends DiagnosticsDumpOptions {
   readonly setDiagnosticsState: Dispatch<
     SetStateAction<DatasetDiagnosticsState<StructuredLoadError>>
   >
+  readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
 }
 
 interface UseDatasetDiagnosticsWorkflowResult {
@@ -80,6 +82,7 @@ export function useDatasetDiagnosticsWorkflow({
   transcriptOpacity,
   transcriptPointColorMode,
   transcriptPointSize,
+  visiumHdBinSizeMicrometers,
 }: UseDatasetDiagnosticsWorkflowOptions): UseDatasetDiagnosticsWorkflowResult {
   const handleRunDatasetDiagnostics = useCallback(async () => {
     const requestedUrl = datasetUrl.trim()
@@ -98,6 +101,9 @@ export function useDatasetDiagnosticsWorkflow({
     try {
       const report = await runDatasetDiagnostics(requestedUrl, {
         signal: abortController.signal,
+        ...(visiumHdBinSizeMicrometers === undefined
+          ? {}
+          : { visiumHdBinSizeMicrometers }),
       })
 
       if (diagnosticsAbortRef.current !== abortController) {
@@ -142,6 +148,7 @@ export function useDatasetDiagnosticsWorkflow({
     recordTelemetry,
     runDatasetDiagnostics,
     setDiagnosticsState,
+    visiumHdBinSizeMicrometers,
   ])
 
   const handleDownloadDiagnostics = useCallback(() => {

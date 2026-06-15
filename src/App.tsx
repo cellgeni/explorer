@@ -560,6 +560,10 @@ export function App({
       null,
     [cellMetadataTracks, selectedCellMetadataTrackId],
   )
+  const diagnosticsVisiumHdBinSize =
+    visiumHdControlState.status === 'idle'
+      ? undefined
+      : visiumHdControlState.selectedBinSize
   const hiddenAnnotationSetIdSet = useMemo(
     () => new Set(hiddenAnnotationSetIds),
     [hiddenAnnotationSetIds],
@@ -1032,6 +1036,9 @@ export function App({
       transcriptOpacity,
       transcriptPointColorMode,
       transcriptPointSize,
+      ...(diagnosticsVisiumHdBinSize === undefined
+        ? {}
+        : { visiumHdBinSizeMicrometers: diagnosticsVisiumHdBinSize }),
     })
   const handleImageTileError = useCallback((error: Error) => {
     setMorphologyState((current) => {

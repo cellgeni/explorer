@@ -3,6 +3,7 @@ import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { DatasetDiagnosticsReport } from '../../data/datasetDiagnostics'
 import type { TelemetryEvent } from '../../data/telemetry'
+import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetDiagnosticsRunner } from '../app-shell/appDependencies'
 import type { DatasetDiagnosticsState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
@@ -39,6 +40,7 @@ interface DiagnosticsProbeProps {
     snapshot: DiagnosticsSnapshot,
   ) => void
   readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
+  readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
 }
 
 let diagnosticsApi: ReturnType<typeof useDatasetDiagnosticsWorkflow>
@@ -48,6 +50,7 @@ function DiagnosticsProbe({
   datasetUrl = ' https://example.test/output ',
   onReady,
   runDatasetDiagnostics,
+  visiumHdBinSizeMicrometers,
 }: DiagnosticsProbeProps) {
   const [diagnosticsState, setDiagnosticsState] = React.useState<
     DatasetDiagnosticsState<StructuredLoadError>
@@ -103,6 +106,7 @@ function DiagnosticsProbe({
     transcriptOpacity: 0.85,
     transcriptPointColorMode: 'feature',
     transcriptPointSize: 2,
+    ...(visiumHdBinSizeMicrometers === undefined ? {} : { visiumHdBinSizeMicrometers }),
   })
 
   React.useEffect(() => {
@@ -210,5 +214,32 @@ describe('useDatasetDiagnosticsWorkflow', () => {
 
     expect(runDatasetDiagnostics).not.toHaveBeenCalled()
     expect(diagnosticsSnapshot.diagnosticsState).toEqual({ status: 'idle' })
+  })
+
+  it('passes the active Visium HD bin size into diagnostics', async () => {
+    const runDatasetDiagnostics = vi.fn(async () => successfulReport)
+
+    render(
+      <DiagnosticsProbe
+        onReady={(nextApi, nextSnapshot) => {
+          diagnosticsApi = nextApi
+          diagnosticsSnapshot = nextSnapshot
+        }}
+        runDatasetDiagnostics={runDatasetDiagnostics}
+        visiumHdBinSizeMicrometers={8}
+      />,
+    )
+
+    await act(async () => {
+      await diagnosticsApi.handleRunDatasetDiagnostics()
+    })
+
+    expect(runDatasetDiagnostics).toHaveBeenCalledWith(
+      'https://example.test/output',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        visiumHdBinSizeMicrometers: 8,
+      }),
+    )
   })
 })

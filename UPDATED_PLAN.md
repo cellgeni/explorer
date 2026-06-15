@@ -1097,6 +1097,12 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       detail loaders, and the Cell tab switches to `Bin Info` with a clear
       action plus an unavailable expression status until Slice 5 adds binned
       expression loading.
+- [x] Tightened Visium HD dataset diagnostics around the active binned mode.
+      When the app has a selected Visium HD tier, diagnostics now check that
+      tier's positions parquet, scalefactors JSON, filtered feature-barcode
+      matrix, high/low tissue images, and optional UMAP projection rather than
+      treating every detected tier as the required mode. Diagnostics still
+      check optional root Feature Slice and barcode-mapping files.
 
 ### Definition Of Done For The First Visium HD MVP
 
@@ -1110,7 +1116,7 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [x] Hover/click on a bin shows barcode, bin size, tissue status, array
       row/column, image coordinate, and expression details once expression
       loading is implemented.
-- [ ] Dataset diagnostics check the Visium HD files that actually matter for
+- [x] Dataset diagnostics check the Visium HD files that actually matter for
       the selected mode: binned positions, binned scalefactors, binned tissue
       image, filtered feature-barcode matrix, and optional analysis projection.
 - [ ] Unit tests cover Visium HD path detection, scalefactor parsing,

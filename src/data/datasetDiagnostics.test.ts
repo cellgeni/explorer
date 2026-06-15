@@ -92,9 +92,86 @@ describe('runDatasetDiagnostics', () => {
       'https://example.test/visium/feature_slice.h5',
       expect.objectContaining({ label: 'Feature Slice H5' }),
     )
+    expect(rangeValidator).toHaveBeenCalledWith(
+      'https://example.test/visium/binned_outputs/square_016um/analysis/umap/gene_expression_2_components/projection.csv',
+      expect.objectContaining({ label: 'Visium HD 16um UMAP projection' }),
+    )
     expect(fetcher).not.toHaveBeenCalledWith(
       'https://example.test/visium/experiment.xenium',
       expect.anything(),
     )
   })
+
+  it('checks only the selected Visium HD binned mode when provided', async () => {
+    const detection: SpatialDatasetDetection = {
+      platform: 'visium-hd',
+      baseUrl: 'https://example.test/visium',
+      bins: [visiumBin(16, 'square_016um'), visiumBin(8, 'square_008um')],
+      checked: [],
+    }
+    const rangeValidator = vi.fn(async () => undefined)
+
+    const report = await runDatasetDiagnostics('https://example.test/visium', {
+      detectDataset: vi.fn(async () => detection),
+      fetcher: vi.fn(async () => new Response('{}', { status: 200 })),
+      rangeValidator,
+      visiumHdBinSizeMicrometers: 8,
+    })
+
+    expect(report.checks.find((check) => check.id === 'visium-hd-8um-positions')).toEqual(
+      expect.objectContaining({ required: true, status: 'pass' }),
+    )
+    expect(
+      report.checks.find((check) => check.id === 'visium-hd-16um-positions'),
+    ).toBeUndefined()
+    expect(rangeValidator).toHaveBeenCalledWith(
+      'https://example.test/visium/binned_outputs/square_008um/spatial/tissue_positions.parquet',
+      expect.objectContaining({ label: 'Visium HD 8um positions' }),
+    )
+    expect(rangeValidator).not.toHaveBeenCalledWith(
+      'https://example.test/visium/binned_outputs/square_016um/spatial/tissue_positions.parquet',
+      expect.anything(),
+    )
+  })
+
+  it('fails Visium HD diagnostics when the selected binned mode is absent', async () => {
+    const detection: SpatialDatasetDetection = {
+      platform: 'visium-hd',
+      baseUrl: 'https://example.test/visium',
+      bins: [visiumBin(16, 'square_016um')],
+      checked: [],
+    }
+
+    const report = await runDatasetDiagnostics('https://example.test/visium', {
+      detectDataset: vi.fn(async () => detection),
+      fetcher: vi.fn(async () => new Response('{}', { status: 200 })),
+      rangeValidator: vi.fn(async () => undefined),
+      visiumHdBinSizeMicrometers: 8,
+    })
+
+    expect(
+      report.checks.find((check) => check.id === 'visium-hd-8um-selected-bin'),
+    ).toEqual(
+      expect.objectContaining({
+        required: true,
+        status: 'fail',
+        message: 'Selected binned output was not detected.',
+      }),
+    )
+  })
 })
+
+function visiumBin(
+  binSizeMicrometers: 8 | 16,
+  directory: string,
+): Extract<SpatialDatasetDetection, { readonly platform: 'visium-hd' }>['bins'][number] {
+  const outputPath = `binned_outputs/${directory}`
+
+  return {
+    binSizeMicrometers,
+    outputPath,
+    tissuePositionsPath: `${outputPath}/spatial/tissue_positions.parquet`,
+    scalefactorsPath: `${outputPath}/spatial/scalefactors_json.json`,
+    filteredMatrixH5Path: `${outputPath}/filtered_feature_bc_matrix.h5`,
+  }
+}

@@ -5,6 +5,10 @@ import {
   type SpatialDatasetDetection,
 } from '../datasets/datasetFactory'
 import type { Platform } from '../datasets/spatialDataset'
+import type {
+  VisiumHdBinDescriptor,
+  VisiumHdBinSizeMicrometers,
+} from '../datasets/visiumHdDataset'
 import type { RangeSupportFetcher } from './rangeSupport'
 
 export type DatasetDiagnosticStatus = 'pass' | 'warning' | 'fail'
@@ -31,6 +35,7 @@ export interface DatasetDiagnosticsReport {
 export interface DatasetDiagnosticsOptions {
   readonly fetcher?: RangeSupportFetcher
   readonly signal?: AbortSignal
+  readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
   readonly rangeValidator?: (
     url: string,
     options: {
@@ -194,8 +199,23 @@ async function runVisiumHdDiagnostics(
   options: DatasetDiagnosticsOptions,
 ): Promise<readonly DatasetDiagnosticCheck[]> {
   const checks: DatasetDiagnosticCheck[] = []
+  const selectedBin = selectedVisiumHdBin(detection, options.visiumHdBinSizeMicrometers)
 
-  for (const bin of detection.bins) {
+  if (selectedBin.status === 'missing') {
+    checks.push(
+      diagnosticCheck({
+        id: `visium-hd-${options.visiumHdBinSizeMicrometers}um-selected-bin`,
+        label: `Visium HD ${options.visiumHdBinSizeMicrometers}um selected mode`,
+        url: detection.baseUrl,
+        required: true,
+        status: 'fail',
+        message: 'Selected binned output was not detected.',
+        startedAt: Date.now(),
+      }),
+    )
+  }
+
+  for (const bin of selectedBin.bins) {
     const suffix = `${bin.binSizeMicrometers}um`
 
     checks.push(
@@ -258,6 +278,18 @@ async function runVisiumHdDiagnostics(
         options,
       ),
     )
+    checks.push(
+      await checkRangeFile(
+        detection.baseUrl,
+        {
+          id: `visium-hd-${suffix}-umap-projection`,
+          label: `Visium HD ${suffix} UMAP projection`,
+          path: `${bin.outputPath}/analysis/umap/gene_expression_2_components/projection.csv`,
+        },
+        false,
+        options,
+      ),
+    )
   }
 
   for (const file of VISIUM_HD_ROOT_RANGE_FILES) {
@@ -280,6 +312,26 @@ async function runVisiumHdDiagnostics(
   }
 
   return checks
+}
+
+function selectedVisiumHdBin(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'visium-hd' }>,
+  binSizeMicrometers: VisiumHdBinSizeMicrometers | undefined,
+):
+  | { readonly status: 'all'; readonly bins: readonly VisiumHdBinDescriptor[] }
+  | { readonly status: 'selected'; readonly bins: readonly VisiumHdBinDescriptor[] }
+  | { readonly status: 'missing'; readonly bins: readonly [] } {
+  if (binSizeMicrometers === undefined) {
+    return { status: 'all', bins: detection.bins }
+  }
+
+  const selectedBin = detection.bins.find(
+    (bin) => bin.binSizeMicrometers === binSizeMicrometers,
+  )
+
+  return selectedBin === undefined
+    ? { status: 'missing', bins: [] }
+    : { status: 'selected', bins: [selectedBin] }
 }
 
 async function checkRangeFile(
