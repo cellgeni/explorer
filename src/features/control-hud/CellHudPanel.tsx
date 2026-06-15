@@ -1,5 +1,6 @@
 import { EmbeddingPanel } from '../analysis/EmbeddingPanel'
 import { CellInfoPanel } from '../cells/CellInfoPanel'
+import { GridCellInfoPanel } from '../cells/GridCellInfoPanel'
 import type { AnalysisEmbeddingState } from '../analysis/analysisEmbeddingModel'
 import type {
   CellDetailState,
@@ -9,7 +10,7 @@ import type {
   AnalysisEmbedding,
   AnalysisEmbeddingKind,
 } from '../../data/analysisEmbeddings'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { GridCellDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 
 interface CellHudPanelProps {
@@ -21,7 +22,9 @@ interface CellHudPanelProps {
   readonly annotationStyles: readonly AnnotationColorStyle[]
   readonly selectedEmbeddingKind: AnalysisEmbeddingKind
   readonly roiCellIds: readonly string[]
+  readonly isVisiumHdDataset: boolean
   readonly selectedCell: OverviewCellDatum | null
+  readonly selectedGridCell: GridCellDatum | null
   readonly selectedCellAnnotationLabels: readonly string[]
   readonly cellDetailCopy: string
   readonly cellDetailState: CellDetailState
@@ -30,6 +33,7 @@ interface CellHudPanelProps {
   readonly onEmbeddingKindChange: (kind: AnalysisEmbeddingKind) => void
   readonly onLoadAnalysisEmbeddings: () => void
   readonly onClearSelectedCell: () => void
+  readonly onClearSelectedGridCell: () => void
   readonly onSelectEmbeddingCell: (cellId: string) => void
 }
 
@@ -42,7 +46,9 @@ export function CellHudPanel({
   annotationStyles,
   selectedEmbeddingKind,
   roiCellIds,
+  isVisiumHdDataset,
   selectedCell,
+  selectedGridCell,
   selectedCellAnnotationLabels,
   cellDetailCopy,
   cellDetailState,
@@ -51,8 +57,16 @@ export function CellHudPanel({
   onEmbeddingKindChange,
   onLoadAnalysisEmbeddings,
   onClearSelectedCell,
+  onClearSelectedGridCell,
   onSelectEmbeddingCell,
 }: CellHudPanelProps) {
+  const detailHeading = isVisiumHdDataset ? 'Bin Info' : 'Cell Info'
+  const detailCopy = isVisiumHdDataset
+    ? selectedGridCell === null
+      ? 'No selection'
+      : 'Selected bin'
+    : cellDetailCopy
+
   return (
     <div
       id="hud-panel-cell"
@@ -126,19 +140,30 @@ export function CellHudPanel({
 
       <section className="analysis-section" aria-labelledby="cell-info-heading">
         <div className="section-heading-row">
-          <h2 id="cell-info-heading">Cell Info</h2>
+          <h2 id="cell-info-heading">{detailHeading}</h2>
           <div className="section-heading-actions">
             <span
               className={
-                cellDetailState.status === 'loading'
+                !isVisiumHdDataset && cellDetailState.status === 'loading'
                   ? 'status-chip is-loading'
                   : 'status-chip'
               }
               aria-live="polite"
             >
-              {cellDetailCopy}
+              {detailCopy}
             </span>
-            {selectedCell === null ? null : (
+            {isVisiumHdDataset ? (
+              selectedGridCell === null ? null : (
+                <button
+                  type="button"
+                  className="secondary-action"
+                  title="Clear selected bin"
+                  onClick={onClearSelectedGridCell}
+                >
+                  Clear Bin
+                </button>
+              )
+            ) : selectedCell === null ? null : (
               <button
                 type="button"
                 className="secondary-action"
@@ -150,13 +175,20 @@ export function CellHudPanel({
             )}
           </div>
         </div>
-        <CellInfoPanel
-          key={selectedCell?.id ?? 'none'}
-          cell={selectedCell}
-          annotationLabels={selectedCellAnnotationLabels}
-          state={cellDetailState}
-          transcriptDistributionState={cellTranscriptDistributionState}
-        />
+        {isVisiumHdDataset ? (
+          <GridCellInfoPanel
+            key={selectedGridCell?.id ?? 'none'}
+            cell={selectedGridCell}
+          />
+        ) : (
+          <CellInfoPanel
+            key={selectedCell?.id ?? 'none'}
+            cell={selectedCell}
+            annotationLabels={selectedCellAnnotationLabels}
+            state={cellDetailState}
+            transcriptDistributionState={cellTranscriptDistributionState}
+          />
+        )}
       </section>
     </div>
   )

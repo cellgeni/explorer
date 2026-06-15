@@ -405,6 +405,22 @@ describe('ViewerCore', () => {
     expect(screen.getByText('Unassigned')).toBeInTheDocument()
   })
 
+  it('shows grid-cell hover metadata', () => {
+    const gridCell = gridCellDatum()
+
+    render(<ViewerCore gridCells={[gridCell]} />)
+
+    act(() => {
+      deckGlMock.onHover?.({ object: gridCell, x: 18, y: 24 })
+    })
+
+    expect(screen.getByText('BC-1')).toBeInTheDocument()
+    expect(screen.getByText('16 μm')).toBeInTheDocument()
+    expect(screen.getByText('4, 7')).toBeInTheDocument()
+    expect(screen.getByText('128, 256 px')).toBeInTheDocument()
+    expect(screen.getByText('In tissue')).toBeInTheDocument()
+  })
+
   it('notifies when an exact transcript point is clicked', () => {
     const transcript = transcriptDatum({
       id: 'tx-clicked',
@@ -428,6 +444,19 @@ describe('ViewerCore', () => {
       transcript,
       screen: { x: 14, y: 22 },
     })
+  })
+
+  it('notifies when a grid cell is clicked', () => {
+    const gridCell = gridCellDatum()
+    const onGridCellClick = vi.fn()
+
+    render(<ViewerCore gridCells={[gridCell]} onGridCellClick={onGridCellClick} />)
+
+    act(() => {
+      deckGlMock.onClick?.({ object: gridCell, x: 14, y: 22 })
+    })
+
+    expect(onGridCellClick).toHaveBeenCalledWith(gridCell)
   })
 
   it('reports debounced viewport details for boundary loading', async () => {
@@ -1032,5 +1061,27 @@ function transcriptDatum({
     ...(cellAssignment === undefined ? {} : { cellAssignment }),
     qv: 31,
     fillColor: [255, 200, 80, 220],
+  }
+}
+
+function gridCellDatum(values: Partial<GridCellDatum> = {}): GridCellDatum {
+  return {
+    id: 'BC-1',
+    gridId: 'grid-16um',
+    row: 4,
+    col: 7,
+    binSizeMicrometers: 16,
+    inTissue: true,
+    fullresRow: 128,
+    fullresCol: 256,
+    polygon: [
+      [0, 0, 0],
+      [16, 0, 0],
+      [16, -16, 0],
+      [0, -16, 0],
+    ],
+    fillColor: [34, 120, 108, 28],
+    lineColor: [22, 90, 82, 150],
+    ...values,
   }
 }

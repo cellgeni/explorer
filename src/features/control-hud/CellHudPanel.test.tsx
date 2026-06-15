@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { GridCellDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 import { CellHudPanel } from './CellHudPanel'
 
 const embeddings: readonly AnalysisEmbedding[] = [
@@ -39,7 +39,9 @@ describe('CellHudPanel', () => {
         annotationStyles={[]}
         selectedEmbeddingKind="umap"
         roiCellIds={[]}
+        isVisiumHdDataset={false}
         selectedCell={null}
+        selectedGridCell={null}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"
         cellDetailState={{ status: 'idle' }}
@@ -48,6 +50,7 @@ describe('CellHudPanel', () => {
         onEmbeddingKindChange={onEmbeddingKindChange}
         onLoadAnalysisEmbeddings={onLoadAnalysisEmbeddings}
         onClearSelectedCell={vi.fn()}
+        onClearSelectedGridCell={vi.fn()}
         onSelectEmbeddingCell={vi.fn()}
       />,
     )
@@ -80,7 +83,9 @@ describe('CellHudPanel', () => {
         annotationStyles={[]}
         selectedEmbeddingKind="umap"
         roiCellIds={[]}
+        isVisiumHdDataset={false}
         selectedCell={cellDatum()}
+        selectedGridCell={null}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="Selected"
         cellDetailState={{ status: 'idle' }}
@@ -89,6 +94,7 @@ describe('CellHudPanel', () => {
         onEmbeddingKindChange={vi.fn()}
         onLoadAnalysisEmbeddings={vi.fn()}
         onClearSelectedCell={onClearSelectedCell}
+        onClearSelectedGridCell={vi.fn()}
         onSelectEmbeddingCell={vi.fn()}
       />,
     )
@@ -96,6 +102,48 @@ describe('CellHudPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear Cell' }))
 
     expect(onClearSelectedCell).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders selected Visium HD bin details and clears bin selection', () => {
+    const onClearSelectedGridCell = vi.fn()
+
+    render(
+      <CellHudPanel
+        active
+        embeddingViewInputId="embedding-view"
+        embeddingCopy="No embedding loaded"
+        analysisEmbeddingState={{ status: 'idle' }}
+        activeEmbedding={null}
+        annotationStyles={[]}
+        selectedEmbeddingKind="umap"
+        roiCellIds={[]}
+        isVisiumHdDataset
+        selectedCell={null}
+        selectedGridCell={gridCellDatum()}
+        selectedCellAnnotationLabels={[]}
+        cellDetailCopy="No selection"
+        cellDetailState={{ status: 'idle' }}
+        cellTranscriptDistributionState={{ status: 'idle' }}
+        loadEnabled={false}
+        onEmbeddingKindChange={vi.fn()}
+        onLoadAnalysisEmbeddings={vi.fn()}
+        onClearSelectedCell={vi.fn()}
+        onClearSelectedGridCell={onClearSelectedGridCell}
+        onSelectEmbeddingCell={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Bin Info' })).toBeInTheDocument()
+    expect(screen.getByText('Selected bin')).toBeInTheDocument()
+    expect(screen.getByText('BC-1')).toBeInTheDocument()
+    expect(screen.getByText('16 um')).toBeInTheDocument()
+    expect(screen.getByText('In tissue')).toBeInTheDocument()
+    expect(screen.getByText('row 4, col 7')).toBeInTheDocument()
+    expect(screen.getByText('row 128, col 256')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Bin' }))
+
+    expect(onClearSelectedGridCell).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -107,6 +155,28 @@ function cellDatum(values: Partial<OverviewCellDatum> = {}): OverviewCellDatum {
     fillColor: [215, 63, 124, 220],
     transcriptCount: 12,
     cellArea: 40,
+    ...values,
+  }
+}
+
+function gridCellDatum(values: Partial<GridCellDatum> = {}): GridCellDatum {
+  return {
+    id: 'BC-1',
+    gridId: 'grid-16um',
+    row: 4,
+    col: 7,
+    binSizeMicrometers: 16,
+    inTissue: true,
+    fullresRow: 128,
+    fullresCol: 256,
+    polygon: [
+      [0, 0, 0],
+      [16, 0, 0],
+      [16, -16, 0],
+      [0, -16, 0],
+    ],
+    fillColor: [34, 120, 108, 28],
+    lineColor: [22, 90, 82, 150],
     ...values,
   }
 }

@@ -22,6 +22,7 @@ function Probe({
   setFlatMorphologyImage,
   setLoadState,
   setMorphologyState,
+  setSelectedGridCell,
   setSpatialGridCells,
   setVisiumHdControlState,
 }: {
@@ -37,6 +38,9 @@ function Probe({
   readonly setMorphologyState: Parameters<
     typeof useVisiumHdBinWorkflow
   >[0]['setMorphologyState']
+  readonly setSelectedGridCell: Parameters<
+    typeof useVisiumHdBinWorkflow
+  >[0]['setSelectedGridCell']
   readonly setSpatialGridCells: Parameters<
     typeof useVisiumHdBinWorkflow
   >[0]['setSpatialGridCells']
@@ -53,6 +57,7 @@ function Probe({
     setFlatMorphologyImage,
     setLoadState,
     setMorphologyState,
+    setSelectedGridCell,
     setSpatialGridCells,
     setVisiumHdControlState,
   })
@@ -108,6 +113,7 @@ describe('useVisiumHdBinWorkflow', () => {
     const setFlatMorphologyImage = vi.fn()
     const setLoadState = vi.fn()
     const setMorphologyState = vi.fn()
+    const setSelectedGridCell = vi.fn()
     const setSpatialGridCells = vi.fn()
     const setVisiumHdControlState = vi.fn()
     let api: UseVisiumHdBinWorkflowResult | null = null
@@ -122,6 +128,7 @@ describe('useVisiumHdBinWorkflow', () => {
         setFlatMorphologyImage={setFlatMorphologyImage}
         setLoadState={setLoadState}
         setMorphologyState={setMorphologyState}
+        setSelectedGridCell={setSelectedGridCell}
         setSpatialGridCells={setSpatialGridCells}
         setVisiumHdControlState={setVisiumHdControlState}
       />,
@@ -135,6 +142,7 @@ describe('useVisiumHdBinWorkflow', () => {
     expect(dataset.readBinnedOverview).toHaveBeenCalledWith(8)
     expect(dataset.meta).toHaveBeenCalledWith(8)
     expect(dataset.image).toHaveBeenCalledWith(8)
+    expect(setSelectedGridCell).toHaveBeenCalledWith(null)
     expect(setLoadState).toHaveBeenCalledWith({
       status: 'ready',
       url: datasetUrl,
@@ -174,6 +182,7 @@ describe('useVisiumHdBinWorkflow', () => {
         setFlatMorphologyImage={vi.fn()}
         setLoadState={vi.fn()}
         setMorphologyState={vi.fn()}
+        setSelectedGridCell={vi.fn()}
         setSpatialGridCells={vi.fn()}
         setVisiumHdControlState={vi.fn()}
       />,

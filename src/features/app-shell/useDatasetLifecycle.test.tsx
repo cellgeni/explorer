@@ -64,6 +64,7 @@ function Probe({
   setFlatMorphologyImage = vi.fn(),
   setLoadState = vi.fn(),
   setMorphologyState = vi.fn(),
+  setSelectedGridCell = vi.fn(),
   setSpatialGridCells = vi.fn(),
   setVisiumHdControlState = vi.fn(),
   startDatasetLoadRef = { current: null },
@@ -79,6 +80,7 @@ function Probe({
   readonly setFlatMorphologyImage?: LifecycleOptions['setFlatMorphologyImage']
   readonly setLoadState?: LifecycleOptions['setLoadState']
   readonly setMorphologyState?: LifecycleOptions['setMorphologyState']
+  readonly setSelectedGridCell?: LifecycleOptions['setSelectedGridCell']
   readonly setSpatialGridCells?: LifecycleOptions['setSpatialGridCells']
   readonly setVisiumHdControlState?: LifecycleOptions['setVisiumHdControlState']
   readonly startDatasetLoadRef?: LifecycleOptions['startDatasetLoadRef']
@@ -187,6 +189,7 @@ function Probe({
     setRoiTranscriptExportState: noopSetter,
     setSelectedAnnotationGroupId: noopSetter,
     setSelectedCell: noopSetter,
+    setSelectedGridCell,
     setSelectedEmbeddingKind: noopSetter,
     setSelectedGenes: noopSetter,
     setSpatialGridCells,

@@ -1090,6 +1090,13 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       reason. Switching tiers reuses the cached `VisiumHdDataset`, reloads the
       selected binned overview, updates grid-cell layer data, and refreshes the
       flat tissue image source for the selected tier.
+- [x] Added Visium HD bin inspection. Grid-cell layer data now carries barcode,
+      tier size, tissue flag, array row/column, and full-resolution image
+      coordinate metadata into the viewer. Hovering a bin shows a compact
+      metadata tooltip, clicking a bin selects it without starting Xenium cell
+      detail loaders, and the Cell tab switches to `Bin Info` with a clear
+      action plus an unavailable expression status until Slice 5 adds binned
+      expression loading.
 
 ### Definition Of Done For The First Visium HD MVP
 
@@ -1100,7 +1107,7 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [x] The UI clearly labels the dataset as Visium HD and disables transcript,
       Magic Lens, and Xenium cell-boundary controls instead of surfacing
       misleading errors.
-- [ ] Hover/click on a bin shows barcode, bin size, tissue status, array
+- [x] Hover/click on a bin shows barcode, bin size, tissue status, array
       row/column, image coordinate, and expression details once expression
       loading is implemented.
 - [ ] Dataset diagnostics check the Visium HD files that actually matter for

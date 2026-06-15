@@ -60,9 +60,24 @@ export interface GridCellDatum {
   readonly gridId: string
   readonly row: number
   readonly col: number
+  readonly binSizeMicrometers?: number
+  readonly inTissue?: boolean
+  readonly fullresRow?: number
+  readonly fullresCol?: number
   readonly polygon: readonly Position[]
   readonly fillColor: Color
   readonly lineColor: Color
+}
+
+export interface GridCellLayerDataOptions {
+  readonly metadata?: readonly GridCellLayerBatchMetadata[]
+}
+
+export interface GridCellLayerBatchMetadata {
+  readonly binSizeMicrometers?: number
+  readonly inTissue?: ArrayLike<number>
+  readonly fullresRows?: ArrayLike<number>
+  readonly fullresCols?: ArrayLike<number>
 }
 
 export interface CellBoundaryLayerGeometryOptions {
@@ -1451,6 +1466,7 @@ export function boundaryElementsToLayerData(
 export function gridCellBatchesToLayerData(
   grids: readonly SpatialGrid[],
   batches: readonly GridCellBatch[],
+  options: GridCellLayerDataOptions = {},
 ): readonly GridCellDatum[] {
   if (grids.length === 0 || batches.length === 0) {
     return []
@@ -1459,8 +1475,15 @@ export function gridCellBatchesToLayerData(
   const gridById = new Map(grids.map((grid) => [grid.id, grid]))
   const cells: GridCellDatum[] = []
 
-  for (const batch of batches) {
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+    const batch = batches[batchIndex]
+
+    if (batch === undefined) {
+      continue
+    }
+
     const grid = gridById.get(batch.gridId)
+    const metadata = options.metadata?.[batchIndex]
 
     if (grid === undefined) {
       continue
@@ -1481,6 +1504,18 @@ export function gridCellBatchesToLayerData(
         gridId: grid.id,
         row,
         col,
+        ...(metadata?.binSizeMicrometers === undefined
+          ? {}
+          : { binSizeMicrometers: metadata.binSizeMicrometers }),
+        ...(metadata?.inTissue?.[index] === undefined
+          ? {}
+          : { inTissue: metadata.inTissue[index] === 1 }),
+        ...(metadata?.fullresRows?.[index] === undefined
+          ? {}
+          : { fullresRow: metadata.fullresRows[index] }),
+        ...(metadata?.fullresCols?.[index] === undefined
+          ? {}
+          : { fullresCol: metadata.fullresCols[index] }),
         polygon: gridCellCorners(grid, row, col).map((point) => [point.x, -point.y, 0]),
         fillColor: [34, 120, 108, 28],
         lineColor: [22, 90, 82, 150],

@@ -477,6 +477,7 @@ export function App({
     ShareableViewState | undefined
   >(initialShareableState.viewState)
   const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
+  const [selectedGridCell, setSelectedGridCell] = useState<GridCellDatum | null>(null)
   const [spatialFocusRequest, setSpatialFocusRequest] =
     useState<ViewerFocusRequest | null>(null)
   const [currentViewportDetail, setCurrentViewportDetail] =
@@ -1491,6 +1492,7 @@ export function App({
     setRoiTranscriptExportState,
     setSelectedAnnotationGroupId,
     setSelectedCell,
+    setSelectedGridCell,
     setSelectedEmbeddingKind,
     setSelectedGenes,
     setSpatialGridCells,
@@ -1524,6 +1526,7 @@ export function App({
     setLoadState,
     setMorphologyState,
     setSpatialGridCells,
+    setSelectedGridCell,
     setVisiumHdControlState,
   })
 
@@ -1776,7 +1779,9 @@ export function App({
           annotationStyles={annotationStyleColors}
           selectedEmbeddingKind={selectedEmbeddingKind}
           roiCellIds={roiCellIds}
+          isVisiumHdDataset={isVisiumHdDataset}
           selectedCell={selectedCell}
+          selectedGridCell={selectedGridCell}
           selectedCellAnnotationLabels={selectedCellAnnotationLabels}
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
@@ -1790,7 +1795,13 @@ export function App({
           onClearSelectedCell={() => {
             setSelectedCell(null)
           }}
-          onSelectEmbeddingCell={handleEmbeddingCellSelect}
+          onClearSelectedGridCell={() => {
+            setSelectedGridCell(null)
+          }}
+          onSelectEmbeddingCell={(cellId) => {
+            setSelectedGridCell(null)
+            handleEmbeddingCellSelect(cellId)
+          }}
         />
 
         <RoiHudPanel
@@ -1879,7 +1890,12 @@ export function App({
           onTranscriptHover={setHoveredTranscript}
           onTranscriptClick={handlePinTranscript}
           onCellClick={(cell) => {
+            setSelectedGridCell(null)
             setSelectedCell(cell)
+          }}
+          onGridCellClick={(cell) => {
+            setSelectedCell(null)
+            setSelectedGridCell(cell)
           }}
           {...(isVisiumHdDataset ? {} : { onRoiComplete: handleRoiComplete })}
           {...(isVisiumHdDataset ? {} : { onMagicLensMove: handleMagicLensMove })}

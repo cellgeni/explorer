@@ -54,6 +54,7 @@ export interface UseVisiumHdBinWorkflowOptions {
   readonly setLoadState: Setter<DatasetLoadState<StructuredLoadError>>
   readonly setMorphologyState: Setter<MorphologyLoadState<StructuredLoadError>>
   readonly setSpatialGridCells: Setter<readonly GridCellDatum[]>
+  readonly setSelectedGridCell: Setter<GridCellDatum | null>
   readonly setVisiumHdControlState: Setter<VisiumHdControlState>
 }
 
@@ -74,6 +75,7 @@ export function useVisiumHdBinWorkflow({
   setLoadState,
   setMorphologyState,
   setSpatialGridCells,
+  setSelectedGridCell,
   setVisiumHdControlState,
 }: UseVisiumHdBinWorkflowOptions): UseVisiumHdBinWorkflowResult {
   const fallbackRequestIdRef = useRef(0)
@@ -97,6 +99,7 @@ export function useVisiumHdBinWorkflow({
       const requestId = requestIdRef.current + 1
       const startedAt = readTimestamp()
       requestIdRef.current = requestId
+      setSelectedGridCell(null)
       setVisiumHdControlState((current) =>
         current.status === 'idle'
           ? current
@@ -125,7 +128,16 @@ export function useVisiumHdBinWorkflow({
         }
 
         setSpatialGridCells(
-          gridCellBatchesToLayerData([overview.grid], [overview.gridCells]),
+          gridCellBatchesToLayerData([overview.grid], [overview.gridCells], {
+            metadata: [
+              {
+                binSizeMicrometers: overview.binSizeMicrometers,
+                inTissue: overview.inTissue,
+                fullresRows: overview.fullresRows,
+                fullresCols: overview.fullresCols,
+              },
+            ],
+          }),
         )
         setLoadState({
           status: 'ready',
@@ -206,6 +218,7 @@ export function useVisiumHdBinWorkflow({
       setFlatMorphologyImage,
       setLoadState,
       setMorphologyState,
+      setSelectedGridCell,
       setSpatialGridCells,
       setVisiumHdControlState,
       shouldLoadMorphology,

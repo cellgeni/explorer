@@ -111,6 +111,7 @@ export interface ViewerCoreProps {
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
+  readonly onGridCellClick?: (cell: GridCellDatum) => void
   readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
   readonly onTranscriptClick?: (detail: ViewerTranscriptHoverDetail) => void
   readonly onRoiComplete?: (selection: RoiSelection) => void
@@ -164,6 +165,11 @@ export interface ViewerTranscriptHoverDetail {
   readonly screen: ScreenPoint
 }
 
+export interface ViewerGridCellHoverDetail {
+  readonly cell: GridCellDatum
+  readonly screen: ScreenPoint
+}
+
 export type RoiDrawMode = 'idle' | 'box' | 'lasso'
 
 export function ViewerCore({
@@ -214,6 +220,7 @@ export function ViewerCore({
   onViewportChange,
   onViewportCellCountChange,
   onCellClick,
+  onGridCellClick,
   onTranscriptHover,
   onTranscriptClick,
   onRoiComplete,
@@ -280,6 +287,7 @@ export function ViewerCore({
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
       {...(onViewportCellCountChange === undefined ? {} : { onViewportCellCountChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
+      {...(onGridCellClick === undefined ? {} : { onGridCellClick })}
       {...(onTranscriptHover === undefined ? {} : { onTranscriptHover })}
       {...(onTranscriptClick === undefined ? {} : { onTranscriptClick })}
       {...(onRoiComplete === undefined ? {} : { onRoiComplete })}
@@ -337,6 +345,7 @@ interface ViewerSurfaceProps {
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
+  readonly onGridCellClick?: (cell: GridCellDatum) => void
   readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
   readonly onTranscriptClick?: (detail: ViewerTranscriptHoverDetail) => void
   readonly onRoiComplete?: (selection: RoiSelection) => void
@@ -460,6 +469,7 @@ function ViewerSurface({
   onViewportChange,
   onViewportCellCountChange,
   onCellClick,
+  onGridCellClick,
   onTranscriptHover,
   onTranscriptClick,
   onRoiComplete,
@@ -483,6 +493,9 @@ function ViewerSurface({
   const [magicLensScreen, setMagicLensScreen] = useState<ScreenPoint | null>(null)
   const [transcriptHover, setTranscriptHover] =
     useState<ViewerTranscriptHoverDetail | null>(null)
+  const [gridCellHover, setGridCellHover] = useState<ViewerGridCellHoverDetail | null>(
+    null,
+  )
   const [boundaryStyleViewport, setBoundaryStyleViewport] =
     useState<BoundaryStyleViewport | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
@@ -925,6 +938,11 @@ function ViewerSurface({
         return
       }
 
+      if (isGridCellDatum(info.object)) {
+        onGridCellClick?.(info.object)
+        return
+      }
+
       if (onCellClick === undefined) {
         return
       }
@@ -954,7 +972,7 @@ function ViewerSurface({
         onCellClick(coordinateCell)
       }
     },
-    [boundaries, cellById, onCellClick, onTranscriptClick, visibleCells],
+    [boundaries, cellById, onCellClick, onGridCellClick, onTranscriptClick, visibleCells],
   )
   const handleDeckHover = useCallback(
     (info: PickingInfo<unknown>) => {
@@ -967,6 +985,7 @@ function ViewerSurface({
           },
         }
         setTranscriptHover(detail)
+        setGridCellHover(null)
         onTranscriptHover?.(detail)
         return
       }
@@ -980,7 +999,26 @@ function ViewerSurface({
           },
         }
         setTranscriptHover(detail)
+        setGridCellHover(null)
         onTranscriptHover?.(detail)
+        return
+      }
+
+      if (isGridCellDatum(info.object)) {
+        setTranscriptHover((current) => {
+          if (current !== null) {
+            onTranscriptHover?.(null)
+          }
+
+          return null
+        })
+        setGridCellHover({
+          cell: info.object,
+          screen: {
+            x: info.x,
+            y: info.y,
+          },
+        })
         return
       }
 
@@ -991,6 +1029,7 @@ function ViewerSurface({
 
         return null
       })
+      setGridCellHover(null)
     },
     [onTranscriptHover],
   )
@@ -1038,6 +1077,7 @@ function ViewerSurface({
     clearMouseCoordinate()
     setMagicLensScreen(null)
     setTranscriptHover(null)
+    setGridCellHover(null)
     onTranscriptHover?.(null)
     onMagicLensLeave?.()
   }, [clearMouseCoordinate, onMagicLensLeave, onTranscriptHover])
@@ -1386,6 +1426,7 @@ function ViewerSurface({
       {transcriptHover === null ? null : (
         <TranscriptHoverTooltip detail={transcriptHover} />
       )}
+      {gridCellHover === null ? null : <GridCellHoverTooltip detail={gridCellHover} />}
       {!hasSpatialData && status === 'idle' ? (
         <div className="viewport-empty-state" aria-hidden="true">
           Please load a dataset
@@ -1710,6 +1751,47 @@ function MagicLensOverlay({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function GridCellHoverTooltip({
+  detail,
+}: {
+  readonly detail: ViewerGridCellHoverDetail
+}) {
+  const cell = detail.cell
+
+  return (
+    <div
+      className="transcript-hover-tooltip grid-cell-hover-tooltip"
+      style={{
+        left: detail.screen.x,
+        top: detail.screen.y,
+      }}
+      aria-hidden="true"
+    >
+      <p>{cell.id}</p>
+      <dl>
+        <div>
+          <dt>Bin</dt>
+          <dd>{formatGridCellBinSize(cell)}</dd>
+        </div>
+        <div>
+          <dt>Array</dt>
+          <dd>
+            {cell.row.toLocaleString()}, {cell.col.toLocaleString()}
+          </dd>
+        </div>
+        <div>
+          <dt>Image px</dt>
+          <dd>{formatGridCellImageCoordinate(cell)}</dd>
+        </div>
+        <div>
+          <dt>Tissue</dt>
+          <dd>{formatGridCellTissue(cell)}</dd>
+        </div>
+      </dl>
     </div>
   )
 }
@@ -2077,6 +2159,30 @@ function formatCoordinateValue(value: number): string {
   })
 }
 
+function formatGridCellBinSize(cell: GridCellDatum): string {
+  return cell.binSizeMicrometers === undefined
+    ? 'Unknown'
+    : `${formatCoordinateValue(cell.binSizeMicrometers)} μm`
+}
+
+function formatGridCellImageCoordinate(cell: GridCellDatum): string {
+  if (cell.fullresRow === undefined || cell.fullresCol === undefined) {
+    return 'Unknown'
+  }
+
+  return `${formatCoordinateValue(cell.fullresRow)}, ${formatCoordinateValue(
+    cell.fullresCol,
+  )} px`
+}
+
+function formatGridCellTissue(cell: GridCellDatum): string {
+  if (cell.inTissue === undefined) {
+    return 'Unknown'
+  }
+
+  return cell.inTissue ? 'In tissue' : 'Out of tissue'
+}
+
 function readViewportMessage(
   status: ViewerLoadStatus,
   imageStatus: ViewerLoadStatus,
@@ -2275,6 +2381,22 @@ function isCellBoundaryDatum(value: unknown): value is CellBoundaryDatum {
   const candidate = value as Partial<CellBoundaryDatum>
 
   return typeof candidate.id === 'string' && Array.isArray(candidate.polygon)
+}
+
+function isGridCellDatum(value: unknown): value is GridCellDatum {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const candidate = value as Partial<GridCellDatum>
+
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.gridId === 'string' &&
+    typeof candidate.row === 'number' &&
+    typeof candidate.col === 'number' &&
+    Array.isArray(candidate.polygon)
+  )
 }
 
 function isTranscriptPointDatum(value: unknown): value is TranscriptPointDatum {

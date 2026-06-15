@@ -1364,6 +1364,36 @@ describe('deck layer factory', () => {
       },
     ])
   })
+
+  it('copies Visium HD grid-cell metadata into deck.gl polygon data', () => {
+    expect(
+      gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch], {
+        metadata: [
+          {
+            binSizeMicrometers: 16,
+            inTissue: new Uint8Array([1, 0]),
+            fullresRows: new Float64Array([128, 144]),
+            fullresCols: new Float64Array([256, 272]),
+          },
+        ],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        id: 'BC-1',
+        binSizeMicrometers: 16,
+        inTissue: true,
+        fullresRow: 128,
+        fullresCol: 256,
+      }),
+      expect.objectContaining({
+        id: 'BC-2',
+        binSizeMicrometers: 16,
+        inTissue: false,
+        fullresRow: 144,
+        fullresCol: 272,
+      }),
+    ])
+  })
 })
 
 const fixtureGrid: SpatialGrid = {

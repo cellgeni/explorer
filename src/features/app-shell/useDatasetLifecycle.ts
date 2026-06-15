@@ -230,6 +230,7 @@ interface UseDatasetLifecycleOptions {
   >
   readonly setSelectedAnnotationGroupId: Setter<string>
   readonly setSelectedCell: Setter<OverviewCellDatum | null>
+  readonly setSelectedGridCell: Setter<GridCellDatum | null>
   readonly setSelectedEmbeddingKind: Setter<AnalysisEmbeddingKind>
   readonly setSelectedGenes: Setter<readonly string[]>
   readonly setSpatialGridCells: Setter<readonly GridCellDatum[]>
@@ -359,6 +360,7 @@ export function useDatasetLifecycle({
   setRoiTranscriptExportState,
   setSelectedAnnotationGroupId,
   setSelectedCell,
+  setSelectedGridCell,
   setSelectedEmbeddingKind,
   setSelectedGenes,
   setSpatialGridCells,
@@ -635,6 +637,7 @@ export function useDatasetLifecycle({
         shouldRestoreSharedState ? (sharedState?.magicLensActive ?? false) : false,
       )
       setSelectedCell(null)
+      setSelectedGridCell(null)
       setCurrentViewportDetail(null)
       setViewportCellCount(null)
       setLoadState({ status: 'loading', url: requestedUrl })
@@ -694,7 +697,16 @@ export function useDatasetLifecycle({
           }
 
           setSpatialGridCells(
-            gridCellBatchesToLayerData([overview.grid], [overview.gridCells]),
+            gridCellBatchesToLayerData([overview.grid], [overview.gridCells], {
+              metadata: [
+                {
+                  binSizeMicrometers: overview.binSizeMicrometers,
+                  inTissue: overview.inTissue,
+                  fullresRows: overview.fullresRows,
+                  fullresCols: overview.fullresCols,
+                },
+              ],
+            }),
           )
           setVisiumHdControlState(
             visiumHdControlStateFromOverview(
