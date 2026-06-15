@@ -1169,6 +1169,15 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [x] Added structured Feature Slice budget errors so future UI enablement can
       distinguish "Feature Slice reader exists but this hosted H5 is too large
       for the current full-file adapter" from generic matrix failures.
+- [x] Added Playwright coverage for the public Visium HD reference dataset. The
+      E2E smoke fills the supplied Space Ranger 4.0.1 URL, loads the dataset
+      through the production-preview app, verifies the Visium HD dataset panel,
+      and asserts the expected 54,504 active 16 µm bins.
+- [x] First Visium HD MVP final verification passed after the E2E smoke slice:
+      full Vitest, TypeScript, ESLint, production build, touched-file Prettier
+      checks, `git diff --check`, and Playwright against a manually started
+      production preview. The build still reports the existing browser
+      externalization and large chunk warnings.
 
 ### Definition Of Done For The First Visium HD MVP
 
@@ -1188,7 +1197,7 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [x] Unit tests cover Visium HD path detection, scalefactor parsing,
       tissue-position parsing, affine transform derivation, square-bin layer
       conversion, and platform capability gating.
-- [ ] Browser/E2E smoke covers the reference dataset through at least image plus
+- [x] Browser/E2E smoke covers the reference dataset through at least image plus
       16 µm bins.
-- [ ] Final verification passes `npm test`, `npm run build`,
+- [x] Final verification passes `npm test`, `npm run build`,
       `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.
