@@ -189,8 +189,8 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     this.byteRangeCache = options.byteRangeCache
   }
 
-  async meta(): Promise<DatasetMeta> {
-    const overview = await this.readBinnedOverview()
+  async meta(binSizeMicrometers = this.defaultBinSizeMicrometers): Promise<DatasetMeta> {
+    const overview = await this.readBinnedOverview(binSizeMicrometers)
 
     return {
       platform: 'visium-hd',
@@ -224,8 +224,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     return Promise.reject(visiumHdNotImplementedError('annotation loading'))
   }
 
-  async image(): Promise<ImageSource | null> {
-    const overview = await this.readBinnedOverview()
+  async image(
+    binSizeMicrometers = this.defaultBinSizeMicrometers,
+  ): Promise<ImageSource | null> {
+    const overview = await this.readBinnedOverview(binSizeMicrometers)
     const size = flatImageSizeFromScalefactors(overview.scalefactors)
 
     return {

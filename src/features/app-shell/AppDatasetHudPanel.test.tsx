@@ -16,6 +16,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       boundaryLimitInputId: 'boundary-limit',
       datasetInputId: 'dataset-url',
       morphologyInputId: 'morphology',
+      visiumHdBinSizeInputId: 'visium-bin-size',
     },
     datasetUrl: 'https://example.test/output',
     debugLog: [],
@@ -25,12 +26,15 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     }),
     handleDownloadDiagnostics: vi.fn(),
     handleRunDatasetDiagnostics: vi.fn(async () => undefined),
+    handleVisiumHdBinSizeChange: vi.fn(async () => undefined),
     isLoading: false,
+    isVisiumHdDataset: false,
     setBoundaryCellLimit: vi.fn(),
     setDatasetUrl: vi.fn(),
     setDebugLog: vi.fn(),
     setShouldLoadMorphology: vi.fn(),
     shouldLoadMorphology: true,
+    visiumHdControlState: { status: 'idle' },
     ...overrides,
   }
 }
@@ -66,5 +70,33 @@ describe('AppDatasetHudPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Diagnose Dataset' }))
 
     expect(props.handleRunDatasetDiagnostics).toHaveBeenCalledTimes(1)
+  })
+
+  it('forwards Visium HD bin changes through the async handler', () => {
+    const props = baseProps({
+      isVisiumHdDataset: true,
+      visiumHdControlState: {
+        status: 'ready',
+        url: 'https://example.test/visium',
+        selectedBinSize: 16,
+        options: [
+          { size: 16, available: true, disabled: false },
+          { size: 8, available: true, disabled: false },
+          {
+            size: 2,
+            available: true,
+            disabled: true,
+            reason: '2 µm is disabled until budgeted loading is implemented.',
+          },
+        ],
+      },
+    })
+
+    render(<AppDatasetHudPanel {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '8 µm' }))
+
+    expect(props.handleVisiumHdBinSizeChange).toHaveBeenCalledWith(8)
+    expect(screen.getByLabelText('Boundary limit')).toBeDisabled()
   })
 })

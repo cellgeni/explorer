@@ -1,0 +1,264 @@
+import { useCallback, useRef } from 'react'
+import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
+import type { DatasetMeta, ImageSource } from '../../datasets/spatialDataset'
+import type {
+  VisiumHdBinnedOverview,
+  VisiumHdBinSizeMicrometers,
+} from '../../datasets/visiumHdDataset'
+import {
+  gridCellBatchesToLayerData,
+  type GridCellDatum,
+} from '../../rendering/deckLayers'
+import type { DatasetLoadState, MorphologyLoadState } from '../dataset/datasetLoadModel'
+import {
+  createVisiumHdBinOptions,
+  updateVisiumHdBinOptionCount,
+  type VisiumHdControlState,
+} from '../dataset/visiumHdModel'
+import {
+  createStructuredLoadError,
+  readErrorMessage,
+  type StructuredLoadError,
+} from '../errors/loadErrorModel'
+import type { SpatialDatasetLoader } from './appDependencies'
+import {
+  formatElapsed,
+  readTimestamp,
+  type DebugLogAppendOptions,
+} from './appRuntimeModel'
+
+interface MutableRef<T> {
+  current: T
+}
+
+interface Setter<T> {
+  (value: T | ((current: T) => T)): void
+}
+
+export interface VisiumHdOverviewDataset {
+  meta(binSizeMicrometers?: VisiumHdBinSizeMicrometers): Promise<DatasetMeta>
+  image(binSizeMicrometers?: VisiumHdBinSizeMicrometers): Promise<ImageSource | null>
+  readBinnedOverview(
+    binSizeMicrometers?: VisiumHdBinSizeMicrometers,
+  ): Promise<VisiumHdBinnedOverview>
+}
+
+export interface UseVisiumHdBinWorkflowOptions {
+  readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly getSpatialDataset: SpatialDatasetLoader
+  readonly loadedDatasetUrl: string | null
+  readonly shouldLoadMorphology: boolean
+  readonly visiumHdControlState: VisiumHdControlState
+  readonly visiumHdBinRequestIdRef?: MutableRef<number>
+  readonly setFlatMorphologyImage: Setter<FlatMorphologyCanvasImage | null>
+  readonly setLoadState: Setter<DatasetLoadState<StructuredLoadError>>
+  readonly setMorphologyState: Setter<MorphologyLoadState<StructuredLoadError>>
+  readonly setSpatialGridCells: Setter<readonly GridCellDatum[]>
+  readonly setVisiumHdControlState: Setter<VisiumHdControlState>
+}
+
+export interface UseVisiumHdBinWorkflowResult {
+  readonly handleVisiumHdBinSizeChange: (
+    binSize: VisiumHdBinSizeMicrometers,
+  ) => Promise<void>
+}
+
+export function useVisiumHdBinWorkflow({
+  appendDebugEvent,
+  getSpatialDataset,
+  loadedDatasetUrl,
+  shouldLoadMorphology,
+  visiumHdControlState,
+  visiumHdBinRequestIdRef,
+  setFlatMorphologyImage,
+  setLoadState,
+  setMorphologyState,
+  setSpatialGridCells,
+  setVisiumHdControlState,
+}: UseVisiumHdBinWorkflowOptions): UseVisiumHdBinWorkflowResult {
+  const fallbackRequestIdRef = useRef(0)
+  const requestIdRef = visiumHdBinRequestIdRef ?? fallbackRequestIdRef
+
+  const handleVisiumHdBinSizeChange = useCallback(
+    async (binSize: VisiumHdBinSizeMicrometers) => {
+      if (visiumHdControlState.status === 'idle') {
+        return
+      }
+
+      const option = visiumHdControlState.options.find(
+        (candidate) => candidate.size === binSize,
+      )
+
+      if (option === undefined || option.disabled) {
+        return
+      }
+
+      const datasetUrl = loadedDatasetUrl ?? visiumHdControlState.url
+      const requestId = requestIdRef.current + 1
+      const startedAt = readTimestamp()
+      requestIdRef.current = requestId
+      setVisiumHdControlState((current) =>
+        current.status === 'idle'
+          ? current
+          : {
+              ...current,
+              status: 'loading',
+              selectedBinSize: binSize,
+            },
+      )
+      appendDebugEvent(`Loading Visium HD ${binSize} µm bins`)
+
+      try {
+        const dataset = await getSpatialDataset(datasetUrl)
+
+        if (!isVisiumHdOverviewDataset(dataset)) {
+          throw new Error('Loaded dataset does not expose Visium HD binned outputs.')
+        }
+
+        const [overview, meta] = await Promise.all([
+          dataset.readBinnedOverview(binSize),
+          dataset.meta(binSize),
+        ])
+
+        if (requestIdRef.current !== requestId) {
+          return
+        }
+
+        setSpatialGridCells(
+          gridCellBatchesToLayerData([overview.grid], [overview.gridCells]),
+        )
+        setLoadState({
+          status: 'ready',
+          url: datasetUrl,
+          cellCount: overview.gridCells.ids.length,
+        })
+
+        setVisiumHdControlState({
+          status: 'ready',
+          url: datasetUrl,
+          selectedBinSize: overview.binSizeMicrometers,
+          options: updateVisiumHdBinOptionCount(
+            visiumHdControlState.options,
+            overview.binSizeMicrometers,
+            overview.gridCells.ids.length,
+          ),
+          binCount: overview.gridCells.ids.length,
+        })
+        appendDebugEvent(
+          `Visium HD ${overview.binSizeMicrometers} µm bins ready: ${overview.gridCells.ids.length.toLocaleString()} in ${formatElapsed(
+            startedAt,
+          )}`,
+        )
+
+        if (!shouldLoadMorphology) {
+          setFlatMorphologyImage(null)
+          setMorphologyState({ status: 'idle' })
+          return
+        }
+
+        setMorphologyState({ status: 'loading', url: datasetUrl })
+        const imageSource = await dataset.image(overview.binSizeMicrometers)
+
+        if (requestIdRef.current !== requestId) {
+          return
+        }
+
+        const flatImage = flatMorphologyImageFromSource(imageSource, meta)
+
+        if (flatImage === null) {
+          setFlatMorphologyImage(null)
+          setMorphologyState({ status: 'idle' })
+          return
+        }
+
+        setFlatMorphologyImage(flatImage)
+        setMorphologyState({
+          status: 'ready',
+          url: flatImage.url,
+        })
+      } catch (error) {
+        if (requestIdRef.current !== requestId) {
+          return
+        }
+
+        setVisiumHdControlState((current) =>
+          current.status === 'idle'
+            ? current
+            : {
+                ...current,
+                status: 'error',
+                error: readErrorMessage(error),
+              },
+        )
+        setLoadState({
+          status: 'error',
+          url: datasetUrl,
+          error: createStructuredLoadError('Dataset overview', error),
+        })
+        appendDebugEvent(`Visium HD ${binSize} µm bins failed`)
+      }
+    },
+    [
+      appendDebugEvent,
+      getSpatialDataset,
+      loadedDatasetUrl,
+      requestIdRef,
+      setFlatMorphologyImage,
+      setLoadState,
+      setMorphologyState,
+      setSpatialGridCells,
+      setVisiumHdControlState,
+      shouldLoadMorphology,
+      visiumHdControlState,
+    ],
+  )
+
+  return { handleVisiumHdBinSizeChange }
+}
+
+export function isVisiumHdOverviewDataset(
+  dataset: unknown,
+): dataset is VisiumHdOverviewDataset {
+  return (
+    dataset !== null &&
+    typeof dataset === 'object' &&
+    'readBinnedOverview' in dataset &&
+    typeof dataset.readBinnedOverview === 'function' &&
+    'meta' in dataset &&
+    typeof dataset.meta === 'function' &&
+    'image' in dataset &&
+    typeof dataset.image === 'function'
+  )
+}
+
+export function visiumHdControlStateFromOverview(
+  url: string,
+  availableBinSizes: readonly VisiumHdBinSizeMicrometers[],
+  overview: VisiumHdBinnedOverview,
+): VisiumHdControlState {
+  return {
+    status: 'ready',
+    url,
+    selectedBinSize: overview.binSizeMicrometers,
+    options: createVisiumHdBinOptions(availableBinSizes, {
+      [overview.binSizeMicrometers]: overview.gridCells.ids.length,
+    }),
+    binCount: overview.gridCells.ids.length,
+  }
+}
+
+export function flatMorphologyImageFromSource(
+  source: ImageSource | null,
+  meta: DatasetMeta,
+): FlatMorphologyCanvasImage | null {
+  if (source === null || source.kind !== 'flat') {
+    return null
+  }
+
+  return {
+    url: source.url,
+    scaleFactor: source.scaleFactor,
+    micrometersPerPixel: meta.units.micrometersPerPixel,
+    ...(source.size === undefined ? {} : { size: source.size }),
+  }
+}

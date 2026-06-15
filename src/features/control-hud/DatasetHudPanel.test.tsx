@@ -20,19 +20,24 @@ describe('DatasetHudPanel', () => {
         datasetInputId="dataset-url"
         morphologyInputId="morphology"
         boundaryLimitInputId="boundary-limit"
+        visiumHdBinSizeInputId="visium-bin-size"
         datasetUrl="https://example.test/output"
         shouldLoadMorphology={false}
+        morphologyLabel="Morphology image"
         boundaryCellLimit={50000}
         maxBoundaryCellLimit={100000}
+        boundaryControlsDisabled={false}
         isLoading={false}
         diagnosticsState={{ status: 'idle' }}
         cellFeatureMatrixCapabilityState={{ status: 'idle' }}
+        visiumHdControlState={{ status: 'idle' }}
         activeErrors={[]}
         debugLog={[{ id: 1, timestamp: 1_700_000_000_000, message: 'Loaded' }]}
         onSubmit={onSubmit}
         onDatasetUrlChange={onDatasetUrlChange}
         onShouldLoadMorphologyChange={onShouldLoadMorphologyChange}
         onBoundaryCellLimitChange={onBoundaryCellLimitChange}
+        onVisiumHdBinSizeChange={vi.fn()}
         onRunDatasetDiagnostics={onRunDatasetDiagnostics}
         onDownloadDiagnostics={onDownloadDiagnostics}
         onClearDebugLog={onClearDebugLog}
@@ -60,5 +65,69 @@ describe('DatasetHudPanel', () => {
     expect(onRunDatasetDiagnostics).toHaveBeenCalledTimes(1)
     expect(onDownloadDiagnostics).toHaveBeenCalledTimes(1)
     expect(onClearDebugLog).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders Visium HD bin controls and disables unavailable tiers', () => {
+    const onVisiumHdBinSizeChange = vi.fn()
+
+    render(
+      <DatasetHudPanel
+        active
+        datasetInputId="dataset-url"
+        morphologyInputId="morphology"
+        boundaryLimitInputId="boundary-limit"
+        visiumHdBinSizeInputId="visium-bin-size"
+        datasetUrl="https://example.test/visium"
+        shouldLoadMorphology
+        morphologyLabel="Tissue image"
+        boundaryCellLimit={50000}
+        maxBoundaryCellLimit={100000}
+        boundaryControlsDisabled
+        isLoading={false}
+        diagnosticsState={{ status: 'idle' }}
+        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
+        visiumHdControlState={{
+          status: 'ready',
+          url: 'https://example.test/visium',
+          selectedBinSize: 16,
+          binCount: 54_504,
+          options: [
+            { size: 16, available: true, disabled: false, binCount: 54_504 },
+            { size: 8, available: true, disabled: false },
+            {
+              size: 2,
+              available: true,
+              disabled: true,
+              reason: '2 µm is disabled until budgeted loading is implemented.',
+            },
+          ],
+        }}
+        activeErrors={[]}
+        debugLog={[]}
+        onSubmit={vi.fn()}
+        onDatasetUrlChange={vi.fn()}
+        onShouldLoadMorphologyChange={vi.fn()}
+        onBoundaryCellLimitChange={vi.fn()}
+        onVisiumHdBinSizeChange={onVisiumHdBinSizeChange}
+        onRunDatasetDiagnostics={vi.fn()}
+        onDownloadDiagnostics={vi.fn()}
+        onClearDebugLog={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Visium HD')).toBeInTheDocument()
+    expect(screen.getByLabelText('Tissue image')).toBeChecked()
+    expect(screen.getByLabelText('Boundary limit')).toBeDisabled()
+    expect(screen.getByRole('button', { name: '16 µm' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '8 µm' }))
+
+    expect(onVisiumHdBinSizeChange).toHaveBeenCalledWith(8)
+    expect(screen.getByRole('button', { name: '2 µm' })).toBeDisabled()
+    expect(
+      screen.getByText('2 µm is disabled until budgeted loading is implemented.'),
+    ).toBeInTheDocument()
   })
 })

@@ -31,6 +31,7 @@ import {
 import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
+import { useVisiumHdBinWorkflow } from './features/app-shell/useVisiumHdBinWorkflow'
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
 import {
@@ -125,6 +126,7 @@ import type {
   DatasetWarmupState,
   MorphologyLoadState,
 } from './features/dataset/datasetLoadModel'
+import type { VisiumHdControlState } from './features/dataset/visiumHdModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import {
   normalizeTranscriptExactPointLimit,
@@ -481,7 +483,11 @@ export function App({
     useState<ViewerViewportDetail | null>(null)
   const [, setViewportCellCount] = useState<number | null>(null)
   const [datasetPlatform, setDatasetPlatform] = useState<Platform | null>(null)
+  const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>({
+    status: 'idle',
+  })
   const loadRequestId = useRef(0)
+  const visiumHdBinRequestId = useRef(0)
   const analysisEmbeddingRequestId = useRef(0)
   const boundaryRequestId = useRef(0)
   const geneExpressionRequestId = useRef(0)
@@ -1493,6 +1499,7 @@ export function App({
     setTranscriptExactPointLimit,
     setTranscriptLayerState,
     setTranscriptPointColorMode,
+    setVisiumHdControlState,
     setViewportCellCount,
     startDatasetLoadRef,
     transcriptAbortRef,
@@ -1504,6 +1511,20 @@ export function App({
     transcriptRequestIdRef: transcriptRequestId,
     transcriptViewportKeyRef,
     warmDatasetForRoi,
+  })
+
+  const { handleVisiumHdBinSizeChange } = useVisiumHdBinWorkflow({
+    appendDebugEvent,
+    getSpatialDataset,
+    loadedDatasetUrl,
+    shouldLoadMorphology,
+    visiumHdControlState,
+    visiumHdBinRequestIdRef: visiumHdBinRequestId,
+    setFlatMorphologyImage,
+    setLoadState,
+    setMorphologyState,
+    setSpatialGridCells,
+    setVisiumHdControlState,
   })
 
   useShareableUrlHash({
@@ -1569,12 +1590,15 @@ export function App({
           handleDatasetSubmit={handleDatasetSubmit}
           handleDownloadDiagnostics={handleDownloadDiagnostics}
           handleRunDatasetDiagnostics={handleRunDatasetDiagnostics}
+          handleVisiumHdBinSizeChange={handleVisiumHdBinSizeChange}
           isLoading={isLoading}
+          isVisiumHdDataset={isVisiumHdDataset}
           setBoundaryCellLimit={setBoundaryCellLimit}
           setDatasetUrl={setDatasetUrl}
           setDebugLog={setDebugLog}
           setShouldLoadMorphology={setShouldLoadMorphology}
           shouldLoadMorphology={shouldLoadMorphology}
+          visiumHdControlState={visiumHdControlState}
         />
 
         <AppLayerHudPanel

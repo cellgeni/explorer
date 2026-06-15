@@ -8,13 +8,18 @@ import type {
   CellFeatureMatrixCapabilityState,
   DatasetDiagnosticsState,
 } from '../dataset/datasetLoadModel'
+import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
+import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { DebugLogAppendOptions, DebugLogEntry } from './appRuntimeModel'
 import type { AppControlIds } from './useAppControlIds'
 
 type AppDatasetControlIds = Pick<
   AppControlIds,
-  'datasetInputId' | 'morphologyInputId' | 'boundaryLimitInputId'
+  | 'datasetInputId'
+  | 'morphologyInputId'
+  | 'boundaryLimitInputId'
+  | 'visiumHdBinSizeInputId'
 >
 
 export interface AppDatasetHudPanelProps {
@@ -30,12 +35,17 @@ export interface AppDatasetHudPanelProps {
   readonly handleDatasetSubmit: FormEventHandler<HTMLFormElement>
   readonly handleDownloadDiagnostics: () => void
   readonly handleRunDatasetDiagnostics: () => Promise<void>
+  readonly handleVisiumHdBinSizeChange: (
+    binSize: VisiumHdBinSizeMicrometers,
+  ) => Promise<void>
   readonly isLoading: boolean
+  readonly isVisiumHdDataset: boolean
   readonly setBoundaryCellLimit: Dispatch<SetStateAction<number>>
   readonly setDatasetUrl: (url: string) => void
   readonly setDebugLog: Dispatch<SetStateAction<readonly DebugLogEntry[]>>
   readonly setShouldLoadMorphology: Dispatch<SetStateAction<boolean>>
   readonly shouldLoadMorphology: boolean
+  readonly visiumHdControlState: VisiumHdControlState
 }
 
 export function AppDatasetHudPanel({
@@ -51,12 +61,15 @@ export function AppDatasetHudPanel({
   handleDatasetSubmit,
   handleDownloadDiagnostics,
   handleRunDatasetDiagnostics,
+  handleVisiumHdBinSizeChange,
   isLoading,
+  isVisiumHdDataset,
   setBoundaryCellLimit,
   setDatasetUrl,
   setDebugLog,
   setShouldLoadMorphology,
   shouldLoadMorphology,
+  visiumHdControlState,
 }: AppDatasetHudPanelProps) {
   return (
     <DatasetHudPanel
@@ -64,13 +77,17 @@ export function AppDatasetHudPanel({
       datasetInputId={controlIds.datasetInputId}
       morphologyInputId={controlIds.morphologyInputId}
       boundaryLimitInputId={controlIds.boundaryLimitInputId}
+      visiumHdBinSizeInputId={controlIds.visiumHdBinSizeInputId}
       datasetUrl={datasetUrl}
       shouldLoadMorphology={shouldLoadMorphology}
+      morphologyLabel={isVisiumHdDataset ? 'Tissue image' : 'Morphology image'}
       boundaryCellLimit={boundaryCellLimit}
       maxBoundaryCellLimit={MAX_BOUNDARY_VIEWPORT_CELL_LIMIT}
+      boundaryControlsDisabled={isVisiumHdDataset}
       isLoading={isLoading}
       diagnosticsState={diagnosticsState}
       cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
+      visiumHdControlState={visiumHdControlState}
       activeErrors={activeErrors}
       debugLog={debugLog}
       onSubmit={handleDatasetSubmit}
@@ -90,6 +107,9 @@ export function AppDatasetHudPanel({
       }}
       onRunDatasetDiagnostics={() => {
         void handleRunDatasetDiagnostics()
+      }}
+      onVisiumHdBinSizeChange={(binSize) => {
+        void handleVisiumHdBinSizeChange(binSize)
       }}
       onDownloadDiagnostics={handleDownloadDiagnostics}
       onClearDebugLog={() => {

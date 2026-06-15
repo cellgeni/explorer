@@ -14,13 +14,7 @@ import { type RoiSelection } from '../../data/roiSelection'
 import type { ShareableState } from '../../data/shareableState'
 import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
-import type {
-  DatasetMeta,
-  ImageSource,
-  Platform,
-  SpatialElement,
-} from '../../datasets/spatialDataset'
-import type { VisiumHdBinnedOverview } from '../../datasets/visiumHdDataset'
+import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { AnalysisEmbeddingKind } from '../../data/analysisEmbeddings'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
@@ -103,11 +97,17 @@ import type {
   DatasetWarmupState,
   MorphologyLoadState,
 } from '../dataset/datasetLoadModel'
+import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import {
   createStructuredLoadError,
   readErrorMessage,
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
+import {
+  flatMorphologyImageFromSource,
+  isVisiumHdOverviewDataset,
+  visiumHdControlStateFromOverview,
+} from './useVisiumHdBinWorkflow'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
 
@@ -240,6 +240,7 @@ interface UseDatasetLifecycleOptions {
   readonly setTranscriptExactPointLimit: Setter<number>
   readonly setTranscriptLayerState: Setter<TranscriptLayerState<StructuredLoadError>>
   readonly setTranscriptPointColorMode: Setter<TranscriptPointColorMode>
+  readonly setVisiumHdControlState: Setter<VisiumHdControlState>
   readonly setViewportCellCount: Setter<number | null>
   readonly startDatasetLoadRef: MutableRef<
     ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
@@ -366,6 +367,7 @@ export function useDatasetLifecycle({
   setTranscriptExactPointLimit,
   setTranscriptLayerState,
   setTranscriptPointColorMode,
+  setVisiumHdControlState,
   setViewportCellCount,
   startDatasetLoadRef,
   transcriptAbortRef,
@@ -544,6 +546,7 @@ export function useDatasetLifecycle({
 
       setDatasetUrl(requestedUrl)
       setDatasetPlatform(null)
+      setVisiumHdControlState({ status: 'idle' })
       setDatasetWarmupState({ status: 'idle' })
       setCellFeatureMatrixCapabilityState({ status: 'idle' })
       cellFeatureMatrixCapabilityKeyRef.current = null
@@ -692,6 +695,13 @@ export function useDatasetLifecycle({
 
           setSpatialGridCells(
             gridCellBatchesToLayerData([overview.grid], [overview.gridCells]),
+          )
+          setVisiumHdControlState(
+            visiumHdControlStateFromOverview(
+              requestedUrl,
+              detection.bins.map((bin) => bin.binSizeMicrometers),
+              overview,
+            ),
           )
           initialShareableStateRef.current = null
           setLoadState({
@@ -912,6 +922,7 @@ export function useDatasetLifecycle({
           error: createStructuredLoadError('Dataset overview', error),
         })
         setDatasetPlatform(null)
+        setVisiumHdControlState({ status: 'idle' })
         setSpatialGridCells([])
         setFlatMorphologyImage(null)
         initialShareableStateRef.current = null
@@ -975,39 +986,4 @@ export function useDatasetLifecycle({
   ])
 
   return { handleDatasetSubmit }
-}
-
-interface VisiumHdOverviewDataset {
-  meta(): Promise<DatasetMeta>
-  image(): Promise<ImageSource | null>
-  readBinnedOverview(): Promise<VisiumHdBinnedOverview>
-}
-
-function isVisiumHdOverviewDataset(dataset: unknown): dataset is VisiumHdOverviewDataset {
-  return (
-    dataset !== null &&
-    typeof dataset === 'object' &&
-    'readBinnedOverview' in dataset &&
-    typeof dataset.readBinnedOverview === 'function' &&
-    'meta' in dataset &&
-    typeof dataset.meta === 'function' &&
-    'image' in dataset &&
-    typeof dataset.image === 'function'
-  )
-}
-
-function flatMorphologyImageFromSource(
-  source: ImageSource | null,
-  meta: DatasetMeta,
-): FlatMorphologyCanvasImage | null {
-  if (source === null || source.kind !== 'flat') {
-    return null
-  }
-
-  return {
-    url: source.url,
-    scaleFactor: source.scaleFactor,
-    micrometersPerPixel: meta.units.micrometersPerPixel,
-    ...(source.size === undefined ? {} : { size: source.size }),
-  }
 }

@@ -4,6 +4,7 @@ export interface AppControlIds {
   readonly datasetInputId: string
   readonly morphologyInputId: string
   readonly boundaryLimitInputId: string
+  readonly visiumHdBinSizeInputId: string
   readonly imageOpacityInputId: string
   readonly cellFillOpacityInputId: string
   readonly cellBoundaryOpacityInputId: string
@@ -42,6 +43,7 @@ export function useAppControlIds(): AppControlIds {
     datasetInputId: useId(),
     morphologyInputId: useId(),
     boundaryLimitInputId: useId(),
+    visiumHdBinSizeInputId: useId(),
     imageOpacityInputId: useId(),
     cellFillOpacityInputId: useId(),
     cellBoundaryOpacityInputId: useId(),

@@ -6,7 +6,11 @@ import type {
   GridCellBatch,
   SpatialGrid,
 } from '../../datasets/spatialDataset'
-import type { VisiumHdBinnedOverview } from '../../datasets/visiumHdDataset'
+import type {
+  VisiumHdBinnedOverview,
+  VisiumHdBinDescriptor,
+  VisiumHdBinSizeMicrometers,
+} from '../../datasets/visiumHdDataset'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
 import { useDatasetLifecycle } from './useDatasetLifecycle'
 
@@ -24,6 +28,21 @@ function stringRef(value: string | null = null) {
 
 function timeoutRef() {
   return { current: null as number | null }
+}
+
+function visiumBinDescriptor(
+  binSizeMicrometers: VisiumHdBinSizeMicrometers,
+): VisiumHdBinDescriptor {
+  const padded = binSizeMicrometers.toString().padStart(3, '0')
+  const outputPath = `binned_outputs/square_${padded}um`
+
+  return {
+    binSizeMicrometers,
+    outputPath,
+    tissuePositionsPath: `${outputPath}/spatial/tissue_positions.parquet`,
+    scalefactorsPath: `${outputPath}/spatial/scalefactors_json.json`,
+    filteredMatrixH5Path: `${outputPath}/filtered_feature_bc_matrix.h5`,
+  }
 }
 
 type LifecycleOptions = Parameters<typeof useDatasetLifecycle>[0]
@@ -46,6 +65,7 @@ function Probe({
   setLoadState = vi.fn(),
   setMorphologyState = vi.fn(),
   setSpatialGridCells = vi.fn(),
+  setVisiumHdControlState = vi.fn(),
   startDatasetLoadRef = { current: null },
   warmDatasetForRoi = vi.fn(async () => undefined),
 }: {
@@ -60,6 +80,7 @@ function Probe({
   readonly setLoadState?: LifecycleOptions['setLoadState']
   readonly setMorphologyState?: LifecycleOptions['setMorphologyState']
   readonly setSpatialGridCells?: LifecycleOptions['setSpatialGridCells']
+  readonly setVisiumHdControlState?: LifecycleOptions['setVisiumHdControlState']
   readonly startDatasetLoadRef?: LifecycleOptions['startDatasetLoadRef']
   readonly warmDatasetForRoi?: LifecycleOptions['warmDatasetForRoi']
 }) {
@@ -174,6 +195,7 @@ function Probe({
     setTranscriptExactPointLimit: noopSetter,
     setTranscriptLayerState: noopSetter,
     setTranscriptPointColorMode: noopSetter,
+    setVisiumHdControlState,
     setViewportCellCount: noopSetter,
     startDatasetLoadRef,
     transcriptAbortRef: refs.transcriptAbortRef,
@@ -320,7 +342,7 @@ describe('useDatasetLifecycle', () => {
     const detectSpatialDataset = vi.fn(async () => ({
       platform: 'visium-hd' as const,
       baseUrl: datasetUrl,
-      bins: [],
+      bins: [visiumBinDescriptor(16), visiumBinDescriptor(8), visiumBinDescriptor(2)],
       checked: [],
     }))
     const getSpatialDataset = vi.fn(async () => dataset)
@@ -332,6 +354,7 @@ describe('useDatasetLifecycle', () => {
     const setLoadState = vi.fn()
     const setMorphologyState = vi.fn()
     const setSpatialGridCells = vi.fn()
+    const setVisiumHdControlState = vi.fn()
     const warmDatasetForRoi = vi.fn(async () => undefined)
 
     render(
@@ -347,6 +370,7 @@ describe('useDatasetLifecycle', () => {
         setLoadState={setLoadState}
         setMorphologyState={setMorphologyState}
         setSpatialGridCells={setSpatialGridCells}
+        setVisiumHdControlState={setVisiumHdControlState}
         startDatasetLoadRef={startDatasetLoadRef}
         warmDatasetForRoi={warmDatasetForRoi}
       />,
@@ -366,6 +390,18 @@ describe('useDatasetLifecycle', () => {
     expect(loadAnnotationGroups).not.toHaveBeenCalled()
     expect(warmDatasetForRoi).not.toHaveBeenCalled()
     expect(setDatasetPlatform).toHaveBeenCalledWith('visium-hd')
+    expect(setVisiumHdControlState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'ready',
+        selectedBinSize: 16,
+        binCount: 1,
+        options: [
+          expect.objectContaining({ size: 16, available: true, disabled: false }),
+          expect.objectContaining({ size: 8, available: true, disabled: false }),
+          expect.objectContaining({ size: 2, available: true, disabled: true }),
+        ],
+      }),
+    )
     expect(setLoadState).toHaveBeenCalledWith({
       status: 'ready',
       url: datasetUrl,

@@ -1083,14 +1083,21 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       Vitest, production build, `git diff --check`, and a local browser smoke
       of the supplied Visium HD URL all pass. Build still reports the existing
       browser-externalized dependency and large chunk warnings.
+- [x] Added Visium HD binned tier controls. The Dataset tab now labels loaded
+      Visium HD datasets, treats the image toggle as `Tissue image`, disables
+      the Xenium boundary-limit control, exposes 16 µm and 8 µm selectable
+      binned tiers, and keeps 2 µm visible but disabled with a budgeted-loading
+      reason. Switching tiers reuses the cached `VisiumHdDataset`, reloads the
+      selected binned overview, updates grid-cell layer data, and refreshes the
+      flat tissue image source for the selected tier.
 
 ### Definition Of Done For The First Visium HD MVP
 
 - [ ] Loading the reference URL renders a tissue image plus aligned 16 µm square
       bins without requiring any Xenium files.
-- [ ] The user can switch between 16 µm and 8 µm binned outputs; 2 µm is either
+- [x] The user can switch between 16 µm and 8 µm binned outputs; 2 µm is either
       explicitly unavailable with a reason or enabled through a budgeted path.
-- [ ] The UI clearly labels the dataset as Visium HD and disables transcript,
+- [x] The UI clearly labels the dataset as Visium HD and disables transcript,
       Magic Lens, and Xenium cell-boundary controls instead of surfacing
       misleading errors.
 - [ ] Hover/click on a bin shows barcode, bin size, tissue status, array
