@@ -50,6 +50,16 @@ describe('loadErrorModel', () => {
       title: 'ROI gene matrix unavailable',
       detail: 'UnsupportedRoiGeneStatsMatrixError',
     })
+    const overBudget = new Error(
+      'Feature-barcode H5 matrix is 121.6 MB, exceeding the interactive full-file budget of 64.0 MB.',
+    )
+    overBudget.name = 'FullFileMatrixBudgetExceededError'
+
+    expect(createStructuredLoadError('Gene expression', overBudget)).toMatchObject({
+      code: 'unsupported',
+      title: 'Expression matrix over budget',
+      detail: 'FullFileMatrixBudgetExceededError',
+    })
     expect(
       createStructuredLoadError(
         'Morphology image',

@@ -42,6 +42,7 @@ export interface GexResult<ElementId extends string = CellId> {
 export interface CellFeatureMatrixReadOptions {
   readonly signal?: AbortSignal
   readonly onStageTiming?: GeneExpressionStageTimingHandler
+  readonly maxFullFileBytes?: number
 }
 
 export interface AggregatedGene {
@@ -246,6 +247,22 @@ export function createGeneFeatureIndex(
   }
 
   return indices
+}
+
+export class FullFileMatrixBudgetExceededError extends Error {
+  override readonly name = 'FullFileMatrixBudgetExceededError'
+
+  constructor(
+    readonly url: string,
+    readonly byteLength: number,
+    readonly maxBytes: number,
+  ) {
+    super(
+      `Feature-barcode H5 matrix is ${formatByteCount(
+        byteLength,
+      )}, exceeding the interactive full-file budget of ${formatByteCount(maxBytes)}.`,
+    )
+  }
 }
 
 export function selectionToSql(
@@ -1540,6 +1557,10 @@ async function loadH5MatrixUncached(
   url: string,
   options: CellFeatureMatrixReadOptions,
 ): Promise<H5MatrixCache> {
+  if (options.maxFullFileBytes !== undefined) {
+    await assertFullFileReadWithinBudget(url, options.maxFullFileBytes, options.signal)
+  }
+
   const h5wasm = (await import('h5wasm')).default
   const { FS } = await h5wasm.ready
   throwIfAborted(options.signal)
@@ -1605,6 +1626,61 @@ async function loadH5MatrixUncached(
 
     throw error
   }
+}
+
+async function assertFullFileReadWithinBudget(
+  url: string,
+  maxBytes: number,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  if (!Number.isFinite(maxBytes) || maxBytes < 0) {
+    throw new RangeError(`Full-file matrix byte budget must be non-negative.`)
+  }
+
+  const response = await fetch(url, {
+    method: 'HEAD',
+    ...(signal === undefined ? {} : { signal }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`cell_feature_matrix.h5 HEAD returned HTTP ${response.status}.`)
+  }
+
+  const contentLength = response.headers.get('content-length')
+
+  if (contentLength === null) {
+    throw new Error(
+      'Feature-barcode H5 matrix size is not exposed through Content-Length, so the interactive full-file read budget cannot be verified.',
+    )
+  }
+
+  const byteLength = Number(contentLength)
+
+  if (!Number.isFinite(byteLength) || byteLength < 0) {
+    throw new Error(
+      `Feature-barcode H5 matrix returned invalid Content-Length ${contentLength}.`,
+    )
+  }
+
+  if (byteLength > maxBytes) {
+    throw new FullFileMatrixBudgetExceededError(url, byteLength, maxBytes)
+  }
+}
+
+function formatByteCount(byteLength: number): string {
+  if (byteLength >= 1024 * 1024 * 1024) {
+    return `${(byteLength / (1024 * 1024 * 1024)).toFixed(1)} GB`
+  }
+
+  if (byteLength >= 1024 * 1024) {
+    return `${(byteLength / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  if (byteLength >= 1024) {
+    return `${(byteLength / 1024).toFixed(1)} KB`
+  }
+
+  return `${byteLength.toLocaleString()} bytes`
 }
 
 function expectH5Dataset(

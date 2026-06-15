@@ -486,6 +486,23 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('reports visible grid cells in viewport details', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onViewportChange = vi.fn()
+
+    render(
+      <ViewerCore gridCells={[gridCellDatum()]} onViewportChange={onViewportChange} />,
+    )
+
+    await waitFor(() => {
+      expect(onViewportChange).toHaveBeenCalled()
+    })
+    expect(onViewportChange.mock.calls[0]?.[0]).toMatchObject({
+      visibleCellCount: 1,
+    })
+  })
+
   it('centers the spatial view when a focus request is received', async () => {
     const cells: readonly OverviewCellDatum[] = [
       {

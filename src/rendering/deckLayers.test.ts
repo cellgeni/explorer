@@ -23,6 +23,7 @@ import {
   styleCellBoundariesByCells,
   styleCellBoundariesByGeneExpression,
   styleCellsByGeneExpression,
+  styleGridCellsByGeneExpression,
   styleGeneExpressionCellsByScale,
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
@@ -1009,6 +1010,55 @@ describe('deck layer factory', () => {
     ])
     expect(getFillColor(gridCells[0]!)).toEqual([34, 120, 108, 14])
     expect(getLineColor(gridCells[0]!)).toEqual([22, 90, 82, 75])
+  })
+
+  it('merges gene expression color into affine grid cells', () => {
+    const gridCells = gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])
+    const expressionStyledGridCells = styleGridCellsByGeneExpression(
+      gridCells,
+      [
+        {
+          id: 'BC-1',
+          position: [10, -20, 0],
+          radiusPixels: 6,
+          fillColor: [240, 128, 120, 220],
+          expressionCount: 7,
+          expressionGenes: ['Actb'],
+        },
+      ],
+      { styleUnmatchedCells: true },
+    )
+
+    expect(expressionStyledGridCells[0]).toMatchObject({
+      id: 'BC-1',
+      fillColor: [240, 128, 120, 220],
+      lineColor: [240, 128, 120, 220],
+      expressionCount: 7,
+      expressionGenes: ['Actb'],
+    })
+    expect(expressionStyledGridCells[1]).toMatchObject({
+      id: 'BC-2',
+      fillColor: [72, 68, 58, 84],
+      expressionCount: 0,
+    })
+
+    const layers = createOverviewLayers([], [], {
+      gridCells: expressionStyledGridCells,
+      gridCellOpacity: 0.5,
+    })
+    const gridLayer = layers.find(
+      (layer) => layer instanceof PolygonLayer && layer.id === 'spatial-grid-cells',
+    )
+
+    if (!(gridLayer instanceof PolygonLayer)) {
+      throw new Error('Expected grid cells to render as PolygonLayer.')
+    }
+
+    const getFillColor = gridLayer.props.getFillColor as (
+      cell: (typeof expressionStyledGridCells)[number],
+    ) => readonly number[]
+
+    expect(getFillColor(expressionStyledGridCells[0]!)).toEqual([240, 128, 120, 110])
   })
 
   it('colors transcript aggregate bins with the selected density scale', () => {

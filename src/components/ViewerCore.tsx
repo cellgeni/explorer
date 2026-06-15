@@ -11,6 +11,7 @@ import {
   createOverviewViewState,
   spatialOverviewView,
   styleCellsByGeneExpression,
+  styleGridCellsByGeneExpression,
 } from '../rendering/deckLayers'
 import {
   EXPRESSION_AGGREGATION_BIN_MICROMETERS,
@@ -573,6 +574,13 @@ function ViewerSurface({
       }),
     [geneExpressionActive, geneExpressionPointStyleIndex, renderCells],
   )
+  const expressionStyledGridCells = useMemo(
+    () =>
+      styleGridCellsByGeneExpression(gridCells, geneExpressionPointStyleIndex, {
+        styleUnmatchedCells: geneExpressionActive,
+      }),
+    [geneExpressionActive, geneExpressionPointStyleIndex, gridCells],
+  )
   const geneExpressionOverlayCells = useMemo(
     () =>
       expressionOverlayCellsForRendering({
@@ -658,7 +666,7 @@ function ViewerSurface({
         cellFillOpacity,
         cellBoundaryOpacity,
         cellBoundaryFillEnabled,
-        gridCells,
+        gridCells: expressionStyledGridCells,
         cellBoundaryGeometry: boundaryLayerGeometry,
         cellBoundaryStyle: boundaryLayerStyle,
         geneExpressionActive,
@@ -676,9 +684,9 @@ function ViewerSurface({
       boundaryLayerStyle,
       boundaries,
       expressionStyledRenderCells,
+      expressionStyledGridCells,
       geneExpressionActive,
       geneExpressionOverlayCells,
-      gridCells,
       transcriptAggregateBins,
       transcriptOpacity,
       transcriptPointSize,
@@ -691,7 +699,18 @@ function ViewerSurface({
   const hasImage = imageLoader !== null || imageChannels.length > 0 || flatImage !== null
   const canTrackMouseCoordinates = hasSpatialData || hasImage
   const visibleCellCount = visibleCells.length
+  const visibleGridCellCount = useMemo(
+    () =>
+      viewportBbox === null
+        ? gridCells.length
+        : countGridCellsInBbox(gridCells, viewportBbox),
+    [gridCells, viewportBbox],
+  )
   const estimatedViewportCellCount = useMemo(() => {
+    if (!hasCells && hasGridCells) {
+      return visibleGridCellCount
+    }
+
     if (viewportBbox === null) {
       return cells.length
     }
@@ -703,7 +722,16 @@ function ViewerSurface({
     return estimateOverviewCellCountInBbox(cells, viewportBbox, {
       extentBbox: cellExtentBbox,
     })
-  }, [cellExtentBbox, cells, viewState.zoom, viewportBbox, visibleCellCount])
+  }, [
+    cellExtentBbox,
+    cells,
+    hasCells,
+    hasGridCells,
+    viewState.zoom,
+    viewportBbox,
+    visibleCellCount,
+    visibleGridCellCount,
+  ])
   const displayedRoiSelection = useMemo<RoiSelection | null>(
     () => roiSelection ?? (roiBbox === null ? null : { kind: 'box', bbox: roiBbox }),
     [roiBbox, roiSelection],
@@ -1317,7 +1345,7 @@ function ViewerSurface({
     const timeout = window.setTimeout(() => {
       onViewportChange({
         bbox: viewportBbox,
-        visibleCellCount,
+        visibleCellCount: estimatedViewportCellCount,
         viewState,
       })
     }, 180)
@@ -1325,7 +1353,13 @@ function ViewerSurface({
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [hasSpatialData, onViewportChange, viewState, viewportBbox, visibleCellCount])
+  }, [
+    estimatedViewportCellCount,
+    hasSpatialData,
+    onViewportChange,
+    viewState,
+    viewportBbox,
+  ])
 
   return (
     <div
@@ -1791,6 +1825,12 @@ function GridCellHoverTooltip({
           <dt>Tissue</dt>
           <dd>{formatGridCellTissue(cell)}</dd>
         </div>
+        {cell.expressionCount === undefined ? null : (
+          <div>
+            <dt>Expression</dt>
+            <dd>{formatCoordinateValue(cell.expressionCount)}</dd>
+          </div>
+        )}
       </dl>
     </div>
   )
@@ -2181,6 +2221,39 @@ function formatGridCellTissue(cell: GridCellDatum): string {
   }
 
   return cell.inTissue ? 'In tissue' : 'Out of tissue'
+}
+
+function countGridCellsInBbox(gridCells: readonly GridCellDatum[], bbox: BBox): number {
+  let count = 0
+
+  for (const cell of gridCells) {
+    if (gridCellIntersectsBbox(cell, bbox)) {
+      count += 1
+    }
+  }
+
+  return count
+}
+
+function gridCellIntersectsBbox(cell: GridCellDatum, bbox: BBox): boolean {
+  if (cell.polygon.length === 0) {
+    return false
+  }
+
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const [x = 0, deckY = 0] of cell.polygon) {
+    const rawY = -deckY
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, rawY)
+    maxY = Math.max(maxY, rawY)
+  }
+
+  return maxX >= bbox.minX && minX <= bbox.maxX && maxY >= bbox.minY && minY <= bbox.maxY
 }
 
 function readViewportMessage(

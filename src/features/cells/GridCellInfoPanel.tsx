@@ -9,6 +9,9 @@ export function GridCellInfoPanel({ cell }: GridCellInfoPanelProps) {
     return <p className="cell-info-empty">No bin selected</p>
   }
 
+  const hasExpression = cell.expressionCount !== undefined
+  const expressionGenes = cell.expressionGenes ?? []
+
   return (
     <div className="cell-detail-panel">
       <dl className="cell-info-list">
@@ -39,9 +42,26 @@ export function GridCellInfoPanel({ cell }: GridCellInfoPanelProps) {
       <div className="cell-expression-panel">
         <div className="cell-expression-heading">
           <span>Gene expression</span>
-          <small>Unavailable</small>
+          <small>{hasExpression ? 'Loaded' : 'Unavailable'}</small>
         </div>
-        <p className="cell-expression-status">No expression loaded</p>
+        {hasExpression ? (
+          <dl className="cell-info-list">
+            <div>
+              <dt>Score</dt>
+              <dd>{formatNumber(cell.expressionCount ?? 0)}</dd>
+            </div>
+            <div>
+              <dt>Genes</dt>
+              <dd>
+                {expressionGenes.length === 0
+                  ? 'Selected genes'
+                  : expressionGenes.join(', ')}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="cell-expression-status">No expression loaded</p>
+        )}
       </div>
     </div>
   )

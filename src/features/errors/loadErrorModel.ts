@@ -143,6 +143,20 @@ export function createStructuredLoadError(
     )
   }
 
+  if (isFullFileMatrixBudgetError(error, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'unsupported',
+        title: 'Expression matrix over budget',
+        message,
+        action:
+          'Use a smaller interactive matrix source or add a range-readable sparse matrix reader before enabling this expression overlay.',
+      },
+      detail,
+    )
+  }
+
   if (
     normalizedMessage.includes('experiment.xenium') ||
     normalizedMessage.includes('no supported xenium ome-tiff')
@@ -218,6 +232,13 @@ function isUnsupportedRoiGeneStatsError(
     (error instanceof Error && error.name === 'UnsupportedRoiGeneStatsMatrixError') ||
     normalizedMessage.includes('native csc arrays in cell_feature_matrix.zarr.zip') ||
     normalizedMessage.includes('readable cell_feature_matrix.h5 fallback')
+  )
+}
+
+function isFullFileMatrixBudgetError(error: unknown, normalizedMessage: string): boolean {
+  return (
+    (error instanceof Error && error.name === 'FullFileMatrixBudgetExceededError') ||
+    normalizedMessage.includes('interactive full-file budget')
   )
 }
 

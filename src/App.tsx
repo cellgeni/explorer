@@ -27,6 +27,7 @@ import {
 import {
   defaultAppDependencies,
   type AppProps,
+  type GeneExpressionLoader,
 } from './features/app-shell/appDependencies'
 import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
@@ -163,6 +164,7 @@ import {
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
 import type { Platform, SpatialElement } from './datasets/spatialDataset'
+import type { VisiumHdBinSizeMicrometers } from './datasets/visiumHdDataset'
 import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
 import type {
   GeneExpressionColorScale,
@@ -201,6 +203,16 @@ export type {
   TranscriptCapabilitiesLoader,
   TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
+
+interface SpatialGeneExpressionDataset {
+  readonly geneExpression: (
+    bbox: Parameters<GeneExpressionLoader>[1],
+    genes: readonly string[],
+    options?: Parameters<GeneExpressionLoader>[3] & {
+      readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers
+    },
+  ) => Promise<GeneExpressionBatch>
+}
 
 export function App({
   loadDatasetOverview = defaultAppDependencies.loadDatasetOverview,
@@ -668,6 +680,7 @@ export function App({
     morphologyChannels,
     morphologyImage,
     observationColorMode,
+    gridCells: spatialGridCells,
     overviewCells,
     selectedGenes,
     transcriptDensityColorScale,
@@ -1081,6 +1094,35 @@ export function App({
     setGeneExpressionScaleDomain({ key: '', max: 0 })
     setGeneExpressionState({ status: 'idle' })
   }, [])
+  const activeVisiumHdBinSize =
+    visiumHdControlState.status === 'idle'
+      ? undefined
+      : visiumHdControlState.selectedBinSize
+  const geneExpressionLoadingEnabled = !isVisiumHdDataset
+  const geneExpressionDisabledMessage = isVisiumHdDataset
+    ? 'Visium HD selected-gene overlays require the Feature Slice H5 reader and are not enabled yet.'
+    : undefined
+  const loadActiveGeneExpression = useCallback<GeneExpressionLoader>(
+    async (baseUrl, bbox, genes, options = {}) => {
+      if (!isVisiumHdDataset) {
+        return loadGeneExpression(baseUrl, bbox, genes, options)
+      }
+
+      const dataset = await getSpatialDataset(baseUrl)
+
+      if (!isSpatialGeneExpressionDataset(dataset)) {
+        throw new Error('Loaded dataset does not expose selected-gene expression.')
+      }
+
+      return dataset.geneExpression(bbox, genes, {
+        ...options,
+        ...(activeVisiumHdBinSize === undefined
+          ? {}
+          : { binSizeMicrometers: activeVisiumHdBinSize }),
+      })
+    },
+    [activeVisiumHdBinSize, getSpatialDataset, isVisiumHdDataset, loadGeneExpression],
+  )
 
   const toggleGene = useCallback(
     (gene: string) => {
@@ -1119,14 +1161,15 @@ export function App({
     boundaryViewportKeyRef,
     geneExpressionAbortRef,
     geneExpressionDetailMode,
-    geneExpressionLoadingEnabled: !isVisiumHdDataset,
+    geneExpressionDisabledMessage,
+    geneExpressionLoadingEnabled,
     geneExpressionRequestIdRef: geneExpressionRequestId,
     geneExpressionScaleKey,
     geneExpressionScoreMode,
     geneExpressionViewportKeyRef,
     lastViewportDetailRef,
     loadBoundaryElements,
-    loadGeneExpression,
+    loadGeneExpression: loadActiveGeneExpression,
     loadState,
     overviewExtent,
     recordTelemetry,
@@ -1529,7 +1572,13 @@ export function App({
     shouldLoadMorphology,
     visiumHdControlState,
     visiumHdBinRequestIdRef: visiumHdBinRequestId,
+    geneExpressionAbortRef,
+    geneExpressionRequestIdRef: geneExpressionRequestId,
+    geneExpressionViewportKeyRef,
     setFlatMorphologyImage,
+    setGeneExpressionBatch,
+    setGeneExpressionScaleDomain,
+    setGeneExpressionState,
     setGenePanelState,
     setLoadState,
     setMorphologyState,
@@ -1928,5 +1977,16 @@ export function App({
         />
       </section>
     </main>
+  )
+}
+
+function isSpatialGeneExpressionDataset(
+  dataset: unknown,
+): dataset is SpatialGeneExpressionDataset {
+  return (
+    dataset !== null &&
+    typeof dataset === 'object' &&
+    'geneExpression' in dataset &&
+    typeof dataset.geneExpression === 'function'
   )
 }

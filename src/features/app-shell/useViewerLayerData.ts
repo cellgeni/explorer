@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { MorphologyCanvasChannel } from '../../components/MorphologyCanvas'
-import type { BBox } from '../../data/coords'
+import { micrometers, type BBox } from '../../data/coords'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { SpatialElement } from '../../datasets/spatialDataset'
@@ -19,6 +19,7 @@ import {
   transcriptPointsToLayerData,
   type GeneExpressionColorScale,
   type GeneExpressionScoreMode,
+  type GridCellDatum,
   type OverviewCellDatum,
   type TranscriptDensityColorScale,
   type TranscriptPointColorMode,
@@ -47,6 +48,7 @@ import type { StructuredLoadError } from '../errors/loadErrorModel'
 
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_MORPHOLOGY_CHANNEL_OPACITIES: ReadonlyMap<string, number> = new Map()
+const EMPTY_GRID_CELLS: readonly GridCellDatum[] = []
 
 interface UseViewerLayerDataOptions {
   readonly annotationState: AnnotationState<StructuredLoadError>
@@ -54,6 +56,7 @@ interface UseViewerLayerDataOptions {
   readonly cellMetadataTrack: CellMetadataColorStyle | null
   readonly observationColorMode: ObservationColorMode
   readonly overviewCells: readonly OverviewCellDatum[]
+  readonly gridCells?: readonly GridCellDatum[]
   readonly currentViewportBbox: BBox | null
   readonly geneExpressionScaleDatasetUrl: string
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
@@ -77,6 +80,7 @@ export function useViewerLayerData({
   cellMetadataTrack,
   observationColorMode,
   overviewCells,
+  gridCells = EMPTY_GRID_CELLS,
   currentViewportBbox,
   geneExpressionScaleDatasetUrl,
   geneExpressionScoreMode,
@@ -125,8 +129,8 @@ export function useViewerLayerData({
     return styleOverviewCellsByObservation(overviewCells, 'cell-area')
   }, [observationColorMode, overviewCells])
   const overviewExtent = useMemo(
-    () => overviewCellsToBbox(overviewCells),
-    [overviewCells],
+    () => spatialLayerDataToBbox(overviewCells, gridCells),
+    [gridCells, overviewCells],
   )
   const geneExpressionScaleKey = useMemo(
     () =>
@@ -273,5 +277,47 @@ export function useViewerLayerData({
     transcriptLayerPoints,
     viewerObservationColorMode,
     visibleTranscriptEstimate,
+  }
+}
+
+function spatialLayerDataToBbox(
+  cells: readonly OverviewCellDatum[],
+  gridCells: readonly GridCellDatum[],
+): BBox | null {
+  const cellBbox = overviewCellsToBbox(cells)
+
+  if (gridCells.length === 0) {
+    return cellBbox
+  }
+
+  let minX = cellBbox?.minX ?? Number.POSITIVE_INFINITY
+  let maxX = cellBbox?.maxX ?? Number.NEGATIVE_INFINITY
+  let minY = cellBbox?.minY ?? Number.POSITIVE_INFINITY
+  let maxY = cellBbox?.maxY ?? Number.NEGATIVE_INFINITY
+
+  for (const cell of gridCells) {
+    for (const [x = 0, deckY = 0] of cell.polygon) {
+      const rawY = -deckY
+      minX = Math.min(minX, x)
+      maxX = Math.max(maxX, x)
+      minY = Math.min(minY, rawY)
+      maxY = Math.max(maxY, rawY)
+    }
+  }
+
+  if (
+    !Number.isFinite(minX) ||
+    !Number.isFinite(maxX) ||
+    !Number.isFinite(minY) ||
+    !Number.isFinite(maxY)
+  ) {
+    return null
+  }
+
+  return {
+    minX: micrometers(minX),
+    maxX: micrometers(maxX),
+    minY: micrometers(minY),
+    maxY: micrometers(maxY),
   }
 }

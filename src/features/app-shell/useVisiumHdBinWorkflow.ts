@@ -15,7 +15,12 @@ import {
   updateVisiumHdBinOptionCount,
   type VisiumHdControlState,
 } from '../dataset/visiumHdModel'
-import type { GenePanelState } from '../genes/geneControlsModel'
+import type {
+  GeneExpressionScaleDomain,
+  GeneExpressionState,
+  GenePanelState,
+} from '../genes/geneControlsModel'
+import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import {
   createStructuredLoadError,
   readErrorMessage,
@@ -23,6 +28,7 @@ import {
 } from '../errors/loadErrorModel'
 import type { SpatialDatasetLoader } from './appDependencies'
 import {
+  abortActiveRequest,
   formatElapsed,
   readTimestamp,
   type DebugLogAppendOptions,
@@ -54,8 +60,16 @@ export interface UseVisiumHdBinWorkflowOptions {
   readonly loadedDatasetUrl: string | null
   readonly shouldLoadMorphology: boolean
   readonly visiumHdControlState: VisiumHdControlState
-  readonly visiumHdBinRequestIdRef?: MutableRef<number>
+  readonly visiumHdBinRequestIdRef?: MutableRef<number> | undefined
+  readonly geneExpressionAbortRef?: MutableRef<AbortController | null> | undefined
+  readonly geneExpressionRequestIdRef?: MutableRef<number> | undefined
+  readonly geneExpressionViewportKeyRef?: MutableRef<string | null> | undefined
   readonly setFlatMorphologyImage: Setter<FlatMorphologyCanvasImage | null>
+  readonly setGeneExpressionBatch?: Setter<GeneExpressionBatch | null> | undefined
+  readonly setGeneExpressionScaleDomain?: Setter<GeneExpressionScaleDomain> | undefined
+  readonly setGeneExpressionState?:
+    | Setter<GeneExpressionState<StructuredLoadError>>
+    | undefined
   readonly setGenePanelState: Setter<GenePanelState<StructuredLoadError>>
   readonly setLoadState: Setter<DatasetLoadState<StructuredLoadError>>
   readonly setMorphologyState: Setter<MorphologyLoadState<StructuredLoadError>>
@@ -77,7 +91,13 @@ export function useVisiumHdBinWorkflow({
   shouldLoadMorphology,
   visiumHdControlState,
   visiumHdBinRequestIdRef,
+  geneExpressionAbortRef,
+  geneExpressionRequestIdRef,
+  geneExpressionViewportKeyRef,
   setFlatMorphologyImage,
+  setGeneExpressionBatch,
+  setGeneExpressionScaleDomain,
+  setGeneExpressionState,
   setGenePanelState,
   setLoadState,
   setMorphologyState,
@@ -107,6 +127,14 @@ export function useVisiumHdBinWorkflow({
       const startedAt = readTimestamp()
       requestIdRef.current = requestId
       setSelectedGridCell(null)
+      resetVisiumHdExpressionState({
+        geneExpressionAbortRef,
+        geneExpressionRequestIdRef,
+        geneExpressionViewportKeyRef,
+        setGeneExpressionBatch,
+        setGeneExpressionScaleDomain,
+        setGeneExpressionState,
+      })
       setVisiumHdControlState((current) =>
         current.status === 'idle'
           ? current
@@ -247,10 +275,16 @@ export function useVisiumHdBinWorkflow({
     },
     [
       appendDebugEvent,
+      geneExpressionAbortRef,
+      geneExpressionRequestIdRef,
+      geneExpressionViewportKeyRef,
       getSpatialDataset,
       loadedDatasetUrl,
       requestIdRef,
       setFlatMorphologyImage,
+      setGeneExpressionBatch,
+      setGeneExpressionScaleDomain,
+      setGeneExpressionState,
       setGenePanelState,
       setLoadState,
       setMorphologyState,
@@ -263,6 +297,40 @@ export function useVisiumHdBinWorkflow({
   )
 
   return { handleVisiumHdBinSizeChange }
+}
+
+function resetVisiumHdExpressionState({
+  geneExpressionAbortRef,
+  geneExpressionRequestIdRef,
+  geneExpressionViewportKeyRef,
+  setGeneExpressionBatch,
+  setGeneExpressionScaleDomain,
+  setGeneExpressionState,
+}: {
+  readonly geneExpressionAbortRef?: MutableRef<AbortController | null> | undefined
+  readonly geneExpressionRequestIdRef?: MutableRef<number> | undefined
+  readonly geneExpressionViewportKeyRef?: MutableRef<string | null> | undefined
+  readonly setGeneExpressionBatch?: Setter<GeneExpressionBatch | null> | undefined
+  readonly setGeneExpressionScaleDomain?: Setter<GeneExpressionScaleDomain> | undefined
+  readonly setGeneExpressionState?:
+    | Setter<GeneExpressionState<StructuredLoadError>>
+    | undefined
+}): void {
+  if (geneExpressionAbortRef !== undefined) {
+    abortActiveRequest(geneExpressionAbortRef)
+  }
+
+  if (geneExpressionRequestIdRef !== undefined) {
+    geneExpressionRequestIdRef.current += 1
+  }
+
+  if (geneExpressionViewportKeyRef !== undefined) {
+    geneExpressionViewportKeyRef.current = null
+  }
+
+  setGeneExpressionBatch?.(null)
+  setGeneExpressionScaleDomain?.({ key: '', max: 0 })
+  setGeneExpressionState?.({ status: 'idle' })
 }
 
 export function isVisiumHdOverviewDataset(

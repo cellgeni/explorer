@@ -56,6 +56,7 @@ interface UseViewportDataWorkflowOptions {
   readonly boundaryViewportKeyRef: MutableRef<string | null>
   readonly geneExpressionAbortRef: MutableRef<AbortController | null>
   readonly geneExpressionDetailMode: GeneExpressionDetailMode
+  readonly geneExpressionDisabledMessage?: string | undefined
   readonly geneExpressionLoadingEnabled?: boolean
   readonly geneExpressionRequestIdRef: MutableRef<number>
   readonly geneExpressionScaleKey: string
@@ -94,6 +95,7 @@ export function useViewportDataWorkflow({
   boundaryViewportKeyRef,
   geneExpressionAbortRef,
   geneExpressionDetailMode,
+  geneExpressionDisabledMessage,
   geneExpressionLoadingEnabled = true,
   geneExpressionRequestIdRef,
   geneExpressionScaleKey,
@@ -196,9 +198,16 @@ export function useViewportDataWorkflow({
         geneExpressionRequestIdRef.current += 1
         geneExpressionViewportKeyRef.current = null
         setGeneExpressionBatch(null)
-        setGeneExpressionState((current) =>
-          current.status === 'idle' ? current : { status: 'idle' },
-        )
+        setGeneExpressionState((current) => {
+          if (selectedGenes.length > 0 && geneExpressionDisabledMessage !== undefined) {
+            return current.status === 'waiting' &&
+              current.message === geneExpressionDisabledMessage
+              ? current
+              : { status: 'waiting', message: geneExpressionDisabledMessage }
+          }
+
+          return current.status === 'idle' ? current : { status: 'idle' }
+        })
         return
       }
 
@@ -380,6 +389,7 @@ export function useViewportDataWorkflow({
       boundaryViewportKeyRef,
       geneExpressionAbortRef,
       geneExpressionDetailMode,
+      geneExpressionDisabledMessage,
       geneExpressionLoadingEnabled,
       geneExpressionRequestIdRef,
       geneExpressionScaleKey,

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { GridCellDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 import { useViewerLayerData } from './useViewerLayerData'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
@@ -142,6 +142,71 @@ describe('useViewerLayerData', () => {
 
     expect(result.viewerObservationColorMode).toBe('metadata')
     expect(result.activeCellMetadataTrack?.id).toBe('metadata:confidence')
+  })
+
+  it('derives extent from Visium HD grid cells when overview cells are absent', () => {
+    const gridCells: readonly GridCellDatum[] = [
+      {
+        id: 'BC-1',
+        gridId: 'grid-16um',
+        row: 0,
+        col: 0,
+        polygon: [
+          [10, -20, 0],
+          [26, -20, 0],
+          [26, -36, 0],
+          [10, -36, 0],
+        ],
+        fillColor: [34, 120, 108, 28],
+        lineColor: [22, 90, 82, 150],
+      },
+    ]
+
+    function GridProbe({ onReady }: { readonly onReady: (nextResult: Result) => void }) {
+      const nextResult = useViewerLayerData({
+        annotationColors: {},
+        annotationState: { status: 'idle' },
+        cellMetadataTrack: null,
+        boundaryElements: [],
+        currentViewportBbox: null,
+        geneExpressionBatch: null,
+        geneExpressionColorScale: 'plasma',
+        geneExpressionScaleDatasetUrl: 'https://example.test/visium',
+        geneExpressionScaleDomain: { key: '', max: 0 },
+        geneExpressionScoreMode: 'sum',
+        gridCells,
+        morphologyChannelSettings: [],
+        morphologyChannels: [],
+        morphologyImage: null,
+        observationColorMode: 'annotations',
+        overviewCells: [],
+        selectedGenes: [],
+        transcriptDensityColorScale: 'thermal',
+        transcriptLayerState: { status: 'idle' },
+        transcriptPointColorMode: 'feature',
+      })
+
+      React.useEffect(() => {
+        onReady(nextResult)
+      })
+
+      return null
+    }
+
+    render(
+      <GridProbe
+        onReady={(nextResult) => {
+          result = nextResult
+        }}
+      />,
+    )
+
+    expect(result.overviewExtent).toEqual({
+      minX: micrometers(10),
+      maxX: micrometers(26),
+      minY: micrometers(20),
+      maxY: micrometers(36),
+    })
   })
 
   it('passes morphology channel alpha rendering metadata to the canvas model', () => {

@@ -67,6 +67,8 @@ export interface GridCellDatum {
   readonly polygon: readonly Position[]
   readonly fillColor: Color
   readonly lineColor: Color
+  readonly expressionCount?: number
+  readonly expressionGenes?: readonly string[]
 }
 
 export interface GridCellLayerDataOptions {
@@ -1606,6 +1608,60 @@ export function styleCellsByGeneExpression(
     return {
       ...cell,
       fillColor: expressionCell.fillColor,
+      ...(expressionCell.expressionCount === undefined
+        ? {}
+        : { expressionCount: expressionCell.expressionCount }),
+      ...(expressionCell.expressionGenes === undefined
+        ? {}
+        : { expressionGenes: expressionCell.expressionGenes }),
+    }
+  })
+
+  return hasExpressionStyle ? styledCells : cells
+}
+
+export function styleGridCellsByGeneExpression(
+  cells: readonly GridCellDatum[],
+  expressionSource: readonly OverviewCellDatum[] | GeneExpressionCellStyleIndex,
+  options: GeneExpressionCellStyleOptions = {},
+): readonly GridCellDatum[] {
+  if (cells.length === 0) {
+    return cells
+  }
+
+  const styleIndex = isOverviewCellDatumArray(expressionSource)
+    ? createGeneExpressionCellStyleIndex(expressionSource, options)
+    : expressionSource
+  const styleUnmatchedCells = options.styleUnmatchedCells ?? false
+
+  if (styleIndex.expressionByCellId.size === 0 && !styleUnmatchedCells) {
+    return cells
+  }
+
+  let hasExpressionStyle = false
+  const styledCells = cells.map((cell) => {
+    const expressionCell = styleIndex.expressionByCellId.get(cell.id)
+
+    if (expressionCell === undefined) {
+      if (!styleUnmatchedCells) {
+        return cell
+      }
+
+      hasExpressionStyle = true
+
+      return {
+        ...cell,
+        fillColor: GENE_EXPRESSION_ZERO_FILL_COLOR,
+        lineColor: boundaryLineColor(GENE_EXPRESSION_ZERO_FILL_COLOR),
+        expressionCount: 0,
+      }
+    }
+
+    hasExpressionStyle = true
+    return {
+      ...cell,
+      fillColor: expressionCell.fillColor,
+      lineColor: boundaryLineColor(expressionCell.fillColor),
       ...(expressionCell.expressionCount === undefined
         ? {}
         : { expressionCount: expressionCell.expressionCount }),

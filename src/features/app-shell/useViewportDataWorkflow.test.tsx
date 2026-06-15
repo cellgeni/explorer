@@ -74,6 +74,7 @@ let snapshot: Snapshot
 
 function Probe({
   boundaryLoadingEnabled = true,
+  geneExpressionDisabledMessage,
   geneExpressionLoadingEnabled = true,
   loadBoundaryElements,
   loadGeneExpression,
@@ -84,6 +85,7 @@ function Probe({
     typeof useViewportDataWorkflow
   >[0]['loadBoundaryElements']
   readonly boundaryLoadingEnabled?: boolean
+  readonly geneExpressionDisabledMessage?: string
   readonly geneExpressionLoadingEnabled?: boolean
   readonly loadGeneExpression: Parameters<
     typeof useViewportDataWorkflow
@@ -136,6 +138,7 @@ function Probe({
     boundaryViewportKeyRef,
     geneExpressionAbortRef,
     geneExpressionDetailMode: 'auto',
+    geneExpressionDisabledMessage,
     geneExpressionLoadingEnabled,
     geneExpressionRequestIdRef,
     geneExpressionScaleKey: 'scale-key',
@@ -206,6 +209,37 @@ describe('useViewportDataWorkflow', () => {
     expect(loadGeneExpression).not.toHaveBeenCalled()
     expect(snapshot.boundaryState).toEqual({ status: 'idle' })
     expect(snapshot.geneExpressionState).toEqual({ status: 'idle' })
+  })
+
+  it('reports disabled gene expression without starting a selected-gene load', async () => {
+    const loadGeneExpression = vi.fn(async () => batch)
+
+    render(
+      <Probe
+        geneExpressionDisabledMessage="Visium HD expression loading is paused."
+        geneExpressionLoadingEnabled={false}
+        loadBoundaryElements={vi.fn(async () => ({ elements: [] }))}
+        loadGeneExpression={loadGeneExpression}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(detailWithoutBoundaryLoad)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(loadGeneExpression).not.toHaveBeenCalled()
+    expect(snapshot.geneExpressionBatch).toBeNull()
+    expect(snapshot.geneExpressionState).toEqual({
+      status: 'waiting',
+      message: 'Visium HD expression loading is paused.',
+    })
   })
 
   it('loads boundary elements and gene expression for a new viewport', async () => {

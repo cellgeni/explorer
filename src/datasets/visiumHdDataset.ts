@@ -60,6 +60,7 @@ export interface VisiumHdDatasetOptions {
     ids: readonly SpatialElementId[],
     options?: CellFeatureMatrixReadOptions,
   ) => Promise<GexResult<SpatialElementId>>
+  readonly maxInteractiveMatrixBytes?: number
   readonly readObjects?: VisiumHdParquetObjectReader
   readonly loadCompressors?: () => Promise<Compressors>
   readonly byteRangeCache?: PersistentByteRangeCache | null
@@ -180,6 +181,7 @@ export class VisiumHdTissuePositionsDecodeError extends Error {
 }
 
 const DEFAULT_VISIUM_HD_MAX_BASIS_FIT_SAMPLES = 10_000
+export const DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET = 64 * 1024 * 1024
 
 export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   readonly baseUrl: string
@@ -203,6 +205,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     ids: readonly SpatialElementId[],
     options?: CellFeatureMatrixReadOptions,
   ) => Promise<GexResult<SpatialElementId>>
+  private readonly maxInteractiveMatrixBytes: number
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
   private readonly loadCompressors: (() => Promise<Compressors>) | undefined
   private readonly byteRangeCache: PersistentByteRangeCache | null | undefined
@@ -228,6 +231,9 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       options.featureGenePanelReader ?? readVisiumHdFeatureGenePanel
     this.featureMatrixReader =
       options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5
+    this.maxInteractiveMatrixBytes =
+      options.maxInteractiveMatrixBytes ??
+      DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET
     this.readObjects = options.readObjects
     this.loadCompressors = options.loadCompressors
     this.byteRangeCache = options.byteRangeCache
@@ -270,7 +276,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     return this.featureMatrixReader(
       datasetFileUrl(this.baseUrl, bin.filteredMatrixH5Path),
       ids,
-      options,
+      {
+        ...options,
+        maxFullFileBytes: options.maxFullFileBytes ?? this.maxInteractiveMatrixBytes,
+      },
     )
   }
 

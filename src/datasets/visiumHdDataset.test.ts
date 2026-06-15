@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { micrometers } from '../data/coords'
 import {
+  DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET,
   VISIUM_HD_TISSUE_POSITION_COLUMNS,
   VisiumHdDataset,
   createVisiumHdBinnedOverview,
@@ -256,7 +257,9 @@ describe('Visium HD dataset readers', () => {
     expect(featureMatrixReader).toHaveBeenCalledWith(
       'https://example.test/visium/binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
       ['BC-0'],
-      {},
+      {
+        maxFullFileBytes: DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET,
+      },
     )
   })
 
@@ -306,7 +309,10 @@ describe('Visium HD dataset readers', () => {
     expect(featureMatrixReader).toHaveBeenCalledWith(
       'https://example.test/visium/binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
       ['BC-0'],
-      expect.objectContaining({ onStageTiming: expect.any(Function) }),
+      expect.objectContaining({
+        maxFullFileBytes: DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET,
+        onStageTiming: expect.any(Function),
+      }),
     )
     expect(batch.genes).toEqual(['Actb', 'Gad1'])
     expect(batch.maxCount).toBe(8)

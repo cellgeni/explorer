@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { cellIdToInt, intToCellId } from './cellid'
 import {
   aggregateGex,
   createGeneFeatureIndex,
+  FullFileMatrixBudgetExceededError,
   gexFromCellMajorSparseArrays,
   gexFromCellFeatureMatrixH5,
   gexFromFeatureBarcodeMatrixH5,
@@ -325,6 +326,37 @@ describe('GEX helpers', () => {
         geneNames: [],
         counts: [],
       })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('rejects oversized H5 matrices before fetching the full file', async () => {
+    const originalFetch = globalThis.fetch
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'HEAD') {
+        return new Response(null, {
+          headers: {
+            'content-length': String(128 * 1024 * 1024),
+          },
+        })
+      }
+
+      throw new Error('Unexpected full matrix fetch')
+    })
+
+    globalThis.fetch = fetcher
+
+    try {
+      await expect(
+        gexFromFeatureBarcodeMatrixH5(
+          'https://example.test/visium/oversized_feature_bc_matrix.h5',
+          ['AAAC-1'],
+          { maxFullFileBytes: 64 * 1024 * 1024 },
+        ),
+      ).rejects.toBeInstanceOf(FullFileMatrixBudgetExceededError)
+      expect(fetcher).toHaveBeenCalledTimes(1)
+      expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'HEAD' })
     } finally {
       globalThis.fetch = originalFetch
     }

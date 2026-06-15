@@ -854,6 +854,18 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 
 - [x] Use this public Visium HD fixture for development and smoke tests:
       `https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f`
+- [x] Official 10x Space Ranger output references captured for Phase 6 GEX:
+      Understanding Space Ranger Outputs
+      `https://www.10xgenomics.com/support/software/space-ranger/latest/analysis/outputs/output-overview`,
+      Segmented Outputs
+      `https://www.10xgenomics.com/support/software/space-ranger/latest/analysis/outputs/segmented-outputs`,
+      and Feature Slice H5
+      `https://www.10xgenomics.com/support/software/space-ranger/latest/analysis/outputs/space-ranger-feature-slice-h5`.
+      Key takeaway: binned `filtered_feature_bc_matrix.h5` remains a standard
+      matrix output, but interactive selected-gene overlays should target
+      `feature_slice.h5` because 10x documents it as the Visium HD-specific
+      path for efficient single-gene or multi-gene 2 µm slices that can be
+      binned to 8 µm or 16 µm.
 - [x] Fixture top-level files/directories supplied by the user:
       `binned_outputs/`, `segmented_outputs/`, `spatial/`,
       `barcode_mappings.parquet`, `feature_slice.h5`, `metrics_summary.csv`,
@@ -1111,10 +1123,43 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       supports generic Space Ranger barcodes, and `VisiumHdDataset` can score
       selected genes for visible binned barcodes. The viewport/UI expression
       overlay remains gated off until the grid-cell rendering path is enabled.
+- [x] Continued Slice 5 by enabling selected-gene expression through the Visium
+      HD app path. Viewport expression requests now route through the active
+      `SpatialDataset` and selected binned tier, grid-cell polygons inherit
+      expression colors/count metadata, hover and Bin Info panels expose loaded
+      expression scores, and bin-tier switches clear stale expression requests.
+      Grid-only viewports now report visible bin counts and grid extents to the
+      existing expression LOD planner instead of appearing as zero-cell views.
+      Focused tests, full Vitest, TypeScript, ESLint, production build, and a
+      direct Playwright production-preview smoke passed locally; the configured
+      Playwright `webServer` command still expects `npm` on PATH in this desktop
+      environment, so the equivalent smoke was run against a manually started
+      preview server.
+- [x] Paused the Visium HD selected-gene expression viewport path after the
+      first integration pass exposed a UI hang when selecting a gene. The app
+      now keeps Visium HD gene selection and the binned gene panel active, but
+      reports a waiting status and avoids starting the full H5 matrix read until
+      a budgeted binned-expression loader is added.
+- [x] Reworked that pause into an expression-matrix budget guard. Visium HD
+      selected-gene requests can enter the shared expression workflow again,
+      but the H5 matrix reader now performs a `HEAD` size preflight and rejects
+      oversized full-file reads before importing `h5wasm` or fetching matrix
+      bytes. The reference 16 µm and 8 µm H5 files exceed the current 64 MB
+      interactive budget, so they surface a controlled expression-budget error
+      instead of hanging the UI. Matrix Market sidecars were also probed and
+      are larger than the H5 files, so they are not an acceptable interactive
+      fallback for this fixture.
+- [x] After reviewing the official 10x Feature Slice documentation, keep the
+      Visium HD selected-gene overlay gated in the UI instead of surfacing the
+      binned-matrix budget error to users. The H5 budget guard remains in the
+      lower-level reader as a safety net, but the app now reports that
+      selected-gene overlays require the Feature Slice H5 reader. Next work is
+      to read `feature_slice.h5` feature COO slices and bin them to the active
+      8 µm or 16 µm grid.
 
 ### Definition Of Done For The First Visium HD MVP
 
-- [ ] Loading the reference URL renders a tissue image plus aligned 16 µm square
+- [x] Loading the reference URL renders a tissue image plus aligned 16 µm square
       bins without requiring any Xenium files.
 - [x] The user can switch between 16 µm and 8 µm binned outputs; 2 µm is either
       explicitly unavailable with a reason or enabled through a budgeted path.
