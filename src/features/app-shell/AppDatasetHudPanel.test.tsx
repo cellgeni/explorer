@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON } from '../../datasets/visiumHdStrategy'
 import { AppDatasetHudPanel } from './AppDatasetHudPanel'
 
 type Props = ComponentProps<typeof AppDatasetHudPanel>
@@ -86,7 +87,7 @@ describe('AppDatasetHudPanel', () => {
             size: 2,
             available: true,
             disabled: true,
-            reason: '2 µm is disabled until budgeted loading is implemented.',
+            reason: VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
           },
         ],
       },

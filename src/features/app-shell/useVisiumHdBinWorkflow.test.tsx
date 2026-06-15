@@ -9,6 +9,7 @@ import type {
   SpatialGrid,
 } from '../../datasets/spatialDataset'
 import type { VisiumHdBinnedOverview } from '../../datasets/visiumHdDataset'
+import { VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON } from '../../datasets/visiumHdStrategy'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import {
   useVisiumHdBinWorkflow,
@@ -311,7 +312,7 @@ function visiumControlState(): VisiumHdControlState {
         size: 2,
         available: true,
         disabled: true,
-        reason: '2 µm is disabled until budgeted loading is implemented.',
+        reason: VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
       },
     ],
     binCount: 54_504,

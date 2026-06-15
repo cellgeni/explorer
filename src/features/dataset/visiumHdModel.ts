@@ -1,4 +1,5 @@
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
+import { VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON } from '../../datasets/visiumHdStrategy'
 
 export interface VisiumHdBinOption {
   readonly size: VisiumHdBinSizeMicrometers
@@ -20,8 +21,6 @@ export type VisiumHdControlState =
     }
 
 const VISIUM_HD_BIN_OPTION_ORDER: readonly VisiumHdBinSizeMicrometers[] = [16, 8, 2]
-const VISIUM_HD_2UM_DISABLED_REASON =
-  '2 µm is disabled until budgeted loading is implemented.'
 
 export function createVisiumHdBinOptions(
   availableBinSizes: readonly VisiumHdBinSizeMicrometers[],
@@ -35,7 +34,7 @@ export function createVisiumHdBinOptions(
     const reason = !isAvailable
       ? `${size} µm binned output was not detected.`
       : size === 2
-        ? VISIUM_HD_2UM_DISABLED_REASON
+        ? VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON
         : undefined
 
     return {

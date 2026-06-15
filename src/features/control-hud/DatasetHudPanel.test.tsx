@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON } from '../../datasets/visiumHdStrategy'
 import { DatasetHudPanel } from './DatasetHudPanel'
 
 describe('DatasetHudPanel', () => {
@@ -98,7 +99,7 @@ describe('DatasetHudPanel', () => {
               size: 2,
               available: true,
               disabled: true,
-              reason: '2 µm is disabled until budgeted loading is implemented.',
+              reason: VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
             },
           ],
         }}
@@ -126,8 +127,6 @@ describe('DatasetHudPanel', () => {
 
     expect(onVisiumHdBinSizeChange).toHaveBeenCalledWith(8)
     expect(screen.getByRole('button', { name: '2 µm' })).toBeDisabled()
-    expect(
-      screen.getByText('2 µm is disabled until budgeted loading is implemented.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText(VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON)).toBeInTheDocument()
   })
 })

@@ -1185,6 +1185,13 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       or transcript loaders. Analysis embedding loads now prefer the active
       binned output projection path when present, and the embedding panel can
       label, link, select, and focus Visium HD bins by barcode.
+- [x] Started Slice 7 with 2 µm first-paint guardrails. The 2 µm binned output
+      remains detectable in dataset probing and visible in tier controls, but
+      it is no longer allowed to become the default first-paint overview and
+      direct 2 µm overview reads reject before touching the full
+      `tissue_positions.parquet`. The disabled reason now names the intended
+      budgeted strategies: filtered matrix barcodes with a derived affine grid
+      or viewport/tiled position loading.
 
 ### Definition Of Done For The First Visium HD MVP
 

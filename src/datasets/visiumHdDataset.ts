@@ -12,6 +12,10 @@ import {
   type VisiumFeatureSliceReadOptions,
   type VisiumFeatureSliceTarget,
 } from '../data/visiumFeatureSlice'
+import {
+  VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
+  VisiumHdTwoMicrometerOverviewDisabledError,
+} from './visiumHdStrategy'
 import { micrometers } from '../data/coords'
 import {
   cacheFooterByteRanges,
@@ -483,6 +487,14 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   readBinnedOverview(
     binSizeMicrometers = this.defaultBinSizeMicrometers,
   ): Promise<VisiumHdBinnedOverview> {
+    if (binSizeMicrometers === 2) {
+      return Promise.reject(
+        new VisiumHdTwoMicrometerOverviewDisabledError(
+          VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
+        ),
+      )
+    }
+
     const existing = this.overviewPromises.get(binSizeMicrometers)
 
     if (existing !== undefined) {
@@ -857,10 +869,12 @@ function preferredDefaultBinSize(
     return 16
   }
 
-  return bins.reduce<VisiumHdBinSizeMicrometers>(
-    (largest, bin) =>
-      bin.binSizeMicrometers > largest ? bin.binSizeMicrometers : largest,
-    bins[0]?.binSizeMicrometers ?? 16,
+  if (bins.some((bin) => bin.binSizeMicrometers === 8)) {
+    return 8
+  }
+
+  throw new VisiumHdTwoMicrometerOverviewDisabledError(
+    VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
   )
 }
 

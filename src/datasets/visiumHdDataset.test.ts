@@ -13,6 +13,10 @@ import {
   readVisiumHdFeatureGenePanel,
   readVisiumHdTissuePositions,
 } from './visiumHdDataset'
+import {
+  VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
+  VisiumHdTwoMicrometerOverviewDisabledError,
+} from './visiumHdStrategy'
 import type { AsyncBuffer } from 'hyparquet'
 import type {
   ReadVisiumHdTissuePositionsOptions,
@@ -32,6 +36,14 @@ const bin16: VisiumHdBinDescriptor = {
   tissuePositionsPath: 'binned_outputs/square_016um/spatial/tissue_positions.parquet',
   scalefactorsPath: 'binned_outputs/square_016um/spatial/scalefactors_json.json',
   filteredMatrixH5Path: 'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+}
+
+const bin2: VisiumHdBinDescriptor = {
+  binSizeMicrometers: 2,
+  outputPath: 'binned_outputs/square_002um',
+  tissuePositionsPath: 'binned_outputs/square_002um/spatial/tissue_positions.parquet',
+  scalefactorsPath: 'binned_outputs/square_002um/spatial/scalefactors_json.json',
+  filteredMatrixH5Path: 'binned_outputs/square_002um/filtered_feature_bc_matrix.h5',
 }
 
 const scalefactors: VisiumHdScalefactors = {
@@ -240,6 +252,71 @@ describe('Visium HD dataset readers', () => {
     expect(Array.from(batch.gridCells?.[0]?.rows ?? [])).toEqual([0])
     expect(Array.from(batch.gridCells?.[0]?.cols ?? [])).toEqual([0])
     expect(tissuePositionCalls).toHaveLength(1)
+  })
+
+  it('rejects 2 µm overview reads until a budgeted loading path is available', async () => {
+    const tissuePositionsReader = vi.fn(async () =>
+      parseVisiumHdTissuePositionRows([visiumPositionRow('BC-2', 1, 0, 0, 400, 200)]),
+    )
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16, bin2],
+      tissuePositionsReader,
+      scalefactorsReader: async () => scalefactors,
+    })
+
+    await expect(dataset.readBinnedOverview(2)).rejects.toThrow(
+      VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
+    )
+    await expect(dataset.readBinnedOverview(2)).rejects.toBeInstanceOf(
+      VisiumHdTwoMicrometerOverviewDisabledError,
+    )
+    expect(tissuePositionsReader).not.toHaveBeenCalled()
+  })
+
+  it('does not choose 2 µm as a first-paint default tier', async () => {
+    const tissuePositionsReader = vi.fn(async () =>
+      parseVisiumHdTissuePositionRows([
+        visiumPositionRow('BC-8', 1, 0, 0, 400, 200),
+        visiumPositionRow('BC-9', 1, 1, 0, 402, 216),
+        visiumPositionRow('BC-10', 1, 0, 1, 416, 204),
+      ]),
+    )
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [
+        {
+          ...bin2,
+        },
+        {
+          ...bin16,
+          binSizeMicrometers: 8,
+          outputPath: 'binned_outputs/square_008um',
+          tissuePositionsPath:
+            'binned_outputs/square_008um/spatial/tissue_positions.parquet',
+          scalefactorsPath: 'binned_outputs/square_008um/spatial/scalefactors_json.json',
+          filteredMatrixH5Path:
+            'binned_outputs/square_008um/filtered_feature_bc_matrix.h5',
+        },
+      ],
+      tissuePositionsReader,
+      scalefactorsReader: async () => ({ ...scalefactors, binSizeMicrometers: 8 }),
+    })
+
+    await expect(dataset.readBinnedOverview()).resolves.toMatchObject({
+      binSizeMicrometers: 8,
+    })
+    expect(tissuePositionsReader).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects 2 µm-only datasets until a budgeted first-paint strategy exists', () => {
+    expect(
+      () =>
+        new VisiumHdDataset({
+          baseUrl: 'https://example.test/visium/',
+          bins: [bin2],
+        }),
+    ).toThrow(VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON)
   })
 
   it('reads binned matrix rows by Visium HD barcode', async () => {
