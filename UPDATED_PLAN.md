@@ -1004,7 +1004,7 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       evaluate whether `filtered_feature_bc_matrix.h5` can serve interactive
       selected-gene counts without downloading unacceptable amounts of data.
       Avoid the Xenium cell-id integer codec in all Visium paths.
-- [ ] Slice 6: ROI and embedding compatibility.
+- [x] Slice 6: ROI and embedding compatibility.
       Reuse ROI geometry for bin selection and export selected barcodes. Load
       binned `analysis/umap/gene_expression_2_components/projection.csv` when
       present, keyed by barcode rather than cell ID.
@@ -1178,6 +1178,13 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       checks, `git diff --check`, and Playwright against a manually started
       production preview. The build still reports the existing browser
       externalization and large chunk warnings.
+- [x] Continued Slice 6 with Visium HD ROI and embedding compatibility.
+      Barcode-keyed ROI selection now reuses the viewer ROI geometry over the
+      active affine-grid bins, scopes ROI state to the active dataset/tier, and
+      exports selected barcode metadata as CSV without invoking Xenium ROI cell
+      or transcript loaders. Analysis embedding loads now prefer the active
+      binned output projection path when present, and the embedding panel can
+      label, link, select, and focus Visium HD bins by barcode.
 
 ### Definition Of Done For The First Visium HD MVP
 

@@ -5,7 +5,10 @@ import {
   type LoadDatasetAnnotationsOptions,
 } from '../../data/datasetAnnotations'
 import { loadDatasetBoundaryElements } from '../../data/datasetBoundaries'
-import { loadDatasetAnalysisEmbeddings } from '../../data/analysisEmbeddings'
+import {
+  loadDatasetAnalysisEmbeddings,
+  type LoadDatasetAnalysisEmbeddingsOptions,
+} from '../../data/analysisEmbeddings'
 import { loadDatasetGeneExpression } from '../../data/geneExpression'
 import { loadDatasetOverview } from '../../data/datasetOverview'
 import {
@@ -99,7 +102,7 @@ export type AnnotationGroupLoader = (
 
 export type AnalysisEmbeddingsLoader = (
   baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
+  options?: LoadDatasetAnalysisEmbeddingsOptions,
 ) => Promise<readonly AnalysisEmbedding[]>
 
 export type RoiCellsLoader = (

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
 import { asCellId } from '../../data/cellid'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import { analysisEmbeddingStatusCopy } from './analysisEmbeddingModel'
 
 const embedding: AnalysisEmbedding = {
@@ -12,13 +11,6 @@ const embedding: AnalysisEmbedding = {
     { id: asCellId('aaaaaaaa-1'), x: 1, y: 2 },
     { id: asCellId('bbbbbbbb-2'), x: 3, y: 4 },
   ],
-}
-
-const selectedCell: OverviewCellDatum = {
-  id: 'aaaaaaaa-1',
-  position: [1, 2, 0],
-  radiusPixels: 1,
-  fillColor: [0, 0, 0],
 }
 
 describe('analysisEmbeddingStatusCopy', () => {
@@ -56,7 +48,10 @@ describe('analysisEmbeddingStatusCopy', () => {
     expect(analysisEmbeddingStatusCopy(state, null, [], null)).toBe('No projection')
     expect(analysisEmbeddingStatusCopy(state, embedding, [], null)).toBe('UMAP: 2 cells')
     expect(
-      analysisEmbeddingStatusCopy(state, embedding, ['aaaaaaaa-1'], selectedCell),
+      analysisEmbeddingStatusCopy(state, embedding, ['aaaaaaaa-1'], 'bbbbbbbb-2'),
     ).toBe('UMAP: 2 linked')
+    expect(analysisEmbeddingStatusCopy(state, embedding, [], null, 'bins')).toBe(
+      'UMAP: 2 bins',
+    )
   })
 })

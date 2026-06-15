@@ -66,6 +66,10 @@ export function CellHudPanel({
       ? 'No selection'
       : 'Selected bin'
     : cellDetailCopy
+  const embeddingElementLabel = isVisiumHdDataset ? 'bins' : 'cells'
+  const selectedEmbeddingElementId = isVisiumHdDataset
+    ? (selectedGridCell?.id ?? null)
+    : (selectedCell?.id ?? null)
 
   return (
     <div
@@ -132,9 +136,10 @@ export function CellHudPanel({
         <EmbeddingPanel
           embedding={activeEmbedding}
           annotationStyles={annotationStyles}
-          roiCellIds={roiCellIds}
-          selectedCellId={selectedCell?.id ?? null}
-          onSelectCell={onSelectEmbeddingCell}
+          roiElementIds={roiCellIds}
+          selectedElementId={selectedEmbeddingElementId}
+          elementLabel={embeddingElementLabel}
+          onSelectElement={onSelectEmbeddingCell}
         />
       </section>
 

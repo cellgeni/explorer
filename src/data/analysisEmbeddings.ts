@@ -1,10 +1,11 @@
 import { datasetFileUrl } from './datasetFiles'
-import type { CellId } from './cellid'
 
 export type AnalysisEmbeddingKind = 'umap' | 'tsne'
+export type AnalysisEmbeddingElementLabel = 'cells' | 'bins'
+export type AnalysisEmbeddingVisiumHdBinSize = 2 | 8 | 16
 
 export interface AnalysisEmbeddingPoint {
-  readonly id: CellId
+  readonly id: string
   readonly x: number
   readonly y: number
 }
@@ -19,6 +20,7 @@ export interface AnalysisEmbedding {
 export interface LoadDatasetAnalysisEmbeddingsOptions {
   readonly signal?: AbortSignal
   readonly fetcher?: typeof fetch
+  readonly visiumHdBinSizeMicrometers?: AnalysisEmbeddingVisiumHdBinSize
 }
 
 interface EmbeddingCandidate {
@@ -65,10 +67,11 @@ export async function loadDatasetAnalysisEmbeddings(
   options: LoadDatasetAnalysisEmbeddingsOptions = {},
 ): Promise<readonly AnalysisEmbedding[]> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+  const candidates = analysisEmbeddingCandidates(options.visiumHdBinSizeMicrometers)
   const embeddings: AnalysisEmbedding[] = []
   const loadedKinds = new Set<AnalysisEmbeddingKind>()
 
-  for (const candidate of EMBEDDING_CANDIDATES) {
+  for (const candidate of candidates) {
     if (loadedKinds.has(candidate.kind)) {
       continue
     }
@@ -133,10 +136,30 @@ export function parseAnalysisEmbeddingCsv(
       continue
     }
 
-    points.push({ id: id as CellId, x, y })
+    points.push({ id, x, y })
   }
 
   return points
+}
+
+function analysisEmbeddingCandidates(
+  visiumHdBinSizeMicrometers: AnalysisEmbeddingVisiumHdBinSize | undefined,
+): readonly EmbeddingCandidate[] {
+  if (visiumHdBinSizeMicrometers === undefined) {
+    return EMBEDDING_CANDIDATES
+  }
+
+  const binDirectory = `binned_outputs/square_${String(
+    visiumHdBinSizeMicrometers,
+  ).padStart(3, '0')}um`
+
+  return [
+    ...EMBEDDING_CANDIDATES.map((candidate) => ({
+      ...candidate,
+      path: `${binDirectory}/${candidate.path}`,
+    })),
+    ...EMBEDDING_CANDIDATES,
+  ]
 }
 
 async function fetchEmbeddingCsv(

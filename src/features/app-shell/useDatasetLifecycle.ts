@@ -159,6 +159,7 @@ interface UseDatasetLifecycleOptions {
   readonly loadDatasetOverview: DatasetOverviewLoader
   readonly loadGenePanel: GenePanelLoader
   readonly loadMorphologyImage: MorphologyImageLoader
+  readonly onBeforeDatasetLoad?: () => void
   readonly loadRequestIdRef: MutableRef<number>
   readonly magicLensAbortRef: MutableRef<AbortController | null>
   readonly magicLensDebounceRef: MutableRef<number | null>
@@ -295,6 +296,7 @@ export function useDatasetLifecycle({
   loadDatasetOverview,
   loadGenePanel,
   loadMorphologyImage,
+  onBeforeDatasetLoad,
   loadRequestIdRef,
   magicLensAbortRef,
   magicLensDebounceRef,
@@ -524,6 +526,7 @@ export function useDatasetLifecycle({
         initialShareableStateRef.current = null
       }
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
+      onBeforeDatasetLoad?.()
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(datasetWarmupAbortRef)
       abortActiveRequest(diagnosticsAbortRef)

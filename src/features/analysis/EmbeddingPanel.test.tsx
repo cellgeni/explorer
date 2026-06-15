@@ -66,9 +66,9 @@ describe('EmbeddingPanel', () => {
       <EmbeddingPanel
         embedding={null}
         annotationStyles={[]}
-        roiCellIds={[]}
-        selectedCellId={null}
-        onSelectCell={vi.fn()}
+        roiElementIds={[]}
+        selectedElementId={null}
+        onSelectElement={vi.fn()}
       />,
     )
 
@@ -82,9 +82,9 @@ describe('EmbeddingPanel', () => {
       <EmbeddingPanel
         embedding={embedding}
         annotationStyles={[]}
-        roiCellIds={['aaaaaaaa-1']}
-        selectedCellId="bbbbbbbb-2"
-        onSelectCell={onSelectCell}
+        roiElementIds={['aaaaaaaa-1']}
+        selectedElementId="bbbbbbbb-2"
+        onSelectElement={onSelectCell}
       />,
     )
 
@@ -113,13 +113,31 @@ describe('EmbeddingPanel', () => {
             color: '#123456',
           },
         ]}
-        roiCellIds={[]}
-        selectedCellId={null}
-        onSelectCell={vi.fn()}
+        roiElementIds={[]}
+        selectedElementId={null}
+        onSelectElement={vi.fn()}
       />,
     )
 
     expect(context.fillStyles).toContain('rgba(18, 52, 86, 0.82)')
     expect(context.fillStyles).toContain('rgba(72, 68, 58, 0.34)')
+  })
+
+  it('labels Visium HD embedding points as bins', () => {
+    render(
+      <EmbeddingPanel
+        embedding={embedding}
+        annotationStyles={[]}
+        roiElementIds={[]}
+        selectedElementId={null}
+        elementLabel="bins"
+        onSelectElement={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByRole('img', { name: 'UMAP embedding, 2 bins' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Bins').nextElementSibling).toHaveTextContent('2')
   })
 })

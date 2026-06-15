@@ -1,5 +1,7 @@
-import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type {
+  AnalysisEmbedding,
+  AnalysisEmbeddingElementLabel,
+} from '../../data/analysisEmbeddings'
 
 export type AnalysisEmbeddingState<ErrorType = unknown> =
   | { readonly status: 'idle' }
@@ -18,8 +20,9 @@ export type AnalysisEmbeddingState<ErrorType = unknown> =
 export function analysisEmbeddingStatusCopy<ErrorType>(
   state: AnalysisEmbeddingState<ErrorType>,
   activeEmbedding: AnalysisEmbedding | null,
-  roiCellIds: readonly string[],
-  selectedCell: OverviewCellDatum | null,
+  roiElementIds: readonly string[],
+  selectedElementId: string | null,
+  elementLabel: AnalysisEmbeddingElementLabel = 'cells',
 ): string {
   if (state.status === 'loading') {
     return 'Loading'
@@ -30,10 +33,10 @@ export function analysisEmbeddingStatusCopy<ErrorType>(
       return 'No projection'
     }
 
-    const linkedCount = roiCellIds.length + (selectedCell === null ? 0 : 1)
+    const linkedCount = roiElementIds.length + (selectedElementId === null ? 0 : 1)
 
     return linkedCount === 0
-      ? `${activeEmbedding.label}: ${activeEmbedding.points.length.toLocaleString()} cells`
+      ? `${activeEmbedding.label}: ${activeEmbedding.points.length.toLocaleString()} ${elementLabel}`
       : `${activeEmbedding.label}: ${linkedCount.toLocaleString()} linked`
   }
 

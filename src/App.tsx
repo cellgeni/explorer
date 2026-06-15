@@ -15,7 +15,7 @@ import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkf
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
 import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
-import { RoiHudPanel } from './features/control-hud/RoiHudPanel'
+import { RoiHudPanel, VisiumHdRoiHudPanel } from './features/control-hud/RoiHudPanel'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
   parseControlHudTab,
@@ -40,6 +40,7 @@ import {
   appendDebugLogEntry,
   createLoadingTasks,
   createDebugLogEntry,
+  downloadTextFile,
   type DebugLogAppendOptions,
   type DebugLogEntry,
 } from './features/app-shell/appRuntimeModel'
@@ -86,13 +87,23 @@ import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import {
   roiGeneDatasetWarmupKey,
   roiGeneStatsStatusCopy,
+  roiSelectionLabel,
   roiStatusCopy,
   summarizeRoiCells,
+  defaultRoiName,
   type RoiGeneStatsState,
   type RoiGeneViewportWarmupState,
   type RoiState,
   type RoiTranscriptExportState,
 } from './features/roi/roiModel'
+import {
+  gridCellDatumDeckCenter,
+  selectVisiumHdGridCellsInRoi,
+  summarizeVisiumHdRoiBins,
+  visiumHdRoiBinsToCsv,
+  visiumHdRoiStatusCopy,
+  type VisiumHdRoiState,
+} from './features/roi/visiumHdRoiModel'
 import { useDatasetDiagnosticsWorkflow } from './features/diagnostics/useDatasetDiagnosticsWorkflow'
 import {
   annotationLabelsForCell,
@@ -179,6 +190,7 @@ import type {
   ViewerMagicLensStatus,
   ViewerViewportDetail,
 } from './components/ViewerCore'
+import { slug } from './utils/slug'
 
 export type {
   AnalysisEmbeddingsLoader,
@@ -213,6 +225,8 @@ interface SpatialGeneExpressionDataset {
     },
   ) => Promise<GeneExpressionBatch>
 }
+
+const IDLE_VISIUM_HD_ROI_STATE: VisiumHdRoiState = { status: 'idle' }
 
 export function App({
   loadDatasetOverview = defaultAppDependencies.loadDatasetOverview,
@@ -304,6 +318,9 @@ export function App({
   const [roiState, setRoiState] = useState<RoiState<StructuredLoadError>>({
     status: 'idle',
   })
+  const [visiumHdRoiState, setVisiumHdRoiState] = useState<VisiumHdRoiState>(
+    IDLE_VISIUM_HD_ROI_STATE,
+  )
   const [roiGeneStatsState, setRoiGeneStatsState] = useState<
     RoiGeneStatsState<StructuredLoadError>
   >({ status: 'idle' })
@@ -576,6 +593,15 @@ export function App({
     visiumHdControlState.status === 'idle'
       ? undefined
       : visiumHdControlState.selectedBinSize
+  const activeVisiumHdBinSize = diagnosticsVisiumHdBinSize
+  const activeVisiumHdRoiState: VisiumHdRoiState =
+    isVisiumHdDataset &&
+    loadState.status === 'ready' &&
+    visiumHdRoiState.status === 'ready' &&
+    visiumHdRoiState.url === loadState.url &&
+    visiumHdRoiState.binSizeMicrometers === activeVisiumHdBinSize
+      ? visiumHdRoiState
+      : IDLE_VISIUM_HD_ROI_STATE
   const hiddenAnnotationSetIdSet = useMemo(
     () => new Set(hiddenAnnotationSetIds),
     [hiddenAnnotationSetIds],
@@ -718,6 +744,15 @@ export function App({
 
     return cellById
   }, [overviewCells])
+  const gridCellById = useMemo(() => {
+    const cellById = new Map<string, GridCellDatum>()
+
+    for (const cell of spatialGridCells) {
+      cellById.set(cell.id, cell)
+    }
+
+    return cellById
+  }, [spatialGridCells])
   const activeEmbedding = useMemo(
     () =>
       analysisEmbeddingState.status === 'ready'
@@ -730,14 +765,26 @@ export function App({
     [analysisEmbeddingState, selectedEmbeddingKind],
   )
   const roiCellIds = useMemo(
-    () => (roiState.status === 'ready' ? roiState.cells.map((cell) => cell.id) : []),
-    [roiState],
+    () =>
+      isVisiumHdDataset
+        ? activeVisiumHdRoiState.status === 'ready'
+          ? activeVisiumHdRoiState.bins.map((bin) => bin.barcode)
+          : []
+        : roiState.status === 'ready'
+          ? roiState.cells.map((cell) => cell.id)
+          : [],
+    [activeVisiumHdRoiState, isVisiumHdDataset, roiState],
   )
+  const selectedEmbeddingElementId = isVisiumHdDataset
+    ? (selectedGridCell?.id ?? null)
+    : (selectedCell?.id ?? null)
+  const embeddingElementLabel = isVisiumHdDataset ? 'bins' : 'cells'
   const embeddingCopy = analysisEmbeddingStatusCopy(
     analysisEmbeddingState,
     activeEmbedding,
     roiCellIds,
-    selectedCell,
+    selectedEmbeddingElementId,
+    embeddingElementLabel,
   )
   const cellDetailCopy = cellDetailStatusCopy(cellDetailState, selectedCell)
   const selectedCellAnnotationLabels = useMemo(
@@ -766,8 +813,16 @@ export function App({
       target: [cell.position[0] ?? 0, cell.position[1] ?? 0, cell.position[2] ?? 0],
     })
   }, [])
+  const focusSpatialViewOnGridCell = useCallback((cell: GridCellDatum) => {
+    spatialFocusRequestIdRef.current += 1
+    setSpatialFocusRequest({
+      key: spatialFocusRequestIdRef.current,
+      target: gridCellDatumDeckCenter(cell),
+    })
+  }, [])
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const roiCopy = roiStatusCopy(roiState, roiMode)
+  const visiumHdRoiCopy = visiumHdRoiStatusCopy(activeVisiumHdRoiState, roiMode)
   const roiGeneStatsCopy = roiGeneStatsStatusCopy(roiGeneStatsState)
   const analysisHeaderCopy =
     geneExpressionState.status === 'loading'
@@ -783,7 +838,11 @@ export function App({
     roiGeneViewportWarmupState.key === roiGeneViewportWarmupRequiredKey
   const isDatasetPreparationPending =
     loadState.status === 'ready' && datasetWarmupState.status === 'loading'
-  const canDrawRoi = xeniumFeatureLoadEnabled && !isDatasetPreparationPending
+  const canDrawRoi = isVisiumHdDataset
+    ? loadState.status === 'ready' &&
+      spatialGridCells.length > 0 &&
+      visiumHdControlState.status !== 'loading'
+    : xeniumFeatureLoadEnabled && !isDatasetPreparationPending
   const roiHeaderCopy = isDatasetPreparationPending
     ? 'Preparing'
     : roiGeneStatsState.status === 'loading'
@@ -801,6 +860,13 @@ export function App({
   const roiSummary = useMemo(
     () => (roiState.status === 'ready' ? summarizeRoiCells(roiState.cells) : null),
     [roiState],
+  )
+  const visiumHdRoiSummary = useMemo(
+    () =>
+      activeVisiumHdRoiState.status === 'ready'
+        ? summarizeVisiumHdRoiBins(activeVisiumHdRoiState.bins)
+        : null,
+    [activeVisiumHdRoiState],
   )
   const loadingTasks = useMemo(
     () =>
@@ -863,7 +929,13 @@ export function App({
     () => new Set(loadingTasks.map((task) => task.tabId)),
     [loadingTasks],
   )
-  const activeRoiSelection = roiState.status === 'idle' ? null : roiState.selection
+  const activeRoiSelection = isVisiumHdDataset
+    ? activeVisiumHdRoiState.status === 'idle'
+      ? null
+      : activeVisiumHdRoiState.selection
+    : roiState.status === 'idle'
+      ? null
+      : roiState.selection
   const effectiveShowTranscriptOverlay = showTranscriptOverlay && !isVisiumHdDataset
   const shareableMorphologyEnabledChannelIds = useMemo(() => {
     if (baseMorphologyChannelIds.size === 0) {
@@ -943,6 +1015,54 @@ export function App({
     },
     [performanceBudget.telemetryEventLimit],
   )
+  const handleVisiumHdRoiComplete = useCallback(
+    (selection: RoiSelection) => {
+      if (!isVisiumHdDataset || loadState.status !== 'ready') {
+        return
+      }
+
+      const result = selectVisiumHdGridCellsInRoi(spatialGridCells, selection)
+
+      setRoiMode('idle')
+      setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
+      setVisiumHdRoiState({
+        status: 'ready',
+        url: loadState.url,
+        ...(activeVisiumHdBinSize === undefined
+          ? {}
+          : { binSizeMicrometers: activeVisiumHdBinSize }),
+        bbox: selection.bbox,
+        selection,
+        bins: result.bins,
+        hitBinLimit: result.hitBinLimit,
+      })
+      appendDebugEvent(
+        `${roiSelectionLabel(selection)} drawn: ${result.bins.length.toLocaleString()}${
+          result.hitBinLimit ? '+' : ''
+        } Visium HD bins`,
+      )
+    },
+    [
+      activeVisiumHdBinSize,
+      appendDebugEvent,
+      isVisiumHdDataset,
+      loadState,
+      spatialGridCells,
+    ],
+  )
+  const handleExportVisiumHdRoiBarcodes = useCallback(() => {
+    if (activeVisiumHdRoiState.status !== 'ready') {
+      return
+    }
+
+    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
+
+    downloadTextFile(
+      `${slug(name)}-barcodes.csv`,
+      visiumHdRoiBinsToCsv(activeVisiumHdRoiState.bins),
+    )
+    appendDebugEvent(`Exported ROI barcodes ${name}`)
+  }, [activeVisiumHdRoiState, appendDebugEvent, roiName])
   const handleTileCacheEviction = useCallback(
     (evictedTileCount: number) => {
       recordTelemetry(
@@ -1094,10 +1214,19 @@ export function App({
     setGeneExpressionScaleDomain({ key: '', max: 0 })
     setGeneExpressionState({ status: 'idle' })
   }, [])
-  const activeVisiumHdBinSize =
-    visiumHdControlState.status === 'idle'
-      ? undefined
-      : visiumHdControlState.selectedBinSize
+  const loadActiveAnalysisEmbeddings = useCallback(
+    (...args: Parameters<typeof loadAnalysisEmbeddings>) => {
+      const [baseUrl, options = {}] = args
+
+      return loadAnalysisEmbeddings(baseUrl, {
+        ...options,
+        ...(isVisiumHdDataset && activeVisiumHdBinSize !== undefined
+          ? { visiumHdBinSizeMicrometers: activeVisiumHdBinSize }
+          : {}),
+      })
+    },
+    [activeVisiumHdBinSize, isVisiumHdDataset, loadAnalysisEmbeddings],
+  )
   const geneExpressionLoadingEnabled = !isVisiumHdDataset
   const geneExpressionDisabledMessage = isVisiumHdDataset
     ? 'Visium HD selected-gene overlays require the Feature Slice H5 reader and are not enabled yet.'
@@ -1236,6 +1365,7 @@ export function App({
   } = useRoiWorkflow({
     appendDebugEvent,
     currentViewportDetail,
+    enabled: !isVisiumHdDataset,
     initialSharedRoiSelectionRef,
     loadRoiCells,
     loadRoiGeneStats,
@@ -1265,6 +1395,43 @@ export function App({
     setRoiState,
     setRoiTranscriptExportState,
   })
+  const clearVisiumHdRoiState = useCallback(() => {
+    setVisiumHdRoiState(IDLE_VISIUM_HD_ROI_STATE)
+  }, [])
+  const handleClearActiveRoi = useCallback(() => {
+    if (!isVisiumHdDataset) {
+      handleClearRoi()
+      return
+    }
+
+    setRoiMode('idle')
+    clearVisiumHdRoiState()
+    appendDebugEvent('Cleared ROI')
+  }, [appendDebugEvent, clearVisiumHdRoiState, handleClearRoi, isVisiumHdDataset])
+
+  useEffect(() => {
+    const selection = initialSharedRoiSelectionRef.current
+
+    if (
+      !isVisiumHdDataset ||
+      selection === null ||
+      loadState.status !== 'ready' ||
+      activeVisiumHdRoiState.status !== 'idle'
+    ) {
+      return
+    }
+
+    initialSharedRoiSelectionRef.current = null
+    setRoiName('Shared ROI')
+    handleVisiumHdRoiComplete(selection)
+  }, [
+    handleVisiumHdRoiComplete,
+    initialSharedRoiSelectionRef,
+    isVisiumHdDataset,
+    loadState.status,
+    setRoiName,
+    activeVisiumHdRoiState.status,
+  ])
 
   const {
     handleAnnotationColorChange,
@@ -1305,7 +1472,7 @@ export function App({
       analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
       analysisEmbeddingState,
       appendDebugEvent,
-      loadAnalysisEmbeddings,
+      loadAnalysisEmbeddings: loadActiveAnalysisEmbeddings,
       loadState,
       onSelectedCellFocus: focusSpatialViewOnCell,
       overviewCellById,
@@ -1314,6 +1481,31 @@ export function App({
       setSelectedCell,
       setSelectedEmbeddingKind,
     })
+  const handleEmbeddingElementSelect = useCallback(
+    (elementId: string) => {
+      if (!isVisiumHdDataset) {
+        setSelectedGridCell(null)
+        handleEmbeddingCellSelect(elementId)
+        return
+      }
+
+      const gridCell = gridCellById.get(elementId)
+
+      if (gridCell === undefined) {
+        return
+      }
+
+      setSelectedCell(null)
+      setSelectedGridCell(gridCell)
+      focusSpatialViewOnGridCell(gridCell)
+    },
+    [
+      focusSpatialViewOnGridCell,
+      gridCellById,
+      handleEmbeddingCellSelect,
+      isVisiumHdDataset,
+    ],
+  )
 
   const {
     handleMagicLensCursorActiveChange,
@@ -1483,6 +1675,7 @@ export function App({
     magicLensLastDetailRef,
     magicLensLastQueryKeyRef,
     magicLensRequestIdRef: magicLensRequestId,
+    onBeforeDatasetLoad: clearVisiumHdRoiState,
     queueAutoContrast,
     recordTelemetry,
     roiAbortRef,
@@ -1569,6 +1762,7 @@ export function App({
     appendDebugEvent,
     getSpatialDataset,
     loadedDatasetUrl,
+    onBeforeBinSizeChange: clearVisiumHdRoiState,
     shouldLoadMorphology,
     visiumHdControlState,
     visiumHdBinRequestIdRef: visiumHdBinRequestId,
@@ -1843,7 +2037,7 @@ export function App({
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
           cellTranscriptDistributionState={cellTranscriptDistributionState}
-          loadEnabled={xeniumFeatureLoadEnabled}
+          loadEnabled={loadState.status === 'ready'}
           onEmbeddingKindChange={(nextEmbeddingKind) => {
             setSelectedEmbeddingKind(nextEmbeddingKind)
             appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
@@ -1855,47 +2049,76 @@ export function App({
           onClearSelectedGridCell={() => {
             setSelectedGridCell(null)
           }}
-          onSelectEmbeddingCell={(cellId) => {
-            setSelectedGridCell(null)
-            handleEmbeddingCellSelect(cellId)
-          }}
+          onSelectEmbeddingCell={handleEmbeddingElementSelect}
         />
 
-        <RoiHudPanel
-          active={activeControlHudTab === 'roi'}
-          roiNameInputId={controlIds.roiNameInputId}
-          roiHeaderCopy={roiHeaderCopy}
-          isLoading={isRoiTabLoading}
-          canDrawRoi={canDrawRoi}
-          roiMode={roiMode}
-          roiName={roiName}
-          loadEnabled={xeniumFeatureLoadEnabled}
-          roiState={roiState}
-          roiSummary={roiSummary}
-          roiGeneStatsCopy={roiGeneStatsCopy}
-          roiGeneStatsState={roiGeneStatsState}
-          roiTranscriptExportState={roiTranscriptExportState}
-          onRoiModeChange={(nextMode) => {
-            if (nextMode !== 'idle') {
-              setMeasurementEnabled(false)
-              setMeasurementResetKey((current) => current + 1)
-            }
+        {isVisiumHdDataset ? (
+          <VisiumHdRoiHudPanel
+            active={activeControlHudTab === 'roi'}
+            roiNameInputId={controlIds.roiNameInputId}
+            roiHeaderCopy={visiumHdRoiCopy}
+            canDrawRoi={canDrawRoi}
+            roiMode={roiMode}
+            roiName={roiName}
+            loadEnabled={loadState.status === 'ready'}
+            roiState={activeVisiumHdRoiState}
+            roiSummary={visiumHdRoiSummary}
+            onRoiModeChange={(nextMode) => {
+              if (nextMode !== 'idle') {
+                setMeasurementEnabled(false)
+                setMeasurementResetKey((current) => current + 1)
+              }
 
-            setRoiMode(nextMode)
-            appendDebugEvent(
-              nextMode === 'idle'
-                ? 'ROI draw cancelled'
-                : nextMode === 'box'
-                  ? 'ROI draw mode enabled'
-                  : 'ROI lasso mode enabled',
-            )
-          }}
-          onClearRoi={handleClearRoi}
-          onRoiNameChange={setRoiName}
-          onSaveRoiAnnotation={handleSaveRoiAnnotation}
-          onExportRoiCells={handleExportRoiCells}
-          onExportRoiTranscripts={handleExportRoiTranscripts}
-        />
+              setRoiMode(nextMode)
+              appendDebugEvent(
+                nextMode === 'idle'
+                  ? 'ROI draw cancelled'
+                  : nextMode === 'box'
+                    ? 'ROI draw mode enabled'
+                    : 'ROI lasso mode enabled',
+              )
+            }}
+            onClearRoi={handleClearActiveRoi}
+            onRoiNameChange={setRoiName}
+            onExportRoiBarcodes={handleExportVisiumHdRoiBarcodes}
+          />
+        ) : (
+          <RoiHudPanel
+            active={activeControlHudTab === 'roi'}
+            roiNameInputId={controlIds.roiNameInputId}
+            roiHeaderCopy={roiHeaderCopy}
+            isLoading={isRoiTabLoading}
+            canDrawRoi={canDrawRoi}
+            roiMode={roiMode}
+            roiName={roiName}
+            loadEnabled={xeniumFeatureLoadEnabled}
+            roiState={roiState}
+            roiSummary={roiSummary}
+            roiGeneStatsCopy={roiGeneStatsCopy}
+            roiGeneStatsState={roiGeneStatsState}
+            roiTranscriptExportState={roiTranscriptExportState}
+            onRoiModeChange={(nextMode) => {
+              if (nextMode !== 'idle') {
+                setMeasurementEnabled(false)
+                setMeasurementResetKey((current) => current + 1)
+              }
+
+              setRoiMode(nextMode)
+              appendDebugEvent(
+                nextMode === 'idle'
+                  ? 'ROI draw cancelled'
+                  : nextMode === 'box'
+                    ? 'ROI draw mode enabled'
+                    : 'ROI lasso mode enabled',
+              )
+            }}
+            onClearRoi={handleClearActiveRoi}
+            onRoiNameChange={setRoiName}
+            onSaveRoiAnnotation={handleSaveRoiAnnotation}
+            onExportRoiCells={handleExportRoiCells}
+            onExportRoiTranscripts={handleExportRoiTranscripts}
+          />
+        )}
       </AppControlHud>
 
       <section className="viewer-region" aria-labelledby="viewer-heading">
@@ -1954,7 +2177,9 @@ export function App({
             setSelectedCell(null)
             setSelectedGridCell(cell)
           }}
-          {...(isVisiumHdDataset ? {} : { onRoiComplete: handleRoiComplete })}
+          onRoiComplete={
+            isVisiumHdDataset ? handleVisiumHdRoiComplete : handleRoiComplete
+          }
           {...(isVisiumHdDataset ? {} : { onMagicLensMove: handleMagicLensMove })}
           {...(isVisiumHdDataset ? {} : { onMagicLensLeave: handleMagicLensLeave })}
           {...(initialShareableState.viewState === undefined

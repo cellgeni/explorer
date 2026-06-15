@@ -58,6 +58,7 @@ export interface UseVisiumHdBinWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly getSpatialDataset: SpatialDatasetLoader
   readonly loadedDatasetUrl: string | null
+  readonly onBeforeBinSizeChange?: () => void
   readonly shouldLoadMorphology: boolean
   readonly visiumHdControlState: VisiumHdControlState
   readonly visiumHdBinRequestIdRef?: MutableRef<number> | undefined
@@ -88,6 +89,7 @@ export function useVisiumHdBinWorkflow({
   appendDebugEvent,
   getSpatialDataset,
   loadedDatasetUrl,
+  onBeforeBinSizeChange,
   shouldLoadMorphology,
   visiumHdControlState,
   visiumHdBinRequestIdRef,
@@ -126,6 +128,7 @@ export function useVisiumHdBinWorkflow({
       const requestId = requestIdRef.current + 1
       const startedAt = readTimestamp()
       requestIdRef.current = requestId
+      onBeforeBinSizeChange?.()
       setSelectedGridCell(null)
       resetVisiumHdExpressionState({
         geneExpressionAbortRef,
@@ -280,6 +283,7 @@ export function useVisiumHdBinWorkflow({
       geneExpressionViewportKeyRef,
       getSpatialDataset,
       loadedDatasetUrl,
+      onBeforeBinSizeChange,
       requestIdRef,
       setFlatMorphologyImage,
       setGeneExpressionBatch,

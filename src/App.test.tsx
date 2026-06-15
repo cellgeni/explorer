@@ -17,6 +17,8 @@ import {
   type RoiCellsLoader,
   type RoiGeneStatsLoader,
   type RoiTranscriptsLoader,
+  type SpatialDatasetDetector,
+  type SpatialDatasetLoader,
   type TranscriptAggregateLoader,
   type TranscriptCapabilitiesLoader,
   type TranscriptViewportLoader,
@@ -26,6 +28,7 @@ import { micrometers } from './data/coords'
 import { warmDatasetForRoi } from './data/datasetWarmup'
 import { GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT } from './data/geneExpressionLod'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
+import type { VisiumHdBinnedOverview } from './datasets/visiumHdDataset'
 import type { TiffPyramidLoader } from './tiff/loader'
 
 vi.mock('@deck.gl/react', () => ({
@@ -86,6 +89,47 @@ function openHudTab(name: string): void {
 
 function pendingPromise<T>(): Promise<T> {
   return new Promise<T>(() => {})
+}
+
+function visiumOverviewFixture(): VisiumHdBinnedOverview {
+  const grid = {
+    id: 'grid-16um',
+    binSizeMicrometers: micrometers(16),
+    basis: {
+      origin: { x: micrometers(10), y: micrometers(5) },
+      rowStep: { x: micrometers(0), y: micrometers(10) },
+      colStep: { x: micrometers(10), y: micrometers(0) },
+    },
+  }
+
+  return {
+    binSizeMicrometers: 16,
+    scalefactors: {
+      micronsPerPixel: 1,
+      tissueHiresScale: 1,
+      tissueLowresScale: 0.1,
+      binSizeMicrometers: 16,
+      spotDiameterFullres: 16,
+    },
+    grid,
+    gridCells: {
+      kind: 'grid-cells',
+      gridId: grid.id,
+      ids: ['BC-1', 'BC-2'],
+      rows: new Int32Array([0, 0]),
+      cols: new Int32Array([0, 1]),
+    },
+    fullresRows: new Float64Array([5, 5]),
+    fullresCols: new Float64Array([10, 20]),
+    inTissue: new Uint8Array([1, 1]),
+    sourcePaths: {
+      tissuePositions: 'binned_outputs/square_016um/spatial/tissue_positions.parquet',
+      scalefactors: 'binned_outputs/square_016um/spatial/scalefactors_json.json',
+      tissueHiresImage: 'binned_outputs/square_016um/spatial/tissue_hires_image.png',
+      tissueLowresImage: 'binned_outputs/square_016um/spatial/tissue_lowres_image.png',
+      filteredMatrixH5: 'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+    },
+  }
 }
 
 describe('App', () => {
@@ -227,6 +271,186 @@ describe('App', () => {
     openHudTab('ROI')
     expect(screen.getByRole('heading', { name: 'ROI' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
+  })
+
+  it('draws a Visium HD ROI, exports barcodes, and links barcode embeddings', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 320,
+      height: 190,
+      top: 0,
+      right: 320,
+      bottom: 190,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const createObjectUrlSpy = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:visium-roi-barcodes')
+    const revokeObjectUrlSpy = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+    const downloadClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
+    const overview = visiumOverviewFixture()
+    const detectSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetDetector>> = vi.fn(
+      async () => ({
+        platform: 'visium-hd',
+        baseUrl: visiumUrl,
+        bins: [
+          {
+            binSizeMicrometers: 16,
+            outputPath: 'binned_outputs/square_016um',
+            tissuePositionsPath:
+              'binned_outputs/square_016um/spatial/tissue_positions.parquet',
+            scalefactorsPath:
+              'binned_outputs/square_016um/spatial/scalefactors_json.json',
+            filteredMatrixH5Path:
+              'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+          },
+        ],
+        checked: [],
+      }),
+    )
+    const visiumDataset = {
+      readBinnedOverview: vi.fn(async () => overview),
+      meta: vi.fn(async () => ({
+        platform: 'visium-hd' as const,
+        units: {
+          dataUnit: 'micrometer' as const,
+          imageUnit: 'pixel' as const,
+          micrometersPerPixel: micrometers(1),
+          origin: 'top-left' as const,
+          imageYAxis: 'down' as const,
+        },
+        extent: {
+          minX: micrometers(0),
+          maxX: micrometers(40),
+          minY: micrometers(0),
+          maxY: micrometers(20),
+        },
+        capabilities: {
+          transcripts: false,
+          cellBoundaries: false,
+          pyramidImage: false,
+          multiChannel: false,
+        },
+        grids: [overview.grid],
+      })),
+      image: vi.fn(async () => null),
+    }
+    const getSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetLoader>> = vi.fn(
+      async () => visiumDataset as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
+    )
+    const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
+      vi.fn(async () => [
+        {
+          kind: 'umap',
+          label: 'UMAP',
+          sourcePath:
+            'binned_outputs/square_016um/analysis/umap/gene_expression_2_components/projection.csv',
+          points: [
+            { id: 'BC-1', x: 0, y: 0 },
+            { id: 'BC-2', x: 10, y: 10 },
+          ],
+        },
+      ])
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [])
+
+    try {
+      render(
+        <App
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={getSpatialDataset}
+          loadAnalysisEmbeddings={loadAnalysisEmbeddings}
+          loadRoiCells={loadRoiCells}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      await waitFor(() => {
+        expect(detectSpatialDataset).toHaveBeenCalled()
+        expect(visiumDataset.readBinnedOverview).toHaveBeenCalled()
+      })
+      await screen.findAllByText(/Visium HD ready/)
+
+      openHudTab('ROI')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+
+      const roiLayer = document.querySelector('.roi-draw-layer')
+
+      if (!(roiLayer instanceof HTMLElement)) {
+        throw new Error('Expected ROI draw layer.')
+      }
+
+      fireEvent.pointerDown(roiLayer, { clientX: 4, clientY: 4, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 316, clientY: 186, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: 316, clientY: 186, pointerId: 1 })
+
+      const summary = await screen.findByLabelText('ROI summary')
+      expect(summary).toHaveTextContent('Bins')
+      expect(summary).toHaveTextContent('2')
+      expect(summary).toHaveTextContent('16 um')
+      expect(screen.getByRole('button', { name: 'Export Barcodes' })).toBeEnabled()
+      expect(screen.queryByRole('button', { name: 'Export Cells' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Export Transcripts' })).toBeNull()
+      expect(loadRoiCells).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Export Barcodes' }))
+
+      expect(downloadClickSpy).toHaveBeenCalled()
+      const blob = createObjectUrlSpy.mock.calls[0]?.[0]
+      expect(blob).toBeInstanceOf(Blob)
+
+      if (blob instanceof Blob) {
+        await expect(blob.text()).resolves.toContain('BC-1')
+        await expect(blob.text()).resolves.toContain('BC-2')
+      }
+
+      openHudTab('Cell')
+      fireEvent.click(screen.getByRole('button', { name: 'Load Embeddings' }))
+
+      await waitFor(() => {
+        expect(loadAnalysisEmbeddings).toHaveBeenCalledWith(
+          visiumUrl,
+          expect.objectContaining({
+            signal: expect.any(AbortSignal) as AbortSignal,
+            visiumHdBinSizeMicrometers: 16,
+          }),
+        )
+      })
+      expect(await screen.findByText('UMAP: 2 linked')).toBeInTheDocument()
+      expect(
+        screen.getByRole('img', { name: 'UMAP embedding, 2 bins' }),
+      ).toBeInTheDocument()
+
+      fireEvent.pointerDown(screen.getByRole('img', { name: 'UMAP embedding, 2 bins' }), {
+        clientX: 12,
+        clientY: 178,
+      })
+
+      expect(await screen.findByText('Selected bin')).toBeInTheDocument()
+      expect(screen.getByText('BC-1')).toBeInTheDocument()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+      createObjectUrlSpy.mockRestore()
+      revokeObjectUrlSpy.mockRestore()
+      downloadClickSpy.mockRestore()
+    }
   })
 
   it('lets the user configure image and cell layer opacity', () => {

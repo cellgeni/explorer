@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
-import { RoiHudPanel } from './RoiHudPanel'
+import { RoiHudPanel, VisiumHdRoiHudPanel } from './RoiHudPanel'
 
 const bbox = {
   minX: micrometers(0),
@@ -93,5 +93,67 @@ describe('RoiHudPanel', () => {
     expect(onSaveRoiAnnotation).toHaveBeenCalledTimes(1)
     expect(onExportRoiCells).toHaveBeenCalledTimes(1)
     expect(onExportRoiTranscripts).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders Visium HD bin ROI summary and barcode export actions', () => {
+    const onRoiModeChange = vi.fn()
+    const onClearRoi = vi.fn()
+    const onExportRoiBarcodes = vi.fn()
+
+    render(
+      <VisiumHdRoiHudPanel
+        active
+        roiNameInputId="roi-name"
+        roiHeaderCopy="2 bins"
+        canDrawRoi
+        roiMode="idle"
+        roiName="ROI 1"
+        loadEnabled
+        roiState={{
+          status: 'ready',
+          url: 'https://example.test/visium',
+          bbox,
+          selection: { kind: 'box', bbox },
+          bins: [
+            {
+              barcode: 'BC-1',
+              gridId: 'grid-16um',
+              row: 4,
+              col: 7,
+              center: { x: micrometers(1), y: micrometers(2) },
+              binSizeMicrometers: 16,
+              inTissue: true,
+            },
+            {
+              barcode: 'BC-2',
+              gridId: 'grid-16um',
+              row: 4,
+              col: 8,
+              center: { x: micrometers(3), y: micrometers(4) },
+              binSizeMicrometers: 16,
+              inTissue: false,
+            },
+          ],
+          hitBinLimit: false,
+        }}
+        roiSummary={{ binCount: 2, binSizeMicrometers: 16, inTissueCount: 1 }}
+        onRoiModeChange={onRoiModeChange}
+        onClearRoi={onClearRoi}
+        onRoiNameChange={vi.fn()}
+        onExportRoiBarcodes={onExportRoiBarcodes}
+      />,
+    )
+
+    expect(screen.getByLabelText('ROI summary')).toHaveTextContent('Bins')
+    expect(screen.getByLabelText('ROI summary')).toHaveTextContent('16 um')
+    expect(screen.getByLabelText('ROI summary')).toHaveTextContent('In tissue')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Export Barcodes' }))
+
+    expect(onRoiModeChange).toHaveBeenCalledWith('box')
+    expect(onClearRoi).toHaveBeenCalledTimes(1)
+    expect(onExportRoiBarcodes).toHaveBeenCalledTimes(1)
   })
 })

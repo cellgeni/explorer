@@ -2,6 +2,7 @@ import type { PointerEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type {
   AnalysisEmbedding,
+  AnalysisEmbeddingElementLabel,
   AnalysisEmbeddingPoint,
 } from '../../data/analysisEmbeddings'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
@@ -23,17 +24,19 @@ interface EmbeddingBounds {
 interface EmbeddingPanelProps {
   readonly embedding: AnalysisEmbedding | null
   readonly annotationStyles?: readonly AnnotationColorStyle[]
-  readonly roiCellIds: readonly string[]
-  readonly selectedCellId: string | null
-  readonly onSelectCell: (cellId: string) => void
+  readonly roiElementIds: readonly string[]
+  readonly selectedElementId: string | null
+  readonly elementLabel?: AnalysisEmbeddingElementLabel
+  readonly onSelectElement: (elementId: string) => void
 }
 
 export function EmbeddingPanel({
   embedding,
   annotationStyles = EMPTY_ANNOTATION_STYLES,
-  roiCellIds,
-  selectedCellId,
-  onSelectCell,
+  roiElementIds,
+  selectedElementId,
+  elementLabel = 'cells',
+  onSelectElement,
 }: EmbeddingPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sampledPoints = useMemo(
@@ -56,12 +59,12 @@ export function EmbeddingPanel({
   )
   const roiPoints = useMemo(
     () =>
-      roiCellIds.flatMap((cellId) => {
-        const point = pointByCellId.get(cellId)
+      roiElementIds.flatMap((elementId) => {
+        const point = pointByCellId.get(elementId)
 
         return point === undefined ? [] : [point]
       }),
-    [pointByCellId, roiCellIds],
+    [pointByCellId, roiElementIds],
   )
   const annotationPointGroups = useMemo(
     () =>
@@ -71,7 +74,7 @@ export function EmbeddingPanel({
     [annotationStyles, sampledPoints],
   )
   const selectedPoint =
-    selectedCellId === null ? undefined : pointByCellId.get(selectedCellId)
+    selectedElementId === null ? undefined : pointByCellId.get(selectedElementId)
 
   useEffect(() => {
     if (embedding === null || bounds === null) {
@@ -146,10 +149,10 @@ export function EmbeddingPanel({
       )
 
       if (point !== null) {
-        onSelectCell(point.id)
+        onSelectElement(point.id)
       }
     },
-    [bounds, embedding, onSelectCell],
+    [bounds, embedding, onSelectElement],
   )
 
   if (embedding === null) {
@@ -163,14 +166,14 @@ export function EmbeddingPanel({
           ref={canvasRef}
           className="embedding-plot"
           role="img"
-          aria-label={`${embedding.label} embedding, ${embedding.points.length.toLocaleString()} cells`}
-          title={`${embedding.label} embedding, ${embedding.points.length.toLocaleString()} cells`}
+          aria-label={`${embedding.label} embedding, ${embedding.points.length.toLocaleString()} ${elementLabel}`}
+          title={`${embedding.label} embedding, ${embedding.points.length.toLocaleString()} ${elementLabel}`}
           onPointerDown={handlePointerDown}
         />
       </div>
       <dl className="embedding-summary" aria-label="Embedding link summary">
         <div>
-          <dt>Cells</dt>
+          <dt>{elementLabel === 'bins' ? 'Bins' : 'Cells'}</dt>
           <dd>{embedding.points.length.toLocaleString()}</dd>
         </div>
         <div>

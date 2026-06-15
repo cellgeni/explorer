@@ -62,4 +62,39 @@ describe('analysis embeddings', () => {
       },
     ])
   })
+
+  it('prefers selected Visium HD binned projections when a bin size is provided', async () => {
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = String(input)
+
+      if (
+        url.endsWith(
+          'binned_outputs/square_008um/analysis/umap/gene_expression_2_components/projection.csv',
+        )
+      ) {
+        return new Response('Barcode,UMAP-1,UMAP-2\nbarcode-8um,1,2\n')
+      }
+
+      if (url.endsWith('analysis/umap/gene_expression_2_components/projection.csv')) {
+        return new Response('Barcode,UMAP-1,UMAP-2\nroot-barcode,3,4\n')
+      }
+
+      return new Response(null, { status: 404 })
+    }) as unknown as typeof fetch
+
+    await expect(
+      loadDatasetAnalysisEmbeddings('https://example.test/visium-hd/', {
+        fetcher,
+        visiumHdBinSizeMicrometers: 8,
+      }),
+    ).resolves.toEqual([
+      {
+        kind: 'umap',
+        label: 'UMAP',
+        sourcePath:
+          'binned_outputs/square_008um/analysis/umap/gene_expression_2_components/projection.csv',
+        points: [{ id: 'barcode-8um', x: 1, y: 2 }],
+      },
+    ])
+  })
 })

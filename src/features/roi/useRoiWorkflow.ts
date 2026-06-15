@@ -51,6 +51,7 @@ interface MutableRef<T> {
 interface UseRoiWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly currentViewportDetail: ViewerViewportDetail | null
+  readonly enabled?: boolean
   readonly initialSharedRoiSelectionRef: MutableRef<RoiSelection | null>
   readonly loadRoiCells: RoiCellsLoader
   readonly loadRoiGeneStats: RoiGeneStatsLoader
@@ -99,6 +100,7 @@ interface UseRoiWorkflowResult {
 export function useRoiWorkflow({
   appendDebugEvent,
   currentViewportDetail,
+  enabled = true,
   initialSharedRoiSelectionRef,
   loadRoiCells,
   loadRoiGeneStats,
@@ -150,6 +152,7 @@ export function useRoiWorkflow({
     const readyDatasetUrl = loadState.status === 'ready' ? loadState.url : null
 
     if (
+      !enabled ||
       readyDatasetUrl === null ||
       detail === null ||
       roiState.status !== 'idle' ||
@@ -265,6 +268,7 @@ export function useRoiWorkflow({
   }, [
     appendDebugEvent,
     currentViewportDetail,
+    enabled,
     loadRoiCells,
     loadRoiGeneStats,
     loadState,
@@ -277,7 +281,7 @@ export function useRoiWorkflow({
 
   const handleRoiComplete = useCallback(
     (selection: RoiSelection) => {
-      if (loadState.status !== 'ready') {
+      if (!enabled || loadState.status !== 'ready') {
         return
       }
 
@@ -454,6 +458,7 @@ export function useRoiWorkflow({
     },
     [
       appendDebugEvent,
+      enabled,
       loadRoiCells,
       loadRoiGeneStats,
       loadState,
@@ -482,6 +487,7 @@ export function useRoiWorkflow({
 
     if (
       selection === null ||
+      !enabled ||
       loadState.status !== 'ready' ||
       roiState.status !== 'idle'
     ) {
@@ -493,6 +499,7 @@ export function useRoiWorkflow({
     handleRoiComplete(selection)
   }, [
     handleRoiComplete,
+    enabled,
     initialSharedRoiSelectionRef,
     loadState.status,
     roiState.status,
