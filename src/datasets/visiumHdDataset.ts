@@ -21,6 +21,7 @@ import {
 import {
   filterVisiumHdSegmentationElementsByBbox,
   readVisiumHdSegmentationElements,
+  visiumHdSegmentationInfos,
   type ReadVisiumHdSegmentationElementsOptions,
   type VisiumHdSegmentedOutputPaths,
 } from './visiumHdSegmentations'
@@ -360,6 +361,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
 
   async meta(binSizeMicrometers = this.defaultBinSizeMicrometers): Promise<DatasetMeta> {
     const overview = await this.readBinnedOverview(binSizeMicrometers)
+    const segmentations = visiumHdSegmentationInfos(this.segmentedOutputs)
 
     return {
       platform: 'visium-hd',
@@ -372,6 +374,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
         multiChannel: false,
       },
       grids: [overview.grid],
+      ...(segmentations.length === 0 ? {} : { segmentations }),
     }
   }
 

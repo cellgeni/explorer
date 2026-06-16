@@ -1,6 +1,6 @@
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import { datasetFileUrl } from '../data/datasetFiles'
-import type { SpatialElement } from './spatialDataset'
+import type { SegmentationInfo, SpatialElement } from './spatialDataset'
 
 export interface VisiumHdSegmentedOutputPaths {
   readonly scalefactorsPath?: string
@@ -53,6 +53,56 @@ export class VisiumHdSegmentationGeojsonBudgetExceededError extends Error {
 
 type GeojsonPolygon = readonly (readonly (readonly number[])[])[]
 type GeojsonMultiPolygon = readonly GeojsonPolygon[]
+
+export function visiumHdSegmentationInfos(
+  paths: VisiumHdSegmentedOutputPaths | undefined,
+): readonly SegmentationInfo[] {
+  if (paths === undefined) {
+    return []
+  }
+
+  const segmentations: SegmentationInfo[] = []
+
+  appendSegmentationInfo(segmentations, {
+    id: 'visium-hd-cell-segmentations',
+    kind: 'cell',
+    label: 'Cell segmentations',
+    sourceKind: 'geojson',
+    path: paths.cellSegmentationsGeojsonPath,
+  })
+  appendSegmentationInfo(segmentations, {
+    id: 'visium-hd-nucleus-segmentations',
+    kind: 'nucleus',
+    label: 'Nucleus segmentations',
+    sourceKind: 'geojson',
+    path: paths.nucleusSegmentationsGeojsonPath,
+  })
+  appendSegmentationInfo(segmentations, {
+    id: 'visium-hd-graphclust-cell-segmentations',
+    kind: 'cell',
+    label: 'Graphclust cell segmentations',
+    sourceKind: 'geojson',
+    path: paths.graphclustAnnotatedCellSegmentationsGeojsonPath,
+    annotated: true,
+  })
+  appendSegmentationInfo(segmentations, {
+    id: 'visium-hd-graphclust-nucleus-segmentations',
+    kind: 'nucleus',
+    label: 'Graphclust nucleus segmentations',
+    sourceKind: 'geojson',
+    path: paths.graphclustAnnotatedNucleusSegmentationsGeojsonPath,
+    annotated: true,
+  })
+  appendSegmentationInfo(segmentations, {
+    id: 'visium-hd-nucleus-instance-mask',
+    kind: 'nucleus',
+    label: 'Nucleus instance mask',
+    sourceKind: 'tiff',
+    path: paths.nucleusInstanceMaskTiffPath,
+  })
+
+  return segmentations
+}
 
 export async function readVisiumHdSegmentationElements(
   baseUrl: string,
@@ -349,6 +399,24 @@ function readGeojsonPosition(
     x: micrometers(x * context.scalefactors.micronsPerPixel),
     y: micrometers(y * context.scalefactors.micronsPerPixel),
   }
+}
+
+function appendSegmentationInfo(
+  segmentations: SegmentationInfo[],
+  info: Omit<SegmentationInfo, 'path'> & { readonly path: string | undefined },
+): void {
+  if (info.path === undefined) {
+    return
+  }
+
+  segmentations.push({
+    id: info.id,
+    kind: info.kind,
+    label: info.label,
+    sourceKind: info.sourceKind,
+    path: info.path,
+    ...(info.annotated === undefined ? {} : { annotated: info.annotated }),
+  })
 }
 
 function readSegmentationFeatureId(

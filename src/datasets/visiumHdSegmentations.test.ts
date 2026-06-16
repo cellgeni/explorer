@@ -5,11 +5,55 @@ import {
   normalizeVisiumHdGeojsonCellId,
   parseVisiumHdSegmentationGeojson,
   readVisiumHdSegmentationElements,
+  visiumHdSegmentationInfos,
 } from './visiumHdSegmentations'
 
 const scalefactors = { micronsPerPixel: 0.5 }
 
 describe('Visium HD segmentation GeoJSON reader', () => {
+  it('describes detected segmented output sidecars without conflating source types', () => {
+    expect(
+      visiumHdSegmentationInfos({
+        cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
+        nucleusSegmentationsGeojsonPath:
+          'segmented_outputs/nucleus_segmentations.geojson',
+        graphclustAnnotatedCellSegmentationsGeojsonPath:
+          'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
+        nucleusInstanceMaskTiffPath: 'segmented_outputs/nucleus_instance_mask.tiff',
+      }),
+    ).toEqual([
+      {
+        id: 'visium-hd-cell-segmentations',
+        kind: 'cell',
+        label: 'Cell segmentations',
+        sourceKind: 'geojson',
+        path: 'segmented_outputs/cell_segmentations.geojson',
+      },
+      {
+        id: 'visium-hd-nucleus-segmentations',
+        kind: 'nucleus',
+        label: 'Nucleus segmentations',
+        sourceKind: 'geojson',
+        path: 'segmented_outputs/nucleus_segmentations.geojson',
+      },
+      {
+        id: 'visium-hd-graphclust-cell-segmentations',
+        kind: 'cell',
+        label: 'Graphclust cell segmentations',
+        sourceKind: 'geojson',
+        path: 'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
+        annotated: true,
+      },
+      {
+        id: 'visium-hd-nucleus-instance-mask',
+        kind: 'nucleus',
+        label: 'Nucleus instance mask',
+        sourceKind: 'tiff',
+        path: 'segmented_outputs/nucleus_instance_mask.tiff',
+      },
+    ])
+  })
+
   it('normalizes numeric Space Ranger GeoJSON cell IDs to matrix cell IDs', () => {
     expect(normalizeVisiumHdGeojsonCellId(1)).toBe('cellid_000000001-1')
     expect(normalizeVisiumHdGeojsonCellId('42')).toBe('cellid_000000042-1')

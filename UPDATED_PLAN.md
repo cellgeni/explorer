@@ -1268,6 +1268,14 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       draw segmented cells when a hosted dataset exposes them. Binned-only Visium
       HD datasets continue to return no boundary elements without invoking the
       Xenium `cell_boundaries.parquet` loader.
+- [x] Added first-class segmented-output metadata. `DatasetMeta` now exposes
+      optional segmentation descriptors with `cell`/`nucleus`, `geojson`/`tiff`,
+      path, label, and annotation metadata. `VisiumHdDataset.meta()` populates
+      those descriptors from detected segmented sidecars while keeping
+      `capabilities.cellBoundaries` true only when cell GeoJSON polygons are
+      available for the existing boundary renderer. Nucleus-only datasets now
+      advertise nucleus segmentations without being mislabeled as cell-boundary
+      capable.
 - [ ] Slice 8 remaining: nucleus segmentation GeoJSON/TIFF rendering,
       annotated segmentation styling, and a viewport-scoped or streaming strategy
       for segmentation assets that exceed the interactive GeoJSON full-file

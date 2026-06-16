@@ -77,6 +77,15 @@ export interface ChannelInfo {
   readonly purpose?: string
 }
 
+export interface SegmentationInfo {
+  readonly id: string
+  readonly kind: 'cell' | 'nucleus'
+  readonly label: string
+  readonly sourceKind: 'geojson' | 'tiff'
+  readonly path: string
+  readonly annotated?: boolean
+}
+
 export interface DatasetMeta {
   readonly platform: Platform
   readonly units: UnitsDescriptor
@@ -89,6 +98,7 @@ export interface DatasetMeta {
   }
   readonly channels?: readonly ChannelInfo[]
   readonly grids?: readonly SpatialGrid[]
+  readonly segmentations?: readonly SegmentationInfo[]
 }
 
 export type ImageSource =

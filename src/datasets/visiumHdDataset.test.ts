@@ -434,6 +434,52 @@ describe('Visium HD dataset readers', () => {
     )
   })
 
+  it('reports nucleus segmentation metadata without enabling cell boundaries', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      segmentedOutputs: {
+        nucleusSegmentationsGeojsonPath:
+          'segmented_outputs/nucleus_segmentations.geojson',
+        nucleusInstanceMaskTiffPath: 'segmented_outputs/nucleus_instance_mask.tiff',
+      },
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+    })
+
+    const meta = await dataset.meta()
+    const batch = await dataset.elements({
+      minX: micrometers(90),
+      maxX: micrometers(110),
+      minY: micrometers(190),
+      maxY: micrometers(210),
+    })
+
+    expect(meta.capabilities.cellBoundaries).toBe(false)
+    expect(meta.segmentations).toEqual([
+      {
+        id: 'visium-hd-nucleus-segmentations',
+        kind: 'nucleus',
+        label: 'Nucleus segmentations',
+        sourceKind: 'geojson',
+        path: 'segmented_outputs/nucleus_segmentations.geojson',
+      },
+      {
+        id: 'visium-hd-nucleus-instance-mask',
+        kind: 'nucleus',
+        label: 'Nucleus instance mask',
+        sourceKind: 'tiff',
+        path: 'segmented_outputs/nucleus_instance_mask.tiff',
+      },
+    ])
+    expect(batch.elements).toEqual([])
+  })
+
   it('rejects 2 µm overview reads until a budgeted loading path is available', async () => {
     const tissuePositionsReader = vi.fn(async () =>
       parseVisiumHdTissuePositionRows([visiumPositionRow('BC-2', 1, 0, 0, 400, 200)]),
