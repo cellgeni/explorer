@@ -568,6 +568,13 @@ describe('App', () => {
           }),
         )
       })
+      await waitFor(() => {
+        expect(screen.queryByTestId('deck-layer-spatial-grid-cells')).toBeNull()
+        expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
+          'data-count',
+          '1',
+        )
+      })
       expect(loadBoundaryElements).not.toHaveBeenCalled()
     } finally {
       rectSpy.mockRestore()

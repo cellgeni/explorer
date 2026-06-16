@@ -172,6 +172,7 @@ export interface OverviewLayerOptions {
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
   readonly cellBoundaryFillEnabled?: boolean
+  readonly cellBoundaryPickable?: boolean
   readonly gridCells?: readonly GridCellDatum[]
   readonly gridCellOpacity?: number
   readonly cellBoundaryGeometry?: CellBoundaryLayerGeometry
@@ -381,6 +382,7 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
 const DEFAULT_OVERVIEW_CELL_FILL_RGB = [72, 68, 58] as const
 const GENE_EXPRESSION_ZERO_FILL_COLOR: Color = [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 84]
 const GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY = 0.5
+const CELL_BOUNDARY_HIT_AREA_OPACITY = 0.01
 const EMPTY_CELL_BOUNDARY_PATH_GEOMETRY: CellBoundaryPathGeometryData = {
   length: 0,
   startIndices: new Uint32Array(1),
@@ -557,6 +559,21 @@ export function createOverviewLayers(
           updateTriggers: {
             getColor: [cellBoundaryOpacity, cellBoundaryStyle],
           },
+        }),
+      )
+    }
+
+    if (options.cellBoundaryPickable === true) {
+      layers.push(
+        new PolygonLayer<CellBoundaryDatum>({
+          id: 'cell-boundary-hit-areas',
+          data: boundaries,
+          pickable: true,
+          stroked: false,
+          filled: true,
+          opacity: CELL_BOUNDARY_HIT_AREA_OPACITY,
+          getPolygon: (boundary) => boundary.polygon,
+          getFillColor: [0, 0, 0, 1],
         }),
       )
     }

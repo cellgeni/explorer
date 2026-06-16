@@ -421,6 +421,51 @@ describe('ViewerCore', () => {
     expect(screen.getByText('In tissue')).toBeInTheDocument()
   })
 
+  it('shows segmented cell boundary hover metadata when enabled', () => {
+    const boundary: CellBoundaryDatum = {
+      id: 'cellid_000000001-1',
+      polygon: [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, -10, 0],
+        [0, -10, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+
+    render(
+      <ViewerCore
+        boundaries={[boundary]}
+        cellBoundaryHoverEnabled
+        expressionCells={[
+          {
+            id: boundary.id,
+            position: [5, -5, 0],
+            radiusPixels: 4,
+            fillColor: [240, 128, 120, 220],
+            expressionCount: 7,
+            expressionGenes: ['Actb', 'Pecam1', 'Col1a1', 'Vim'],
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
+      'data-count',
+      '1',
+    )
+
+    act(() => {
+      deckGlMock.onHover?.({ object: boundary, x: 18, y: 24 })
+    })
+
+    expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
+    expect(screen.getByText('Segmented')).toBeInTheDocument()
+    expect(screen.getByText('100 um^2')).toBeInTheDocument()
+    expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
+  })
+
   it('notifies when an exact transcript point is clicked', () => {
     const transcript = transcriptDatum({
       id: 'tx-clicked',

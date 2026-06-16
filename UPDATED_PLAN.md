@@ -1289,6 +1289,12 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       load the detected GeoJSON by default. Structured load errors now classify
       explicit segmentation-budget failures separately from expression matrix
       budget failures.
+- [x] Added Visium HD segmentation-first viewer behavior. When cell segmentation
+      polygons are loaded, the viewer hides the binned grid layer at render time
+      while preserving the loaded bin state for ROI/export workflows. Visium HD
+      cell-boundary hit areas are now pickable behind an explicit viewer option,
+      and hovering segmented cells shows a compact metadata tooltip with cell ID,
+      polygon size/area, and matching expression details when available.
 - [ ] Slice 8 remaining: nucleus segmentation GeoJSON/TIFF rendering,
       annotated segmentation styling, and a viewport-scoped or streaming strategy
       for segmentation assets that exceed the interactive GeoJSON full-file

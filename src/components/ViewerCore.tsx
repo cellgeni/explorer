@@ -69,6 +69,7 @@ export interface ViewerCoreProps {
   readonly expressionCells?: readonly OverviewCellDatum[]
   readonly geneExpressionActive?: boolean
   readonly boundaries?: readonly CellBoundaryDatum[]
+  readonly cellBoundaryHoverEnabled?: boolean
   readonly gridCells?: readonly GridCellDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
@@ -171,6 +172,13 @@ export interface ViewerGridCellHoverDetail {
   readonly screen: ScreenPoint
 }
 
+export interface ViewerCellBoundaryHoverDetail {
+  readonly boundary: CellBoundaryDatum
+  readonly expressionCount?: number
+  readonly expressionGenes?: readonly string[]
+  readonly screen: ScreenPoint
+}
+
 export type RoiDrawMode = 'idle' | 'box' | 'lasso'
 
 export function ViewerCore({
@@ -178,6 +186,7 @@ export function ViewerCore({
   expressionCells = [],
   geneExpressionActive = false,
   boundaries = [],
+  cellBoundaryHoverEnabled = false,
   gridCells = [],
   transcriptAggregateBins = [],
   transcriptPoints = [],
@@ -245,6 +254,7 @@ export function ViewerCore({
       expressionCells={expressionCells}
       geneExpressionActive={geneExpressionActive}
       boundaries={boundaries}
+      cellBoundaryHoverEnabled={cellBoundaryHoverEnabled}
       gridCells={gridCells}
       transcriptAggregateBins={transcriptAggregateBins}
       transcriptPoints={transcriptPoints}
@@ -303,6 +313,7 @@ interface ViewerSurfaceProps {
   readonly expressionCells: readonly OverviewCellDatum[]
   readonly geneExpressionActive: boolean
   readonly boundaries: readonly CellBoundaryDatum[]
+  readonly cellBoundaryHoverEnabled: boolean
   readonly gridCells: readonly GridCellDatum[]
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints: readonly TranscriptPointDatum[]
@@ -427,6 +438,7 @@ function ViewerSurface({
   expressionCells,
   geneExpressionActive,
   boundaries,
+  cellBoundaryHoverEnabled,
   gridCells,
   transcriptAggregateBins,
   transcriptPoints,
@@ -497,6 +509,8 @@ function ViewerSurface({
   const [gridCellHover, setGridCellHover] = useState<ViewerGridCellHoverDetail | null>(
     null,
   )
+  const [cellBoundaryHover, setCellBoundaryHover] =
+    useState<ViewerCellBoundaryHoverDetail | null>(null)
   const [boundaryStyleViewport, setBoundaryStyleViewport] =
     useState<BoundaryStyleViewport | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
@@ -666,6 +680,7 @@ function ViewerSurface({
         cellFillOpacity,
         cellBoundaryOpacity,
         cellBoundaryFillEnabled,
+        cellBoundaryPickable: cellBoundaryHoverEnabled,
         gridCells: expressionStyledGridCells,
         cellBoundaryGeometry: boundaryLayerGeometry,
         cellBoundaryStyle: boundaryLayerStyle,
@@ -680,6 +695,7 @@ function ViewerSurface({
       cellBoundaryOpacity,
       cellFillOpacity,
       cellBoundaryFillEnabled,
+      cellBoundaryHoverEnabled,
       boundaryLayerGeometry,
       boundaryLayerStyle,
       boundaries,
@@ -695,7 +711,8 @@ function ViewerSurface({
   )
   const hasCells = cells.length > 0
   const hasGridCells = gridCells.length > 0
-  const hasSpatialData = hasCells || hasGridCells
+  const hasBoundaries = boundaries.length > 0
+  const hasSpatialData = hasCells || hasGridCells || hasBoundaries
   const hasImage = imageLoader !== null || imageChannels.length > 0 || flatImage !== null
   const canTrackMouseCoordinates = hasSpatialData || hasImage
   const visibleCellCount = visibleCells.length
@@ -711,6 +728,10 @@ function ViewerSurface({
       return visibleGridCellCount
     }
 
+    if (!hasCells && !hasGridCells && hasBoundaries) {
+      return boundaries.length
+    }
+
     if (viewportBbox === null) {
       return cells.length
     }
@@ -724,7 +745,9 @@ function ViewerSurface({
     })
   }, [
     cellExtentBbox,
+    boundaries.length,
     cells,
+    hasBoundaries,
     hasCells,
     hasGridCells,
     viewState.zoom,
@@ -1014,6 +1037,7 @@ function ViewerSurface({
         }
         setTranscriptHover(detail)
         setGridCellHover(null)
+        setCellBoundaryHover(null)
         onTranscriptHover?.(detail)
         return
       }
@@ -1028,6 +1052,7 @@ function ViewerSurface({
         }
         setTranscriptHover(detail)
         setGridCellHover(null)
+        setCellBoundaryHover(null)
         onTranscriptHover?.(detail)
         return
       }
@@ -1047,6 +1072,36 @@ function ViewerSurface({
             y: info.y,
           },
         })
+        setCellBoundaryHover(null)
+        return
+      }
+
+      if (cellBoundaryHoverEnabled && isCellBoundaryDatum(info.object)) {
+        const expressionCell = geneExpressionPointStyleIndex.expressionByCellId.get(
+          info.object.id,
+        )
+
+        setTranscriptHover((current) => {
+          if (current !== null) {
+            onTranscriptHover?.(null)
+          }
+
+          return null
+        })
+        setGridCellHover(null)
+        setCellBoundaryHover({
+          boundary: info.object,
+          ...(expressionCell?.expressionCount === undefined
+            ? {}
+            : { expressionCount: expressionCell.expressionCount }),
+          ...(expressionCell?.expressionGenes === undefined
+            ? {}
+            : { expressionGenes: expressionCell.expressionGenes }),
+          screen: {
+            x: info.x,
+            y: info.y,
+          },
+        })
         return
       }
 
@@ -1058,8 +1113,9 @@ function ViewerSurface({
         return null
       })
       setGridCellHover(null)
+      setCellBoundaryHover(null)
     },
-    [onTranscriptHover],
+    [cellBoundaryHoverEnabled, geneExpressionPointStyleIndex, onTranscriptHover],
   )
   const handleMouseCoordinatePointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
@@ -1461,6 +1517,9 @@ function ViewerSurface({
         <TranscriptHoverTooltip detail={transcriptHover} />
       )}
       {gridCellHover === null ? null : <GridCellHoverTooltip detail={gridCellHover} />}
+      {cellBoundaryHover === null ? null : (
+        <CellBoundaryHoverTooltip detail={cellBoundaryHover} />
+      )}
       {!hasSpatialData && status === 'idle' ? (
         <div className="viewport-empty-state" aria-hidden="true">
           Please load a dataset
@@ -1829,6 +1888,53 @@ function GridCellHoverTooltip({
           <div>
             <dt>Expression</dt>
             <dd>{formatCoordinateValue(cell.expressionCount)}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  )
+}
+
+function CellBoundaryHoverTooltip({
+  detail,
+}: {
+  readonly detail: ViewerCellBoundaryHoverDetail
+}) {
+  const boundary = detail.boundary
+
+  return (
+    <div
+      className="transcript-hover-tooltip grid-cell-hover-tooltip cell-boundary-hover-tooltip"
+      style={{
+        left: detail.screen.x,
+        top: detail.screen.y,
+      }}
+      aria-hidden="true"
+    >
+      <p>{boundary.id}</p>
+      <dl>
+        <div>
+          <dt>Cell</dt>
+          <dd>Segmented</dd>
+        </div>
+        <div>
+          <dt>Vertices</dt>
+          <dd>{boundary.polygon.length.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Area</dt>
+          <dd>{formatBoundaryPolygonArea(boundary.polygon)}</dd>
+        </div>
+        {detail.expressionCount === undefined ? null : (
+          <div>
+            <dt>Expression</dt>
+            <dd>{formatCoordinateValue(detail.expressionCount)}</dd>
+          </div>
+        )}
+        {detail.expressionGenes === undefined || detail.expressionGenes.length === 0 ? null : (
+          <div>
+            <dt>Genes</dt>
+            <dd>{formatExpressionGeneList(detail.expressionGenes)}</dd>
           </div>
         )}
       </dl>
@@ -2221,6 +2327,39 @@ function formatGridCellTissue(cell: GridCellDatum): string {
   }
 
   return cell.inTissue ? 'In tissue' : 'Out of tissue'
+}
+
+function formatBoundaryPolygonArea(polygon: readonly Position[]): string {
+  return `${formatCoordinateValue(boundaryPolygonArea(polygon))} um^2`
+}
+
+function boundaryPolygonArea(polygon: readonly Position[]): number {
+  if (polygon.length < 3) {
+    return 0
+  }
+
+  let area = 0
+
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index]!
+    const next = polygon[(index + 1) % polygon.length]!
+    const currentX = current[0] ?? 0
+    const currentY = current[1] ?? 0
+    const nextX = next[0] ?? 0
+    const nextY = next[1] ?? 0
+
+    area += currentX * nextY - nextX * currentY
+  }
+
+  return Math.abs(area) / 2
+}
+
+function formatExpressionGeneList(genes: readonly string[]): string {
+  const shownGenes = genes.slice(0, 3)
+  const omittedCount = genes.length - shownGenes.length
+  const suffix = omittedCount <= 0 ? '' : ` +${omittedCount.toLocaleString()}`
+
+  return `${shownGenes.join(', ')}${suffix}`
 }
 
 function countGridCellsInBbox(gridCells: readonly GridCellDatum[], bbox: BBox): number {

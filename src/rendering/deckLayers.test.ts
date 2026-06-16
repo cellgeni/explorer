@@ -206,6 +206,48 @@ describe('deck layer factory', () => {
     expect(pointLayer.props.data).toEqual([])
   })
 
+  it('adds pickable boundary hit polygons when boundary picking is enabled', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const layers = createOverviewLayers(fixtureCells, boundaries, {
+      cellBoundaryPickable: true,
+    })
+
+    expect(layers).toHaveLength(3)
+    expect(layers[0]).toBeInstanceOf(PathLayer)
+    expect(layers[1]).toBeInstanceOf(PolygonLayer)
+    expect(layers[2]).toBeInstanceOf(ScatterplotLayer)
+
+    const hitLayer = layers[1]
+
+    if (!(hitLayer instanceof PolygonLayer)) {
+      throw new Error('Expected second overview layer to be a PolygonLayer.')
+    }
+
+    expect(hitLayer.id).toBe('cell-boundary-hit-areas')
+    expect(hitLayer.props.pickable).toBe(true)
+    expect(hitLayer.props.stroked).toBe(false)
+    expect(hitLayer.props.filled).toBe(true)
+    expect(hitLayer.props.opacity).toBe(0.01)
+    expect(hitLayer.props.data).toEqual(boundaries)
+
+    const getPolygon = hitLayer.props.getPolygon as (
+      boundary: CellBoundaryDatum,
+    ) => readonly (readonly number[])[]
+
+    expect(getPolygon(boundaries[0]!)).toEqual(boundaries[0]!.polygon)
+  })
+
   it('applies separate cell fill and boundary opacity to points and boundaries', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {

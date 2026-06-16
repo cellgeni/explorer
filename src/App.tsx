@@ -740,6 +740,11 @@ export function App({
     transcriptLayerState,
     transcriptPointColorMode,
   })
+  const viewerGridCells = useMemo(
+    () =>
+      isVisiumHdDataset && boundaryLayerData.length > 0 ? [] : spatialGridCells,
+    [boundaryLayerData.length, isVisiumHdDataset, spatialGridCells],
+  )
   const viewerMicrometersPerPixel =
     morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
   const viewerImageStatus =
@@ -2203,7 +2208,8 @@ export function App({
           expressionCells={styledGeneExpressionCells}
           geneExpressionActive={geneExpressionState.status === 'ready'}
           boundaries={boundaryLayerData}
-          gridCells={spatialGridCells}
+          cellBoundaryHoverEnabled={isVisiumHdDataset}
+          gridCells={viewerGridCells}
           transcriptAggregateBins={transcriptLayerAggregateBins}
           transcriptPoints={transcriptLayerPoints}
           imageLoader={morphologyImage?.loader ?? null}
