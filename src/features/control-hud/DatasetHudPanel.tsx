@@ -22,8 +22,10 @@ interface DatasetHudPanelProps {
   readonly morphologyInputId: string
   readonly boundaryLimitInputId: string
   readonly visiumHdBinSizeInputId: string
+  readonly visiumHdTwoMicrometerBudgetInputId: string
   readonly datasetUrl: string
   readonly shouldLoadMorphology: boolean
+  readonly visiumHdTwoMicrometerBudgetInput: string
   readonly morphologyLabel: string
   readonly boundaryCellLimit: number
   readonly maxBoundaryCellLimit: number
@@ -38,6 +40,7 @@ interface DatasetHudPanelProps {
   readonly onDatasetUrlChange: (url: string) => void
   readonly onShouldLoadMorphologyChange: (enabled: boolean) => void
   readonly onBoundaryCellLimitChange: (limit: number) => void
+  readonly onVisiumHdTwoMicrometerBudgetInputChange: (value: string) => void
   readonly onVisiumHdBinSizeChange: (binSize: VisiumHdBinSizeMicrometers) => void
   readonly onRunDatasetDiagnostics: () => void
   readonly onDownloadDiagnostics: () => void
@@ -50,8 +53,10 @@ export function DatasetHudPanel({
   morphologyInputId,
   boundaryLimitInputId,
   visiumHdBinSizeInputId,
+  visiumHdTwoMicrometerBudgetInputId,
   datasetUrl,
   shouldLoadMorphology,
+  visiumHdTwoMicrometerBudgetInput,
   morphologyLabel,
   boundaryCellLimit,
   maxBoundaryCellLimit,
@@ -66,6 +71,7 @@ export function DatasetHudPanel({
   onDatasetUrlChange,
   onShouldLoadMorphologyChange,
   onBoundaryCellLimitChange,
+  onVisiumHdTwoMicrometerBudgetInputChange,
   onVisiumHdBinSizeChange,
   onRunDatasetDiagnostics,
   onDownloadDiagnostics,
@@ -123,6 +129,22 @@ export function DatasetHudPanel({
           disabled={boundaryControlsDisabled}
           onChange={(event) => {
             onBoundaryCellLimitChange(event.currentTarget.valueAsNumber)
+          }}
+        />
+        <label htmlFor={visiumHdTwoMicrometerBudgetInputId}>2 µm budget</label>
+        <input
+          id={visiumHdTwoMicrometerBudgetInputId}
+          name="visiumHdTwoMicrometerBudget"
+          type="number"
+          inputMode="numeric"
+          min="1"
+          step="1"
+          autoComplete="off"
+          value={visiumHdTwoMicrometerBudgetInput}
+          placeholder="disabled"
+          title="Max filtered barcodes for Visium HD 2 µm loading"
+          onChange={(event) => {
+            onVisiumHdTwoMicrometerBudgetInputChange(event.currentTarget.value)
           }}
         />
         <button type="submit" disabled={isLoading} title="Load dataset">

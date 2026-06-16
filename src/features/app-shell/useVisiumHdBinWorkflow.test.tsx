@@ -20,6 +20,7 @@ function Probe({
   state,
   getSpatialDataset,
   onReady,
+  visiumHdTwoMicrometerFilteredBarcodeBudget,
   setFlatMorphologyImage,
   setGeneExpressionBatch,
   setGeneExpressionScaleDomain,
@@ -36,6 +37,9 @@ function Probe({
     typeof useVisiumHdBinWorkflow
   >[0]['getSpatialDataset']
   readonly onReady: (nextApi: UseVisiumHdBinWorkflowResult) => void
+  readonly visiumHdTwoMicrometerFilteredBarcodeBudget?: Parameters<
+    typeof useVisiumHdBinWorkflow
+  >[0]['visiumHdTwoMicrometerFilteredBarcodeBudget']
   readonly setFlatMorphologyImage: Parameters<
     typeof useVisiumHdBinWorkflow
   >[0]['setFlatMorphologyImage']
@@ -70,6 +74,7 @@ function Probe({
     getSpatialDataset,
     loadedDatasetUrl: 'https://example.test/visium',
     shouldLoadMorphology: true,
+    visiumHdTwoMicrometerFilteredBarcodeBudget,
     visiumHdControlState: state,
     setFlatMorphologyImage,
     setGeneExpressionBatch,
@@ -283,6 +288,7 @@ describe('useVisiumHdBinWorkflow', () => {
           api = nextApi
         }}
         setFlatMorphologyImage={vi.fn()}
+        visiumHdTwoMicrometerFilteredBarcodeBudget={25_000}
         setGenePanelState={vi.fn()}
         setLoadState={vi.fn()}
         setMorphologyState={vi.fn()}
@@ -297,6 +303,75 @@ describe('useVisiumHdBinWorkflow', () => {
     })
 
     expect(getSpatialDataset).not.toHaveBeenCalled()
+  })
+
+  it('loads a budget-enabled 2 µm tier instead of ignoring it', async () => {
+    const datasetUrl = 'https://example.test/visium'
+    const grid = visiumGrid(2)
+    const overview: VisiumHdBinnedOverview = {
+      binSizeMicrometers: 2,
+      scalefactors: {
+        micronsPerPixel: 0.5,
+        tissueHiresScale: 0.2,
+        tissueLowresScale: 0.02,
+      },
+      grid,
+      gridCells: gridCells(grid, 's_002um_000001_000002-1'),
+      fullresRows: new Float64Array([16]),
+      fullresCols: new Float64Array([16]),
+      inTissue: new Uint8Array([1]),
+      sourcePaths: {
+        tissuePositions: 'binned_outputs/square_002um/spatial/tissue_positions.parquet',
+        scalefactors: 'binned_outputs/square_002um/spatial/scalefactors_json.json',
+        tissueHiresImage: 'binned_outputs/square_002um/spatial/tissue_hires_image.png',
+        tissueLowresImage: 'binned_outputs/square_002um/spatial/tissue_lowres_image.png',
+        filteredMatrixH5: 'binned_outputs/square_002um/filtered_feature_bc_matrix.h5',
+        filteredMatrixBarcodes:
+          'binned_outputs/square_002um/filtered_feature_bc_matrix/barcodes.tsv.gz',
+      },
+    }
+    const dataset = {
+      annotations: vi.fn(async () => []),
+      elements: vi.fn(async () => ({ elements: [] })),
+      image: vi.fn(async () => null),
+      matrix: vi.fn(async () => {
+        throw new Error('unused')
+      }),
+      genePanel: vi.fn(async () => ['Actb']),
+      meta: vi.fn(async () => visiumMeta(grid)),
+      readBinnedOverview: vi.fn(async () => overview),
+    }
+    const getSpatialDataset = vi.fn(async () => dataset)
+    let api: UseVisiumHdBinWorkflowResult | null = null
+
+    render(
+      <Probe
+        state={budgetedTwoMicrometerVisiumControlState()}
+        getSpatialDataset={getSpatialDataset}
+        visiumHdTwoMicrometerFilteredBarcodeBudget={25_000}
+        onReady={(nextApi) => {
+          api = nextApi
+        }}
+        setFlatMorphologyImage={vi.fn()}
+        setGenePanelState={vi.fn()}
+        setLoadState={vi.fn()}
+        setMorphologyState={vi.fn()}
+        setSelectedGridCell={vi.fn()}
+        setSpatialGridCells={vi.fn()}
+        setVisiumHdControlState={vi.fn()}
+      />,
+    )
+
+    await act(async () => {
+      await api?.handleVisiumHdBinSizeChange(2)
+    })
+
+    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl, {
+      visiumHdMaxTwoMicrometerFilteredBarcodes: 25_000,
+    })
+    expect(dataset.genePanel).toHaveBeenCalledWith(2)
+    expect(dataset.readBinnedOverview).toHaveBeenCalledWith(2)
+    expect(dataset.meta).toHaveBeenCalledWith(2)
   })
 })
 
@@ -319,7 +394,21 @@ function visiumControlState(): VisiumHdControlState {
   }
 }
 
-function visiumGrid(binSizeMicrometers: 8 | 16): SpatialGrid {
+function budgetedTwoMicrometerVisiumControlState(): VisiumHdControlState {
+  return {
+    status: 'ready',
+    url: 'https://example.test/visium',
+    selectedBinSize: 16,
+    options: [
+      { size: 16, available: true, disabled: false, binCount: 54_504 },
+      { size: 8, available: true, disabled: false },
+      { size: 2, available: true, disabled: false },
+    ],
+    binCount: 54_504,
+  }
+}
+
+function visiumGrid(binSizeMicrometers: 2 | 8 | 16): SpatialGrid {
   return {
     id: `visium-hd-square-${binSizeMicrometers.toString().padStart(3, '0')}um`,
     binSizeMicrometers: micrometers(binSizeMicrometers),

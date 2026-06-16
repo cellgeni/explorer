@@ -11,6 +11,7 @@ describe('DatasetHudPanel', () => {
     const onDatasetUrlChange = vi.fn()
     const onShouldLoadMorphologyChange = vi.fn()
     const onBoundaryCellLimitChange = vi.fn()
+    const onVisiumHdTwoMicrometerBudgetInputChange = vi.fn()
     const onRunDatasetDiagnostics = vi.fn()
     const onDownloadDiagnostics = vi.fn()
     const onClearDebugLog = vi.fn()
@@ -22,8 +23,10 @@ describe('DatasetHudPanel', () => {
         morphologyInputId="morphology"
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
+        visiumHdTwoMicrometerBudgetInputId="visium-2um-budget"
         datasetUrl="https://example.test/output"
         shouldLoadMorphology={false}
+        visiumHdTwoMicrometerBudgetInput=""
         morphologyLabel="Morphology image"
         boundaryCellLimit={50000}
         maxBoundaryCellLimit={100000}
@@ -38,6 +41,9 @@ describe('DatasetHudPanel', () => {
         onDatasetUrlChange={onDatasetUrlChange}
         onShouldLoadMorphologyChange={onShouldLoadMorphologyChange}
         onBoundaryCellLimitChange={onBoundaryCellLimitChange}
+        onVisiumHdTwoMicrometerBudgetInputChange={
+          onVisiumHdTwoMicrometerBudgetInputChange
+        }
         onVisiumHdBinSizeChange={vi.fn()}
         onRunDatasetDiagnostics={onRunDatasetDiagnostics}
         onDownloadDiagnostics={onDownloadDiagnostics}
@@ -52,6 +58,9 @@ describe('DatasetHudPanel', () => {
     fireEvent.change(screen.getByLabelText('Boundary limit'), {
       target: { value: '2500' },
     })
+    fireEvent.change(screen.getByLabelText('2 µm budget'), {
+      target: { value: '25000' },
+    })
     fireEvent.submit(
       screen.getByRole('button', { name: 'Load Dataset' }).closest('form')!,
     )
@@ -62,6 +71,7 @@ describe('DatasetHudPanel', () => {
     expect(onDatasetUrlChange).toHaveBeenCalledWith('https://example.test/next')
     expect(onShouldLoadMorphologyChange).toHaveBeenCalledWith(true)
     expect(onBoundaryCellLimitChange).toHaveBeenCalledWith(2500)
+    expect(onVisiumHdTwoMicrometerBudgetInputChange).toHaveBeenCalledWith('25000')
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onRunDatasetDiagnostics).toHaveBeenCalledTimes(1)
     expect(onDownloadDiagnostics).toHaveBeenCalledTimes(1)
@@ -78,8 +88,10 @@ describe('DatasetHudPanel', () => {
         morphologyInputId="morphology"
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
+        visiumHdTwoMicrometerBudgetInputId="visium-2um-budget"
         datasetUrl="https://example.test/visium"
         shouldLoadMorphology
+        visiumHdTwoMicrometerBudgetInput=""
         morphologyLabel="Tissue image"
         boundaryCellLimit={50000}
         maxBoundaryCellLimit={100000}
@@ -109,6 +121,7 @@ describe('DatasetHudPanel', () => {
         onDatasetUrlChange={vi.fn()}
         onShouldLoadMorphologyChange={vi.fn()}
         onBoundaryCellLimitChange={vi.fn()}
+        onVisiumHdTwoMicrometerBudgetInputChange={vi.fn()}
         onVisiumHdBinSizeChange={onVisiumHdBinSizeChange}
         onRunDatasetDiagnostics={vi.fn()}
         onDownloadDiagnostics={vi.fn()}
@@ -128,5 +141,59 @@ describe('DatasetHudPanel', () => {
     expect(onVisiumHdBinSizeChange).toHaveBeenCalledWith(8)
     expect(screen.getByRole('button', { name: '2 µm' })).toBeDisabled()
     expect(screen.getByText(VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON)).toBeInTheDocument()
+  })
+
+  it('forwards 2 µm bin changes when the tier is budget-enabled', () => {
+    const onVisiumHdBinSizeChange = vi.fn()
+
+    render(
+      <DatasetHudPanel
+        active
+        datasetInputId="dataset-url"
+        morphologyInputId="morphology"
+        boundaryLimitInputId="boundary-limit"
+        visiumHdBinSizeInputId="visium-bin-size"
+        visiumHdTwoMicrometerBudgetInputId="visium-2um-budget"
+        datasetUrl="https://example.test/visium"
+        shouldLoadMorphology
+        visiumHdTwoMicrometerBudgetInput="25000"
+        morphologyLabel="Tissue image"
+        boundaryCellLimit={50000}
+        maxBoundaryCellLimit={100000}
+        boundaryControlsDisabled
+        isLoading={false}
+        diagnosticsState={{ status: 'idle' }}
+        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
+        visiumHdControlState={{
+          status: 'ready',
+          url: 'https://example.test/visium',
+          selectedBinSize: 16,
+          binCount: 54_504,
+          options: [
+            { size: 16, available: true, disabled: false, binCount: 54_504 },
+            { size: 8, available: true, disabled: false },
+            { size: 2, available: true, disabled: false },
+          ],
+        }}
+        activeErrors={[]}
+        debugLog={[]}
+        onSubmit={vi.fn()}
+        onDatasetUrlChange={vi.fn()}
+        onShouldLoadMorphologyChange={vi.fn()}
+        onBoundaryCellLimitChange={vi.fn()}
+        onVisiumHdTwoMicrometerBudgetInputChange={vi.fn()}
+        onVisiumHdBinSizeChange={onVisiumHdBinSizeChange}
+        onRunDatasetDiagnostics={vi.fn()}
+        onDownloadDiagnostics={vi.fn()}
+        onClearDebugLog={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '2 µm' }))
+
+    expect(onVisiumHdBinSizeChange).toHaveBeenCalledWith(2)
+    expect(
+      screen.queryByText(VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON),
+    ).not.toBeInTheDocument()
   })
 })

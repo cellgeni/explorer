@@ -21,6 +21,7 @@ import {
 import {
   VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
   VisiumHdTwoMicrometerOverviewDisabledError,
+  normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget,
 } from './visiumHdStrategy'
 import { micrometers } from '../data/coords'
 import {
@@ -218,6 +219,7 @@ export const DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET = 128 * 1024 * 1024
 export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   readonly baseUrl: string
   readonly bins: readonly VisiumHdBinDescriptor[]
+  readonly maxTwoMicrometerFilteredBarcodes: number | undefined
   private readonly defaultBinSizeMicrometers: VisiumHdBinSizeMicrometers
   private readonly fetcher: typeof fetch
   private readonly tissuePositionsReader: (
@@ -249,7 +251,6 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     genes: readonly string[],
     options: VisiumFeatureSliceReadOptions,
   ) => Promise<GexResult<SpatialElementId>>
-  private readonly maxTwoMicrometerFilteredBarcodes: number | undefined
   private readonly maxInteractiveMatrixBytes: number
   private readonly maxInteractiveFeatureSliceBytes: number
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
@@ -285,7 +286,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
     this.featureSliceReader = options.featureSliceReader ?? gexFromVisiumFeatureSliceH5
-    this.maxTwoMicrometerFilteredBarcodes = options.maxTwoMicrometerFilteredBarcodes
+    this.maxTwoMicrometerFilteredBarcodes =
+      normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(
+        options.maxTwoMicrometerFilteredBarcodes,
+      )
     this.maxInteractiveMatrixBytes =
       options.maxInteractiveMatrixBytes ??
       DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET

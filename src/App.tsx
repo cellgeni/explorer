@@ -138,7 +138,11 @@ import type {
   DatasetWarmupState,
   MorphologyLoadState,
 } from './features/dataset/datasetLoadModel'
-import type { VisiumHdControlState } from './features/dataset/visiumHdModel'
+import {
+  parseVisiumHdTwoMicrometerBudgetInput,
+  updateVisiumHdBinOptionsForTwoMicrometerBudget,
+  type VisiumHdControlState,
+} from './features/dataset/visiumHdModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import {
   normalizeTranscriptExactPointLimit,
@@ -516,6 +520,8 @@ export function App({
   const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>({
     status: 'idle',
   })
+  const [visiumHdTwoMicrometerBudgetInput, setVisiumHdTwoMicrometerBudgetInput] =
+    useState('')
   const loadRequestId = useRef(0)
   const visiumHdBinRequestId = useRef(0)
   const analysisEmbeddingRequestId = useRef(0)
@@ -594,6 +600,10 @@ export function App({
       ? undefined
       : visiumHdControlState.selectedBinSize
   const activeVisiumHdBinSize = diagnosticsVisiumHdBinSize
+  const visiumHdTwoMicrometerFilteredBarcodeBudget = useMemo(
+    () => parseVisiumHdTwoMicrometerBudgetInput(visiumHdTwoMicrometerBudgetInput),
+    [visiumHdTwoMicrometerBudgetInput],
+  )
   const activeVisiumHdRoiState: VisiumHdRoiState =
     isVisiumHdDataset &&
     loadState.status === 'ready' &&
@@ -626,6 +636,22 @@ export function App({
     ],
     [customMorphologyLayers, morphologyImage],
   )
+  const handleVisiumHdTwoMicrometerBudgetInputChange = useCallback((value: string) => {
+    const nextBudget = parseVisiumHdTwoMicrometerBudgetInput(value)
+
+    setVisiumHdTwoMicrometerBudgetInput(value)
+    setVisiumHdControlState((current) =>
+      current.status === 'idle'
+        ? current
+        : {
+            ...current,
+            options: updateVisiumHdBinOptionsForTwoMicrometerBudget(
+              current.options,
+              nextBudget,
+            ),
+          },
+    )
+  }, [])
   const customImageUrls = useMemo(
     () => customMorphologyLayers.map((layer) => layer.image.url),
     [customMorphologyLayers],
@@ -1237,7 +1263,13 @@ export function App({
         return loadGeneExpression(baseUrl, bbox, genes, options)
       }
 
-      const dataset = await getSpatialDataset(baseUrl)
+      const dataset =
+        visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
+          ? await getSpatialDataset(baseUrl)
+          : await getSpatialDataset(baseUrl, {
+              visiumHdMaxTwoMicrometerFilteredBarcodes:
+                visiumHdTwoMicrometerFilteredBarcodeBudget,
+            })
 
       if (!isSpatialGeneExpressionDataset(dataset)) {
         throw new Error('Loaded dataset does not expose selected-gene expression.')
@@ -1250,7 +1282,13 @@ export function App({
           : { binSizeMicrometers: activeVisiumHdBinSize }),
       })
     },
-    [activeVisiumHdBinSize, getSpatialDataset, isVisiumHdDataset, loadGeneExpression],
+    [
+      activeVisiumHdBinSize,
+      getSpatialDataset,
+      isVisiumHdDataset,
+      loadGeneExpression,
+      visiumHdTwoMicrometerFilteredBarcodeBudget,
+    ],
   )
 
   const toggleGene = useCallback(
@@ -1665,6 +1703,7 @@ export function App({
     lastViewportDetailRef,
     detectSpatialDataset,
     getSpatialDataset,
+    visiumHdTwoMicrometerFilteredBarcodeBudget,
     loadAnnotationGroups,
     loadDatasetOverview,
     loadGenePanel,
@@ -1764,6 +1803,7 @@ export function App({
     loadedDatasetUrl,
     onBeforeBinSizeChange: clearVisiumHdRoiState,
     shouldLoadMorphology,
+    visiumHdTwoMicrometerFilteredBarcodeBudget,
     visiumHdControlState,
     visiumHdBinRequestIdRef: visiumHdBinRequestId,
     geneExpressionAbortRef,
@@ -1851,8 +1891,12 @@ export function App({
           setDatasetUrl={setDatasetUrl}
           setDebugLog={setDebugLog}
           setShouldLoadMorphology={setShouldLoadMorphology}
+          onVisiumHdTwoMicrometerBudgetInputChange={
+            handleVisiumHdTwoMicrometerBudgetInputChange
+          }
           shouldLoadMorphology={shouldLoadMorphology}
           visiumHdControlState={visiumHdControlState}
+          visiumHdTwoMicrometerBudgetInput={visiumHdTwoMicrometerBudgetInput}
         />
 
         <AppLayerHudPanel

@@ -57,6 +57,7 @@ function Probe({
   getSpatialDataset = vi.fn(async () => {
     throw new Error('unused')
   }),
+  visiumHdTwoMicrometerFilteredBarcodeBudget,
   loadAnnotationGroups = vi.fn(async () => []),
   loadDatasetOverview = vi.fn(async () => []),
   loadGenePanel = vi.fn(async () => []),
@@ -74,6 +75,7 @@ function Probe({
   readonly refs: ReturnType<typeof createLifecycleRefs>
   readonly detectSpatialDataset?: LifecycleOptions['detectSpatialDataset']
   readonly getSpatialDataset?: LifecycleOptions['getSpatialDataset']
+  readonly visiumHdTwoMicrometerFilteredBarcodeBudget?: LifecycleOptions['visiumHdTwoMicrometerFilteredBarcodeBudget']
   readonly loadAnnotationGroups?: LifecycleOptions['loadAnnotationGroups']
   readonly loadDatasetOverview?: LifecycleOptions['loadDatasetOverview']
   readonly loadGenePanel?: LifecycleOptions['loadGenePanel']
@@ -120,6 +122,7 @@ function Probe({
     lastViewportDetailRef: { current: null },
     detectSpatialDataset,
     getSpatialDataset,
+    visiumHdTwoMicrometerFilteredBarcodeBudget,
     loadAnnotationGroups,
     loadDatasetOverview,
     loadGenePanel,
@@ -453,5 +456,117 @@ describe('useDatasetLifecycle', () => {
       status: 'ready',
       url: `${datasetUrl}/binned_outputs/square_016um/spatial/tissue_hires_image.png`,
     })
+  })
+
+  it('enables the 2 µm Visium HD tier when the dataset exposes a filtered-barcode budget', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const datasetUrl = 'https://example.test/visium'
+    const grid: SpatialGrid = {
+      id: 'visium-hd-square-016um',
+      binSizeMicrometers: micrometers(16),
+      basis: {
+        origin: { x: micrometers(8), y: micrometers(8) },
+        rowStep: { x: micrometers(0), y: micrometers(16) },
+        colStep: { x: micrometers(16), y: micrometers(0) },
+      },
+      bounds: { minRow: 0, maxRow: 0, minCol: 0, maxCol: 0 },
+    }
+    const overview: VisiumHdBinnedOverview = {
+      binSizeMicrometers: 16,
+      scalefactors: {
+        micronsPerPixel: 0.5,
+        tissueHiresScale: 0.2,
+        tissueLowresScale: 0.02,
+      },
+      grid,
+      gridCells: {
+        kind: 'grid-cells',
+        gridId: grid.id,
+        ids: ['BC-1'],
+        rows: new Int32Array([0]),
+        cols: new Int32Array([0]),
+      },
+      fullresRows: new Float64Array([16]),
+      fullresCols: new Float64Array([16]),
+      inTissue: new Uint8Array([1]),
+      sourcePaths: {
+        tissuePositions: 'binned_outputs/square_016um/spatial/tissue_positions.parquet',
+        scalefactors: 'binned_outputs/square_016um/spatial/scalefactors_json.json',
+        tissueHiresImage: 'binned_outputs/square_016um/spatial/tissue_hires_image.png',
+        tissueLowresImage: 'binned_outputs/square_016um/spatial/tissue_lowres_image.png',
+        filteredMatrixH5: 'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+      },
+    }
+    const dataset = {
+      maxTwoMicrometerFilteredBarcodes: 25_000,
+      annotations: vi.fn(async () => []),
+      elements: vi.fn(async () => ({ elements: [] })),
+      image: vi.fn(async () => null),
+      matrix: vi.fn(async () => {
+        throw new Error('unused')
+      }),
+      meta: vi.fn(async () => ({
+        platform: 'visium-hd' as const,
+        units: {
+          dataUnit: 'micrometer' as const,
+          imageUnit: 'pixel' as const,
+          micrometersPerPixel: micrometers(0.5),
+          origin: 'top-left' as const,
+          imageYAxis: 'down' as const,
+        },
+        extent: {
+          minX: micrometers(0),
+          maxX: micrometers(16),
+          minY: micrometers(0),
+          maxY: micrometers(16),
+        },
+        capabilities: {
+          transcripts: false,
+          cellBoundaries: false,
+          pyramidImage: false,
+          multiChannel: false,
+        },
+        grids: [grid],
+      })),
+      readBinnedOverview: vi.fn(async () => overview),
+    }
+    const getSpatialDataset = vi.fn(async () => dataset)
+    const setVisiumHdControlState = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'visium-hd' as const,
+          baseUrl: datasetUrl,
+          bins: [visiumBinDescriptor(16), visiumBinDescriptor(8), visiumBinDescriptor(2)],
+          checked: [],
+        }))}
+        getSpatialDataset={getSpatialDataset}
+        visiumHdTwoMicrometerFilteredBarcodeBudget={25_000}
+        setVisiumHdControlState={setVisiumHdControlState}
+        startDatasetLoadRef={startDatasetLoadRef}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(datasetUrl, false)
+    })
+
+    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl, {
+      visiumHdMaxTwoMicrometerFilteredBarcodes: 25_000,
+    })
+    expect(setVisiumHdControlState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: [
+          expect.objectContaining({ size: 16, available: true, disabled: false }),
+          expect.objectContaining({ size: 8, available: true, disabled: false }),
+          expect.objectContaining({ size: 2, available: true, disabled: false }),
+        ],
+      }),
+    )
   })
 })

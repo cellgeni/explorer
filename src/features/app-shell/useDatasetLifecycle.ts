@@ -155,6 +155,7 @@ interface UseDatasetLifecycleOptions {
   readonly lastViewportDetailRef: MutableRef<ViewerViewportDetail | null>
   readonly detectSpatialDataset: SpatialDatasetDetector
   readonly getSpatialDataset: SpatialDatasetLoader
+  readonly visiumHdTwoMicrometerFilteredBarcodeBudget?: number | undefined
   readonly loadAnnotationGroups: AnnotationGroupLoader
   readonly loadDatasetOverview: DatasetOverviewLoader
   readonly loadGenePanel: GenePanelLoader
@@ -292,6 +293,7 @@ export function useDatasetLifecycle({
   lastViewportDetailRef,
   detectSpatialDataset,
   getSpatialDataset,
+  visiumHdTwoMicrometerFilteredBarcodeBudget,
   loadAnnotationGroups,
   loadDatasetOverview,
   loadGenePanel,
@@ -684,7 +686,13 @@ export function useDatasetLifecycle({
 
         if (detection.platform === 'visium-hd') {
           setDatasetPlatform('visium-hd')
-          const dataset = await getSpatialDataset(detection.baseUrl)
+          const dataset =
+            visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
+              ? await getSpatialDataset(detection.baseUrl)
+              : await getSpatialDataset(detection.baseUrl, {
+                  visiumHdMaxTwoMicrometerFilteredBarcodes:
+                    visiumHdTwoMicrometerFilteredBarcodeBudget,
+                })
 
           if (!isVisiumHdOverviewDataset(dataset)) {
             throw new Error('Detected Visium HD dataset does not expose binned outputs.')
@@ -748,6 +756,10 @@ export function useDatasetLifecycle({
               requestedUrl,
               detection.bins.map((bin) => bin.binSizeMicrometers),
               overview,
+              {
+                twoMicrometerFilteredBarcodeBudget:
+                  dataset.maxTwoMicrometerFilteredBarcodes,
+              },
             ),
           )
           initialShareableStateRef.current = null

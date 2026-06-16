@@ -9,8 +9,9 @@ that file is too large for the same eager overview path used by 16 µm and 8 µm
 
 - Dataset detection may still report the 2 µm tier when the Space Ranger files
   are present.
-- The Dataset tab keeps 2 µm visible but disabled unless a later UI path supplies
-  an explicit rendering budget.
+- The Dataset tab keeps 2 µm visible but disabled unless the dataset loader is
+  created with an explicit filtered-barcode rendering budget from the UI or
+  environment.
 - `VisiumHdDataset.readBinnedOverview(2)` rejects by default before reading
   `tissue_positions.parquet`.
 - When `maxTwoMicrometerFilteredBarcodes` is configured, the dataset can build a
@@ -28,8 +29,32 @@ represent in-tissue bins and avoid materializing out-of-tissue positions. If the
 barcode count exceeds the supplied budget, parsing fails with
 `VisiumHdFilteredBarcodeBudgetExceededError`.
 
-## Next Enablement Step
+## UI Enablement
 
-To expose 2 µm in the UI, add an explicit budget control or viewport-scoped mode
-that passes `maxTwoMicrometerFilteredBarcodes` and keeps large reference datasets
-disabled with the current explanatory reason.
+The app enables the 2 µm segmented control when the constructed
+`VisiumHdDataset` exposes `maxTwoMicrometerFilteredBarcodes`. The default
+production loader leaves this unset, so the public reference dataset remains
+disabled with the explanatory reason.
+
+The Dataset HUD exposes a `2 µm budget` numeric field. Leaving it blank uses the
+build-time default. Entering a positive integer passes that runtime value to the
+cached dataset loader as `visiumHdMaxTwoMicrometerFilteredBarcodes`, and dataset
+cache entries are keyed by the effective budget so switching budgets rebuilds the
+Visium HD dataset safely.
+
+For controlled deployments or tests, set
+`VITE_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES` to a positive integer. The
+constant `VISIUM_HD_TWO_MICROMETER_FILTERED_BARCODE_BUDGET_ENV` reads that key.
+The UI value takes precedence when present; otherwise the loader passes the env
+value into `VisiumHdDataset`, and the Dataset tab allows the 2 µm tier to be
+selected. The current gzip reader still buffers
+`barcodes.tsv.gz`, so do not enable this for large hosted datasets until a
+streaming or viewport-scoped barcode path is available.
+
+## Barcode Mapping Bridge
+
+`barcode_mappings.parquet` is the bridge from 2 µm squares to coarser 8 µm and
+16 µm squares and segmented cell assignments. The first Slice 8 reader projects
+only `square_002um`, `square_008um`, `square_016um`, `cell_id`, `in_nucleus`,
+and `in_cell`, and requires an explicit row budget. It is a foundation for
+future bin-to-cell workflows; it is not used for default rendering yet.

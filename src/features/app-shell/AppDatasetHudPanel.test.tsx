@@ -18,6 +18,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       datasetInputId: 'dataset-url',
       morphologyInputId: 'morphology',
       visiumHdBinSizeInputId: 'visium-bin-size',
+      visiumHdTwoMicrometerBudgetInputId: 'visium-2um-budget',
     },
     datasetUrl: 'https://example.test/output',
     debugLog: [],
@@ -34,8 +35,10 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     setDatasetUrl: vi.fn(),
     setDebugLog: vi.fn(),
     setShouldLoadMorphology: vi.fn(),
+    onVisiumHdTwoMicrometerBudgetInputChange: vi.fn(),
     shouldLoadMorphology: true,
     visiumHdControlState: { status: 'idle' },
+    visiumHdTwoMicrometerBudgetInput: '',
     ...overrides,
   }
 }
@@ -53,6 +56,9 @@ describe('AppDatasetHudPanel', () => {
     fireEvent.change(screen.getByLabelText('Boundary limit'), {
       target: { value: '100001' },
     })
+    fireEvent.change(screen.getByLabelText('2 µm budget'), {
+      target: { value: '25000' },
+    })
 
     expect(props.setDatasetUrl).toHaveBeenCalledWith('https://example.test/next')
     expect(props.setShouldLoadMorphology).toHaveBeenCalledWith(false)
@@ -61,6 +67,13 @@ describe('AppDatasetHudPanel', () => {
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Boundary limit: 100,000', {
       coalesceKey: 'boundary-limit',
     })
+    expect(props.onVisiumHdTwoMicrometerBudgetInputChange).toHaveBeenCalledWith('25000')
+    expect(props.appendDebugEvent).toHaveBeenCalledWith(
+      'Visium HD 2 µm budget: 25,000 barcodes',
+      {
+        coalesceKey: 'visium-hd-2um-budget',
+      },
+    )
   })
 
   it('runs async diagnostics without leaking the promise into the button handler', () => {

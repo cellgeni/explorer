@@ -18,3 +18,25 @@ export class VisiumHdFilteredBarcodeBudgetExceededError extends Error {
     )
   }
 }
+
+export function normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(
+  value: number | undefined,
+): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!Number.isFinite(value) || value < 1) {
+    throw new RangeError(
+      `2 µm filtered barcode budget must be a positive finite number, received ${value}.`,
+    )
+  }
+
+  return Math.floor(value)
+}
+
+export function hasVisiumHdTwoMicrometerFilteredBarcodeBudget(
+  value: number | undefined,
+): value is number {
+  return value !== undefined && Number.isFinite(value) && Math.floor(value) >= 1
+}

@@ -1008,7 +1008,7 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       Reuse ROI geometry for bin selection and export selected barcodes. Load
       binned `analysis/umap/gene_expression_2_components/projection.csv` when
       present, keyed by barcode rather than cell ID.
-- [ ] Slice 7: 2 µm strategy.
+- [x] Slice 7: 2 µm strategy.
       Do not load all 11.2M position rows for first paint. Prefer filtered
       matrix barcodes plus the derived affine array-to-image transform, or a
       separate viewport/tiled strategy, before enabling 2 µm rendering.
@@ -1198,15 +1198,38 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       cache `filtered_feature_bc_matrix/barcodes.tsv.gz`; and pure helpers can
       derive finer affine grid bases from coarser loaded tiers and build
       columnar binned overviews from filtered barcodes without reading the full
-      2 µm `tissue_positions.parquet`. The UI still keeps 2 µm rendering
-      disabled until a viewport or barcode-count budget is wired in.
+      2 µm `tissue_positions.parquet`. At this point the UI still kept 2 µm
+      rendering disabled until a viewport or barcode-count budget was wired in.
 - [x] Added the first budgeted 2 µm dataset path and documentation. When
       `maxTwoMicrometerFilteredBarcodes` is configured, `VisiumHdDataset` can
       satisfy `readBinnedOverview(2)` from filtered matrix barcodes and a
       coarser 8/16 µm affine basis; over-budget barcode sidecars fail with a
       typed `VisiumHdFilteredBarcodeBudgetExceededError`. Documented the
-      current contract and next UI enablement step in
+      current contract and UI enablement behavior in
       `docs/visium-hd-2um-strategy.md`.
+- [x] Closed the missing Slice 7 UI-budget wiring. `VisiumHdDataset` now exposes
+      its normalized `maxTwoMicrometerFilteredBarcodes` value, the Visium HD bin
+      controls enable 2 µm only when that explicit budget is present, and the
+      default production loader keeps 2 µm disabled unless
+      `VITE_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES` is set. The strategy
+      doc calls out that the current gzip barcode reader still buffers the
+      sidecar, so large hosted datasets should remain disabled until a streaming
+      or viewport-scoped barcode path is implemented.
+- [x] Added a runtime Dataset HUD control for the same 2 µm filtered-barcode
+      budget. The `2 µm budget` field accepts a positive integer, passes it into
+      the cached Visium HD dataset loader as
+      `visiumHdMaxTwoMicrometerFilteredBarcodes`, and re-evaluates the Visium HD
+      bin options so the 2 µm tier becomes selectable without rebuilding the app.
+      Leaving the field blank falls back to the build-time
+      `VISIUM_HD_TWO_MICROMETER_FILTERED_BARCODE_BUDGET_ENV` /
+      `VITE_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES` default.
+- [x] Started Slice 8 with a budgeted `barcode_mappings.parquet` reader. The
+      new parser validates `square_002um`, `square_008um`, `square_016um`,
+      nullable `cell_id`, and `in_nucleus`/`in_cell` flags, while the reader
+      projects only those columns and requires an explicit `maxRows` budget
+      before touching the hosted mapping file. This creates the typed
+      bin-to-cell bridge needed for future segmented-output workflows without
+      changing default rendering or enabling unbounded mapping scans.
 
 ### Definition Of Done For The First Visium HD MVP
 

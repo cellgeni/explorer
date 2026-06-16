@@ -42,6 +42,7 @@ import {
   cachedSpatialDataset,
   detectSpatialDataset,
   type AnySpatialDataset,
+  type CachedSpatialDatasetOptions,
   type DetectSpatialDatasetOptions,
   type SpatialDatasetDetection,
 } from '../../datasets/datasetFactory'
@@ -205,7 +206,10 @@ export type SpatialDatasetDetector = (
   baseUrl: string,
   options?: DetectSpatialDatasetOptions,
 ) => Promise<SpatialDatasetDetection>
-export type SpatialDatasetLoader = (baseUrl: string) => Promise<AnySpatialDataset>
+export type SpatialDatasetLoader = (
+  baseUrl: string,
+  options?: CachedSpatialDatasetOptions,
+) => Promise<AnySpatialDataset>
 
 export interface AppProps {
   readonly loadDatasetOverview?: DatasetOverviewLoader

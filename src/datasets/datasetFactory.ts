@@ -1,5 +1,6 @@
 import { datasetFileUrl } from '../data/datasetFiles'
 import type { CellId } from '../data/cellid'
+import { normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget } from './visiumHdStrategy'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
 
@@ -37,6 +38,14 @@ export interface DetectSpatialDatasetOptions {
   readonly signal?: AbortSignal
 }
 
+export interface CreateSpatialDatasetOptions extends DetectSpatialDatasetOptions {
+  readonly visiumHdMaxTwoMicrometerFilteredBarcodes?: number
+}
+
+export interface CachedSpatialDatasetOptions {
+  readonly visiumHdMaxTwoMicrometerFilteredBarcodes?: number
+}
+
 const VISIUM_HD_BINS: readonly {
   readonly size: VisiumHdBinSizeMicrometers
   readonly outputPath: string
@@ -46,6 +55,10 @@ const VISIUM_HD_BINS: readonly {
   { size: 16, outputPath: 'binned_outputs/square_016um' },
 ]
 
+const VISIUM_HD_TWO_MICROMETER_FILTERED_BARCODE_BUDGET_ENV =
+  'VITE_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES'
+const DEFAULT_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES =
+  readDefaultTwoMicrometerFilteredBarcodeBudget()
 const spatialDatasetCache = new Map<string, Promise<AnySpatialDataset>>()
 
 export async function detectSpatialDataset(
@@ -121,7 +134,7 @@ export async function detectSpatialDataset(
 
 export async function createSpatialDataset(
   baseUrl: string,
-  options: DetectSpatialDatasetOptions = {},
+  options: CreateSpatialDatasetOptions = {},
 ): Promise<AnySpatialDataset> {
   const detection = await detectSpatialDataset(baseUrl, options)
 
@@ -135,28 +148,50 @@ export async function createSpatialDataset(
     return new VisiumHdDataset({
       baseUrl: detection.baseUrl,
       bins: detection.bins,
+      ...(options.visiumHdMaxTwoMicrometerFilteredBarcodes === undefined
+        ? {}
+        : {
+            maxTwoMicrometerFilteredBarcodes:
+              options.visiumHdMaxTwoMicrometerFilteredBarcodes,
+          }),
     })
   }
 
   throw new Error('Unsupported spatial dataset layout.')
 }
 
-export function cachedSpatialDataset(baseUrl: string): Promise<AnySpatialDataset> {
+export function cachedSpatialDataset(
+  baseUrl: string,
+  options: CachedSpatialDatasetOptions = {},
+): Promise<AnySpatialDataset> {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
-  const existing = spatialDatasetCache.get(normalizedBaseUrl)
+  const maxTwoMicrometerFilteredBarcodes =
+    options.visiumHdMaxTwoMicrometerFilteredBarcodes ??
+    DEFAULT_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES
+  const cacheKey = spatialDatasetCacheKey(
+    normalizedBaseUrl,
+    maxTwoMicrometerFilteredBarcodes,
+  )
+  const existing = spatialDatasetCache.get(cacheKey)
 
   if (existing !== undefined) {
     return existing
   }
 
-  const promise = createSpatialDataset(normalizedBaseUrl).catch((error: unknown) => {
-    if (spatialDatasetCache.get(normalizedBaseUrl) === promise) {
-      spatialDatasetCache.delete(normalizedBaseUrl)
+  const promise = createSpatialDataset(normalizedBaseUrl, {
+    ...(maxTwoMicrometerFilteredBarcodes === undefined
+      ? {}
+      : {
+          visiumHdMaxTwoMicrometerFilteredBarcodes: maxTwoMicrometerFilteredBarcodes,
+        }),
+  }).catch((error: unknown) => {
+    if (spatialDatasetCache.get(cacheKey) === promise) {
+      spatialDatasetCache.delete(cacheKey)
     }
 
     throw error
   })
-  spatialDatasetCache.set(normalizedBaseUrl, promise)
+  spatialDatasetCache.set(cacheKey, promise)
   return promise
 }
 
@@ -191,4 +226,21 @@ async function probeDatasetPath(
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
+}
+
+function spatialDatasetCacheKey(
+  baseUrl: string,
+  visiumHdMaxTwoMicrometerFilteredBarcodes: number | undefined,
+): string {
+  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}`
+}
+
+function readDefaultTwoMicrometerFilteredBarcodeBudget(): number | undefined {
+  const rawBudget = import.meta.env[VISIUM_HD_TWO_MICROMETER_FILTERED_BARCODE_BUDGET_ENV]
+
+  if (typeof rawBudget !== 'string' || rawBudget.trim() === '') {
+    return undefined
+  }
+
+  return normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(Number(rawBudget))
 }
