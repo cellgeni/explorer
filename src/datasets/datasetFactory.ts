@@ -6,6 +6,17 @@ import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visium
 
 export type AnySpatialDataset = SpatialDataset<CellId> | SpatialDataset<SpatialElementId>
 
+export interface VisiumHdSegmentedOutputPaths {
+  readonly scalefactorsPath?: string
+  readonly filteredFeatureCellMatrixH5Path?: string
+  readonly rawFeatureCellMatrixH5Path?: string
+  readonly cellSegmentationsGeojsonPath?: string
+  readonly nucleusSegmentationsGeojsonPath?: string
+  readonly nucleusInstanceMaskTiffPath?: string
+  readonly graphclustAnnotatedCellSegmentationsGeojsonPath?: string
+  readonly graphclustAnnotatedNucleusSegmentationsGeojsonPath?: string
+}
+
 export type SpatialDatasetDetection =
   | {
       readonly platform: 'xenium'
@@ -17,6 +28,7 @@ export type SpatialDatasetDetection =
       readonly baseUrl: string
       readonly bins: readonly VisiumHdBinDescriptor[]
       readonly segmentedScalefactorsPath?: string
+      readonly segmentedOutputs?: VisiumHdSegmentedOutputPaths
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
@@ -54,6 +66,44 @@ const VISIUM_HD_BINS: readonly {
   { size: 8, outputPath: 'binned_outputs/square_008um' },
   { size: 16, outputPath: 'binned_outputs/square_016um' },
 ]
+
+const VISIUM_HD_SEGMENTED_OUTPUT_PROBES = [
+  {
+    key: 'scalefactorsPath',
+    path: 'segmented_outputs/spatial/scalefactors_json.json',
+  },
+  {
+    key: 'filteredFeatureCellMatrixH5Path',
+    path: 'segmented_outputs/filtered_feature_cell_matrix.h5',
+  },
+  {
+    key: 'rawFeatureCellMatrixH5Path',
+    path: 'segmented_outputs/raw_feature_cell_matrix.h5',
+  },
+  {
+    key: 'cellSegmentationsGeojsonPath',
+    path: 'segmented_outputs/cell_segmentations.geojson',
+  },
+  {
+    key: 'nucleusSegmentationsGeojsonPath',
+    path: 'segmented_outputs/nucleus_segmentations.geojson',
+  },
+  {
+    key: 'nucleusInstanceMaskTiffPath',
+    path: 'segmented_outputs/nucleus_instance_mask.tiff',
+  },
+  {
+    key: 'graphclustAnnotatedCellSegmentationsGeojsonPath',
+    path: 'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
+  },
+  {
+    key: 'graphclustAnnotatedNucleusSegmentationsGeojsonPath',
+    path: 'segmented_outputs/graphclust_annotated_nucleus_segmentations.geojson',
+  },
+] as const satisfies readonly {
+  readonly key: keyof VisiumHdSegmentedOutputPaths
+  readonly path: string
+}[]
 
 const VISIUM_HD_TWO_MICROMETER_FILTERED_BARCODE_BUDGET_ENV =
   'VITE_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES'
@@ -106,21 +156,23 @@ export async function detectSpatialDataset(
     }
   }
 
-  const segmentedScalefactors = await probeDatasetPath(
-    normalizedBaseUrl,
-    'segmented_outputs/spatial/scalefactors_json.json',
-    options,
+  const segmentedOutputProbes = await Promise.all(
+    VISIUM_HD_SEGMENTED_OUTPUT_PROBES.map((probe) =>
+      probeDatasetPath(normalizedBaseUrl, probe.path, options),
+    ),
   )
-  checked.push(segmentedScalefactors)
+  checked.push(...segmentedOutputProbes)
+  const segmentedOutputs = segmentedOutputPathsFromProbes(segmentedOutputProbes)
 
   if (bins.length > 0) {
     return {
       platform: 'visium-hd',
       baseUrl: normalizedBaseUrl,
       bins,
-      ...(segmentedScalefactors.ok
-        ? { segmentedScalefactorsPath: segmentedScalefactors.path }
-        : {}),
+      ...(segmentedOutputs.scalefactorsPath === undefined
+        ? {}
+        : { segmentedScalefactorsPath: segmentedOutputs.scalefactorsPath }),
+      ...(hasSegmentedOutputPaths(segmentedOutputs) ? { segmentedOutputs } : {}),
       checked,
     }
   }
@@ -226,6 +278,32 @@ async function probeDatasetPath(
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
+}
+
+function segmentedOutputPathsFromProbes(
+  probes: readonly DatasetProbeResult[],
+): VisiumHdSegmentedOutputPaths {
+  const paths: Partial<Record<keyof VisiumHdSegmentedOutputPaths, string>> = {}
+
+  for (const probe of probes) {
+    if (!probe.ok) {
+      continue
+    }
+
+    const descriptor = VISIUM_HD_SEGMENTED_OUTPUT_PROBES.find(
+      (candidate) => candidate.path === probe.path,
+    )
+
+    if (descriptor !== undefined) {
+      paths[descriptor.key] = probe.path
+    }
+  }
+
+  return paths
+}
+
+function hasSegmentedOutputPaths(paths: VisiumHdSegmentedOutputPaths): boolean {
+  return Object.values(paths).some((path) => path !== undefined)
 }
 
 function spatialDatasetCacheKey(

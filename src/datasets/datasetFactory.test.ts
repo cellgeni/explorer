@@ -16,7 +16,7 @@ describe('spatial dataset detection', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
-  it('detects Visium HD binned outputs and segmented scalefactors', async () => {
+  it('detects Visium HD binned outputs and segmented output sidecars', async () => {
     const fetcher = fetcherForOkPaths([
       '/visium/binned_outputs/square_002um/spatial/tissue_positions.parquet',
       '/visium/binned_outputs/square_002um/spatial/scalefactors_json.json',
@@ -28,6 +28,8 @@ describe('spatial dataset detection', () => {
       '/visium/binned_outputs/square_016um/spatial/scalefactors_json.json',
       '/visium/binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
       '/visium/segmented_outputs/spatial/scalefactors_json.json',
+      '/visium/segmented_outputs/filtered_feature_cell_matrix.h5',
+      '/visium/segmented_outputs/cell_segmentations.geojson',
     ])
 
     const detection = await detectSpatialDataset('https://example.test/visium/', {
@@ -38,6 +40,12 @@ describe('spatial dataset detection', () => {
       platform: 'visium-hd',
       baseUrl: 'https://example.test/visium',
       segmentedScalefactorsPath: 'segmented_outputs/spatial/scalefactors_json.json',
+      segmentedOutputs: {
+        scalefactorsPath: 'segmented_outputs/spatial/scalefactors_json.json',
+        filteredFeatureCellMatrixH5Path:
+          'segmented_outputs/filtered_feature_cell_matrix.h5',
+        cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
+      },
     })
 
     if (detection.platform !== 'visium-hd') {

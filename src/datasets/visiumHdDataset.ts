@@ -19,6 +19,14 @@ import {
   type VisiumHdSquareBarcode,
 } from './visiumHdBarcodes'
 import {
+  normalizeVisiumHdBarcodeMappingRowBudget,
+  readVisiumHdBarcodeMappings,
+  selectVisiumHdBarcodeMappingAssignments,
+  type ReadVisiumHdBarcodeMappingsOptions,
+  type VisiumHdBarcodeMapping,
+  type VisiumHdBarcodeMappingCellAssignment,
+} from './visiumHdBarcodeMappings'
+import {
   VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
   VisiumHdTwoMicrometerOverviewDisabledError,
   normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget,
@@ -77,6 +85,10 @@ export interface VisiumHdDatasetOptions {
     bin: VisiumHdBinDescriptor,
     options: ReadVisiumHdFilteredMatrixBarcodesOptions,
   ) => Promise<readonly VisiumHdSquareBarcode[]>
+  readonly barcodeMappingsReader?: (
+    baseUrl: string,
+    options: ReadVisiumHdBarcodeMappingsOptions,
+  ) => Promise<readonly VisiumHdBarcodeMapping[]>
   readonly featureMatrixReader?: (
     url: string,
     ids: readonly SpatialElementId[],
@@ -163,6 +175,11 @@ export interface VisiumHdGeneExpressionQueryOptions extends GeneExpressionQueryO
   readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers
 }
 
+export interface VisiumHdBarcodeMappingQueryOptions {
+  readonly maxRows: number
+  readonly signal?: AbortSignal
+}
+
 export interface ReadVisiumHdBinnedOverviewOptions {
   readonly baseUrl: string
   readonly bin: VisiumHdBinDescriptor
@@ -239,6 +256,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     bin: VisiumHdBinDescriptor,
     options: ReadVisiumHdFilteredMatrixBarcodesOptions,
   ) => Promise<readonly VisiumHdSquareBarcode[]>
+  private readonly barcodeMappingsReader: (
+    baseUrl: string,
+    options: ReadVisiumHdBarcodeMappingsOptions,
+  ) => Promise<readonly VisiumHdBarcodeMapping[]>
   private readonly featureMatrixReader: (
     url: string,
     ids: readonly SpatialElementId[],
@@ -268,6 +289,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     VisiumHdBinSizeMicrometers,
     Promise<readonly VisiumHdSquareBarcode[]>
   >()
+  private readonly barcodeMappingPromises = new Map<
+    number,
+    Promise<readonly VisiumHdBarcodeMapping[]>
+  >()
 
   constructor(options: VisiumHdDatasetOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl)
@@ -282,6 +307,8 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       options.featureGenePanelReader ?? readVisiumHdFeatureGenePanel
     this.filteredMatrixBarcodeReader =
       options.filteredMatrixBarcodeReader ?? readVisiumHdFilteredMatrixBarcodes
+    this.barcodeMappingsReader =
+      options.barcodeMappingsReader ?? readVisiumHdBarcodeMappings
     this.featureMatrixReader =
       options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
@@ -405,6 +432,56 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     }
 
     return promise
+  }
+
+  barcodeMappings(
+    options: VisiumHdBarcodeMappingQueryOptions,
+  ): Promise<readonly VisiumHdBarcodeMapping[]> {
+    const maxRows = normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
+    const existing = this.barcodeMappingPromises.get(maxRows)
+
+    if (existing !== undefined && options.signal === undefined) {
+      return existing
+    }
+
+    const promise = this.barcodeMappingsReader(this.baseUrl, {
+      maxRows,
+      fetcher: this.fetcher,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(this.readObjects === undefined ? {} : { readObjects: this.readObjects }),
+      ...(this.loadCompressors === undefined
+        ? {}
+        : { loadCompressors: this.loadCompressors }),
+      ...(this.byteRangeCache === undefined
+        ? {}
+        : { byteRangeCache: this.byteRangeCache }),
+    }).catch((error: unknown) => {
+      if (this.barcodeMappingPromises.get(maxRows) === promise) {
+        this.barcodeMappingPromises.delete(maxRows)
+      }
+
+      throw error
+    })
+
+    if (options.signal === undefined) {
+      this.barcodeMappingPromises.set(maxRows, promise)
+    }
+
+    return promise
+  }
+
+  async barcodeMappingAssignments(
+    binSizeMicrometers: VisiumHdBinSizeMicrometers,
+    binIds: readonly SpatialElementId[],
+    options: VisiumHdBarcodeMappingQueryOptions,
+  ): Promise<readonly VisiumHdBarcodeMappingCellAssignment[]> {
+    if (binIds.length === 0) {
+      return []
+    }
+
+    const mappings = await this.barcodeMappings(options)
+
+    return selectVisiumHdBarcodeMappingAssignments(mappings, binSizeMicrometers, binIds)
   }
 
   async image(

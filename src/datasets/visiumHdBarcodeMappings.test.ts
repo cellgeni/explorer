@@ -5,6 +5,7 @@ import {
   VisiumHdBarcodeMappingsBudgetExceededError,
   parseVisiumHdBarcodeMappingRows,
   readVisiumHdBarcodeMappings,
+  selectVisiumHdBarcodeMappingAssignments,
 } from './visiumHdBarcodeMappings'
 import type { AsyncBuffer } from 'hyparquet'
 import type { VisiumHdBarcodeMappingsReadObjectsOptions } from './visiumHdBarcodeMappings'
@@ -105,6 +106,49 @@ describe('Visium HD barcode mappings', () => {
         { maxRows: 1 },
       ),
     ).toThrow('Expected barcode_mappings.parquet square_002um')
+  })
+
+  it('selects cell assignments for a requested binned tier', () => {
+    const mappings = parseVisiumHdBarcodeMappingRows(
+      [
+        {
+          square_002um: 's_002um_000001_000002-1',
+          square_008um: 's_008um_000000_000000-1',
+          square_016um: 's_016um_000000_000000-1',
+          cell_id: 'cell-a',
+          in_nucleus: true,
+          in_cell: true,
+        },
+        {
+          square_002um: 's_002um_000003_000004-1',
+          square_008um: 's_008um_000000_000001-1',
+          square_016um: 's_016um_000000_000000-1',
+          cell_id: null,
+          in_nucleus: false,
+          in_cell: false,
+        },
+      ],
+      { maxRows: 2 },
+    )
+
+    expect(
+      selectVisiumHdBarcodeMappingAssignments(mappings, 16, ['s_016um_000000_000000-1']),
+    ).toEqual([
+      {
+        binId: 's_016um_000000_000000-1',
+        square002um: 's_002um_000001_000002-1',
+        cellId: 'cell-a',
+        inNucleus: true,
+        inCell: true,
+      },
+      {
+        binId: 's_016um_000000_000000-1',
+        square002um: 's_002um_000003_000004-1',
+        cellId: null,
+        inNucleus: false,
+        inCell: false,
+      },
+    ])
   })
 })
 

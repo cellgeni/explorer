@@ -920,34 +920,34 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 
 ### Product Decisions
 
-- [ ] Implement a real `VisiumHdDataset` rather than adding Visium branches
+- [x] Implement a real `VisiumHdDataset` rather than adding Visium branches
       inside `XeniumDataset`.
-- [ ] Add a dataset factory/detector so app dependencies can resolve a generic
+- [x] Add a dataset factory/detector so app dependencies can resolve a generic
       `SpatialDataset` from a URL. The current URL helpers and caches should
       stop assuming Xenium file names such as `cells.parquet`,
       `cell_feature_matrix.zarr.zip`, `transcripts.parquet`, and
       `experiment.xenium`.
-- [ ] Treat Visium HD renderable units as square bins, not cells. Use barcode
+- [x] Treat Visium HD renderable units as square bins, not cells. Use barcode
       IDs as element IDs and expose bin size as a first-class dataset setting.
-- [ ] Represent Visium HD bins as an indexed affine grid, not as per-bin
+- [x] Represent Visium HD bins as an indexed affine grid, not as per-bin
       polygons and not as axis-aligned squares in image/render space. Add a
       dataset-level grid basis with `origin`, `rowStep`, and `colStep`; the
       axis-aligned square is only the degenerate basis where the steps align
       with the render axes.
-- [ ] Keep `ElementGeometry` as the logical/addressing view for picking,
+- [x] Keep `ElementGeometry` as the logical/addressing view for picking,
       tooltip, selection, and inspected elements only. Do not use an array of
       `{ kind: 'grid-cell', gridId, row, col }` objects as the bulk storage for
       a Visium HD tier. Grid-tier payloads must stay columnar, for example
       `Int32Array` rows, `Int32Array` cols, and one interned `gridId`, with
       logical elements reconstructed on demand.
-- [ ] Define `SpatialGrid` invariants up front: `origin` is the center of bin
+- [x] Define `SpatialGrid` invariants up front: `origin` is the center of bin
       `(0, 0)`; `rowStep` and `colStep` are center-to-center pitches in the
       same render coordinate space as polygon rings and image alignment;
       `row`/`col` match Space Ranger `array_row`/`array_col`; grid-cell corners
       use the contiguous-square `±0.5` rule in array space. Occupancy is not
       part of the grid basis; it comes from emitted/loaded bins, with optional
       row/col bounds only for cheap culling.
-- [ ] Separate nominal and measured geometry. `binSizeMicrometers` is the
+- [x] Separate nominal and measured geometry. `binSizeMicrometers` is the
       declared tier size used for labels, tier selection, and scale logic;
       `rowStep`/`colStep` are the measured render geometry after registration.
       Small differences between nominal size and measured step length are
@@ -957,36 +957,36 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       possible. Avoid independently fitting 2/8/16 µm tiers in a way that
       introduces slightly different orientations and breaks exact cross-tier
       nesting needed by `barcode_mappings.parquet`.
-- [ ] Start with binned output visualization (`square_016um` and
+- [x] Start with binned output visualization (`square_016um` and
       `square_008um`) before Feature Slice H5 and segmented-output support.
       The 2 µm layer is valuable but must be handled as a high-density mode with
       explicit budgets.
-- [ ] Hide or disable Xenium-only workflows for Visium HD until equivalent data
+- [x] Hide or disable Xenium-only workflows for Visium HD until equivalent data
       exists: transcript overlay, raw transcript hover, Magic Lens transcript
       scans, Xenium cell boundaries, and Xenium `analysis.zarr.zip`
       annotations.
-- [ ] Use binned `tissue_hires_image.png`/`tissue_lowres_image.png` plus
+- [x] Use binned `tissue_hires_image.png`/`tissue_lowres_image.png` plus
       `scalefactors_json.json` for the image underlay. This requires finishing
       the existing `ImageSource.kind === 'flat'` path in the viewer.
-- [ ] Keep coordinates internally in micrometers where possible, but explicitly
+- [x] Keep coordinates internally in micrometers where possible, but explicitly
       model Visium HD full-resolution image pixels and scalefactors. Do not
       assume Xenium's OME-TIFF pyramid units or Y-axis handling in shared code.
 
 ### Implementation Slices
 
-- [ ] Slice 1: dataset detection and capability plumbing.
+- [x] Slice 1: dataset detection and capability plumbing.
       Add `VisiumHdDataset`, generic dataset cache helpers, and platform-aware
       diagnostics. Detect Visium HD from `binned_outputs/square_*um` and binned
       `spatial/tissue_positions.parquet`/`scalefactors_json.json`; detect Xenium
       from `experiment.xenium` as today. In the same slice, add the generic
       `SpatialElementId`/barcode-keyed expression contract and the indexed
       affine-grid contract before implementing Visium readers.
-- [ ] Slice 2: binned overview reader.
+- [x] Slice 2: binned overview reader.
       Read 16 µm `tissue_positions.parquet`, filter `in_tissue = 1`, convert
       full-resolution pixel coordinates through `microns_per_pixel`, and return
       columnar grid-cell payloads with barcode IDs, bin size, array row/column,
       and tissue position metadata. Add 8 µm support behind a bin-size selector.
-- [ ] Slice 3: square-bin rendering.
+- [x] Slice 3: square-bin rendering.
       Extend renderer layer data so indexed affine grid cells draw through a
       dedicated grid layer instead of being dropped by the current polygon-only
       boundary conversion. Compute corners from the shared basis, keep winding
@@ -994,11 +994,11 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       `ElementGeometry` only for hovered, clicked, or selected bins. Hover and
       selection should show barcode, bin size, array row/column, full-res pixel
       coordinate, and any loaded expression summary.
-- [ ] Slice 4: flat tissue image underlay.
+- [x] Slice 4: flat tissue image underlay.
       Implement `ImageSource.kind === 'flat'` in the viewer with PNG loading,
       scale-factor alignment, opacity, and fallback from high-res to low-res.
       Verify visual alignment against 16 µm and 8 µm bins.
-- [ ] Slice 5: binned gene panel and expression.
+- [x] Slice 5: binned gene panel and expression.
       Add a generic feature-barcode matrix reader for Visium HD barcodes. Use
       `filtered_feature_bc_matrix/features.tsv.gz` for the gene panel first, and
       evaluate whether `filtered_feature_bc_matrix.h5` can serve interactive
@@ -1019,6 +1019,15 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       segmented cell/nucleus rendering; the fixture currently exposes
       `segmented_outputs/filtered_feature_cell_matrix.h5`, but common GeoJSON
       segmentation paths still return 404.
+- [x] Slice 8 partial: Feature Slice H5 selected-gene reader core.
+- [x] Slice 8 partial: Feature Slice budget error classification for hosted
+      full-file reads.
+- [x] Slice 8 partial: budgeted `barcode_mappings.parquet` reader and
+      dataset-level bin-to-cell assignment bridge.
+- [x] Slice 8 partial: segmented-output detector and diagnostics probes for
+      feature-cell matrices, cell/nucleus GeoJSONs, annotated GeoJSONs, and the
+      nucleus instance-mask TIFF.
+- [ ] Slice 8 remaining: segmented cell/nucleus geometry probing and rendering.
 
 ### Phase 6 Execution Notes
 
@@ -1230,6 +1239,18 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       before touching the hosted mapping file. This creates the typed
       bin-to-cell bridge needed for future segmented-output workflows without
       changing default rendering or enabling unbounded mapping scans.
+- [x] Continued Slice 8 by exposing the budgeted barcode-mapping bridge through
+      `VisiumHdDataset`. The dataset now caches mapping reads by explicit row
+      budget and can derive typed cell-assignment records for selected 2, 8, or
+      16 µm bin IDs while preserving the existing opt-in scan guardrail.
+- [x] Continued Slice 8 segmented-output readiness. Official Space Ranger 4.1
+      docs name `cell_segmentations.geojson`, `nucleus_segmentations.geojson`,
+      `nucleus_instance_mask.tiff`,
+      `graphclust_annotated_cell_segmentations.geojson`,
+      `graphclust_annotated_nucleus_segmentations.geojson`, and feature-cell
+      matrices under segmented outputs. Dataset detection now records which of
+      those sidecars are present, and diagnostics checks them as optional
+      segmented-output assets when any segmented-output signal is detected.
 
 ### Definition Of Done For The First Visium HD MVP
 

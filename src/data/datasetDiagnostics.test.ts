@@ -44,6 +44,12 @@ describe('runDatasetDiagnostics', () => {
       platform: 'visium-hd',
       baseUrl: 'https://example.test/visium',
       segmentedScalefactorsPath: 'segmented_outputs/spatial/scalefactors_json.json',
+      segmentedOutputs: {
+        scalefactorsPath: 'segmented_outputs/spatial/scalefactors_json.json',
+        filteredFeatureCellMatrixH5Path:
+          'segmented_outputs/filtered_feature_cell_matrix.h5',
+        cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
+      },
       bins: [
         {
           binSizeMicrometers: 16,
@@ -80,6 +86,14 @@ describe('runDatasetDiagnostics', () => {
       'https://example.test/visium/segmented_outputs/spatial/scalefactors_json.json',
       expect.objectContaining({ method: 'GET' }),
     )
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/visium/segmented_outputs/cell_segmentations.geojson',
+      expect.objectContaining({ method: 'GET' }),
+    )
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/visium/segmented_outputs/nucleus_segmentations.geojson',
+      expect.objectContaining({ method: 'GET' }),
+    )
     expect(rangeValidator).toHaveBeenCalledWith(
       'https://example.test/visium/binned_outputs/square_016um/spatial/tissue_positions.parquet',
       expect.objectContaining({ label: 'Visium HD 16um positions' }),
@@ -95,6 +109,14 @@ describe('runDatasetDiagnostics', () => {
     expect(rangeValidator).toHaveBeenCalledWith(
       'https://example.test/visium/binned_outputs/square_016um/analysis/umap/gene_expression_2_components/projection.csv',
       expect.objectContaining({ label: 'Visium HD 16um UMAP projection' }),
+    )
+    expect(rangeValidator).toHaveBeenCalledWith(
+      'https://example.test/visium/segmented_outputs/filtered_feature_cell_matrix.h5',
+      expect.objectContaining({ label: 'Visium HD filtered feature-cell matrix' }),
+    )
+    expect(rangeValidator).toHaveBeenCalledWith(
+      'https://example.test/visium/segmented_outputs/nucleus_instance_mask.tiff',
+      expect.objectContaining({ label: 'Visium HD nucleus instance mask' }),
     )
     expect(fetcher).not.toHaveBeenCalledWith(
       'https://example.test/visium/experiment.xenium',

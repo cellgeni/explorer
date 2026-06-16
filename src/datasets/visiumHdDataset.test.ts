@@ -184,6 +184,72 @@ describe('Visium HD dataset readers', () => {
     )
   })
 
+  it('loads and caches budgeted barcode mappings through the dataset', async () => {
+    const fetcher = vi.fn(async () => new Response('unused'))
+    const barcodeMappings = [
+      {
+        square002um: 's_002um_000001_000002-1',
+        square008um: 's_008um_000000_000000-1',
+        square016um: 's_016um_000000_000000-1',
+        cellId: 'cell-1',
+        inNucleus: true,
+        inCell: true,
+      },
+    ]
+    const barcodeMappingsReader = vi.fn(async () => barcodeMappings)
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      fetcher,
+      barcodeMappingsReader,
+    })
+
+    await expect(dataset.barcodeMappings({ maxRows: 25 })).resolves.toBe(barcodeMappings)
+    await expect(dataset.barcodeMappings({ maxRows: 25 })).resolves.toBe(barcodeMappings)
+    expect(barcodeMappingsReader).toHaveBeenCalledTimes(1)
+    expect(barcodeMappingsReader).toHaveBeenCalledWith('https://example.test/visium', {
+      maxRows: 25,
+      fetcher,
+    })
+  })
+
+  it('filters barcode mapping assignments by active bin IDs', async () => {
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      barcodeMappingsReader: async () => [
+        {
+          square002um: 's_002um_000001_000002-1',
+          square008um: 's_008um_000000_000000-1',
+          square016um: 's_016um_000000_000000-1',
+          cellId: 'cell-a',
+          inNucleus: true,
+          inCell: true,
+        },
+        {
+          square002um: 's_002um_000003_000004-1',
+          square008um: 's_008um_000000_000001-1',
+          square016um: 's_016um_000000_000001-1',
+          cellId: null,
+          inNucleus: false,
+          inCell: false,
+        },
+      ],
+    })
+
+    await expect(
+      dataset.barcodeMappingAssignments(16, ['s_016um_000000_000001-1'], { maxRows: 50 }),
+    ).resolves.toEqual([
+      {
+        binId: 's_016um_000000_000001-1',
+        square002um: 's_002um_000003_000004-1',
+        cellId: null,
+        inNucleus: false,
+        inCell: false,
+      },
+    ])
+  })
+
   it('reads tissue_positions.parquet through the Visium HD column projection', async () => {
     const calls: VisiumHdParquetReadObjectsOptions[] = []
     const positions = await readVisiumHdTissuePositions({

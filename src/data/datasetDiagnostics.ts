@@ -78,6 +78,52 @@ const VISIUM_HD_ROOT_RANGE_FILES = [
   },
 ] as const
 
+const VISIUM_HD_SEGMENTED_READABLE_FILES = [
+  {
+    id: 'visium-hd-segmented-scalefactors',
+    label: 'Visium HD segmented scalefactors',
+    path: 'segmented_outputs/spatial/scalefactors_json.json',
+  },
+  {
+    id: 'visium-hd-cell-segmentations',
+    label: 'Visium HD cell segmentations GeoJSON',
+    path: 'segmented_outputs/cell_segmentations.geojson',
+  },
+  {
+    id: 'visium-hd-nucleus-segmentations',
+    label: 'Visium HD nucleus segmentations GeoJSON',
+    path: 'segmented_outputs/nucleus_segmentations.geojson',
+  },
+  {
+    id: 'visium-hd-graphclust-cell-segmentations',
+    label: 'Visium HD graphclust cell segmentations GeoJSON',
+    path: 'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
+  },
+  {
+    id: 'visium-hd-graphclust-nucleus-segmentations',
+    label: 'Visium HD graphclust nucleus segmentations GeoJSON',
+    path: 'segmented_outputs/graphclust_annotated_nucleus_segmentations.geojson',
+  },
+] as const
+
+const VISIUM_HD_SEGMENTED_RANGE_FILES = [
+  {
+    id: 'visium-hd-filtered-feature-cell-matrix',
+    label: 'Visium HD filtered feature-cell matrix',
+    path: 'segmented_outputs/filtered_feature_cell_matrix.h5',
+  },
+  {
+    id: 'visium-hd-raw-feature-cell-matrix',
+    label: 'Visium HD raw feature-cell matrix',
+    path: 'segmented_outputs/raw_feature_cell_matrix.h5',
+  },
+  {
+    id: 'visium-hd-nucleus-instance-mask',
+    label: 'Visium HD nucleus instance mask',
+    path: 'segmented_outputs/nucleus_instance_mask.tiff',
+  },
+] as const
+
 export async function runDatasetDiagnostics(
   baseUrl: string,
   options: DatasetDiagnosticsOptions = {},
@@ -296,22 +342,26 @@ async function runVisiumHdDiagnostics(
     checks.push(await checkRangeFile(detection.baseUrl, file, false, options))
   }
 
-  if (detection.segmentedScalefactorsPath !== undefined) {
-    checks.push(
-      await checkReadableFile(
-        detection.baseUrl,
-        {
-          id: 'visium-hd-segmented-scalefactors',
-          label: 'Visium HD segmented scalefactors',
-          path: detection.segmentedScalefactorsPath,
-        },
-        false,
-        options,
-      ),
-    )
+  if (hasSegmentedOutputSignal(detection)) {
+    for (const file of VISIUM_HD_SEGMENTED_READABLE_FILES) {
+      checks.push(await checkReadableFile(detection.baseUrl, file, false, options))
+    }
+
+    for (const file of VISIUM_HD_SEGMENTED_RANGE_FILES) {
+      checks.push(await checkRangeFile(detection.baseUrl, file, false, options))
+    }
   }
 
   return checks
+}
+
+function hasSegmentedOutputSignal(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'visium-hd' }>,
+): boolean {
+  return (
+    detection.segmentedScalefactorsPath !== undefined ||
+    detection.segmentedOutputs !== undefined
+  )
 }
 
 function selectedVisiumHdBin(

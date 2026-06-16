@@ -29,6 +29,14 @@ export interface VisiumHdBarcodeMapping {
   readonly inCell: boolean
 }
 
+export interface VisiumHdBarcodeMappingCellAssignment {
+  readonly binId: SpatialElementId
+  readonly square002um: SpatialElementId
+  readonly cellId: SpatialElementId | null
+  readonly inNucleus: boolean
+  readonly inCell: boolean
+}
+
 export interface ReadVisiumHdBarcodeMappingsOptions {
   readonly maxRows: number
   readonly file?: AsyncBuffer
@@ -69,7 +77,7 @@ export async function readVisiumHdBarcodeMappings(
   baseUrl: string,
   options: ReadVisiumHdBarcodeMappingsOptions,
 ): Promise<readonly VisiumHdBarcodeMapping[]> {
-  const maxRows = normalizeMaxRows(options.maxRows)
+  const maxRows = normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
   const url = datasetFileUrl(baseUrl, VISIUM_HD_BARCODE_MAPPINGS_PATH)
   const file = options.file ?? (await barcodeMappingsFileFromUrl(url, options))
   const compressors =
@@ -90,13 +98,56 @@ export function parseVisiumHdBarcodeMappingRows(
   options: { readonly maxRows?: number } = {},
 ): readonly VisiumHdBarcodeMapping[] {
   const maxRows =
-    options.maxRows === undefined ? undefined : normalizeMaxRows(options.maxRows)
+    options.maxRows === undefined
+      ? undefined
+      : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
 
   if (maxRows !== undefined && rows.length > maxRows) {
     throw new VisiumHdBarcodeMappingsBudgetExceededError(rows.length, maxRows)
   }
 
   return rows.map((row, index) => parseVisiumHdBarcodeMappingRow(row, index))
+}
+
+export function selectVisiumHdBarcodeMappingAssignments(
+  mappings: readonly VisiumHdBarcodeMapping[],
+  binSizeMicrometers: VisiumHdBinSizeMicrometers,
+  binIds?: readonly SpatialElementId[],
+): readonly VisiumHdBarcodeMappingCellAssignment[] {
+  const selectedBinIds = binIds === undefined ? null : new Set(binIds)
+  const assignments: VisiumHdBarcodeMappingCellAssignment[] = []
+
+  for (const mapping of mappings) {
+    const binId = visiumHdBarcodeMappingBinId(mapping, binSizeMicrometers)
+
+    if (selectedBinIds !== null && !selectedBinIds.has(binId)) {
+      continue
+    }
+
+    assignments.push({
+      binId,
+      square002um: mapping.square002um,
+      cellId: mapping.cellId,
+      inNucleus: mapping.inNucleus,
+      inCell: mapping.inCell,
+    })
+  }
+
+  return assignments
+}
+
+export function visiumHdBarcodeMappingBinId(
+  mapping: VisiumHdBarcodeMapping,
+  binSizeMicrometers: VisiumHdBinSizeMicrometers,
+): SpatialElementId {
+  switch (binSizeMicrometers) {
+    case 2:
+      return mapping.square002um
+    case 8:
+      return mapping.square008um
+    case 16:
+      return mapping.square016um
+  }
 }
 
 export function parseVisiumHdBarcodeMappingRow(
@@ -229,7 +280,7 @@ function readBooleanFlag(
   )
 }
 
-function normalizeMaxRows(value: number): number {
+export function normalizeVisiumHdBarcodeMappingRowBudget(value: number): number {
   if (!Number.isFinite(value) || value < 1) {
     throw new RangeError(
       `Barcode mapping row budget must be a positive finite number, received ${value}.`,
