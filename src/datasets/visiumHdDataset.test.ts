@@ -480,6 +480,75 @@ describe('Visium HD dataset readers', () => {
     expect(batch.elements).toEqual([])
   })
 
+  it('loads detected Visium HD nucleus segmentation polygons by kind', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const insideElement = {
+      id: 'nucleus_000000001',
+      geometry: {
+        kind: 'polygon' as const,
+        rings: [
+          [
+            { x: micrometers(95), y: micrometers(195) },
+            { x: micrometers(105), y: micrometers(195) },
+            { x: micrometers(105), y: micrometers(205) },
+          ],
+        ],
+      },
+    }
+    const outsideElement = {
+      id: 'nucleus_000000002',
+      geometry: {
+        kind: 'polygon' as const,
+        rings: [
+          [
+            { x: micrometers(500), y: micrometers(500) },
+            { x: micrometers(510), y: micrometers(500) },
+            { x: micrometers(510), y: micrometers(510) },
+          ],
+        ],
+      },
+    }
+    const segmentationReader = vi.fn(async () => [insideElement, outsideElement])
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      segmentedOutputs: {
+        nucleusSegmentationsGeojsonPath:
+          'segmented_outputs/nucleus_segmentations.geojson',
+      },
+      segmentationReader,
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+    })
+    const bbox = {
+      minX: micrometers(90),
+      maxX: micrometers(110),
+      minY: micrometers(190),
+      maxY: micrometers(210),
+    }
+
+    await expect(dataset.segmentationElements('nucleus', bbox)).resolves.toEqual([
+      insideElement,
+    ])
+    await expect(dataset.segmentationElements('nucleus', bbox)).resolves.toEqual([
+      insideElement,
+    ])
+
+    expect(segmentationReader).toHaveBeenCalledTimes(1)
+    expect(segmentationReader).toHaveBeenCalledWith(
+      'https://example.test/visium',
+      expect.objectContaining({
+        path: 'segmented_outputs/nucleus_segmentations.geojson',
+        scalefactors,
+        kind: 'nucleus',
+      }),
+    )
+  })
+
   it('rejects 2 µm overview reads until a budgeted loading path is available', async () => {
     const tissuePositionsReader = vi.fn(async () =>
       parseVisiumHdTissuePositionRows([visiumPositionRow('BC-2', 1, 0, 0, 400, 200)]),

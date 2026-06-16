@@ -1276,6 +1276,13 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       available for the existing boundary renderer. Nucleus-only datasets now
       advertise nucleus segmentations without being mislabeled as cell-boundary
       capable.
+- [x] Added the core nucleus/cell segmentation element loader. `VisiumHdDataset`
+      now exposes a kind-aware `segmentationElements(kind, bbox)` method that
+      reuses the active binned scalefactors, reads the detected cell or nucleus
+      GeoJSON path, caches parsed elements by path/kind/scale, and applies
+      viewport bbox filtering. The existing `elements(bbox)` boundary path
+      remains cell-only for the current renderer, while nucleus geometry is now
+      available for a dedicated overlay/UI slice.
 - [ ] Slice 8 remaining: nucleus segmentation GeoJSON/TIFF rendering,
       annotated segmentation styling, and a viewport-scoped or streaming strategy
       for segmentation assets that exceed the interactive GeoJSON full-file

@@ -24,6 +24,7 @@ import {
   visiumHdSegmentationInfos,
   type ReadVisiumHdSegmentationElementsOptions,
   type VisiumHdSegmentedOutputPaths,
+  type VisiumHdSegmentationKind,
 } from './visiumHdSegmentations'
 import {
   normalizeVisiumHdBarcodeMappingRowBudget,
@@ -381,7 +382,11 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   async elements(bbox: BBox): Promise<ElementBatch<SpatialElementId>> {
     const overview = await this.readBinnedOverview()
     const selected = selectGridCellsInBbox(overview, bbox)
-    const elements = await this.segmentedCellElements(bbox, overview.scalefactors)
+    const elements = await this.segmentationElementsWithScalefactors(
+      'cell',
+      bbox,
+      overview.scalefactors,
+    )
 
     return {
       elements,
@@ -516,6 +521,15 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     const mappings = await this.barcodeMappings(options)
 
     return selectVisiumHdBarcodeMappingAssignments(mappings, binSizeMicrometers, binIds)
+  }
+
+  async segmentationElements(
+    kind: VisiumHdSegmentationKind,
+    bbox: BBox,
+    binSizeMicrometers = this.defaultBinSizeMicrometers,
+  ): Promise<readonly SpatialElement[]> {
+    const overview = await this.readBinnedOverview(binSizeMicrometers)
+    return this.segmentationElementsWithScalefactors(kind, bbox, overview.scalefactors)
   }
 
   async image(
@@ -763,25 +777,27 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     return promise
   }
 
-  private async segmentedCellElements(
+  private async segmentationElementsWithScalefactors(
+    kind: VisiumHdSegmentationKind,
     bbox: BBox,
     scalefactors: VisiumHdScalefactors,
   ): Promise<readonly SpatialElement[]> {
-    const path = this.cellSegmentationPath()
+    const path = this.segmentationPath(kind)
 
     if (path === undefined) {
       return []
     }
 
-    const elements = await this.segmentedElementsForPath(path, scalefactors)
+    const elements = await this.segmentedElementsForPath(path, kind, scalefactors)
     return filterVisiumHdSegmentationElementsByBbox(elements, bbox)
   }
 
   private segmentedElementsForPath(
     path: string,
+    kind: VisiumHdSegmentationKind,
     scalefactors: VisiumHdScalefactors,
   ): Promise<readonly SpatialElement[]> {
-    const cacheKey = `${path}\n${scalefactors.micronsPerPixel}`
+    const cacheKey = `${path}\n${kind}\n${scalefactors.micronsPerPixel}`
     const existing = this.segmentationPromises.get(cacheKey)
 
     if (existing !== undefined) {
@@ -791,7 +807,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     const promise = this.segmentationReader(this.baseUrl, {
       path,
       scalefactors,
-      kind: 'cell',
+      kind,
       maxFullFileBytes: this.maxInteractiveSegmentationGeojsonBytes,
       fetcher: this.fetcher,
     }).catch((error: unknown) => {
@@ -807,9 +823,20 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   }
 
   private cellSegmentationPath(): string | undefined {
+    return this.segmentationPath('cell')
+  }
+
+  private segmentationPath(kind: VisiumHdSegmentationKind): string | undefined {
+    if (kind === 'cell') {
+      return (
+        this.segmentedOutputs?.cellSegmentationsGeojsonPath ??
+        this.segmentedOutputs?.graphclustAnnotatedCellSegmentationsGeojsonPath
+      )
+    }
+
     return (
-      this.segmentedOutputs?.cellSegmentationsGeojsonPath ??
-      this.segmentedOutputs?.graphclustAnnotatedCellSegmentationsGeojsonPath
+      this.segmentedOutputs?.nucleusSegmentationsGeojsonPath ??
+      this.segmentedOutputs?.graphclustAnnotatedNucleusSegmentationsGeojsonPath
     )
   }
 }
