@@ -2,7 +2,11 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
-import type { GridCellDatum, OverviewCellDatum } from '../../rendering/deckLayers'
+import type {
+  CellBoundaryDatum,
+  GridCellDatum,
+  OverviewCellDatum,
+} from '../../rendering/deckLayers'
 import { CellHudPanel } from './CellHudPanel'
 
 const embeddings: readonly AnalysisEmbedding[] = [
@@ -42,6 +46,7 @@ describe('CellHudPanel', () => {
         isVisiumHdDataset={false}
         selectedCell={null}
         selectedGridCell={null}
+        selectedBoundaryCell={null}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"
         cellDetailState={{ status: 'idle' }}
@@ -51,6 +56,7 @@ describe('CellHudPanel', () => {
         onLoadAnalysisEmbeddings={onLoadAnalysisEmbeddings}
         onClearSelectedCell={vi.fn()}
         onClearSelectedGridCell={vi.fn()}
+        onClearSelectedBoundaryCell={vi.fn()}
         onSelectEmbeddingCell={vi.fn()}
       />,
     )
@@ -86,6 +92,7 @@ describe('CellHudPanel', () => {
         isVisiumHdDataset={false}
         selectedCell={cellDatum()}
         selectedGridCell={null}
+        selectedBoundaryCell={null}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="Selected"
         cellDetailState={{ status: 'idle' }}
@@ -95,6 +102,7 @@ describe('CellHudPanel', () => {
         onLoadAnalysisEmbeddings={vi.fn()}
         onClearSelectedCell={onClearSelectedCell}
         onClearSelectedGridCell={vi.fn()}
+        onClearSelectedBoundaryCell={vi.fn()}
         onSelectEmbeddingCell={vi.fn()}
       />,
     )
@@ -120,6 +128,7 @@ describe('CellHudPanel', () => {
         isVisiumHdDataset
         selectedCell={null}
         selectedGridCell={gridCellDatum()}
+        selectedBoundaryCell={null}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"
         cellDetailState={{ status: 'idle' }}
@@ -129,6 +138,7 @@ describe('CellHudPanel', () => {
         onLoadAnalysisEmbeddings={vi.fn()}
         onClearSelectedCell={vi.fn()}
         onClearSelectedGridCell={onClearSelectedGridCell}
+        onClearSelectedBoundaryCell={vi.fn()}
         onSelectEmbeddingCell={vi.fn()}
       />,
     )
@@ -144,6 +154,48 @@ describe('CellHudPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear Bin' }))
 
     expect(onClearSelectedGridCell).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders selected Visium HD segmented cell details and clears cell selection', () => {
+    const onClearSelectedBoundaryCell = vi.fn()
+
+    render(
+      <CellHudPanel
+        active
+        embeddingViewInputId="embedding-view"
+        embeddingCopy="No embedding loaded"
+        analysisEmbeddingState={{ status: 'idle' }}
+        activeEmbedding={null}
+        annotationStyles={[]}
+        selectedEmbeddingKind="umap"
+        roiCellIds={[]}
+        isVisiumHdDataset
+        selectedCell={null}
+        selectedGridCell={null}
+        selectedBoundaryCell={boundaryCellDatum()}
+        selectedCellAnnotationLabels={[]}
+        cellDetailCopy="No selection"
+        cellDetailState={{ status: 'idle' }}
+        cellTranscriptDistributionState={{ status: 'idle' }}
+        loadEnabled={false}
+        onEmbeddingKindChange={vi.fn()}
+        onLoadAnalysisEmbeddings={vi.fn()}
+        onClearSelectedCell={vi.fn()}
+        onClearSelectedGridCell={vi.fn()}
+        onClearSelectedBoundaryCell={onClearSelectedBoundaryCell}
+        onSelectEmbeddingCell={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
+    expect(screen.getByText('Selected cell')).toBeInTheDocument()
+    expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
+    expect(screen.getByText('Cell boundary')).toBeInTheDocument()
+    expect(screen.getByText('100 um^2')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Cell' }))
+
+    expect(onClearSelectedBoundaryCell).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -177,6 +229,21 @@ function gridCellDatum(values: Partial<GridCellDatum> = {}): GridCellDatum {
     ],
     fillColor: [34, 120, 108, 28],
     lineColor: [22, 90, 82, 150],
+    ...values,
+  }
+}
+
+function boundaryCellDatum(values: Partial<CellBoundaryDatum> = {}): CellBoundaryDatum {
+  return {
+    id: 'cellid_000000001-1',
+    polygon: [
+      [0, 0, 0],
+      [10, 0, 0],
+      [10, -10, 0],
+      [0, -10, 0],
+    ],
+    fillColor: [32, 102, 83, 34],
+    lineColor: [32, 102, 83, 190],
     ...values,
   }
 }

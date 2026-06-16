@@ -10,7 +10,11 @@ import type {
   AnalysisEmbedding,
   AnalysisEmbeddingKind,
 } from '../../data/analysisEmbeddings'
-import type { GridCellDatum, OverviewCellDatum } from '../../rendering/deckLayers'
+import type {
+  CellBoundaryDatum,
+  GridCellDatum,
+  OverviewCellDatum,
+} from '../../rendering/deckLayers'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 
 interface CellHudPanelProps {
@@ -25,6 +29,7 @@ interface CellHudPanelProps {
   readonly isVisiumHdDataset: boolean
   readonly selectedCell: OverviewCellDatum | null
   readonly selectedGridCell: GridCellDatum | null
+  readonly selectedBoundaryCell: CellBoundaryDatum | null
   readonly selectedCellAnnotationLabels: readonly string[]
   readonly cellDetailCopy: string
   readonly cellDetailState: CellDetailState
@@ -34,6 +39,7 @@ interface CellHudPanelProps {
   readonly onLoadAnalysisEmbeddings: () => void
   readonly onClearSelectedCell: () => void
   readonly onClearSelectedGridCell: () => void
+  readonly onClearSelectedBoundaryCell: () => void
   readonly onSelectEmbeddingCell: (cellId: string) => void
 }
 
@@ -49,6 +55,7 @@ export function CellHudPanel({
   isVisiumHdDataset,
   selectedCell,
   selectedGridCell,
+  selectedBoundaryCell,
   selectedCellAnnotationLabels,
   cellDetailCopy,
   cellDetailState,
@@ -58,13 +65,19 @@ export function CellHudPanel({
   onLoadAnalysisEmbeddings,
   onClearSelectedCell,
   onClearSelectedGridCell,
+  onClearSelectedBoundaryCell,
   onSelectEmbeddingCell,
 }: CellHudPanelProps) {
-  const detailHeading = isVisiumHdDataset ? 'Bin Info' : 'Cell Info'
+  const visiumSelectionKind =
+    selectedBoundaryCell !== null ? 'cell' : selectedGridCell !== null ? 'bin' : null
+  const detailHeading =
+    isVisiumHdDataset && selectedBoundaryCell === null ? 'Bin Info' : 'Cell Info'
   const detailCopy = isVisiumHdDataset
-    ? selectedGridCell === null
+    ? visiumSelectionKind === null
       ? 'No selection'
-      : 'Selected bin'
+      : visiumSelectionKind === 'cell'
+        ? 'Selected cell'
+        : 'Selected bin'
     : cellDetailCopy
   const embeddingElementLabel = isVisiumHdDataset ? 'bins' : 'cells'
   const selectedEmbeddingElementId = isVisiumHdDataset
@@ -158,7 +171,16 @@ export function CellHudPanel({
               {detailCopy}
             </span>
             {isVisiumHdDataset ? (
-              selectedGridCell === null ? null : (
+              selectedBoundaryCell !== null ? (
+                <button
+                  type="button"
+                  className="secondary-action"
+                  title="Clear selected cell"
+                  onClick={onClearSelectedBoundaryCell}
+                >
+                  Clear Cell
+                </button>
+              ) : selectedGridCell === null ? null : (
                 <button
                   type="button"
                   className="secondary-action"
@@ -181,10 +203,17 @@ export function CellHudPanel({
           </div>
         </div>
         {isVisiumHdDataset ? (
-          <GridCellInfoPanel
-            key={selectedGridCell?.id ?? 'none'}
-            cell={selectedGridCell}
-          />
+          selectedBoundaryCell !== null ? (
+            <BoundaryCellInfoPanel
+              key={selectedBoundaryCell.id}
+              cell={selectedBoundaryCell}
+            />
+          ) : (
+            <GridCellInfoPanel
+              key={selectedGridCell?.id ?? 'none'}
+              cell={selectedGridCell}
+            />
+          )
         ) : (
           <CellInfoPanel
             key={selectedCell?.id ?? 'none'}
@@ -197,4 +226,64 @@ export function CellHudPanel({
       </section>
     </div>
   )
+}
+
+function BoundaryCellInfoPanel({ cell }: { readonly cell: CellBoundaryDatum }) {
+  return (
+    <div className="cell-detail-panel">
+      <dl className="cell-info-list">
+        <div>
+          <dt>Cell ID</dt>
+          <dd>{cell.id}</dd>
+        </div>
+        <div>
+          <dt>Segmentation</dt>
+          <dd>Cell boundary</dd>
+        </div>
+        <div>
+          <dt>Vertices</dt>
+          <dd>{cell.polygon.length.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Area</dt>
+          <dd>{formatBoundaryArea(cell)} um^2</dd>
+        </div>
+      </dl>
+
+      <div className="cell-expression-panel">
+        <div className="cell-expression-heading">
+          <span>Gene expression</span>
+          <small>Unavailable</small>
+        </div>
+        <p className="cell-expression-status">No expression loaded</p>
+      </div>
+    </div>
+  )
+}
+
+function formatBoundaryArea(cell: CellBoundaryDatum): string {
+  if (cell.polygon.length < 3) {
+    return '0'
+  }
+
+  let area = 0
+
+  for (let index = 0; index < cell.polygon.length; index += 1) {
+    const current = cell.polygon[index]!
+    const next = cell.polygon[(index + 1) % cell.polygon.length]!
+    const currentX = current[0] ?? 0
+    const currentY = current[1] ?? 0
+    const nextX = next[0] ?? 0
+    const nextY = next[1] ?? 0
+
+    area += currentX * nextY - nextX * currentY
+  }
+
+  return formatMetricNumber(Math.abs(area) / 2)
+}
+
+function formatMetricNumber(value: number): string {
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: Math.abs(value) < 10 ? 2 : 1,
+  })
 }

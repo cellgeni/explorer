@@ -32,7 +32,13 @@ import type { VisiumHdBinnedOverview } from './datasets/visiumHdDataset'
 import type { TiffPyramidLoader } from './tiff/loader'
 
 vi.mock('@deck.gl/react', () => ({
-  DeckGL: ({ layers = [] }: { readonly layers?: readonly unknown[] }) => (
+  DeckGL: ({
+    layers = [],
+    onClick,
+  }: {
+    readonly layers?: readonly unknown[]
+    readonly onClick?: (info: { readonly object?: unknown; readonly x: number; readonly y: number }) => void
+  }) => (
     <div data-testid="deckgl">
       {layers.map((layer) => {
         const candidate = layer as {
@@ -44,12 +50,16 @@ vi.mock('@deck.gl/react', () => ({
         }
         const id = candidate.id ?? candidate.props?.id ?? 'unknown-layer'
         const data = candidate.props?.data ?? []
+        const clickObject = Array.isArray(data) ? data[0] : undefined
 
         return (
           <div
             key={id}
             data-testid={`deck-layer-${id}`}
             data-count={String(data.length)}
+            onClick={() => {
+              onClick?.({ object: clickObject, x: 0, y: 0 })
+            }}
           />
         )
       })}
@@ -575,6 +585,12 @@ describe('App', () => {
           '1',
         )
       })
+      fireEvent.click(screen.getByTestId('deck-layer-cell-boundary-hit-areas'))
+      openHudTab('Cell')
+
+      expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
+      expect(screen.getByText('Selected cell')).toBeInTheDocument()
+      expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
       expect(loadBoundaryElements).not.toHaveBeenCalled()
     } finally {
       rectSpy.mockRestore()

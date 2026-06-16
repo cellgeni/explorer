@@ -188,7 +188,11 @@ import type {
   TranscriptDensityColorScale,
   TranscriptPointColorMode,
 } from './rendering/deckLayers'
-import type { GridCellDatum, OverviewCellDatum } from './rendering/deckLayers'
+import type {
+  CellBoundaryDatum,
+  GridCellDatum,
+  OverviewCellDatum,
+} from './rendering/deckLayers'
 import type {
   RoiDrawMode,
   ViewerMagicLensDetail,
@@ -512,6 +516,8 @@ export function App({
   >(initialShareableState.viewState)
   const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
   const [selectedGridCell, setSelectedGridCell] = useState<GridCellDatum | null>(null)
+  const [selectedBoundaryCell, setSelectedBoundaryCell] =
+    useState<CellBoundaryDatum | null>(null)
   const [spatialFocusRequest, setSpatialFocusRequest] =
     useState<ViewerFocusRequest | null>(null)
   const [currentViewportDetail, setCurrentViewportDetail] =
@@ -744,6 +750,15 @@ export function App({
     () =>
       isVisiumHdDataset && boundaryLayerData.length > 0 ? [] : spatialGridCells,
     [boundaryLayerData.length, isVisiumHdDataset, spatialGridCells],
+  )
+  const activeSelectedBoundaryCell = useMemo(
+    () =>
+      selectedBoundaryCell !== null &&
+      isVisiumHdDataset &&
+      boundaryLayerData.includes(selectedBoundaryCell)
+        ? selectedBoundaryCell
+        : null,
+    [boundaryLayerData, isVisiumHdDataset, selectedBoundaryCell],
   )
   const viewerMicrometersPerPixel =
     morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
@@ -1556,6 +1571,7 @@ export function App({
     (elementId: string) => {
       if (!isVisiumHdDataset) {
         setSelectedGridCell(null)
+        setSelectedBoundaryCell(null)
         handleEmbeddingCellSelect(elementId)
         return
       }
@@ -1567,6 +1583,7 @@ export function App({
       }
 
       setSelectedCell(null)
+      setSelectedBoundaryCell(null)
       setSelectedGridCell(gridCell)
       focusSpatialViewOnGridCell(gridCell)
     },
@@ -2110,6 +2127,7 @@ export function App({
           isVisiumHdDataset={isVisiumHdDataset}
           selectedCell={selectedCell}
           selectedGridCell={selectedGridCell}
+          selectedBoundaryCell={activeSelectedBoundaryCell}
           selectedCellAnnotationLabels={selectedCellAnnotationLabels}
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
@@ -2122,9 +2140,13 @@ export function App({
           onLoadAnalysisEmbeddings={handleLoadAnalysisEmbeddings}
           onClearSelectedCell={() => {
             setSelectedCell(null)
+            setSelectedBoundaryCell(null)
           }}
           onClearSelectedGridCell={() => {
             setSelectedGridCell(null)
+          }}
+          onClearSelectedBoundaryCell={() => {
+            setSelectedBoundaryCell(null)
           }}
           onSelectEmbeddingCell={handleEmbeddingElementSelect}
         />
@@ -2249,10 +2271,17 @@ export function App({
           onTranscriptClick={handlePinTranscript}
           onCellClick={(cell) => {
             setSelectedGridCell(null)
+            setSelectedBoundaryCell(null)
             setSelectedCell(cell)
+          }}
+          onCellBoundaryClick={(cell) => {
+            setSelectedCell(null)
+            setSelectedGridCell(null)
+            setSelectedBoundaryCell(cell)
           }}
           onGridCellClick={(cell) => {
             setSelectedCell(null)
+            setSelectedBoundaryCell(null)
             setSelectedGridCell(cell)
           }}
           onRoiComplete={

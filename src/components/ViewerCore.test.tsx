@@ -504,6 +504,35 @@ describe('ViewerCore', () => {
     expect(onGridCellClick).toHaveBeenCalledWith(gridCell)
   })
 
+  it('notifies when a segmented cell boundary is clicked', () => {
+    const boundary: CellBoundaryDatum = {
+      id: 'cellid_000000001-1',
+      polygon: [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, -10, 0],
+        [0, -10, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+    const onCellBoundaryClick = vi.fn()
+
+    render(
+      <ViewerCore
+        boundaries={[boundary]}
+        cellBoundaryHoverEnabled
+        onCellBoundaryClick={onCellBoundaryClick}
+      />,
+    )
+
+    act(() => {
+      deckGlMock.onClick?.({ object: boundary, x: 14, y: 22 })
+    })
+
+    expect(onCellBoundaryClick).toHaveBeenCalledWith(boundary)
+  })
+
   it('reports debounced viewport details for boundary loading', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

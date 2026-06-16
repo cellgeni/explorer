@@ -113,6 +113,7 @@ export interface ViewerCoreProps {
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
+  readonly onCellBoundaryClick?: (boundary: CellBoundaryDatum) => void
   readonly onGridCellClick?: (cell: GridCellDatum) => void
   readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
   readonly onTranscriptClick?: (detail: ViewerTranscriptHoverDetail) => void
@@ -230,6 +231,7 @@ export function ViewerCore({
   onViewportChange,
   onViewportCellCountChange,
   onCellClick,
+  onCellBoundaryClick,
   onGridCellClick,
   onTranscriptHover,
   onTranscriptClick,
@@ -298,6 +300,7 @@ export function ViewerCore({
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
       {...(onViewportCellCountChange === undefined ? {} : { onViewportCellCountChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
+      {...(onCellBoundaryClick === undefined ? {} : { onCellBoundaryClick })}
       {...(onGridCellClick === undefined ? {} : { onGridCellClick })}
       {...(onTranscriptHover === undefined ? {} : { onTranscriptHover })}
       {...(onTranscriptClick === undefined ? {} : { onTranscriptClick })}
@@ -357,6 +360,7 @@ interface ViewerSurfaceProps {
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
+  readonly onCellBoundaryClick?: (boundary: CellBoundaryDatum) => void
   readonly onGridCellClick?: (cell: GridCellDatum) => void
   readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
   readonly onTranscriptClick?: (detail: ViewerTranscriptHoverDetail) => void
@@ -482,6 +486,7 @@ function ViewerSurface({
   onViewportChange,
   onViewportCellCountChange,
   onCellClick,
+  onCellBoundaryClick,
   onGridCellClick,
   onTranscriptHover,
   onTranscriptClick,
@@ -994,11 +999,7 @@ function ViewerSurface({
         return
       }
 
-      if (onCellClick === undefined) {
-        return
-      }
-
-      if (isOverviewCellDatum(info.object)) {
+      if (isOverviewCellDatum(info.object) && onCellClick !== undefined) {
         onCellClick(info.object)
         return
       }
@@ -1006,10 +1007,17 @@ function ViewerSurface({
       if (isCellBoundaryDatum(info.object)) {
         const cell = cellById.get(info.object.id)
 
-        if (cell !== undefined) {
+        if (cell !== undefined && onCellClick !== undefined) {
           onCellClick(cell)
           return
         }
+
+        onCellBoundaryClick?.(info.object)
+        return
+      }
+
+      if (onCellClick === undefined) {
+        return
       }
 
       const coordinateCell = cellForDeckCoordinate(
@@ -1023,7 +1031,15 @@ function ViewerSurface({
         onCellClick(coordinateCell)
       }
     },
-    [boundaries, cellById, onCellClick, onGridCellClick, onTranscriptClick, visibleCells],
+    [
+      boundaries,
+      cellById,
+      onCellBoundaryClick,
+      onCellClick,
+      onGridCellClick,
+      onTranscriptClick,
+      visibleCells,
+    ],
   )
   const handleDeckHover = useCallback(
     (info: PickingInfo<unknown>) => {
