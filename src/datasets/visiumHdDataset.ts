@@ -19,6 +19,12 @@ import {
   type VisiumHdSquareBarcode,
 } from './visiumHdBarcodes'
 import {
+  filterVisiumHdSegmentationElementsByBbox,
+  readVisiumHdSegmentationElements,
+  type ReadVisiumHdSegmentationElementsOptions,
+  type VisiumHdSegmentedOutputPaths,
+} from './visiumHdSegmentations'
+import {
   normalizeVisiumHdBarcodeMappingRowBudget,
   readVisiumHdBarcodeMappings,
   selectVisiumHdBarcodeMappingAssignments,
@@ -49,6 +55,7 @@ import type {
   SpatialGrid,
   SpatialGridBasis,
   SpatialDataset,
+  SpatialElement,
   SpatialElementId,
 } from './spatialDataset'
 import type { GeneExpressionBatch, GeneExpressionQueryOptions } from './xeniumDataset'
@@ -89,6 +96,11 @@ export interface VisiumHdDatasetOptions {
     baseUrl: string,
     options: ReadVisiumHdBarcodeMappingsOptions,
   ) => Promise<readonly VisiumHdBarcodeMapping[]>
+  readonly segmentedOutputs?: VisiumHdSegmentedOutputPaths
+  readonly segmentationReader?: (
+    baseUrl: string,
+    options: ReadVisiumHdSegmentationElementsOptions,
+  ) => Promise<readonly SpatialElement[]>
   readonly featureMatrixReader?: (
     url: string,
     ids: readonly SpatialElementId[],
@@ -104,6 +116,7 @@ export interface VisiumHdDatasetOptions {
   readonly maxTwoMicrometerFilteredBarcodes?: number
   readonly maxInteractiveMatrixBytes?: number
   readonly maxInteractiveFeatureSliceBytes?: number
+  readonly maxInteractiveSegmentationGeojsonBytes?: number
   readonly readObjects?: VisiumHdParquetObjectReader
   readonly loadCompressors?: () => Promise<Compressors>
   readonly byteRangeCache?: PersistentByteRangeCache | null
@@ -232,6 +245,7 @@ export class VisiumHdTissuePositionsDecodeError extends Error {
 const DEFAULT_VISIUM_HD_MAX_BASIS_FIT_SAMPLES = 10_000
 export const DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET = 64 * 1024 * 1024
 export const DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET = 128 * 1024 * 1024
+export const DEFAULT_VISIUM_HD_SEGMENTATION_GEOJSON_BYTE_BUDGET = 64 * 1024 * 1024
 
 export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   readonly baseUrl: string
@@ -260,6 +274,11 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     baseUrl: string,
     options: ReadVisiumHdBarcodeMappingsOptions,
   ) => Promise<readonly VisiumHdBarcodeMapping[]>
+  private readonly segmentedOutputs: VisiumHdSegmentedOutputPaths | undefined
+  private readonly segmentationReader: (
+    baseUrl: string,
+    options: ReadVisiumHdSegmentationElementsOptions,
+  ) => Promise<readonly SpatialElement[]>
   private readonly featureMatrixReader: (
     url: string,
     ids: readonly SpatialElementId[],
@@ -274,6 +293,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   ) => Promise<GexResult<SpatialElementId>>
   private readonly maxInteractiveMatrixBytes: number
   private readonly maxInteractiveFeatureSliceBytes: number
+  private readonly maxInteractiveSegmentationGeojsonBytes: number
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
   private readonly loadCompressors: (() => Promise<Compressors>) | undefined
   private readonly byteRangeCache: PersistentByteRangeCache | null | undefined
@@ -293,6 +313,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     number,
     Promise<readonly VisiumHdBarcodeMapping[]>
   >()
+  private readonly segmentationPromises = new Map<
+    string,
+    Promise<readonly SpatialElement[]>
+  >()
 
   constructor(options: VisiumHdDatasetOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl)
@@ -309,6 +333,9 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       options.filteredMatrixBarcodeReader ?? readVisiumHdFilteredMatrixBarcodes
     this.barcodeMappingsReader =
       options.barcodeMappingsReader ?? readVisiumHdBarcodeMappings
+    this.segmentedOutputs = options.segmentedOutputs
+    this.segmentationReader =
+      options.segmentationReader ?? readVisiumHdSegmentationElements
     this.featureMatrixReader =
       options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
@@ -323,6 +350,9 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     this.maxInteractiveFeatureSliceBytes =
       options.maxInteractiveFeatureSliceBytes ??
       DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET
+    this.maxInteractiveSegmentationGeojsonBytes =
+      options.maxInteractiveSegmentationGeojsonBytes ??
+      DEFAULT_VISIUM_HD_SEGMENTATION_GEOJSON_BYTE_BUDGET
     this.readObjects = options.readObjects
     this.loadCompressors = options.loadCompressors
     this.byteRangeCache = options.byteRangeCache
@@ -337,7 +367,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       extent: overviewExtent(overview),
       capabilities: {
         transcripts: false,
-        cellBoundaries: false,
+        cellBoundaries: this.cellSegmentationPath() !== undefined,
         pyramidImage: false,
         multiChannel: false,
       },
@@ -348,9 +378,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   async elements(bbox: BBox): Promise<ElementBatch<SpatialElementId>> {
     const overview = await this.readBinnedOverview()
     const selected = selectGridCellsInBbox(overview, bbox)
+    const elements = await this.segmentedCellElements(bbox, overview.scalefactors)
 
     return {
-      elements: [],
+      elements,
       gridCells: [selected],
     }
   }
@@ -727,6 +758,56 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
 
     this.overviewPromises.set(2, promise)
     return promise
+  }
+
+  private async segmentedCellElements(
+    bbox: BBox,
+    scalefactors: VisiumHdScalefactors,
+  ): Promise<readonly SpatialElement[]> {
+    const path = this.cellSegmentationPath()
+
+    if (path === undefined) {
+      return []
+    }
+
+    const elements = await this.segmentedElementsForPath(path, scalefactors)
+    return filterVisiumHdSegmentationElementsByBbox(elements, bbox)
+  }
+
+  private segmentedElementsForPath(
+    path: string,
+    scalefactors: VisiumHdScalefactors,
+  ): Promise<readonly SpatialElement[]> {
+    const cacheKey = `${path}\n${scalefactors.micronsPerPixel}`
+    const existing = this.segmentationPromises.get(cacheKey)
+
+    if (existing !== undefined) {
+      return existing
+    }
+
+    const promise = this.segmentationReader(this.baseUrl, {
+      path,
+      scalefactors,
+      kind: 'cell',
+      maxFullFileBytes: this.maxInteractiveSegmentationGeojsonBytes,
+      fetcher: this.fetcher,
+    }).catch((error: unknown) => {
+      if (this.segmentationPromises.get(cacheKey) === promise) {
+        this.segmentationPromises.delete(cacheKey)
+      }
+
+      throw error
+    })
+
+    this.segmentationPromises.set(cacheKey, promise)
+    return promise
+  }
+
+  private cellSegmentationPath(): string | undefined {
+    return (
+      this.segmentedOutputs?.cellSegmentationsGeojsonPath ??
+      this.segmentedOutputs?.graphclustAnnotatedCellSegmentationsGeojsonPath
+    )
   }
 }
 

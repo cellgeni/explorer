@@ -1,12 +1,12 @@
 import type { BBox } from './coords'
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
-import { cachedXeniumDataset } from './xeniumDatasetCache'
+import { cachedSpatialDataset } from '../datasets/datasetFactory'
 import type { ElementBatch, SpatialDataset } from '../datasets/spatialDataset'
 import type { DatasetRangeValidator } from './datasetOverview'
 
 export interface LoadDatasetBoundaryElementsOptions {
-  readonly getDataset?: (baseUrl: string) => SpatialDataset
+  readonly getDataset?: (baseUrl: string) => Promise<SpatialDataset> | SpatialDataset
   readonly validateRangeSupport?: DatasetRangeValidator
   readonly signal?: AbortSignal
 }
@@ -17,15 +17,22 @@ export async function loadDatasetBoundaryElements(
   options: LoadDatasetBoundaryElementsOptions = {},
 ): Promise<ElementBatch> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
-
-  await validateRangeSupport(datasetFileUrl(baseUrl, 'cell_boundaries.parquet'), {
-    label: 'cell_boundaries.parquet',
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-  })
+  const dataset = await (options.getDataset?.(baseUrl) ?? cachedSpatialDataset(baseUrl))
+  throwIfAborted(options.signal)
+  const meta = await dataset.meta()
   throwIfAborted(options.signal)
 
-  const dataset = options.getDataset?.(baseUrl) ?? (await cachedXeniumDataset(baseUrl))
-  throwIfAborted(options.signal)
+  if (!meta.capabilities.cellBoundaries) {
+    return { elements: [] }
+  }
+
+  if (meta.platform === 'xenium') {
+    await validateRangeSupport(datasetFileUrl(baseUrl, 'cell_boundaries.parquet'), {
+      label: 'cell_boundaries.parquet',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+    throwIfAborted(options.signal)
+  }
 
   const batch = await dataset.elements(bbox)
   throwIfAborted(options.signal)

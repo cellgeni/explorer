@@ -27,6 +27,7 @@ import {
 import {
   defaultAppDependencies,
   type AppProps,
+  type BoundaryElementsLoader,
   type GeneExpressionLoader,
 } from './features/app-shell/appDependencies'
 import { useAppControlIds } from './features/app-shell/useAppControlIds'
@@ -1253,6 +1254,34 @@ export function App({
     },
     [activeVisiumHdBinSize, isVisiumHdDataset, loadAnalysisEmbeddings],
   )
+  const loadActiveBoundaryElements = useCallback<BoundaryElementsLoader>(
+    async (baseUrl, bbox, options = {}) => {
+      if (!isVisiumHdDataset) {
+        return loadBoundaryElements(baseUrl, bbox, options)
+      }
+
+      const dataset =
+        visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
+          ? await getSpatialDataset(baseUrl)
+          : await getSpatialDataset(baseUrl, {
+              visiumHdMaxTwoMicrometerFilteredBarcodes:
+                visiumHdTwoMicrometerFilteredBarcodeBudget,
+            })
+      const meta = await dataset.meta()
+
+      if (!meta.capabilities.cellBoundaries) {
+        return { elements: [] }
+      }
+
+      return dataset.elements(bbox)
+    },
+    [
+      getSpatialDataset,
+      isVisiumHdDataset,
+      loadBoundaryElements,
+      visiumHdTwoMicrometerFilteredBarcodeBudget,
+    ],
+  )
   const geneExpressionLoadingEnabled = !isVisiumHdDataset
   const geneExpressionDisabledMessage = isVisiumHdDataset
     ? 'Visium HD selected-gene overlays require the Feature Slice H5 reader and are not enabled yet.'
@@ -1323,7 +1352,6 @@ export function App({
     appendDebugEvent,
     boundaryAbortRef,
     boundaryCellLimit,
-    boundaryLoadingEnabled: !isVisiumHdDataset,
     boundaryRequestIdRef: boundaryRequestId,
     boundaryViewportKeyRef,
     geneExpressionAbortRef,
@@ -1335,7 +1363,7 @@ export function App({
     geneExpressionScoreMode,
     geneExpressionViewportKeyRef,
     lastViewportDetailRef,
-    loadBoundaryElements,
+    loadBoundaryElements: loadActiveBoundaryElements,
     loadGeneExpression: loadActiveGeneExpression,
     loadState,
     overviewExtent,
@@ -1386,7 +1414,7 @@ export function App({
     cellDetailState,
     cellTranscriptDistributionAbortRef,
     cellTranscriptDistributionRequestIdRef: cellTranscriptDistributionRequestId,
-    loadBoundaryElements,
+    loadBoundaryElements: loadActiveBoundaryElements,
     loadCellTranscriptDistribution,
     loadRoiGeneStats,
     loadState,

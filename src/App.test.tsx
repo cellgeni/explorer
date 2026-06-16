@@ -453,6 +453,128 @@ describe('App', () => {
     }
   })
 
+  it('loads Visium HD segmented boundaries through the active spatial dataset', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 320,
+      height: 190,
+      top: 0,
+      right: 320,
+      bottom: 190,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const overview = visiumOverviewFixture()
+    const detectSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetDetector>> = vi.fn(
+      async () => ({
+        platform: 'visium-hd',
+        baseUrl: visiumUrl,
+        bins: [
+          {
+            binSizeMicrometers: 16,
+            outputPath: 'binned_outputs/square_016um',
+            tissuePositionsPath:
+              'binned_outputs/square_016um/spatial/tissue_positions.parquet',
+            scalefactorsPath:
+              'binned_outputs/square_016um/spatial/scalefactors_json.json',
+            filteredMatrixH5Path:
+              'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+          },
+        ],
+        segmentedOutputs: {
+          cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
+        },
+        checked: [],
+      }),
+    )
+    const visiumDataset = {
+      readBinnedOverview: vi.fn(async () => overview),
+      meta: vi.fn(async () => ({
+        platform: 'visium-hd' as const,
+        units: {
+          dataUnit: 'micrometer' as const,
+          imageUnit: 'pixel' as const,
+          micrometersPerPixel: micrometers(1),
+          origin: 'top-left' as const,
+          imageYAxis: 'down' as const,
+        },
+        extent: {
+          minX: micrometers(0),
+          maxX: micrometers(40),
+          minY: micrometers(0),
+          maxY: micrometers(20),
+        },
+        capabilities: {
+          transcripts: false,
+          cellBoundaries: true,
+          pyramidImage: false,
+          multiChannel: false,
+        },
+        grids: [overview.grid],
+      })),
+      image: vi.fn(async () => null),
+      elements: vi.fn(async () => ({
+        elements: [
+          {
+            id: 'cellid_000000001-1',
+            geometry: {
+              kind: 'polygon' as const,
+              rings: [
+                [
+                  { x: micrometers(0), y: micrometers(0) },
+                  { x: micrometers(10), y: micrometers(0) },
+                  { x: micrometers(10), y: micrometers(10) },
+                ],
+              ],
+            },
+          },
+        ],
+      })),
+    }
+    const getSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetLoader>> = vi.fn(
+      async () => visiumDataset as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
+    )
+    const loadBoundaryElements: ReturnType<typeof vi.fn<BoundaryElementsLoader>> = vi.fn(
+      async () => ({ elements: [] }),
+    )
+
+    try {
+      render(
+        <App
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={getSpatialDataset}
+          loadBoundaryElements={loadBoundaryElements}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      await screen.findAllByText(/Visium HD ready/)
+      await waitFor(() => {
+        expect(visiumDataset.elements).toHaveBeenCalledWith(
+          expect.objectContaining({
+            minX: expect.any(Number) as number,
+            maxX: expect.any(Number) as number,
+            minY: expect.any(Number) as number,
+            maxY: expect.any(Number) as number,
+          }),
+        )
+      })
+      expect(loadBoundaryElements).not.toHaveBeenCalled()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
   it('lets the user configure image and cell layer opacity', () => {
     render(<App />)
     openHudTab('Layers')

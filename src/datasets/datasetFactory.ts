@@ -1,21 +1,11 @@
 import { datasetFileUrl } from '../data/datasetFiles'
 import type { CellId } from '../data/cellid'
 import { normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget } from './visiumHdStrategy'
+import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentations'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
 
 export type AnySpatialDataset = SpatialDataset<CellId> | SpatialDataset<SpatialElementId>
-
-export interface VisiumHdSegmentedOutputPaths {
-  readonly scalefactorsPath?: string
-  readonly filteredFeatureCellMatrixH5Path?: string
-  readonly rawFeatureCellMatrixH5Path?: string
-  readonly cellSegmentationsGeojsonPath?: string
-  readonly nucleusSegmentationsGeojsonPath?: string
-  readonly nucleusInstanceMaskTiffPath?: string
-  readonly graphclustAnnotatedCellSegmentationsGeojsonPath?: string
-  readonly graphclustAnnotatedNucleusSegmentationsGeojsonPath?: string
-}
 
 export type SpatialDatasetDetection =
   | {
@@ -200,6 +190,9 @@ export async function createSpatialDataset(
     return new VisiumHdDataset({
       baseUrl: detection.baseUrl,
       bins: detection.bins,
+      ...(detection.segmentedOutputs === undefined
+        ? {}
+        : { segmentedOutputs: detection.segmentedOutputs }),
       ...(options.visiumHdMaxTwoMicrometerFilteredBarcodes === undefined
         ? {}
         : {

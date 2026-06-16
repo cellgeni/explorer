@@ -1027,7 +1027,12 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [x] Slice 8 partial: segmented-output detector and diagnostics probes for
       feature-cell matrices, cell/nucleus GeoJSONs, annotated GeoJSONs, and the
       nucleus instance-mask TIFF.
-- [ ] Slice 8 remaining: segmented cell/nucleus geometry probing and rendering.
+- [x] Slice 8 partial: segmented cell GeoJSON parsing and rendering through the
+      existing polygon boundary layer when a detected cell segmentation GeoJSON
+      is present and within the interactive full-file byte budget.
+- [ ] Slice 8 remaining: nucleus segmentation GeoJSON/TIFF rendering,
+      annotated segmentation styling, and viewport-scoped or streaming segmented
+      geometry loading for large hosted masks.
 
 ### Phase 6 Execution Notes
 
@@ -1251,6 +1256,22 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       matrices under segmented outputs. Dataset detection now records which of
       those sidecars are present, and diagnostics checks them as optional
       segmented-output assets when any segmented-output signal is detected.
+- [x] Continued Slice 8 with cell segmentation GeoJSON rendering plumbing.
+      Added a typed Visium HD segmentation GeoJSON reader for `FeatureCollection`
+      polygon/multipolygon masks, matrix-style normalization for numeric Space
+      Ranger GeoJSON `cell_id` values, full-resolution pixel to micrometer
+      conversion, viewport filtering, and a full-file byte-budget guard. Detected
+      `cell_segmentations.geojson` or graphclust-annotated cell segmentations
+      now set `capabilities.cellBoundaries = true` on `VisiumHdDataset`, and the
+      App routes Visium HD boundary viewport loads through the active
+      `SpatialDataset.elements()` path so existing polygon boundary rendering can
+      draw segmented cells when a hosted dataset exposes them. Binned-only Visium
+      HD datasets continue to return no boundary elements without invoking the
+      Xenium `cell_boundaries.parquet` loader.
+- [ ] Slice 8 remaining: nucleus segmentation GeoJSON/TIFF rendering,
+      annotated segmentation styling, and a viewport-scoped or streaming strategy
+      for segmentation assets that exceed the interactive GeoJSON full-file
+      budget.
 
 ### Definition Of Done For The First Visium HD MVP
 
