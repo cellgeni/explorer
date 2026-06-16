@@ -72,6 +72,20 @@ describe('loadErrorModel', () => {
       title: 'Feature Slice H5 over budget',
       detail: 'FeatureSliceFullFileBudgetExceededError',
     })
+    const segmentationOverBudget = new Error(
+      'Visium HD segmentation GeoJSON is 65.0 MB, exceeding the interactive full-file budget of 64.0 MB.',
+    )
+    segmentationOverBudget.name = 'VisiumHdSegmentationGeojsonBudgetExceededError'
+
+    expect(
+      createStructuredLoadError('Cell boundaries', segmentationOverBudget),
+    ).toMatchObject({
+      code: 'unsupported',
+      title: 'Segmentation GeoJSON over budget',
+      detail: 'VisiumHdSegmentationGeojsonBudgetExceededError',
+      action:
+        'Raise or remove the Visium HD segmentation GeoJSON budget, or provide a smaller segmentation source.',
+    })
     expect(
       createStructuredLoadError(
         'Morphology image',

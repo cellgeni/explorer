@@ -25,6 +25,7 @@ import type {
   VisiumHdParquetReadObjectsOptions,
   VisiumHdScalefactors,
 } from './visiumHdDataset'
+import type { ReadVisiumHdSegmentationElementsOptions } from './visiumHdSegmentations'
 
 const fakeFile: AsyncBuffer = {
   byteLength: 8,
@@ -394,7 +395,11 @@ describe('Visium HD dataset readers', () => {
         ],
       },
     }
-    const segmentationReader = vi.fn(async () => [insideElement, outsideElement])
+    const segmentationOptions: ReadVisiumHdSegmentationElementsOptions[] = []
+    const segmentationReader = vi.fn(async (_baseUrl, options) => {
+      segmentationOptions.push(options)
+      return [insideElement, outsideElement]
+    })
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16],
@@ -432,6 +437,7 @@ describe('Visium HD dataset readers', () => {
         kind: 'cell',
       }),
     )
+    expect(segmentationOptions[0]).not.toHaveProperty('maxFullFileBytes')
   })
 
   it('reports nucleus segmentation metadata without enabling cell boundaries', async () => {
@@ -512,7 +518,11 @@ describe('Visium HD dataset readers', () => {
         ],
       },
     }
-    const segmentationReader = vi.fn(async () => [insideElement, outsideElement])
+    const segmentationOptions: ReadVisiumHdSegmentationElementsOptions[] = []
+    const segmentationReader = vi.fn(async (_baseUrl, options) => {
+      segmentationOptions.push(options)
+      return [insideElement, outsideElement]
+    })
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16],
@@ -547,6 +557,7 @@ describe('Visium HD dataset readers', () => {
         kind: 'nucleus',
       }),
     )
+    expect(segmentationOptions[0]).not.toHaveProperty('maxFullFileBytes')
   })
 
   it('rejects 2 µm overview reads until a budgeted loading path is available', async () => {

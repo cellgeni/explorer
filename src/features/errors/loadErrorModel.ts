@@ -143,6 +143,20 @@ export function createStructuredLoadError(
     )
   }
 
+  if (isSegmentationGeojsonBudgetError(error, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'unsupported',
+        title: 'Segmentation GeoJSON over budget',
+        message,
+        action:
+          'Raise or remove the Visium HD segmentation GeoJSON budget, or provide a smaller segmentation source.',
+      },
+      detail,
+    )
+  }
+
   if (isFullFileMatrixBudgetError(error, normalizedMessage)) {
     if (isFeatureSliceBudgetError(error, normalizedMessage)) {
       return withOptionalDetail(
@@ -255,6 +269,18 @@ function isFullFileMatrixBudgetError(error: unknown, normalizedMessage: string):
     (error instanceof Error &&
       error.name === 'FeatureSliceFullFileBudgetExceededError') ||
     normalizedMessage.includes('interactive full-file budget')
+  )
+}
+
+function isSegmentationGeojsonBudgetError(
+  error: unknown,
+  normalizedMessage: string,
+): boolean {
+  return (
+    (error instanceof Error &&
+      error.name === 'VisiumHdSegmentationGeojsonBudgetExceededError') ||
+    (normalizedMessage.includes('segmentation geojson') &&
+      normalizedMessage.includes('interactive full-file budget'))
   )
 }
 

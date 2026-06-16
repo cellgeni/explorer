@@ -247,7 +247,6 @@ export class VisiumHdTissuePositionsDecodeError extends Error {
 const DEFAULT_VISIUM_HD_MAX_BASIS_FIT_SAMPLES = 10_000
 export const DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET = 64 * 1024 * 1024
 export const DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET = 128 * 1024 * 1024
-export const DEFAULT_VISIUM_HD_SEGMENTATION_GEOJSON_BYTE_BUDGET = 64 * 1024 * 1024
 
 export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   readonly baseUrl: string
@@ -295,7 +294,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   ) => Promise<GexResult<SpatialElementId>>
   private readonly maxInteractiveMatrixBytes: number
   private readonly maxInteractiveFeatureSliceBytes: number
-  private readonly maxInteractiveSegmentationGeojsonBytes: number
+  private readonly maxInteractiveSegmentationGeojsonBytes: number | undefined
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
   private readonly loadCompressors: (() => Promise<Compressors>) | undefined
   private readonly byteRangeCache: PersistentByteRangeCache | null | undefined
@@ -353,8 +352,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       options.maxInteractiveFeatureSliceBytes ??
       DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET
     this.maxInteractiveSegmentationGeojsonBytes =
-      options.maxInteractiveSegmentationGeojsonBytes ??
-      DEFAULT_VISIUM_HD_SEGMENTATION_GEOJSON_BYTE_BUDGET
+      options.maxInteractiveSegmentationGeojsonBytes
     this.readObjects = options.readObjects
     this.loadCompressors = options.loadCompressors
     this.byteRangeCache = options.byteRangeCache
@@ -808,8 +806,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       path,
       scalefactors,
       kind,
-      maxFullFileBytes: this.maxInteractiveSegmentationGeojsonBytes,
       fetcher: this.fetcher,
+      ...(this.maxInteractiveSegmentationGeojsonBytes === undefined
+        ? {}
+        : { maxFullFileBytes: this.maxInteractiveSegmentationGeojsonBytes }),
     }).catch((error: unknown) => {
       if (this.segmentationPromises.get(cacheKey) === promise) {
         this.segmentationPromises.delete(cacheKey)

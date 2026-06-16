@@ -1283,6 +1283,12 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       viewport bbox filtering. The existing `elements(bbox)` boundary path
       remains cell-only for the current renderer, while nucleus geometry is now
       available for a dedicated overlay/UI slice.
+- [x] Removed the default 64 MB full-file budget from Visium HD segmentation
+      GeoJSON reads. The optional budget parameter remains available for
+      constrained deployments and tests, but hosted segmentation overlays now
+      load the detected GeoJSON by default. Structured load errors now classify
+      explicit segmentation-budget failures separately from expression matrix
+      budget failures.
 - [ ] Slice 8 remaining: nucleus segmentation GeoJSON/TIFF rendering,
       annotated segmentation styling, and a viewport-scoped or streaming strategy
       for segmentation assets that exceed the interactive GeoJSON full-file
