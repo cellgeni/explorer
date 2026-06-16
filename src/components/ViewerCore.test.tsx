@@ -187,6 +187,27 @@ describe('ViewerCore', () => {
     expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
   })
 
+  it('renders nucleus segmentation polygons without overview cells', () => {
+    const nucleusBoundary: CellBoundaryDatum = {
+      id: 'nucleus-1',
+      polygon: [
+        [0, 0, 0],
+        [8, 0, 0],
+        [8, -8, 0],
+      ],
+      fillColor: [63, 118, 190, 38],
+      lineColor: [128, 188, 255, 170],
+    }
+
+    render(<ViewerCore nucleusBoundaries={[nucleusBoundary]} />)
+
+    expect(screen.getByTestId('deck-layer-nucleus-segmentation-polygons')).toHaveAttribute(
+      'data-count',
+      '1',
+    )
+    expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
+  })
+
   it('applies image opacity to the morphology canvas', () => {
     render(<ViewerCore imageOpacity={0.4} />)
 

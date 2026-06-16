@@ -69,6 +69,7 @@ export interface ViewerCoreProps {
   readonly expressionCells?: readonly OverviewCellDatum[]
   readonly geneExpressionActive?: boolean
   readonly boundaries?: readonly CellBoundaryDatum[]
+  readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled?: boolean
   readonly gridCells?: readonly GridCellDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
@@ -187,6 +188,7 @@ export function ViewerCore({
   expressionCells = [],
   geneExpressionActive = false,
   boundaries = [],
+  nucleusBoundaries = [],
   cellBoundaryHoverEnabled = false,
   gridCells = [],
   transcriptAggregateBins = [],
@@ -256,6 +258,7 @@ export function ViewerCore({
       expressionCells={expressionCells}
       geneExpressionActive={geneExpressionActive}
       boundaries={boundaries}
+      nucleusBoundaries={nucleusBoundaries}
       cellBoundaryHoverEnabled={cellBoundaryHoverEnabled}
       gridCells={gridCells}
       transcriptAggregateBins={transcriptAggregateBins}
@@ -316,6 +319,7 @@ interface ViewerSurfaceProps {
   readonly expressionCells: readonly OverviewCellDatum[]
   readonly geneExpressionActive: boolean
   readonly boundaries: readonly CellBoundaryDatum[]
+  readonly nucleusBoundaries: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled: boolean
   readonly gridCells: readonly GridCellDatum[]
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
@@ -442,6 +446,7 @@ function ViewerSurface({
   expressionCells,
   geneExpressionActive,
   boundaries,
+  nucleusBoundaries,
   cellBoundaryHoverEnabled,
   gridCells,
   transcriptAggregateBins,
@@ -686,6 +691,7 @@ function ViewerSurface({
         cellBoundaryOpacity,
         cellBoundaryFillEnabled,
         cellBoundaryPickable: cellBoundaryHoverEnabled,
+        nucleusBoundaries,
         gridCells: expressionStyledGridCells,
         cellBoundaryGeometry: boundaryLayerGeometry,
         cellBoundaryStyle: boundaryLayerStyle,
@@ -704,6 +710,7 @@ function ViewerSurface({
       boundaryLayerGeometry,
       boundaryLayerStyle,
       boundaries,
+      nucleusBoundaries,
       expressionStyledRenderCells,
       expressionStyledGridCells,
       geneExpressionActive,
@@ -717,7 +724,8 @@ function ViewerSurface({
   const hasCells = cells.length > 0
   const hasGridCells = gridCells.length > 0
   const hasBoundaries = boundaries.length > 0
-  const hasSpatialData = hasCells || hasGridCells || hasBoundaries
+  const hasNucleusBoundaries = nucleusBoundaries.length > 0
+  const hasSpatialData = hasCells || hasGridCells || hasBoundaries || hasNucleusBoundaries
   const hasImage = imageLoader !== null || imageChannels.length > 0 || flatImage !== null
   const canTrackMouseCoordinates = hasSpatialData || hasImage
   const visibleCellCount = visibleCells.length
@@ -735,6 +743,10 @@ function ViewerSurface({
 
     if (!hasCells && !hasGridCells && hasBoundaries) {
       return boundaries.length
+    }
+
+    if (!hasCells && !hasGridCells && !hasBoundaries && hasNucleusBoundaries) {
+      return nucleusBoundaries.length
     }
 
     if (viewportBbox === null) {
@@ -755,6 +767,8 @@ function ViewerSurface({
     hasBoundaries,
     hasCells,
     hasGridCells,
+    hasNucleusBoundaries,
+    nucleusBoundaries.length,
     viewState.zoom,
     viewportBbox,
     visibleCellCount,

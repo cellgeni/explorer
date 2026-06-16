@@ -502,6 +502,8 @@ describe('App', () => {
         ],
         segmentedOutputs: {
           cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
+          nucleusSegmentationsGeojsonPath:
+            'segmented_outputs/nucleus_segmentations.geojson',
         },
         checked: [],
       }),
@@ -530,6 +532,22 @@ describe('App', () => {
           multiChannel: false,
         },
         grids: [overview.grid],
+        segmentations: [
+          {
+            id: 'visium-hd-cell-segmentations',
+            kind: 'cell' as const,
+            label: 'Cell segmentations',
+            sourceKind: 'geojson' as const,
+            path: 'segmented_outputs/cell_segmentations.geojson',
+          },
+          {
+            id: 'visium-hd-nucleus-segmentations',
+            kind: 'nucleus' as const,
+            label: 'Nucleus segmentations',
+            sourceKind: 'geojson' as const,
+            path: 'segmented_outputs/nucleus_segmentations.geojson',
+          },
+        ],
       })),
       image: vi.fn(async () => null),
       elements: vi.fn(async () => ({
@@ -549,6 +567,21 @@ describe('App', () => {
           },
         ],
       })),
+      segmentationElements: vi.fn(async () => [
+        {
+          id: 'nucleus_000000001',
+          geometry: {
+            kind: 'polygon' as const,
+            rings: [
+              [
+                { x: micrometers(1), y: micrometers(1) },
+                { x: micrometers(4), y: micrometers(1) },
+                { x: micrometers(4), y: micrometers(4) },
+              ],
+            ],
+          },
+        },
+      ]),
     }
     const getSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetLoader>> = vi.fn(
       async () => visiumDataset as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
@@ -584,7 +617,19 @@ describe('App', () => {
           'data-count',
           '1',
         )
+        expect(
+          screen.getByTestId('deck-layer-nucleus-segmentation-polygons'),
+        ).toHaveAttribute('data-count', '1')
       })
+      expect(visiumDataset.segmentationElements).toHaveBeenCalledWith(
+        'nucleus',
+        expect.objectContaining({
+          minX: expect.any(Number) as number,
+          maxX: expect.any(Number) as number,
+          minY: expect.any(Number) as number,
+          maxY: expect.any(Number) as number,
+        }),
+      )
       fireEvent.click(screen.getByTestId('deck-layer-cell-boundary-hit-areas'))
       openHudTab('Cell')
 

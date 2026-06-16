@@ -49,6 +49,7 @@ import type { StructuredLoadError } from '../errors/loadErrorModel'
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_MORPHOLOGY_CHANNEL_OPACITIES: ReadonlyMap<string, number> = new Map()
 const EMPTY_GRID_CELLS: readonly GridCellDatum[] = []
+const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 
 interface UseViewerLayerDataOptions {
   readonly annotationState: AnnotationState<StructuredLoadError>
@@ -72,6 +73,7 @@ interface UseViewerLayerDataOptions {
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
   readonly morphologyChannelOpacities?: ReadonlyMap<string, number>
   readonly boundaryElements: readonly SpatialElement[]
+  readonly nucleusBoundaryElements?: readonly SpatialElement[]
 }
 
 export function useViewerLayerData({
@@ -96,6 +98,7 @@ export function useViewerLayerData({
   morphologyChannelSettings,
   morphologyChannelOpacities = EMPTY_MORPHOLOGY_CHANNEL_OPACITIES,
   boundaryElements,
+  nucleusBoundaryElements = EMPTY_SPATIAL_ELEMENTS,
 }: UseViewerLayerDataOptions) {
   const annotationStyleColors = useMemo(
     () =>
@@ -256,12 +259,21 @@ export function useViewerLayerData({
     () => boundaryElementsToLayerData(boundaryElements),
     [boundaryElements],
   )
+  const nucleusBoundaryLayerData = useMemo(
+    () =>
+      boundaryElementsToLayerData(nucleusBoundaryElements, {
+        fillColor: [63, 118, 190, 38],
+        lineColor: [128, 188, 255, 170],
+      }),
+    [nucleusBoundaryElements],
+  )
 
   return {
     activeAnnotationStyleColors,
     activeCellMetadataTrack,
     annotationStyleColors,
     boundaryLayerData,
+    nucleusBoundaryLayerData,
     geneExpressionLayerDataDurationMs,
     geneExpressionRestyleDurationMs,
     geneExpressionScaleKey,

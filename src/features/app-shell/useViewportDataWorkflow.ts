@@ -64,6 +64,7 @@ interface UseViewportDataWorkflowOptions {
   readonly geneExpressionViewportKeyRef: MutableRef<string | null>
   readonly lastViewportDetailRef: MutableRef<ViewerViewportDetail | null>
   readonly loadBoundaryElements: BoundaryElementsLoader
+  readonly loadNucleusBoundaryElements?: BoundaryElementsLoader
   readonly loadGeneExpression: GeneExpressionLoader
   readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly overviewExtent: BBox | null
@@ -75,6 +76,7 @@ interface UseViewportDataWorkflowOptions {
   ) => void
   readonly selectedGenes: readonly string[]
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
+  readonly setNucleusBoundaryElements?: Setter<readonly SpatialElement[]>
   readonly setBoundaryState: Setter<BoundaryLoadState<StructuredLoadError>>
   readonly setCurrentViewportDetail: Setter<ViewerViewportDetail | null>
   readonly setGeneExpressionBatch: Setter<GeneExpressionBatch | null>
@@ -103,6 +105,7 @@ export function useViewportDataWorkflow({
   geneExpressionViewportKeyRef,
   lastViewportDetailRef,
   loadBoundaryElements,
+  loadNucleusBoundaryElements,
   loadGeneExpression,
   loadState,
   overviewExtent,
@@ -110,6 +113,7 @@ export function useViewportDataWorkflow({
   rememberGeneExpressionScaleMax,
   selectedGenes,
   setBoundaryElements,
+  setNucleusBoundaryElements,
   setBoundaryState,
   setCurrentViewportDetail,
   setGeneExpressionBatch,
@@ -139,6 +143,9 @@ export function useViewportDataWorkflow({
         boundaryRequestIdRef.current += 1
         boundaryViewportKeyRef.current = null
         setBoundaryElements((current) => (current.length === 0 ? current : []))
+        setNucleusBoundaryElements?.((current) =>
+          current.length === 0 ? current : [],
+        )
         setBoundaryState((current) =>
           current.status === 'idle' ? current : { status: 'idle' },
         )
@@ -154,19 +161,32 @@ export function useViewportDataWorkflow({
           boundaryViewportKeyRef.current = requestKey
           setBoundaryState({ status: 'loading', url: loadState.url })
 
-          void loadBoundaryElements(loadState.url, detail.bbox, {
-            signal: abortController.signal,
-          })
+          const loadNucleusElements =
+            loadNucleusBoundaryElements === undefined
+              ? Promise.resolve({ elements: [] })
+              : loadNucleusBoundaryElements(loadState.url, detail.bbox, {
+                  signal: abortController.signal,
+                })
+
+          void Promise.all([
+            loadBoundaryElements(loadState.url, detail.bbox, {
+              signal: abortController.signal,
+            }),
+            loadNucleusElements,
+          ])
             .then((batch) => {
               if (boundaryRequestIdRef.current !== requestId) {
                 return
               }
 
-              setBoundaryElements(batch.elements)
+              const [cellBatch, nucleusBatch] = batch
+
+              setBoundaryElements(cellBatch.elements)
+              setNucleusBoundaryElements?.(nucleusBatch.elements)
               setBoundaryState({
                 status: 'ready',
                 url: loadState.url,
-                cellCount: batch.elements.length,
+                cellCount: cellBatch.elements.length,
               })
             })
             .catch((error) => {
@@ -179,6 +199,7 @@ export function useViewportDataWorkflow({
               }
 
               setBoundaryElements([])
+              setNucleusBoundaryElements?.([])
               setBoundaryState({
                 status: 'error',
                 url: loadState.url,
@@ -397,6 +418,7 @@ export function useViewportDataWorkflow({
       geneExpressionViewportKeyRef,
       lastViewportDetailRef,
       loadBoundaryElements,
+      loadNucleusBoundaryElements,
       loadGeneExpression,
       loadState,
       overviewExtent,
@@ -404,6 +426,7 @@ export function useViewportDataWorkflow({
       rememberGeneExpressionScaleMax,
       selectedGenes,
       setBoundaryElements,
+      setNucleusBoundaryElements,
       setBoundaryState,
       setCurrentViewportDetail,
       setGeneExpressionBatch,

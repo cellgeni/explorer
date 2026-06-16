@@ -86,6 +86,11 @@ export interface CellBoundaryLayerGeometryOptions {
   readonly includeFill?: boolean
 }
 
+export interface BoundaryElementsToLayerDataOptions {
+  readonly fillColor?: Color
+  readonly lineColor?: Color
+}
+
 interface CellBoundaryPathGeometryData {
   readonly length: number
   readonly startIndices: Uint32Array
@@ -173,6 +178,8 @@ export interface OverviewLayerOptions {
   readonly cellBoundaryOpacity?: number
   readonly cellBoundaryFillEnabled?: boolean
   readonly cellBoundaryPickable?: boolean
+  readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
+  readonly nucleusBoundaryOpacity?: number
   readonly gridCells?: readonly GridCellDatum[]
   readonly gridCellOpacity?: number
   readonly cellBoundaryGeometry?: CellBoundaryLayerGeometry
@@ -457,6 +464,7 @@ export function createOverviewLayers(
   const cellBoundaryStyle = options.cellBoundaryStyle ?? EMPTY_CELL_BOUNDARY_LAYER_STYLE
   const transcriptAggregateBins = options.transcriptAggregateBins ?? []
   const gridCells = options.gridCells ?? []
+  const nucleusBoundaries = options.nucleusBoundaries ?? []
   const transcriptDensityBins = transcriptAggregateBins.filter(
     (bin) => bin.glyphType !== 'feature-circle',
   )
@@ -577,6 +585,35 @@ export function createOverviewLayers(
         }),
       )
     }
+  }
+
+  if (nucleusBoundaries.length > 0) {
+    const nucleusBoundaryOpacity = normalizeLayerOpacity(
+      options.nucleusBoundaryOpacity ?? DEFAULT_LAYER_OPACITY,
+    )
+
+    layers.push(
+      new PolygonLayer<CellBoundaryDatum>({
+        id: 'nucleus-segmentation-polygons',
+        data: nucleusBoundaries,
+        pickable: false,
+        stroked: true,
+        filled: true,
+        opacity: 1,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 0.5,
+        getPolygon: (boundary) => boundary.polygon,
+        getFillColor: (boundary) =>
+          colorWithOpacity(boundary.fillColor, nucleusBoundaryOpacity),
+        getLineColor: (boundary) =>
+          colorWithOpacity(boundary.lineColor, nucleusBoundaryOpacity),
+        getLineWidth: 0.5,
+        updateTriggers: {
+          getFillColor: [nucleusBoundaryOpacity],
+          getLineColor: [nucleusBoundaryOpacity],
+        },
+      }),
+    )
   }
 
   layers.push(cellPointLayer)
@@ -1457,8 +1494,11 @@ function cellAreaToRadiusMicrometers(cellArea: number | undefined): number | und
 
 export function boundaryElementsToLayerData(
   elements: readonly SpatialElement[],
+  options: BoundaryElementsToLayerDataOptions = {},
 ): readonly CellBoundaryDatum[] {
   const cells: CellBoundaryDatum[] = []
+  const fillColor = options.fillColor ?? [32, 102, 83, 34]
+  const lineColor = options.lineColor ?? [32, 102, 83, 190]
 
   for (const element of elements) {
     if (element.geometry.kind !== 'polygon') {
@@ -1474,8 +1514,8 @@ export function boundaryElementsToLayerData(
     cells.push({
       id: element.id,
       polygon: ring.map((point) => [point.x, -point.y, 0]),
-      fillColor: [32, 102, 83, 34],
-      lineColor: [32, 102, 83, 190],
+      fillColor,
+      lineColor,
     })
   }
 

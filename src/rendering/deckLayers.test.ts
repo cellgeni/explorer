@@ -248,6 +248,51 @@ describe('deck layer factory', () => {
     expect(getPolygon(boundaries[0]!)).toEqual(boundaries[0]!.polygon)
   })
 
+  it('adds a non-pickable nucleus segmentation polygon layer', () => {
+    const nucleusBoundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'nucleus-1',
+        polygon: [
+          [1, -1, 0],
+          [4, -1, 0],
+          [4, -4, 0],
+        ],
+        fillColor: [63, 118, 190, 38],
+        lineColor: [128, 188, 255, 170],
+      },
+    ]
+    const layers = createOverviewLayers([], [], {
+      nucleusBoundaries,
+      nucleusBoundaryOpacity: 0.5,
+    })
+
+    expect(layers).toHaveLength(2)
+    expect(layers[0]).toBeInstanceOf(PolygonLayer)
+    expect(layers[1]).toBeInstanceOf(ScatterplotLayer)
+
+    const nucleusLayer = layers[0]
+
+    if (!(nucleusLayer instanceof PolygonLayer)) {
+      throw new Error('Expected first overview layer to be a PolygonLayer.')
+    }
+
+    expect(nucleusLayer.id).toBe('nucleus-segmentation-polygons')
+    expect(nucleusLayer.props.pickable).toBe(false)
+    expect(nucleusLayer.props.stroked).toBe(true)
+    expect(nucleusLayer.props.filled).toBe(true)
+    expect(nucleusLayer.props.data).toEqual(nucleusBoundaries)
+
+    const getFillColor = nucleusLayer.props.getFillColor as (
+      boundary: CellBoundaryDatum,
+    ) => readonly number[]
+    const getLineColor = nucleusLayer.props.getLineColor as (
+      boundary: CellBoundaryDatum,
+    ) => readonly number[]
+
+    expect(getFillColor(nucleusBoundaries[0]!)).toEqual([63, 118, 190, 19])
+    expect(getLineColor(nucleusBoundaries[0]!)).toEqual([128, 188, 255, 85])
+  })
+
   it('applies separate cell fill and boundary opacity to points and boundaries', () => {
     const boundaries: readonly CellBoundaryDatum[] = [
       {
@@ -1420,6 +1465,38 @@ describe('deck layer factory', () => {
           [3, -4, 0],
           [5, -6, 0],
         ],
+      },
+    ])
+  })
+
+  it('applies custom colors while converting boundary elements', () => {
+    expect(
+      boundaryElementsToLayerData(
+        [
+          {
+            id: 'nucleus-1',
+            geometry: {
+              kind: 'polygon',
+              rings: [
+                [
+                  { x: micrometers(1), y: micrometers(2) },
+                  { x: micrometers(3), y: micrometers(4) },
+                  { x: micrometers(5), y: micrometers(6) },
+                ],
+              ],
+            },
+          },
+        ],
+        {
+          fillColor: [63, 118, 190, 38],
+          lineColor: [128, 188, 255, 170],
+        },
+      ),
+    ).toMatchObject([
+      {
+        id: 'nucleus-1',
+        fillColor: [63, 118, 190, 38],
+        lineColor: [128, 188, 255, 170],
       },
     ])
   })

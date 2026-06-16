@@ -1295,10 +1295,15 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       cell-boundary hit areas are now pickable behind an explicit viewer option,
       and hovering segmented cells shows a compact metadata tooltip with cell ID,
       polygon size/area, and matching expression details when available.
-- [ ] Slice 8 remaining: nucleus segmentation GeoJSON/TIFF rendering,
-      annotated segmentation styling, and a viewport-scoped or streaming strategy
-      for segmentation assets that exceed the interactive GeoJSON full-file
-      budget.
+- [x] Added first-pass Visium HD nucleus GeoJSON rendering. The viewport boundary
+      workflow now optionally loads detected nucleus segmentation GeoJSON through
+      the existing kind-aware `segmentationElements('nucleus', bbox)` dataset
+      API, clears nucleus overlays on dataset reload, converts them into a
+      distinct blue polygon layer, and keeps that layer non-pickable so segmented
+      cell click selection remains stable.
+- [ ] Slice 8 remaining: nucleus segmentation TIFF rendering, annotated
+      segmentation styling, and a viewport-scoped or streaming strategy for
+      segmentation assets that exceed the interactive GeoJSON full-file budget.
 
 ### Definition Of Done For The First Visium HD MVP
 

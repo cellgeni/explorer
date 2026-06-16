@@ -159,6 +159,7 @@ import {
   telemetryEvent,
   type TelemetryEvent,
 } from './data/telemetry'
+import type { BBox } from './data/coords'
 import { normalizeBoundaryCellLimit } from './rendering/boundaryViewport'
 import {
   DEFAULT_CELL_FILL_OPACITY,
@@ -179,7 +180,11 @@ import {
 } from './data/morphologyImage'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
-import type { Platform, SpatialElement } from './datasets/spatialDataset'
+import type {
+  Platform,
+  SpatialElement,
+  SpatialElementId,
+} from './datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from './datasets/visiumHdDataset'
 import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
 import type {
@@ -451,6 +456,9 @@ export function App({
     [],
   )
   const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
+  const [nucleusBoundaryElements, setNucleusBoundaryElements] = useState<
+    readonly SpatialElement[]
+  >([])
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(
     initialShareableState.shouldLoadMorphology ?? true,
   )
@@ -714,6 +722,7 @@ export function App({
     geneExpressionScaleMax,
     morphologyCanvasChannels,
     morphologyMicrometersPerPixel,
+    nucleusBoundaryLayerData,
     overviewExtent,
     styledGeneExpressionCells,
     styledOverviewCells,
@@ -738,6 +747,7 @@ export function App({
     morphologyChannelOpacities,
     morphologyChannels,
     morphologyImage,
+    nucleusBoundaryElements,
     observationColorMode,
     gridCells: spatialGridCells,
     overviewCells,
@@ -1302,6 +1312,40 @@ export function App({
       visiumHdTwoMicrometerFilteredBarcodeBudget,
     ],
   )
+  const loadActiveNucleusBoundaryElements = useCallback<BoundaryElementsLoader>(
+    async (baseUrl, bbox) => {
+      if (!isVisiumHdDataset) {
+        return { elements: [] }
+      }
+
+      const dataset =
+        visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
+          ? await getSpatialDataset(baseUrl)
+          : await getSpatialDataset(baseUrl, {
+              visiumHdMaxTwoMicrometerFilteredBarcodes:
+                visiumHdTwoMicrometerFilteredBarcodeBudget,
+            })
+      const meta = await dataset.meta()
+      const hasNucleusGeojson =
+        meta.segmentations?.some(
+          (segmentation) =>
+            segmentation.kind === 'nucleus' && segmentation.sourceKind === 'geojson',
+        ) ?? false
+
+      if (!hasNucleusGeojson || !isSpatialSegmentationDataset(dataset)) {
+        return { elements: [] }
+      }
+
+      return {
+        elements: await dataset.segmentationElements('nucleus', bbox),
+      }
+    },
+    [
+      getSpatialDataset,
+      isVisiumHdDataset,
+      visiumHdTwoMicrometerFilteredBarcodeBudget,
+    ],
+  )
   const geneExpressionLoadingEnabled = !isVisiumHdDataset
   const geneExpressionDisabledMessage = isVisiumHdDataset
     ? 'Visium HD selected-gene overlays require the Feature Slice H5 reader and are not enabled yet.'
@@ -1384,6 +1428,9 @@ export function App({
     geneExpressionViewportKeyRef,
     lastViewportDetailRef,
     loadBoundaryElements: loadActiveBoundaryElements,
+    ...(isVisiumHdDataset
+      ? { loadNucleusBoundaryElements: loadActiveNucleusBoundaryElements }
+      : {}),
     loadGeneExpression: loadActiveGeneExpression,
     loadState,
     overviewExtent,
@@ -1391,6 +1438,7 @@ export function App({
     rememberGeneExpressionScaleMax,
     selectedGenes,
     setBoundaryElements,
+    setNucleusBoundaryElements,
     setBoundaryState,
     setCurrentViewportDetail,
     setGeneExpressionBatch,
@@ -1828,6 +1876,7 @@ export function App({
     setSelectedEmbeddingKind,
     setSelectedGenes,
     setSpatialGridCells,
+    setNucleusBoundaryElements,
     setTranscriptCapabilityState,
     setTranscriptDensityColorScale,
     setTranscriptExactPointLimit,
@@ -2230,6 +2279,7 @@ export function App({
           expressionCells={styledGeneExpressionCells}
           geneExpressionActive={geneExpressionState.status === 'ready'}
           boundaries={boundaryLayerData}
+          nucleusBoundaries={nucleusBoundaryLayerData}
           cellBoundaryHoverEnabled={isVisiumHdDataset}
           gridCells={viewerGridCells}
           transcriptAggregateBins={transcriptLayerAggregateBins}
@@ -2320,5 +2370,24 @@ function isSpatialGeneExpressionDataset(
     typeof dataset === 'object' &&
     'geneExpression' in dataset &&
     typeof dataset.geneExpression === 'function'
+  )
+}
+
+interface SpatialSegmentationDataset {
+  segmentationElements(
+    kind: 'cell' | 'nucleus',
+    bbox: BBox,
+    binSizeMicrometers?: number,
+  ): Promise<readonly SpatialElement<SpatialElementId>[]>
+}
+
+function isSpatialSegmentationDataset(
+  dataset: unknown,
+): dataset is SpatialSegmentationDataset {
+  return (
+    dataset !== null &&
+    typeof dataset === 'object' &&
+    'segmentationElements' in dataset &&
+    typeof dataset.segmentationElements === 'function'
   )
 }

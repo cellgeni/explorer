@@ -185,6 +185,7 @@ interface UseDatasetLifecycleOptions {
   readonly setSelectedCellMetadataTrackId: Setter<string | null>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
+  readonly setNucleusBoundaryElements?: Setter<readonly SpatialElement[]>
   readonly setBoundaryState: Setter<BoundaryLoadState<StructuredLoadError>>
   readonly setCellDetailState: Setter<CellDetailState<StructuredLoadError>>
   readonly setCellFeatureMatrixCapabilityState: Setter<CellFeatureMatrixCapabilityState>
@@ -323,6 +324,7 @@ export function useDatasetLifecycle({
   setSelectedCellMetadataTrackId,
   setAutoContrastChannelIds,
   setBoundaryElements,
+  setNucleusBoundaryElements,
   setBoundaryState,
   setCellDetailState,
   setCellFeatureMatrixCapabilityState,
@@ -570,6 +572,7 @@ export function useDatasetLifecycle({
       autoContrastChannelIdsRef.current.clear()
       setAutoContrastChannelIds([])
       setBoundaryElements([])
+      setNucleusBoundaryElements?.([])
       setHoveredTranscript(null)
       setPinnedTranscript(null)
       setManualTranscriptExactRequestKey(null)
