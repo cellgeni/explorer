@@ -16,6 +16,8 @@ interface UseShareableUrlHashOptions {
   readonly geneExpressionScoreMode: string
   readonly imageOpacity: number
   readonly cellFillOpacity: number
+  readonly showCellBoundaries: boolean
+  readonly showNucleusBoundaries: boolean
   readonly cellBoundaryOpacity: number
   readonly morphologyEnabledChannelIds: readonly string[] | undefined
   readonly magicLensActive: boolean
@@ -53,6 +55,8 @@ export function useShareableUrlHash({
   geneExpressionScoreMode,
   imageOpacity,
   cellFillOpacity,
+  showCellBoundaries,
+  showNucleusBoundaries,
   cellBoundaryOpacity,
   morphologyEnabledChannelIds,
   magicLensActive,
@@ -100,6 +104,8 @@ export function useShareableUrlHash({
         boundaryCellLimit,
         imageOpacity,
         cellFillOpacity,
+        showCellBoundaries,
+        showNucleusBoundaries,
         cellBoundaryOpacity,
         ...(morphologyEnabledChannelIds === undefined
           ? {}
@@ -146,6 +152,8 @@ export function useShareableUrlHash({
     geneExpressionScoreMode,
     imageOpacity,
     cellFillOpacity,
+    showCellBoundaries,
+    showNucleusBoundaries,
     cellBoundaryOpacity,
     morphologyEnabledChannelIds,
     magicLensActive,

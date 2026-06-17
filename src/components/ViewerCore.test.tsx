@@ -187,6 +187,93 @@ describe('ViewerCore', () => {
     expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
   })
 
+  it('keeps the current zoom when rendered grid cells are toggled with a stable fit', () => {
+    const gridCell = gridCellDatum()
+    const boundary: CellBoundaryDatum = {
+      id: 'cellid_000000001-1',
+      polygon: [
+        [0, 0, 0],
+        [16, 0, 0],
+        [16, -16, 0],
+        [0, -16, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+    const { rerender } = render(
+      <ViewerCore
+        gridCells={[gridCell]}
+        fitGridCells={[gridCell]}
+        boundaries={[boundary]}
+        viewResetKey="dataset:visium"
+      />,
+    )
+
+    act(() => {
+      deckGlMock.onViewStateChange?.({
+        viewState: {
+          target: [128, -96, 0],
+          zoom: 6,
+          minZoom: -8,
+          maxZoom: 12,
+        },
+      })
+    })
+
+    expect(deckGlMock.viewState?.zoom).toBe(6)
+
+    rerender(
+      <ViewerCore
+        gridCells={[]}
+        fitGridCells={[gridCell]}
+        boundaries={[boundary]}
+        viewResetKey="dataset:visium"
+      />,
+    )
+
+    expect(screen.queryByTestId('deck-layer-spatial-grid-cells')).not.toBeInTheDocument()
+    expect(deckGlMock.viewState?.zoom).toBe(6)
+    expect(deckGlMock.viewState?.target).toEqual([128, -96, 0])
+  })
+
+  it('resets the view for a new dataset key without remounting the image canvas', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const firstGridCell = gridCellDatum()
+    const secondGridCell = gridCellDatum({
+      id: 'BC-2',
+      polygon: [
+        [100, -100, 0],
+        [132, -100, 0],
+        [132, -132, 0],
+        [100, -132, 0],
+      ],
+    })
+    const { rerender } = render(
+      <ViewerCore gridCells={[firstGridCell]} viewResetKey="dataset:a" />,
+    )
+    const canvas = document.querySelector('canvas.morphology-canvas')
+
+    act(() => {
+      deckGlMock.onViewStateChange?.({
+        viewState: {
+          target: [128, -96, 0],
+          zoom: 6,
+          minZoom: -8,
+          maxZoom: 12,
+        },
+      })
+    })
+
+    expect(deckGlMock.viewState?.zoom).toBe(6)
+
+    rerender(<ViewerCore gridCells={[secondGridCell]} viewResetKey="dataset:b" />)
+
+    await waitFor(() => {
+      expect(deckGlMock.viewState?.target).toEqual([116, -116, 0])
+    })
+    expect(document.querySelector('canvas.morphology-canvas')).toBe(canvas)
+  })
+
   it('renders nucleus segmentation polygons without overview cells', () => {
     const nucleusBoundary: CellBoundaryDatum = {
       id: 'nucleus-1',
@@ -201,10 +288,9 @@ describe('ViewerCore', () => {
 
     render(<ViewerCore nucleusBoundaries={[nucleusBoundary]} />)
 
-    expect(screen.getByTestId('deck-layer-nucleus-segmentation-polygons')).toHaveAttribute(
-      'data-count',
-      '1',
-    )
+    expect(
+      screen.getByTestId('deck-layer-nucleus-segmentation-polygons'),
+    ).toHaveAttribute('data-count', '1')
     expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
   })
 

@@ -21,6 +21,7 @@ function Probe({
   getSpatialDataset,
   onReady,
   visiumHdTwoMicrometerFilteredBarcodeBudget,
+  flatMorphologyImage,
   setFlatMorphologyImage,
   setGeneExpressionBatch,
   setGeneExpressionScaleDomain,
@@ -40,6 +41,9 @@ function Probe({
   readonly visiumHdTwoMicrometerFilteredBarcodeBudget?: Parameters<
     typeof useVisiumHdBinWorkflow
   >[0]['visiumHdTwoMicrometerFilteredBarcodeBudget']
+  readonly flatMorphologyImage?: Parameters<
+    typeof useVisiumHdBinWorkflow
+  >[0]['flatMorphologyImage']
   readonly setFlatMorphologyImage: Parameters<
     typeof useVisiumHdBinWorkflow
   >[0]['setFlatMorphologyImage']
@@ -76,6 +80,7 @@ function Probe({
     shouldLoadMorphology: true,
     visiumHdTwoMicrometerFilteredBarcodeBudget,
     visiumHdControlState: state,
+    flatMorphologyImage,
     setFlatMorphologyImage,
     setGeneExpressionBatch,
     setGeneExpressionScaleDomain,
@@ -272,6 +277,82 @@ describe('useVisiumHdBinWorkflow', () => {
     expect(setGeneExpressionBatch).toHaveBeenCalledWith(null)
     expect(setGeneExpressionScaleDomain).toHaveBeenCalledWith({ key: '', max: 0 })
     expect(setGeneExpressionState).toHaveBeenCalledWith({ status: 'idle' })
+  })
+
+  it('keeps the loaded Visium HD tissue image when switching bin tiers', async () => {
+    const datasetUrl = 'https://example.test/visium'
+    const grid = visiumGrid(8)
+    const overview: VisiumHdBinnedOverview = {
+      binSizeMicrometers: 8,
+      scalefactors: {
+        micronsPerPixel: 0.5,
+        tissueHiresScale: 0.2,
+        tissueLowresScale: 0.02,
+      },
+      grid,
+      gridCells: gridCells(grid, 'BC-8'),
+      fullresRows: new Float64Array([16]),
+      fullresCols: new Float64Array([16]),
+      inTissue: new Uint8Array([1]),
+      sourcePaths: {
+        tissuePositions: 'binned_outputs/square_008um/spatial/tissue_positions.parquet',
+        scalefactors: 'binned_outputs/square_008um/spatial/scalefactors_json.json',
+        tissueHiresImage: 'binned_outputs/square_008um/spatial/tissue_hires_image.png',
+        tissueLowresImage: 'binned_outputs/square_008um/spatial/tissue_lowres_image.png',
+        filteredMatrixH5: 'binned_outputs/square_008um/filtered_feature_bc_matrix.h5',
+      },
+    }
+    const existingFlatImage: FlatMorphologyCanvasImage = {
+      url: `${datasetUrl}/binned_outputs/square_016um/spatial/tissue_hires_image.png`,
+      scaleFactor: 0.2,
+      micrometersPerPixel: micrometers(0.5),
+      size: [200, 120],
+    }
+    const dataset = {
+      annotations: vi.fn(async () => []),
+      elements: vi.fn(async () => ({ elements: [] })),
+      image: vi.fn(async () => {
+        throw new Error('unused')
+      }),
+      matrix: vi.fn(async () => {
+        throw new Error('unused')
+      }),
+      genePanel: vi.fn(async () => ['Actb']),
+      meta: vi.fn(async () => visiumMeta(grid)),
+      readBinnedOverview: vi.fn(async () => overview),
+    }
+    const setFlatMorphologyImage = vi.fn()
+    const setMorphologyState = vi.fn()
+    let api: UseVisiumHdBinWorkflowResult | null = null
+
+    render(
+      <Probe
+        state={visiumControlState()}
+        getSpatialDataset={vi.fn(async () => dataset)}
+        onReady={(nextApi) => {
+          api = nextApi
+        }}
+        flatMorphologyImage={existingFlatImage}
+        setFlatMorphologyImage={setFlatMorphologyImage}
+        setGenePanelState={vi.fn()}
+        setLoadState={vi.fn()}
+        setMorphologyState={setMorphologyState}
+        setSelectedGridCell={vi.fn()}
+        setSpatialGridCells={vi.fn()}
+        setVisiumHdControlState={vi.fn()}
+      />,
+    )
+
+    await act(async () => {
+      await api?.handleVisiumHdBinSizeChange(8)
+    })
+
+    expect(dataset.image).not.toHaveBeenCalled()
+    expect(setFlatMorphologyImage).not.toHaveBeenCalled()
+    expect(setMorphologyState).toHaveBeenCalledWith({
+      status: 'ready',
+      url: existingFlatImage.url,
+    })
   })
 
   it('ignores disabled Visium HD tiers', async () => {

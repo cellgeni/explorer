@@ -206,6 +206,8 @@ import type {
 } from './components/ViewerCore'
 import { slug } from './utils/slug'
 
+const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
+
 export type {
   AnalysisEmbeddingsLoader,
   AnnotationGroupLoader,
@@ -474,6 +476,12 @@ export function App({
     normalizeLayerOpacity(
       initialShareableState.cellFillOpacity ?? DEFAULT_CELL_FILL_OPACITY,
     ),
+  )
+  const [showCellBoundaries, setShowCellBoundaries] = useState(
+    initialShareableState.showCellBoundaries ?? true,
+  )
+  const [showNucleusBoundaries, setShowNucleusBoundaries] = useState(
+    initialShareableState.showNucleusBoundaries ?? true,
   )
   const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(() =>
     normalizeLayerOpacity(initialShareableState.cellBoundaryOpacity ?? 1),
@@ -756,18 +764,25 @@ export function App({
     transcriptLayerState,
     transcriptPointColorMode,
   })
+  const visibleBoundaryLayerData = showCellBoundaries
+    ? boundaryLayerData
+    : EMPTY_CELL_BOUNDARY_DATA
+  const visibleNucleusBoundaryLayerData = showNucleusBoundaries
+    ? nucleusBoundaryLayerData
+    : EMPTY_CELL_BOUNDARY_DATA
   const viewerGridCells = useMemo(
-    () => (isVisiumHdDataset && boundaryLayerData.length > 0 ? [] : spatialGridCells),
-    [boundaryLayerData.length, isVisiumHdDataset, spatialGridCells],
+    () =>
+      isVisiumHdDataset && visibleBoundaryLayerData.length > 0 ? [] : spatialGridCells,
+    [isVisiumHdDataset, spatialGridCells, visibleBoundaryLayerData.length],
   )
   const activeSelectedBoundaryCell = useMemo(
     () =>
       selectedBoundaryCell !== null &&
       isVisiumHdDataset &&
-      boundaryLayerData.includes(selectedBoundaryCell)
+      visibleBoundaryLayerData.includes(selectedBoundaryCell)
         ? selectedBoundaryCell
         : null,
-    [boundaryLayerData, isVisiumHdDataset, selectedBoundaryCell],
+    [isVisiumHdDataset, selectedBoundaryCell, visibleBoundaryLayerData],
   )
   const viewerMicrometersPerPixel =
     morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
@@ -783,6 +798,8 @@ export function App({
       : morphologyState.status === 'error'
         ? morphologyState.error
         : null
+  const viewerViewResetKey =
+    loadState.status === 'idle' ? 'idle' : `${loadState.status}:${loadState.url}`
   const geneOptions = useMemo(
     () => (genePanelState.status === 'ready' ? genePanelState.genes : []),
     [genePanelState],
@@ -1893,6 +1910,7 @@ export function App({
     shouldLoadMorphology,
     visiumHdTwoMicrometerFilteredBarcodeBudget,
     visiumHdControlState,
+    flatMorphologyImage,
     visiumHdBinRequestIdRef: visiumHdBinRequestId,
     geneExpressionAbortRef,
     geneExpressionRequestIdRef: geneExpressionRequestId,
@@ -1923,6 +1941,8 @@ export function App({
     geneExpressionScoreMode,
     imageOpacity: imageLayerOpacity,
     cellFillOpacity,
+    showCellBoundaries,
+    showNucleusBoundaries,
     cellBoundaryOpacity,
     morphologyEnabledChannelIds: shareableMorphologyEnabledChannelIds,
     magicLensActive,
@@ -2009,8 +2029,13 @@ export function App({
           morphologyChannelSettings={morphologyChannelSettings}
           morphologyChannels={morphologyChannels}
           performanceBudget={performanceBudget}
+          showCellBoundaries={showCellBoundaries}
+          showNucleusBoundaries={showNucleusBoundaries}
+          nucleusBoundaryControlsVisible={isVisiumHdDataset}
           setCellBoundaryOpacity={setCellBoundaryOpacity}
           setCellFillOpacity={setCellFillOpacity}
+          setShowCellBoundaries={setShowCellBoundaries}
+          setShowNucleusBoundaries={setShowNucleusBoundaries}
           setCoordinateUnit={setCoordinateUnit}
           setCustomLayerOpacity={handleCustomImageLayerOpacityChange}
           setImageLayerOpacity={setImageLayerOpacity}
@@ -2267,10 +2292,11 @@ export function App({
           cells={styledOverviewCells}
           expressionCells={styledGeneExpressionCells}
           geneExpressionActive={geneExpressionState.status === 'ready'}
-          boundaries={boundaryLayerData}
-          nucleusBoundaries={nucleusBoundaryLayerData}
-          cellBoundaryHoverEnabled={isVisiumHdDataset}
+          boundaries={visibleBoundaryLayerData}
+          nucleusBoundaries={visibleNucleusBoundaryLayerData}
+          cellBoundaryHoverEnabled={isVisiumHdDataset && showCellBoundaries}
           gridCells={viewerGridCells}
+          fitGridCells={spatialGridCells}
           transcriptAggregateBins={transcriptLayerAggregateBins}
           transcriptPoints={transcriptLayerPoints}
           imageLoader={morphologyImage?.loader ?? null}
@@ -2301,6 +2327,7 @@ export function App({
           magicLensRadiusMicrometers={magicLensRadiusMicrometers}
           magicLensStatus={magicLensViewerStatus}
           magicLensSummary={magicLensViewerSummary}
+          viewResetKey={viewerViewResetKey}
           focusRequest={spatialFocusRequest}
           onImageTileError={handleImageTileError}
           onTileCacheEviction={handleTileCacheEviction}

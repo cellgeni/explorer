@@ -2465,6 +2465,37 @@ h2 {
   border-top: 1px solid rgba(23, 21, 17, 0.12);
 }
 
+.boundary-layer-toggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 6px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(23, 21, 17, 0.12);
+}
+
+.boundary-layer-toggles label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: #2f2b22;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.boundary-layer-toggles input {
+  flex: 0 0 auto;
+  accent-color: #2f6f64;
+}
+
+.boundary-layer-toggles span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .layer-opacity-control {
   display: grid;
   gap: 3px;

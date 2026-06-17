@@ -27,6 +27,8 @@ export interface ShareableState {
   readonly boundaryCellLimit?: number
   readonly imageOpacity?: number
   readonly cellFillOpacity?: number
+  readonly showCellBoundaries?: boolean
+  readonly showNucleusBoundaries?: boolean
   readonly cellBoundaryOpacity?: number
   readonly morphologyEnabledChannelIds?: readonly string[]
   readonly transcriptOverlay?: boolean
@@ -76,6 +78,8 @@ export function parseShareableState(hash: string): ShareableState {
   const boundaryCellLimit = parsePositiveInteger(params.get('boundaryLimit'))
   const imageOpacity = parseUnitNumber(params.get('imgOpacity'))
   const cellFillOpacity = parseUnitNumber(params.get('cellFill'))
+  const showCellBoundaries = parseBoolean(params.get('cellBounds'))
+  const showNucleusBoundaries = parseBoolean(params.get('nucleusBounds'))
   const cellBoundaryOpacity = parseUnitNumber(params.get('cellBoundary'))
   const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')
   const transcriptOverlay = parseBoolean(params.get('tx'))
@@ -163,6 +167,14 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (cellFillOpacity !== undefined) {
     state.cellFillOpacity = cellFillOpacity
+  }
+
+  if (showCellBoundaries !== undefined) {
+    state.showCellBoundaries = showCellBoundaries
+  }
+
+  if (showNucleusBoundaries !== undefined) {
+    state.showNucleusBoundaries = showNucleusBoundaries
   }
 
   if (cellBoundaryOpacity !== undefined) {
@@ -294,6 +306,14 @@ export function formatShareableState(state: ShareableState): string {
 
   if (state.cellFillOpacity !== undefined && Number.isFinite(state.cellFillOpacity)) {
     params.set('cellFill', roundForHash(state.cellFillOpacity).toString())
+  }
+
+  if (state.showCellBoundaries !== undefined) {
+    params.set('cellBounds', state.showCellBoundaries ? '1' : '0')
+  }
+
+  if (state.showNucleusBoundaries !== undefined) {
+    params.set('nucleusBounds', state.showNucleusBoundaries ? '1' : '0')
   }
 
   if (

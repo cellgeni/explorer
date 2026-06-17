@@ -37,7 +37,11 @@ vi.mock('@deck.gl/react', () => ({
     onClick,
   }: {
     readonly layers?: readonly unknown[]
-    readonly onClick?: (info: { readonly object?: unknown; readonly x: number; readonly y: number }) => void
+    readonly onClick?: (info: {
+      readonly object?: unknown
+      readonly x: number
+      readonly y: number
+    }) => void
   }) => (
     <div data-testid="deckgl">
       {layers.map((layer) => {
@@ -620,6 +624,32 @@ describe('App', () => {
         expect(
           screen.getByTestId('deck-layer-nucleus-segmentation-polygons'),
         ).toHaveAttribute('data-count', '1')
+      })
+      openHudTab('Layers')
+      fireEvent.click(screen.getByLabelText('Cell boundaries'))
+      await waitFor(() => {
+        expect(screen.queryByTestId('deck-layer-cell-boundary-hit-areas')).toBeNull()
+        expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+          'data-count',
+          '2',
+        )
+        expect(
+          screen.getByTestId('deck-layer-nucleus-segmentation-polygons'),
+        ).toHaveAttribute('data-count', '1')
+      })
+      fireEvent.click(screen.getByLabelText('Nucleus boundaries'))
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId('deck-layer-nucleus-segmentation-polygons'),
+        ).toBeNull()
+      })
+      fireEvent.click(screen.getByLabelText('Cell boundaries'))
+      await waitFor(() => {
+        expect(screen.queryByTestId('deck-layer-spatial-grid-cells')).toBeNull()
+        expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
+          'data-count',
+          '1',
+        )
       })
       expect(visiumDataset.segmentationElements).toHaveBeenCalledWith(
         'nucleus',

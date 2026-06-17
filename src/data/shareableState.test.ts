@@ -39,6 +39,8 @@ describe('shareableState', () => {
       boundaryCellLimit: 2500,
       imageOpacity: 0.45,
       cellFillOpacity: 0.7,
+      showCellBoundaries: false,
+      showNucleusBoundaries: true,
       cellBoundaryOpacity: 0.35,
       morphologyEnabledChannelIds: ['Channel:1', 'Channel:3'],
       transcriptOverlay: true,
@@ -77,6 +79,8 @@ describe('shareableState', () => {
     expect(state.boundaryCellLimit).toBe(2500)
     expect(state.imageOpacity).toBe(0.45)
     expect(state.cellFillOpacity).toBe(0.7)
+    expect(state.showCellBoundaries).toBe(false)
+    expect(state.showNucleusBoundaries).toBe(true)
     expect(state.cellBoundaryOpacity).toBe(0.35)
     expect(state.morphologyEnabledChannelIds).toEqual(['Channel:1', 'Channel:3'])
     expect(state.transcriptOverlay).toBe(true)

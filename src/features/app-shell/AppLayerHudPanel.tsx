@@ -18,6 +18,8 @@ type AppLayerControlIds = Pick<
   AppControlIds,
   | 'imageOpacityInputId'
   | 'cellFillOpacityInputId'
+  | 'cellBoundaryVisibilityInputId'
+  | 'nucleusBoundaryVisibilityInputId'
   | 'cellBoundaryOpacityInputId'
   | 'coordinateUnitInputId'
   | 'measurementModeInputId'
@@ -46,8 +48,13 @@ export interface AppLayerHudPanelProps {
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
   readonly morphologyChannels: readonly MorphologyImageChannel[]
   readonly performanceBudget: PerformanceBudget
+  readonly showCellBoundaries: boolean
+  readonly showNucleusBoundaries: boolean
+  readonly nucleusBoundaryControlsVisible: boolean
   readonly setCellBoundaryOpacity: Dispatch<SetStateAction<number>>
   readonly setCellFillOpacity: Dispatch<SetStateAction<number>>
+  readonly setShowCellBoundaries: Dispatch<SetStateAction<boolean>>
+  readonly setShowNucleusBoundaries: Dispatch<SetStateAction<boolean>>
   readonly setCoordinateUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
   readonly setCustomLayerOpacity: (imageUrl: string, opacity: number) => void
   readonly setImageLayerOpacity: Dispatch<SetStateAction<number>>
@@ -84,8 +91,13 @@ export function AppLayerHudPanel({
   morphologyChannelSettings,
   morphologyChannels,
   performanceBudget,
+  showCellBoundaries,
+  showNucleusBoundaries,
+  nucleusBoundaryControlsVisible,
   setCellBoundaryOpacity,
   setCellFillOpacity,
+  setShowCellBoundaries,
+  setShowNucleusBoundaries,
   setCoordinateUnit,
   setCustomLayerOpacity,
   setImageLayerOpacity,
@@ -104,6 +116,8 @@ export function AppLayerHudPanel({
       performanceBudget={performanceBudget}
       imageOpacityInputId={controlIds.imageOpacityInputId}
       cellFillOpacityInputId={controlIds.cellFillOpacityInputId}
+      cellBoundaryVisibilityInputId={controlIds.cellBoundaryVisibilityInputId}
+      nucleusBoundaryVisibilityInputId={controlIds.nucleusBoundaryVisibilityInputId}
       cellBoundaryOpacityInputId={controlIds.cellBoundaryOpacityInputId}
       coordinateUnitInputId={controlIds.coordinateUnitInputId}
       measurementModeInputId={controlIds.measurementModeInputId}
@@ -114,6 +128,9 @@ export function AppLayerHudPanel({
       loadEnabled={loadEnabled}
       imageLayerOpacity={imageLayerOpacity}
       cellFillOpacity={cellFillOpacity}
+      showCellBoundaries={showCellBoundaries}
+      showNucleusBoundaries={showNucleusBoundaries}
+      nucleusBoundaryControlsVisible={nucleusBoundaryControlsVisible}
       cellBoundaryOpacity={cellBoundaryOpacity}
       coordinateUnit={coordinateUnit}
       measurementEnabled={measurementEnabled}
@@ -138,6 +155,28 @@ export function AppLayerHudPanel({
         appendDebugEvent(`Cell fill opacity: ${nextPercent}%`, {
           coalesceKey: 'cell-fill-opacity',
         })
+      }}
+      onShowCellBoundariesChange={(nextEnabled) => {
+        if (showCellBoundaries === nextEnabled) {
+          return
+        }
+
+        setShowCellBoundaries(nextEnabled)
+        appendDebugEvent(
+          nextEnabled ? 'Cell boundaries shown' : 'Cell boundaries hidden',
+          { coalesceKey: 'cell-boundaries-visible' },
+        )
+      }}
+      onShowNucleusBoundariesChange={(nextEnabled) => {
+        if (showNucleusBoundaries === nextEnabled) {
+          return
+        }
+
+        setShowNucleusBoundaries(nextEnabled)
+        appendDebugEvent(
+          nextEnabled ? 'Nucleus boundaries shown' : 'Nucleus boundaries hidden',
+          { coalesceKey: 'nucleus-boundaries-visible' },
+        )
       }}
       onCellBoundaryOpacityPercentChange={(nextPercent) => {
         setCellBoundaryOpacity(percentToOpacity(nextPercent))

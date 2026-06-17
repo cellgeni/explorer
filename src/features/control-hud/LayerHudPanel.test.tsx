@@ -7,6 +7,8 @@ describe('LayerHudPanel', () => {
     const onImageLayerOpacityPercentChange = vi.fn()
     const onCustomLayerOpacityPercentChange = vi.fn()
     const onCellFillOpacityPercentChange = vi.fn()
+    const onShowCellBoundariesChange = vi.fn()
+    const onShowNucleusBoundariesChange = vi.fn()
     const onCellBoundaryOpacityPercentChange = vi.fn()
     const onCoordinateUnitChange = vi.fn()
     const onMeasurementEnabledChange = vi.fn()
@@ -28,6 +30,8 @@ describe('LayerHudPanel', () => {
         }}
         imageOpacityInputId="image-opacity"
         cellFillOpacityInputId="cell-fill-opacity"
+        cellBoundaryVisibilityInputId="cell-boundary-visibility"
+        nucleusBoundaryVisibilityInputId="nucleus-boundary-visibility"
         cellBoundaryOpacityInputId="cell-boundary-opacity"
         coordinateUnitInputId="coordinate-unit"
         measurementModeInputId="measurement-mode"
@@ -50,6 +54,9 @@ describe('LayerHudPanel', () => {
         loadEnabled
         imageLayerOpacity={0.8}
         cellFillOpacity={0.6}
+        showCellBoundaries
+        showNucleusBoundaries
+        nucleusBoundaryControlsVisible
         cellBoundaryOpacity={0.4}
         coordinateUnit="um"
         measurementEnabled={false}
@@ -60,6 +67,8 @@ describe('LayerHudPanel', () => {
         onImageLayerOpacityPercentChange={onImageLayerOpacityPercentChange}
         onCustomLayerOpacityPercentChange={onCustomLayerOpacityPercentChange}
         onCellFillOpacityPercentChange={onCellFillOpacityPercentChange}
+        onShowCellBoundariesChange={onShowCellBoundariesChange}
+        onShowNucleusBoundariesChange={onShowNucleusBoundariesChange}
         onCellBoundaryOpacityPercentChange={onCellBoundaryOpacityPercentChange}
         onCoordinateUnitChange={onCoordinateUnitChange}
         onMeasurementEnabledChange={onMeasurementEnabledChange}
@@ -81,6 +90,8 @@ describe('LayerHudPanel', () => {
     fireEvent.change(screen.getByLabelText('Cell fill opacity'), {
       target: { value: '55' },
     })
+    fireEvent.click(screen.getByLabelText('Cell boundaries'))
+    fireEvent.click(screen.getByLabelText('Nucleus boundaries'))
     fireEvent.change(screen.getByLabelText('Cell boundary opacity'), {
       target: { value: '65' },
     })
@@ -104,6 +115,8 @@ describe('LayerHudPanel', () => {
       35,
     )
     expect(onCellFillOpacityPercentChange).toHaveBeenCalledWith(55)
+    expect(onShowCellBoundariesChange).toHaveBeenCalledWith(false)
+    expect(onShowNucleusBoundariesChange).toHaveBeenCalledWith(false)
     expect(onCellBoundaryOpacityPercentChange).toHaveBeenCalledWith(65)
     expect(onCoordinateUnitChange).toHaveBeenCalledWith('px')
     expect(onMeasurementEnabledChange).toHaveBeenCalledWith(true)

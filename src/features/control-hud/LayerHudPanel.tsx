@@ -17,6 +17,8 @@ interface LayerHudPanelProps {
   readonly performanceBudget: PerformanceBudget
   readonly imageOpacityInputId: string
   readonly cellFillOpacityInputId: string
+  readonly cellBoundaryVisibilityInputId: string
+  readonly nucleusBoundaryVisibilityInputId: string
   readonly cellBoundaryOpacityInputId: string
   readonly coordinateUnitInputId: string
   readonly measurementModeInputId: string
@@ -27,6 +29,9 @@ interface LayerHudPanelProps {
   readonly loadEnabled: boolean
   readonly imageLayerOpacity: number
   readonly cellFillOpacity: number
+  readonly showCellBoundaries: boolean
+  readonly showNucleusBoundaries: boolean
+  readonly nucleusBoundaryControlsVisible: boolean
   readonly cellBoundaryOpacity: number
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
@@ -37,6 +42,8 @@ interface LayerHudPanelProps {
   readonly onImageLayerOpacityPercentChange: (percent: number) => void
   readonly onCustomLayerOpacityPercentChange: (imageUrl: string, percent: number) => void
   readonly onCellFillOpacityPercentChange: (percent: number) => void
+  readonly onShowCellBoundariesChange: (enabled: boolean) => void
+  readonly onShowNucleusBoundariesChange: (enabled: boolean) => void
   readonly onCellBoundaryOpacityPercentChange: (percent: number) => void
   readonly onCoordinateUnitChange: (unit: ViewerCoordinateUnit) => void
   readonly onMeasurementEnabledChange: (enabled: boolean) => void
@@ -58,6 +65,8 @@ export function LayerHudPanel({
   performanceBudget,
   imageOpacityInputId,
   cellFillOpacityInputId,
+  cellBoundaryVisibilityInputId,
+  nucleusBoundaryVisibilityInputId,
   cellBoundaryOpacityInputId,
   coordinateUnitInputId,
   measurementModeInputId,
@@ -68,6 +77,9 @@ export function LayerHudPanel({
   loadEnabled,
   imageLayerOpacity,
   cellFillOpacity,
+  showCellBoundaries,
+  showNucleusBoundaries,
+  nucleusBoundaryControlsVisible,
   cellBoundaryOpacity,
   coordinateUnit,
   measurementEnabled,
@@ -78,6 +90,8 @@ export function LayerHudPanel({
   onImageLayerOpacityPercentChange,
   onCustomLayerOpacityPercentChange,
   onCellFillOpacityPercentChange,
+  onShowCellBoundariesChange,
+  onShowNucleusBoundariesChange,
   onCellBoundaryOpacityPercentChange,
   onCoordinateUnitChange,
   onMeasurementEnabledChange,
@@ -128,6 +142,34 @@ export function LayerHudPanel({
           {performanceBudget.overviewRenderCellLimit.toLocaleString()} cells -{' '}
           {performanceBudget.maxConcurrentTileRequests} tile requests
         </p>
+        <div className="boundary-layer-toggles" aria-label="Boundary layers">
+          <label htmlFor={cellBoundaryVisibilityInputId}>
+            <input
+              id={cellBoundaryVisibilityInputId}
+              type="checkbox"
+              checked={showCellBoundaries}
+              title="Toggle cell boundary layer"
+              onChange={(event) => {
+                onShowCellBoundariesChange(event.currentTarget.checked)
+              }}
+            />
+            <span>Cell boundaries</span>
+          </label>
+          {nucleusBoundaryControlsVisible ? (
+            <label htmlFor={nucleusBoundaryVisibilityInputId}>
+              <input
+                id={nucleusBoundaryVisibilityInputId}
+                type="checkbox"
+                checked={showNucleusBoundaries}
+                title="Toggle nucleus boundary layer"
+                onChange={(event) => {
+                  onShowNucleusBoundariesChange(event.currentTarget.checked)
+                }}
+              />
+              <span>Nucleus boundaries</span>
+            </label>
+          ) : null}
+        </div>
         <div className="layer-opacity-controls">
           <div className="layer-opacity-control">
             <div className="layer-opacity-header">

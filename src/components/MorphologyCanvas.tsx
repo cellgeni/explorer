@@ -75,10 +75,16 @@ export function MorphologyCanvas({
     height: 0,
   })
   const [flatImageElement, setFlatImageElement] = useState<LoadedFlatImage | null>(null)
+  const flatImageUrl = flatImage?.url ?? null
+  const onTileErrorRef = useRef(onTileError)
   const renderChannels = useMemo(
     () => visibleMorphologyChannels(loader, channels),
     [channels, loader],
   )
+
+  useEffect(() => {
+    onTileErrorRef.current = onTileError
+  }, [onTileError])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -109,7 +115,7 @@ export function MorphologyCanvas({
   }, [])
 
   useEffect(() => {
-    if (flatImage === null) {
+    if (flatImageUrl === null) {
       return
     }
 
@@ -127,15 +133,15 @@ export function MorphologyCanvas({
         : new Promise<void>((resolve, reject) => {
             image.onload = () => resolve()
             image.onerror = () =>
-              reject(new Error(`Failed to load flat morphology image ${flatImage.url}`))
+              reject(new Error(`Failed to load flat morphology image ${flatImageUrl}`))
           })
 
-    image.src = flatImage.url
+    image.src = flatImageUrl
 
     void (ready ?? image.decode())
       .then(() => {
         if (!cancelled) {
-          setFlatImageElement({ image, url: flatImage.url })
+          setFlatImageElement({ image, url: flatImageUrl })
         }
       })
       .catch((error: unknown) => {
@@ -146,8 +152,8 @@ export function MorphologyCanvas({
         const loadError =
           error instanceof Error
             ? error
-            : new Error(`Failed to load flat morphology image ${flatImage.url}`)
-        onTileError?.(loadError)
+            : new Error(`Failed to load flat morphology image ${flatImageUrl}`)
+        onTileErrorRef.current?.(loadError)
       })
 
     return () => {
@@ -155,7 +161,7 @@ export function MorphologyCanvas({
       image.onload = null
       image.onerror = null
     }
-  }, [flatImage, onTileError])
+  }, [flatImageUrl])
 
   useEffect(() => {
     const canvas = canvasRef.current

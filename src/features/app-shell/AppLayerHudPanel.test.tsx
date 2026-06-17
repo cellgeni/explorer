@@ -14,11 +14,13 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     cellFillOpacity: 1,
     controlIds: {
       cellBoundaryOpacityInputId: 'cell-boundary-opacity',
+      cellBoundaryVisibilityInputId: 'cell-boundary-visibility',
       cellFillOpacityInputId: 'cell-fill-opacity',
       coordinateUnitInputId: 'coordinate-unit',
       imageOpacityInputId: 'image-opacity',
       measurementModeInputId: 'measurement-mode',
       measurementUnitInputId: 'measurement-unit',
+      nucleusBoundaryVisibilityInputId: 'nucleus-boundary-visibility',
     },
     coordinateUnit: 'um',
     customLayerLoadState: { status: 'idle' },
@@ -34,6 +36,9 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     measurementUnit: 'um',
     morphologyChannelSettings: [],
     morphologyChannels: [],
+    showCellBoundaries: true,
+    showNucleusBoundaries: true,
+    nucleusBoundaryControlsVisible: true,
     performanceBudget: {
       boundaryCellLimit: 50_000,
       maxConcurrentTileRequests: 4,
@@ -44,6 +49,8 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     },
     setCellBoundaryOpacity: vi.fn(),
     setCellFillOpacity: vi.fn(),
+    setShowCellBoundaries: vi.fn(),
+    setShowNucleusBoundaries: vi.fn(),
     setCoordinateUnit: vi.fn(),
     setCustomLayerOpacity: vi.fn(),
     setImageLayerOpacity: vi.fn(),
@@ -84,6 +91,24 @@ describe('AppLayerHudPanel', () => {
     })
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Cell boundary opacity: 25%', {
       coalesceKey: 'cell-boundary-opacity',
+    })
+  })
+
+  it('logs independent boundary layer visibility changes', () => {
+    const props = baseProps()
+
+    render(<AppLayerHudPanel {...props} />)
+
+    fireEvent.click(screen.getByLabelText('Cell boundaries'))
+    fireEvent.click(screen.getByLabelText('Nucleus boundaries'))
+
+    expect(props.setShowCellBoundaries).toHaveBeenCalledWith(false)
+    expect(props.setShowNucleusBoundaries).toHaveBeenCalledWith(false)
+    expect(props.appendDebugEvent).toHaveBeenCalledWith('Cell boundaries hidden', {
+      coalesceKey: 'cell-boundaries-visible',
+    })
+    expect(props.appendDebugEvent).toHaveBeenCalledWith('Nucleus boundaries hidden', {
+      coalesceKey: 'nucleus-boundaries-visible',
     })
   })
 

@@ -8,6 +8,8 @@ export interface AppControlIds {
   readonly visiumHdTwoMicrometerBudgetInputId: string
   readonly imageOpacityInputId: string
   readonly cellFillOpacityInputId: string
+  readonly cellBoundaryVisibilityInputId: string
+  readonly nucleusBoundaryVisibilityInputId: string
   readonly cellBoundaryOpacityInputId: string
   readonly coordinateUnitInputId: string
   readonly measurementModeInputId: string
@@ -48,6 +50,8 @@ export function useAppControlIds(): AppControlIds {
     visiumHdTwoMicrometerBudgetInputId: useId(),
     imageOpacityInputId: useId(),
     cellFillOpacityInputId: useId(),
+    cellBoundaryVisibilityInputId: useId(),
+    nucleusBoundaryVisibilityInputId: useId(),
     cellBoundaryOpacityInputId: useId(),
     coordinateUnitInputId: useId(),
     measurementModeInputId: useId(),

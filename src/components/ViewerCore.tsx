@@ -66,12 +66,14 @@ export type ViewerCoordinateUnit = 'um' | 'px'
 
 export interface ViewerCoreProps {
   readonly cells?: readonly OverviewCellDatum[]
+  readonly fitCells?: readonly OverviewCellDatum[]
   readonly expressionCells?: readonly OverviewCellDatum[]
   readonly geneExpressionActive?: boolean
   readonly boundaries?: readonly CellBoundaryDatum[]
   readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled?: boolean
   readonly gridCells?: readonly GridCellDatum[]
+  readonly fitGridCells?: readonly GridCellDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
   readonly imageLoader?: TiffPyramidLoader | null
@@ -105,6 +107,7 @@ export interface ViewerCoreProps {
   readonly magicLensStatus?: ViewerMagicLensStatus
   readonly magicLensSummary?: ViewerMagicLensSummary | null
   readonly initialViewStateOverride?: InitialViewStateOverride
+  readonly viewResetKey?: string | number
   readonly focusRequest?: ViewerFocusRequest | null
   readonly overviewRenderCellLimit?: number
   readonly maxConcurrentTileRequests?: number
@@ -185,12 +188,14 @@ export type RoiDrawMode = 'idle' | 'box' | 'lasso'
 
 export function ViewerCore({
   cells = [],
+  fitCells,
   expressionCells = [],
   geneExpressionActive = false,
   boundaries = [],
   nucleusBoundaries = [],
   cellBoundaryHoverEnabled = false,
   gridCells = [],
+  fitGridCells,
   transcriptAggregateBins = [],
   transcriptPoints = [],
   imageLoader = null,
@@ -224,6 +229,7 @@ export function ViewerCore({
   magicLensStatus = 'idle',
   magicLensSummary = null,
   initialViewStateOverride,
+  viewResetKey,
   focusRequest = null,
   overviewRenderCellLimit,
   maxConcurrentTileRequests,
@@ -241,19 +247,21 @@ export function ViewerCore({
   onMagicLensMove,
   onMagicLensLeave,
 }: ViewerCoreProps) {
+  const viewFitCells = fitCells ?? cells
+  const viewFitGridCells = fitGridCells ?? gridCells
   const fittedViewState = useMemo(
-    () => createOverviewViewState(cells, gridCells),
-    [cells, gridCells],
+    () => createOverviewViewState(viewFitCells, viewFitGridCells),
+    [viewFitCells, viewFitGridCells],
   )
   const initialViewState = useMemo(
     () => mergeInitialViewState(fittedViewState, initialViewStateOverride),
     [fittedViewState, initialViewStateOverride],
   )
-  const resetKey = viewStateKey(initialViewState)
+  const resetKey =
+    viewResetKey === undefined ? viewStateKey(initialViewState) : String(viewResetKey)
 
   return (
     <ViewerSurface
-      key={resetKey}
       cells={cells}
       expressionCells={expressionCells}
       geneExpressionActive={geneExpressionActive}
@@ -281,6 +289,7 @@ export function ViewerCore({
       measurementResetKey={measurementResetKey}
       micrometersPerPixel={micrometersPerPixel}
       initialViewState={initialViewState}
+      viewResetKey={resetKey}
       focusRequest={focusRequest}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
       {...(maxConcurrentTileRequests === undefined ? {} : { maxConcurrentTileRequests })}
@@ -342,6 +351,7 @@ interface ViewerSurfaceProps {
   readonly measurementResetKey: number
   readonly micrometersPerPixel: number
   readonly initialViewState: OverviewViewState
+  readonly viewResetKey: string
   readonly focusRequest: ViewerFocusRequest | null
   readonly overviewRenderCellLimit?: number
   readonly maxConcurrentTileRequests?: number
@@ -469,6 +479,7 @@ function ViewerSurface({
   measurementResetKey,
   micrometersPerPixel,
   initialViewState,
+  viewResetKey,
   focusRequest,
   overviewRenderCellLimit,
   maxConcurrentTileRequests,
@@ -525,8 +536,21 @@ function ViewerSurface({
     useState<BoundaryStyleViewport | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
   const mouseCoordinateFrameRef = useRef<number | null>(null)
+  const lastAppliedViewResetKeyRef = useRef(viewResetKey)
   const lastAppliedFocusRequestKeyRef = useRef<number | null>(null)
   const cellExtentBbox = useMemo(() => overviewCellsExtentBbox(cells), [cells])
+  useEffect(() => {
+    if (lastAppliedViewResetKeyRef.current === viewResetKey) {
+      return
+    }
+
+    lastAppliedViewResetKeyRef.current = viewResetKey
+    setViewState((currentViewState) =>
+      equivalentViewState(currentViewState, initialViewState)
+        ? currentViewState
+        : initialViewState,
+    )
+  }, [initialViewState, viewResetKey])
   useEffect(() => {
     if (
       focusRequest === null ||

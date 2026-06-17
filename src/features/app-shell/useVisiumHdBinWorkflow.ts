@@ -63,6 +63,7 @@ export interface UseVisiumHdBinWorkflowOptions {
   readonly shouldLoadMorphology: boolean
   readonly visiumHdTwoMicrometerFilteredBarcodeBudget?: number | undefined
   readonly visiumHdControlState: VisiumHdControlState
+  readonly flatMorphologyImage?: FlatMorphologyCanvasImage | null | undefined
   readonly visiumHdBinRequestIdRef?: MutableRef<number> | undefined
   readonly geneExpressionAbortRef?: MutableRef<AbortController | null> | undefined
   readonly geneExpressionRequestIdRef?: MutableRef<number> | undefined
@@ -95,6 +96,7 @@ export function useVisiumHdBinWorkflow({
   shouldLoadMorphology,
   visiumHdTwoMicrometerFilteredBarcodeBudget,
   visiumHdControlState,
+  flatMorphologyImage,
   visiumHdBinRequestIdRef,
   geneExpressionAbortRef,
   geneExpressionRequestIdRef,
@@ -243,6 +245,14 @@ export function useVisiumHdBinWorkflow({
           return
         }
 
+        if (flatMorphologyImage !== undefined && flatMorphologyImage !== null) {
+          setMorphologyState({
+            status: 'ready',
+            url: flatMorphologyImage.url,
+          })
+          return
+        }
+
         setMorphologyState({ status: 'loading', url: datasetUrl })
         const imageSource = await dataset.image(overview.binSizeMicrometers)
 
@@ -287,6 +297,7 @@ export function useVisiumHdBinWorkflow({
     },
     [
       appendDebugEvent,
+      flatMorphologyImage,
       geneExpressionAbortRef,
       geneExpressionRequestIdRef,
       geneExpressionViewportKeyRef,
