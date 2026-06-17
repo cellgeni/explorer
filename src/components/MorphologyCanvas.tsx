@@ -12,7 +12,7 @@ import { TileCache } from '../tiff/tileCache'
 import type { DisplayWindow } from '../codecs/jpeg2000'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
-import type { TileCacheEntry } from '../tiff/tileCache'
+import type { ReadyTile, TileCacheEntry } from '../tiff/tileCache'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
 const MAX_CONCURRENT_TILE_REQUESTS = 4
@@ -176,9 +176,9 @@ export function MorphologyCanvas({
       return
     }
 
-    syncCanvasBackingStore(canvas, context, viewport)
-
     if (renderChannels.length === 0) {
+      syncCanvasBackingStore(canvas, context, viewport)
+
       if (
         flatImage !== null &&
         flatImageElement !== null &&
@@ -228,25 +228,27 @@ export function MorphologyCanvas({
     const activeKeys = new Set(channelRequests.map((request) => request.cacheKey))
     const abortController = new AbortController()
     let cancelled = false
+    let drewCurrentRequest = false
 
     pruneInactiveCacheRecords(cacheRecordsRef.current, activeKeys)
 
     const drawReadyTiles = () => {
-      if (cancelled) {
+      if (cancelled || drewCurrentRequest) {
         return
       }
 
+      const currentRequestIsReady = requestedTilesAreReadyToDraw(channelRequests)
+      const batches = currentRequestIsReady
+        ? channelTileBatches(channelRequests, bbox, { requestedLevelOnly: true })
+        : channelTileBatches(channelRequests, bbox, { requestedLevelOnly: false })
+
+      if (!currentRequestIsReady && !tileBatchesHaveTiles(batches)) {
+        return
+      }
+
+      drewCurrentRequest = currentRequestIsReady
       syncCanvasBackingStore(canvas, context, viewport)
-      drawMorphologyTileChannels(
-        context,
-        channelRequests.map((request) => ({
-          color: request.channel.color,
-          opacity: normalizeLayerOpacity(request.channel.opacity ?? 1),
-          tiles: request.cache.readyTiles(bbox, request.level),
-        })),
-        viewState,
-        viewport,
-      )
+      drawMorphologyTileChannels(context, batches, viewState, viewport)
     }
 
     drawReadyTiles()
@@ -262,7 +264,7 @@ export function MorphologyCanvas({
           tiles: request.tiles,
         }),
       ),
-    )
+    ).then(drawReadyTiles)
 
     return () => {
       cancelled = true
@@ -330,6 +332,7 @@ async function requestTilesInPriorityOrder(options: RequestTilesOptions): Promis
 
 interface ChannelCacheRecord {
   readonly cache: TileCache
+  readonly maxTiles: number
 }
 
 interface ChannelRequest {
@@ -339,6 +342,80 @@ interface ChannelRequest {
   readonly level: number
   readonly maxConcurrentRequests: number
   readonly tiles: readonly TileIndex[]
+}
+
+type ChannelTileBatch = Parameters<typeof drawMorphologyTileChannels>[1][number]
+
+function channelTileBatches(
+  requests: readonly ChannelRequest[],
+  bbox: BBox,
+  options: { readonly requestedLevelOnly: boolean },
+): readonly ChannelTileBatch[] {
+  return requests.map((request) => ({
+    color: request.channel.color,
+    opacity: normalizeLayerOpacity(request.channel.opacity ?? 1),
+    tiles: readyTilesForChannelRequest(request, bbox, options),
+  }))
+}
+
+function tileBatchesHaveTiles(batches: readonly ChannelTileBatch[]): boolean {
+  return batches.some((batch) => batch.tiles.length > 0)
+}
+
+function readyTilesForChannelRequest(
+  request: ChannelRequest,
+  bbox: BBox,
+  options: { readonly requestedLevelOnly: boolean },
+): readonly ReadyTile[] {
+  if (options.requestedLevelOnly) {
+    return request.cache.readyTiles(bbox, request.level)
+  }
+
+  const readyTiles = request.cache.readyTiles(bbox)
+  const fallbackLevel = fallbackTileLevel(readyTiles, request.level)
+
+  if (fallbackLevel === null) {
+    return []
+  }
+
+  return readyTiles.filter((tile) => tile.level === fallbackLevel)
+}
+
+function fallbackTileLevel(
+  readyTiles: readonly ReadyTile[],
+  requestedLevel: number,
+): number | null {
+  let fallbackLevel: number | null = null
+  let fallbackDistance = Number.POSITIVE_INFINITY
+
+  for (const tile of readyTiles) {
+    const distance = Math.abs(tile.level - requestedLevel)
+
+    if (
+      fallbackLevel === null ||
+      distance < fallbackDistance ||
+      (distance === fallbackDistance && tile.level > fallbackLevel)
+    ) {
+      fallbackLevel = tile.level
+      fallbackDistance = distance
+    }
+  }
+
+  return fallbackLevel
+}
+
+function requestedTilesAreReadyToDraw(requests: readonly ChannelRequest[]): boolean {
+  for (const request of requests) {
+    for (const tile of request.tiles) {
+      const entry = request.cache.get(request.level, tile.col, tile.row)
+
+      if (entry === undefined || entry.state === 'loading') {
+        return false
+      }
+    }
+  }
+
+  return true
 }
 
 function visibleMorphologyChannels(
@@ -395,9 +472,10 @@ function prepareChannelRequest(options: {
       24,
       Math.floor(options.maxCacheTiles / Math.max(1, options.cacheRecords.size + 1)),
     )
+    const maxTiles = Math.min(scheduling.maxCacheTiles, normalMaxTiles)
     record = {
       cache: new TileCache({
-        maxTiles: Math.min(scheduling.maxCacheTiles, normalMaxTiles),
+        maxTiles,
         color: options.channel.color,
         alphaFromIntensity: options.channel.alphaFromIntensity ?? true,
         ...(options.channel.contrast === undefined
@@ -408,6 +486,7 @@ function prepareChannelRequest(options: {
           ? {}
           : { onEvict: options.onTileCacheEviction }),
       }),
+      maxTiles,
     }
     options.cacheRecords.set(cacheKey, record)
   }
@@ -420,7 +499,7 @@ function prepareChannelRequest(options: {
     maxConcurrentRequests: scheduling.maxConcurrentRequests,
     tiles: selectCenteredTiles(
       options.channel.loader.tilesForBbox(level, requestBbox),
-      scheduling.maxInitialTileRequests,
+      Math.min(scheduling.maxInitialTileRequests, record.maxTiles),
       options.bbox,
       (tile) => options.channel.loader.tileBounds(level, tile.col, tile.row),
     ),
