@@ -20,6 +20,7 @@ import type {
   SpatialElement,
   SpatialGrid,
 } from '../datasets/spatialDataset'
+import { annotationPaletteColor, normalizeAnnotationColor } from './annotationPalette'
 import {
   DEFAULT_CELL_FILL_OPACITY,
   DEFAULT_LAYER_OPACITY,
@@ -50,6 +51,7 @@ export interface OverviewViewState {
 
 export interface CellBoundaryDatum {
   readonly id: string
+  readonly annotationLabel?: string
   readonly polygon: readonly Position[]
   readonly fillColor: Color
   readonly lineColor: Color
@@ -1497,8 +1499,9 @@ export function boundaryElementsToLayerData(
   options: BoundaryElementsToLayerDataOptions = {},
 ): readonly CellBoundaryDatum[] {
   const cells: CellBoundaryDatum[] = []
-  const fillColor = options.fillColor ?? [32, 102, 83, 34]
-  const lineColor = options.lineColor ?? [32, 102, 83, 190]
+  const defaultFillColor = options.fillColor ?? [32, 102, 83, 34]
+  const defaultLineColor = options.lineColor ?? [32, 102, 83, 190]
+  const annotationPaletteByLabel = new Map<string, string>()
 
   for (const element of elements) {
     if (element.geometry.kind !== 'polygon') {
@@ -1511,15 +1514,100 @@ export function boundaryElementsToLayerData(
       continue
     }
 
+    const style = boundaryStyleFromElementMetadata(
+      element,
+      defaultFillColor,
+      defaultLineColor,
+      annotationPaletteByLabel,
+    )
+
     cells.push({
       id: element.id,
       polygon: ring.map((point) => [point.x, -point.y, 0]),
-      fillColor,
-      lineColor,
+      fillColor: style.fillColor,
+      lineColor: style.lineColor,
+      ...(style.annotationLabel === undefined
+        ? {}
+        : { annotationLabel: style.annotationLabel }),
     })
   }
 
   return cells
+}
+
+const ANNOTATED_SEGMENTATION_FILL_ALPHA = 82
+const ANNOTATED_SEGMENTATION_LINE_ALPHA = 210
+
+function boundaryStyleFromElementMetadata(
+  element: SpatialElement,
+  defaultFillColor: Color,
+  defaultLineColor: Color,
+  annotationPaletteByLabel: Map<string, string>,
+): {
+  readonly fillColor: Color
+  readonly lineColor: Color
+  readonly annotationLabel?: string
+} {
+  const annotation = element.metadata?.segmentation?.annotation
+
+  if (annotation === undefined) {
+    return { fillColor: defaultFillColor, lineColor: defaultLineColor }
+  }
+
+  const annotationLabel = annotation.label
+  const paletteColor =
+    annotation.color ??
+    (annotationLabel === undefined
+      ? undefined
+      : annotationPaletteColorForLabel(annotationLabel, annotationPaletteByLabel))
+  const fillColor = hexToBoundaryColor(
+    annotation.fillColor ?? paletteColor,
+    ANNOTATED_SEGMENTATION_FILL_ALPHA,
+  )
+  const lineColor = hexToBoundaryColor(
+    annotation.lineColor ?? paletteColor,
+    ANNOTATED_SEGMENTATION_LINE_ALPHA,
+  )
+
+  return {
+    fillColor: fillColor ?? defaultFillColor,
+    lineColor: lineColor ?? defaultLineColor,
+    ...(annotationLabel === undefined ? {} : { annotationLabel }),
+  }
+}
+
+function annotationPaletteColorForLabel(
+  label: string,
+  paletteByLabel: Map<string, string>,
+): string {
+  const existing = paletteByLabel.get(label)
+
+  if (existing !== undefined) {
+    return existing
+  }
+
+  const color = annotationPaletteColor(paletteByLabel.size)
+  paletteByLabel.set(label, color)
+  return color
+}
+
+function hexToBoundaryColor(hexColor: string | undefined, alpha: number): Color | null {
+  if (hexColor === undefined) {
+    return null
+  }
+
+  const normalized = normalizeAnnotationColor(hexColor)
+
+  if (normalized === null) {
+    return null
+  }
+
+  return [
+    Number.parseInt(normalized.slice(1, 3), 16),
+    Number.parseInt(normalized.slice(3, 5), 16),
+    Number.parseInt(normalized.slice(5, 7), 16),
+    alpha,
+  ]
 }
 
 export function gridCellBatchesToLayerData(

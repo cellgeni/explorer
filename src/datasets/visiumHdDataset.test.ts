@@ -440,6 +440,61 @@ describe('Visium HD dataset readers', () => {
     expect(segmentationOptions[0]).not.toHaveProperty('maxFullFileBytes')
   })
 
+  it('uses annotated Visium HD cell segmentation paths when plain cell GeoJSON is absent', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const annotatedElement = {
+      id: 'cellid_000000001-1',
+      metadata: {
+        segmentation: {
+          kind: 'cell' as const,
+          annotation: { label: 'Cluster 1', color: '#1f77b4' },
+        },
+      },
+      geometry: {
+        kind: 'polygon' as const,
+        rings: [
+          [
+            { x: micrometers(95), y: micrometers(195) },
+            { x: micrometers(105), y: micrometers(195) },
+            { x: micrometers(105), y: micrometers(205) },
+          ],
+        ],
+      },
+    }
+    const segmentationReader = vi.fn(async () => [annotatedElement])
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      segmentedOutputs: {
+        graphclustAnnotatedCellSegmentationsGeojsonPath:
+          'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
+      },
+      segmentationReader,
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+    })
+
+    const batch = await dataset.elements({
+      minX: micrometers(90),
+      maxX: micrometers(110),
+      minY: micrometers(190),
+      maxY: micrometers(210),
+    })
+
+    expect(batch.elements).toEqual([annotatedElement])
+    expect(segmentationReader).toHaveBeenCalledWith(
+      'https://example.test/visium',
+      expect.objectContaining({
+        path: 'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
+        kind: 'cell',
+      }),
+    )
+  })
+
   it('reports nucleus segmentation metadata without enabling cell boundaries', async () => {
     const positions = parseVisiumHdTissuePositionRows([
       visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
@@ -848,7 +903,9 @@ describe('Visium HD dataset readers', () => {
       ],
       ['Actb', 'Gad1'],
       expect.objectContaining({
+        backend: 'lazy-range-worker',
         binSizeMicrometers: 16,
+        fetcher: expect.any(Function),
         maxFullFileBytes: DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
         onStageTiming: expect.any(Function),
       }),

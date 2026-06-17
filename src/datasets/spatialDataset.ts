@@ -49,6 +49,23 @@ export type ElementGeometry =
 export interface SpatialElement<ElementId extends SpatialElementId = SpatialElementId> {
   readonly id: ElementId
   readonly geometry: ElementGeometry
+  readonly metadata?: SpatialElementMetadata
+}
+
+export interface SpatialElementMetadata {
+  readonly segmentation?: SpatialElementSegmentationMetadata
+}
+
+export interface SpatialElementSegmentationMetadata {
+  readonly kind: 'cell' | 'nucleus'
+  readonly annotation?: SpatialElementSegmentationAnnotation
+}
+
+export interface SpatialElementSegmentationAnnotation {
+  readonly label?: string
+  readonly color?: string
+  readonly fillColor?: string
+  readonly lineColor?: string
 }
 
 export interface GridCellBatch<ElementId extends SpatialElementId = SpatialElementId> {

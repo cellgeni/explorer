@@ -236,6 +236,12 @@ function BoundaryCellInfoPanel({ cell }: { readonly cell: CellBoundaryDatum }) {
           <dt>Cell ID</dt>
           <dd>{cell.id}</dd>
         </div>
+        {cell.annotationLabel === undefined ? null : (
+          <div>
+            <dt>Annotation</dt>
+            <dd>{cell.annotationLabel}</dd>
+          </div>
+        )}
         <div>
           <dt>Segmentation</dt>
           <dd>Cell boundary</dd>

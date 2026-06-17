@@ -4,7 +4,12 @@ import {
   featureSliceBinningScale,
   gexFromVisiumFeatureSliceH5,
   parseVisiumFeatureSliceMetadata,
+  type VisiumFeatureSliceWorkerLike,
 } from './visiumFeatureSlice'
+import type {
+  VisiumFeatureSliceWorkerRequest,
+  VisiumFeatureSliceWorkerResponse,
+} from '../workers/visiumFeatureSliceMessages'
 
 describe('Visium HD Feature Slice H5', () => {
   it('parses Feature Slice metadata', () => {
@@ -98,7 +103,99 @@ describe('Visium HD Feature Slice H5', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: 'HEAD' })
   })
+
+  it('dispatches hosted reads through the lazy range worker backend', async () => {
+    const workers: FakeFeatureSliceWorker[] = []
+    const workerFactory = () => {
+      const worker = new FakeFeatureSliceWorker((request) => ({
+        id: request.id,
+        ok: true,
+        geneNames: request.genes,
+        cells: [
+          {
+            id: 'BC-1',
+            geneNames: ['Actb'],
+            counts: [9],
+          },
+        ],
+      }))
+      workers.push(worker)
+      return worker
+    }
+    const stageLabels: string[] = []
+
+    const result = await gexFromVisiumFeatureSliceH5(
+      'https://example.test/visium/feature_slice.h5',
+      [
+        { id: 'BC-1', row: 3, col: 4 },
+        { id: 'BC-empty', row: 8, col: 9 },
+      ],
+      ['Actb', 'Actb'],
+      {
+        backend: 'lazy-range-worker',
+        binSizeMicrometers: 16,
+        maxFullFileBytes: 1,
+        workerFactory,
+        onStageTiming: (timing) => {
+          stageLabels.push(timing.label)
+        },
+      },
+    )
+
+    expect(workers).toHaveLength(1)
+    expect(workers[0]?.requests).toEqual([
+      expect.objectContaining({
+        url: 'https://example.test/visium/feature_slice.h5',
+        genes: ['Actb'],
+        binSizeMicrometers: 16,
+        targets: [
+          { id: 'BC-1', row: 3, col: 4 },
+          { id: 'BC-empty', row: 8, col: 9 },
+        ],
+      }),
+    ])
+    expect(workers[0]?.terminated).toBe(true)
+    expect(stageLabels).toEqual(['Feature Slice H5 lazy range read'])
+    expect(result.geneNames).toEqual(['Actb'])
+    expect(result.cells.get('BC-1')).toEqual({
+      geneNames: ['Actb'],
+      counts: [9],
+    })
+    expect(result.cells.get('BC-empty')).toEqual({
+      geneNames: [],
+      counts: [],
+    })
+  })
 })
+
+class FakeFeatureSliceWorker implements VisiumFeatureSliceWorkerLike {
+  onmessage: ((event: MessageEvent<VisiumFeatureSliceWorkerResponse>) => void) | null =
+    null
+  onerror: ((event: ErrorEvent) => void) | null = null
+  readonly requests: VisiumFeatureSliceWorkerRequest[] = []
+  terminated = false
+
+  constructor(
+    private readonly respond: (
+      request: VisiumFeatureSliceWorkerRequest,
+    ) => VisiumFeatureSliceWorkerResponse,
+  ) {}
+
+  postMessage(message: VisiumFeatureSliceWorkerRequest): void {
+    this.requests.push(message)
+    const response = this.respond(message)
+
+    queueMicrotask(() => {
+      this.onmessage?.({
+        data: response,
+      } as MessageEvent<VisiumFeatureSliceWorkerResponse>)
+    })
+  }
+
+  terminate(): void {
+    this.terminated = true
+  }
+}
 
 async function createTinyFeatureSliceH5(): Promise<Uint8Array> {
   const h5wasm = (await import('h5wasm')).default

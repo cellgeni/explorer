@@ -3,6 +3,7 @@ import * as React from 'react'
 import { describe, expect, it } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
+import type { SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { GridCellDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 import { useViewerLayerData } from './useViewerLayerData'
@@ -207,6 +208,87 @@ describe('useViewerLayerData', () => {
       minY: micrometers(20),
       maxY: micrometers(36),
     })
+  })
+
+  it('preserves annotated nucleus boundary styling in layer data', () => {
+    const nucleusBoundaryElements: readonly SpatialElement[] = [
+      {
+        id: 'nucleus-7',
+        geometry: {
+          kind: 'polygon',
+          rings: [
+            [
+              { x: micrometers(0), y: micrometers(0) },
+              { x: micrometers(4), y: micrometers(0) },
+              { x: micrometers(4), y: micrometers(4) },
+              { x: micrometers(0), y: micrometers(0) },
+            ],
+          ],
+        },
+        metadata: {
+          segmentation: {
+            kind: 'nucleus',
+            annotation: {
+              label: 'Nucleus Cluster 4',
+              fillColor: '#248f8f',
+              lineColor: '#ff8800',
+            },
+          },
+        },
+      },
+    ]
+
+    function NucleusProbe({
+      onReady,
+    }: {
+      readonly onReady: (nextResult: Result) => void
+    }) {
+      const nextResult = useViewerLayerData({
+        annotationColors: {},
+        annotationState: { status: 'idle' },
+        cellMetadataTrack: null,
+        boundaryElements: [],
+        currentViewportBbox: null,
+        geneExpressionBatch: null,
+        geneExpressionColorScale: 'plasma',
+        geneExpressionScaleDatasetUrl: 'https://example.test/output',
+        geneExpressionScaleDomain: { key: '', max: 0 },
+        geneExpressionScoreMode: 'sum',
+        morphologyChannelSettings: [],
+        morphologyChannels: [],
+        morphologyImage: null,
+        nucleusBoundaryElements,
+        observationColorMode: 'annotations',
+        overviewCells,
+        selectedGenes: [],
+        transcriptDensityColorScale: 'thermal',
+        transcriptLayerState: { status: 'idle' },
+        transcriptPointColorMode: 'feature',
+      })
+
+      React.useEffect(() => {
+        onReady(nextResult)
+      })
+
+      return null
+    }
+
+    render(
+      <NucleusProbe
+        onReady={(nextResult) => {
+          result = nextResult
+        }}
+      />,
+    )
+
+    expect(result.nucleusBoundaryLayerData).toEqual([
+      expect.objectContaining({
+        id: 'nucleus-7',
+        annotationLabel: 'Nucleus Cluster 4',
+        fillColor: [36, 143, 143, 82],
+        lineColor: [255, 136, 0, 210],
+      }),
+    ])
   })
 
   it('passes morphology channel alpha rendering metadata to the canvas model', () => {

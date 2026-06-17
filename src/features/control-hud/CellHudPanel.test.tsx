@@ -190,6 +190,8 @@ describe('CellHudPanel', () => {
     expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
     expect(screen.getByText('Selected cell')).toBeInTheDocument()
     expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
+    expect(screen.getByText('Annotation')).toBeInTheDocument()
+    expect(screen.getByText('Cluster 2')).toBeInTheDocument()
     expect(screen.getByText('Cell boundary')).toBeInTheDocument()
     expect(screen.getByText('100 um^2')).toBeInTheDocument()
 
@@ -236,6 +238,7 @@ function gridCellDatum(values: Partial<GridCellDatum> = {}): GridCellDatum {
 function boundaryCellDatum(values: Partial<CellBoundaryDatum> = {}): CellBoundaryDatum {
   return {
     id: 'cellid_000000001-1',
+    annotationLabel: 'Cluster 2',
     polygon: [
       [0, 0, 0],
       [10, 0, 0],

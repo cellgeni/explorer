@@ -19,6 +19,8 @@ describe('Visium HD segmentation GeoJSON reader', () => {
           'segmented_outputs/nucleus_segmentations.geojson',
         graphclustAnnotatedCellSegmentationsGeojsonPath:
           'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
+        graphclustAnnotatedNucleusSegmentationsGeojsonPath:
+          'segmented_outputs/graphclust_annotated_nucleus_segmentations.geojson',
         nucleusInstanceMaskTiffPath: 'segmented_outputs/nucleus_instance_mask.tiff',
       }),
     ).toEqual([
@@ -42,6 +44,14 @@ describe('Visium HD segmentation GeoJSON reader', () => {
         label: 'Graphclust cell segmentations',
         sourceKind: 'geojson',
         path: 'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
+        annotated: true,
+      },
+      {
+        id: 'visium-hd-graphclust-nucleus-segmentations',
+        kind: 'nucleus',
+        label: 'Graphclust nucleus segmentations',
+        sourceKind: 'geojson',
+        path: 'segmented_outputs/graphclust_annotated_nucleus_segmentations.geojson',
         annotated: true,
       },
       {
@@ -103,6 +113,96 @@ describe('Visium HD segmentation GeoJSON reader', () => {
         },
       },
     ])
+  })
+
+  it('preserves annotated segmentation labels and colors from GeoJSON properties', () => {
+    const elements = parseVisiumHdSegmentationGeojson(
+      {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: {
+              cell_id: 7,
+              graphclust: 'Cluster 2',
+              fill_color: '#ff8800',
+              stroke_color: [0, 64, 128],
+            },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [10, 20],
+                  [14, 20],
+                  [14, 24],
+                  [10, 20],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      { scalefactors },
+    )
+
+    expect(elements[0]).toMatchObject({
+      id: 'cellid_000000007-1',
+      metadata: {
+        segmentation: {
+          kind: 'cell',
+          annotation: {
+            label: 'Cluster 2',
+            fillColor: '#ff8800',
+            lineColor: '#004080',
+          },
+        },
+      },
+    })
+  })
+
+  it('preserves annotated nucleus segmentation labels and colors', () => {
+    const elements = parseVisiumHdSegmentationGeojson(
+      {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: {
+              nucleus_id: 'nucleus-7',
+              classification: 'Nucleus Cluster 4',
+              color: '#248f8f',
+            },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [10, 20],
+                  [14, 20],
+                  [14, 24],
+                  [10, 20],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      { scalefactors, kind: 'nucleus' },
+    )
+
+    expect(elements[0]).toMatchObject({
+      id: 'nucleus-7',
+      metadata: {
+        segmentation: {
+          kind: 'nucleus',
+          annotation: {
+            label: 'Nucleus Cluster 4',
+            color: '#248f8f',
+            fillColor: '#248f8f',
+            lineColor: '#248f8f',
+          },
+        },
+      },
+    })
   })
 
   it('flattens multipolygons and filters by viewport bbox', () => {

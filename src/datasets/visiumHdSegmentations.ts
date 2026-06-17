@@ -1,6 +1,10 @@
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import { datasetFileUrl } from '../data/datasetFiles'
-import type { SegmentationInfo, SpatialElement } from './spatialDataset'
+import type {
+  SegmentationInfo,
+  SpatialElement,
+  SpatialElementMetadata,
+} from './spatialDataset'
 
 export interface VisiumHdSegmentedOutputPaths {
   readonly scalefactorsPath?: string
@@ -53,6 +57,58 @@ export class VisiumHdSegmentationGeojsonBudgetExceededError extends Error {
 
 type GeojsonPolygon = readonly (readonly (readonly number[])[])[]
 type GeojsonMultiPolygon = readonly GeojsonPolygon[]
+const ANNOTATION_LABEL_PROPERTY_KEYS = [
+  'annotation',
+  'annotation_label',
+  'annotationLabel',
+  'label',
+  'Label',
+  'classification',
+  'classification_name',
+  'classificationName',
+  'class',
+  'Class',
+  'cluster',
+  'cluster_id',
+  'cluster_name',
+  'graphclust',
+  'Graphclust',
+  'group',
+  'name',
+  'cell_type',
+  'cellType',
+] as const
+const ANNOTATION_COLOR_PROPERTY_KEYS = [
+  'color',
+  'Color',
+  'colour',
+  'fill',
+  'fill_color',
+  'fillColor',
+  'stroke',
+  'stroke_color',
+  'strokeColor',
+  'line_color',
+  'lineColor',
+] as const
+const ANNOTATION_FILL_COLOR_PROPERTY_KEYS = [
+  'fill',
+  'fill_color',
+  'fillColor',
+  'color',
+  'Color',
+  'colour',
+] as const
+const ANNOTATION_LINE_COLOR_PROPERTY_KEYS = [
+  'stroke',
+  'stroke_color',
+  'strokeColor',
+  'line_color',
+  'lineColor',
+  'color',
+  'Color',
+  'colour',
+] as const
 
 export function visiumHdSegmentationInfos(
   paths: VisiumHdSegmentedOutputPaths | undefined,
@@ -284,6 +340,7 @@ function segmentationFeatureToElements(
   )
   const polygonRings = readGeometryPolygons(geometry, featureIndex, options.scalefactors)
   const baseId = readSegmentationFeatureId(feature, featureIndex, options.kind)
+  const metadata = readSegmentationFeatureMetadata(feature, featureIndex, options.kind)
   const elements: SpatialElement[] = []
 
   for (let polygonIndex = 0; polygonIndex < polygonRings.length; polygonIndex += 1) {
@@ -296,6 +353,7 @@ function segmentationFeatureToElements(
     elements.push({
       id: polygonIndex === 0 ? baseId : `${baseId}#${polygonIndex + 1}`,
       geometry: { kind: 'polygon', rings },
+      ...(metadata === undefined ? {} : { metadata }),
     })
   }
 
@@ -462,6 +520,113 @@ function readSegmentationFeatureId(
   }
 
   return `${kind}_${featureIndex.toString().padStart(9, '0')}`
+}
+
+function readSegmentationFeatureMetadata(
+  feature: Record<string, unknown>,
+  featureIndex: number,
+  kind: VisiumHdSegmentationKind,
+): SpatialElementMetadata | undefined {
+  const properties =
+    feature.properties === null || feature.properties === undefined
+      ? {}
+      : expectObject(
+          feature.properties,
+          `Visium HD segmentation feature ${featureIndex} properties`,
+        )
+  const label = readAnnotationLabel(properties)
+  const color = readColorProperty(properties, ANNOTATION_COLOR_PROPERTY_KEYS)
+  const fillColor = readColorProperty(properties, ANNOTATION_FILL_COLOR_PROPERTY_KEYS)
+  const lineColor = readColorProperty(properties, ANNOTATION_LINE_COLOR_PROPERTY_KEYS)
+
+  if (
+    label === undefined &&
+    color === undefined &&
+    fillColor === undefined &&
+    lineColor === undefined
+  ) {
+    return undefined
+  }
+
+  return {
+    segmentation: {
+      kind,
+      annotation: {
+        ...(label === undefined ? {} : { label }),
+        ...(color === undefined ? {} : { color }),
+        ...(fillColor === undefined ? {} : { fillColor }),
+        ...(lineColor === undefined ? {} : { lineColor }),
+      },
+    },
+  }
+}
+
+function readAnnotationLabel(source: Record<string, unknown>): string | undefined {
+  const value = readFirstProperty(source, ANNOTATION_LABEL_PROPERTY_KEYS)
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length === 0 ? undefined : trimmed
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Number.isInteger(value) ? value.toString() : value.toLocaleString()
+  }
+
+  if (typeof value === 'bigint') {
+    return value.toString()
+  }
+
+  return undefined
+}
+
+function readColorProperty(
+  source: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const color = normalizeGeojsonColor(source[key])
+
+    if (color !== undefined) {
+      return color
+    }
+  }
+
+  return undefined
+}
+
+function normalizeGeojsonColor(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+
+    return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed.toLowerCase() : undefined
+  }
+
+  if (Array.isArray(value) && value.length >= 3) {
+    const red = normalizeColorComponent(value[0])
+    const green = normalizeColorComponent(value[1])
+    const blue = normalizeColorComponent(value[2])
+
+    if (red === null || green === null || blue === null) {
+      return undefined
+    }
+
+    return `#${componentToHex(red)}${componentToHex(green)}${componentToHex(blue)}`
+  }
+
+  return undefined
+}
+
+function normalizeColorComponent(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+
+  return Math.max(0, Math.min(255, Math.round(value)))
+}
+
+function componentToHex(value: number): string {
+  return value.toString(16).padStart(2, '0')
 }
 
 function readFirstProperty(

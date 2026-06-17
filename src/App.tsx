@@ -757,8 +757,7 @@ export function App({
     transcriptPointColorMode,
   })
   const viewerGridCells = useMemo(
-    () =>
-      isVisiumHdDataset && boundaryLayerData.length > 0 ? [] : spatialGridCells,
+    () => (isVisiumHdDataset && boundaryLayerData.length > 0 ? [] : spatialGridCells),
     [boundaryLayerData.length, isVisiumHdDataset, spatialGridCells],
   )
   const activeSelectedBoundaryCell = useMemo(
@@ -1340,16 +1339,8 @@ export function App({
         elements: await dataset.segmentationElements('nucleus', bbox),
       }
     },
-    [
-      getSpatialDataset,
-      isVisiumHdDataset,
-      visiumHdTwoMicrometerFilteredBarcodeBudget,
-    ],
+    [getSpatialDataset, isVisiumHdDataset, visiumHdTwoMicrometerFilteredBarcodeBudget],
   )
-  const geneExpressionLoadingEnabled = !isVisiumHdDataset
-  const geneExpressionDisabledMessage = isVisiumHdDataset
-    ? 'Visium HD selected-gene overlays require the Feature Slice H5 reader and are not enabled yet.'
-    : undefined
   const loadActiveGeneExpression = useCallback<GeneExpressionLoader>(
     async (baseUrl, bbox, genes, options = {}) => {
       if (!isVisiumHdDataset) {
@@ -1420,8 +1411,6 @@ export function App({
     boundaryViewportKeyRef,
     geneExpressionAbortRef,
     geneExpressionDetailMode,
-    geneExpressionDisabledMessage,
-    geneExpressionLoadingEnabled,
     geneExpressionRequestIdRef: geneExpressionRequestId,
     geneExpressionScaleKey,
     geneExpressionScoreMode,

@@ -166,7 +166,7 @@ export function createStructuredLoadError(
           title: 'Feature Slice H5 over budget',
           message,
           action:
-            'Use a range-capable Feature Slice H5 reader before enabling hosted Visium HD selected-gene overlays.',
+            'Use the lazy-range Feature Slice H5 backend for hosted Visium HD selected-gene overlays, or lower the full-file budget scope.',
         },
         detail,
       )

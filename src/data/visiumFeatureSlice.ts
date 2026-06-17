@@ -4,6 +4,11 @@ import {
   type GexCell,
   type GexResult,
 } from './gex'
+import type {
+  VisiumFeatureSliceWorkerRequest,
+  VisiumFeatureSliceWorkerResponse,
+  VisiumFeatureSliceWorkerSuccess,
+} from '../workers/visiumFeatureSliceMessages'
 
 type NumericArrayLike =
   | Int8Array
@@ -17,7 +22,7 @@ type NumericArrayLike =
   | Float32Array
   | Float64Array
 
-interface H5FileLike {
+export interface H5FileLike {
   get(path: string): unknown
   get_attribute(name: string, jsonCompatible: false): unknown
 }
@@ -55,9 +60,28 @@ export interface VisiumFeatureSliceTarget<ElementId extends string = string> {
   readonly col: number
 }
 
+export type VisiumFeatureSliceBackend = 'full-file' | 'lazy-range-worker'
+
+export interface VisiumFeatureSliceWorkerLike {
+  onmessage: ((event: MessageEvent<VisiumFeatureSliceWorkerResponse>) => void) | null
+  onerror: ((event: ErrorEvent) => void) | null
+  postMessage(message: VisiumFeatureSliceWorkerRequest): void
+  terminate(): void
+}
+
+export type VisiumFeatureSliceWorkerFactory = () => VisiumFeatureSliceWorkerLike
+
+export interface VisiumFeatureSliceH5FileReadOptions {
+  readonly binSizeMicrometers: number
+  readonly signal?: AbortSignal
+  readonly onStageTiming?: CellFeatureMatrixReadOptions['onStageTiming']
+}
+
 export interface VisiumFeatureSliceReadOptions extends CellFeatureMatrixReadOptions {
   readonly binSizeMicrometers: number
   readonly fetcher?: typeof fetch
+  readonly backend?: VisiumFeatureSliceBackend
+  readonly workerFactory?: VisiumFeatureSliceWorkerFactory
 }
 
 export class FeatureSliceFullFileBudgetExceededError extends Error {
@@ -81,6 +105,7 @@ const FEATURE_SLICES_GROUP_NAME = '/feature_slices'
 const FEATURE_NAME_DATASET = '/features/name'
 const FEATURE_TYPE_DATASET = '/features/feature_type'
 const featureSliceCache = new Map<string, Promise<VisiumFeatureSliceCache>>()
+let nextFeatureSliceWorkerRequestId = 1
 
 export async function gexFromVisiumFeatureSliceH5<ElementId extends string>(
   url: string,
@@ -97,6 +122,10 @@ export async function gexFromVisiumFeatureSliceH5<ElementId extends string>(
     }
   }
 
+  if ((options.backend ?? 'full-file') === 'lazy-range-worker') {
+    return gexFromVisiumFeatureSliceLazyRangeWorker(url, targets, selectedGenes, options)
+  }
+
   const metadataStartedAt = Date.now()
   const matrix = await loadVisiumFeatureSliceH5(url, options)
   options.onStageTiming?.({
@@ -107,6 +136,43 @@ export async function gexFromVisiumFeatureSliceH5<ElementId extends string>(
   })
   throwIfAborted(options.signal)
 
+  return gexFromVisiumFeatureSliceLoadedH5(matrix, targets, selectedGenes, options)
+}
+
+export function gexFromVisiumFeatureSliceH5File<ElementId extends string>(
+  file: H5FileLike,
+  targets: readonly VisiumFeatureSliceTarget<ElementId>[],
+  genes: readonly string[],
+  options: VisiumFeatureSliceH5FileReadOptions,
+): GexResult<ElementId> {
+  const selectedGenes = normalizeSelectedGeneList(genes)
+
+  if (targets.length === 0 || selectedGenes.length === 0) {
+    return {
+      geneNames: selectedGenes,
+      cells: emptyCellsFor(targets),
+    }
+  }
+
+  const metadataStartedAt = Date.now()
+  const matrix = createVisiumFeatureSliceCache(file)
+  options.onStageTiming?.({
+    stage: 'matrix-read',
+    label: 'Feature Slice H5 metadata',
+    durationMs: elapsedMs(metadataStartedAt),
+    detail: `${matrix.featureNames.length.toLocaleString()} features`,
+  })
+  throwIfAborted(options.signal)
+
+  return gexFromVisiumFeatureSliceLoadedH5(matrix, targets, selectedGenes, options)
+}
+
+function gexFromVisiumFeatureSliceLoadedH5<ElementId extends string>(
+  matrix: VisiumFeatureSliceCache,
+  targets: readonly VisiumFeatureSliceTarget<ElementId>[],
+  selectedGenes: readonly string[],
+  options: VisiumFeatureSliceH5FileReadOptions,
+): GexResult<ElementId> {
   const binningScale = featureSliceBinningScale(
     options.binSizeMicrometers,
     matrix.metadata.spotPitchMicrometers,
@@ -154,6 +220,138 @@ export async function gexFromVisiumFeatureSliceH5<ElementId extends string>(
     geneNames: selectedGenes,
     cells,
   }
+}
+
+async function gexFromVisiumFeatureSliceLazyRangeWorker<ElementId extends string>(
+  url: string,
+  targets: readonly VisiumFeatureSliceTarget<ElementId>[],
+  selectedGenes: readonly string[],
+  options: VisiumFeatureSliceReadOptions,
+): Promise<GexResult<ElementId>> {
+  const worker = (options.workerFactory ?? createDefaultFeatureSliceWorker)()
+  const requestId = nextFeatureSliceWorkerRequestId
+  nextFeatureSliceWorkerRequestId += 1
+  const startedAt = Date.now()
+  const request: VisiumFeatureSliceWorkerRequest = {
+    id: requestId,
+    url,
+    targets: targets.map((target) => ({
+      id: target.id,
+      row: target.row,
+      col: target.col,
+    })),
+    genes: selectedGenes,
+    binSizeMicrometers: options.binSizeMicrometers,
+  }
+  const signal = options.signal
+
+  if (signal?.aborted === true) {
+    worker.terminate()
+    throw abortError(signal)
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+
+    const cleanup = () => {
+      if (signal !== undefined) {
+        signal.removeEventListener('abort', handleAbort)
+      }
+
+      worker.terminate()
+    }
+    const settle = (callback: () => void) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+      callback()
+    }
+    const handleAbort = () => {
+      if (signal === undefined) {
+        return
+      }
+
+      settle(() => {
+        reject(abortError(signal))
+      })
+    }
+
+    worker.onmessage = (event) => {
+      const response = event.data
+
+      if (response.id !== requestId) {
+        return
+      }
+
+      if (response.ok) {
+        settle(() => {
+          options.onStageTiming?.({
+            stage: 'matrix-read',
+            label: 'Feature Slice H5 lazy range read',
+            durationMs: elapsedMs(startedAt),
+            detail: `${selectedGenes.length.toLocaleString()} genes, ${targets.length.toLocaleString()} bins`,
+          })
+          resolve(gexResultFromWorkerResponse(response, targets))
+        })
+        return
+      }
+
+      settle(() => {
+        const error = new Error(response.error)
+        error.name = response.errorName ?? 'FeatureSliceLazyRangeWorkerError'
+        reject(error)
+      })
+    }
+    worker.onerror = (event) => {
+      settle(() => {
+        reject(new Error(event.message || 'Feature Slice H5 worker failed.'))
+      })
+    }
+
+    if (signal !== undefined) {
+      signal.addEventListener('abort', handleAbort, { once: true })
+    }
+
+    try {
+      worker.postMessage(request)
+    } catch (cause) {
+      settle(() => {
+        reject(cause instanceof Error ? cause : new Error(String(cause)))
+      })
+    }
+  })
+}
+
+function gexResultFromWorkerResponse<ElementId extends string>(
+  response: VisiumFeatureSliceWorkerSuccess,
+  targets: readonly VisiumFeatureSliceTarget<ElementId>[],
+): GexResult<ElementId> {
+  const cells = emptyMutableCellsFor(targets)
+
+  for (const cell of response.cells) {
+    cells.set(cell.id as ElementId, {
+      geneNames: [...cell.geneNames],
+      counts: [...cell.counts],
+    })
+  }
+
+  return {
+    geneNames: [...response.geneNames],
+    cells,
+  }
+}
+
+function createDefaultFeatureSliceWorker(): VisiumFeatureSliceWorkerLike {
+  if (typeof Worker === 'undefined') {
+    throw new Error('Feature Slice H5 lazy range reads require browser Worker support.')
+  }
+
+  return new Worker(new URL('../workers/visiumFeatureSlice.worker.ts', import.meta.url), {
+    type: 'module',
+  })
 }
 
 export function parseVisiumFeatureSliceMetadata(
@@ -320,25 +518,7 @@ async function loadVisiumFeatureSliceH5Uncached(
 
   try {
     const file = new h5wasm.File(fileName, 'r') as H5FileLike
-    const metadata = parseVisiumFeatureSliceMetadata(
-      file.get_attribute(METADATA_JSON_ATTR_NAME, false),
-    )
-    const featureNames = expectStringArray(
-      readH5Dataset(file, FEATURE_NAME_DATASET).value,
-      FEATURE_NAME_DATASET,
-    )
-    const featureTypes = expectStringArray(
-      readH5Dataset(file, FEATURE_TYPE_DATASET).value,
-      FEATURE_TYPE_DATASET,
-    )
-
-    return {
-      file,
-      metadata,
-      featureNames,
-      featureTypes,
-      geneFeaturesByKey: geneFeaturesByKey(featureNames, featureTypes),
-    }
+    return createVisiumFeatureSliceCache(file)
   } catch (error) {
     try {
       FS.unlink(fileName)
@@ -347,6 +527,28 @@ async function loadVisiumFeatureSliceH5Uncached(
     }
 
     throw error
+  }
+}
+
+function createVisiumFeatureSliceCache(file: H5FileLike): VisiumFeatureSliceCache {
+  const metadata = parseVisiumFeatureSliceMetadata(
+    file.get_attribute(METADATA_JSON_ATTR_NAME, false),
+  )
+  const featureNames = expectStringArray(
+    readH5Dataset(file, FEATURE_NAME_DATASET).value,
+    FEATURE_NAME_DATASET,
+  )
+  const featureTypes = expectStringArray(
+    readH5Dataset(file, FEATURE_TYPE_DATASET).value,
+    FEATURE_TYPE_DATASET,
+  )
+
+  return {
+    file,
+    metadata,
+    featureNames,
+    featureTypes,
+    geneFeaturesByKey: geneFeaturesByKey(featureNames, featureTypes),
   }
 }
 

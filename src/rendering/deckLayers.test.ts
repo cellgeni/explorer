@@ -1501,6 +1501,68 @@ describe('deck layer factory', () => {
     ])
   })
 
+  it('applies annotated segmentation labels and colors while converting boundary elements', () => {
+    expect(
+      boundaryElementsToLayerData([
+        {
+          id: 'clustered-cell-1',
+          metadata: {
+            segmentation: {
+              kind: 'cell',
+              annotation: { label: 'Cluster 1' },
+            },
+          },
+          geometry: {
+            kind: 'polygon',
+            rings: [
+              [
+                { x: micrometers(1), y: micrometers(2) },
+                { x: micrometers(3), y: micrometers(4) },
+                { x: micrometers(5), y: micrometers(6) },
+              ],
+            ],
+          },
+        },
+        {
+          id: 'clustered-cell-2',
+          metadata: {
+            segmentation: {
+              kind: 'cell',
+              annotation: {
+                label: 'Cluster 2',
+                fillColor: '#ff8800',
+                lineColor: '#004080',
+              },
+            },
+          },
+          geometry: {
+            kind: 'polygon',
+            rings: [
+              [
+                { x: micrometers(10), y: micrometers(20) },
+                { x: micrometers(30), y: micrometers(40) },
+                { x: micrometers(50), y: micrometers(60) },
+              ],
+            ],
+          },
+        },
+      ]),
+    ).toMatchObject([
+      {
+        id: 'clustered-cell-1',
+        annotationLabel: 'Cluster 1',
+        fillColor: [31, 119, 180, 82],
+        lineColor: [31, 119, 180, 210],
+      },
+      {
+        id: 'clustered-cell-2',
+        annotationLabel: 'Cluster 2',
+        fillColor: [255, 136, 0, 82],
+        lineColor: [0, 64, 128, 210],
+      },
+    ])
+  })
+
   it('converts columnar affine grid batches into deck.gl polygons', () => {
     expect(gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])).toEqual([
       {

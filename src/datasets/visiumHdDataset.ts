@@ -604,7 +604,9 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       viewportBins,
       selectedGenes,
       {
+        backend: 'lazy-range-worker',
         binSizeMicrometers: overview.binSizeMicrometers,
+        fetcher: this.fetcher,
         maxFullFileBytes: this.maxInteractiveFeatureSliceBytes,
         ...(options.signal === undefined ? {} : { signal: options.signal }),
         ...(options.onStageTiming === undefined

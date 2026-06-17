@@ -1022,6 +1022,8 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [x] Slice 8 partial: Feature Slice H5 selected-gene reader core.
 - [x] Slice 8 partial: Feature Slice budget error classification for hosted
       full-file reads.
+- [x] Slice 8 partial: Feature Slice H5 lazy-range worker backend for hosted
+      selected-gene overlays.
 - [x] Slice 8 partial: budgeted `barcode_mappings.parquet` reader and
       dataset-level bin-to-cell assignment bridge.
 - [x] Slice 8 partial: segmented-output detector and diagnostics probes for
@@ -1030,9 +1032,10 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [x] Slice 8 partial: segmented cell GeoJSON parsing and rendering through the
       existing polygon boundary layer when a detected cell segmentation GeoJSON
       is present and within the interactive full-file byte budget.
-- [ ] Slice 8 remaining: nucleus segmentation GeoJSON/TIFF rendering,
-      annotated segmentation styling, and viewport-scoped or streaming segmented
-      geometry loading for large hosted masks.
+- [x] Slice 8 partial: annotated nucleus GeoJSON segmentation styling coverage.
+- [ ] Slice 8 remaining: nucleus segmentation TIFF rendering and
+      viewport-scoped or streaming segmented geometry loading for large hosted
+      masks.
 
 ### Phase 6 Execution Notes
 
@@ -1163,13 +1166,10 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       instead of hanging the UI. Matrix Market sidecars were also probed and
       are larger than the H5 files, so they are not an acceptable interactive
       fallback for this fixture.
-- [x] After reviewing the official 10x Feature Slice documentation, keep the
-      Visium HD selected-gene overlay gated in the UI instead of surfacing the
-      binned-matrix budget error to users. The H5 budget guard remains in the
-      lower-level reader as a safety net, but the app now reports that
-      selected-gene overlays require the Feature Slice H5 reader. Next work is
-      to read `feature_slice.h5` feature COO slices and bin them to the active
-      8 µm or 16 µm grid.
+- [x] After reviewing the official 10x Feature Slice documentation, kept the
+      Visium HD selected-gene overlay gated while only a full-file matrix path
+      existed. The H5 budget guard remains in the lower-level full-file reader
+      as a safety net.
 - [x] Added the first Feature Slice H5 reader core. It parses root
       `metadata_json`, reads `/features/name` and `/features/feature_type`,
       resolves selected genes to `/feature_slices/{featureIndex}/{row,col,data}`
@@ -1177,12 +1177,14 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       returns generic `GexResult<SpatialElementId>` counts for visible binned
       barcodes. `VisiumHdDataset.geneExpression()` now targets this reader
       instead of the oversized filtered feature-barcode matrix path. The
-      default h5wasm adapter remains protected by a full-file byte budget, so
-      the UI overlay gate stays in place until a range-capable Feature Slice
-      backend can support the 503 MB hosted fixture interactively.
+      default h5wasm adapter remains protected by a full-file byte budget.
 - [x] Added structured Feature Slice budget errors so future UI enablement can
       distinguish "Feature Slice reader exists but this hosted H5 is too large
       for the current full-file adapter" from generic matrix failures.
+- [x] Added a worker-backed lazy-range Feature Slice adapter. The app now
+      enables Visium HD selected-gene overlays, while the dataset requests the
+      lazy backend so hosted `feature_slice.h5` reads use h5wasm's range-backed
+      lazy file path instead of fetching the full H5.
 - [x] Added Playwright coverage for the public Visium HD reference dataset. The
       E2E smoke fills the supplied Space Ranger 4.0.1 URL, loads the dataset
       through the production-preview app, verifies the Visium HD dataset panel,
@@ -1301,9 +1303,19 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       API, clears nucleus overlays on dataset reload, converts them into a
       distinct blue polygon layer, and keeps that layer non-pickable so segmented
       cell click selection remains stable.
-- [ ] Slice 8 remaining: nucleus segmentation TIFF rendering, annotated
-      segmentation styling, and a viewport-scoped or streaming strategy for
-      segmentation assets that exceed the interactive GeoJSON full-file budget.
+- [x] Added annotated Visium HD cell segmentation styling. GeoJSON segmentation
+      parsing now preserves common annotation/classification labels plus
+      hex/RGB fill and stroke colors, graphclust annotated cell GeoJSON is used
+      when plain cell segmentation GeoJSON is absent, boundary conversion applies
+      deterministic annotation palette colors or explicit GeoJSON colors, and
+      hover/Cell Info surfaces show the annotation label for segmented cells.
+- [x] Added annotated nucleus segmentation styling coverage. The same
+      annotation metadata path used for cell GeoJSON now covers nucleus GeoJSON,
+      and the nucleus boundary layer data preserves annotation labels plus
+      explicit fill/stroke colors.
+- [ ] Slice 8 remaining: nucleus segmentation TIFF rendering and a
+      viewport-scoped or streaming strategy for segmentation assets that exceed
+      the interactive GeoJSON full-file budget.
 
 ### Definition Of Done For The First Visium HD MVP
 

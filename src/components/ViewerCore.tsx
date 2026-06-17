@@ -1947,6 +1947,12 @@ function CellBoundaryHoverTooltip({
           <dt>Cell</dt>
           <dd>Segmented</dd>
         </div>
+        {boundary.annotationLabel === undefined ? null : (
+          <div>
+            <dt>Annotation</dt>
+            <dd>{boundary.annotationLabel}</dd>
+          </div>
+        )}
         <div>
           <dt>Vertices</dt>
           <dd>{boundary.polygon.length.toLocaleString()}</dd>
@@ -1961,7 +1967,8 @@ function CellBoundaryHoverTooltip({
             <dd>{formatCoordinateValue(detail.expressionCount)}</dd>
           </div>
         )}
-        {detail.expressionGenes === undefined || detail.expressionGenes.length === 0 ? null : (
+        {detail.expressionGenes === undefined ||
+        detail.expressionGenes.length === 0 ? null : (
           <div>
             <dt>Genes</dt>
             <dd>{formatExpressionGeneList(detail.expressionGenes)}</dd>
