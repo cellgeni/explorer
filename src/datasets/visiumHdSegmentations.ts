@@ -30,12 +30,37 @@ export interface ReadVisiumHdSegmentationElementsOptions {
   readonly bbox?: BBox
   readonly maxFullFileBytes?: number
   readonly fetcher?: typeof fetch
+  readonly maskRasterReader?: VisiumHdNucleusInstanceMaskRasterReader
   readonly signal?: AbortSignal
 }
 
 export interface ParseVisiumHdSegmentationGeojsonOptions {
   readonly scalefactors: VisiumHdSegmentationScalefactors
   readonly kind?: VisiumHdSegmentationKind
+  readonly bbox?: BBox
+}
+
+export interface VisiumHdNucleusInstanceMaskRaster {
+  readonly data: ArrayLike<number | bigint>
+  readonly width: number
+  readonly height: number
+  readonly originRow?: number
+  readonly originCol?: number
+}
+
+export interface ReadVisiumHdNucleusInstanceMaskRasterOptions {
+  readonly bbox: BBox
+  readonly scalefactors: VisiumHdSegmentationScalefactors
+  readonly signal?: AbortSignal
+}
+
+export type VisiumHdNucleusInstanceMaskRasterReader = (
+  url: string,
+  options: ReadVisiumHdNucleusInstanceMaskRasterOptions,
+) => Promise<VisiumHdNucleusInstanceMaskRaster>
+
+export interface ParseVisiumHdNucleusInstanceMaskOptions {
+  readonly scalefactors: VisiumHdSegmentationScalefactors
   readonly bbox?: BBox
 }
 
@@ -57,6 +82,31 @@ export class VisiumHdSegmentationGeojsonBudgetExceededError extends Error {
 
 type GeojsonPolygon = readonly (readonly (readonly number[])[])[]
 type GeojsonMultiPolygon = readonly GeojsonPolygon[]
+interface MaskEdge {
+  readonly start: MaskVertex
+  readonly end: MaskVertex
+}
+
+interface MaskVertex {
+  readonly col: number
+  readonly row: number
+}
+
+interface MaskPixelEdgeContext {
+  readonly raster: VisiumHdNucleusInstanceMaskRaster
+  readonly localRow: number
+  readonly localCol: number
+  readonly row: number
+  readonly col: number
+}
+
+interface NucleusMaskWindow {
+  readonly left: number
+  readonly top: number
+  readonly right: number
+  readonly bottom: number
+}
+
 const ANNOTATION_LABEL_PROPERTY_KEYS = [
   'annotation',
   'annotation_label',
@@ -167,6 +217,10 @@ export async function readVisiumHdSegmentationElements(
   const url = datasetFileUrl(baseUrl, options.path)
   const fetcher = options.fetcher ?? fetch
 
+  if (isTiffPath(options.path)) {
+    return readVisiumHdNucleusInstanceMaskElements(url, options)
+  }
+
   if (options.maxFullFileBytes !== undefined) {
     await assertSegmentationGeojsonWithinBudget(
       url,
@@ -191,6 +245,36 @@ export async function readVisiumHdSegmentationElements(
   throwIfAborted(options.signal)
 
   return parseVisiumHdSegmentationGeojson(geojson, options)
+}
+
+export async function readVisiumHdNucleusInstanceMaskElements(
+  url: string,
+  options: ReadVisiumHdSegmentationElementsOptions,
+): Promise<readonly SpatialElement[]> {
+  if ((options.kind ?? 'nucleus') !== 'nucleus') {
+    throw new Error(
+      'Visium HD nucleus instance-mask TIFF can only provide nucleus elements.',
+    )
+  }
+
+  if (options.bbox === undefined) {
+    throw new Error('Visium HD nucleus instance-mask TIFF reads require a viewport bbox.')
+  }
+
+  const raster = await (
+    options.maskRasterReader ?? readVisiumHdNucleusInstanceMaskRasterFromTiff
+  )(url, {
+    bbox: options.bbox,
+    scalefactors: options.scalefactors,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+
+  throwIfAborted(options.signal)
+
+  return parseVisiumHdNucleusInstanceMaskRaster(raster, {
+    bbox: options.bbox,
+    scalefactors: options.scalefactors,
+  })
 }
 
 export function parseVisiumHdSegmentationGeojson(
@@ -223,6 +307,89 @@ export function parseVisiumHdSegmentationGeojson(
 
     for (const element of featureElements) {
       elements.push(element)
+    }
+  }
+
+  return options.bbox === undefined
+    ? elements
+    : filterVisiumHdSegmentationElementsByBbox(elements, options.bbox)
+}
+
+export function parseVisiumHdNucleusInstanceMaskRaster(
+  raster: VisiumHdNucleusInstanceMaskRaster,
+  options: ParseVisiumHdNucleusInstanceMaskOptions,
+): readonly SpatialElement[] {
+  assertPositiveMicronsPerPixel(options.scalefactors.micronsPerPixel)
+
+  if (!Number.isInteger(raster.width) || raster.width < 0) {
+    throw new Error('Expected nucleus instance-mask raster width to be non-negative.')
+  }
+
+  if (!Number.isInteger(raster.height) || raster.height < 0) {
+    throw new Error('Expected nucleus instance-mask raster height to be non-negative.')
+  }
+
+  if (raster.width === 0 || raster.height === 0) {
+    return []
+  }
+
+  const expectedLength = raster.width * raster.height
+
+  if (raster.data.length !== expectedLength) {
+    throw new Error(
+      `Expected nucleus instance-mask raster to contain ${expectedLength.toLocaleString()} pixels, received ${raster.data.length.toLocaleString()}.`,
+    )
+  }
+
+  const originRow = normalizeRasterOrigin(raster.originRow, 'originRow')
+  const originCol = normalizeRasterOrigin(raster.originCol, 'originCol')
+  const edgesByLabel = new Map<number, MaskEdge[]>()
+
+  for (let row = 0; row < raster.height; row += 1) {
+    for (let col = 0; col < raster.width; col += 1) {
+      const label = readMaskLabel(raster, row, col)
+
+      if (label === 0) {
+        continue
+      }
+
+      appendMaskPixelEdges(edgesByLabel, label, {
+        col: originCol + col,
+        localCol: col,
+        localRow: row,
+        raster,
+        row: originRow + row,
+      })
+    }
+  }
+
+  const elements: SpatialElement[] = []
+
+  for (const [label, edges] of edgesByLabel) {
+    const rings = traceMaskBoundaryRings(edges, options.scalefactors)
+
+    for (let ringIndex = 0; ringIndex < rings.length; ringIndex += 1) {
+      const ring = rings[ringIndex]
+
+      if (ring === undefined || ring.length < 4) {
+        continue
+      }
+
+      elements.push({
+        id:
+          ringIndex === 0
+            ? formatVisiumHdNucleusInstanceMaskId(label)
+            : `${formatVisiumHdNucleusInstanceMaskId(label)}#${ringIndex + 1}`,
+        geometry: {
+          kind: 'polygon',
+          rings: [ring],
+        },
+        metadata: {
+          segmentation: {
+            kind: 'nucleus',
+          },
+        },
+      })
     }
   }
 
@@ -280,6 +447,114 @@ export function filterVisiumHdSegmentationElementsByBbox(
   return elements.filter((element) => elementIntersectsBbox(element, bbox))
 }
 
+async function readVisiumHdNucleusInstanceMaskRasterFromTiff(
+  url: string,
+  options: ReadVisiumHdNucleusInstanceMaskRasterOptions,
+): Promise<VisiumHdNucleusInstanceMaskRaster> {
+  assertPositiveMicronsPerPixel(options.scalefactors.micronsPerPixel)
+  const { fromUrl } = await import('geotiff')
+  const tiff = await fromUrl(url, { allowFullFile: false }, options.signal)
+  const image = await tiff.getImage(0)
+  const window = nucleusMaskWindowForBbox(
+    options.bbox,
+    options.scalefactors,
+    image.getWidth(),
+    image.getHeight(),
+  )
+
+  if (window === null) {
+    return {
+      data: [],
+      width: 0,
+      height: 0,
+      originRow: 0,
+      originCol: 0,
+    }
+  }
+
+  const raster = await image.readRasters({
+    window: [window.left, window.top, window.right, window.bottom],
+    samples: [0],
+    interleave: true,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+
+  return {
+    data: readSingleRasterSample(raster),
+    width: window.right - window.left,
+    height: window.bottom - window.top,
+    originRow: window.top,
+    originCol: window.left,
+  }
+}
+
+function nucleusMaskWindowForBbox(
+  bbox: BBox,
+  scalefactors: VisiumHdSegmentationScalefactors,
+  imageWidth: number,
+  imageHeight: number,
+): NucleusMaskWindow | null {
+  if (!Number.isFinite(imageWidth) || imageWidth <= 0) {
+    return null
+  }
+
+  if (!Number.isFinite(imageHeight) || imageHeight <= 0) {
+    return null
+  }
+
+  const paddingPixels = 1
+  const left = Math.max(
+    0,
+    Math.floor(bbox.minX / scalefactors.micronsPerPixel) - paddingPixels,
+  )
+  const right = Math.min(
+    Math.ceil(imageWidth),
+    Math.ceil(bbox.maxX / scalefactors.micronsPerPixel) + paddingPixels,
+  )
+  const top = Math.max(
+    0,
+    Math.floor(bbox.minY / scalefactors.micronsPerPixel) - paddingPixels,
+  )
+  const bottom = Math.min(
+    Math.ceil(imageHeight),
+    Math.ceil(bbox.maxY / scalefactors.micronsPerPixel) + paddingPixels,
+  )
+
+  if (right <= left || bottom <= top) {
+    return null
+  }
+
+  return { left, top, right, bottom }
+}
+
+function readSingleRasterSample(value: unknown): ArrayLike<number | bigint> {
+  if (isRasterArray(value)) {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    const firstSample = value[0]
+
+    if (isRasterArray(firstSample)) {
+      return firstSample
+    }
+  }
+
+  throw new Error('Expected nucleus instance-mask TIFF to decode to one numeric raster.')
+}
+
+function isRasterArray(value: unknown): value is ArrayLike<number | bigint> {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+
+  if (!('length' in value) || typeof value.length !== 'number') {
+    return false
+  }
+
+  return Array.isArray(value) || ArrayBuffer.isView(value)
+}
+
 async function assertSegmentationGeojsonWithinBudget(
   url: string,
   maxBytes: number,
@@ -318,6 +593,245 @@ async function assertSegmentationGeojsonWithinBudget(
   if (byteLength > maxBytes) {
     throw new VisiumHdSegmentationGeojsonBudgetExceededError(url, byteLength, maxBytes)
   }
+}
+
+function appendMaskPixelEdges(
+  edgesByLabel: Map<number, MaskEdge[]>,
+  label: number,
+  context: MaskPixelEdgeContext,
+): void {
+  const edges = readOrCreateMaskEdges(edgesByLabel, label)
+  const { col, localCol, localRow, raster, row } = context
+
+  if (readMaskLabel(raster, localRow - 1, localCol) !== label) {
+    edges.push({
+      start: { col, row },
+      end: { col: col + 1, row },
+    })
+  }
+
+  if (readMaskLabel(raster, localRow, localCol + 1) !== label) {
+    edges.push({
+      start: { col: col + 1, row },
+      end: { col: col + 1, row: row + 1 },
+    })
+  }
+
+  if (readMaskLabel(raster, localRow + 1, localCol) !== label) {
+    edges.push({
+      start: { col: col + 1, row: row + 1 },
+      end: { col, row: row + 1 },
+    })
+  }
+
+  if (readMaskLabel(raster, localRow, localCol - 1) !== label) {
+    edges.push({
+      start: { col, row: row + 1 },
+      end: { col, row },
+    })
+  }
+}
+
+function readOrCreateMaskEdges(
+  edgesByLabel: Map<number, MaskEdge[]>,
+  label: number,
+): MaskEdge[] {
+  const existing = edgesByLabel.get(label)
+
+  if (existing !== undefined) {
+    return existing
+  }
+
+  const edges: MaskEdge[] = []
+  edgesByLabel.set(label, edges)
+  return edges
+}
+
+function traceMaskBoundaryRings(
+  edges: readonly MaskEdge[],
+  scalefactors: VisiumHdSegmentationScalefactors,
+): readonly DataPoint[][] {
+  const unusedEdges = new Set<number>()
+  const outgoingEdges = new Map<string, number[]>()
+
+  for (let index = 0; index < edges.length; index += 1) {
+    const edge = edges[index]
+
+    if (edge === undefined) {
+      continue
+    }
+
+    unusedEdges.add(index)
+    const key = maskVertexKey(edge.start)
+    const outgoing = outgoingEdges.get(key)
+
+    if (outgoing === undefined) {
+      outgoingEdges.set(key, [index])
+    } else {
+      outgoing.push(index)
+    }
+  }
+
+  const rings: DataPoint[][] = []
+
+  while (unusedEdges.size > 0) {
+    const firstEdgeIndex = unusedEdges.values().next().value
+
+    if (typeof firstEdgeIndex !== 'number') {
+      break
+    }
+
+    const ring = traceMaskBoundaryRing(
+      firstEdgeIndex,
+      edges,
+      outgoingEdges,
+      unusedEdges,
+      scalefactors,
+    )
+
+    if (ring.length >= 4) {
+      rings.push(ring)
+    }
+  }
+
+  return rings
+}
+
+function traceMaskBoundaryRing(
+  firstEdgeIndex: number,
+  edges: readonly MaskEdge[],
+  outgoingEdges: ReadonlyMap<string, readonly number[]>,
+  unusedEdges: Set<number>,
+  scalefactors: VisiumHdSegmentationScalefactors,
+): DataPoint[] {
+  const firstEdge = edges[firstEdgeIndex]
+
+  if (firstEdge === undefined) {
+    unusedEdges.delete(firstEdgeIndex)
+    return []
+  }
+
+  unusedEdges.delete(firstEdgeIndex)
+  const vertices: MaskVertex[] = [firstEdge.start, firstEdge.end]
+  const startKey = maskVertexKey(firstEdge.start)
+  let current = firstEdge.end
+
+  while (maskVertexKey(current) !== startKey) {
+    const nextEdgeIndex = takeNextMaskEdgeIndex(current, outgoingEdges, unusedEdges)
+
+    if (nextEdgeIndex === null) {
+      break
+    }
+
+    const nextEdge = edges[nextEdgeIndex]
+
+    if (nextEdge === undefined) {
+      unusedEdges.delete(nextEdgeIndex)
+      break
+    }
+
+    unusedEdges.delete(nextEdgeIndex)
+    current = nextEdge.end
+    vertices.push(current)
+  }
+
+  if (maskVertexKey(vertices.at(-1) ?? firstEdge.start) !== startKey) {
+    return []
+  }
+
+  return vertices.map((vertex) => maskVertexToDataPoint(vertex, scalefactors))
+}
+
+function takeNextMaskEdgeIndex(
+  vertex: MaskVertex,
+  outgoingEdges: ReadonlyMap<string, readonly number[]>,
+  unusedEdges: ReadonlySet<number>,
+): number | null {
+  const candidates = outgoingEdges.get(maskVertexKey(vertex))
+
+  if (candidates === undefined) {
+    return null
+  }
+
+  for (const candidate of candidates) {
+    if (unusedEdges.has(candidate)) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function readMaskLabel(
+  raster: VisiumHdNucleusInstanceMaskRaster,
+  row: number,
+  col: number,
+): number {
+  if (row < 0 || col < 0 || row >= raster.height || col >= raster.width) {
+    return 0
+  }
+
+  const value = raster.data[row * raster.width + col]
+
+  if (value === undefined) {
+    throw new Error(`Missing nucleus instance-mask pixel at row ${row}, column ${col}.`)
+  }
+
+  if (typeof value === 'bigint') {
+    if (value <= 0n) {
+      return 0
+    }
+
+    if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error(
+        `Nucleus instance-mask label ${value.toString()} exceeds the safe integer range.`,
+      )
+    }
+
+    return Number(value)
+  }
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0
+  }
+
+  if (!Number.isInteger(value)) {
+    throw new Error(`Nucleus instance-mask label ${value} is not an integer.`)
+  }
+
+  return value
+}
+
+function normalizeRasterOrigin(value: number | undefined, label: string): number {
+  if (value === undefined) {
+    return 0
+  }
+
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(
+      `Expected nucleus instance-mask ${label} to be a non-negative integer.`,
+    )
+  }
+
+  return value
+}
+
+function maskVertexToDataPoint(
+  vertex: MaskVertex,
+  scalefactors: VisiumHdSegmentationScalefactors,
+): DataPoint {
+  return {
+    x: micrometers(vertex.col * scalefactors.micronsPerPixel),
+    y: micrometers(vertex.row * scalefactors.micronsPerPixel),
+  }
+}
+
+function maskVertexKey(vertex: MaskVertex): string {
+  return `${vertex.col},${vertex.row}`
+}
+
+function formatVisiumHdNucleusInstanceMaskId(label: number): string {
+  return `nucleus_${label.toString().padStart(9, '0')}`
 }
 
 function segmentationFeatureToElements(
@@ -742,6 +1256,10 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw abortError(signal)
   }
+}
+
+function isTiffPath(path: string): boolean {
+  return /\.tiff?$/i.test(path)
 }
 
 function abortError(signal: AbortSignal): Error {

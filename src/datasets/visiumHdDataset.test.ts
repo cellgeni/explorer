@@ -40,6 +40,14 @@ const bin16: VisiumHdBinDescriptor = {
   filteredMatrixH5Path: 'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
 }
 
+const bin8: VisiumHdBinDescriptor = {
+  binSizeMicrometers: 8,
+  outputPath: 'binned_outputs/square_008um',
+  tissuePositionsPath: 'binned_outputs/square_008um/spatial/tissue_positions.parquet',
+  scalefactorsPath: 'binned_outputs/square_008um/spatial/scalefactors_json.json',
+  filteredMatrixH5Path: 'binned_outputs/square_008um/filtered_feature_bc_matrix.h5',
+}
+
 const bin2: VisiumHdBinDescriptor = {
   binSizeMicrometers: 2,
   outputPath: 'binned_outputs/square_002um',
@@ -318,6 +326,61 @@ describe('Visium HD dataset readers', () => {
     expect(overview.grid.basis.rowStep.y).toBeCloseTo(1)
     expect(overview.grid.basis.colStep.x).toBeCloseTo(2)
     expect(overview.grid.basis.colStep.y).toBeCloseTo(16)
+  })
+
+  it('derives coarser Visium HD tier bases from the finest reliable loaded tier', async () => {
+    const positionsByTier = new Map([
+      [
+        8,
+        parseVisiumHdTissuePositionRows([
+          visiumPositionRow('BC-8-0', 1, 0, 0, 0, 0),
+          visiumPositionRow('BC-8-1', 1, 1, 0, 16, 0),
+          visiumPositionRow('BC-8-2', 1, 0, 1, 0, 16),
+        ]),
+      ],
+      [
+        16,
+        parseVisiumHdTissuePositionRows([
+          visiumPositionRow('BC-16-0', 1, 0, 0, 100, 100),
+        ]),
+      ],
+    ])
+    const tissuePositionUrls: string[] = []
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16, bin8],
+      tissuePositionsReader: async (options) => {
+        tissuePositionUrls.push(options.url ?? '')
+        const tier = options.url?.includes('square_008um') ? 8 : 16
+        const positions = positionsByTier.get(tier)
+
+        if (positions === undefined) {
+          throw new Error(`Missing positions for ${tier} µm tier.`)
+        }
+
+        return positions
+      },
+      scalefactorsReader: async (url) =>
+        url.includes('square_008um')
+          ? { ...scalefactors, binSizeMicrometers: 8, spotDiameterFullres: 16 }
+          : scalefactors,
+    })
+
+    const overview = await dataset.readBinnedOverview(16)
+
+    expect(tissuePositionUrls).toEqual(
+      expect.arrayContaining([
+        'https://example.test/visium/binned_outputs/square_008um/spatial/tissue_positions.parquet',
+        'https://example.test/visium/binned_outputs/square_016um/spatial/tissue_positions.parquet',
+      ]),
+    )
+    expect(overview.gridCells.ids).toEqual(['BC-16-0'])
+    expect(overview.grid.basis.origin.x).toBeCloseTo(4)
+    expect(overview.grid.basis.origin.y).toBeCloseTo(4)
+    expect(overview.grid.basis.rowStep.x).toBeCloseTo(0)
+    expect(overview.grid.basis.rowStep.y).toBeCloseTo(16)
+    expect(overview.grid.basis.colStep.x).toBeCloseTo(16)
+    expect(overview.grid.basis.colStep.y).toBeCloseTo(0)
   })
 
   it('exposes Visium HD metadata and bbox-filtered grid cells through the dataset', async () => {
@@ -615,6 +678,77 @@ describe('Visium HD dataset readers', () => {
     expect(segmentationOptions[0]).not.toHaveProperty('maxFullFileBytes')
   })
 
+  it('falls back to Visium HD nucleus instance-mask TIFF when nucleus GeoJSON is absent', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const bbox = {
+      minX: micrometers(90),
+      maxX: micrometers(110),
+      minY: micrometers(190),
+      maxY: micrometers(210),
+    }
+    const insideElement = {
+      id: 'nucleus_000000001',
+      geometry: {
+        kind: 'polygon' as const,
+        rings: [
+          [
+            { x: micrometers(95), y: micrometers(195) },
+            { x: micrometers(105), y: micrometers(195) },
+            { x: micrometers(105), y: micrometers(205) },
+          ],
+        ],
+      },
+    }
+    const outsideElement = {
+      id: 'nucleus_000000002',
+      geometry: {
+        kind: 'polygon' as const,
+        rings: [
+          [
+            { x: micrometers(500), y: micrometers(500) },
+            { x: micrometers(510), y: micrometers(500) },
+            { x: micrometers(510), y: micrometers(510) },
+          ],
+        ],
+      },
+    }
+    const segmentationReader = vi.fn(
+      async (baseUrl: string, options: ReadVisiumHdSegmentationElementsOptions) => {
+        void baseUrl
+        void options
+        return [insideElement, outsideElement]
+      },
+    )
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      segmentedOutputs: {
+        nucleusInstanceMaskTiffPath: 'segmented_outputs/nucleus_instance_mask.tiff',
+      },
+      segmentationReader,
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+    })
+
+    await expect(dataset.segmentationElements('nucleus', bbox)).resolves.toEqual([
+      insideElement,
+    ])
+    expect(segmentationReader).toHaveBeenCalledWith(
+      'https://example.test/visium',
+      expect.objectContaining({
+        path: 'segmented_outputs/nucleus_instance_mask.tiff',
+        scalefactors,
+        kind: 'nucleus',
+        bbox,
+      }),
+    )
+    expect(segmentationReader.mock.calls[0]?.[1]).not.toHaveProperty('maxFullFileBytes')
+  })
+
   it('rejects 2 µm overview reads until a budgeted loading path is available', async () => {
     const tissuePositionsReader = vi.fn(async () =>
       parseVisiumHdTissuePositionRows([visiumPositionRow('BC-2', 1, 0, 0, 400, 200)]),
@@ -681,6 +815,53 @@ describe('Visium HD dataset readers', () => {
         maxBarcodeCount: 10,
       },
     )
+  })
+
+  it('prefers the 8 µm basis source for budgeted 2 µm overview reads', async () => {
+    const tissuePositionUrls: string[] = []
+    const filteredMatrixBarcodeReader = vi.fn(async () => [
+      {
+        barcode: 's_002um_000000_000000-1',
+        binSizeMicrometers: 2 as const,
+        row: 0,
+        col: 0,
+      },
+    ])
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16, bin8, bin2],
+      maxTwoMicrometerFilteredBarcodes: 10,
+      tissuePositionsReader: async (options) => {
+        tissuePositionUrls.push(options.url ?? '')
+
+        if (!options.url?.includes('square_008um')) {
+          throw new Error('Expected 2 µm basis derivation to use the 8 µm tier.')
+        }
+
+        return parseVisiumHdTissuePositionRows([
+          visiumPositionRow('BC-8-0', 1, 0, 0, 0, 0),
+          visiumPositionRow('BC-8-1', 1, 1, 0, 16, 0),
+          visiumPositionRow('BC-8-2', 1, 0, 1, 0, 16),
+        ])
+      },
+      scalefactorsReader: async (url) =>
+        url.includes('square_002um')
+          ? { ...scalefactors, binSizeMicrometers: 2, spotDiameterFullres: 4 }
+          : { ...scalefactors, binSizeMicrometers: 8, spotDiameterFullres: 16 },
+      filteredMatrixBarcodeReader,
+    })
+
+    const overview = await dataset.readBinnedOverview(2)
+
+    expect(tissuePositionUrls).toEqual([
+      'https://example.test/visium/binned_outputs/square_008um/spatial/tissue_positions.parquet',
+    ])
+    expect(overview.grid.basis.origin.x).toBeCloseTo(-3)
+    expect(overview.grid.basis.origin.y).toBeCloseTo(-3)
+    expect(overview.grid.basis.rowStep.x).toBeCloseTo(0)
+    expect(overview.grid.basis.rowStep.y).toBeCloseTo(2)
+    expect(overview.grid.basis.colStep.x).toBeCloseTo(2)
+    expect(overview.grid.basis.colStep.y).toBeCloseTo(0)
   })
 
   it('creates a binned overview from filtered matrix square barcodes and a derived basis', () => {

@@ -44,7 +44,12 @@ import {
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
 } from '../data/persistentByteRangeCache'
-import { deriveSubdividedGridBasis, fitGridBasis, gridCellCenter } from './spatialGrid'
+import {
+  deriveNestedGridBasis,
+  deriveSubdividedGridBasis,
+  fitGridBasis,
+  gridCellCenter,
+} from './spatialGrid'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
@@ -200,6 +205,7 @@ export interface ReadVisiumHdBinnedOverviewOptions {
   readonly bin: VisiumHdBinDescriptor
   readonly includeOutOfTissue?: boolean
   readonly maxBasisFitSamples?: number
+  readonly basis?: SpatialGridBasis | Promise<SpatialGridBasis>
   readonly fetcher?: typeof fetch
   readonly tissuePositionsReader?: (
     options: ReadVisiumHdTissuePositionsOptions,
@@ -217,6 +223,7 @@ export interface ReadVisiumHdBinnedOverviewOptions {
 export interface CreateVisiumHdBinnedOverviewOptions {
   readonly includeOutOfTissue?: boolean
   readonly maxBasisFitSamples?: number
+  readonly basis?: SpatialGridBasis
 }
 
 export interface VisiumHdParquetReadObjectsOptions {
@@ -691,9 +698,20 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     }
 
     const bin = findBin(this.bins, binSizeMicrometers)
+    const basisSourceBinSize = nestedBasisSourceBinSize(this.bins, binSizeMicrometers)
+    const basis =
+      basisSourceBinSize === undefined
+        ? undefined
+        : this.readBinnedOverview(basisSourceBinSize).then((sourceOverview) =>
+            deriveNestedGridBasis(
+              sourceOverview.grid.basis,
+              binSizeMicrometers / basisSourceBinSize,
+            ),
+          )
     const promise = readVisiumHdBinnedOverview({
       baseUrl: this.baseUrl,
       bin,
+      ...(basis === undefined ? {} : { basis }),
       fetcher: this.fetcher,
       tissuePositionsReader: this.tissuePositionsReader,
       scalefactorsReader: this.scalefactorsReader,
@@ -733,7 +751,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     }
 
     const bin = findBin(this.bins, 2)
-    const sourceBinSize = preferredBasisSourceBinSize(this.bins)
+    const sourceBinSize = preferredTwoMicrometerBasisSourceBinSize(this.bins)
 
     if (sourceBinSize === undefined) {
       return Promise.reject(
@@ -782,13 +800,24 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     bbox: BBox,
     scalefactors: VisiumHdScalefactors,
   ): Promise<readonly SpatialElement[]> {
-    const path = this.segmentationPath(kind)
+    const source = this.segmentationSource(kind)
 
-    if (path === undefined) {
+    if (source === undefined) {
       return []
     }
 
-    const elements = await this.segmentedElementsForPath(path, kind, scalefactors)
+    if (source.sourceKind === 'tiff') {
+      const elements = await this.segmentationReader(this.baseUrl, {
+        path: source.path,
+        scalefactors,
+        kind,
+        bbox,
+        fetcher: this.fetcher,
+      })
+      return filterVisiumHdSegmentationElementsByBbox(elements, bbox)
+    }
+
+    const elements = await this.segmentedElementsForPath(source.path, kind, scalefactors)
     return filterVisiumHdSegmentationElementsByBbox(elements, bbox)
   }
 
@@ -825,21 +854,31 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   }
 
   private cellSegmentationPath(): string | undefined {
-    return this.segmentationPath('cell')
+    return this.segmentationSource('cell')?.path
   }
 
-  private segmentationPath(kind: VisiumHdSegmentationKind): string | undefined {
+  private segmentationSource(
+    kind: VisiumHdSegmentationKind,
+  ): { readonly path: string; readonly sourceKind: 'geojson' | 'tiff' } | undefined {
     if (kind === 'cell') {
-      return (
+      const path =
         this.segmentedOutputs?.cellSegmentationsGeojsonPath ??
         this.segmentedOutputs?.graphclustAnnotatedCellSegmentationsGeojsonPath
-      )
+
+      return path === undefined ? undefined : { path, sourceKind: 'geojson' }
     }
 
-    return (
+    const geojsonPath =
       this.segmentedOutputs?.nucleusSegmentationsGeojsonPath ??
       this.segmentedOutputs?.graphclustAnnotatedNucleusSegmentationsGeojsonPath
-    )
+
+    if (geojsonPath !== undefined) {
+      return { path: geojsonPath, sourceKind: 'geojson' }
+    }
+
+    const tiffPath = this.segmentedOutputs?.nucleusInstanceMaskTiffPath
+
+    return tiffPath === undefined ? undefined : { path: tiffPath, sourceKind: 'tiff' }
   }
 }
 
@@ -849,7 +888,7 @@ export async function readVisiumHdBinnedOverview(
   const baseUrl = normalizeBaseUrl(options.baseUrl)
   const tissuePositionsUrl = datasetFileUrl(baseUrl, options.bin.tissuePositionsPath)
   const scalefactorsUrl = datasetFileUrl(baseUrl, options.bin.scalefactorsPath)
-  const [positions, scalefactors] = await Promise.all([
+  const [positions, scalefactors, basis] = await Promise.all([
     (options.tissuePositionsReader ?? readVisiumHdTissuePositions)({
       url: tissuePositionsUrl,
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
@@ -866,6 +905,7 @@ export async function readVisiumHdBinnedOverview(
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     }),
+    options.basis,
   ])
 
   return createVisiumHdBinnedOverview(options.bin, positions, scalefactors, {
@@ -875,6 +915,7 @@ export async function readVisiumHdBinnedOverview(
     ...(options.maxBasisFitSamples === undefined
       ? {}
       : { maxBasisFitSamples: options.maxBasisFitSamples }),
+    ...(basis === undefined ? {} : { basis }),
   })
 }
 
@@ -1062,7 +1103,10 @@ export function createVisiumHdBinnedOverview(
     readonly col: number
     readonly point: DataPoint
   }[] = []
-  const sampleStride = basisSampleStride(retainedCount, options.maxBasisFitSamples)
+  const sampleStride =
+    options.basis === undefined
+      ? basisSampleStride(retainedCount, options.maxBasisFitSamples)
+      : 1
   let targetIndex = 0
   let minRow = Number.POSITIVE_INFINITY
   let maxRow = Number.NEGATIVE_INFINITY
@@ -1087,7 +1131,10 @@ export function createVisiumHdBinnedOverview(
     fullresCols[targetIndex] = fullresCol
     inTissue[targetIndex] = positions.inTissue[sourceIndex] ?? 0
 
-    if (targetIndex % sampleStride === 0 || basisSamples.length < 3) {
+    if (
+      options.basis === undefined &&
+      (targetIndex % sampleStride === 0 || basisSamples.length < 3)
+    ) {
       basisSamples.push({ row: arrayRow, col: arrayCol, point })
     }
 
@@ -1101,7 +1148,7 @@ export function createVisiumHdBinnedOverview(
   const grid: SpatialGrid = {
     id: visiumHdGridId(bin.binSizeMicrometers),
     binSizeMicrometers: micrometers(bin.binSizeMicrometers),
-    basis: fitGridBasis(basisSamples),
+    basis: options.basis ?? fitGridBasis(basisSamples),
     bounds: {
       minRow,
       maxRow,
@@ -1276,14 +1323,25 @@ function findBin(
   return bin
 }
 
-function preferredBasisSourceBinSize(
+function preferredTwoMicrometerBasisSourceBinSize(
   bins: readonly VisiumHdBinDescriptor[],
 ): 8 | 16 | undefined {
+  if (bins.some((bin) => bin.binSizeMicrometers === 8)) {
+    return 8
+  }
+
   if (bins.some((bin) => bin.binSizeMicrometers === 16)) {
     return 16
   }
 
-  if (bins.some((bin) => bin.binSizeMicrometers === 8)) {
+  return undefined
+}
+
+function nestedBasisSourceBinSize(
+  bins: readonly VisiumHdBinDescriptor[],
+  targetBinSize: VisiumHdBinSizeMicrometers,
+): 8 | undefined {
+  if (targetBinSize === 16 && bins.some((bin) => bin.binSizeMicrometers === 8)) {
     return 8
   }
 

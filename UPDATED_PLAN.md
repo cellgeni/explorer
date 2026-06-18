@@ -952,7 +952,7 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       `rowStep`/`colStep` are the measured render geometry after registration.
       Small differences between nominal size and measured step length are
       expected and should not be treated as bugs.
-- [ ] Fit or read the finest reliable grid basis once, then derive coarser
+- [x] Fit or read the finest reliable grid basis once, then derive coarser
       binned tiers by integer scaling of the same origin and step vectors when
       possible. Avoid independently fitting 2/8/16 µm tiers in a way that
       introduces slightly different orientations and breaks exact cross-tier
@@ -1033,9 +1033,10 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       existing polygon boundary layer when a detected cell segmentation GeoJSON
       is present and within the interactive full-file byte budget.
 - [x] Slice 8 partial: annotated nucleus GeoJSON segmentation styling coverage.
-- [ ] Slice 8 remaining: nucleus segmentation TIFF rendering and
-      viewport-scoped or streaming segmented geometry loading for large hosted
-      masks.
+- [x] Slice 8 partial: nucleus segmentation TIFF rendering through a
+      viewport-scoped instance-mask reader.
+- [ ] Slice 8 remaining: viewport-scoped or streaming segmented geometry
+      loading for oversized hosted GeoJSON assets.
 
 ### Phase 6 Execution Notes
 
@@ -1313,9 +1314,20 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       annotation metadata path used for cell GeoJSON now covers nucleus GeoJSON,
       and the nucleus boundary layer data preserves annotation labels plus
       explicit fill/stroke colors.
-- [ ] Slice 8 remaining: nucleus segmentation TIFF rendering and a
-      viewport-scoped or streaming strategy for segmentation assets that exceed
-      the interactive GeoJSON full-file budget.
+- [x] Closed the Visium HD shared-grid-basis item. Non-2 µm overview reads now
+      derive 16 µm grid bases from a loaded 8 µm basis when both tiers are
+      available, and budgeted 2 µm filtered-barcode overviews prefer the 8 µm
+      basis before falling back to 16 µm. Focused tests cover coarser-tier
+      derivation and 2 µm source preference.
+- [x] Added viewport-scoped Visium HD nucleus instance-mask TIFF rendering.
+      The segmentation reader now branches `.tif/.tiff` paths through a
+      GeoTIFF Range window derived from the viewport bbox, converts nonzero
+      instance labels into nucleus polygon elements, and rejects TIFF reads
+      without an explicit bbox. The App nucleus-boundary gate now accepts
+      nucleus TIFF segmentations, and dataset fallback prefers nucleus GeoJSON
+      before using the TIFF mask.
+- [ ] Slice 8 remaining: viewport-scoped or streaming strategy for oversized
+      hosted GeoJSON segmentation assets.
 
 ### Definition Of Done For The First Visium HD MVP
 

@@ -3,6 +3,7 @@ import { micrometers } from '../data/coords'
 import {
   VisiumHdSegmentationGeojsonBudgetExceededError,
   normalizeVisiumHdGeojsonCellId,
+  parseVisiumHdNucleusInstanceMaskRaster,
   parseVisiumHdSegmentationGeojson,
   readVisiumHdSegmentationElements,
   visiumHdSegmentationInfos,
@@ -251,6 +252,133 @@ describe('Visium HD segmentation GeoJSON reader', () => {
 
     expect(elements.map((element) => element.id)).toEqual(['segmented-cell#2'])
     expect(elements[0]?.geometry.kind).toBe('polygon')
+  })
+
+  it('converts labelled nucleus instance-mask TIFF pixels into polygon elements', () => {
+    const elements = parseVisiumHdNucleusInstanceMaskRaster(
+      {
+        width: 4,
+        height: 4,
+        data: new Uint16Array([
+          0,
+          0,
+          0,
+          0, //
+          0,
+          7,
+          7,
+          0, //
+          0,
+          7,
+          7,
+          0, //
+          0,
+          0,
+          0,
+          0,
+        ]),
+      },
+      { scalefactors },
+    )
+
+    expect(elements).toEqual([
+      {
+        id: 'nucleus_000000007',
+        geometry: {
+          kind: 'polygon',
+          rings: [
+            [
+              { x: micrometers(0.5), y: micrometers(0.5) },
+              { x: micrometers(1), y: micrometers(0.5) },
+              { x: micrometers(1.5), y: micrometers(0.5) },
+              { x: micrometers(1.5), y: micrometers(1) },
+              { x: micrometers(1.5), y: micrometers(1.5) },
+              { x: micrometers(1), y: micrometers(1.5) },
+              { x: micrometers(0.5), y: micrometers(1.5) },
+              { x: micrometers(0.5), y: micrometers(1) },
+              { x: micrometers(0.5), y: micrometers(0.5) },
+            ],
+          ],
+        },
+        metadata: {
+          segmentation: {
+            kind: 'nucleus',
+          },
+        },
+      },
+    ])
+  })
+
+  it('uses the raster origin when converting viewport-scoped nucleus masks', () => {
+    const elements = parseVisiumHdNucleusInstanceMaskRaster(
+      {
+        width: 1,
+        height: 1,
+        originRow: 20,
+        originCol: 10,
+        data: new Uint32Array([3]),
+      },
+      { scalefactors },
+    )
+
+    expect(elements[0]).toMatchObject({
+      id: 'nucleus_000000003',
+      geometry: {
+        kind: 'polygon',
+        rings: [
+          [
+            { x: micrometers(5), y: micrometers(10) },
+            { x: micrometers(5.5), y: micrometers(10) },
+            { x: micrometers(5.5), y: micrometers(10.5) },
+            { x: micrometers(5), y: micrometers(10.5) },
+            { x: micrometers(5), y: micrometers(10) },
+          ],
+        ],
+      },
+    })
+  })
+
+  it('reads nucleus instance-mask TIFFs through an injected viewport raster reader', async () => {
+    const bbox = {
+      minX: micrometers(4),
+      maxX: micrometers(6),
+      minY: micrometers(9),
+      maxY: micrometers(11),
+    }
+    const maskRasterReader = vi.fn(async () => ({
+      width: 1,
+      height: 1,
+      originRow: 20,
+      originCol: 10,
+      data: new Uint16Array([5]),
+    }))
+
+    const elements = await readVisiumHdSegmentationElements(
+      'https://example.test/visium/',
+      {
+        path: 'segmented_outputs/nucleus_instance_mask.tiff',
+        scalefactors,
+        kind: 'nucleus',
+        bbox,
+        maskRasterReader,
+      },
+    )
+
+    expect(maskRasterReader).toHaveBeenCalledWith(
+      'https://example.test/visium/segmented_outputs/nucleus_instance_mask.tiff',
+      { bbox, scalefactors },
+    )
+    expect(elements.map((element) => element.id)).toEqual(['nucleus_000000005'])
+  })
+
+  it('rejects nucleus instance-mask TIFF reads without a viewport bbox', async () => {
+    await expect(
+      readVisiumHdSegmentationElements('https://example.test/visium/', {
+        path: 'segmented_outputs/nucleus_instance_mask.tiff',
+        scalefactors,
+        kind: 'nucleus',
+      }),
+    ).rejects.toThrow('require a viewport bbox')
   })
 
   it('enforces a full-file byte budget before reading hosted segmentations', async () => {

@@ -1342,13 +1342,11 @@ export function App({
                 visiumHdTwoMicrometerFilteredBarcodeBudget,
             })
       const meta = await dataset.meta()
-      const hasNucleusGeojson =
-        meta.segmentations?.some(
-          (segmentation) =>
-            segmentation.kind === 'nucleus' && segmentation.sourceKind === 'geojson',
-        ) ?? false
+      const hasNucleusSegmentation =
+        meta.segmentations?.some((segmentation) => segmentation.kind === 'nucleus') ??
+        false
 
-      if (!hasNucleusGeojson || !isSpatialSegmentationDataset(dataset)) {
+      if (!hasNucleusSegmentation || !isSpatialSegmentationDataset(dataset)) {
         return { elements: [] }
       }
 

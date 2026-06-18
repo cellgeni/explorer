@@ -506,8 +506,7 @@ describe('App', () => {
         ],
         segmentedOutputs: {
           cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
-          nucleusSegmentationsGeojsonPath:
-            'segmented_outputs/nucleus_segmentations.geojson',
+          nucleusInstanceMaskTiffPath: 'segmented_outputs/nucleus_instance_mask.tiff',
         },
         checked: [],
       }),
@@ -545,11 +544,11 @@ describe('App', () => {
             path: 'segmented_outputs/cell_segmentations.geojson',
           },
           {
-            id: 'visium-hd-nucleus-segmentations',
+            id: 'visium-hd-nucleus-instance-mask',
             kind: 'nucleus' as const,
-            label: 'Nucleus segmentations',
-            sourceKind: 'geojson' as const,
-            path: 'segmented_outputs/nucleus_segmentations.geojson',
+            label: 'Nucleus instance mask',
+            sourceKind: 'tiff' as const,
+            path: 'segmented_outputs/nucleus_instance_mask.tiff',
           },
         ],
       })),
