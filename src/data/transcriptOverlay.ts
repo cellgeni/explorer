@@ -1,5 +1,6 @@
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
+import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import {
   loadTranscriptZarrAggregates,
   loadTranscriptZarrViewport,
@@ -123,6 +124,7 @@ export interface TranscriptViewportOptions {
   readonly geneOnly?: boolean
   readonly featureNames?: readonly string[]
   readonly metadataEnrichmentTimeoutMs?: number
+  readonly onFallback?: FallbackNotifier
 }
 
 export interface TranscriptCapabilityOptions {
@@ -225,6 +227,16 @@ export async function loadDatasetTranscriptViewport(
     if (isAbortError(error)) {
       throw error
     }
+
+    notifyFallback(options.onFallback, {
+      source: 'Transcripts',
+      message:
+        'transcripts.zarr.zip was not available for exact transcript loading, so the app switched to raw transcripts.parquet.',
+      action:
+        'Exact transcripts can still load at close zooms, but raw Parquet scans may be slower.',
+      detail: error instanceof Error ? error.message : String(error),
+      coalesceKey: `transcript-exact-raw-parquet:${baseUrl}`,
+    })
   }
 
   throwIfAborted(options.signal)
@@ -249,6 +261,8 @@ export async function loadDatasetTranscriptViewport(
       }),
       options.signal,
       options.metadataEnrichmentTimeoutMs ?? TRANSCRIPT_METADATA_ENRICH_TIMEOUT_MS,
+      options.onFallback,
+      baseUrl,
     )
   }
 
@@ -355,6 +369,15 @@ async function enrichNativeTranscriptViewportFromParquet(
       throw error
     }
 
+    notifyFallback(options.onFallback, {
+      source: 'Transcripts',
+      message:
+        'Transcript points loaded from native Zarr, but Parquet metadata enrichment failed.',
+      action:
+        'Transcript hover remains available; cell assignment and nucleus fields may be unavailable for those points.',
+      detail: error instanceof Error ? error.message : String(error),
+      coalesceKey: `transcript-metadata-enrichment:${baseUrl}`,
+    })
     return nativeResult
   }
 }
@@ -414,8 +437,7 @@ export function planTranscriptLod(
           kind: 'unavailable',
           visibleTranscriptEstimate,
           exactLimit,
-          message:
-            'Density mode needs the official transcripts.zarr.zip LOD output.',
+          message: 'Density mode needs the official transcripts.zarr.zip LOD output.',
         }
   }
 
@@ -541,8 +563,15 @@ function transcriptResultWithMetadataDeadline(
   enrichment: Promise<TranscriptViewportResult>,
   signal: AbortSignal | undefined,
   timeoutMs: number,
+  onFallback: FallbackNotifier | undefined,
+  baseUrl: string,
 ): Promise<TranscriptViewportResult> {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    notifyTranscriptMetadataFallback(
+      onFallback,
+      baseUrl,
+      'Metadata enrichment was disabled.',
+    )
     return Promise.resolve(nativeResult)
   }
 
@@ -565,6 +594,11 @@ function transcriptResultWithMetadataDeadline(
 
       settled = true
       cleanup()
+      notifyTranscriptMetadataFallback(
+        onFallback,
+        baseUrl,
+        `Metadata enrichment exceeded ${timeoutMs.toLocaleString()} ms.`,
+      )
       resolve(nativeResult)
     }
 
@@ -591,6 +625,11 @@ function transcriptResultWithMetadataDeadline(
         return
       }
 
+      notifyTranscriptMetadataFallback(
+        onFallback,
+        baseUrl,
+        error instanceof Error ? error.message : String(error),
+      )
       resolve(nativeResult)
     }
 
@@ -599,6 +638,22 @@ function transcriptResultWithMetadataDeadline(
 
     signal?.addEventListener('abort', handleAbort, { once: true })
     enrichment.then(settleWithResult, settleWithError)
+  })
+}
+
+function notifyTranscriptMetadataFallback(
+  onFallback: FallbackNotifier | undefined,
+  baseUrl: string,
+  detail: string,
+): void {
+  notifyFallback(onFallback, {
+    source: 'Transcripts',
+    message:
+      'Transcript points loaded from native Zarr without Parquet assignment metadata.',
+    action:
+      'Transcript hover remains available; cell assignment and nucleus fields may be unavailable for those points.',
+    detail,
+    coalesceKey: `transcript-metadata-enrichment:${baseUrl}`,
   })
 }
 

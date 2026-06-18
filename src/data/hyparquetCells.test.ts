@@ -91,8 +91,10 @@ describe('readCellsOverview', () => {
 
   it('falls back when the optional nucleus count column is unavailable', async () => {
     const calls: HyparquetReadObjectsOptions[] = []
+    const onFallback = vi.fn()
     const rows = await readCellsOverview({
       file: fakeFile,
+      onFallback,
       readObjects: async (options) => {
         calls.push(options)
 
@@ -127,12 +129,21 @@ describe('readCellsOverview', () => {
       transcriptCount: 7,
       cellArea: 314,
     })
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Dataset overview',
+        message: expect.stringContaining('optional column nucleus_count'),
+        coalesceKey: 'cells-parquet-optional-column:nucleus_count',
+      }),
+    )
   })
 
   it('falls back when the optional segmentation method column is unavailable', async () => {
     const calls: HyparquetReadObjectsOptions[] = []
+    const onFallback = vi.fn()
     const rows = await readCellsOverview({
       file: fakeFile,
+      onFallback,
       readObjects: async (options) => {
         calls.push(options)
 
@@ -169,6 +180,13 @@ describe('readCellsOverview', () => {
       cellArea: 314,
       nucleusCount: 2,
     })
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Dataset overview',
+        message: expect.stringContaining('optional column segmentation_method'),
+        coalesceKey: 'cells-parquet-optional-column:segmentation_method',
+      }),
+    )
   })
 
   it('wraps low-level parquet page read errors with overview context', async () => {
@@ -179,6 +197,24 @@ describe('readCellsOverview', () => {
         url: 'https://example.test/xenium/cells.parquet',
         readObjects: async () => {
           throw new RangeError('Offset is outside the bounds of the DataView')
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: 'ParquetDecodeError',
+      message: expect.stringContaining(
+        'Unable to decode cells.parquet while reading overview columns (x_centroid, y_centroid, transcript_counts, cell_area, nucleus_count, segmentation_method).',
+      ),
+    })
+  })
+
+  it('wraps Safari out-of-bounds parquet page errors with overview context', async () => {
+    await expect(
+      readCellsOverview({
+        file: fakeFile,
+        includeCellIds: false,
+        url: 'https://example.test/xenium/cells.parquet',
+        readObjects: async () => {
+          throw new RangeError('Out of bounds access')
         },
       }),
     ).rejects.toMatchObject({

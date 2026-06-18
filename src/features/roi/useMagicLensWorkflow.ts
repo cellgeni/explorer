@@ -4,6 +4,7 @@ import type {
   ViewerViewportDetail,
 } from '../../components/ViewerCore'
 import { normalizeRoiSelection, type RoiSelectionInput } from '../../data/roiSelection'
+import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { RoiCellsLoader, RoiGeneStatsLoader } from '../app-shell/appDependencies'
 import {
   abortActiveRequest,
@@ -39,6 +40,7 @@ interface MutableRef<T> {
 interface UseMagicLensWorkflowOptions {
   readonly activeRoiSelection: RoiSelectionInput | null
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly appendFallbackNotice: FallbackNotifier
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly loadRoiCells: RoiCellsLoader
   readonly loadRoiGeneStats: RoiGeneStatsLoader
@@ -76,6 +78,7 @@ interface UseMagicLensWorkflowResult {
 export function useMagicLensWorkflow({
   activeRoiSelection,
   appendDebugEvent,
+  appendFallbackNotice,
   currentViewportDetail,
   loadRoiCells,
   loadRoiGeneStats,
@@ -161,6 +164,7 @@ export function useMagicLensWorkflow({
             signal: abortController.signal,
             cellLimit: MAGIC_LENS_CELL_LIMIT,
             geneLimit: MAGIC_LENS_GENE_STATS_LIMIT,
+            onFallback: appendFallbackNotice,
           }).then((stats) => {
             if (magicLensRequestIdRef.current !== requestId) {
               return
@@ -201,6 +205,7 @@ export function useMagicLensWorkflow({
     },
     [
       appendDebugEvent,
+      appendFallbackNotice,
       loadRoiCells,
       loadRoiGeneStats,
       loadState,

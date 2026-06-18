@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   chooseTranscriptGridLevel,
+  loadTranscriptZarrGenePanel,
   parseTranscriptZarrGenePanelAttrs,
   transcriptDensityLevelForBbox,
   transcriptFeatureCircleOffset,
@@ -11,6 +12,23 @@ import {
 } from './transcriptZarr'
 import { micrometers } from './coords'
 import type { TranscriptPoint } from './transcriptOverlay'
+
+const zarrMock = vi.hoisted(() => ({
+  open: vi.fn(),
+}))
+const zipStoreMock = vi.hoisted(() => ({
+  fromUrl: vi.fn(() => ({ kind: 'zip-store' })),
+}))
+
+vi.mock('zarrita', () => zarrMock)
+vi.mock('@zarrita/storage', () => ({
+  ZipFileStore: zipStoreMock,
+}))
+
+beforeEach(() => {
+  zarrMock.open.mockReset()
+  zipStoreMock.fromUrl.mockClear()
+})
 
 describe('transcriptZarr', () => {
   it('selects level-zero transcript grid tiles intersecting a viewport', () => {
@@ -156,6 +174,33 @@ describe('transcriptZarr', () => {
         gene_names: ['Actb', 'NegControlCodeword_001', 'Gad1'],
       }),
     ).toEqual(['Actb', 'Gad1'])
+  })
+
+  it('notifies when transcript Zarr gene metadata falls back to density/gene attrs', async () => {
+    const onFallback = vi.fn()
+    const root = {
+      attrs: {},
+      resolve: vi.fn(() => 'density/gene'),
+    }
+    zarrMock.open
+      .mockResolvedValueOnce(root)
+      .mockResolvedValueOnce({ attrs: { gene_names: ['Actb', 'Gad1'] } })
+
+    await expect(
+      loadTranscriptZarrGenePanel('https://example.test/transcripts.zarr.zip', {
+        onFallback,
+      }),
+    ).resolves.toEqual(['Actb', 'Gad1'])
+
+    expect(root.resolve).toHaveBeenCalledWith('density/gene')
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Gene panel',
+        message: expect.stringContaining('switched to density/gene metadata'),
+        coalesceKey:
+          'gene-panel-transcript-zarr-density:https://example.test/transcripts.zarr.zip',
+      }),
+    )
   })
 })
 

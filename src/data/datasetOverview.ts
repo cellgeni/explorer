@@ -1,6 +1,7 @@
 import { isCellsParquetDecodeError, readCellsOverview } from './hyparquetCells'
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
+import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import type { CellOverviewPoint, ReadCellsOverviewOptions } from './hyparquetCells'
 import type { ReadCellsOverviewWithDuckDbOptions } from './duckdbCells'
 import type { AssertHttpRangeSupportOptions } from './rangeSupport'
@@ -22,6 +23,7 @@ export interface LoadDatasetOverviewOptions {
   readonly readCells?: CellsOverviewReader
   readonly readFallbackCells?: CellsOverviewReader
   readonly validateRangeSupport?: DatasetRangeValidator
+  readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
 }
 
@@ -46,6 +48,7 @@ export async function loadDatasetOverview(
       ? {}
       : { includeCellIds: options.includeCellIds }),
     ...(limit === undefined ? {} : { limit }),
+    ...(options.onFallback === undefined ? {} : { onFallback: options.onFallback }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   }
 
@@ -59,6 +62,14 @@ export async function loadDatasetOverview(
     throwIfAborted(options.signal)
 
     const readFallbackCells = options.readFallbackCells ?? readCellsOverviewWithDuckDb
+    notifyFallback(options.onFallback, {
+      source: 'Dataset overview',
+      message:
+        'The browser Parquet reader could not decode cells.parquet, so the app switched to the DuckDB-WASM overview reader.',
+      action: 'The dataset can still load, but the first overview read may be slower.',
+      detail: error instanceof Error ? error.message : String(error),
+      coalesceKey: `dataset-overview-duckdb:${url}`,
+    })
     return readFallbackCells(readOptions)
   }
 }

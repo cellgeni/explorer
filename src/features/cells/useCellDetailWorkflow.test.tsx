@@ -16,6 +16,7 @@ interface Snapshot {
 let snapshot: Snapshot
 
 const appendDebugEvent = vi.fn()
+const appendFallbackNotice = vi.fn()
 const loadBoundaryElements = vi.fn(async () => ({ elements: [] }))
 const loadCellTranscriptDistribution = vi.fn(async () => ({
   bins: [],
@@ -74,6 +75,7 @@ function Probe({ onReady }: { readonly onReady: (nextSnapshot: Snapshot) => void
 
   useCellDetailWorkflow({
     appendDebugEvent,
+    appendFallbackNotice,
     cellDetailAbortRef,
     cellDetailRequestIdRef,
     cellDetailState,

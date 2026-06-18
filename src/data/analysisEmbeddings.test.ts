@@ -26,7 +26,27 @@ describe('analysis embeddings', () => {
     ).toEqual([{ id: 'cell,1', x: -1, y: 2.5 }])
   })
 
+  it('notifies when projection CSV headers fall back to positional columns', () => {
+    const onFallback = vi.fn()
+
+    expect(
+      parseAnalysisEmbeddingCsv('cell-1,1,2\ncell-2,3,4\n', 'umap', {
+        onFallback,
+        sourcePath: 'analysis/umap/projection.csv',
+      }),
+    ).toEqual([{ id: 'cell-2', x: 3, y: 4 }])
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Analysis embeddings',
+        message: expect.stringContaining('using positional CSV columns'),
+        detail: 'analysis/umap/projection.csv',
+        coalesceKey: 'analysis-embedding-columns:umap:analysis/umap/projection.csv',
+      }),
+    )
+  })
+
   it('loads the first available projection for each embedding kind', async () => {
+    const onFallback = vi.fn()
     const fetcher = vi.fn(async (input: URL | RequestInfo) => {
       const url = String(input)
 
@@ -46,7 +66,10 @@ describe('analysis embeddings', () => {
     }) as unknown as typeof fetch
 
     await expect(
-      loadDatasetAnalysisEmbeddings('https://example.test/xenium/', { fetcher }),
+      loadDatasetAnalysisEmbeddings('https://example.test/xenium/', {
+        fetcher,
+        onFallback,
+      }),
     ).resolves.toEqual([
       {
         kind: 'umap',
@@ -61,6 +84,14 @@ describe('analysis embeddings', () => {
         points: [{ id: 'cell-1', x: 3, y: 4 }],
       },
     ])
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Analysis embeddings',
+        message: expect.stringContaining('secondary CSV path'),
+        detail: expect.stringContaining('analysis/tsne/2_components/projection.csv'),
+        coalesceKey: 'analysis-embedding-path:https://example.test/xenium/:tsne',
+      }),
+    )
   })
 
   it('prefers selected Visium HD binned projections when a bin size is provided', async () => {

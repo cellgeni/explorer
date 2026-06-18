@@ -44,11 +44,13 @@ describe('gene panel loader', () => {
     const signal = new AbortController().signal
     const fetcher = vi.fn(async () => new Response(null, { status: 404 }))
     const loadTranscriptZarrGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+    const onFallback = vi.fn()
 
     await expect(
       loadGenePanel('https://example.test/xenium/', {
         fetcher,
         loadTranscriptZarrGenePanel,
+        onFallback,
         signal,
       }),
     ).resolves.toEqual(['Actb', 'Gad1'])
@@ -58,7 +60,14 @@ describe('gene panel loader', () => {
     })
     expect(loadTranscriptZarrGenePanel).toHaveBeenCalledWith(
       'https://example.test/xenium/transcripts.zarr.zip',
-      { signal },
+      { onFallback, signal },
+    )
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Gene panel',
+        message: expect.stringContaining('switched to transcript Zarr gene metadata'),
+        coalesceKey: 'gene-panel-transcript-zarr:https://example.test/xenium/',
+      }),
     )
   })
 

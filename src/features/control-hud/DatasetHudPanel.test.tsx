@@ -36,6 +36,7 @@ describe('DatasetHudPanel', () => {
         cellFeatureMatrixCapabilityState={{ status: 'idle' }}
         visiumHdControlState={{ status: 'idle' }}
         activeErrors={[]}
+        fallbackNotices={[]}
         debugLog={[{ id: 1, timestamp: 1_700_000_000_000, message: 'Loaded' }]}
         onSubmit={onSubmit}
         onDatasetUrlChange={onDatasetUrlChange}
@@ -116,6 +117,7 @@ describe('DatasetHudPanel', () => {
           ],
         }}
         activeErrors={[]}
+        fallbackNotices={[]}
         debugLog={[]}
         onSubmit={vi.fn()}
         onDatasetUrlChange={vi.fn()}
@@ -176,6 +178,7 @@ describe('DatasetHudPanel', () => {
           ],
         }}
         activeErrors={[]}
+        fallbackNotices={[]}
         debugLog={[]}
         onSubmit={vi.fn()}
         onDatasetUrlChange={vi.fn()}
@@ -195,5 +198,58 @@ describe('DatasetHudPanel', () => {
     expect(
       screen.queryByText(VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON),
     ).not.toBeInTheDocument()
+  })
+
+  it('renders fallback notices in the dataset HUD', () => {
+    render(
+      <DatasetHudPanel
+        active
+        datasetInputId="dataset-url"
+        morphologyInputId="morphology"
+        boundaryLimitInputId="boundary-limit"
+        visiumHdBinSizeInputId="visium-bin-size"
+        visiumHdTwoMicrometerBudgetInputId="visium-2um-budget"
+        datasetUrl="https://example.test/output"
+        shouldLoadMorphology={false}
+        visiumHdTwoMicrometerBudgetInput=""
+        morphologyLabel="Morphology image"
+        boundaryCellLimit={50000}
+        maxBoundaryCellLimit={100000}
+        boundaryControlsDisabled={false}
+        isLoading={false}
+        diagnosticsState={{ status: 'idle' }}
+        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
+        visiumHdControlState={{ status: 'idle' }}
+        activeErrors={[]}
+        fallbackNotices={[
+          {
+            id: 1,
+            timestamp: 1_700_000_000_000,
+            source: 'Dataset overview',
+            message:
+              'The browser Parquet reader could not decode cells.parquet, so the app switched to the DuckDB-WASM overview reader.',
+            action: 'The first overview read may be slower.',
+            detail: 'Out of bounds access',
+          },
+        ]}
+        debugLog={[]}
+        onSubmit={vi.fn()}
+        onDatasetUrlChange={vi.fn()}
+        onShouldLoadMorphologyChange={vi.fn()}
+        onBoundaryCellLimitChange={vi.fn()}
+        onVisiumHdTwoMicrometerBudgetInputChange={vi.fn()}
+        onVisiumHdBinSizeChange={vi.fn()}
+        onRunDatasetDiagnostics={vi.fn()}
+        onDownloadDiagnostics={vi.fn()}
+        onClearDebugLog={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('status', { name: 'Fallback notices' })).toBeInTheDocument()
+    expect(screen.getByText('Fallbacks')).toBeInTheDocument()
+    expect(screen.getByText('Dataset overview')).toBeInTheDocument()
+    expect(screen.getByText(/DuckDB-WASM overview reader/)).toBeInTheDocument()
+    expect(screen.getByText('The first overview read may be slower.')).toBeInTheDocument()
+    expect(screen.getByText('Out of bounds access')).toBeInTheDocument()
   })
 })

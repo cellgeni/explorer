@@ -23,6 +23,7 @@ import {
   type CustomMorphologyLayerLoadState,
 } from './customMorphologyLayers'
 import { normalizeCustomMorphologyLayerUrl } from '../../data/morphologyImage'
+import type { FallbackNotifier } from '../../data/fallbackNotice'
 
 interface MutableRef<T> {
   current: T
@@ -30,6 +31,7 @@ interface MutableRef<T> {
 
 interface UseCustomMorphologyLayerWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly appendFallbackNotice?: FallbackNotifier
   readonly customLayers: readonly CustomMorphologyLayer[]
   readonly customLayerAbortRef: MutableRef<AbortController | null>
   readonly customLayerIdRef: MutableRef<number>
@@ -52,6 +54,7 @@ interface UseCustomMorphologyLayerWorkflowResult {
 
 export function useCustomMorphologyLayerWorkflow({
   appendDebugEvent,
+  appendFallbackNotice,
   customLayers,
   customLayerAbortRef,
   customLayerIdRef,
@@ -98,6 +101,9 @@ export function useCustomMorphologyLayerWorkflow({
       try {
         const image = await loadCustomMorphologyLayer(normalizedUrl, {
           signal: abortController.signal,
+          ...(appendFallbackNotice === undefined
+            ? {}
+            : { onFallback: appendFallbackNotice }),
         })
 
         if (
@@ -151,6 +157,7 @@ export function useCustomMorphologyLayerWorkflow({
     },
     [
       appendDebugEvent,
+      appendFallbackNotice,
       customLayerAbortRef,
       customLayerIdRef,
       customLayerRequestIdRef,

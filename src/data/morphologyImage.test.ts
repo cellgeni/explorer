@@ -68,6 +68,29 @@ describe('morphology image loader', () => {
     )
   })
 
+  it('passes fallback notifications to the image opener', async () => {
+    const loader = {} as TiffPyramidLoader
+    const openImage = vi.fn(async () => loader)
+    const onFallback = vi.fn()
+
+    await expect(
+      loadMorphologyImage('https://example.test/xenium/', {
+        candidates: ['morphology.ome.tif'],
+        openImage,
+        onFallback,
+      }),
+    ).resolves.toMatchObject({
+      url: 'https://example.test/xenium/morphology.ome.tif',
+      loader,
+    })
+
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/xenium/morphology.ome.tif',
+      undefined,
+      onFallback,
+    )
+  })
+
   it('opens channel loaders from OME-declared sibling focus files', async () => {
     const channel0 = {
       id: 'Channel:0',

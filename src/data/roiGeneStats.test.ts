@@ -104,9 +104,7 @@ describe('ROI gene stats', () => {
     const matrix: GexResult = {
       geneNames: ['Actb'],
       cells: new Map(
-        cells
-          .slice(0, 2)
-          .map((cell) => [cell.id, { geneNames: ['Actb'], counts: [1] }]),
+        cells.slice(0, 2).map((cell) => [cell.id, { geneNames: ['Actb'], counts: [1] }]),
       ),
     }
     const dataset = {
@@ -187,10 +185,12 @@ describe('ROI gene stats', () => {
     const readH5Matrix = vi.fn(async () => {
       throw new Error('cell_feature_matrix.h5 not found')
     })
+    const onFallback = vi.fn()
 
     await expect(
       loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
         getDataset: () => dataset,
+        onFallback,
         validateRangeSupport,
         readH5Matrix,
       }),
@@ -205,6 +205,13 @@ describe('ROI gene stats', () => {
       {},
     )
     expect(dataset.transcriptsForCellIds).not.toHaveBeenCalled()
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'ROI genes',
+        message: expect.stringContaining('switched to cell_feature_matrix.h5'),
+        coalesceKey: 'roi-genes-h5:https://example.test/xenium',
+      }),
+    )
   })
 
   it('falls back to H5 matrix stats when the Zarr matrix layout is unavailable', async () => {
@@ -229,9 +236,11 @@ describe('ROI gene stats', () => {
     }
     const validateRangeSupport = vi.fn(async () => undefined)
     const readH5Matrix = vi.fn(async () => h5Matrix)
+    const onFallback = vi.fn()
 
     const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
       getDataset: () => dataset,
+      onFallback,
       validateRangeSupport,
       readH5Matrix,
     })
@@ -247,6 +256,13 @@ describe('ROI gene stats', () => {
       count: 11,
       detectedCells: 1,
     })
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'ROI genes',
+        message: expect.stringContaining('switched to cell_feature_matrix.h5'),
+        coalesceKey: 'roi-genes-h5:https://example.test/xenium',
+      }),
+    )
   })
 
   it('can explicitly fall back to transcript aggregation', async () => {
@@ -271,9 +287,11 @@ describe('ROI gene stats', () => {
     const readH5Matrix = vi.fn(async () => {
       throw new Error('cell_feature_matrix.h5 not found')
     })
+    const onFallback = vi.fn()
 
     const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
       getDataset: () => dataset,
+      onFallback,
       validateRangeSupport,
       allowTranscriptFallback: true,
       readH5Matrix,
@@ -289,5 +307,19 @@ describe('ROI gene stats', () => {
       count: 9,
       detectedCells: 1,
     })
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'ROI genes',
+        message: expect.stringContaining('switched to cell_feature_matrix.h5'),
+        coalesceKey: 'roi-genes-h5:https://example.test/xenium',
+      }),
+    )
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'ROI genes',
+        message: expect.stringContaining('switched to transcript aggregation'),
+        coalesceKey: 'roi-genes-transcripts:https://example.test/xenium',
+      }),
+    )
   })
 })

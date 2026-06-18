@@ -5,6 +5,7 @@ import {
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
 } from './persistentByteRangeCache'
+import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
 import type { CellId } from './cellid'
 import type { DataPoint } from './coords'
@@ -66,6 +67,7 @@ export interface ReadCellsOverviewOptions {
   readonly fetcher?: typeof fetch
   readonly readObjects?: HyparquetObjectReader
   readonly byteRangeCache?: PersistentByteRangeCache | null
+  readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
 }
 
@@ -86,6 +88,7 @@ export async function readCellsOverview(
     ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
     readObjects,
     url: options.url,
+    onFallback: options.onFallback,
   })
 
   return rows.map(parseCellOverviewRow)
@@ -95,6 +98,7 @@ async function readCellsOverviewRows(
   options: HyparquetReadObjectsOptions & {
     readonly readObjects: HyparquetObjectReader
     readonly url: string | undefined
+    readonly onFallback: FallbackNotifier | undefined
   },
 ): Promise<readonly Record<string, unknown>[]> {
   const missingOptionalColumns = new Set<string>()
@@ -114,6 +118,13 @@ async function readCellsOverviewRows(
       }
 
       missingOptionalColumns.add(missingColumn)
+      notifyFallback(options.onFallback, {
+        source: 'Dataset overview',
+        message: `cells.parquet is missing optional column ${missingColumn}; continuing without that cell metadata.`,
+        action:
+          'Overview rendering can continue, but controls that need that optional field may be unavailable.',
+        coalesceKey: `cells-parquet-optional-column:${missingColumn}`,
+      })
     }
   }
 }
@@ -264,6 +275,7 @@ function isLowLevelParquetReadFailure(error: unknown): boolean {
 
   return (
     message.includes('offset is outside the bounds of the dataview') ||
+    message.includes('out of bounds access') ||
     message.includes('invalid typed array length')
   )
 }

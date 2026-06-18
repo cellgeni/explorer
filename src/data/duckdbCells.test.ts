@@ -108,6 +108,7 @@ describe('readCellsOverviewWithDuckDb', () => {
   })
 
   it('falls back when the optional nucleus count column is unavailable', async () => {
+    const onFallback = vi.fn()
     const fallbackStatement = new FakeStatement([
       {
         cell_id: intToCellId(1, 2),
@@ -132,6 +133,7 @@ describe('readCellsOverviewWithDuckDb', () => {
       readCellsOverviewWithDuckDb({
         url: 'https://example.test/xenium/cells.parquet',
         createClient: async () => client,
+        onFallback,
       }),
     ).resolves.toEqual([
       {
@@ -144,9 +146,17 @@ describe('readCellsOverviewWithDuckDb', () => {
     expect(prepare).toHaveBeenCalledTimes(2)
     expect(prepare.mock.calls[1]?.[0]).not.toContain('nucleus_count')
     expect(prepare.mock.calls[1]?.[0]).toContain('segmentation_method')
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Dataset overview',
+        message: expect.stringContaining('optional column nucleus_count'),
+        coalesceKey: 'duckdb-cells-parquet-optional-column:nucleus_count',
+      }),
+    )
   })
 
   it('falls back when the optional segmentation method column is unavailable', async () => {
+    const onFallback = vi.fn()
     const fallbackStatement = new FakeStatement([
       {
         cell_id: intToCellId(1, 2),
@@ -172,6 +182,7 @@ describe('readCellsOverviewWithDuckDb', () => {
       readCellsOverviewWithDuckDb({
         url: 'https://example.test/xenium/cells.parquet',
         createClient: async () => client,
+        onFallback,
       }),
     ).resolves.toEqual([
       {
@@ -185,5 +196,12 @@ describe('readCellsOverviewWithDuckDb', () => {
     expect(prepare).toHaveBeenCalledTimes(2)
     expect(prepare.mock.calls[1]?.[0]).toContain('nucleus_count')
     expect(prepare.mock.calls[1]?.[0]).not.toContain('segmentation_method')
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Dataset overview',
+        message: expect.stringContaining('optional column segmentation_method'),
+        coalesceKey: 'duckdb-cells-parquet-optional-column:segmentation_method',
+      }),
+    )
   })
 })

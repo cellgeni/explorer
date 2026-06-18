@@ -38,12 +38,15 @@ import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWor
 import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
 import {
   abortActiveRequest,
+  appendFallbackNoticeEntry,
   appendDebugLogEntry,
   createLoadingTasks,
+  createFallbackNoticeEntry,
   createDebugLogEntry,
   downloadTextFile,
   type DebugLogAppendOptions,
   type DebugLogEntry,
+  type FallbackNoticeEntry,
 } from './features/app-shell/appRuntimeModel'
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
@@ -161,6 +164,7 @@ import {
 } from './data/telemetry'
 import type { BBox } from './data/coords'
 import { normalizeBoundaryCellLimit } from './rendering/boundaryViewport'
+import type { FallbackNotice } from './data/fallbackNotice'
 import {
   DEFAULT_CELL_FILL_OPACITY,
   normalizeLayerOpacity,
@@ -425,6 +429,9 @@ export function App({
     string | null
   >(null)
   const [debugLog, setDebugLog] = useState<readonly DebugLogEntry[]>([])
+  const [fallbackNotices, setFallbackNotices] = useState<readonly FallbackNoticeEntry[]>(
+    [],
+  )
   const [telemetryEvents, setTelemetryEvents] = useState<readonly TelemetryEvent[]>([])
   const [isControlHudCollapsed, setIsControlHudCollapsed] = useState(false)
   const [activeControlHudTab, setActiveControlHudTab] = useState<ControlHudTab>(
@@ -561,6 +568,7 @@ export function App({
   const magicLensLastDetailRef = useRef<ViewerMagicLensDetail | null>(null)
   const magicLensLastQueryKeyRef = useRef<string | null>(null)
   const debugLogIdRef = useRef(0)
+  const fallbackNoticeIdRef = useRef(0)
   const datasetAbortRef = useRef<AbortController | null>(null)
   const datasetWarmupAbortRef = useRef<AbortController | null>(null)
   const diagnosticsAbortRef = useRef<AbortController | null>(null)
@@ -1080,6 +1088,18 @@ export function App({
     },
     [],
   )
+  const appendFallbackNotice = useCallback(
+    (notice: FallbackNotice) => {
+      fallbackNoticeIdRef.current += 1
+      const entry = createFallbackNoticeEntry(fallbackNoticeIdRef.current, notice)
+
+      setFallbackNotices((current) => appendFallbackNoticeEntry(current, entry))
+      appendDebugEvent(`Fallback: ${notice.source}: ${notice.message}`, {
+        ...(notice.coalesceKey === undefined ? {} : { coalesceKey: notice.coalesceKey }),
+      })
+    },
+    [appendDebugEvent],
+  )
   const recordTelemetry = useCallback(
     (event: TelemetryEvent) => {
       setTelemetryEvents((current) =>
@@ -1453,6 +1473,7 @@ export function App({
   useTranscriptWorkflow({
     activeControlHudTab,
     appendDebugEvent,
+    appendFallbackNotice,
     currentViewportDetail,
     effectiveTranscriptFeatureFilterMode,
     loadRequestIdRef: loadRequestId,
@@ -1481,6 +1502,7 @@ export function App({
 
   useCellDetailWorkflow({
     appendDebugEvent,
+    appendFallbackNotice,
     cellDetailAbortRef,
     cellDetailRequestIdRef: cellDetailRequestId,
     cellDetailState,
@@ -1502,6 +1524,7 @@ export function App({
     handleRoiComplete,
   } = useRoiWorkflow({
     appendDebugEvent,
+    appendFallbackNotice,
     currentViewportDetail,
     enabled: !isVisiumHdDataset,
     initialSharedRoiSelectionRef,
@@ -1536,6 +1559,10 @@ export function App({
   const clearVisiumHdRoiState = useCallback(() => {
     setVisiumHdRoiState(IDLE_VISIUM_HD_ROI_STATE)
   }, [])
+  const handleBeforeDatasetLoad = useCallback(() => {
+    clearVisiumHdRoiState()
+    setFallbackNotices([])
+  }, [clearVisiumHdRoiState])
   const handleClearActiveRoi = useCallback(() => {
     if (!isVisiumHdDataset) {
       handleClearRoi()
@@ -1610,6 +1637,7 @@ export function App({
       analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
       analysisEmbeddingState,
       appendDebugEvent,
+      appendFallbackNotice,
       loadAnalysisEmbeddings: loadActiveAnalysisEmbeddings,
       loadState,
       onSelectedCellFocus: focusSpatialViewOnCell,
@@ -1658,6 +1686,7 @@ export function App({
   } = useMagicLensWorkflow({
     activeRoiSelection,
     appendDebugEvent,
+    appendFallbackNotice,
     currentViewportDetail,
     loadRoiCells,
     loadRoiGeneStats,
@@ -1694,6 +1723,7 @@ export function App({
   const { handleLoadCustomLayer, handleRemoveCustomLayer } =
     useCustomMorphologyLayerWorkflow({
       appendDebugEvent,
+      appendFallbackNotice,
       customLayers: customMorphologyLayers,
       customLayerAbortRef: customMorphologyLayerAbortRef,
       customLayerIdRef: customMorphologyLayerIdRef,
@@ -1779,6 +1809,7 @@ export function App({
     analysisEmbeddingAbortRef,
     analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
     appendDebugEvent,
+    appendFallbackNotice,
     autoContrastChannelIdsRef,
     boundaryAbortRef,
     boundaryRequestIdRef: boundaryRequestId,
@@ -1816,7 +1847,7 @@ export function App({
     magicLensLastDetailRef,
     magicLensLastQueryKeyRef,
     magicLensRequestIdRef: magicLensRequestId,
-    onBeforeDatasetLoad: clearVisiumHdRoiState,
+    onBeforeDatasetLoad: handleBeforeDatasetLoad,
     queueAutoContrast,
     recordTelemetry,
     roiAbortRef,
@@ -1986,6 +2017,7 @@ export function App({
           controlIds={controlIds}
           datasetUrl={datasetUrl}
           debugLog={debugLog}
+          fallbackNotices={fallbackNotices}
           diagnosticsState={diagnosticsState}
           handleDatasetSubmit={handleDatasetSubmit}
           handleDownloadDiagnostics={handleDownloadDiagnostics}

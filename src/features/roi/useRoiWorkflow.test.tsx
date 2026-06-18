@@ -102,11 +102,13 @@ function Probe({
     cellCount: 1,
   }
   const magicLensScope: MagicLensScope = 'roi'
+  const appendFallbackNotice = React.useCallback(() => undefined, [])
 
   const nextApi = useRoiWorkflow({
     appendDebugEvent: (message) => {
       debugMessagesRef.current.push(message)
     },
+    appendFallbackNotice,
     currentViewportDetail: null,
     initialSharedRoiSelectionRef,
     loadRoiCells: vi.fn(async () => []),
@@ -240,9 +242,11 @@ function WarmupProbe({
     cellCount: 1_000,
   }
   const loadRoiTranscripts = React.useCallback(async () => [], [])
+  const appendFallbackNotice = React.useCallback(() => undefined, [])
 
   useRoiWorkflow({
     appendDebugEvent: vi.fn(),
+    appendFallbackNotice,
     currentViewportDetail,
     initialSharedRoiSelectionRef,
     loadRoiCells,

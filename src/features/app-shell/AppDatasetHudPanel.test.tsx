@@ -22,6 +22,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     },
     datasetUrl: 'https://example.test/output',
     debugLog: [],
+    fallbackNotices: [],
     diagnosticsState: { status: 'idle' },
     handleDatasetSubmit: vi.fn((event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()

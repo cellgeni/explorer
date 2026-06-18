@@ -15,6 +15,7 @@ import {
 import { tiffChunkKey } from './chunkKeys'
 import { loadZchunkStorePyramidOptions } from './zchunkStore'
 import { parseOmeTiffMetadata } from './omeMetadata'
+import { notifyFallback, type FallbackNotifier } from '../data/fallbackNotice'
 import type {
   BBox,
   ImagePixels,
@@ -65,6 +66,7 @@ export { parsePhysicalSizeMicrometersPerPixel } from './omeMetadata'
 export async function openTiff(
   url: string,
   signal?: AbortSignal,
+  onFallback?: FallbackNotifier,
 ): Promise<TiffPyramidLoader> {
   const selection = parseTiffImageSelection(url)
   const tiff = await fromUrl(selection.sourceUrl, { allowFullFile: false }, signal)
@@ -101,6 +103,15 @@ export async function openTiff(
       channels: omeMetadata.channels,
     })
   }
+
+  notifyFallback(onFallback, {
+    source: 'Morphology image',
+    message:
+      'Zarr chunk-store tile metadata was unavailable, so the app switched to GeoTIFF metadata parsing.',
+    action:
+      'The image can still load, but opening the TIFF may be slower than the chunk-store path.',
+    coalesceKey: `morphology-geotiff-metadata:${selection.sourceUrl}`,
+  })
 
   const firstImage = await tiff.getImage(selection.ifdIndex ?? 0)
   const firstDirectory = firstImage.getFileDirectory()

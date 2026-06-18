@@ -8,6 +8,7 @@ import {
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
 } from '../../data/transcriptOverlay'
+import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import type {
   TranscriptAggregateLoader,
@@ -51,6 +52,7 @@ interface MutableRef<T> {
 interface UseTranscriptWorkflowOptions {
   readonly activeControlHudTab: ControlHudTab
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly appendFallbackNotice: FallbackNotifier
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly effectiveTranscriptFeatureFilterMode: TranscriptFeatureFilterMode
   readonly loadRequestIdRef: MutableRef<number>
@@ -84,6 +86,7 @@ interface UseTranscriptWorkflowOptions {
 export function useTranscriptWorkflow({
   activeControlHudTab,
   appendDebugEvent,
+  appendFallbackNotice,
   currentViewportDetail,
   effectiveTranscriptFeatureFilterMode,
   loadRequestIdRef,
@@ -375,6 +378,14 @@ export function useTranscriptWorkflow({
         currentViewportDetail.bbox,
         fallbackMode,
       )
+      appendFallbackNotice({
+        source: 'Transcripts',
+        message:
+          'Native transcripts.zarr.zip density was unavailable, so the app switched to cell transcript-count summary bins.',
+        action:
+          'This fallback shows approximate all-transcript density and cannot provide feature-level aggregate details.',
+        coalesceKey: `transcript-cell-summary:${loadState.url}`,
+      })
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === aggregateRequestId) {
@@ -536,6 +547,7 @@ export function useTranscriptWorkflow({
         minQv: transcriptMinQv,
         geneOnly: transcriptGeneOnly,
         featureNames,
+        onFallback: appendFallbackNotice,
       })
         .then((result) => {
           if (didExactQueryTimeOut || transcriptRequestIdRef.current !== requestId) {
@@ -625,6 +637,7 @@ export function useTranscriptWorkflow({
     }
   }, [
     appendDebugEvent,
+    appendFallbackNotice,
     currentViewportDetail,
     effectiveTranscriptFeatureFilterMode,
     loadState,

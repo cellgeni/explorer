@@ -64,12 +64,14 @@ function Probe({
     url: 'https://example.test/output',
     cellCount: 1,
   }
+  const appendFallbackNotice = React.useCallback(() => undefined, [])
 
   const nextApi = useMagicLensWorkflow({
     activeRoiSelection: null,
     appendDebugEvent: (message) => {
       debugMessagesRef.current.push(message)
     },
+    appendFallbackNotice,
     currentViewportDetail: viewportDetail,
     loadRoiCells: vi.fn(async () => []),
     loadRoiGeneStats: vi.fn(async () => ({

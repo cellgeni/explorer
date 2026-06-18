@@ -2,6 +2,7 @@ import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
 import { micrometers } from './coords'
 import type { BBox } from './coords'
+import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import { isGeneFeature } from './gex'
 import type {
   TranscriptAggregateBin,
@@ -45,6 +46,7 @@ export interface TranscriptZarrViewportOptions {
 }
 
 export interface TranscriptZarrGenePanelOptions {
+  readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
 }
 
@@ -250,6 +252,14 @@ export async function loadTranscriptZarrGenePanel(
     const densityGenes = parseTranscriptZarrGenePanelAttrs(densityGene.attrs)
 
     if (densityGenes.length > 0) {
+      notifyFallback(options.onFallback, {
+        source: 'Gene panel',
+        message:
+          'transcripts.zarr.zip root gene metadata was unavailable, so the app switched to density/gene metadata.',
+        action:
+          'Gene search can continue, but the gene list came from the transcript density metadata path.',
+        coalesceKey: `gene-panel-transcript-zarr-density:${url}`,
+      })
       return densityGenes
     }
   } catch {

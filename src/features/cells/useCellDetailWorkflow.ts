@@ -1,5 +1,6 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import { asCellId } from '../../data/cellid'
+import type { FallbackNotifier } from '../../data/fallbackNotice'
 import {
   CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
   CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
@@ -40,6 +41,7 @@ interface MutableRef<T> {
 
 interface UseCellDetailWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly appendFallbackNotice: FallbackNotifier
   readonly cellDetailAbortRef: MutableRef<AbortController | null>
   readonly cellDetailRequestIdRef: MutableRef<number>
   readonly cellDetailState: CellDetailState<StructuredLoadError>
@@ -60,6 +62,7 @@ interface UseCellDetailWorkflowOptions {
 
 export function useCellDetailWorkflow({
   appendDebugEvent,
+  appendFallbackNotice,
   cellDetailAbortRef,
   cellDetailRequestIdRef,
   cellDetailState,
@@ -112,6 +115,7 @@ export function useCellDetailWorkflow({
           cellLimit: 1,
           geneLimit: CELL_GENE_EXPRESSION_LIMIT,
           sampleStrategy: 'head',
+          onFallback: appendFallbackNotice,
         }),
         loadSelectedCellBoundary(
           loadState.url,
@@ -171,6 +175,7 @@ export function useCellDetailWorkflow({
     }
   }, [
     appendDebugEvent,
+    appendFallbackNotice,
     cellDetailAbortRef,
     cellDetailRequestIdRef,
     loadBoundaryElements,

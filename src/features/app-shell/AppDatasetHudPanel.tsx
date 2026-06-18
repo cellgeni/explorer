@@ -15,6 +15,7 @@ import {
 } from '../dataset/visiumHdModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { DebugLogAppendOptions, DebugLogEntry } from './appRuntimeModel'
+import type { FallbackNoticeEntry } from './appRuntimeModel'
 import type { AppControlIds } from './useAppControlIds'
 
 type AppDatasetControlIds = Pick<
@@ -35,6 +36,7 @@ export interface AppDatasetHudPanelProps {
   readonly controlIds: AppDatasetControlIds
   readonly datasetUrl: string
   readonly debugLog: readonly DebugLogEntry[]
+  readonly fallbackNotices: readonly FallbackNoticeEntry[]
   readonly diagnosticsState: DatasetDiagnosticsState<StructuredLoadError>
   readonly handleDatasetSubmit: FormEventHandler<HTMLFormElement>
   readonly handleDownloadDiagnostics: () => void
@@ -63,6 +65,7 @@ export function AppDatasetHudPanel({
   controlIds,
   datasetUrl,
   debugLog,
+  fallbackNotices,
   diagnosticsState,
   handleDatasetSubmit,
   handleDownloadDiagnostics,
@@ -99,6 +102,7 @@ export function AppDatasetHudPanel({
       cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
       visiumHdControlState={visiumHdControlState}
       activeErrors={activeErrors}
+      fallbackNotices={fallbackNotices}
       debugLog={debugLog}
       onSubmit={handleDatasetSubmit}
       onDatasetUrlChange={setDatasetUrl}

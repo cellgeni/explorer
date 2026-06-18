@@ -177,6 +177,7 @@ describe('transcriptOverlay', () => {
 
   it('returns native exact points when Parquet metadata enrichment is slow', async () => {
     vi.useFakeTimers()
+    const onFallback = vi.fn()
     const nativeResult = {
       points: [
         transcriptPoint({
@@ -209,6 +210,7 @@ describe('transcriptOverlay', () => {
               transcriptsForViewport,
             }) as unknown as XeniumDataset,
           metadataEnrichmentTimeoutMs: 25,
+          onFallback,
         },
       )
 
@@ -216,9 +218,117 @@ describe('transcriptOverlay', () => {
 
       await expect(result).resolves.toEqual(nativeResult)
       expect(transcriptsForViewport).toHaveBeenCalled()
+      expect(onFallback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: 'Transcripts',
+          message: expect.stringContaining('without Parquet assignment metadata'),
+          detail: 'Metadata enrichment exceeded 25 ms.',
+          coalesceKey: 'transcript-metadata-enrichment:https://example.test/xenium/',
+        }),
+      )
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('falls back to raw transcripts.parquet when native exact Zarr is unavailable', async () => {
+    const parquetResult = {
+      points: [
+        transcriptPoint({
+          id: '12',
+          transcriptId: '12',
+          cellId: intToCellId(1, 1),
+          cellAssignment: 'known',
+          fovName: 'FOV-001',
+        }),
+      ],
+      groups: [],
+      hitPointLimit: false,
+    }
+    const validateRangeSupport = vi.fn(async (_url: string, options) => {
+      if (options.label === 'transcripts.zarr.zip') {
+        throw new Error('missing zarr')
+      }
+    })
+    const transcriptsForViewport = vi.fn(async () => parquetResult)
+    const onFallback = vi.fn()
+
+    await expect(
+      loadDatasetTranscriptViewport(
+        'https://example.test/xenium/',
+        {
+          minX: micrometers(0),
+          minY: micrometers(0),
+          maxX: micrometers(10),
+          maxY: micrometers(10),
+        },
+        {
+          validateRangeSupport,
+          getDataset: async () =>
+            ({
+              transcriptsForViewport,
+            }) as unknown as XeniumDataset,
+          onFallback,
+        },
+      ),
+    ).resolves.toEqual(parquetResult)
+
+    expect(transcriptsForViewport).toHaveBeenCalled()
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Transcripts',
+        message: expect.stringContaining('switched to raw transcripts.parquet'),
+        coalesceKey: 'transcript-exact-raw-parquet:https://example.test/xenium/',
+      }),
+    )
+  })
+
+  it('returns native exact points when Parquet metadata enrichment fails', async () => {
+    const nativeResult = {
+      points: [
+        transcriptPoint({
+          id: 'FOV-001:12',
+          transcriptId: '12',
+          cellId: null,
+          cellAssignment: 'unavailable',
+          fovName: 'FOV-001',
+        }),
+      ],
+      groups: [],
+      hitPointLimit: false,
+    }
+    const validateRangeSupport = vi.fn(async (_url: string, options) => {
+      if (options.label === 'transcripts.parquet') {
+        throw new Error('missing parquet')
+      }
+    })
+    const onFallback = vi.fn()
+    transcriptZarrMock.loadTranscriptZarrViewport.mockResolvedValue(nativeResult)
+
+    await expect(
+      loadDatasetTranscriptViewport(
+        'https://example.test/xenium/',
+        {
+          minX: micrometers(0),
+          minY: micrometers(0),
+          maxX: micrometers(10),
+          maxY: micrometers(10),
+        },
+        {
+          validateRangeSupport,
+          onFallback,
+        },
+      ),
+    ).resolves.toEqual(nativeResult)
+
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Transcripts',
+        message: expect.stringContaining('Parquet metadata enrichment failed'),
+        detail: 'missing parquet',
+        coalesceKey: 'transcript-metadata-enrichment:https://example.test/xenium/',
+      }),
+    )
   })
 })
 

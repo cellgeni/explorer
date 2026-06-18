@@ -57,12 +57,14 @@ function Probe({
     url: 'https://example.test/output',
     cellCount: 1,
   }
+  const appendFallbackNotice = React.useCallback(() => undefined, [])
 
   useTranscriptWorkflow({
     activeControlHudTab: 'transcripts',
     appendDebugEvent: (message) => {
       debugMessagesRef.current.push(message)
     },
+    appendFallbackNotice,
     currentViewportDetail: viewportDetail,
     effectiveTranscriptFeatureFilterMode: 'all',
     loadRequestIdRef,

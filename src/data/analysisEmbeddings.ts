@@ -1,4 +1,5 @@
 import { datasetFileUrl } from './datasetFiles'
+import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 
 export type AnalysisEmbeddingKind = 'umap' | 'tsne'
 export type AnalysisEmbeddingElementLabel = 'cells' | 'bins'
@@ -21,6 +22,12 @@ export interface LoadDatasetAnalysisEmbeddingsOptions {
   readonly signal?: AbortSignal
   readonly fetcher?: typeof fetch
   readonly visiumHdBinSizeMicrometers?: AnalysisEmbeddingVisiumHdBinSize
+  readonly onFallback?: FallbackNotifier
+}
+
+export interface ParseAnalysisEmbeddingCsvOptions {
+  readonly onFallback?: FallbackNotifier
+  readonly sourcePath?: string
 }
 
 interface EmbeddingCandidate {
@@ -70,6 +77,7 @@ export async function loadDatasetAnalysisEmbeddings(
   const candidates = analysisEmbeddingCandidates(options.visiumHdBinSizeMicrometers)
   const embeddings: AnalysisEmbedding[] = []
   const loadedKinds = new Set<AnalysisEmbeddingKind>()
+  const skippedPathsByKind = new Map<AnalysisEmbeddingKind, string[]>()
 
   for (const candidate of candidates) {
     if (loadedKinds.has(candidate.kind)) {
@@ -83,15 +91,26 @@ export async function loadDatasetAnalysisEmbeddings(
     )
 
     if (csv === null) {
+      appendSkippedEmbeddingPath(skippedPathsByKind, candidate)
       continue
     }
 
-    const points = parseAnalysisEmbeddingCsv(csv, candidate.kind)
+    const points = parseAnalysisEmbeddingCsv(csv, candidate.kind, {
+      sourcePath: candidate.path,
+      ...(options.onFallback === undefined ? {} : { onFallback: options.onFallback }),
+    })
 
     if (points.length === 0) {
+      appendSkippedEmbeddingPath(skippedPathsByKind, candidate)
       continue
     }
 
+    notifyEmbeddingPathFallback(
+      options.onFallback,
+      baseUrl,
+      candidate,
+      skippedPathsByKind.get(candidate.kind) ?? [],
+    )
     embeddings.push({
       kind: candidate.kind,
       label: candidate.label,
@@ -107,6 +126,7 @@ export async function loadDatasetAnalysisEmbeddings(
 export function parseAnalysisEmbeddingCsv(
   csv: string,
   kind: AnalysisEmbeddingKind,
+  options: ParseAnalysisEmbeddingCsvOptions = {},
 ): readonly AnalysisEmbeddingPoint[] {
   const rows = parseCsvRows(csv).filter((row) =>
     row.some((value) => value.trim().length > 0),
@@ -117,10 +137,31 @@ export function parseAnalysisEmbeddingCsv(
   }
 
   const header = rows[0] ?? []
-  const idIndex = findCellIdColumn(header)
-  const xIndex = findEmbeddingAxisColumn(header, kind, '1') ?? fallbackAxisIndex(1)
-  const yIndex = findEmbeddingAxisColumn(header, kind, '2') ?? fallbackAxisIndex(2)
+  const idColumnIndex = findCellIdColumn(header)
+  const xColumnIndex = findEmbeddingAxisColumn(header, kind, '1')
+  const yColumnIndex = findEmbeddingAxisColumn(header, kind, '2')
+  const idIndex = idColumnIndex ?? 0
+  const xIndex = xColumnIndex ?? fallbackAxisIndex(1)
+  const yIndex = yColumnIndex ?? fallbackAxisIndex(2)
   const points: AnalysisEmbeddingPoint[] = []
+  const missingColumns = [
+    ...(idColumnIndex === undefined ? ['cell id'] : []),
+    ...(xColumnIndex === undefined ? [`${kind.toUpperCase()} x`] : []),
+    ...(yColumnIndex === undefined ? [`${kind.toUpperCase()} y`] : []),
+  ]
+
+  if (missingColumns.length > 0) {
+    notifyFallback(options.onFallback, {
+      source: 'Analysis embeddings',
+      message: `Projection CSV is missing recognized ${missingColumns.join(
+        ', ',
+      )} header${missingColumns.length === 1 ? '' : 's'}; using positional CSV columns instead.`,
+      action:
+        'The embedding can still load, but verify the projection if the CSV column order is custom.',
+      ...(options.sourcePath === undefined ? {} : { detail: options.sourcePath }),
+      coalesceKey: `analysis-embedding-columns:${kind}:${options.sourcePath ?? 'inline'}`,
+    })
+  }
 
   for (const row of rows.slice(1)) {
     const id = row[idIndex]?.trim()
@@ -162,6 +203,36 @@ function analysisEmbeddingCandidates(
   ]
 }
 
+function appendSkippedEmbeddingPath(
+  skippedPathsByKind: Map<AnalysisEmbeddingKind, string[]>,
+  candidate: EmbeddingCandidate,
+): void {
+  skippedPathsByKind.set(candidate.kind, [
+    ...(skippedPathsByKind.get(candidate.kind) ?? []),
+    candidate.path,
+  ])
+}
+
+function notifyEmbeddingPathFallback(
+  onFallback: FallbackNotifier | undefined,
+  baseUrl: string,
+  candidate: EmbeddingCandidate,
+  skippedPaths: readonly string[],
+): void {
+  if (skippedPaths.length === 0) {
+    return
+  }
+
+  notifyFallback(onFallback, {
+    source: 'Analysis embeddings',
+    message: `${candidate.label} projection loaded from a secondary CSV path after earlier known paths were unavailable.`,
+    action:
+      'The embedding can still load, but the projection source may differ from the preferred Xenium output layout.',
+    detail: `Using ${candidate.path}; skipped ${skippedPaths.join(', ')}`,
+    coalesceKey: `analysis-embedding-path:${baseUrl}:${candidate.kind}`,
+  })
+}
+
 async function fetchEmbeddingCsv(
   url: string,
   fetcher: typeof fetch,
@@ -180,7 +251,7 @@ async function fetchEmbeddingCsv(
   return response.text()
 }
 
-function findCellIdColumn(header: readonly string[]): number {
+function findCellIdColumn(header: readonly string[]): number | undefined {
   const index = header.findIndex((value) => {
     const normalized = normalizeHeader(value)
 
@@ -192,7 +263,7 @@ function findCellIdColumn(header: readonly string[]): number {
     )
   })
 
-  return index < 0 ? 0 : index
+  return index < 0 ? undefined : index
 }
 
 function findEmbeddingAxisColumn(

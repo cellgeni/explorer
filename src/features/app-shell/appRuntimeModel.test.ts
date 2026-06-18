@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   abortActiveRequest,
   appendDebugLogEntry,
+  appendFallbackNoticeEntry,
   clearTimeoutRef,
   createDebugLogEntry,
+  createFallbackNoticeEntry,
   createLoadingTasks,
   downloadTextFile,
   formatElapsed,
@@ -83,6 +85,30 @@ describe('appRuntimeModel', () => {
     )
 
     expect(entries.reduce(appendDebugLogEntry, [])).toHaveLength(32)
+  })
+
+  it('coalesces fallback notices and enforces the notice limit', () => {
+    const original = createFallbackNoticeEntry(1, {
+      source: 'Dataset overview',
+      message: 'Loading with fallback A.',
+      coalesceKey: 'dataset',
+    })
+    const replacement = createFallbackNoticeEntry(2, {
+      source: 'Dataset overview',
+      message: 'Loading with fallback B.',
+      coalesceKey: 'dataset',
+    })
+
+    expect(appendFallbackNoticeEntry([original], replacement)).toEqual([replacement])
+
+    const entries = Array.from({ length: 20 }, (_, index) =>
+      createFallbackNoticeEntry(index, {
+        source: 'Source',
+        message: `Fallback ${index}`,
+      }),
+    )
+
+    expect(entries.reduce(appendFallbackNoticeEntry, [])).toHaveLength(16)
   })
 
   it('formats elapsed time and short labels', () => {

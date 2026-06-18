@@ -1,13 +1,15 @@
 import { isGeneFeature } from './gex'
 import { datasetFileUrl } from './datasetFiles'
+import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import { loadTranscriptZarrGenePanel as loadTranscriptZarrGenePanelFromZip } from './transcriptZarr'
 
 export interface LoadGenePanelOptions {
   readonly fetcher?: typeof fetch
   readonly loadTranscriptZarrGenePanel?: (
     url: string,
-    options?: { readonly signal?: AbortSignal },
+    options?: { readonly onFallback?: FallbackNotifier; readonly signal?: AbortSignal },
   ) => Promise<readonly string[]>
+  readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
 }
 
@@ -38,6 +40,15 @@ export async function loadGenePanel(
       throw error
     }
 
+    notifyFallback(options.onFallback, {
+      source: 'Gene panel',
+      message:
+        'gene_panel.json could not be loaded, so the app switched to transcript Zarr gene metadata.',
+      action:
+        'Gene search can continue if transcripts.zarr.zip exposes gene names, but panel-specific target metadata is unavailable.',
+      detail: error instanceof Error ? error.message : String(error),
+      coalesceKey: `gene-panel-transcript-zarr:${baseUrl}`,
+    })
     return loadGenePanelFromTranscriptZarr(baseUrl, error, options)
   }
 }
@@ -166,7 +177,12 @@ async function loadGenePanelFromTranscriptZarr(
   const loader = options.loadTranscriptZarrGenePanel ?? loadTranscriptZarrGenePanelFromZip
   const url = datasetFileUrl(baseUrl, 'transcripts.zarr.zip')
   const loaderOptions =
-    options.signal === undefined ? undefined : { signal: options.signal }
+    options.signal === undefined && options.onFallback === undefined
+      ? undefined
+      : {
+          ...(options.onFallback === undefined ? {} : { onFallback: options.onFallback }),
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+        }
 
   try {
     return await loader(url, loaderOptions)

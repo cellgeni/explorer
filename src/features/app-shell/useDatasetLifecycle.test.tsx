@@ -96,6 +96,7 @@ function Probe({
     analysisEmbeddingAbortRef: refs.analysisEmbeddingAbortRef,
     analysisEmbeddingRequestIdRef: numberRef(),
     appendDebugEvent: vi.fn(),
+    appendFallbackNotice: vi.fn(),
     autoContrastChannelIdsRef: { current: new Set<string>() },
     boundaryAbortRef: refs.boundaryAbortRef,
     boundaryRequestIdRef: numberRef(),

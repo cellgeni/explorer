@@ -1,5 +1,6 @@
 import { createDuckDbClient } from './duckdb'
 import { parseCellOverviewRow } from './hyparquetCells'
+import { notifyFallback } from './fallbackNotice'
 import type { CellOverviewPoint, ReadCellsOverviewOptions } from './hyparquetCells'
 import type { ArrowTableLike, DuckDbPreparedStatementLike, SqlParameter } from './gex'
 
@@ -14,7 +15,7 @@ export interface DuckDbOverviewConnectionLike {
 
 export interface ReadCellsOverviewWithDuckDbOptions extends Pick<
   ReadCellsOverviewOptions,
-  'includeCellIds' | 'limit' | 'signal' | 'url'
+  'includeCellIds' | 'limit' | 'onFallback' | 'signal' | 'url'
 > {
   readonly createClient?: () => Promise<DuckDbOverviewClientLike>
 }
@@ -77,6 +78,13 @@ async function queryOverviewRowsWithFallback(
       }
 
       missingOptionalColumns.add(missingColumn)
+      notifyFallback(options.onFallback, {
+        source: 'Dataset overview',
+        message: `DuckDB overview read found cells.parquet is missing optional column ${missingColumn}; continuing without that cell metadata.`,
+        action:
+          'Overview rendering can continue, but controls that need that optional field may be unavailable.',
+        coalesceKey: `duckdb-cells-parquet-optional-column:${missingColumn}`,
+      })
     }
   }
 }

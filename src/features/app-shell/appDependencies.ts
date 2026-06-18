@@ -48,6 +48,7 @@ import {
 } from '../../datasets/datasetFactory'
 import type { BBox, DataPoint } from '../../data/coords'
 import type { CellId } from '../../data/cellid'
+import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { GeneExpressionStageTimingHandler } from '../../data/geneExpressionTiming'
 import type { ChannelAutoContrast } from '../../data/morphologyContrast'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
@@ -66,18 +67,19 @@ export type DatasetOverviewLoader = (
   options?: {
     readonly limit?: number | null
     readonly includeCellIds?: boolean
+    readonly onFallback?: FallbackNotifier
     readonly signal?: AbortSignal
   },
 ) => Promise<readonly CellOverviewPoint[]>
 
 export type MorphologyImageLoader = (
   baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
+  options?: { readonly onFallback?: FallbackNotifier; readonly signal?: AbortSignal },
 ) => Promise<MorphologyImage>
 
 export type CustomMorphologyLayerLoader = (
   imageUrl: string,
-  options?: { readonly signal?: AbortSignal },
+  options?: { readonly onFallback?: FallbackNotifier; readonly signal?: AbortSignal },
 ) => Promise<MorphologyImage>
 
 export type BoundaryElementsLoader = (
@@ -88,7 +90,7 @@ export type BoundaryElementsLoader = (
 
 export type GenePanelLoader = (
   baseUrl: string,
-  options?: { readonly signal?: AbortSignal },
+  options?: { readonly onFallback?: FallbackNotifier; readonly signal?: AbortSignal },
 ) => Promise<readonly string[]>
 
 export type AnnotationLoader = (
@@ -120,6 +122,7 @@ export type RoiGeneStatsLoader = (
     readonly cellLimit?: number
     readonly geneLimit?: number
     readonly sampleStrategy?: 'stratified' | 'head'
+    readonly onFallback?: FallbackNotifier
   },
 ) => Promise<RoiGeneStats>
 
@@ -172,6 +175,7 @@ export type TranscriptViewportLoader = (
     readonly minQv?: number
     readonly geneOnly?: boolean
     readonly featureNames?: readonly string[]
+    readonly onFallback?: FallbackNotifier
   },
 ) => Promise<{
   readonly points: readonly TranscriptPoint[]

@@ -39,6 +39,16 @@ describe('loadErrorModel', () => {
       code: 'parquet-decode',
       title: 'cells.parquet decode failed',
     })
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
+        new RangeError('Out of bounds access'),
+      ),
+    ).toMatchObject({
+      code: 'parquet-decode',
+      title: 'cells.parquet decode failed',
+      detail: 'RangeError',
+    })
   })
 
   it('classifies specialized manifest, decode, and unsupported matrix errors', () => {

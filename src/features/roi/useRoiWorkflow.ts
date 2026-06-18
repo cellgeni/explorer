@@ -5,6 +5,7 @@ import type {
   ViewerViewportDetail,
 } from '../../components/ViewerCore'
 import { ROI_CELL_EXPORT_LIMIT } from '../../data/roiCells'
+import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { RoiSelection } from '../../data/roiSelection'
 import type {
   RoiCellsLoader,
@@ -50,6 +51,7 @@ interface MutableRef<T> {
 
 interface UseRoiWorkflowOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly appendFallbackNotice: FallbackNotifier
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly enabled?: boolean
   readonly initialSharedRoiSelectionRef: MutableRef<RoiSelection | null>
@@ -99,6 +101,7 @@ interface UseRoiWorkflowResult {
 
 export function useRoiWorkflow({
   appendDebugEvent,
+  appendFallbackNotice,
   currentViewportDetail,
   enabled = true,
   initialSharedRoiSelectionRef,
@@ -231,6 +234,7 @@ export function useRoiWorkflow({
             signal: abortController.signal,
             cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             sampleStrategy: 'head',
+            onFallback: appendFallbackNotice,
           })
 
           if (abortController.signal.aborted) {
@@ -267,6 +271,7 @@ export function useRoiWorkflow({
     }, ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
   }, [
     appendDebugEvent,
+    appendFallbackNotice,
     currentViewportDetail,
     enabled,
     loadRoiCells,
@@ -355,6 +360,7 @@ export function useRoiWorkflow({
             signal: abortController.signal,
             cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             sampleStrategy: 'head',
+            onFallback: appendFallbackNotice,
           })
             .then((previewStats) => {
               if (roiRequestIdRef.current !== requestId) {
@@ -388,6 +394,7 @@ export function useRoiWorkflow({
 
                   return loadRoiGeneStats(loadState.url, cells, {
                     signal: abortController.signal,
+                    onFallback: appendFallbackNotice,
                   })
                 })
                 .then((stats) => {
@@ -458,6 +465,7 @@ export function useRoiWorkflow({
     },
     [
       appendDebugEvent,
+      appendFallbackNotice,
       enabled,
       loadRoiCells,
       loadRoiGeneStats,

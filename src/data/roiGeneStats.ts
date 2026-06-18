@@ -2,6 +2,7 @@ import { aggregateGex, gexFromCellFeatureMatrixH5 } from './gex'
 import { datasetFileUrl } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
+import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import type { CellId } from './cellid'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { CellFeatureMatrixReadOptions, GexResult } from './gex'
@@ -45,6 +46,7 @@ export interface LoadDatasetRoiGeneStatsOptions {
   readonly geneLimit?: number
   readonly sampleStrategy?: RoiGeneStatsSampleStrategy
   readonly allowTranscriptFallback?: boolean
+  readonly onFallback?: FallbackNotifier
   readonly readH5Matrix?: (
     url: string,
     cellIds: readonly CellId[],
@@ -79,6 +81,7 @@ export async function loadDatasetRoiGeneStats(
     validateRangeSupport: options.validateRangeSupport ?? assertHttpRangeSupport,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     allowTranscriptFallback: options.allowTranscriptFallback ?? false,
+    onFallback: options.onFallback,
     readH5Matrix: options.readH5Matrix ?? gexFromCellFeatureMatrixH5,
   })
   throwIfAborted(options.signal)
@@ -157,6 +160,7 @@ async function loadRoiGeneStatsMatrix(
     readonly validateRangeSupport: DatasetRangeValidator
     readonly signal?: AbortSignal
     readonly allowTranscriptFallback: boolean
+    readonly onFallback: FallbackNotifier | undefined
     readonly readH5Matrix: (
       url: string,
       cellIds: readonly CellId[],
@@ -189,6 +193,15 @@ async function loadRoiGeneStatsMatrix(
     }
 
     matrixError = error
+    notifyFallback(options.onFallback, {
+      source: 'ROI genes',
+      message:
+        'ROI gene stats could not use the native Zarr cell-feature matrix, so the app switched to cell_feature_matrix.h5.',
+      action:
+        'ROI gene summaries can continue, but the H5 compatibility path may be slower.',
+      detail: error instanceof Error ? error.message : String(error),
+      coalesceKey: `roi-genes-h5:${baseUrl}`,
+    })
   }
 
   try {
@@ -205,6 +218,16 @@ async function loadRoiGeneStatsMatrix(
     if (!options.allowTranscriptFallback || dataset.transcriptsForCellIds === undefined) {
       throw unsupportedRoiGeneStatsError(matrixError, error)
     }
+
+    notifyFallback(options.onFallback, {
+      source: 'ROI genes',
+      message:
+        'ROI gene stats could not use the Zarr or H5 cell-feature matrix, so the app switched to transcript aggregation.',
+      action:
+        'This fallback is intended for explicit compatibility paths and may be slower than matrix-backed summaries.',
+      detail: error instanceof Error ? error.message : String(error),
+      coalesceKey: `roi-genes-transcripts:${baseUrl}`,
+    })
   }
 
   await options.validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {

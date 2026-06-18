@@ -91,6 +91,7 @@ describe('dataset overview loader', () => {
   })
 
   it('falls back to DuckDB-compatible overview reads after a parquet decode failure', async () => {
+    const onFallback = vi.fn()
     const readCells = vi.fn(async () => {
       throw new CellsParquetDecodeError('Unable to decode cells.parquet.')
     })
@@ -108,6 +109,7 @@ describe('dataset overview loader', () => {
         limit: null,
         readCells,
         readFallbackCells,
+        onFallback,
         validateRangeSupport: async () => undefined,
       }),
     ).resolves.toEqual([
@@ -121,6 +123,14 @@ describe('dataset overview loader', () => {
     expect(readFallbackCells).toHaveBeenCalledWith({
       url: 'https://example.test/xenium/cells.parquet',
       includeCellIds: false,
+      onFallback,
     })
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Dataset overview',
+        message: expect.stringContaining('switched to the DuckDB-WASM overview reader'),
+        coalesceKey: 'dataset-overview-duckdb:https://example.test/xenium/cells.parquet',
+      }),
+    )
   })
 })

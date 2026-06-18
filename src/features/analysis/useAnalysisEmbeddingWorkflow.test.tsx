@@ -54,6 +54,7 @@ function Probe({
     url: 'https://example.test/output',
     cellCount: 1,
   }
+  const appendFallbackNotice = React.useCallback(() => undefined, [])
 
   const nextApi = useAnalysisEmbeddingWorkflow({
     analysisEmbeddingAbortRef,
@@ -62,6 +63,7 @@ function Probe({
     appendDebugEvent: (message) => {
       debugMessagesRef.current.push(message)
     },
+    appendFallbackNotice,
     loadAnalysisEmbeddings,
     loadState,
     ...(onSelectedCellFocus === undefined ? {} : { onSelectedCellFocus }),
@@ -114,7 +116,10 @@ describe('useAnalysisEmbeddingWorkflow', () => {
 
     expect(loadAnalysisEmbeddings).toHaveBeenCalledWith(
       'https://example.test/output',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onFallback: expect.any(Function),
+      }),
     )
     expect(snapshot.embeddingState.status).toBe('ready')
     expect(snapshot.selectedEmbeddingKind).toBe('umap')

@@ -14,6 +14,7 @@ import { type RoiSelection } from '../../data/roiSelection'
 import type { ShareableState } from '../../data/shareableState'
 import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
+import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { AnalysisEmbeddingKind } from '../../data/analysisEmbeddings'
@@ -129,6 +130,7 @@ interface UseDatasetLifecycleOptions {
   readonly analysisEmbeddingAbortRef: MutableRef<AbortController | null>
   readonly analysisEmbeddingRequestIdRef: MutableRef<number>
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly appendFallbackNotice: FallbackNotifier
   readonly autoContrastChannelIdsRef: MutableRef<Set<string>>
   readonly boundaryAbortRef: MutableRef<AbortController | null>
   readonly boundaryRequestIdRef: MutableRef<number>
@@ -268,6 +270,7 @@ export function useDatasetLifecycle({
   analysisEmbeddingAbortRef,
   analysisEmbeddingRequestIdRef,
   appendDebugEvent,
+  appendFallbackNotice,
   autoContrastChannelIdsRef,
   boundaryAbortRef,
   boundaryRequestIdRef,
@@ -835,7 +838,10 @@ export function useDatasetLifecycle({
         setGenePanelState({ status: 'loading', url: requestedUrl })
         startDatasetWarmup(requestedUrl, requestId)
 
-        void loadGenePanel(requestedUrl, { signal: abortController.signal })
+        void loadGenePanel(requestedUrl, {
+          signal: abortController.signal,
+          onFallback: appendFallbackNotice,
+        })
           .then((genes) => {
             if (loadRequestIdRef.current !== requestId) {
               return
@@ -897,6 +903,7 @@ export function useDatasetLifecycle({
           includeCellIds: true,
           limit: null,
           signal: abortController.signal,
+          onFallback: appendFallbackNotice,
         })
 
         if (loadRequestIdRef.current !== requestId) {
@@ -926,7 +933,10 @@ export function useDatasetLifecycle({
           return
         }
 
-        void loadMorphologyImage(requestedUrl, { signal: abortController.signal })
+        void loadMorphologyImage(requestedUrl, {
+          signal: abortController.signal,
+          onFallback: appendFallbackNotice,
+        })
           .then((image) => {
             if (loadRequestIdRef.current !== requestId) {
               return

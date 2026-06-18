@@ -303,6 +303,7 @@ function isCellsParquetDecodeError(
   return (
     normalizedMessage.includes('unable to decode cells.parquet') ||
     normalizedMessage.includes('offset is outside the bounds of the dataview') ||
+    normalizedMessage.includes('out of bounds access') ||
     normalizedMessage.includes('invalid typed array length')
   )
 }

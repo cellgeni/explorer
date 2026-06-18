@@ -1,6 +1,8 @@
 import type { ControlHudTab } from './appShellModel'
+import type { FallbackNotice } from '../../data/fallbackNotice'
 
 const DEBUG_LOG_LIMIT = 32
+const FALLBACK_NOTICE_LIMIT = 16
 
 export interface DebugLogEntry {
   readonly id: number
@@ -18,6 +20,11 @@ export interface LoadingTask {
   readonly tabId: ControlHudTab
   readonly label: string
   readonly detail?: string
+}
+
+export interface FallbackNoticeEntry extends FallbackNotice {
+  readonly id: number
+  readonly timestamp: number
 }
 
 interface LoadingTaskStateInputs {
@@ -289,6 +296,34 @@ export function appendDebugLogEntry(
   }
 
   return [entry, ...current].slice(0, DEBUG_LOG_LIMIT)
+}
+
+export function createFallbackNoticeEntry(
+  id: number,
+  notice: FallbackNotice,
+): FallbackNoticeEntry {
+  return {
+    id,
+    timestamp: readTimestamp(),
+    ...notice,
+  }
+}
+
+export function appendFallbackNoticeEntry(
+  current: readonly FallbackNoticeEntry[],
+  entry: FallbackNoticeEntry,
+): readonly FallbackNoticeEntry[] {
+  const first = current[0]
+
+  if (
+    first !== undefined &&
+    entry.coalesceKey !== undefined &&
+    first.coalesceKey === entry.coalesceKey
+  ) {
+    return [entry, ...current.slice(1)]
+  }
+
+  return [entry, ...current].slice(0, FALLBACK_NOTICE_LIMIT)
 }
 
 export function readTimestamp(): number {

@@ -43,6 +43,15 @@ interface ActivityLogEntry {
   readonly message: string
 }
 
+interface FallbackNoticeEntry {
+  readonly id: number
+  readonly timestamp: number
+  readonly source: string
+  readonly message: string
+  readonly action?: string
+  readonly detail?: string
+}
+
 export function DownloadIcon() {
   return (
     <svg className="button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -103,6 +112,42 @@ export function ErrorSummary({
           </li>
         ))}
       </ul>
+    </section>
+  )
+}
+
+export function FallbackNoticeSummary({
+  notices,
+}: {
+  readonly notices: readonly FallbackNoticeEntry[]
+}) {
+  if (notices.length === 0) {
+    return null
+  }
+
+  return (
+    <section
+      className="fallback-summary"
+      role="status"
+      aria-label="Fallback notices"
+      aria-live="polite"
+    >
+      <h2>Fallbacks</h2>
+      <ol>
+        {notices.map((notice) => (
+          <li key={notice.id}>
+            <div className="fallback-summary-heading">
+              <strong>{notice.source}</strong>
+              <time dateTime={new Date(notice.timestamp).toISOString()}>
+                {formatDebugTimestamp(notice.timestamp)}
+              </time>
+            </div>
+            <p>{notice.message}</p>
+            {notice.action === undefined ? null : <p>{notice.action}</p>}
+            {notice.detail === undefined ? null : <p>{notice.detail}</p>}
+          </li>
+        ))}
+      </ol>
     </section>
   )
 }

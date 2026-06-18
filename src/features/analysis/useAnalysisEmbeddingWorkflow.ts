@@ -1,5 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import type { AnalysisEmbeddingKind } from '../../data/analysisEmbeddings'
+import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import type { AnalysisEmbeddingsLoader } from '../app-shell/appDependencies'
 import {
@@ -23,6 +24,7 @@ interface UseAnalysisEmbeddingWorkflowOptions {
   readonly analysisEmbeddingRequestIdRef: MutableRef<number>
   readonly analysisEmbeddingState: AnalysisEmbeddingState<StructuredLoadError>
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly appendFallbackNotice: FallbackNotifier
   readonly loadAnalysisEmbeddings: AnalysisEmbeddingsLoader
   readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly onSelectedCellFocus?: (cell: OverviewCellDatum) => void
@@ -45,6 +47,7 @@ export function useAnalysisEmbeddingWorkflow({
   analysisEmbeddingRequestIdRef,
   analysisEmbeddingState,
   appendDebugEvent,
+  appendFallbackNotice,
   loadAnalysisEmbeddings,
   loadState,
   onSelectedCellFocus,
@@ -67,7 +70,10 @@ export function useAnalysisEmbeddingWorkflow({
     setAnalysisEmbeddingState({ status: 'loading', url: loadState.url })
     appendDebugEvent('Loading embeddings')
 
-    void loadAnalysisEmbeddings(loadState.url, { signal: abortController.signal })
+    void loadAnalysisEmbeddings(loadState.url, {
+      signal: abortController.signal,
+      onFallback: appendFallbackNotice,
+    })
       .then((embeddings) => {
         if (analysisEmbeddingRequestIdRef.current !== requestId) {
           return
@@ -109,6 +115,7 @@ export function useAnalysisEmbeddingWorkflow({
     analysisEmbeddingRequestIdRef,
     analysisEmbeddingState,
     appendDebugEvent,
+    appendFallbackNotice,
     loadAnalysisEmbeddings,
     loadState,
     selectedEmbeddingKind,
