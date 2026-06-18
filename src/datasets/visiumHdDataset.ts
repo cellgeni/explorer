@@ -817,7 +817,12 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       return filterVisiumHdSegmentationElementsByBbox(elements, bbox)
     }
 
-    const elements = await this.segmentedElementsForPath(source.path, kind, scalefactors)
+    const elements = await this.segmentedElementsForPath(
+      source.path,
+      kind,
+      scalefactors,
+      bbox,
+    )
     return filterVisiumHdSegmentationElementsByBbox(elements, bbox)
   }
 
@@ -825,8 +830,11 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     path: string,
     kind: VisiumHdSegmentationKind,
     scalefactors: VisiumHdScalefactors,
+    bbox?: BBox,
   ): Promise<readonly SpatialElement[]> {
-    const cacheKey = `${path}\n${kind}\n${scalefactors.micronsPerPixel}`
+    const cacheKey = `${path}\n${kind}\n${scalefactors.micronsPerPixel}\n${segmentationBboxCacheKey(
+      bbox,
+    )}`
     const existing = this.segmentationPromises.get(cacheKey)
 
     if (existing !== undefined) {
@@ -838,6 +846,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       scalefactors,
       kind,
       fetcher: this.fetcher,
+      ...(bbox === undefined ? {} : { bbox, streamGeojson: true }),
       ...(this.maxInteractiveSegmentationGeojsonBytes === undefined
         ? {}
         : { maxFullFileBytes: this.maxInteractiveSegmentationGeojsonBytes }),
@@ -1381,6 +1390,14 @@ function overviewExtent(overview: VisiumHdBinnedOverview): BBox {
     minY: micrometers(minY),
     maxY: micrometers(maxY),
   }
+}
+
+function segmentationBboxCacheKey(bbox: BBox | undefined): string {
+  if (bbox === undefined) {
+    return 'full'
+  }
+
+  return [bbox.minX, bbox.minY, bbox.maxX, bbox.maxY].join(',')
 }
 
 function selectGridCellsInBbox(

@@ -1035,7 +1035,7 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [x] Slice 8 partial: annotated nucleus GeoJSON segmentation styling coverage.
 - [x] Slice 8 partial: nucleus segmentation TIFF rendering through a
       viewport-scoped instance-mask reader.
-- [ ] Slice 8 remaining: viewport-scoped or streaming segmented geometry
+- [x] Slice 8 remaining: viewport-scoped or streaming segmented geometry
       loading for oversized hosted GeoJSON assets.
 
 ### Phase 6 Execution Notes
@@ -1326,8 +1326,11 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       without an explicit bbox. The App nucleus-boundary gate now accepts
       nucleus TIFF segmentations, and dataset fallback prefers nucleus GeoJSON
       before using the TIFF mask.
-- [ ] Slice 8 remaining: viewport-scoped or streaming strategy for oversized
-      hosted GeoJSON segmentation assets.
+- [x] Added a streaming Visium HD segmentation GeoJSON path for viewport
+      boundary reads. Dataset GeoJSON segmentations now pass the current bbox
+      into a stream-mode `FeatureCollection.features` scanner, cache repeated
+      reads by bbox instead of by whole-slide file, and avoid materializing the
+      full response JSON for oversized hosted assets.
 
 ### Definition Of Done For The First Visium HD MVP
 

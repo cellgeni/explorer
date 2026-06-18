@@ -254,6 +254,78 @@ describe('Visium HD segmentation GeoJSON reader', () => {
     expect(elements[0]?.geometry.kind).toBe('polygon')
   })
 
+  it('streams viewport GeoJSON features without materializing the full response JSON', async () => {
+    const insideFeature = JSON.stringify({
+      type: 'Feature',
+      properties: { cell_id: 1 },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [10, 20],
+            [14, 20],
+            [14, 24],
+            [10, 20],
+          ],
+        ],
+      },
+    })
+    const outsideFeature = JSON.stringify({
+      type: 'Feature',
+      properties: { cell_id: 2 },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [200, 200],
+            [204, 200],
+            [204, 204],
+            [200, 200],
+          ],
+        ],
+      },
+    })
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of [
+          '{"type":"FeatureCollection","features":[',
+          insideFeature.slice(0, 32),
+          insideFeature.slice(32),
+          ',',
+          outsideFeature,
+          ']}',
+        ]) {
+          controller.enqueue(encoder.encode(chunk))
+        }
+
+        controller.close()
+      },
+    })
+    const response = new Response(stream, { status: 200 })
+    const jsonSpy = vi.spyOn(response, 'json')
+    const fetcher = vi.fn(async () => response) as unknown as typeof fetch
+
+    const elements = await readVisiumHdSegmentationElements(
+      'https://example.test/visium/',
+      {
+        path: 'segmented_outputs/cell_segmentations.geojson',
+        scalefactors,
+        bbox: {
+          minX: micrometers(4),
+          maxX: micrometers(8),
+          minY: micrometers(9),
+          maxY: micrometers(13),
+        },
+        streamGeojson: true,
+        fetcher,
+      },
+    )
+
+    expect(elements.map((element) => element.id)).toEqual(['cellid_000000001-1'])
+    expect(jsonSpy).not.toHaveBeenCalled()
+  })
+
   it('converts labelled nucleus instance-mask TIFF pixels into polygon elements', () => {
     const elements = parseVisiumHdNucleusInstanceMaskRaster(
       {

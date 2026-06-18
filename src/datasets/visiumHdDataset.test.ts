@@ -473,20 +473,16 @@ describe('Visium HD dataset readers', () => {
       tissuePositionsReader: async () => positions,
       scalefactorsReader: async () => scalefactors,
     })
+    const bbox = {
+      minX: micrometers(90),
+      maxX: micrometers(110),
+      minY: micrometers(190),
+      maxY: micrometers(210),
+    }
 
     const meta = await dataset.meta()
-    const batch = await dataset.elements({
-      minX: micrometers(90),
-      maxX: micrometers(110),
-      minY: micrometers(190),
-      maxY: micrometers(210),
-    })
-    const secondBatch = await dataset.elements({
-      minX: micrometers(90),
-      maxX: micrometers(110),
-      minY: micrometers(190),
-      maxY: micrometers(210),
-    })
+    const batch = await dataset.elements(bbox)
+    const secondBatch = await dataset.elements(bbox)
 
     expect(meta.capabilities.cellBoundaries).toBe(true)
     expect(batch.elements).toEqual([insideElement])
@@ -498,6 +494,8 @@ describe('Visium HD dataset readers', () => {
         path: 'segmented_outputs/cell_segmentations.geojson',
         scalefactors,
         kind: 'cell',
+        bbox,
+        streamGeojson: true,
       }),
     )
     expect(segmentationOptions[0]).not.toHaveProperty('maxFullFileBytes')
@@ -673,9 +671,60 @@ describe('Visium HD dataset readers', () => {
         path: 'segmented_outputs/nucleus_segmentations.geojson',
         scalefactors,
         kind: 'nucleus',
+        bbox,
+        streamGeojson: true,
       }),
     )
     expect(segmentationOptions[0]).not.toHaveProperty('maxFullFileBytes')
+  })
+
+  it('scopes Visium HD GeoJSON segmentation caching by viewport bbox', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const segmentationOptions: ReadVisiumHdSegmentationElementsOptions[] = []
+    const segmentationReader = vi.fn(async (_baseUrl, options) => {
+      segmentationOptions.push(options)
+      return []
+    })
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      segmentedOutputs: {
+        cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
+      },
+      segmentationReader,
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+    })
+    const firstBbox = {
+      minX: micrometers(90),
+      maxX: micrometers(110),
+      minY: micrometers(190),
+      maxY: micrometers(210),
+    }
+    const secondBbox = {
+      minX: micrometers(190),
+      maxX: micrometers(210),
+      minY: micrometers(290),
+      maxY: micrometers(310),
+    }
+
+    await dataset.elements(firstBbox)
+    await dataset.elements({ ...firstBbox })
+    await dataset.elements(secondBbox)
+
+    expect(segmentationReader).toHaveBeenCalledTimes(2)
+    expect(segmentationOptions.map((options) => options.bbox)).toEqual([
+      firstBbox,
+      secondBbox,
+    ])
+    expect(segmentationOptions.map((options) => options.streamGeojson)).toEqual([
+      true,
+      true,
+    ])
   })
 
   it('falls back to Visium HD nucleus instance-mask TIFF when nucleus GeoJSON is absent', async () => {
