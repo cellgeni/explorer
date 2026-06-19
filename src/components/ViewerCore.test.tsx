@@ -187,6 +187,51 @@ describe('ViewerCore', () => {
     expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
   })
 
+  it('suppresses expression dots while keeping grid-cell expression fills', () => {
+    render(
+      <ViewerCore
+        geneExpressionActive
+        geneExpressionOverlayEnabled={false}
+        gridCells={[gridCellDatum()]}
+        expressionCells={[
+          {
+            id: 'BC-1',
+            position: [8, -8, 0],
+            radiusPixels: 6,
+            fillColor: [240, 128, 120, 220],
+            expressionCount: 7,
+            expressionGenes: ['Actb'],
+          },
+        ]}
+      />,
+    )
+
+    const expressionLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'gene-expression-scatter'
+    })
+    const gridLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'spatial-grid-cells'
+    }) as
+      | {
+          readonly props?: {
+            readonly data?: readonly GridCellDatum[]
+          }
+        }
+      | undefined
+
+    expect(expressionLayer).toBeUndefined()
+    expect(gridLayer?.props?.data?.[0]).toMatchObject({
+      id: 'BC-1',
+      fillColor: [240, 128, 120, 220],
+      expressionCount: 7,
+      expressionGenes: ['Actb'],
+    })
+  })
+
   it('keeps the current zoom when rendered grid cells are toggled with a stable fit', () => {
     const gridCell = gridCellDatum()
     const boundary: CellBoundaryDatum = {

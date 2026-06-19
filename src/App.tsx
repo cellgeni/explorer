@@ -13,6 +13,7 @@ import { AppLayerHudPanel } from './features/app-shell/AppLayerHudPanel'
 import { AppTranscriptHudPanel } from './features/app-shell/AppTranscriptHudPanel'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
+import { useVisiumHdExpressionProjectionWorkflow } from './features/genes/useVisiumHdExpressionProjectionWorkflow'
 import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import { RoiHudPanel, VisiumHdRoiHudPanel } from './features/control-hud/RoiHudPanel'
@@ -214,6 +215,8 @@ import type {
 import { slug } from './utils/slug'
 
 const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
+const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
+const EMPTY_GENE_EXPRESSION_SCALE_DOMAIN: GeneExpressionScaleDomain = { key: '', max: 0 }
 
 export type {
   AnalysisEmbeddingsLoader,
@@ -674,6 +677,15 @@ export function App({
         : annotationState,
     [annotationState, hiddenAnnotationSetIdSet],
   )
+  const appendDebugEvent = useCallback(
+    (message: string, options: DebugLogAppendOptions = {}) => {
+      debugLogIdRef.current += 1
+      const entry = createDebugLogEntry(debugLogIdRef.current, message, options)
+
+      setDebugLog((current) => appendDebugLogEntry(current, entry))
+    },
+    [],
+  )
   const morphologyChannels = useMemo(
     () => [
       ...(morphologyImage?.channelLoaders ?? []),
@@ -741,6 +753,34 @@ export function App({
       new Set((morphologyImage?.channelLoaders ?? []).map((channel) => channel.info.id)),
     [morphologyImage],
   )
+  const visibleCellBoundaryElements = showCellBoundaries
+    ? boundaryElements
+    : EMPTY_SPATIAL_ELEMENTS
+  const visiumHdExpressionProjectionState = useVisiumHdExpressionProjectionWorkflow({
+    appendDebugEvent,
+    boundaryElements: visibleCellBoundaryElements,
+    geneExpressionBatch,
+    getSpatialDataset,
+    isVisiumHdDataset,
+    loadState,
+    rowBudget: visiumHdBarcodeMappingRowBudget,
+    selectedBinSize: activeVisiumHdBinSize,
+    twoMicrometerFilteredBarcodeBudget: visiumHdTwoMicrometerFilteredBarcodeBudget,
+  })
+  const projectedVisiumHdExpressionBatch =
+    visiumHdExpressionProjectionState.status === 'ready'
+      ? visiumHdExpressionProjectionState.batch
+      : null
+  const isProjectedVisiumHdExpressionActive =
+    isVisiumHdDataset &&
+    visibleCellBoundaryElements.length > 0 &&
+    projectedVisiumHdExpressionBatch !== null
+  const viewerGeneExpressionBatch = isProjectedVisiumHdExpressionActive
+    ? projectedVisiumHdExpressionBatch
+    : geneExpressionBatch
+  const viewerGeneExpressionScaleDomain = isProjectedVisiumHdExpressionActive
+    ? EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
+    : geneExpressionScaleDomain
   const {
     activeAnnotationStyleColors,
     activeCellMetadataTrack,
@@ -768,10 +808,10 @@ export function App({
     boundaryElements,
     cellMetadataTrack: selectedCellMetadataTrack,
     currentViewportBbox: currentViewportDetail?.bbox ?? null,
-    geneExpressionBatch,
+    geneExpressionBatch: viewerGeneExpressionBatch,
     geneExpressionColorScale,
     geneExpressionScaleDatasetUrl,
-    geneExpressionScaleDomain,
+    geneExpressionScaleDomain: viewerGeneExpressionScaleDomain,
     geneExpressionScoreMode,
     morphologyChannelSettings,
     morphologyChannelOpacities,
@@ -797,6 +837,7 @@ export function App({
       isVisiumHdDataset && visibleBoundaryLayerData.length > 0 ? [] : spatialGridCells,
     [isVisiumHdDataset, spatialGridCells, visibleBoundaryLayerData.length],
   )
+  const geneExpressionOverlayEnabled = !(isVisiumHdDataset && spatialGridCells.length > 0)
   const activeSelectedBoundaryCell = useMemo(
     () =>
       selectedBoundaryCell !== null &&
@@ -980,6 +1021,7 @@ export function App({
           geneExpressionState.status === 'loading'
             ? geneExpressionModeLabel(geneExpressionState.mode)
             : undefined,
+        visiumHdExpressionProjectionState,
         genePanelState,
         isRoiGeneViewportWarmupLoading,
         loadState,
@@ -1008,6 +1050,7 @@ export function App({
       diagnosticsState,
       geneExpressionState,
       genePanelState,
+      visiumHdExpressionProjectionState,
       isRoiGeneViewportWarmupLoading,
       loadState,
       magicLensState,
@@ -1092,15 +1135,6 @@ export function App({
     transcriptCapabilityState,
     transcriptLayerState,
     effectiveShowTranscriptOverlay,
-  )
-  const appendDebugEvent = useCallback(
-    (message: string, options: DebugLogAppendOptions = {}) => {
-      debugLogIdRef.current += 1
-      const entry = createDebugLogEntry(debugLogIdRef.current, message, options)
-
-      setDebugLog((current) => appendDebugLogEntry(current, entry))
-    },
-    [],
   )
   const appendFallbackNotice = useCallback(
     (notice: FallbackNotice) => {
@@ -2352,6 +2386,7 @@ export function App({
           cells={styledOverviewCells}
           expressionCells={styledGeneExpressionCells}
           geneExpressionActive={geneExpressionState.status === 'ready'}
+          geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
           boundaries={visibleBoundaryLayerData}
           nucleusBoundaries={visibleNucleusBoundaryLayerData}
           cellBoundaryHoverEnabled={isVisiumHdDataset && showCellBoundaries}

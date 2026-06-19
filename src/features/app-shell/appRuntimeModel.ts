@@ -37,6 +37,7 @@ interface LoadingTaskStateInputs {
   readonly annotationGroupState: LoadingStatusState
   readonly boundaryState: LoadingStatusState
   readonly geneExpressionState: LoadingGeneExpressionState
+  readonly visiumHdExpressionProjectionState?: LoadingStatusState
   readonly transcriptCapabilityState: LoadingStatusState
   readonly transcriptLayerState: LoadingTranscriptLayerState
   readonly magicLensState: LoadingStatusState
@@ -87,6 +88,7 @@ export function createLoadingTasks({
   annotationGroupState,
   boundaryState,
   geneExpressionState,
+  visiumHdExpressionProjectionState,
   transcriptCapabilityState,
   transcriptLayerState,
   magicLensState,
@@ -165,6 +167,14 @@ export function createLoadingTasks({
       tabId: 'genes',
       label: geneExpressionLoadingLabel,
       detail: geneExpressionState.genes?.join(', ') ?? '',
+    })
+  }
+
+  if (visiumHdExpressionProjectionState?.status === 'loading') {
+    tasks.push({
+      id: 'visium-hd-expression-projection',
+      tabId: 'genes',
+      label: 'Mapping expression to cells',
     })
   }
 

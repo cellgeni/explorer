@@ -53,6 +53,7 @@ describe('appRuntimeModel', () => {
           status: 'loading',
           genes: ['Actb', 'Gad1'],
         },
+        visiumHdExpressionProjectionState: { status: 'loading' },
         cellDetailState: { status: 'loading', cellId: 'abcdefghijklmnop' },
         roiGeneStatsState: { status: 'loading', cellCount: 1234 },
         isRoiGeneViewportWarmupLoading: true,
@@ -63,6 +64,7 @@ describe('appRuntimeModel', () => {
     expect(tasks.map((task) => task.id)).toEqual([
       'dataset',
       'gene-expression',
+      'visium-hd-expression-projection',
       'cell-details',
       'roi-gene-warmup',
       'roi-genes',
@@ -70,8 +72,8 @@ describe('appRuntimeModel', () => {
     ])
     expect(tasks[0]).toMatchObject({ detail: 'output' })
     expect(tasks[1]).toMatchObject({ detail: 'Actb, Gad1' })
-    expect(tasks[4]).toMatchObject({ detail: '1,234 cells' })
-    expect(tasks[5]).toMatchObject({ detail: '2 channels' })
+    expect(tasks[5]).toMatchObject({ detail: '1,234 cells' })
+    expect(tasks[6]).toMatchObject({ detail: '2 channels' })
   })
 
   it('coalesces debug log entries and enforces the log limit', () => {

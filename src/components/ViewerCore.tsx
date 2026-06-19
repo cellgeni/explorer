@@ -69,6 +69,7 @@ export interface ViewerCoreProps {
   readonly fitCells?: readonly OverviewCellDatum[]
   readonly expressionCells?: readonly OverviewCellDatum[]
   readonly geneExpressionActive?: boolean
+  readonly geneExpressionOverlayEnabled?: boolean
   readonly boundaries?: readonly CellBoundaryDatum[]
   readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled?: boolean
@@ -191,6 +192,7 @@ export function ViewerCore({
   fitCells,
   expressionCells = [],
   geneExpressionActive = false,
+  geneExpressionOverlayEnabled = true,
   boundaries = [],
   nucleusBoundaries = [],
   cellBoundaryHoverEnabled = false,
@@ -265,6 +267,7 @@ export function ViewerCore({
       cells={cells}
       expressionCells={expressionCells}
       geneExpressionActive={geneExpressionActive}
+      geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
       boundaries={boundaries}
       nucleusBoundaries={nucleusBoundaries}
       cellBoundaryHoverEnabled={cellBoundaryHoverEnabled}
@@ -327,6 +330,7 @@ interface ViewerSurfaceProps {
   readonly cells: readonly OverviewCellDatum[]
   readonly expressionCells: readonly OverviewCellDatum[]
   readonly geneExpressionActive: boolean
+  readonly geneExpressionOverlayEnabled: boolean
   readonly boundaries: readonly CellBoundaryDatum[]
   readonly nucleusBoundaries: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled: boolean
@@ -455,6 +459,7 @@ function ViewerSurface({
   cells,
   expressionCells,
   geneExpressionActive,
+  geneExpressionOverlayEnabled,
   boundaries,
   nucleusBoundaries,
   cellBoundaryHoverEnabled,
@@ -631,12 +636,14 @@ function ViewerSurface({
   )
   const geneExpressionOverlayCells = useMemo(
     () =>
-      expressionOverlayCellsForRendering({
-        expressionCells,
-        viewState,
-        viewportBbox,
-      }),
-    [expressionCells, viewState, viewportBbox],
+      geneExpressionOverlayEnabled
+        ? expressionOverlayCellsForRendering({
+            expressionCells,
+            viewState,
+            viewportBbox,
+          })
+        : EMPTY_OVERVIEW_CELLS,
+    [expressionCells, geneExpressionOverlayEnabled, viewState, viewportBbox],
   )
   const cellById = useMemo(() => {
     const nextCellById = new Map<string, OverviewCellDatum>()
