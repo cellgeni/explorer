@@ -272,6 +272,7 @@ export function ViewerCore({
       nucleusBoundaries={nucleusBoundaries}
       cellBoundaryHoverEnabled={cellBoundaryHoverEnabled}
       gridCells={gridCells}
+      viewportCountGridCells={viewFitGridCells}
       transcriptAggregateBins={transcriptAggregateBins}
       transcriptPoints={transcriptPoints}
       imageLoader={imageLoader}
@@ -335,6 +336,7 @@ interface ViewerSurfaceProps {
   readonly nucleusBoundaries: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled: boolean
   readonly gridCells: readonly GridCellDatum[]
+  readonly viewportCountGridCells: readonly GridCellDatum[]
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints: readonly TranscriptPointDatum[]
   readonly imageLoader: TiffPyramidLoader | null
@@ -464,6 +466,7 @@ function ViewerSurface({
   nucleusBoundaries,
   cellBoundaryHoverEnabled,
   gridCells,
+  viewportCountGridCells,
   transcriptAggregateBins,
   transcriptPoints,
   imageLoader,
@@ -754,6 +757,7 @@ function ViewerSurface({
   )
   const hasCells = cells.length > 0
   const hasGridCells = gridCells.length > 0
+  const hasViewportCountGridCells = viewportCountGridCells.length > 0
   const hasBoundaries = boundaries.length > 0
   const hasNucleusBoundaries = nucleusBoundaries.length > 0
   const hasSpatialData = hasCells || hasGridCells || hasBoundaries || hasNucleusBoundaries
@@ -763,12 +767,12 @@ function ViewerSurface({
   const visibleGridCellCount = useMemo(
     () =>
       viewportBbox === null
-        ? gridCells.length
-        : countGridCellsInBbox(gridCells, viewportBbox),
-    [gridCells, viewportBbox],
+        ? viewportCountGridCells.length
+        : countGridCellsInBbox(viewportCountGridCells, viewportBbox),
+    [viewportBbox, viewportCountGridCells],
   )
   const estimatedViewportCellCount = useMemo(() => {
-    if (!hasCells && hasGridCells) {
+    if (!hasCells && hasViewportCountGridCells) {
       return visibleGridCellCount
     }
 
@@ -799,6 +803,7 @@ function ViewerSurface({
     hasCells,
     hasGridCells,
     hasNucleusBoundaries,
+    hasViewportCountGridCells,
     nucleusBoundaries.length,
     viewState.zoom,
     viewportBbox,

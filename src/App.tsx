@@ -832,10 +832,13 @@ export function App({
   const visibleNucleusBoundaryLayerData = showNucleusBoundaries
     ? nucleusBoundaryLayerData
     : EMPTY_CELL_BOUNDARY_DATA
+  const isVisiumHdBoundarySurfaceReserved =
+    isVisiumHdDataset &&
+    showCellBoundaries &&
+    (boundaryState.status === 'loading' || visibleBoundaryLayerData.length > 0)
   const viewerGridCells = useMemo(
-    () =>
-      isVisiumHdDataset && visibleBoundaryLayerData.length > 0 ? [] : spatialGridCells,
-    [isVisiumHdDataset, spatialGridCells, visibleBoundaryLayerData.length],
+    () => (isVisiumHdBoundarySurfaceReserved ? [] : spatialGridCells),
+    [isVisiumHdBoundarySurfaceReserved, spatialGridCells],
   )
   const geneExpressionOverlayEnabled = !(isVisiumHdDataset && spatialGridCells.length > 0)
   const activeSelectedBoundaryCell = useMemo(

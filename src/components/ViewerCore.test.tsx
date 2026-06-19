@@ -729,6 +729,50 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('uses fit grid cells for viewport density when rendered grid cells are hidden', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onViewportChange = vi.fn()
+    const firstGridCell = gridCellDatum()
+    const secondGridCell = gridCellDatum({
+      id: 'BC-2',
+      col: 8,
+      polygon: [
+        [20, 0, 0],
+        [36, 0, 0],
+        [36, -16, 0],
+        [20, -16, 0],
+      ],
+    })
+    const boundary: CellBoundaryDatum = {
+      id: 'cellid_000000001-1',
+      polygon: [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, -10, 0],
+        [0, -10, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+
+    render(
+      <ViewerCore
+        boundaries={[boundary]}
+        fitGridCells={[firstGridCell, secondGridCell]}
+        gridCells={[]}
+        onViewportChange={onViewportChange}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(onViewportChange).toHaveBeenCalled()
+    })
+    expect(onViewportChange.mock.calls[0]?.[0]).toMatchObject({
+      visibleCellCount: 2,
+    })
+  })
+
   it('centers the spatial view when a focus request is received', async () => {
     const cells: readonly OverviewCellDatum[] = [
       {

@@ -29,6 +29,7 @@ import { warmDatasetForRoi } from './data/datasetWarmup'
 import { GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT } from './data/geneExpressionLod'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
 import type { VisiumHdBinnedOverview } from './datasets/visiumHdDataset'
+import type { SpatialElement } from './datasets/spatialDataset'
 import type { TiffPyramidLoader } from './tiff/loader'
 
 vi.mock('@deck.gl/react', () => ({
@@ -103,6 +104,18 @@ function openHudTab(name: string): void {
 
 function pendingPromise<T>(): Promise<T> {
   return new Promise<T>(() => {})
+}
+
+function deferredPromise<T>(): {
+  readonly promise: Promise<T>
+  readonly resolve: (value: T) => void
+} {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+
+  return { promise, resolve }
 }
 
 function visiumOverviewFixture(): VisiumHdBinnedOverview {
@@ -511,6 +524,26 @@ describe('App', () => {
         checked: [],
       }),
     )
+    const cellBoundaryBatch: { readonly elements: readonly SpatialElement[] } = {
+      elements: [
+        {
+          id: 'cellid_000000001-1',
+          geometry: {
+            kind: 'polygon' as const,
+            rings: [
+              [
+                { x: micrometers(0), y: micrometers(0) },
+                { x: micrometers(10), y: micrometers(0) },
+                { x: micrometers(10), y: micrometers(10) },
+              ],
+            ],
+          },
+        },
+      ],
+    }
+    const cellBoundaryDeferred = deferredPromise<{
+      readonly elements: readonly SpatialElement[]
+    }>()
     const visiumDataset = {
       readBinnedOverview: vi.fn(async () => overview),
       meta: vi.fn(async () => ({
@@ -553,23 +586,7 @@ describe('App', () => {
         ],
       })),
       image: vi.fn(async () => null),
-      elements: vi.fn(async () => ({
-        elements: [
-          {
-            id: 'cellid_000000001-1',
-            geometry: {
-              kind: 'polygon' as const,
-              rings: [
-                [
-                  { x: micrometers(0), y: micrometers(0) },
-                  { x: micrometers(10), y: micrometers(0) },
-                  { x: micrometers(10), y: micrometers(10) },
-                ],
-              ],
-            },
-          },
-        ],
-      })),
+      elements: vi.fn(() => cellBoundaryDeferred.promise),
       segmentationElements: vi.fn(async () => [
         {
           id: 'nucleus_000000001',
@@ -613,6 +630,14 @@ describe('App', () => {
             maxY: expect.any(Number) as number,
           }),
         )
+      })
+      await waitFor(() => {
+        expect(screen.queryByTestId('deck-layer-spatial-grid-cells')).toBeNull()
+        expect(screen.queryByTestId('deck-layer-cell-boundary-hit-areas')).toBeNull()
+      })
+      await act(async () => {
+        cellBoundaryDeferred.resolve(cellBoundaryBatch)
+        await cellBoundaryDeferred.promise
       })
       await waitFor(() => {
         expect(screen.queryByTestId('deck-layer-spatial-grid-cells')).toBeNull()
