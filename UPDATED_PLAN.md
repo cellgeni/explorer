@@ -1337,6 +1337,17 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       through the existing budgeted dataset API and shows cell id plus
       nucleus/cell membership in Bin Info. A blank budget keeps the mapping file
       untouched and shows an unavailable state.
+- [x] Stabilized Visium HD boundary/bin layer switching. When cell boundaries
+      are enabled and a Visium HD boundary load is pending, the viewer now
+      reserves the segmented-cell surface and hides rendered bins until the
+      boundary request resolves, preventing zoomed-out flicker between bins and
+      outlines. Viewport density estimates now count the stable fit-grid bins
+      even when the rendered bin layer is hidden, so boundary-loading thresholds
+      do not oscillate around the cutoff. Regression coverage asserts both the
+      pending boundary-load state and the hidden-rendered-grid viewport-density
+      path. Verification passed TypeScript, ESLint, focused App/ViewerCore
+      tests, full Vitest, production build, Playwright E2E, touched-file
+      Prettier, and `git diff --check`; implemented in `c4674c1`.
 
 ### Definition Of Done For The First Visium HD MVP
 
