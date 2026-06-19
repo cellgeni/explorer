@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON } from '../../datasets/visiumHdStrategy'
 import {
   createVisiumHdBinOptions,
+  parseVisiumHdBarcodeMappingBudgetInput,
   parseVisiumHdTwoMicrometerBudgetInput,
   updateVisiumHdBinOptionsForTwoMicrometerBudget,
 } from './visiumHdModel'
@@ -55,6 +56,14 @@ describe('Visium HD controls model', () => {
     expect(parseVisiumHdTwoMicrometerBudgetInput('25000.9')).toBe(25_000)
     expect(parseVisiumHdTwoMicrometerBudgetInput('0')).toBeUndefined()
     expect(parseVisiumHdTwoMicrometerBudgetInput('not-a-number')).toBeUndefined()
+  })
+
+  it('parses optional barcode mapping row budget input values', () => {
+    expect(parseVisiumHdBarcodeMappingBudgetInput('')).toBeUndefined()
+    expect(parseVisiumHdBarcodeMappingBudgetInput('12000000')).toBe(12_000_000)
+    expect(parseVisiumHdBarcodeMappingBudgetInput('12000000.9')).toBe(12_000_000)
+    expect(parseVisiumHdBarcodeMappingBudgetInput('0')).toBeUndefined()
+    expect(parseVisiumHdBarcodeMappingBudgetInput('not-a-number')).toBeUndefined()
   })
 
   it('refreshes existing bin options when the 2 µm budget changes', () => {

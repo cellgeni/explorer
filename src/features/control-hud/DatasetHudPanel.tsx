@@ -25,9 +25,11 @@ interface DatasetHudPanelProps {
   readonly boundaryLimitInputId: string
   readonly visiumHdBinSizeInputId: string
   readonly visiumHdTwoMicrometerBudgetInputId: string
+  readonly visiumHdBarcodeMappingBudgetInputId: string
   readonly datasetUrl: string
   readonly shouldLoadMorphology: boolean
   readonly visiumHdTwoMicrometerBudgetInput: string
+  readonly visiumHdBarcodeMappingBudgetInput: string
   readonly morphologyLabel: string
   readonly boundaryCellLimit: number
   readonly maxBoundaryCellLimit: number
@@ -44,6 +46,7 @@ interface DatasetHudPanelProps {
   readonly onShouldLoadMorphologyChange: (enabled: boolean) => void
   readonly onBoundaryCellLimitChange: (limit: number) => void
   readonly onVisiumHdTwoMicrometerBudgetInputChange: (value: string) => void
+  readonly onVisiumHdBarcodeMappingBudgetInputChange: (value: string) => void
   readonly onVisiumHdBinSizeChange: (binSize: VisiumHdBinSizeMicrometers) => void
   readonly onRunDatasetDiagnostics: () => void
   readonly onDownloadDiagnostics: () => void
@@ -57,9 +60,11 @@ export function DatasetHudPanel({
   boundaryLimitInputId,
   visiumHdBinSizeInputId,
   visiumHdTwoMicrometerBudgetInputId,
+  visiumHdBarcodeMappingBudgetInputId,
   datasetUrl,
   shouldLoadMorphology,
   visiumHdTwoMicrometerBudgetInput,
+  visiumHdBarcodeMappingBudgetInput,
   morphologyLabel,
   boundaryCellLimit,
   maxBoundaryCellLimit,
@@ -76,6 +81,7 @@ export function DatasetHudPanel({
   onShouldLoadMorphologyChange,
   onBoundaryCellLimitChange,
   onVisiumHdTwoMicrometerBudgetInputChange,
+  onVisiumHdBarcodeMappingBudgetInputChange,
   onVisiumHdBinSizeChange,
   onRunDatasetDiagnostics,
   onDownloadDiagnostics,
@@ -149,6 +155,22 @@ export function DatasetHudPanel({
           title="Max filtered barcodes for Visium HD 2 µm loading"
           onChange={(event) => {
             onVisiumHdTwoMicrometerBudgetInputChange(event.currentTarget.value)
+          }}
+        />
+        <label htmlFor={visiumHdBarcodeMappingBudgetInputId}>Mapping rows</label>
+        <input
+          id={visiumHdBarcodeMappingBudgetInputId}
+          name="visiumHdBarcodeMappingBudget"
+          type="number"
+          inputMode="numeric"
+          min="1"
+          step="1"
+          autoComplete="off"
+          value={visiumHdBarcodeMappingBudgetInput}
+          placeholder="disabled"
+          title="Max barcode mapping rows for Visium HD bin cell assignment"
+          onChange={(event) => {
+            onVisiumHdBarcodeMappingBudgetInputChange(event.currentTarget.value)
           }}
         />
         <button type="submit" disabled={isLoading} title="Load dataset">

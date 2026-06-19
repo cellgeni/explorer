@@ -46,6 +46,7 @@ describe('CellHudPanel', () => {
         isVisiumHdDataset={false}
         selectedCell={null}
         selectedGridCell={null}
+        selectedGridCellAssignmentState={{ status: 'idle' }}
         selectedBoundaryCell={null}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"
@@ -92,6 +93,7 @@ describe('CellHudPanel', () => {
         isVisiumHdDataset={false}
         selectedCell={cellDatum()}
         selectedGridCell={null}
+        selectedGridCellAssignmentState={{ status: 'idle' }}
         selectedBoundaryCell={null}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="Selected"
@@ -128,6 +130,16 @@ describe('CellHudPanel', () => {
         isVisiumHdDataset
         selectedCell={null}
         selectedGridCell={gridCellDatum()}
+        selectedGridCellAssignmentState={{
+          status: 'ready',
+          binId: 'BC-1',
+          assignment: {
+            cellId: 'cellid_000000001-1',
+            inNucleus: true,
+            inCell: true,
+            rowBudget: 12_000_000,
+          },
+        }}
         selectedBoundaryCell={null}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"
@@ -150,6 +162,8 @@ describe('CellHudPanel', () => {
     expect(screen.getByText('In tissue')).toBeInTheDocument()
     expect(screen.getByText('row 4, col 7')).toBeInTheDocument()
     expect(screen.getByText('row 128, col 256')).toBeInTheDocument()
+    expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
+    expect(screen.getByText('Nucleus')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear Bin' }))
 
@@ -172,6 +186,7 @@ describe('CellHudPanel', () => {
         isVisiumHdDataset
         selectedCell={null}
         selectedGridCell={null}
+        selectedGridCellAssignmentState={{ status: 'idle' }}
         selectedBoundaryCell={boundaryCellDatum()}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"

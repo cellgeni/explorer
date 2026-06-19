@@ -64,6 +64,8 @@ import {
   type CellTranscriptDistributionState,
 } from './features/cells/cellDetailModel'
 import { useCellDetailWorkflow } from './features/cells/useCellDetailWorkflow'
+import type { GridCellAssignmentState } from './features/cells/gridCellAssignmentModel'
+import { useGridCellAssignmentWorkflow } from './features/cells/useGridCellAssignmentWorkflow'
 import {
   analysisEmbeddingStatusCopy,
   type AnalysisEmbeddingState,
@@ -143,6 +145,7 @@ import type {
   MorphologyLoadState,
 } from './features/dataset/datasetLoadModel'
 import {
+  parseVisiumHdBarcodeMappingBudgetInput,
   parseVisiumHdTwoMicrometerBudgetInput,
   updateVisiumHdBinOptionsForTwoMicrometerBudget,
   type VisiumHdControlState,
@@ -552,6 +555,11 @@ export function App({
   })
   const [visiumHdTwoMicrometerBudgetInput, setVisiumHdTwoMicrometerBudgetInput] =
     useState('')
+  const [visiumHdBarcodeMappingBudgetInput, setVisiumHdBarcodeMappingBudgetInput] =
+    useState('')
+  const [gridCellAssignmentState, setGridCellAssignmentState] = useState<
+    GridCellAssignmentState<StructuredLoadError>
+  >({ status: 'idle' })
   const loadRequestId = useRef(0)
   const visiumHdBinRequestId = useRef(0)
   const analysisEmbeddingRequestId = useRef(0)
@@ -563,6 +571,7 @@ export function App({
   const transcriptRequestId = useRef(0)
   const magicLensRequestId = useRef(0)
   const cellDetailRequestId = useRef(0)
+  const gridCellAssignmentRequestId = useRef(0)
   const cellTranscriptDistributionRequestId = useRef(0)
   const magicLensDebounceRef = useRef<number | null>(null)
   const magicLensLastDetailRef = useRef<ViewerMagicLensDetail | null>(null)
@@ -586,6 +595,7 @@ export function App({
   const spatialFocusRequestIdRef = useRef(0)
   const magicLensAbortRef = useRef<AbortController | null>(null)
   const cellDetailAbortRef = useRef<AbortController | null>(null)
+  const gridCellAssignmentAbortRef = useRef<AbortController | null>(null)
   const cellTranscriptDistributionAbortRef = useRef<AbortController | null>(null)
   const customMorphologyLayerAbortRef = useRef<AbortController | null>(null)
   const autoContrastChannelIdsRef = useRef<Set<string>>(new Set())
@@ -634,6 +644,10 @@ export function App({
   const visiumHdTwoMicrometerFilteredBarcodeBudget = useMemo(
     () => parseVisiumHdTwoMicrometerBudgetInput(visiumHdTwoMicrometerBudgetInput),
     [visiumHdTwoMicrometerBudgetInput],
+  )
+  const visiumHdBarcodeMappingRowBudget = useMemo(
+    () => parseVisiumHdBarcodeMappingBudgetInput(visiumHdBarcodeMappingBudgetInput),
+    [visiumHdBarcodeMappingBudgetInput],
   )
   const activeVisiumHdRoiState: VisiumHdRoiState =
     isVisiumHdDataset &&
@@ -1516,6 +1530,19 @@ export function App({
     setCellDetailState,
     setCellTranscriptDistributionState,
   })
+  useGridCellAssignmentWorkflow({
+    appendDebugEvent,
+    getSpatialDataset,
+    gridCellAssignmentAbortRef,
+    gridCellAssignmentRequestIdRef: gridCellAssignmentRequestId,
+    isVisiumHdDataset,
+    loadState,
+    rowBudget: visiumHdBarcodeMappingRowBudget,
+    selectedBinSize: activeVisiumHdBinSize,
+    selectedGridCell,
+    setGridCellAssignmentState,
+    twoMicrometerFilteredBarcodeBudget: visiumHdTwoMicrometerFilteredBarcodeBudget,
+  })
 
   const {
     handleClearRoi,
@@ -2032,9 +2059,11 @@ export function App({
           onVisiumHdTwoMicrometerBudgetInputChange={
             handleVisiumHdTwoMicrometerBudgetInputChange
           }
+          onVisiumHdBarcodeMappingBudgetInputChange={setVisiumHdBarcodeMappingBudgetInput}
           shouldLoadMorphology={shouldLoadMorphology}
           visiumHdControlState={visiumHdControlState}
           visiumHdTwoMicrometerBudgetInput={visiumHdTwoMicrometerBudgetInput}
+          visiumHdBarcodeMappingBudgetInput={visiumHdBarcodeMappingBudgetInput}
         />
 
         <AppLayerHudPanel
@@ -2220,6 +2249,7 @@ export function App({
           isVisiumHdDataset={isVisiumHdDataset}
           selectedCell={selectedCell}
           selectedGridCell={selectedGridCell}
+          selectedGridCellAssignmentState={gridCellAssignmentState}
           selectedBoundaryCell={activeSelectedBoundaryCell}
           selectedCellAnnotationLabels={selectedCellAnnotationLabels}
           cellDetailCopy={cellDetailCopy}

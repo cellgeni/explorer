@@ -1,10 +1,19 @@
 import type { GridCellDatum } from '../../rendering/deckLayers'
+import {
+  gridCellAssignmentLocationLabel,
+  gridCellAssignmentStatusLabel,
+  type GridCellAssignmentState,
+} from './gridCellAssignmentModel'
 
 interface GridCellInfoPanelProps {
   readonly cell: GridCellDatum | null
+  readonly assignmentState?: GridCellAssignmentState
 }
 
-export function GridCellInfoPanel({ cell }: GridCellInfoPanelProps) {
+export function GridCellInfoPanel({
+  cell,
+  assignmentState = { status: 'idle' },
+}: GridCellInfoPanelProps) {
   if (cell === null) {
     return <p className="cell-info-empty">No bin selected</p>
   }
@@ -41,6 +50,14 @@ export function GridCellInfoPanel({ cell }: GridCellInfoPanelProps) {
 
       <div className="cell-expression-panel">
         <div className="cell-expression-heading">
+          <span>Cell assignment</span>
+          <small>{gridCellAssignmentStatusLabel(assignmentState)}</small>
+        </div>
+        <GridCellAssignmentDetail state={assignmentState} />
+      </div>
+
+      <div className="cell-expression-panel">
+        <div className="cell-expression-heading">
           <span>Gene expression</span>
           <small>{hasExpression ? 'Loaded' : 'Unavailable'}</small>
         </div>
@@ -65,6 +82,61 @@ export function GridCellInfoPanel({ cell }: GridCellInfoPanelProps) {
       </div>
     </div>
   )
+}
+
+function GridCellAssignmentDetail({
+  state,
+}: {
+  readonly state: GridCellAssignmentState
+}) {
+  if (state.status === 'ready') {
+    return (
+      <dl className="cell-info-list">
+        <div>
+          <dt>Cell ID</dt>
+          <dd>{state.assignment.cellId}</dd>
+        </div>
+        <div>
+          <dt>Location</dt>
+          <dd>{gridCellAssignmentLocationLabel(state.assignment)}</dd>
+        </div>
+        <div>
+          <dt>Rows</dt>
+          <dd>{state.assignment.rowBudget.toLocaleString()}</dd>
+        </div>
+      </dl>
+    )
+  }
+
+  if (state.status === 'loading') {
+    return (
+      <p className="cell-expression-status">
+        Reading up to {state.rowBudget.toLocaleString()} mapping rows
+      </p>
+    )
+  }
+
+  if (state.status === 'missing') {
+    return (
+      <p className="cell-expression-status">
+        No cell assignment found within {state.rowBudget.toLocaleString()} mapping rows
+      </p>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <p className="cell-expression-status">
+        {state.error.title}: {state.error.message}
+      </p>
+    )
+  }
+
+  if (state.status === 'unavailable') {
+    return <p className="cell-expression-status">{state.reason}</p>
+  }
+
+  return <p className="cell-expression-status">No assignment loaded</p>
 }
 
 function formatImageCoordinate(cell: GridCellDatum): string {

@@ -12,6 +12,7 @@ describe('DatasetHudPanel', () => {
     const onShouldLoadMorphologyChange = vi.fn()
     const onBoundaryCellLimitChange = vi.fn()
     const onVisiumHdTwoMicrometerBudgetInputChange = vi.fn()
+    const onVisiumHdBarcodeMappingBudgetInputChange = vi.fn()
     const onRunDatasetDiagnostics = vi.fn()
     const onDownloadDiagnostics = vi.fn()
     const onClearDebugLog = vi.fn()
@@ -24,9 +25,11 @@ describe('DatasetHudPanel', () => {
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
         visiumHdTwoMicrometerBudgetInputId="visium-2um-budget"
+        visiumHdBarcodeMappingBudgetInputId="visium-mapping-budget"
         datasetUrl="https://example.test/output"
         shouldLoadMorphology={false}
         visiumHdTwoMicrometerBudgetInput=""
+        visiumHdBarcodeMappingBudgetInput=""
         morphologyLabel="Morphology image"
         boundaryCellLimit={50000}
         maxBoundaryCellLimit={100000}
@@ -45,6 +48,9 @@ describe('DatasetHudPanel', () => {
         onVisiumHdTwoMicrometerBudgetInputChange={
           onVisiumHdTwoMicrometerBudgetInputChange
         }
+        onVisiumHdBarcodeMappingBudgetInputChange={
+          onVisiumHdBarcodeMappingBudgetInputChange
+        }
         onVisiumHdBinSizeChange={vi.fn()}
         onRunDatasetDiagnostics={onRunDatasetDiagnostics}
         onDownloadDiagnostics={onDownloadDiagnostics}
@@ -62,6 +68,9 @@ describe('DatasetHudPanel', () => {
     fireEvent.change(screen.getByLabelText('2 µm budget'), {
       target: { value: '25000' },
     })
+    fireEvent.change(screen.getByLabelText('Mapping rows'), {
+      target: { value: '12000000' },
+    })
     fireEvent.submit(
       screen.getByRole('button', { name: 'Load Dataset' }).closest('form')!,
     )
@@ -73,6 +82,7 @@ describe('DatasetHudPanel', () => {
     expect(onShouldLoadMorphologyChange).toHaveBeenCalledWith(true)
     expect(onBoundaryCellLimitChange).toHaveBeenCalledWith(2500)
     expect(onVisiumHdTwoMicrometerBudgetInputChange).toHaveBeenCalledWith('25000')
+    expect(onVisiumHdBarcodeMappingBudgetInputChange).toHaveBeenCalledWith('12000000')
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onRunDatasetDiagnostics).toHaveBeenCalledTimes(1)
     expect(onDownloadDiagnostics).toHaveBeenCalledTimes(1)
@@ -90,9 +100,11 @@ describe('DatasetHudPanel', () => {
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
         visiumHdTwoMicrometerBudgetInputId="visium-2um-budget"
+        visiumHdBarcodeMappingBudgetInputId="visium-mapping-budget"
         datasetUrl="https://example.test/visium"
         shouldLoadMorphology
         visiumHdTwoMicrometerBudgetInput=""
+        visiumHdBarcodeMappingBudgetInput=""
         morphologyLabel="Tissue image"
         boundaryCellLimit={50000}
         maxBoundaryCellLimit={100000}
@@ -124,6 +136,7 @@ describe('DatasetHudPanel', () => {
         onShouldLoadMorphologyChange={vi.fn()}
         onBoundaryCellLimitChange={vi.fn()}
         onVisiumHdTwoMicrometerBudgetInputChange={vi.fn()}
+        onVisiumHdBarcodeMappingBudgetInputChange={vi.fn()}
         onVisiumHdBinSizeChange={onVisiumHdBinSizeChange}
         onRunDatasetDiagnostics={vi.fn()}
         onDownloadDiagnostics={vi.fn()}
@@ -156,9 +169,11 @@ describe('DatasetHudPanel', () => {
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
         visiumHdTwoMicrometerBudgetInputId="visium-2um-budget"
+        visiumHdBarcodeMappingBudgetInputId="visium-mapping-budget"
         datasetUrl="https://example.test/visium"
         shouldLoadMorphology
         visiumHdTwoMicrometerBudgetInput="25000"
+        visiumHdBarcodeMappingBudgetInput=""
         morphologyLabel="Tissue image"
         boundaryCellLimit={50000}
         maxBoundaryCellLimit={100000}
@@ -185,6 +200,7 @@ describe('DatasetHudPanel', () => {
         onShouldLoadMorphologyChange={vi.fn()}
         onBoundaryCellLimitChange={vi.fn()}
         onVisiumHdTwoMicrometerBudgetInputChange={vi.fn()}
+        onVisiumHdBarcodeMappingBudgetInputChange={vi.fn()}
         onVisiumHdBinSizeChange={onVisiumHdBinSizeChange}
         onRunDatasetDiagnostics={vi.fn()}
         onDownloadDiagnostics={vi.fn()}
@@ -209,9 +225,11 @@ describe('DatasetHudPanel', () => {
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
         visiumHdTwoMicrometerBudgetInputId="visium-2um-budget"
+        visiumHdBarcodeMappingBudgetInputId="visium-mapping-budget"
         datasetUrl="https://example.test/output"
         shouldLoadMorphology={false}
         visiumHdTwoMicrometerBudgetInput=""
+        visiumHdBarcodeMappingBudgetInput=""
         morphologyLabel="Morphology image"
         boundaryCellLimit={50000}
         maxBoundaryCellLimit={100000}
@@ -238,6 +256,7 @@ describe('DatasetHudPanel', () => {
         onShouldLoadMorphologyChange={vi.fn()}
         onBoundaryCellLimitChange={vi.fn()}
         onVisiumHdTwoMicrometerBudgetInputChange={vi.fn()}
+        onVisiumHdBarcodeMappingBudgetInputChange={vi.fn()}
         onVisiumHdBinSizeChange={vi.fn()}
         onRunDatasetDiagnostics={vi.fn()}
         onDownloadDiagnostics={vi.fn()}

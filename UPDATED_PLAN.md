@@ -1331,6 +1331,12 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       into a stream-mode `FeatureCollection.features` scanner, cache repeated
       reads by bbox instead of by whole-slide file, and avoid materializing the
       full response JSON for oversized hosted assets.
+- [x] Added opt-in Visium HD bin-to-cell assignment UI. The Dataset HUD now has
+      a `Mapping rows` budget for `barcode_mappings.parquet`; when it is set,
+      selecting a Visium HD bin loads its mapped segmented cell assignment
+      through the existing budgeted dataset API and shows cell id plus
+      nucleus/cell membership in Bin Info. A blank budget keeps the mapping file
+      untouched and shows an unavailable state.
 
 ### Definition Of Done For The First Visium HD MVP
 

@@ -1,4 +1,5 @@
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
+import { normalizeVisiumHdBarcodeMappingRowBudget } from '../../datasets/visiumHdBarcodeMappings'
 import {
   VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
   hasVisiumHdTwoMicrometerFilteredBarcodeBudget,
@@ -26,6 +27,7 @@ export type VisiumHdControlState =
 
 const VISIUM_HD_BIN_OPTION_ORDER: readonly VisiumHdBinSizeMicrometers[] = [16, 8, 2]
 export const VISIUM_HD_TWO_MICROMETER_BUDGET_INPUT_MIN = 1
+export const VISIUM_HD_BARCODE_MAPPING_BUDGET_INPUT_MIN = 1
 
 export interface CreateVisiumHdBinOptionsOptions {
   readonly twoMicrometerFilteredBarcodeBudget?: number
@@ -115,4 +117,25 @@ export function parseVisiumHdTwoMicrometerBudgetInput(value: string): number | u
   }
 
   return normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(numericValue)
+}
+
+export function parseVisiumHdBarcodeMappingBudgetInput(
+  value: string,
+): number | undefined {
+  const trimmedValue = value.trim()
+
+  if (trimmedValue === '') {
+    return undefined
+  }
+
+  const numericValue = Number(trimmedValue)
+
+  if (
+    !Number.isFinite(numericValue) ||
+    numericValue < VISIUM_HD_BARCODE_MAPPING_BUDGET_INPUT_MIN
+  ) {
+    return undefined
+  }
+
+  return normalizeVisiumHdBarcodeMappingRowBudget(numericValue)
 }

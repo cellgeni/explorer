@@ -6,6 +6,7 @@ import type {
   CellDetailState,
   CellTranscriptDistributionState,
 } from '../cells/cellDetailModel'
+import type { GridCellAssignmentState } from '../cells/gridCellAssignmentModel'
 import type {
   AnalysisEmbedding,
   AnalysisEmbeddingKind,
@@ -29,6 +30,7 @@ interface CellHudPanelProps {
   readonly isVisiumHdDataset: boolean
   readonly selectedCell: OverviewCellDatum | null
   readonly selectedGridCell: GridCellDatum | null
+  readonly selectedGridCellAssignmentState: GridCellAssignmentState
   readonly selectedBoundaryCell: CellBoundaryDatum | null
   readonly selectedCellAnnotationLabels: readonly string[]
   readonly cellDetailCopy: string
@@ -55,6 +57,7 @@ export function CellHudPanel({
   isVisiumHdDataset,
   selectedCell,
   selectedGridCell,
+  selectedGridCellAssignmentState,
   selectedBoundaryCell,
   selectedCellAnnotationLabels,
   cellDetailCopy,
@@ -212,6 +215,7 @@ export function CellHudPanel({
             <GridCellInfoPanel
               key={selectedGridCell?.id ?? 'none'}
               cell={selectedGridCell}
+              assignmentState={selectedGridCellAssignmentState}
             />
           )
         ) : (

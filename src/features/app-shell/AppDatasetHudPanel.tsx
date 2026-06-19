@@ -10,6 +10,7 @@ import type {
 } from '../dataset/datasetLoadModel'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
+  parseVisiumHdBarcodeMappingBudgetInput,
   parseVisiumHdTwoMicrometerBudgetInput,
   type VisiumHdControlState,
 } from '../dataset/visiumHdModel'
@@ -25,6 +26,7 @@ type AppDatasetControlIds = Pick<
   | 'boundaryLimitInputId'
   | 'visiumHdBinSizeInputId'
   | 'visiumHdTwoMicrometerBudgetInputId'
+  | 'visiumHdBarcodeMappingBudgetInputId'
 >
 
 export interface AppDatasetHudPanelProps {
@@ -51,9 +53,11 @@ export interface AppDatasetHudPanelProps {
   readonly setDebugLog: Dispatch<SetStateAction<readonly DebugLogEntry[]>>
   readonly setShouldLoadMorphology: Dispatch<SetStateAction<boolean>>
   readonly onVisiumHdTwoMicrometerBudgetInputChange: (value: string) => void
+  readonly onVisiumHdBarcodeMappingBudgetInputChange: (value: string) => void
   readonly shouldLoadMorphology: boolean
   readonly visiumHdControlState: VisiumHdControlState
   readonly visiumHdTwoMicrometerBudgetInput: string
+  readonly visiumHdBarcodeMappingBudgetInput: string
 }
 
 export function AppDatasetHudPanel({
@@ -78,9 +82,11 @@ export function AppDatasetHudPanel({
   setDebugLog,
   setShouldLoadMorphology,
   onVisiumHdTwoMicrometerBudgetInputChange,
+  onVisiumHdBarcodeMappingBudgetInputChange,
   shouldLoadMorphology,
   visiumHdControlState,
   visiumHdTwoMicrometerBudgetInput,
+  visiumHdBarcodeMappingBudgetInput,
 }: AppDatasetHudPanelProps) {
   return (
     <DatasetHudPanel
@@ -90,9 +96,11 @@ export function AppDatasetHudPanel({
       boundaryLimitInputId={controlIds.boundaryLimitInputId}
       visiumHdBinSizeInputId={controlIds.visiumHdBinSizeInputId}
       visiumHdTwoMicrometerBudgetInputId={controlIds.visiumHdTwoMicrometerBudgetInputId}
+      visiumHdBarcodeMappingBudgetInputId={controlIds.visiumHdBarcodeMappingBudgetInputId}
       datasetUrl={datasetUrl}
       shouldLoadMorphology={shouldLoadMorphology}
       visiumHdTwoMicrometerBudgetInput={visiumHdTwoMicrometerBudgetInput}
+      visiumHdBarcodeMappingBudgetInput={visiumHdBarcodeMappingBudgetInput}
       morphologyLabel={isVisiumHdDataset ? 'Tissue image' : 'Morphology image'}
       boundaryCellLimit={boundaryCellLimit}
       maxBoundaryCellLimit={MAX_BOUNDARY_VIEWPORT_CELL_LIMIT}
@@ -128,6 +136,18 @@ export function AppDatasetHudPanel({
             : `Visium HD 2 µm budget: ${nextBudget.toLocaleString()} barcodes`,
           {
             coalesceKey: 'visium-hd-2um-budget',
+          },
+        )
+      }}
+      onVisiumHdBarcodeMappingBudgetInputChange={(value) => {
+        const nextBudget = parseVisiumHdBarcodeMappingBudgetInput(value)
+        onVisiumHdBarcodeMappingBudgetInputChange(value)
+        appendDebugEvent(
+          nextBudget === undefined
+            ? 'Visium HD mapping row budget disabled'
+            : `Visium HD mapping row budget: ${nextBudget.toLocaleString()} rows`,
+          {
+            coalesceKey: 'visium-hd-mapping-budget',
           },
         )
       }}

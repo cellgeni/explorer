@@ -57,4 +57,6 @@ streaming or viewport-scoped barcode path is available.
 16 µm squares and segmented cell assignments. The first Slice 8 reader projects
 only `square_002um`, `square_008um`, `square_016um`, `cell_id`, `in_nucleus`,
 and `in_cell`, and requires an explicit row budget. It is a foundation for
-future bin-to-cell workflows; it is not used for default rendering yet.
+bin-to-cell workflows and is now used by the selected Bin Info panel when the
+Dataset HUD has a `Mapping rows` budget. Default rendering still does not touch
+`barcode_mappings.parquet`.

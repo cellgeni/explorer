@@ -19,6 +19,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       morphologyInputId: 'morphology',
       visiumHdBinSizeInputId: 'visium-bin-size',
       visiumHdTwoMicrometerBudgetInputId: 'visium-2um-budget',
+      visiumHdBarcodeMappingBudgetInputId: 'visium-mapping-budget',
     },
     datasetUrl: 'https://example.test/output',
     debugLog: [],
@@ -37,9 +38,11 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     setDebugLog: vi.fn(),
     setShouldLoadMorphology: vi.fn(),
     onVisiumHdTwoMicrometerBudgetInputChange: vi.fn(),
+    onVisiumHdBarcodeMappingBudgetInputChange: vi.fn(),
     shouldLoadMorphology: true,
     visiumHdControlState: { status: 'idle' },
     visiumHdTwoMicrometerBudgetInput: '',
+    visiumHdBarcodeMappingBudgetInput: '',
     ...overrides,
   }
 }
@@ -60,6 +63,9 @@ describe('AppDatasetHudPanel', () => {
     fireEvent.change(screen.getByLabelText('2 µm budget'), {
       target: { value: '25000' },
     })
+    fireEvent.change(screen.getByLabelText('Mapping rows'), {
+      target: { value: '12000000' },
+    })
 
     expect(props.setDatasetUrl).toHaveBeenCalledWith('https://example.test/next')
     expect(props.setShouldLoadMorphology).toHaveBeenCalledWith(false)
@@ -73,6 +79,15 @@ describe('AppDatasetHudPanel', () => {
       'Visium HD 2 µm budget: 25,000 barcodes',
       {
         coalesceKey: 'visium-hd-2um-budget',
+      },
+    )
+    expect(props.onVisiumHdBarcodeMappingBudgetInputChange).toHaveBeenCalledWith(
+      '12000000',
+    )
+    expect(props.appendDebugEvent).toHaveBeenCalledWith(
+      'Visium HD mapping row budget: 12,000,000 rows',
+      {
+        coalesceKey: 'visium-hd-mapping-budget',
       },
     )
   })
