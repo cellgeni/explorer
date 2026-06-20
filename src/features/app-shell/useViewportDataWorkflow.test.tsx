@@ -279,10 +279,25 @@ describe('useViewportDataWorkflow', () => {
     expect(snapshot.boundaryElements).toEqual([element])
     expect(snapshot.geneExpressionState.status).toBe('ready')
     expect(snapshot.geneExpressionBatch).toBe(batch)
-    expect(snapshot.telemetryEvents.at(-1)).toMatchObject({
-      name: 'gene-expression.load',
-      outcome: 'success',
-    })
+    expect(snapshot.telemetryEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'viewport.boundaries.load',
+          outcome: 'success',
+        }),
+      ]),
+    )
+    expect(
+      snapshot.debugMessages.some((message) => message.startsWith('Boundaries ready:')),
+    ).toBe(true)
+    expect(snapshot.telemetryEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'gene-expression.load',
+          outcome: 'success',
+        }),
+      ]),
+    )
   })
 
   it('retries retryable gene expression load failures once', async () => {

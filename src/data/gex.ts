@@ -7,11 +7,15 @@ import {
   ZARR_ZIP_CACHE_NAMESPACE,
 } from './persistentByteRangeCache'
 import { geneExpressionStageTiming } from './geneExpressionTiming'
+import { createGeneFeatureIndex } from './geneFeatures'
 import type { CellId } from './cellid'
 import type { DataPoint, Micrometers } from './coords'
-import type { GeneExpressionStageTimingHandler } from './geneExpressionTiming'
+import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
 import type { PersistentByteRangeCache } from './persistentByteRangeCache'
 import type { Array as ZarrArray, DataType, Group as ZarrGroup } from 'zarrita'
+
+export type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
+export { createGeneFeatureIndex, isGeneFeature } from './geneFeatures'
 
 export type TranscriptScope = 'spatial' | 'cells-only'
 
@@ -28,22 +32,6 @@ export interface PolygonSelection {
 }
 
 export type Selection = CircleSelection | PolygonSelection
-
-export interface GexCell {
-  readonly geneNames: readonly string[]
-  readonly counts: readonly number[]
-}
-
-export interface GexResult<ElementId extends string = CellId> {
-  readonly geneNames: readonly string[]
-  readonly cells: ReadonlyMap<ElementId, GexCell>
-}
-
-export interface CellFeatureMatrixReadOptions {
-  readonly signal?: AbortSignal
-  readonly onStageTiming?: GeneExpressionStageTimingHandler
-  readonly maxFullFileBytes?: number
-}
 
 export interface AggregatedGene {
   readonly gene: string
@@ -122,16 +110,6 @@ export interface DuckDbPreparedStatementLike {
 export interface TranscriptDuckDbConnection {
   prepare(sql: string): Promise<DuckDbPreparedStatementLike>
 }
-
-const NON_GENE_PATTERNS = [
-  /^Total transcripts$/i,
-  /NegControlProbe/i,
-  /NegControlCodeword/i,
-  /^BLANK/i,
-  /UnassignedCodeword/i,
-  /antisense/i,
-  /Deprecated/i,
-] as const
 
 const CELL_MAJOR_RANGE_COALESCE_GAP = 4_096
 const CELL_MAJOR_RANGE_MAX_SPAN = 500_000
@@ -217,36 +195,6 @@ export function aggregateGex(
   return [...totals.entries()]
     .map(([gene, count]) => ({ gene, count }))
     .sort((a, b) => b.count - a.count)
-}
-
-export function isGeneFeature(name: string, featureType?: string): boolean {
-  if (NON_GENE_PATTERNS.some((pattern) => pattern.test(name))) {
-    return false
-  }
-
-  if (featureType === undefined) {
-    return true
-  }
-
-  const normalizedType = featureType.trim().toLowerCase()
-  return normalizedType === 'gene' || normalizedType === 'gene expression'
-}
-
-export function createGeneFeatureIndex(
-  geneNames: readonly string[],
-  featureTypes: readonly string[],
-): ReadonlySet<number> {
-  const indices = new Set<number>()
-
-  for (let index = 0; index < geneNames.length; index += 1) {
-    const geneName = geneNames[index]
-
-    if (geneName !== undefined && isGeneFeature(geneName, featureTypes[index])) {
-      indices.add(index)
-    }
-  }
-
-  return indices
 }
 
 export class FullFileMatrixBudgetExceededError extends Error {

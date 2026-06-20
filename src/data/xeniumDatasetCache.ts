@@ -7,9 +7,7 @@ export function cachedXeniumDataset(baseUrl: string): Promise<XeniumDataset> {
   return cachedDataset(baseUrl, datasetCache)
 }
 
-export function cachedXeniumTranscriptDataset(
-  baseUrl: string,
-): Promise<XeniumDataset> {
+export function cachedXeniumTranscriptDataset(baseUrl: string): Promise<XeniumDataset> {
   return cachedDataset(baseUrl, transcriptDatasetCache)
 }
 

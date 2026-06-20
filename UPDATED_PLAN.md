@@ -1012,13 +1012,13 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       Do not load all 11.2M position rows for first paint. Prefer filtered
       matrix barcodes plus the derived affine array-to-image transform, or a
       separate viewport/tiled strategy, before enabling 2 µm rendering.
-- [ ] Slice 8: Feature Slice and segmented outputs.
+- [x] Slice 8: Feature Slice and segmented outputs.
       After the binned MVP is stable, use available root `feature_slice.h5` and
       `barcode_mappings.parquet` for Feature Slice gene/UMI image slices and
       bin-to-cell mapping. Re-probe `segmented_outputs/` geometry paths before
-      segmented cell/nucleus rendering; the fixture currently exposes
-      `segmented_outputs/filtered_feature_cell_matrix.h5`, but common GeoJSON
-      segmentation paths still return 404.
+      segmented cell/nucleus rendering; the fixture now exposes
+      `segmented_outputs/filtered_feature_cell_matrix.h5` plus cell/nucleus
+      segmentation GeoJSON sidecars.
 - [x] Slice 8 partial: Feature Slice H5 selected-gene reader core.
 - [x] Slice 8 partial: Feature Slice budget error classification for hosted
       full-file reads.
@@ -1371,3 +1371,13 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       16 µm bins.
 - [x] Final verification passes `npm test`, `npm run build`,
       `npm run typecheck`, `npm run lint`, and `npm run test:e2e`.
+
+### Phase 6.x Post-MVP Hardening
+
+- [ ] Broaden browser coverage for Visium HD beyond first paint. The first pass
+      should cover 16/8 µm switching, guarded 2 µm budget enablement,
+      Feature Slice selected-gene overlay, ROI barcode export, cell/nucleus
+      segmentation overlay controls, and mapping-row/bin-info inspection.
+- [ ] Continue the optimization pass for public hosted Visium HD datasets:
+      interaction profiling, segmentation streaming cost, Feature Slice worker
+      range behavior, memory pressure, and bundle/chunk splitting.

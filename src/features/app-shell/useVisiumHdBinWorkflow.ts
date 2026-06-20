@@ -22,6 +22,10 @@ import type {
 } from '../genes/geneControlsModel'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import {
+  formatRuntimeMemorySnapshot,
+  readRuntimeMemorySnapshot,
+} from '../../data/runtimeMemory'
+import {
   createStructuredLoadError,
   readErrorMessage,
   type StructuredLoadError,
@@ -236,7 +240,7 @@ export function useVisiumHdBinWorkflow({
         appendDebugEvent(
           `Visium HD ${overview.binSizeMicrometers} µm bins ready: ${overview.gridCells.ids.length.toLocaleString()} in ${formatElapsed(
             startedAt,
-          )}`,
+          )}${formatMemorySuffix()}`,
         )
 
         if (!shouldLoadMorphology) {
@@ -371,6 +375,11 @@ export function isVisiumHdOverviewDataset(
     'image' in dataset &&
     typeof dataset.image === 'function'
   )
+}
+
+function formatMemorySuffix(): string {
+  const detail = formatRuntimeMemorySnapshot(readRuntimeMemorySnapshot())
+  return detail === undefined ? '' : `; memory ${detail}`
 }
 
 export function visiumHdControlStateFromOverview(

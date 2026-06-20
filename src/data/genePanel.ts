@@ -1,6 +1,6 @@
-import { isGeneFeature } from './gex'
 import { datasetFileUrl } from './datasetFiles'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
+import { isGeneFeature } from './geneFeatures'
 import { loadTranscriptZarrGenePanel as loadTranscriptZarrGenePanelFromZip } from './transcriptZarr'
 
 export interface LoadGenePanelOptions {

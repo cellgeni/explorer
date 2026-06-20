@@ -346,8 +346,8 @@ function pointInPolygon(point: DataPoint, polygon: readonly DataPoint[]): boolea
     }
 
     const intersectionX =
-      current.x + ((point.y - current.y) * (previous.x - current.x)) /
-        (previous.y - current.y)
+      current.x +
+      ((point.y - current.y) * (previous.x - current.x)) / (previous.y - current.y)
 
     if (intersectionX >= point.x) {
       inside = !inside

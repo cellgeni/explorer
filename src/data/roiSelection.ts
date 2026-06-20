@@ -18,9 +18,7 @@ export function normalizeRoiSelection(input: RoiSelectionInput): RoiSelection {
 export function roiSelectionToSpatialSelection(
   selection: RoiSelection,
 ): Selection | null {
-  return selection.kind === 'lasso'
-    ? { kind: 'polygon', points: selection.points }
-    : null
+  return selection.kind === 'lasso' ? { kind: 'polygon', points: selection.points } : null
 }
 
 export function isRoiSelection(input: RoiSelectionInput): input is RoiSelection {

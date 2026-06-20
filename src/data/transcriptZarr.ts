@@ -3,7 +3,7 @@ import * as zarr from 'zarrita'
 import { micrometers } from './coords'
 import type { BBox } from './coords'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
-import { isGeneFeature } from './gex'
+import { isGeneFeature } from './geneFeatures'
 import type {
   TranscriptAggregateBin,
   TranscriptAggregateFeatureSummary,

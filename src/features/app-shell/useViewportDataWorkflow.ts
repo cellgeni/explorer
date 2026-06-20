@@ -12,9 +12,13 @@ import {
   viewStateToShareable,
   type ShareableViewState,
 } from '../../data/shareableState'
+import {
+  formatRuntimeMemorySnapshot,
+  readRuntimeMemorySnapshot,
+} from '../../data/runtimeMemory'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { BBox } from '../../data/coords'
-import type { SpatialElement } from '../../datasets/spatialDataset'
+import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import {
   boundaryViewportKey,
@@ -143,9 +147,7 @@ export function useViewportDataWorkflow({
         boundaryRequestIdRef.current += 1
         boundaryViewportKeyRef.current = null
         setBoundaryElements((current) => (current.length === 0 ? current : []))
-        setNucleusBoundaryElements?.((current) =>
-          current.length === 0 ? current : [],
-        )
+        setNucleusBoundaryElements?.((current) => (current.length === 0 ? current : []))
         setBoundaryState((current) =>
           current.status === 'idle' ? current : { status: 'idle' },
         )
@@ -160,26 +162,42 @@ export function useViewportDataWorkflow({
           boundaryAbortRef.current = abortController
           boundaryViewportKeyRef.current = requestKey
           setBoundaryState({ status: 'loading', url: loadState.url })
+          const boundaryStartedAt = readTimestamp()
+          appendDebugEvent(
+            `Boundaries started: ${detail.visibleCellCount.toLocaleString()} visible cells`,
+            { coalesceKey: 'boundary-query' },
+          )
 
+          const loadCellElements = loadProfiledBoundaryElements(
+            loadBoundaryElements,
+            loadState.url,
+            detail.bbox,
+            { signal: abortController.signal },
+          )
           const loadNucleusElements =
             loadNucleusBoundaryElements === undefined
-              ? Promise.resolve({ elements: [] })
-              : loadNucleusBoundaryElements(loadState.url, detail.bbox, {
-                  signal: abortController.signal,
-                })
+              ? Promise.resolve(profiledBoundaryElements({ elements: [] }, 0))
+              : loadProfiledBoundaryElements(
+                  loadNucleusBoundaryElements,
+                  loadState.url,
+                  detail.bbox,
+                  { signal: abortController.signal },
+                )
 
-          void Promise.all([
-            loadBoundaryElements(loadState.url, detail.bbox, {
-              signal: abortController.signal,
-            }),
-            loadNucleusElements,
-          ])
+          void Promise.all([loadCellElements, loadNucleusElements])
             .then((batch) => {
               if (boundaryRequestIdRef.current !== requestId) {
                 return
               }
 
-              const [cellBatch, nucleusBatch] = batch
+              const [cellResult, nucleusResult] = batch
+              const cellBatch = cellResult.batch
+              const nucleusBatch = nucleusResult.batch
+              const profileDetail = formatBoundaryProfileDetail(
+                cellResult,
+                nucleusResult,
+                loadNucleusBoundaryElements !== undefined,
+              )
 
               setBoundaryElements(cellBatch.elements)
               setNucleusBoundaryElements?.(nucleusBatch.elements)
@@ -187,6 +205,15 @@ export function useViewportDataWorkflow({
                 status: 'ready',
                 url: loadState.url,
                 cellCount: cellBatch.elements.length,
+              })
+              recordTelemetry(
+                telemetryEvent('viewport.boundaries.load', 'success', {
+                  startedAt: boundaryStartedAt,
+                  detail: profileDetail,
+                }),
+              )
+              appendDebugEvent(`Boundaries ready: ${profileDetail}`, {
+                coalesceKey: 'boundary-query',
               })
             })
             .catch((error) => {
@@ -204,6 +231,15 @@ export function useViewportDataWorkflow({
                 status: 'error',
                 url: loadState.url,
                 error: createStructuredLoadError('Cell boundaries', error),
+              })
+              recordTelemetry(
+                telemetryEvent('viewport.boundaries.load', 'failure', {
+                  startedAt: boundaryStartedAt,
+                  detail: readErrorMessage(error),
+                }),
+              )
+              appendDebugEvent('Boundary load failed', {
+                coalesceKey: 'boundary-query',
               })
             })
             .finally(() => {
@@ -342,6 +378,7 @@ export function useViewportDataWorkflow({
           }
 
           const timingDetail = formatGeneExpressionTiming(batch.timing)
+          const memoryDetail = currentMemoryDetail()
 
           rememberGeneExpressionScaleMax(
             geneExpressionScaleKey,
@@ -360,13 +397,18 @@ export function useViewportDataWorkflow({
           recordTelemetry(
             telemetryEvent('gene-expression.load', 'success', {
               startedAt: expressionStartedAt,
-              detail: `${geneExpressionModeLabel(expressionPlan.mode)}: ${batch.cells.length.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
+              detail: [
+                `${geneExpressionModeLabel(expressionPlan.mode)}: ${batch.cells.length.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
+                memoryDetail === undefined ? undefined : `memory ${memoryDetail}`,
+              ]
+                .filter((part): part is string => part !== undefined)
+                .join('; '),
             }),
           )
           appendDebugEvent(
             `${geneExpressionModeLabel(expressionPlan.mode)} ready: ${batch.cells.length.toLocaleString()} positive cells in ${formatElapsed(
               expressionStartedAt,
-            )} (${timingDetail})`,
+            )} (${formatProfileTimingDetail(timingDetail, memoryDetail)})`,
             { coalesceKey: 'gene-expression-query' },
           )
         })
@@ -469,4 +511,65 @@ function isTypeErrorLike(error: unknown): boolean {
     'name' in error &&
     error.name === 'TypeError'
   )
+}
+
+interface ProfiledBoundaryElements {
+  readonly batch: ElementBatch
+  readonly durationMs: number
+}
+
+async function loadProfiledBoundaryElements(
+  loader: BoundaryElementsLoader,
+  baseUrl: string,
+  bbox: BBox,
+  options: Parameters<BoundaryElementsLoader>[2],
+): Promise<ProfiledBoundaryElements> {
+  const startedAt = readTimestamp()
+  const batch = await loader(baseUrl, bbox, options)
+  return profiledBoundaryElements(batch, Math.max(0, readTimestamp() - startedAt))
+}
+
+function profiledBoundaryElements(
+  batch: ElementBatch,
+  durationMs: number,
+): ProfiledBoundaryElements {
+  return { batch, durationMs }
+}
+
+function formatBoundaryProfileDetail(
+  cellResult: ProfiledBoundaryElements,
+  nucleusResult: ProfiledBoundaryElements,
+  includeNucleus: boolean,
+): string {
+  const memoryDetail = currentMemoryDetail()
+  const parts = [
+    `${cellResult.batch.elements.length.toLocaleString()} cells in ${formatDurationMs(
+      cellResult.durationMs,
+    )}`,
+    includeNucleus
+      ? `${nucleusResult.batch.elements.length.toLocaleString()} nuclei in ${formatDurationMs(
+          nucleusResult.durationMs,
+        )}`
+      : undefined,
+    memoryDetail === undefined ? undefined : `memory ${memoryDetail}`,
+  ].filter((part): part is string => part !== undefined)
+
+  return parts.join(', ')
+}
+
+function currentMemoryDetail(): string | undefined {
+  return formatRuntimeMemorySnapshot(readRuntimeMemorySnapshot())
+}
+
+function formatProfileTimingDetail(
+  timingDetail: string,
+  memoryDetail: string | undefined,
+): string {
+  return memoryDetail === undefined
+    ? timingDetail
+    : `${timingDetail}; memory ${memoryDetail}`
+}
+
+function formatDurationMs(durationMs: number): string {
+  return `${Math.round(durationMs).toLocaleString()} ms`
 }

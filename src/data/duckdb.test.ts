@@ -72,17 +72,23 @@ describe('DuckDB-WASM bootstrap', () => {
 
   it('can require httpfs extension loading for remote parquet query paths', async () => {
     await expect(
-      configureDuckDb(new RecordingConnection({ httpfs: new Error('httpfs unavailable') }), {
-        requireHttpfs: true,
-      }),
+      configureDuckDb(
+        new RecordingConnection({ httpfs: new Error('httpfs unavailable') }),
+        {
+          requireHttpfs: true,
+        },
+      ),
     ).rejects.toThrow('httpfs unavailable')
   })
 
   it('can require spatial extension loading for spatial query paths', async () => {
     await expect(
-      configureDuckDb(new RecordingConnection({ spatial: new Error('spatial unavailable') }), {
-        requireSpatial: true,
-      }),
+      configureDuckDb(
+        new RecordingConnection({ spatial: new Error('spatial unavailable') }),
+        {
+          requireSpatial: true,
+        },
+      ),
     ).rejects.toThrow('spatial unavailable')
   })
 

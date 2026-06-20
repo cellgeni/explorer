@@ -2,11 +2,11 @@ import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet'
 import { datasetFileUrl } from '../data/datasetFiles'
 import {
   gexFromFeatureBarcodeMatrixH5,
-  isGeneFeature,
   type CellFeatureMatrixReadOptions,
   type GexCell,
   type GexResult,
 } from '../data/gex'
+import { isGeneFeature } from '../data/geneFeatures'
 import {
   gexFromVisiumFeatureSliceH5,
   type VisiumFeatureSliceReadOptions,

@@ -16,9 +16,7 @@ export interface GeneExpressionStageTiming {
   readonly detail?: string
 }
 
-export type GeneExpressionStageTimingHandler = (
-  timing: GeneExpressionStageTiming,
-) => void
+export type GeneExpressionStageTimingHandler = (timing: GeneExpressionStageTiming) => void
 
 export function geneExpressionStageTiming(
   stage: GeneExpressionTimingStage,

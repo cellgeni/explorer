@@ -1,4 +1,3 @@
-import createOpenJpegModule from '@cornerstonejs/codec-openjpeg'
 import type { OpenJpegModule } from '@cornerstonejs/codec-openjpeg'
 
 export type Jpeg2000Pixels = Uint8Array | Uint16Array
@@ -109,7 +108,9 @@ export const decodeJ2K = decodeJpeg2000
 export const normaliseToRGBA = normaliseToRgba
 
 function ensureDecoderModule(): Promise<OpenJpegModule> {
-  decoderModulePromise ??= createOpenJpegModule()
+  decoderModulePromise ??= import('@cornerstonejs/codec-openjpeg').then(
+    ({ default: createOpenJpegModule }) => createOpenJpegModule(),
+  )
   return decoderModulePromise
 }
 

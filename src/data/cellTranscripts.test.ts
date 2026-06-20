@@ -240,9 +240,9 @@ describe('cell transcript distribution loader', () => {
     const transcriptsForCellId = vi.fn(async () =>
       Array.from({ length: 2 }, () => transcript(cellId, 1)),
     )
-    vi.mocked(cachedXeniumTranscriptDataset).mockResolvedValue(
-      { transcriptsForCellId } as unknown as XeniumDataset,
-    )
+    vi.mocked(cachedXeniumTranscriptDataset).mockResolvedValue({
+      transcriptsForCellId,
+    } as unknown as XeniumDataset)
 
     await loadDatasetCellTranscriptDistribution('https://example.test/xenium/', cellId, {
       validateRangeSupport: async () => undefined,

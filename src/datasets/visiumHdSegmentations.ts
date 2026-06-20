@@ -945,14 +945,10 @@ function drainStreamedGeojsonFeatureScanner(
       JSON.parse(scanner.buffer.slice(valueStart, valueEnd)) as unknown,
       `Visium HD segmentation feature ${scanner.featureIndex}`,
     )
-    const featureElements = segmentationFeatureToElements(
-      feature,
-      scanner.featureIndex,
-      {
-        kind: options.kind ?? 'cell',
-        scalefactors: options.scalefactors,
-      },
-    )
+    const featureElements = segmentationFeatureToElements(feature, scanner.featureIndex, {
+      kind: options.kind ?? 'cell',
+      scalefactors: options.scalefactors,
+    })
 
     scanner.elements.push(
       ...(options.bbox === undefined

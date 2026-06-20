@@ -106,9 +106,9 @@ describe('dataset ROI transcript loader', () => {
 
   it('uses a separate transcript dataset cache by default', async () => {
     const transcriptsInBbox = vi.fn(async () => [])
-    vi.mocked(cachedXeniumTranscriptDataset).mockResolvedValue(
-      { transcriptsInBbox } as unknown as XeniumDataset,
-    )
+    vi.mocked(cachedXeniumTranscriptDataset).mockResolvedValue({
+      transcriptsInBbox,
+    } as unknown as XeniumDataset)
 
     await loadDatasetRoiTranscripts('https://example.test/xenium/', bbox, {
       validateRangeSupport: async () => undefined,

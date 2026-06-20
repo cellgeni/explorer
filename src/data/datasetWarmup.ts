@@ -19,9 +19,7 @@ import type { XeniumDataset } from '../datasets/xeniumDataset'
 export interface WarmDatasetForRoiOptions {
   readonly getDataset?: (baseUrl: string) => XeniumDataset | Promise<XeniumDataset>
   readonly validateRangeSupport?: DatasetRangeValidator
-  readonly warmMatrix?: (
-    url: string,
-  ) => Promise<CellFeatureMatrixZarrCapability | void>
+  readonly warmMatrix?: (url: string) => Promise<CellFeatureMatrixZarrCapability | void>
   readonly onCellFeatureMatrixCapability?: (
     capability: CellFeatureMatrixZarrCapability,
   ) => void

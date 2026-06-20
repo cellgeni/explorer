@@ -1,9 +1,5 @@
-import {
-  isGeneFeature,
-  type CellFeatureMatrixReadOptions,
-  type GexCell,
-  type GexResult,
-} from './gex'
+import { isGeneFeature } from './geneFeatures'
+import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
 import type {
   VisiumFeatureSliceWorkerRequest,
   VisiumFeatureSliceWorkerResponse,
