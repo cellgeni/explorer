@@ -23,6 +23,15 @@ async function loadVisiumHdReferenceDataset(page: Page) {
   return visiumPanel
 }
 
+async function expectVisiumHdBoundaryLayersOffByDefault(page: Page) {
+  await page.getByRole('tab', { name: 'Layers' }).click()
+  const layersPanel = page.locator('#hud-panel-layers')
+  await expect(layersPanel.getByLabel('Cell boundaries')).toBeEnabled()
+  await expect(layersPanel.getByLabel('Cell boundaries')).not.toBeChecked()
+  await expect(layersPanel.getByLabel('Nucleus boundaries')).toBeEnabled()
+  await expect(layersPanel.getByLabel('Nucleus boundaries')).not.toBeChecked()
+}
+
 test('shows the scaffolded viewer shell', async ({ page }) => {
   await page.goto('/')
 
@@ -57,6 +66,7 @@ test('loads the Visium HD reference dataset with tissue image and 16 um bins', a
   test.setTimeout(120_000)
 
   await loadVisiumHdReferenceDataset(page)
+  await expectVisiumHdBoundaryLayersOffByDefault(page)
 })
 
 test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced controls', async ({
@@ -90,13 +100,6 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
     'title',
     '2 µm bins',
   )
-
-  await page.getByRole('tab', { name: 'Layers' }).click()
-  const layersPanel = page.locator('#hud-panel-layers')
-  await expect(layersPanel.getByLabel('Cell boundaries')).toBeEnabled()
-  await expect(layersPanel.getByLabel('Cell boundaries')).toBeChecked()
-  await expect(layersPanel.getByLabel('Nucleus boundaries')).toBeEnabled()
-  await expect(layersPanel.getByLabel('Nucleus boundaries')).toBeChecked()
 
   await page.getByRole('tab', { name: 'Genes' }).click()
   const genesPanel = page.locator('#hud-panel-genes')

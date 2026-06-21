@@ -840,6 +840,12 @@ export function App({
     () => (isVisiumHdBoundarySurfaceReserved ? [] : spatialGridCells),
     [isVisiumHdBoundarySurfaceReserved, spatialGridCells],
   )
+  const boundaryLoadingEnabled =
+    showCellBoundaries || (isVisiumHdDataset && showNucleusBoundaries)
+  const boundaryOverlayRequestKey = `${boundaryLoadingEnabled ? 'enabled' : 'disabled'}:${
+    isVisiumHdDataset && showNucleusBoundaries ? 'nucleus' : 'no-nucleus'
+  }`
+  const boundaryOverlayRequestKeyRef = useRef(boundaryOverlayRequestKey)
   const geneExpressionOverlayEnabled = !(isVisiumHdDataset && spatialGridCells.length > 0)
   const activeSelectedBoundaryCell = useMemo(
     () =>
@@ -1493,6 +1499,7 @@ export function App({
     appendDebugEvent,
     boundaryAbortRef,
     boundaryCellLimit,
+    boundaryLoadingEnabled,
     boundaryRequestIdRef: boundaryRequestId,
     boundaryViewportKeyRef,
     geneExpressionAbortRef,
@@ -1503,7 +1510,7 @@ export function App({
     geneExpressionViewportKeyRef,
     lastViewportDetailRef,
     loadBoundaryElements: loadActiveBoundaryElements,
-    ...(isVisiumHdDataset
+    ...(isVisiumHdDataset && showNucleusBoundaries
       ? { loadNucleusBoundaryElements: loadActiveNucleusBoundaryElements }
       : {}),
     loadGeneExpression: loadActiveGeneExpression,
@@ -1520,6 +1527,21 @@ export function App({
     setGeneExpressionState,
     setShareableViewState,
   })
+  useEffect(() => {
+    if (boundaryOverlayRequestKeyRef.current === boundaryOverlayRequestKey) {
+      return
+    }
+
+    boundaryOverlayRequestKeyRef.current = boundaryOverlayRequestKey
+    const detail = lastViewportDetailRef.current
+
+    if (detail === null || loadState.status !== 'ready') {
+      return
+    }
+
+    boundaryViewportKeyRef.current = null
+    handleViewportChange(detail)
+  }, [boundaryOverlayRequestKey, handleViewportChange, loadState.status])
 
   useTranscriptWorkflow({
     activeControlHudTab,
@@ -1974,6 +1996,8 @@ export function App({
     setSelectedGridCell,
     setSelectedEmbeddingKind,
     setSelectedGenes,
+    setShowCellBoundaries,
+    setShowNucleusBoundaries,
     setSpatialGridCells,
     setNucleusBoundaryElements,
     setTranscriptCapabilityState,

@@ -67,6 +67,8 @@ function Probe({
   setLoadState = vi.fn(),
   setMorphologyState = vi.fn(),
   setSelectedGridCell = vi.fn(),
+  setShowCellBoundaries = vi.fn(),
+  setShowNucleusBoundaries = vi.fn(),
   setSpatialGridCells = vi.fn(),
   setVisiumHdControlState = vi.fn(),
   startDatasetLoadRef = { current: null },
@@ -85,6 +87,8 @@ function Probe({
   readonly setLoadState?: LifecycleOptions['setLoadState']
   readonly setMorphologyState?: LifecycleOptions['setMorphologyState']
   readonly setSelectedGridCell?: LifecycleOptions['setSelectedGridCell']
+  readonly setShowCellBoundaries?: LifecycleOptions['setShowCellBoundaries']
+  readonly setShowNucleusBoundaries?: LifecycleOptions['setShowNucleusBoundaries']
   readonly setSpatialGridCells?: LifecycleOptions['setSpatialGridCells']
   readonly setVisiumHdControlState?: LifecycleOptions['setVisiumHdControlState']
   readonly startDatasetLoadRef?: LifecycleOptions['startDatasetLoadRef']
@@ -198,6 +202,8 @@ function Probe({
     setSelectedGridCell,
     setSelectedEmbeddingKind: noopSetter,
     setSelectedGenes: noopSetter,
+    setShowCellBoundaries,
+    setShowNucleusBoundaries,
     setSpatialGridCells,
     setTranscriptCapabilityState: noopSetter,
     setTranscriptDensityColorScale: noopSetter,
@@ -364,6 +370,8 @@ describe('useDatasetLifecycle', () => {
     const setGenePanelState = vi.fn()
     const setLoadState = vi.fn()
     const setMorphologyState = vi.fn()
+    const setShowCellBoundaries = vi.fn()
+    const setShowNucleusBoundaries = vi.fn()
     const setSpatialGridCells = vi.fn()
     const setVisiumHdControlState = vi.fn()
     const warmDatasetForRoi = vi.fn(async () => undefined)
@@ -381,6 +389,8 @@ describe('useDatasetLifecycle', () => {
         setGenePanelState={setGenePanelState}
         setLoadState={setLoadState}
         setMorphologyState={setMorphologyState}
+        setShowCellBoundaries={setShowCellBoundaries}
+        setShowNucleusBoundaries={setShowNucleusBoundaries}
         setSpatialGridCells={setSpatialGridCells}
         setVisiumHdControlState={setVisiumHdControlState}
         startDatasetLoadRef={startDatasetLoadRef}
@@ -401,6 +411,8 @@ describe('useDatasetLifecycle', () => {
     expect(loadGenePanel).not.toHaveBeenCalled()
     expect(loadAnnotationGroups).not.toHaveBeenCalled()
     expect(warmDatasetForRoi).not.toHaveBeenCalled()
+    expect(setShowCellBoundaries).toHaveBeenCalledWith(false)
+    expect(setShowNucleusBoundaries).toHaveBeenCalledWith(false)
     expect(dataset.genePanel).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({ signal: expect.any(AbortSignal) }),

@@ -621,6 +621,23 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       await screen.findAllByText(/Visium HD ready/)
+      expect(visiumDataset.elements).not.toHaveBeenCalled()
+      expect(visiumDataset.segmentationElements).not.toHaveBeenCalled()
+      await waitFor(() => {
+        expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+          'data-count',
+          '2',
+        )
+        expect(screen.queryByTestId('deck-layer-cell-boundary-hit-areas')).toBeNull()
+        expect(
+          screen.queryByTestId('deck-layer-nucleus-segmentation-polygons'),
+        ).toBeNull()
+      })
+      openHudTab('Layers')
+      expect(screen.getByLabelText('Cell boundaries')).not.toBeChecked()
+      expect(screen.getByLabelText('Nucleus boundaries')).not.toBeChecked()
+
+      fireEvent.click(screen.getByLabelText('Cell boundaries'))
       await waitFor(() => {
         expect(visiumDataset.elements).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -630,10 +647,6 @@ describe('App', () => {
             maxY: expect.any(Number) as number,
           }),
         )
-      })
-      await waitFor(() => {
-        expect(screen.queryByTestId('deck-layer-spatial-grid-cells')).toBeNull()
-        expect(screen.queryByTestId('deck-layer-cell-boundary-hit-areas')).toBeNull()
       })
       await act(async () => {
         cellBoundaryDeferred.resolve(cellBoundaryBatch)
@@ -646,10 +659,26 @@ describe('App', () => {
           '1',
         )
         expect(
+          screen.queryByTestId('deck-layer-nucleus-segmentation-polygons'),
+        ).toBeNull()
+      })
+
+      fireEvent.click(screen.getByLabelText('Nucleus boundaries'))
+      await waitFor(() => {
+        expect(visiumDataset.segmentationElements).toHaveBeenCalledWith(
+          'nucleus',
+          expect.objectContaining({
+            minX: expect.any(Number) as number,
+            maxX: expect.any(Number) as number,
+            minY: expect.any(Number) as number,
+            maxY: expect.any(Number) as number,
+          }),
+        )
+        expect(
           screen.getByTestId('deck-layer-nucleus-segmentation-polygons'),
         ).toHaveAttribute('data-count', '1')
       })
-      openHudTab('Layers')
+
       fireEvent.click(screen.getByLabelText('Cell boundaries'))
       await waitFor(() => {
         expect(screen.queryByTestId('deck-layer-cell-boundary-hit-areas')).toBeNull()
@@ -661,12 +690,7 @@ describe('App', () => {
           screen.getByTestId('deck-layer-nucleus-segmentation-polygons'),
         ).toHaveAttribute('data-count', '1')
       })
-      fireEvent.click(screen.getByLabelText('Nucleus boundaries'))
-      await waitFor(() => {
-        expect(
-          screen.queryByTestId('deck-layer-nucleus-segmentation-polygons'),
-        ).toBeNull()
-      })
+
       fireEvent.click(screen.getByLabelText('Cell boundaries'))
       await waitFor(() => {
         expect(screen.queryByTestId('deck-layer-spatial-grid-cells')).toBeNull()
@@ -675,15 +699,6 @@ describe('App', () => {
           '1',
         )
       })
-      expect(visiumDataset.segmentationElements).toHaveBeenCalledWith(
-        'nucleus',
-        expect.objectContaining({
-          minX: expect.any(Number) as number,
-          maxX: expect.any(Number) as number,
-          minY: expect.any(Number) as number,
-          maxY: expect.any(Number) as number,
-        }),
-      )
       fireEvent.click(screen.getByTestId('deck-layer-cell-boundary-hit-areas'))
       openHudTab('Cell')
 

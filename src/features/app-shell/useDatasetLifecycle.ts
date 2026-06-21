@@ -238,6 +238,8 @@ interface UseDatasetLifecycleOptions {
   readonly setSelectedGridCell: Setter<GridCellDatum | null>
   readonly setSelectedEmbeddingKind: Setter<AnalysisEmbeddingKind>
   readonly setSelectedGenes: Setter<readonly string[]>
+  readonly setShowCellBoundaries: Setter<boolean>
+  readonly setShowNucleusBoundaries: Setter<boolean>
   readonly setSpatialGridCells: Setter<readonly GridCellDatum[]>
   readonly setTranscriptCapabilityState: Setter<
     TranscriptCapabilityState<StructuredLoadError>
@@ -372,6 +374,8 @@ export function useDatasetLifecycle({
   setSelectedGridCell,
   setSelectedEmbeddingKind,
   setSelectedGenes,
+  setShowCellBoundaries,
+  setShowNucleusBoundaries,
   setSpatialGridCells,
   setTranscriptCapabilityState,
   setTranscriptDensityColorScale,
@@ -692,6 +696,14 @@ export function useDatasetLifecycle({
 
         if (detection.platform === 'visium-hd') {
           setDatasetPlatform('visium-hd')
+          setShowCellBoundaries(
+            shouldRestoreSharedState ? (sharedState?.showCellBoundaries ?? false) : false,
+          )
+          setShowNucleusBoundaries(
+            shouldRestoreSharedState
+              ? (sharedState?.showNucleusBoundaries ?? false)
+              : false,
+          )
           const dataset =
             visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
               ? await getSpatialDataset(detection.baseUrl)
