@@ -220,6 +220,46 @@ describe('CellHudPanel', () => {
 
     expect(onClearSelectedBoundaryCell).toHaveBeenCalledTimes(1)
   })
+
+  it('explains when selected Visium HD cell expression needs barcode mappings', () => {
+    render(
+      <CellHudPanel
+        active
+        embeddingViewInputId="embedding-view"
+        embeddingCopy="No embedding loaded"
+        analysisEmbeddingState={{ status: 'idle' }}
+        activeEmbedding={null}
+        annotationStyles={[]}
+        selectedEmbeddingKind="umap"
+        roiCellIds={[]}
+        isVisiumHdDataset
+        selectedCell={null}
+        selectedGridCell={null}
+        selectedGridCellAssignmentState={{ status: 'idle' }}
+        selectedBoundaryCell={boundaryCellDatum()}
+        selectedBoundaryCellExpressionStatus={{
+          status: 'unavailable',
+          message: 'Set a mapping row budget in Dataset to color cell boundaries.',
+        }}
+        selectedCellAnnotationLabels={[]}
+        cellDetailCopy="No selection"
+        cellDetailState={{ status: 'idle' }}
+        cellTranscriptDistributionState={{ status: 'idle' }}
+        loadEnabled={false}
+        onEmbeddingKindChange={vi.fn()}
+        onLoadAnalysisEmbeddings={vi.fn()}
+        onClearSelectedCell={vi.fn()}
+        onClearSelectedGridCell={vi.fn()}
+        onClearSelectedBoundaryCell={vi.fn()}
+        onSelectEmbeddingCell={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Gene expression')).toBeInTheDocument()
+    expect(
+      screen.getByText('Set a mapping row budget in Dataset to color cell boundaries.'),
+    ).toBeInTheDocument()
+  })
 })
 
 function cellDatum(values: Partial<OverviewCellDatum> = {}): OverviewCellDatum {

@@ -4,15 +4,21 @@ import {
   gridCellAssignmentStatusLabel,
   type GridCellAssignmentState,
 } from './gridCellAssignmentModel'
+import {
+  expressionStatusLabel,
+  type CellGeneExpressionStatus,
+} from './cellGeneExpressionStatus'
 
 interface GridCellInfoPanelProps {
   readonly cell: GridCellDatum | null
   readonly assignmentState?: GridCellAssignmentState
+  readonly expressionStatus?: CellGeneExpressionStatus | undefined
 }
 
 export function GridCellInfoPanel({
   cell,
   assignmentState = { status: 'idle' },
+  expressionStatus,
 }: GridCellInfoPanelProps) {
   if (cell === null) {
     return <p className="cell-info-empty">No bin selected</p>
@@ -59,7 +65,9 @@ export function GridCellInfoPanel({
       <div className="cell-expression-panel">
         <div className="cell-expression-heading">
           <span>Gene expression</span>
-          <small>{hasExpression ? 'Loaded' : 'Unavailable'}</small>
+          <small>
+            {hasExpression ? 'Loaded' : expressionStatusLabel(expressionStatus)}
+          </small>
         </div>
         {hasExpression ? (
           <dl className="cell-info-list">
@@ -77,7 +85,9 @@ export function GridCellInfoPanel({
             </div>
           </dl>
         ) : (
-          <p className="cell-expression-status">No expression loaded</p>
+          <p className="cell-expression-status">
+            {expressionStatus?.message ?? 'No expression loaded'}
+          </p>
         )}
       </div>
     </div>

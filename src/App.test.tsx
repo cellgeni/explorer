@@ -587,7 +587,9 @@ describe('App', () => {
 
       const initialBinInfo = screen.getByRole('region', { name: 'Bin Info' })
       expect(within(initialBinInfo).getByText('BC-1')).toBeInTheDocument()
-      expect(within(initialBinInfo).getByText('No expression loaded')).toBeInTheDocument()
+      expect(
+        within(initialBinInfo).getByText('Select a gene or gene set to load expression.'),
+      ).toBeInTheDocument()
 
       openHudTab('Genes')
       expect(await screen.findByText('1 genes')).toBeInTheDocument()

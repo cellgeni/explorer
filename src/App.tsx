@@ -13,7 +13,10 @@ import { AppLayerHudPanel } from './features/app-shell/AppLayerHudPanel'
 import { AppTranscriptHudPanel } from './features/app-shell/AppTranscriptHudPanel'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
-import { useVisiumHdExpressionProjectionWorkflow } from './features/genes/useVisiumHdExpressionProjectionWorkflow'
+import {
+  useVisiumHdExpressionProjectionWorkflow,
+  type VisiumHdExpressionProjectionState,
+} from './features/genes/useVisiumHdExpressionProjectionWorkflow'
 import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import { RoiHudPanel, VisiumHdRoiHudPanel } from './features/control-hud/RoiHudPanel'
@@ -64,6 +67,7 @@ import {
   type CellDetailState,
   type CellTranscriptDistributionState,
 } from './features/cells/cellDetailModel'
+import type { CellGeneExpressionStatus } from './features/cells/cellGeneExpressionStatus'
 import { useCellDetailWorkflow } from './features/cells/useCellDetailWorkflow'
 import type { GridCellAssignmentState } from './features/cells/gridCellAssignmentModel'
 import { useGridCellAssignmentWorkflow } from './features/cells/useGridCellAssignmentWorkflow'
@@ -917,13 +921,34 @@ export function App({
 
     return cellById
   }, [expressionStyledSpatialGridCells])
-  const activeSelectedGridCell = useMemo(
-    () =>
-      selectedGridCell === null
-        ? null
-        : (gridCellById.get(selectedGridCell.id) ?? selectedGridCell),
-    [gridCellById, selectedGridCell],
-  )
+  const activeSelectedGridCell = useMemo(() => {
+    if (selectedGridCell === null) {
+      return null
+    }
+
+    const cell = gridCellById.get(selectedGridCell.id) ?? selectedGridCell
+
+    if (
+      isVisiumHdDataset &&
+      selectedGenes.length > 0 &&
+      geneExpressionState.status === 'ready' &&
+      cell.expressionCount === undefined
+    ) {
+      return {
+        ...cell,
+        expressionCount: 0,
+        expressionGenes: selectedGenes,
+      }
+    }
+
+    return cell
+  }, [
+    geneExpressionState.status,
+    gridCellById,
+    isVisiumHdDataset,
+    selectedGenes,
+    selectedGridCell,
+  ])
   const activeEmbedding = useMemo(
     () =>
       analysisEmbeddingState.status === 'ready'
@@ -964,6 +989,32 @@ export function App({
         ? []
         : annotationLabelsForCell(visibleAnnotationState, selectedCell.id),
     [selectedCell, visibleAnnotationState],
+  )
+  const selectedGeneExpressionStatus = useMemo(
+    () => selectionGeneExpressionStatus(selectedGenes, geneExpressionState),
+    [geneExpressionState, selectedGenes],
+  )
+  const selectedGridCellExpressionStatus =
+    activeSelectedGridCell !== null &&
+    activeSelectedGridCell.expressionCount === undefined
+      ? selectedGeneExpressionStatus
+      : undefined
+  const selectedBoundaryCellExpressionStatus = useMemo(
+    () =>
+      activeSelectedBoundaryCell === null ||
+      activeSelectedBoundaryCell.expressionCount !== undefined
+        ? undefined
+        : boundarySelectionGeneExpressionStatus(
+            selectedGeneExpressionStatus,
+            geneExpressionState,
+            visiumHdExpressionProjectionState,
+          ),
+    [
+      activeSelectedBoundaryCell,
+      geneExpressionState,
+      selectedGeneExpressionStatus,
+      visiumHdExpressionProjectionState,
+    ],
   )
   const handleAnnotationSetVisibilityChange = useCallback(
     (setId: string, visible: boolean) => {
@@ -2340,7 +2391,9 @@ export function App({
           selectedCell={selectedCell}
           selectedGridCell={activeSelectedGridCell}
           selectedGridCellAssignmentState={gridCellAssignmentState}
+          selectedGridCellExpressionStatus={selectedGridCellExpressionStatus}
           selectedBoundaryCell={activeSelectedBoundaryCell}
+          selectedBoundaryCellExpressionStatus={selectedBoundaryCellExpressionStatus}
           selectedCellAnnotationLabels={selectedCellAnnotationLabels}
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
@@ -2538,6 +2591,97 @@ function isSpatialGeneExpressionDataset(
     'geneExpression' in dataset &&
     typeof dataset.geneExpression === 'function'
   )
+}
+
+function selectionGeneExpressionStatus(
+  selectedGenes: readonly string[],
+  state: GeneExpressionState<StructuredLoadError>,
+): CellGeneExpressionStatus {
+  if (selectedGenes.length === 0) {
+    return {
+      status: 'idle',
+      message: 'Select a gene or gene set to load expression.',
+    }
+  }
+
+  if (state.status === 'loading') {
+    return {
+      status: 'loading',
+      message: 'Loading selected-gene expression.',
+    }
+  }
+
+  if (state.status === 'waiting') {
+    return {
+      status: 'unavailable',
+      message: state.message,
+    }
+  }
+
+  if (state.status === 'error') {
+    return {
+      status: 'error',
+      message: formatStructuredError(state.error),
+    }
+  }
+
+  if (state.status === 'ready') {
+    return {
+      status: 'unavailable',
+      message:
+        'Selected-gene expression is loaded, but no expression value matched this selection.',
+    }
+  }
+
+  return {
+    status: 'idle',
+    message: 'Expression will load after the spatial view is ready.',
+  }
+}
+
+function boundarySelectionGeneExpressionStatus(
+  baseStatus: CellGeneExpressionStatus,
+  geneExpressionState: GeneExpressionState<StructuredLoadError>,
+  projectionState: VisiumHdExpressionProjectionState,
+): CellGeneExpressionStatus {
+  if (geneExpressionState.status !== 'ready') {
+    return baseStatus
+  }
+
+  if (projectionState.status === 'loading') {
+    return {
+      status: 'loading',
+      message: `Projecting selected-gene expression onto ${projectionState.boundaryCellCount.toLocaleString()} cells using up to ${projectionState.rowBudget.toLocaleString()} mapping rows.`,
+    }
+  }
+
+  if (projectionState.status === 'unavailable') {
+    return {
+      status: 'unavailable',
+      message: projectionState.reason,
+    }
+  }
+
+  if (projectionState.status === 'error') {
+    return {
+      status: 'error',
+      message: formatStructuredError(projectionState.error),
+    }
+  }
+
+  if (projectionState.status === 'ready') {
+    return {
+      status: 'unavailable',
+      message:
+        'Selected-gene expression was projected, but no expression value matched this cell.',
+    }
+  }
+
+  return {
+    status: 'unavailable',
+    message:
+      'Selected-gene bin expression is loaded. Set Mapping rows in Dataset to project it onto segmented cells.',
+  }
 }
 
 interface SpatialSegmentationDataset {

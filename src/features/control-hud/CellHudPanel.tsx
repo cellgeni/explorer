@@ -1,6 +1,10 @@
 import { EmbeddingPanel } from '../analysis/EmbeddingPanel'
 import { CellInfoPanel } from '../cells/CellInfoPanel'
 import { GridCellInfoPanel } from '../cells/GridCellInfoPanel'
+import {
+  expressionStatusLabel,
+  type CellGeneExpressionStatus,
+} from '../cells/cellGeneExpressionStatus'
 import type { AnalysisEmbeddingState } from '../analysis/analysisEmbeddingModel'
 import type {
   CellDetailState,
@@ -31,7 +35,9 @@ interface CellHudPanelProps {
   readonly selectedCell: OverviewCellDatum | null
   readonly selectedGridCell: GridCellDatum | null
   readonly selectedGridCellAssignmentState: GridCellAssignmentState
+  readonly selectedGridCellExpressionStatus?: CellGeneExpressionStatus | undefined
   readonly selectedBoundaryCell: CellBoundaryDatum | null
+  readonly selectedBoundaryCellExpressionStatus?: CellGeneExpressionStatus | undefined
   readonly selectedCellAnnotationLabels: readonly string[]
   readonly cellDetailCopy: string
   readonly cellDetailState: CellDetailState
@@ -58,7 +64,9 @@ export function CellHudPanel({
   selectedCell,
   selectedGridCell,
   selectedGridCellAssignmentState,
+  selectedGridCellExpressionStatus,
   selectedBoundaryCell,
+  selectedBoundaryCellExpressionStatus,
   selectedCellAnnotationLabels,
   cellDetailCopy,
   cellDetailState,
@@ -210,12 +218,14 @@ export function CellHudPanel({
             <BoundaryCellInfoPanel
               key={selectedBoundaryCell.id}
               cell={selectedBoundaryCell}
+              expressionStatus={selectedBoundaryCellExpressionStatus}
             />
           ) : (
             <GridCellInfoPanel
               key={selectedGridCell?.id ?? 'none'}
               cell={selectedGridCell}
               assignmentState={selectedGridCellAssignmentState}
+              expressionStatus={selectedGridCellExpressionStatus}
             />
           )
         ) : (
@@ -232,7 +242,13 @@ export function CellHudPanel({
   )
 }
 
-function BoundaryCellInfoPanel({ cell }: { readonly cell: CellBoundaryDatum }) {
+function BoundaryCellInfoPanel({
+  cell,
+  expressionStatus,
+}: {
+  readonly cell: CellBoundaryDatum
+  readonly expressionStatus?: CellGeneExpressionStatus | undefined
+}) {
   const hasExpression = cell.expressionCount !== undefined
   const expressionGenes = cell.expressionGenes ?? []
 
@@ -266,7 +282,9 @@ function BoundaryCellInfoPanel({ cell }: { readonly cell: CellBoundaryDatum }) {
       <div className="cell-expression-panel">
         <div className="cell-expression-heading">
           <span>Gene expression</span>
-          <small>{hasExpression ? 'Loaded' : 'Unavailable'}</small>
+          <small>
+            {hasExpression ? 'Loaded' : expressionStatusLabel(expressionStatus)}
+          </small>
         </div>
         {hasExpression ? (
           <dl className="cell-info-list">
@@ -284,7 +302,9 @@ function BoundaryCellInfoPanel({ cell }: { readonly cell: CellBoundaryDatum }) {
             </div>
           </dl>
         ) : (
-          <p className="cell-expression-status">No expression loaded</p>
+          <p className="cell-expression-status">
+            {expressionStatus?.message ?? 'No expression loaded'}
+          </p>
         )}
       </div>
     </div>
