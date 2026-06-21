@@ -2461,6 +2461,12 @@ h2 {
   color: #6f332a;
 }
 
+.cell-expression-load-action {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+}
+
 .cell-expression-filter {
   color: #7b4d1d;
   font-size: 0.62rem;

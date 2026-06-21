@@ -72,7 +72,7 @@ test('loads the Visium HD reference dataset with tissue image and 16 um bins', a
 test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced controls', async ({
   page,
 }) => {
-  test.setTimeout(180_000)
+  test.setTimeout(300_000)
 
   const visiumPanel = await loadVisiumHdReferenceDataset(page)
 

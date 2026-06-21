@@ -8,17 +8,23 @@ import {
   expressionStatusLabel,
   type CellGeneExpressionStatus,
 } from './cellGeneExpressionStatus'
+import { CellExpressionProfilePanel } from './CellExpressionProfilePanel'
+import type { CellExpressionProfileState } from './cellExpressionProfileModel'
 
 interface GridCellInfoPanelProps {
   readonly cell: GridCellDatum | null
   readonly assignmentState?: GridCellAssignmentState
   readonly expressionStatus?: CellGeneExpressionStatus | undefined
+  readonly expressionProfileState?: CellExpressionProfileState | undefined
+  readonly onLoadExpressionProfile?: (() => void) | undefined
 }
 
 export function GridCellInfoPanel({
   cell,
   assignmentState = { status: 'idle' },
   expressionStatus,
+  expressionProfileState = IDLE_CELL_EXPRESSION_PROFILE_STATE,
+  onLoadExpressionProfile,
 }: GridCellInfoPanelProps) {
   if (cell === null) {
     return <p className="cell-info-empty">No bin selected</p>
@@ -90,9 +96,21 @@ export function GridCellInfoPanel({
           </p>
         )}
       </div>
+
+      <CellExpressionProfilePanel
+        state={expressionProfileState}
+        disabled={onLoadExpressionProfile === undefined}
+        onLoad={onLoadExpressionProfile ?? noop}
+      />
     </div>
   )
 }
+
+const IDLE_CELL_EXPRESSION_PROFILE_STATE: CellExpressionProfileState = {
+  status: 'idle',
+}
+
+function noop(): void {}
 
 function GridCellAssignmentDetail({
   state,

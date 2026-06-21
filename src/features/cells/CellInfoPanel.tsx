@@ -1,5 +1,4 @@
 import type { CSSProperties } from 'react'
-import { useId, useMemo, useState } from 'react'
 import {
   CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
   type CellTranscriptZBin,
@@ -7,13 +6,12 @@ import {
 } from '../../data/cellTranscripts'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import {
-  CELL_GENE_EXPRESSION_LIMIT,
   type CellDetailState,
   type CellLoadErrorSummary,
   summarizeCellShape,
   type CellTranscriptDistributionState,
-  type CellGeneExpressionGene,
 } from './cellDetailModel'
+import { CellGeneExpressionList } from './CellGeneExpressionList'
 
 interface CellInfoPanelProps {
   readonly cell: OverviewCellDatum | null
@@ -30,8 +28,6 @@ export function CellInfoPanel({
   state,
   transcriptDistributionState,
 }: CellInfoPanelProps) {
-  const geneSearchInputId = useId()
-  const [geneSearch, setGeneSearch] = useState('')
   const readyState =
     cell !== null && state.status === 'ready' && state.cellId === cell.id ? state : null
   const loadingState =
@@ -45,13 +41,6 @@ export function CellInfoPanel({
         : summarizeCellShape(cell, null)
       : readyState.shape
   const expression = readyState?.expression ?? null
-  const filteredGenes = useMemo(
-    () =>
-      expression === null ? [] : filterCellExpressionGenes(expression.genes, geneSearch),
-    [expression, geneSearch],
-  )
-  const maxExpressionCount =
-    expression?.genes.reduce((max, gene) => Math.max(max, gene.count), 0) ?? 0
 
   if (cell === null) {
     return <p className="cell-info-empty">No cell selected</p>
@@ -150,59 +139,7 @@ export function CellInfoPanel({
           </p>
         )}
 
-        {expression === null ? null : (
-          <>
-            <label className="cell-expression-filter" htmlFor={geneSearchInputId}>
-              Gene filter
-            </label>
-            <input
-              id={geneSearchInputId}
-              className="cell-expression-search"
-              type="search"
-              autoComplete="off"
-              spellCheck={false}
-              value={geneSearch}
-              placeholder="Search expressed genes"
-              title="Gene expression filter"
-              onChange={(event) => {
-                setGeneSearch(event.currentTarget.value)
-              }}
-            />
-            {expression.genes.length === 0 ? (
-              <p className="cell-expression-status">No expressed genes found</p>
-            ) : filteredGenes.length === 0 ? (
-              <p className="cell-expression-status">No matching genes</p>
-            ) : (
-              <ol className="cell-expression-list" aria-label="Cell gene expression">
-                {filteredGenes.map((gene) => (
-                  <li
-                    key={gene.gene}
-                    style={
-                      {
-                        '--cell-gene-width': `${expressionBarWidth(
-                          gene.count,
-                          maxExpressionCount,
-                        )}%`,
-                      } as CSSProperties
-                    }
-                  >
-                    <div className="cell-expression-row">
-                      <span>{gene.gene}</span>
-                      <strong>{gene.count.toLocaleString()}</strong>
-                    </div>
-                    <div className="cell-expression-bar" aria-hidden="true" />
-                    <small>{formatPercent(gene.percentTotal)} total</small>
-                  </li>
-                ))}
-              </ol>
-            )}
-            {expression.hitGeneLimit ? (
-              <p className="cell-expression-status">
-                Showing first {CELL_GENE_EXPRESSION_LIMIT.toLocaleString()} genes
-              </p>
-            ) : null}
-          </>
-        )}
+        {expression === null ? null : <CellGeneExpressionList expression={expression} />}
       </div>
     </div>
   )
@@ -307,27 +244,6 @@ function CellTranscriptZDistributionPanel({
   )
 }
 
-function filterCellExpressionGenes(
-  genes: readonly CellGeneExpressionGene[],
-  search: string,
-): readonly CellGeneExpressionGene[] {
-  const normalizedSearch = search.trim().toLowerCase()
-
-  if (normalizedSearch.length === 0) {
-    return genes
-  }
-
-  return genes.filter((gene) => gene.gene.toLowerCase().includes(normalizedSearch))
-}
-
-function expressionBarWidth(count: number, maxCount: number): number {
-  if (maxCount <= 0) {
-    return 0
-  }
-
-  return Math.max(2, Math.min(100, (count / maxCount) * 100))
-}
-
 function cellTranscriptZBarHeight(bin: CellTranscriptZBin, maxBinCount: number): number {
   if (maxBinCount <= 0 || bin.count <= 0) {
     return 0
@@ -379,10 +295,6 @@ function formatNumber(value: number | undefined): string {
   return value === undefined
     ? '0'
     : value.toLocaleString(undefined, { maximumFractionDigits: 1 })
-}
-
-function formatPercent(value: number): string {
-  return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
 }
 
 function formatMetric(value: number | undefined, unit?: string): string {

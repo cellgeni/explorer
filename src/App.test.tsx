@@ -558,6 +558,18 @@ describe('App', () => {
         genes: ['Actb'],
         maxCount: 7,
       })),
+      matrix: vi.fn(async () => ({
+        geneNames: ['Actb', 'Gad1'],
+        cells: new Map([
+          [
+            'BC-1',
+            {
+              geneNames: ['Actb', 'Gad1'],
+              counts: [9, 3],
+            },
+          ],
+        ]),
+      })),
     }
     const getSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetLoader>> = vi.fn(
       async () => visiumDataset as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
@@ -591,6 +603,28 @@ describe('App', () => {
         within(initialBinInfo).getByText('Select a gene or gene set to load expression.'),
       ).toBeInTheDocument()
 
+      fireEvent.click(
+        within(initialBinInfo).getByRole('button', { name: 'Load Profile' }),
+      )
+
+      await waitFor(() => {
+        expect(visiumDataset.matrix).toHaveBeenCalledWith(
+          ['BC-1'],
+          16,
+          expect.objectContaining({
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+      await waitFor(() => {
+        expect(within(initialBinInfo).getByText('12 counts')).toBeInTheDocument()
+      })
+      expect(within(initialBinInfo).getAllByText('Selected bin').length).toBeGreaterThan(
+        0,
+      )
+      expect(within(initialBinInfo).getByText('Actb')).toBeInTheDocument()
+      expect(within(initialBinInfo).getByText('Gad1')).toBeInTheDocument()
+
       openHudTab('Genes')
       expect(await screen.findByText('1 genes')).toBeInTheDocument()
       fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
@@ -604,7 +638,7 @@ describe('App', () => {
       await waitFor(() => {
         expect(within(updatedBinInfo).getByText('Loaded')).toBeInTheDocument()
       })
-      expect(within(updatedBinInfo).getByText('Actb')).toBeInTheDocument()
+      expect(within(updatedBinInfo).getAllByText('Actb').length).toBeGreaterThan(0)
       expect(within(updatedBinInfo).getByText('7')).toBeInTheDocument()
       expect(
         within(updatedBinInfo).queryByText('No expression loaded'),

@@ -260,6 +260,55 @@ describe('CellHudPanel', () => {
       screen.getByText('Set a mapping row budget in Dataset to color cell boundaries.'),
     ).toBeInTheDocument()
   })
+
+  it('shows a segmented-cell expression profile state and forwards profile loading', () => {
+    const onLoadSelectedExpressionProfile = vi.fn()
+
+    render(
+      <CellHudPanel
+        active
+        embeddingViewInputId="embedding-view"
+        embeddingCopy="No embedding loaded"
+        analysisEmbeddingState={{ status: 'idle' }}
+        activeEmbedding={null}
+        annotationStyles={[]}
+        selectedEmbeddingKind="umap"
+        roiCellIds={[]}
+        isVisiumHdDataset
+        selectedCell={null}
+        selectedGridCell={null}
+        selectedGridCellAssignmentState={{ status: 'idle' }}
+        selectedBoundaryCell={boundaryCellDatum()}
+        selectedExpressionProfileState={{
+          status: 'unavailable',
+          selectionId: 'cellid_000000001-1',
+          selectionKind: 'cell',
+          reason: 'Set Mapping rows in Dataset to load a segmented-cell profile.',
+        }}
+        selectedCellAnnotationLabels={[]}
+        cellDetailCopy="No selection"
+        cellDetailState={{ status: 'idle' }}
+        cellTranscriptDistributionState={{ status: 'idle' }}
+        loadEnabled={false}
+        onEmbeddingKindChange={vi.fn()}
+        onLoadAnalysisEmbeddings={vi.fn()}
+        onClearSelectedCell={vi.fn()}
+        onClearSelectedGridCell={vi.fn()}
+        onClearSelectedBoundaryCell={vi.fn()}
+        onSelectEmbeddingCell={vi.fn()}
+        onLoadSelectedExpressionProfile={onLoadSelectedExpressionProfile}
+      />,
+    )
+
+    expect(screen.getByText('Expression profile')).toBeInTheDocument()
+    expect(
+      screen.getByText('Set Mapping rows in Dataset to load a segmented-cell profile.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load Profile' }))
+
+    expect(onLoadSelectedExpressionProfile).toHaveBeenCalledTimes(1)
+  })
 })
 
 function cellDatum(values: Partial<OverviewCellDatum> = {}): OverviewCellDatum {

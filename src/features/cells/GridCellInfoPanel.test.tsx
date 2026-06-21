@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import type { GridCellDatum } from '../../rendering/deckLayers'
 import { GridCellInfoPanel } from './GridCellInfoPanel'
 
@@ -82,6 +82,52 @@ describe('GridCellInfoPanel', () => {
     expect(
       screen.getByText('Set a mapping row budget in Dataset to load assignment.'),
     ).toBeInTheDocument()
+  })
+
+  it('loads a selected bin expression profile on demand', () => {
+    const onLoadExpressionProfile = vi.fn()
+
+    render(
+      <GridCellInfoPanel
+        cell={gridCellDatum()}
+        onLoadExpressionProfile={onLoadExpressionProfile}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load Profile' }))
+
+    expect(screen.getByText('Expression profile')).toBeInTheDocument()
+    expect(screen.getByText('Not loaded')).toBeInTheDocument()
+    expect(onLoadExpressionProfile).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a ready selected bin expression profile', () => {
+    render(
+      <GridCellInfoPanel
+        cell={gridCellDatum()}
+        expressionProfileState={{
+          status: 'ready',
+          selectionId: 'BC-1',
+          selectionKind: 'bin',
+          sourceLabel: 'Selected bin',
+          expression: {
+            totalCount: 10,
+            hitGeneLimit: false,
+            genes: [
+              { gene: 'Actb', count: 7, percentTotal: 70 },
+              { gene: 'Gad1', count: 3, percentTotal: 30 },
+            ],
+          },
+        }}
+        onLoadExpressionProfile={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('10 counts')).toBeInTheDocument()
+    expect(screen.getByText('Selected bin')).toBeInTheDocument()
+    expect(screen.getByText('Actb')).toBeInTheDocument()
+    expect(screen.getByText('Gad1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh Profile' })).toBeInTheDocument()
   })
 
   it('shows an empty state without a selected bin', () => {

@@ -1,4 +1,5 @@
 import { EmbeddingPanel } from '../analysis/EmbeddingPanel'
+import { CellExpressionProfilePanel } from '../cells/CellExpressionProfilePanel'
 import { CellInfoPanel } from '../cells/CellInfoPanel'
 import { GridCellInfoPanel } from '../cells/GridCellInfoPanel'
 import {
@@ -10,6 +11,7 @@ import type {
   CellDetailState,
   CellTranscriptDistributionState,
 } from '../cells/cellDetailModel'
+import type { CellExpressionProfileState } from '../cells/cellExpressionProfileModel'
 import type { GridCellAssignmentState } from '../cells/gridCellAssignmentModel'
 import type {
   AnalysisEmbedding,
@@ -38,6 +40,7 @@ interface CellHudPanelProps {
   readonly selectedGridCellExpressionStatus?: CellGeneExpressionStatus | undefined
   readonly selectedBoundaryCell: CellBoundaryDatum | null
   readonly selectedBoundaryCellExpressionStatus?: CellGeneExpressionStatus | undefined
+  readonly selectedExpressionProfileState?: CellExpressionProfileState | undefined
   readonly selectedCellAnnotationLabels: readonly string[]
   readonly cellDetailCopy: string
   readonly cellDetailState: CellDetailState
@@ -49,6 +52,7 @@ interface CellHudPanelProps {
   readonly onClearSelectedGridCell: () => void
   readonly onClearSelectedBoundaryCell: () => void
   readonly onSelectEmbeddingCell: (cellId: string) => void
+  readonly onLoadSelectedExpressionProfile?: (() => void) | undefined
 }
 
 export function CellHudPanel({
@@ -67,6 +71,7 @@ export function CellHudPanel({
   selectedGridCellExpressionStatus,
   selectedBoundaryCell,
   selectedBoundaryCellExpressionStatus,
+  selectedExpressionProfileState,
   selectedCellAnnotationLabels,
   cellDetailCopy,
   cellDetailState,
@@ -78,6 +83,7 @@ export function CellHudPanel({
   onClearSelectedGridCell,
   onClearSelectedBoundaryCell,
   onSelectEmbeddingCell,
+  onLoadSelectedExpressionProfile,
 }: CellHudPanelProps) {
   const visiumSelectionKind =
     selectedBoundaryCell !== null ? 'cell' : selectedGridCell !== null ? 'bin' : null
@@ -219,6 +225,8 @@ export function CellHudPanel({
               key={selectedBoundaryCell.id}
               cell={selectedBoundaryCell}
               expressionStatus={selectedBoundaryCellExpressionStatus}
+              expressionProfileState={selectedExpressionProfileState}
+              onLoadExpressionProfile={onLoadSelectedExpressionProfile}
             />
           ) : (
             <GridCellInfoPanel
@@ -226,6 +234,8 @@ export function CellHudPanel({
               cell={selectedGridCell}
               assignmentState={selectedGridCellAssignmentState}
               expressionStatus={selectedGridCellExpressionStatus}
+              expressionProfileState={selectedExpressionProfileState}
+              onLoadExpressionProfile={onLoadSelectedExpressionProfile}
             />
           )
         ) : (
@@ -245,9 +255,13 @@ export function CellHudPanel({
 function BoundaryCellInfoPanel({
   cell,
   expressionStatus,
+  expressionProfileState = IDLE_CELL_EXPRESSION_PROFILE_STATE,
+  onLoadExpressionProfile,
 }: {
   readonly cell: CellBoundaryDatum
   readonly expressionStatus?: CellGeneExpressionStatus | undefined
+  readonly expressionProfileState?: CellExpressionProfileState | undefined
+  readonly onLoadExpressionProfile?: (() => void) | undefined
 }) {
   const hasExpression = cell.expressionCount !== undefined
   const expressionGenes = cell.expressionGenes ?? []
@@ -307,9 +321,21 @@ function BoundaryCellInfoPanel({
           </p>
         )}
       </div>
+
+      <CellExpressionProfilePanel
+        state={expressionProfileState}
+        disabled={onLoadExpressionProfile === undefined}
+        onLoad={onLoadExpressionProfile ?? noop}
+      />
     </div>
   )
 }
+
+const IDLE_CELL_EXPRESSION_PROFILE_STATE: CellExpressionProfileState = {
+  status: 'idle',
+}
+
+function noop(): void {}
 
 function formatBoundaryArea(cell: CellBoundaryDatum): string {
   if (cell.polygon.length < 3) {

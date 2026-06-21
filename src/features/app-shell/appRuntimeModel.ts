@@ -45,6 +45,7 @@ interface LoadingTaskStateInputs {
   readonly analysisEmbeddingState: LoadingStatusState
   readonly cellDetailState: LoadingCellState
   readonly cellTranscriptDistributionState: LoadingCellState
+  readonly visiumHdExpressionProfileState?: LoadingSelectionState
   readonly roiState: LoadingStatusState
   readonly roiGeneStatsState: LoadingRoiGeneStatsState
   readonly roiTranscriptExportState: LoadingStatusState
@@ -74,6 +75,10 @@ interface LoadingCellState extends LoadingStatusState {
   readonly cellId?: string
 }
 
+interface LoadingSelectionState extends LoadingStatusState {
+  readonly selectionId?: string
+}
+
 interface LoadingRoiGeneStatsState extends LoadingStatusState {
   readonly cellCount?: number
 }
@@ -96,6 +101,7 @@ export function createLoadingTasks({
   analysisEmbeddingState,
   cellDetailState,
   cellTranscriptDistributionState,
+  visiumHdExpressionProfileState,
   roiState,
   roiGeneStatsState,
   roiTranscriptExportState,
@@ -232,6 +238,15 @@ export function createLoadingTasks({
       tabId: 'cell',
       label: 'Loading cell z distribution',
       detail: shortIdentifier(cellTranscriptDistributionState.cellId ?? ''),
+    })
+  }
+
+  if (visiumHdExpressionProfileState?.status === 'loading') {
+    tasks.push({
+      id: 'visium-hd-expression-profile',
+      tabId: 'cell',
+      label: 'Loading expression profile',
+      detail: shortIdentifier(visiumHdExpressionProfileState.selectionId ?? ''),
     })
   }
 
