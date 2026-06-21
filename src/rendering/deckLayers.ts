@@ -55,6 +55,8 @@ export interface CellBoundaryDatum {
   readonly polygon: readonly Position[]
   readonly fillColor: Color
   readonly lineColor: Color
+  readonly expressionCount?: number
+  readonly expressionGenes?: readonly string[]
 }
 
 export interface GridCellDatum {
@@ -1957,6 +1959,12 @@ export function styleCellBoundariesByGeneExpression(
       ...boundary,
       fillColor: expressionCell.fillColor,
       lineColor: boundaryLineColor(expressionCell.fillColor),
+      ...(expressionCell.expressionCount === undefined
+        ? {}
+        : { expressionCount: expressionCell.expressionCount }),
+      ...(expressionCell.expressionGenes === undefined
+        ? {}
+        : { expressionGenes: expressionCell.expressionGenes }),
     }
   })
 

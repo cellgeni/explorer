@@ -233,6 +233,9 @@ export function CellHudPanel({
 }
 
 function BoundaryCellInfoPanel({ cell }: { readonly cell: CellBoundaryDatum }) {
+  const hasExpression = cell.expressionCount !== undefined
+  const expressionGenes = cell.expressionGenes ?? []
+
   return (
     <div className="cell-detail-panel">
       <dl className="cell-info-list">
@@ -263,9 +266,26 @@ function BoundaryCellInfoPanel({ cell }: { readonly cell: CellBoundaryDatum }) {
       <div className="cell-expression-panel">
         <div className="cell-expression-heading">
           <span>Gene expression</span>
-          <small>Unavailable</small>
+          <small>{hasExpression ? 'Loaded' : 'Unavailable'}</small>
         </div>
-        <p className="cell-expression-status">No expression loaded</p>
+        {hasExpression ? (
+          <dl className="cell-info-list">
+            <div>
+              <dt>Score</dt>
+              <dd>{formatMetricNumber(cell.expressionCount ?? 0)}</dd>
+            </div>
+            <div>
+              <dt>Genes</dt>
+              <dd>
+                {expressionGenes.length === 0
+                  ? 'Selected genes'
+                  : expressionGenes.join(', ')}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="cell-expression-status">No expression loaded</p>
+        )}
       </div>
     </div>
   )

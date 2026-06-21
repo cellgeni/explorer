@@ -480,6 +480,139 @@ describe('App', () => {
     }
   })
 
+  it('updates selected Visium HD bin info when selected-gene expression loads', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
+    const rect = {
+      x: 0,
+      y: 0,
+      width: 320,
+      height: 190,
+      top: 0,
+      right: 320,
+      bottom: 190,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(rect)
+    const contextSpy = vi
+      .spyOn(HTMLCanvasElement.prototype, 'getContext')
+      .mockReturnValue(null)
+    const overview = visiumOverviewFixture()
+    const detectSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetDetector>> = vi.fn(
+      async () => ({
+        platform: 'visium-hd',
+        baseUrl: visiumUrl,
+        bins: [
+          {
+            binSizeMicrometers: 16,
+            outputPath: 'binned_outputs/square_016um',
+            tissuePositionsPath:
+              'binned_outputs/square_016um/spatial/tissue_positions.parquet',
+            scalefactorsPath:
+              'binned_outputs/square_016um/spatial/scalefactors_json.json',
+            filteredMatrixH5Path:
+              'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+          },
+        ],
+        checked: [],
+      }),
+    )
+    const visiumDataset = {
+      readBinnedOverview: vi.fn(async () => overview),
+      meta: vi.fn(async () => ({
+        platform: 'visium-hd' as const,
+        units: {
+          dataUnit: 'micrometer' as const,
+          imageUnit: 'pixel' as const,
+          micrometersPerPixel: micrometers(1),
+          origin: 'top-left' as const,
+          imageYAxis: 'down' as const,
+        },
+        extent: {
+          minX: micrometers(0),
+          maxX: micrometers(40),
+          minY: micrometers(0),
+          maxY: micrometers(20),
+        },
+        capabilities: {
+          transcripts: false,
+          cellBoundaries: false,
+          pyramidImage: false,
+          multiChannel: false,
+        },
+        grids: [overview.grid],
+      })),
+      image: vi.fn(async () => null),
+      genePanel: vi.fn(async () => ['Actb']),
+      geneExpression: vi.fn(async () => ({
+        cells: [
+          {
+            id: 'BC-1',
+            position: { x: micrometers(10), y: micrometers(5) },
+            count: 7,
+          },
+        ],
+        genes: ['Actb'],
+        maxCount: 7,
+      })),
+    }
+    const getSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetLoader>> = vi.fn(
+      async () => visiumDataset as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
+    )
+
+    try {
+      render(
+        <App
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={getSpatialDataset}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      await waitFor(() => {
+        expect(visiumDataset.readBinnedOverview).toHaveBeenCalled()
+      })
+      await waitFor(() => {
+        expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+          'data-count',
+          '2',
+        )
+      })
+
+      openHudTab('Cell')
+      fireEvent.click(screen.getByTestId('deck-layer-spatial-grid-cells'))
+
+      const initialBinInfo = screen.getByRole('region', { name: 'Bin Info' })
+      expect(within(initialBinInfo).getByText('BC-1')).toBeInTheDocument()
+      expect(within(initialBinInfo).getByText('No expression loaded')).toBeInTheDocument()
+
+      openHudTab('Genes')
+      expect(await screen.findByText('1 genes')).toBeInTheDocument()
+      fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
+
+      await waitFor(() => {
+        expect(visiumDataset.geneExpression).toHaveBeenCalled()
+      })
+
+      openHudTab('Cell')
+      const updatedBinInfo = screen.getByRole('region', { name: 'Bin Info' })
+      await waitFor(() => {
+        expect(within(updatedBinInfo).getByText('Loaded')).toBeInTheDocument()
+      })
+      expect(within(updatedBinInfo).getByText('Actb')).toBeInTheDocument()
+      expect(within(updatedBinInfo).getByText('7')).toBeInTheDocument()
+      expect(
+        within(updatedBinInfo).queryByText('No expression loaded'),
+      ).not.toBeInTheDocument()
+    } finally {
+      rectSpy.mockRestore()
+      contextSpy.mockRestore()
+    }
+  })
+
   it('loads Visium HD segmented boundaries through the active spatial dataset', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)

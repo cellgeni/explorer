@@ -179,6 +179,8 @@ import {
   DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
   DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
   geneExpressionScoreDomainMax,
+  styleCellBoundariesByGeneExpression,
+  styleGridCellsByGeneExpression,
 } from './rendering/deckLayers'
 import { useViewerStore } from './store/viewerStore'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
@@ -829,16 +831,31 @@ export function App({
   const visibleBoundaryLayerData = showCellBoundaries
     ? boundaryLayerData
     : EMPTY_CELL_BOUNDARY_DATA
+  const expressionStyledBoundaryLayerData = useMemo(
+    () =>
+      styleCellBoundariesByGeneExpression(
+        visibleBoundaryLayerData,
+        styledGeneExpressionCells,
+      ),
+    [styledGeneExpressionCells, visibleBoundaryLayerData],
+  )
   const visibleNucleusBoundaryLayerData = showNucleusBoundaries
     ? nucleusBoundaryLayerData
     : EMPTY_CELL_BOUNDARY_DATA
   const isVisiumHdBoundarySurfaceReserved =
     isVisiumHdDataset &&
     showCellBoundaries &&
-    (boundaryState.status === 'loading' || visibleBoundaryLayerData.length > 0)
+    (boundaryState.status === 'loading' || expressionStyledBoundaryLayerData.length > 0)
+  const expressionStyledSpatialGridCells = useMemo(
+    () =>
+      styleGridCellsByGeneExpression(spatialGridCells, styledGeneExpressionCells, {
+        styleUnmatchedCells: geneExpressionState.status === 'ready',
+      }),
+    [geneExpressionState.status, spatialGridCells, styledGeneExpressionCells],
+  )
   const viewerGridCells = useMemo(
-    () => (isVisiumHdBoundarySurfaceReserved ? [] : spatialGridCells),
-    [isVisiumHdBoundarySurfaceReserved, spatialGridCells],
+    () => (isVisiumHdBoundarySurfaceReserved ? [] : expressionStyledSpatialGridCells),
+    [expressionStyledSpatialGridCells, isVisiumHdBoundarySurfaceReserved],
   )
   const boundaryLoadingEnabled =
     showCellBoundaries || (isVisiumHdDataset && showNucleusBoundaries)
@@ -847,15 +864,17 @@ export function App({
   }`
   const boundaryOverlayRequestKeyRef = useRef(boundaryOverlayRequestKey)
   const geneExpressionOverlayEnabled = !(isVisiumHdDataset && spatialGridCells.length > 0)
-  const activeSelectedBoundaryCell = useMemo(
-    () =>
-      selectedBoundaryCell !== null &&
-      isVisiumHdDataset &&
-      visibleBoundaryLayerData.includes(selectedBoundaryCell)
-        ? selectedBoundaryCell
-        : null,
-    [isVisiumHdDataset, selectedBoundaryCell, visibleBoundaryLayerData],
-  )
+  const activeSelectedBoundaryCell = useMemo(() => {
+    if (selectedBoundaryCell === null || !isVisiumHdDataset) {
+      return null
+    }
+
+    return (
+      expressionStyledBoundaryLayerData.find(
+        (cell) => cell.id === selectedBoundaryCell.id,
+      ) ?? null
+    )
+  }, [expressionStyledBoundaryLayerData, isVisiumHdDataset, selectedBoundaryCell])
   const viewerMicrometersPerPixel =
     morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
   const viewerImageStatus =
@@ -892,12 +911,19 @@ export function App({
   const gridCellById = useMemo(() => {
     const cellById = new Map<string, GridCellDatum>()
 
-    for (const cell of spatialGridCells) {
+    for (const cell of expressionStyledSpatialGridCells) {
       cellById.set(cell.id, cell)
     }
 
     return cellById
-  }, [spatialGridCells])
+  }, [expressionStyledSpatialGridCells])
+  const activeSelectedGridCell = useMemo(
+    () =>
+      selectedGridCell === null
+        ? null
+        : (gridCellById.get(selectedGridCell.id) ?? selectedGridCell),
+    [gridCellById, selectedGridCell],
+  )
   const activeEmbedding = useMemo(
     () =>
       analysisEmbeddingState.status === 'ready'
@@ -921,7 +947,7 @@ export function App({
     [activeVisiumHdRoiState, isVisiumHdDataset, roiState],
   )
   const selectedEmbeddingElementId = isVisiumHdDataset
-    ? (selectedGridCell?.id ?? null)
+    ? (activeSelectedGridCell?.id ?? null)
     : (selectedCell?.id ?? null)
   const embeddingElementLabel = isVisiumHdDataset ? 'bins' : 'cells'
   const embeddingCopy = analysisEmbeddingStatusCopy(
@@ -1171,7 +1197,10 @@ export function App({
         return
       }
 
-      const result = selectVisiumHdGridCellsInRoi(spatialGridCells, selection)
+      const result = selectVisiumHdGridCellsInRoi(
+        expressionStyledSpatialGridCells,
+        selection,
+      )
 
       setRoiMode('idle')
       setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
@@ -1197,7 +1226,7 @@ export function App({
       appendDebugEvent,
       isVisiumHdDataset,
       loadState,
-      spatialGridCells,
+      expressionStyledSpatialGridCells,
     ],
   )
   const handleExportVisiumHdRoiBarcodes = useCallback(() => {
@@ -2309,7 +2338,7 @@ export function App({
           roiCellIds={roiCellIds}
           isVisiumHdDataset={isVisiumHdDataset}
           selectedCell={selectedCell}
-          selectedGridCell={selectedGridCell}
+          selectedGridCell={activeSelectedGridCell}
           selectedGridCellAssignmentState={gridCellAssignmentState}
           selectedBoundaryCell={activeSelectedBoundaryCell}
           selectedCellAnnotationLabels={selectedCellAnnotationLabels}
@@ -2414,7 +2443,7 @@ export function App({
           expressionCells={styledGeneExpressionCells}
           geneExpressionActive={geneExpressionState.status === 'ready'}
           geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
-          boundaries={visibleBoundaryLayerData}
+          boundaries={expressionStyledBoundaryLayerData}
           nucleusBoundaries={visibleNucleusBoundaryLayerData}
           cellBoundaryHoverEnabled={isVisiumHdDataset && showCellBoundaries}
           gridCells={viewerGridCells}

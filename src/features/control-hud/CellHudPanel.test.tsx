@@ -187,7 +187,10 @@ describe('CellHudPanel', () => {
         selectedCell={null}
         selectedGridCell={null}
         selectedGridCellAssignmentState={{ status: 'idle' }}
-        selectedBoundaryCell={boundaryCellDatum()}
+        selectedBoundaryCell={boundaryCellDatum({
+          expressionCount: 5,
+          expressionGenes: ['Actb'],
+        })}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"
         cellDetailState={{ status: 'idle' }}
@@ -209,6 +212,9 @@ describe('CellHudPanel', () => {
     expect(screen.getByText('Cluster 2')).toBeInTheDocument()
     expect(screen.getByText('Cell boundary')).toBeInTheDocument()
     expect(screen.getByText('100 um^2')).toBeInTheDocument()
+    expect(screen.getByText('Loaded')).toBeInTheDocument()
+    expect(screen.getByText('Actb')).toBeInTheDocument()
+    expect(screen.getByText('5')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear Cell' }))
 
