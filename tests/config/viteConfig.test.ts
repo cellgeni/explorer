@@ -2,9 +2,12 @@
 
 import { describe, expect, it } from 'vitest'
 import type { UserConfig } from 'vite'
-import viteConfig, { crossOriginIsolationHeaders } from '../../vite.config'
+import viteConfig, {
+  crossOriginIsolationHeaders,
+  dependencyChunkGroups,
+} from '../../vite.config'
 
-function assertStaticUserConfig(config: typeof viteConfig): UserConfig {
+function assertStaticUserConfig(config: unknown): UserConfig {
   if (typeof config === 'function') {
     throw new Error('Expected Vite config to be a static object.')
   }
@@ -13,7 +16,7 @@ function assertStaticUserConfig(config: typeof viteConfig): UserConfig {
     throw new Error('Expected Vite config to be synchronous.')
   }
 
-  return config
+  return config as UserConfig
 }
 
 describe('vite config', () => {
@@ -34,5 +37,24 @@ describe('vite config', () => {
 
     expect(config.server?.headers).toEqual(crossOriginIsolationHeaders)
     expect(config.preview?.headers).toEqual(crossOriginIsolationHeaders)
+  })
+
+  it('splits heavy spatial dependencies into named production chunks', () => {
+    const config = assertStaticUserConfig(viteConfig)
+    const output = config.build?.rolldownOptions?.output
+    const codeSplitting = Array.isArray(output)
+      ? output[0]?.codeSplitting
+      : output?.codeSplitting
+
+    expect(codeSplitting).toMatchObject({
+      groups: dependencyChunkGroups,
+    })
+    expect(dependencyChunkGroups.map((group) => group.name)).toEqual([
+      'react-vendor',
+      'deck-vendor',
+      'duckdb-vendor',
+      'spatial-io-vendor',
+      'codec-vendor',
+    ])
   })
 })

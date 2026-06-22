@@ -1378,10 +1378,15 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 
 ### Phase 6.x Post-MVP Hardening
 
-- [ ] Broaden browser coverage for Visium HD beyond first paint. The first pass
+- [x] Broaden browser coverage for Visium HD beyond first paint. The first pass
       should cover 16/8 µm switching, guarded 2 µm budget enablement,
       Feature Slice selected-gene overlay, ROI barcode export, cell/nucleus
       segmentation overlay controls, and mapping-row/bin-info inspection.
 - [ ] Continue the optimization pass for public hosted Visium HD datasets:
       interaction profiling, segmentation streaming cost, Feature Slice worker
       range behavior, memory pressure, and bundle/chunk splitting.
+- [x] Started the Visium HD optimization pass with explicit Vite/Rolldown
+      dependency chunk groups for React, deck.gl, DuckDB-WASM, spatial I/O, and
+      codecs. The production app entry chunk dropped from about 1.26 MB to about
+      427 kB; the remaining build warnings are now isolated to heavyweight
+      spatial/HDF5/codec vendor chunks.
