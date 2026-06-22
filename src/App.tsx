@@ -11,7 +11,6 @@ import { AppDatasetHudPanel } from './features/app-shell/AppDatasetHudPanel'
 import { AppGeneHudPanel } from './features/app-shell/AppGeneHudPanel'
 import { AppLayerHudPanel } from './features/app-shell/AppLayerHudPanel'
 import { AppTranscriptHudPanel } from './features/app-shell/AppTranscriptHudPanel'
-import { SlideRegistryPanel } from './features/slides/SlideRegistryPanel'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
 import {
@@ -2448,16 +2447,6 @@ export function App({
           visiumHdControlState={visiumHdControlState}
           visiumHdTwoMicrometerBudgetInput={visiumHdTwoMicrometerBudgetInput}
           visiumHdBarcodeMappingBudgetInput={visiumHdBarcodeMappingBudgetInput}
-        />
-
-        <SlideRegistryPanel
-          active={activeControlHudTab === 'slides'}
-          parentSampleIdInputId={controlIds.slideParentSampleIdInputId}
-          parentSampleNameInputId={controlIds.slideParentSampleNameInputId}
-          slideNameInputId={controlIds.slideNameInputId}
-          cutDateInputId={controlIds.slideCutDateInputId}
-          supportTypeInputId={controlIds.slideSupportTypeInputId}
-          notesInputId={controlIds.slideNotesInputId}
         />
 
         <AppLayerHudPanel
