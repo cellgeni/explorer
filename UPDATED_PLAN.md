@@ -577,6 +577,10 @@ unless the phase order is explicitly changed.
       instead of expanding through a large temporary JS number array, and large
       raw/LZW tiles use a lower initial tile/cache/concurrency budget so custom
       OME-TIFFs render progressively without overwhelming the tab.
+- [x] Confirmed Xenium exact transcript feature coloring is deterministic rather
+      than random. Exact transcript points use the same feature-name hash as
+      feature-circle glyphs, and regression coverage now locks same-gene points
+      to the same color while preserving QV-based coloring as an explicit mode.
 - [ ] Optimization pass: after correctness is stable, tune interaction
       performance, memory pressure, fetch/decode concurrency, and rendering
       costs without changing product behavior.

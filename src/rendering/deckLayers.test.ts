@@ -1262,6 +1262,42 @@ describe('deck layer factory', () => {
     expect(qualityDatum?.fillColor).not.toEqual(featureDatum?.fillColor)
   })
 
+  it('uses stable feature colors for exact transcript points from the same gene', () => {
+    const transcripts = [
+      {
+        id: 'tx-1',
+        cellId: null,
+        featureName: 'Actb',
+        fovName: 'FOV-1',
+        position: { x: micrometers(10), y: micrometers(20) },
+        qv: 10,
+      },
+      {
+        id: 'tx-2',
+        cellId: null,
+        featureName: 'Gad1',
+        fovName: 'FOV-1',
+        position: { x: micrometers(11), y: micrometers(21) },
+        qv: 40,
+      },
+      {
+        id: 'tx-3',
+        cellId: null,
+        featureName: 'Actb',
+        fovName: 'FOV-2',
+        position: { x: micrometers(12), y: micrometers(22) },
+        qv: 35,
+      },
+    ]
+
+    const featureData = transcriptPointsToLayerData(transcripts, 'feature')
+    const qualityData = transcriptPointsToLayerData(transcripts, 'quality')
+
+    expect(featureData[0]?.fillColor).toEqual(featureData[2]?.fillColor)
+    expect(featureData[0]?.fillColor).not.toEqual(featureData[1]?.fillColor)
+    expect(qualityData[0]?.fillColor).not.toEqual(qualityData[2]?.fillColor)
+  })
+
   it('renders selected-gene feature circles as a separate pickable circle layer', () => {
     const bins = transcriptAggregateBinsToLayerData([
       {
