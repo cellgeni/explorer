@@ -168,7 +168,7 @@ export function DatasetHudPanel({
           autoComplete="off"
           value={visiumHdBarcodeMappingBudgetInput}
           placeholder="disabled"
-          title="Max barcode mapping rows for Visium HD bin cell assignment"
+          title="Advanced cap for bulk Visium HD cell mapping; selected cell profiles use automatic lookup"
           onChange={(event) => {
             onVisiumHdBarcodeMappingBudgetInputChange(event.currentTarget.value)
           }}

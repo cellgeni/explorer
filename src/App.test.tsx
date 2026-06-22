@@ -756,6 +756,28 @@ describe('App', () => {
       })),
       image: vi.fn(async () => null),
       elements: vi.fn(() => cellBoundaryDeferred.promise),
+      barcodeMappingsForCell: vi.fn(async () => [
+        {
+          square002um: 's_002um_000001_000002-1',
+          square008um: 's_008um_000000_000000-1',
+          square016um: 'BC-1',
+          cellId: 'cellid_000000001-1',
+          inNucleus: false,
+          inCell: true,
+        },
+      ]),
+      matrix: vi.fn(async () => ({
+        geneNames: ['Actb', 'Gad1'],
+        cells: new Map([
+          [
+            'BC-1',
+            {
+              geneNames: ['Actb', 'Gad1'],
+              counts: [8, 4],
+            },
+          ],
+        ]),
+      })),
       segmentationElements: vi.fn(async () => [
         {
           id: 'nucleus_000000001',
@@ -874,6 +896,34 @@ describe('App', () => {
       expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
       expect(screen.getByText('Selected cell')).toBeInTheDocument()
       expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
+      const selectedCellInfo = screen.getByRole('region', { name: 'Cell Info' })
+
+      fireEvent.click(
+        within(selectedCellInfo).getByRole('button', { name: 'Load Profile' }),
+      )
+
+      await waitFor(() => {
+        expect(visiumDataset.barcodeMappingsForCell).toHaveBeenCalledWith(
+          'cellid_000000001-1',
+          expect.objectContaining({
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+      await waitFor(() => {
+        expect(visiumDataset.matrix).toHaveBeenCalledWith(
+          ['BC-1'],
+          16,
+          expect.objectContaining({
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+      await waitFor(() => {
+        expect(within(selectedCellInfo).getByText('12 counts')).toBeInTheDocument()
+      })
+      expect(within(selectedCellInfo).getByText('Actb')).toBeInTheDocument()
+      expect(within(selectedCellInfo).getByText('Gad1')).toBeInTheDocument()
       expect(loadBoundaryElements).not.toHaveBeenCalled()
     } finally {
       rectSpy.mockRestore()

@@ -285,6 +285,13 @@ interface VisiumHdBarcodeMappingsDataset extends VisiumHdExpressionProfileDatase
   }) => Promise<readonly VisiumHdBarcodeMapping[]>
 }
 
+interface VisiumHdCellBarcodeMappingsDataset extends VisiumHdExpressionProfileDataset {
+  readonly barcodeMappingsForCell: (
+    cellId: SpatialElementId,
+    options?: { readonly signal?: AbortSignal },
+  ) => Promise<readonly VisiumHdBarcodeMapping[]>
+}
+
 const IDLE_VISIUM_HD_ROI_STATE: VisiumHdRoiState = { status: 'idle' }
 const IDLE_CELL_EXPRESSION_PROFILE_STATE: CellExpressionProfileState<StructuredLoadError> =
   {
@@ -1651,16 +1658,6 @@ export function App({
       return
     }
 
-    if (selection.kind === 'cell' && visiumHdBarcodeMappingRowBudget === undefined) {
-      setVisiumHdExpressionProfileState({
-        status: 'unavailable',
-        selectionId: selection.id,
-        selectionKind: selection.kind,
-        reason: 'Set Mapping rows in Dataset to load a segmented-cell profile.',
-      })
-      return
-    }
-
     abortActiveRequest(visiumHdExpressionProfileAbortRef)
     const requestId = visiumHdExpressionProfileRequestId.current + 1
     const abortController = new AbortController()
@@ -1698,17 +1695,13 @@ export function App({
         }
       }
 
-      if (!isVisiumHdBarcodeMappingsDataset(dataset)) {
-        throw new Error(
-          'Loaded dataset does not expose Visium HD barcode mappings for cells.',
-        )
-      }
-
-      const mappingsDataset = dataset as VisiumHdBarcodeMappingsDataset
-      const mappings = await mappingsDataset.barcodeMappings({
-        maxRows: visiumHdBarcodeMappingRowBudget ?? 0,
-        signal: abortController.signal,
-      })
+      const mappings = await selectedVisiumHdCellMappings(
+        dataset,
+        selection.id,
+        visiumHdBarcodeMappingRowBudget,
+        abortController.signal,
+      )
+      const matrixDataset = dataset as VisiumHdExpressionProfileDataset
       const mappedBinIds = selectedVisiumHdCellMappedBinIds(
         mappings,
         selection.id,
@@ -1727,7 +1720,7 @@ export function App({
         }
       }
 
-      const matrix = await mappingsDataset.matrix(mappedBinIds, binSize, {
+      const matrix = await matrixDataset.matrix(mappedBinIds, binSize, {
         signal: abortController.signal,
       })
 
@@ -2869,6 +2862,42 @@ function isVisiumHdBarcodeMappingsDataset(
     'barcodeMappings' in dataset &&
     typeof dataset.barcodeMappings === 'function'
   )
+}
+
+function isVisiumHdCellBarcodeMappingsDataset(
+  dataset: unknown,
+): dataset is VisiumHdCellBarcodeMappingsDataset {
+  return (
+    isVisiumHdExpressionProfileDataset(dataset) &&
+    'barcodeMappingsForCell' in dataset &&
+    typeof dataset.barcodeMappingsForCell === 'function'
+  )
+}
+
+async function selectedVisiumHdCellMappings(
+  dataset: unknown,
+  cellId: SpatialElementId,
+  rowBudget: number | undefined,
+  signal: AbortSignal,
+): Promise<readonly VisiumHdBarcodeMapping[]> {
+  if (isVisiumHdCellBarcodeMappingsDataset(dataset)) {
+    return dataset.barcodeMappingsForCell(cellId, { signal })
+  }
+
+  if (rowBudget === undefined) {
+    throw new Error(
+      'Loaded dataset does not expose on-demand cell mapping. Set Mapping rows in Dataset to use the legacy mapping scan.',
+    )
+  }
+
+  if (!isVisiumHdBarcodeMappingsDataset(dataset)) {
+    throw new Error('Loaded dataset does not expose Visium HD barcode mappings.')
+  }
+
+  return dataset.barcodeMappings({
+    maxRows: rowBudget,
+    signal,
+  })
 }
 
 function selectedVisiumHdProfileBinSize(

@@ -103,6 +103,7 @@ export interface VisiumHdDatasetOptions {
     baseUrl: string,
     options: ReadVisiumHdBarcodeMappingsOptions,
   ) => Promise<readonly VisiumHdBarcodeMapping[]>
+  readonly barcodeMappingsForCellReader?: VisiumHdBarcodeMappingsForCellReader
   readonly segmentedOutputs?: VisiumHdSegmentedOutputPaths
   readonly segmentationReader?: (
     baseUrl: string,
@@ -200,6 +201,10 @@ export interface VisiumHdBarcodeMappingQueryOptions {
   readonly signal?: AbortSignal
 }
 
+export interface VisiumHdBarcodeMappingCellQueryOptions {
+  readonly signal?: AbortSignal
+}
+
 export interface ReadVisiumHdBinnedOverviewOptions {
   readonly baseUrl: string
   readonly bin: VisiumHdBinDescriptor
@@ -238,6 +243,12 @@ export type VisiumHdParquetObjectReader = (
   options: VisiumHdParquetReadObjectsOptions,
 ) => Promise<readonly Record<string, unknown>[]>
 
+export type VisiumHdBarcodeMappingsForCellReader = (
+  baseUrl: string,
+  cellId: SpatialElementId,
+  options: VisiumHdBarcodeMappingCellQueryOptions,
+) => Promise<readonly VisiumHdBarcodeMapping[]>
+
 export const VISIUM_HD_TISSUE_POSITION_COLUMNS = [
   'barcode',
   'in_tissue',
@@ -254,6 +265,14 @@ export class VisiumHdTissuePositionsDecodeError extends Error {
 const DEFAULT_VISIUM_HD_MAX_BASIS_FIT_SAMPLES = 10_000
 export const DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET = 64 * 1024 * 1024
 export const DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET = 128 * 1024 * 1024
+
+const readVisiumHdBarcodeMappingsForCellWithDuckDb: VisiumHdBarcodeMappingsForCellReader =
+  async (baseUrl, cellId, options) => {
+    const { readVisiumHdBarcodeMappingsForCellWithDuckDb: readWithDuckDb } =
+      await import('./visiumHdBarcodeMappingDuckDb')
+
+    return readWithDuckDb(baseUrl, cellId, options)
+  }
 
 export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   readonly baseUrl: string
@@ -282,6 +301,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     baseUrl: string,
     options: ReadVisiumHdBarcodeMappingsOptions,
   ) => Promise<readonly VisiumHdBarcodeMapping[]>
+  private readonly barcodeMappingsForCellReader: VisiumHdBarcodeMappingsForCellReader
   private readonly segmentedOutputs: VisiumHdSegmentedOutputPaths | undefined
   private readonly segmentationReader: (
     baseUrl: string,
@@ -321,6 +341,10 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     number,
     Promise<readonly VisiumHdBarcodeMapping[]>
   >()
+  private readonly barcodeMappingCellPromises = new Map<
+    SpatialElementId,
+    Promise<readonly VisiumHdBarcodeMapping[]>
+  >()
   private readonly segmentationPromises = new Map<
     string,
     Promise<readonly SpatialElement[]>
@@ -341,6 +365,8 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       options.filteredMatrixBarcodeReader ?? readVisiumHdFilteredMatrixBarcodes
     this.barcodeMappingsReader =
       options.barcodeMappingsReader ?? readVisiumHdBarcodeMappings
+    this.barcodeMappingsForCellReader =
+      options.barcodeMappingsForCellReader ?? readVisiumHdBarcodeMappingsForCellWithDuckDb
     this.segmentedOutputs = options.segmentedOutputs
     this.segmentationReader =
       options.segmentationReader ?? readVisiumHdSegmentationElements
@@ -509,6 +535,33 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
 
     if (options.signal === undefined) {
       this.barcodeMappingPromises.set(maxRows, promise)
+    }
+
+    return promise
+  }
+
+  barcodeMappingsForCell(
+    cellId: SpatialElementId,
+    options: VisiumHdBarcodeMappingCellQueryOptions = {},
+  ): Promise<readonly VisiumHdBarcodeMapping[]> {
+    const existing = this.barcodeMappingCellPromises.get(cellId)
+
+    if (existing !== undefined && options.signal === undefined) {
+      return existing
+    }
+
+    const promise = this.barcodeMappingsForCellReader(this.baseUrl, cellId, {
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    }).catch((error: unknown) => {
+      if (this.barcodeMappingCellPromises.get(cellId) === promise) {
+        this.barcodeMappingCellPromises.delete(cellId)
+      }
+
+      throw error
+    })
+
+    if (options.signal === undefined) {
+      this.barcodeMappingCellPromises.set(cellId, promise)
     }
 
     return promise

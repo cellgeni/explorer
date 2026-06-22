@@ -222,6 +222,34 @@ describe('Visium HD dataset readers', () => {
     })
   })
 
+  it('loads and caches on-demand barcode mappings for one segmented cell', async () => {
+    const barcodeMappings = [
+      {
+        square002um: 's_002um_000001_000002-1',
+        square008um: 's_008um_000000_000000-1',
+        square016um: 's_016um_000000_000000-1',
+        cellId: 'cell-1',
+        inNucleus: false,
+        inCell: true,
+      },
+    ]
+    const barcodeMappingsForCellReader = vi.fn(async () => barcodeMappings)
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      barcodeMappingsForCellReader,
+    })
+
+    await expect(dataset.barcodeMappingsForCell('cell-1')).resolves.toBe(barcodeMappings)
+    await expect(dataset.barcodeMappingsForCell('cell-1')).resolves.toBe(barcodeMappings)
+    expect(barcodeMappingsForCellReader).toHaveBeenCalledTimes(1)
+    expect(barcodeMappingsForCellReader).toHaveBeenCalledWith(
+      'https://example.test/visium',
+      'cell-1',
+      {},
+    )
+  })
+
   it('filters barcode mapping assignments by active bin IDs', async () => {
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',

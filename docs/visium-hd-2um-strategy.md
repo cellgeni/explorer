@@ -54,9 +54,9 @@ streaming or viewport-scoped barcode path is available.
 ## Barcode Mapping Bridge
 
 `barcode_mappings.parquet` is the bridge from 2 µm squares to coarser 8 µm and
-16 µm squares and segmented cell assignments. The first Slice 8 reader projects
-only `square_002um`, `square_008um`, `square_016um`, `cell_id`, `in_nucleus`,
-and `in_cell`, and requires an explicit row budget. It is a foundation for
-bin-to-cell workflows and is now used by the selected Bin Info panel when the
-Dataset HUD has a `Mapping rows` budget. Default rendering still does not touch
-`barcode_mappings.parquet`.
+16 µm squares and segmented cell assignments. Selected segmented-cell expression
+profiles use an on-demand DuckDB-WASM query for one `cell_id`, projecting only
+`square_002um`, `square_008um`, `square_016um`, `cell_id`, `in_nucleus`, and
+`in_cell`. The Dataset HUD `Mapping rows` budget remains for bulk mapping paths
+such as viewport-wide selected-gene projection and legacy bin-to-cell assignment.
+Default rendering still does not touch `barcode_mappings.parquet`.
