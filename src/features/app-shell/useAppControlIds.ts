@@ -7,6 +7,12 @@ export interface AppControlIds {
   readonly visiumHdBinSizeInputId: string
   readonly visiumHdTwoMicrometerBudgetInputId: string
   readonly visiumHdBarcodeMappingBudgetInputId: string
+  readonly slideParentSampleIdInputId: string
+  readonly slideParentSampleNameInputId: string
+  readonly slideNameInputId: string
+  readonly slideCutDateInputId: string
+  readonly slideSupportTypeInputId: string
+  readonly slideNotesInputId: string
   readonly imageOpacityInputId: string
   readonly cellFillOpacityInputId: string
   readonly cellBoundaryVisibilityInputId: string
@@ -50,6 +56,12 @@ export function useAppControlIds(): AppControlIds {
     visiumHdBinSizeInputId: useId(),
     visiumHdTwoMicrometerBudgetInputId: useId(),
     visiumHdBarcodeMappingBudgetInputId: useId(),
+    slideParentSampleIdInputId: useId(),
+    slideParentSampleNameInputId: useId(),
+    slideNameInputId: useId(),
+    slideCutDateInputId: useId(),
+    slideSupportTypeInputId: useId(),
+    slideNotesInputId: useId(),
     imageOpacityInputId: useId(),
     cellFillOpacityInputId: useId(),
     cellBoundaryVisibilityInputId: useId(),

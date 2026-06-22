@@ -162,6 +162,9 @@ function visiumOverviewFixture(): VisiumHdBinnedOverview {
 describe('App', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/')
+    if (typeof window.localStorage.removeItem === 'function') {
+      window.localStorage.removeItem('cellgeni.explorer.slideRegistry.v1')
+    }
     useViewerStore.setState(initialViewerState)
     vi.mocked(warmDatasetForRoi).mockClear()
   })
@@ -197,6 +200,27 @@ describe('App', () => {
       'aria-selected',
       'false',
     )
+    expect(screen.getByRole('tab', { name: 'Slides' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    )
+
+    openHudTab('Slides')
+    expect(screen.getByRole('heading', { name: 'Slides' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Tissue block ID')).toBeInTheDocument()
+    expect(screen.getByLabelText('Slide label')).toBeInTheDocument()
+    const cutDateInput = screen.getByLabelText('Cut date')
+
+    expect(cutDateInput).toBeInstanceOf(HTMLInputElement)
+
+    if (cutDateInput instanceof HTMLInputElement) {
+      expect(cutDateInput.value).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    }
+
+    expect(
+      screen.getByRole('radiogroup', { name: 'Tissue position on chip or slide' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Slide' })).toBeDisabled()
 
     openHudTab('Layers')
     expect(screen.getByRole('slider', { name: 'Dataset image opacity' })).toHaveValue(

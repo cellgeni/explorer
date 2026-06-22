@@ -10,6 +10,7 @@ import {
 describe('appShellModel', () => {
   it('parses known controls and rejects unknown values', () => {
     expect(parseControlHudTab('genes')).toBe('genes')
+    expect(parseControlHudTab('slides')).toBe('slides')
     expect(parseControlHudTab('missing')).toBeUndefined()
     expect(parseViewerCoordinateUnit('um')).toBe('um')
     expect(parseViewerCoordinateUnit('px')).toBe('px')

@@ -4,6 +4,7 @@ import type { ObservationColorMode } from '../../rendering/cellStyling'
 
 export const CONTROL_HUD_TABS = [
   { id: 'dataset', label: 'Dataset' },
+  { id: 'slides', label: 'Slides' },
   { id: 'layers', label: 'Layers' },
   { id: 'genes', label: 'Genes' },
   { id: 'transcripts', label: 'Transcripts' },
