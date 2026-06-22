@@ -1,5 +1,11 @@
 import type { CSSProperties } from 'react'
-import { magicLensScopeLabel, type MagicLensState } from './magicLensModel'
+import {
+  magicLensElementLabel,
+  magicLensEmptyGeneMessage,
+  magicLensPrimaryMetricLabel,
+  magicLensScopeLabel,
+  type MagicLensState,
+} from './magicLensModel'
 import type { RoiGeneStatsState } from './roiModel'
 
 export function MagicLensPanel({ state }: { readonly state: MagicLensState }) {
@@ -36,14 +42,14 @@ export function MagicLensPanel({ state }: { readonly state: MagicLensState }) {
           <dd>{magicLensScopeLabel(state.scope)}</dd>
         </div>
         <div>
-          <dt>Transcripts</dt>
+          <dt>{magicLensPrimaryMetricLabel(state.summary)}</dt>
           <dd>
             {state.summary.transcriptCount.toLocaleString()}
             {state.summary.hitLimit ? '+' : ''}
           </dd>
         </div>
         <div>
-          <dt>Cells</dt>
+          <dt>{magicLensElementLabel(state.summary)}</dt>
           <dd>{state.summary.cellCount.toLocaleString()}</dd>
         </div>
         <div>
@@ -57,7 +63,7 @@ export function MagicLensPanel({ state }: { readonly state: MagicLensState }) {
       </dl>
 
       {state.summary.topGenes.length === 0 ? (
-        <p className="magic-lens-status">No detected gene transcripts</p>
+        <p className="magic-lens-status">{magicLensEmptyGeneMessage(state.summary)}</p>
       ) : (
         <section
           className="magic-lens-gene-panel"

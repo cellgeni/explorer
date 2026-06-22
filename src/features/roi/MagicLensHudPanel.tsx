@@ -13,6 +13,7 @@ interface MagicLensHudPanelProps {
   readonly magicLensState: MagicLensState
   readonly magicLensRadiusMicrometers: number
   readonly magicLensMinQv: number
+  readonly minQvVisible?: boolean
   readonly magicLensIsCursorActive: boolean
   readonly magicLensCanScan: boolean
   readonly onScopeChange: (scope: MagicLensScope) => void
@@ -34,6 +35,7 @@ export function MagicLensHudPanel({
   magicLensState,
   magicLensRadiusMicrometers,
   magicLensMinQv,
+  minQvVisible = true,
   magicLensIsCursorActive,
   magicLensCanScan,
   onScopeChange,
@@ -129,20 +131,24 @@ export function MagicLensHudPanel({
           </output>
         </div>
 
-        <label htmlFor={magicLensMinQvInputId}>Min QV</label>
-        <input
-          id={magicLensMinQvInputId}
-          type="number"
-          inputMode="numeric"
-          min="0"
-          max="40"
-          step="1"
-          value={magicLensMinQv}
-          title="Magic lens minimum QV"
-          onChange={(event) => {
-            onMinQvChange(event.currentTarget.valueAsNumber)
-          }}
-        />
+        {minQvVisible ? (
+          <>
+            <label htmlFor={magicLensMinQvInputId}>Min QV</label>
+            <input
+              id={magicLensMinQvInputId}
+              type="number"
+              inputMode="numeric"
+              min="0"
+              max="40"
+              step="1"
+              value={magicLensMinQv}
+              title="Magic lens minimum QV"
+              onChange={(event) => {
+                onMinQvChange(event.currentTarget.valueAsNumber)
+              }}
+            />
+          </>
+        ) : null}
 
         {magicLensScope === 'cursor' ? (
           <button
@@ -165,7 +171,7 @@ export function MagicLensHudPanel({
             title="Scan magic lens"
             onClick={onRunMagicLens}
           >
-            {magicLensState.status === 'loading' ? 'Scanning...' : 'Scan Lens'}
+            {magicLensState.status === 'loading' ? 'Scanning…' : 'Scan Lens'}
           </button>
         )}
 

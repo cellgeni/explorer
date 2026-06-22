@@ -72,7 +72,7 @@ test('loads the Visium HD reference dataset with tissue image and 16 um bins', a
 test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced controls', async ({
   page,
 }) => {
-  test.setTimeout(300_000)
+  test.setTimeout(600_000)
 
   const visiumPanel = await loadVisiumHdReferenceDataset(page)
 
@@ -108,6 +108,19 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
   await expect(genesPanel.locator('.analysis-status')).toContainText(
     /Expression overview: [1-9][0-9,]* positive cells across 54,504 slide cells/,
     { timeout: 60_000 },
+  )
+
+  await page.getByRole('tab', { name: 'Magic Lens' }).click()
+  const magicLensPanel = page.locator('#hud-panel-magic-lens')
+  await expect(magicLensPanel.getByRole('spinbutton', { name: 'Min QV' })).toHaveCount(0)
+  await magicLensPanel.getByRole('button', { name: 'Viewport' }).click()
+  await expect(magicLensPanel.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
+  await magicLensPanel.getByRole('button', { name: 'Scan Lens' }).click()
+  const magicLensResults = magicLensPanel.getByLabel('Magic lens results')
+  await expect(magicLensResults).toContainText('UMIs', { timeout: 60_000 })
+  await expect(magicLensResults).toContainText('Bins')
+  await expect(magicLensPanel.getByLabel('Magic lens gene distribution')).toContainText(
+    'A2M',
   )
 
   await page.getByRole('tab', { name: 'Dataset' }).click()

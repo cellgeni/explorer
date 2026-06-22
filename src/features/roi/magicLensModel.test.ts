@@ -7,6 +7,8 @@ import type { DatasetCell } from '../../datasets/xeniumDataset'
 import {
   filterCellsForCircle,
   magicLensDetailQueryKey,
+  magicLensElementLabel,
+  magicLensPrimaryMetricLabel,
   magicLensScopeLabel,
   magicLensStatusCopy,
   normalizeMagicLensMinQv,
@@ -14,6 +16,7 @@ import {
   parseMagicLensScope,
   resolveMagicLensSelection,
   summarizeMagicLensCells,
+  summarizeMagicLensExpressionBins,
 } from './magicLensModel'
 
 const cells: readonly DatasetCell[] = [
@@ -134,5 +137,61 @@ describe('magicLensModel', () => {
     expect(normalizeMagicLensRadius(1_000)).toBe(500)
     expect(normalizeMagicLensMinQv(-5)).toBe(0)
     expect(normalizeMagicLensMinQv(Number.NaN)).toBe(20)
+  })
+
+  it('summarizes Visium HD expression bins with expression labels', () => {
+    const summary = summarizeMagicLensExpressionBins(
+      3,
+      {
+        cells: [
+          {
+            id: 'BC-1',
+            position: { x: micrometers(0), y: micrometers(0) },
+            count: 6,
+          },
+          {
+            id: 'BC-2',
+            position: { x: micrometers(1), y: micrometers(1) },
+            count: 2,
+          },
+        ],
+        genes: ['A2M', 'GAD1'],
+        geneCounts: [
+          { gene: 'A2M', count: 6 },
+          { gene: 'GAD1', count: 2 },
+        ],
+      },
+      ['A2M'],
+      { hitLimit: true },
+    )
+
+    expect(summary).toMatchObject({
+      kind: 'expression',
+      transcriptCount: 8,
+      cellCount: 3,
+      geneCount: 2,
+      selectedGeneTranscriptCount: 6,
+      hitLimit: true,
+    })
+    expect(summary.topGenes).toEqual([
+      { gene: 'A2M', count: 6, percentTotal: 75, selected: true },
+      { gene: 'GAD1', count: 2, percentTotal: 25, selected: false },
+    ])
+    expect(magicLensPrimaryMetricLabel(summary)).toBe('UMIs')
+    expect(magicLensElementLabel(summary)).toBe('Bins')
+    expect(
+      magicLensStatusCopy(
+        {
+          status: 'ready',
+          url: 'https://example.test/visium',
+          scope: 'viewport',
+          summary,
+        },
+        'viewport',
+        'ready',
+        true,
+        false,
+      ),
+    ).toBe('8 UMIs')
   })
 })

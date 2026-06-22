@@ -147,6 +147,7 @@ export interface ViewerMagicLensDetail {
 }
 
 export interface ViewerMagicLensSummary {
+  readonly kind?: 'transcripts' | 'expression'
   readonly transcriptCount: number
   readonly cellCount: number
   readonly geneCount: number
@@ -1880,7 +1881,7 @@ function MagicLensOverlay({
           <p>
             {summary === null
               ? 'Scanning lens'
-              : `${summary.cellCount.toLocaleString()} cells - ${summary.transcriptCount.toLocaleString()} tx`}
+              : `${summary.cellCount.toLocaleString()} ${magicLensElementShortLabel(summary)} - ${summary.transcriptCount.toLocaleString()} ${magicLensPrimaryMetricShortLabel(summary)}`}
           </p>
           {status === 'loading' ? <small>loading expression...</small> : null}
           {topGenes.length === 0 && status !== 'loading' ? (
@@ -2186,6 +2187,14 @@ function magicLensOverlayModel(
       width: hudWidth,
     },
   }
+}
+
+function magicLensElementShortLabel(summary: ViewerMagicLensSummary): string {
+  return summary.kind === 'expression' ? 'bins' : 'cells'
+}
+
+function magicLensPrimaryMetricShortLabel(summary: ViewerMagicLensSummary): string {
+  return summary.kind === 'expression' ? 'UMI' : 'tx'
 }
 
 function dataPointArrayToBbox(points: readonly DataPoint[]): BBox | null {

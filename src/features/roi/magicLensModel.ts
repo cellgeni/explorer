@@ -1,15 +1,17 @@
 import type { BBox, DataPoint } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { RoiSelectionInput } from '../../data/roiSelection'
-import type { DatasetCell } from '../../datasets/xeniumDataset'
+import type { DatasetCell, GeneExpressionBatch } from '../../datasets/xeniumDataset'
 
 export const MAGIC_LENS_CELL_LIMIT = 25_000
 export const MAGIC_LENS_TOP_GENE_LIMIT = 8
 export const MAGIC_LENS_GENE_STATS_LIMIT = 10_000
 
 export type MagicLensScope = 'cursor' | 'viewport' | 'roi'
+export type MagicLensSummaryKind = 'transcripts' | 'expression'
 
 export interface MagicLensSummary {
+  readonly kind?: MagicLensSummaryKind
   readonly transcriptCount: number
   readonly cellCount: number
   readonly geneCount: number
@@ -28,6 +30,10 @@ interface MagicLensGeneSummary {
 export interface MagicLensCircleFilter {
   readonly center: DataPoint
   readonly radiusMicrometers: number
+}
+
+export interface MagicLensExpressionBin {
+  readonly center: DataPoint
 }
 
 export interface MagicLensLoadErrorSummary {
@@ -130,19 +136,72 @@ export function summarizeMagicLensCells(
   }
 }
 
+export function summarizeMagicLensExpressionBins(
+  binCount: number,
+  expressionBatch: Pick<GeneExpressionBatch, 'cells' | 'genes' | 'geneCounts'>,
+  selectedGenes: readonly string[],
+  options: {
+    readonly hitLimit?: boolean
+  },
+): MagicLensSummary {
+  const selectedGeneKeys = new Set(selectedGenes.map((gene) => gene.toLocaleLowerCase()))
+  const totalCount = expressionBatch.cells.reduce((sum, cell) => sum + cell.count, 0)
+  const geneCounts =
+    expressionBatch.geneCounts ??
+    (expressionBatch.genes.length === 1 && totalCount > 0
+      ? [
+          {
+            gene: expressionBatch.genes[0] ?? selectedGenes[0] ?? 'Selected genes',
+            count: totalCount,
+          },
+        ]
+      : [])
+  let selectedGeneTranscriptCount = 0
+
+  for (const gene of geneCounts) {
+    if (selectedGeneKeys.has(gene.gene.toLocaleLowerCase())) {
+      selectedGeneTranscriptCount += gene.count
+    }
+  }
+
+  const selectedCount =
+    geneCounts.length === 0 && selectedGenes.length > 0
+      ? totalCount
+      : selectedGeneTranscriptCount
+  const topGenes = geneCounts
+    .map((gene) => ({
+      gene: gene.gene,
+      count: gene.count,
+      percentTotal: totalCount === 0 ? 0 : (gene.count / totalCount) * 100,
+      selected: selectedGeneKeys.has(gene.gene.toLocaleLowerCase()),
+    }))
+    .slice(0, MAGIC_LENS_TOP_GENE_LIMIT)
+
+  return {
+    kind: 'expression',
+    transcriptCount: totalCount,
+    cellCount: binCount,
+    geneCount: topGenes.length,
+    selectedGeneTranscriptCount: selectedCount,
+    topGenes,
+    hitLimit: options.hitLimit ?? false,
+  }
+}
+
 export function magicLensStatusCopy<ErrorType extends MagicLensLoadErrorSummary>(
   state: MagicLensState<ErrorType>,
   scope: MagicLensScope,
   loadStatus: 'idle' | 'loading' | 'ready' | 'error',
   canScan: boolean,
   active: boolean,
+  unavailableReason?: string,
 ): string {
   if (state.status === 'loading') {
     return `Scanning ${magicLensScopeLabel(state.scope)}`
   }
 
   if (state.status === 'ready') {
-    return `${state.summary.transcriptCount.toLocaleString()} transcripts`
+    return `${state.summary.transcriptCount.toLocaleString()} ${magicLensPrimaryMetricNoun(state.summary)}`
   }
 
   if (state.status === 'error') {
@@ -154,11 +213,19 @@ export function magicLensStatusCopy<ErrorType extends MagicLensLoadErrorSummary>
   }
 
   if (scope === 'cursor') {
-    return active ? 'Move cursor' : 'Lens off'
+    if (active) {
+      return 'Move cursor'
+    }
+
+    return unavailableReason ?? 'Lens off'
   }
 
   if (canScan) {
     return 'Ready'
+  }
+
+  if (unavailableReason !== undefined) {
+    return unavailableReason
   }
 
   return scope === 'roi' ? 'ROI required' : 'Viewport pending'
@@ -176,6 +243,42 @@ export function filterCellsForCircle(
 
     return deltaX * deltaX + deltaY * deltaY <= radiusSquared
   })
+}
+
+export function filterExpressionBinsForCircle<Bin extends MagicLensExpressionBin>(
+  bins: readonly Bin[],
+  filter: MagicLensCircleFilter,
+): readonly Bin[] {
+  const radiusSquared = filter.radiusMicrometers * filter.radiusMicrometers
+
+  return bins.filter((bin) => {
+    const deltaX = bin.center.x - filter.center.x
+    const deltaY = bin.center.y - filter.center.y
+
+    return deltaX * deltaX + deltaY * deltaY <= radiusSquared
+  })
+}
+
+export function magicLensPrimaryMetricLabel(summary: MagicLensSummary): string {
+  return summary.kind === 'expression' ? 'UMIs' : 'Transcripts'
+}
+
+export function magicLensPrimaryMetricShortLabel(summary: MagicLensSummary): string {
+  return summary.kind === 'expression' ? 'UMI' : 'tx'
+}
+
+export function magicLensPrimaryMetricNoun(summary: MagicLensSummary): string {
+  return summary.kind === 'expression' ? 'UMIs' : 'transcripts'
+}
+
+export function magicLensElementLabel(summary: MagicLensSummary): string {
+  return summary.kind === 'expression' ? 'Bins' : 'Cells'
+}
+
+export function magicLensEmptyGeneMessage(summary: MagicLensSummary): string {
+  return summary.kind === 'expression'
+    ? 'No detected selected-gene expression'
+    : 'No detected gene transcripts'
 }
 
 export function magicLensDetailQueryKey(

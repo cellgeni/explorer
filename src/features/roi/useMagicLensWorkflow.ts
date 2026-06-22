@@ -29,6 +29,7 @@ import {
   summarizeMagicLensCells,
   type MagicLensCircleFilter,
   type MagicLensScope,
+  type MagicLensSummary,
   type MagicLensState,
 } from './magicLensModel'
 import { emptyRoiGeneStats } from './roiModel'
@@ -44,6 +45,7 @@ interface UseMagicLensWorkflowOptions {
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly loadRoiCells: RoiCellsLoader
   readonly loadRoiGeneStats: RoiGeneStatsLoader
+  readonly loadMagicLensSummary?: MagicLensSummaryLoader
   readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly magicLensAbortRef: MutableRef<AbortController | null>
   readonly magicLensActive: boolean
@@ -65,6 +67,16 @@ interface UseMagicLensWorkflowOptions {
   readonly setMeasurementResetKey: Dispatch<SetStateAction<number>>
 }
 
+export type MagicLensSummaryLoader = (
+  baseUrl: string,
+  selection: RoiSelectionInput,
+  options: {
+    readonly signal: AbortSignal
+    readonly scope: MagicLensScope
+    readonly circleFilter: MagicLensCircleFilter | null
+  },
+) => Promise<MagicLensSummary>
+
 interface UseMagicLensWorkflowResult {
   readonly handleMagicLensCursorActiveChange: (active: boolean) => void
   readonly handleMagicLensLeave: () => void
@@ -82,6 +94,7 @@ export function useMagicLensWorkflow({
   currentViewportDetail,
   loadRoiCells,
   loadRoiGeneStats,
+  loadMagicLensSummary,
   loadState,
   magicLensAbortRef,
   magicLensActive,
@@ -126,6 +139,51 @@ export function useMagicLensWorkflow({
       )
 
       const normalizedSelection = normalizeRoiSelection(selection)
+
+      if (loadMagicLensSummary !== undefined) {
+        void loadMagicLensSummary(loadState.url, normalizedSelection, {
+          signal: abortController.signal,
+          scope,
+          circleFilter,
+        })
+          .then((summary) => {
+            if (magicLensRequestIdRef.current !== requestId) {
+              return
+            }
+
+            setMagicLensState({
+              status: 'ready',
+              url: loadState.url,
+              scope,
+              summary,
+            })
+            appendDebugEvent(
+              `Magic lens ready: ${summary.cellCount.toLocaleString()} ${
+                summary.kind === 'expression' ? 'bins' : 'cells'
+              }`,
+              scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-ready' } : {},
+            )
+          })
+          .catch((error) => {
+            if (isAbortError(error) || magicLensRequestIdRef.current !== requestId) {
+              return
+            }
+
+            setMagicLensState({
+              status: 'error',
+              url: loadState.url,
+              scope,
+              error: createStructuredLoadError('Magic lens', error),
+            })
+            appendDebugEvent('Magic lens failed')
+          })
+          .finally(() => {
+            if (magicLensAbortRef.current === abortController) {
+              magicLensAbortRef.current = null
+            }
+          })
+        return
+      }
 
       void loadRoiCells(loadState.url, normalizedSelection, {
         signal: abortController.signal,
@@ -206,6 +264,7 @@ export function useMagicLensWorkflow({
     [
       appendDebugEvent,
       appendFallbackNotice,
+      loadMagicLensSummary,
       loadRoiCells,
       loadRoiGeneStats,
       loadState,

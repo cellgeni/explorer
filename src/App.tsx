@@ -92,15 +92,22 @@ import {
 } from './features/morphology/customMorphologyLayers'
 import { useCustomMorphologyLayerWorkflow } from './features/morphology/useCustomMorphologyLayerWorkflow'
 import {
+  MAGIC_LENS_CELL_LIMIT,
   magicLensScopeLabel,
   magicLensStatusCopy,
+  filterExpressionBinsForCircle,
   normalizeMagicLensMinQv,
   normalizeMagicLensRadius,
   parseMagicLensScope,
+  summarizeMagicLensExpressionBins,
   type MagicLensScope,
+  type MagicLensSummary,
   type MagicLensState,
 } from './features/roi/magicLensModel'
-import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
+import {
+  useMagicLensWorkflow,
+  type MagicLensSummaryLoader,
+} from './features/roi/useMagicLensWorkflow'
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import {
   roiGeneDatasetWarmupKey,
@@ -168,7 +175,7 @@ import {
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
 } from './data/transcriptOverlay'
-import { type RoiSelection } from './data/roiSelection'
+import { normalizeRoiSelection, type RoiSelection } from './data/roiSelection'
 import type { ContinuousCellMetadataTrack } from './data/customAnnotations'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
 import { type ShareableState, type ShareableViewState } from './data/shareableState'
@@ -1246,6 +1253,19 @@ export function App({
       ? null
       : roiState.selection
   const effectiveShowTranscriptOverlay = showTranscriptOverlay && !isVisiumHdDataset
+  const visiumHdMagicLensUnavailableReason =
+    isVisiumHdDataset && loadState.status === 'ready'
+      ? selectedGenes.length === 0
+        ? 'Select gene'
+        : spatialGridCells.length === 0
+          ? 'Bins pending'
+          : undefined
+      : undefined
+  const magicLensLoadEnabled = isVisiumHdDataset
+    ? loadState.status === 'ready' &&
+      selectedGenes.length > 0 &&
+      spatialGridCells.length > 0
+    : xeniumFeatureLoadEnabled
   const shareableMorphologyEnabledChannelIds = useMemo(() => {
     if (baseMorphologyChannelIds.size === 0) {
       return undefined
@@ -1267,12 +1287,9 @@ export function App({
     morphologyState.status,
   ])
   const magicLensIsCursorActive =
-    magicLensScope === 'cursor' &&
-    magicLensActive &&
-    loadState.status === 'ready' &&
-    !isVisiumHdDataset
+    magicLensScope === 'cursor' && magicLensActive && magicLensLoadEnabled
   const magicLensCanScan =
-    xeniumFeatureLoadEnabled &&
+    magicLensLoadEnabled &&
     magicLensState.status !== 'loading' &&
     (magicLensScope === 'cursor'
       ? true
@@ -1301,6 +1318,7 @@ export function App({
     loadState.status,
     magicLensCanScan,
     magicLensActive,
+    visiumHdMagicLensUnavailableReason,
   )
   const transcriptCopy = transcriptStatusCopy(
     transcriptCapabilityState,
@@ -1631,6 +1649,84 @@ export function App({
       isVisiumHdDataset,
       loadGeneExpression,
       visiumHdTwoMicrometerFilteredBarcodeBudget,
+    ],
+  )
+  const loadVisiumHdMagicLensSummary = useCallback<MagicLensSummaryLoader>(
+    async (_baseUrl, selection, options): Promise<MagicLensSummary> => {
+      const normalizedSelection = normalizeRoiSelection(selection)
+      const selectedBinsResult = selectVisiumHdGridCellsInRoi(
+        expressionStyledSpatialGridCells,
+        normalizedSelection,
+        MAGIC_LENS_CELL_LIMIT,
+      )
+      const selectedBins =
+        options.circleFilter === null
+          ? selectedBinsResult.bins
+          : filterExpressionBinsForCircle(selectedBinsResult.bins, options.circleFilter)
+
+      if (selectedBins.length === 0 || selectedGenes.length === 0) {
+        return summarizeMagicLensExpressionBins(
+          selectedBins.length,
+          { cells: [], genes: selectedGenes },
+          selectedGenes,
+          { hitLimit: selectedBinsResult.hitBinLimit },
+        )
+      }
+
+      const selectedBinIds = new Set(selectedBins.map((bin) => bin.barcode))
+      const reusableExpressionBatch =
+        options.scope === 'viewport' &&
+        geneExpressionBatch !== null &&
+        currentViewportDetail !== null &&
+        sameBbox(normalizedSelection.bbox, currentViewportDetail.bbox) &&
+        sameGeneSet(geneExpressionBatch.genes, selectedGenes)
+          ? geneExpressionBatch
+          : null
+      const expressionBatch =
+        reusableExpressionBatch ??
+        (await loadActiveGeneExpression(
+          loadState.status === 'ready' ? loadState.url : _baseUrl,
+          normalizedSelection.bbox,
+          selectedGenes,
+          {
+            limit: MAGIC_LENS_CELL_LIMIT,
+            signal: options.signal,
+          },
+        ))
+      const filteredExpressionCells = expressionBatch.cells.filter((cell) =>
+        selectedBinIds.has(cell.id),
+      )
+      const filteredMaxCount = filteredExpressionCells.reduce(
+        (maxCount, cell) => Math.max(maxCount, cell.count),
+        0,
+      )
+      const filteredExpressionBatch =
+        filteredExpressionCells.length === expressionBatch.cells.length
+          ? {
+              ...expressionBatch,
+              cells: filteredExpressionCells,
+              maxCount: filteredMaxCount,
+            }
+          : {
+              cells: filteredExpressionCells,
+              genes: expressionBatch.genes,
+              maxCount: filteredMaxCount,
+            }
+
+      return summarizeMagicLensExpressionBins(
+        selectedBins.length,
+        filteredExpressionBatch,
+        selectedGenes,
+        { hitLimit: selectedBinsResult.hitBinLimit },
+      )
+    },
+    [
+      currentViewportDetail,
+      expressionStyledSpatialGridCells,
+      geneExpressionBatch,
+      loadActiveGeneExpression,
+      loadState,
+      selectedGenes,
     ],
   )
   const handleLoadVisiumHdExpressionProfile = useCallback(() => {
@@ -2008,6 +2104,7 @@ export function App({
     handleAnnotationColorChange,
     handleAnnotationGroupChange,
     handleClearAnnotations,
+    handleExportAnnotations,
     handleImportAnnotationUrl,
     handleImportAnnotations,
     handleLoadAnnotations,
@@ -2098,6 +2195,7 @@ export function App({
     currentViewportDetail,
     loadRoiCells,
     loadRoiGeneStats,
+    ...(isVisiumHdDataset ? { loadMagicLensSummary: loadVisiumHdMagicLensSummary } : {}),
     loadState,
     magicLensAbortRef,
     magicLensActive,
@@ -2576,12 +2674,13 @@ export function App({
           magicLensRadiusInputId={controlIds.magicLensRadiusInputId}
           magicLensMinQvInputId={controlIds.magicLensMinQvInputId}
           magicLensCopy={magicLensCopy}
-          loadEnabled={xeniumFeatureLoadEnabled}
+          loadEnabled={magicLensLoadEnabled}
           roiAvailable={activeRoiSelection !== null}
           magicLensScope={magicLensScope}
           magicLensState={magicLensState}
           magicLensRadiusMicrometers={magicLensRadiusMicrometers}
           magicLensMinQv={magicLensMinQv}
+          minQvVisible={!isVisiumHdDataset}
           magicLensIsCursorActive={magicLensIsCursorActive}
           magicLensCanScan={magicLensCanScan}
           onScopeChange={handleMagicLensScopeChange}
@@ -2609,6 +2708,7 @@ export function App({
           onAnnotationGroupChange={handleAnnotationGroupChange}
           onLoadAnnotations={handleLoadAnnotations}
           onClearAnnotations={handleClearAnnotations}
+          onExportAnnotations={handleExportAnnotations}
           onImportAnnotations={(file) => {
             void handleImportAnnotations(file)
           }}
@@ -2807,8 +2907,8 @@ export function App({
           onRoiComplete={
             isVisiumHdDataset ? handleVisiumHdRoiComplete : handleRoiComplete
           }
-          {...(isVisiumHdDataset ? {} : { onMagicLensMove: handleMagicLensMove })}
-          {...(isVisiumHdDataset ? {} : { onMagicLensLeave: handleMagicLensLeave })}
+          onMagicLensMove={handleMagicLensMove}
+          onMagicLensLeave={handleMagicLensLeave}
           {...(initialShareableState.viewState === undefined
             ? {}
             : { initialViewStateOverride: initialShareableState.viewState })}
@@ -2929,6 +3029,31 @@ function selectedVisiumHdCellMappedBinIds(
   }
 
   return [...mappedBinIds]
+}
+
+function sameBbox(left: BBox, right: BBox): boolean {
+  return (
+    left.minX === right.minX &&
+    left.maxX === right.maxX &&
+    left.minY === right.minY &&
+    left.maxY === right.maxY
+  )
+}
+
+function sameGeneSet(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  const rightKeys = new Set(right.map((gene) => gene.toLocaleLowerCase()))
+
+  for (const gene of left) {
+    if (!rightKeys.has(gene.toLocaleLowerCase())) {
+      return false
+    }
+  }
+
+  return true
 }
 
 function isVisiumHdBinSizeMicrometers(

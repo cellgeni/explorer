@@ -65,7 +65,11 @@ import type {
   SpatialElement,
   SpatialElementId,
 } from './spatialDataset'
-import type { GeneExpressionBatch, GeneExpressionQueryOptions } from './xeniumDataset'
+import type {
+  GeneExpressionBatch,
+  GeneExpressionGeneCount,
+  GeneExpressionQueryOptions,
+} from './xeniumDataset'
 
 export type VisiumHdBinSizeMicrometers = 2 | 8 | 16
 
@@ -684,6 +688,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     throwIfAborted(options.signal)
     const scoreCellsStartedAt = Date.now()
     const selectedGeneSet = new Set(selectedGenes)
+    const geneCounts = selectedGeneCounts(matrix, selectedGenes)
     const cells: GeneExpressionBatch['cells'][number][] = []
     let maxCount = 0
 
@@ -719,6 +724,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     return {
       cells,
       genes: selectedGenes,
+      geneCounts,
       maxCount,
       timing: {
         viewportCellsMs,
@@ -1646,6 +1652,40 @@ function selectedGeneCount(cell: GexCell, selectedGeneSet: ReadonlySet<string>):
   }
 
   return total
+}
+
+function selectedGeneCounts(
+  matrix: GexResult<SpatialElementId>,
+  selectedGenes: readonly string[],
+): readonly GeneExpressionGeneCount[] {
+  const selectedGeneKeys = new Map(
+    selectedGenes.map((gene) => [gene.toLocaleLowerCase(), gene]),
+  )
+  const countsByGene = new Map<string, number>()
+
+  for (const cell of matrix.cells.values()) {
+    for (let index = 0; index < cell.geneNames.length; index += 1) {
+      const gene = cell.geneNames[index]
+      const count = cell.counts[index]
+
+      if (gene === undefined || count === undefined || count <= 0) {
+        continue
+      }
+
+      const selectedGene = selectedGeneKeys.get(gene.toLocaleLowerCase())
+
+      if (selectedGene === undefined) {
+        continue
+      }
+
+      countsByGene.set(selectedGene, (countsByGene.get(selectedGene) ?? 0) + count)
+    }
+  }
+
+  return selectedGenes
+    .map((gene) => ({ gene, count: countsByGene.get(gene) ?? 0 }))
+    .filter((gene) => gene.count > 0)
+    .sort((left, right) => right.count - left.count)
 }
 
 function normalizeGeneList(genes: readonly string[]): readonly string[] {
