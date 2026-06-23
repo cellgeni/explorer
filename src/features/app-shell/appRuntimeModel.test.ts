@@ -9,9 +9,11 @@ import {
   createLoadingTasks,
   downloadTextFile,
   formatElapsed,
+  invalidateLatestRequest,
   isAbortError,
   shortDatasetLabel,
   shortIdentifier,
+  startLatestRequest,
   throwAbortError,
 } from './appRuntimeModel'
 
@@ -136,6 +138,44 @@ describe('appRuntimeModel', () => {
     expect(abortController.signal.aborted).toBe(true)
     expect(abortRef.current).toBeNull()
     expect(timeoutRef.current).toBeNull()
+  })
+
+  it('starts latest requests and clears only the active controller', () => {
+    const firstAbortController = new AbortController()
+    const abortRef = { current: firstAbortController }
+    const requestIdRef = { current: 4 }
+
+    const firstRequest = startLatestRequest({ abortRef, requestIdRef })
+
+    expect(firstAbortController.signal.aborted).toBe(true)
+    expect(firstRequest.requestId).toBe(5)
+    expect(firstRequest.signal).toBe(firstRequest.abortController.signal)
+    expect(firstRequest.isCurrent()).toBe(true)
+    expect(abortRef.current).toBe(firstRequest.abortController)
+
+    const secondRequest = startLatestRequest({ abortRef, requestIdRef })
+
+    expect(firstRequest.abortController.signal.aborted).toBe(true)
+    expect(firstRequest.isCurrent()).toBe(false)
+    expect(secondRequest.requestId).toBe(6)
+    expect(secondRequest.isCurrent()).toBe(true)
+
+    firstRequest.complete()
+    expect(abortRef.current).toBe(secondRequest.abortController)
+
+    secondRequest.complete()
+    expect(abortRef.current).toBeNull()
+  })
+
+  it('invalidates latest requests', () => {
+    const abortController = new AbortController()
+    const abortRef = { current: abortController }
+    const requestIdRef = { current: 2 }
+
+    expect(invalidateLatestRequest({ abortRef, requestIdRef })).toBe(3)
+    expect(abortController.signal.aborted).toBe(true)
+    expect(abortRef.current).toBeNull()
+    expect(requestIdRef.current).toBe(3)
   })
 
   it('downloads text through a transient link', () => {

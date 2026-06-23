@@ -27,11 +27,13 @@ import {
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayers'
 import type { BoundaryElementsLoader, GeneExpressionLoader } from './appDependencies'
 import {
-  abortActiveRequest,
   formatElapsed,
+  invalidateLatestRequest,
   isAbortError,
   readTimestamp,
+  startLatestRequest,
   type DebugLogAppendOptions,
+  type LatestRequestRefs,
 } from './appRuntimeModel'
 import type { BoundaryLoadState, DatasetLoadState } from '../dataset/datasetLoadModel'
 import {
@@ -51,34 +53,27 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseViewportDataWorkflowOptions {
-  readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly boundaryAbortRef: MutableRef<AbortController | null>
-  readonly boundaryCellLimit: number
-  readonly boundaryLoadingEnabled?: boolean
-  readonly boundaryRequestIdRef: MutableRef<number>
+interface BoundaryRequestRefs extends LatestRequestRefs {
   readonly boundaryViewportKeyRef: MutableRef<string | null>
-  readonly geneExpressionAbortRef: MutableRef<AbortController | null>
-  readonly geneExpressionDetailMode: GeneExpressionDetailMode
-  readonly geneExpressionDisabledMessage?: string | undefined
-  readonly geneExpressionLoadingEnabled?: boolean
-  readonly geneExpressionRequestIdRef: MutableRef<number>
-  readonly geneExpressionScaleKey: string
-  readonly geneExpressionScoreMode: GeneExpressionScoreMode
+}
+
+interface GeneExpressionRequestRefs extends LatestRequestRefs {
   readonly geneExpressionViewportKeyRef: MutableRef<string | null>
+}
+
+interface ViewportDataWorkflowRequests {
+  readonly boundary: BoundaryRequestRefs
+  readonly geneExpression: GeneExpressionRequestRefs
   readonly lastViewportDetailRef: MutableRef<ViewerViewportDetail | null>
-  readonly loadBoundaryElements: BoundaryElementsLoader
-  readonly loadNucleusBoundaryElements?: BoundaryElementsLoader
-  readonly loadGeneExpression: GeneExpressionLoader
-  readonly loadState: DatasetLoadState<StructuredLoadError>
-  readonly overviewExtent: BBox | null
-  readonly recordTelemetry: (event: TelemetryEvent) => void
-  readonly rememberGeneExpressionScaleMax: (
-    key: string,
-    batch: GeneExpressionBatch,
-    scoreMode: GeneExpressionScoreMode,
-  ) => void
-  readonly selectedGenes: readonly string[]
+}
+
+interface ViewportDataWorkflowLoaders {
+  readonly boundaryElements: BoundaryElementsLoader
+  readonly nucleusBoundaryElements?: BoundaryElementsLoader
+  readonly geneExpression: GeneExpressionLoader
+}
+
+interface ViewportDataWorkflowSetters {
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
   readonly setNucleusBoundaryElements?: Setter<readonly SpatialElement[]>
   readonly setBoundaryState: Setter<BoundaryLoadState<StructuredLoadError>>
@@ -88,42 +83,78 @@ interface UseViewportDataWorkflowOptions {
   readonly setShareableViewState: Setter<ShareableViewState | undefined>
 }
 
+interface UseViewportDataWorkflowOptions {
+  readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly boundaryCellLimit: number
+  readonly boundaryLoadingEnabled?: boolean
+  readonly geneExpressionDetailMode: GeneExpressionDetailMode
+  readonly geneExpressionDisabledMessage?: string | undefined
+  readonly geneExpressionLoadingEnabled?: boolean
+  readonly geneExpressionScaleKey: string
+  readonly geneExpressionScoreMode: GeneExpressionScoreMode
+  readonly loadState: DatasetLoadState<StructuredLoadError>
+  readonly loaders: ViewportDataWorkflowLoaders
+  readonly overviewExtent: BBox | null
+  readonly recordTelemetry: (event: TelemetryEvent) => void
+  readonly rememberGeneExpressionScaleMax: (
+    key: string,
+    batch: GeneExpressionBatch,
+    scoreMode: GeneExpressionScoreMode,
+  ) => void
+  readonly requests: ViewportDataWorkflowRequests
+  readonly selectedGenes: readonly string[]
+  readonly setters: ViewportDataWorkflowSetters
+}
+
 interface UseViewportDataWorkflowResult {
   readonly handleViewportChange: (detail: ViewerViewportDetail) => void
 }
 
 export function useViewportDataWorkflow({
   appendDebugEvent,
-  boundaryAbortRef,
   boundaryCellLimit,
   boundaryLoadingEnabled = true,
-  boundaryRequestIdRef,
-  boundaryViewportKeyRef,
-  geneExpressionAbortRef,
   geneExpressionDetailMode,
   geneExpressionDisabledMessage,
   geneExpressionLoadingEnabled = true,
-  geneExpressionRequestIdRef,
   geneExpressionScaleKey,
   geneExpressionScoreMode,
-  geneExpressionViewportKeyRef,
-  lastViewportDetailRef,
-  loadBoundaryElements,
-  loadNucleusBoundaryElements,
-  loadGeneExpression,
   loadState,
+  loaders,
   overviewExtent,
   recordTelemetry,
   rememberGeneExpressionScaleMax,
+  requests,
   selectedGenes,
-  setBoundaryElements,
-  setNucleusBoundaryElements,
-  setBoundaryState,
-  setCurrentViewportDetail,
-  setGeneExpressionBatch,
-  setGeneExpressionState,
-  setShareableViewState,
+  setters,
 }: UseViewportDataWorkflowOptions): UseViewportDataWorkflowResult {
+  const {
+    boundary: {
+      abortRef: boundaryAbortRef,
+      requestIdRef: boundaryRequestIdRef,
+      boundaryViewportKeyRef,
+    },
+    geneExpression: {
+      abortRef: geneExpressionAbortRef,
+      requestIdRef: geneExpressionRequestIdRef,
+      geneExpressionViewportKeyRef,
+    },
+    lastViewportDetailRef,
+  } = requests
+  const {
+    boundaryElements: loadBoundaryElements,
+    geneExpression: loadGeneExpression,
+    nucleusBoundaryElements: loadNucleusBoundaryElements,
+  } = loaders
+  const {
+    setBoundaryElements,
+    setBoundaryState,
+    setCurrentViewportDetail,
+    setGeneExpressionBatch,
+    setGeneExpressionState,
+    setNucleusBoundaryElements,
+    setShareableViewState,
+  } = setters
   const handleViewportChange = useCallback(
     (detail: ViewerViewportDetail) => {
       if (loadState.status !== 'ready') {
@@ -143,8 +174,10 @@ export function useViewportDataWorkflow({
         !boundaryLoadingEnabled ||
         !shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })
       ) {
-        abortActiveRequest(boundaryAbortRef)
-        boundaryRequestIdRef.current += 1
+        invalidateLatestRequest({
+          abortRef: boundaryAbortRef,
+          requestIdRef: boundaryRequestIdRef,
+        })
         boundaryViewportKeyRef.current = null
         setBoundaryElements((current) => (current.length === 0 ? current : []))
         setNucleusBoundaryElements?.((current) => (current.length === 0 ? current : []))
@@ -155,11 +188,10 @@ export function useViewportDataWorkflow({
         const requestKey = boundaryViewportKey(loadState.url, detail.bbox)
 
         if (requestKey !== boundaryViewportKeyRef.current) {
-          abortActiveRequest(boundaryAbortRef)
-          const requestId = boundaryRequestIdRef.current + 1
-          const abortController = new AbortController()
-          boundaryRequestIdRef.current = requestId
-          boundaryAbortRef.current = abortController
+          const request = startLatestRequest({
+            abortRef: boundaryAbortRef,
+            requestIdRef: boundaryRequestIdRef,
+          })
           boundaryViewportKeyRef.current = requestKey
           setBoundaryState({ status: 'loading', url: loadState.url })
           const boundaryStartedAt = readTimestamp()
@@ -172,7 +204,7 @@ export function useViewportDataWorkflow({
             loadBoundaryElements,
             loadState.url,
             detail.bbox,
-            { signal: abortController.signal },
+            { signal: request.signal },
           )
           const loadNucleusElements =
             loadNucleusBoundaryElements === undefined
@@ -181,12 +213,12 @@ export function useViewportDataWorkflow({
                   loadNucleusBoundaryElements,
                   loadState.url,
                   detail.bbox,
-                  { signal: abortController.signal },
+                  { signal: request.signal },
                 )
 
           void Promise.all([loadCellElements, loadNucleusElements])
             .then((batch) => {
-              if (boundaryRequestIdRef.current !== requestId) {
+              if (!request.isCurrent()) {
                 return
               }
 
@@ -221,7 +253,7 @@ export function useViewportDataWorkflow({
                 return
               }
 
-              if (boundaryRequestIdRef.current !== requestId) {
+              if (!request.isCurrent()) {
                 return
               }
 
@@ -243,16 +275,16 @@ export function useViewportDataWorkflow({
               })
             })
             .finally(() => {
-              if (boundaryAbortRef.current === abortController) {
-                boundaryAbortRef.current = null
-              }
+              request.complete()
             })
         }
       }
 
       if (!geneExpressionLoadingEnabled || selectedGenes.length === 0) {
-        abortActiveRequest(geneExpressionAbortRef)
-        geneExpressionRequestIdRef.current += 1
+        invalidateLatestRequest({
+          abortRef: geneExpressionAbortRef,
+          requestIdRef: geneExpressionRequestIdRef,
+        })
         geneExpressionViewportKeyRef.current = null
         setGeneExpressionBatch(null)
         setGeneExpressionState((current) => {
@@ -286,8 +318,10 @@ export function useViewportDataWorkflow({
           return
         }
 
-        abortActiveRequest(geneExpressionAbortRef)
-        geneExpressionRequestIdRef.current += 1
+        invalidateLatestRequest({
+          abortRef: geneExpressionAbortRef,
+          requestIdRef: geneExpressionRequestIdRef,
+        })
         geneExpressionViewportKeyRef.current = waitingKey
         setGeneExpressionBatch(null)
         setGeneExpressionState({ status: 'waiting', message: expressionPlan.message })
@@ -305,12 +339,11 @@ export function useViewportDataWorkflow({
         return
       }
 
-      const expressionRequestId = geneExpressionRequestIdRef.current + 1
-      abortActiveRequest(geneExpressionAbortRef)
-      const expressionAbortController = new AbortController()
+      const expressionRequest = startLatestRequest({
+        abortRef: geneExpressionAbortRef,
+        requestIdRef: geneExpressionRequestIdRef,
+      })
       const expressionStartedAt = readTimestamp()
-      geneExpressionRequestIdRef.current = expressionRequestId
-      geneExpressionAbortRef.current = expressionAbortController
       geneExpressionViewportKeyRef.current = expressionKey
       setGeneExpressionState({
         status: 'loading',
@@ -325,14 +358,11 @@ export function useViewportDataWorkflow({
       )
 
       const expressionOptions: Parameters<GeneExpressionLoader>[3] = {
-        signal: expressionAbortController.signal,
+        signal: expressionRequest.signal,
         limit: expressionPlan.cellLimit,
         sampleStride: expressionPlan.sampleStride,
         onStageTiming: (timing) => {
-          if (
-            expressionAbortController.signal.aborted ||
-            geneExpressionRequestIdRef.current !== expressionRequestId
-          ) {
+          if (expressionRequest.signal.aborted || !expressionRequest.isCurrent()) {
             return
           }
 
@@ -352,7 +382,7 @@ export function useViewportDataWorkflow({
           )
         } catch (error) {
           if (
-            expressionAbortController.signal.aborted ||
+            expressionRequest.signal.aborted ||
             !isRetryableExpressionLoadError(error)
           ) {
             throw error
@@ -373,7 +403,7 @@ export function useViewportDataWorkflow({
 
       void loadExpressionBatch()
         .then((batch) => {
-          if (geneExpressionRequestIdRef.current !== expressionRequestId) {
+          if (!expressionRequest.isCurrent()) {
             return
           }
 
@@ -417,7 +447,7 @@ export function useViewportDataWorkflow({
             return
           }
 
-          if (geneExpressionRequestIdRef.current !== expressionRequestId) {
+          if (!expressionRequest.isCurrent()) {
             return
           }
 
@@ -438,9 +468,7 @@ export function useViewportDataWorkflow({
           })
         })
         .finally(() => {
-          if (geneExpressionAbortRef.current === expressionAbortController) {
-            geneExpressionAbortRef.current = null
-          }
+          expressionRequest.complete()
         })
     },
     [
@@ -454,9 +482,9 @@ export function useViewportDataWorkflow({
       geneExpressionDetailMode,
       geneExpressionDisabledMessage,
       geneExpressionLoadingEnabled,
-      geneExpressionRequestIdRef,
       geneExpressionScaleKey,
       geneExpressionScoreMode,
+      geneExpressionRequestIdRef,
       geneExpressionViewportKeyRef,
       lastViewportDetailRef,
       loadBoundaryElements,

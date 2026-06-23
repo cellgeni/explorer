@@ -26,6 +26,7 @@ import {
   DEFAULT_LAYER_OPACITY,
   normalizeLayerOpacity,
 } from './layerOpacity'
+import { transcriptFeatureColor, transcriptQualityColor } from './transcriptColors'
 
 export interface OverviewCellDatum {
   readonly id: string
@@ -2001,36 +2002,6 @@ function cellPointOutlineColor(color: Color): Color {
     color[2] ?? 0,
     Math.min(245, Math.max(160, color[3] ?? 210)),
   ]
-}
-
-function transcriptFeatureColor(featureName: string): Color {
-  const palette: readonly Color[] = [
-    [76, 211, 194, 235],
-    [248, 197, 80, 235],
-    [231, 97, 126, 235],
-    [147, 197, 253, 235],
-    [167, 139, 250, 235],
-    [132, 204, 22, 235],
-    [251, 146, 60, 235],
-    [244, 114, 182, 235],
-  ]
-  let hash = 0
-
-  for (let index = 0; index < featureName.length; index += 1) {
-    hash = (hash * 31 + featureName.charCodeAt(index)) >>> 0
-  }
-
-  return palette[hash % palette.length] ?? [76, 211, 194, 235]
-}
-
-function transcriptQualityColor(qv: number): Color {
-  const t = Math.max(0, Math.min(1, qv / 40))
-  return interpolateColorStops(
-    [127, 77, 35, 170],
-    [221, 127, 75, 215],
-    [58, 176, 145, 245],
-    Math.sqrt(t),
-  )
 }
 
 function colorWithOpacity(color: Color, opacity: number): Color {

@@ -41,6 +41,16 @@ import { useVisiumHdBinWorkflow } from './features/app-shell/useVisiumHdBinWorkf
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
 import {
+  formatMappingRowsScope,
+  isSpatialGeneExpressionDataset,
+  isSpatialSegmentationDataset,
+  isVisiumHdExpressionProfileDataset,
+  selectedVisiumHdCellMappedBinIds,
+  selectedVisiumHdCellMappings,
+  selectedVisiumHdProfileBinSize,
+  type VisiumHdExpressionProfileDataset,
+} from './features/app-shell/visiumHdAppController'
+import {
   abortActiveRequest,
   appendFallbackNoticeEntry,
   appendDebugLogEntry,
@@ -181,7 +191,7 @@ import {
   type TelemetryEvent,
 } from './data/telemetry'
 import type { BBox } from './data/coords'
-import type { CellFeatureMatrixReadOptions, GexResult } from './data/gexTypes'
+import type { GexResult } from './data/gexTypes'
 import { normalizeBoundaryCellLimit } from './rendering/boundaryViewport'
 import type { FallbackNotice } from './data/fallbackNotice'
 import {
@@ -210,11 +220,6 @@ import type {
   SpatialElement,
   SpatialElementId,
 } from './datasets/spatialDataset'
-import type { VisiumHdBinSizeMicrometers } from './datasets/visiumHdDataset'
-import {
-  visiumHdBarcodeMappingBinId,
-  type VisiumHdBarcodeMapping,
-} from './datasets/visiumHdBarcodeMappings'
 import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
 import type {
   GeneExpressionColorScale,
@@ -262,38 +267,6 @@ export type {
   TranscriptCapabilitiesLoader,
   TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
-
-interface SpatialGeneExpressionDataset {
-  readonly geneExpression: (
-    bbox: Parameters<GeneExpressionLoader>[1],
-    genes: readonly string[],
-    options?: Parameters<GeneExpressionLoader>[3] & {
-      readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers
-    },
-  ) => Promise<GeneExpressionBatch>
-}
-
-interface VisiumHdExpressionProfileDataset {
-  readonly matrix: (
-    ids: readonly SpatialElementId[],
-    binSizeMicrometers?: VisiumHdBinSizeMicrometers,
-    options?: CellFeatureMatrixReadOptions,
-  ) => Promise<GexResult<SpatialElementId>>
-}
-
-interface VisiumHdBarcodeMappingsDataset extends VisiumHdExpressionProfileDataset {
-  readonly barcodeMappings: (options: {
-    readonly maxRows?: number
-    readonly signal?: AbortSignal
-  }) => Promise<readonly VisiumHdBarcodeMapping[]>
-}
-
-interface VisiumHdCellBarcodeMappingsDataset extends VisiumHdExpressionProfileDataset {
-  readonly barcodeMappingsForCell: (
-    cellId: SpatialElementId,
-    options?: { readonly signal?: AbortSignal },
-  ) => Promise<readonly VisiumHdBarcodeMapping[]>
-}
 
 const IDLE_VISIUM_HD_ROI_STATE: VisiumHdRoiState = { status: 'idle' }
 const IDLE_CELL_EXPRESSION_PROFILE_STATE: CellExpressionProfileState<StructuredLoadError> =
@@ -1905,35 +1878,45 @@ export function App({
   )
   const { handleViewportChange } = useViewportDataWorkflow({
     appendDebugEvent,
-    boundaryAbortRef,
     boundaryCellLimit,
     boundaryLoadingEnabled,
-    boundaryRequestIdRef: boundaryRequestId,
-    boundaryViewportKeyRef,
-    geneExpressionAbortRef,
     geneExpressionDetailMode,
-    geneExpressionRequestIdRef: geneExpressionRequestId,
     geneExpressionScaleKey,
     geneExpressionScoreMode,
-    geneExpressionViewportKeyRef,
-    lastViewportDetailRef,
-    loadBoundaryElements: loadActiveBoundaryElements,
-    ...(isVisiumHdDataset && showNucleusBoundaries
-      ? { loadNucleusBoundaryElements: loadActiveNucleusBoundaryElements }
-      : {}),
-    loadGeneExpression: loadActiveGeneExpression,
     loadState,
+    loaders: {
+      boundaryElements: loadActiveBoundaryElements,
+      ...(isVisiumHdDataset && showNucleusBoundaries
+        ? { nucleusBoundaryElements: loadActiveNucleusBoundaryElements }
+        : {}),
+      geneExpression: loadActiveGeneExpression,
+    },
     overviewExtent,
     recordTelemetry,
     rememberGeneExpressionScaleMax,
+    requests: {
+      boundary: {
+        abortRef: boundaryAbortRef,
+        requestIdRef: boundaryRequestId,
+        boundaryViewportKeyRef,
+      },
+      geneExpression: {
+        abortRef: geneExpressionAbortRef,
+        requestIdRef: geneExpressionRequestId,
+        geneExpressionViewportKeyRef,
+      },
+      lastViewportDetailRef,
+    },
     selectedGenes,
-    setBoundaryElements,
-    setNucleusBoundaryElements,
-    setBoundaryState,
-    setCurrentViewportDetail,
-    setGeneExpressionBatch,
-    setGeneExpressionState,
-    setShareableViewState,
+    setters: {
+      setBoundaryElements,
+      setNucleusBoundaryElements,
+      setBoundaryState,
+      setCurrentViewportDetail,
+      setGeneExpressionBatch,
+      setGeneExpressionState,
+      setShareableViewState,
+    },
   })
   useEffect(() => {
     if (boundaryOverlayRequestKeyRef.current === boundaryOverlayRequestKey) {
@@ -2920,99 +2903,6 @@ export function App({
   )
 }
 
-function isSpatialGeneExpressionDataset(
-  dataset: unknown,
-): dataset is SpatialGeneExpressionDataset {
-  return (
-    dataset !== null &&
-    typeof dataset === 'object' &&
-    'geneExpression' in dataset &&
-    typeof dataset.geneExpression === 'function'
-  )
-}
-
-function isVisiumHdExpressionProfileDataset(
-  dataset: unknown,
-): dataset is VisiumHdExpressionProfileDataset {
-  return (
-    dataset !== null &&
-    typeof dataset === 'object' &&
-    'matrix' in dataset &&
-    typeof dataset.matrix === 'function'
-  )
-}
-
-function isVisiumHdBarcodeMappingsDataset(
-  dataset: unknown,
-): dataset is VisiumHdBarcodeMappingsDataset {
-  return (
-    isVisiumHdExpressionProfileDataset(dataset) &&
-    'barcodeMappings' in dataset &&
-    typeof dataset.barcodeMappings === 'function'
-  )
-}
-
-function isVisiumHdCellBarcodeMappingsDataset(
-  dataset: unknown,
-): dataset is VisiumHdCellBarcodeMappingsDataset {
-  return (
-    isVisiumHdExpressionProfileDataset(dataset) &&
-    'barcodeMappingsForCell' in dataset &&
-    typeof dataset.barcodeMappingsForCell === 'function'
-  )
-}
-
-async function selectedVisiumHdCellMappings(
-  dataset: unknown,
-  cellId: SpatialElementId,
-  rowBudget: number | undefined,
-  signal: AbortSignal,
-): Promise<readonly VisiumHdBarcodeMapping[]> {
-  if (isVisiumHdCellBarcodeMappingsDataset(dataset)) {
-    return dataset.barcodeMappingsForCell(cellId, { signal })
-  }
-
-  if (!isVisiumHdBarcodeMappingsDataset(dataset)) {
-    throw new Error('Loaded dataset does not expose Visium HD barcode mappings.')
-  }
-
-  return dataset.barcodeMappings({
-    ...(rowBudget === undefined ? {} : { maxRows: rowBudget }),
-    signal,
-  })
-}
-
-function selectedVisiumHdProfileBinSize(
-  activeBinSize: VisiumHdBinSizeMicrometers | undefined,
-  selectedGridCell: GridCellDatum | null,
-): VisiumHdBinSizeMicrometers | undefined {
-  if (activeBinSize !== undefined) {
-    return activeBinSize
-  }
-
-  return isVisiumHdBinSizeMicrometers(selectedGridCell?.binSizeMicrometers)
-    ? selectedGridCell.binSizeMicrometers
-    : undefined
-}
-
-function selectedVisiumHdCellMappedBinIds(
-  mappings: readonly VisiumHdBarcodeMapping[],
-  cellId: SpatialElementId,
-  binSizeMicrometers: VisiumHdBinSizeMicrometers,
-): readonly SpatialElementId[] {
-  const mappedBinIds = new Set<SpatialElementId>()
-
-  for (const mapping of mappings) {
-    if (mapping.cellId !== cellId || (!mapping.inCell && !mapping.inNucleus)) {
-      continue
-    }
-
-    mappedBinIds.add(visiumHdBarcodeMappingBinId(mapping, binSizeMicrometers))
-  }
-
-  return [...mappedBinIds]
-}
-
 function sameBbox(left: BBox, right: BBox): boolean {
   return (
     left.minX === right.minX &&
@@ -3036,12 +2926,6 @@ function sameGeneSet(left: readonly string[], right: readonly string[]): boolean
   }
 
   return true
-}
-
-function isVisiumHdBinSizeMicrometers(
-  value: number | undefined,
-): value is VisiumHdBinSizeMicrometers {
-  return value === 2 || value === 8 || value === 16
 }
 
 function selectionGeneExpressionStatus(
@@ -3134,29 +3018,4 @@ function boundarySelectionGeneExpressionStatus(
     status: 'unavailable',
     message: 'Selected-gene bin expression is loaded. Cell projection is pending.',
   }
-}
-
-function formatMappingRowsScope(rowBudget: number | undefined): string {
-  return rowBudget === undefined
-    ? 'all available mapping rows'
-    : `up to ${rowBudget.toLocaleString()} mapping rows`
-}
-
-interface SpatialSegmentationDataset {
-  segmentationElements(
-    kind: 'cell' | 'nucleus',
-    bbox: BBox,
-    binSizeMicrometers?: number,
-  ): Promise<readonly SpatialElement<SpatialElementId>[]>
-}
-
-function isSpatialSegmentationDataset(
-  dataset: unknown,
-): dataset is SpatialSegmentationDataset {
-  return (
-    dataset !== null &&
-    typeof dataset === 'object' &&
-    'segmentationElements' in dataset &&
-    typeof dataset.segmentationElements === 'function'
-  )
 }

@@ -83,13 +83,13 @@ function Probe({
 }: {
   readonly loadBoundaryElements: Parameters<
     typeof useViewportDataWorkflow
-  >[0]['loadBoundaryElements']
+  >[0]['loaders']['boundaryElements']
   readonly boundaryLoadingEnabled?: boolean
   readonly geneExpressionDisabledMessage?: string
   readonly geneExpressionLoadingEnabled?: boolean
   readonly loadGeneExpression: Parameters<
     typeof useViewportDataWorkflow
-  >[0]['loadGeneExpression']
+  >[0]['loaders']['geneExpression']
   readonly onReady: (
     nextApi: ReturnType<typeof useViewportDataWorkflow>,
     nextSnapshot: Snapshot,
@@ -131,33 +131,43 @@ function Probe({
 
   const nextApi = useViewportDataWorkflow({
     appendDebugEvent,
-    boundaryAbortRef,
     boundaryCellLimit: 10,
     boundaryLoadingEnabled,
-    boundaryRequestIdRef,
-    boundaryViewportKeyRef,
-    geneExpressionAbortRef,
     geneExpressionDetailMode: 'auto',
     geneExpressionDisabledMessage,
     geneExpressionLoadingEnabled,
-    geneExpressionRequestIdRef,
     geneExpressionScaleKey: 'scale-key',
     geneExpressionScoreMode: 'sum',
-    geneExpressionViewportKeyRef,
-    lastViewportDetailRef,
-    loadBoundaryElements,
-    loadGeneExpression,
     loadState: readyLoadState,
+    loaders: {
+      boundaryElements: loadBoundaryElements,
+      geneExpression: loadGeneExpression,
+    },
     overviewExtent: bbox,
     recordTelemetry,
     rememberGeneExpressionScaleMax,
+    requests: {
+      boundary: {
+        abortRef: boundaryAbortRef,
+        requestIdRef: boundaryRequestIdRef,
+        boundaryViewportKeyRef,
+      },
+      geneExpression: {
+        abortRef: geneExpressionAbortRef,
+        requestIdRef: geneExpressionRequestIdRef,
+        geneExpressionViewportKeyRef,
+      },
+      lastViewportDetailRef,
+    },
     selectedGenes: selectedGenes ?? defaultSelectedGenes,
-    setBoundaryElements,
-    setBoundaryState,
-    setCurrentViewportDetail,
-    setGeneExpressionBatch,
-    setGeneExpressionState,
-    setShareableViewState,
+    setters: {
+      setBoundaryElements,
+      setBoundaryState,
+      setCurrentViewportDetail,
+      setGeneExpressionBatch,
+      setGeneExpressionState,
+      setShareableViewState,
+    },
   })
 
   React.useEffect(() => {

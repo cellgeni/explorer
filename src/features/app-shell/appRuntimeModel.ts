@@ -27,6 +27,23 @@ export interface FallbackNoticeEntry extends FallbackNotice {
   readonly timestamp: number
 }
 
+interface MutableRef<T> {
+  current: T
+}
+
+export interface LatestRequestRefs {
+  readonly abortRef: MutableRef<AbortController | null>
+  readonly requestIdRef: MutableRef<number>
+}
+
+export interface LatestRequest {
+  readonly requestId: number
+  readonly abortController: AbortController
+  readonly signal: AbortSignal
+  readonly isCurrent: () => boolean
+  readonly complete: () => void
+}
+
 interface LoadingTaskStateInputs {
   readonly loadState: LoadingUrlState
   readonly datasetWarmupState: LoadingUrlState
@@ -410,6 +427,38 @@ function isLoadingWithUrl(
 export function abortActiveRequest(ref: { current: AbortController | null }): void {
   ref.current?.abort()
   ref.current = null
+}
+
+export function startLatestRequest({
+  abortRef,
+  requestIdRef,
+}: LatestRequestRefs): LatestRequest {
+  abortActiveRequest(abortRef)
+  const requestId = requestIdRef.current + 1
+  const abortController = new AbortController()
+  requestIdRef.current = requestId
+  abortRef.current = abortController
+
+  return {
+    requestId,
+    abortController,
+    signal: abortController.signal,
+    isCurrent: () => requestIdRef.current === requestId,
+    complete: () => {
+      if (abortRef.current === abortController) {
+        abortRef.current = null
+      }
+    },
+  }
+}
+
+export function invalidateLatestRequest({
+  abortRef,
+  requestIdRef,
+}: LatestRequestRefs): number {
+  abortActiveRequest(abortRef)
+  requestIdRef.current += 1
+  return requestIdRef.current
 }
 
 export function clearTimeoutRef(ref: { current: number | null }): void {

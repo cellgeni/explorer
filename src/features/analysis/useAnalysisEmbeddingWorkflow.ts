@@ -4,8 +4,8 @@ import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import type { AnalysisEmbeddingsLoader } from '../app-shell/appDependencies'
 import {
-  abortActiveRequest,
   isAbortError,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
@@ -62,20 +62,19 @@ export function useAnalysisEmbeddingWorkflow({
       return
     }
 
-    const requestId = analysisEmbeddingRequestIdRef.current + 1
-    abortActiveRequest(analysisEmbeddingAbortRef)
-    const abortController = new AbortController()
-    analysisEmbeddingRequestIdRef.current = requestId
-    analysisEmbeddingAbortRef.current = abortController
+    const request = startLatestRequest({
+      abortRef: analysisEmbeddingAbortRef,
+      requestIdRef: analysisEmbeddingRequestIdRef,
+    })
     setAnalysisEmbeddingState({ status: 'loading', url: loadState.url })
     appendDebugEvent('Loading embeddings')
 
     void loadAnalysisEmbeddings(loadState.url, {
-      signal: abortController.signal,
+      signal: request.signal,
       onFallback: appendFallbackNotice,
     })
       .then((embeddings) => {
-        if (analysisEmbeddingRequestIdRef.current !== requestId) {
+        if (!request.isCurrent()) {
           return
         }
 
@@ -94,7 +93,7 @@ export function useAnalysisEmbeddingWorkflow({
         appendDebugEvent(`Embeddings loaded: ${embeddings.length.toLocaleString()} views`)
       })
       .catch((error) => {
-        if (isAbortError(error) || analysisEmbeddingRequestIdRef.current !== requestId) {
+        if (isAbortError(error) || !request.isCurrent()) {
           return
         }
 
@@ -106,9 +105,7 @@ export function useAnalysisEmbeddingWorkflow({
         appendDebugEvent('Embeddings failed')
       })
       .finally(() => {
-        if (analysisEmbeddingAbortRef.current === abortController) {
-          analysisEmbeddingAbortRef.current = null
-        }
+        request.complete()
       })
   }, [
     analysisEmbeddingAbortRef,
