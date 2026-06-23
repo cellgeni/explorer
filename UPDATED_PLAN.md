@@ -1157,6 +1157,35 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       Playwright `webServer` command still expects `npm` on PATH in this desktop
       environment, so the equivalent smoke was run against a manually started
       preview server.
+- [x] Recorded the selected-bin expression split. The Bin Info surface separates
+      selected-gene overlay status from the all-gene top-profile for the clicked
+      bin, so users can distinguish viewport scoring from the per-bin GEX
+      profile and refresh that profile explicitly when needed.
+- [x] Updated selected-bin profile behavior after the lazy H5 matrix reader
+      landed. Clicking a Visium HD bin now automatically starts the selected
+      bin's all-gene GEX profile load, then leaves the `Bin GEX profile` action
+      available as a refresh/retry control. The App regression test now asserts
+      that a grid-bin click calls `dataset.matrix([binId], binSize, { signal })`
+      and renders the top-gene profile without pressing `Load Bin GEX`.
+- [x] Clarified and hardened Visium HD GEX surfaces. Bin and segmented-cell
+      detail panels now label selected-gene scores separately from all-gene GEX
+      profiles, expose bin/cell-specific GEX load and refresh actions, show a
+      top-gene caption for loaded profiles, and keep active grid GEX colors
+      visible even when grid opacity is low.
+- [x] Removed the accidental full-file H5 matrix path from Visium HD bin/cell
+      GEX profiles. `VisiumHdDataset.matrix()` now defaults to a worker-backed
+      lazy-range reader for `filtered_feature_bc_matrix.h5` and no longer adds
+      the 64 MB full-file budget by default, so loading a selected 16, 8, or
+      2 µm bin profile should request only the H5 ranges needed for the target
+      barcode rows instead of rejecting on total H5 file size. The legacy
+      full-file reader and explicit budget guard remain available for tests or
+      specialized callers.
+- [x] Hardened hosted Visium HD feature-barcode H5 reads after seeing
+      `XMLHttpRequest.send` failures from Emscripten's lazy-file loader under
+      browser resource pressure. Feature-barcode matrix worker requests are now
+      serialized and transient XHR/resource errors are retried before surfacing
+      as profile load failures; a browser probe against the hosted 16 µm matrix
+      successfully read real bin rows through the queued worker path.
 - [x] Paused the Visium HD selected-gene expression viewport path after the
       first integration pass exposed a UI hang when selecting a gene. The app
       now keeps Visium HD gene selection and the binned gene panel active, but
@@ -1255,6 +1284,12 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       `VisiumHdDataset`. The dataset now caches mapping reads by explicit row
       budget and can derive typed cell-assignment records for selected 2, 8, or
       16 µm bin IDs while preserving the existing opt-in scan guardrail.
+- [x] Superseded the temporary Visium HD budget gates. The Dataset HUD no
+      longer exposes the `2 µm budget` or `Mapping rows` controls, normal app
+      loading no longer applies the
+      `VITE_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES` default, and the
+      2, 8, and 16 µm bin/cell mapping paths use all available rows unless an
+      explicit lower-level cap is supplied by a test or specialized caller.
 - [x] Continued Slice 8 segmented-output readiness. Official Space Ranger 4.1
       docs name `cell_segmentations.geojson`, `nucleus_segmentations.geojson`,
       `nucleus_instance_mask.tiff`,

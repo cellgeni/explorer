@@ -70,7 +70,7 @@ export function GridCellInfoPanel({
 
       <div className="cell-expression-panel">
         <div className="cell-expression-heading">
-          <span>Gene expression</span>
+          <span>Selected-gene GEX</span>
           <small>
             {hasExpression ? 'Loaded' : expressionStatusLabel(expressionStatus)}
           </small>
@@ -99,6 +99,7 @@ export function GridCellInfoPanel({
 
       <CellExpressionProfilePanel
         state={expressionProfileState}
+        selectionKind="bin"
         disabled={onLoadExpressionProfile === undefined}
         onLoad={onLoadExpressionProfile ?? noop}
       />
@@ -130,7 +131,7 @@ function GridCellAssignmentDetail({
         </div>
         <div>
           <dt>Rows</dt>
-          <dd>{state.assignment.rowBudget.toLocaleString()}</dd>
+          <dd>{formatMappingRowsScope(state.assignment.rowBudget)}</dd>
         </div>
       </dl>
     )
@@ -139,7 +140,7 @@ function GridCellAssignmentDetail({
   if (state.status === 'loading') {
     return (
       <p className="cell-expression-status">
-        Reading up to {state.rowBudget.toLocaleString()} mapping rows
+        Reading {formatMappingRowsScope(state.rowBudget)}
       </p>
     )
   }
@@ -147,7 +148,7 @@ function GridCellAssignmentDetail({
   if (state.status === 'missing') {
     return (
       <p className="cell-expression-status">
-        No cell assignment found within {state.rowBudget.toLocaleString()} mapping rows
+        No cell assignment found in {formatMappingRowsScope(state.rowBudget)}
       </p>
     )
   }
@@ -165,6 +166,12 @@ function GridCellAssignmentDetail({
   }
 
   return <p className="cell-expression-status">No assignment loaded</p>
+}
+
+function formatMappingRowsScope(rowBudget: number | undefined): string {
+  return rowBudget === undefined
+    ? 'all available mapping rows'
+    : `${rowBudget.toLocaleString()} mapping rows`
 }
 
 function formatImageCoordinate(cell: GridCellDatum): string {

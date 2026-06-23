@@ -26,11 +26,13 @@ let api: ReturnType<typeof useAnnotationWorkflow>
 let snapshot: Snapshot
 
 function Probe({
+  initialAnnotationState = { status: 'idle' },
   loadAnnotations,
   onReady,
   roiState = { status: 'idle' },
   selectedAnnotationGroupId = 'cluster-a',
 }: {
+  readonly initialAnnotationState?: AnnotationState<StructuredLoadError>
   readonly loadAnnotations: Parameters<typeof useAnnotationWorkflow>[0]['loadAnnotations']
   readonly onReady: (
     nextApi: ReturnType<typeof useAnnotationWorkflow>,
@@ -42,9 +44,8 @@ function Probe({
   const [annotationColors, setAnnotationColors] = React.useState<
     Readonly<Record<string, string>>
   >({})
-  const [annotationState, setAnnotationState] = React.useState<
-    AnnotationState<StructuredLoadError>
-  >({ status: 'idle' })
+  const [annotationState, setAnnotationState] =
+    React.useState<AnnotationState<StructuredLoadError>>(initialAnnotationState)
   const [, setHiddenAnnotationSetIds] = React.useState<readonly string[]>([])
   const [cellMetadataTracks, setCellMetadataTracks] = React.useState<
     readonly ContinuousCellMetadataTrack[]
@@ -199,6 +200,54 @@ describe('useAnnotationWorkflow', () => {
     ).toBe('roi:1:marker-roi')
     expect(snapshot.observationColorMode).toBe('annotations')
     expect(snapshot.roiName).toBe('ROI 2')
+  })
+
+  it('exports ready annotations as CSV', async () => {
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
+    const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
+    const revokeObjectUrl = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+
+    render(
+      <Probe
+        initialAnnotationState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          annotations: [
+            {
+              id: 'roi:1:marker-roi',
+              label: 'Marker ROI',
+              cellIds: [asCellId('aaaaaaaa-1')],
+            },
+          ],
+        }}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleExportAnnotations()
+    })
+
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
+    const blob = createObjectUrl.mock.calls[0]?.[0]
+
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:test')
+    expect(snapshot.debugMessages).toContain('Exported annotations: 1 labels')
+
+    if (blob instanceof Blob) {
+      await expect(blob.text()).resolves.toBe(
+        'annotation_id,label,cell_id\nroi:1:marker-roi,Marker ROI,aaaaaaaa-1',
+      )
+    }
   })
 
   it('imports custom annotations from a URL', async () => {

@@ -24,12 +24,8 @@ interface DatasetHudPanelProps {
   readonly morphologyInputId: string
   readonly boundaryLimitInputId: string
   readonly visiumHdBinSizeInputId: string
-  readonly visiumHdTwoMicrometerBudgetInputId: string
-  readonly visiumHdBarcodeMappingBudgetInputId: string
   readonly datasetUrl: string
   readonly shouldLoadMorphology: boolean
-  readonly visiumHdTwoMicrometerBudgetInput: string
-  readonly visiumHdBarcodeMappingBudgetInput: string
   readonly morphologyLabel: string
   readonly boundaryCellLimit: number
   readonly maxBoundaryCellLimit: number
@@ -45,8 +41,6 @@ interface DatasetHudPanelProps {
   readonly onDatasetUrlChange: (url: string) => void
   readonly onShouldLoadMorphologyChange: (enabled: boolean) => void
   readonly onBoundaryCellLimitChange: (limit: number) => void
-  readonly onVisiumHdTwoMicrometerBudgetInputChange: (value: string) => void
-  readonly onVisiumHdBarcodeMappingBudgetInputChange: (value: string) => void
   readonly onVisiumHdBinSizeChange: (binSize: VisiumHdBinSizeMicrometers) => void
   readonly onRunDatasetDiagnostics: () => void
   readonly onDownloadDiagnostics: () => void
@@ -59,12 +53,8 @@ export function DatasetHudPanel({
   morphologyInputId,
   boundaryLimitInputId,
   visiumHdBinSizeInputId,
-  visiumHdTwoMicrometerBudgetInputId,
-  visiumHdBarcodeMappingBudgetInputId,
   datasetUrl,
   shouldLoadMorphology,
-  visiumHdTwoMicrometerBudgetInput,
-  visiumHdBarcodeMappingBudgetInput,
   morphologyLabel,
   boundaryCellLimit,
   maxBoundaryCellLimit,
@@ -80,8 +70,6 @@ export function DatasetHudPanel({
   onDatasetUrlChange,
   onShouldLoadMorphologyChange,
   onBoundaryCellLimitChange,
-  onVisiumHdTwoMicrometerBudgetInputChange,
-  onVisiumHdBarcodeMappingBudgetInputChange,
   onVisiumHdBinSizeChange,
   onRunDatasetDiagnostics,
   onDownloadDiagnostics,
@@ -139,38 +127,6 @@ export function DatasetHudPanel({
           disabled={boundaryControlsDisabled}
           onChange={(event) => {
             onBoundaryCellLimitChange(event.currentTarget.valueAsNumber)
-          }}
-        />
-        <label htmlFor={visiumHdTwoMicrometerBudgetInputId}>2 µm budget</label>
-        <input
-          id={visiumHdTwoMicrometerBudgetInputId}
-          name="visiumHdTwoMicrometerBudget"
-          type="number"
-          inputMode="numeric"
-          min="1"
-          step="1"
-          autoComplete="off"
-          value={visiumHdTwoMicrometerBudgetInput}
-          placeholder="disabled"
-          title="Max filtered barcodes for Visium HD 2 µm loading"
-          onChange={(event) => {
-            onVisiumHdTwoMicrometerBudgetInputChange(event.currentTarget.value)
-          }}
-        />
-        <label htmlFor={visiumHdBarcodeMappingBudgetInputId}>Mapping rows</label>
-        <input
-          id={visiumHdBarcodeMappingBudgetInputId}
-          name="visiumHdBarcodeMappingBudget"
-          type="number"
-          inputMode="numeric"
-          min="1"
-          step="1"
-          autoComplete="off"
-          value={visiumHdBarcodeMappingBudgetInput}
-          placeholder="disabled"
-          title="Advanced cap for bulk Visium HD cell mapping; selected cell profiles use automatic lookup"
-          onChange={(event) => {
-            onVisiumHdBarcodeMappingBudgetInputChange(event.currentTarget.value)
           }}
         />
         <button type="submit" disabled={isLoading} title="Load dataset">

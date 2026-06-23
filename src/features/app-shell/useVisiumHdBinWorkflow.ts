@@ -65,7 +65,6 @@ export interface UseVisiumHdBinWorkflowOptions {
   readonly loadedDatasetUrl: string | null
   readonly onBeforeBinSizeChange?: () => void
   readonly shouldLoadMorphology: boolean
-  readonly visiumHdTwoMicrometerFilteredBarcodeBudget?: number | undefined
   readonly visiumHdControlState: VisiumHdControlState
   readonly flatMorphologyImage?: FlatMorphologyCanvasImage | null | undefined
   readonly visiumHdBinRequestIdRef?: MutableRef<number> | undefined
@@ -98,7 +97,6 @@ export function useVisiumHdBinWorkflow({
   loadedDatasetUrl,
   onBeforeBinSizeChange,
   shouldLoadMorphology,
-  visiumHdTwoMicrometerFilteredBarcodeBudget,
   visiumHdControlState,
   flatMorphologyImage,
   visiumHdBinRequestIdRef,
@@ -159,13 +157,7 @@ export function useVisiumHdBinWorkflow({
       appendDebugEvent(`Loading Visium HD ${binSize} µm bins`)
 
       try {
-        const dataset =
-          visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
-            ? await getSpatialDataset(datasetUrl)
-            : await getSpatialDataset(datasetUrl, {
-                visiumHdMaxTwoMicrometerFilteredBarcodes:
-                  visiumHdTwoMicrometerFilteredBarcodeBudget,
-              })
+        const dataset = await getSpatialDataset(datasetUrl)
 
         if (!isVisiumHdOverviewDataset(dataset)) {
           throw new Error('Loaded dataset does not expose Visium HD binned outputs.')
@@ -320,7 +312,6 @@ export function useVisiumHdBinWorkflow({
       setSpatialGridCells,
       setVisiumHdControlState,
       shouldLoadMorphology,
-      visiumHdTwoMicrometerFilteredBarcodeBudget,
       visiumHdControlState,
     ],
   )
@@ -386,28 +377,14 @@ export function visiumHdControlStateFromOverview(
   url: string,
   availableBinSizes: readonly VisiumHdBinSizeMicrometers[],
   overview: VisiumHdBinnedOverview,
-  options: {
-    readonly twoMicrometerFilteredBarcodeBudget?: number | undefined
-  } = {},
 ): VisiumHdControlState {
-  const binOptionOptions =
-    options.twoMicrometerFilteredBarcodeBudget === undefined
-      ? {}
-      : {
-          twoMicrometerFilteredBarcodeBudget: options.twoMicrometerFilteredBarcodeBudget,
-        }
-
   return {
     status: 'ready',
     url,
     selectedBinSize: overview.binSizeMicrometers,
-    options: createVisiumHdBinOptions(
-      availableBinSizes,
-      {
-        [overview.binSizeMicrometers]: overview.gridCells.ids.length,
-      },
-      binOptionOptions,
-    ),
+    options: createVisiumHdBinOptions(availableBinSizes, {
+      [overview.binSizeMicrometers]: overview.gridCells.ids.length,
+    }),
     binCount: overview.gridCells.ids.length,
   }
 }

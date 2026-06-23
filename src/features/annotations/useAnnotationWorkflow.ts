@@ -14,6 +14,7 @@ import type { ObservationColorMode } from '../../rendering/cellStyling'
 import { slug } from '../../utils/slug'
 import type { AnnotationLoader } from '../app-shell/appDependencies'
 import {
+  downloadTextFile,
   isAbortError,
   shortIdentifier,
   type DebugLogAppendOptions,
@@ -25,6 +26,7 @@ import {
 } from '../errors/loadErrorModel'
 import { defaultRoiName, type RoiState } from '../roi/roiModel'
 import {
+  annotationsToCsv,
   colorsForAnnotations,
   customAnnotationFilePrefix,
   hasReadyAnnotationsAfterRemove,
@@ -69,6 +71,7 @@ interface UseAnnotationWorkflowResult {
   readonly handleAnnotationColorChange: (annotationId: string, color: string) => void
   readonly handleAnnotationGroupChange: (groupId: string) => void
   readonly handleClearAnnotations: () => void
+  readonly handleExportAnnotations: () => void
   readonly handleImportAnnotations: (file: File | null) => Promise<void>
   readonly handleImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly handleLoadAnnotations: () => void
@@ -435,6 +438,17 @@ export function useAnnotationWorkflow({
     setSelectedCellMetadataTrackId,
   ])
 
+  const handleExportAnnotations = useCallback(() => {
+    if (annotationState.status !== 'ready' || annotationState.annotations.length === 0) {
+      return
+    }
+
+    downloadTextFile('annotations.csv', annotationsToCsv(annotationState.annotations))
+    appendDebugEvent(
+      `Exported annotations: ${annotationState.annotations.length.toLocaleString()} labels`,
+    )
+  }, [annotationState, appendDebugEvent])
+
   const handleSaveRoiAnnotation = useCallback(() => {
     if (loadState.status !== 'ready' || roiState.status !== 'ready') {
       return
@@ -479,6 +493,7 @@ export function useAnnotationWorkflow({
     handleAnnotationColorChange,
     handleAnnotationGroupChange,
     handleClearAnnotations,
+    handleExportAnnotations,
     handleImportAnnotations,
     handleImportAnnotationUrl,
     handleLoadAnnotations,

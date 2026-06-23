@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON } from '../../datasets/visiumHdStrategy'
 import { AppDatasetHudPanel } from './AppDatasetHudPanel'
 
 type Props = ComponentProps<typeof AppDatasetHudPanel>
@@ -18,8 +17,6 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       datasetInputId: 'dataset-url',
       morphologyInputId: 'morphology',
       visiumHdBinSizeInputId: 'visium-bin-size',
-      visiumHdTwoMicrometerBudgetInputId: 'visium-2um-budget',
-      visiumHdBarcodeMappingBudgetInputId: 'visium-mapping-budget',
     },
     datasetUrl: 'https://example.test/output',
     debugLog: [],
@@ -37,12 +34,8 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     setDatasetUrl: vi.fn(),
     setDebugLog: vi.fn(),
     setShouldLoadMorphology: vi.fn(),
-    onVisiumHdTwoMicrometerBudgetInputChange: vi.fn(),
-    onVisiumHdBarcodeMappingBudgetInputChange: vi.fn(),
     shouldLoadMorphology: true,
     visiumHdControlState: { status: 'idle' },
-    visiumHdTwoMicrometerBudgetInput: '',
-    visiumHdBarcodeMappingBudgetInput: '',
     ...overrides,
   }
 }
@@ -60,12 +53,6 @@ describe('AppDatasetHudPanel', () => {
     fireEvent.change(screen.getByLabelText('Boundary limit'), {
       target: { value: '100001' },
     })
-    fireEvent.change(screen.getByLabelText('2 µm budget'), {
-      target: { value: '25000' },
-    })
-    fireEvent.change(screen.getByLabelText('Mapping rows'), {
-      target: { value: '12000000' },
-    })
 
     expect(props.setDatasetUrl).toHaveBeenCalledWith('https://example.test/next')
     expect(props.setShouldLoadMorphology).toHaveBeenCalledWith(false)
@@ -74,22 +61,6 @@ describe('AppDatasetHudPanel', () => {
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Boundary limit: 100,000', {
       coalesceKey: 'boundary-limit',
     })
-    expect(props.onVisiumHdTwoMicrometerBudgetInputChange).toHaveBeenCalledWith('25000')
-    expect(props.appendDebugEvent).toHaveBeenCalledWith(
-      'Visium HD 2 µm budget: 25,000 barcodes',
-      {
-        coalesceKey: 'visium-hd-2um-budget',
-      },
-    )
-    expect(props.onVisiumHdBarcodeMappingBudgetInputChange).toHaveBeenCalledWith(
-      '12000000',
-    )
-    expect(props.appendDebugEvent).toHaveBeenCalledWith(
-      'Visium HD mapping row budget: 12,000,000 rows',
-      {
-        coalesceKey: 'visium-hd-mapping-budget',
-      },
-    )
   })
 
   it('runs async diagnostics without leaking the promise into the button handler', () => {
@@ -112,12 +83,7 @@ describe('AppDatasetHudPanel', () => {
         options: [
           { size: 16, available: true, disabled: false },
           { size: 8, available: true, disabled: false },
-          {
-            size: 2,
-            available: true,
-            disabled: true,
-            reason: VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
-          },
+          { size: 2, available: true, disabled: false },
         ],
       },
     })

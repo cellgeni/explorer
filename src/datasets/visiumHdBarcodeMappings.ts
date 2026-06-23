@@ -38,7 +38,7 @@ export interface VisiumHdBarcodeMappingCellAssignment {
 }
 
 export interface ReadVisiumHdBarcodeMappingsOptions {
-  readonly maxRows: number
+  readonly maxRows?: number
   readonly file?: AsyncBuffer
   readonly fetcher?: typeof fetch
   readonly signal?: AbortSignal
@@ -77,7 +77,10 @@ export async function readVisiumHdBarcodeMappings(
   baseUrl: string,
   options: ReadVisiumHdBarcodeMappingsOptions,
 ): Promise<readonly VisiumHdBarcodeMapping[]> {
-  const maxRows = normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
+  const maxRows =
+    options.maxRows === undefined
+      ? undefined
+      : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
   const url = datasetFileUrl(baseUrl, VISIUM_HD_BARCODE_MAPPINGS_PATH)
   const file = options.file ?? (await barcodeMappingsFileFromUrl(url, options))
   const compressors =
@@ -86,11 +89,11 @@ export async function readVisiumHdBarcodeMappings(
     file,
     columns: VISIUM_HD_BARCODE_MAPPING_COLUMNS,
     rowFormat: 'object',
-    rowEnd: maxRows + 1,
+    ...(maxRows === undefined ? {} : { rowEnd: maxRows + 1 }),
     compressors,
   })
 
-  return parseVisiumHdBarcodeMappingRows(rows, { maxRows })
+  return parseVisiumHdBarcodeMappingRows(rows, maxRows === undefined ? {} : { maxRows })
 }
 
 export function parseVisiumHdBarcodeMappingRows(

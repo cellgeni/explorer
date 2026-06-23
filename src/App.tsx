@@ -100,6 +100,7 @@ import {
   normalizeMagicLensRadius,
   parseMagicLensScope,
   summarizeMagicLensExpressionBins,
+  summarizeMagicLensExpressionProfile,
   type MagicLensScope,
   type MagicLensSummary,
   type MagicLensState,
@@ -163,12 +164,7 @@ import type {
   DatasetWarmupState,
   MorphologyLoadState,
 } from './features/dataset/datasetLoadModel'
-import {
-  parseVisiumHdBarcodeMappingBudgetInput,
-  parseVisiumHdTwoMicrometerBudgetInput,
-  updateVisiumHdBinOptionsForTwoMicrometerBudget,
-  type VisiumHdControlState,
-} from './features/dataset/visiumHdModel'
+import type { VisiumHdControlState } from './features/dataset/visiumHdModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import {
   normalizeTranscriptExactPointLimit,
@@ -287,7 +283,7 @@ interface VisiumHdExpressionProfileDataset {
 
 interface VisiumHdBarcodeMappingsDataset extends VisiumHdExpressionProfileDataset {
   readonly barcodeMappings: (options: {
-    readonly maxRows: number
+    readonly maxRows?: number
     readonly signal?: AbortSignal
   }) => Promise<readonly VisiumHdBarcodeMapping[]>
 }
@@ -607,10 +603,6 @@ export function App({
   const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>({
     status: 'idle',
   })
-  const [visiumHdTwoMicrometerBudgetInput, setVisiumHdTwoMicrometerBudgetInput] =
-    useState('')
-  const [visiumHdBarcodeMappingBudgetInput, setVisiumHdBarcodeMappingBudgetInput] =
-    useState('')
   const [gridCellAssignmentState, setGridCellAssignmentState] = useState<
     GridCellAssignmentState<StructuredLoadError>
   >({ status: 'idle' })
@@ -630,6 +622,7 @@ export function App({
   const cellDetailRequestId = useRef(0)
   const gridCellAssignmentRequestId = useRef(0)
   const visiumHdExpressionProfileRequestId = useRef(0)
+  const autoLoadedVisiumHdBinProfileKeyRef = useRef<string | null>(null)
   const cellTranscriptDistributionRequestId = useRef(0)
   const magicLensDebounceRef = useRef<number | null>(null)
   const magicLensLastDetailRef = useRef<ViewerMagicLensDetail | null>(null)
@@ -700,14 +693,7 @@ export function App({
       ? undefined
       : visiumHdControlState.selectedBinSize
   const activeVisiumHdBinSize = diagnosticsVisiumHdBinSize
-  const visiumHdTwoMicrometerFilteredBarcodeBudget = useMemo(
-    () => parseVisiumHdTwoMicrometerBudgetInput(visiumHdTwoMicrometerBudgetInput),
-    [visiumHdTwoMicrometerBudgetInput],
-  )
-  const visiumHdBarcodeMappingRowBudget = useMemo(
-    () => parseVisiumHdBarcodeMappingBudgetInput(visiumHdBarcodeMappingBudgetInput),
-    [visiumHdBarcodeMappingBudgetInput],
-  )
+  const visiumHdBarcodeMappingRowBudget: number | undefined = undefined
   const activeVisiumHdRoiState: VisiumHdRoiState =
     isVisiumHdDataset &&
     loadState.status === 'ready' &&
@@ -749,22 +735,6 @@ export function App({
     ],
     [customMorphologyLayers, morphologyImage],
   )
-  const handleVisiumHdTwoMicrometerBudgetInputChange = useCallback((value: string) => {
-    const nextBudget = parseVisiumHdTwoMicrometerBudgetInput(value)
-
-    setVisiumHdTwoMicrometerBudgetInput(value)
-    setVisiumHdControlState((current) =>
-      current.status === 'idle'
-        ? current
-        : {
-            ...current,
-            options: updateVisiumHdBinOptionsForTwoMicrometerBudget(
-              current.options,
-              nextBudget,
-            ),
-          },
-    )
-  }, [])
   const customImageUrls = useMemo(
     () => customMorphologyLayers.map((layer) => layer.image.url),
     [customMorphologyLayers],
@@ -821,7 +791,6 @@ export function App({
     loadState,
     rowBudget: visiumHdBarcodeMappingRowBudget,
     selectedBinSize: activeVisiumHdBinSize,
-    twoMicrometerFilteredBarcodeBudget: visiumHdTwoMicrometerFilteredBarcodeBudget,
   })
   const projectedVisiumHdExpressionBatch =
     visiumHdExpressionProjectionState.status === 'ready'
@@ -1253,18 +1222,16 @@ export function App({
       ? null
       : roiState.selection
   const effectiveShowTranscriptOverlay = showTranscriptOverlay && !isVisiumHdDataset
+  const visiumHdMagicLensBinsReady =
+    isVisiumHdDataset && loadState.status === 'ready' && spatialGridCells.length > 0
   const visiumHdMagicLensUnavailableReason =
     isVisiumHdDataset && loadState.status === 'ready'
-      ? selectedGenes.length === 0
-        ? 'Select gene'
-        : spatialGridCells.length === 0
-          ? 'Bins pending'
-          : undefined
+      ? spatialGridCells.length === 0
+        ? 'Bins pending'
+        : undefined
       : undefined
   const magicLensLoadEnabled = isVisiumHdDataset
-    ? loadState.status === 'ready' &&
-      selectedGenes.length > 0 &&
-      spatialGridCells.length > 0
+    ? visiumHdMagicLensBinsReady
     : xeniumFeatureLoadEnabled
   const shareableMorphologyEnabledChannelIds = useMemo(() => {
     if (baseMorphologyChannelIds.size === 0) {
@@ -1568,13 +1535,7 @@ export function App({
         return loadBoundaryElements(baseUrl, bbox, options)
       }
 
-      const dataset =
-        visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
-          ? await getSpatialDataset(baseUrl)
-          : await getSpatialDataset(baseUrl, {
-              visiumHdMaxTwoMicrometerFilteredBarcodes:
-                visiumHdTwoMicrometerFilteredBarcodeBudget,
-            })
+      const dataset = await getSpatialDataset(baseUrl)
       const meta = await dataset.meta()
 
       if (!meta.capabilities.cellBoundaries) {
@@ -1583,12 +1544,7 @@ export function App({
 
       return dataset.elements(bbox)
     },
-    [
-      getSpatialDataset,
-      isVisiumHdDataset,
-      loadBoundaryElements,
-      visiumHdTwoMicrometerFilteredBarcodeBudget,
-    ],
+    [getSpatialDataset, isVisiumHdDataset, loadBoundaryElements],
   )
   const loadActiveNucleusBoundaryElements = useCallback<BoundaryElementsLoader>(
     async (baseUrl, bbox) => {
@@ -1596,13 +1552,7 @@ export function App({
         return { elements: [] }
       }
 
-      const dataset =
-        visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
-          ? await getSpatialDataset(baseUrl)
-          : await getSpatialDataset(baseUrl, {
-              visiumHdMaxTwoMicrometerFilteredBarcodes:
-                visiumHdTwoMicrometerFilteredBarcodeBudget,
-            })
+      const dataset = await getSpatialDataset(baseUrl)
       const meta = await dataset.meta()
       const hasNucleusSegmentation =
         meta.segmentations?.some((segmentation) => segmentation.kind === 'nucleus') ??
@@ -1616,7 +1566,7 @@ export function App({
         elements: await dataset.segmentationElements('nucleus', bbox),
       }
     },
-    [getSpatialDataset, isVisiumHdDataset, visiumHdTwoMicrometerFilteredBarcodeBudget],
+    [getSpatialDataset, isVisiumHdDataset],
   )
   const loadActiveGeneExpression = useCallback<GeneExpressionLoader>(
     async (baseUrl, bbox, genes, options = {}) => {
@@ -1624,13 +1574,7 @@ export function App({
         return loadGeneExpression(baseUrl, bbox, genes, options)
       }
 
-      const dataset =
-        visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
-          ? await getSpatialDataset(baseUrl)
-          : await getSpatialDataset(baseUrl, {
-              visiumHdMaxTwoMicrometerFilteredBarcodes:
-                visiumHdTwoMicrometerFilteredBarcodeBudget,
-            })
+      const dataset = await getSpatialDataset(baseUrl)
 
       if (!isSpatialGeneExpressionDataset(dataset)) {
         throw new Error('Loaded dataset does not expose selected-gene expression.')
@@ -1643,13 +1587,7 @@ export function App({
           : { binSizeMicrometers: activeVisiumHdBinSize }),
       })
     },
-    [
-      activeVisiumHdBinSize,
-      getSpatialDataset,
-      isVisiumHdDataset,
-      loadGeneExpression,
-      visiumHdTwoMicrometerFilteredBarcodeBudget,
-    ],
+    [activeVisiumHdBinSize, getSpatialDataset, isVisiumHdDataset, loadGeneExpression],
   )
   const loadVisiumHdMagicLensSummary = useCallback<MagicLensSummaryLoader>(
     async (_baseUrl, selection, options): Promise<MagicLensSummary> => {
@@ -1664,7 +1602,7 @@ export function App({
           ? selectedBinsResult.bins
           : filterExpressionBinsForCircle(selectedBinsResult.bins, options.circleFilter)
 
-      if (selectedBins.length === 0 || selectedGenes.length === 0) {
+      if (selectedBins.length === 0) {
         return summarizeMagicLensExpressionBins(
           selectedBins.length,
           { cells: [], genes: selectedGenes },
@@ -1674,6 +1612,37 @@ export function App({
       }
 
       const selectedBinIds = new Set(selectedBins.map((bin) => bin.barcode))
+
+      if (selectedGenes.length === 0) {
+        const dataset = await getSpatialDataset(
+          loadState.status === 'ready' ? loadState.url : _baseUrl,
+        )
+
+        if (!isVisiumHdExpressionProfileDataset(dataset)) {
+          throw new Error('Loaded dataset does not expose Visium HD expression profiles.')
+        }
+
+        const profileDataset = dataset as VisiumHdExpressionProfileDataset
+        const matrix = await profileDataset.matrix(
+          selectedBins.map((bin) => bin.barcode),
+          activeVisiumHdBinSize,
+          { signal: options.signal },
+        )
+        const expression = cellExpressionSummaryFromGexCells(
+          matrix,
+          selectedBins.map((bin) => bin.barcode),
+        )
+
+        return summarizeMagicLensExpressionProfile(
+          selectedBins.length,
+          expression,
+          selectedGenes,
+          {
+            hitLimit: selectedBinsResult.hitBinLimit || expression.hitGeneLimit,
+          },
+        )
+      }
+
       const reusableExpressionBatch =
         options.scope === 'viewport' &&
         geneExpressionBatch !== null &&
@@ -1724,9 +1693,11 @@ export function App({
       currentViewportDetail,
       expressionStyledSpatialGridCells,
       geneExpressionBatch,
+      getSpatialDataset,
       loadActiveGeneExpression,
       loadState,
       selectedGenes,
+      activeVisiumHdBinSize,
     ],
   )
   const handleLoadVisiumHdExpressionProfile = useCallback(() => {
@@ -1766,13 +1737,7 @@ export function App({
     })
 
     void (async () => {
-      const dataset =
-        visiumHdTwoMicrometerFilteredBarcodeBudget === undefined
-          ? await getSpatialDataset(loadState.url)
-          : await getSpatialDataset(loadState.url, {
-              visiumHdMaxTwoMicrometerFilteredBarcodes:
-                visiumHdTwoMicrometerFilteredBarcodeBudget,
-            })
+      const dataset = await getSpatialDataset(loadState.url)
 
       if (!isVisiumHdExpressionProfileDataset(dataset)) {
         throw new Error('Loaded dataset does not expose Visium HD expression profiles.')
@@ -1875,7 +1840,39 @@ export function App({
     isVisiumHdDataset,
     loadState,
     visiumHdBarcodeMappingRowBudget,
-    visiumHdTwoMicrometerFilteredBarcodeBudget,
+  ])
+
+  useEffect(() => {
+    if (
+      !isVisiumHdDataset ||
+      loadState.status !== 'ready' ||
+      activeVisiumHdExpressionProfileSelection?.kind !== 'bin'
+    ) {
+      autoLoadedVisiumHdBinProfileKeyRef.current = null
+      return
+    }
+
+    const binSize = selectedVisiumHdProfileBinSize(
+      activeVisiumHdBinSize,
+      activeSelectedGridCell,
+    )
+    const profileKey = `${activeVisiumHdExpressionProfileSelection.id}:${
+      binSize ?? 'unknown'
+    }`
+
+    if (autoLoadedVisiumHdBinProfileKeyRef.current === profileKey) {
+      return
+    }
+
+    autoLoadedVisiumHdBinProfileKeyRef.current = profileKey
+    handleLoadVisiumHdExpressionProfile()
+  }, [
+    activeSelectedGridCell,
+    activeVisiumHdBinSize,
+    activeVisiumHdExpressionProfileSelection,
+    handleLoadVisiumHdExpressionProfile,
+    isVisiumHdDataset,
+    loadState.status,
   ])
 
   const toggleGene = useCallback(
@@ -2011,7 +2008,6 @@ export function App({
     selectedBinSize: activeVisiumHdBinSize,
     selectedGridCell,
     setGridCellAssignmentState,
-    twoMicrometerFilteredBarcodeBudget: visiumHdTwoMicrometerFilteredBarcodeBudget,
   })
 
   const {
@@ -2342,7 +2338,6 @@ export function App({
     lastViewportDetailRef,
     detectSpatialDataset,
     getSpatialDataset,
-    visiumHdTwoMicrometerFilteredBarcodeBudget,
     loadAnnotationGroups,
     loadDatasetOverview,
     loadGenePanel,
@@ -2445,7 +2440,6 @@ export function App({
     loadedDatasetUrl,
     onBeforeBinSizeChange: handleBeforeVisiumHdBinSizeChange,
     shouldLoadMorphology,
-    visiumHdTwoMicrometerFilteredBarcodeBudget,
     visiumHdControlState,
     flatMorphologyImage,
     visiumHdBinRequestIdRef: visiumHdBinRequestId,
@@ -2537,14 +2531,8 @@ export function App({
           setDatasetUrl={setDatasetUrl}
           setDebugLog={setDebugLog}
           setShouldLoadMorphology={setShouldLoadMorphology}
-          onVisiumHdTwoMicrometerBudgetInputChange={
-            handleVisiumHdTwoMicrometerBudgetInputChange
-          }
-          onVisiumHdBarcodeMappingBudgetInputChange={setVisiumHdBarcodeMappingBudgetInput}
           shouldLoadMorphology={shouldLoadMorphology}
           visiumHdControlState={visiumHdControlState}
-          visiumHdTwoMicrometerBudgetInput={visiumHdTwoMicrometerBudgetInput}
-          visiumHdBarcodeMappingBudgetInput={visiumHdBarcodeMappingBudgetInput}
         />
 
         <AppLayerHudPanel
@@ -2984,18 +2972,12 @@ async function selectedVisiumHdCellMappings(
     return dataset.barcodeMappingsForCell(cellId, { signal })
   }
 
-  if (rowBudget === undefined) {
-    throw new Error(
-      'Loaded dataset does not expose on-demand cell mapping. Set Mapping rows in Dataset to use the legacy mapping scan.',
-    )
-  }
-
   if (!isVisiumHdBarcodeMappingsDataset(dataset)) {
     throw new Error('Loaded dataset does not expose Visium HD barcode mappings.')
   }
 
   return dataset.barcodeMappings({
-    maxRows: rowBudget,
+    ...(rowBudget === undefined ? {} : { maxRows: rowBudget }),
     signal,
   })
 }
@@ -3120,7 +3102,9 @@ function boundarySelectionGeneExpressionStatus(
   if (projectionState.status === 'loading') {
     return {
       status: 'loading',
-      message: `Projecting selected-gene expression onto ${projectionState.boundaryCellCount.toLocaleString()} cells using up to ${projectionState.rowBudget.toLocaleString()} mapping rows.`,
+      message: `Projecting selected-gene expression onto ${projectionState.boundaryCellCount.toLocaleString()} cells using ${formatMappingRowsScope(
+        projectionState.rowBudget,
+      )}.`,
     }
   }
 
@@ -3148,9 +3132,14 @@ function boundarySelectionGeneExpressionStatus(
 
   return {
     status: 'unavailable',
-    message:
-      'Selected-gene bin expression is loaded. Set Mapping rows in Dataset to project it onto segmented cells.',
+    message: 'Selected-gene bin expression is loaded. Cell projection is pending.',
   }
+}
+
+function formatMappingRowsScope(rowBudget: number | undefined): string {
+  return rowBudget === undefined
+    ? 'all available mapping rows'
+    : `up to ${rowBudget.toLocaleString()} mapping rows`
 }
 
 interface SpatialSegmentationDataset {

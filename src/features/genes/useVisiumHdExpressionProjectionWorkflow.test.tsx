@@ -68,7 +68,6 @@ function Probe({
     loadState,
     rowBudget,
     selectedBinSize: 16,
-    twoMicrometerFilteredBarcodeBudget: undefined,
   })
 
   React.useEffect(() => {
@@ -82,8 +81,21 @@ function Probe({
 }
 
 describe('useVisiumHdExpressionProjectionWorkflow', () => {
-  it('does not load barcode mappings until a row budget is configured', async () => {
-    const getSpatialDataset = vi.fn()
+  it('projects expression without a configured mapping row budget', async () => {
+    const barcodeMappingAssignments = vi.fn(async () => [
+      {
+        binId: 'bin-1',
+        cellId: 'cell-a',
+        inCell: true,
+        inNucleus: false,
+      },
+    ])
+    const getSpatialDataset: SpatialDatasetLoader = vi.fn(
+      async () =>
+        ({
+          barcodeMappingAssignments,
+        }) as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
+    )
     const snapshots: Snapshot[] = []
 
     render(
@@ -98,16 +110,19 @@ describe('useVisiumHdExpressionProjectionWorkflow', () => {
 
     await act(async () => {
       await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
-    expect(getSpatialDataset).not.toHaveBeenCalled()
-    expect(snapshots.at(-1)?.state).toEqual({
-      status: 'unavailable',
-      reason: 'Set a mapping row budget in Dataset to color cell boundaries.',
+    expect(getSpatialDataset).toHaveBeenCalledWith('https://example.test/visium')
+    expect(barcodeMappingAssignments).toHaveBeenCalledWith(16, ['bin-1'], {
+      signal: expect.any(AbortSignal),
     })
-    expect(snapshots.at(-1)?.debugMessages).toEqual([
-      'Visium HD expression cell coloring needs Mapping rows',
-    ])
+    expect(snapshots.at(-1)?.state).toMatchObject({
+      status: 'ready',
+      mappedBinCount: 1,
+      mappedCellCount: 1,
+    })
   })
 
   it('projects binned expression onto visible boundary cells with mappings', async () => {
@@ -155,10 +170,7 @@ describe('useVisiumHdExpressionProjectionWorkflow', () => {
       await Promise.resolve()
     })
 
-    expect(getSpatialDataset).toHaveBeenCalledWith(
-      'https://example.test/visium',
-      undefined,
-    )
+    expect(getSpatialDataset).toHaveBeenCalledWith('https://example.test/visium')
     expect(barcodeMappingAssignments).toHaveBeenCalledWith(16, ['bin-1'], {
       maxRows: 12_000_000,
       signal: expect.any(AbortSignal),

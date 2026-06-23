@@ -7,6 +7,7 @@ import {
   gexFromCellMajorSparseArrays,
   gexFromCellFeatureMatrixH5,
   gexFromFeatureBarcodeMatrixH5,
+  gexFromFeatureBarcodeMatrixH5LazyRangeWorker,
   gexFromFeatureMajorSparseArrays,
   gexFromTranscriptsParquet,
   isGeneFeature,
@@ -16,10 +17,15 @@ import { micrometers } from './coords'
 import type {
   ArrowTableLike,
   DuckDbPreparedStatementLike,
+  FeatureBarcodeMatrixWorkerLike,
   Selection,
   SqlParameter,
   TranscriptDuckDbConnection,
 } from './gex'
+import type {
+  FeatureBarcodeMatrixWorkerRequest,
+  FeatureBarcodeMatrixWorkerResponse,
+} from '../workers/featureBarcodeMatrixMessages'
 
 class FakeTable implements ArrowTableLike {
   constructor(private readonly rows: readonly Record<string, unknown>[]) {}
@@ -361,7 +367,159 @@ describe('GEX helpers', () => {
       globalThis.fetch = originalFetch
     }
   })
+
+  it('reads generic barcode rows through the lazy range worker', async () => {
+    const originalFetch = globalThis.fetch
+    const fetcher = vi.fn(async () => {
+      throw new Error('Unexpected full matrix fetch')
+    })
+    const workers: FakeFeatureBarcodeMatrixWorker[] = []
+    const stageTimings: string[] = []
+
+    globalThis.fetch = fetcher
+
+    try {
+      const result = await gexFromFeatureBarcodeMatrixH5LazyRangeWorker(
+        'https://example.test/visium/filtered_feature_bc_matrix.h5',
+        ['TTGG-1', 'missing-barcode'],
+        {
+          maxFullFileBytes: 1,
+          workerFactory: () => {
+            const worker = new FakeFeatureBarcodeMatrixWorker()
+            workers.push(worker)
+            return worker
+          },
+          onStageTiming: (timing) => {
+            stageTimings.push(timing.stage)
+          },
+        },
+      )
+
+      expect(fetcher).not.toHaveBeenCalled()
+      expect(workers).toHaveLength(1)
+      expect(workers[0]?.requests).toEqual([
+        {
+          id: expect.any(Number),
+          url: 'https://example.test/visium/filtered_feature_bc_matrix.h5',
+          elementIds: ['TTGG-1', 'missing-barcode'],
+        },
+      ])
+      expect(workers[0]?.terminated).toBe(true)
+      expect(stageTimings).toEqual(['matrix-cell-major-ranges'])
+      expect(result.geneNames).toEqual(['Actb'])
+      expect(result.cells.get('TTGG-1')).toEqual({
+        geneNames: ['Actb'],
+        counts: [4],
+      })
+      expect(result.cells.get('missing-barcode')).toEqual({
+        geneNames: [],
+        counts: [],
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('retries transient lazy worker XMLHttpRequest failures', async () => {
+    const workers: (
+      | FakeFeatureBarcodeMatrixWorker
+      | FailingFeatureBarcodeMatrixWorker
+    )[] = []
+
+    const result = await gexFromFeatureBarcodeMatrixH5LazyRangeWorker(
+      'https://example.test/visium/filtered_feature_bc_matrix.h5',
+      ['TTGG-1'],
+      {
+        workerFactory: () => {
+          const worker =
+            workers.length === 0
+              ? new FailingFeatureBarcodeMatrixWorker(
+                  'NetworkError',
+                  "Failed to execute 'send' on 'XMLHttpRequest': Failed to load 'https://example.test/visium/filtered_feature_bc_matrix.h5'.",
+                )
+              : new FakeFeatureBarcodeMatrixWorker()
+          workers.push(worker)
+          return worker
+        },
+      },
+    )
+
+    expect(workers).toHaveLength(2)
+    expect(workers[0]?.terminated).toBe(true)
+    expect(workers[1]?.terminated).toBe(true)
+    expect(result.cells.get('TTGG-1')).toEqual({
+      geneNames: ['Actb'],
+      counts: [4],
+    })
+  })
 })
+
+class FakeFeatureBarcodeMatrixWorker implements FeatureBarcodeMatrixWorkerLike {
+  onmessage: ((event: MessageEvent<FeatureBarcodeMatrixWorkerResponse>) => void) | null =
+    null
+  onerror: ((event: ErrorEvent) => void) | null = null
+  readonly requests: FeatureBarcodeMatrixWorkerRequest[] = []
+  terminated = false
+
+  postMessage(message: FeatureBarcodeMatrixWorkerRequest): void {
+    this.requests.push(message)
+    queueMicrotask(() => {
+      this.onmessage?.(
+        new MessageEvent('message', {
+          data: {
+            id: message.id,
+            ok: true,
+            geneNames: ['Actb'],
+            cells: [
+              {
+                id: 'TTGG-1',
+                geneNames: ['Actb'],
+                counts: [4],
+              },
+            ],
+          },
+        }),
+      )
+    })
+  }
+
+  terminate(): void {
+    this.terminated = true
+  }
+}
+
+class FailingFeatureBarcodeMatrixWorker implements FeatureBarcodeMatrixWorkerLike {
+  onmessage: ((event: MessageEvent<FeatureBarcodeMatrixWorkerResponse>) => void) | null =
+    null
+  onerror: ((event: ErrorEvent) => void) | null = null
+  readonly requests: FeatureBarcodeMatrixWorkerRequest[] = []
+  terminated = false
+
+  constructor(
+    private readonly errorName: string,
+    private readonly errorMessage: string,
+  ) {}
+
+  postMessage(message: FeatureBarcodeMatrixWorkerRequest): void {
+    this.requests.push(message)
+    queueMicrotask(() => {
+      this.onmessage?.(
+        new MessageEvent('message', {
+          data: {
+            id: message.id,
+            ok: false,
+            errorName: this.errorName,
+            error: this.errorMessage,
+          },
+        }),
+      )
+    })
+  }
+
+  terminate(): void {
+    this.terminated = true
+  }
+}
 
 function cellIdsToUint32Pairs(cellIds: readonly string[]): Uint32Array {
   const values = new Uint32Array(cellIds.length * 2)

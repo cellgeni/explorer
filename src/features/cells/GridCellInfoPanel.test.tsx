@@ -14,7 +14,7 @@ describe('GridCellInfoPanel', () => {
     expect(screen.getByText('row 128, col 256')).toBeInTheDocument()
     expect(screen.getByText('Cell assignment')).toBeInTheDocument()
     expect(screen.getByText('No assignment loaded')).toBeInTheDocument()
-    expect(screen.getByText('Gene expression')).toBeInTheDocument()
+    expect(screen.getByText('Selected-gene GEX')).toBeInTheDocument()
     expect(screen.getByText('No expression loaded')).toBeInTheDocument()
   })
 
@@ -44,7 +44,7 @@ describe('GridCellInfoPanel', () => {
     expect(screen.getByText('Loaded')).toBeInTheDocument()
     expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
     expect(screen.getByText('Nucleus')).toBeInTheDocument()
-    expect(screen.getByText('12,000,000')).toBeInTheDocument()
+    expect(screen.getByText('12,000,000 mapping rows')).toBeInTheDocument()
   })
 
   it('shows Visium HD cell assignment errors', () => {
@@ -68,20 +68,24 @@ describe('GridCellInfoPanel', () => {
     ).toBeInTheDocument()
   })
 
-  it('asks for a mapping row budget before loading assignment metadata', () => {
+  it('shows assignment metadata loaded from all mapping rows', () => {
     render(
       <GridCellInfoPanel
         cell={gridCellDatum()}
         assignmentState={{
-          status: 'unavailable',
-          reason: 'Set a mapping row budget in Dataset to load assignment.',
+          status: 'ready',
+          binId: 'BC-1',
+          assignment: {
+            cellId: 'cell-1',
+            inNucleus: false,
+            inCell: true,
+          },
         }}
       />,
     )
 
-    expect(
-      screen.getByText('Set a mapping row budget in Dataset to load assignment.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('cell-1')).toBeInTheDocument()
+    expect(screen.getByText('all available mapping rows')).toBeInTheDocument()
   })
 
   it('loads a selected bin expression profile on demand', () => {
@@ -94,10 +98,10 @@ describe('GridCellInfoPanel', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Load Profile' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load Bin GEX' }))
 
-    expect(screen.getByText('Expression profile')).toBeInTheDocument()
-    expect(screen.getByText('Not loaded')).toBeInTheDocument()
+    expect(screen.getByText('Bin GEX profile')).toBeInTheDocument()
+    expect(screen.getByText('No bin GEX loaded')).toBeInTheDocument()
     expect(onLoadExpressionProfile).toHaveBeenCalledTimes(1)
   })
 
@@ -125,9 +129,10 @@ describe('GridCellInfoPanel', () => {
 
     expect(screen.getByText('10 counts')).toBeInTheDocument()
     expect(screen.getByText('Selected bin')).toBeInTheDocument()
+    expect(screen.getByText('Top genes in selected bin')).toBeInTheDocument()
     expect(screen.getByText('Actb')).toBeInTheDocument()
     expect(screen.getByText('Gad1')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Refresh Profile' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh Bin GEX' })).toBeInTheDocument()
   })
 
   it('shows an empty state without a selected bin', () => {

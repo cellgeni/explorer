@@ -5,6 +5,7 @@ import {
   annotationLabelsForCell,
   annotationSizePlots,
   annotationStatusCopy,
+  annotationsToCsv,
   colorsForAnnotations,
   customAnnotationFilePrefix,
   filterAnnotationsByVisibleSets,
@@ -83,6 +84,30 @@ describe('annotationModel', () => {
       ),
     ).toEqual(['Astrocytes', 'Layer 1'])
     expect(annotationLabelsForCell({ status: 'idle' }, 'aaaaaaaa-1')).toEqual([])
+  })
+
+  it('serializes annotations as importable CSV', () => {
+    expect(
+      annotationsToCsv([
+        {
+          id: 'roi:1:marker-roi',
+          label: 'Marker ROI',
+          cellIds: [asCellId('aaaaaaaa-1'), asCellId('bbbbbbbb-2')],
+        },
+        {
+          id: 'custom:labels:quoted',
+          label: 'Layer "A", region',
+          cellIds: [asCellId('cccccccc-3')],
+        },
+      ]),
+    ).toBe(
+      [
+        'annotation_id,label,cell_id',
+        'roi:1:marker-roi,Marker ROI,aaaaaaaa-1',
+        'roi:1:marker-roi,Marker ROI,bbbbbbbb-2',
+        'custom:labels:quoted,"Layer ""A"", region",cccccccc-3',
+      ].join('\n'),
+    )
   })
 
   it('summarizes annotation size plots by analysis grouping', () => {

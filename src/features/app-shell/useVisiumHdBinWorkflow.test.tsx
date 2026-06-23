@@ -9,7 +9,6 @@ import type {
   SpatialGrid,
 } from '../../datasets/spatialDataset'
 import type { VisiumHdBinnedOverview } from '../../datasets/visiumHdDataset'
-import { VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON } from '../../datasets/visiumHdStrategy'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import {
   useVisiumHdBinWorkflow,
@@ -20,7 +19,6 @@ function Probe({
   state,
   getSpatialDataset,
   onReady,
-  visiumHdTwoMicrometerFilteredBarcodeBudget,
   flatMorphologyImage,
   setFlatMorphologyImage,
   setGeneExpressionBatch,
@@ -38,9 +36,6 @@ function Probe({
     typeof useVisiumHdBinWorkflow
   >[0]['getSpatialDataset']
   readonly onReady: (nextApi: UseVisiumHdBinWorkflowResult) => void
-  readonly visiumHdTwoMicrometerFilteredBarcodeBudget?: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['visiumHdTwoMicrometerFilteredBarcodeBudget']
   readonly flatMorphologyImage?: Parameters<
     typeof useVisiumHdBinWorkflow
   >[0]['flatMorphologyImage']
@@ -78,7 +73,6 @@ function Probe({
     getSpatialDataset,
     loadedDatasetUrl: 'https://example.test/visium',
     shouldLoadMorphology: true,
-    visiumHdTwoMicrometerFilteredBarcodeBudget,
     visiumHdControlState: state,
     flatMorphologyImage,
     setFlatMorphologyImage,
@@ -153,7 +147,7 @@ describe('useVisiumHdBinWorkflow', () => {
 
     render(
       <Probe
-        state={visiumControlState()}
+        state={visiumControlStateWithMissingTwoMicrometer()}
         getSpatialDataset={getSpatialDataset}
         onReady={(nextApi) => {
           api = nextApi
@@ -363,13 +357,12 @@ describe('useVisiumHdBinWorkflow', () => {
 
     render(
       <Probe
-        state={visiumControlState()}
+        state={visiumControlStateWithMissingTwoMicrometer()}
         getSpatialDataset={getSpatialDataset}
         onReady={(nextApi) => {
           api = nextApi
         }}
         setFlatMorphologyImage={vi.fn()}
-        visiumHdTwoMicrometerFilteredBarcodeBudget={25_000}
         setGenePanelState={vi.fn()}
         setLoadState={vi.fn()}
         setMorphologyState={vi.fn()}
@@ -386,7 +379,7 @@ describe('useVisiumHdBinWorkflow', () => {
     expect(getSpatialDataset).not.toHaveBeenCalled()
   })
 
-  it('loads a budget-enabled 2 µm tier instead of ignoring it', async () => {
+  it('loads a 2 µm tier without a configured budget', async () => {
     const datasetUrl = 'https://example.test/visium'
     const grid = visiumGrid(2)
     const overview: VisiumHdBinnedOverview = {
@@ -427,9 +420,8 @@ describe('useVisiumHdBinWorkflow', () => {
 
     render(
       <Probe
-        state={budgetedTwoMicrometerVisiumControlState()}
+        state={visiumControlState()}
         getSpatialDataset={getSpatialDataset}
-        visiumHdTwoMicrometerFilteredBarcodeBudget={25_000}
         onReady={(nextApi) => {
           api = nextApi
         }}
@@ -447,9 +439,7 @@ describe('useVisiumHdBinWorkflow', () => {
       await api?.handleVisiumHdBinSizeChange(2)
     })
 
-    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl, {
-      visiumHdMaxTwoMicrometerFilteredBarcodes: 25_000,
-    })
+    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl)
     expect(dataset.genePanel).toHaveBeenCalledWith(2)
     expect(dataset.readBinnedOverview).toHaveBeenCalledWith(2)
     expect(dataset.meta).toHaveBeenCalledWith(2)
@@ -464,18 +454,13 @@ function visiumControlState(): VisiumHdControlState {
     options: [
       { size: 16, available: true, disabled: false, binCount: 54_504 },
       { size: 8, available: true, disabled: false },
-      {
-        size: 2,
-        available: true,
-        disabled: true,
-        reason: VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
-      },
+      { size: 2, available: true, disabled: false },
     ],
     binCount: 54_504,
   }
 }
 
-function budgetedTwoMicrometerVisiumControlState(): VisiumHdControlState {
+function visiumControlStateWithMissingTwoMicrometer(): VisiumHdControlState {
   return {
     status: 'ready',
     url: 'https://example.test/visium',
@@ -483,7 +468,12 @@ function budgetedTwoMicrometerVisiumControlState(): VisiumHdControlState {
     options: [
       { size: 16, available: true, disabled: false, binCount: 54_504 },
       { size: 8, available: true, disabled: false },
-      { size: 2, available: true, disabled: false },
+      {
+        size: 2,
+        available: false,
+        disabled: true,
+        reason: '2 µm binned output was not detected.',
+      },
     ],
     binCount: 54_504,
   }

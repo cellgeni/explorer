@@ -57,7 +57,6 @@ function Probe({
   getSpatialDataset = vi.fn(async () => {
     throw new Error('unused')
   }),
-  visiumHdTwoMicrometerFilteredBarcodeBudget,
   loadAnnotationGroups = vi.fn(async () => []),
   loadDatasetOverview = vi.fn(async () => []),
   loadGenePanel = vi.fn(async () => []),
@@ -77,7 +76,6 @@ function Probe({
   readonly refs: ReturnType<typeof createLifecycleRefs>
   readonly detectSpatialDataset?: LifecycleOptions['detectSpatialDataset']
   readonly getSpatialDataset?: LifecycleOptions['getSpatialDataset']
-  readonly visiumHdTwoMicrometerFilteredBarcodeBudget?: LifecycleOptions['visiumHdTwoMicrometerFilteredBarcodeBudget']
   readonly loadAnnotationGroups?: LifecycleOptions['loadAnnotationGroups']
   readonly loadDatasetOverview?: LifecycleOptions['loadDatasetOverview']
   readonly loadGenePanel?: LifecycleOptions['loadGenePanel']
@@ -127,7 +125,6 @@ function Probe({
     lastViewportDetailRef: { current: null },
     detectSpatialDataset,
     getSpatialDataset,
-    visiumHdTwoMicrometerFilteredBarcodeBudget,
     loadAnnotationGroups,
     loadDatasetOverview,
     loadGenePanel,
@@ -437,7 +434,7 @@ describe('useDatasetLifecycle', () => {
         options: [
           expect.objectContaining({ size: 16, available: true, disabled: false }),
           expect.objectContaining({ size: 8, available: true, disabled: false }),
-          expect.objectContaining({ size: 2, available: true, disabled: true }),
+          expect.objectContaining({ size: 2, available: true, disabled: false }),
         ],
       }),
     )
@@ -559,7 +556,6 @@ describe('useDatasetLifecycle', () => {
           checked: [],
         }))}
         getSpatialDataset={getSpatialDataset}
-        visiumHdTwoMicrometerFilteredBarcodeBudget={25_000}
         setVisiumHdControlState={setVisiumHdControlState}
         startDatasetLoadRef={startDatasetLoadRef}
       />,
@@ -569,9 +565,7 @@ describe('useDatasetLifecycle', () => {
       await startDatasetLoadRef.current?.(datasetUrl, false)
     })
 
-    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl, {
-      visiumHdMaxTwoMicrometerFilteredBarcodes: 25_000,
-    })
+    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl)
     expect(setVisiumHdControlState).toHaveBeenCalledWith(
       expect.objectContaining({
         options: [

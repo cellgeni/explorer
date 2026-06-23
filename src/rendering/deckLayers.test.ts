@@ -1148,6 +1148,41 @@ describe('deck layer factory', () => {
     expect(getFillColor(expressionStyledGridCells[0]!)).toEqual([240, 128, 120, 110])
   })
 
+  it('keeps active affine-grid gene expression visible at low grid opacity', () => {
+    const gridCells = styleGridCellsByGeneExpression(
+      gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch]),
+      [
+        {
+          id: 'BC-1',
+          position: [10, -20, 0],
+          radiusPixels: 6,
+          fillColor: [240, 128, 120, 220],
+          expressionCount: 7,
+          expressionGenes: ['Actb'],
+        },
+      ],
+      { styleUnmatchedCells: true },
+    )
+    const layers = createOverviewLayers([], [], {
+      geneExpressionActive: true,
+      gridCells,
+      gridCellOpacity: 0.1,
+    })
+    const gridLayer = layers.find(
+      (layer) => layer instanceof PolygonLayer && layer.id === 'spatial-grid-cells',
+    )
+
+    if (!(gridLayer instanceof PolygonLayer)) {
+      throw new Error('Expected grid cells to render as PolygonLayer.')
+    }
+
+    const getFillColor = gridLayer.props.getFillColor as (
+      cell: (typeof gridCells)[number],
+    ) => readonly number[]
+
+    expect(getFillColor(gridCells[0]!)).toEqual([240, 128, 120, 110])
+  })
+
   it('colors transcript aggregate bins with the selected density scale', () => {
     const thermalBins = transcriptAggregateBinsToLayerData(
       [

@@ -547,6 +547,25 @@ describe('App', () => {
       })),
       image: vi.fn(async () => null),
       genePanel: vi.fn(async () => ['A2M', 'GAD1']),
+      matrix: vi.fn(async () => ({
+        geneNames: ['A2M', 'GAD1'],
+        cells: new Map([
+          [
+            'BC-1',
+            {
+              geneNames: ['A2M', 'GAD1'],
+              counts: [7, 2],
+            },
+          ],
+          [
+            'BC-2',
+            {
+              geneNames: ['GAD1'],
+              counts: [3],
+            },
+          ],
+        ]),
+      })),
       geneExpression: vi.fn(async () => ({
         cells: [
           {
@@ -578,12 +597,47 @@ describe('App', () => {
 
       await screen.findAllByText(/Visium HD ready/)
 
+      openHudTab('Magic Lens')
+      expect(screen.queryByRole('spinbutton', { name: 'Min QV' })).toBeNull()
+      const enableLensButton = screen.getByRole('button', { name: 'Enable Lens' })
+      await waitFor(() => {
+        expect(enableLensButton).toBeEnabled()
+      })
+      fireEvent.click(enableLensButton)
+      expect(screen.getByRole('button', { name: 'Disable Lens' })).toBeEnabled()
+      fireEvent.click(screen.getByRole('button', { name: 'Viewport' }))
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Scan Lens' }))
+
+      await waitFor(() => {
+        expect(visiumDataset.matrix).toHaveBeenCalledWith(
+          ['BC-1', 'BC-2'],
+          16,
+          expect.objectContaining({
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
+
+      const allGeneResults = await screen.findByLabelText('Magic lens results')
+      expect(allGeneResults).toHaveTextContent('UMIs')
+      expect(allGeneResults).toHaveTextContent('12')
+      expect(allGeneResults).toHaveTextContent('Bins')
+      expect(allGeneResults).toHaveTextContent('2')
+      expect(screen.getByLabelText('Magic lens gene distribution')).toHaveTextContent(
+        'A2M',
+      )
+      expect(screen.getByLabelText('Magic lens gene distribution')).toHaveTextContent(
+        'GAD1',
+      )
+
       openHudTab('Genes')
       expect(await screen.findByText('2 genes')).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'A2M' }))
 
       openHudTab('Magic Lens')
-      expect(screen.queryByRole('spinbutton', { name: 'Min QV' })).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'Viewport' }))
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
@@ -745,10 +799,6 @@ describe('App', () => {
         within(initialBinInfo).getByText('Select a gene or gene set to load expression.'),
       ).toBeInTheDocument()
 
-      fireEvent.click(
-        within(initialBinInfo).getByRole('button', { name: 'Load Profile' }),
-      )
-
       await waitFor(() => {
         expect(visiumDataset.matrix).toHaveBeenCalledWith(
           ['BC-1'],
@@ -761,6 +811,9 @@ describe('App', () => {
       await waitFor(() => {
         expect(within(initialBinInfo).getByText('12 counts')).toBeInTheDocument()
       })
+      expect(
+        within(initialBinInfo).getByRole('button', { name: 'Refresh Bin GEX' }),
+      ).toBeInTheDocument()
       expect(within(initialBinInfo).getAllByText('Selected bin').length).toBeGreaterThan(
         0,
       )
@@ -1041,7 +1094,7 @@ describe('App', () => {
       const selectedCellInfo = screen.getByRole('region', { name: 'Cell Info' })
 
       fireEvent.click(
-        within(selectedCellInfo).getByRole('button', { name: 'Load Profile' }),
+        within(selectedCellInfo).getByRole('button', { name: 'Load Cell GEX' }),
       )
 
       await waitFor(() => {

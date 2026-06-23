@@ -36,7 +36,7 @@ export type VisiumHdExpressionProjectionState =
       readonly status: 'loading'
       readonly binCount: number
       readonly boundaryCellCount: number
-      readonly rowBudget: number
+      readonly rowBudget?: number
     }
   | {
       readonly status: 'ready'
@@ -52,7 +52,7 @@ interface VisiumHdExpressionProjectionDataset {
   readonly barcodeMappingAssignments: (
     binSizeMicrometers: VisiumHdBinSizeMicrometers,
     binIds: readonly SpatialElementId[],
-    options: { readonly maxRows: number; readonly signal?: AbortSignal },
+    options: { readonly maxRows?: number; readonly signal?: AbortSignal },
   ) => Promise<readonly VisiumHdExpressionCellAssignment[]>
 }
 
@@ -65,7 +65,6 @@ interface UseVisiumHdExpressionProjectionWorkflowOptions {
   readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly rowBudget: number | undefined
   readonly selectedBinSize: VisiumHdBinSizeMicrometers | undefined
-  readonly twoMicrometerFilteredBarcodeBudget: number | undefined
 }
 
 const IDLE_VISIUM_HD_EXPRESSION_PROJECTION_STATE: VisiumHdExpressionProjectionState = {
@@ -81,7 +80,6 @@ export function useVisiumHdExpressionProjectionWorkflow({
   loadState,
   rowBudget,
   selectedBinSize,
-  twoMicrometerFilteredBarcodeBudget,
 }: UseVisiumHdExpressionProjectionWorkflowOptions): VisiumHdExpressionProjectionState {
   const [state, setState] = useState<VisiumHdExpressionProjectionState>(
     IDLE_VISIUM_HD_EXPRESSION_PROJECTION_STATE,
@@ -148,21 +146,6 @@ export function useVisiumHdExpressionProjectionWorkflow({
       return
     }
 
-    if (rowBudget === undefined) {
-      abortActiveRequest(abortRef)
-      const requestId = requestIdRef.current + 1
-
-      requestIdRef.current = requestId
-      queueProjectionState(requestIdRef, requestId, setState, {
-        status: 'unavailable',
-        reason: 'Set a mapping row budget in Dataset to color cell boundaries.',
-      })
-      appendDebugEvent('Visium HD expression cell coloring needs Mapping rows', {
-        coalesceKey: 'visium-hd-expression-projection',
-      })
-      return
-    }
-
     const requestId = requestIdRef.current + 1
     const abortController = new AbortController()
     const startedAt = readTimestamp()
@@ -174,7 +157,7 @@ export function useVisiumHdExpressionProjectionWorkflow({
       status: 'loading',
       binCount: binIds.length,
       boundaryCellCount: boundaries.length,
-      rowBudget,
+      ...(rowBudget === undefined ? {} : { rowBudget }),
     })
     appendDebugEvent(
       `Visium HD expression cell projection started: ${binIds.length.toLocaleString()} bins, ${boundaries.length.toLocaleString()} boundaries`,
@@ -182,15 +165,7 @@ export function useVisiumHdExpressionProjectionWorkflow({
     )
 
     void (async () => {
-      const dataset = await getSpatialDataset(
-        loadState.url,
-        twoMicrometerFilteredBarcodeBudget === undefined
-          ? undefined
-          : {
-              visiumHdMaxTwoMicrometerFilteredBarcodes:
-                twoMicrometerFilteredBarcodeBudget,
-            },
-      )
+      const dataset = await getSpatialDataset(loadState.url)
 
       if (!hasBarcodeMappingAssignments(dataset)) {
         throw new Error('Active dataset does not expose Visium HD barcode mappings.')
@@ -200,7 +175,7 @@ export function useVisiumHdExpressionProjectionWorkflow({
         selectedBinSize,
         binIds,
         {
-          maxRows: rowBudget,
+          ...(rowBudget === undefined ? {} : { maxRows: rowBudget }),
           signal: abortController.signal,
         },
       )
@@ -221,7 +196,7 @@ export function useVisiumHdExpressionProjectionWorkflow({
         boundaryCellCount: boundaries.length,
         mappedBinCount: result.mappedBinCount,
         mappedCellCount: result.mappedCellCount,
-        rowBudget,
+        ...(rowBudget === undefined ? {} : { rowBudget }),
       })
       appendDebugEvent(
         `Visium HD expression cell projection ready: ${result.mappedCellCount.toLocaleString()} cells in ${formatElapsed(
@@ -263,7 +238,6 @@ export function useVisiumHdExpressionProjectionWorkflow({
     loadState,
     rowBudget,
     selectedBinSize,
-    twoMicrometerFilteredBarcodeBudget,
   ])
 
   return state

@@ -76,6 +76,17 @@ export function annotationLabelsForCell<ErrorType>(
   return labels
 }
 
+export function annotationsToCsv(annotations: readonly Annotation[]): string {
+  const rows = [
+    ['annotation_id', 'label', 'cell_id'],
+    ...annotations.flatMap((annotation) =>
+      annotation.cellIds.map((cellId) => [annotation.id, annotation.label, cellId]),
+    ),
+  ]
+
+  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
+}
+
 export function filterAnnotationsByVisibleSets(
   annotations: readonly Annotation[],
   hiddenSetIds: ReadonlySet<string>,
@@ -221,6 +232,14 @@ export function removeAnnotationColorsByPrefix(
 
 export function customAnnotationFilePrefix(fileName: string): string {
   return `custom:${slug(fileName)}:`
+}
+
+function csvEscape(value: string): string {
+  if (/[",\n\r]/.test(value)) {
+    return `"${value.replaceAll('"', '""')}"`
+  }
+
+  return value
 }
 
 function annotationSizeGrouping(annotation: Annotation): {

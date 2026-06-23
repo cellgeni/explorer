@@ -221,7 +221,7 @@ describe('CellHudPanel', () => {
     expect(onClearSelectedBoundaryCell).toHaveBeenCalledTimes(1)
   })
 
-  it('explains when selected Visium HD cell expression needs barcode mappings', () => {
+  it('explains when selected Visium HD cell expression projection is pending', () => {
     render(
       <CellHudPanel
         active
@@ -239,7 +239,7 @@ describe('CellHudPanel', () => {
         selectedBoundaryCell={boundaryCellDatum()}
         selectedBoundaryCellExpressionStatus={{
           status: 'unavailable',
-          message: 'Set a mapping row budget in Dataset to color cell boundaries.',
+          message: 'Selected-gene bin expression is loaded. Cell projection is pending.',
         }}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"
@@ -255,9 +255,11 @@ describe('CellHudPanel', () => {
       />,
     )
 
-    expect(screen.getByText('Gene expression')).toBeInTheDocument()
+    expect(screen.getByText('Selected-gene GEX')).toBeInTheDocument()
     expect(
-      screen.getByText('Set a mapping row budget in Dataset to color cell boundaries.'),
+      screen.getByText(
+        'Selected-gene bin expression is loaded. Cell projection is pending.',
+      ),
     ).toBeInTheDocument()
   })
 
@@ -283,7 +285,7 @@ describe('CellHudPanel', () => {
           status: 'unavailable',
           selectionId: 'cellid_000000001-1',
           selectionKind: 'cell',
-          reason: 'Set Mapping rows in Dataset to load a segmented-cell profile.',
+          reason: 'Cell expression profile is pending.',
         }}
         selectedCellAnnotationLabels={[]}
         cellDetailCopy="No selection"
@@ -300,12 +302,10 @@ describe('CellHudPanel', () => {
       />,
     )
 
-    expect(screen.getByText('Expression profile')).toBeInTheDocument()
-    expect(
-      screen.getByText('Set Mapping rows in Dataset to load a segmented-cell profile.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Cell GEX profile')).toBeInTheDocument()
+    expect(screen.getByText('Cell expression profile is pending.')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Load Profile' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load Cell GEX' }))
 
     expect(onLoadSelectedExpressionProfile).toHaveBeenCalledTimes(1)
   })

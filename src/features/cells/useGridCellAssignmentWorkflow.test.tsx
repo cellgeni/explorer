@@ -57,7 +57,6 @@ function Probe({
     selectedBinSize: 16,
     selectedGridCell,
     setGridCellAssignmentState,
-    twoMicrometerFilteredBarcodeBudget: undefined,
   })
 
   React.useEffect(() => {
@@ -71,8 +70,21 @@ function Probe({
 }
 
 describe('useGridCellAssignmentWorkflow', () => {
-  it('does not load barcode mappings until a row budget is configured', async () => {
-    const getSpatialDataset = vi.fn()
+  it('loads selected bin cell assignment without a configured row budget', async () => {
+    const barcodeMappingAssignments = vi.fn(async () => [
+      {
+        binId: 'BC-1',
+        cellId: 'cellid_000000001-1',
+        inNucleus: false,
+        inCell: true,
+      },
+    ])
+    const getSpatialDataset: SpatialDatasetLoader = vi.fn(
+      async () =>
+        ({
+          barcodeMappingAssignments,
+        }) as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
+    )
     const snapshots: Snapshot[] = []
 
     render(
@@ -87,13 +99,22 @@ describe('useGridCellAssignmentWorkflow', () => {
 
     await act(async () => {
       await Promise.resolve()
+      await Promise.resolve()
     })
 
-    expect(getSpatialDataset).not.toHaveBeenCalled()
+    expect(getSpatialDataset).toHaveBeenCalledWith('https://example.test/visium')
+    expect(barcodeMappingAssignments).toHaveBeenCalledWith(16, ['BC-1'], {
+      signal: expect.any(AbortSignal),
+    })
     const snapshot = snapshots.at(-1)
     expect(snapshot?.assignmentState).toEqual({
-      status: 'unavailable',
-      reason: 'Set a mapping row budget in Dataset to load assignment.',
+      status: 'ready',
+      binId: 'BC-1',
+      assignment: {
+        cellId: 'cellid_000000001-1',
+        inNucleus: false,
+        inCell: true,
+      },
     })
   })
 
@@ -129,7 +150,7 @@ describe('useGridCellAssignmentWorkflow', () => {
       await Promise.resolve()
     })
 
-    expect(getSpatialDataset).toHaveBeenCalledWith('https://example.test/visium', {})
+    expect(getSpatialDataset).toHaveBeenCalledWith('https://example.test/visium')
     expect(barcodeMappingAssignments).toHaveBeenCalledWith(16, ['BC-1'], {
       maxRows: 12_000_000,
       signal: expect.any(AbortSignal),

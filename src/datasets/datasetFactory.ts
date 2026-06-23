@@ -1,6 +1,5 @@
 import { datasetFileUrl } from '../data/datasetFiles'
 import type { CellId } from '../data/cellid'
-import { normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget } from './visiumHdStrategy'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentations'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
@@ -95,10 +94,6 @@ const VISIUM_HD_SEGMENTED_OUTPUT_PROBES = [
   readonly path: string
 }[]
 
-const VISIUM_HD_TWO_MICROMETER_FILTERED_BARCODE_BUDGET_ENV =
-  'VITE_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES'
-const DEFAULT_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES =
-  readDefaultTwoMicrometerFilteredBarcodeBudget()
 const spatialDatasetCache = new Map<string, Promise<AnySpatialDataset>>()
 
 export async function detectSpatialDataset(
@@ -211,8 +206,7 @@ export function cachedSpatialDataset(
 ): Promise<AnySpatialDataset> {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
   const maxTwoMicrometerFilteredBarcodes =
-    options.visiumHdMaxTwoMicrometerFilteredBarcodes ??
-    DEFAULT_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES
+    options.visiumHdMaxTwoMicrometerFilteredBarcodes
   const cacheKey = spatialDatasetCacheKey(
     normalizedBaseUrl,
     maxTwoMicrometerFilteredBarcodes,
@@ -304,14 +298,4 @@ function spatialDatasetCacheKey(
   visiumHdMaxTwoMicrometerFilteredBarcodes: number | undefined,
 ): string {
   return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}`
-}
-
-function readDefaultTwoMicrometerFilteredBarcodeBudget(): number | undefined {
-  const rawBudget = import.meta.env[VISIUM_HD_TWO_MICROMETER_FILTERED_BARCODE_BUDGET_ENV]
-
-  if (typeof rawBudget !== 'string' || rawBudget.trim() === '') {
-    return undefined
-  }
-
-  return normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(Number(rawBudget))
 }

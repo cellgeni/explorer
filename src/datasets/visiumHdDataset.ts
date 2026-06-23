@@ -1,7 +1,7 @@
 import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet'
 import { datasetFileUrl } from '../data/datasetFiles'
 import {
-  gexFromFeatureBarcodeMatrixH5,
+  gexFromFeatureBarcodeMatrixH5LazyRangeWorker,
   type CellFeatureMatrixReadOptions,
   type GexCell,
   type GexResult,
@@ -35,7 +35,6 @@ import {
   type VisiumHdBarcodeMappingCellAssignment,
 } from './visiumHdBarcodeMappings'
 import {
-  VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
   VisiumHdTwoMicrometerOverviewDisabledError,
   normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget,
 } from './visiumHdStrategy'
@@ -126,7 +125,6 @@ export interface VisiumHdDatasetOptions {
     options: VisiumFeatureSliceReadOptions,
   ) => Promise<GexResult<SpatialElementId>>
   readonly maxTwoMicrometerFilteredBarcodes?: number
-  readonly maxInteractiveMatrixBytes?: number
   readonly maxInteractiveFeatureSliceBytes?: number
   readonly maxInteractiveSegmentationGeojsonBytes?: number
   readonly readObjects?: VisiumHdParquetObjectReader
@@ -201,7 +199,7 @@ export interface VisiumHdGeneExpressionQueryOptions extends GeneExpressionQueryO
 }
 
 export interface VisiumHdBarcodeMappingQueryOptions {
-  readonly maxRows: number
+  readonly maxRows?: number
   readonly signal?: AbortSignal
 }
 
@@ -267,7 +265,6 @@ export class VisiumHdTissuePositionsDecodeError extends Error {
 }
 
 const DEFAULT_VISIUM_HD_MAX_BASIS_FIT_SAMPLES = 10_000
-export const DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET = 64 * 1024 * 1024
 export const DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET = 128 * 1024 * 1024
 
 const readVisiumHdBarcodeMappingsForCellWithDuckDb: VisiumHdBarcodeMappingsForCellReader =
@@ -323,7 +320,6 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     genes: readonly string[],
     options: VisiumFeatureSliceReadOptions,
   ) => Promise<GexResult<SpatialElementId>>
-  private readonly maxInteractiveMatrixBytes: number
   private readonly maxInteractiveFeatureSliceBytes: number
   private readonly maxInteractiveSegmentationGeojsonBytes: number | undefined
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
@@ -375,16 +371,13 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     this.segmentationReader =
       options.segmentationReader ?? readVisiumHdSegmentationElements
     this.featureMatrixReader =
-      options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5
+      options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5LazyRangeWorker
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
     this.featureSliceReader = options.featureSliceReader ?? gexFromVisiumFeatureSliceH5
     this.maxTwoMicrometerFilteredBarcodes =
       normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(
         options.maxTwoMicrometerFilteredBarcodes,
       )
-    this.maxInteractiveMatrixBytes =
-      options.maxInteractiveMatrixBytes ??
-      DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET
     this.maxInteractiveFeatureSliceBytes =
       options.maxInteractiveFeatureSliceBytes ??
       DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET
@@ -439,10 +432,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     return this.featureMatrixReader(
       datasetFileUrl(this.baseUrl, bin.filteredMatrixH5Path),
       ids,
-      {
-        ...options,
-        maxFullFileBytes: options.maxFullFileBytes ?? this.maxInteractiveMatrixBytes,
-      },
+      options,
     )
   }
 
@@ -511,15 +501,19 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   barcodeMappings(
     options: VisiumHdBarcodeMappingQueryOptions,
   ): Promise<readonly VisiumHdBarcodeMapping[]> {
-    const maxRows = normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
-    const existing = this.barcodeMappingPromises.get(maxRows)
+    const maxRows =
+      options.maxRows === undefined
+        ? undefined
+        : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
+    const cacheKey = maxRows ?? Number.POSITIVE_INFINITY
+    const existing = this.barcodeMappingPromises.get(cacheKey)
 
     if (existing !== undefined && options.signal === undefined) {
       return existing
     }
 
     const promise = this.barcodeMappingsReader(this.baseUrl, {
-      maxRows,
+      ...(maxRows === undefined ? {} : { maxRows }),
       fetcher: this.fetcher,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       ...(this.readObjects === undefined ? {} : { readObjects: this.readObjects }),
@@ -530,15 +524,15 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
         ? {}
         : { byteRangeCache: this.byteRangeCache }),
     }).catch((error: unknown) => {
-      if (this.barcodeMappingPromises.get(maxRows) === promise) {
-        this.barcodeMappingPromises.delete(maxRows)
+      if (this.barcodeMappingPromises.get(cacheKey) === promise) {
+        this.barcodeMappingPromises.delete(cacheKey)
       }
 
       throw error
     })
 
     if (options.signal === undefined) {
-      this.barcodeMappingPromises.set(maxRows, promise)
+      this.barcodeMappingPromises.set(cacheKey, promise)
     }
 
     return promise
@@ -739,14 +733,6 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     binSizeMicrometers = this.defaultBinSizeMicrometers,
   ): Promise<VisiumHdBinnedOverview> {
     if (binSizeMicrometers === 2) {
-      if (this.maxTwoMicrometerFilteredBarcodes === undefined) {
-        return Promise.reject(
-          new VisiumHdTwoMicrometerOverviewDisabledError(
-            VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
-          ),
-        )
-      }
-
       return this.readTwoMicrometerOverviewFromFilteredBarcodes()
     }
 
@@ -799,16 +785,6 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       return existing
     }
 
-    const maxBarcodeCount = this.maxTwoMicrometerFilteredBarcodes
-
-    if (maxBarcodeCount === undefined) {
-      return Promise.reject(
-        new VisiumHdTwoMicrometerOverviewDisabledError(
-          VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
-        ),
-      )
-    }
-
     const bin = findBin(this.bins, 2)
     const sourceBinSize = preferredTwoMicrometerBasisSourceBinSize(this.bins)
 
@@ -828,7 +804,9 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
         }),
         this.filteredMatrixBarcodeReader(this.baseUrl, bin, {
           fetcher: this.fetcher,
-          maxBarcodeCount,
+          ...(this.maxTwoMicrometerFilteredBarcodes === undefined
+            ? {}
+            : { maxBarcodeCount: this.maxTwoMicrometerFilteredBarcodes }),
         }),
       ])
       const basis = deriveSubdividedGridBasis(

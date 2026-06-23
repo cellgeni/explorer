@@ -36,6 +36,18 @@ export interface MagicLensExpressionBin {
   readonly center: DataPoint
 }
 
+export interface MagicLensExpressionProfile {
+  readonly genes: readonly MagicLensExpressionProfileGene[]
+  readonly totalCount: number
+  readonly hitGeneLimit?: boolean
+}
+
+export interface MagicLensExpressionProfileGene {
+  readonly gene: string
+  readonly count: number
+  readonly percentTotal: number
+}
+
 export interface MagicLensLoadErrorSummary {
   readonly title: string
 }
@@ -188,6 +200,43 @@ export function summarizeMagicLensExpressionBins(
   }
 }
 
+export function summarizeMagicLensExpressionProfile(
+  binCount: number,
+  expression: MagicLensExpressionProfile,
+  selectedGenes: readonly string[],
+  options: {
+    readonly hitLimit?: boolean
+  },
+): MagicLensSummary {
+  const selectedGeneKeys = new Set(selectedGenes.map((gene) => gene.toLocaleLowerCase()))
+  let selectedGeneTranscriptCount = 0
+
+  for (const gene of expression.genes) {
+    if (selectedGeneKeys.has(gene.gene.toLocaleLowerCase())) {
+      selectedGeneTranscriptCount += gene.count
+    }
+  }
+
+  const topGenes = expression.genes
+    .map((gene) => ({
+      gene: gene.gene,
+      count: gene.count,
+      percentTotal: gene.percentTotal,
+      selected: selectedGeneKeys.has(gene.gene.toLocaleLowerCase()),
+    }))
+    .slice(0, MAGIC_LENS_TOP_GENE_LIMIT)
+
+  return {
+    kind: 'expression',
+    transcriptCount: expression.totalCount,
+    cellCount: binCount,
+    geneCount: topGenes.length,
+    selectedGeneTranscriptCount,
+    topGenes,
+    hitLimit: options.hitLimit ?? expression.hitGeneLimit ?? false,
+  }
+}
+
 export function magicLensStatusCopy<ErrorType extends MagicLensLoadErrorSummary>(
   state: MagicLensState<ErrorType>,
   scope: MagicLensScope,
@@ -277,7 +326,7 @@ export function magicLensElementLabel(summary: MagicLensSummary): string {
 
 export function magicLensEmptyGeneMessage(summary: MagicLensSummary): string {
   return summary.kind === 'expression'
-    ? 'No detected selected-gene expression'
+    ? 'No detected expression'
     : 'No detected gene transcripts'
 }
 

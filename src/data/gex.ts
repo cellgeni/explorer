@@ -8,6 +8,11 @@ import {
 } from './persistentByteRangeCache'
 import { geneExpressionStageTiming } from './geneExpressionTiming'
 import { createGeneFeatureIndex } from './geneFeatures'
+import type {
+  FeatureBarcodeMatrixWorkerRequest,
+  FeatureBarcodeMatrixWorkerResponse,
+  FeatureBarcodeMatrixWorkerSuccess,
+} from '../workers/featureBarcodeMatrixMessages'
 import type { CellId } from './cellid'
 import type { DataPoint, Micrometers } from './coords'
 import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
@@ -61,8 +66,12 @@ interface SliceableNumericDataset {
   slice(ranges: readonly (readonly (number | null)[])[]): unknown
 }
 
+export interface H5FileLike {
+  get(path: string): unknown
+}
+
 interface H5MatrixCache {
-  readonly file: unknown
+  readonly file: H5FileLike
   readonly geneNames: readonly string[]
   readonly featureTypes: readonly string[]
   readonly barcodeRows: ReadonlyMap<string, number>
@@ -122,6 +131,8 @@ const CELL_MAJOR_FULL_INDPTR_MAX_LENGTH = 6_000_000
 const CELL_MAJOR_ROI_WARMUP_ROW_COUNT = 128
 const SELECTED_GENE_CELL_MAJOR_CELL_THRESHOLD = 2_000
 const SELECTED_GENE_CELL_MAJOR_GENE_THRESHOLD = 32
+const FEATURE_BARCODE_MATRIX_WORKER_MAX_ATTEMPTS = 3
+const FEATURE_BARCODE_MATRIX_WORKER_RETRY_DELAY_MS = 250
 const h5MatrixCache = new Map<string, Promise<H5MatrixCache>>()
 const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
 const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
@@ -134,6 +145,21 @@ const zarrCellMajorIndptrCache = new WeakMap<
   ZarrArray<DataType, ZipFileStore>,
   CellMajorIndptrCacheEntry
 >()
+let nextFeatureBarcodeMatrixWorkerRequestId = 1
+let featureBarcodeMatrixWorkerQueue: Promise<void> = Promise.resolve()
+
+export interface FeatureBarcodeMatrixWorkerLike {
+  onmessage: ((event: MessageEvent<FeatureBarcodeMatrixWorkerResponse>) => void) | null
+  onerror: ((event: ErrorEvent) => void) | null
+  postMessage(message: FeatureBarcodeMatrixWorkerRequest): void
+  terminate(): void
+}
+
+export type FeatureBarcodeMatrixWorkerFactory = () => FeatureBarcodeMatrixWorkerLike
+
+export interface FeatureBarcodeMatrixLazyRangeReadOptions extends CellFeatureMatrixReadOptions {
+  readonly workerFactory?: FeatureBarcodeMatrixWorkerFactory
+}
 
 export async function warmCellFeatureMatrixZarr(
   url: string,
@@ -483,6 +509,185 @@ export async function gexFromFeatureBarcodeMatrixH5<ElementId extends string>(
   const matrix = await loadH5Matrix(url, options)
   throwIfAborted(options.signal)
 
+  return gexFromLoadedH5Matrix(matrix, elementIds)
+}
+
+export async function gexFromFeatureBarcodeMatrixH5LazyRangeWorker<
+  ElementId extends string,
+>(
+  url: string,
+  elementIds: readonly ElementId[],
+  options: FeatureBarcodeMatrixLazyRangeReadOptions = {},
+): Promise<GexResult<ElementId>> {
+  return enqueueFeatureBarcodeMatrixWorkerRead(options.signal, () =>
+    gexFromFeatureBarcodeMatrixH5LazyRangeWorkerWithRetries(url, elementIds, options),
+  )
+}
+
+async function gexFromFeatureBarcodeMatrixH5LazyRangeWorkerWithRetries<
+  ElementId extends string,
+>(
+  url: string,
+  elementIds: readonly ElementId[],
+  options: FeatureBarcodeMatrixLazyRangeReadOptions,
+): Promise<GexResult<ElementId>> {
+  if (elementIds.length === 0) {
+    return {
+      geneNames: [],
+      cells: emptyCellsFor(elementIds),
+    }
+  }
+
+  let lastError: unknown
+
+  for (
+    let attempt = 1;
+    attempt <= FEATURE_BARCODE_MATRIX_WORKER_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    throwIfAborted(options.signal)
+
+    try {
+      return await gexFromFeatureBarcodeMatrixH5LazyRangeWorkerAttempt(
+        url,
+        elementIds,
+        options,
+      )
+    } catch (error) {
+      lastError = error
+
+      if (
+        !shouldRetryFeatureBarcodeMatrixWorkerError(error) ||
+        attempt >= FEATURE_BARCODE_MATRIX_WORKER_MAX_ATTEMPTS
+      ) {
+        throw error
+      }
+
+      await delay(FEATURE_BARCODE_MATRIX_WORKER_RETRY_DELAY_MS * attempt, options.signal)
+    }
+  }
+
+  throw lastError
+}
+
+async function gexFromFeatureBarcodeMatrixH5LazyRangeWorkerAttempt<
+  ElementId extends string,
+>(
+  url: string,
+  elementIds: readonly ElementId[],
+  options: FeatureBarcodeMatrixLazyRangeReadOptions,
+): Promise<GexResult<ElementId>> {
+  const worker = (options.workerFactory ?? createDefaultFeatureBarcodeMatrixWorker)()
+  const requestId = nextFeatureBarcodeMatrixWorkerRequestId
+  nextFeatureBarcodeMatrixWorkerRequestId += 1
+  const startedAt = Date.now()
+  const request: FeatureBarcodeMatrixWorkerRequest = {
+    id: requestId,
+    url,
+    elementIds: [...elementIds],
+  }
+  const signal = options.signal
+
+  if (signal?.aborted === true) {
+    worker.terminate()
+    throw abortError(signal)
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+
+    const cleanup = () => {
+      if (signal !== undefined) {
+        signal.removeEventListener('abort', handleAbort)
+      }
+
+      worker.terminate()
+    }
+    const settle = (callback: () => void) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+      callback()
+    }
+    const handleAbort = () => {
+      if (signal === undefined) {
+        return
+      }
+
+      settle(() => {
+        reject(abortError(signal))
+      })
+    }
+
+    worker.onmessage = (event) => {
+      const response = event.data
+
+      if (response.id !== requestId) {
+        return
+      }
+
+      if (response.ok) {
+        settle(() => {
+          options.onStageTiming?.(
+            geneExpressionStageTiming(
+              'matrix-cell-major-ranges',
+              'Feature-barcode H5 lazy range read',
+              startedAt,
+              `${elementIds.length.toLocaleString()} elements`,
+            ),
+          )
+          resolve(gexResultFromFeatureBarcodeWorkerResponse(response, elementIds))
+        })
+        return
+      }
+
+      settle(() => {
+        const error = new Error(response.error)
+        error.name = response.errorName ?? 'FeatureBarcodeMatrixLazyRangeWorkerError'
+        reject(error)
+      })
+    }
+    worker.onerror = (event) => {
+      settle(() => {
+        reject(new Error(event.message || 'Feature-barcode H5 worker failed.'))
+      })
+    }
+
+    if (signal !== undefined) {
+      signal.addEventListener('abort', handleAbort, { once: true })
+    }
+
+    try {
+      worker.postMessage(request)
+    } catch (cause) {
+      settle(() => {
+        reject(cause instanceof Error ? cause : new Error(String(cause)))
+      })
+    }
+  })
+}
+
+export function gexFromFeatureBarcodeMatrixH5File<ElementId extends string>(
+  file: H5FileLike,
+  elementIds: readonly ElementId[],
+): GexResult<ElementId> {
+  if (elementIds.length === 0) {
+    return {
+      geneNames: [],
+      cells: emptyCellsFor(elementIds),
+    }
+  }
+
+  return gexFromLoadedH5Matrix(createH5MatrixCache(file), elementIds)
+}
+
+function gexFromLoadedH5Matrix<ElementId extends string>(
+  matrix: H5MatrixCache,
+  elementIds: readonly ElementId[],
+): GexResult<ElementId> {
   return gexFromCellMajorSparseArrays({
     cellIds: elementIds,
     geneNames: matrix.geneNames,
@@ -491,6 +696,103 @@ export async function gexFromFeatureBarcodeMatrixH5<ElementId extends string>(
     indptr: matrix.indptr,
     indicesDataset: matrix.indicesDataset,
     dataDataset: matrix.dataDataset,
+  })
+}
+
+function gexResultFromFeatureBarcodeWorkerResponse<ElementId extends string>(
+  response: FeatureBarcodeMatrixWorkerSuccess,
+  elementIds: readonly ElementId[],
+): GexResult<ElementId> {
+  const cells = emptyMutableCellsFor(elementIds)
+
+  for (const cell of response.cells) {
+    cells.set(cell.id as ElementId, {
+      geneNames: [...cell.geneNames],
+      counts: [...cell.counts],
+    })
+  }
+
+  return {
+    geneNames: [...response.geneNames],
+    cells,
+  }
+}
+
+function createDefaultFeatureBarcodeMatrixWorker(): FeatureBarcodeMatrixWorkerLike {
+  if (typeof Worker === 'undefined') {
+    throw new Error('Feature-barcode H5 lazy range reads require browser Worker support.')
+  }
+
+  return new Worker(
+    new URL('../workers/featureBarcodeMatrix.worker.ts', import.meta.url),
+    {
+      type: 'module',
+    },
+  )
+}
+
+async function enqueueFeatureBarcodeMatrixWorkerRead<T>(
+  signal: AbortSignal | undefined,
+  task: () => Promise<T>,
+): Promise<T> {
+  const previous = featureBarcodeMatrixWorkerQueue
+  let releaseTurn: () => void = () => {}
+  const turn = new Promise<void>((resolve) => {
+    releaseTurn = resolve
+  })
+
+  featureBarcodeMatrixWorkerQueue = previous.catch(() => undefined).then(() => turn)
+
+  try {
+    await previous.catch(() => undefined)
+    throwIfAborted(signal)
+    return await task()
+  } finally {
+    releaseTurn()
+  }
+}
+
+function shouldRetryFeatureBarcodeMatrixWorkerError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  if (error.name === 'AbortError') {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  const name = error.name.toLowerCase()
+
+  return (
+    name.includes('network') ||
+    message.includes('xmlhttprequest') ||
+    message.includes('failed to load') ||
+    message.includes('err_insufficient_resources')
+  )
+}
+
+function delay(milliseconds: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted === true) {
+      reject(abortError(signal))
+      return
+    }
+
+    const timeout = setTimeout(() => {
+      cleanup()
+      resolve()
+    }, milliseconds)
+    const handleAbort = () => {
+      clearTimeout(timeout)
+      cleanup()
+      reject(signal === undefined ? new Error('Request aborted.') : abortError(signal))
+    }
+    const cleanup = () => {
+      signal?.removeEventListener('abort', handleAbort)
+    }
+
+    signal?.addEventListener('abort', handleAbort, { once: true })
   })
 }
 
@@ -775,7 +1077,7 @@ function emptyCellsFor<ElementId extends string>(
   return new Map(cellIds.map((cellId) => [cellId, { geneNames: [], counts: [] }]))
 }
 
-function emptyMutableCellsFor<ElementId extends CellId>(
+function emptyMutableCellsFor<ElementId extends string>(
   cellIds: readonly ElementId[],
 ): Map<ElementId, { geneNames: string[]; counts: number[] }> {
   return new Map(cellIds.map((cellId) => [cellId, { geneNames: [], counts: [] }]))
@@ -1535,36 +1837,7 @@ async function loadH5MatrixUncached(
 
   try {
     const file = new h5wasm.File(fileName, 'r')
-    const barcodeDataset = expectH5Dataset(
-      file.get('/matrix/barcodes'),
-      '/matrix/barcodes',
-    )
-    const geneNameDataset = expectH5Dataset(
-      file.get('/matrix/features/name'),
-      '/matrix/features/name',
-    )
-    const featureTypeDataset = expectH5Dataset(
-      file.get('/matrix/features/feature_type'),
-      '/matrix/features/feature_type',
-    )
-    const indptrDataset = expectH5Dataset(file.get('/matrix/indptr'), '/matrix/indptr')
-    const indicesDataset = expectH5Dataset(file.get('/matrix/indices'), '/matrix/indices')
-    const dataDataset = expectH5Dataset(file.get('/matrix/data'), '/matrix/data')
-
-    return {
-      file,
-      geneNames: expectStringArray(geneNameDataset.value, '/matrix/features/name'),
-      featureTypes: expectStringArray(
-        featureTypeDataset.value,
-        '/matrix/features/feature_type',
-      ),
-      barcodeRows: h5BarcodeRows(
-        expectStringArray(barcodeDataset.value, '/matrix/barcodes'),
-      ),
-      indptr: expectNumericArrayLike(indptrDataset.value, '/matrix/indptr'),
-      indicesDataset,
-      dataDataset,
-    }
+    return createH5MatrixCache(file)
   } catch (error) {
     try {
       FS.unlink(fileName)
@@ -1573,6 +1846,36 @@ async function loadH5MatrixUncached(
     }
 
     throw error
+  }
+}
+
+function createH5MatrixCache(file: H5FileLike): H5MatrixCache {
+  const barcodeDataset = expectH5Dataset(file.get('/matrix/barcodes'), '/matrix/barcodes')
+  const geneNameDataset = expectH5Dataset(
+    file.get('/matrix/features/name'),
+    '/matrix/features/name',
+  )
+  const featureTypeDataset = expectH5Dataset(
+    file.get('/matrix/features/feature_type'),
+    '/matrix/features/feature_type',
+  )
+  const indptrDataset = expectH5Dataset(file.get('/matrix/indptr'), '/matrix/indptr')
+  const indicesDataset = expectH5Dataset(file.get('/matrix/indices'), '/matrix/indices')
+  const dataDataset = expectH5Dataset(file.get('/matrix/data'), '/matrix/data')
+
+  return {
+    file,
+    geneNames: expectStringArray(geneNameDataset.value, '/matrix/features/name'),
+    featureTypes: expectStringArray(
+      featureTypeDataset.value,
+      '/matrix/features/feature_type',
+    ),
+    barcodeRows: h5BarcodeRows(
+      expectStringArray(barcodeDataset.value, '/matrix/barcodes'),
+    ),
+    indptr: expectNumericArrayLike(indptrDataset.value, '/matrix/indptr'),
+    indicesDataset,
+    dataDataset,
   }
 }
 

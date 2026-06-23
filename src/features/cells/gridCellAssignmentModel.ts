@@ -7,7 +7,7 @@ export interface GridCellAssignment {
   readonly cellId: string
   readonly inNucleus: boolean
   readonly inCell: boolean
-  readonly rowBudget: number
+  readonly rowBudget?: number
 }
 
 export type GridCellAssignmentState<
@@ -15,13 +15,13 @@ export type GridCellAssignmentState<
 > =
   | { readonly status: 'idle' }
   | { readonly status: 'unavailable'; readonly reason: string }
-  | { readonly status: 'loading'; readonly binId: string; readonly rowBudget: number }
+  | { readonly status: 'loading'; readonly binId: string; readonly rowBudget?: number }
   | {
       readonly status: 'ready'
       readonly binId: string
       readonly assignment: GridCellAssignment
     }
-  | { readonly status: 'missing'; readonly binId: string; readonly rowBudget: number }
+  | { readonly status: 'missing'; readonly binId: string; readonly rowBudget?: number }
   | { readonly status: 'error'; readonly binId: string; readonly error: ErrorType }
 
 export function gridCellAssignmentStatusLabel(state: GridCellAssignmentState): string {

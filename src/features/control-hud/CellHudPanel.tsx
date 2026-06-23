@@ -295,7 +295,7 @@ function BoundaryCellInfoPanel({
 
       <div className="cell-expression-panel">
         <div className="cell-expression-heading">
-          <span>Gene expression</span>
+          <span>Selected-gene GEX</span>
           <small>
             {hasExpression ? 'Loaded' : expressionStatusLabel(expressionStatus)}
           </small>
@@ -324,6 +324,7 @@ function BoundaryCellInfoPanel({
 
       <CellExpressionProfilePanel
         state={expressionProfileState}
+        selectionKind="cell"
         disabled={onLoadExpressionProfile === undefined}
         onLoad={onLoadExpressionProfile ?? noop}
       />

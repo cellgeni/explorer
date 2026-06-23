@@ -8,6 +8,7 @@ describe('AnnotationHudPanel', () => {
     const onAnnotationGroupChange = vi.fn()
     const onLoadAnnotations = vi.fn()
     const onClearAnnotations = vi.fn()
+    const onExportAnnotations = vi.fn()
     const onImportAnnotations = vi.fn()
     const onAnnotationImportUrlChange = vi.fn()
     const onImportAnnotationUrl = vi.fn(async () => true)
@@ -67,6 +68,7 @@ describe('AnnotationHudPanel', () => {
         onAnnotationGroupChange={onAnnotationGroupChange}
         onLoadAnnotations={onLoadAnnotations}
         onClearAnnotations={onClearAnnotations}
+        onExportAnnotations={onExportAnnotations}
         onImportAnnotations={onImportAnnotations}
         onAnnotationImportUrlChange={onAnnotationImportUrlChange}
         onImportAnnotationUrl={onImportAnnotationUrl}
@@ -85,6 +87,7 @@ describe('AnnotationHudPanel', () => {
     fireEvent.change(screen.getByLabelText('Astrocytes color'), {
       target: { value: '#abcdef' },
     })
+    fireEvent.click(screen.getByRole('button', { name: 'Export Annotations' }))
     fireEvent.click(screen.getByLabelText('Loaded annotations visible'))
     fireEvent.click(screen.getByRole('button', { name: 'Remove Astrocytes' }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove confidence' }))
@@ -104,6 +107,7 @@ describe('AnnotationHudPanel', () => {
     expect(onAnnotationGroupChange).toHaveBeenCalledWith('all')
     expect(onLoadAnnotations).toHaveBeenCalledTimes(1)
     expect(onClearAnnotations).toHaveBeenCalledTimes(1)
+    expect(onExportAnnotations).toHaveBeenCalledTimes(1)
     expect(onAnnotationColorChange).toHaveBeenCalledWith('astro', '#abcdef')
     expect(onAnnotationSetVisibilityChange).toHaveBeenCalledWith(
       'loaded-annotations',
@@ -177,6 +181,7 @@ describe('AnnotationHudPanel', () => {
         onAnnotationGroupChange={vi.fn()}
         onLoadAnnotations={vi.fn()}
         onClearAnnotations={vi.fn()}
+        onExportAnnotations={vi.fn()}
         onImportAnnotations={vi.fn()}
         onAnnotationImportUrlChange={vi.fn()}
         onImportAnnotationUrl={vi.fn(async () => true)}

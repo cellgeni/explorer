@@ -17,6 +17,7 @@ import {
   resolveMagicLensSelection,
   summarizeMagicLensCells,
   summarizeMagicLensExpressionBins,
+  summarizeMagicLensExpressionProfile,
 } from './magicLensModel'
 
 const cells: readonly DatasetCell[] = [
@@ -193,5 +194,34 @@ describe('magicLensModel', () => {
         false,
       ),
     ).toBe('8 UMIs')
+  })
+
+  it('summarizes Visium HD all-gene expression profiles for magic lens areas', () => {
+    const summary = summarizeMagicLensExpressionProfile(
+      2,
+      {
+        totalCount: 12,
+        hitGeneLimit: true,
+        genes: [
+          { gene: 'A2M', count: 7, percentTotal: 58.333 },
+          { gene: 'GAD1', count: 5, percentTotal: 41.667 },
+        ],
+      },
+      [],
+      {},
+    )
+
+    expect(summary).toMatchObject({
+      kind: 'expression',
+      transcriptCount: 12,
+      cellCount: 2,
+      geneCount: 2,
+      selectedGeneTranscriptCount: 0,
+      hitLimit: true,
+    })
+    expect(summary.topGenes).toEqual([
+      { gene: 'A2M', count: 7, percentTotal: 58.333, selected: false },
+      { gene: 'GAD1', count: 5, percentTotal: 41.667, selected: false },
+    ])
   })
 })

@@ -3,7 +3,6 @@ import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { micrometers } from '../data/coords'
 import {
   DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
-  DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET,
   VISIUM_HD_TISSUE_POSITION_COLUMNS,
   VisiumHdDataset,
   createVisiumHdBinnedOverview,
@@ -14,10 +13,6 @@ import {
   readVisiumHdFeatureGenePanel,
   readVisiumHdTissuePositions,
 } from './visiumHdDataset'
-import {
-  VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
-  VisiumHdTwoMicrometerOverviewDisabledError,
-} from './visiumHdStrategy'
 import type { AsyncBuffer } from 'hyparquet'
 import type {
   ReadVisiumHdTissuePositionsOptions,
@@ -826,24 +821,41 @@ describe('Visium HD dataset readers', () => {
     expect(segmentationReader.mock.calls[0]?.[1]).not.toHaveProperty('maxFullFileBytes')
   })
 
-  it('rejects 2 µm overview reads until a budgeted loading path is available', async () => {
+  it('loads 2 µm overview reads without a filtered-barcode budget', async () => {
     const tissuePositionsReader = vi.fn(async () =>
-      parseVisiumHdTissuePositionRows([visiumPositionRow('BC-2', 1, 0, 0, 400, 200)]),
+      parseVisiumHdTissuePositionRows([
+        visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+        visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+        visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+      ]),
     )
+    const filteredMatrixBarcodeReader = vi.fn(async () => [
+      {
+        barcode: 's_002um_000001_000002-1',
+        binSizeMicrometers: 2 as const,
+        row: 1,
+        col: 2,
+      },
+    ])
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16, bin2],
       tissuePositionsReader,
-      scalefactorsReader: async () => scalefactors,
+      scalefactorsReader: async (url) =>
+        url.includes('square_002um')
+          ? { ...scalefactors, binSizeMicrometers: 2, spotDiameterFullres: 4 }
+          : scalefactors,
+      filteredMatrixBarcodeReader,
     })
 
-    await expect(dataset.readBinnedOverview(2)).rejects.toThrow(
-      VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
+    await expect(dataset.readBinnedOverview(2)).resolves.toMatchObject({
+      binSizeMicrometers: 2,
+    })
+    expect(filteredMatrixBarcodeReader).toHaveBeenCalledWith(
+      'https://example.test/visium',
+      bin2,
+      { fetcher: expect.any(Function) },
     )
-    await expect(dataset.readBinnedOverview(2)).rejects.toBeInstanceOf(
-      VisiumHdTwoMicrometerOverviewDisabledError,
-    )
-    expect(tissuePositionsReader).not.toHaveBeenCalled()
   })
 
   it('loads a 2 µm overview from filtered matrix barcodes when an explicit budget is configured', async () => {
@@ -894,7 +906,7 @@ describe('Visium HD dataset readers', () => {
     )
   })
 
-  it('prefers the 8 µm basis source for budgeted 2 µm overview reads', async () => {
+  it('prefers the 8 µm basis source for 2 µm filtered-barcode overview reads', async () => {
     const tissuePositionUrls: string[] = []
     const filteredMatrixBarcodeReader = vi.fn(async () => [
       {
@@ -1045,7 +1057,7 @@ describe('Visium HD dataset readers', () => {
     expect(tissuePositionsReader).toHaveBeenCalledTimes(1)
   })
 
-  it('allows 2 µm-only datasets to construct while rejecting unsafe overview reads', async () => {
+  it('allows 2 µm-only datasets to construct while requiring a coarser basis source', async () => {
     const filteredMatrixBarcodeReader = vi.fn(async () => [
       {
         barcode: 's_002um_000001_000002-1',
@@ -1061,7 +1073,7 @@ describe('Visium HD dataset readers', () => {
     })
 
     await expect(dataset.readBinnedOverview()).rejects.toThrow(
-      VISIUM_HD_TWO_MICROMETER_STRATEGY_REASON,
+      '2 µm overview loading requires a detected 8 µm or 16 µm tier',
     )
     await expect(dataset.filteredMatrixBarcodes()).resolves.toEqual([
       {
@@ -1073,7 +1085,7 @@ describe('Visium HD dataset readers', () => {
     ])
   })
 
-  it('rejects budgeted 2 µm overview reads when no coarser basis source exists', async () => {
+  it('rejects 2 µm overview reads when no coarser basis source exists', async () => {
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin2],
@@ -1101,9 +1113,7 @@ describe('Visium HD dataset readers', () => {
     expect(featureMatrixReader).toHaveBeenCalledWith(
       'https://example.test/visium/binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
       ['BC-0'],
-      {
-        maxFullFileBytes: DEFAULT_VISIUM_HD_INTERACTIVE_MATRIX_BYTE_BUDGET,
-      },
+      {},
     )
   })
 

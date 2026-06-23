@@ -31,6 +31,7 @@ interface AnnotationHudPanelProps {
   readonly onAnnotationGroupChange: (groupId: string) => void
   readonly onLoadAnnotations: () => void
   readonly onClearAnnotations: () => void
+  readonly onExportAnnotations: () => void
   readonly onImportAnnotations: (file: File | null) => void
   readonly onAnnotationImportUrlChange: (url: string) => void
   readonly onImportAnnotationUrl: (url: string) => Promise<boolean>
@@ -58,6 +59,7 @@ export function AnnotationHudPanel({
   onAnnotationGroupChange,
   onLoadAnnotations,
   onClearAnnotations,
+  onExportAnnotations,
   onImportAnnotations,
   onAnnotationImportUrlChange,
   onImportAnnotationUrl,
@@ -144,6 +146,17 @@ export function AnnotationHudPanel({
           onClick={onClearAnnotations}
         >
           Clear Annotations
+        </button>
+        <button
+          type="button"
+          className="secondary-action"
+          disabled={
+            annotationState.status !== 'ready' || annotationState.annotations.length === 0
+          }
+          title="Export annotations"
+          onClick={onExportAnnotations}
+        >
+          Export Annotations
         </button>
         <label
           className="secondary-file-action"

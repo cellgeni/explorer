@@ -687,6 +687,9 @@ export function createOverviewLayers(
     const gridCellOpacity = normalizeLayerOpacity(
       options.gridCellOpacity ?? DEFAULT_LAYER_OPACITY,
     )
+    const effectiveGridCellOpacity = geneExpressionActive
+      ? Math.max(gridCellOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
+      : gridCellOpacity
 
     layers.push(
       new PolygonLayer<GridCellDatum>({
@@ -699,12 +702,14 @@ export function createOverviewLayers(
         lineWidthUnits: 'pixels',
         lineWidthMinPixels: 0.25,
         getPolygon: (cell) => cell.polygon,
-        getFillColor: (cell) => colorWithOpacity(cell.fillColor, gridCellOpacity),
-        getLineColor: (cell) => colorWithOpacity(cell.lineColor, gridCellOpacity),
+        getFillColor: (cell) =>
+          colorWithOpacity(cell.fillColor, effectiveGridCellOpacity),
+        getLineColor: (cell) =>
+          colorWithOpacity(cell.lineColor, effectiveGridCellOpacity),
         getLineWidth: 0.25,
         updateTriggers: {
-          getFillColor: [gridCellOpacity],
-          getLineColor: [gridCellOpacity],
+          getFillColor: [effectiveGridCellOpacity],
+          getLineColor: [effectiveGridCellOpacity],
         },
       }),
     )

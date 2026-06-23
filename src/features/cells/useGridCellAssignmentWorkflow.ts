@@ -33,7 +33,7 @@ interface VisiumHdBarcodeAssignmentDataset {
   readonly barcodeMappingAssignments: (
     binSizeMicrometers: VisiumHdBinSizeMicrometers,
     binIds: readonly SpatialElementId[],
-    options: { readonly maxRows: number; readonly signal?: AbortSignal },
+    options: { readonly maxRows?: number; readonly signal?: AbortSignal },
   ) => Promise<readonly VisiumHdBarcodeMappingCellAssignment[]>
 }
 
@@ -49,7 +49,6 @@ interface UseGridCellAssignmentWorkflowOptions {
   readonly setGridCellAssignmentState: Dispatch<
     SetStateAction<GridCellAssignmentState<StructuredLoadError>>
   >
-  readonly twoMicrometerFilteredBarcodeBudget: number | undefined
   readonly rowBudget: number | undefined
 }
 
@@ -63,7 +62,6 @@ export function useGridCellAssignmentWorkflow({
   selectedBinSize,
   selectedGridCell,
   setGridCellAssignmentState,
-  twoMicrometerFilteredBarcodeBudget,
   rowBudget,
 }: UseGridCellAssignmentWorkflowOptions): void {
   useEffect(() => {
@@ -74,21 +72,6 @@ export function useGridCellAssignmentWorkflow({
       queueMicrotask(() => {
         if (gridCellAssignmentRequestIdRef.current === requestId) {
           setGridCellAssignmentState({ status: 'idle' })
-        }
-      })
-      return
-    }
-
-    if (rowBudget === undefined) {
-      abortActiveRequest(gridCellAssignmentAbortRef)
-      gridCellAssignmentRequestIdRef.current += 1
-      const requestId = gridCellAssignmentRequestIdRef.current
-      queueMicrotask(() => {
-        if (gridCellAssignmentRequestIdRef.current === requestId) {
-          setGridCellAssignmentState({
-            status: 'unavailable',
-            reason: 'Set a mapping row budget in Dataset to load assignment.',
-          })
         }
       })
       return
@@ -120,21 +103,14 @@ export function useGridCellAssignmentWorkflow({
     setGridCellAssignmentState({
       status: 'loading',
       binId: selectedGridCell.id,
-      rowBudget,
+      ...(rowBudget === undefined ? {} : { rowBudget }),
     })
     appendDebugEvent(`Bin assignment started: ${shortIdentifier(selectedGridCell.id)}`, {
       coalesceKey: 'bin-assignment',
     })
 
     void (async () => {
-      const dataset = await getSpatialDataset(loadState.url, {
-        ...(twoMicrometerFilteredBarcodeBudget === undefined
-          ? {}
-          : {
-              visiumHdMaxTwoMicrometerFilteredBarcodes:
-                twoMicrometerFilteredBarcodeBudget,
-            }),
-      })
+      const dataset = await getSpatialDataset(loadState.url)
 
       if (!hasBarcodeMappingAssignments(dataset)) {
         throw new Error('Active dataset does not expose Visium HD barcode mappings.')
@@ -144,7 +120,7 @@ export function useGridCellAssignmentWorkflow({
         binSize,
         [selectedGridCell.id],
         {
-          maxRows: rowBudget,
+          ...(rowBudget === undefined ? {} : { maxRows: rowBudget }),
           signal: abortController.signal,
         },
       )
@@ -162,7 +138,7 @@ export function useGridCellAssignmentWorkflow({
         setGridCellAssignmentState({
           status: 'missing',
           binId: selectedGridCell.id,
-          rowBudget,
+          ...(rowBudget === undefined ? {} : { rowBudget }),
         })
       } else {
         setGridCellAssignmentState({
@@ -172,7 +148,7 @@ export function useGridCellAssignmentWorkflow({
             cellId: assignment.cellId,
             inNucleus: assignment.inNucleus,
             inCell: assignment.inCell,
-            rowBudget,
+            ...(rowBudget === undefined ? {} : { rowBudget }),
           },
         })
       }
@@ -217,7 +193,6 @@ export function useGridCellAssignmentWorkflow({
     selectedBinSize,
     selectedGridCell,
     setGridCellAssignmentState,
-    twoMicrometerFilteredBarcodeBudget,
   ])
 }
 
