@@ -13,6 +13,13 @@ interface Snapshot {
   readonly debugMessages: readonly string[]
 }
 
+interface SnapshotAssignment {
+  readonly binId: string
+  readonly cellId: string
+  readonly inNucleus: boolean
+  readonly inCell: boolean
+}
+
 const DEFAULT_GRID_CELL = gridCellDatum()
 
 function Probe({
@@ -169,6 +176,98 @@ describe('useGridCellAssignmentWorkflow', () => {
     expect(snapshot?.debugMessages).toEqual(
       expect.arrayContaining([expect.stringMatching(/^Bin assignment ready in /)]),
     )
+  })
+
+  it('ignores stale assignment results after the selected bin changes', async () => {
+    const resolvers: Array<(assignments: readonly SnapshotAssignment[]) => void> = []
+    const signals: AbortSignal[] = []
+    const barcodeMappingAssignments = vi.fn(
+      (
+        _binSize: number,
+        _binIds: readonly string[],
+        options: { readonly signal?: AbortSignal },
+      ) =>
+        new Promise<readonly SnapshotAssignment[]>((resolve) => {
+          if (options.signal !== undefined) {
+            signals.push(options.signal)
+          }
+          resolvers.push(resolve)
+        }),
+    )
+    const getSpatialDataset: SpatialDatasetLoader = vi.fn(
+      async () =>
+        ({
+          barcodeMappingAssignments,
+        }) as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
+    )
+    const snapshots: Snapshot[] = []
+    const secondCell = gridCellDatum({ id: 'BC-2' })
+    const { rerender } = render(
+      <Probe
+        getSpatialDataset={getSpatialDataset}
+        rowBudget={undefined}
+        selectedGridCell={DEFAULT_GRID_CELL}
+        onReady={(nextSnapshot) => {
+          snapshots.push(nextSnapshot)
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    rerender(
+      <Probe
+        getSpatialDataset={getSpatialDataset}
+        rowBudget={undefined}
+        selectedGridCell={secondCell}
+        onReady={(nextSnapshot) => {
+          snapshots.push(nextSnapshot)
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(signals[0]?.aborted).toBe(true)
+
+    await act(async () => {
+      resolvers[1]?.([
+        {
+          binId: 'BC-2',
+          cellId: 'cell-2',
+          inNucleus: true,
+          inCell: true,
+        },
+      ])
+      await Promise.resolve()
+    })
+    await act(async () => {
+      resolvers[0]?.([
+        {
+          binId: 'BC-1',
+          cellId: 'cell-1',
+          inNucleus: false,
+          inCell: true,
+        },
+      ])
+      await Promise.resolve()
+    })
+
+    expect(snapshots.at(-1)?.assignmentState).toEqual({
+      status: 'ready',
+      binId: 'BC-2',
+      assignment: {
+        cellId: 'cell-2',
+        inNucleus: true,
+        inCell: true,
+      },
+    })
   })
 })
 

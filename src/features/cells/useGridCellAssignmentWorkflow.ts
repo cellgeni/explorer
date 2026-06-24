@@ -6,9 +6,11 @@ import type { SpatialDatasetLoader } from '../app-shell/appDependencies'
 import {
   abortActiveRequest,
   formatElapsed,
+  invalidateLatestRequest,
   isAbortError,
   readTimestamp,
   shortIdentifier,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
@@ -66,9 +68,11 @@ export function useGridCellAssignmentWorkflow({
 }: UseGridCellAssignmentWorkflowOptions): void {
   useEffect(() => {
     if (!isVisiumHdDataset || selectedGridCell === null || loadState.status !== 'ready') {
-      abortActiveRequest(gridCellAssignmentAbortRef)
-      gridCellAssignmentRequestIdRef.current += 1
-      const requestId = gridCellAssignmentRequestIdRef.current
+      const requestId = invalidateLatestRequest({
+        abortRef: gridCellAssignmentAbortRef,
+        requestIdRef: gridCellAssignmentRequestIdRef,
+      })
+
       queueMicrotask(() => {
         if (gridCellAssignmentRequestIdRef.current === requestId) {
           setGridCellAssignmentState({ status: 'idle' })
@@ -80,9 +84,11 @@ export function useGridCellAssignmentWorkflow({
     const binSize = gridCellBinSize(selectedGridCell, selectedBinSize)
 
     if (binSize === undefined) {
-      abortActiveRequest(gridCellAssignmentAbortRef)
-      gridCellAssignmentRequestIdRef.current += 1
-      const requestId = gridCellAssignmentRequestIdRef.current
+      const requestId = invalidateLatestRequest({
+        abortRef: gridCellAssignmentAbortRef,
+        requestIdRef: gridCellAssignmentRequestIdRef,
+      })
+
       queueMicrotask(() => {
         if (gridCellAssignmentRequestIdRef.current === requestId) {
           setGridCellAssignmentState({
@@ -94,12 +100,11 @@ export function useGridCellAssignmentWorkflow({
       return
     }
 
-    const requestId = gridCellAssignmentRequestIdRef.current + 1
+    const request = startLatestRequest({
+      abortRef: gridCellAssignmentAbortRef,
+      requestIdRef: gridCellAssignmentRequestIdRef,
+    })
     const startedAt = readTimestamp()
-    const abortController = new AbortController()
-    abortActiveRequest(gridCellAssignmentAbortRef)
-    gridCellAssignmentRequestIdRef.current = requestId
-    gridCellAssignmentAbortRef.current = abortController
     setGridCellAssignmentState({
       status: 'loading',
       binId: selectedGridCell.id,
@@ -121,14 +126,11 @@ export function useGridCellAssignmentWorkflow({
         [selectedGridCell.id],
         {
           ...(rowBudget === undefined ? {} : { maxRows: rowBudget }),
-          signal: abortController.signal,
+          signal: request.signal,
         },
       )
 
-      if (
-        abortController.signal.aborted ||
-        gridCellAssignmentRequestIdRef.current !== requestId
-      ) {
+      if (request.signal.aborted || !request.isCurrent()) {
         return
       }
 
@@ -158,7 +160,7 @@ export function useGridCellAssignmentWorkflow({
       })
     })()
       .catch((error) => {
-        if (isAbortError(error) || gridCellAssignmentRequestIdRef.current !== requestId) {
+        if (isAbortError(error) || !request.isCurrent()) {
           return
         }
 
@@ -172,13 +174,11 @@ export function useGridCellAssignmentWorkflow({
         })
       })
       .finally(() => {
-        if (gridCellAssignmentAbortRef.current === abortController) {
-          gridCellAssignmentAbortRef.current = null
-        }
+        request.complete()
       })
 
     return () => {
-      if (gridCellAssignmentAbortRef.current === abortController) {
+      if (request.isCurrent()) {
         abortActiveRequest(gridCellAssignmentAbortRef)
       }
     }

@@ -11,6 +11,13 @@ the app shell, platform workflows, and rendering modules.
 3. Extract Visium HD app orchestration into a focused controller/helper module.
 4. Start behavior-preserving decomposition of `ViewerCore` and `deckLayers`.
 
+## Progress Notes
+
+- 2026-06-24: Expanded shared latest-request runner usage to the Visium HD
+  bin-assignment and expression-to-segmented-cell projection workflows. The next
+  optimization pass can continue migrating remaining manual request lifecycles,
+  then move on to grouped hook option objects.
+
 ## Recommendations
 
 1. **Create domain state bundles for `App.tsx`.**

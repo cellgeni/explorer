@@ -14,8 +14,10 @@ import type { SpatialDatasetLoader } from '../app-shell/appDependencies'
 import {
   abortActiveRequest,
   formatElapsed,
+  invalidateLatestRequest,
   isAbortError,
   readTimestamp,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
@@ -98,10 +100,7 @@ export function useVisiumHdExpressionProjectionWorkflow({
       geneExpressionBatch === null ||
       boundaries.length === 0
     ) {
-      abortActiveRequest(abortRef)
-      const requestId = requestIdRef.current + 1
-
-      requestIdRef.current = requestId
+      const requestId = invalidateLatestRequest({ abortRef, requestIdRef })
       queueProjectionState(
         requestIdRef,
         requestId,
@@ -112,10 +111,7 @@ export function useVisiumHdExpressionProjectionWorkflow({
     }
 
     if (selectedBinSize === undefined) {
-      abortActiveRequest(abortRef)
-      const requestId = requestIdRef.current + 1
-
-      requestIdRef.current = requestId
+      const requestId = invalidateLatestRequest({ abortRef, requestIdRef })
       queueProjectionState(requestIdRef, requestId, setState, {
         status: 'unavailable',
         reason: 'Selected Visium HD bin size is unavailable.',
@@ -132,10 +128,7 @@ export function useVisiumHdExpressionProjectionWorkflow({
         boundaries,
       )
 
-      abortActiveRequest(abortRef)
-      const requestId = requestIdRef.current + 1
-
-      requestIdRef.current = requestId
+      const requestId = invalidateLatestRequest({ abortRef, requestIdRef })
       queueProjectionState(requestIdRef, requestId, setState, {
         status: 'ready',
         batch: result.batch,
@@ -146,14 +139,10 @@ export function useVisiumHdExpressionProjectionWorkflow({
       return
     }
 
-    const requestId = requestIdRef.current + 1
-    const abortController = new AbortController()
+    const request = startLatestRequest({ abortRef, requestIdRef })
     const startedAt = readTimestamp()
 
-    abortActiveRequest(abortRef)
-    requestIdRef.current = requestId
-    abortRef.current = abortController
-    queueProjectionState(requestIdRef, requestId, setState, {
+    queueProjectionState(requestIdRef, request.requestId, setState, {
       status: 'loading',
       binCount: binIds.length,
       boundaryCellCount: boundaries.length,
@@ -176,11 +165,11 @@ export function useVisiumHdExpressionProjectionWorkflow({
         binIds,
         {
           ...(rowBudget === undefined ? {} : { maxRows: rowBudget }),
-          signal: abortController.signal,
+          signal: request.signal,
         },
       )
 
-      if (abortController.signal.aborted || requestIdRef.current !== requestId) {
+      if (request.signal.aborted || !request.isCurrent()) {
         return
       }
 
@@ -206,7 +195,7 @@ export function useVisiumHdExpressionProjectionWorkflow({
       )
     })()
       .catch((error) => {
-        if (isAbortError(error) || requestIdRef.current !== requestId) {
+        if (isAbortError(error) || !request.isCurrent()) {
           return
         }
 
@@ -219,13 +208,11 @@ export function useVisiumHdExpressionProjectionWorkflow({
         })
       })
       .finally(() => {
-        if (abortRef.current === abortController) {
-          abortRef.current = null
-        }
+        request.complete()
       })
 
     return () => {
-      if (abortRef.current === abortController) {
+      if (request.isCurrent()) {
         abortActiveRequest(abortRef)
       }
     }
