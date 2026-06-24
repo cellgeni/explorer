@@ -27,6 +27,11 @@ const successfulReport: DatasetDiagnosticsReport = {
   ],
 }
 
+const secondSuccessfulReport: DatasetDiagnosticsReport = {
+  ...successfulReport,
+  completedAt: '2026-06-08T00:00:02.000Z',
+}
+
 interface DiagnosticsSnapshot {
   readonly debugMessages: readonly string[]
   readonly diagnosticsState: DatasetDiagnosticsState<StructuredLoadError>
@@ -242,4 +247,71 @@ describe('useDatasetDiagnosticsWorkflow', () => {
       }),
     )
   })
+
+  it('ignores stale diagnostics completions after a newer run starts', async () => {
+    const firstRun = createDeferred<DatasetDiagnosticsReport>()
+    const secondRun = createDeferred<DatasetDiagnosticsReport>()
+    const signals: AbortSignal[] = []
+    const runDatasetDiagnostics = vi.fn((_, options) => {
+      signals.push(options.signal)
+      return signals.length === 1 ? firstRun.promise : secondRun.promise
+    })
+
+    render(
+      <DiagnosticsProbe
+        onReady={(nextApi, nextSnapshot) => {
+          diagnosticsApi = nextApi
+          diagnosticsSnapshot = nextSnapshot
+        }}
+        runDatasetDiagnostics={runDatasetDiagnostics}
+      />,
+    )
+
+    let firstRequest!: Promise<void>
+    await act(async () => {
+      firstRequest = diagnosticsApi.handleRunDatasetDiagnostics()
+      await Promise.resolve()
+    })
+
+    let secondRequest!: Promise<void>
+    await act(async () => {
+      secondRequest = diagnosticsApi.handleRunDatasetDiagnostics()
+      await Promise.resolve()
+    })
+
+    expect(signals[0]?.aborted).toBe(true)
+
+    await act(async () => {
+      secondRun.resolve(secondSuccessfulReport)
+      await secondRequest
+    })
+
+    expect(diagnosticsSnapshot.diagnosticsState).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      report: secondSuccessfulReport,
+    })
+
+    await act(async () => {
+      firstRun.resolve(successfulReport)
+      await firstRequest
+    })
+
+    expect(diagnosticsSnapshot.diagnosticsState).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      report: secondSuccessfulReport,
+    })
+  })
 })
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}

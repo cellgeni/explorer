@@ -36,7 +36,7 @@ function Probe({
 }: {
   readonly loadTranscriptCapabilities: Parameters<
     typeof useTranscriptWorkflow
-  >[0]['loadTranscriptCapabilities']
+  >[0]['loaders']['loadTranscriptCapabilities']
   readonly onReady: (nextSnapshot: Snapshot) => void
 }) {
   const [capabilityState, setTranscriptCapabilityState] = React.useState<
@@ -60,49 +60,61 @@ function Probe({
   const appendFallbackNotice = React.useCallback(() => undefined, [])
 
   useTranscriptWorkflow({
-    activeControlHudTab: 'transcripts',
-    appendDebugEvent: (message) => {
-      debugMessagesRef.current.push(message)
-    },
-    appendFallbackNotice,
-    currentViewportDetail: viewportDetail,
-    effectiveTranscriptFeatureFilterMode: 'all',
-    loadRequestIdRef,
-    loadState,
-    loadTranscriptAggregates: vi.fn(async () => ({
-      source: 'native-zarr' as const,
-      bins: [],
-      level: {
-        level: 0,
-        gridSizeMicrometers: 1,
-        gridKeys: [],
-        transcriptCounts: [],
+    callbacks: {
+      appendDebugEvent: (message) => {
+        debugMessagesRef.current.push(message)
       },
-      selectedFeatureNames: [],
-    })),
-    loadTranscriptCapabilities,
-    loadTranscriptViewport: vi.fn(async () => ({
-      points: [],
-      groups: [],
-      hitPointLimit: false,
-    })),
-    manualTranscriptExactRequestKey: null,
-    overviewCells: [],
-    selectedGenes: [],
-    setTranscriptCapabilityState,
-    setTranscriptLayerState,
-    showTranscriptOverlay: false,
-    transcriptAbortRef,
-    transcriptCapabilityAbortRef,
-    transcriptCapabilityRequestIdRef,
-    transcriptCapabilityState: capabilityState,
-    transcriptDetailMode: 'auto',
-    transcriptExactPointLimit: 100_000,
-    transcriptGeneOnly: true,
-    transcriptMinQv: 20,
-    transcriptRequestIdRef,
-    transcriptViewportKeyRef,
-    visibleTranscriptEstimate: 0,
+      appendFallbackNotice,
+    },
+    controls: {
+      activeControlHudTab: 'transcripts',
+      effectiveTranscriptFeatureFilterMode: 'all',
+      manualTranscriptExactRequestKey: null,
+      showTranscriptOverlay: false,
+      transcriptDetailMode: 'auto',
+      transcriptExactPointLimit: 100_000,
+      transcriptGeneOnly: true,
+      transcriptMinQv: 20,
+      visibleTranscriptEstimate: 0,
+    },
+    data: {
+      currentViewportDetail: viewportDetail,
+      loadState,
+      overviewCells: [],
+      selectedGenes: [],
+      transcriptCapabilityState: capabilityState,
+    },
+    loaders: {
+      loadTranscriptAggregates: vi.fn(async () => ({
+        source: 'native-zarr' as const,
+        bins: [],
+        level: {
+          level: 0,
+          gridSizeMicrometers: 1,
+          gridKeys: [],
+          transcriptCounts: [],
+        },
+        selectedFeatureNames: [],
+      })),
+      loadTranscriptCapabilities,
+      loadTranscriptViewport: vi.fn(async () => ({
+        points: [],
+        groups: [],
+        hitPointLimit: false,
+      })),
+    },
+    refs: {
+      loadRequestIdRef,
+      transcriptAbortRef,
+      transcriptCapabilityAbortRef,
+      transcriptCapabilityRequestIdRef,
+      transcriptRequestIdRef,
+      transcriptViewportKeyRef,
+    },
+    setters: {
+      setTranscriptCapabilityState,
+      setTranscriptLayerState,
+    },
   })
 
   React.useEffect(() => {

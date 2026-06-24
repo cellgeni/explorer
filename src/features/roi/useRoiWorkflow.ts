@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import type {
   RoiDrawMode,
   ViewerMagicLensDetail,
@@ -13,12 +13,13 @@ import type {
   RoiTranscriptsLoader,
 } from '../app-shell/appDependencies'
 import {
-  abortActiveRequest,
   clearTimeoutRef,
   downloadTextFile,
   formatElapsed,
+  invalidateLatestRequest,
   isAbortError,
   readTimestamp,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
@@ -49,32 +50,47 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseRoiWorkflowOptions {
+interface UseRoiWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
+}
+
+interface UseRoiWorkflowControls {
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly enabled?: boolean
-  readonly initialSharedRoiSelectionRef: MutableRef<RoiSelection | null>
+  readonly magicLensScope: MagicLensScope
+  readonly roiName: string
+}
+
+interface UseRoiWorkflowData {
+  readonly loadState: DatasetLoadState<StructuredLoadError>
+  readonly roiState: RoiState<StructuredLoadError>
+}
+
+interface UseRoiWorkflowLoaders {
   readonly loadRoiCells: RoiCellsLoader
   readonly loadRoiGeneStats: RoiGeneStatsLoader
   readonly loadRoiTranscripts: RoiTranscriptsLoader
-  readonly loadState: DatasetLoadState<StructuredLoadError>
+}
+
+interface UseRoiWorkflowRefs {
+  readonly initialSharedRoiSelectionRef: MutableRef<RoiSelection | null>
   readonly magicLensAbortRef: MutableRef<AbortController | null>
   readonly magicLensDebounceRef: MutableRef<number | null>
   readonly magicLensLastDetailRef: MutableRef<ViewerMagicLensDetail | null>
   readonly magicLensLastQueryKeyRef: MutableRef<string | null>
   readonly magicLensRequestIdRef: MutableRef<number>
-  readonly magicLensScope: MagicLensScope
   readonly roiAbortRef: MutableRef<AbortController | null>
   readonly roiGeneViewportWarmupAbortRef: MutableRef<AbortController | null>
   readonly roiGeneViewportWarmupKeyRef: MutableRef<string | null>
   readonly roiGeneViewportWarmupTimeoutRef: MutableRef<number | null>
   readonly roiIdRef: MutableRef<number>
-  readonly roiName: string
   readonly roiRequestIdRef: MutableRef<number>
-  readonly roiState: RoiState<StructuredLoadError>
   readonly roiTranscriptExportAbortRef: MutableRef<AbortController | null>
   readonly roiTranscriptExportRequestIdRef: MutableRef<number>
+}
+
+interface UseRoiWorkflowSetters {
   readonly setMagicLensState: Dispatch<
     SetStateAction<MagicLensState<StructuredLoadError>>
   >
@@ -92,6 +108,15 @@ interface UseRoiWorkflowOptions {
   >
 }
 
+interface UseRoiWorkflowOptions {
+  readonly callbacks: UseRoiWorkflowCallbacks
+  readonly controls: UseRoiWorkflowControls
+  readonly data: UseRoiWorkflowData
+  readonly loaders: UseRoiWorkflowLoaders
+  readonly refs: UseRoiWorkflowRefs
+  readonly setters: UseRoiWorkflowSetters
+}
+
 interface UseRoiWorkflowResult {
   readonly handleClearRoi: () => void
   readonly handleExportRoiCells: () => void
@@ -100,48 +125,51 @@ interface UseRoiWorkflowResult {
 }
 
 export function useRoiWorkflow({
-  appendDebugEvent,
-  appendFallbackNotice,
-  currentViewportDetail,
-  enabled = true,
-  initialSharedRoiSelectionRef,
-  loadRoiCells,
-  loadRoiGeneStats,
-  loadRoiTranscripts,
-  loadState,
-  magicLensAbortRef,
-  magicLensDebounceRef,
-  magicLensLastDetailRef,
-  magicLensLastQueryKeyRef,
-  magicLensRequestIdRef,
-  magicLensScope,
-  roiAbortRef,
-  roiGeneViewportWarmupAbortRef,
-  roiGeneViewportWarmupKeyRef,
-  roiGeneViewportWarmupTimeoutRef,
-  roiIdRef,
-  roiName,
-  roiRequestIdRef,
-  roiState,
-  roiTranscriptExportAbortRef,
-  roiTranscriptExportRequestIdRef,
-  setMagicLensState,
-  setRoiGeneStatsState,
-  setRoiGeneViewportWarmupState,
-  setRoiMode,
-  setRoiName,
-  setRoiState,
-  setRoiTranscriptExportState,
+  callbacks: { appendDebugEvent, appendFallbackNotice },
+  controls: { currentViewportDetail, enabled = true, magicLensScope, roiName },
+  data: { loadState, roiState },
+  loaders: { loadRoiCells, loadRoiGeneStats, loadRoiTranscripts },
+  refs: {
+    initialSharedRoiSelectionRef,
+    magicLensAbortRef,
+    magicLensDebounceRef,
+    magicLensLastDetailRef,
+    magicLensLastQueryKeyRef,
+    magicLensRequestIdRef,
+    roiAbortRef,
+    roiGeneViewportWarmupAbortRef,
+    roiGeneViewportWarmupKeyRef,
+    roiGeneViewportWarmupTimeoutRef,
+    roiIdRef,
+    roiRequestIdRef,
+    roiTranscriptExportAbortRef,
+    roiTranscriptExportRequestIdRef,
+  },
+  setters: {
+    setMagicLensState,
+    setRoiGeneStatsState,
+    setRoiGeneViewportWarmupState,
+    setRoiMode,
+    setRoiName,
+    setRoiState,
+    setRoiTranscriptExportState,
+  },
 }: UseRoiWorkflowOptions): UseRoiWorkflowResult {
+  const roiGeneViewportWarmupRequestIdRef = useRef(0)
+
   useEffect(
     () => () => {
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-      abortActiveRequest(roiGeneViewportWarmupAbortRef)
+      invalidateLatestRequest({
+        abortRef: roiGeneViewportWarmupAbortRef,
+        requestIdRef: roiGeneViewportWarmupRequestIdRef,
+      })
       roiGeneViewportWarmupKeyRef.current = null
     },
     [
       roiGeneViewportWarmupAbortRef,
       roiGeneViewportWarmupKeyRef,
+      roiGeneViewportWarmupRequestIdRef,
       roiGeneViewportWarmupTimeoutRef,
     ],
   )
@@ -165,7 +193,10 @@ export function useRoiWorkflow({
         roiGeneViewportWarmupTimeoutRef.current !== null ||
         roiGeneViewportWarmupAbortRef.current !== null
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-      abortActiveRequest(roiGeneViewportWarmupAbortRef)
+      invalidateLatestRequest({
+        abortRef: roiGeneViewportWarmupAbortRef,
+        requestIdRef: roiGeneViewportWarmupRequestIdRef,
+      })
 
       if (hadPendingWarmup) {
         roiGeneViewportWarmupKeyRef.current = null
@@ -182,16 +213,21 @@ export function useRoiWorkflow({
     }
 
     clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-    abortActiveRequest(roiGeneViewportWarmupAbortRef)
+    invalidateLatestRequest({
+      abortRef: roiGeneViewportWarmupAbortRef,
+      requestIdRef: roiGeneViewportWarmupRequestIdRef,
+    })
     roiGeneViewportWarmupKeyRef.current = warmupKey
     setRoiGeneViewportWarmupState({ status: 'loading', key: warmupKey })
 
     roiGeneViewportWarmupTimeoutRef.current = window.setTimeout(() => {
       roiGeneViewportWarmupTimeoutRef.current = null
-      const abortController = new AbortController()
+      const request = startLatestRequest({
+        abortRef: roiGeneViewportWarmupAbortRef,
+        requestIdRef: roiGeneViewportWarmupRequestIdRef,
+      })
       const selection = { kind: 'box' as const, bbox: detail.bbox }
       const warmupStartedAt = readTimestamp()
-      roiGeneViewportWarmupAbortRef.current = abortController
 
       void (async () => {
         try {
@@ -200,11 +236,11 @@ export function useRoiWorkflow({
             `ROI warmup cells started: ${detail.visibleCellCount.toLocaleString()} visible, limit ${ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT.toLocaleString()}`,
           )
           const cells = await loadRoiCells(readyDatasetUrl, selection, {
-            signal: abortController.signal,
+            signal: request.signal,
             limit: ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT,
           })
 
-          if (abortController.signal.aborted) {
+          if (!request.isCurrent() || request.signal.aborted) {
             return
           }
 
@@ -231,13 +267,13 @@ export function useRoiWorkflow({
             ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
           )
           const stats = await loadRoiGeneStats(readyDatasetUrl, cells, {
-            signal: abortController.signal,
+            signal: request.signal,
             cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             sampleStrategy: 'head',
             onFallback: appendFallbackNotice,
           })
 
-          if (abortController.signal.aborted) {
+          if (!request.isCurrent() || request.signal.aborted) {
             return
           }
 
@@ -251,7 +287,7 @@ export function useRoiWorkflow({
           })
           setRoiGeneViewportWarmupState({ status: 'ready', key: warmupKey })
         } catch (error) {
-          if (isAbortError(error)) {
+          if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
             return
           }
 
@@ -263,9 +299,7 @@ export function useRoiWorkflow({
           )
           setRoiGeneViewportWarmupState({ status: 'error', key: warmupKey })
         } finally {
-          if (roiGeneViewportWarmupAbortRef.current === abortController) {
-            roiGeneViewportWarmupAbortRef.current = null
-          }
+          request.complete()
         }
       })()
     }, ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
@@ -279,6 +313,7 @@ export function useRoiWorkflow({
     loadState,
     roiGeneViewportWarmupAbortRef,
     roiGeneViewportWarmupKeyRef,
+    roiGeneViewportWarmupRequestIdRef,
     roiGeneViewportWarmupTimeoutRef,
     roiState.status,
     setRoiGeneViewportWarmupState,
@@ -291,22 +326,26 @@ export function useRoiWorkflow({
       }
 
       const bbox = selection.bbox
-      const requestId = roiRequestIdRef.current + 1
       const roiStartedAt = readTimestamp()
       const roiCellsStartedAt = roiStartedAt
-      abortActiveRequest(roiAbortRef)
+      const request = startLatestRequest({
+        abortRef: roiAbortRef,
+        requestIdRef: roiRequestIdRef,
+      })
       clearTimeoutRef(magicLensDebounceRef)
       magicLensLastDetailRef.current = null
       magicLensLastQueryKeyRef.current = null
-      abortActiveRequest(magicLensAbortRef)
-      magicLensRequestIdRef.current += 1
-      const abortController = new AbortController()
-      roiRequestIdRef.current = requestId
-      roiAbortRef.current = abortController
+      invalidateLatestRequest({
+        abortRef: magicLensAbortRef,
+        requestIdRef: magicLensRequestIdRef,
+      })
       setRoiMode('idle')
       setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-      abortActiveRequest(roiGeneViewportWarmupAbortRef)
+      invalidateLatestRequest({
+        abortRef: roiGeneViewportWarmupAbortRef,
+        requestIdRef: roiGeneViewportWarmupRequestIdRef,
+      })
       setRoiGeneViewportWarmupState({ status: 'idle' })
       setRoiState({ status: 'loading', url: loadState.url, bbox, selection })
       setRoiGeneStatsState({ status: 'idle' })
@@ -314,9 +353,9 @@ export function useRoiWorkflow({
       setMagicLensState({ status: 'idle' })
       appendDebugEvent(`${roiSelectionLabel(selection)} drawn: ROI cells started`)
 
-      void loadRoiCells(loadState.url, selection, { signal: abortController.signal })
+      void loadRoiCells(loadState.url, selection, { signal: request.signal })
         .then((cells) => {
-          if (roiRequestIdRef.current !== requestId) {
+          if (!request.isCurrent() || request.signal.aborted) {
             return
           }
 
@@ -357,13 +396,13 @@ export function useRoiWorkflow({
           )
 
           return loadRoiGeneStats(loadState.url, cells, {
-            signal: abortController.signal,
+            signal: request.signal,
             cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             sampleStrategy: 'head',
             onFallback: appendFallbackNotice,
           })
             .then((previewStats) => {
-              if (roiRequestIdRef.current !== requestId) {
+              if (!request.isCurrent() || request.signal.aborted) {
                 return
               }
 
@@ -388,17 +427,17 @@ export function useRoiWorkflow({
               )
               return deferRoiGeneRefinement()
                 .then(() => {
-                  if (roiRequestIdRef.current !== requestId) {
+                  if (!request.isCurrent() || request.signal.aborted) {
                     return undefined
                   }
 
                   return loadRoiGeneStats(loadState.url, cells, {
-                    signal: abortController.signal,
+                    signal: request.signal,
                     onFallback: appendFallbackNotice,
                   })
                 })
                 .then((stats) => {
-                  if (roiRequestIdRef.current !== requestId) {
+                  if (!request.isCurrent() || request.signal.aborted) {
                     return
                   }
 
@@ -418,7 +457,11 @@ export function useRoiWorkflow({
                   )
                 })
                 .catch((error) => {
-                  if (isAbortError(error) || roiRequestIdRef.current !== requestId) {
+                  if (
+                    isAbortError(error) ||
+                    !request.isCurrent() ||
+                    request.signal.aborted
+                  ) {
                     return
                   }
 
@@ -428,7 +471,7 @@ export function useRoiWorkflow({
                 })
             })
             .catch((error) => {
-              if (isAbortError(error) || roiRequestIdRef.current !== requestId) {
+              if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
                 return
               }
 
@@ -443,7 +486,7 @@ export function useRoiWorkflow({
             })
         })
         .catch((error) => {
-          if (isAbortError(error) || roiRequestIdRef.current !== requestId) {
+          if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
             return
           }
 
@@ -458,9 +501,7 @@ export function useRoiWorkflow({
           appendDebugEvent(`ROI cells failed (${formatElapsed(roiCellsStartedAt)})`)
         })
         .finally(() => {
-          if (roiAbortRef.current === abortController) {
-            roiAbortRef.current = null
-          }
+          request.complete()
         })
     },
     [
@@ -477,6 +518,7 @@ export function useRoiWorkflow({
       magicLensRequestIdRef,
       roiAbortRef,
       roiGeneViewportWarmupAbortRef,
+      roiGeneViewportWarmupRequestIdRef,
       roiGeneViewportWarmupTimeoutRef,
       roiIdRef,
       roiRequestIdRef,
@@ -515,15 +557,21 @@ export function useRoiWorkflow({
   ])
 
   const handleClearRoi = useCallback(() => {
-    abortActiveRequest(roiAbortRef)
-    abortActiveRequest(roiTranscriptExportAbortRef)
+    invalidateLatestRequest({
+      abortRef: roiAbortRef,
+      requestIdRef: roiRequestIdRef,
+    })
+    invalidateLatestRequest({
+      abortRef: roiTranscriptExportAbortRef,
+      requestIdRef: roiTranscriptExportRequestIdRef,
+    })
     if (magicLensScope === 'roi') {
-      abortActiveRequest(magicLensAbortRef)
-      magicLensRequestIdRef.current += 1
+      invalidateLatestRequest({
+        abortRef: magicLensAbortRef,
+        requestIdRef: magicLensRequestIdRef,
+      })
       setMagicLensState({ status: 'idle' })
     }
-    roiRequestIdRef.current += 1
-    roiTranscriptExportRequestIdRef.current += 1
     setRoiMode('idle')
     setRoiState({ status: 'idle' })
     setRoiGeneStatsState({ status: 'idle' })
@@ -560,20 +608,19 @@ export function useRoiWorkflow({
       return
     }
 
-    const requestId = roiTranscriptExportRequestIdRef.current + 1
-    abortActiveRequest(roiTranscriptExportAbortRef)
-    const abortController = new AbortController()
+    const request = startLatestRequest({
+      abortRef: roiTranscriptExportAbortRef,
+      requestIdRef: roiTranscriptExportRequestIdRef,
+    })
     const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
-    roiTranscriptExportRequestIdRef.current = requestId
-    roiTranscriptExportAbortRef.current = abortController
     setRoiTranscriptExportState({ status: 'loading', url: roiState.url })
     appendDebugEvent(`Exporting ROI transcripts ${name}`)
 
     void loadRoiTranscripts(roiState.url, roiState.selection, {
-      signal: abortController.signal,
+      signal: request.signal,
     })
       .then((transcripts) => {
-        if (roiTranscriptExportRequestIdRef.current !== requestId) {
+        if (!request.isCurrent() || request.signal.aborted) {
           return
         }
 
@@ -587,10 +634,7 @@ export function useRoiWorkflow({
         )
       })
       .catch((error) => {
-        if (
-          isAbortError(error) ||
-          roiTranscriptExportRequestIdRef.current !== requestId
-        ) {
+        if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
           return
         }
 
@@ -602,9 +646,7 @@ export function useRoiWorkflow({
         appendDebugEvent('ROI transcript export failed')
       })
       .finally(() => {
-        if (roiTranscriptExportAbortRef.current === abortController) {
-          roiTranscriptExportAbortRef.current = null
-        }
+        request.complete()
       })
   }, [
     appendDebugEvent,

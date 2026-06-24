@@ -1,14 +1,14 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
 import { summarizeDatasetDiagnostics } from '../../data/datasetDiagnostics'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetDiagnosticsRunner } from '../app-shell/appDependencies'
 import {
-  abortActiveRequest,
   downloadTextFile,
   isAbortError,
   readTimestamp,
   shortDatasetLabel,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import type { DatasetDiagnosticsState } from '../dataset/datasetLoadModel'
@@ -84,6 +84,8 @@ export function useDatasetDiagnosticsWorkflow({
   transcriptPointSize,
   visiumHdBinSizeMicrometers,
 }: UseDatasetDiagnosticsWorkflowOptions): UseDatasetDiagnosticsWorkflowResult {
+  const diagnosticsRequestIdRef = useRef(0)
+
   const handleRunDatasetDiagnostics = useCallback(async () => {
     const requestedUrl = datasetUrl.trim()
 
@@ -92,21 +94,22 @@ export function useDatasetDiagnosticsWorkflow({
     }
 
     const diagnosticsStartedAt = readTimestamp()
-    abortActiveRequest(diagnosticsAbortRef)
-    const abortController = new AbortController()
-    diagnosticsAbortRef.current = abortController
+    const request = startLatestRequest({
+      abortRef: diagnosticsAbortRef,
+      requestIdRef: diagnosticsRequestIdRef,
+    })
     setDiagnosticsState({ status: 'loading', url: requestedUrl })
     appendDebugEvent(`Diagnosing dataset ${shortDatasetLabel(requestedUrl)}`)
 
     try {
       const report = await runDatasetDiagnostics(requestedUrl, {
-        signal: abortController.signal,
+        signal: request.signal,
         ...(visiumHdBinSizeMicrometers === undefined
           ? {}
           : { visiumHdBinSizeMicrometers }),
       })
 
-      if (diagnosticsAbortRef.current !== abortController) {
+      if (!request.isCurrent() || request.signal.aborted) {
         return
       }
 
@@ -120,7 +123,7 @@ export function useDatasetDiagnosticsWorkflow({
         }),
       )
     } catch (error) {
-      if (isAbortError(error) || diagnosticsAbortRef.current !== abortController) {
+      if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
         return
       }
 
@@ -137,9 +140,7 @@ export function useDatasetDiagnosticsWorkflow({
         }),
       )
     } finally {
-      if (diagnosticsAbortRef.current === abortController) {
-        diagnosticsAbortRef.current = null
-      }
+      request.complete()
     }
   }, [
     appendDebugEvent,

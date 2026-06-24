@@ -13,11 +13,12 @@ import type {
   RoiGeneStatsLoader,
 } from '../app-shell/appDependencies'
 import {
-  abortActiveRequest,
   formatElapsed,
+  invalidateLatestRequest,
   isAbortError,
   readTimestamp,
   shortIdentifier,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
@@ -39,19 +40,31 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseCellDetailWorkflowOptions {
+interface UseCellDetailWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
-  readonly cellDetailAbortRef: MutableRef<AbortController | null>
-  readonly cellDetailRequestIdRef: MutableRef<number>
+}
+
+interface UseCellDetailWorkflowData {
   readonly cellDetailState: CellDetailState<StructuredLoadError>
-  readonly cellTranscriptDistributionAbortRef: MutableRef<AbortController | null>
-  readonly cellTranscriptDistributionRequestIdRef: MutableRef<number>
+  readonly loadState: DatasetLoadState<StructuredLoadError>
+  readonly selectedCell: OverviewCellDatum | null
+}
+
+interface UseCellDetailWorkflowLoaders {
   readonly loadBoundaryElements: BoundaryElementsLoader
   readonly loadCellTranscriptDistribution: CellTranscriptDistributionLoader
   readonly loadRoiGeneStats: RoiGeneStatsLoader
-  readonly loadState: DatasetLoadState<StructuredLoadError>
-  readonly selectedCell: OverviewCellDatum | null
+}
+
+interface UseCellDetailWorkflowRefs {
+  readonly cellDetailAbortRef: MutableRef<AbortController | null>
+  readonly cellDetailRequestIdRef: MutableRef<number>
+  readonly cellTranscriptDistributionAbortRef: MutableRef<AbortController | null>
+  readonly cellTranscriptDistributionRequestIdRef: MutableRef<number>
+}
+
+interface UseCellDetailWorkflowSetters {
   readonly setCellDetailState: Dispatch<
     SetStateAction<CellDetailState<StructuredLoadError>>
   >
@@ -60,40 +73,42 @@ interface UseCellDetailWorkflowOptions {
   >
 }
 
+interface UseCellDetailWorkflowOptions {
+  readonly callbacks: UseCellDetailWorkflowCallbacks
+  readonly data: UseCellDetailWorkflowData
+  readonly loaders: UseCellDetailWorkflowLoaders
+  readonly refs: UseCellDetailWorkflowRefs
+  readonly setters: UseCellDetailWorkflowSetters
+}
+
 export function useCellDetailWorkflow({
-  appendDebugEvent,
-  appendFallbackNotice,
-  cellDetailAbortRef,
-  cellDetailRequestIdRef,
-  cellDetailState,
-  cellTranscriptDistributionAbortRef,
-  cellTranscriptDistributionRequestIdRef,
-  loadBoundaryElements,
-  loadCellTranscriptDistribution,
-  loadRoiGeneStats,
-  loadState,
-  selectedCell,
-  setCellDetailState,
-  setCellTranscriptDistributionState,
+  callbacks: { appendDebugEvent, appendFallbackNotice },
+  data: { cellDetailState, loadState, selectedCell },
+  loaders: { loadBoundaryElements, loadCellTranscriptDistribution, loadRoiGeneStats },
+  refs: {
+    cellDetailAbortRef,
+    cellDetailRequestIdRef,
+    cellTranscriptDistributionAbortRef,
+    cellTranscriptDistributionRequestIdRef,
+  },
+  setters: { setCellDetailState, setCellTranscriptDistributionState },
 }: UseCellDetailWorkflowOptions): void {
   useEffect(() => {
     if (selectedCell === null || loadState.status !== 'ready') {
-      abortActiveRequest(cellDetailAbortRef)
-      cellDetailRequestIdRef.current += 1
+      invalidateLatestRequest({
+        abortRef: cellDetailAbortRef,
+        requestIdRef: cellDetailRequestIdRef,
+      })
       return
     }
 
-    const requestId = cellDetailRequestIdRef.current + 1
     const detailStartedAt = readTimestamp()
-    const abortController = new AbortController()
-    abortActiveRequest(cellDetailAbortRef)
-    cellDetailRequestIdRef.current = requestId
-    cellDetailAbortRef.current = abortController
+    const request = startLatestRequest({
+      abortRef: cellDetailAbortRef,
+      requestIdRef: cellDetailRequestIdRef,
+    })
     queueMicrotask(() => {
-      if (
-        abortController.signal.aborted ||
-        cellDetailRequestIdRef.current !== requestId
-      ) {
+      if (!request.isCurrent() || request.signal.aborted) {
         return
       }
 
@@ -111,7 +126,7 @@ export function useCellDetailWorkflow({
       const datasetCell = overviewCellToDatasetCell(selectedCell)
       const [stats, boundaryElement] = await Promise.all([
         loadRoiGeneStats(loadState.url, [datasetCell], {
-          signal: abortController.signal,
+          signal: request.signal,
           cellLimit: 1,
           geneLimit: CELL_GENE_EXPRESSION_LIMIT,
           sampleStrategy: 'head',
@@ -121,14 +136,11 @@ export function useCellDetailWorkflow({
           loadState.url,
           selectedCell,
           loadBoundaryElements,
-          abortController.signal,
+          request.signal,
         ),
       ])
 
-      if (
-        abortController.signal.aborted ||
-        cellDetailRequestIdRef.current !== requestId
-      ) {
+      if (!request.isCurrent() || request.signal.aborted) {
         return
       }
 
@@ -148,7 +160,7 @@ export function useCellDetailWorkflow({
       )
     })()
       .catch((error) => {
-        if (isAbortError(error) || cellDetailRequestIdRef.current !== requestId) {
+        if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
           return
         }
 
@@ -163,15 +175,12 @@ export function useCellDetailWorkflow({
         })
       })
       .finally(() => {
-        if (cellDetailAbortRef.current === abortController) {
-          cellDetailAbortRef.current = null
-        }
+        request.complete()
       })
 
     return () => {
-      if (cellDetailAbortRef.current === abortController) {
-        abortActiveRequest(cellDetailAbortRef)
-      }
+      request.abortController.abort()
+      request.complete()
     }
   }, [
     appendDebugEvent,
@@ -187,9 +196,10 @@ export function useCellDetailWorkflow({
 
   useEffect(() => {
     if (selectedCell === null || loadState.status !== 'ready') {
-      abortActiveRequest(cellTranscriptDistributionAbortRef)
-      cellTranscriptDistributionRequestIdRef.current += 1
-      const requestId = cellTranscriptDistributionRequestIdRef.current
+      const requestId = invalidateLatestRequest({
+        abortRef: cellTranscriptDistributionAbortRef,
+        requestIdRef: cellTranscriptDistributionRequestIdRef,
+      })
       queueMicrotask(() => {
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
           setCellTranscriptDistributionState({ status: 'idle' })
@@ -202,9 +212,10 @@ export function useCellDetailWorkflow({
       cellDetailState.status === 'error' &&
       cellDetailState.cellId === selectedCell.id
     ) {
-      abortActiveRequest(cellTranscriptDistributionAbortRef)
-      cellTranscriptDistributionRequestIdRef.current += 1
-      const requestId = cellTranscriptDistributionRequestIdRef.current
+      const requestId = invalidateLatestRequest({
+        abortRef: cellTranscriptDistributionAbortRef,
+        requestIdRef: cellTranscriptDistributionRequestIdRef,
+      })
       const error = new Error(
         'Cell details failed before the selected-cell transcript z distribution could load.',
       )
@@ -225,9 +236,10 @@ export function useCellDetailWorkflow({
       cellDetailState.status !== 'ready' ||
       cellDetailState.cellId !== selectedCell.id
     ) {
-      abortActiveRequest(cellTranscriptDistributionAbortRef)
-      cellTranscriptDistributionRequestIdRef.current += 1
-      const requestId = cellTranscriptDistributionRequestIdRef.current
+      const requestId = invalidateLatestRequest({
+        abortRef: cellTranscriptDistributionAbortRef,
+        requestIdRef: cellTranscriptDistributionRequestIdRef,
+      })
       queueMicrotask(() => {
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
           setCellTranscriptDistributionState({
@@ -246,9 +258,10 @@ export function useCellDetailWorkflow({
         : null
 
     if (boundaryPolygon === null || boundaryPolygon.length < 3) {
-      abortActiveRequest(cellTranscriptDistributionAbortRef)
-      cellTranscriptDistributionRequestIdRef.current += 1
-      const requestId = cellTranscriptDistributionRequestIdRef.current
+      const requestId = invalidateLatestRequest({
+        abortRef: cellTranscriptDistributionAbortRef,
+        requestIdRef: cellTranscriptDistributionRequestIdRef,
+      })
       const error = new Error(
         'Selected cell boundary is unavailable, so cell-only transcript z locations cannot be computed.',
       )
@@ -265,18 +278,14 @@ export function useCellDetailWorkflow({
       return
     }
 
-    const requestId = cellTranscriptDistributionRequestIdRef.current + 1
     const distributionStartedAt = readTimestamp()
-    const abortController = new AbortController()
-    abortActiveRequest(cellTranscriptDistributionAbortRef)
-    cellTranscriptDistributionRequestIdRef.current = requestId
-    cellTranscriptDistributionAbortRef.current = abortController
+    const request = startLatestRequest({
+      abortRef: cellTranscriptDistributionAbortRef,
+      requestIdRef: cellTranscriptDistributionRequestIdRef,
+    })
 
     queueMicrotask(() => {
-      if (
-        abortController.signal.aborted ||
-        cellTranscriptDistributionRequestIdRef.current !== requestId
-      ) {
+      if (!request.isCurrent() || request.signal.aborted) {
         return
       }
 
@@ -292,17 +301,14 @@ export function useCellDetailWorkflow({
     )
 
     void loadCellTranscriptDistribution(loadState.url, asCellId(selectedCell.id), {
-      signal: abortController.signal,
+      signal: request.signal,
       limit: CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
       minQv: DEFAULT_CELL_TRANSCRIPT_MIN_QV,
       binCount: CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
       boundaryPolygon,
     })
       .then((distribution) => {
-        if (
-          abortController.signal.aborted ||
-          cellTranscriptDistributionRequestIdRef.current !== requestId
-        ) {
+        if (!request.isCurrent() || request.signal.aborted) {
           return
         }
 
@@ -320,10 +326,7 @@ export function useCellDetailWorkflow({
         )
       })
       .catch((error) => {
-        if (
-          isAbortError(error) ||
-          cellTranscriptDistributionRequestIdRef.current !== requestId
-        ) {
+        if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
           return
         }
 
@@ -341,15 +344,12 @@ export function useCellDetailWorkflow({
         )
       })
       .finally(() => {
-        if (cellTranscriptDistributionAbortRef.current === abortController) {
-          cellTranscriptDistributionAbortRef.current = null
-        }
+        request.complete()
       })
 
     return () => {
-      if (cellTranscriptDistributionAbortRef.current === abortController) {
-        abortActiveRequest(cellTranscriptDistributionAbortRef)
-      }
+      request.abortController.abort()
+      request.complete()
     }
   }, [
     appendDebugEvent,

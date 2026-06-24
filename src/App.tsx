@@ -58,7 +58,9 @@ import {
   createFallbackNoticeEntry,
   createDebugLogEntry,
   downloadTextFile,
+  invalidateLatestRequest,
   isAbortError,
+  startLatestRequest,
   type DebugLogAppendOptions,
   type DebugLogEntry,
   type FallbackNoticeEntry,
@@ -1037,8 +1039,10 @@ export function App({
     ],
   )
   const clearVisiumHdExpressionProfileState = useCallback(() => {
-    abortActiveRequest(visiumHdExpressionProfileAbortRef)
-    visiumHdExpressionProfileRequestId.current += 1
+    invalidateLatestRequest({
+      abortRef: visiumHdExpressionProfileAbortRef,
+      requestIdRef: visiumHdExpressionProfileRequestId,
+    })
     setVisiumHdExpressionProfileState((current) =>
       current.status === 'idle' ? current : IDLE_CELL_EXPRESSION_PROFILE_STATE,
     )
@@ -1482,8 +1486,10 @@ export function App({
     [],
   )
   const resetGeneExpressionSelectionState = useCallback(() => {
-    abortActiveRequest(geneExpressionAbortRef)
-    geneExpressionRequestId.current += 1
+    invalidateLatestRequest({
+      abortRef: geneExpressionAbortRef,
+      requestIdRef: geneExpressionRequestId,
+    })
     geneExpressionViewportKeyRef.current = null
     setGeneExpressionBatch(null)
     setGeneExpressionScaleDomain({ key: '', max: 0 })
@@ -1698,11 +1704,10 @@ export function App({
       return
     }
 
-    abortActiveRequest(visiumHdExpressionProfileAbortRef)
-    const requestId = visiumHdExpressionProfileRequestId.current + 1
-    const abortController = new AbortController()
-    visiumHdExpressionProfileRequestId.current = requestId
-    visiumHdExpressionProfileAbortRef.current = abortController
+    const request = startLatestRequest({
+      abortRef: visiumHdExpressionProfileAbortRef,
+      requestIdRef: visiumHdExpressionProfileRequestId,
+    })
     setVisiumHdExpressionProfileState({
       status: 'loading',
       selectionId: selection.id,
@@ -1720,7 +1725,7 @@ export function App({
 
       if (selection.kind === 'bin') {
         const matrix = await profileDataset.matrix([selection.id], binSize, {
-          signal: abortController.signal,
+          signal: request.signal,
         })
 
         return {
@@ -1733,7 +1738,7 @@ export function App({
         dataset,
         selection.id,
         visiumHdBarcodeMappingRowBudget,
-        abortController.signal,
+        request.signal,
       )
       const matrixDataset = dataset as VisiumHdExpressionProfileDataset
       const mappedBinIds = selectedVisiumHdCellMappedBinIds(
@@ -1755,7 +1760,7 @@ export function App({
       }
 
       const matrix = await matrixDataset.matrix(mappedBinIds, binSize, {
-        signal: abortController.signal,
+        signal: request.signal,
       })
 
       return {
@@ -1764,10 +1769,7 @@ export function App({
       }
     })()
       .then(({ expression, sourceLabel }) => {
-        if (
-          abortController.signal.aborted ||
-          visiumHdExpressionProfileRequestId.current !== requestId
-        ) {
+        if (!request.isCurrent() || request.signal.aborted) {
           return
         }
 
@@ -1784,11 +1786,7 @@ export function App({
         )
       })
       .catch((error: unknown) => {
-        if (
-          isAbortError(error) ||
-          abortController.signal.aborted ||
-          visiumHdExpressionProfileRequestId.current !== requestId
-        ) {
+        if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
           return
         }
 
@@ -1800,9 +1798,7 @@ export function App({
         })
       })
       .finally(() => {
-        if (visiumHdExpressionProfileAbortRef.current === abortController) {
-          visiumHdExpressionProfileAbortRef.current = null
-        }
+        request.complete()
       })
   }, [
     activeSelectedGridCell,
@@ -1935,50 +1931,72 @@ export function App({
   }, [boundaryOverlayRequestKey, handleViewportChange, loadState.status])
 
   useTranscriptWorkflow({
-    activeControlHudTab,
-    appendDebugEvent,
-    appendFallbackNotice,
-    currentViewportDetail,
-    effectiveTranscriptFeatureFilterMode,
-    loadRequestIdRef: loadRequestId,
-    loadState,
-    loadTranscriptAggregates,
-    loadTranscriptCapabilities,
-    loadTranscriptViewport,
-    manualTranscriptExactRequestKey,
-    overviewCells,
-    selectedGenes,
-    setTranscriptCapabilityState,
-    setTranscriptLayerState,
-    showTranscriptOverlay: effectiveShowTranscriptOverlay,
-    transcriptAbortRef,
-    transcriptCapabilityAbortRef,
-    transcriptCapabilityRequestIdRef: transcriptCapabilityRequestId,
-    transcriptCapabilityState,
-    transcriptDetailMode,
-    transcriptExactPointLimit,
-    transcriptGeneOnly,
-    transcriptMinQv,
-    transcriptRequestIdRef: transcriptRequestId,
-    transcriptViewportKeyRef,
-    visibleTranscriptEstimate,
+    callbacks: {
+      appendDebugEvent,
+      appendFallbackNotice,
+    },
+    controls: {
+      activeControlHudTab,
+      effectiveTranscriptFeatureFilterMode,
+      manualTranscriptExactRequestKey,
+      showTranscriptOverlay: effectiveShowTranscriptOverlay,
+      transcriptDetailMode,
+      transcriptExactPointLimit,
+      transcriptGeneOnly,
+      transcriptMinQv,
+      visibleTranscriptEstimate,
+    },
+    data: {
+      currentViewportDetail,
+      loadState,
+      overviewCells,
+      selectedGenes,
+      transcriptCapabilityState,
+    },
+    loaders: {
+      loadTranscriptAggregates,
+      loadTranscriptCapabilities,
+      loadTranscriptViewport,
+    },
+    refs: {
+      loadRequestIdRef: loadRequestId,
+      transcriptAbortRef,
+      transcriptCapabilityAbortRef,
+      transcriptCapabilityRequestIdRef: transcriptCapabilityRequestId,
+      transcriptRequestIdRef: transcriptRequestId,
+      transcriptViewportKeyRef,
+    },
+    setters: {
+      setTranscriptCapabilityState,
+      setTranscriptLayerState,
+    },
   })
 
   useCellDetailWorkflow({
-    appendDebugEvent,
-    appendFallbackNotice,
-    cellDetailAbortRef,
-    cellDetailRequestIdRef: cellDetailRequestId,
-    cellDetailState,
-    cellTranscriptDistributionAbortRef,
-    cellTranscriptDistributionRequestIdRef: cellTranscriptDistributionRequestId,
-    loadBoundaryElements: loadActiveBoundaryElements,
-    loadCellTranscriptDistribution,
-    loadRoiGeneStats,
-    loadState,
-    selectedCell,
-    setCellDetailState,
-    setCellTranscriptDistributionState,
+    callbacks: {
+      appendDebugEvent,
+      appendFallbackNotice,
+    },
+    data: {
+      cellDetailState,
+      loadState,
+      selectedCell,
+    },
+    loaders: {
+      loadBoundaryElements: loadActiveBoundaryElements,
+      loadCellTranscriptDistribution,
+      loadRoiGeneStats,
+    },
+    refs: {
+      cellDetailAbortRef,
+      cellDetailRequestIdRef: cellDetailRequestId,
+      cellTranscriptDistributionAbortRef,
+      cellTranscriptDistributionRequestIdRef: cellTranscriptDistributionRequestId,
+    },
+    setters: {
+      setCellDetailState,
+      setCellTranscriptDistributionState,
+    },
   })
   useGridCellAssignmentWorkflow({
     appendDebugEvent,
@@ -1999,38 +2017,50 @@ export function App({
     handleExportRoiTranscripts,
     handleRoiComplete,
   } = useRoiWorkflow({
-    appendDebugEvent,
-    appendFallbackNotice,
-    currentViewportDetail,
-    enabled: !isVisiumHdDataset,
-    initialSharedRoiSelectionRef,
-    loadRoiCells,
-    loadRoiGeneStats,
-    loadRoiTranscripts,
-    loadState,
-    magicLensAbortRef,
-    magicLensDebounceRef,
-    magicLensLastDetailRef,
-    magicLensLastQueryKeyRef,
-    magicLensRequestIdRef: magicLensRequestId,
-    magicLensScope,
-    roiAbortRef,
-    roiGeneViewportWarmupAbortRef,
-    roiGeneViewportWarmupKeyRef,
-    roiGeneViewportWarmupTimeoutRef,
-    roiIdRef,
-    roiName,
-    roiRequestIdRef: roiRequestId,
-    roiState,
-    roiTranscriptExportAbortRef,
-    roiTranscriptExportRequestIdRef: roiTranscriptExportRequestId,
-    setMagicLensState,
-    setRoiGeneStatsState,
-    setRoiGeneViewportWarmupState,
-    setRoiMode,
-    setRoiName,
-    setRoiState,
-    setRoiTranscriptExportState,
+    callbacks: {
+      appendDebugEvent,
+      appendFallbackNotice,
+    },
+    controls: {
+      currentViewportDetail,
+      enabled: !isVisiumHdDataset,
+      magicLensScope,
+      roiName,
+    },
+    data: {
+      loadState,
+      roiState,
+    },
+    loaders: {
+      loadRoiCells,
+      loadRoiGeneStats,
+      loadRoiTranscripts,
+    },
+    refs: {
+      initialSharedRoiSelectionRef,
+      magicLensAbortRef,
+      magicLensDebounceRef,
+      magicLensLastDetailRef,
+      magicLensLastQueryKeyRef,
+      magicLensRequestIdRef: magicLensRequestId,
+      roiAbortRef,
+      roiGeneViewportWarmupAbortRef,
+      roiGeneViewportWarmupKeyRef,
+      roiGeneViewportWarmupTimeoutRef,
+      roiIdRef,
+      roiRequestIdRef: roiRequestId,
+      roiTranscriptExportAbortRef,
+      roiTranscriptExportRequestIdRef: roiTranscriptExportRequestId,
+    },
+    setters: {
+      setMagicLensState,
+      setRoiGeneStatsState,
+      setRoiGeneViewportWarmupState,
+      setRoiMode,
+      setRoiName,
+      setRoiState,
+      setRoiTranscriptExportState,
+    },
   })
   const clearVisiumHdRoiState = useCallback(() => {
     setVisiumHdRoiState(IDLE_VISIUM_HD_ROI_STATE)

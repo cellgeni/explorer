@@ -1,4 +1,10 @@
-import { useEffect, type Dispatch, type FormEvent, type SetStateAction } from 'react'
+import {
+  useEffect,
+  useRef,
+  type Dispatch,
+  type FormEvent,
+  type SetStateAction,
+} from 'react'
 import type {
   RoiDrawMode,
   ViewerMagicLensDetail,
@@ -84,9 +90,11 @@ import {
   abortActiveRequest,
   clearTimeoutRef,
   formatElapsed,
+  invalidateLatestRequest,
   isAbortError,
   readTimestamp,
   shortDatasetLabel,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from './appRuntimeModel'
 import { parseObservationColorMode } from './appShellModel'
@@ -427,6 +435,8 @@ export function useDatasetLifecycle({
     setViewportCellCount,
   },
 }: UseDatasetLifecycleOptions): UseDatasetLifecycleResult {
+  const datasetWarmupRequestIdRef = useRef(0)
+
   useEffect(() => {
     if (didApplyInitialDatasetUrlRef.current) {
       return
@@ -483,10 +493,11 @@ export function useDatasetLifecycle({
   ])
 
   function startDatasetWarmup(requestedUrl: string, requestId: number) {
-    abortActiveRequest(datasetWarmupAbortRef)
+    const request = startLatestRequest({
+      abortRef: datasetWarmupAbortRef,
+      requestIdRef: datasetWarmupRequestIdRef,
+    })
     const warmupStartedAt = readTimestamp()
-    const abortController = new AbortController()
-    datasetWarmupAbortRef.current = abortController
     setDatasetWarmupState({ status: 'loading', url: requestedUrl })
     appendDebugEvent('Dataset prep started')
     const applyCellFeatureMatrixCapability = (result: WarmDatasetForRoiResult | void) => {
@@ -496,7 +507,8 @@ export function useDatasetLifecycle({
         capability === undefined ||
         capability === null ||
         loadRequestIdRef.current !== requestId ||
-        abortController.signal.aborted
+        !request.isCurrent() ||
+        request.signal.aborted
       ) {
         return
       }
@@ -523,13 +535,17 @@ export function useDatasetLifecycle({
     }
 
     void warmDatasetForRoi(requestedUrl, {
-      signal: abortController.signal,
+      signal: request.signal,
       onCellFeatureMatrixCapability: (capability) => {
         applyCellFeatureMatrixCapability({ cellFeatureMatrix: capability })
       },
     })
       .then((result) => {
-        if (loadRequestIdRef.current !== requestId) {
+        if (
+          loadRequestIdRef.current !== requestId ||
+          !request.isCurrent() ||
+          request.signal.aborted
+        ) {
           return
         }
 
@@ -538,7 +554,12 @@ export function useDatasetLifecycle({
         appendDebugEvent(`Dataset prep ready (${formatElapsed(warmupStartedAt)})`)
       })
       .catch((error) => {
-        if (isAbortError(error) || loadRequestIdRef.current !== requestId) {
+        if (
+          isAbortError(error) ||
+          loadRequestIdRef.current !== requestId ||
+          !request.isCurrent() ||
+          request.signal.aborted
+        ) {
           return
         }
 
@@ -546,9 +567,7 @@ export function useDatasetLifecycle({
         appendDebugEvent(`Dataset prep incomplete (${formatElapsed(warmupStartedAt)})`)
       })
       .finally(() => {
-        if (datasetWarmupAbortRef.current === abortController) {
-          datasetWarmupAbortRef.current = null
-        }
+        request.complete()
       })
   }
 
@@ -556,7 +575,6 @@ export function useDatasetLifecycle({
     const requestedUrl = datasetUrl.trim()
 
     if (requestedUrl !== '') {
-      const requestId = loadRequestIdRef.current + 1
       const loadStartedAt = readTimestamp()
       const sharedState = initialShareableStateRef.current
       const shouldRestoreSharedState =
@@ -570,27 +588,65 @@ export function useDatasetLifecycle({
       }
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
       onBeforeDatasetLoad?.()
-      abortActiveRequest(datasetAbortRef)
-      abortActiveRequest(datasetWarmupAbortRef)
+      const request = startLatestRequest({
+        abortRef: datasetAbortRef,
+        requestIdRef: loadRequestIdRef,
+      })
+      const requestId = request.requestId
+      const isCurrentDatasetLoad = () => request.isCurrent() && !request.signal.aborted
+      invalidateLatestRequest({
+        abortRef: datasetWarmupAbortRef,
+        requestIdRef: datasetWarmupRequestIdRef,
+      })
       abortActiveRequest(diagnosticsAbortRef)
-      abortActiveRequest(analysisEmbeddingAbortRef)
-      abortActiveRequest(boundaryAbortRef)
-      abortActiveRequest(geneExpressionAbortRef)
-      abortActiveRequest(roiAbortRef)
-      abortActiveRequest(roiTranscriptExportAbortRef)
-      abortActiveRequest(transcriptCapabilityAbortRef)
-      abortActiveRequest(transcriptAbortRef)
+      invalidateLatestRequest({
+        abortRef: analysisEmbeddingAbortRef,
+        requestIdRef: analysisEmbeddingRequestIdRef,
+      })
+      invalidateLatestRequest({
+        abortRef: boundaryAbortRef,
+        requestIdRef: boundaryRequestIdRef,
+      })
+      invalidateLatestRequest({
+        abortRef: geneExpressionAbortRef,
+        requestIdRef: geneExpressionRequestIdRef,
+      })
+      invalidateLatestRequest({
+        abortRef: roiAbortRef,
+        requestIdRef: roiRequestIdRef,
+      })
+      invalidateLatestRequest({
+        abortRef: roiTranscriptExportAbortRef,
+        requestIdRef: roiTranscriptExportRequestIdRef,
+      })
+      invalidateLatestRequest({
+        abortRef: transcriptCapabilityAbortRef,
+        requestIdRef: transcriptCapabilityRequestIdRef,
+      })
+      invalidateLatestRequest({
+        abortRef: transcriptAbortRef,
+        requestIdRef: transcriptRequestIdRef,
+      })
       abortActiveRequest(roiGeneViewportWarmupAbortRef)
-      abortActiveRequest(magicLensAbortRef)
-      abortActiveRequest(cellDetailAbortRef)
-      abortActiveRequest(cellTranscriptDistributionAbortRef)
-      abortActiveRequest(customMorphologyLayerAbortRef)
+      invalidateLatestRequest({
+        abortRef: magicLensAbortRef,
+        requestIdRef: magicLensRequestIdRef,
+      })
+      invalidateLatestRequest({
+        abortRef: cellDetailAbortRef,
+        requestIdRef: cellDetailRequestIdRef,
+      })
+      invalidateLatestRequest({
+        abortRef: cellTranscriptDistributionAbortRef,
+        requestIdRef: cellTranscriptDistributionRequestIdRef,
+      })
+      invalidateLatestRequest({
+        abortRef: customMorphologyLayerAbortRef,
+        requestIdRef: customMorphologyLayerRequestIdRef,
+      })
       clearTimeoutRef(magicLensDebounceRef)
       clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
       roiGeneViewportWarmupKeyRef.current = null
-      const abortController = new AbortController()
-      loadRequestIdRef.current = requestId
-      datasetAbortRef.current = abortController
 
       setDatasetUrl(requestedUrl)
       setDatasetPlatform(null)
@@ -696,17 +752,6 @@ export function useDatasetLifecycle({
       setGenePanelState({ status: 'idle' })
       setAnnotationState({ status: 'idle' })
       setGeneExpressionState({ status: 'idle' })
-      boundaryRequestIdRef.current += 1
-      analysisEmbeddingRequestIdRef.current += 1
-      geneExpressionRequestIdRef.current += 1
-      roiRequestIdRef.current += 1
-      roiTranscriptExportRequestIdRef.current += 1
-      transcriptCapabilityRequestIdRef.current += 1
-      transcriptRequestIdRef.current += 1
-      magicLensRequestIdRef.current += 1
-      cellDetailRequestIdRef.current += 1
-      cellTranscriptDistributionRequestIdRef.current += 1
-      customMorphologyLayerRequestIdRef.current += 1
       magicLensLastDetailRef.current = null
       magicLensLastQueryKeyRef.current = null
       boundaryViewportKeyRef.current = null
@@ -719,10 +764,10 @@ export function useDatasetLifecycle({
 
       try {
         const detection = await detectSpatialDataset(requestedUrl, {
-          signal: abortController.signal,
+          signal: request.signal,
         })
 
-        if (loadRequestIdRef.current !== requestId) {
+        if (!isCurrentDatasetLoad()) {
           return
         }
 
@@ -745,9 +790,9 @@ export function useDatasetLifecycle({
           if (dataset.genePanel !== undefined) {
             setGenePanelState({ status: 'loading', url: requestedUrl })
             void dataset
-              .genePanel(undefined, { signal: abortController.signal })
+              .genePanel(undefined, { signal: request.signal })
               .then((genes) => {
-                if (loadRequestIdRef.current !== requestId) {
+                if (!isCurrentDatasetLoad()) {
                   return
                 }
 
@@ -761,7 +806,7 @@ export function useDatasetLifecycle({
                   return
                 }
 
-                if (loadRequestIdRef.current !== requestId) {
+                if (!isCurrentDatasetLoad()) {
                   return
                 }
 
@@ -779,7 +824,7 @@ export function useDatasetLifecycle({
             dataset.meta(),
           ])
 
-          if (loadRequestIdRef.current !== requestId) {
+          if (!isCurrentDatasetLoad()) {
             return
           }
 
@@ -824,7 +869,7 @@ export function useDatasetLifecycle({
             void dataset
               .image()
               .then((imageSource) => {
-                if (loadRequestIdRef.current !== requestId) {
+                if (!isCurrentDatasetLoad()) {
                   return
                 }
 
@@ -847,7 +892,7 @@ export function useDatasetLifecycle({
                   return
                 }
 
-                if (loadRequestIdRef.current !== requestId) {
+                if (!isCurrentDatasetLoad()) {
                   return
                 }
 
@@ -873,11 +918,11 @@ export function useDatasetLifecycle({
         startDatasetWarmup(requestedUrl, requestId)
 
         void loadGenePanel(requestedUrl, {
-          signal: abortController.signal,
+          signal: request.signal,
           onFallback: appendFallbackNotice,
         })
           .then((genes) => {
-            if (loadRequestIdRef.current !== requestId) {
+            if (!isCurrentDatasetLoad()) {
               return
             }
 
@@ -889,7 +934,7 @@ export function useDatasetLifecycle({
               return
             }
 
-            if (loadRequestIdRef.current !== requestId) {
+            if (!isCurrentDatasetLoad()) {
               return
             }
 
@@ -901,9 +946,9 @@ export function useDatasetLifecycle({
             appendDebugEvent('Gene panel failed')
           })
 
-        void loadAnnotationGroups(requestedUrl, { signal: abortController.signal })
+        void loadAnnotationGroups(requestedUrl, { signal: request.signal })
           .then((groups) => {
-            if (loadRequestIdRef.current !== requestId) {
+            if (!isCurrentDatasetLoad()) {
               return
             }
 
@@ -921,7 +966,7 @@ export function useDatasetLifecycle({
               return
             }
 
-            if (loadRequestIdRef.current !== requestId) {
+            if (!isCurrentDatasetLoad()) {
               return
             }
 
@@ -936,11 +981,11 @@ export function useDatasetLifecycle({
         const cells = await loadDatasetOverview(requestedUrl, {
           includeCellIds: true,
           limit: null,
-          signal: abortController.signal,
+          signal: request.signal,
           onFallback: appendFallbackNotice,
         })
 
-        if (loadRequestIdRef.current !== requestId) {
+        if (!isCurrentDatasetLoad()) {
           return
         }
 
@@ -968,11 +1013,11 @@ export function useDatasetLifecycle({
         }
 
         void loadMorphologyImage(requestedUrl, {
-          signal: abortController.signal,
+          signal: request.signal,
           onFallback: appendFallbackNotice,
         })
           .then((image) => {
-            if (loadRequestIdRef.current !== requestId) {
+            if (!isCurrentDatasetLoad()) {
               return
             }
 
@@ -994,7 +1039,7 @@ export function useDatasetLifecycle({
             appendDebugEvent('Morphology image ready')
             queueAutoContrast(image.channelLoaders, {
               requestId,
-              signal: abortController.signal,
+              signal: request.signal,
             })
           })
           .catch((error) => {
@@ -1002,7 +1047,7 @@ export function useDatasetLifecycle({
               return
             }
 
-            if (loadRequestIdRef.current !== requestId) {
+            if (!isCurrentDatasetLoad()) {
               return
             }
 
@@ -1018,7 +1063,7 @@ export function useDatasetLifecycle({
           return
         }
 
-        if (loadRequestIdRef.current !== requestId) {
+        if (!isCurrentDatasetLoad()) {
           return
         }
 
@@ -1039,7 +1084,10 @@ export function useDatasetLifecycle({
             detail: readErrorMessage(error),
           }),
         )
-        abortActiveRequest(datasetWarmupAbortRef)
+        invalidateLatestRequest({
+          abortRef: datasetWarmupAbortRef,
+          requestIdRef: datasetWarmupRequestIdRef,
+        })
         setDatasetWarmupState({ status: 'idle' })
         setCellFeatureMatrixCapabilityState({ status: 'idle' })
         cellFeatureMatrixCapabilityKeyRef.current = null

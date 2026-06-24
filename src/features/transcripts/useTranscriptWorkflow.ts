@@ -17,10 +17,11 @@ import type {
 } from '../app-shell/appDependencies'
 import type { ControlHudTab } from '../app-shell/appShellModel'
 import {
-  abortActiveRequest,
   formatElapsed,
+  invalidateLatestRequest,
   isAbortError,
   readTimestamp,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
@@ -49,68 +50,98 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseTranscriptWorkflowOptions {
-  readonly activeControlHudTab: ControlHudTab
+interface UseTranscriptWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
-  readonly currentViewportDetail: ViewerViewportDetail | null
+}
+
+interface UseTranscriptWorkflowControls {
+  readonly activeControlHudTab: ControlHudTab
   readonly effectiveTranscriptFeatureFilterMode: TranscriptFeatureFilterMode
-  readonly loadRequestIdRef: MutableRef<number>
+  readonly manualTranscriptExactRequestKey: string | null
+  readonly showTranscriptOverlay: boolean
+  readonly transcriptDetailMode: TranscriptDetailMode
+  readonly transcriptExactPointLimit: number
+  readonly transcriptGeneOnly: boolean
+  readonly transcriptMinQv: number
+  readonly visibleTranscriptEstimate: number
+}
+
+interface UseTranscriptWorkflowData {
+  readonly currentViewportDetail: ViewerViewportDetail | null
   readonly loadState: DatasetLoadState<StructuredLoadError>
+  readonly overviewCells: readonly OverviewCellDatum[]
+  readonly selectedGenes: readonly string[]
+  readonly transcriptCapabilityState: TranscriptCapabilityState<StructuredLoadError>
+}
+
+interface UseTranscriptWorkflowLoaders {
   readonly loadTranscriptAggregates: TranscriptAggregateLoader
   readonly loadTranscriptCapabilities: TranscriptCapabilitiesLoader
   readonly loadTranscriptViewport: TranscriptViewportLoader
-  readonly manualTranscriptExactRequestKey: string | null
-  readonly overviewCells: readonly OverviewCellDatum[]
-  readonly selectedGenes: readonly string[]
+}
+
+interface UseTranscriptWorkflowRefs {
+  readonly loadRequestIdRef: MutableRef<number>
+  readonly transcriptAbortRef: MutableRef<AbortController | null>
+  readonly transcriptCapabilityAbortRef: MutableRef<AbortController | null>
+  readonly transcriptCapabilityRequestIdRef: MutableRef<number>
+  readonly transcriptRequestIdRef: MutableRef<number>
+  readonly transcriptViewportKeyRef: MutableRef<string | null>
+}
+
+interface UseTranscriptWorkflowSetters {
   readonly setTranscriptCapabilityState: Dispatch<
     SetStateAction<TranscriptCapabilityState<StructuredLoadError>>
   >
   readonly setTranscriptLayerState: Dispatch<
     SetStateAction<TranscriptLayerState<StructuredLoadError>>
   >
-  readonly showTranscriptOverlay: boolean
-  readonly transcriptAbortRef: MutableRef<AbortController | null>
-  readonly transcriptCapabilityAbortRef: MutableRef<AbortController | null>
-  readonly transcriptCapabilityRequestIdRef: MutableRef<number>
-  readonly transcriptCapabilityState: TranscriptCapabilityState<StructuredLoadError>
-  readonly transcriptDetailMode: TranscriptDetailMode
-  readonly transcriptExactPointLimit: number
-  readonly transcriptGeneOnly: boolean
-  readonly transcriptMinQv: number
-  readonly transcriptRequestIdRef: MutableRef<number>
-  readonly transcriptViewportKeyRef: MutableRef<string | null>
-  readonly visibleTranscriptEstimate: number
+}
+
+interface UseTranscriptWorkflowOptions {
+  readonly callbacks: UseTranscriptWorkflowCallbacks
+  readonly controls: UseTranscriptWorkflowControls
+  readonly data: UseTranscriptWorkflowData
+  readonly loaders: UseTranscriptWorkflowLoaders
+  readonly refs: UseTranscriptWorkflowRefs
+  readonly setters: UseTranscriptWorkflowSetters
 }
 
 export function useTranscriptWorkflow({
-  activeControlHudTab,
-  appendDebugEvent,
-  appendFallbackNotice,
-  currentViewportDetail,
-  effectiveTranscriptFeatureFilterMode,
-  loadRequestIdRef,
-  loadState,
-  loadTranscriptAggregates,
-  loadTranscriptCapabilities,
-  loadTranscriptViewport,
-  manualTranscriptExactRequestKey,
-  overviewCells,
-  selectedGenes,
-  setTranscriptCapabilityState,
-  setTranscriptLayerState,
-  showTranscriptOverlay,
-  transcriptAbortRef,
-  transcriptCapabilityAbortRef,
-  transcriptCapabilityRequestIdRef,
-  transcriptCapabilityState,
-  transcriptDetailMode,
-  transcriptExactPointLimit,
-  transcriptGeneOnly,
-  transcriptMinQv,
-  transcriptRequestIdRef,
-  transcriptViewportKeyRef,
-  visibleTranscriptEstimate,
+  callbacks: { appendDebugEvent, appendFallbackNotice },
+  controls: {
+    activeControlHudTab,
+    effectiveTranscriptFeatureFilterMode,
+    manualTranscriptExactRequestKey,
+    showTranscriptOverlay,
+    transcriptDetailMode,
+    transcriptExactPointLimit,
+    transcriptGeneOnly,
+    transcriptMinQv,
+    visibleTranscriptEstimate,
+  },
+  data: {
+    currentViewportDetail,
+    loadState,
+    overviewCells,
+    selectedGenes,
+    transcriptCapabilityState,
+  },
+  loaders: {
+    loadTranscriptAggregates,
+    loadTranscriptCapabilities,
+    loadTranscriptViewport,
+  },
+  refs: {
+    loadRequestIdRef,
+    transcriptAbortRef,
+    transcriptCapabilityAbortRef,
+    transcriptCapabilityRequestIdRef,
+    transcriptRequestIdRef,
+    transcriptViewportKeyRef,
+  },
+  setters: { setTranscriptCapabilityState, setTranscriptLayerState },
 }: UseTranscriptWorkflowOptions): void {
   useEffect(() => {
     if (
@@ -122,24 +153,28 @@ export function useTranscriptWorkflow({
     }
 
     const requestedUrl = loadState.url
-    const requestId = loadRequestIdRef.current
-    const abortController = new AbortController()
+    const datasetRequestId = loadRequestIdRef.current
+    const request = startLatestRequest({
+      abortRef: transcriptCapabilityAbortRef,
+      requestIdRef: transcriptCapabilityRequestIdRef,
+    })
     const transcriptStartedAt = readTimestamp()
-    abortActiveRequest(transcriptCapabilityAbortRef)
-    transcriptCapabilityRequestIdRef.current += 1
-    transcriptCapabilityAbortRef.current = abortController
     queueMicrotask(() => {
-      if (transcriptCapabilityAbortRef.current === abortController) {
+      if (request.isCurrent() && !request.signal.aborted) {
         setTranscriptCapabilityState({ status: 'loading', url: requestedUrl })
       }
     })
     appendDebugEvent('Transcript output check started')
 
     void loadTranscriptCapabilities(requestedUrl, {
-      signal: abortController.signal,
+      signal: request.signal,
     })
       .then((capabilities) => {
-        if (loadRequestIdRef.current !== requestId || abortController.signal.aborted) {
+        if (
+          loadRequestIdRef.current !== datasetRequestId ||
+          !request.isCurrent() ||
+          request.signal.aborted
+        ) {
           return
         }
 
@@ -156,7 +191,12 @@ export function useTranscriptWorkflow({
         )
       })
       .catch((error) => {
-        if (isAbortError(error) || loadRequestIdRef.current !== requestId) {
+        if (
+          isAbortError(error) ||
+          loadRequestIdRef.current !== datasetRequestId ||
+          !request.isCurrent() ||
+          request.signal.aborted
+        ) {
           return
         }
 
@@ -170,9 +210,7 @@ export function useTranscriptWorkflow({
         })
       })
       .finally(() => {
-        if (transcriptCapabilityAbortRef.current === abortController) {
-          transcriptCapabilityAbortRef.current = null
-        }
+        request.complete()
       })
   }, [
     activeControlHudTab,
@@ -193,9 +231,10 @@ export function useTranscriptWorkflow({
       loadState.status !== 'ready' ||
       currentViewportDetail === null
     ) {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestIdRef.current += 1
-      const clearRequestId = transcriptRequestIdRef.current
+      const clearRequestId = invalidateLatestRequest({
+        abortRef: transcriptAbortRef,
+        requestIdRef: transcriptRequestIdRef,
+      })
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === clearRequestId) {
@@ -211,9 +250,10 @@ export function useTranscriptWorkflow({
       transcriptCapabilityState.status === 'idle' ||
       transcriptCapabilityState.status === 'loading'
     ) {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestIdRef.current += 1
-      const waitingRequestId = transcriptRequestIdRef.current
+      const waitingRequestId = invalidateLatestRequest({
+        abortRef: transcriptAbortRef,
+        requestIdRef: transcriptRequestIdRef,
+      })
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === waitingRequestId) {
@@ -228,9 +268,10 @@ export function useTranscriptWorkflow({
     }
 
     if (transcriptCapabilityState.status === 'error') {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestIdRef.current += 1
-      const errorRequestId = transcriptRequestIdRef.current
+      const errorRequestId = invalidateLatestRequest({
+        abortRef: transcriptAbortRef,
+        requestIdRef: transcriptRequestIdRef,
+      })
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === errorRequestId) {
@@ -276,15 +317,14 @@ export function useTranscriptWorkflow({
         return
       }
 
-      abortActiveRequest(transcriptAbortRef)
-      const requestId = transcriptRequestIdRef.current + 1
-      const abortController = new AbortController()
+      const request = startLatestRequest({
+        abortRef: transcriptAbortRef,
+        requestIdRef: transcriptRequestIdRef,
+      })
       const transcriptStartedAt = readTimestamp()
-      transcriptRequestIdRef.current = requestId
-      transcriptAbortRef.current = abortController
       transcriptViewportKeyRef.current = requestKey
       queueMicrotask(() => {
-        if (transcriptRequestIdRef.current === requestId) {
+        if (request.isCurrent() && !request.signal.aborted) {
           setTranscriptLayerState((current) => {
             const previousLayer = retainedTranscriptLayerState(current)
 
@@ -302,13 +342,13 @@ export function useTranscriptWorkflow({
       })
 
       void loadTranscriptAggregates(loadState.url, currentViewportDetail.bbox, {
-        signal: abortController.signal,
+        signal: request.signal,
         mode: plan.mode,
         featureNames: aggregateFeatureNames,
         maxBins,
       })
         .then((result) => {
-          if (transcriptRequestIdRef.current !== requestId) {
+          if (!request.isCurrent() || request.signal.aborted) {
             return
           }
 
@@ -336,7 +376,7 @@ export function useTranscriptWorkflow({
           )
         })
         .catch((error) => {
-          if (isAbortError(error) || transcriptRequestIdRef.current !== requestId) {
+          if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
             return
           }
 
@@ -351,15 +391,12 @@ export function useTranscriptWorkflow({
           })
         })
         .finally(() => {
-          if (transcriptAbortRef.current === abortController) {
-            transcriptAbortRef.current = null
-          }
+          request.complete()
         })
 
       return () => {
-        if (transcriptAbortRef.current === abortController) {
-          abortActiveRequest(transcriptAbortRef)
-        }
+        request.abortController.abort()
+        request.complete()
       }
     }
 
@@ -369,9 +406,10 @@ export function useTranscriptWorkflow({
       transcriptDetailMode !== 'exact' &&
       visibleTranscriptEstimate > 0
     ) {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestIdRef.current += 1
-      const aggregateRequestId = transcriptRequestIdRef.current
+      const aggregateRequestId = invalidateLatestRequest({
+        abortRef: transcriptAbortRef,
+        requestIdRef: transcriptRequestIdRef,
+      })
       const fallbackMode = 'density'
       const bins = buildCellSummaryTranscriptBins(
         overviewCells,
@@ -408,9 +446,10 @@ export function useTranscriptWorkflow({
     }
 
     if (plan.kind === 'waiting') {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestIdRef.current += 1
-      const waitingRequestId = transcriptRequestIdRef.current
+      const waitingRequestId = invalidateLatestRequest({
+        abortRef: transcriptAbortRef,
+        requestIdRef: transcriptRequestIdRef,
+      })
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === waitingRequestId) {
@@ -425,9 +464,10 @@ export function useTranscriptWorkflow({
     }
 
     if (plan.kind === 'unavailable') {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestIdRef.current += 1
-      const unavailableRequestId = transcriptRequestIdRef.current
+      const unavailableRequestId = invalidateLatestRequest({
+        abortRef: transcriptAbortRef,
+        requestIdRef: transcriptRequestIdRef,
+      })
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === unavailableRequestId) {
@@ -459,9 +499,10 @@ export function useTranscriptWorkflow({
       ) &&
       manualTranscriptExactRequestKey !== requestKey
     ) {
-      abortActiveRequest(transcriptAbortRef)
-      transcriptRequestIdRef.current += 1
-      const waitingRequestId = transcriptRequestIdRef.current
+      const waitingRequestId = invalidateLatestRequest({
+        abortRef: transcriptAbortRef,
+        requestIdRef: transcriptRequestIdRef,
+      })
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === waitingRequestId) {
@@ -487,15 +528,14 @@ export function useTranscriptWorkflow({
       return
     }
 
-    abortActiveRequest(transcriptAbortRef)
-    const requestId = transcriptRequestIdRef.current + 1
-    const abortController = new AbortController()
+    const request = startLatestRequest({
+      abortRef: transcriptAbortRef,
+      requestIdRef: transcriptRequestIdRef,
+    })
     const transcriptStartedAt = readTimestamp()
-    transcriptRequestIdRef.current = requestId
-    transcriptAbortRef.current = abortController
     transcriptViewportKeyRef.current = requestKey
     queueMicrotask(() => {
-      if (transcriptRequestIdRef.current === requestId) {
+      if (request.isCurrent() && !request.signal.aborted) {
         setTranscriptLayerState((current) => {
           const previousLayer = retainedTranscriptLayerState(current)
 
@@ -516,19 +556,20 @@ export function useTranscriptWorkflow({
     let didExactQueryTimeOut = false
     let exactQueryTimeout: number | null = null
     const startTimeout = window.setTimeout(() => {
+      if (!request.isCurrent() || request.signal.aborted) {
+        return
+      }
+
       exactQueryTimeout = window.setTimeout(() => {
-        if (transcriptRequestIdRef.current !== requestId) {
+        if (!request.isCurrent() || request.signal.aborted) {
           return
         }
 
         didExactQueryTimeOut = true
         transcriptViewportKeyRef.current = null
 
-        if (transcriptAbortRef.current === abortController) {
-          transcriptAbortRef.current = null
-        }
-
-        abortController.abort()
+        request.complete()
+        request.abortController.abort()
         setTranscriptLayerState({
           status: 'waiting',
           message:
@@ -541,7 +582,7 @@ export function useTranscriptWorkflow({
       }, TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS)
 
       void loadTranscriptViewport(loadState.url, currentViewportDetail.bbox, {
-        signal: abortController.signal,
+        signal: request.signal,
         pointLimit: transcriptExactPointLimit,
         groupLimit: TRANSCRIPT_GROUP_LIMIT,
         minQv: transcriptMinQv,
@@ -550,7 +591,7 @@ export function useTranscriptWorkflow({
         onFallback: appendFallbackNotice,
       })
         .then((result) => {
-          if (didExactQueryTimeOut || transcriptRequestIdRef.current !== requestId) {
+          if (didExactQueryTimeOut || !request.isCurrent() || request.signal.aborted) {
             return
           }
 
@@ -594,7 +635,8 @@ export function useTranscriptWorkflow({
           if (
             didExactQueryTimeOut ||
             isAbortError(error) ||
-            transcriptRequestIdRef.current !== requestId
+            !request.isCurrent() ||
+            request.signal.aborted
           ) {
             return
           }
@@ -619,9 +661,7 @@ export function useTranscriptWorkflow({
             exactQueryTimeout = null
           }
 
-          if (transcriptAbortRef.current === abortController) {
-            transcriptAbortRef.current = null
-          }
+          request.complete()
         })
     }, 220)
 
@@ -631,9 +671,8 @@ export function useTranscriptWorkflow({
         window.clearTimeout(exactQueryTimeout)
       }
 
-      if (transcriptAbortRef.current === abortController) {
-        abortActiveRequest(transcriptAbortRef)
-      }
+      request.abortController.abort()
+      request.complete()
     }
   }, [
     appendDebugEvent,

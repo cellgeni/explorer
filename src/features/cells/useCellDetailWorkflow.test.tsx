@@ -74,20 +74,30 @@ function Probe({ onReady }: { readonly onReady: (nextSnapshot: Snapshot) => void
   const cellTranscriptDistributionRequestIdRef = React.useRef(8)
 
   useCellDetailWorkflow({
-    appendDebugEvent,
-    appendFallbackNotice,
-    cellDetailAbortRef,
-    cellDetailRequestIdRef,
-    cellDetailState,
-    cellTranscriptDistributionAbortRef,
-    cellTranscriptDistributionRequestIdRef,
-    loadBoundaryElements,
-    loadCellTranscriptDistribution,
-    loadRoiGeneStats,
-    loadState: readyLoadState,
-    selectedCell: null,
-    setCellDetailState,
-    setCellTranscriptDistributionState,
+    callbacks: {
+      appendDebugEvent,
+      appendFallbackNotice,
+    },
+    data: {
+      cellDetailState,
+      loadState: readyLoadState,
+      selectedCell: null,
+    },
+    loaders: {
+      loadBoundaryElements,
+      loadCellTranscriptDistribution,
+      loadRoiGeneStats,
+    },
+    refs: {
+      cellDetailAbortRef,
+      cellDetailRequestIdRef,
+      cellTranscriptDistributionAbortRef,
+      cellTranscriptDistributionRequestIdRef,
+    },
+    setters: {
+      setCellDetailState,
+      setCellTranscriptDistributionState,
+    },
   })
 
   React.useEffect(() => {

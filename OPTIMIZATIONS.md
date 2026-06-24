@@ -25,6 +25,17 @@ the app shell, platform workflows, and rendering modules.
   invalidates in-flight viewport/ROI scans when returning to cursor scope, and
   custom image layer loads ignore stale completions after a newer layer request
   starts. Focused stale-request tests were added for both paths.
+- 2026-06-24: Finished item 1 for abortable latest-request workflows by moving
+  diagnostics, transcript capability/viewport loads, selected-cell details,
+  cell transcript distributions, ROI cells/genes, ROI transcript export,
+  dataset load/warmup, and Visium HD expression profile loading onto the shared
+  latest-request helpers. Non-abortable sequencing guards, parallel tile fetches,
+  and pure cleanup aborts were left outside the runner pattern by design.
+- 2026-06-24: Continued item 2 by grouping `useTranscriptWorkflow`,
+  `useCellDetailWorkflow`, and `useRoiWorkflow` options into callbacks, controls
+  or data, loaders, refs, and setters. The App call sites now expose the same
+  concern boundaries already used by `useDatasetLifecycle` and
+  `useViewportDataWorkflow`.
 
 ## Recommendations
 

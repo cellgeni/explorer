@@ -34,6 +34,7 @@ import type { SpatialDatasetLoader } from './appDependencies'
 import {
   abortActiveRequest,
   formatElapsed,
+  invalidateLatestRequest,
   readTimestamp,
   type DebugLogAppendOptions,
 } from './appRuntimeModel'
@@ -336,11 +337,14 @@ function resetVisiumHdExpressionState({
     | Setter<GeneExpressionState<StructuredLoadError>>
     | undefined
 }): void {
-  if (geneExpressionAbortRef !== undefined) {
+  if (geneExpressionAbortRef !== undefined && geneExpressionRequestIdRef !== undefined) {
+    invalidateLatestRequest({
+      abortRef: geneExpressionAbortRef,
+      requestIdRef: geneExpressionRequestIdRef,
+    })
+  } else if (geneExpressionAbortRef !== undefined) {
     abortActiveRequest(geneExpressionAbortRef)
-  }
-
-  if (geneExpressionRequestIdRef !== undefined) {
+  } else if (geneExpressionRequestIdRef !== undefined) {
     geneExpressionRequestIdRef.current += 1
   }
 
