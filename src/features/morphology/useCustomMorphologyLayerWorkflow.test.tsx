@@ -134,6 +134,64 @@ describe('useCustomMorphologyLayerWorkflow', () => {
     expect(snapshot.morphologyChannelSettings).toHaveLength(0)
   })
 
+  it('ignores stale custom layer loads after a newer request starts', async () => {
+    const firstLoad = createDeferred<MorphologyImage>()
+    const secondLoad = createDeferred<MorphologyImage>()
+    const capturedSignals: AbortSignal[] = []
+    const firstUrl = 'https://example.test/layers/first.ome.tif'
+    const secondUrl = 'https://example.test/layers/second.ome.tif'
+    const loadCustomMorphologyLayer = vi.fn(
+      (
+        url: string,
+        options: { readonly signal?: AbortSignal } = {},
+      ): Promise<MorphologyImage> => {
+        if (options.signal !== undefined) {
+          capturedSignals.push(options.signal)
+        }
+
+        return url === firstUrl ? firstLoad.promise : secondLoad.promise
+      },
+    )
+
+    render(
+      <Probe
+        loadCustomMorphologyLayer={loadCustomMorphologyLayer}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    let firstResult!: Promise<boolean>
+    act(() => {
+      firstResult = api.handleLoadCustomLayer(firstUrl)
+    })
+
+    let secondResult!: Promise<boolean>
+    act(() => {
+      secondResult = api.handleLoadCustomLayer(secondUrl)
+    })
+
+    expect(capturedSignals[0]?.aborted).toBe(true)
+
+    await act(async () => {
+      secondLoad.resolve(customMorphologyImage(secondUrl, 'Channel:1'))
+      await expect(secondResult).resolves.toBe(true)
+    })
+
+    expect(snapshot.customLayers.map((layer) => layer.image.url)).toEqual([secondUrl])
+    expect(snapshot.morphologyChannelSettings[0]?.id).toBe('custom-layer:1:Channel:1')
+
+    await act(async () => {
+      firstLoad.resolve(customMorphologyImage(firstUrl, 'Channel:0'))
+      await expect(firstResult).resolves.toBe(false)
+    })
+
+    expect(snapshot.customLayers.map((layer) => layer.image.url)).toEqual([secondUrl])
+    expect(snapshot.morphologyChannelSettings).toHaveLength(1)
+  })
+
   it('enables all native RGB custom channels when loaded', async () => {
     const loader = {} as TiffPyramidLoader
     const image: MorphologyImage = {
@@ -244,3 +302,37 @@ describe('useCustomMorphologyLayerWorkflow', () => {
     expect(snapshot.debugMessages).toContain('Custom layer URL invalid')
   })
 })
+
+function customMorphologyImage(url: string, channelId: string): MorphologyImage {
+  const loader = {} as TiffPyramidLoader
+
+  return {
+    url,
+    loader,
+    channels: [],
+    channelLoaders: [
+      {
+        info: {
+          id: channelId,
+          index: 0,
+          name: channelId,
+          color: [88, 144, 255],
+          contrast: { min: 0, max: 65_535 },
+        },
+        loader,
+      },
+    ],
+  }
+}
+
+function createDeferred<T>(): {
+  readonly promise: Promise<T>
+  readonly resolve: (value: T) => void
+} {
+  let resolve: (value: T) => void = () => undefined
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+
+  return { promise, resolve }
+}

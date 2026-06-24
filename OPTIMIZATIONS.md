@@ -20,6 +20,11 @@ the app shell, platform workflows, and rendering modules.
 - 2026-06-24: Started item 2 by grouping `useDatasetLifecycle` options into
   callbacks, controls, initial state, loaders, refs, and setters. Continue this
   pattern with ROI and transcript workflows before broad viewer decomposition.
+- 2026-06-24: Continued item 1 by migrating Magic Lens scans and custom
+  morphology layer loads to the shared latest-request runner. Magic Lens now
+  invalidates in-flight viewport/ROI scans when returning to cursor scope, and
+  custom image layer loads ignore stale completions after a newer layer request
+  starts. Focused stale-request tests were added for both paths.
 
 ## Recommendations
 

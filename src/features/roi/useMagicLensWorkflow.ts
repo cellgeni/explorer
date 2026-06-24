@@ -7,9 +7,10 @@ import { normalizeRoiSelection, type RoiSelectionInput } from '../../data/roiSel
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { RoiCellsLoader, RoiGeneStatsLoader } from '../app-shell/appDependencies'
 import {
-  abortActiveRequest,
   clearTimeoutRef,
+  invalidateLatestRequest,
   isAbortError,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
@@ -123,11 +124,10 @@ export function useMagicLensWorkflow({
         return
       }
 
-      const requestId = magicLensRequestIdRef.current + 1
-      abortActiveRequest(magicLensAbortRef)
-      const abortController = new AbortController()
-      magicLensRequestIdRef.current = requestId
-      magicLensAbortRef.current = abortController
+      const request = startLatestRequest({
+        abortRef: magicLensAbortRef,
+        requestIdRef: magicLensRequestIdRef,
+      })
       setMagicLensState({
         status: 'loading',
         url: loadState.url,
@@ -142,12 +142,12 @@ export function useMagicLensWorkflow({
 
       if (loadMagicLensSummary !== undefined) {
         void loadMagicLensSummary(loadState.url, normalizedSelection, {
-          signal: abortController.signal,
+          signal: request.signal,
           scope,
           circleFilter,
         })
           .then((summary) => {
-            if (magicLensRequestIdRef.current !== requestId) {
+            if (!request.isCurrent()) {
               return
             }
 
@@ -165,7 +165,7 @@ export function useMagicLensWorkflow({
             )
           })
           .catch((error) => {
-            if (isAbortError(error) || magicLensRequestIdRef.current !== requestId) {
+            if (isAbortError(error) || !request.isCurrent()) {
               return
             }
 
@@ -178,19 +178,17 @@ export function useMagicLensWorkflow({
             appendDebugEvent('Magic lens failed')
           })
           .finally(() => {
-            if (magicLensAbortRef.current === abortController) {
-              magicLensAbortRef.current = null
-            }
+            request.complete()
           })
         return
       }
 
       void loadRoiCells(loadState.url, normalizedSelection, {
-        signal: abortController.signal,
+        signal: request.signal,
         limit: MAGIC_LENS_CELL_LIMIT,
       })
         .then((cells) => {
-          if (magicLensRequestIdRef.current !== requestId) {
+          if (!request.isCurrent()) {
             return undefined
           }
 
@@ -219,12 +217,12 @@ export function useMagicLensWorkflow({
           }
 
           return loadRoiGeneStats(loadState.url, lensCells, {
-            signal: abortController.signal,
+            signal: request.signal,
             cellLimit: MAGIC_LENS_CELL_LIMIT,
             geneLimit: MAGIC_LENS_GENE_STATS_LIMIT,
             onFallback: appendFallbackNotice,
           }).then((stats) => {
-            if (magicLensRequestIdRef.current !== requestId) {
+            if (!request.isCurrent()) {
               return
             }
 
@@ -243,7 +241,7 @@ export function useMagicLensWorkflow({
           })
         })
         .catch((error) => {
-          if (isAbortError(error) || magicLensRequestIdRef.current !== requestId) {
+          if (isAbortError(error) || !request.isCurrent()) {
             return
           }
 
@@ -256,9 +254,7 @@ export function useMagicLensWorkflow({
           appendDebugEvent('Magic lens failed')
         })
         .finally(() => {
-          if (magicLensAbortRef.current === abortController) {
-            magicLensAbortRef.current = null
-          }
+          request.complete()
         })
     },
     [
@@ -284,8 +280,10 @@ export function useMagicLensWorkflow({
       return
     }
 
-    abortActiveRequest(magicLensAbortRef)
-    magicLensRequestIdRef.current += 1
+    invalidateLatestRequest({
+      abortRef: magicLensAbortRef,
+      requestIdRef: magicLensRequestIdRef,
+    })
     setMagicLensState({ status: 'idle' })
   }, [
     magicLensAbortRef,
@@ -326,6 +324,10 @@ export function useMagicLensWorkflow({
   const handleMagicLensScopeChange = useCallback(
     (nextScope: MagicLensScope) => {
       if (nextScope === 'cursor') {
+        invalidateLatestRequest({
+          abortRef: magicLensAbortRef,
+          requestIdRef: magicLensRequestIdRef,
+        })
         setMagicLensScope('cursor')
         setMagicLensState({ status: 'idle' })
         magicLensLastQueryKeyRef.current = null
@@ -346,7 +348,9 @@ export function useMagicLensWorkflow({
     [
       appendDebugEvent,
       handleMagicLensLeave,
+      magicLensAbortRef,
       magicLensLastQueryKeyRef,
+      magicLensRequestIdRef,
       setMagicLensActive,
       setMagicLensScope,
       setMagicLensState,

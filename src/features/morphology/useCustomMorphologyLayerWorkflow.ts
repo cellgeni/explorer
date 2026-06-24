@@ -1,9 +1,9 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import type { CustomMorphologyLayerLoader } from '../app-shell/appDependencies'
 import {
-  abortActiveRequest,
   isAbortError,
   shortDatasetLabel,
+  startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import {
@@ -89,27 +89,23 @@ export function useCustomMorphologyLayerWorkflow({
         return true
       }
 
-      abortActiveRequest(customLayerAbortRef)
-      customLayerRequestIdRef.current += 1
-      const requestId = customLayerRequestIdRef.current
+      const request = startLatestRequest({
+        abortRef: customLayerAbortRef,
+        requestIdRef: customLayerRequestIdRef,
+      })
       const datasetRequestId = loadRequestIdRef.current
-      const abortController = new AbortController()
-      customLayerAbortRef.current = abortController
       setCustomLayerLoadState({ status: 'loading', url: normalizedUrl })
       appendDebugEvent(`Loading custom layer ${shortDatasetLabel(normalizedUrl)}`)
 
       try {
         const image = await loadCustomMorphologyLayer(normalizedUrl, {
-          signal: abortController.signal,
+          signal: request.signal,
           ...(appendFallbackNotice === undefined
             ? {}
             : { onFallback: appendFallbackNotice }),
         })
 
-        if (
-          customLayerRequestIdRef.current !== requestId ||
-          loadRequestIdRef.current !== datasetRequestId
-        ) {
+        if (!request.isCurrent() || loadRequestIdRef.current !== datasetRequestId) {
           return false
         }
 
@@ -136,7 +132,7 @@ export function useCustomMorphologyLayerWorkflow({
       } catch (error) {
         if (
           isAbortError(error) ||
-          customLayerRequestIdRef.current !== requestId ||
+          !request.isCurrent() ||
           loadRequestIdRef.current !== datasetRequestId
         ) {
           return false
@@ -150,9 +146,7 @@ export function useCustomMorphologyLayerWorkflow({
         appendDebugEvent('Custom layer failed')
         return false
       } finally {
-        if (customLayerAbortRef.current === abortController) {
-          customLayerAbortRef.current = null
-        }
+        request.complete()
       }
     },
     [
