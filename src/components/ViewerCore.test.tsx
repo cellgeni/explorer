@@ -573,6 +573,47 @@ describe('ViewerCore', () => {
     expect(screen.getByText('In tissue')).toBeInTheDocument()
   })
 
+  it('suppresses grid-cell hover metadata while cursor magic lens is active', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const gridCell = gridCellDatum()
+
+    render(
+      <ViewerCore
+        gridCells={[gridCell]}
+        magicLensActive
+        magicLensRadiusMicrometers={40}
+        magicLensStatus="ready"
+        magicLensSummary={{
+          kind: 'expression',
+          transcriptCount: 167,
+          cellCount: 6,
+          geneCount: 1,
+          selectedGeneTranscriptCount: 167,
+          topGenes: [{ gene: 'C7', count: 167, selected: true }],
+          hitLimit: false,
+        }}
+      />,
+    )
+
+    const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+    fireEvent.pointerMove(frame, { clientX: 80, clientY: 40 })
+
+    await waitFor(() => {
+      expect(document.querySelector('.viewer-magic-lens-hud')).toHaveTextContent(
+        '6 bins - 167 UMI',
+      )
+    })
+
+    act(() => {
+      deckGlMock.onHover?.({ object: gridCell, x: 80, y: 40 })
+    })
+
+    expect(document.querySelector('.viewer-magic-lens-hud')).toHaveTextContent('C7')
+    expect(screen.queryByText('BC-1')).not.toBeInTheDocument()
+    expect(screen.queryByText('16 μm')).not.toBeInTheDocument()
+  })
+
   it('shows segmented cell boundary hover metadata when enabled', () => {
     const boundary: CellBoundaryDatum = {
       id: 'cellid_000000001-1',

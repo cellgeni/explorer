@@ -1119,6 +1119,12 @@ function ViewerSurface({
 
           return null
         })
+        if (magicLensActive) {
+          setGridCellHover(null)
+          setCellBoundaryHover(null)
+          return
+        }
+
         setGridCellHover({
           cell: info.object,
           screen: {
@@ -1169,7 +1175,12 @@ function ViewerSurface({
       setGridCellHover(null)
       setCellBoundaryHover(null)
     },
-    [cellBoundaryHoverEnabled, geneExpressionPointStyleIndex, onTranscriptHover],
+    [
+      cellBoundaryHoverEnabled,
+      geneExpressionPointStyleIndex,
+      magicLensActive,
+      onTranscriptHover,
+    ],
   )
   const handleMouseCoordinatePointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
@@ -1184,6 +1195,7 @@ function ViewerSurface({
       })
 
       if (magicLensActive && roiMode === 'idle' && !measurementEnabled) {
+        setGridCellHover((current) => (current === null ? current : null))
         const rect = event.currentTarget.getBoundingClientRect()
         const screen = {
           x: event.clientX - rect.left,
@@ -1570,7 +1582,9 @@ function ViewerSurface({
       {transcriptHover === null ? null : (
         <TranscriptHoverTooltip detail={transcriptHover} />
       )}
-      {gridCellHover === null ? null : <GridCellHoverTooltip detail={gridCellHover} />}
+      {gridCellHover === null || magicLensActive ? null : (
+        <GridCellHoverTooltip detail={gridCellHover} />
+      )}
       {cellBoundaryHover === null ? null : (
         <CellBoundaryHoverTooltip detail={cellBoundaryHover} />
       )}
@@ -1735,7 +1749,7 @@ function MagicLensOverlay({
               ? 'Scanning lens'
               : `${summary.cellCount.toLocaleString()} ${magicLensElementShortLabel(summary)} - ${summary.transcriptCount.toLocaleString()} ${magicLensPrimaryMetricShortLabel(summary)}`}
           </p>
-          {status === 'loading' ? <small>loading expression...</small> : null}
+          {status === 'loading' ? <small>Loading expression…</small> : null}
           {topGenes.length === 0 && status !== 'loading' ? (
             <small>No detected genes</small>
           ) : null}

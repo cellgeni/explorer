@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Xenium Spotter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* ── Palette ── */
+      --bg:          #f2f1ef;       /* warm off-white — main canvas surround */
+      --panel:       #ffffff;       /* crisp white panels */
+      --surface:     #f5f4f2;       /* recessed inputs / stat boxes */
+      --surface-2:   #eceae6;       /* deeper recess — hover, active states */
+      --border:      #dddbd6;       /* warm light dividers */
+      --border-med:  #c8c5bf;       /* slightly more visible border */
+
+      --accent:      #c9500a;       /* scientific orange — primary action */
+      --accent-soft: #fef0e6;       /* very light tint for selected states */
+      --accent-mid:  #f0844a;       /* lighter orange for hover */
+
+      --teal:        #0c7a6a;       /* ok/success states */
+      --teal-soft:   #e6f4f1;
+      --violet:      #6c4fd6;       /* draw mode active */
+      --violet-soft: #f0edfb;
+      --violet-soft: #f0edfb;
+      --danger:      #c0392b;
+
+      --text:        #1a1916;       /* near-black warm */
+      --text-2:      #4a4844;       /* secondary text */
+      --text-dim:    #8c8884;       /* muted labels */
+      --text-xdim:   #b5b2ad;       /* very muted */
+
+      --shadow-sm:   0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-md:   0 4px 12px rgba(0,0,0,.09), 0 2px 4px rgba(0,0,0,.06);
+
+      --sans:  'Inter', system-ui, sans-serif;
+      --mono:  'JetBrains Mono', 'Fira Code', monospace;
+
+      --radius-sm: 5px;
+      --radius-md: 8px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.5;
+      height: 100vh;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: 52px 1fr;
+      grid-template-columns: 300px 1fr 284px;
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-med); border-radius: 10px; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       HEADER
+    ───────────────────────────────────────────────────────────────────────── */
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 20px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 15px;
+      letter-spacing: -.2px;
+      color: var(--text);
+    }
+    .logo-mark {
+      width: 26px; height: 26px;
+      background: var(--accent);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .logo-mark svg { width: 14px; height: 14px; fill: #fff; }
+    .logo-name { color: var(--text); }
+    .logo-name span { color: var(--accent); }
+
+    header .sep { flex: 1; }
+
+    .dataset-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      max-width: 440px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      background: var(--surface);
+      padding: 3px 10px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+    }
+
+    #db-status {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 11px;
+      border-radius: 100px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      border: 1px solid #b6ddd8;
+      transition: all .3s;
+    }
+    #db-status.loading { background: #fef5e6; color: #b35c00; border-color: #f5d5a8; }
+    #db-status.error   { background: #fdecea; color: var(--danger); border-color: #f5c0bb; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       LAYOUT — PANELS
+    ───────────────────────────────────────────────────────────────────────── */
+    #gex-panel {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    #panel {
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .panel-section {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #panel #log { flex-shrink: 0; border-bottom: none; }
+
+    .panel-title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 10px;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       CANVAS
+    ───────────────────────────────────────────────────────────────────────── */
+    #canvas-wrap {
+      position: relative;
+      background: #18181b;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+    #morph-canvas {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+    #deck-container {
+      position: absolute; inset: 0;
+      background: transparent;
+    }
+    #deck-container canvas { display: block; background: transparent; }
+    #overlay-canvas {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      background: transparent;
+    }
+    #canvas-hint {
+      position: absolute;
+      bottom: 14px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: rgba(255,255,255,.45);
+      background: rgba(0,0,0,.45);
+      padding: 4px 14px;
+      border-radius: 100px;
+      pointer-events: none;
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+      z-index: 10;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       BUTTONS
+    ───────────────────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all .14s;
+      background: var(--surface);
+      color: var(--text-2);
+      width: 100%;
+      margin-bottom: 5px;
+    }
+    .btn:last-child { margin-bottom: 0; }
+    .btn:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border-med); color: var(--text); }
+    .btn.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .btn.primary:hover:not(:disabled) { background: #b84508; border-color: #b84508; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       INPUTS
+    ───────────────────────────────────────────────────────────────────────── */
+    #dataset-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 7px 9px;
+      border-radius: var(--radius-sm);
+      outline: none;
+      margin-bottom: 7px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    #dataset-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(201,80,10,.1);
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       LOAD PROGRESS
+    ───────────────────────────────────────────────────────────────────────── */
+    #load-progress-wrap { display: none; padding-top: 9px; }
+    #load-progress-label {
+      font-size: 11px; color: var(--text-dim);
+      margin-bottom: 5px; display: block;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #load-progress-track {
+      height: 5px; background: var(--surface-2);
+      border-radius: 10px; overflow: hidden;
+    }
+    #load-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--teal) 0%, var(--accent) 100%);
+      width: 0%; border-radius: 10px;
+      transition: width .08s linear;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       SEGMENTED / TOGGLE CONTROLS
+    ───────────────────────────────────────────────────────────────────────── */
+    .mode-row, .scope-row, .colour-row {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 3px;
+    }
+
+    .mode-btn, .scope-btn, .colour-btn {
+      flex: 1;
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 6px 4px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all .14s;
+      text-align: center;
+      line-height: 1.4;
+    }
+    .mode-btn:hover, .scope-btn:hover, .colour-btn:hover { color: var(--text-2); }
+
+    .mode-btn.active {
+      background: var(--panel);
+      color: var(--violet);
+      box-shadow: var(--shadow-sm);
+      font-weight: 600;
+    }
+    .scope-btn.active {
+      background: var(--panel);
+      color: var(--teal);
+      box-shadow: var(--shadow-sm);
+      font-weight: 600;
+    }
+    #scope-row.disabled {
+      opacity: .4;
+      pointer-events: none;
+    }
+    .colour-btn.active {
+      background: var(--panel);
+      color: var(--accent);
+      box-shadow: var(--shadow-sm);
+      font-weight: 600;
+    }
+
+    .mode-btn .mode-icon { font-size: 14px; display: block; margin-bottom: 1px; }
+    .mode-btn .mode-label { display: block; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       SLIDER
+    ───────────────────────────────────────────────────────────────────────── */
+    .slider-row {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 9px;
+    }
+    .slider-row label { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+    .slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
+    .slider-row .val { font-family: var(--mono); font-size: 11px; color: var(--accent); min-width: 36px; text-align: right; font-weight: 500; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       STATS
+    ───────────────────────────────────────────────────────────────────────── */
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 0; }
+    .stat-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 10px 11px;
+    }
+    .stat-box .s-val {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+      letter-spacing: -.5px;
+    }
+    .stat-box .s-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 3px;
+      font-weight: 500;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       LOG
+    ───────────────────────────────────────────────────────────────────────── */
+    #log { font-size: 11px; color: var(--text-dim); line-height: 1.7; padding: 10px 16px; font-family: var(--mono); }
+    #log .entry { display: flex; gap: 6px; }
+    #log .entry.ok  .mark { color: var(--teal); }
+    #log .entry.err .mark { color: var(--danger); }
+    #log .entry.run .mark { color: var(--accent); animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       SOURCE PICKER
+    ───────────────────────────────────────────────────────────────────────── */
+    .source-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 8px; }
+    .source-btn {
+      font-family: var(--sans);
+      font-size: 11px;
+      padding: 7px 4px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-2);
+      cursor: pointer;
+      transition: all .14s;
+      text-align: center;
+      line-height: 1.4;
+    }
+    .source-btn:hover { border-color: var(--border-med); background: var(--surface-2); }
+    .source-btn.active {
+      border-color: #b6ddd8;
+      background: var(--teal-soft);
+      color: var(--teal);
+    }
+    .source-btn .src-icon { font-size: 14px; display: block; margin-bottom: 2px; }
+    .source-btn .src-name { display: block; font-weight: 600; }
+    .source-btn .src-type { display: block; font-size: 10px; font-family: var(--mono); opacity: .7; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       TABS
+    ───────────────────────────────────────────────────────────────────────── */
+    .tab-bar {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 12px;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+    .tab-btn {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all .14s;
+      border-radius: 0;
+    }
+    .tab-btn:hover { color: var(--text-2); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+    /* ── Cluster legend ── */
+    #cluster-legend { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; max-height: 160px; overflow-y: auto; }
+    #cluster-legend span { padding: 1px 0; }
+
+    /* ── Dataset info ── */
+    #dataset-info-content b { color: var(--text-dim); font-weight: 600; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       HEATMAP
+    ───────────────────────────────────────────────────────────────────────── */
+    #heatmap-wrap { padding: 2px 16px 14px; }
+    .heatmap-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; cursor: default; }
+    .heatmap-bar:hover .hm-fill { filter: brightness(.92); }
+    .hm-gene  { font-size: 11px; color: var(--text-2); width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; font-family: var(--mono); }
+    .hm-track { flex: 1; height: 10px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+    .hm-fill  { height: 100%; border-radius: 3px; transition: width .4s ease; }
+    .hm-count { font-size: 11px; font-family: var(--mono); color: var(--text-dim); min-width: 36px; text-align: right; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       MATRIX
+    ───────────────────────────────────────────────────────────────────────── */
+    #matrix-wrap { overflow-x: auto; }
+    .matrix-table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--mono); }
+    .matrix-table th {
+      position: sticky; top: 0;
+      background: var(--surface);
+      color: var(--text-dim);
+      font-weight: 500;
+      padding: 5px 7px;
+      border-bottom: 1px solid var(--border);
+      text-align: left; white-space: nowrap;
+      font-family: var(--sans); font-size: 10px;
+    }
+    .matrix-table th.gene-col { text-align: right; }
+    .matrix-table td { padding: 4px 7px; border-bottom: 1px solid var(--border); white-space: nowrap; color: var(--text-2); }
+    .matrix-table td.cell-col { color: var(--text-dim); font-size: 10px; }
+    .matrix-table td.count-cell { text-align: right; font-variant-numeric: tabular-nums; }
+    .matrix-table td.count-cell.nonzero { color: var(--accent); font-weight: 500; }
+    .matrix-table tr:hover td { background: var(--surface); }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       HIGHLIGHT PANEL
+    ───────────────────────────────────────────────────────────────────────── */
+    #highlight-wrap {
+      display: flex; flex-direction: column;
+      padding: 0 16px 12px;
+    }
+    #gene-list { max-height: 300px; overflow-y: auto; }
+
+    #gene-search {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 12px;
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      outline: none;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    #gene-search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(201,80,10,.1); }
+    #gene-search::placeholder { color: var(--text-xdim); }
+
+    #gene-chips {
+      display: flex; flex-wrap: wrap; gap: 5px;
+      margin-bottom: 8px; flex-shrink: 0;
+    }
+    .gene-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 500;
+      padding: 3px 8px 3px 4px;
+      border-radius: 100px;
+      border: 1px solid;
+      cursor: pointer;
+      transition: opacity .12s;
+    }
+    .gene-chip:hover { opacity: .75; }
+    .gene-chip .chip-x { font-size: 13px; line-height: 1; opacity: .6; margin-left: 1px; }
+
+
+    .gene-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 4px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .gene-row:hover { background: var(--surface); }
+    .gene-row.selected { background: var(--accent-soft); }
+    .gene-row .gr-name  { font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-family: var(--mono); }
+    .gene-row .gr-count { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+
+    /* colour swatches */
+    .gr-swatch, .chip-swatch {
+      width: 16px; height: 16px;
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,0,.12);
+      padding: 0; cursor: pointer; flex-shrink: 0;
+      background: none;
+    }
+    .gr-swatch::-webkit-color-swatch-wrapper,
+    .chip-swatch::-webkit-color-swatch-wrapper { padding: 0; border-radius: 3px; }
+    .gr-swatch::-webkit-color-swatch,
+    .chip-swatch::-webkit-color-swatch { border: none; border-radius: 3px; }
+    .chip-swatch { width: 13px; height: 13px; border-radius: 3px; margin-right: 1px; }
+
+    /* legend */
+    #highlight-legend { flex-shrink: 0; margin-top: 8px; }
+    #legend-gradient  { height: 8px; border-radius: 4px; margin: 4px 0 3px; }
+    .legend-labels    { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); font-family: var(--mono); }
+
+    #applyHighlightBtn { flex-shrink: 0; margin-top: 10px; }
+    #clearHighlightBtn { flex-shrink: 0; margin-top: 4px; display: none; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       EMPTY STATE
+    ───────────────────────────────────────────────────────────────────────── */
+    .empty-state {
+      padding: 28px 16px; text-align: center;
+      font-size: 12px; color: var(--text-dim); line-height: 1.8;
+    }
+    .empty-state .icon { font-size: 30px; margin-bottom: 10px; opacity: .6; }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       EXPORT
+    ───────────────────────────────────────────────────────────────────────── */
+    #exportBtn { display: none; margin: 8px 16px 12px; width: calc(100% - 32px); }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       POLYGON HINT
+    ───────────────────────────────────────────────────────────────────────── */
+    #polygon-hint {
+      font-size: 11px; color: var(--text-dim);
+      margin-bottom: 9px; line-height: 1.6;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 7px 10px;
+    }
+
+    #magicLensBtn.active {
+      background: var(--violet-soft, #f0edfb);
+      border-color: #c4b8f5;
+      color: var(--violet);
+      font-weight: 600;
+    }
+
+    #morphologyToggleBtn.active {
+      background: var(--teal-soft);
+      border-color: #b6ddd8;
+      color: var(--teal);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <div class="logo-mark">
+        <!-- Simple crosshair/target SVG mark -->
+        <svg viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="7" cy="7" r="3" fill="none" stroke="#fff" stroke-width="1.5"/>
+          <line x1="7" y1="0" x2="7" y2="4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="7" y1="10" x2="7" y2="14" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="0" y1="7" x2="4" y2="7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="10" y1="7" x2="14" y2="7" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="logo-name">Xenium <span>Spotter</span></span>
+    </div>
+    <div class="sep"></div>
+    <div class="dataset-label" id="dataset-label">No dataset loaded</div>
+    <div id="db-status" class="loading">Initialising</div>
+  </header>
+
+  <!-- ── LEFT GEX PANEL ── -->
+  <div id="gex-panel">
+
+    <div class="panel-section">
+      <div class="panel-title">Expression Data</div>
+      <div class="source-grid">
+        <button class="source-btn" data-source="transcripts-parquet">
+          <span class="src-icon">🗄</span>
+          <span class="src-name">Transcripts</span>
+          <span class="src-type">.parquet</span>
+        </button>
+        <button class="source-btn active" data-source="cfm-zarr">
+          <span class="src-icon">🧬</span>
+          <span class="src-name">Cell Matrix</span>
+          <span class="src-type">.zarr.zip</span>
+        </button>
+      </div>
+      <div class="panel-title" style="margin-top:6px;">Transcript Scope</div>
+      <div class="scope-row" id="scope-row">
+        <button class="scope-btn active" data-scope="spatial">
+          All in area<br><span style="font-size:10px;">incl. extracellular</span>
+        </button>
+        <button class="scope-btn" data-scope="cells-only">
+          Cell-assigned<br><span style="font-size:10px;">matches CFM</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-section" style="flex-shrink:0;min-height:280px;display:flex;flex-direction:column;padding-bottom:0;">
+      <div class="panel-title">Gene Expression</div>
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="heatmap">Heatmap</button>
+        <button class="tab-btn" data-tab="matrix">Per-cell</button>
+        <button class="tab-btn" data-tab="highlight" id="highlightTabBtn" style="display:none;">Highlight</button>
+      </div>
+
+      <div id="heatmap-wrap" style="max-height:400px;overflow-y:auto;">
+        <div class="empty-state">
+          <div class="icon">🔬</div>
+          Load a dataset, then<br>draw a selection on the map
+        </div>
+      </div>
+
+      <div id="matrix-wrap" style="display:none;max-height:400px;overflow:auto;">
+        <div class="empty-state">No data yet</div>
+      </div>
+
+      <div id="highlight-wrap" style="display:none;">
+        <div class="colour-row">
+          <button class="colour-btn active" data-colour="palette">
+            🎨 Palette<br><span style="font-size:10px;">dominant gene</span>
+          </button>
+          <button class="colour-btn" data-colour="aggregate">
+            🌡 Aggregate<br><span style="font-size:10px;">total expression</span>
+          </button>
+        </div>
+        <input id="gene-search" type="text" placeholder="Search genes…" />
+        <div id="gene-chips"></div>
+        <div id="gene-list"></div>
+        <div id="highlight-legend" style="display:none;">
+          <div style="font-size:11px;color:var(--text-dim);">Expression level</div>
+          <div id="legend-gradient"></div>
+          <div class="legend-labels"><span>0</span><span id="legend-max"></span></div>
+        </div>
+        <button class="btn primary" id="applyHighlightBtn" disabled>Apply Highlight</button>
+        <button class="btn" id="clearHighlightBtn">Clear Highlight</button>
+      </div>
+    </div>
+
+    <button class="btn" id="exportBtn">↓ Export CSV</button>
+  </div>
+
+  <!-- ── CANVAS ── -->
+  <div id="canvas-wrap">
+    <canvas id="morph-canvas"></canvas>
+    <div id="deck-container"></div>
+    <canvas id="overlay-canvas"></canvas>
+    <div id="canvas-hint">scroll to zoom · drag to pan · shift+drag = circle · shift+click = polygon</div>
+  </div>
+
+  <!-- ── RIGHT CONTROLS PANEL ── -->
+  <div id="panel">
+
+    <div class="panel-section">
+      <div class="panel-title">Dataset</div>
+      <input id="dataset-input" type="text"
+        value="https://ftp.ebi.ac.uk/pub/databases/biostudies/S-BIAD/214/S-BIAD2214/Files/xenium/output-XETG00155__0043604__BK25-SKI-27-FO-2-4-S3__20241010__133127"
+        placeholder="Xenium dataset base URL…" />
+      <button class="btn primary" id="loadBtn" disabled>Load Dataset</button>
+      <div id="load-progress-wrap">
+        <span id="load-progress-label">Downloading…</span>
+        <div id="load-progress-track"><div id="load-progress-fill"></div></div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-title">Draw Mode</div>
+      <div class="mode-row">
+        <button class="mode-btn active" data-mode="circle">
+          <span class="mode-icon">⭕</span>
+          <span class="mode-label">Circle</span>
+        </button>
+        <button class="mode-btn" data-mode="polygon">
+          <span class="mode-icon">⬡</span>
+          <span class="mode-label">Polygon</span>
+        </button>
+      </div>
+      <div id="circle-controls">
+        <div class="slider-row">
+          <label>Radius (µm)</label>
+          <input type="range" id="radiusSlider" min="20" max="2000" value="80" step="10">
+          <span class="val" id="radiusVal">80</span>
+        </div>
+      </div>
+      <div id="polygon-hint" style="display:none;">
+        Shift+click to add vertices.<br>Double-click or click first vertex to close.
+      </div>
+      <button class="btn primary" id="queryBtn" disabled>Query Selection</button>
+      <button class="btn" id="clearBtn" style="display:none;">Clear Selection</button>
+      <button class="btn" id="magicLensBtn" style="margin-top:6px;" disabled>
+        <span id="magicLensIcon">🔍</span> Magic Lens
+      </button>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-title">Selection</div>
+      <div class="stat-grid">
+        <div class="stat-box">
+          <div class="s-val" id="stat-cells">—</div>
+          <div class="s-label">cells in region</div>
+        </div>
+        <div class="stat-box">
+          <div class="s-val" id="stat-total">—</div>
+          <div class="s-label">total cells</div>
+        </div>
+        <div class="stat-box">
+          <div class="s-val" id="stat-tx">—</div>
+          <div class="s-label">transcripts in region</div>
+        </div>
+        <div class="stat-box">
+          <div class="s-val" id="stat-total-tx">—</div>
+          <div class="s-label">total transcripts</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section" id="morphology-section" style="display:none;">
+      <div class="panel-title">Morphology Image</div>
+      <button class="btn" id="morphologyToggleBtn">Show Image</button>
+      <div id="morphology-controls" style="display:none;margin-top:8px;">
+        <div class="slider-row">
+          <label>Brightness</label>
+          <input type="range" id="brightnessSlider" min="50" max="200" value="100" step="5">
+          <span class="val" id="brightnessVal">1.0×</span>
+        </div>
+        <div class="slider-row">
+          <label>Contrast</label>
+          <input type="range" id="contrastSlider" min="50" max="200" value="100" step="5">
+          <span class="val" id="contrastVal">1.0×</span>
+        </div>
+        <div class="slider-row">
+          <label>Cell opacity</label>
+          <input type="range" id="cellOpacitySlider" min="0" max="100" value="100" step="5">
+          <span class="val" id="cellOpacityVal">100%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section" id="dataset-info-section" style="display:none;">
+      <div class="panel-title">Dataset Info</div>
+      <div id="dataset-info-content" style="font-size:11px;color:var(--text-2);line-height:1.8;"></div>
+    </div>
+
+    <div class="panel-section" id="cluster-section" style="display:none;">
+      <div class="panel-title">Cluster Colours</div>
+      <div style="display:flex;gap:4px;margin-bottom:8px;">
+        <select id="cluster-method-select" style="flex:1;font-family:var(--sans);font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-2);outline:none;cursor:pointer;"></select>
+      </div>
+      <button class="btn" id="applyClusterBtn">Apply Cluster Colours</button>
+      <button class="btn" id="clearClusterBtn" style="display:none;">Clear Cluster Colours</button>
+      <div id="cluster-legend" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;"></div>
+    </div>
+
+    <div id="log"></div>
+  </div>
+
+  <!-- deck.gl via CDN — must load before main.js -->
+  <script src="https://unpkg.com/deck.gl@9.1.0/dist.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
