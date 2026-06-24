@@ -126,11 +126,38 @@ type QueueAutoContrast = (
   options?: QueueAutoContrastOptions,
 ) => void
 
-interface UseDatasetLifecycleOptions {
-  readonly analysisEmbeddingAbortRef: MutableRef<AbortController | null>
-  readonly analysisEmbeddingRequestIdRef: MutableRef<number>
+interface UseDatasetLifecycleCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
+  readonly onBeforeDatasetLoad?: () => void
+  readonly queueAutoContrast: QueueAutoContrast
+  readonly recordTelemetry: (event: TelemetryEvent) => void
+}
+
+interface UseDatasetLifecycleControls {
+  readonly geneExpressionColorScale: GeneExpressionColorScale
+  readonly transcriptDensityColorScale: TranscriptDensityColorScale
+  readonly transcriptExactPointLimit: number
+  readonly transcriptPointColorMode: TranscriptPointColorMode
+}
+
+interface UseDatasetLifecycleInitialState {
+  readonly initialShareableState: ShareableState
+}
+
+interface UseDatasetLifecycleLoaders {
+  readonly detectSpatialDataset: SpatialDatasetDetector
+  readonly getSpatialDataset: SpatialDatasetLoader
+  readonly loadAnnotationGroups: AnnotationGroupLoader
+  readonly loadDatasetOverview: DatasetOverviewLoader
+  readonly loadGenePanel: GenePanelLoader
+  readonly loadMorphologyImage: MorphologyImageLoader
+  readonly warmDatasetForRoi: DatasetWarmupLoader
+}
+
+interface UseDatasetLifecycleRefs {
+  readonly analysisEmbeddingAbortRef: MutableRef<AbortController | null>
+  readonly analysisEmbeddingRequestIdRef: MutableRef<number>
   readonly autoContrastChannelIdsRef: MutableRef<Set<string>>
   readonly boundaryAbortRef: MutableRef<AbortController | null>
   readonly boundaryRequestIdRef: MutableRef<number>
@@ -147,29 +174,18 @@ interface UseDatasetLifecycleOptions {
   readonly diagnosticsAbortRef: MutableRef<AbortController | null>
   readonly didApplyInitialDatasetUrlRef: MutableRef<boolean>
   readonly geneExpressionAbortRef: MutableRef<AbortController | null>
-  readonly geneExpressionColorScale: GeneExpressionColorScale
   readonly geneExpressionRequestIdRef: MutableRef<number>
   readonly geneExpressionViewportKeyRef: MutableRef<string | null>
-  readonly initialShareableState: ShareableState
   readonly initialShareableStateRef: MutableRef<ShareableState | null>
   readonly initialSharedRoiSelectionRef: MutableRef<RoiSelection | null>
   readonly initialShouldLoadMorphologyRef: MutableRef<boolean>
   readonly lastViewportDetailRef: MutableRef<ViewerViewportDetail | null>
-  readonly detectSpatialDataset: SpatialDatasetDetector
-  readonly getSpatialDataset: SpatialDatasetLoader
-  readonly loadAnnotationGroups: AnnotationGroupLoader
-  readonly loadDatasetOverview: DatasetOverviewLoader
-  readonly loadGenePanel: GenePanelLoader
-  readonly loadMorphologyImage: MorphologyImageLoader
-  readonly onBeforeDatasetLoad?: () => void
   readonly loadRequestIdRef: MutableRef<number>
   readonly magicLensAbortRef: MutableRef<AbortController | null>
   readonly magicLensDebounceRef: MutableRef<number | null>
   readonly magicLensLastDetailRef: MutableRef<ViewerMagicLensDetail | null>
   readonly magicLensLastQueryKeyRef: MutableRef<string | null>
   readonly magicLensRequestIdRef: MutableRef<number>
-  readonly queueAutoContrast: QueueAutoContrast
-  readonly recordTelemetry: (event: TelemetryEvent) => void
   readonly roiAbortRef: MutableRef<AbortController | null>
   readonly roiGeneViewportWarmupAbortRef: MutableRef<AbortController | null>
   readonly roiGeneViewportWarmupKeyRef: MutableRef<string | null>
@@ -177,6 +193,17 @@ interface UseDatasetLifecycleOptions {
   readonly roiRequestIdRef: MutableRef<number>
   readonly roiTranscriptExportAbortRef: MutableRef<AbortController | null>
   readonly roiTranscriptExportRequestIdRef: MutableRef<number>
+  readonly startDatasetLoadRef: MutableRef<
+    ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
+  >
+  readonly transcriptAbortRef: MutableRef<AbortController | null>
+  readonly transcriptCapabilityAbortRef: MutableRef<AbortController | null>
+  readonly transcriptCapabilityRequestIdRef: MutableRef<number>
+  readonly transcriptRequestIdRef: MutableRef<number>
+  readonly transcriptViewportKeyRef: MutableRef<string | null>
+}
+
+interface UseDatasetLifecycleSetters {
   readonly setAnalysisEmbeddingState: Setter<AnalysisEmbeddingState<StructuredLoadError>>
   readonly setAnnotationColors: Setter<Readonly<Record<string, string>>>
   readonly setAnnotationGroupState: Setter<AnnotationGroupState<StructuredLoadError>>
@@ -249,18 +276,15 @@ interface UseDatasetLifecycleOptions {
   readonly setTranscriptPointColorMode: Setter<TranscriptPointColorMode>
   readonly setVisiumHdControlState: Setter<VisiumHdControlState>
   readonly setViewportCellCount: Setter<number | null>
-  readonly startDatasetLoadRef: MutableRef<
-    ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
-  >
-  readonly transcriptAbortRef: MutableRef<AbortController | null>
-  readonly transcriptCapabilityAbortRef: MutableRef<AbortController | null>
-  readonly transcriptCapabilityRequestIdRef: MutableRef<number>
-  readonly transcriptDensityColorScale: TranscriptDensityColorScale
-  readonly transcriptExactPointLimit: number
-  readonly transcriptPointColorMode: TranscriptPointColorMode
-  readonly transcriptRequestIdRef: MutableRef<number>
-  readonly transcriptViewportKeyRef: MutableRef<string | null>
-  readonly warmDatasetForRoi: DatasetWarmupLoader
+}
+
+interface UseDatasetLifecycleOptions {
+  readonly callbacks: UseDatasetLifecycleCallbacks
+  readonly controls: UseDatasetLifecycleControls
+  readonly initialState: UseDatasetLifecycleInitialState
+  readonly loaders: UseDatasetLifecycleLoaders
+  readonly refs: UseDatasetLifecycleRefs
+  readonly setters: UseDatasetLifecycleSetters
 }
 
 interface UseDatasetLifecycleResult {
@@ -268,130 +292,140 @@ interface UseDatasetLifecycleResult {
 }
 
 export function useDatasetLifecycle({
-  analysisEmbeddingAbortRef,
-  analysisEmbeddingRequestIdRef,
-  appendDebugEvent,
-  appendFallbackNotice,
-  autoContrastChannelIdsRef,
-  boundaryAbortRef,
-  boundaryRequestIdRef,
-  boundaryViewportKeyRef,
-  cellDetailAbortRef,
-  cellDetailRequestIdRef,
-  cellFeatureMatrixCapabilityKeyRef,
-  cellTranscriptDistributionAbortRef,
-  cellTranscriptDistributionRequestIdRef,
-  customMorphologyLayerAbortRef,
-  customMorphologyLayerRequestIdRef,
-  datasetAbortRef,
-  datasetWarmupAbortRef,
-  diagnosticsAbortRef,
-  didApplyInitialDatasetUrlRef,
-  geneExpressionAbortRef,
-  geneExpressionColorScale,
-  geneExpressionRequestIdRef,
-  geneExpressionViewportKeyRef,
-  initialShareableState,
-  initialShareableStateRef,
-  initialSharedRoiSelectionRef,
-  initialShouldLoadMorphologyRef,
-  lastViewportDetailRef,
-  detectSpatialDataset,
-  getSpatialDataset,
-  loadAnnotationGroups,
-  loadDatasetOverview,
-  loadGenePanel,
-  loadMorphologyImage,
-  onBeforeDatasetLoad,
-  loadRequestIdRef,
-  magicLensAbortRef,
-  magicLensDebounceRef,
-  magicLensLastDetailRef,
-  magicLensLastQueryKeyRef,
-  magicLensRequestIdRef,
-  queueAutoContrast,
-  recordTelemetry,
-  roiAbortRef,
-  roiGeneViewportWarmupAbortRef,
-  roiGeneViewportWarmupKeyRef,
-  roiGeneViewportWarmupTimeoutRef,
-  roiRequestIdRef,
-  roiTranscriptExportAbortRef,
-  roiTranscriptExportRequestIdRef,
-  setAnalysisEmbeddingState,
-  setAnnotationColors,
-  setAnnotationGroupState,
-  setAnnotationState,
-  setHiddenAnnotationSetIds,
-  setCellMetadataTracks,
-  setSelectedCellMetadataTrackId,
-  setAutoContrastChannelIds,
-  setBoundaryElements,
-  setNucleusBoundaryElements,
-  setBoundaryState,
-  setCellDetailState,
-  setCellFeatureMatrixCapabilityState,
-  setCellTranscriptDistributionState,
-  setCurrentViewportDetail,
-  setCustomMorphologyLayerState,
-  setCustomMorphologyLayers,
-  setCustomImageLayerOpacities,
-  setDatasetUrl,
-  setDatasetPlatform,
-  setDatasetWarmupState,
-  setDiagnosticsState,
-  setGeneExpressionBatch,
-  setGeneExpressionColorScale,
-  setGeneExpressionDetailMode,
-  setGeneExpressionScaleDomain,
-  setGeneExpressionScoreMode,
-  setGeneExpressionState,
-  setGenePanelState,
-  setHoveredTranscript,
-  setLoadState,
-  setMagicLensActive,
-  setMagicLensState,
-  setManualTranscriptExactRequestKey,
-  setMeasurementEnabled,
-  setMeasurementResetKey,
-  setFlatMorphologyImage,
-  setMorphologyChannelSettings,
-  setMorphologyImage,
-  setMorphologyState,
-  setObservationColorMode,
-  setOverviewCells,
-  setPinnedTranscript,
-  setRoiGeneStatsState,
-  setRoiGeneViewportWarmupState,
-  setRoiMode,
-  setRoiName,
-  setRoiState,
-  setRoiTranscriptExportState,
-  setSelectedAnnotationGroupId,
-  setSelectedCell,
-  setSelectedGridCell,
-  setSelectedEmbeddingKind,
-  setSelectedGenes,
-  setShowCellBoundaries,
-  setShowNucleusBoundaries,
-  setSpatialGridCells,
-  setTranscriptCapabilityState,
-  setTranscriptDensityColorScale,
-  setTranscriptExactPointLimit,
-  setTranscriptLayerState,
-  setTranscriptPointColorMode,
-  setVisiumHdControlState,
-  setViewportCellCount,
-  startDatasetLoadRef,
-  transcriptAbortRef,
-  transcriptCapabilityAbortRef,
-  transcriptCapabilityRequestIdRef,
-  transcriptDensityColorScale,
-  transcriptExactPointLimit,
-  transcriptPointColorMode,
-  transcriptRequestIdRef,
-  transcriptViewportKeyRef,
-  warmDatasetForRoi,
+  callbacks: {
+    appendDebugEvent,
+    appendFallbackNotice,
+    onBeforeDatasetLoad,
+    queueAutoContrast,
+    recordTelemetry,
+  },
+  controls: {
+    geneExpressionColorScale,
+    transcriptDensityColorScale,
+    transcriptExactPointLimit,
+    transcriptPointColorMode,
+  },
+  initialState: { initialShareableState },
+  loaders: {
+    detectSpatialDataset,
+    getSpatialDataset,
+    loadAnnotationGroups,
+    loadDatasetOverview,
+    loadGenePanel,
+    loadMorphologyImage,
+    warmDatasetForRoi,
+  },
+  refs: {
+    analysisEmbeddingAbortRef,
+    analysisEmbeddingRequestIdRef,
+    autoContrastChannelIdsRef,
+    boundaryAbortRef,
+    boundaryRequestIdRef,
+    boundaryViewportKeyRef,
+    cellDetailAbortRef,
+    cellDetailRequestIdRef,
+    cellFeatureMatrixCapabilityKeyRef,
+    cellTranscriptDistributionAbortRef,
+    cellTranscriptDistributionRequestIdRef,
+    customMorphologyLayerAbortRef,
+    customMorphologyLayerRequestIdRef,
+    datasetAbortRef,
+    datasetWarmupAbortRef,
+    diagnosticsAbortRef,
+    didApplyInitialDatasetUrlRef,
+    geneExpressionAbortRef,
+    geneExpressionRequestIdRef,
+    geneExpressionViewportKeyRef,
+    initialShareableStateRef,
+    initialSharedRoiSelectionRef,
+    initialShouldLoadMorphologyRef,
+    lastViewportDetailRef,
+    loadRequestIdRef,
+    magicLensAbortRef,
+    magicLensDebounceRef,
+    magicLensLastDetailRef,
+    magicLensLastQueryKeyRef,
+    magicLensRequestIdRef,
+    roiAbortRef,
+    roiGeneViewportWarmupAbortRef,
+    roiGeneViewportWarmupKeyRef,
+    roiGeneViewportWarmupTimeoutRef,
+    roiRequestIdRef,
+    roiTranscriptExportAbortRef,
+    roiTranscriptExportRequestIdRef,
+    startDatasetLoadRef,
+    transcriptAbortRef,
+    transcriptCapabilityAbortRef,
+    transcriptCapabilityRequestIdRef,
+    transcriptRequestIdRef,
+    transcriptViewportKeyRef,
+  },
+  setters: {
+    setAnalysisEmbeddingState,
+    setAnnotationColors,
+    setAnnotationGroupState,
+    setAnnotationState,
+    setHiddenAnnotationSetIds,
+    setCellMetadataTracks,
+    setSelectedCellMetadataTrackId,
+    setAutoContrastChannelIds,
+    setBoundaryElements,
+    setNucleusBoundaryElements,
+    setBoundaryState,
+    setCellDetailState,
+    setCellFeatureMatrixCapabilityState,
+    setCellTranscriptDistributionState,
+    setCurrentViewportDetail,
+    setCustomMorphologyLayerState,
+    setCustomMorphologyLayers,
+    setCustomImageLayerOpacities,
+    setDatasetUrl,
+    setDatasetPlatform,
+    setDatasetWarmupState,
+    setDiagnosticsState,
+    setGeneExpressionBatch,
+    setGeneExpressionColorScale,
+    setGeneExpressionDetailMode,
+    setGeneExpressionScaleDomain,
+    setGeneExpressionScoreMode,
+    setGeneExpressionState,
+    setGenePanelState,
+    setHoveredTranscript,
+    setLoadState,
+    setMagicLensActive,
+    setMagicLensState,
+    setManualTranscriptExactRequestKey,
+    setMeasurementEnabled,
+    setMeasurementResetKey,
+    setFlatMorphologyImage,
+    setMorphologyChannelSettings,
+    setMorphologyImage,
+    setMorphologyState,
+    setObservationColorMode,
+    setOverviewCells,
+    setPinnedTranscript,
+    setRoiGeneStatsState,
+    setRoiGeneViewportWarmupState,
+    setRoiMode,
+    setRoiName,
+    setRoiState,
+    setRoiTranscriptExportState,
+    setSelectedAnnotationGroupId,
+    setSelectedCell,
+    setSelectedGridCell,
+    setSelectedEmbeddingKind,
+    setSelectedGenes,
+    setShowCellBoundaries,
+    setShowNucleusBoundaries,
+    setSpatialGridCells,
+    setTranscriptCapabilityState,
+    setTranscriptDensityColorScale,
+    setTranscriptExactPointLimit,
+    setTranscriptLayerState,
+    setTranscriptPointColorMode,
+    setVisiumHdControlState,
+    setViewportCellCount,
+  },
 }: UseDatasetLifecycleOptions): UseDatasetLifecycleResult {
   useEffect(() => {
     if (didApplyInitialDatasetUrlRef.current) {

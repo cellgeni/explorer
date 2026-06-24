@@ -17,6 +17,9 @@ the app shell, platform workflows, and rendering modules.
   bin-assignment and expression-to-segmented-cell projection workflows. The next
   optimization pass can continue migrating remaining manual request lifecycles,
   then move on to grouped hook option objects.
+- 2026-06-24: Started item 2 by grouping `useDatasetLifecycle` options into
+  callbacks, controls, initial state, loaders, refs, and setters. Continue this
+  pattern with ROI and transcript workflows before broad viewer decomposition.
 
 ## Recommendations
 
