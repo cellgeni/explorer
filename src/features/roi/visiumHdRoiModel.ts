@@ -18,6 +18,8 @@ export type VisiumHdRoiState =
       readonly hitBinLimit: boolean
     }
 
+export const IDLE_VISIUM_HD_ROI_STATE: VisiumHdRoiState = { status: 'idle' }
+
 export interface VisiumHdRoiBin {
   readonly barcode: string
   readonly gridId: string

@@ -36,6 +36,26 @@ the app shell, platform workflows, and rendering modules.
   or data, loaders, refs, and setters. The App call sites now expose the same
   concern boundaries already used by `useDatasetLifecycle` and
   `useViewportDataWorkflow`.
+- 2026-06-25: Continued item 3 by extracting selected Visium HD expression
+  profile orchestration from `App.tsx` into
+  `useVisiumHdExpressionProfileWorkflow`. The hook now owns selected bin/cell
+  profile loading, auto-loading selected bins, cancellation, stale completion
+  guards, and unavailable/error transitions behind grouped callback, control,
+  data, loader, ref, and setter options. Added focused hook coverage for auto
+  bin loading, segmented-cell mapped-bin loading, and stale request completion.
+- 2026-06-25: Continued item 3 by extracting Visium HD ROI orchestration into
+  `useVisiumHdRoiWorkflow`. The hook now owns Visium HD ROI completion, shared
+  ROI replay, active ROI clearing, and barcode export while `App.tsx` keeps only
+  cross-domain cleanup wiring. Added focused hook coverage for ROI completion,
+  shared ROI replay, barcode export, and Visium/non-Visium clear behavior.
+- 2026-06-25: Finished item 3 by extracting Visium HD Magic Lens summary
+  orchestration into `useVisiumHdMagicLensSummary`. The helper now owns ROI/bin
+  selection, cursor circle filtering, expression-profile matrix reads, selected
+  gene expression loading, and viewport batch reuse. `App.tsx` now keeps Visium
+  HD wiring and platform gates while focused hooks/helpers own the data
+  orchestration for bins, selected profiles, ROI, and Magic Lens summaries.
+  Added focused coverage for profile-matrix summaries, viewport expression reuse,
+  and selected-gene loader fallback.
 
 ## Recommendations
 

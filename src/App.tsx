@@ -38,29 +38,21 @@ import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
 import { useVisiumHdBinWorkflow } from './features/app-shell/useVisiumHdBinWorkflow'
+import { useVisiumHdExpressionProfileWorkflow } from './features/app-shell/useVisiumHdExpressionProfileWorkflow'
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
 import {
   formatMappingRowsScope,
   isSpatialGeneExpressionDataset,
   isSpatialSegmentationDataset,
-  isVisiumHdExpressionProfileDataset,
-  selectedVisiumHdCellMappedBinIds,
-  selectedVisiumHdCellMappings,
-  selectedVisiumHdProfileBinSize,
-  type VisiumHdExpressionProfileDataset,
 } from './features/app-shell/visiumHdAppController'
 import {
-  abortActiveRequest,
   appendFallbackNoticeEntry,
   appendDebugLogEntry,
   createLoadingTasks,
   createFallbackNoticeEntry,
   createDebugLogEntry,
-  downloadTextFile,
   invalidateLatestRequest,
-  isAbortError,
-  startLatestRequest,
   type DebugLogAppendOptions,
   type DebugLogEntry,
   type FallbackNoticeEntry,
@@ -82,7 +74,6 @@ import {
 } from './features/cells/cellDetailModel'
 import {
   cellExpressionProfileMatchesSelection,
-  cellExpressionSummaryFromGexCells,
   type CellExpressionProfileSelection,
   type CellExpressionProfileState,
 } from './features/cells/cellExpressionProfileModel'
@@ -104,31 +95,23 @@ import {
 } from './features/morphology/customMorphologyLayers'
 import { useCustomMorphologyLayerWorkflow } from './features/morphology/useCustomMorphologyLayerWorkflow'
 import {
-  MAGIC_LENS_CELL_LIMIT,
   magicLensScopeLabel,
   magicLensStatusCopy,
-  filterExpressionBinsForCircle,
   normalizeMagicLensMinQv,
   normalizeMagicLensRadius,
   parseMagicLensScope,
-  summarizeMagicLensExpressionBins,
-  summarizeMagicLensExpressionProfile,
   type MagicLensScope,
-  type MagicLensSummary,
   type MagicLensState,
 } from './features/roi/magicLensModel'
-import {
-  useMagicLensWorkflow,
-  type MagicLensSummaryLoader,
-} from './features/roi/useMagicLensWorkflow'
+import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
+import { useVisiumHdMagicLensSummary } from './features/roi/useVisiumHdMagicLensSummary'
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
+import { useVisiumHdRoiWorkflow } from './features/roi/useVisiumHdRoiWorkflow'
 import {
   roiGeneDatasetWarmupKey,
   roiGeneStatsStatusCopy,
-  roiSelectionLabel,
   roiStatusCopy,
   summarizeRoiCells,
-  defaultRoiName,
   type RoiGeneStatsState,
   type RoiGeneViewportWarmupState,
   type RoiState,
@@ -136,9 +119,8 @@ import {
 } from './features/roi/roiModel'
 import {
   gridCellDatumDeckCenter,
-  selectVisiumHdGridCellsInRoi,
+  IDLE_VISIUM_HD_ROI_STATE,
   summarizeVisiumHdRoiBins,
-  visiumHdRoiBinsToCsv,
   visiumHdRoiStatusCopy,
   type VisiumHdRoiState,
 } from './features/roi/visiumHdRoiModel'
@@ -183,7 +165,7 @@ import {
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
 } from './data/transcriptOverlay'
-import { normalizeRoiSelection, type RoiSelection } from './data/roiSelection'
+import type { RoiSelection } from './data/roiSelection'
 import type { ContinuousCellMetadataTrack } from './data/customAnnotations'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
 import { type ShareableState, type ShareableViewState } from './data/shareableState'
@@ -192,8 +174,6 @@ import {
   telemetryEvent,
   type TelemetryEvent,
 } from './data/telemetry'
-import type { BBox } from './data/coords'
-import type { GexResult } from './data/gexTypes'
 import { normalizeBoundaryCellLimit } from './rendering/boundaryViewport'
 import type { FallbackNotice } from './data/fallbackNotice'
 import {
@@ -217,11 +197,7 @@ import {
 } from './data/morphologyImage'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
-import type {
-  Platform,
-  SpatialElement,
-  SpatialElementId,
-} from './datasets/spatialDataset'
+import type { Platform, SpatialElement } from './datasets/spatialDataset'
 import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
 import type {
   GeneExpressionColorScale,
@@ -240,7 +216,6 @@ import type {
   ViewerMagicLensStatus,
   ViewerViewportDetail,
 } from './components/ViewerCore'
-import { slug } from './utils/slug'
 
 const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
@@ -270,7 +245,6 @@ export type {
   TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
 
-const IDLE_VISIUM_HD_ROI_STATE: VisiumHdRoiState = { status: 'idle' }
 const IDLE_CELL_EXPRESSION_PROFILE_STATE: CellExpressionProfileState<StructuredLoadError> =
   {
     status: 'idle',
@@ -597,7 +571,6 @@ export function App({
   const cellDetailRequestId = useRef(0)
   const gridCellAssignmentRequestId = useRef(0)
   const visiumHdExpressionProfileRequestId = useRef(0)
-  const autoLoadedVisiumHdBinProfileKeyRef = useRef<string | null>(null)
   const cellTranscriptDistributionRequestId = useRef(0)
   const magicLensDebounceRef = useRef<number | null>(null)
   const magicLensLastDetailRef = useRef<ViewerMagicLensDetail | null>(null)
@@ -1038,20 +1011,26 @@ export function App({
       visiumHdExpressionProjectionState,
     ],
   )
-  const clearVisiumHdExpressionProfileState = useCallback(() => {
-    invalidateLatestRequest({
-      abortRef: visiumHdExpressionProfileAbortRef,
-      requestIdRef: visiumHdExpressionProfileRequestId,
+  const { clearVisiumHdExpressionProfileState, handleLoadVisiumHdExpressionProfile } =
+    useVisiumHdExpressionProfileWorkflow({
+      callbacks: { appendDebugEvent },
+      controls: {
+        activeBinSize: activeVisiumHdBinSize,
+        isVisiumHdDataset,
+        rowBudget: visiumHdBarcodeMappingRowBudget,
+      },
+      data: {
+        activeSelection: activeVisiumHdExpressionProfileSelection,
+        loadState,
+        selectedGridCell: activeSelectedGridCell,
+      },
+      loaders: { getSpatialDataset },
+      refs: {
+        abortRef: visiumHdExpressionProfileAbortRef,
+        requestIdRef: visiumHdExpressionProfileRequestId,
+      },
+      setters: { setExpressionProfileState: setVisiumHdExpressionProfileState },
     })
-    setVisiumHdExpressionProfileState((current) =>
-      current.status === 'idle' ? current : IDLE_CELL_EXPRESSION_PROFILE_STATE,
-    )
-  }, [])
-  useEffect(() => {
-    return () => {
-      abortActiveRequest(visiumHdExpressionProfileAbortRef)
-    }
-  }, [])
   const handleAnnotationSetVisibilityChange = useCallback(
     (setId: string, visible: boolean) => {
       setHiddenAnnotationSetIds((current) => {
@@ -1289,57 +1268,6 @@ export function App({
     },
     [performanceBudget.telemetryEventLimit],
   )
-  const handleVisiumHdRoiComplete = useCallback(
-    (selection: RoiSelection) => {
-      if (!isVisiumHdDataset || loadState.status !== 'ready') {
-        return
-      }
-
-      const result = selectVisiumHdGridCellsInRoi(
-        expressionStyledSpatialGridCells,
-        selection,
-      )
-
-      setRoiMode('idle')
-      setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
-      setVisiumHdRoiState({
-        status: 'ready',
-        url: loadState.url,
-        ...(activeVisiumHdBinSize === undefined
-          ? {}
-          : { binSizeMicrometers: activeVisiumHdBinSize }),
-        bbox: selection.bbox,
-        selection,
-        bins: result.bins,
-        hitBinLimit: result.hitBinLimit,
-      })
-      appendDebugEvent(
-        `${roiSelectionLabel(selection)} drawn: ${result.bins.length.toLocaleString()}${
-          result.hitBinLimit ? '+' : ''
-        } Visium HD bins`,
-      )
-    },
-    [
-      activeVisiumHdBinSize,
-      appendDebugEvent,
-      isVisiumHdDataset,
-      loadState,
-      expressionStyledSpatialGridCells,
-    ],
-  )
-  const handleExportVisiumHdRoiBarcodes = useCallback(() => {
-    if (activeVisiumHdRoiState.status !== 'ready') {
-      return
-    }
-
-    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
-
-    downloadTextFile(
-      `${slug(name)}-barcodes.csv`,
-      visiumHdRoiBinsToCsv(activeVisiumHdRoiState.bins),
-    )
-    appendDebugEvent(`Exported ROI barcodes ${name}`)
-  }, [activeVisiumHdRoiState, appendDebugEvent, roiName])
   const handleTileCacheEviction = useCallback(
     (evictedTileCount: number) => {
       recordTelemetry(
@@ -1568,282 +1496,22 @@ export function App({
     },
     [activeVisiumHdBinSize, getSpatialDataset, isVisiumHdDataset, loadGeneExpression],
   )
-  const loadVisiumHdMagicLensSummary = useCallback<MagicLensSummaryLoader>(
-    async (_baseUrl, selection, options): Promise<MagicLensSummary> => {
-      const normalizedSelection = normalizeRoiSelection(selection)
-      const selectedBinsResult = selectVisiumHdGridCellsInRoi(
-        expressionStyledSpatialGridCells,
-        normalizedSelection,
-        MAGIC_LENS_CELL_LIMIT,
-      )
-      const selectedBins =
-        options.circleFilter === null
-          ? selectedBinsResult.bins
-          : filterExpressionBinsForCircle(selectedBinsResult.bins, options.circleFilter)
-
-      if (selectedBins.length === 0) {
-        return summarizeMagicLensExpressionBins(
-          selectedBins.length,
-          { cells: [], genes: selectedGenes },
-          selectedGenes,
-          { hitLimit: selectedBinsResult.hitBinLimit },
-        )
-      }
-
-      const selectedBinIds = new Set(selectedBins.map((bin) => bin.barcode))
-
-      if (selectedGenes.length === 0) {
-        const dataset = await getSpatialDataset(
-          loadState.status === 'ready' ? loadState.url : _baseUrl,
-        )
-
-        if (!isVisiumHdExpressionProfileDataset(dataset)) {
-          throw new Error('Loaded dataset does not expose Visium HD expression profiles.')
-        }
-
-        const profileDataset = dataset as VisiumHdExpressionProfileDataset
-        const matrix = await profileDataset.matrix(
-          selectedBins.map((bin) => bin.barcode),
-          activeVisiumHdBinSize,
-          { signal: options.signal },
-        )
-        const expression = cellExpressionSummaryFromGexCells(
-          matrix,
-          selectedBins.map((bin) => bin.barcode),
-        )
-
-        return summarizeMagicLensExpressionProfile(
-          selectedBins.length,
-          expression,
-          selectedGenes,
-          {
-            hitLimit: selectedBinsResult.hitBinLimit || expression.hitGeneLimit,
-          },
-        )
-      }
-
-      const reusableExpressionBatch =
-        options.scope === 'viewport' &&
-        geneExpressionBatch !== null &&
-        currentViewportDetail !== null &&
-        sameBbox(normalizedSelection.bbox, currentViewportDetail.bbox) &&
-        sameGeneSet(geneExpressionBatch.genes, selectedGenes)
-          ? geneExpressionBatch
-          : null
-      const expressionBatch =
-        reusableExpressionBatch ??
-        (await loadActiveGeneExpression(
-          loadState.status === 'ready' ? loadState.url : _baseUrl,
-          normalizedSelection.bbox,
-          selectedGenes,
-          {
-            limit: MAGIC_LENS_CELL_LIMIT,
-            signal: options.signal,
-          },
-        ))
-      const filteredExpressionCells = expressionBatch.cells.filter((cell) =>
-        selectedBinIds.has(cell.id),
-      )
-      const filteredMaxCount = filteredExpressionCells.reduce(
-        (maxCount, cell) => Math.max(maxCount, cell.count),
-        0,
-      )
-      const filteredExpressionBatch =
-        filteredExpressionCells.length === expressionBatch.cells.length
-          ? {
-              ...expressionBatch,
-              cells: filteredExpressionCells,
-              maxCount: filteredMaxCount,
-            }
-          : {
-              cells: filteredExpressionCells,
-              genes: expressionBatch.genes,
-              maxCount: filteredMaxCount,
-            }
-
-      return summarizeMagicLensExpressionBins(
-        selectedBins.length,
-        filteredExpressionBatch,
-        selectedGenes,
-        { hitLimit: selectedBinsResult.hitBinLimit },
-      )
+  const loadVisiumHdMagicLensSummary = useVisiumHdMagicLensSummary({
+    controls: {
+      selectedBinSize: activeVisiumHdBinSize,
     },
-    [
+    data: {
       currentViewportDetail,
-      expressionStyledSpatialGridCells,
       geneExpressionBatch,
-      getSpatialDataset,
-      loadActiveGeneExpression,
+      gridCells: expressionStyledSpatialGridCells,
       loadState,
       selectedGenes,
-      activeVisiumHdBinSize,
-    ],
-  )
-  const handleLoadVisiumHdExpressionProfile = useCallback(() => {
-    if (
-      !isVisiumHdDataset ||
-      loadState.status !== 'ready' ||
-      activeVisiumHdExpressionProfileSelection === null
-    ) {
-      return
-    }
-
-    const selection = activeVisiumHdExpressionProfileSelection
-    const binSize = selectedVisiumHdProfileBinSize(
-      activeVisiumHdBinSize,
-      activeSelectedGridCell,
-    )
-
-    if (binSize === undefined) {
-      setVisiumHdExpressionProfileState({
-        status: 'unavailable',
-        selectionId: selection.id,
-        selectionKind: selection.kind,
-        reason: 'Select a Visium HD bin size to load this expression profile.',
-      })
-      return
-    }
-
-    const request = startLatestRequest({
-      abortRef: visiumHdExpressionProfileAbortRef,
-      requestIdRef: visiumHdExpressionProfileRequestId,
-    })
-    setVisiumHdExpressionProfileState({
-      status: 'loading',
-      selectionId: selection.id,
-      selectionKind: selection.kind,
-    })
-
-    void (async () => {
-      const dataset = await getSpatialDataset(loadState.url)
-
-      if (!isVisiumHdExpressionProfileDataset(dataset)) {
-        throw new Error('Loaded dataset does not expose Visium HD expression profiles.')
-      }
-
-      const profileDataset = dataset as VisiumHdExpressionProfileDataset
-
-      if (selection.kind === 'bin') {
-        const matrix = await profileDataset.matrix([selection.id], binSize, {
-          signal: request.signal,
-        })
-
-        return {
-          expression: cellExpressionSummaryFromGexCells(matrix, [selection.id]),
-          sourceLabel: 'Selected bin',
-        }
-      }
-
-      const mappings = await selectedVisiumHdCellMappings(
-        dataset,
-        selection.id,
-        visiumHdBarcodeMappingRowBudget,
-        request.signal,
-      )
-      const matrixDataset = dataset as VisiumHdExpressionProfileDataset
-      const mappedBinIds = selectedVisiumHdCellMappedBinIds(
-        mappings,
-        selection.id,
-        binSize,
-      )
-
-      if (mappedBinIds.length === 0) {
-        const emptyMatrix: GexResult<SpatialElementId> = {
-          geneNames: [],
-          cells: new Map(),
-        }
-
-        return {
-          expression: cellExpressionSummaryFromGexCells(emptyMatrix, []),
-          sourceLabel: '0 mapped bins',
-        }
-      }
-
-      const matrix = await matrixDataset.matrix(mappedBinIds, binSize, {
-        signal: request.signal,
-      })
-
-      return {
-        expression: cellExpressionSummaryFromGexCells(matrix, mappedBinIds),
-        sourceLabel: `${mappedBinIds.length.toLocaleString()} mapped bins`,
-      }
-    })()
-      .then(({ expression, sourceLabel }) => {
-        if (!request.isCurrent() || request.signal.aborted) {
-          return
-        }
-
-        setVisiumHdExpressionProfileState({
-          status: 'ready',
-          selectionId: selection.id,
-          selectionKind: selection.kind,
-          expression,
-          sourceLabel,
-        })
-        appendDebugEvent(
-          `Loaded Visium HD ${selection.kind} expression profile: ${expression.genes.length.toLocaleString()} genes`,
-          { coalesceKey: 'visium-hd-expression-profile' },
-        )
-      })
-      .catch((error: unknown) => {
-        if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
-          return
-        }
-
-        setVisiumHdExpressionProfileState({
-          status: 'error',
-          selectionId: selection.id,
-          selectionKind: selection.kind,
-          error: createStructuredLoadError('Gene expression', error),
-        })
-      })
-      .finally(() => {
-        request.complete()
-      })
-  }, [
-    activeSelectedGridCell,
-    activeVisiumHdBinSize,
-    activeVisiumHdExpressionProfileSelection,
-    appendDebugEvent,
-    getSpatialDataset,
-    isVisiumHdDataset,
-    loadState,
-    visiumHdBarcodeMappingRowBudget,
-  ])
-
-  useEffect(() => {
-    if (
-      !isVisiumHdDataset ||
-      loadState.status !== 'ready' ||
-      activeVisiumHdExpressionProfileSelection?.kind !== 'bin'
-    ) {
-      autoLoadedVisiumHdBinProfileKeyRef.current = null
-      return
-    }
-
-    const binSize = selectedVisiumHdProfileBinSize(
-      activeVisiumHdBinSize,
-      activeSelectedGridCell,
-    )
-    const profileKey = `${activeVisiumHdExpressionProfileSelection.id}:${
-      binSize ?? 'unknown'
-    }`
-
-    if (autoLoadedVisiumHdBinProfileKeyRef.current === profileKey) {
-      return
-    }
-
-    autoLoadedVisiumHdBinProfileKeyRef.current = profileKey
-    handleLoadVisiumHdExpressionProfile()
-  }, [
-    activeSelectedGridCell,
-    activeVisiumHdBinSize,
-    activeVisiumHdExpressionProfileSelection,
-    handleLoadVisiumHdExpressionProfile,
-    isVisiumHdDataset,
-    loadState.status,
-  ])
-
+    },
+    loaders: {
+      getSpatialDataset,
+      loadGeneExpression: loadActiveGeneExpression,
+    },
+  })
   const toggleGene = useCallback(
     (gene: string) => {
       const isSelected = selectedGenes.includes(gene)
@@ -2062,9 +1730,36 @@ export function App({
       setRoiTranscriptExportState,
     },
   })
-  const clearVisiumHdRoiState = useCallback(() => {
-    setVisiumHdRoiState(IDLE_VISIUM_HD_ROI_STATE)
-  }, [])
+  const {
+    clearVisiumHdRoiState,
+    handleClearActiveRoi,
+    handleExportVisiumHdRoiBarcodes,
+    handleVisiumHdRoiComplete,
+  } = useVisiumHdRoiWorkflow({
+    callbacks: {
+      appendDebugEvent,
+      clearRoi: handleClearRoi,
+    },
+    controls: {
+      activeBinSize: activeVisiumHdBinSize,
+      isVisiumHdDataset,
+      roiName,
+    },
+    data: {
+      activeRoiState: activeVisiumHdRoiState,
+      gridCells: expressionStyledSpatialGridCells,
+      loadState,
+    },
+    refs: {
+      initialSharedRoiSelectionRef,
+      roiIdRef,
+    },
+    setters: {
+      setRoiMode,
+      setRoiName,
+      setVisiumHdRoiState,
+    },
+  })
   const handleBeforeDatasetLoad = useCallback(() => {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
@@ -2074,40 +1769,6 @@ export function App({
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
   }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState])
-  const handleClearActiveRoi = useCallback(() => {
-    if (!isVisiumHdDataset) {
-      handleClearRoi()
-      return
-    }
-
-    setRoiMode('idle')
-    clearVisiumHdRoiState()
-    appendDebugEvent('Cleared ROI')
-  }, [appendDebugEvent, clearVisiumHdRoiState, handleClearRoi, isVisiumHdDataset])
-
-  useEffect(() => {
-    const selection = initialSharedRoiSelectionRef.current
-
-    if (
-      !isVisiumHdDataset ||
-      selection === null ||
-      loadState.status !== 'ready' ||
-      activeVisiumHdRoiState.status !== 'idle'
-    ) {
-      return
-    }
-
-    initialSharedRoiSelectionRef.current = null
-    setRoiName('Shared ROI')
-    handleVisiumHdRoiComplete(selection)
-  }, [
-    handleVisiumHdRoiComplete,
-    initialSharedRoiSelectionRef,
-    isVisiumHdDataset,
-    loadState.status,
-    setRoiName,
-    activeVisiumHdRoiState.status,
-  ])
 
   const {
     handleAnnotationColorChange,
@@ -2943,31 +2604,6 @@ export function App({
       </section>
     </main>
   )
-}
-
-function sameBbox(left: BBox, right: BBox): boolean {
-  return (
-    left.minX === right.minX &&
-    left.maxX === right.maxX &&
-    left.minY === right.minY &&
-    left.maxY === right.maxY
-  )
-}
-
-function sameGeneSet(left: readonly string[], right: readonly string[]): boolean {
-  if (left.length !== right.length) {
-    return false
-  }
-
-  const rightKeys = new Set(right.map((gene) => gene.toLocaleLowerCase()))
-
-  for (const gene of left) {
-    if (!rightKeys.has(gene.toLocaleLowerCase())) {
-      return false
-    }
-  }
-
-  return true
 }
 
 function selectionGeneExpressionStatus(
