@@ -38,6 +38,7 @@ import {
   roiCellsToCsv,
   roiGeneDatasetWarmupKey,
   roiSelectionLabel,
+  roiSelectionToGeoJson,
   roiTranscriptsToCsv,
   type RoiGeneStatsState,
   type RoiGeneViewportWarmupState,
@@ -120,6 +121,7 @@ interface UseRoiWorkflowOptions {
 interface UseRoiWorkflowResult {
   readonly handleClearRoi: () => void
   readonly handleExportRoiCells: () => void
+  readonly handleExportRoiGeoJson: () => void
   readonly handleExportRoiTranscripts: () => void
   readonly handleRoiComplete: (selection: RoiSelection) => void
 }
@@ -603,6 +605,27 @@ export function useRoiWorkflow({
     appendDebugEvent(`Exported ROI cells ${name}`)
   }, [appendDebugEvent, roiIdRef, roiName, roiState])
 
+  const handleExportRoiGeoJson = useCallback(() => {
+    if (roiState.status !== 'ready') {
+      return
+    }
+
+    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
+
+    downloadTextFile(
+      `${slug(name)}-roi.geojson`,
+      roiSelectionToGeoJson(roiState.selection, {
+        roi_name: name,
+        dataset_platform: 'xenium',
+        dataset_url: roiState.url,
+        selected_cell_count: roiState.cells.length,
+        hit_cell_limit: roiState.hitCellLimit,
+      }),
+      'application/geo+json;charset=utf-8',
+    )
+    appendDebugEvent(`Exported ROI GeoJSON ${name}`)
+  }, [appendDebugEvent, roiIdRef, roiName, roiState])
+
   const handleExportRoiTranscripts = useCallback(() => {
     if (roiState.status !== 'ready') {
       return
@@ -662,6 +685,7 @@ export function useRoiWorkflow({
   return {
     handleClearRoi,
     handleExportRoiCells,
+    handleExportRoiGeoJson,
     handleExportRoiTranscripts,
     handleRoiComplete,
   }

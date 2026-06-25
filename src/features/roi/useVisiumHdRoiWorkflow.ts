@@ -9,7 +9,7 @@ import {
 } from '../app-shell/appRuntimeModel'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
-import { defaultRoiName, roiSelectionLabel } from './roiModel'
+import { defaultRoiName, roiSelectionLabel, roiSelectionToGeoJson } from './roiModel'
 import {
   IDLE_VISIUM_HD_ROI_STATE,
   selectVisiumHdGridCellsInRoi,
@@ -61,6 +61,7 @@ interface UseVisiumHdRoiWorkflowResult {
   readonly clearVisiumHdRoiState: () => void
   readonly handleClearActiveRoi: () => void
   readonly handleExportVisiumHdRoiBarcodes: () => void
+  readonly handleExportVisiumHdRoiGeoJson: () => void
   readonly handleVisiumHdRoiComplete: (selection: RoiSelection) => void
 }
 
@@ -129,6 +130,28 @@ export function useVisiumHdRoiWorkflow({
     appendDebugEvent(`Exported ROI barcodes ${name}`)
   }, [activeRoiState, appendDebugEvent, roiIdRef, roiName])
 
+  const handleExportVisiumHdRoiGeoJson = useCallback(() => {
+    if (activeRoiState.status !== 'ready') {
+      return
+    }
+
+    const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
+
+    downloadTextFile(
+      `${slug(name)}-roi.geojson`,
+      roiSelectionToGeoJson(activeRoiState.selection, {
+        roi_name: name,
+        dataset_platform: 'visium_hd',
+        dataset_url: activeRoiState.url,
+        selected_barcode_count: activeRoiState.bins.length,
+        hit_barcode_limit: activeRoiState.hitBinLimit,
+        bin_size_um: activeRoiState.binSizeMicrometers ?? null,
+      }),
+      'application/geo+json;charset=utf-8',
+    )
+    appendDebugEvent(`Exported ROI GeoJSON ${name}`)
+  }, [activeRoiState, appendDebugEvent, roiIdRef, roiName])
+
   const handleClearActiveRoi = useCallback(() => {
     if (!isVisiumHdDataset) {
       clearRoi()
@@ -168,6 +191,7 @@ export function useVisiumHdRoiWorkflow({
     clearVisiumHdRoiState,
     handleClearActiveRoi,
     handleExportVisiumHdRoiBarcodes,
+    handleExportVisiumHdRoiGeoJson,
     handleVisiumHdRoiComplete,
   }
 }

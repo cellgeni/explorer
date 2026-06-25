@@ -9,6 +9,7 @@ import {
   roiGeneDatasetWarmupKey,
   roiGeneStatsStatusCopy,
   roiSelectionLabel,
+  roiSelectionToGeoJson,
   roiStatusCopy,
   roiTranscriptsToCsv,
   summarizeRoiCells,
@@ -145,5 +146,74 @@ describe('roiModel', () => {
         'aaaaaaaa-1,"Gene, ""A""",1,2,3,40,true,false',
       ].join('\n'),
     )
+  })
+
+  it('serializes ROI selections as GeoJSON polygons', () => {
+    const box = JSON.parse(
+      roiSelectionToGeoJson(
+        {
+          kind: 'box',
+          bbox: {
+            minX: micrometers(0),
+            minY: micrometers(1),
+            maxX: micrometers(10),
+            maxY: micrometers(20),
+          },
+        },
+        { roi_name: 'Tumor ROI', selected_cell_count: 2 },
+      ),
+    )
+
+    expect(box).toMatchObject({
+      type: 'FeatureCollection',
+      bbox: [0, 1, 10, 20],
+      features: [
+        {
+          type: 'Feature',
+          properties: {
+            roi_kind: 'box',
+            coordinate_unit: 'micrometer',
+            roi_name: 'Tumor ROI',
+            selected_cell_count: 2,
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [0, 1],
+                [10, 1],
+                [10, 20],
+                [0, 20],
+                [0, 1],
+              ],
+            ],
+          },
+        },
+      ],
+    })
+
+    const lasso = JSON.parse(
+      roiSelectionToGeoJson({
+        kind: 'lasso',
+        bbox: {
+          minX: micrometers(2),
+          minY: micrometers(3),
+          maxX: micrometers(8),
+          maxY: micrometers(9),
+        },
+        points: [
+          { x: micrometers(2), y: micrometers(3) },
+          { x: micrometers(8), y: micrometers(3) },
+          { x: micrometers(5), y: micrometers(9) },
+        ],
+      }),
+    )
+
+    expect(lasso.features[0].geometry.coordinates[0]).toEqual([
+      [2, 3],
+      [8, 3],
+      [5, 9],
+      [2, 3],
+    ])
   })
 })

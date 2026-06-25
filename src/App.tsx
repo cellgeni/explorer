@@ -1682,6 +1682,7 @@ export function App({
   const {
     handleClearRoi,
     handleExportRoiCells,
+    handleExportRoiGeoJson,
     handleExportRoiTranscripts,
     handleRoiComplete,
   } = useRoiWorkflow({
@@ -1734,6 +1735,7 @@ export function App({
     clearVisiumHdRoiState,
     handleClearActiveRoi,
     handleExportVisiumHdRoiBarcodes,
+    handleExportVisiumHdRoiGeoJson,
     handleVisiumHdRoiComplete,
   } = useVisiumHdRoiWorkflow({
     callbacks: {
@@ -2467,6 +2469,7 @@ export function App({
             onClearRoi={handleClearActiveRoi}
             onRoiNameChange={setRoiName}
             onExportRoiBarcodes={handleExportVisiumHdRoiBarcodes}
+            onExportRoiGeoJson={handleExportVisiumHdRoiGeoJson}
           />
         ) : (
           <RoiHudPanel
@@ -2502,6 +2505,7 @@ export function App({
             onRoiNameChange={setRoiName}
             onSaveRoiAnnotation={handleSaveRoiAnnotation}
             onExportRoiCells={handleExportRoiCells}
+            onExportRoiGeoJson={handleExportRoiGeoJson}
             onExportRoiTranscripts={handleExportRoiTranscripts}
           />
         )}

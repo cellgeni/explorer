@@ -36,6 +36,11 @@ const detailWithoutBoundaryLoad: ViewerViewportDetail = {
   visibleCellCount: 0,
 }
 
+const denseCellScaleDetail: ViewerViewportDetail = {
+  ...detail,
+  visibleCellCount: 120_000,
+}
+
 const defaultSelectedGenes = ['Actb']
 
 const readyLoadState: DatasetLoadState<StructuredLoadError> = {
@@ -308,6 +313,46 @@ describe('useViewportDataWorkflow', () => {
         }),
       ]),
     )
+  })
+
+  it('loads boundary elements for dense cell-scale viewports', async () => {
+    const element: SpatialElement = {
+      id: 'boundary-1',
+      geometry: { kind: 'polygon', rings: [[{ x: micrometers(1), y: micrometers(2) }]] },
+    }
+    const loadBoundaryElements = vi.fn(async () => ({ elements: [element] }))
+    const loadGeneExpression = vi.fn(async () => batch)
+
+    render(
+      <Probe
+        loadBoundaryElements={loadBoundaryElements}
+        loadGeneExpression={loadGeneExpression}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(denseCellScaleDetail)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadBoundaryElements).toHaveBeenCalledWith(
+      'https://example.test/output',
+      denseCellScaleDetail.bbox,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(snapshot.boundaryState).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      cellCount: 1,
+    })
+    expect(snapshot.boundaryElements).toEqual([element])
   })
 
   it('retries retryable gene expression load failures once', async () => {

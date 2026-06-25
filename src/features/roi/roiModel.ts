@@ -224,8 +224,71 @@ export function roiTranscriptsToCsv(transcripts: readonly DatasetTranscript[]): 
   return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
 }
 
+export type RoiGeoJsonPropertyValue = string | number | boolean | null
+
+export type RoiGeoJsonProperties = Readonly<Record<string, RoiGeoJsonPropertyValue>>
+
+export function roiSelectionToGeoJson(
+  selection: RoiSelection,
+  properties: RoiGeoJsonProperties = {},
+): string {
+  const feature = {
+    type: 'Feature',
+    bbox: [
+      selection.bbox.minX,
+      selection.bbox.minY,
+      selection.bbox.maxX,
+      selection.bbox.maxY,
+    ],
+    properties: {
+      roi_kind: selection.kind,
+      coordinate_unit: 'micrometer',
+      ...properties,
+    },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [roiSelectionToPolygonRing(selection)],
+    },
+  } as const
+
+  return `${JSON.stringify(
+    {
+      type: 'FeatureCollection',
+      bbox: feature.bbox,
+      features: [feature],
+    },
+    null,
+    2,
+  )}\n`
+}
+
 export function defaultRoiName(index: number): string {
   return `ROI ${index}`
+}
+
+function roiSelectionToPolygonRing(selection: RoiSelection): readonly number[][] {
+  const points =
+    selection.kind === 'lasso' && selection.points.length >= 3
+      ? selection.points
+      : [
+          { x: selection.bbox.minX, y: selection.bbox.minY },
+          { x: selection.bbox.maxX, y: selection.bbox.minY },
+          { x: selection.bbox.maxX, y: selection.bbox.maxY },
+          { x: selection.bbox.minX, y: selection.bbox.maxY },
+        ]
+  const ring = points.map((point) => [point.x, point.y])
+  const first = ring[0]
+  const last = ring.at(-1)
+
+  if (
+    first !== undefined &&
+    last !== undefined &&
+    (first[0] !== last[0] || first[1] !== last[1])
+  ) {
+    ring.push([...first])
+  }
+
+  return ring
 }
 
 function csvEscape(value: string): string {

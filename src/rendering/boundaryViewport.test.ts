@@ -41,6 +41,26 @@ describe('boundary viewport trigger', () => {
     ).toBe(true)
   })
 
+  it('loads polygons at cell-scale zoom even when the count estimate is dense', () => {
+    expect(
+      shouldLoadBoundaryPolygons({
+        ...candidate,
+        visibleCellCount: 120_000,
+        viewState: { ...candidate.viewState, zoom: -0.25 },
+      }),
+    ).toBe(true)
+    expect(
+      shouldLoadBoundaryPolygons(
+        {
+          ...candidate,
+          visibleCellCount: 120_000,
+          viewState: { ...candidate.viewState, zoom: 0 },
+        },
+        { cellScaleZoom: 0.5 },
+      ),
+    ).toBe(false)
+  })
+
   it('skips polygons for dense overview candidates and empty viewports', () => {
     expect(shouldLoadBoundaryPolygons({ ...candidate, visibleCellCount: 120_000 })).toBe(
       false,

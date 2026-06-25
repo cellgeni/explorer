@@ -18,6 +18,7 @@ describe('RoiHudPanel', () => {
     const onRoiNameChange = vi.fn()
     const onSaveRoiAnnotation = vi.fn()
     const onExportRoiCells = vi.fn()
+    const onExportRoiGeoJson = vi.fn()
     const onExportRoiTranscripts = vi.fn()
 
     render(
@@ -71,6 +72,7 @@ describe('RoiHudPanel', () => {
         onRoiNameChange={onRoiNameChange}
         onSaveRoiAnnotation={onSaveRoiAnnotation}
         onExportRoiCells={onExportRoiCells}
+        onExportRoiGeoJson={onExportRoiGeoJson}
         onExportRoiTranscripts={onExportRoiTranscripts}
       />,
     )
@@ -82,6 +84,7 @@ describe('RoiHudPanel', () => {
       target: { value: 'Marker ROI' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save ROI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Export GeoJSON' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export Cells' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export Transcripts' }))
 
@@ -91,6 +94,7 @@ describe('RoiHudPanel', () => {
     expect(onClearRoi).toHaveBeenCalledTimes(1)
     expect(onRoiNameChange).toHaveBeenCalledWith('Marker ROI')
     expect(onSaveRoiAnnotation).toHaveBeenCalledTimes(1)
+    expect(onExportRoiGeoJson).toHaveBeenCalledTimes(1)
     expect(onExportRoiCells).toHaveBeenCalledTimes(1)
     expect(onExportRoiTranscripts).toHaveBeenCalledTimes(1)
   })
@@ -99,6 +103,7 @@ describe('RoiHudPanel', () => {
     const onRoiModeChange = vi.fn()
     const onClearRoi = vi.fn()
     const onExportRoiBarcodes = vi.fn()
+    const onExportRoiGeoJson = vi.fn()
 
     render(
       <VisiumHdRoiHudPanel
@@ -141,6 +146,7 @@ describe('RoiHudPanel', () => {
         onClearRoi={onClearRoi}
         onRoiNameChange={vi.fn()}
         onExportRoiBarcodes={onExportRoiBarcodes}
+        onExportRoiGeoJson={onExportRoiGeoJson}
       />,
     )
 
@@ -150,10 +156,12 @@ describe('RoiHudPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Export GeoJSON' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export Barcodes' }))
 
     expect(onRoiModeChange).toHaveBeenCalledWith('box')
     expect(onClearRoi).toHaveBeenCalledTimes(1)
+    expect(onExportRoiGeoJson).toHaveBeenCalledTimes(1)
     expect(onExportRoiBarcodes).toHaveBeenCalledTimes(1)
   })
 })

@@ -27,6 +27,7 @@ interface RoiHudPanelProps {
   readonly onRoiNameChange: (name: string) => void
   readonly onSaveRoiAnnotation: () => void
   readonly onExportRoiCells: () => void
+  readonly onExportRoiGeoJson: () => void
   readonly onExportRoiTranscripts: () => void
 }
 
@@ -49,6 +50,7 @@ export function RoiHudPanel({
   onRoiNameChange,
   onSaveRoiAnnotation,
   onExportRoiCells,
+  onExportRoiGeoJson,
   onExportRoiTranscripts,
 }: RoiHudPanelProps) {
   return (
@@ -155,6 +157,15 @@ export function RoiHudPanel({
             type="button"
             className="secondary-action"
             disabled={roiState.status !== 'ready'}
+            title="Export ROI as GeoJSON"
+            onClick={onExportRoiGeoJson}
+          >
+            Export GeoJSON
+          </button>
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={roiState.status !== 'ready'}
             title="Export ROI cells"
             onClick={onExportRoiCells}
           >
@@ -170,13 +181,13 @@ export function RoiHudPanel({
             onClick={onExportRoiTranscripts}
           >
             {roiTranscriptExportState.status === 'loading'
-              ? 'Exporting...'
+              ? 'Exporting…'
               : 'Export Transcripts'}
           </button>
         </div>
         {roiTranscriptExportState.status === 'loading' ? (
           <p className="roi-gene-status" aria-live="polite">
-            Preparing ROI transcript CSV
+            Preparing ROI transcript CSV…
           </p>
         ) : null}
       </section>
@@ -198,6 +209,7 @@ interface VisiumHdRoiHudPanelProps {
   readonly onClearRoi: () => void
   readonly onRoiNameChange: (name: string) => void
   readonly onExportRoiBarcodes: () => void
+  readonly onExportRoiGeoJson: () => void
 }
 
 export function VisiumHdRoiHudPanel({
@@ -214,6 +226,7 @@ export function VisiumHdRoiHudPanel({
   onClearRoi,
   onRoiNameChange,
   onExportRoiBarcodes,
+  onExportRoiGeoJson,
 }: VisiumHdRoiHudPanelProps) {
   return (
     <div
@@ -307,6 +320,15 @@ export function VisiumHdRoiHudPanel({
         )}
 
         <div className="roi-action-row">
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={roiState.status !== 'ready'}
+            title="Export ROI as GeoJSON"
+            onClick={onExportRoiGeoJson}
+          >
+            Export GeoJSON
+          </button>
           <button
             type="button"
             className="secondary-action"

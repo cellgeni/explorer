@@ -1,6 +1,6 @@
 import { act, render } from '@testing-library/react'
 import * as React from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   RoiDrawMode,
   ViewerMagicLensDetail,
@@ -326,6 +326,10 @@ function roiGeneStatsLoader(): ReturnType<typeof vi.fn<RoiGeneStatsLoader>> {
 }
 
 describe('useRoiWorkflow', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('clears ROI state and dependent exports/lens state', () => {
     render(
       <Probe
@@ -347,6 +351,63 @@ describe('useRoiWorkflow', () => {
     expect(snapshot.magicLensState).toEqual({ status: 'idle' })
     expect(snapshot.roiRequestId).toBe(5)
     expect(snapshot.debugMessages).toContain('Cleared ROI')
+  })
+
+  it('exports ready ROI geometry as GeoJSON', async () => {
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
+    const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
+    const revokeObjectUrl = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+
+    render(
+      <Probe
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleExportRoiGeoJson()
+    })
+
+    const blob = createObjectUrl.mock.calls[0]?.[0] as Blob | undefined
+    const geoJson = JSON.parse((await blob?.text()) ?? '{}')
+
+    expect(blob?.type).toBe('application/geo+json;charset=utf-8')
+    expect(geoJson).toMatchObject({
+      type: 'FeatureCollection',
+      features: [
+        {
+          properties: {
+            roi_name: 'ROI 1',
+            dataset_platform: 'xenium',
+            dataset_url: 'https://example.test/output',
+            selected_cell_count: 1,
+            hit_cell_limit: false,
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [0, 0],
+                [10, 0],
+                [10, 10],
+                [0, 10],
+                [0, 0],
+              ],
+            ],
+          },
+        },
+      ],
+    })
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:test')
+    expect(snapshot.debugMessages).toContain('Exported ROI GeoJSON ROI 1')
   })
 
   it('keeps ROI gene warmup scoped to the dataset while the viewport moves', async () => {

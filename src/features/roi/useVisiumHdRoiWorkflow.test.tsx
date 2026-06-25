@@ -235,6 +235,61 @@ describe('useVisiumHdRoiWorkflow', () => {
     expect(snapshot.debugMessages).toContain('Exported ROI barcodes Tumor ROI')
   })
 
+  it('exports ready Visium HD ROI geometry as GeoJSON', async () => {
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
+    const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
+    const revokeObjectUrl = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+
+    render(
+      <Probe
+        initialVisiumHdRoiState={readyVisiumHdRoiState}
+        roiName="Tumor ROI"
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleExportVisiumHdRoiGeoJson()
+    })
+
+    const blob = createObjectUrl.mock.calls[0]?.[0] as Blob | undefined
+    const geoJson = JSON.parse((await blob?.text()) ?? '{}')
+
+    expect(blob?.type).toBe('application/geo+json;charset=utf-8')
+    expect(geoJson.features[0]).toMatchObject({
+      properties: {
+        roi_name: 'Tumor ROI',
+        dataset_platform: 'visium_hd',
+        dataset_url: 'https://example.test/visium',
+        selected_barcode_count: 1,
+        hit_barcode_limit: false,
+        bin_size_um: 8,
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [20, 0],
+            [20, 20],
+            [0, 20],
+            [0, 0],
+          ],
+        ],
+      },
+    })
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:test')
+    expect(snapshot.debugMessages).toContain('Exported ROI GeoJSON Tumor ROI')
+  })
+
   it('clears only the Visium HD ROI state for Visium HD datasets', () => {
     const clearRoi = vi.fn()
 

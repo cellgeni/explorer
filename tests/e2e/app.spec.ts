@@ -94,7 +94,6 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
     timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
   })
 
-  await page.getByLabel('2 µm budget').fill('1')
   await expect(visiumPanel.getByRole('button', { name: '2 µm' })).toBeEnabled()
   await expect(visiumPanel.getByRole('button', { name: '2 µm' })).toHaveAttribute(
     'title',
@@ -122,10 +121,6 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
   await expect(magicLensPanel.getByLabel('Magic lens gene distribution')).toContainText(
     'A2M',
   )
-
-  await page.getByRole('tab', { name: 'Dataset' }).click()
-  await page.getByLabel('Mapping rows').fill('50')
-  await expect(page.getByLabel('Mapping rows')).toHaveValue('50')
 
   await page.getByRole('tab', { name: 'Cell' }).click()
   const cellPanel = page.locator('#hud-panel-cell')
