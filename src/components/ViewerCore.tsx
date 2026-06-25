@@ -1149,6 +1149,12 @@ function ViewerSurface({
           return null
         })
         setGridCellHover(null)
+
+        if (magicLensActive) {
+          setCellBoundaryHover(null)
+          return
+        }
+
         setCellBoundaryHover({
           boundary: info.object,
           ...(expressionCell?.expressionCount === undefined
@@ -1196,6 +1202,7 @@ function ViewerSurface({
 
       if (magicLensActive && roiMode === 'idle' && !measurementEnabled) {
         setGridCellHover((current) => (current === null ? current : null))
+        setCellBoundaryHover((current) => (current === null ? current : null))
         const rect = event.currentTarget.getBoundingClientRect()
         const screen = {
           x: event.clientX - rect.left,
@@ -1585,7 +1592,7 @@ function ViewerSurface({
       {gridCellHover === null || magicLensActive ? null : (
         <GridCellHoverTooltip detail={gridCellHover} />
       )}
-      {cellBoundaryHover === null ? null : (
+      {cellBoundaryHover === null || magicLensActive ? null : (
         <CellBoundaryHoverTooltip detail={cellBoundaryHover} />
       )}
       {!hasSpatialData && status === 'idle' ? (

@@ -659,6 +659,58 @@ describe('ViewerCore', () => {
     expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
   })
 
+  it('suppresses segmented cell boundary hover metadata while cursor magic lens is active', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const boundary: CellBoundaryDatum = {
+      id: 'cellid_000000001-1',
+      polygon: [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, -10, 0],
+        [0, -10, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+
+    render(
+      <ViewerCore
+        boundaries={[boundary]}
+        cellBoundaryHoverEnabled
+        magicLensActive
+        magicLensRadiusMicrometers={40}
+        magicLensStatus="ready"
+        magicLensSummary={{
+          kind: 'expression',
+          transcriptCount: 167,
+          cellCount: 6,
+          geneCount: 1,
+          selectedGeneTranscriptCount: 167,
+          topGenes: [{ gene: 'C7', count: 167, selected: true }],
+          hitLimit: false,
+        }}
+      />,
+    )
+
+    const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+    fireEvent.pointerMove(frame, { clientX: 80, clientY: 40 })
+
+    await waitFor(() => {
+      expect(document.querySelector('.viewer-magic-lens-hud')).toHaveTextContent(
+        '6 bins - 167 UMI',
+      )
+    })
+
+    act(() => {
+      deckGlMock.onHover?.({ object: boundary, x: 80, y: 40 })
+    })
+
+    expect(document.querySelector('.viewer-magic-lens-hud')).toHaveTextContent('C7')
+    expect(screen.queryByText('cellid_000000001-1')).not.toBeInTheDocument()
+    expect(screen.queryByText('Segmented')).not.toBeInTheDocument()
+  })
+
   it('notifies when an exact transcript point is clicked', () => {
     const transcript = transcriptDatum({
       id: 'tx-clicked',
