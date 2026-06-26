@@ -1450,6 +1450,14 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       and platform-aware boundary, nucleus, gene-expression, and
       analysis-loading helpers. `App.tsx` uses the adapter for those policies
       while preserving the existing workflow boundaries.
+- [x] Continued the viewer structural split. `ViewerCore` now delegates shared
+      types, navigation/view-state math, ROI drawing helpers, measurement
+      overlays, Magic Lens overlays, hover/picking helpers, and viewport status
+      messages to focused modules while preserving the public `ViewerCore`
+      exports. `deckLayers.ts` now remains the compatibility facade and
+      `createOverviewLayers` assembly point, with cell points, binary
+      boundaries, grid cells, transcripts, expression styling, palette helpers,
+      and view fitting split into renderer modules.
 
 ### Test Coverage Assessment - 2026-06-26
 

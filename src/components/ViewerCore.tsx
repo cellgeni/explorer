@@ -1,8 +1,50 @@
 import { DeckGL } from '@deck.gl/react'
-import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
+import type { KeyboardEvent, PointerEvent } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
+import {
+  CellBoundaryHoverTooltip,
+  GridCellHoverTooltip,
+  OverviewCellHoverTooltip,
+  TranscriptHoverTooltip,
+} from './viewerHoverTooltips'
+import {
+  cellForDeckCoordinate,
+  isCellBoundaryDatum,
+  isGridCellDatum,
+  isOverviewCellDatum,
+  isTranscriptAggregateDatum,
+  isTranscriptPointDatum,
+} from './viewerPicking'
+import { MagicLensOverlay } from './viewerMagicLensOverlay'
+import { magicLensOverlayModel } from './viewerMagicLensModel'
+import {
+  bboxFromCircle,
+  countGridCellsInBbox,
+  equivalentBoundaryStyleViewport,
+  equivalentViewState,
+  equivalentViewportSize,
+  formatMouseCoordinate,
+  mergeInitialViewState,
+  normaliseViewState,
+  pointerEventToDataPoint,
+  viewStateFromKeyboardEvent,
+  viewStateKey,
+  type BoundaryStyleViewport,
+  type MouseCoordinate,
+} from './viewerNavigation'
+import {
+  dataPointsToBbox,
+  dataPointsToPathOverlay,
+  hasMinimumPointStep,
+  roiBboxToScreenRect,
+  roiSelectionFromBox,
+  roiSelectionFromLasso,
+  type RoiDraft,
+} from './viewerRoiInteraction'
+import { MeasurementOverlay, type MeasurementState } from './viewerMeasurementOverlay'
+import { readViewportMessage } from './viewerStatus'
 import {
   createCellBoundaryLayerGeometry,
   createCellBoundaryLayerStyle,
@@ -24,9 +66,9 @@ import {
 } from '../rendering/cellAggregation'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
 import { styleOverviewCellsByObservation } from '../rendering/cellStyling'
-import { micrometers, scaleFromZoom } from '../data/coords'
-import type { PickingInfo, Position, ViewStateChangeParameters } from '@deck.gl/core'
-import type { BBox, DataPoint } from '../data/coords'
+import { scaleFromZoom } from '../data/coords'
+import type { PickingInfo, ViewStateChangeParameters } from '@deck.gl/core'
+import type { BBox } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { TiffPyramidLoader } from '../tiff/loader'
@@ -50,159 +92,49 @@ import type {
 } from '../rendering/cellStyling'
 import {
   DEFAULT_MICROMETERS_PER_PIXEL,
-  formatCoordinateValue,
   hasMinimumMeasurementDistance,
   measurementOverlayModel,
-  rawDataPointToScreen,
-  safeMicrometersPerPixel,
   scaleBarModel,
-  type MeasurementLine,
-  type MeasurementOverlayModel,
   type ScaleBarModel,
   type ScreenPoint,
-  type ViewerDistanceUnit,
 } from './viewerMeasurements'
+import type {
+  RoiDrawMode,
+  ViewerCellBoundaryHoverDetail,
+  ViewerCoordinateUnit,
+  ViewerCoreProps,
+  ViewerFocusRequest,
+  ViewerGridCellHoverDetail,
+  ViewerLoadStatus,
+  ViewerMagicLensDetail,
+  ViewerMagicLensStatus,
+  ViewerMagicLensSummary,
+  ViewerOverviewCellHoverDetail,
+  ViewerTranscriptHoverDetail,
+  ViewerViewportDetail,
+} from './viewerCoreTypes'
+export type {
+  InitialViewStateOverride,
+  RoiDrawMode,
+  ViewerCellBoundaryHoverDetail,
+  ViewerCoordinateUnit,
+  ViewerCoreProps,
+  ViewerFocusRequest,
+  ViewerGridCellHoverDetail,
+  ViewerLoadStatus,
+  ViewerMagicLensDetail,
+  ViewerMagicLensGeneSummary,
+  ViewerMagicLensStatus,
+  ViewerMagicLensSummary,
+  ViewerOverviewCellHoverDetail,
+  ViewerTranscriptHoverDetail,
+  ViewerViewportDetail,
+} from './viewerCoreTypes'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
 const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
-const DATASET_LOADING_TASK_ID = 'dataset'
-const MORPHOLOGY_LOADING_TASK_ID = 'morphology'
-const BOUNDARY_LOADING_TASK_ID = 'boundaries'
-
-export type ViewerLoadStatus = 'idle' | 'loading' | 'ready' | 'error'
-export type ViewerCoordinateUnit = ViewerDistanceUnit
-
-export interface ViewerCoreProps {
-  readonly cells?: readonly OverviewCellDatum[]
-  readonly fitCells?: readonly OverviewCellDatum[]
-  readonly expressionCells?: readonly OverviewCellDatum[]
-  readonly geneExpressionActive?: boolean
-  readonly geneExpressionOverlayEnabled?: boolean
-  readonly boundaries?: readonly CellBoundaryDatum[]
-  readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
-  readonly cellBoundaryHoverEnabled?: boolean
-  readonly hoverTooltipsEnabled?: boolean
-  readonly gridCells?: readonly GridCellDatum[]
-  readonly fitGridCells?: readonly GridCellDatum[]
-  readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
-  readonly transcriptPoints?: readonly TranscriptPointDatum[]
-  readonly imageLoader?: TiffPyramidLoader | null
-  readonly imageChannels?: readonly MorphologyCanvasChannel[]
-  readonly flatImage?: FlatMorphologyCanvasImage | null
-  readonly imageOpacity?: number
-  readonly cellFillOpacity?: number
-  readonly cellBoundaryOpacity?: number
-  readonly transcriptOpacity?: number
-  readonly transcriptPointSize?: number
-  readonly observationColorMode?: ObservationColorMode
-  readonly annotationStyleColors?: readonly AnnotationColorStyle[]
-  readonly cellMetadataTrack?: CellMetadataColorStyle | null
-  readonly loadingTasks?: readonly LoadingTaskSummary[]
-  readonly coordinateUnit?: ViewerCoordinateUnit
-  readonly measurementEnabled?: boolean
-  readonly measurementUnit?: ViewerCoordinateUnit
-  readonly measurementResetKey?: number
-  readonly micrometersPerPixel?: number
-  readonly status?: ViewerLoadStatus
-  readonly imageStatus?: ViewerLoadStatus
-  readonly boundaryStatus?: ViewerLoadStatus
-  readonly errorMessage?: string
-  readonly imageErrorMessage?: string
-  readonly boundaryErrorMessage?: string
-  readonly roiMode?: RoiDrawMode
-  readonly roiBbox?: BBox | null
-  readonly roiSelection?: RoiSelection | null
-  readonly magicLensActive?: boolean
-  readonly magicLensRadiusMicrometers?: number
-  readonly magicLensStatus?: ViewerMagicLensStatus
-  readonly magicLensSummary?: ViewerMagicLensSummary | null
-  readonly initialViewStateOverride?: InitialViewStateOverride
-  readonly viewResetKey?: string | number
-  readonly focusRequest?: ViewerFocusRequest | null
-  readonly overviewRenderCellLimit?: number
-  readonly maxConcurrentTileRequests?: number
-  readonly tileCacheMaxTiles?: number
-  readonly onImageTileError?: (error: Error) => void
-  readonly onTileCacheEviction?: (evictedTileCount: number) => void
-  readonly onViewportChange?: (detail: ViewerViewportDetail) => void
-  readonly onViewportCellCountChange?: (cellCount: number) => void
-  readonly onCellClick?: (cell: OverviewCellDatum) => void
-  readonly onCellBoundaryClick?: (boundary: CellBoundaryDatum) => void
-  readonly onGridCellClick?: (cell: GridCellDatum) => void
-  readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
-  readonly onTranscriptClick?: (detail: ViewerTranscriptHoverDetail) => void
-  readonly onRoiComplete?: (selection: RoiSelection) => void
-  readonly onMagicLensMove?: (detail: ViewerMagicLensDetail) => void
-  readonly onMagicLensLeave?: () => void
-}
-
-export interface InitialViewStateOverride {
-  readonly target?: readonly [number, number, number]
-  readonly zoom?: number
-}
-
-export interface ViewerFocusRequest {
-  readonly key: number
-  readonly target: readonly [number, number, number]
-}
-
-export type ViewerMagicLensStatus = 'idle' | 'loading' | 'ready' | 'error'
-
-export interface ViewerMagicLensDetail {
-  readonly center: DataPoint
-  readonly radiusMicrometers: number
-  readonly bbox: BBox
-  readonly screen: ScreenPoint
-}
-
-export interface ViewerMagicLensSummary {
-  readonly kind?: 'transcripts' | 'expression'
-  readonly transcriptCount: number
-  readonly cellCount: number
-  readonly geneCount: number
-  readonly selectedGeneTranscriptCount: number
-  readonly topGenes: readonly ViewerMagicLensGeneSummary[]
-  readonly hitLimit: boolean
-}
-
-export interface ViewerMagicLensGeneSummary {
-  readonly gene: string
-  readonly count: number
-  readonly selected: boolean
-}
-
-export interface ViewerViewportDetail {
-  readonly bbox: BBox
-  readonly visibleCellCount: number
-  readonly viewState: OverviewViewState
-}
-
-export interface ViewerTranscriptHoverDetail {
-  readonly transcript?: TranscriptPointDatum
-  readonly aggregate?: TranscriptAggregateDatum
-  readonly screen: ScreenPoint
-}
-
-export interface ViewerGridCellHoverDetail {
-  readonly cell: GridCellDatum
-  readonly screen: ScreenPoint
-}
-
-export interface ViewerCellBoundaryHoverDetail {
-  readonly boundary: CellBoundaryDatum
-  readonly expressionCount?: number
-  readonly expressionGenes?: readonly string[]
-  readonly screen: ScreenPoint
-}
-
-export interface ViewerOverviewCellHoverDetail {
-  readonly cell: OverviewCellDatum
-  readonly screen: ScreenPoint
-}
-
-export type RoiDrawMode = 'idle' | 'box' | 'lasso'
 
 export function ViewerCore({
   cells = [],
@@ -407,51 +339,6 @@ interface ViewerSurfaceProps {
   readonly onRoiComplete?: (selection: RoiSelection) => void
   readonly onMagicLensMove?: (detail: ViewerMagicLensDetail) => void
   readonly onMagicLensLeave?: () => void
-}
-
-type RoiDraft =
-  | {
-      readonly kind: 'box'
-      readonly start: DataPoint
-      readonly current: DataPoint
-    }
-  | {
-      readonly kind: 'lasso'
-      readonly points: readonly DataPoint[]
-      readonly current: DataPoint
-    }
-
-interface MeasurementDraft {
-  readonly start: DataPoint
-  readonly current: DataPoint
-}
-
-interface MeasurementState {
-  readonly resetKey: number
-  readonly draft: MeasurementDraft | null
-  readonly line: MeasurementLine | null
-}
-
-interface BoundaryStyleViewport {
-  readonly bbox: BBox
-  readonly zoom: number
-}
-
-interface RoiPathOverlay {
-  readonly d: string
-  readonly isDraft: boolean
-}
-
-interface MouseCoordinate {
-  readonly xMicrometers: number
-  readonly yMicrometers: number
-}
-
-interface RoiScreenRect {
-  readonly left: number
-  readonly top: number
-  readonly width: number
-  readonly height: number
 }
 
 function ViewerSurface({
@@ -1702,40 +1589,6 @@ function expressionOverlayCellsForRendering({
   return overlayCells.length === 0 ? EMPTY_OVERVIEW_CELLS : overlayCells
 }
 
-function pointerEventToDataPoint(
-  event: PointerEvent<HTMLDivElement>,
-  viewState: OverviewViewState,
-  viewport: CssViewportSize,
-): DataPoint {
-  const rect = event.currentTarget.getBoundingClientRect()
-  const scale = scaleFromZoom(viewState.zoom)
-  const offsetX = viewport.width / 2 - viewState.target[0] * scale
-  const offsetY = viewport.height / 2 + viewState.target[1] * scale
-
-  return {
-    x: micrometers((event.clientX - rect.left - offsetX) / scale),
-    y: micrometers((event.clientY - rect.top - offsetY) / scale),
-  }
-}
-
-function dataPointsToBbox(first: DataPoint, second: DataPoint): BBox {
-  return {
-    minX: micrometers(Math.min(first.x, second.x)),
-    maxX: micrometers(Math.max(first.x, second.x)),
-    minY: micrometers(Math.min(first.y, second.y)),
-    maxY: micrometers(Math.max(first.y, second.y)),
-  }
-}
-
-function bboxFromCircle(center: DataPoint, radius: number): BBox {
-  return {
-    minX: micrometers(Math.max(0, center.x - radius)),
-    maxX: micrometers(center.x + radius),
-    minY: micrometers(Math.max(0, center.y - radius)),
-    maxY: micrometers(center.y + radius),
-  }
-}
-
 function ScaleBar({ model }: { readonly model: ScaleBarModel }) {
   return (
     <div className="viewport-scale-bar" aria-label={`Scale bar ${model.label}`}>
@@ -1747,577 +1600,6 @@ function ScaleBar({ model }: { readonly model: ScaleBarModel }) {
       />
     </div>
   )
-}
-
-function MeasurementOverlay({ model }: { readonly model: MeasurementOverlayModel }) {
-  return (
-    <div className="measurement-overlay">
-      <svg className="measurement-svg" focusable="false" aria-hidden="true">
-        <line
-          className={`measurement-line${model.isDraft ? ' is-draft' : ''}`}
-          x1={model.start.x}
-          y1={model.start.y}
-          x2={model.end.x}
-          y2={model.end.y}
-        />
-        <circle
-          className="measurement-endpoint"
-          cx={model.start.x}
-          cy={model.start.y}
-          r="3"
-        />
-        <circle
-          className="measurement-endpoint"
-          cx={model.end.x}
-          cy={model.end.y}
-          r="3"
-        />
-      </svg>
-      <span
-        className={`measurement-label${model.isDraft ? ' is-draft' : ''}`}
-        style={model.labelStyle}
-      >
-        {model.label}
-      </span>
-    </div>
-  )
-}
-
-interface MagicLensOverlayModel {
-  readonly circleStyle: CSSProperties
-  readonly hudStyle: CSSProperties
-}
-
-function MagicLensOverlay({
-  model,
-  status,
-  summary,
-}: {
-  readonly model: MagicLensOverlayModel
-  readonly status: ViewerMagicLensStatus
-  readonly summary: ViewerMagicLensSummary | null
-}) {
-  const topGenes = summary?.topGenes.slice(0, 8) ?? []
-  const maxCount = Math.max(...topGenes.map((gene) => gene.count), 1)
-
-  return (
-    <div className="viewer-magic-lens" aria-hidden="true">
-      <span className="viewer-magic-lens-circle" style={model.circleStyle} />
-      {status === 'idle' && summary === null ? null : (
-        <div className="viewer-magic-lens-hud" style={model.hudStyle}>
-          <p>
-            {summary === null
-              ? 'Scanning lens'
-              : `${summary.cellCount.toLocaleString()} ${magicLensElementShortLabel(summary)} - ${summary.transcriptCount.toLocaleString()} ${magicLensPrimaryMetricShortLabel(summary)}`}
-          </p>
-          {status === 'loading' ? <small>Loading expression…</small> : null}
-          {topGenes.length === 0 && status !== 'loading' ? (
-            <small>No detected genes</small>
-          ) : null}
-          {topGenes.length === 0 ? null : (
-            <ol>
-              {topGenes.map((gene) => (
-                <li
-                  key={gene.gene}
-                  className={gene.selected ? 'is-selected' : undefined}
-                  style={
-                    {
-                      '--viewer-magic-lens-gene-width': `${Math.max(
-                        4,
-                        (gene.count / maxCount) * 100,
-                      )}%`,
-                    } as CSSProperties
-                  }
-                >
-                  <span>{gene.gene}</span>
-                  <strong>{gene.count.toLocaleString()}</strong>
-                  <i />
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function GridCellHoverTooltip({
-  detail,
-}: {
-  readonly detail: ViewerGridCellHoverDetail
-}) {
-  const cell = detail.cell
-
-  return (
-    <div
-      className="transcript-hover-tooltip grid-cell-hover-tooltip"
-      style={{
-        left: detail.screen.x,
-        top: detail.screen.y,
-      }}
-      aria-hidden="true"
-    >
-      <p>{cell.id}</p>
-      <dl>
-        <div>
-          <dt>Bin</dt>
-          <dd>{formatGridCellBinSize(cell)}</dd>
-        </div>
-        <div>
-          <dt>Array</dt>
-          <dd>
-            {cell.row.toLocaleString()}, {cell.col.toLocaleString()}
-          </dd>
-        </div>
-        <div>
-          <dt>Image px</dt>
-          <dd>{formatGridCellImageCoordinate(cell)}</dd>
-        </div>
-        <div>
-          <dt>Tissue</dt>
-          <dd>{formatGridCellTissue(cell)}</dd>
-        </div>
-        {cell.expressionCount === undefined ? null : (
-          <div>
-            <dt>Expression</dt>
-            <dd>{formatCoordinateValue(cell.expressionCount)}</dd>
-          </div>
-        )}
-      </dl>
-    </div>
-  )
-}
-
-function OverviewCellHoverTooltip({
-  detail,
-}: {
-  readonly detail: ViewerOverviewCellHoverDetail
-}) {
-  const cell = detail.cell
-  const cellCount = cell.cellCount
-  const isAggregateBin = cellCount !== undefined || cell.id.startsWith('cell-bin:')
-
-  return (
-    <div
-      className="transcript-hover-tooltip grid-cell-hover-tooltip overview-cell-hover-tooltip"
-      style={{
-        left: detail.screen.x,
-        top: detail.screen.y,
-      }}
-      aria-hidden="true"
-    >
-      <p>{cell.id}</p>
-      <dl>
-        <div>
-          <dt>{isAggregateBin ? 'Bin' : 'Cell'}</dt>
-          <dd>{isAggregateBin ? 'Overview' : 'Xenium'}</dd>
-        </div>
-        {cellCount === undefined ? null : (
-          <div>
-            <dt>Count</dt>
-            <dd>{cellCount.toLocaleString()}</dd>
-          </div>
-        )}
-        <div>
-          <dt>X/Y</dt>
-          <dd>{formatOverviewCellPosition(cell)}</dd>
-        </div>
-        {cell.transcriptCount === undefined ? null : (
-          <div>
-            <dt>Tx</dt>
-            <dd>{cell.transcriptCount.toLocaleString()}</dd>
-          </div>
-        )}
-        {cell.cellArea === undefined ? null : (
-          <div>
-            <dt>Area</dt>
-            <dd>{formatCoordinateValue(cell.cellArea)} um^2</dd>
-          </div>
-        )}
-        {cell.expressionCount === undefined ? null : (
-          <div>
-            <dt>Expression</dt>
-            <dd>{formatCoordinateValue(cell.expressionCount)}</dd>
-          </div>
-        )}
-        {cell.expressionGenes === undefined ||
-        cell.expressionGenes.length === 0 ? null : (
-          <div>
-            <dt>Genes</dt>
-            <dd>{formatExpressionGeneList(cell.expressionGenes)}</dd>
-          </div>
-        )}
-      </dl>
-    </div>
-  )
-}
-
-function CellBoundaryHoverTooltip({
-  detail,
-}: {
-  readonly detail: ViewerCellBoundaryHoverDetail
-}) {
-  const boundary = detail.boundary
-
-  return (
-    <div
-      className="transcript-hover-tooltip grid-cell-hover-tooltip cell-boundary-hover-tooltip"
-      style={{
-        left: detail.screen.x,
-        top: detail.screen.y,
-      }}
-      aria-hidden="true"
-    >
-      <p>{boundary.id}</p>
-      <dl>
-        <div>
-          <dt>Cell</dt>
-          <dd>Segmented</dd>
-        </div>
-        {boundary.annotationLabel === undefined ? null : (
-          <div>
-            <dt>Annotation</dt>
-            <dd>{boundary.annotationLabel}</dd>
-          </div>
-        )}
-        <div>
-          <dt>Vertices</dt>
-          <dd>{boundary.polygon.length.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Area</dt>
-          <dd>{formatBoundaryPolygonArea(boundary.polygon)}</dd>
-        </div>
-        {detail.expressionCount === undefined ? null : (
-          <div>
-            <dt>Expression</dt>
-            <dd>{formatCoordinateValue(detail.expressionCount)}</dd>
-          </div>
-        )}
-        {detail.expressionGenes === undefined ||
-        detail.expressionGenes.length === 0 ? null : (
-          <div>
-            <dt>Genes</dt>
-            <dd>{formatExpressionGeneList(detail.expressionGenes)}</dd>
-          </div>
-        )}
-      </dl>
-    </div>
-  )
-}
-
-function TranscriptHoverTooltip({
-  detail,
-}: {
-  readonly detail: ViewerTranscriptHoverDetail
-}) {
-  const aggregate = detail.aggregate
-
-  if (aggregate !== undefined) {
-    return (
-      <div
-        className="transcript-hover-tooltip"
-        style={{
-          left: detail.screen.x,
-          top: detail.screen.y,
-        }}
-        aria-hidden="true"
-      >
-        <p>
-          {aggregate.featureName === undefined
-            ? 'Transcript density bin'
-            : aggregate.featureName}
-        </p>
-        <dl>
-          <div>
-            <dt>Count</dt>
-            <dd>{aggregate.count.toLocaleString()}</dd>
-          </div>
-          {aggregate.binTotalCount === undefined ? null : (
-            <div>
-              <dt>Total</dt>
-              <dd>{aggregate.binTotalCount.toLocaleString()}</dd>
-            </div>
-          )}
-          <div>
-            <dt>Level</dt>
-            <dd>{aggregate.level.toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>X/Y</dt>
-            <dd>
-              {formatCoordinateValue(aggregate.position[0] ?? 0)},{' '}
-              {formatCoordinateValue(-(aggregate.position[1] ?? 0))} um
-            </dd>
-          </div>
-          <div>
-            <dt>Bin</dt>
-            <dd>
-              {aggregate.binX.toLocaleString()}, {aggregate.binY.toLocaleString()}
-            </dd>
-          </div>
-          {aggregate.omittedFeatureCount === undefined ? null : (
-            <div>
-              <dt>Hidden</dt>
-              <dd>{aggregate.omittedFeatureCount.toLocaleString()} genes</dd>
-            </div>
-          )}
-        </dl>
-      </div>
-    )
-  }
-
-  const transcript = detail.transcript
-
-  if (transcript === undefined) {
-    return null
-  }
-
-  const transcriptCellLabel = transcriptCellDisplayLabel(transcript)
-
-  return (
-    <div
-      className="transcript-hover-tooltip"
-      style={{
-        left: detail.screen.x,
-        top: detail.screen.y,
-      }}
-      aria-hidden="true"
-    >
-      <p>{transcript.featureName}</p>
-      <dl>
-        <div>
-          <dt>ID</dt>
-          <dd>{transcript.transcriptId ?? transcript.id}</dd>
-        </div>
-        <div>
-          <dt>FOV</dt>
-          <dd>{transcript.fovName ?? 'Unassigned'}</dd>
-        </div>
-        {transcriptCellLabel === null ? null : (
-          <div>
-            <dt>Cell</dt>
-            <dd>{transcriptCellLabel}</dd>
-          </div>
-        )}
-        <div>
-          <dt>QV</dt>
-          <dd>{formatCoordinateValue(transcript.qv)}</dd>
-        </div>
-        <div>
-          <dt>X/Y</dt>
-          <dd>
-            {formatCoordinateValue(transcript.position[0] ?? 0)},{' '}
-            {formatCoordinateValue(-(transcript.position[1] ?? 0))} um
-          </dd>
-        </div>
-        {transcript.zLocation === undefined ? null : (
-          <div>
-            <dt>Z</dt>
-            <dd>{formatCoordinateValue(transcript.zLocation)} um</dd>
-          </div>
-        )}
-        {transcript.overlapsNucleus === undefined ? null : (
-          <div>
-            <dt>Nucleus</dt>
-            <dd>{transcript.overlapsNucleus ? 'Overlap' : 'Outside'}</dd>
-          </div>
-        )}
-        {transcript.nucleusDistance === undefined ? null : (
-          <div>
-            <dt>Distance</dt>
-            <dd>{formatCoordinateValue(transcript.nucleusDistance)} um</dd>
-          </div>
-        )}
-      </dl>
-    </div>
-  )
-}
-
-function transcriptCellDisplayLabel(transcript: TranscriptPointDatum): string | null {
-  if (transcript.cellId !== null) {
-    return transcript.cellId
-  }
-
-  return transcript.cellAssignment === 'unassigned' ? 'Unassigned' : null
-}
-
-function magicLensOverlayModel(
-  screen: ScreenPoint,
-  radiusMicrometers: number,
-  viewState: OverviewViewState,
-  viewport: CssViewportSize,
-  status: ViewerMagicLensStatus,
-  summary: ViewerMagicLensSummary | null,
-): MagicLensOverlayModel {
-  const radiusPixels = Math.max(10, radiusMicrometers * scaleFromZoom(viewState.zoom))
-  const hudWidth = 190
-  const geneCount = Math.min(summary?.topGenes.length ?? 1, 8)
-  const hudHeight = status === 'loading' ? 58 : 46 + geneCount * 22
-  const gap = 10
-  let hudLeft = screen.x + radiusPixels + gap
-  let hudTop = screen.y - hudHeight / 2
-
-  if (hudLeft + hudWidth > viewport.width - 8) {
-    hudLeft = screen.x - radiusPixels - gap - hudWidth
-  }
-
-  hudTop = Math.max(8, Math.min(viewport.height - hudHeight - 8, hudTop))
-
-  return {
-    circleStyle: {
-      left: screen.x,
-      top: screen.y,
-      width: radiusPixels * 2,
-      height: radiusPixels * 2,
-    },
-    hudStyle: {
-      left: Math.max(8, hudLeft),
-      top: hudTop,
-      width: hudWidth,
-    },
-  }
-}
-
-function magicLensElementShortLabel(summary: ViewerMagicLensSummary): string {
-  return summary.kind === 'expression' ? 'bins' : 'cells'
-}
-
-function magicLensPrimaryMetricShortLabel(summary: ViewerMagicLensSummary): string {
-  return summary.kind === 'expression' ? 'UMI' : 'tx'
-}
-
-function dataPointArrayToBbox(points: readonly DataPoint[]): BBox | null {
-  if (points.length === 0) {
-    return null
-  }
-
-  let minX = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-
-  for (const point of points) {
-    minX = Math.min(minX, point.x)
-    maxX = Math.max(maxX, point.x)
-    minY = Math.min(minY, point.y)
-    maxY = Math.max(maxY, point.y)
-  }
-
-  return {
-    minX: micrometers(minX),
-    maxX: micrometers(maxX),
-    minY: micrometers(minY),
-    maxY: micrometers(maxY),
-  }
-}
-
-function roiBboxToScreenRect(
-  bbox: BBox | null,
-  viewState: OverviewViewState,
-  viewport: CssViewportSize,
-): RoiScreenRect | null {
-  if (bbox === null) {
-    return null
-  }
-
-  const topLeft = rawDataPointToScreen(
-    { x: bbox.minX, y: bbox.minY },
-    viewState,
-    viewport,
-  )
-  const bottomRight = rawDataPointToScreen(
-    { x: bbox.maxX, y: bbox.maxY },
-    viewState,
-    viewport,
-  )
-  const left = Math.min(topLeft.x, bottomRight.x)
-  const top = Math.min(topLeft.y, bottomRight.y)
-  const right = Math.max(topLeft.x, bottomRight.x)
-  const bottom = Math.max(topLeft.y, bottomRight.y)
-
-  return {
-    left,
-    top,
-    width: right - left,
-    height: bottom - top,
-  }
-}
-
-function dataPointsToPathOverlay(
-  points: readonly DataPoint[],
-  viewState: OverviewViewState,
-  viewport: CssViewportSize,
-  isDraft: boolean,
-): RoiPathOverlay | null {
-  if (points.length < 2) {
-    return null
-  }
-
-  const screenPoints = points.map((point) =>
-    rawDataPointToScreen(point, viewState, viewport),
-  )
-
-  return {
-    d: screenPointsToPath(screenPoints, !isDraft && screenPoints.length >= 3),
-    isDraft,
-  }
-}
-
-function screenPointsToPath(points: readonly ScreenPoint[], closePath: boolean): string {
-  const [firstPoint, ...remainingPoints] = points
-
-  if (firstPoint === undefined) {
-    return ''
-  }
-
-  const lineCommands = remainingPoints
-    .map((point) => `L ${formatPathPoint(point.x)} ${formatPathPoint(point.y)}`)
-    .join(' ')
-
-  return [
-    `M ${formatPathPoint(firstPoint.x)} ${formatPathPoint(firstPoint.y)}`,
-    lineCommands,
-    closePath ? 'Z' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-}
-
-function formatPathPoint(value: number): string {
-  return value.toFixed(2)
-}
-
-function roiSelectionFromBox(first: DataPoint, second: DataPoint): RoiSelection | null {
-  const bbox = dataPointsToBbox(first, second)
-
-  return hasMinimumRoiSize(bbox) ? { kind: 'box', bbox } : null
-}
-
-function roiSelectionFromLasso(points: readonly DataPoint[]): RoiSelection | null {
-  const bbox = dataPointArrayToBbox(points)
-
-  if (bbox === null || points.length < 3 || !hasMinimumRoiSize(bbox)) {
-    return null
-  }
-
-  return { kind: 'lasso', bbox, points }
-}
-
-function hasMinimumRoiSize(bbox: BBox): boolean {
-  return bbox.maxX - bbox.minX >= 1 && bbox.maxY - bbox.minY >= 1
-}
-
-function hasMinimumPointStep(
-  first: DataPoint,
-  second: DataPoint,
-  minDistance: number,
-): boolean {
-  const deltaX = second.x - first.x
-  const deltaY = second.y - first.y
-
-  return deltaX * deltaX + deltaY * deltaY >= minDistance * minDistance
 }
 
 function styleCellsForObservation(
@@ -2334,437 +1616,4 @@ function styleCellsForObservation(
     annotations: annotationStyleColors,
     metadataTrack: cellMetadataTrack,
   })
-}
-
-function formatMouseCoordinate(
-  coordinate: MouseCoordinate,
-  unit: ViewerCoordinateUnit,
-  micrometersPerPixel: number,
-): string {
-  if (unit === 'px') {
-    const pixelSize = safeMicrometersPerPixel(micrometersPerPixel)
-
-    return `X ${formatCoordinateValue(coordinate.xMicrometers / pixelSize)} px | Y ${formatCoordinateValue(coordinate.yMicrometers / pixelSize)} px`
-  }
-
-  return `X ${formatCoordinateValue(coordinate.xMicrometers)} μm | Y ${formatCoordinateValue(coordinate.yMicrometers)} μm`
-}
-
-function formatGridCellBinSize(cell: GridCellDatum): string {
-  return cell.binSizeMicrometers === undefined
-    ? 'Unknown'
-    : `${formatCoordinateValue(cell.binSizeMicrometers)} μm`
-}
-
-function formatOverviewCellPosition(cell: OverviewCellDatum): string {
-  return `${formatCoordinateValue(cell.position[0] ?? 0)}, ${formatCoordinateValue(
-    -(cell.position[1] ?? 0),
-  )} um`
-}
-
-function formatGridCellImageCoordinate(cell: GridCellDatum): string {
-  if (cell.fullresRow === undefined || cell.fullresCol === undefined) {
-    return 'Unknown'
-  }
-
-  return `${formatCoordinateValue(cell.fullresRow)}, ${formatCoordinateValue(
-    cell.fullresCol,
-  )} px`
-}
-
-function formatGridCellTissue(cell: GridCellDatum): string {
-  if (cell.inTissue === undefined) {
-    return 'Unknown'
-  }
-
-  return cell.inTissue ? 'In tissue' : 'Out of tissue'
-}
-
-function formatBoundaryPolygonArea(polygon: readonly Position[]): string {
-  return `${formatCoordinateValue(boundaryPolygonArea(polygon))} um^2`
-}
-
-function boundaryPolygonArea(polygon: readonly Position[]): number {
-  if (polygon.length < 3) {
-    return 0
-  }
-
-  let area = 0
-
-  for (let index = 0; index < polygon.length; index += 1) {
-    const current = polygon[index]!
-    const next = polygon[(index + 1) % polygon.length]!
-    const currentX = current[0] ?? 0
-    const currentY = current[1] ?? 0
-    const nextX = next[0] ?? 0
-    const nextY = next[1] ?? 0
-
-    area += currentX * nextY - nextX * currentY
-  }
-
-  return Math.abs(area) / 2
-}
-
-function formatExpressionGeneList(genes: readonly string[]): string {
-  const shownGenes = genes.slice(0, 3)
-  const omittedCount = genes.length - shownGenes.length
-  const suffix = omittedCount <= 0 ? '' : ` +${omittedCount.toLocaleString()}`
-
-  return `${shownGenes.join(', ')}${suffix}`
-}
-
-function countGridCellsInBbox(gridCells: readonly GridCellDatum[], bbox: BBox): number {
-  let count = 0
-
-  for (const cell of gridCells) {
-    if (gridCellIntersectsBbox(cell, bbox)) {
-      count += 1
-    }
-  }
-
-  return count
-}
-
-function gridCellIntersectsBbox(cell: GridCellDatum, bbox: BBox): boolean {
-  if (cell.polygon.length === 0) {
-    return false
-  }
-
-  let minX = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-
-  for (const [x = 0, deckY = 0] of cell.polygon) {
-    const rawY = -deckY
-    minX = Math.min(minX, x)
-    maxX = Math.max(maxX, x)
-    minY = Math.min(minY, rawY)
-    maxY = Math.max(maxY, rawY)
-  }
-
-  return maxX >= bbox.minX && minX <= bbox.maxX && maxY >= bbox.minY && minY <= bbox.maxY
-}
-
-function readViewportMessage(
-  status: ViewerLoadStatus,
-  imageStatus: ViewerLoadStatus,
-  boundaryStatus: ViewerLoadStatus,
-  messages: {
-    readonly errorMessage?: string
-    readonly imageErrorMessage?: string
-    readonly boundaryErrorMessage?: string
-  },
-  loadingTaskIds: ReadonlySet<string>,
-): { readonly kind: 'info' | 'error'; readonly text: string } | null {
-  if (status === 'loading' && !loadingTaskIds.has(DATASET_LOADING_TASK_ID)) {
-    return { kind: 'info', text: 'Loading overview cells…' }
-  }
-
-  if (status === 'error') {
-    return {
-      kind: 'error',
-      text: messages.errorMessage ?? 'Dataset load failed.',
-    }
-  }
-
-  if (imageStatus === 'loading' && !loadingTaskIds.has(MORPHOLOGY_LOADING_TASK_ID)) {
-    return { kind: 'info', text: 'Reading OME-TIFF image…' }
-  }
-
-  if (imageStatus === 'error') {
-    return {
-      kind: 'error',
-      text: messages.imageErrorMessage ?? 'OME-TIFF image load failed.',
-    }
-  }
-
-  if (boundaryStatus === 'loading' && !loadingTaskIds.has(BOUNDARY_LOADING_TASK_ID)) {
-    return { kind: 'info', text: 'Loading cell boundaries…' }
-  }
-
-  if (boundaryStatus === 'error') {
-    return {
-      kind: 'error',
-      text: messages.boundaryErrorMessage ?? 'Cell boundary load failed.',
-    }
-  }
-
-  return null
-}
-
-function mergeInitialViewState(
-  fittedViewState: OverviewViewState,
-  override: InitialViewStateOverride | undefined,
-): OverviewViewState {
-  if (override === undefined) {
-    return fittedViewState
-  }
-
-  const nextViewState = normaliseViewState({
-    ...fittedViewState,
-    ...override,
-    target: override.target ?? fittedViewState.target,
-    minZoom: fittedViewState.minZoom,
-    maxZoom: fittedViewState.maxZoom,
-  })
-
-  return {
-    ...nextViewState,
-    zoom: clampZoom(nextViewState.zoom, fittedViewState),
-  }
-}
-
-function viewStateFromKeyboardEvent(
-  event: KeyboardEvent<HTMLDivElement>,
-  viewState: OverviewViewState,
-  initialViewState: OverviewViewState,
-): OverviewViewState | null {
-  const panStep = (event.shiftKey ? 256 : 64) / scaleFromZoom(viewState.zoom)
-
-  switch (event.key) {
-    case 'ArrowLeft':
-      return {
-        ...viewState,
-        target: [viewState.target[0] - panStep, viewState.target[1], viewState.target[2]],
-      }
-    case 'ArrowRight':
-      return {
-        ...viewState,
-        target: [viewState.target[0] + panStep, viewState.target[1], viewState.target[2]],
-      }
-    case 'ArrowUp':
-      return {
-        ...viewState,
-        target: [viewState.target[0], viewState.target[1] - panStep, viewState.target[2]],
-      }
-    case 'ArrowDown':
-      return {
-        ...viewState,
-        target: [viewState.target[0], viewState.target[1] + panStep, viewState.target[2]],
-      }
-    case '+':
-    case '=':
-      return {
-        ...viewState,
-        zoom: clampZoom(viewState.zoom + 0.5, viewState),
-      }
-    case '-':
-    case '_':
-      return {
-        ...viewState,
-        zoom: clampZoom(viewState.zoom - 0.5, viewState),
-      }
-    case 'Home':
-      return initialViewState
-    default:
-      return null
-  }
-}
-
-function normaliseViewState(viewState: {
-  readonly target?: readonly [number, number] | readonly [number, number, number]
-  readonly zoom?: number
-  readonly minZoom?: number
-  readonly maxZoom?: number
-}): OverviewViewState {
-  const target = viewState.target ?? [0, 0, 0]
-
-  return {
-    target: [target[0] ?? 0, target[1] ?? 0, target[2] ?? 0],
-    zoom: viewState.zoom ?? 0,
-    minZoom: viewState.minZoom ?? -10,
-    maxZoom: viewState.maxZoom ?? 10,
-  }
-}
-
-function clampZoom(zoom: number, viewState: OverviewViewState): number {
-  return Math.min(viewState.maxZoom, Math.max(viewState.minZoom, zoom))
-}
-
-function equivalentViewState(left: OverviewViewState, right: OverviewViewState): boolean {
-  return (
-    nearlyEqual(left.target[0], right.target[0], 0.5) &&
-    nearlyEqual(left.target[1], right.target[1], 0.5) &&
-    nearlyEqual(left.target[2], right.target[2], 0.5) &&
-    nearlyEqual(left.zoom, right.zoom, 0.001) &&
-    nearlyEqual(left.minZoom, right.minZoom, 0.001) &&
-    nearlyEqual(left.maxZoom, right.maxZoom, 0.001)
-  )
-}
-
-function equivalentViewportSize(left: CssViewportSize, right: CssViewportSize): boolean {
-  return (
-    nearlyEqual(left.width, right.width, 0.5) &&
-    nearlyEqual(left.height, right.height, 0.5)
-  )
-}
-
-function equivalentBoundaryStyleViewport(
-  left: BoundaryStyleViewport | null,
-  right: BoundaryStyleViewport,
-): boolean {
-  return (
-    left !== null &&
-    nearlyEqual(left.zoom, right.zoom, 0.001) &&
-    nearlyEqual(left.bbox.minX, right.bbox.minX, 0.5) &&
-    nearlyEqual(left.bbox.maxX, right.bbox.maxX, 0.5) &&
-    nearlyEqual(left.bbox.minY, right.bbox.minY, 0.5) &&
-    nearlyEqual(left.bbox.maxY, right.bbox.maxY, 0.5)
-  )
-}
-
-function nearlyEqual(left: number, right: number, tolerance: number): boolean {
-  return Math.abs(left - right) <= tolerance
-}
-
-function viewStateKey(viewState: OverviewViewState): string {
-  return `${viewState.target.join(':')}:${viewState.zoom}`
-}
-
-function isOverviewCellDatum(value: unknown): value is OverviewCellDatum {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  const candidate = value as Partial<OverviewCellDatum>
-
-  return (
-    typeof candidate.id === 'string' &&
-    Array.isArray(candidate.position) &&
-    typeof candidate.radiusPixels === 'number'
-  )
-}
-
-function isCellBoundaryDatum(value: unknown): value is CellBoundaryDatum {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  const candidate = value as Partial<CellBoundaryDatum>
-
-  return typeof candidate.id === 'string' && Array.isArray(candidate.polygon)
-}
-
-function isGridCellDatum(value: unknown): value is GridCellDatum {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  const candidate = value as Partial<GridCellDatum>
-
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.gridId === 'string' &&
-    typeof candidate.row === 'number' &&
-    typeof candidate.col === 'number' &&
-    Array.isArray(candidate.polygon)
-  )
-}
-
-function isTranscriptPointDatum(value: unknown): value is TranscriptPointDatum {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  const candidate = value as Partial<TranscriptPointDatum>
-
-  return (
-    typeof candidate.id === 'string' &&
-    Array.isArray(candidate.position) &&
-    typeof candidate.featureName === 'string' &&
-    typeof candidate.qv === 'number'
-  )
-}
-
-function isTranscriptAggregateDatum(value: unknown): value is TranscriptAggregateDatum {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  const candidate = value as Partial<TranscriptAggregateDatum>
-
-  return (
-    typeof candidate.id === 'string' &&
-    Array.isArray(candidate.position) &&
-    typeof candidate.count === 'number' &&
-    typeof candidate.radiusMicrometers === 'number'
-  )
-}
-
-function cellForDeckCoordinate(
-  coordinate: readonly number[] | undefined,
-  boundaries: readonly CellBoundaryDatum[],
-  cells: readonly OverviewCellDatum[],
-  cellById: ReadonlyMap<string, OverviewCellDatum>,
-): OverviewCellDatum | null {
-  const x = coordinate?.[0]
-  const y = coordinate?.[1]
-
-  if (x === undefined || y === undefined) {
-    return null
-  }
-
-  for (let index = boundaries.length - 1; index >= 0; index -= 1) {
-    const boundary = boundaries[index]
-
-    if (boundary === undefined || !polygonContainsDeckPoint(boundary.polygon, x, y)) {
-      continue
-    }
-
-    return cellById.get(boundary.id) ?? null
-  }
-
-  for (const cell of cells) {
-    const [cellX = 0, cellY = 0] = cell.position
-    const radius = Math.max(0, cell.radiusMicrometers ?? cell.radiusPixels)
-    const dx = x - cellX
-    const dy = y - cellY
-
-    if (dx * dx + dy * dy <= radius * radius) {
-      return cell
-    }
-  }
-
-  return null
-}
-
-function polygonContainsDeckPoint(
-  polygon: readonly Position[],
-  x: number,
-  y: number,
-): boolean {
-  if (polygon.length < 3) {
-    return false
-  }
-
-  let inside = false
-
-  for (
-    let currentIndex = 0, previousIndex = polygon.length - 1;
-    currentIndex < polygon.length;
-    previousIndex = currentIndex, currentIndex += 1
-  ) {
-    const current = polygon[currentIndex]
-    const previous = polygon[previousIndex]
-
-    if (current === undefined || previous === undefined) {
-      continue
-    }
-
-    const currentX = current[0] ?? 0
-    const currentY = current[1] ?? 0
-    const previousX = previous[0] ?? 0
-    const previousY = previous[1] ?? 0
-    const crossesY = currentY > y !== previousY > y
-
-    if (
-      crossesY &&
-      x < ((previousX - currentX) * (y - currentY)) / (previousY - currentY) + currentX
-    ) {
-      inside = !inside
-    }
-  }
-
-  return inside
 }

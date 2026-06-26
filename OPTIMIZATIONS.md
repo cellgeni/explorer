@@ -103,6 +103,14 @@ the app shell, platform workflows, and rendering modules.
   platform-aware boundary, nucleus, gene-expression, and analysis-loading
   helpers. `App.tsx` consumes those platform policies while leaving the existing
   data/workflow hooks intact.
+- 2026-06-26: Continued item 4 by splitting `ViewerCore` interaction concerns
+  and `deckLayers` renderer concerns. Viewer types, navigation, ROI drawing,
+  measurement overlays, Magic Lens overlays, hover/picking helpers, and viewport
+  status messages now live behind focused viewer modules while `ViewerCore`
+  remains the surface wiring component. `deckLayers.ts` is now a compatibility
+  facade and `createOverviewLayers` assembly point, with cell points,
+  boundaries, grid cells, transcripts, gene-expression styling, palette helpers,
+  and view fitting moved into renderer modules.
 
 ## Recommendations
 
