@@ -1442,6 +1442,14 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       Visium HD ROI completion, morphology auto-contrast failures, and dataset
       resets now use named helpers/constants instead of inline async state
       payloads. Focused model coverage was added for the new constructors.
+- [x] Finished the platform adapter layer for Xenium-like versus Visium HD app
+      behavior. `features/app-shell/platformAdapter` now owns feature gates,
+      platform labels, transcript visibility, boundary/nucleus overlay policy,
+      Magic Lens availability, ROI draw readiness, active ROI/embedding
+      selection, selected expression-profile routing, ROI completion routing,
+      and platform-aware boundary, nucleus, gene-expression, and
+      analysis-loading helpers. `App.tsx` uses the adapter for those policies
+      while preserving the existing workflow boundaries.
 
 ### Test Coverage Assessment - 2026-06-26
 

@@ -29,6 +29,23 @@ import {
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
 import {
+  activeVisiumHdRoiStateForPlatform,
+  appPlatformAdapterFor,
+  isVisiumHdPlatform,
+  loadPlatformBoundaryElements,
+  loadPlatformGeneExpression,
+  loadPlatformNucleusBoundaryElements,
+  platformAnalysisEmbeddingOptions,
+  platformActiveBoundaryCell,
+  platformBoundarySurfaceReserved,
+  platformExpressionProfileSelection,
+  platformProjectedExpressionActive,
+  platformRoiElementIds,
+  platformRoiCompleteHandler,
+  platformRoiSelection,
+  platformSelectedEmbeddingElementId,
+} from './features/app-shell/platformAdapter'
+import {
   defaultAppDependencies,
   type AppProps,
   type BoundaryElementsLoader,
@@ -41,11 +58,7 @@ import { useVisiumHdBinWorkflow } from './features/app-shell/useVisiumHdBinWorkf
 import { useVisiumHdExpressionProfileWorkflow } from './features/app-shell/useVisiumHdExpressionProfileWorkflow'
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
-import {
-  formatMappingRowsScope,
-  isSpatialGeneExpressionDataset,
-  isSpatialSegmentationDataset,
-} from './features/app-shell/visiumHdAppController'
+import { formatMappingRowsScope } from './features/app-shell/visiumHdAppController'
 import {
   appendFallbackNoticeEntry,
   appendDebugLogEntry,
@@ -79,7 +92,6 @@ import {
 import {
   IDLE_CELL_EXPRESSION_PROFILE_STATE,
   cellExpressionProfileMatchesSelection,
-  type CellExpressionProfileSelection,
   type CellExpressionProfileState,
 } from './features/cells/cellExpressionProfileModel'
 import type { CellGeneExpressionStatus } from './features/cells/cellGeneExpressionStatus'
@@ -248,6 +260,7 @@ import type {
 } from './components/ViewerCore'
 
 const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
+const EMPTY_GRID_CELL_DATA: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 const EMPTY_GENE_EXPRESSION_SCALE_DOMAIN: GeneExpressionScaleDomain = { key: '', max: 0 }
 
@@ -635,9 +648,9 @@ export function App({
   const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
   const isLoading = loadState.status === 'loading'
   const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
-  const isVisiumHdDataset =
-    loadState.status === 'ready' && datasetPlatform === 'visium-hd'
-  const xeniumFeatureLoadEnabled = loadState.status === 'ready' && !isVisiumHdDataset
+  const platformAdapter = appPlatformAdapterFor(loadState, datasetPlatform)
+  const isVisiumHdDataset = isVisiumHdPlatform(platformAdapter)
+  const platformFeatureLoadEnabled = platformAdapter.featureLoadEnabled(loadState)
   const geneExpressionScaleDatasetUrl =
     loadState.status === 'ready' ? loadState.url : datasetUrl
   const selectedCellMetadataTrack = useMemo(
@@ -653,14 +666,12 @@ export function App({
       : visiumHdControlState.selectedBinSize
   const activeVisiumHdBinSize = diagnosticsVisiumHdBinSize
   const visiumHdBarcodeMappingRowBudget: number | undefined = undefined
-  const activeVisiumHdRoiState: VisiumHdRoiState =
-    isVisiumHdDataset &&
-    loadState.status === 'ready' &&
-    visiumHdRoiState.status === 'ready' &&
-    visiumHdRoiState.url === loadState.url &&
-    visiumHdRoiState.binSizeMicrometers === activeVisiumHdBinSize
-      ? visiumHdRoiState
-      : IDLE_VISIUM_HD_ROI_STATE
+  const activeVisiumHdRoiState = activeVisiumHdRoiStateForPlatform({
+    activeBinSize: activeVisiumHdBinSize,
+    adapter: platformAdapter,
+    loadState,
+    state: visiumHdRoiState,
+  })
   const hiddenAnnotationSetIdSet = useMemo(
     () => new Set(hiddenAnnotationSetIds),
     [hiddenAnnotationSetIds],
@@ -766,10 +777,11 @@ export function App({
     visiumHdExpressionProjectionState.status === 'ready'
       ? visiumHdExpressionProjectionState.batch
       : null
-  const isProjectedVisiumHdExpressionActive =
-    isVisiumHdDataset &&
-    visibleCellBoundaryElements.length > 0 &&
-    projectedVisiumHdExpressionBatch !== null
+  const isProjectedVisiumHdExpressionActive = platformProjectedExpressionActive(
+    platformAdapter,
+    visibleCellBoundaryElements.length,
+    projectedVisiumHdExpressionBatch,
+  )
   const viewerGeneExpressionBatch = isProjectedVisiumHdExpressionActive
     ? projectedVisiumHdExpressionBatch
     : geneExpressionBatch
@@ -847,10 +859,14 @@ export function App({
   const visibleNucleusBoundaryLayerData = showNucleusBoundaries
     ? nucleusBoundaryLayerData
     : EMPTY_CELL_BOUNDARY_DATA
-  const isVisiumHdBoundarySurfaceReserved =
-    isVisiumHdDataset &&
-    showCellBoundaries &&
-    (boundaryState.status === 'loading' || expressionStyledBoundaryLayerData.length > 0)
+  const isVisiumHdBoundarySurfaceReserved = platformBoundarySurfaceReserved(
+    platformAdapter,
+    {
+      boundaryState,
+      expressionBoundaryCount: expressionStyledBoundaryLayerData.length,
+      showCellBoundaries,
+    },
+  )
   const expressionStyledSpatialGridCells = useMemo(
     () =>
       styleGridCellsByGeneExpression(spatialGridCells, styledGeneExpressionCells, {
@@ -858,28 +874,28 @@ export function App({
       }),
     [geneExpressionState.status, spatialGridCells, styledGeneExpressionCells],
   )
-  const viewerGridCells = useMemo(
-    () => (isVisiumHdBoundarySurfaceReserved ? [] : expressionStyledSpatialGridCells),
-    [expressionStyledSpatialGridCells, isVisiumHdBoundarySurfaceReserved],
+  const viewerGridCells = isVisiumHdBoundarySurfaceReserved
+    ? EMPTY_GRID_CELL_DATA
+    : expressionStyledSpatialGridCells
+  const boundaryLoadingEnabled = platformAdapter.boundaryLoadingEnabled(
+    showCellBoundaries,
+    showNucleusBoundaries,
   )
-  const boundaryLoadingEnabled =
-    showCellBoundaries || (isVisiumHdDataset && showNucleusBoundaries)
-  const boundaryOverlayRequestKey = `${boundaryLoadingEnabled ? 'enabled' : 'disabled'}:${
-    isVisiumHdDataset && showNucleusBoundaries ? 'nucleus' : 'no-nucleus'
-  }`
+  const boundaryOverlayRequestKey = platformAdapter.boundaryOverlayRequestKey(
+    showCellBoundaries,
+    showNucleusBoundaries,
+  )
   const boundaryOverlayRequestKeyRef = useRef(boundaryOverlayRequestKey)
-  const geneExpressionOverlayEnabled = !(isVisiumHdDataset && spatialGridCells.length > 0)
+  const geneExpressionOverlayEnabled = platformAdapter.geneExpressionOverlayEnabled(
+    spatialGridCells.length,
+  )
   const activeSelectedBoundaryCell = useMemo(() => {
-    if (selectedBoundaryCell === null || !isVisiumHdDataset) {
-      return null
-    }
-
-    return (
-      expressionStyledBoundaryLayerData.find(
-        (cell) => cell.id === selectedBoundaryCell.id,
-      ) ?? null
+    return platformActiveBoundaryCell(
+      platformAdapter,
+      selectedBoundaryCell,
+      expressionStyledBoundaryLayerData,
     )
-  }, [expressionStyledBoundaryLayerData, isVisiumHdDataset, selectedBoundaryCell])
+  }, [expressionStyledBoundaryLayerData, platformAdapter, selectedBoundaryCell])
   const viewerMicrometersPerPixel =
     morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
   const viewerImageStatus =
@@ -950,28 +966,15 @@ export function App({
     selectedGenes,
     selectedGridCell,
   ])
-  const activeVisiumHdExpressionProfileSelection =
-    useMemo<CellExpressionProfileSelection | null>(() => {
-      if (!isVisiumHdDataset) {
-        return null
-      }
-
-      if (activeSelectedBoundaryCell !== null) {
-        return {
-          id: activeSelectedBoundaryCell.id,
-          kind: 'cell',
-        }
-      }
-
-      if (activeSelectedGridCell !== null) {
-        return {
-          id: activeSelectedGridCell.id,
-          kind: 'bin',
-        }
-      }
-
-      return null
-    }, [activeSelectedBoundaryCell, activeSelectedGridCell, isVisiumHdDataset])
+  const activeVisiumHdExpressionProfileSelection = useMemo(
+    () =>
+      platformExpressionProfileSelection(
+        platformAdapter,
+        activeSelectedBoundaryCell,
+        activeSelectedGridCell,
+      ),
+    [activeSelectedBoundaryCell, activeSelectedGridCell, platformAdapter],
+  )
   const activeVisiumHdExpressionProfileState = cellExpressionProfileMatchesSelection(
     visiumHdExpressionProfileState,
     activeVisiumHdExpressionProfileSelection,
@@ -990,20 +993,15 @@ export function App({
     [analysisEmbeddingState, selectedEmbeddingKind],
   )
   const roiCellIds = useMemo(
-    () =>
-      isVisiumHdDataset
-        ? activeVisiumHdRoiState.status === 'ready'
-          ? activeVisiumHdRoiState.bins.map((bin) => bin.barcode)
-          : []
-        : roiState.status === 'ready'
-          ? roiState.cells.map((cell) => cell.id)
-          : [],
-    [activeVisiumHdRoiState, isVisiumHdDataset, roiState],
+    () => platformRoiElementIds(platformAdapter, roiState, activeVisiumHdRoiState),
+    [activeVisiumHdRoiState, platformAdapter, roiState],
   )
-  const selectedEmbeddingElementId = isVisiumHdDataset
-    ? (activeSelectedGridCell?.id ?? null)
-    : (selectedCell?.id ?? null)
-  const embeddingElementLabel = isVisiumHdDataset ? 'bins' : 'cells'
+  const selectedEmbeddingElementId = platformSelectedEmbeddingElementId(
+    platformAdapter,
+    selectedCell,
+    activeSelectedGridCell,
+  )
+  const embeddingElementLabel = platformAdapter.labels.embeddingElementPlural
   const embeddingCopy = analysisEmbeddingStatusCopy(
     analysisEmbeddingState,
     activeEmbedding,
@@ -1123,11 +1121,12 @@ export function App({
     roiGeneViewportWarmupState.key === roiGeneViewportWarmupRequiredKey
   const isDatasetPreparationPending =
     loadState.status === 'ready' && datasetWarmupState.status === 'loading'
-  const canDrawRoi = isVisiumHdDataset
-    ? loadState.status === 'ready' &&
-      spatialGridCells.length > 0 &&
-      visiumHdControlState.status !== 'loading'
-    : xeniumFeatureLoadEnabled && !isDatasetPreparationPending
+  const canDrawRoi = platformAdapter.canDrawRoi({
+    isDatasetPreparationPending,
+    loadState,
+    spatialGridCellCount: spatialGridCells.length,
+    visiumHdControlState,
+  })
   const roiHeaderCopy = isDatasetPreparationPending
     ? 'Preparing'
     : roiGeneStatsState.status === 'loading'
@@ -1218,25 +1217,18 @@ export function App({
     () => new Set(loadingTasks.map((task) => task.tabId)),
     [loadingTasks],
   )
-  const activeRoiSelection = isVisiumHdDataset
-    ? activeVisiumHdRoiState.status === 'idle'
-      ? null
-      : activeVisiumHdRoiState.selection
-    : roiState.status === 'idle'
-      ? null
-      : roiState.selection
-  const effectiveShowTranscriptOverlay = showTranscriptOverlay && !isVisiumHdDataset
-  const visiumHdMagicLensBinsReady =
-    isVisiumHdDataset && loadState.status === 'ready' && spatialGridCells.length > 0
-  const visiumHdMagicLensUnavailableReason =
-    isVisiumHdDataset && loadState.status === 'ready'
-      ? spatialGridCells.length === 0
-        ? 'Bins pending'
-        : undefined
-      : undefined
-  const magicLensLoadEnabled = isVisiumHdDataset
-    ? visiumHdMagicLensBinsReady
-    : xeniumFeatureLoadEnabled
+  const activeRoiSelection = platformRoiSelection(
+    platformAdapter,
+    roiState,
+    activeVisiumHdRoiState,
+  )
+  const effectiveShowTranscriptOverlay =
+    platformAdapter.effectiveTranscriptOverlay(showTranscriptOverlay)
+  const magicLensAvailability = platformAdapter.magicLensAvailability(
+    loadState,
+    spatialGridCells.length,
+  )
+  const magicLensLoadEnabled = magicLensAvailability.loadEnabled
   const shareableMorphologyEnabledChannelIds = useMemo(() => {
     if (baseMorphologyChannelIds.size === 0) {
       return undefined
@@ -1289,7 +1281,7 @@ export function App({
     loadState.status,
     magicLensCanScan,
     magicLensActive,
-    visiumHdMagicLensUnavailableReason,
+    magicLensAvailability.unavailableReason,
   )
   const transcriptCopy = transcriptStatusCopy(
     transcriptCapabilityState,
@@ -1490,72 +1482,41 @@ export function App({
 
       return loadAnalysisEmbeddings(baseUrl, {
         ...options,
-        ...(isVisiumHdDataset && activeVisiumHdBinSize !== undefined
-          ? { visiumHdBinSizeMicrometers: activeVisiumHdBinSize }
-          : {}),
+        ...platformAnalysisEmbeddingOptions(platformAdapter, activeVisiumHdBinSize),
       })
     },
-    [activeVisiumHdBinSize, isVisiumHdDataset, loadAnalysisEmbeddings],
+    [activeVisiumHdBinSize, loadAnalysisEmbeddings, platformAdapter],
   )
   const loadActiveBoundaryElements = useCallback<BoundaryElementsLoader>(
-    async (baseUrl, bbox, options = {}) => {
-      if (!isVisiumHdDataset) {
-        return loadBoundaryElements(baseUrl, bbox, options)
-      }
-
-      const dataset = await getSpatialDataset(baseUrl)
-      const meta = await dataset.meta()
-
-      if (!meta.capabilities.cellBoundaries) {
-        return { elements: [] }
-      }
-
-      return dataset.elements(bbox)
-    },
-    [getSpatialDataset, isVisiumHdDataset, loadBoundaryElements],
+    (...args) =>
+      loadPlatformBoundaryElements(
+        platformAdapter,
+        { getSpatialDataset, loadBoundaryElements },
+        ...args,
+      ),
+    [getSpatialDataset, loadBoundaryElements, platformAdapter],
   )
   const loadActiveNucleusBoundaryElements = useCallback<BoundaryElementsLoader>(
-    async (baseUrl, bbox) => {
-      if (!isVisiumHdDataset) {
-        return { elements: [] }
-      }
-
-      const dataset = await getSpatialDataset(baseUrl)
-      const meta = await dataset.meta()
-      const hasNucleusSegmentation =
-        meta.segmentations?.some((segmentation) => segmentation.kind === 'nucleus') ??
-        false
-
-      if (!hasNucleusSegmentation || !isSpatialSegmentationDataset(dataset)) {
-        return { elements: [] }
-      }
-
-      return {
-        elements: await dataset.segmentationElements('nucleus', bbox),
-      }
-    },
-    [getSpatialDataset, isVisiumHdDataset],
+    (...args) =>
+      loadPlatformNucleusBoundaryElements(
+        platformAdapter,
+        { getSpatialDataset },
+        ...args,
+      ),
+    [getSpatialDataset, platformAdapter],
   )
   const loadActiveGeneExpression = useCallback<GeneExpressionLoader>(
-    async (baseUrl, bbox, genes, options = {}) => {
-      if (!isVisiumHdDataset) {
-        return loadGeneExpression(baseUrl, bbox, genes, options)
-      }
-
-      const dataset = await getSpatialDataset(baseUrl)
-
-      if (!isSpatialGeneExpressionDataset(dataset)) {
-        throw new Error('Loaded dataset does not expose selected-gene expression.')
-      }
-
-      return dataset.geneExpression(bbox, genes, {
-        ...options,
-        ...(activeVisiumHdBinSize === undefined
-          ? {}
-          : { binSizeMicrometers: activeVisiumHdBinSize }),
-      })
-    },
-    [activeVisiumHdBinSize, getSpatialDataset, isVisiumHdDataset, loadGeneExpression],
+    (...args) =>
+      loadPlatformGeneExpression(
+        platformAdapter,
+        {
+          activeBinSize: activeVisiumHdBinSize,
+          getSpatialDataset,
+          loadGeneExpression,
+        },
+        ...args,
+      ),
+    [activeVisiumHdBinSize, getSpatialDataset, loadGeneExpression, platformAdapter],
   )
   const loadVisiumHdMagicLensSummary = useVisiumHdMagicLensSummary({
     controls: {
@@ -1621,7 +1582,7 @@ export function App({
     },
     loaders: {
       boundaryElements: loadActiveBoundaryElements,
-      ...(isVisiumHdDataset && showNucleusBoundaries
+      ...(platformAdapter.capabilities.nucleusBoundaries && showNucleusBoundaries
         ? { nucleusBoundaryElements: loadActiveNucleusBoundaryElements }
         : {}),
       geneExpression: loadActiveGeneExpression,
@@ -1765,7 +1726,7 @@ export function App({
     },
     controls: {
       currentViewportDetail,
-      enabled: !isVisiumHdDataset,
+      enabled: platformAdapter.kind !== 'visium-hd',
       magicLensScope,
       roiName,
     },
@@ -1969,7 +1930,7 @@ export function App({
     loaders: {
       loadRoiCells,
       loadRoiGeneStats,
-      ...(isVisiumHdDataset
+      ...(platformAdapter.kind === 'visium-hd'
         ? { loadMagicLensSummary: loadVisiumHdMagicLensSummary }
         : {}),
     },
@@ -2390,7 +2351,7 @@ export function App({
           showCellBoundaries={showCellBoundaries}
           showNucleusBoundaries={showNucleusBoundaries}
           showHoverTooltips={showHoverTooltips}
-          nucleusBoundaryControlsVisible={isVisiumHdDataset}
+          nucleusBoundaryControlsVisible={platformAdapter.capabilities.nucleusBoundaries}
           setCellBoundaryOpacity={setCellBoundaryOpacity}
           setCellFillOpacity={setCellFillOpacity}
           setShowCellBoundaries={setShowCellBoundaries}
@@ -2452,7 +2413,9 @@ export function App({
           genePanelState={genePanelState}
           handlePinTranscript={handlePinTranscript}
           hoveredTranscript={hoveredTranscript}
-          loadEnabled={xeniumFeatureLoadEnabled}
+          loadEnabled={
+            platformAdapter.capabilities.transcripts && platformFeatureLoadEnabled
+          }
           pinnedTranscript={pinnedTranscript}
           resetGeneExpressionSelectionState={resetGeneExpressionSelectionState}
           selectedGenes={selectedGenes}
@@ -2500,7 +2463,7 @@ export function App({
           magicLensState={magicLensState}
           magicLensRadiusMicrometers={magicLensRadiusMicrometers}
           magicLensMinQv={magicLensMinQv}
-          minQvVisible={!isVisiumHdDataset}
+          minQvVisible={platformAdapter.capabilities.magicLensMinQv}
           magicLensIsCursorActive={magicLensIsCursorActive}
           magicLensCanScan={magicLensCanScan}
           onScopeChange={handleMagicLensScopeChange}
@@ -2517,7 +2480,9 @@ export function App({
           annotationImportUrlInputId={controlIds.annotationImportUrlInputId}
           annotationImportUrl={annotationImportUrl}
           annotationHeaderCopy={annotationHeaderCopy}
-          loadEnabled={xeniumFeatureLoadEnabled}
+          loadEnabled={
+            platformAdapter.capabilities.annotations && platformFeatureLoadEnabled
+          }
           selectedAnnotationGroupId={selectedAnnotationGroupId}
           annotationGroupOptions={annotationGroupOptions}
           annotationState={annotationState}
@@ -2626,7 +2591,7 @@ export function App({
             canDrawRoi={canDrawRoi}
             roiMode={roiMode}
             roiName={roiName}
-            loadEnabled={xeniumFeatureLoadEnabled}
+            loadEnabled={platformFeatureLoadEnabled}
             roiState={roiState}
             roiSummary={roiSummary}
             roiGeneStatsCopy={roiGeneStatsCopy}
@@ -2669,7 +2634,9 @@ export function App({
           geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
           boundaries={expressionStyledBoundaryLayerData}
           nucleusBoundaries={visibleNucleusBoundaryLayerData}
-          cellBoundaryHoverEnabled={isVisiumHdDataset && showCellBoundaries}
+          cellBoundaryHoverEnabled={platformAdapter.cellBoundaryHoverEnabled(
+            showCellBoundaries,
+          )}
           hoverTooltipsEnabled={showHoverTooltips}
           gridCells={viewerGridCells}
           fitGridCells={spatialGridCells}
@@ -2729,9 +2696,10 @@ export function App({
             setSelectedBoundaryCell(null)
             setSelectedGridCell(cell)
           }}
-          onRoiComplete={
-            isVisiumHdDataset ? handleVisiumHdRoiComplete : handleRoiComplete
-          }
+          onRoiComplete={platformRoiCompleteHandler(platformAdapter, {
+            visiumHd: handleVisiumHdRoiComplete,
+            xenium: handleRoiComplete,
+          })}
           onMagicLensMove={handleMagicLensMove}
           onMagicLensLeave={handleMagicLensLeave}
           {...(initialShareableState.viewState === undefined

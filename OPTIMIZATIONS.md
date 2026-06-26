@@ -95,6 +95,14 @@ the app shell, platform workflows, and rendering modules.
   projection, Visium HD ROI completion, morphology auto-contrast failures, and
   dataset reset paths. Runtime workflows no longer assemble async state payloads
   inline, and focused model tests cover the new constructors.
+- 2026-06-26: Finished item 5 by introducing an app-shell platform adapter for
+  Xenium-like versus Visium HD behavior. The adapter now centralizes feature
+  gates, platform labels, transcript visibility, boundary/nucleus overlay
+  policy, Magic Lens availability, ROI draw readiness, active ROI/embedding
+  selection, selected expression-profile routing, ROI completion routing, and
+  platform-aware boundary, nucleus, gene-expression, and analysis-loading
+  helpers. `App.tsx` consumes those platform policies while leaving the existing
+  data/workflow hooks intact.
 
 ## Recommendations
 
