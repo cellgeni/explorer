@@ -27,7 +27,7 @@ function Probe({
 }: {
   readonly loadCustomMorphologyLayer: Parameters<
     typeof useCustomMorphologyLayerWorkflow
-  >[0]['loadCustomMorphologyLayer']
+  >[0]['loaders']['loadCustomMorphologyLayer']
   readonly onReady: (
     nextApi: ReturnType<typeof useCustomMorphologyLayerWorkflow>,
     nextSnapshot: Snapshot,
@@ -49,18 +49,26 @@ function Probe({
   const loadRequestIdRef = React.useRef(11)
 
   const nextApi = useCustomMorphologyLayerWorkflow({
-    appendDebugEvent: (message) => {
-      debugMessagesRef.current.push(message)
+    callbacks: {
+      appendDebugEvent: (message) => {
+        debugMessagesRef.current.push(message)
+      },
     },
-    customLayers,
-    customLayerAbortRef,
-    customLayerIdRef,
-    customLayerRequestIdRef,
-    loadCustomMorphologyLayer,
-    loadRequestIdRef,
-    setCustomLayerLoadState: setCustomLayerState,
-    setCustomLayers,
-    setMorphologyChannelSettings,
+    data: {
+      customLayers,
+    },
+    loaders: { loadCustomMorphologyLayer },
+    refs: {
+      customLayerAbortRef,
+      customLayerIdRef,
+      customLayerRequestIdRef,
+      loadRequestIdRef,
+    },
+    setters: {
+      setCustomLayerLoadState: setCustomLayerState,
+      setCustomLayers,
+      setMorphologyChannelSettings,
+    },
   })
 
   React.useEffect(() => {

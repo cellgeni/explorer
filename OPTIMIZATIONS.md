@@ -56,6 +56,16 @@ the app shell, platform workflows, and rendering modules.
   orchestration for bins, selected profiles, ROI, and Magic Lens summaries.
   Added focused coverage for profile-matrix summaries, viewport expression reuse,
   and selected-gene loader fallback.
+- 2026-06-26: Continued item 2 by grouping options for
+  `useVisiumHdBinWorkflow`, `useGridCellAssignmentWorkflow`,
+  `useMorphologyWorkflow`, `useCustomMorphologyLayerWorkflow`, and
+  `useAnalysisEmbeddingWorkflow` into callbacks, controls, data, loaders, refs,
+  and setters where applicable. Continued the same pass for
+  `useMagicLensWorkflow` and `useAnnotationWorkflow`.
+  These Visium HD, morphology, and embedding workflows now match the grouped
+  option shape used by the other app-shell workflows while preserving the
+  existing bin switching, morphology reuse, barcode assignment, auto-contrast,
+  custom image layer, embedding selection, Magic Lens, and annotation behavior.
 
 ## Recommendations
 

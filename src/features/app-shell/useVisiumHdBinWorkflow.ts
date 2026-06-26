@@ -60,18 +60,33 @@ export interface VisiumHdOverviewDataset {
   ): Promise<VisiumHdBinnedOverview>
 }
 
-export interface UseVisiumHdBinWorkflowOptions {
+interface VisiumHdBinWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly getSpatialDataset: SpatialDatasetLoader
-  readonly loadedDatasetUrl: string | null
   readonly onBeforeBinSizeChange?: () => void
+}
+
+interface VisiumHdBinWorkflowControls {
   readonly shouldLoadMorphology: boolean
   readonly visiumHdControlState: VisiumHdControlState
+}
+
+interface VisiumHdBinWorkflowData {
   readonly flatMorphologyImage?: FlatMorphologyCanvasImage | null | undefined
+  readonly loadedDatasetUrl: string | null
+}
+
+interface VisiumHdBinWorkflowLoaders {
+  readonly getSpatialDataset: SpatialDatasetLoader
+}
+
+interface VisiumHdBinWorkflowRefs {
   readonly visiumHdBinRequestIdRef?: MutableRef<number> | undefined
   readonly geneExpressionAbortRef?: MutableRef<AbortController | null> | undefined
   readonly geneExpressionRequestIdRef?: MutableRef<number> | undefined
   readonly geneExpressionViewportKeyRef?: MutableRef<string | null> | undefined
+}
+
+interface VisiumHdBinWorkflowSetters {
   readonly setFlatMorphologyImage: Setter<FlatMorphologyCanvasImage | null>
   readonly setGeneExpressionBatch?: Setter<GeneExpressionBatch | null> | undefined
   readonly setGeneExpressionScaleDomain?: Setter<GeneExpressionScaleDomain> | undefined
@@ -86,6 +101,15 @@ export interface UseVisiumHdBinWorkflowOptions {
   readonly setVisiumHdControlState: Setter<VisiumHdControlState>
 }
 
+export interface UseVisiumHdBinWorkflowOptions {
+  readonly callbacks: VisiumHdBinWorkflowCallbacks
+  readonly controls: VisiumHdBinWorkflowControls
+  readonly data: VisiumHdBinWorkflowData
+  readonly loaders: VisiumHdBinWorkflowLoaders
+  readonly refs?: VisiumHdBinWorkflowRefs | undefined
+  readonly setters: VisiumHdBinWorkflowSetters
+}
+
 export interface UseVisiumHdBinWorkflowResult {
   readonly handleVisiumHdBinSizeChange: (
     binSize: VisiumHdBinSizeMicrometers,
@@ -93,28 +117,35 @@ export interface UseVisiumHdBinWorkflowResult {
 }
 
 export function useVisiumHdBinWorkflow({
-  appendDebugEvent,
-  getSpatialDataset,
-  loadedDatasetUrl,
-  onBeforeBinSizeChange,
-  shouldLoadMorphology,
-  visiumHdControlState,
-  flatMorphologyImage,
-  visiumHdBinRequestIdRef,
-  geneExpressionAbortRef,
-  geneExpressionRequestIdRef,
-  geneExpressionViewportKeyRef,
-  setFlatMorphologyImage,
-  setGeneExpressionBatch,
-  setGeneExpressionScaleDomain,
-  setGeneExpressionState,
-  setGenePanelState,
-  setLoadState,
-  setMorphologyState,
-  setSpatialGridCells,
-  setSelectedGridCell,
-  setVisiumHdControlState,
+  callbacks,
+  controls,
+  data,
+  loaders,
+  refs,
+  setters,
 }: UseVisiumHdBinWorkflowOptions): UseVisiumHdBinWorkflowResult {
+  const { appendDebugEvent, onBeforeBinSizeChange } = callbacks
+  const { shouldLoadMorphology, visiumHdControlState } = controls
+  const { flatMorphologyImage, loadedDatasetUrl } = data
+  const { getSpatialDataset } = loaders
+  const {
+    geneExpressionAbortRef,
+    geneExpressionRequestIdRef,
+    geneExpressionViewportKeyRef,
+    visiumHdBinRequestIdRef,
+  } = refs ?? {}
+  const {
+    setFlatMorphologyImage,
+    setGeneExpressionBatch,
+    setGeneExpressionScaleDomain,
+    setGeneExpressionState,
+    setGenePanelState,
+    setLoadState,
+    setMorphologyState,
+    setSelectedGridCell,
+    setSpatialGridCells,
+    setVisiumHdControlState,
+  } = setters
   const fallbackRequestIdRef = useRef(0)
   const requestIdRef = visiumHdBinRequestIdRef ?? fallbackRequestIdRef
 

@@ -12,8 +12,14 @@ import type { VisiumHdBinnedOverview } from '../../datasets/visiumHdDataset'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import {
   useVisiumHdBinWorkflow,
+  type UseVisiumHdBinWorkflowOptions,
   type UseVisiumHdBinWorkflowResult,
 } from './useVisiumHdBinWorkflow'
+
+type VisiumHdBinWorkflowOptions = Parameters<typeof useVisiumHdBinWorkflow>[0]
+type VisiumHdBinWorkflowLoaderOptions = VisiumHdBinWorkflowOptions['loaders']
+type VisiumHdBinWorkflowDataOptions = VisiumHdBinWorkflowOptions['data']
+type VisiumHdBinWorkflowSetterOptions = VisiumHdBinWorkflowOptions['setters']
 
 function Probe({
   state,
@@ -32,60 +38,45 @@ function Probe({
   setVisiumHdControlState,
 }: {
   readonly state: VisiumHdControlState
-  readonly getSpatialDataset: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['getSpatialDataset']
+  readonly getSpatialDataset: VisiumHdBinWorkflowLoaderOptions['getSpatialDataset']
   readonly onReady: (nextApi: UseVisiumHdBinWorkflowResult) => void
-  readonly flatMorphologyImage?: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['flatMorphologyImage']
-  readonly setFlatMorphologyImage: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['setFlatMorphologyImage']
-  readonly setGeneExpressionBatch?: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['setGeneExpressionBatch']
-  readonly setGeneExpressionScaleDomain?: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['setGeneExpressionScaleDomain']
-  readonly setGeneExpressionState?: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['setGeneExpressionState']
-  readonly setGenePanelState: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['setGenePanelState']
-  readonly setLoadState: Parameters<typeof useVisiumHdBinWorkflow>[0]['setLoadState']
-  readonly setMorphologyState: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['setMorphologyState']
-  readonly setSelectedGridCell: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['setSelectedGridCell']
-  readonly setSpatialGridCells: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['setSpatialGridCells']
-  readonly setVisiumHdControlState: Parameters<
-    typeof useVisiumHdBinWorkflow
-  >[0]['setVisiumHdControlState']
+  readonly flatMorphologyImage?: VisiumHdBinWorkflowDataOptions['flatMorphologyImage']
+  readonly setFlatMorphologyImage: VisiumHdBinWorkflowSetterOptions['setFlatMorphologyImage']
+  readonly setGeneExpressionBatch?: VisiumHdBinWorkflowSetterOptions['setGeneExpressionBatch']
+  readonly setGeneExpressionScaleDomain?: VisiumHdBinWorkflowSetterOptions['setGeneExpressionScaleDomain']
+  readonly setGeneExpressionState?: VisiumHdBinWorkflowSetterOptions['setGeneExpressionState']
+  readonly setGenePanelState: VisiumHdBinWorkflowSetterOptions['setGenePanelState']
+  readonly setLoadState: VisiumHdBinWorkflowSetterOptions['setLoadState']
+  readonly setMorphologyState: VisiumHdBinWorkflowSetterOptions['setMorphologyState']
+  readonly setSelectedGridCell: VisiumHdBinWorkflowSetterOptions['setSelectedGridCell']
+  readonly setSpatialGridCells: VisiumHdBinWorkflowSetterOptions['setSpatialGridCells']
+  readonly setVisiumHdControlState: VisiumHdBinWorkflowSetterOptions['setVisiumHdControlState']
 }) {
-  const api = useVisiumHdBinWorkflow({
-    appendDebugEvent: vi.fn(),
-    getSpatialDataset,
-    loadedDatasetUrl: 'https://example.test/visium',
-    shouldLoadMorphology: true,
-    visiumHdControlState: state,
-    flatMorphologyImage,
-    setFlatMorphologyImage,
-    setGeneExpressionBatch,
-    setGeneExpressionScaleDomain,
-    setGeneExpressionState,
-    setGenePanelState,
-    setLoadState,
-    setMorphologyState,
-    setSelectedGridCell,
-    setSpatialGridCells,
-    setVisiumHdControlState,
-  })
+  const options: UseVisiumHdBinWorkflowOptions = {
+    callbacks: { appendDebugEvent: vi.fn() },
+    controls: {
+      shouldLoadMorphology: true,
+      visiumHdControlState: state,
+    },
+    data: {
+      flatMorphologyImage,
+      loadedDatasetUrl: 'https://example.test/visium',
+    },
+    loaders: { getSpatialDataset },
+    setters: {
+      setFlatMorphologyImage,
+      setGeneExpressionBatch,
+      setGeneExpressionScaleDomain,
+      setGeneExpressionState,
+      setGenePanelState,
+      setLoadState,
+      setMorphologyState,
+      setSelectedGridCell,
+      setSpatialGridCells,
+      setVisiumHdControlState,
+    },
+  }
+  const api = useVisiumHdBinWorkflow(options)
 
   useEffect(() => {
     onReady(api)

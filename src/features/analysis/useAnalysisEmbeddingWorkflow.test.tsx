@@ -38,7 +38,7 @@ function Probe({
   readonly onSelectedCellFocus?: (cell: OverviewCellDatum) => void
   readonly loadAnalysisEmbeddings: Parameters<
     typeof useAnalysisEmbeddingWorkflow
-  >[0]['loadAnalysisEmbeddings']
+  >[0]['loaders']['loadAnalysisEmbeddings']
 }) {
   const [embeddingState, setAnalysisEmbeddingState] = React.useState<
     AnalysisEmbeddingState<StructuredLoadError>
@@ -57,21 +57,29 @@ function Probe({
   const appendFallbackNotice = React.useCallback(() => undefined, [])
 
   const nextApi = useAnalysisEmbeddingWorkflow({
-    analysisEmbeddingAbortRef,
-    analysisEmbeddingRequestIdRef,
-    analysisEmbeddingState: embeddingState,
-    appendDebugEvent: (message) => {
-      debugMessagesRef.current.push(message)
+    callbacks: {
+      appendDebugEvent: (message) => {
+        debugMessagesRef.current.push(message)
+      },
+      appendFallbackNotice,
+      ...(onSelectedCellFocus === undefined ? {} : { onSelectedCellFocus }),
     },
-    appendFallbackNotice,
-    loadAnalysisEmbeddings,
-    loadState,
-    ...(onSelectedCellFocus === undefined ? {} : { onSelectedCellFocus }),
-    overviewCellById: new Map([[cell.id, cell]]),
-    selectedEmbeddingKind,
-    setAnalysisEmbeddingState,
-    setSelectedCell,
-    setSelectedEmbeddingKind,
+    data: {
+      analysisEmbeddingState: embeddingState,
+      loadState,
+      overviewCellById: new Map([[cell.id, cell]]),
+      selectedEmbeddingKind,
+    },
+    loaders: { loadAnalysisEmbeddings },
+    refs: {
+      analysisEmbeddingAbortRef,
+      analysisEmbeddingRequestIdRef,
+    },
+    setters: {
+      setAnalysisEmbeddingState,
+      setSelectedCell,
+      setSelectedEmbeddingKind,
+    },
   })
 
   React.useEffect(() => {

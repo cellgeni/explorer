@@ -72,38 +72,50 @@ function Probe({
   const appendFallbackNotice = React.useCallback(() => undefined, [])
 
   const nextApi = useMagicLensWorkflow({
-    activeRoiSelection: null,
-    appendDebugEvent: (message) => {
-      debugMessagesRef.current.push(message)
+    callbacks: {
+      appendDebugEvent: (message) => {
+        debugMessagesRef.current.push(message)
+      },
+      appendFallbackNotice,
     },
-    appendFallbackNotice,
-    currentViewportDetail: viewportDetail,
-    loadRoiCells: vi.fn(async () => []),
-    loadRoiGeneStats: vi.fn(async () => ({
-      genes: [],
-      cellCount: 0,
-      sampledCellCount: 0,
-      totalCount: 0,
-      hitCellLimit: false,
-    })),
-    ...(loadMagicLensSummary === undefined ? {} : { loadMagicLensSummary }),
-    loadState,
-    magicLensAbortRef,
-    magicLensActive,
-    magicLensDebounceRef,
-    magicLensLastDetailRef,
-    magicLensLastQueryKeyRef,
-    magicLensMinQv,
-    magicLensRequestIdRef,
-    magicLensScope,
-    selectedGenes: [],
-    setMagicLensActive,
-    setMagicLensMinQv,
-    setMagicLensRadiusMicrometers,
-    setMagicLensScope,
-    setMagicLensState,
-    setMeasurementEnabled,
-    setMeasurementResetKey,
+    controls: {
+      magicLensActive,
+      magicLensMinQv,
+      magicLensScope,
+    },
+    data: {
+      activeRoiSelection: null,
+      currentViewportDetail: viewportDetail,
+      loadState,
+      selectedGenes: [],
+    },
+    loaders: {
+      loadRoiCells: vi.fn(async () => []),
+      loadRoiGeneStats: vi.fn(async () => ({
+        genes: [],
+        cellCount: 0,
+        sampledCellCount: 0,
+        totalCount: 0,
+        hitCellLimit: false,
+      })),
+      ...(loadMagicLensSummary === undefined ? {} : { loadMagicLensSummary }),
+    },
+    refs: {
+      magicLensAbortRef,
+      magicLensDebounceRef,
+      magicLensLastDetailRef,
+      magicLensLastQueryKeyRef,
+      magicLensRequestIdRef,
+    },
+    setters: {
+      setMagicLensActive,
+      setMagicLensMinQv,
+      setMagicLensRadiusMicrometers,
+      setMagicLensScope,
+      setMagicLensState,
+      setMeasurementEnabled,
+      setMeasurementResetKey,
+    },
   })
 
   React.useEffect(() => {

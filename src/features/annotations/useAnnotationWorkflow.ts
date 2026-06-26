@@ -41,19 +41,31 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseAnnotationWorkflowOptions {
-  readonly annotationState: AnnotationState<StructuredLoadError>
+interface AnnotationWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly datasetAbortRef: MutableRef<AbortController | null>
-  readonly datasetUrl: string
+}
+
+interface AnnotationWorkflowData {
+  readonly annotationState: AnnotationState<StructuredLoadError>
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
-  readonly loadAnnotations: AnnotationLoader
-  readonly loadRequestIdRef: MutableRef<number>
+  readonly datasetUrl: string
   readonly loadState: DatasetLoadState<StructuredLoadError>
-  readonly roiIdRef: MutableRef<number>
   readonly roiName: string
   readonly roiState: RoiState<StructuredLoadError>
   readonly selectedAnnotationGroupId: string
+}
+
+interface AnnotationWorkflowLoaders {
+  readonly loadAnnotations: AnnotationLoader
+}
+
+interface AnnotationWorkflowRefs {
+  readonly datasetAbortRef: MutableRef<AbortController | null>
+  readonly loadRequestIdRef: MutableRef<number>
+  readonly roiIdRef: MutableRef<number>
+}
+
+interface AnnotationWorkflowSetters {
   readonly setAnnotationColors: Dispatch<SetStateAction<Readonly<Record<string, string>>>>
   readonly setHiddenAnnotationIds: Dispatch<SetStateAction<readonly string[]>>
   readonly setHiddenAnnotationSetIds: Dispatch<SetStateAction<readonly string[]>>
@@ -67,6 +79,14 @@ interface UseAnnotationWorkflowOptions {
   readonly setRoiName: Dispatch<SetStateAction<string>>
   readonly setSelectedAnnotationGroupId: Dispatch<SetStateAction<string>>
   readonly setSelectedCellMetadataTrackId: Dispatch<SetStateAction<string | null>>
+}
+
+interface UseAnnotationWorkflowOptions {
+  readonly callbacks: AnnotationWorkflowCallbacks
+  readonly data: AnnotationWorkflowData
+  readonly loaders: AnnotationWorkflowLoaders
+  readonly refs: AnnotationWorkflowRefs
+  readonly setters: AnnotationWorkflowSetters
 }
 
 interface UseAnnotationWorkflowResult {
@@ -88,28 +108,36 @@ interface AnnotationImportUrl {
 }
 
 export function useAnnotationWorkflow({
-  annotationState,
-  appendDebugEvent,
-  cellMetadataTracks,
-  datasetAbortRef,
-  datasetUrl,
-  loadAnnotations,
-  loadRequestIdRef,
-  loadState,
-  roiIdRef,
-  roiName,
-  roiState,
-  selectedAnnotationGroupId,
-  setAnnotationColors,
-  setHiddenAnnotationIds,
-  setHiddenAnnotationSetIds,
-  setCellMetadataTracks,
-  setAnnotationState,
-  setObservationColorMode,
-  setRoiName,
-  setSelectedAnnotationGroupId,
-  setSelectedCellMetadataTrackId,
+  callbacks,
+  data,
+  loaders,
+  refs,
+  setters,
 }: UseAnnotationWorkflowOptions): UseAnnotationWorkflowResult {
+  const { appendDebugEvent } = callbacks
+  const {
+    annotationState,
+    cellMetadataTracks,
+    datasetUrl,
+    loadState,
+    roiName,
+    roiState,
+    selectedAnnotationGroupId,
+  } = data
+  const { loadAnnotations } = loaders
+  const { datasetAbortRef, loadRequestIdRef, roiIdRef } = refs
+  const {
+    setAnnotationColors,
+    setAnnotationState,
+    setCellMetadataTracks,
+    setHiddenAnnotationIds,
+    setHiddenAnnotationSetIds,
+    setObservationColorMode,
+    setRoiName,
+    setSelectedAnnotationGroupId,
+    setSelectedCellMetadataTrackId,
+  } = setters
+
   const handleLoadAnnotations = useCallback(() => {
     if (loadState.status !== 'ready' || annotationState.status === 'loading') {
       return

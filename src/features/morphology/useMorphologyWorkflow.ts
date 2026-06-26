@@ -22,12 +22,21 @@ interface QueueAutoContrastOptions {
   readonly signal?: AbortSignal
 }
 
-interface UseMorphologyWorkflowOptions {
+interface MorphologyWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly autoContrastChannelIdsRef: MutableRef<Set<string>>
+}
+
+interface MorphologyWorkflowLoaders {
   readonly computeAutoChannelContrast: AutoChannelContrastLoader
+}
+
+interface MorphologyWorkflowRefs {
+  readonly autoContrastChannelIdsRef: MutableRef<Set<string>>
   readonly datasetAbortRef: MutableRef<AbortController | null>
   readonly loadRequestIdRef: MutableRef<number>
+}
+
+interface MorphologyWorkflowSetters {
   readonly setAutoContrastChannelIds: Dispatch<SetStateAction<readonly string[]>>
   readonly setMorphologyChannelSettings: Dispatch<
     SetStateAction<readonly MorphologyChannelSetting[]>
@@ -35,6 +44,13 @@ interface UseMorphologyWorkflowOptions {
   readonly setMorphologyState: Dispatch<
     SetStateAction<MorphologyLoadState<StructuredLoadError>>
   >
+}
+
+interface UseMorphologyWorkflowOptions {
+  readonly callbacks: MorphologyWorkflowCallbacks
+  readonly loaders: MorphologyWorkflowLoaders
+  readonly refs: MorphologyWorkflowRefs
+  readonly setters: MorphologyWorkflowSetters
 }
 
 interface UseMorphologyWorkflowResult {
@@ -50,15 +66,17 @@ interface UseMorphologyWorkflowResult {
 }
 
 export function useMorphologyWorkflow({
-  appendDebugEvent,
-  autoContrastChannelIdsRef,
-  computeAutoChannelContrast,
-  datasetAbortRef,
-  loadRequestIdRef,
-  setAutoContrastChannelIds,
-  setMorphologyChannelSettings,
-  setMorphologyState,
+  callbacks,
+  loaders,
+  refs,
+  setters,
 }: UseMorphologyWorkflowOptions): UseMorphologyWorkflowResult {
+  const { appendDebugEvent } = callbacks
+  const { computeAutoChannelContrast } = loaders
+  const { autoContrastChannelIdsRef, datasetAbortRef, loadRequestIdRef } = refs
+  const { setAutoContrastChannelIds, setMorphologyChannelSettings, setMorphologyState } =
+    setters
+
   const updateMorphologyChannel = useCallback(
     (id: string, patch: Partial<Omit<MorphologyChannelSetting, 'id'>>) => {
       setMorphologyChannelSettings((current) =>

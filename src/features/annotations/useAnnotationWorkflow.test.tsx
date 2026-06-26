@@ -36,7 +36,9 @@ function Probe({
 }: {
   readonly initialAnnotationState?: AnnotationState<StructuredLoadError>
   readonly initialHiddenAnnotationIds?: readonly string[]
-  readonly loadAnnotations: Parameters<typeof useAnnotationWorkflow>[0]['loadAnnotations']
+  readonly loadAnnotations: Parameters<
+    typeof useAnnotationWorkflow
+  >[0]['loaders']['loadAnnotations']
   readonly onReady: (
     nextApi: ReturnType<typeof useAnnotationWorkflow>,
     nextSnapshot: Snapshot,
@@ -74,29 +76,37 @@ function Probe({
   }
 
   const nextApi = useAnnotationWorkflow({
-    annotationState,
-    appendDebugEvent: (message) => {
-      debugMessagesRef.current.push(message)
+    callbacks: {
+      appendDebugEvent: (message) => {
+        debugMessagesRef.current.push(message)
+      },
     },
-    cellMetadataTracks,
-    datasetAbortRef,
-    datasetUrl: 'https://example.test/output',
-    loadAnnotations,
-    loadRequestIdRef,
-    loadState,
-    roiIdRef,
-    roiName,
-    roiState,
-    selectedAnnotationGroupId: groupId,
-    setAnnotationColors,
-    setHiddenAnnotationIds,
-    setHiddenAnnotationSetIds,
-    setCellMetadataTracks,
-    setAnnotationState,
-    setObservationColorMode,
-    setRoiName,
-    setSelectedAnnotationGroupId,
-    setSelectedCellMetadataTrackId,
+    data: {
+      annotationState,
+      cellMetadataTracks,
+      datasetUrl: 'https://example.test/output',
+      loadState,
+      roiName,
+      roiState,
+      selectedAnnotationGroupId: groupId,
+    },
+    loaders: { loadAnnotations },
+    refs: {
+      datasetAbortRef,
+      loadRequestIdRef,
+      roiIdRef,
+    },
+    setters: {
+      setAnnotationColors,
+      setAnnotationState,
+      setCellMetadataTracks,
+      setHiddenAnnotationIds,
+      setHiddenAnnotationSetIds,
+      setObservationColorMode,
+      setRoiName,
+      setSelectedAnnotationGroupId,
+      setSelectedCellMetadataTrackId,
+    },
   })
 
   React.useEffect(() => {

@@ -39,33 +39,60 @@ interface VisiumHdBarcodeAssignmentDataset {
   ) => Promise<readonly VisiumHdBarcodeMappingCellAssignment[]>
 }
 
-interface UseGridCellAssignmentWorkflowOptions {
+interface GridCellAssignmentWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+}
+
+interface GridCellAssignmentWorkflowControls {
+  readonly isVisiumHdDataset: boolean
+  readonly rowBudget: number | undefined
+  readonly selectedBinSize: VisiumHdBinSizeMicrometers | undefined
+}
+
+interface GridCellAssignmentWorkflowData {
+  readonly loadState: DatasetLoadState<StructuredLoadError>
+  readonly selectedGridCell: GridCellDatum | null
+}
+
+interface GridCellAssignmentWorkflowLoaders {
   readonly getSpatialDataset: SpatialDatasetLoader
+}
+
+interface GridCellAssignmentWorkflowRefs {
   readonly gridCellAssignmentAbortRef: MutableRef<AbortController | null>
   readonly gridCellAssignmentRequestIdRef: MutableRef<number>
-  readonly isVisiumHdDataset: boolean
-  readonly loadState: DatasetLoadState<StructuredLoadError>
-  readonly selectedBinSize: VisiumHdBinSizeMicrometers | undefined
-  readonly selectedGridCell: GridCellDatum | null
+}
+
+interface GridCellAssignmentWorkflowSetters {
   readonly setGridCellAssignmentState: Dispatch<
     SetStateAction<GridCellAssignmentState<StructuredLoadError>>
   >
-  readonly rowBudget: number | undefined
+}
+
+interface UseGridCellAssignmentWorkflowOptions {
+  readonly callbacks: GridCellAssignmentWorkflowCallbacks
+  readonly controls: GridCellAssignmentWorkflowControls
+  readonly data: GridCellAssignmentWorkflowData
+  readonly loaders: GridCellAssignmentWorkflowLoaders
+  readonly refs: GridCellAssignmentWorkflowRefs
+  readonly setters: GridCellAssignmentWorkflowSetters
 }
 
 export function useGridCellAssignmentWorkflow({
-  appendDebugEvent,
-  getSpatialDataset,
-  gridCellAssignmentAbortRef,
-  gridCellAssignmentRequestIdRef,
-  isVisiumHdDataset,
-  loadState,
-  selectedBinSize,
-  selectedGridCell,
-  setGridCellAssignmentState,
-  rowBudget,
+  callbacks,
+  controls,
+  data,
+  loaders,
+  refs,
+  setters,
 }: UseGridCellAssignmentWorkflowOptions): void {
+  const { appendDebugEvent } = callbacks
+  const { isVisiumHdDataset, rowBudget, selectedBinSize } = controls
+  const { loadState, selectedGridCell } = data
+  const { getSpatialDataset } = loaders
+  const { gridCellAssignmentAbortRef, gridCellAssignmentRequestIdRef } = refs
+  const { setGridCellAssignmentState } = setters
+
   useEffect(() => {
     if (!isVisiumHdDataset || selectedGridCell === null || loadState.status !== 'ready') {
       const requestId = invalidateLatestRequest({

@@ -19,22 +19,42 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseAnalysisEmbeddingWorkflowOptions {
-  readonly analysisEmbeddingAbortRef: MutableRef<AbortController | null>
-  readonly analysisEmbeddingRequestIdRef: MutableRef<number>
-  readonly analysisEmbeddingState: AnalysisEmbeddingState<StructuredLoadError>
+interface AnalysisEmbeddingWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
-  readonly loadAnalysisEmbeddings: AnalysisEmbeddingsLoader
-  readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly onSelectedCellFocus?: (cell: OverviewCellDatum) => void
+}
+
+interface AnalysisEmbeddingWorkflowData {
+  readonly analysisEmbeddingState: AnalysisEmbeddingState<StructuredLoadError>
+  readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly overviewCellById: ReadonlyMap<string, OverviewCellDatum>
   readonly selectedEmbeddingKind: AnalysisEmbeddingKind
+}
+
+interface AnalysisEmbeddingWorkflowLoaders {
+  readonly loadAnalysisEmbeddings: AnalysisEmbeddingsLoader
+}
+
+interface AnalysisEmbeddingWorkflowRefs {
+  readonly analysisEmbeddingAbortRef: MutableRef<AbortController | null>
+  readonly analysisEmbeddingRequestIdRef: MutableRef<number>
+}
+
+interface AnalysisEmbeddingWorkflowSetters {
   readonly setAnalysisEmbeddingState: Dispatch<
     SetStateAction<AnalysisEmbeddingState<StructuredLoadError>>
   >
   readonly setSelectedCell: Dispatch<SetStateAction<OverviewCellDatum | null>>
   readonly setSelectedEmbeddingKind: Dispatch<SetStateAction<AnalysisEmbeddingKind>>
+}
+
+interface UseAnalysisEmbeddingWorkflowOptions {
+  readonly callbacks: AnalysisEmbeddingWorkflowCallbacks
+  readonly data: AnalysisEmbeddingWorkflowData
+  readonly loaders: AnalysisEmbeddingWorkflowLoaders
+  readonly refs: AnalysisEmbeddingWorkflowRefs
+  readonly setters: AnalysisEmbeddingWorkflowSetters
 }
 
 interface UseAnalysisEmbeddingWorkflowResult {
@@ -43,20 +63,19 @@ interface UseAnalysisEmbeddingWorkflowResult {
 }
 
 export function useAnalysisEmbeddingWorkflow({
-  analysisEmbeddingAbortRef,
-  analysisEmbeddingRequestIdRef,
-  analysisEmbeddingState,
-  appendDebugEvent,
-  appendFallbackNotice,
-  loadAnalysisEmbeddings,
-  loadState,
-  onSelectedCellFocus,
-  overviewCellById,
-  selectedEmbeddingKind,
-  setAnalysisEmbeddingState,
-  setSelectedCell,
-  setSelectedEmbeddingKind,
+  callbacks,
+  data,
+  loaders,
+  refs,
+  setters,
 }: UseAnalysisEmbeddingWorkflowOptions): UseAnalysisEmbeddingWorkflowResult {
+  const { appendDebugEvent, appendFallbackNotice, onSelectedCellFocus } = callbacks
+  const { analysisEmbeddingState, loadState, overviewCellById, selectedEmbeddingKind } =
+    data
+  const { loadAnalysisEmbeddings } = loaders
+  const { analysisEmbeddingAbortRef, analysisEmbeddingRequestIdRef } = refs
+  const { setAnalysisEmbeddingState, setSelectedCell, setSelectedEmbeddingKind } = setters
+
   const handleLoadAnalysisEmbeddings = useCallback(() => {
     if (loadState.status !== 'ready' || analysisEmbeddingState.status === 'loading') {
       return

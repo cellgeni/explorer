@@ -1690,16 +1690,22 @@ export function App({
     },
   })
   useGridCellAssignmentWorkflow({
-    appendDebugEvent,
-    getSpatialDataset,
-    gridCellAssignmentAbortRef,
-    gridCellAssignmentRequestIdRef: gridCellAssignmentRequestId,
-    isVisiumHdDataset,
-    loadState,
-    rowBudget: visiumHdBarcodeMappingRowBudget,
-    selectedBinSize: activeVisiumHdBinSize,
-    selectedGridCell,
-    setGridCellAssignmentState,
+    callbacks: { appendDebugEvent },
+    controls: {
+      isVisiumHdDataset,
+      rowBudget: visiumHdBarcodeMappingRowBudget,
+      selectedBinSize: activeVisiumHdBinSize,
+    },
+    data: {
+      loadState,
+      selectedGridCell,
+    },
+    loaders: { getSpatialDataset },
+    refs: {
+      gridCellAssignmentAbortRef,
+      gridCellAssignmentRequestIdRef: gridCellAssignmentRequestId,
+    },
+    setters: { setGridCellAssignmentState },
   })
 
   const {
@@ -1807,44 +1813,60 @@ export function App({
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
   } = useAnnotationWorkflow({
-    annotationState,
-    appendDebugEvent,
-    cellMetadataTracks,
-    datasetAbortRef,
-    datasetUrl,
-    loadAnnotations,
-    loadRequestIdRef: loadRequestId,
-    loadState,
-    roiIdRef,
-    roiName,
-    roiState,
-    selectedAnnotationGroupId,
-    setAnnotationColors,
-    setHiddenAnnotationIds,
-    setHiddenAnnotationSetIds,
-    setCellMetadataTracks,
-    setAnnotationState,
-    setObservationColorMode,
-    setRoiName,
-    setSelectedAnnotationGroupId,
-    setSelectedCellMetadataTrackId,
+    callbacks: { appendDebugEvent },
+    data: {
+      annotationState,
+      cellMetadataTracks,
+      datasetUrl,
+      loadState,
+      roiName,
+      roiState,
+      selectedAnnotationGroupId,
+    },
+    loaders: { loadAnnotations },
+    refs: {
+      datasetAbortRef,
+      loadRequestIdRef: loadRequestId,
+      roiIdRef,
+    },
+    setters: {
+      setAnnotationColors,
+      setAnnotationState,
+      setCellMetadataTracks,
+      setHiddenAnnotationIds,
+      setHiddenAnnotationSetIds,
+      setObservationColorMode,
+      setRoiName,
+      setSelectedAnnotationGroupId,
+      setSelectedCellMetadataTrackId,
+    },
   })
 
   const { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings } =
     useAnalysisEmbeddingWorkflow({
-      analysisEmbeddingAbortRef,
-      analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
-      analysisEmbeddingState,
-      appendDebugEvent,
-      appendFallbackNotice,
-      loadAnalysisEmbeddings: loadActiveAnalysisEmbeddings,
-      loadState,
-      onSelectedCellFocus: focusSpatialViewOnCell,
-      overviewCellById,
-      selectedEmbeddingKind,
-      setAnalysisEmbeddingState,
-      setSelectedCell,
-      setSelectedEmbeddingKind,
+      callbacks: {
+        appendDebugEvent,
+        appendFallbackNotice,
+        onSelectedCellFocus: focusSpatialViewOnCell,
+      },
+      data: {
+        analysisEmbeddingState,
+        loadState,
+        overviewCellById,
+        selectedEmbeddingKind,
+      },
+      loaders: {
+        loadAnalysisEmbeddings: loadActiveAnalysisEmbeddings,
+      },
+      refs: {
+        analysisEmbeddingAbortRef,
+        analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
+      },
+      setters: {
+        setAnalysisEmbeddingState,
+        setSelectedCell,
+        setSelectedEmbeddingKind,
+      },
     })
   const handleEmbeddingElementSelect = useCallback(
     (elementId: string) => {
@@ -1885,56 +1907,82 @@ export function App({
     handleMagicLensScopeChange,
     handleRunMagicLens,
   } = useMagicLensWorkflow({
-    activeRoiSelection,
-    appendDebugEvent,
-    appendFallbackNotice,
-    currentViewportDetail,
-    loadRoiCells,
-    loadRoiGeneStats,
-    ...(isVisiumHdDataset ? { loadMagicLensSummary: loadVisiumHdMagicLensSummary } : {}),
-    loadState,
-    magicLensAbortRef,
-    magicLensActive,
-    magicLensDebounceRef,
-    magicLensLastDetailRef,
-    magicLensLastQueryKeyRef,
-    magicLensMinQv,
-    magicLensRequestIdRef: magicLensRequestId,
-    magicLensScope,
-    selectedGenes,
-    setMagicLensActive,
-    setMagicLensMinQv,
-    setMagicLensRadiusMicrometers,
-    setMagicLensScope,
-    setMagicLensState,
-    setMeasurementEnabled,
-    setMeasurementResetKey,
+    callbacks: {
+      appendDebugEvent,
+      appendFallbackNotice,
+    },
+    controls: {
+      magicLensActive,
+      magicLensMinQv,
+      magicLensScope,
+    },
+    data: {
+      activeRoiSelection,
+      currentViewportDetail,
+      loadState,
+      selectedGenes,
+    },
+    loaders: {
+      loadRoiCells,
+      loadRoiGeneStats,
+      ...(isVisiumHdDataset
+        ? { loadMagicLensSummary: loadVisiumHdMagicLensSummary }
+        : {}),
+    },
+    refs: {
+      magicLensAbortRef,
+      magicLensDebounceRef,
+      magicLensLastDetailRef,
+      magicLensLastQueryKeyRef,
+      magicLensRequestIdRef: magicLensRequestId,
+    },
+    setters: {
+      setMagicLensActive,
+      setMagicLensMinQv,
+      setMagicLensRadiusMicrometers,
+      setMagicLensScope,
+      setMagicLensState,
+      setMeasurementEnabled,
+      setMeasurementResetKey,
+    },
   })
 
   const { handleAutoContrast, queueAutoContrast, updateMorphologyChannel } =
     useMorphologyWorkflow({
-      appendDebugEvent,
-      autoContrastChannelIdsRef,
-      computeAutoChannelContrast,
-      datasetAbortRef,
-      loadRequestIdRef: loadRequestId,
-      setAutoContrastChannelIds,
-      setMorphologyChannelSettings,
-      setMorphologyState,
+      callbacks: { appendDebugEvent },
+      loaders: { computeAutoChannelContrast },
+      refs: {
+        autoContrastChannelIdsRef,
+        datasetAbortRef,
+        loadRequestIdRef: loadRequestId,
+      },
+      setters: {
+        setAutoContrastChannelIds,
+        setMorphologyChannelSettings,
+        setMorphologyState,
+      },
     })
   const { handleLoadCustomLayer, handleRemoveCustomLayer } =
     useCustomMorphologyLayerWorkflow({
-      appendDebugEvent,
-      appendFallbackNotice,
-      customLayers: customMorphologyLayers,
-      customLayerAbortRef: customMorphologyLayerAbortRef,
-      customLayerIdRef: customMorphologyLayerIdRef,
-      customLayerRequestIdRef: customMorphologyLayerRequestIdRef,
-      loadCustomMorphologyLayer,
-      loadRequestIdRef: loadRequestId,
-      setCustomLayerLoadState: setCustomMorphologyLayerState,
-      setCustomLayers: setCustomMorphologyLayers,
-      setMorphologyChannelSettings,
+      callbacks: {
+        appendDebugEvent,
+        appendFallbackNotice,
+      },
+      data: {
+        customLayers: customMorphologyLayers,
+      },
+      loaders: { loadCustomMorphologyLayer },
+      refs: {
+        customLayerAbortRef: customMorphologyLayerAbortRef,
+        customLayerIdRef: customMorphologyLayerIdRef,
+        customLayerRequestIdRef: customMorphologyLayerRequestIdRef,
+        loadRequestIdRef: loadRequestId,
+      },
+      setters: {
+        setCustomLayerLoadState: setCustomMorphologyLayerState,
+        setCustomLayers: setCustomMorphologyLayers,
+        setMorphologyChannelSettings,
+      },
     })
   const handleCustomImageLayerOpacityChange = useCallback(
     (imageUrl: string, opacity: number) => {
@@ -2148,27 +2196,39 @@ export function App({
   })
 
   const { handleVisiumHdBinSizeChange } = useVisiumHdBinWorkflow({
-    appendDebugEvent,
-    getSpatialDataset,
-    loadedDatasetUrl,
-    onBeforeBinSizeChange: handleBeforeVisiumHdBinSizeChange,
-    shouldLoadMorphology,
-    visiumHdControlState,
-    flatMorphologyImage,
-    visiumHdBinRequestIdRef: visiumHdBinRequestId,
-    geneExpressionAbortRef,
-    geneExpressionRequestIdRef: geneExpressionRequestId,
-    geneExpressionViewportKeyRef,
-    setFlatMorphologyImage,
-    setGeneExpressionBatch,
-    setGeneExpressionScaleDomain,
-    setGeneExpressionState,
-    setGenePanelState,
-    setLoadState,
-    setMorphologyState,
-    setSpatialGridCells,
-    setSelectedGridCell,
-    setVisiumHdControlState,
+    callbacks: {
+      appendDebugEvent,
+      onBeforeBinSizeChange: handleBeforeVisiumHdBinSizeChange,
+    },
+    controls: {
+      shouldLoadMorphology,
+      visiumHdControlState,
+    },
+    data: {
+      flatMorphologyImage,
+      loadedDatasetUrl,
+    },
+    loaders: {
+      getSpatialDataset,
+    },
+    refs: {
+      geneExpressionAbortRef,
+      geneExpressionRequestIdRef: geneExpressionRequestId,
+      geneExpressionViewportKeyRef,
+      visiumHdBinRequestIdRef: visiumHdBinRequestId,
+    },
+    setters: {
+      setFlatMorphologyImage,
+      setGeneExpressionBatch,
+      setGeneExpressionScaleDomain,
+      setGeneExpressionState,
+      setGenePanelState,
+      setLoadState,
+      setMorphologyState,
+      setSelectedGridCell,
+      setSpatialGridCells,
+      setVisiumHdControlState,
+    },
   })
 
   useShareableUrlHash({

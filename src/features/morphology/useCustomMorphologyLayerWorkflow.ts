@@ -29,15 +29,27 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseCustomMorphologyLayerWorkflowOptions {
+interface CustomMorphologyLayerWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice?: FallbackNotifier
+}
+
+interface CustomMorphologyLayerWorkflowData {
   readonly customLayers: readonly CustomMorphologyLayer[]
+}
+
+interface CustomMorphologyLayerWorkflowLoaders {
+  readonly loadCustomMorphologyLayer: CustomMorphologyLayerLoader
+}
+
+interface CustomMorphologyLayerWorkflowRefs {
   readonly customLayerAbortRef: MutableRef<AbortController | null>
   readonly customLayerIdRef: MutableRef<number>
   readonly customLayerRequestIdRef: MutableRef<number>
-  readonly loadCustomMorphologyLayer: CustomMorphologyLayerLoader
   readonly loadRequestIdRef: MutableRef<number>
+}
+
+interface CustomMorphologyLayerWorkflowSetters {
   readonly setCustomLayerLoadState: Dispatch<
     SetStateAction<CustomMorphologyLayerLoadState<StructuredLoadError>>
   >
@@ -47,24 +59,38 @@ interface UseCustomMorphologyLayerWorkflowOptions {
   >
 }
 
+interface UseCustomMorphologyLayerWorkflowOptions {
+  readonly callbacks: CustomMorphologyLayerWorkflowCallbacks
+  readonly data: CustomMorphologyLayerWorkflowData
+  readonly loaders: CustomMorphologyLayerWorkflowLoaders
+  readonly refs: CustomMorphologyLayerWorkflowRefs
+  readonly setters: CustomMorphologyLayerWorkflowSetters
+}
+
 interface UseCustomMorphologyLayerWorkflowResult {
   readonly handleLoadCustomLayer: (url: string) => Promise<boolean>
   readonly handleRemoveCustomLayer: (layerId: string) => void
 }
 
 export function useCustomMorphologyLayerWorkflow({
-  appendDebugEvent,
-  appendFallbackNotice,
-  customLayers,
-  customLayerAbortRef,
-  customLayerIdRef,
-  customLayerRequestIdRef,
-  loadCustomMorphologyLayer,
-  loadRequestIdRef,
-  setCustomLayerLoadState,
-  setCustomLayers,
-  setMorphologyChannelSettings,
+  callbacks,
+  data,
+  loaders,
+  refs,
+  setters,
 }: UseCustomMorphologyLayerWorkflowOptions): UseCustomMorphologyLayerWorkflowResult {
+  const { appendDebugEvent, appendFallbackNotice } = callbacks
+  const { customLayers } = data
+  const { loadCustomMorphologyLayer } = loaders
+  const {
+    customLayerAbortRef,
+    customLayerIdRef,
+    customLayerRequestIdRef,
+    loadRequestIdRef,
+  } = refs
+  const { setCustomLayerLoadState, setCustomLayers, setMorphologyChannelSettings } =
+    setters
+
   const handleLoadCustomLayer = useCallback(
     async (url: string) => {
       let normalizedUrl: string

@@ -39,24 +39,39 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseMagicLensWorkflowOptions {
-  readonly activeRoiSelection: RoiSelectionInput | null
+interface MagicLensWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
+}
+
+interface MagicLensWorkflowControls {
+  readonly magicLensActive: boolean
+  readonly magicLensMinQv: number
+  readonly magicLensScope: MagicLensScope
+}
+
+interface MagicLensWorkflowData {
+  readonly activeRoiSelection: RoiSelectionInput | null
   readonly currentViewportDetail: ViewerViewportDetail | null
+  readonly loadState: DatasetLoadState<StructuredLoadError>
+  readonly selectedGenes: readonly string[]
+}
+
+interface MagicLensWorkflowLoaders {
   readonly loadRoiCells: RoiCellsLoader
   readonly loadRoiGeneStats: RoiGeneStatsLoader
   readonly loadMagicLensSummary?: MagicLensSummaryLoader
-  readonly loadState: DatasetLoadState<StructuredLoadError>
+}
+
+interface MagicLensWorkflowRefs {
   readonly magicLensAbortRef: MutableRef<AbortController | null>
-  readonly magicLensActive: boolean
   readonly magicLensDebounceRef: MutableRef<number | null>
   readonly magicLensLastDetailRef: MutableRef<ViewerMagicLensDetail | null>
   readonly magicLensLastQueryKeyRef: MutableRef<string | null>
-  readonly magicLensMinQv: number
   readonly magicLensRequestIdRef: MutableRef<number>
-  readonly magicLensScope: MagicLensScope
-  readonly selectedGenes: readonly string[]
+}
+
+interface MagicLensWorkflowSetters {
   readonly setMagicLensActive: Dispatch<SetStateAction<boolean>>
   readonly setMagicLensMinQv: Dispatch<SetStateAction<number>>
   readonly setMagicLensRadiusMicrometers: Dispatch<SetStateAction<number>>
@@ -66,6 +81,15 @@ interface UseMagicLensWorkflowOptions {
   >
   readonly setMeasurementEnabled: Dispatch<SetStateAction<boolean>>
   readonly setMeasurementResetKey: Dispatch<SetStateAction<number>>
+}
+
+interface UseMagicLensWorkflowOptions {
+  readonly callbacks: MagicLensWorkflowCallbacks
+  readonly controls: MagicLensWorkflowControls
+  readonly data: MagicLensWorkflowData
+  readonly loaders: MagicLensWorkflowLoaders
+  readonly refs: MagicLensWorkflowRefs
+  readonly setters: MagicLensWorkflowSetters
 }
 
 export type MagicLensSummaryLoader = (
@@ -89,31 +113,34 @@ interface UseMagicLensWorkflowResult {
 }
 
 export function useMagicLensWorkflow({
-  activeRoiSelection,
-  appendDebugEvent,
-  appendFallbackNotice,
-  currentViewportDetail,
-  loadRoiCells,
-  loadRoiGeneStats,
-  loadMagicLensSummary,
-  loadState,
-  magicLensAbortRef,
-  magicLensActive,
-  magicLensDebounceRef,
-  magicLensLastDetailRef,
-  magicLensLastQueryKeyRef,
-  magicLensMinQv,
-  magicLensRequestIdRef,
-  magicLensScope,
-  selectedGenes,
-  setMagicLensActive,
-  setMagicLensMinQv,
-  setMagicLensRadiusMicrometers,
-  setMagicLensScope,
-  setMagicLensState,
-  setMeasurementEnabled,
-  setMeasurementResetKey,
+  callbacks,
+  controls,
+  data,
+  loaders,
+  refs,
+  setters,
 }: UseMagicLensWorkflowOptions): UseMagicLensWorkflowResult {
+  const { appendDebugEvent, appendFallbackNotice } = callbacks
+  const { magicLensActive, magicLensMinQv, magicLensScope } = controls
+  const { activeRoiSelection, currentViewportDetail, loadState, selectedGenes } = data
+  const { loadMagicLensSummary, loadRoiCells, loadRoiGeneStats } = loaders
+  const {
+    magicLensAbortRef,
+    magicLensDebounceRef,
+    magicLensLastDetailRef,
+    magicLensLastQueryKeyRef,
+    magicLensRequestIdRef,
+  } = refs
+  const {
+    setMagicLensActive,
+    setMagicLensMinQv,
+    setMagicLensRadiusMicrometers,
+    setMagicLensScope,
+    setMagicLensState,
+    setMeasurementEnabled,
+    setMeasurementResetKey,
+  } = setters
+
   const runMagicLensQuery = useCallback(
     (
       selection: RoiSelectionInput,

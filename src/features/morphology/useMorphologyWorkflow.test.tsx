@@ -37,7 +37,7 @@ function Probe({
 }: {
   readonly computeAutoChannelContrast: Parameters<
     typeof useMorphologyWorkflow
-  >[0]['computeAutoChannelContrast']
+  >[0]['loaders']['computeAutoChannelContrast']
   readonly onReady: (
     nextApi: ReturnType<typeof useMorphologyWorkflow>,
     nextSnapshot: Snapshot,
@@ -66,16 +66,22 @@ function Probe({
   const debugMessagesRef = React.useRef<string[]>([])
 
   const nextApi = useMorphologyWorkflow({
-    appendDebugEvent: (message) => {
-      debugMessagesRef.current.push(message)
+    callbacks: {
+      appendDebugEvent: (message) => {
+        debugMessagesRef.current.push(message)
+      },
     },
-    autoContrastChannelIdsRef,
-    computeAutoChannelContrast,
-    datasetAbortRef,
-    loadRequestIdRef,
-    setAutoContrastChannelIds,
-    setMorphologyChannelSettings,
-    setMorphologyState,
+    loaders: { computeAutoChannelContrast },
+    refs: {
+      autoContrastChannelIdsRef,
+      datasetAbortRef,
+      loadRequestIdRef,
+    },
+    setters: {
+      setAutoContrastChannelIds,
+      setMorphologyChannelSettings,
+      setMorphologyState,
+    },
   })
 
   React.useEffect(() => {

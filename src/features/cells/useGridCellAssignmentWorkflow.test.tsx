@@ -30,7 +30,7 @@ function Probe({
 }: {
   readonly getSpatialDataset: Parameters<
     typeof useGridCellAssignmentWorkflow
-  >[0]['getSpatialDataset']
+  >[0]['loaders']['getSpatialDataset']
   readonly rowBudget: number | undefined
   readonly selectedGridCell?: GridCellDatum | null
   readonly onReady: (snapshot: Snapshot) => void
@@ -54,16 +54,22 @@ function Probe({
   )
 
   useGridCellAssignmentWorkflow({
-    appendDebugEvent,
-    getSpatialDataset,
-    gridCellAssignmentAbortRef,
-    gridCellAssignmentRequestIdRef,
-    isVisiumHdDataset: true,
-    loadState,
-    rowBudget,
-    selectedBinSize: 16,
-    selectedGridCell,
-    setGridCellAssignmentState,
+    callbacks: { appendDebugEvent },
+    controls: {
+      isVisiumHdDataset: true,
+      rowBudget,
+      selectedBinSize: 16,
+    },
+    data: {
+      loadState,
+      selectedGridCell,
+    },
+    loaders: { getSpatialDataset },
+    refs: {
+      gridCellAssignmentAbortRef,
+      gridCellAssignmentRequestIdRef,
+    },
+    setters: { setGridCellAssignmentState },
   })
 
   React.useEffect(() => {
