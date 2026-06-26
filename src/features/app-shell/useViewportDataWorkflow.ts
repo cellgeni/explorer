@@ -170,10 +170,18 @@ export function useViewportDataWorkflow({
           : nextShareableViewState,
       )
 
-      if (
-        !boundaryLoadingEnabled ||
-        !shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })
-      ) {
+      const shouldLoadBoundaries =
+        boundaryLoadingEnabled &&
+        shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })
+
+      if (!shouldLoadBoundaries) {
+        if (boundaryLoadingEnabled && detail.visibleCellCount > 0) {
+          appendDebugEvent(
+            `Boundaries deferred: ${detail.visibleCellCount.toLocaleString()} visible cells exceed the ${boundaryCellLimit.toLocaleString()} boundary limit. Zoom in or raise Boundary limit to load true polygons.`,
+            { coalesceKey: 'boundary-query' },
+          )
+        }
+
         invalidateLatestRequest({
           abortRef: boundaryAbortRef,
           requestIdRef: boundaryRequestIdRef,

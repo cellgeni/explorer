@@ -232,6 +232,29 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('keeps true boundary strokes visible when cell fills are disabled', () => {
+    const cell: OverviewCellDatum = {
+      ...overviewCellDatum(),
+      id: asCellId('aaaaaaaa-1'),
+      fillColor: [32, 102, 83, 220],
+    }
+    const boundary: CellBoundaryDatum = {
+      id: cell.id,
+      polygon: [
+        [-5, -5, 0],
+        [5, -5, 0],
+        [5, 5, 0],
+        [-5, 5, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [174, 241, 214, 230],
+    }
+
+    render(<ViewerCore cells={[cell]} boundaries={[boundary]} />)
+
+    expect(boundaryPathColorAt(0)).toEqual([174, 241, 214, 230])
+  })
+
   it('keeps the current zoom when rendered grid cells are toggled with a stable fit', () => {
     const gridCell = gridCellDatum()
     const boundary: CellBoundaryDatum = {
@@ -1073,6 +1096,7 @@ describe('ViewerCore', () => {
         cells={cells}
         boundaries={boundaries}
         expressionCells={expressionCells}
+        geneExpressionActive
         initialViewStateOverride={{ target: [0, 0, 0], zoom: 0 }}
       />,
     )
@@ -1082,7 +1106,7 @@ describe('ViewerCore', () => {
     })
 
     expect(boundaryPathColorAt(0)).toEqual([240, 128, 120, 220])
-    expect(boundaryPathColorAt(1)).toEqual([44, 132, 168, 210])
+    expect(boundaryPathColorAt(1)).toEqual([72, 68, 58, 160])
 
     const currentViewState = deckGlMock.viewState
 
@@ -1100,20 +1124,20 @@ describe('ViewerCore', () => {
     })
 
     expect(boundaryPathColorAt(0)).toEqual([240, 128, 120, 220])
-    expect(boundaryPathColorAt(1)).toEqual([44, 132, 168, 210])
+    expect(boundaryPathColorAt(1)).toEqual([72, 68, 58, 160])
 
     await act(async () => {
       vi.advanceTimersByTime(159)
     })
 
     expect(boundaryPathColorAt(0)).toEqual([240, 128, 120, 220])
-    expect(boundaryPathColorAt(1)).toEqual([44, 132, 168, 210])
+    expect(boundaryPathColorAt(1)).toEqual([72, 68, 58, 160])
 
     await act(async () => {
       vi.advanceTimersByTime(1)
     })
 
-    expect(boundaryPathColorAt(0)).toEqual([215, 63, 124, 220])
+    expect(boundaryPathColorAt(0)).toEqual([72, 68, 58, 160])
     expect(boundaryPathColorAt(1)).toEqual([63, 165, 91, 220])
   })
 

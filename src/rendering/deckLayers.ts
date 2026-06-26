@@ -394,6 +394,9 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
 const DEFAULT_OVERVIEW_CELL_FILL_RGB = [72, 68, 58] as const
 const GENE_EXPRESSION_ZERO_FILL_COLOR: Color = [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 84]
 const GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY = 0.5
+const DEFAULT_CELL_BOUNDARY_FILL_COLOR: Color = [32, 102, 83, 34]
+const DEFAULT_CELL_BOUNDARY_LINE_COLOR: Color = [174, 241, 214, 230]
+const CELL_BOUNDARY_LINE_WIDTH_PIXELS = 1.35
 const CELL_BOUNDARY_HIT_AREA_OPACITY = 0.01
 const EMPTY_CELL_BOUNDARY_PATH_GEOMETRY: CellBoundaryPathGeometryData = {
   length: 0,
@@ -565,10 +568,10 @@ export function createOverviewLayers(
           _pathType: 'loop',
           opacity: 1,
           widthUnits: 'pixels',
-          widthMinPixels: 1,
+          widthMinPixels: CELL_BOUNDARY_LINE_WIDTH_PIXELS,
           getPath: () => [],
-          getColor: [32, 102, 83, 190],
-          getWidth: 1,
+          getColor: DEFAULT_CELL_BOUNDARY_LINE_COLOR,
+          getWidth: CELL_BOUNDARY_LINE_WIDTH_PIXELS,
           updateTriggers: {
             getColor: [cellBoundaryOpacity, cellBoundaryStyle],
           },
@@ -1507,8 +1510,8 @@ export function boundaryElementsToLayerData(
   options: BoundaryElementsToLayerDataOptions = {},
 ): readonly CellBoundaryDatum[] {
   const cells: CellBoundaryDatum[] = []
-  const defaultFillColor = options.fillColor ?? [32, 102, 83, 34]
-  const defaultLineColor = options.lineColor ?? [32, 102, 83, 190]
+  const defaultFillColor = options.fillColor ?? DEFAULT_CELL_BOUNDARY_FILL_COLOR
+  const defaultLineColor = options.lineColor ?? DEFAULT_CELL_BOUNDARY_LINE_COLOR
   const annotationPaletteByLabel = new Map<string, string>()
 
   for (const element of elements) {

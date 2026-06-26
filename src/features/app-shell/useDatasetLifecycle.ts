@@ -913,6 +913,14 @@ export function useDatasetLifecycle({
         }
 
         setDatasetPlatform('xenium')
+        setShowCellBoundaries(
+          shouldRestoreSharedState ? (sharedState?.showCellBoundaries ?? true) : true,
+        )
+        setShowNucleusBoundaries(
+          shouldRestoreSharedState
+            ? (sharedState?.showNucleusBoundaries ?? false)
+            : false,
+        )
         setAnnotationGroupState({ status: 'loading', url: requestedUrl })
         setGenePanelState({ status: 'loading', url: requestedUrl })
         startDatasetWarmup(requestedUrl, requestId)

@@ -701,10 +701,15 @@ function ViewerSurface({
     () =>
       createCellBoundaryLayerStyle(
         boundaryLayerGeometry,
-        boundaryStyleCells,
+        cellBoundaryFillEnabled ? boundaryStyleCells : EMPTY_OVERVIEW_CELLS,
         boundaryExpressionCells,
       ),
-    [boundaryExpressionCells, boundaryLayerGeometry, boundaryStyleCells],
+    [
+      boundaryExpressionCells,
+      boundaryLayerGeometry,
+      boundaryStyleCells,
+      cellBoundaryFillEnabled,
+    ],
   )
   const layers = useMemo(
     () =>

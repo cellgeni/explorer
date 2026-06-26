@@ -41,6 +41,15 @@ const denseCellScaleDetail: ViewerViewportDetail = {
   visibleCellCount: 120_000,
 }
 
+const denseOverviewDetail: ViewerViewportDetail = {
+  ...detail,
+  visibleCellCount: 12,
+  viewState: {
+    ...detail.viewState,
+    zoom: -4,
+  },
+}
+
 const defaultSelectedGenes = ['Actb']
 
 const readyLoadState: DatasetLoadState<StructuredLoadError> = {
@@ -312,6 +321,36 @@ describe('useViewportDataWorkflow', () => {
           outcome: 'success',
         }),
       ]),
+    )
+  })
+
+  it('reports when true boundary polygons are deferred by viewport density', async () => {
+    const loadBoundaryElements = vi.fn(async () => ({ elements: [] }))
+    const loadGeneExpression = vi.fn(async () => batch)
+
+    render(
+      <Probe
+        loadBoundaryElements={loadBoundaryElements}
+        loadGeneExpression={loadGeneExpression}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+        selectedGenes={[]}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(denseOverviewDetail)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(loadBoundaryElements).not.toHaveBeenCalled()
+    expect(snapshot.boundaryState).toEqual({ status: 'idle' })
+    expect(snapshot.debugMessages).toContain(
+      'Boundaries deferred: 12 visible cells exceed the 10 boundary limit. Zoom in or raise Boundary limit to load true polygons.',
     )
   })
 

@@ -70,6 +70,7 @@ function Probe({
   setShowNucleusBoundaries = vi.fn(),
   setSpatialGridCells = vi.fn(),
   setVisiumHdControlState = vi.fn(),
+  initialShareableState = {},
   startDatasetLoadRef = { current: null },
   warmDatasetForRoi = vi.fn(async () => undefined),
 }: {
@@ -89,6 +90,7 @@ function Probe({
   readonly setShowNucleusBoundaries?: LifecycleOptions['setters']['setShowNucleusBoundaries']
   readonly setSpatialGridCells?: LifecycleOptions['setters']['setSpatialGridCells']
   readonly setVisiumHdControlState?: LifecycleOptions['setters']['setVisiumHdControlState']
+  readonly initialShareableState?: LifecycleOptions['initialState']['initialShareableState']
   readonly startDatasetLoadRef?: LifecycleOptions['refs']['startDatasetLoadRef']
   readonly warmDatasetForRoi?: LifecycleOptions['loaders']['warmDatasetForRoi']
 }) {
@@ -108,7 +110,7 @@ function Probe({
       transcriptPointColorMode: 'feature',
     },
     initialState: {
-      initialShareableState: {},
+      initialShareableState,
     },
     loaders: {
       detectSpatialDataset,
@@ -142,7 +144,7 @@ function Probe({
       geneExpressionAbortRef: refs.geneExpressionAbortRef,
       geneExpressionRequestIdRef: numberRef(),
       geneExpressionViewportKeyRef: stringRef(),
-      initialShareableStateRef: { current: null },
+      initialShareableStateRef: { current: initialShareableState },
       initialSharedRoiSelectionRef: { current: null },
       initialShouldLoadMorphologyRef: { current: false },
       lastViewportDetailRef: { current: null },
@@ -280,6 +282,42 @@ describe('useDatasetLifecycle', () => {
     expect(refs.cellDetailAbortRef.current).toBeNull()
     expect(refs.cellTranscriptDistributionAbortRef.current).toBeNull()
     expect(refs.customMorphologyLayerAbortRef.current).toBeNull()
+  })
+
+  it('shows Xenium cell boundaries by default on a fresh dataset load', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const datasetUrl = 'https://example.test/xenium'
+    const setDatasetPlatform = vi.fn()
+    const setLoadState = vi.fn()
+    const setShowCellBoundaries = vi.fn()
+    const setShowNucleusBoundaries = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        setDatasetPlatform={setDatasetPlatform}
+        setLoadState={setLoadState}
+        setShowCellBoundaries={setShowCellBoundaries}
+        setShowNucleusBoundaries={setShowNucleusBoundaries}
+        startDatasetLoadRef={startDatasetLoadRef}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(datasetUrl, false)
+    })
+
+    expect(setDatasetPlatform).toHaveBeenCalledWith('xenium')
+    expect(setShowCellBoundaries).toHaveBeenCalledWith(true)
+    expect(setShowNucleusBoundaries).toHaveBeenCalledWith(false)
+    expect(setLoadState).toHaveBeenCalledWith({
+      status: 'ready',
+      url: datasetUrl,
+      cellCount: 0,
+    })
   })
 
   it('loads Visium HD binned overview without starting Xenium loaders', async () => {

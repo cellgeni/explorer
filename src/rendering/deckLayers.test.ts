@@ -189,7 +189,7 @@ describe('deck layer factory', () => {
     expect(boundaryLayer.props.pickable).toBe(false)
     expect(boundaryLayer.props._pathType).toBe('loop')
     expect(boundaryLayer.props.widthUnits).toBe('pixels')
-    expect(boundaryLayer.props.widthMinPixels).toBe(1)
+    expect(boundaryLayer.props.widthMinPixels).toBe(1.35)
 
     const boundaryData = getBoundaryPathData(boundaryLayer)
 
@@ -1530,7 +1530,7 @@ describe('deck layer factory', () => {
       {
         id: 'cell-1',
         fillColor: [32, 102, 83, 34],
-        lineColor: [32, 102, 83, 190],
+        lineColor: [174, 241, 214, 230],
         polygon: [
           [1, -2, 0],
           [3, -4, 0],
