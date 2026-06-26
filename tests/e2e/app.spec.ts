@@ -4,7 +4,25 @@ import type { Page } from '@playwright/test'
 
 const VISIUM_HD_REFERENCE_URL =
   'https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f'
+const XENIUM_LOAD_TIMEOUT_MS = 120_000
+const XENIUM_TRANSCRIPT_TIMEOUT_MS = 120_000
+const XENIUM_ROI_TIMEOUT_MS = 120_000
 const VISIUM_HD_LOAD_TIMEOUT_MS = 90_000
+
+async function loadDefaultXeniumDataset(page: Page) {
+  await page.goto('/')
+
+  await expect(page.getByLabel('Dataset URL')).toHaveValue(/\/public\/xenium\//)
+  await expect(page.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
+
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+  await expect(page.getByText(/Dataset ready: [1-9][0-9,]* cells/)).toBeVisible({
+    timeout: XENIUM_LOAD_TIMEOUT_MS,
+  })
+  await expect(
+    page.getByRole('img', { name: 'Spatial viewer canvas area' }),
+  ).toBeVisible()
+}
 
 async function loadVisiumHdReferenceDataset(page: Page) {
   await page.goto('/')
@@ -58,6 +76,96 @@ test('shows transcript overlay controls in the browser shell', async ({ page }) 
     'thermal',
   )
   await expect(page.getByRole('combobox', { name: 'Point color' })).toHaveValue('feature')
+})
+
+test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell panels', async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+
+  await loadDefaultXeniumDataset(page)
+
+  await expect(page.getByText('Morphology image ready')).toBeVisible({
+    timeout: XENIUM_LOAD_TIMEOUT_MS,
+  })
+
+  await page.getByRole('tab', { name: 'Layers' }).click()
+  const layersPanel = page.locator('#hud-panel-layers')
+  const imageChannels = layersPanel.getByLabel('Image channels')
+  await expect(imageChannels).toContainText('DAPI')
+  await expect(imageChannels).toContainText('18S')
+
+  await page.getByRole('tab', { name: 'Transcripts' }).click()
+  const transcriptsPanel = page.locator('#hud-panel-transcripts')
+  await expect(page.getByRole('checkbox', { name: 'Show transcripts' })).toBeEnabled()
+  await page.getByRole('combobox', { name: 'Detail' }).selectOption('density')
+  await page.getByRole('checkbox', { name: 'Show transcripts' }).check()
+  await expect(transcriptsPanel).toContainText(
+    /Showing native all-transcript density squares from transcripts\.zarr\.zip/,
+    { timeout: XENIUM_TRANSCRIPT_TIMEOUT_MS },
+  )
+  await expect(transcriptsPanel.getByLabel('Transcript overlay summary')).toContainText(
+    /Rendered[1-9][0-9,]* squares/,
+  )
+
+  await page.getByRole('tab', { name: 'ROI' }).click()
+  const roiPanel = page.locator('#hud-panel-roi')
+  await expect(roiPanel.getByRole('button', { name: 'Draw Box' })).toBeEnabled({
+    timeout: XENIUM_ROI_TIMEOUT_MS,
+  })
+  await roiPanel.getByRole('button', { name: 'Draw Box' }).click()
+  await expect(roiPanel.getByRole('button', { name: 'Drawing Box' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  const viewer = page.getByRole('img', { name: 'Spatial viewer canvas area' })
+  const viewerBox = await viewer.boundingBox()
+  expect(viewerBox).not.toBeNull()
+
+  if (viewerBox === null) {
+    return
+  }
+
+  await page.mouse.move(
+    viewerBox.x + viewerBox.width * 0.48,
+    viewerBox.y + viewerBox.height * 0.48,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    viewerBox.x + viewerBox.width * 0.52,
+    viewerBox.y + viewerBox.height * 0.52,
+    {
+      steps: 10,
+    },
+  )
+  await page.mouse.up()
+
+  const roiSummary = roiPanel.getByLabel('ROI summary')
+  await expect(roiSummary).toContainText(/Cells\s*[1-9]/, {
+    timeout: XENIUM_ROI_TIMEOUT_MS,
+  })
+  await expect(roiPanel.getByRole('button', { name: 'Export Cells' })).toBeEnabled()
+  await expect(roiPanel.getByRole('button', { name: 'Export Transcripts' })).toBeEnabled()
+
+  const downloadPromise = page.waitForEvent('download')
+  await roiPanel.getByRole('button', { name: 'Export Cells' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('roi-1-cells.csv')
+
+  const downloadPath = await download.path()
+  expect(downloadPath).not.toBeNull()
+
+  if (downloadPath !== null) {
+    await expect(readFile(downloadPath, 'utf8')).resolves.toContain(
+      'cell_id,x_centroid,y_centroid,transcript_counts,cell_area',
+    )
+  }
+
+  await page.getByRole('tab', { name: 'Cell' }).click()
+  const cellPanel = page.locator('#hud-panel-cell')
+  await expect(page.getByRole('heading', { name: 'Cell Info' })).toBeVisible()
+  await expect(cellPanel).toContainText('No cell selected')
 })
 
 test('loads the Visium HD reference dataset with tissue image and 16 um bins', async ({

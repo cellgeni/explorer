@@ -1425,3 +1425,38 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       codecs. The production app entry chunk dropped from about 1.26 MB to about
       427 kB; the remaining build warnings are now isolated to heavyweight
       spatial/HDF5/codec vendor chunks.
+
+### Test Coverage Assessment - 2026-06-26
+
+- [x] Loaded the plan-required review skills for the coverage pass:
+      `frontend-design`, `vercel-react-best-practices`,
+      `vercel-composition-patterns`, and `web-design-guidelines`. The React and
+      component guidance was the relevant lens for judging current coverage.
+- [x] Current coverage is good enough to continue the feature-fix and
+      optimization sequence. The suite has broad focused coverage across data
+      readers, Visium HD detection, segmentation parsing, Feature Slice/GEX
+      paths, transcript planning, ROI workflows, renderer layer conversion, app
+      lifecycle routing, and browser-level Visium HD behavior.
+- [x] Verification during this assessment passed `npm test` (127 Vitest files,
+      671 tests), `npm run test:e2e` (4 Chromium Playwright tests in about
+      4.4 minutes), `npm run typecheck`, `npm run lint`, and `npm run build`.
+      The build still reports the known browser-externalized optional Node
+      imports and large spatial/HDF5/codec chunk warnings.
+- [x] Static inventory found 128 test/spec files and about 675 `it`/`test`
+      cases against 153 source implementation files. Thirty implementation
+      files do not have direct colocated tests; most are entrypoints, small UI
+      leaves, pure type/message modules, worker wrappers, or integration-covered
+      glue rather than the high-risk Phase 6 paths.
+- [ ] Add a numeric coverage reporter and thresholds before treating the suite
+      as a formal release coverage gate. `vitest.config.ts` currently has no
+      coverage provider/thresholds, and `package.json` has no coverage script.
+- [x] Added a live Xenium E2E path covering the default public Xenium dataset
+      load, morphology channel readiness, native transcript-density overlay,
+      ROI box selection and cell CSV export, and Cell Info panel availability.
+      This complements the existing Chromium desktop Visium HD browser coverage.
+- [ ] Add deeper Visium HD browser coverage for segmentation controls,
+      mapping-row/bin-info inspection, and actually selecting/loading the
+      2 micrometer tier when the environment and fixture budget allow it.
+- [ ] Consider direct tests for small uncolocated pure helpers and leaf
+      components if they gain behavior, especially assignment/status helpers,
+      cell expression leaf panels, and worker-message wrappers.
