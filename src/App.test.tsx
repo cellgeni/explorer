@@ -3758,6 +3758,14 @@ describe('App', () => {
     expect(colorInput).toHaveValue('#1f77b4')
     expect(colorPicker).toHaveStyle('--annotation-color: #1f77b4')
 
+    const visibilityInput = screen.getByLabelText('kmeans 3: Cluster 1 visible')
+    expect(visibilityInput).toBeChecked()
+    fireEvent.click(visibilityInput)
+    expect(visibilityInput).not.toBeChecked()
+    expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent(
+      'kmeans 3: Cluster 1',
+    )
+
     fireEvent.change(colorInput, { target: { value: '#d62728' } })
     expect(colorInput).toHaveValue('#d62728')
     expect(colorPicker).toHaveStyle('--annotation-color: #d62728')

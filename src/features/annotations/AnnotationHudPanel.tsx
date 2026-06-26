@@ -27,6 +27,7 @@ interface AnnotationHudPanelProps {
   readonly annotationGroupState: AnnotationGroupState
   readonly annotationColors: Readonly<Record<string, string>>
   readonly hiddenAnnotationSetIds: readonly string[]
+  readonly hiddenAnnotationIds: readonly string[]
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly onAnnotationGroupChange: (groupId: string) => void
   readonly onLoadAnnotations: () => void
@@ -37,6 +38,7 @@ interface AnnotationHudPanelProps {
   readonly onImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly onAnnotationColorChange: (annotationId: string, color: string) => void
   readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
+  readonly onAnnotationVisibilityChange: (annotationId: string, visible: boolean) => void
   readonly onRemoveAnnotation: (annotationId: string) => void
   readonly onRemoveCellMetadataTrack: (trackId: string) => void
 }
@@ -55,6 +57,7 @@ export function AnnotationHudPanel({
   annotationGroupState,
   annotationColors,
   hiddenAnnotationSetIds,
+  hiddenAnnotationIds,
   cellMetadataTracks,
   onAnnotationGroupChange,
   onLoadAnnotations,
@@ -65,6 +68,7 @@ export function AnnotationHudPanel({
   onImportAnnotationUrl,
   onAnnotationColorChange,
   onAnnotationSetVisibilityChange,
+  onAnnotationVisibilityChange,
   onRemoveAnnotation,
   onRemoveCellMetadataTrack,
 }: AnnotationHudPanelProps) {
@@ -73,6 +77,10 @@ export function AnnotationHudPanel({
     annotationState.status === 'loading' || annotationGroupState.status === 'loading'
   const loadedAnnotations =
     annotationState.status === 'ready' ? annotationState.annotations : []
+  const hiddenAnnotationIdSet = useMemo(
+    () => new Set(hiddenAnnotationIds),
+    [hiddenAnnotationIds],
+  )
   const trimmedAnnotationImportUrl = annotationImportUrl.trim()
 
   async function handleAnnotationUrlSubmit(event: FormEvent<HTMLFormElement>) {
@@ -228,9 +236,13 @@ export function AnnotationHudPanel({
                 const annotationColor =
                   annotationColors[annotation.id] ??
                   annotationPaletteColor(annotationIndex)
+                const visible = !hiddenAnnotationIdSet.has(annotation.id)
 
                 return (
-                  <li key={annotation.id}>
+                  <li
+                    key={annotation.id}
+                    className={visible ? undefined : 'is-hidden'}
+                  >
                     <label
                       className="annotation-color-picker"
                       style={{ '--annotation-color': annotationColor } as CSSProperties}
@@ -249,6 +261,20 @@ export function AnnotationHudPanel({
                         }}
                       />
                       <span className="annotation-color-swatch" aria-hidden="true" />
+                    </label>
+                    <label className="annotation-visibility-toggle">
+                      <input
+                        type="checkbox"
+                        checked={visible}
+                        aria-label={`${annotation.label} visible`}
+                        title={`${annotation.label} visible`}
+                        onChange={(event) => {
+                          onAnnotationVisibilityChange(
+                            annotation.id,
+                            event.currentTarget.checked,
+                          )
+                        }}
+                      />
                     </label>
                     <span>{annotation.label}</span>
                     <small>{annotation.cellIds.length.toLocaleString()}</small>

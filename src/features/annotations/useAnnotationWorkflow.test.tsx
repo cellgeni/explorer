@@ -17,6 +17,7 @@ interface Snapshot {
   readonly annotationState: AnnotationState<StructuredLoadError>
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly debugMessages: readonly string[]
+  readonly hiddenAnnotationIds: readonly string[]
   readonly observationColorMode: ObservationColorMode
   readonly roiName: string
   readonly selectedAnnotationGroupId: string
@@ -27,12 +28,14 @@ let snapshot: Snapshot
 
 function Probe({
   initialAnnotationState = { status: 'idle' },
+  initialHiddenAnnotationIds = [],
   loadAnnotations,
   onReady,
   roiState = { status: 'idle' },
   selectedAnnotationGroupId = 'cluster-a',
 }: {
   readonly initialAnnotationState?: AnnotationState<StructuredLoadError>
+  readonly initialHiddenAnnotationIds?: readonly string[]
   readonly loadAnnotations: Parameters<typeof useAnnotationWorkflow>[0]['loadAnnotations']
   readonly onReady: (
     nextApi: ReturnType<typeof useAnnotationWorkflow>,
@@ -46,6 +49,9 @@ function Probe({
   >({})
   const [annotationState, setAnnotationState] =
     React.useState<AnnotationState<StructuredLoadError>>(initialAnnotationState)
+  const [hiddenAnnotationIds, setHiddenAnnotationIds] = React.useState<readonly string[]>(
+    initialHiddenAnnotationIds,
+  )
   const [, setHiddenAnnotationSetIds] = React.useState<readonly string[]>([])
   const [cellMetadataTracks, setCellMetadataTracks] = React.useState<
     readonly ContinuousCellMetadataTrack[]
@@ -83,6 +89,7 @@ function Probe({
     roiState,
     selectedAnnotationGroupId: groupId,
     setAnnotationColors,
+    setHiddenAnnotationIds,
     setHiddenAnnotationSetIds,
     setCellMetadataTracks,
     setAnnotationState,
@@ -98,6 +105,7 @@ function Probe({
       annotationState,
       cellMetadataTracks,
       debugMessages: debugMessagesRef.current,
+      hiddenAnnotationIds,
       observationColorMode,
       roiName,
       selectedAnnotationGroupId: groupId,
@@ -121,6 +129,7 @@ describe('useAnnotationWorkflow', () => {
 
     render(
       <Probe
+        initialHiddenAnnotationIds={['a']}
         loadAnnotations={loadAnnotations}
         onReady={(nextApi, nextSnapshot) => {
           api = nextApi
@@ -150,7 +159,49 @@ describe('useAnnotationWorkflow', () => {
     })
     expect(snapshot.observationColorMode).toBe('annotations')
     expect(snapshot.annotationColors.a).toBe('#1f77b4')
+    expect(snapshot.hiddenAnnotationIds).toEqual([])
     expect(snapshot.debugMessages).toContain('Annotations loaded: 1 labels')
+  })
+
+  it('removes annotations without leaving stale hidden visibility ids', () => {
+    const removableAnnotations: readonly Annotation[] = [
+      { id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] },
+      { id: 'b', label: 'Neurons', cellIds: [asCellId('bbbbbbbb-2')] },
+    ]
+
+    render(
+      <Probe
+        initialAnnotationState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          annotations: removableAnnotations,
+        }}
+        initialHiddenAnnotationIds={['a', 'b']}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleRemoveAnnotation('a')
+    })
+
+    expect(
+      snapshot.annotationState.status === 'ready'
+        ? snapshot.annotationState.annotations.map((annotation) => annotation.id)
+        : [],
+    ).toEqual(['b'])
+    expect(snapshot.hiddenAnnotationIds).toEqual(['b'])
+
+    act(() => {
+      api.handleClearAnnotations()
+    })
+
+    expect(snapshot.annotationState).toEqual({ status: 'idle' })
+    expect(snapshot.hiddenAnnotationIds).toEqual([])
   })
 
   it('saves ready ROI cells as an annotation', () => {

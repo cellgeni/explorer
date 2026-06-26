@@ -14,6 +14,7 @@ describe('AnnotationHudPanel', () => {
     const onImportAnnotationUrl = vi.fn(async () => true)
     const onAnnotationColorChange = vi.fn()
     const onAnnotationSetVisibilityChange = vi.fn()
+    const onAnnotationVisibilityChange = vi.fn()
     const onRemoveAnnotation = vi.fn()
     const onRemoveCellMetadataTrack = vi.fn()
 
@@ -53,6 +54,7 @@ describe('AnnotationHudPanel', () => {
         }}
         annotationColors={{ astro: '#123456' }}
         hiddenAnnotationSetIds={[]}
+        hiddenAnnotationIds={['astro']}
         cellMetadataTracks={[
           {
             id: 'metadata:confidence',
@@ -74,6 +76,7 @@ describe('AnnotationHudPanel', () => {
         onImportAnnotationUrl={onImportAnnotationUrl}
         onAnnotationColorChange={onAnnotationColorChange}
         onAnnotationSetVisibilityChange={onAnnotationSetVisibilityChange}
+        onAnnotationVisibilityChange={onAnnotationVisibilityChange}
         onRemoveAnnotation={onRemoveAnnotation}
         onRemoveCellMetadataTrack={onRemoveCellMetadataTrack}
       />,
@@ -89,6 +92,7 @@ describe('AnnotationHudPanel', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Export Annotations' }))
     fireEvent.click(screen.getByLabelText('Loaded annotations visible'))
+    fireEvent.click(screen.getByLabelText('Astrocytes visible'))
     fireEvent.click(screen.getByRole('button', { name: 'Remove Astrocytes' }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove confidence' }))
     fireEvent.change(screen.getByLabelText('Import File'), {
@@ -113,6 +117,7 @@ describe('AnnotationHudPanel', () => {
       'loaded-annotations',
       false,
     )
+    expect(onAnnotationVisibilityChange).toHaveBeenCalledWith('astro', true)
     expect(onRemoveAnnotation).toHaveBeenCalledWith('astro')
     expect(onRemoveCellMetadataTrack).toHaveBeenCalledWith('metadata:confidence')
     expect(onImportAnnotations).toHaveBeenCalledWith(expect.any(File))
@@ -124,6 +129,7 @@ describe('AnnotationHudPanel', () => {
     expect(
       within(screen.getByRole('list', { name: 'Loaded annotations' })).getByText('1'),
     ).toBeInTheDocument()
+    expect(screen.getByLabelText('Astrocytes visible')).not.toBeChecked()
     expect(screen.getByRole('region', { name: 'Set sizes' })).toBeInTheDocument()
     expect(screen.getByLabelText('Loaded annotations cell counts')).toHaveTextContent(
       'Astrocytes',
@@ -177,6 +183,7 @@ describe('AnnotationHudPanel', () => {
         }}
         annotationColors={{ 'analysis:0:1': '#abcdef' }}
         hiddenAnnotationSetIds={['analysis:graphclust']}
+        hiddenAnnotationIds={[]}
         cellMetadataTracks={[]}
         onAnnotationGroupChange={vi.fn()}
         onLoadAnnotations={vi.fn()}
@@ -187,6 +194,7 @@ describe('AnnotationHudPanel', () => {
         onImportAnnotationUrl={vi.fn(async () => true)}
         onAnnotationColorChange={vi.fn()}
         onAnnotationSetVisibilityChange={vi.fn()}
+        onAnnotationVisibilityChange={vi.fn()}
         onRemoveAnnotation={vi.fn()}
         onRemoveCellMetadataTrack={vi.fn()}
       />,

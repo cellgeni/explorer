@@ -173,6 +173,7 @@ function Probe({
       setAnnotationColors: noopSetter,
       setAnnotationGroupState: noopSetter,
       setAnnotationState: noopSetter,
+      setHiddenAnnotationIds: noopSetter,
       setHiddenAnnotationSetIds: noopSetter,
       setCellMetadataTracks: noopSetter,
       setSelectedCellMetadataTrackId: noopSetter,

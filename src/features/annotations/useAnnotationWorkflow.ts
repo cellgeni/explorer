@@ -33,6 +33,7 @@ import {
   mergeImportedAnnotations,
   removeAnnotationColor,
   removeAnnotationColorsByPrefix,
+  removeHiddenAnnotationIdsByPrefix,
   type AnnotationState,
 } from './annotationModel'
 
@@ -54,6 +55,7 @@ interface UseAnnotationWorkflowOptions {
   readonly roiState: RoiState<StructuredLoadError>
   readonly selectedAnnotationGroupId: string
   readonly setAnnotationColors: Dispatch<SetStateAction<Readonly<Record<string, string>>>>
+  readonly setHiddenAnnotationIds: Dispatch<SetStateAction<readonly string[]>>
   readonly setHiddenAnnotationSetIds: Dispatch<SetStateAction<readonly string[]>>
   readonly setCellMetadataTracks: Dispatch<
     SetStateAction<readonly ContinuousCellMetadataTrack[]>
@@ -99,6 +101,7 @@ export function useAnnotationWorkflow({
   roiState,
   selectedAnnotationGroupId,
   setAnnotationColors,
+  setHiddenAnnotationIds,
   setHiddenAnnotationSetIds,
   setCellMetadataTracks,
   setAnnotationState,
@@ -138,6 +141,7 @@ export function useAnnotationWorkflow({
           annotations,
         })
         setAnnotationColors((current) => colorsForAnnotations(annotations, current))
+        setHiddenAnnotationIds([])
         if (annotations.length > 0) {
           setObservationColorMode('annotations')
         }
@@ -166,6 +170,7 @@ export function useAnnotationWorkflow({
     loadState,
     selectedAnnotationGroupId,
     setAnnotationColors,
+    setHiddenAnnotationIds,
     setAnnotationState,
     setObservationColorMode,
   ])
@@ -205,6 +210,9 @@ export function useAnnotationWorkflow({
           removeAnnotationColorsByPrefix(current, importedPrefix),
         ),
       )
+      setHiddenAnnotationIds((current) =>
+        removeHiddenAnnotationIdsByPrefix(current, importedPrefix),
+      )
       setCellMetadataTracks(nextCellMetadataTracks)
       setSelectedCellMetadataTrackId((current) => {
         if (nextCellMetadataTracks.length === 0) {
@@ -237,6 +245,7 @@ export function useAnnotationWorkflow({
       datasetUrl,
       loadState,
       setAnnotationColors,
+      setHiddenAnnotationIds,
       setAnnotationState,
       setCellMetadataTracks,
       setObservationColorMode,
@@ -357,6 +366,9 @@ export function useAnnotationWorkflow({
         return annotations.length === 0 ? { status: 'idle' } : { ...current, annotations }
       })
       setAnnotationColors((current) => removeAnnotationColor(current, annotationId))
+      setHiddenAnnotationIds((current) =>
+        current.filter((hiddenAnnotationId) => hiddenAnnotationId !== annotationId),
+      )
       setObservationColorMode((current) =>
         hasReadyAnnotationsAfterRemove(annotationState, annotationId)
           ? current
@@ -374,6 +386,7 @@ export function useAnnotationWorkflow({
       appendDebugEvent,
       cellMetadataTracks,
       setAnnotationColors,
+      setHiddenAnnotationIds,
       setAnnotationState,
       setObservationColorMode,
     ],
@@ -423,6 +436,7 @@ export function useAnnotationWorkflow({
   const handleClearAnnotations = useCallback(() => {
     setAnnotationState({ status: 'idle' })
     setAnnotationColors({})
+    setHiddenAnnotationIds([])
     setHiddenAnnotationSetIds([])
     setCellMetadataTracks([])
     setSelectedCellMetadataTrackId(null)
@@ -431,6 +445,7 @@ export function useAnnotationWorkflow({
   }, [
     appendDebugEvent,
     setAnnotationColors,
+    setHiddenAnnotationIds,
     setAnnotationState,
     setHiddenAnnotationSetIds,
     setCellMetadataTracks,

@@ -216,6 +216,7 @@ interface UseDatasetLifecycleSetters {
   readonly setAnnotationColors: Setter<Readonly<Record<string, string>>>
   readonly setAnnotationGroupState: Setter<AnnotationGroupState<StructuredLoadError>>
   readonly setAnnotationState: Setter<AnnotationState<StructuredLoadError>>
+  readonly setHiddenAnnotationIds: Setter<readonly string[]>
   readonly setHiddenAnnotationSetIds: Setter<readonly string[]>
   readonly setCellMetadataTracks: Setter<readonly ContinuousCellMetadataTrack[]>
   readonly setSelectedCellMetadataTrackId: Setter<string | null>
@@ -373,6 +374,7 @@ export function useDatasetLifecycle({
     setAnnotationColors,
     setAnnotationGroupState,
     setAnnotationState,
+    setHiddenAnnotationIds,
     setHiddenAnnotationSetIds,
     setCellMetadataTracks,
     setSelectedCellMetadataTrackId,
@@ -672,6 +674,7 @@ export function useDatasetLifecycle({
       setPinnedTranscript(null)
       setManualTranscriptExactRequestKey(null)
       setAnnotationColors({})
+      setHiddenAnnotationIds([])
       setHiddenAnnotationSetIds([])
       setCellMetadataTracks([])
       setSelectedCellMetadataTrackId(null)

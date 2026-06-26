@@ -100,6 +100,17 @@ export function filterAnnotationsByVisibleSets(
   )
 }
 
+export function filterAnnotationsByVisibleClasses(
+  annotations: readonly Annotation[],
+  hiddenAnnotationIds: ReadonlySet<string>,
+): readonly Annotation[] {
+  if (hiddenAnnotationIds.size === 0) {
+    return annotations
+  }
+
+  return annotations.filter((annotation) => !hiddenAnnotationIds.has(annotation.id))
+}
+
 export function annotationSetIdForAnnotation(annotation: Annotation): string {
   return annotationSizeGrouping(annotation).id
 }
@@ -228,6 +239,13 @@ export function removeAnnotationColorsByPrefix(
   }
 
   return remainingColors
+}
+
+export function removeHiddenAnnotationIdsByPrefix(
+  annotationIds: readonly string[],
+  prefix: string,
+): readonly string[] {
+  return annotationIds.filter((annotationId) => !annotationId.startsWith(prefix))
 }
 
 export function customAnnotationFilePrefix(fileName: string): string {

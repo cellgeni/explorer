@@ -128,6 +128,7 @@ import { useDatasetDiagnosticsWorkflow } from './features/diagnostics/useDataset
 import {
   annotationLabelsForCell,
   annotationStatusCopy,
+  filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
   type AnnotationGroupState,
   type AnnotationState,
@@ -329,6 +330,7 @@ export function App({
   const [hiddenAnnotationSetIds, setHiddenAnnotationSetIds] = useState<readonly string[]>(
     [],
   )
+  const [hiddenAnnotationIds, setHiddenAnnotationIds] = useState<readonly string[]>([])
   const [cellMetadataTracks, setCellMetadataTracks] = useState<
     readonly ContinuousCellMetadataTrack[]
   >([])
@@ -654,18 +656,25 @@ export function App({
     () => new Set(hiddenAnnotationSetIds),
     [hiddenAnnotationSetIds],
   )
+  const hiddenAnnotationIdSet = useMemo(
+    () => new Set(hiddenAnnotationIds),
+    [hiddenAnnotationIds],
+  )
   const visibleAnnotationState = useMemo<AnnotationState<StructuredLoadError>>(
     () =>
       annotationState.status === 'ready'
         ? {
             ...annotationState,
-            annotations: filterAnnotationsByVisibleSets(
-              annotationState.annotations,
-              hiddenAnnotationSetIdSet,
+            annotations: filterAnnotationsByVisibleClasses(
+              filterAnnotationsByVisibleSets(
+                annotationState.annotations,
+                hiddenAnnotationSetIdSet,
+              ),
+              hiddenAnnotationIdSet,
             ),
           }
         : annotationState,
-    [annotationState, hiddenAnnotationSetIdSet],
+    [annotationState, hiddenAnnotationIdSet, hiddenAnnotationSetIdSet],
   )
   const appendDebugEvent = useCallback(
     (message: string, options: DebugLogAppendOptions = {}) => {
@@ -1039,6 +1048,20 @@ export function App({
         }
 
         return current.includes(setId) ? current : [...current, setId]
+      })
+    },
+    [],
+  )
+  const handleAnnotationVisibilityChange = useCallback(
+    (annotationId: string, visible: boolean) => {
+      setHiddenAnnotationIds((current) => {
+        if (visible) {
+          return current.filter(
+            (hiddenAnnotationId) => hiddenAnnotationId !== annotationId,
+          )
+        }
+
+        return current.includes(annotationId) ? current : [...current, annotationId]
       })
     },
     [],
@@ -1797,6 +1820,7 @@ export function App({
     roiState,
     selectedAnnotationGroupId,
     setAnnotationColors,
+    setHiddenAnnotationIds,
     setHiddenAnnotationSetIds,
     setCellMetadataTracks,
     setAnnotationState,
@@ -2059,6 +2083,7 @@ export function App({
       setAnnotationColors,
       setAnnotationGroupState,
       setAnnotationState,
+      setHiddenAnnotationIds,
       setHiddenAnnotationSetIds,
       setCellMetadataTracks,
       setSelectedCellMetadataTrackId,
@@ -2380,6 +2405,7 @@ export function App({
           annotationGroupState={annotationGroupState}
           annotationColors={annotationColors}
           hiddenAnnotationSetIds={hiddenAnnotationSetIds}
+          hiddenAnnotationIds={hiddenAnnotationIds}
           cellMetadataTracks={cellMetadataTracks}
           onAnnotationGroupChange={handleAnnotationGroupChange}
           onLoadAnnotations={handleLoadAnnotations}
@@ -2392,6 +2418,7 @@ export function App({
           onImportAnnotationUrl={handleImportAnnotationUrl}
           onAnnotationColorChange={handleAnnotationColorChange}
           onAnnotationSetVisibilityChange={handleAnnotationSetVisibilityChange}
+          onAnnotationVisibilityChange={handleAnnotationVisibilityChange}
           onRemoveAnnotation={handleRemoveAnnotation}
           onRemoveCellMetadataTrack={handleRemoveCellMetadataTrack}
         />

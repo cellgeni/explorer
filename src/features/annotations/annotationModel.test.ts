@@ -8,9 +8,11 @@ import {
   annotationsToCsv,
   colorsForAnnotations,
   customAnnotationFilePrefix,
+  filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
   hasReadyAnnotationsAfterRemove,
   mergeImportedAnnotations,
+  removeHiddenAnnotationIdsByPrefix,
   removeAnnotationColor,
   removeAnnotationColorsByPrefix,
 } from './annotationModel'
@@ -195,6 +197,12 @@ describe('annotationModel', () => {
     ).toEqual([visible])
   })
 
+  it('filters annotations by hidden annotation class id', () => {
+    expect(filterAnnotationsByVisibleClasses(annotations, new Set(['b']))).toEqual([
+      annotations[0],
+    ])
+  })
+
   it('merges imported annotations by prefix and maintains palette colors', () => {
     expect(
       mergeImportedAnnotations(
@@ -227,5 +235,11 @@ describe('annotationModel', () => {
       ),
     ).toEqual({ manual: '#222222' })
     expect(customAnnotationFilePrefix('My Labels.csv')).toBe('custom:my-labels-csv:')
+    expect(
+      removeHiddenAnnotationIdsByPrefix(
+        ['custom:file:a', 'custom:file:b', 'manual'],
+        'custom:file:',
+      ),
+    ).toEqual(['manual'])
   })
 })
