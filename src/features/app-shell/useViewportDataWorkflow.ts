@@ -35,15 +35,27 @@ import {
   type DebugLogAppendOptions,
   type LatestRequestRefs,
 } from './appRuntimeModel'
-import type { BoundaryLoadState, DatasetLoadState } from '../dataset/datasetLoadModel'
+import {
+  IDLE_BOUNDARY_LOAD_STATE,
+  boundaryLoadFailed,
+  boundaryLoadReady,
+  boundaryLoadStarted,
+  type BoundaryLoadState,
+  type DatasetLoadState,
+} from '../dataset/datasetLoadModel'
 import {
   createStructuredLoadError,
   readErrorMessage,
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
 import {
+  IDLE_GENE_EXPRESSION_STATE,
   formatGeneExpressionTiming,
+  geneExpressionLoadFailed,
+  geneExpressionLoadReady,
+  geneExpressionLoadStarted,
   geneExpressionModeLabel,
+  geneExpressionWaiting,
   type GeneExpressionState,
 } from '../genes/geneControlsModel'
 
@@ -200,7 +212,7 @@ export function useViewportDataWorkflow({
         setBoundaryElements((current) => (current.length === 0 ? current : []))
         setNucleusBoundaryElements?.((current) => (current.length === 0 ? current : []))
         setBoundaryState((current) =>
-          current.status === 'idle' ? current : { status: 'idle' },
+          current.status === 'idle' ? current : IDLE_BOUNDARY_LOAD_STATE,
         )
       } else {
         const requestKey = boundaryViewportKey(loadState.url, detail.bbox)
@@ -211,7 +223,7 @@ export function useViewportDataWorkflow({
             requestIdRef: boundaryRequestIdRef,
           })
           boundaryViewportKeyRef.current = requestKey
-          setBoundaryState({ status: 'loading', url: loadState.url })
+          setBoundaryState(boundaryLoadStarted(loadState.url))
           const boundaryStartedAt = readTimestamp()
           appendDebugEvent(
             `Boundaries started: ${detail.visibleCellCount.toLocaleString()} visible cells`,
@@ -251,11 +263,9 @@ export function useViewportDataWorkflow({
 
               setBoundaryElements(cellBatch.elements)
               setNucleusBoundaryElements?.(nucleusBatch.elements)
-              setBoundaryState({
-                status: 'ready',
-                url: loadState.url,
-                cellCount: cellBatch.elements.length,
-              })
+              setBoundaryState(
+                boundaryLoadReady(loadState.url, cellBatch.elements.length),
+              )
               recordTelemetry(
                 telemetryEvent('viewport.boundaries.load', 'success', {
                   startedAt: boundaryStartedAt,
@@ -277,11 +287,12 @@ export function useViewportDataWorkflow({
 
               setBoundaryElements([])
               setNucleusBoundaryElements?.([])
-              setBoundaryState({
-                status: 'error',
-                url: loadState.url,
-                error: createStructuredLoadError('Cell boundaries', error),
-              })
+              setBoundaryState(
+                boundaryLoadFailed(
+                  loadState.url,
+                  createStructuredLoadError('Cell boundaries', error),
+                ),
+              )
               recordTelemetry(
                 telemetryEvent('viewport.boundaries.load', 'failure', {
                   startedAt: boundaryStartedAt,
@@ -310,10 +321,10 @@ export function useViewportDataWorkflow({
             return current.status === 'waiting' &&
               current.message === geneExpressionDisabledMessage
               ? current
-              : { status: 'waiting', message: geneExpressionDisabledMessage }
+              : geneExpressionWaiting(geneExpressionDisabledMessage)
           }
 
-          return current.status === 'idle' ? current : { status: 'idle' }
+          return current.status === 'idle' ? current : IDLE_GENE_EXPRESSION_STATE
         })
         return
       }
@@ -342,7 +353,7 @@ export function useViewportDataWorkflow({
         })
         geneExpressionViewportKeyRef.current = waitingKey
         setGeneExpressionBatch(null)
-        setGeneExpressionState({ status: 'waiting', message: expressionPlan.message })
+        setGeneExpressionState(geneExpressionWaiting(expressionPlan.message))
         return
       }
 
@@ -363,13 +374,14 @@ export function useViewportDataWorkflow({
       })
       const expressionStartedAt = readTimestamp()
       geneExpressionViewportKeyRef.current = expressionKey
-      setGeneExpressionState({
-        status: 'loading',
-        url: loadState.url,
-        genes: selectedGenes,
-        mode: expressionPlan.mode,
-        visibleCellCount: expressionPlan.sourceCellCount,
-      })
+      setGeneExpressionState(
+        geneExpressionLoadStarted(
+          loadState.url,
+          selectedGenes,
+          expressionPlan.mode,
+          expressionPlan.sourceCellCount,
+        ),
+      )
       appendDebugEvent(
         `${geneExpressionModeLabel(expressionPlan.mode)} started: ${selectedGenes.join(', ')}; ${expressionPlan.sourceCellCount.toLocaleString()} source cells, limit ${expressionPlan.cellLimit.toLocaleString()}, stride ${expressionPlan.sampleStride.toLocaleString()}`,
         { coalesceKey: 'gene-expression-query' },
@@ -434,14 +446,15 @@ export function useViewportDataWorkflow({
             geneExpressionScoreMode,
           )
           setGeneExpressionBatch(batch)
-          setGeneExpressionState({
-            status: 'ready',
-            url: loadState.url,
-            genes: batch.genes,
-            cellCount: batch.cells.length,
-            mode: expressionPlan.mode,
-            visibleCellCount: expressionPlan.sourceCellCount,
-          })
+          setGeneExpressionState(
+            geneExpressionLoadReady(
+              loadState.url,
+              batch.genes,
+              expressionPlan.mode,
+              batch.cells.length,
+              expressionPlan.sourceCellCount,
+            ),
+          )
           recordTelemetry(
             telemetryEvent('gene-expression.load', 'success', {
               startedAt: expressionStartedAt,
@@ -470,11 +483,12 @@ export function useViewportDataWorkflow({
           }
 
           setGeneExpressionBatch(null)
-          setGeneExpressionState({
-            status: 'error',
-            url: loadState.url,
-            error: createStructuredLoadError('Gene expression', error),
-          })
+          setGeneExpressionState(
+            geneExpressionLoadFailed(
+              loadState.url,
+              createStructuredLoadError('Gene expression', error),
+            ),
+          )
           recordTelemetry(
             telemetryEvent('gene-expression.load', 'failure', {
               startedAt: expressionStartedAt,

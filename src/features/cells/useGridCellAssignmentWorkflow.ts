@@ -18,7 +18,15 @@ import {
   createStructuredLoadError,
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
-import type { GridCellAssignmentState } from './gridCellAssignmentModel'
+import {
+  IDLE_GRID_CELL_ASSIGNMENT_STATE,
+  gridCellAssignmentFailed,
+  gridCellAssignmentLoadStarted,
+  gridCellAssignmentMissing,
+  gridCellAssignmentReady,
+  gridCellAssignmentUnavailable,
+  type GridCellAssignmentState,
+} from './gridCellAssignmentModel'
 
 interface MutableRef<T> {
   current: T
@@ -102,7 +110,7 @@ export function useGridCellAssignmentWorkflow({
 
       queueMicrotask(() => {
         if (gridCellAssignmentRequestIdRef.current === requestId) {
-          setGridCellAssignmentState({ status: 'idle' })
+          setGridCellAssignmentState(IDLE_GRID_CELL_ASSIGNMENT_STATE)
         }
       })
       return
@@ -118,10 +126,9 @@ export function useGridCellAssignmentWorkflow({
 
       queueMicrotask(() => {
         if (gridCellAssignmentRequestIdRef.current === requestId) {
-          setGridCellAssignmentState({
-            status: 'unavailable',
-            reason: 'Selected bin size is unavailable.',
-          })
+          setGridCellAssignmentState(
+            gridCellAssignmentUnavailable('Selected bin size is unavailable.'),
+          )
         }
       })
       return
@@ -132,11 +139,9 @@ export function useGridCellAssignmentWorkflow({
       requestIdRef: gridCellAssignmentRequestIdRef,
     })
     const startedAt = readTimestamp()
-    setGridCellAssignmentState({
-      status: 'loading',
-      binId: selectedGridCell.id,
-      ...(rowBudget === undefined ? {} : { rowBudget }),
-    })
+    setGridCellAssignmentState(
+      gridCellAssignmentLoadStarted(selectedGridCell.id, rowBudget),
+    )
     appendDebugEvent(`Bin assignment started: ${shortIdentifier(selectedGridCell.id)}`, {
       coalesceKey: 'bin-assignment',
     })
@@ -164,22 +169,18 @@ export function useGridCellAssignmentWorkflow({
       const assignment = assignments[0]
 
       if (assignment === undefined) {
-        setGridCellAssignmentState({
-          status: 'missing',
-          binId: selectedGridCell.id,
-          ...(rowBudget === undefined ? {} : { rowBudget }),
-        })
+        setGridCellAssignmentState(
+          gridCellAssignmentMissing(selectedGridCell.id, rowBudget),
+        )
       } else {
-        setGridCellAssignmentState({
-          status: 'ready',
-          binId: selectedGridCell.id,
-          assignment: {
+        setGridCellAssignmentState(
+          gridCellAssignmentReady(selectedGridCell.id, {
             cellId: assignment.cellId,
             inNucleus: assignment.inNucleus,
             inCell: assignment.inCell,
             ...(rowBudget === undefined ? {} : { rowBudget }),
-          },
-        })
+          }),
+        )
       }
 
       appendDebugEvent(`Bin assignment ready in ${formatElapsed(startedAt)}`, {
@@ -191,11 +192,12 @@ export function useGridCellAssignmentWorkflow({
           return
         }
 
-        setGridCellAssignmentState({
-          status: 'error',
-          binId: selectedGridCell.id,
-          error: createStructuredLoadError('Cell details', error),
-        })
+        setGridCellAssignmentState(
+          gridCellAssignmentFailed(
+            selectedGridCell.id,
+            createStructuredLoadError('Cell details', error),
+          ),
+        )
         appendDebugEvent(`Bin assignment failed (${formatElapsed(startedAt)})`, {
           coalesceKey: 'bin-assignment',
         })

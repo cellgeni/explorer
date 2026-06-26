@@ -15,7 +15,10 @@ import {
   type MorphologyChannelSetting,
 } from './morphologyChannels'
 import {
+  IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE,
   createCustomMorphologyLayer,
+  customMorphologyLayerLoadFailed,
+  customMorphologyLayerLoadStarted,
   customMorphologyLayerDefaultEnabledChannelIds,
   customMorphologyLayerChannelIds,
   isCustomMorphologyLayerChannelId,
@@ -99,11 +102,12 @@ export function useCustomMorphologyLayerWorkflow({
         normalizedUrl = normalizeCustomMorphologyLayerUrl(url)
       } catch (error) {
         const trimmedUrl = url.trim()
-        setCustomLayerLoadState({
-          status: 'error',
-          url: trimmedUrl.length === 0 ? url : trimmedUrl,
-          error: createStructuredLoadError('Morphology image', error),
-        })
+        setCustomLayerLoadState(
+          customMorphologyLayerLoadFailed(
+            trimmedUrl.length === 0 ? url : trimmedUrl,
+            createStructuredLoadError('Morphology image', error),
+          ),
+        )
         appendDebugEvent('Custom layer URL invalid')
         return false
       }
@@ -120,7 +124,7 @@ export function useCustomMorphologyLayerWorkflow({
         requestIdRef: customLayerRequestIdRef,
       })
       const datasetRequestId = loadRequestIdRef.current
-      setCustomLayerLoadState({ status: 'loading', url: normalizedUrl })
+      setCustomLayerLoadState(customMorphologyLayerLoadStarted(normalizedUrl))
       appendDebugEvent(`Loading custom layer ${shortDatasetLabel(normalizedUrl)}`)
 
       try {
@@ -150,7 +154,7 @@ export function useCustomMorphologyLayerWorkflow({
             : [...current, layer],
         )
         setMorphologyChannelSettings((current) => [...current, ...settings])
-        setCustomLayerLoadState({ status: 'idle' })
+        setCustomLayerLoadState(IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE)
         appendDebugEvent(
           `Custom layer ready: ${layer.channels.length.toLocaleString()} channels`,
         )
@@ -164,11 +168,12 @@ export function useCustomMorphologyLayerWorkflow({
           return false
         }
 
-        setCustomLayerLoadState({
-          status: 'error',
-          url: normalizedUrl,
-          error: createStructuredLoadError('Morphology image', error),
-        })
+        setCustomLayerLoadState(
+          customMorphologyLayerLoadFailed(
+            normalizedUrl,
+            createStructuredLoadError('Morphology image', error),
+          ),
+        )
         appendDebugEvent('Custom layer failed')
         return false
       } finally {

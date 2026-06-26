@@ -1425,6 +1425,23 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
       codecs. The production app entry chunk dropped from about 1.26 MB to about
       427 kB; the remaining build warnings are now isolated to heavyweight
       spatial/HDF5/codec vendor chunks.
+- [x] Continued the structural optimization pass by extending explicit
+      transition helpers to morphology load, gene panel, and Visium HD
+      bin-control states. Dataset load and Visium HD bin-switch workflows now
+      share those constructors for loading, ready, idle, and error transitions,
+      with focused model and hook coverage preserving tier option-count
+      behavior.
+- [x] Continued the same transition-helper pass for dataset diagnostics and
+      boundary viewport loads. Diagnostics runs, boundary polygon requests, and
+      dataset-load reset paths now use shared model constructors while retaining
+      stale-request, failure, and deferred-boundary behavior.
+- [x] Finished the remaining runtime async-state transition-helper pass.
+      Analysis embeddings, annotations and group discovery, custom morphology
+      layers, grid-cell assignment, Magic Lens, gene expression,
+      cell-feature matrix capability, Visium HD expression projection,
+      Visium HD ROI completion, morphology auto-contrast failures, and dataset
+      resets now use named helpers/constants instead of inline async state
+      payloads. Focused model coverage was added for the new constructors.
 
 ### Test Coverage Assessment - 2026-06-26
 

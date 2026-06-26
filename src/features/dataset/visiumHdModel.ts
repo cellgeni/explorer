@@ -1,4 +1,7 @@
-import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
+import type {
+  VisiumHdBinnedOverview,
+  VisiumHdBinSizeMicrometers,
+} from '../../datasets/visiumHdDataset'
 
 export interface VisiumHdBinOption {
   readonly size: VisiumHdBinSizeMicrometers
@@ -18,6 +21,8 @@ export type VisiumHdControlState =
       readonly binCount?: number
       readonly error?: string
     }
+
+export const IDLE_VISIUM_HD_CONTROL_STATE: VisiumHdControlState = { status: 'idle' }
 
 const VISIUM_HD_BIN_OPTION_ORDER: readonly VisiumHdBinSizeMicrometers[] = [16, 8, 2]
 
@@ -50,6 +55,64 @@ export function updateVisiumHdBinOptionCount(
   return options.map((option) =>
     option.size === binSize ? { ...option, binCount } : option,
   )
+}
+
+export function visiumHdControlLoading(
+  current: VisiumHdControlState,
+  selectedBinSize: VisiumHdBinSizeMicrometers,
+): VisiumHdControlState {
+  return current.status === 'idle'
+    ? current
+    : {
+        ...current,
+        status: 'loading',
+        selectedBinSize,
+      }
+}
+
+export function visiumHdControlReadyFromOptions(
+  url: string,
+  options: readonly VisiumHdBinOption[],
+  overview: VisiumHdBinnedOverview,
+): VisiumHdControlState {
+  return {
+    status: 'ready',
+    url,
+    selectedBinSize: overview.binSizeMicrometers,
+    options: updateVisiumHdBinOptionCount(
+      options,
+      overview.binSizeMicrometers,
+      overview.gridCells.ids.length,
+    ),
+    binCount: overview.gridCells.ids.length,
+  }
+}
+
+export function visiumHdControlStateFromOverview(
+  url: string,
+  availableBinSizes: readonly VisiumHdBinSizeMicrometers[],
+  overview: VisiumHdBinnedOverview,
+): VisiumHdControlState {
+  return visiumHdControlReadyFromOptions(
+    url,
+    createVisiumHdBinOptions(availableBinSizes, {
+      [overview.binSizeMicrometers]: overview.gridCells.ids.length,
+    }),
+    overview,
+  )
+}
+
+export function visiumHdControlFailed(
+  current: VisiumHdControlState,
+  error: string,
+): VisiumHdControlState {
+  return current.status === 'idle'
+    ? current
+    : {
+        ...current,
+        status: 'error',
+        error,
+      }
 }
 
 export function visiumHdBinSizeLabel(size: VisiumHdBinSizeMicrometers): string {

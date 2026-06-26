@@ -43,10 +43,18 @@ import {
   type CellDetailState,
   type CellTranscriptDistributionState,
 } from '../cells/cellDetailModel'
-import type { AnalysisEmbeddingState } from '../analysis/analysisEmbeddingModel'
-import type {
-  AnnotationGroupState,
-  AnnotationState,
+import {
+  IDLE_ANALYSIS_EMBEDDING_STATE,
+  type AnalysisEmbeddingState,
+} from '../analysis/analysisEmbeddingModel'
+import {
+  IDLE_ANNOTATION_GROUP_STATE,
+  IDLE_ANNOTATION_STATE,
+  annotationGroupLoadFailed,
+  annotationGroupLoadReady,
+  annotationGroupLoadStarted,
+  type AnnotationGroupState,
+  type AnnotationState,
 } from '../annotations/annotationModel'
 import type {
   GeneExpressionScaleDomain,
@@ -54,6 +62,11 @@ import type {
   GenePanelState,
 } from '../genes/geneControlsModel'
 import {
+  IDLE_GENE_EXPRESSION_STATE,
+  IDLE_GENE_PANEL_STATE,
+  genePanelLoadFailed,
+  genePanelLoadReady,
+  genePanelLoadStarted,
   parseGeneExpressionColorScale,
   parseGeneExpressionDetailMode,
   parseGeneExpressionScoreMode,
@@ -66,7 +79,8 @@ import type {
   CustomMorphologyLayer,
   CustomMorphologyLayerLoadState,
 } from '../morphology/customMorphologyLayers'
-import type { MagicLensState } from '../roi/magicLensModel'
+import { IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE } from '../morphology/customMorphologyLayers'
+import { IDLE_MAGIC_LENS_STATE, type MagicLensState } from '../roi/magicLensModel'
 import {
   IDLE_ROI_GENE_STATS_STATE,
   IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE,
@@ -78,6 +92,7 @@ import {
   type RoiTranscriptExportState,
 } from '../roi/roiModel'
 import {
+  IDLE_TRANSCRIPT_CAPABILITY_STATE,
   IDLE_TRANSCRIPT_LAYER_STATE,
   parseTranscriptDensityColorScale,
   parseTranscriptPointColorMode,
@@ -106,13 +121,21 @@ import {
 } from './appRuntimeModel'
 import { parseObservationColorMode } from './appShellModel'
 import {
+  IDLE_BOUNDARY_LOAD_STATE,
+  IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE,
+  IDLE_DATASET_DIAGNOSTICS_STATE,
   IDLE_DATASET_WARMUP_STATE,
+  IDLE_MORPHOLOGY_LOAD_STATE,
+  cellFeatureMatrixCapabilityReady,
   datasetLoadFailed,
   datasetLoadReady,
   datasetLoadStarted,
   datasetWarmupFailed,
   datasetWarmupReady,
   datasetWarmupStarted,
+  morphologyLoadFailed,
+  morphologyLoadReady,
+  morphologyLoadStarted,
   type BoundaryLoadState,
   type CellFeatureMatrixCapabilityState,
   type DatasetDiagnosticsState,
@@ -120,7 +143,11 @@ import {
   type DatasetWarmupState,
   type MorphologyLoadState,
 } from '../dataset/datasetLoadModel'
-import type { VisiumHdControlState } from '../dataset/visiumHdModel'
+import {
+  IDLE_VISIUM_HD_CONTROL_STATE,
+  visiumHdControlStateFromOverview,
+  type VisiumHdControlState,
+} from '../dataset/visiumHdModel'
 import {
   createStructuredLoadError,
   readErrorMessage,
@@ -129,7 +156,6 @@ import {
 import {
   flatMorphologyImageFromSource,
   isVisiumHdOverviewDataset,
-  visiumHdControlStateFromOverview,
 } from './useVisiumHdBinWorkflow'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
@@ -536,11 +562,9 @@ export function useDatasetLifecycle({
       }
 
       cellFeatureMatrixCapabilityKeyRef.current = capabilityKey
-      setCellFeatureMatrixCapabilityState({
-        status: 'ready',
-        url: requestedUrl,
-        hasCellMajorCsc: capability.hasCellMajorCsc,
-      })
+      setCellFeatureMatrixCapabilityState(
+        cellFeatureMatrixCapabilityReady(requestedUrl, capability.hasCellMajorCsc),
+      )
 
       if (!capability.hasCellMajorCsc) {
         appendDebugEvent(
@@ -666,9 +690,9 @@ export function useDatasetLifecycle({
 
       setDatasetUrl(requestedUrl)
       setDatasetPlatform(null)
-      setVisiumHdControlState({ status: 'idle' })
+      setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
       setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
-      setCellFeatureMatrixCapabilityState({ status: 'idle' })
+      setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
       cellFeatureMatrixCapabilityKeyRef.current = null
       setOverviewCells([])
       setSpatialGridCells([])
@@ -678,7 +702,7 @@ export function useDatasetLifecycle({
       setFlatMorphologyImage(null)
       setCustomMorphologyLayers([])
       setCustomImageLayerOpacities({})
-      setCustomMorphologyLayerState({ status: 'idle' })
+      setCustomMorphologyLayerState(IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE)
       setMorphologyChannelSettings([])
       autoContrastChannelIdsRef.current.clear()
       setAutoContrastChannelIds([])
@@ -692,9 +716,9 @@ export function useDatasetLifecycle({
       setHiddenAnnotationSetIds([])
       setCellMetadataTracks([])
       setSelectedCellMetadataTrackId(null)
-      setAnnotationGroupState({ status: 'idle' })
+      setAnnotationGroupState(IDLE_ANNOTATION_GROUP_STATE)
       setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
-      setAnalysisEmbeddingState({ status: 'idle' })
+      setAnalysisEmbeddingState(IDLE_ANALYSIS_EMBEDDING_STATE)
       setSelectedEmbeddingKind('umap')
       setObservationColorMode(
         shouldRestoreSharedState
@@ -748,9 +772,9 @@ export function useDatasetLifecycle({
       setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
       setRoiGeneViewportWarmupState(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
       setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
-      setTranscriptCapabilityState({ status: 'idle' })
+      setTranscriptCapabilityState(IDLE_TRANSCRIPT_CAPABILITY_STATE)
       setTranscriptLayerState(IDLE_TRANSCRIPT_LAYER_STATE)
-      setMagicLensState({ status: 'idle' })
+      setMagicLensState(IDLE_MAGIC_LENS_STATE)
       setCellDetailState(IDLE_CELL_DETAIL_STATE)
       setCellTranscriptDistributionState(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
       setMagicLensActive(
@@ -762,13 +786,13 @@ export function useDatasetLifecycle({
       setViewportCellCount(null)
       setLoadState(datasetLoadStarted(requestedUrl))
       setMorphologyState(
-        loadImage ? { status: 'loading', url: requestedUrl } : { status: 'idle' },
+        loadImage ? morphologyLoadStarted(requestedUrl) : IDLE_MORPHOLOGY_LOAD_STATE,
       )
-      setDiagnosticsState({ status: 'idle' })
-      setBoundaryState({ status: 'idle' })
-      setGenePanelState({ status: 'idle' })
-      setAnnotationState({ status: 'idle' })
-      setGeneExpressionState({ status: 'idle' })
+      setDiagnosticsState(IDLE_DATASET_DIAGNOSTICS_STATE)
+      setBoundaryState(IDLE_BOUNDARY_LOAD_STATE)
+      setGenePanelState(IDLE_GENE_PANEL_STATE)
+      setAnnotationState(IDLE_ANNOTATION_STATE)
+      setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
       magicLensLastDetailRef.current = null
       magicLensLastQueryKeyRef.current = null
       boundaryViewportKeyRef.current = null
@@ -805,7 +829,7 @@ export function useDatasetLifecycle({
           }
 
           if (dataset.genePanel !== undefined) {
-            setGenePanelState({ status: 'loading', url: requestedUrl })
+            setGenePanelState(genePanelLoadStarted(requestedUrl))
             void dataset
               .genePanel(undefined, { signal: request.signal })
               .then((genes) => {
@@ -813,7 +837,7 @@ export function useDatasetLifecycle({
                   return
                 }
 
-                setGenePanelState({ status: 'ready', url: requestedUrl, genes })
+                setGenePanelState(genePanelLoadReady(requestedUrl, genes))
                 appendDebugEvent(
                   `Visium HD gene panel ready: ${genes.length.toLocaleString()} genes`,
                 )
@@ -827,11 +851,12 @@ export function useDatasetLifecycle({
                   return
                 }
 
-                setGenePanelState({
-                  status: 'error',
-                  url: requestedUrl,
-                  error: createStructuredLoadError('Gene panel', error),
-                })
+                setGenePanelState(
+                  genePanelLoadFailed(
+                    requestedUrl,
+                    createStructuredLoadError('Gene panel', error),
+                  ),
+                )
                 appendDebugEvent('Visium HD gene panel failed')
               })
           }
@@ -889,15 +914,12 @@ export function useDatasetLifecycle({
                 const flatImage = flatMorphologyImageFromSource(imageSource, meta)
 
                 if (flatImage === null) {
-                  setMorphologyState({ status: 'idle' })
+                  setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
                   return
                 }
 
                 setFlatMorphologyImage(flatImage)
-                setMorphologyState({
-                  status: 'ready',
-                  url: flatImage.url,
-                })
+                setMorphologyState(morphologyLoadReady(flatImage.url))
                 appendDebugEvent('Visium HD tissue image ready')
               })
               .catch((error) => {
@@ -909,11 +931,12 @@ export function useDatasetLifecycle({
                   return
                 }
 
-                setMorphologyState({
-                  status: 'error',
-                  url: requestedUrl,
-                  error: createStructuredLoadError('Morphology image', error),
-                })
+                setMorphologyState(
+                  morphologyLoadFailed(
+                    requestedUrl,
+                    createStructuredLoadError('Morphology image', error),
+                  ),
+                )
                 appendDebugEvent('Visium HD tissue image failed')
               })
           }
@@ -934,8 +957,8 @@ export function useDatasetLifecycle({
             ? (sharedState?.showNucleusBoundaries ?? false)
             : false,
         )
-        setAnnotationGroupState({ status: 'loading', url: requestedUrl })
-        setGenePanelState({ status: 'loading', url: requestedUrl })
+        setAnnotationGroupState(annotationGroupLoadStarted(requestedUrl))
+        setGenePanelState(genePanelLoadStarted(requestedUrl))
         startDatasetWarmup(requestedUrl, requestId)
 
         void loadGenePanel(requestedUrl, {
@@ -947,7 +970,7 @@ export function useDatasetLifecycle({
               return
             }
 
-            setGenePanelState({ status: 'ready', url: requestedUrl, genes })
+            setGenePanelState(genePanelLoadReady(requestedUrl, genes))
             appendDebugEvent(`Gene panel ready: ${genes.length.toLocaleString()} genes`)
           })
           .catch((error) => {
@@ -959,11 +982,12 @@ export function useDatasetLifecycle({
               return
             }
 
-            setGenePanelState({
-              status: 'error',
-              url: requestedUrl,
-              error: createStructuredLoadError('Gene panel', error),
-            })
+            setGenePanelState(
+              genePanelLoadFailed(
+                requestedUrl,
+                createStructuredLoadError('Gene panel', error),
+              ),
+            )
             appendDebugEvent('Gene panel failed')
           })
 
@@ -973,11 +997,7 @@ export function useDatasetLifecycle({
               return
             }
 
-            setAnnotationGroupState({
-              status: 'ready',
-              url: requestedUrl,
-              groups,
-            })
+            setAnnotationGroupState(annotationGroupLoadReady(requestedUrl, groups))
             appendDebugEvent(
               `Annotation sets ready: ${groups.length.toLocaleString()} groups`,
             )
@@ -991,11 +1011,12 @@ export function useDatasetLifecycle({
               return
             }
 
-            setAnnotationGroupState({
-              status: 'error',
-              url: requestedUrl,
-              error: createStructuredLoadError('Annotations', error),
-            })
+            setAnnotationGroupState(
+              annotationGroupLoadFailed(
+                requestedUrl,
+                createStructuredLoadError('Annotations', error),
+              ),
+            )
             appendDebugEvent('Annotation sets failed')
           })
 
@@ -1049,10 +1070,7 @@ export function useDatasetLifecycle({
                 enabledChannelIds === undefined ? {} : { enabledChannelIds },
               ),
             )
-            setMorphologyState({
-              status: 'ready',
-              url: image.url,
-            })
+            setMorphologyState(morphologyLoadReady(image.url))
             appendDebugEvent('Morphology image ready')
             queueAutoContrast(image.channelLoaders, {
               requestId,
@@ -1068,11 +1086,12 @@ export function useDatasetLifecycle({
               return
             }
 
-            setMorphologyState({
-              status: 'error',
-              url: requestedUrl,
-              error: createStructuredLoadError('Morphology image', error),
-            })
+            setMorphologyState(
+              morphologyLoadFailed(
+                requestedUrl,
+                createStructuredLoadError('Morphology image', error),
+              ),
+            )
             appendDebugEvent('Morphology image failed')
           })
       } catch (error) {
@@ -1091,7 +1110,7 @@ export function useDatasetLifecycle({
           ),
         )
         setDatasetPlatform(null)
-        setVisiumHdControlState({ status: 'idle' })
+        setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
         setSpatialGridCells([])
         setFlatMorphologyImage(null)
         initialShareableStateRef.current = null
@@ -1107,12 +1126,12 @@ export function useDatasetLifecycle({
           requestIdRef: datasetWarmupRequestIdRef,
         })
         setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
-        setCellFeatureMatrixCapabilityState({ status: 'idle' })
+        setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
         cellFeatureMatrixCapabilityKeyRef.current = null
-        setMorphologyState({ status: 'idle' })
-        setGenePanelState({ status: 'idle' })
-        setAnnotationGroupState({ status: 'idle' })
-        setTranscriptCapabilityState({ status: 'idle' })
+        setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+        setGenePanelState(IDLE_GENE_PANEL_STATE)
+        setAnnotationGroupState(IDLE_ANNOTATION_GROUP_STATE)
+        setTranscriptCapabilityState(IDLE_TRANSCRIPT_CAPABILITY_STATE)
         setTranscriptLayerState(IDLE_TRANSCRIPT_LAYER_STATE)
       }
     }

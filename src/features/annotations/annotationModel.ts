@@ -23,6 +23,47 @@ export type AnnotationGroupState<ErrorType = unknown> =
     }
   | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
 
+export const IDLE_ANNOTATION_STATE: AnnotationState<never> = { status: 'idle' }
+export const IDLE_ANNOTATION_GROUP_STATE: AnnotationGroupState<never> = {
+  status: 'idle',
+}
+
+export function annotationLoadStarted(url: string): AnnotationState<never> {
+  return { status: 'loading', url }
+}
+
+export function annotationLoadReady(
+  url: string,
+  annotations: readonly Annotation[],
+): AnnotationState<never> {
+  return { status: 'ready', url, annotations }
+}
+
+export function annotationLoadFailed<ErrorType>(
+  url: string,
+  error: ErrorType,
+): AnnotationState<ErrorType> {
+  return { status: 'error', url, error }
+}
+
+export function annotationGroupLoadStarted(url: string): AnnotationGroupState<never> {
+  return { status: 'loading', url }
+}
+
+export function annotationGroupLoadReady(
+  url: string,
+  groups: readonly AnnotationGroupOption[],
+): AnnotationGroupState<never> {
+  return { status: 'ready', url, groups }
+}
+
+export function annotationGroupLoadFailed<ErrorType>(
+  url: string,
+  error: ErrorType,
+): AnnotationGroupState<ErrorType> {
+  return { status: 'error', url, error }
+}
+
 export interface AnnotationSizeRow {
   readonly id: string
   readonly label: string

@@ -17,6 +17,28 @@ export type AnalysisEmbeddingState<ErrorType = unknown> =
       readonly error: ErrorType
     }
 
+export const IDLE_ANALYSIS_EMBEDDING_STATE: AnalysisEmbeddingState<never> = {
+  status: 'idle',
+}
+
+export function analysisEmbeddingLoadStarted(url: string): AnalysisEmbeddingState<never> {
+  return { status: 'loading', url }
+}
+
+export function analysisEmbeddingLoadReady(
+  url: string,
+  embeddings: readonly AnalysisEmbedding[],
+): AnalysisEmbeddingState<never> {
+  return { status: 'ready', url, embeddings }
+}
+
+export function analysisEmbeddingLoadFailed<ErrorType>(
+  url: string,
+  error: ErrorType,
+): AnalysisEmbeddingState<ErrorType> {
+  return { status: 'error', url, error }
+}
+
 export function analysisEmbeddingStatusCopy<ErrorType>(
   state: AnalysisEmbeddingState<ErrorType>,
   activeEmbedding: AnalysisEmbedding | null,

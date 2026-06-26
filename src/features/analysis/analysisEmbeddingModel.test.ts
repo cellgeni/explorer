@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
 import { asCellId } from '../../data/cellid'
-import { analysisEmbeddingStatusCopy } from './analysisEmbeddingModel'
+import {
+  IDLE_ANALYSIS_EMBEDDING_STATE,
+  analysisEmbeddingLoadFailed,
+  analysisEmbeddingLoadReady,
+  analysisEmbeddingLoadStarted,
+  analysisEmbeddingStatusCopy,
+} from './analysisEmbeddingModel'
 
 const embedding: AnalysisEmbedding = {
   kind: 'umap',
@@ -14,6 +20,28 @@ const embedding: AnalysisEmbedding = {
 }
 
 describe('analysisEmbeddingStatusCopy', () => {
+  it('constructs analysis embedding transitions', () => {
+    const error = new Error('failed')
+
+    expect(IDLE_ANALYSIS_EMBEDDING_STATE).toEqual({ status: 'idle' })
+    expect(analysisEmbeddingLoadStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(
+      analysisEmbeddingLoadReady('https://example.test/output', [embedding]),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      embeddings: [embedding],
+    })
+    expect(analysisEmbeddingLoadFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+  })
+
   it('formats non-ready states', () => {
     expect(
       analysisEmbeddingStatusCopy(

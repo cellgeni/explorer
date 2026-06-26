@@ -59,6 +59,8 @@ import {
 } from './features/app-shell/appRuntimeModel'
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
+  IDLE_TRANSCRIPT_CAPABILITY_STATE,
+  IDLE_TRANSCRIPT_LAYER_STATE,
   parseTranscriptDensityColorScale,
   parseTranscriptDetailMode,
   parseTranscriptFeatureFilterMode,
@@ -68,20 +70,27 @@ import {
   type TranscriptLayerState,
 } from './features/transcripts/transcriptLayerModel'
 import {
+  IDLE_CELL_DETAIL_STATE,
+  IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE,
   cellDetailStatusCopy,
   type CellDetailState,
   type CellTranscriptDistributionState,
 } from './features/cells/cellDetailModel'
 import {
+  IDLE_CELL_EXPRESSION_PROFILE_STATE,
   cellExpressionProfileMatchesSelection,
   type CellExpressionProfileSelection,
   type CellExpressionProfileState,
 } from './features/cells/cellExpressionProfileModel'
 import type { CellGeneExpressionStatus } from './features/cells/cellGeneExpressionStatus'
 import { useCellDetailWorkflow } from './features/cells/useCellDetailWorkflow'
-import type { GridCellAssignmentState } from './features/cells/gridCellAssignmentModel'
+import {
+  IDLE_GRID_CELL_ASSIGNMENT_STATE,
+  type GridCellAssignmentState,
+} from './features/cells/gridCellAssignmentModel'
 import { useGridCellAssignmentWorkflow } from './features/cells/useGridCellAssignmentWorkflow'
 import {
+  IDLE_ANALYSIS_EMBEDDING_STATE,
   analysisEmbeddingStatusCopy,
   type AnalysisEmbeddingState,
 } from './features/analysis/analysisEmbeddingModel'
@@ -89,12 +98,14 @@ import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmb
 import type { MorphologyChannelSetting } from './features/morphology/morphologyChannels'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
 import {
+  IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE,
   customMorphologyLayerChannels,
   type CustomMorphologyLayer,
   type CustomMorphologyLayerLoadState,
 } from './features/morphology/customMorphologyLayers'
 import { useCustomMorphologyLayerWorkflow } from './features/morphology/useCustomMorphologyLayerWorkflow'
 import {
+  IDLE_MAGIC_LENS_STATE,
   magicLensScopeLabel,
   magicLensStatusCopy,
   normalizeMagicLensMinQv,
@@ -108,6 +119,10 @@ import { useVisiumHdMagicLensSummary } from './features/roi/useVisiumHdMagicLens
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import { useVisiumHdRoiWorkflow } from './features/roi/useVisiumHdRoiWorkflow'
 import {
+  IDLE_ROI_GENE_STATS_STATE,
+  IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE,
+  IDLE_ROI_STATE,
+  IDLE_ROI_TRANSCRIPT_EXPORT_STATE,
   roiGeneDatasetWarmupKey,
   roiGeneStatsStatusCopy,
   roiStatusCopy,
@@ -126,6 +141,8 @@ import {
 } from './features/roi/visiumHdRoiModel'
 import { useDatasetDiagnosticsWorkflow } from './features/diagnostics/useDatasetDiagnosticsWorkflow'
 import {
+  IDLE_ANNOTATION_GROUP_STATE,
+  IDLE_ANNOTATION_STATE,
   annotationLabelsForCell,
   annotationStatusCopy,
   filterAnnotationsByVisibleClasses,
@@ -135,6 +152,8 @@ import {
 } from './features/annotations/annotationModel'
 import { useAnnotationWorkflow } from './features/annotations/useAnnotationWorkflow'
 import {
+  IDLE_GENE_EXPRESSION_STATE,
+  IDLE_GENE_PANEL_STATE,
   type GeneExpressionScaleDomain,
   type GeneExpressionState,
   geneExpressionModeLabel,
@@ -151,15 +170,25 @@ import {
   formatStructuredError,
   type StructuredLoadError,
 } from './features/errors/loadErrorModel'
-import type {
-  BoundaryLoadState,
-  CellFeatureMatrixCapabilityState,
-  DatasetDiagnosticsState,
-  DatasetLoadState,
-  DatasetWarmupState,
-  MorphologyLoadState,
+import {
+  IDLE_BOUNDARY_LOAD_STATE,
+  IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE,
+  IDLE_DATASET_DIAGNOSTICS_STATE,
+  IDLE_DATASET_LOAD_STATE,
+  IDLE_DATASET_WARMUP_STATE,
+  IDLE_MORPHOLOGY_LOAD_STATE,
+  morphologyLoadFailed,
+  type BoundaryLoadState,
+  type CellFeatureMatrixCapabilityState,
+  type DatasetDiagnosticsState,
+  type DatasetLoadState,
+  type DatasetWarmupState,
+  type MorphologyLoadState,
 } from './features/dataset/datasetLoadModel'
-import type { VisiumHdControlState } from './features/dataset/visiumHdModel'
+import {
+  IDLE_VISIUM_HD_CONTROL_STATE,
+  type VisiumHdControlState,
+} from './features/dataset/visiumHdModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import {
   normalizeTranscriptExactPointLimit,
@@ -246,11 +275,6 @@ export type {
   TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
 
-const IDLE_CELL_EXPRESSION_PROFILE_STATE: CellExpressionProfileState<StructuredLoadError> =
-  {
-    status: 'idle',
-  }
-
 export function App({
   loadDatasetOverview = defaultAppDependencies.loadDatasetOverview,
   loadMorphologyImage = defaultAppDependencies.loadMorphologyImage,
@@ -281,43 +305,33 @@ export function App({
   const [performanceBudget] = useState<PerformanceBudget>(() => detectPerformanceBudget())
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
-  const [loadState, setLoadState] = useState<DatasetLoadState<StructuredLoadError>>({
-    status: 'idle',
-  })
-  const [datasetWarmupState, setDatasetWarmupState] = useState<DatasetWarmupState>({
-    status: 'idle',
-  })
+  const [loadState, setLoadState] = useState<DatasetLoadState<StructuredLoadError>>(
+    IDLE_DATASET_LOAD_STATE,
+  )
+  const [datasetWarmupState, setDatasetWarmupState] = useState<DatasetWarmupState>(
+    IDLE_DATASET_WARMUP_STATE,
+  )
   const [cellFeatureMatrixCapabilityState, setCellFeatureMatrixCapabilityState] =
-    useState<CellFeatureMatrixCapabilityState>({
-      status: 'idle',
-    })
+    useState<CellFeatureMatrixCapabilityState>(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
   const [diagnosticsState, setDiagnosticsState] = useState<
     DatasetDiagnosticsState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_DATASET_DIAGNOSTICS_STATE)
   const [morphologyState, setMorphologyState] = useState<
     MorphologyLoadState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_MORPHOLOGY_LOAD_STATE)
   const [boundaryState, setBoundaryState] = useState<
     BoundaryLoadState<StructuredLoadError>
-  >({ status: 'idle' })
-  const [genePanelState, setGenePanelState] = useState<
-    GenePanelState<StructuredLoadError>
-  >({
-    status: 'idle',
-  })
-  const [annotationState, setAnnotationState] = useState<
-    AnnotationState<StructuredLoadError>
-  >({
-    status: 'idle',
-  })
+  >(IDLE_BOUNDARY_LOAD_STATE)
+  const [genePanelState, setGenePanelState] =
+    useState<GenePanelState<StructuredLoadError>>(IDLE_GENE_PANEL_STATE)
+  const [annotationState, setAnnotationState] =
+    useState<AnnotationState<StructuredLoadError>>(IDLE_ANNOTATION_STATE)
   const [annotationGroupState, setAnnotationGroupState] = useState<
     AnnotationGroupState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_ANNOTATION_GROUP_STATE)
   const [analysisEmbeddingState, setAnalysisEmbeddingState] = useState<
     AnalysisEmbeddingState<StructuredLoadError>
-  >({
-    status: 'idle',
-  })
+  >(IDLE_ANALYSIS_EMBEDDING_STATE)
   const [annotationColors, setAnnotationColors] = useState<
     Readonly<Record<string, string>>
   >({})
@@ -339,39 +353,31 @@ export function App({
   >(null)
   const [selectedEmbeddingKind, setSelectedEmbeddingKind] =
     useState<AnalysisEmbeddingKind>('umap')
-  const [roiState, setRoiState] = useState<RoiState<StructuredLoadError>>({
-    status: 'idle',
-  })
+  const [roiState, setRoiState] = useState<RoiState<StructuredLoadError>>(IDLE_ROI_STATE)
   const [visiumHdRoiState, setVisiumHdRoiState] = useState<VisiumHdRoiState>(
     IDLE_VISIUM_HD_ROI_STATE,
   )
   const [roiGeneStatsState, setRoiGeneStatsState] = useState<
     RoiGeneStatsState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_ROI_GENE_STATS_STATE)
   const [roiGeneViewportWarmupState, setRoiGeneViewportWarmupState] =
-    useState<RoiGeneViewportWarmupState>({ status: 'idle' })
+    useState<RoiGeneViewportWarmupState>(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
   const [roiTranscriptExportState, setRoiTranscriptExportState] = useState<
     RoiTranscriptExportState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
   const [transcriptCapabilityState, setTranscriptCapabilityState] = useState<
     TranscriptCapabilityState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_TRANSCRIPT_CAPABILITY_STATE)
   const [transcriptLayerState, setTranscriptLayerState] = useState<
     TranscriptLayerState<StructuredLoadError>
-  >({
-    status: 'idle',
-  })
-  const [magicLensState, setMagicLensState] = useState<
-    MagicLensState<StructuredLoadError>
-  >({ status: 'idle' })
-  const [cellDetailState, setCellDetailState] = useState<
-    CellDetailState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_TRANSCRIPT_LAYER_STATE)
+  const [magicLensState, setMagicLensState] =
+    useState<MagicLensState<StructuredLoadError>>(IDLE_MAGIC_LENS_STATE)
+  const [cellDetailState, setCellDetailState] =
+    useState<CellDetailState<StructuredLoadError>>(IDLE_CELL_DETAIL_STATE)
   const [cellTranscriptDistributionState, setCellTranscriptDistributionState] = useState<
     CellTranscriptDistributionState<StructuredLoadError>
-  >({
-    status: 'idle',
-  })
+  >(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
   const [magicLensScope, setMagicLensScope] = useState<MagicLensScope>(
     () => parseMagicLensScope(initialShareableState.magicLensScope) ?? 'cursor',
   )
@@ -443,7 +449,7 @@ export function App({
   )
   const [geneExpressionState, setGeneExpressionState] = useState<
     GeneExpressionState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_GENE_EXPRESSION_STATE)
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
   const [spatialGridCells, setSpatialGridCells] = useState<readonly GridCellDatum[]>([])
   const [geneExpressionBatch, setGeneExpressionBatch] =
@@ -458,7 +464,7 @@ export function App({
   >([])
   const [customMorphologyLayerState, setCustomMorphologyLayerState] = useState<
     CustomMorphologyLayerLoadState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE)
   const [customImageLayerOpacities, setCustomImageLayerOpacities] = useState<
     Readonly<Record<string, number>>
   >({})
@@ -551,12 +557,12 @@ export function App({
     useState<ViewerViewportDetail | null>(null)
   const [, setViewportCellCount] = useState<number | null>(null)
   const [datasetPlatform, setDatasetPlatform] = useState<Platform | null>(null)
-  const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>({
-    status: 'idle',
-  })
+  const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>(
+    IDLE_VISIUM_HD_CONTROL_STATE,
+  )
   const [gridCellAssignmentState, setGridCellAssignmentState] = useState<
     GridCellAssignmentState<StructuredLoadError>
-  >({ status: 'idle' })
+  >(IDLE_GRID_CELL_ASSIGNMENT_STATE)
   const [visiumHdExpressionProfileState, setVisiumHdExpressionProfileState] = useState<
     CellExpressionProfileState<StructuredLoadError>
   >(IDLE_CELL_EXPRESSION_PROFILE_STATE)
@@ -1439,11 +1445,10 @@ export function App({
         return current
       }
 
-      return {
-        status: 'error',
-        url: current.url,
-        error: createStructuredLoadError('Image tiles', error),
-      }
+      return morphologyLoadFailed(
+        current.url,
+        createStructuredLoadError('Image tiles', error),
+      )
     })
   }, [])
   const rememberGeneExpressionScaleMax = useCallback(
@@ -1474,7 +1479,7 @@ export function App({
     geneExpressionViewportKeyRef.current = null
     setGeneExpressionBatch(null)
     setGeneExpressionScaleDomain({ key: '', max: 0 })
-    setGeneExpressionState({ status: 'idle' })
+    setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
   }, [])
   const loadActiveAnalysisEmbeddings = useCallback(
     (...args: Parameters<typeof loadAnalysisEmbeddings>) => {

@@ -19,10 +19,14 @@ import {
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
 import {
+  IDLE_MAGIC_LENS_STATE,
   MAGIC_LENS_CELL_LIMIT,
   MAGIC_LENS_GENE_STATS_LIMIT,
   filterCellsForCircle,
   magicLensDetailQueryKey,
+  magicLensFailed,
+  magicLensLoadStarted,
+  magicLensReady,
   magicLensScopeLabel,
   normalizeMagicLensMinQv,
   normalizeMagicLensRadius,
@@ -155,11 +159,7 @@ export function useMagicLensWorkflow({
         abortRef: magicLensAbortRef,
         requestIdRef: magicLensRequestIdRef,
       })
-      setMagicLensState({
-        status: 'loading',
-        url: loadState.url,
-        scope,
-      })
+      setMagicLensState(magicLensLoadStarted(loadState.url, scope))
       appendDebugEvent(
         `Scanning magic lens ${magicLensScopeLabel(scope)}`,
         scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-scan' } : {},
@@ -178,12 +178,7 @@ export function useMagicLensWorkflow({
               return
             }
 
-            setMagicLensState({
-              status: 'ready',
-              url: loadState.url,
-              scope,
-              summary,
-            })
+            setMagicLensState(magicLensReady(loadState.url, scope, summary))
             appendDebugEvent(
               `Magic lens ready: ${summary.cellCount.toLocaleString()} ${
                 summary.kind === 'expression' ? 'bins' : 'cells'
@@ -196,12 +191,13 @@ export function useMagicLensWorkflow({
               return
             }
 
-            setMagicLensState({
-              status: 'error',
-              url: loadState.url,
-              scope,
-              error: createStructuredLoadError('Magic lens', error),
-            })
+            setMagicLensState(
+              magicLensFailed(
+                loadState.url,
+                scope,
+                createStructuredLoadError('Magic lens', error),
+              ),
+            )
             appendDebugEvent('Magic lens failed')
           })
           .finally(() => {
@@ -223,19 +219,15 @@ export function useMagicLensWorkflow({
             circleFilter === null ? cells : filterCellsForCircle(cells, circleFilter)
 
           if (lensCells.length === 0) {
-            setMagicLensState({
-              status: 'ready',
-              url: loadState.url,
-              scope,
-              summary: summarizeMagicLensCells(
-                lensCells,
-                emptyRoiGeneStats(),
-                selectedGenes,
-                {
+            setMagicLensState(
+              magicLensReady(
+                loadState.url,
+                scope,
+                summarizeMagicLensCells(lensCells, emptyRoiGeneStats(), selectedGenes, {
                   hitLimit: cells.length >= MAGIC_LENS_CELL_LIMIT,
-                },
+                }),
               ),
-            })
+            )
             appendDebugEvent(
               'Magic lens ready: 0 cells',
               scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-ready' } : {},
@@ -253,14 +245,15 @@ export function useMagicLensWorkflow({
               return
             }
 
-            setMagicLensState({
-              status: 'ready',
-              url: loadState.url,
-              scope,
-              summary: summarizeMagicLensCells(lensCells, stats, selectedGenes, {
-                hitLimit: cells.length >= MAGIC_LENS_CELL_LIMIT || stats.hitCellLimit,
-              }),
-            })
+            setMagicLensState(
+              magicLensReady(
+                loadState.url,
+                scope,
+                summarizeMagicLensCells(lensCells, stats, selectedGenes, {
+                  hitLimit: cells.length >= MAGIC_LENS_CELL_LIMIT || stats.hitCellLimit,
+                }),
+              ),
+            )
             appendDebugEvent(
               `Magic lens ready: ${lensCells.length.toLocaleString()} cells`,
               scope === 'cursor' ? { coalesceKey: 'magic-lens-cursor-ready' } : {},
@@ -272,12 +265,13 @@ export function useMagicLensWorkflow({
             return
           }
 
-          setMagicLensState({
-            status: 'error',
-            url: loadState.url,
-            scope,
-            error: createStructuredLoadError('Magic lens', error),
-          })
+          setMagicLensState(
+            magicLensFailed(
+              loadState.url,
+              scope,
+              createStructuredLoadError('Magic lens', error),
+            ),
+          )
           appendDebugEvent('Magic lens failed')
         })
         .finally(() => {
@@ -311,7 +305,7 @@ export function useMagicLensWorkflow({
       abortRef: magicLensAbortRef,
       requestIdRef: magicLensRequestIdRef,
     })
-    setMagicLensState({ status: 'idle' })
+    setMagicLensState(IDLE_MAGIC_LENS_STATE)
   }, [
     magicLensAbortRef,
     magicLensDebounceRef,
@@ -356,7 +350,7 @@ export function useMagicLensWorkflow({
           requestIdRef: magicLensRequestIdRef,
         })
         setMagicLensScope('cursor')
-        setMagicLensState({ status: 'idle' })
+        setMagicLensState(IDLE_MAGIC_LENS_STATE)
         magicLensLastQueryKeyRef.current = null
         appendDebugEvent('Magic lens scope: cursor', {
           coalesceKey: 'magic-lens-scope',
@@ -421,7 +415,7 @@ export function useMagicLensWorkflow({
 
       setMeasurementEnabled(false)
       setMeasurementResetKey((current) => current + 1)
-      setMagicLensState({ status: 'idle' })
+      setMagicLensState(IDLE_MAGIC_LENS_STATE)
       magicLensLastQueryKeyRef.current = null
       appendDebugEvent('Magic lens enabled')
     },

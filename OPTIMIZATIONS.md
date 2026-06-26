@@ -78,6 +78,23 @@ the app shell, platform workflows, and rendering modules.
   states, and Visium HD selected expression-profile states. The corresponding
   workflows now call named transitions instead of assembling complex async
   state payloads inline, with focused model tests covering the constructors.
+- 2026-06-26: Continued item 4 by extending named transition constructors to
+  morphology load, gene panel, and Visium HD bin-control states. Dataset load
+  and Visium HD bin-switch orchestration now share those helpers for loading,
+  ready, idle, and error transitions while preserving the existing option-count
+  behavior during tier switches.
+- 2026-06-26: Continued item 4 for diagnostics and boundary viewport states.
+  Dataset diagnostics runs and boundary polygon viewport loads now use shared
+  loading, ready, idle, and error constructors from `datasetLoadModel`, including
+  dataset-load reset paths. Focused workflow coverage continues to exercise
+  success, failure, stale-request, and deferred-boundary behavior.
+- 2026-06-26: Finished item 4 for the remaining runtime async states by adding
+  named transition helpers for analysis embeddings, annotation loads and group
+  discovery, custom morphology layers, grid-cell assignment, Magic Lens, gene
+  expression, cell-feature matrix capability checks, Visium HD expression
+  projection, Visium HD ROI completion, morphology auto-contrast failures, and
+  dataset reset paths. Runtime workflows no longer assemble async state payloads
+  inline, and focused model tests cover the new constructors.
 
 ## Recommendations
 

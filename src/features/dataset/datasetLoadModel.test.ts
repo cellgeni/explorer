@@ -1,14 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import type { DatasetDiagnosticsReport } from '../../data/datasetDiagnostics'
 import {
+  IDLE_BOUNDARY_LOAD_STATE,
+  IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE,
+  IDLE_DATASET_DIAGNOSTICS_STATE,
   IDLE_DATASET_LOAD_STATE,
   IDLE_DATASET_WARMUP_STATE,
+  IDLE_MORPHOLOGY_LOAD_STATE,
+  boundaryLoadFailed,
+  boundaryLoadReady,
+  boundaryLoadStarted,
+  cellFeatureMatrixCapabilityReady,
+  datasetDiagnosticsFailed,
+  datasetDiagnosticsReady,
+  datasetDiagnosticsStarted,
   datasetLoadFailed,
   datasetLoadReady,
   datasetLoadStarted,
   datasetWarmupFailed,
   datasetWarmupReady,
   datasetWarmupStarted,
+  morphologyLoadFailed,
+  morphologyLoadReady,
+  morphologyLoadStarted,
   type BoundaryLoadState,
   type CellFeatureMatrixCapabilityState,
   type DatasetDiagnosticsState,
@@ -57,6 +71,58 @@ describe('datasetLoadModel state contracts', () => {
       status: 'error',
       url: 'https://example.test/output',
     })
+    expect(IDLE_MORPHOLOGY_LOAD_STATE).toEqual({ status: 'idle' })
+    expect(morphologyLoadStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(morphologyLoadReady('https://example.test/image.ome.tif')).toEqual({
+      status: 'ready',
+      url: 'https://example.test/image.ome.tif',
+    })
+    expect(morphologyLoadFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+    expect(IDLE_DATASET_DIAGNOSTICS_STATE).toEqual({ status: 'idle' })
+    expect(datasetDiagnosticsStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(datasetDiagnosticsReady('https://example.test/output', report)).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      report,
+    })
+    expect(datasetDiagnosticsFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+    expect(IDLE_BOUNDARY_LOAD_STATE).toEqual({ status: 'idle' })
+    expect(boundaryLoadStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(boundaryLoadReady('https://example.test/output', 4)).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      cellCount: 4,
+    })
+    expect(boundaryLoadFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+    expect(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE).toEqual({ status: 'idle' })
+    expect(cellFeatureMatrixCapabilityReady('https://example.test/output', true)).toEqual(
+      {
+        status: 'ready',
+        url: 'https://example.test/output',
+        hasCellMajorCsc: true,
+      },
+    )
   })
 
   it('accepts the runtime state shapes used by dataset workflows', () => {

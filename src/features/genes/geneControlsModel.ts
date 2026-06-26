@@ -18,6 +18,8 @@ export type GenePanelState<ErrorType = unknown> =
   | { readonly status: 'ready'; readonly url: string; readonly genes: readonly string[] }
   | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
 
+export const IDLE_GENE_PANEL_STATE: GenePanelState<never> = { status: 'idle' }
+
 export interface GeneExpressionLoadErrorSummary {
   readonly title: string
 }
@@ -58,6 +60,57 @@ export interface SavedGeneSet {
 export interface GeneExpressionScaleDomain {
   readonly key: string
   readonly max: number
+}
+
+export const IDLE_GENE_EXPRESSION_STATE: GeneExpressionState<never> = {
+  status: 'idle',
+}
+
+export function genePanelLoadStarted(url: string): GenePanelState<never> {
+  return { status: 'loading', url }
+}
+
+export function genePanelLoadReady(
+  url: string,
+  genes: readonly string[],
+): GenePanelState<never> {
+  return { status: 'ready', url, genes }
+}
+
+export function genePanelLoadFailed<ErrorType>(
+  url: string,
+  error: ErrorType,
+): GenePanelState<ErrorType> {
+  return { status: 'error', url, error }
+}
+
+export function geneExpressionWaiting(message: string): GeneExpressionState<never> {
+  return { status: 'waiting', message }
+}
+
+export function geneExpressionLoadStarted(
+  url: string,
+  genes: readonly string[],
+  mode: GeneExpressionLoadMode,
+  visibleCellCount: number,
+): GeneExpressionState<never> {
+  return { status: 'loading', url, genes, mode, visibleCellCount }
+}
+
+export function geneExpressionLoadReady(
+  url: string,
+  genes: readonly string[],
+  mode: GeneExpressionLoadMode,
+  cellCount: number,
+  visibleCellCount: number,
+): GeneExpressionState<never> {
+  return { status: 'ready', url, genes, mode, cellCount, visibleCellCount }
+}
+
+export function geneExpressionLoadFailed<
+  ErrorType extends GeneExpressionLoadErrorSummary,
+>(url: string, error: ErrorType): GeneExpressionState<ErrorType> {
+  return { status: 'error', url, error }
 }
 
 export function genePanelStatusCopy<ErrorType>(

@@ -70,6 +70,31 @@ export type MagicLensState<
       readonly error: ErrorType
     }
 
+export const IDLE_MAGIC_LENS_STATE: MagicLensState<never> = { status: 'idle' }
+
+export function magicLensLoadStarted(
+  url: string,
+  scope: MagicLensScope,
+): MagicLensState<never> {
+  return { status: 'loading', url, scope }
+}
+
+export function magicLensReady(
+  url: string,
+  scope: MagicLensScope,
+  summary: MagicLensSummary,
+): MagicLensState<never> {
+  return { status: 'ready', url, scope, summary }
+}
+
+export function magicLensFailed<ErrorType extends MagicLensLoadErrorSummary>(
+  url: string,
+  scope: MagicLensScope,
+  error: ErrorType,
+): MagicLensState<ErrorType> {
+  return { status: 'error', url, scope, error }
+}
+
 export interface MagicLensQueryDetail {
   readonly center: DataPoint
   readonly radiusMicrometers: number

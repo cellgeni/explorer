@@ -34,6 +34,27 @@ export interface VisiumHdRoiBin {
   readonly expressionGenes?: readonly string[]
 }
 
+export function visiumHdRoiReady(options: {
+  readonly url: string
+  readonly binSizeMicrometers?: number
+  readonly bbox: BBox
+  readonly selection: RoiSelection
+  readonly bins: readonly VisiumHdRoiBin[]
+  readonly hitBinLimit: boolean
+}): VisiumHdRoiState {
+  return {
+    status: 'ready',
+    url: options.url,
+    ...(options.binSizeMicrometers === undefined
+      ? {}
+      : { binSizeMicrometers: options.binSizeMicrometers }),
+    bbox: options.bbox,
+    selection: options.selection,
+    bins: options.bins,
+    hitBinLimit: options.hitBinLimit,
+  }
+}
+
 export interface VisiumHdRoiSelectionResult {
   readonly bins: readonly VisiumHdRoiBin[]
   readonly hitBinLimit: boolean

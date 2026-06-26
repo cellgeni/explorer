@@ -5,7 +5,11 @@ import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { RoiSelectionInput } from '../../data/roiSelection'
 import type { DatasetCell } from '../../datasets/xeniumDataset'
 import {
+  IDLE_MAGIC_LENS_STATE,
   filterCellsForCircle,
+  magicLensFailed,
+  magicLensLoadStarted,
+  magicLensReady,
   magicLensDetailQueryKey,
   magicLensElementLabel,
   magicLensPrimaryMetricLabel,
@@ -59,6 +63,30 @@ const stats: RoiGeneStats = {
 }
 
 describe('magicLensModel', () => {
+  it('constructs Magic Lens load transitions', () => {
+    const summary = summarizeMagicLensCells(cells, stats, [], {})
+    const error = { title: 'Unavailable' }
+
+    expect(IDLE_MAGIC_LENS_STATE).toEqual({ status: 'idle' })
+    expect(magicLensLoadStarted('https://example.test/output', 'cursor')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+      scope: 'cursor',
+    })
+    expect(magicLensReady('https://example.test/output', 'viewport', summary)).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      scope: 'viewport',
+      summary,
+    })
+    expect(magicLensFailed('https://example.test/output', 'roi', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      scope: 'roi',
+      error,
+    })
+  })
+
   it('resolves scope labels and selections', () => {
     const roiSelection: RoiSelectionInput = {
       minX: micrometers(1),

@@ -13,7 +13,12 @@ import {
   createStructuredLoadError,
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
-import type { AnalysisEmbeddingState } from './analysisEmbeddingModel'
+import {
+  analysisEmbeddingLoadFailed,
+  analysisEmbeddingLoadReady,
+  analysisEmbeddingLoadStarted,
+  type AnalysisEmbeddingState,
+} from './analysisEmbeddingModel'
 
 interface MutableRef<T> {
   current: T
@@ -85,7 +90,7 @@ export function useAnalysisEmbeddingWorkflow({
       abortRef: analysisEmbeddingAbortRef,
       requestIdRef: analysisEmbeddingRequestIdRef,
     })
-    setAnalysisEmbeddingState({ status: 'loading', url: loadState.url })
+    setAnalysisEmbeddingState(analysisEmbeddingLoadStarted(loadState.url))
     appendDebugEvent('Loading embeddings')
 
     void loadAnalysisEmbeddings(loadState.url, {
@@ -97,11 +102,7 @@ export function useAnalysisEmbeddingWorkflow({
           return
         }
 
-        setAnalysisEmbeddingState({
-          status: 'ready',
-          url: loadState.url,
-          embeddings,
-        })
+        setAnalysisEmbeddingState(analysisEmbeddingLoadReady(loadState.url, embeddings))
 
         if (
           embeddings.length > 0 &&
@@ -116,11 +117,12 @@ export function useAnalysisEmbeddingWorkflow({
           return
         }
 
-        setAnalysisEmbeddingState({
-          status: 'error',
-          url: loadState.url,
-          error: createStructuredLoadError('Embeddings', error),
-        })
+        setAnalysisEmbeddingState(
+          analysisEmbeddingLoadFailed(
+            loadState.url,
+            createStructuredLoadError('Embeddings', error),
+          ),
+        )
         appendDebugEvent('Embeddings failed')
       })
       .finally(() => {

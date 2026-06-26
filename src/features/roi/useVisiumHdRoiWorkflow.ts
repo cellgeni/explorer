@@ -14,6 +14,7 @@ import {
   IDLE_VISIUM_HD_ROI_STATE,
   selectVisiumHdGridCellsInRoi,
   visiumHdRoiBinsToCsv,
+  visiumHdRoiReady,
   type VisiumHdRoiState,
 } from './visiumHdRoiModel'
 
@@ -88,15 +89,16 @@ export function useVisiumHdRoiWorkflow({
 
       setRoiMode('idle')
       setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
-      setVisiumHdRoiState({
-        status: 'ready',
-        url: readyDatasetUrl,
-        ...(activeBinSize === undefined ? {} : { binSizeMicrometers: activeBinSize }),
-        bbox: selection.bbox,
-        selection,
-        bins: result.bins,
-        hitBinLimit: result.hitBinLimit,
-      })
+      setVisiumHdRoiState(
+        visiumHdRoiReady({
+          url: readyDatasetUrl,
+          ...(activeBinSize === undefined ? {} : { binSizeMicrometers: activeBinSize }),
+          bbox: selection.bbox,
+          selection,
+          bins: result.bins,
+          hitBinLimit: result.hitBinLimit,
+        }),
+      )
       appendDebugEvent(
         `${roiSelectionLabel(selection)} drawn: ${result.bins.length.toLocaleString()}${
           result.hitBinLimit ? '+' : ''

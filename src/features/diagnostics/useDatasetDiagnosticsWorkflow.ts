@@ -11,7 +11,12 @@ import {
   startLatestRequest,
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
-import type { DatasetDiagnosticsState } from '../dataset/datasetLoadModel'
+import {
+  datasetDiagnosticsFailed,
+  datasetDiagnosticsReady,
+  datasetDiagnosticsStarted,
+  type DatasetDiagnosticsState,
+} from '../dataset/datasetLoadModel'
 import {
   createStructuredLoadError,
   readErrorMessage,
@@ -126,7 +131,7 @@ export function useDatasetDiagnosticsWorkflow({
       abortRef: diagnosticsAbortRef,
       requestIdRef: diagnosticsRequestIdRef,
     })
-    setDiagnosticsState({ status: 'loading', url: requestedUrl })
+    setDiagnosticsState(datasetDiagnosticsStarted(requestedUrl))
     appendDebugEvent(`Diagnosing dataset ${shortDatasetLabel(requestedUrl)}`)
 
     try {
@@ -142,7 +147,7 @@ export function useDatasetDiagnosticsWorkflow({
       }
 
       const summary = summarizeDatasetDiagnostics(report)
-      setDiagnosticsState({ status: 'ready', url: requestedUrl, report })
+      setDiagnosticsState(datasetDiagnosticsReady(requestedUrl, report))
       appendDebugEvent(`Diagnostics: ${summary}`)
       recordTelemetry(
         telemetryEvent('dataset.diagnostics', 'success', {
@@ -155,11 +160,12 @@ export function useDatasetDiagnosticsWorkflow({
         return
       }
 
-      setDiagnosticsState({
-        status: 'error',
-        url: requestedUrl,
-        error: createStructuredLoadError('Dataset diagnostics', error),
-      })
+      setDiagnosticsState(
+        datasetDiagnosticsFailed(
+          requestedUrl,
+          createStructuredLoadError('Dataset diagnostics', error),
+        ),
+      )
       appendDebugEvent('Diagnostics failed')
       recordTelemetry(
         telemetryEvent('dataset.diagnostics', 'failure', {

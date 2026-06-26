@@ -27,7 +27,11 @@ import {
   createStructuredLoadError,
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
-import { type MagicLensScope, type MagicLensState } from './magicLensModel'
+import {
+  IDLE_MAGIC_LENS_STATE,
+  type MagicLensScope,
+  type MagicLensState,
+} from './magicLensModel'
 import {
   IDLE_ROI_GENE_STATS_STATE,
   IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE,
@@ -367,7 +371,7 @@ export function useRoiWorkflow({
       setRoiState(roiLoading(loadState.url, bbox, selection))
       setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
       setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
-      setMagicLensState({ status: 'idle' })
+      setMagicLensState(IDLE_MAGIC_LENS_STATE)
       appendDebugEvent(`${roiSelectionLabel(selection)} drawn: ROI cells started`)
 
       void loadRoiCells(loadState.url, selection, { signal: request.signal })
@@ -574,7 +578,7 @@ export function useRoiWorkflow({
         abortRef: magicLensAbortRef,
         requestIdRef: magicLensRequestIdRef,
       })
-      setMagicLensState({ status: 'idle' })
+      setMagicLensState(IDLE_MAGIC_LENS_STATE)
     }
     setRoiMode('idle')
     setRoiState(IDLE_ROI_STATE)

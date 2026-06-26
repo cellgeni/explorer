@@ -22,6 +22,22 @@ export type CustomMorphologyLayerLoadState<ErrorType = unknown> =
       readonly error: ErrorType
     }
 
+export const IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE: CustomMorphologyLayerLoadState<never> =
+  { status: 'idle' }
+
+export function customMorphologyLayerLoadStarted(
+  url: string,
+): CustomMorphologyLayerLoadState<never> {
+  return { status: 'loading', url }
+}
+
+export function customMorphologyLayerLoadFailed<ErrorType>(
+  url: string,
+  error: ErrorType,
+): CustomMorphologyLayerLoadState<ErrorType> {
+  return { status: 'error', url, error }
+}
+
 export function createCustomMorphologyLayer(
   id: string,
   image: MorphologyImage,

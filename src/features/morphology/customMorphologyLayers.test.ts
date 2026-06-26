@@ -2,13 +2,38 @@ import { describe, expect, it } from 'vitest'
 import type { MorphologyImage } from '../../data/morphologyImage'
 import type { TiffPyramidLoader } from '../../tiff/loader'
 import {
+  IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE,
   createCustomMorphologyLayer,
   customMorphologyLayerChannels,
   customMorphologyLayerDefaultEnabledChannelIds,
+  customMorphologyLayerLoadFailed,
+  customMorphologyLayerLoadStarted,
   isCustomMorphologyLayerChannelId,
 } from './customMorphologyLayers'
 
 describe('customMorphologyLayers', () => {
+  it('constructs custom morphology layer load transitions', () => {
+    const error = new Error('failed')
+
+    expect(IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE).toEqual({ status: 'idle' })
+    expect(
+      customMorphologyLayerLoadStarted('https://example.test/layers/remote.ome.tif'),
+    ).toEqual({
+      status: 'loading',
+      url: 'https://example.test/layers/remote.ome.tif',
+    })
+    expect(
+      customMorphologyLayerLoadFailed(
+        'https://example.test/layers/remote.ome.tif',
+        error,
+      ),
+    ).toEqual({
+      status: 'error',
+      url: 'https://example.test/layers/remote.ome.tif',
+      error,
+    })
+  })
+
   it('prefixes custom layer channel IDs and labels', () => {
     const loader = {} as TiffPyramidLoader
     const image: MorphologyImage = {

@@ -89,6 +89,48 @@ const IDLE_VISIUM_HD_EXPRESSION_PROJECTION_STATE: VisiumHdExpressionProjectionSt
   status: 'idle',
 }
 
+function visiumHdExpressionProjectionUnavailable(
+  reason: string,
+): VisiumHdExpressionProjectionState {
+  return { status: 'unavailable', reason }
+}
+
+function visiumHdExpressionProjectionLoading(
+  binCount: number,
+  boundaryCellCount: number,
+  rowBudget: number | undefined,
+): VisiumHdExpressionProjectionState {
+  return {
+    status: 'loading',
+    binCount,
+    boundaryCellCount,
+    ...(rowBudget === undefined ? {} : { rowBudget }),
+  }
+}
+
+function visiumHdExpressionProjectionReady(
+  batch: GeneExpressionBatch,
+  mappedBinCount: number,
+  mappedCellCount: number,
+  boundaryCellCount: number,
+  rowBudget?: number,
+): VisiumHdExpressionProjectionState {
+  return {
+    status: 'ready',
+    batch,
+    mappedBinCount,
+    mappedCellCount,
+    boundaryCellCount,
+    ...(rowBudget === undefined ? {} : { rowBudget }),
+  }
+}
+
+function visiumHdExpressionProjectionFailed(
+  error: StructuredLoadError,
+): VisiumHdExpressionProjectionState {
+  return { status: 'error', error }
+}
+
 export function useVisiumHdExpressionProjectionWorkflow({
   callbacks,
   controls,
@@ -128,10 +170,14 @@ export function useVisiumHdExpressionProjectionWorkflow({
 
     if (selectedBinSize === undefined) {
       const requestId = invalidateLatestRequest({ abortRef, requestIdRef })
-      queueProjectionState(requestIdRef, requestId, setState, {
-        status: 'unavailable',
-        reason: 'Selected Visium HD bin size is unavailable.',
-      })
+      queueProjectionState(
+        requestIdRef,
+        requestId,
+        setState,
+        visiumHdExpressionProjectionUnavailable(
+          'Selected Visium HD bin size is unavailable.',
+        ),
+      )
       return
     }
 
@@ -145,25 +191,29 @@ export function useVisiumHdExpressionProjectionWorkflow({
       )
 
       const requestId = invalidateLatestRequest({ abortRef, requestIdRef })
-      queueProjectionState(requestIdRef, requestId, setState, {
-        status: 'ready',
-        batch: result.batch,
-        boundaryCellCount: boundaries.length,
-        mappedBinCount: result.mappedBinCount,
-        mappedCellCount: result.mappedCellCount,
-      })
+      queueProjectionState(
+        requestIdRef,
+        requestId,
+        setState,
+        visiumHdExpressionProjectionReady(
+          result.batch,
+          result.mappedBinCount,
+          result.mappedCellCount,
+          boundaries.length,
+        ),
+      )
       return
     }
 
     const request = startLatestRequest({ abortRef, requestIdRef })
     const startedAt = readTimestamp()
 
-    queueProjectionState(requestIdRef, request.requestId, setState, {
-      status: 'loading',
-      binCount: binIds.length,
-      boundaryCellCount: boundaries.length,
-      ...(rowBudget === undefined ? {} : { rowBudget }),
-    })
+    queueProjectionState(
+      requestIdRef,
+      request.requestId,
+      setState,
+      visiumHdExpressionProjectionLoading(binIds.length, boundaries.length, rowBudget),
+    )
     appendDebugEvent(
       `Visium HD expression cell projection started: ${binIds.length.toLocaleString()} bins, ${boundaries.length.toLocaleString()} boundaries`,
       { coalesceKey: 'visium-hd-expression-projection' },
@@ -195,14 +245,15 @@ export function useVisiumHdExpressionProjectionWorkflow({
         boundaries,
       )
 
-      setState({
-        status: 'ready',
-        batch: result.batch,
-        boundaryCellCount: boundaries.length,
-        mappedBinCount: result.mappedBinCount,
-        mappedCellCount: result.mappedCellCount,
-        ...(rowBudget === undefined ? {} : { rowBudget }),
-      })
+      setState(
+        visiumHdExpressionProjectionReady(
+          result.batch,
+          result.mappedBinCount,
+          result.mappedCellCount,
+          boundaries.length,
+          rowBudget,
+        ),
+      )
       appendDebugEvent(
         `Visium HD expression cell projection ready: ${result.mappedCellCount.toLocaleString()} cells in ${formatElapsed(
           startedAt,
@@ -215,10 +266,11 @@ export function useVisiumHdExpressionProjectionWorkflow({
           return
         }
 
-        setState({
-          status: 'error',
-          error: createStructuredLoadError('Gene expression', error),
-        })
+        setState(
+          visiumHdExpressionProjectionFailed(
+            createStructuredLoadError('Gene expression', error),
+          ),
+        )
         appendDebugEvent(`Visium HD expression cell projection failed`, {
           coalesceKey: 'visium-hd-expression-projection',
         })

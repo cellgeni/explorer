@@ -3,15 +3,68 @@ import { micrometers } from '../../data/coords'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { GridCellDatum } from '../../rendering/deckLayers'
 import {
+  IDLE_VISIUM_HD_ROI_STATE,
   gridCellDatumCenter,
   gridCellDatumDeckCenter,
   selectVisiumHdGridCellsInRoi,
   summarizeVisiumHdRoiBins,
+  visiumHdRoiReady,
   visiumHdRoiBinsToCsv,
   visiumHdRoiStatusCopy,
 } from './visiumHdRoiModel'
 
 describe('visiumHdRoiModel', () => {
+  it('constructs Visium HD ROI transitions', () => {
+    const selection: RoiSelection = {
+      kind: 'box',
+      bbox: {
+        minX: micrometers(0),
+        maxX: micrometers(50),
+        minY: micrometers(0),
+        maxY: micrometers(50),
+      },
+    }
+    const bins = [
+      {
+        barcode: 'BC-1',
+        gridId: 'grid-16um',
+        row: 1,
+        col: 2,
+        center: { x: micrometers(5), y: micrometers(5) },
+        binSizeMicrometers: 16,
+      },
+    ]
+
+    expect(IDLE_VISIUM_HD_ROI_STATE).toEqual({ status: 'idle' })
+    expect(
+      visiumHdRoiReady({
+        url: 'https://example.test/visium',
+        binSizeMicrometers: 16,
+        bbox: selection.bbox,
+        selection,
+        bins,
+        hitBinLimit: true,
+      }),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/visium',
+      binSizeMicrometers: 16,
+      bbox: selection.bbox,
+      selection,
+      bins,
+      hitBinLimit: true,
+    })
+    expect(
+      visiumHdRoiReady({
+        url: 'https://example.test/visium',
+        bbox: selection.bbox,
+        selection,
+        bins: [],
+        hitBinLimit: false,
+      }),
+    ).not.toHaveProperty('binSizeMicrometers')
+  })
+
   it('selects Visium HD grid cells inside a box ROI by data-space center', () => {
     const selection: RoiSelection = {
       kind: 'box',

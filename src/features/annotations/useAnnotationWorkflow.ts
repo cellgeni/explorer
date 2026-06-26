@@ -26,6 +26,10 @@ import {
 } from '../errors/loadErrorModel'
 import { defaultRoiName, type RoiState } from '../roi/roiModel'
 import {
+  IDLE_ANNOTATION_STATE,
+  annotationLoadFailed,
+  annotationLoadReady,
+  annotationLoadStarted,
   annotationsToCsv,
   colorsForAnnotations,
   customAnnotationFilePrefix,
@@ -152,7 +156,7 @@ export function useAnnotationWorkflow({
     appendDebugEvent(
       groupId === undefined ? 'Loading annotations' : `Loading annotations ${groupId}`,
     )
-    setAnnotationState({ status: 'loading', url: loadState.url })
+    setAnnotationState(annotationLoadStarted(loadState.url))
 
     void loadAnnotations(loadState.url, {
       ...(signal === undefined ? {} : { signal }),
@@ -163,11 +167,7 @@ export function useAnnotationWorkflow({
           return
         }
 
-        setAnnotationState({
-          status: 'ready',
-          url: loadState.url,
-          annotations,
-        })
+        setAnnotationState(annotationLoadReady(loadState.url, annotations))
         setAnnotationColors((current) => colorsForAnnotations(annotations, current))
         setHiddenAnnotationIds([])
         if (annotations.length > 0) {
@@ -182,11 +182,12 @@ export function useAnnotationWorkflow({
           return
         }
 
-        setAnnotationState({
-          status: 'error',
-          url: loadState.url,
-          error: createStructuredLoadError('Annotations', error),
-        })
+        setAnnotationState(
+          annotationLoadFailed(
+            loadState.url,
+            createStructuredLoadError('Annotations', error),
+          ),
+        )
         appendDebugEvent('Annotations failed')
       })
   }, [
@@ -223,15 +224,16 @@ export function useAnnotationWorkflow({
         importedMetadataPrefix,
       )
 
-      setAnnotationState((current) => ({
-        status: 'ready',
-        url: loadState.status === 'ready' ? loadState.url : datasetUrl,
-        annotations: mergeImportedAnnotations(
-          current.status === 'ready' ? current.annotations : [],
-          importedAnnotations,
-          importedPrefix,
+      setAnnotationState((current) =>
+        annotationLoadReady(
+          loadState.status === 'ready' ? loadState.url : datasetUrl,
+          mergeImportedAnnotations(
+            current.status === 'ready' ? current.annotations : [],
+            importedAnnotations,
+            importedPrefix,
+          ),
         ),
-      }))
+      )
       setAnnotationColors((current) =>
         colorsForAnnotations(
           importedAnnotations,
@@ -290,11 +292,12 @@ export function useAnnotationWorkflow({
       try {
         importCustomAnnotationText(await file.text(), file.name, 'Imported annotations')
       } catch (error) {
-        setAnnotationState({
-          status: 'error',
-          url: loadState.status === 'ready' ? loadState.url : datasetUrl,
-          error: createStructuredLoadError('Annotations', error),
-        })
+        setAnnotationState(
+          annotationLoadFailed(
+            loadState.status === 'ready' ? loadState.url : datasetUrl,
+            createStructuredLoadError('Annotations', error),
+          ),
+        )
         appendDebugEvent('Annotation import failed')
       }
     },
@@ -337,11 +340,12 @@ export function useAnnotationWorkflow({
           return false
         }
 
-        setAnnotationState({
-          status: 'error',
-          url: loadState.status === 'ready' ? loadState.url : datasetUrl,
-          error: createStructuredLoadError('Annotations', error),
-        })
+        setAnnotationState(
+          annotationLoadFailed(
+            loadState.status === 'ready' ? loadState.url : datasetUrl,
+            createStructuredLoadError('Annotations', error),
+          ),
+        )
         appendDebugEvent('Annotation URL import failed')
         return false
       }
@@ -391,7 +395,9 @@ export function useAnnotationWorkflow({
           (annotation) => annotation.id !== annotationId,
         )
 
-        return annotations.length === 0 ? { status: 'idle' } : { ...current, annotations }
+        return annotations.length === 0
+          ? IDLE_ANNOTATION_STATE
+          : { ...current, annotations }
       })
       setAnnotationColors((current) => removeAnnotationColor(current, annotationId))
       setHiddenAnnotationIds((current) =>
@@ -462,7 +468,7 @@ export function useAnnotationWorkflow({
   )
 
   const handleClearAnnotations = useCallback(() => {
-    setAnnotationState({ status: 'idle' })
+    setAnnotationState(IDLE_ANNOTATION_STATE)
     setAnnotationColors({})
     setHiddenAnnotationIds([])
     setHiddenAnnotationSetIds([])
@@ -506,14 +512,12 @@ export function useAnnotationWorkflow({
 
     roiIdRef.current += 1
     appendDebugEvent(`Saved ROI annotation ${name}`)
-    setAnnotationState((current) => ({
-      status: 'ready',
-      url: loadState.url,
-      annotations: [
+    setAnnotationState((current) =>
+      annotationLoadReady(loadState.url, [
         annotation,
         ...(current.status === 'ready' ? current.annotations : []),
-      ],
-    }))
+      ]),
+    )
     setAnnotationColors((current) => ({
       ...current,
       [annotation.id]: annotationPaletteColor(Object.keys(current).length),

@@ -7,6 +7,7 @@ import {
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import type { MorphologyLoadState } from '../dataset/datasetLoadModel'
+import { morphologyLoadFailed } from '../dataset/datasetLoadModel'
 import {
   createStructuredLoadError,
   type StructuredLoadError,
@@ -115,11 +116,12 @@ export function useMorphologyWorkflow({
             return
           }
 
-          setMorphologyState({
-            status: 'error',
-            url: channel.loader.url,
-            error: createStructuredLoadError('Image tiles', error),
-          })
+          setMorphologyState(
+            morphologyLoadFailed(
+              channel.loader.url,
+              createStructuredLoadError('Image tiles', error),
+            ),
+          )
         })
         .finally(() => {
           if (loadRequestIdRef.current !== requestId) {

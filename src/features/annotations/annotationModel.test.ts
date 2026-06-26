@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { asCellId } from '../../data/cellid'
+import type { AnnotationGroupOption } from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import {
+  IDLE_ANNOTATION_GROUP_STATE,
+  IDLE_ANNOTATION_STATE,
+  annotationGroupLoadFailed,
+  annotationGroupLoadReady,
+  annotationGroupLoadStarted,
   annotationLabelsForCell,
+  annotationLoadFailed,
+  annotationLoadReady,
+  annotationLoadStarted,
   annotationSizePlots,
   annotationStatusCopy,
   annotationsToCsv,
@@ -22,7 +31,49 @@ const annotations: readonly Annotation[] = [
   { id: 'b', label: 'Neurons', cellIds: [asCellId('bbbbbbbb-2')] },
 ]
 
+const annotationGroups: readonly AnnotationGroupOption[] = [
+  { id: 'analysis:0', label: 'Graphclust', groupingName: 'graphclust', groupCount: 2 },
+]
+
 describe('annotationModel', () => {
+  it('constructs annotation and annotation group transitions', () => {
+    const error = new Error('failed')
+
+    expect(IDLE_ANNOTATION_STATE).toEqual({ status: 'idle' })
+    expect(annotationLoadStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(annotationLoadReady('https://example.test/output', annotations)).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      annotations,
+    })
+    expect(annotationLoadFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+
+    expect(IDLE_ANNOTATION_GROUP_STATE).toEqual({ status: 'idle' })
+    expect(annotationGroupLoadStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(
+      annotationGroupLoadReady('https://example.test/output', annotationGroups),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      groups: annotationGroups,
+    })
+    expect(annotationGroupLoadFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+  })
+
   it('formats annotation load status', () => {
     expect(annotationStatusCopy({ status: 'idle' })).toBe('Idle')
     expect(annotationStatusCopy({ status: 'loading', url: 'https://example.test' })).toBe(

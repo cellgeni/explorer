@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
+  IDLE_GENE_EXPRESSION_STATE,
+  IDLE_GENE_PANEL_STATE,
   defaultGeneSetName,
   filterGeneOptions,
+  geneExpressionLoadFailed,
+  geneExpressionLoadReady,
+  geneExpressionLoadStarted,
   formatGeneExpressionTiming,
   formatGeneScaleValue,
+  geneExpressionWaiting,
+  genePanelLoadFailed,
+  genePanelLoadReady,
+  genePanelLoadStarted,
   geneExpressionModeLabel,
   geneExpressionScaleKeyFor,
   geneExpressionStatusCopy,
@@ -15,6 +24,60 @@ import {
 } from './geneControlsModel'
 
 describe('geneControlsModel', () => {
+  it('constructs gene panel transitions', () => {
+    const error = { title: 'Unavailable' }
+
+    expect(IDLE_GENE_PANEL_STATE).toEqual({ status: 'idle' })
+    expect(genePanelLoadStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(genePanelLoadReady('https://example.test/output', ['Actb'])).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      genes: ['Actb'],
+    })
+    expect(genePanelLoadFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+  })
+
+  it('constructs gene expression transitions', () => {
+    const error = { title: 'Unavailable' }
+
+    expect(IDLE_GENE_EXPRESSION_STATE).toEqual({ status: 'idle' })
+    expect(geneExpressionWaiting('Zoom in')).toEqual({
+      status: 'waiting',
+      message: 'Zoom in',
+    })
+    expect(
+      geneExpressionLoadStarted('https://example.test/output', ['Actb'], 'sampled', 100),
+    ).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+      genes: ['Actb'],
+      mode: 'sampled',
+      visibleCellCount: 100,
+    })
+    expect(
+      geneExpressionLoadReady('https://example.test/output', ['Actb'], 'exact', 12, 100),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      genes: ['Actb'],
+      mode: 'exact',
+      cellCount: 12,
+      visibleCellCount: 100,
+    })
+    expect(geneExpressionLoadFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+  })
+
   it('formats panel and expression statuses', () => {
     expect(genePanelStatusCopy({ status: 'idle' })).toBe('Idle')
     expect(

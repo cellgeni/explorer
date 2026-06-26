@@ -9,16 +9,31 @@ import {
   gridCellBatchesToLayerData,
   type GridCellDatum,
 } from '../../rendering/deckLayers'
-import type { DatasetLoadState, MorphologyLoadState } from '../dataset/datasetLoadModel'
 import {
-  createVisiumHdBinOptions,
-  updateVisiumHdBinOptionCount,
+  IDLE_MORPHOLOGY_LOAD_STATE,
+  datasetLoadFailed,
+  datasetLoadReady,
+  morphologyLoadReady,
+  morphologyLoadStarted,
+  type DatasetLoadState,
+  type MorphologyLoadState,
+} from '../dataset/datasetLoadModel'
+import {
+  visiumHdControlFailed,
+  visiumHdControlLoading,
+  visiumHdControlReadyFromOptions,
   type VisiumHdControlState,
 } from '../dataset/visiumHdModel'
 import type {
   GeneExpressionScaleDomain,
   GeneExpressionState,
   GenePanelState,
+} from '../genes/geneControlsModel'
+import {
+  IDLE_GENE_EXPRESSION_STATE,
+  genePanelLoadFailed,
+  genePanelLoadReady,
+  genePanelLoadStarted,
 } from '../genes/geneControlsModel'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import {
@@ -177,15 +192,7 @@ export function useVisiumHdBinWorkflow({
         setGeneExpressionScaleDomain,
         setGeneExpressionState,
       })
-      setVisiumHdControlState((current) =>
-        current.status === 'idle'
-          ? current
-          : {
-              ...current,
-              status: 'loading',
-              selectedBinSize: binSize,
-            },
-      )
+      setVisiumHdControlState((current) => visiumHdControlLoading(current, binSize))
       appendDebugEvent(`Loading Visium HD ${binSize} µm bins`)
 
       try {
@@ -196,7 +203,7 @@ export function useVisiumHdBinWorkflow({
         }
 
         if (dataset.genePanel !== undefined) {
-          setGenePanelState({ status: 'loading', url: datasetUrl })
+          setGenePanelState(genePanelLoadStarted(datasetUrl))
           void dataset
             .genePanel(binSize)
             .then((genes) => {
@@ -204,7 +211,7 @@ export function useVisiumHdBinWorkflow({
                 return
               }
 
-              setGenePanelState({ status: 'ready', url: datasetUrl, genes })
+              setGenePanelState(genePanelLoadReady(datasetUrl, genes))
               appendDebugEvent(
                 `Visium HD gene panel ready: ${genes.length.toLocaleString()} genes`,
               )
@@ -214,11 +221,12 @@ export function useVisiumHdBinWorkflow({
                 return
               }
 
-              setGenePanelState({
-                status: 'error',
-                url: datasetUrl,
-                error: createStructuredLoadError('Gene panel', error),
-              })
+              setGenePanelState(
+                genePanelLoadFailed(
+                  datasetUrl,
+                  createStructuredLoadError('Gene panel', error),
+                ),
+              )
               appendDebugEvent('Visium HD gene panel failed')
             })
         }
@@ -244,23 +252,15 @@ export function useVisiumHdBinWorkflow({
             ],
           }),
         )
-        setLoadState({
-          status: 'ready',
-          url: datasetUrl,
-          cellCount: overview.gridCells.ids.length,
-        })
+        setLoadState(datasetLoadReady(datasetUrl, overview.gridCells.ids.length))
 
-        setVisiumHdControlState({
-          status: 'ready',
-          url: datasetUrl,
-          selectedBinSize: overview.binSizeMicrometers,
-          options: updateVisiumHdBinOptionCount(
+        setVisiumHdControlState(
+          visiumHdControlReadyFromOptions(
+            datasetUrl,
             visiumHdControlState.options,
-            overview.binSizeMicrometers,
-            overview.gridCells.ids.length,
+            overview,
           ),
-          binCount: overview.gridCells.ids.length,
-        })
+        )
         appendDebugEvent(
           `Visium HD ${overview.binSizeMicrometers} µm bins ready: ${overview.gridCells.ids.length.toLocaleString()} in ${formatElapsed(
             startedAt,
@@ -269,19 +269,16 @@ export function useVisiumHdBinWorkflow({
 
         if (!shouldLoadMorphology) {
           setFlatMorphologyImage(null)
-          setMorphologyState({ status: 'idle' })
+          setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
           return
         }
 
         if (flatMorphologyImage !== undefined && flatMorphologyImage !== null) {
-          setMorphologyState({
-            status: 'ready',
-            url: flatMorphologyImage.url,
-          })
+          setMorphologyState(morphologyLoadReady(flatMorphologyImage.url))
           return
         }
 
-        setMorphologyState({ status: 'loading', url: datasetUrl })
+        setMorphologyState(morphologyLoadStarted(datasetUrl))
         const imageSource = await dataset.image(overview.binSizeMicrometers)
 
         if (requestIdRef.current !== requestId) {
@@ -292,34 +289,26 @@ export function useVisiumHdBinWorkflow({
 
         if (flatImage === null) {
           setFlatMorphologyImage(null)
-          setMorphologyState({ status: 'idle' })
+          setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
           return
         }
 
         setFlatMorphologyImage(flatImage)
-        setMorphologyState({
-          status: 'ready',
-          url: flatImage.url,
-        })
+        setMorphologyState(morphologyLoadReady(flatImage.url))
       } catch (error) {
         if (requestIdRef.current !== requestId) {
           return
         }
 
         setVisiumHdControlState((current) =>
-          current.status === 'idle'
-            ? current
-            : {
-                ...current,
-                status: 'error',
-                error: readErrorMessage(error),
-              },
+          visiumHdControlFailed(current, readErrorMessage(error)),
         )
-        setLoadState({
-          status: 'error',
-          url: datasetUrl,
-          error: createStructuredLoadError('Dataset overview', error),
-        })
+        setLoadState(
+          datasetLoadFailed(
+            datasetUrl,
+            createStructuredLoadError('Dataset overview', error),
+          ),
+        )
         appendDebugEvent(`Visium HD ${binSize} µm bins failed`)
       }
     },
@@ -385,7 +374,7 @@ function resetVisiumHdExpressionState({
 
   setGeneExpressionBatch?.(null)
   setGeneExpressionScaleDomain?.({ key: '', max: 0 })
-  setGeneExpressionState?.({ status: 'idle' })
+  setGeneExpressionState?.(IDLE_GENE_EXPRESSION_STATE)
 }
 
 export function isVisiumHdOverviewDataset(
@@ -406,22 +395,6 @@ export function isVisiumHdOverviewDataset(
 function formatMemorySuffix(): string {
   const detail = formatRuntimeMemorySnapshot(readRuntimeMemorySnapshot())
   return detail === undefined ? '' : `; memory ${detail}`
-}
-
-export function visiumHdControlStateFromOverview(
-  url: string,
-  availableBinSizes: readonly VisiumHdBinSizeMicrometers[],
-  overview: VisiumHdBinnedOverview,
-): VisiumHdControlState {
-  return {
-    status: 'ready',
-    url,
-    selectedBinSize: overview.binSizeMicrometers,
-    options: createVisiumHdBinOptions(availableBinSizes, {
-      [overview.binSizeMicrometers]: overview.gridCells.ids.length,
-    }),
-    binCount: overview.gridCells.ids.length,
-  }
 }
 
 export function flatMorphologyImageFromSource(
