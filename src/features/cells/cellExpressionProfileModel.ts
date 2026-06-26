@@ -41,6 +41,62 @@ export interface CellExpressionProfileSelection {
   readonly kind: CellExpressionProfileSelectionKind
 }
 
+export const IDLE_CELL_EXPRESSION_PROFILE_STATE: CellExpressionProfileState<never> = {
+  status: 'idle',
+}
+
+export function cellExpressionProfileUnavailable(
+  selection: CellExpressionProfileSelection,
+  reason: string,
+): CellExpressionProfileState<never> {
+  return {
+    status: 'unavailable',
+    selectionId: selection.id,
+    selectionKind: selection.kind,
+    reason,
+  }
+}
+
+export function cellExpressionProfileLoading(
+  selection: CellExpressionProfileSelection,
+): CellExpressionProfileState<never> {
+  return {
+    status: 'loading',
+    selectionId: selection.id,
+    selectionKind: selection.kind,
+  }
+}
+
+export function cellExpressionProfileReady({
+  expression,
+  selection,
+  sourceLabel,
+}: {
+  readonly selection: CellExpressionProfileSelection
+  readonly expression: CellGeneExpressionSummary
+  readonly sourceLabel?: string | undefined
+}): CellExpressionProfileState<never> {
+  return {
+    status: 'ready',
+    selectionId: selection.id,
+    selectionKind: selection.kind,
+    expression,
+    ...(sourceLabel === undefined ? {} : { sourceLabel }),
+  }
+}
+
+export function cellExpressionProfileFailed<ErrorType extends CellLoadErrorSummary>(
+  selection: CellExpressionProfileSelection,
+  error: ErrorType,
+): CellExpressionProfileState<ErrorType> {
+  return {
+    status: 'error',
+    selectionId: selection.id,
+    selectionKind: selection.kind,
+    error,
+  }
+}
+
 export function cellExpressionSummaryFromGexCells<ElementId extends string>(
   matrix: GexResult<ElementId>,
   elementIds: readonly ElementId[],

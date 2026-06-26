@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import type { DatasetDiagnosticsReport } from '../../data/datasetDiagnostics'
-import type {
-  BoundaryLoadState,
-  CellFeatureMatrixCapabilityState,
-  DatasetDiagnosticsState,
-  DatasetLoadState,
-  DatasetWarmupState,
-  MorphologyLoadState,
+import {
+  IDLE_DATASET_LOAD_STATE,
+  IDLE_DATASET_WARMUP_STATE,
+  datasetLoadFailed,
+  datasetLoadReady,
+  datasetLoadStarted,
+  datasetWarmupFailed,
+  datasetWarmupReady,
+  datasetWarmupStarted,
+  type BoundaryLoadState,
+  type CellFeatureMatrixCapabilityState,
+  type DatasetDiagnosticsState,
+  type DatasetLoadState,
+  type DatasetWarmupState,
+  type MorphologyLoadState,
 } from './datasetLoadModel'
 
 const report: DatasetDiagnosticsReport = {
@@ -18,6 +26,39 @@ const report: DatasetDiagnosticsReport = {
 }
 
 describe('datasetLoadModel state contracts', () => {
+  it('constructs dataset load and warmup transitions', () => {
+    const error = { title: 'Failed' }
+
+    expect(IDLE_DATASET_LOAD_STATE).toEqual({ status: 'idle' })
+    expect(datasetLoadStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(datasetLoadReady('https://example.test/output', 12)).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      cellCount: 12,
+    })
+    expect(datasetLoadFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+    expect(IDLE_DATASET_WARMUP_STATE).toEqual({ status: 'idle' })
+    expect(datasetWarmupStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(datasetWarmupReady('https://example.test/output')).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+    })
+    expect(datasetWarmupFailed('https://example.test/output')).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+    })
+  })
+
   it('accepts the runtime state shapes used by dataset workflows', () => {
     const datasetStates: readonly DatasetLoadState<{ readonly title: string }>[] = [
       { status: 'idle' },

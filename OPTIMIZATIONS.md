@@ -72,6 +72,12 @@ the app shell, platform workflows, and rendering modules.
   and expression-layer telemetry. These hooks now expose callbacks, controls,
   data, loaders, refs, setters, and specialized payload groups where applicable,
   preserving behavior while making the app-shell wiring easier to scan.
+- 2026-06-26: Started item 4 by adding explicit transition helpers for core
+  dataset load/warmup states, transcript capability/layer states, ROI cell/gene
+  and transcript-export states, selected-cell detail/transcript distribution
+  states, and Visium HD selected expression-profile states. The corresponding
+  workflows now call named transitions instead of assembling complex async
+  state payloads inline, with focused model tests covering the constructors.
 
 ## Recommendations
 

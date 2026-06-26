@@ -1,11 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { CellTranscriptZDistribution } from '../../data/cellTranscripts'
 import { micrometers } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { SpatialElement } from '../../datasets/spatialDataset'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import {
+  IDLE_CELL_DETAIL_STATE,
+  IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE,
+  cellDetailFailed,
+  cellDetailLoading,
+  cellDetailReady,
   cellDetailStatusCopy,
   cellExpressionSummaryFromStats,
+  cellTranscriptDistributionFailed,
+  cellTranscriptDistributionLoading,
+  cellTranscriptDistributionReady,
   loadSelectedCellBoundary,
   overviewCellToDatasetCell,
   overviewCellsToBbox,
@@ -39,6 +48,79 @@ const boundary: SpatialElement = {
 }
 
 describe('cellDetailModel', () => {
+  it('constructs selected-cell async transitions', () => {
+    const expression = { genes: [], totalCount: 0, hitGeneLimit: false }
+    const shape = summarizeCellShape(cell, boundary)
+    const distribution: CellTranscriptZDistribution = {
+      bins: [],
+      transcriptCount: 0,
+      zCount: 0,
+      missingZCount: 0,
+      maxBinCount: 0,
+      hitTranscriptLimit: false,
+      minQv: 20,
+    }
+    const error = { title: 'Failed', message: 'No data' }
+
+    expect(IDLE_CELL_DETAIL_STATE).toEqual({ status: 'idle' })
+    expect(cellDetailLoading('https://example.test/output', cell.id)).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+      cellId: cell.id,
+    })
+    expect(
+      cellDetailReady({
+        url: 'https://example.test/output',
+        cellId: cell.id,
+        expression,
+        shape,
+        boundary,
+      }),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      cellId: cell.id,
+      expression,
+      shape,
+      boundary,
+    })
+    expect(cellDetailFailed('https://example.test/output', cell.id, error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      cellId: cell.id,
+      error,
+    })
+
+    expect(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE).toEqual({ status: 'idle' })
+    expect(
+      cellTranscriptDistributionLoading('https://example.test/output', cell.id),
+    ).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+      cellId: cell.id,
+    })
+    expect(
+      cellTranscriptDistributionReady(
+        'https://example.test/output',
+        cell.id,
+        distribution,
+      ),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      cellId: cell.id,
+      distribution,
+    })
+    expect(
+      cellTranscriptDistributionFailed('https://example.test/output', cell.id, error),
+    ).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      cellId: cell.id,
+      error,
+    })
+  })
+
   it('converts overview cells into dataset cells and bounding boxes', () => {
     expect(overviewCellToDatasetCell(cell)).toEqual({
       id: 'aaaaaaaa-1',

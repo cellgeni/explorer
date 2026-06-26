@@ -32,10 +32,19 @@ import {
 import {
   TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS,
   TRANSCRIPT_NATIVE_DENSITY_MAX_BINS,
+  IDLE_TRANSCRIPT_LAYER_STATE,
   buildCellSummaryTranscriptBins,
   isTranscriptExactManualLoadRequired,
   maxTranscriptAggregateCount,
-  retainedTranscriptLayerState,
+  transcriptCapabilityFailed,
+  transcriptCapabilityReady,
+  transcriptCapabilityStarted,
+  transcriptLayerAggregate,
+  transcriptLayerFailed,
+  transcriptLayerLoading,
+  transcriptLayerReady,
+  transcriptLayerUnavailable,
+  transcriptLayerWaiting,
   transcriptAggregateFallbackMessage,
   transcriptExactManualLoadMessage,
   transcriptNativeAggregateMessage,
@@ -161,7 +170,7 @@ export function useTranscriptWorkflow({
     const transcriptStartedAt = readTimestamp()
     queueMicrotask(() => {
       if (request.isCurrent() && !request.signal.aborted) {
-        setTranscriptCapabilityState({ status: 'loading', url: requestedUrl })
+        setTranscriptCapabilityState(transcriptCapabilityStarted(requestedUrl))
       }
     })
     appendDebugEvent('Transcript output check started')
@@ -178,11 +187,9 @@ export function useTranscriptWorkflow({
           return
         }
 
-        setTranscriptCapabilityState({
-          status: 'ready',
-          url: requestedUrl,
-          capabilities,
-        })
+        setTranscriptCapabilityState(
+          transcriptCapabilityReady(requestedUrl, capabilities),
+        )
         appendDebugEvent(
           `Transcript outputs: ${transcriptCapabilityLabel(capabilities)} (${formatElapsed(
             transcriptStartedAt,
@@ -200,11 +207,12 @@ export function useTranscriptWorkflow({
           return
         }
 
-        setTranscriptCapabilityState({
-          status: 'error',
-          url: requestedUrl,
-          error: createStructuredLoadError('Transcripts', error),
-        })
+        setTranscriptCapabilityState(
+          transcriptCapabilityFailed(
+            requestedUrl,
+            createStructuredLoadError('Transcripts', error),
+          ),
+        )
         appendDebugEvent('Transcript output check failed', {
           coalesceKey: 'transcript-capability',
         })
@@ -239,7 +247,7 @@ export function useTranscriptWorkflow({
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === clearRequestId) {
           setTranscriptLayerState((current) =>
-            current.status === 'idle' ? current : { status: 'idle' },
+            current.status === 'idle' ? current : IDLE_TRANSCRIPT_LAYER_STATE,
           )
         }
       })
@@ -257,11 +265,12 @@ export function useTranscriptWorkflow({
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === waitingRequestId) {
-          setTranscriptLayerState({
-            status: 'waiting',
-            message: 'Checking transcript outputs for this dataset.',
-            visibleTranscriptEstimate,
-          })
+          setTranscriptLayerState(
+            transcriptLayerWaiting({
+              message: 'Checking transcript outputs for this dataset.',
+              visibleTranscriptEstimate,
+            }),
+          )
         }
       })
       return
@@ -275,11 +284,9 @@ export function useTranscriptWorkflow({
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === errorRequestId) {
-          setTranscriptLayerState({
-            status: 'error',
-            url: loadState.url,
-            error: transcriptCapabilityState.error,
-          })
+          setTranscriptLayerState(
+            transcriptLayerFailed(loadState.url, transcriptCapabilityState.error),
+          )
         }
       })
       return
@@ -325,16 +332,13 @@ export function useTranscriptWorkflow({
       transcriptViewportKeyRef.current = requestKey
       queueMicrotask(() => {
         if (request.isCurrent() && !request.signal.aborted) {
-          setTranscriptLayerState((current) => {
-            const previousLayer = retainedTranscriptLayerState(current)
-
-            return {
-              status: 'loading',
-              url: loadState.url,
-              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-              ...(previousLayer === undefined ? {} : { previousLayer }),
-            }
-          })
+          setTranscriptLayerState((current) =>
+            transcriptLayerLoading(
+              current,
+              loadState.url,
+              plan.visibleTranscriptEstimate,
+            ),
+          )
         }
       })
       appendDebugEvent('Native transcript aggregate query started', {
@@ -354,20 +358,21 @@ export function useTranscriptWorkflow({
 
           const durationMs = Math.max(0, readTimestamp() - transcriptStartedAt)
 
-          setTranscriptLayerState({
-            status: 'aggregate',
-            source: result.source,
-            mode: plan.mode,
-            bins: result.bins,
-            message: transcriptNativeAggregateMessage({
+          setTranscriptLayerState(
+            transcriptLayerAggregate({
+              source: result.source,
               mode: plan.mode,
-              selectedFeatureCount: result.selectedFeatureNames.length,
-              binCount: result.bins.length,
+              bins: result.bins,
+              message: transcriptNativeAggregateMessage({
+                mode: plan.mode,
+                selectedFeatureCount: result.selectedFeatureNames.length,
+                binCount: result.bins.length,
+              }),
+              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+              scaleMax: result.scaleMax,
+              durationMs,
             }),
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            ...(result.scaleMax === undefined ? {} : { scaleMax: result.scaleMax }),
-            durationMs,
-          })
+          )
           appendDebugEvent(
             `Native transcript aggregate ready: ${result.bins.length.toLocaleString()} squares in ${formatElapsed(
               transcriptStartedAt,
@@ -381,11 +386,12 @@ export function useTranscriptWorkflow({
           }
 
           transcriptViewportKeyRef.current = null
-          setTranscriptLayerState({
-            status: 'error',
-            url: loadState.url,
-            error: createStructuredLoadError('Transcripts', error),
-          })
+          setTranscriptLayerState(
+            transcriptLayerFailed(
+              loadState.url,
+              createStructuredLoadError('Transcripts', error),
+            ),
+          )
           appendDebugEvent('Native transcript aggregate query failed', {
             coalesceKey: 'transcript-query',
           })
@@ -427,19 +433,20 @@ export function useTranscriptWorkflow({
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === aggregateRequestId) {
-          setTranscriptLayerState({
-            status: 'aggregate',
-            source: 'cell-summary',
-            mode: fallbackMode,
-            bins,
-            message: transcriptAggregateFallbackMessage({
+          setTranscriptLayerState(
+            transcriptLayerAggregate({
+              source: 'cell-summary',
               mode: fallbackMode,
-              featureFilterMode: effectiveTranscriptFeatureFilterMode,
-              selectedFeatureCount: featureNames.length,
+              bins,
+              message: transcriptAggregateFallbackMessage({
+                mode: fallbackMode,
+                featureFilterMode: effectiveTranscriptFeatureFilterMode,
+                selectedFeatureCount: featureNames.length,
+              }),
+              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+              scaleMax: maxTranscriptAggregateCount(bins),
             }),
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            scaleMax: maxTranscriptAggregateCount(bins),
-          })
+          )
         }
       })
       return
@@ -453,11 +460,12 @@ export function useTranscriptWorkflow({
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === waitingRequestId) {
-          setTranscriptLayerState({
-            status: 'waiting',
-            message: plan.message,
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-          })
+          setTranscriptLayerState(
+            transcriptLayerWaiting({
+              message: plan.message,
+              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+            }),
+          )
         }
       })
       return
@@ -471,11 +479,9 @@ export function useTranscriptWorkflow({
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === unavailableRequestId) {
-          setTranscriptLayerState({
-            status: 'unavailable',
-            message: plan.message,
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-          })
+          setTranscriptLayerState(
+            transcriptLayerUnavailable(plan.message, plan.visibleTranscriptEstimate),
+          )
         }
       })
       return
@@ -506,16 +512,17 @@ export function useTranscriptWorkflow({
       transcriptViewportKeyRef.current = null
       queueMicrotask(() => {
         if (transcriptRequestIdRef.current === waitingRequestId) {
-          setTranscriptLayerState({
-            status: 'waiting',
-            message: transcriptExactManualLoadMessage(
-              plan.visibleTranscriptEstimate,
-              transcriptExactPointLimit,
-            ),
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            exactLoadRequestKey: requestKey,
-            exactLoadEstimate: plan.visibleTranscriptEstimate,
-          })
+          setTranscriptLayerState(
+            transcriptLayerWaiting({
+              message: transcriptExactManualLoadMessage(
+                plan.visibleTranscriptEstimate,
+                transcriptExactPointLimit,
+              ),
+              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+              exactLoadRequestKey: requestKey,
+              exactLoadEstimate: plan.visibleTranscriptEstimate,
+            }),
+          )
         }
       })
       appendDebugEvent('Transcript exact query waiting for manual viewport load', {
@@ -536,16 +543,9 @@ export function useTranscriptWorkflow({
     transcriptViewportKeyRef.current = requestKey
     queueMicrotask(() => {
       if (request.isCurrent() && !request.signal.aborted) {
-        setTranscriptLayerState((current) => {
-          const previousLayer = retainedTranscriptLayerState(current)
-
-          return {
-            status: 'loading',
-            url: loadState.url,
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            ...(previousLayer === undefined ? {} : { previousLayer }),
-          }
-        })
+        setTranscriptLayerState((current) =>
+          transcriptLayerLoading(current, loadState.url, plan.visibleTranscriptEstimate),
+        )
       }
     })
     appendDebugEvent(
@@ -570,12 +570,13 @@ export function useTranscriptWorkflow({
 
         request.complete()
         request.abortController.abort()
-        setTranscriptLayerState({
-          status: 'waiting',
-          message:
-            'Exact transcript loading exceeded 12 seconds. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.',
-          visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-        })
+        setTranscriptLayerState(
+          transcriptLayerWaiting({
+            message:
+              'Exact transcript loading exceeded 12 seconds. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.',
+            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+          }),
+        )
         appendDebugEvent('Transcript exact query timed out', {
           coalesceKey: 'transcript-query',
         })
@@ -604,26 +605,28 @@ export function useTranscriptWorkflow({
 
           if (result.hitPointLimit) {
             transcriptViewportKeyRef.current = null
-            setTranscriptLayerState({
-              status: 'waiting',
-              message: `Exact transcript viewport exceeded the ${transcriptExactPointLimit.toLocaleString()} point budget. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.`,
-              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            })
+            setTranscriptLayerState(
+              transcriptLayerWaiting({
+                message: `Exact transcript viewport exceeded the ${transcriptExactPointLimit.toLocaleString()} point budget. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.`,
+                visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+              }),
+            )
             appendDebugEvent('Transcript exact query exceeded point budget', {
               coalesceKey: 'transcript-query',
             })
             return
           }
 
-          setTranscriptLayerState({
-            status: 'ready',
-            url: loadState.url,
-            points: result.points,
-            groups: result.groups,
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-            hitPointLimit: result.hitPointLimit,
-            durationMs,
-          })
+          setTranscriptLayerState(
+            transcriptLayerReady({
+              url: loadState.url,
+              points: result.points,
+              groups: result.groups,
+              visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+              hitPointLimit: result.hitPointLimit,
+              durationMs,
+            }),
+          )
           appendDebugEvent(
             `Transcript exact query ready: ${result.points.length.toLocaleString()} points in ${formatElapsed(
               transcriptStartedAt,
@@ -646,11 +649,12 @@ export function useTranscriptWorkflow({
             exactQueryTimeout = null
           }
 
-          setTranscriptLayerState({
-            status: 'error',
-            url: loadState.url,
-            error: createStructuredLoadError('Transcripts', error),
-          })
+          setTranscriptLayerState(
+            transcriptLayerFailed(
+              loadState.url,
+              createStructuredLoadError('Transcripts', error),
+            ),
+          )
           appendDebugEvent('Transcript query failed', {
             coalesceKey: 'transcript-query',
           })

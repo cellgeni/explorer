@@ -83,6 +83,61 @@ export type CellTranscriptDistributionState<
       readonly error: ErrorType
     }
 
+export const IDLE_CELL_DETAIL_STATE: CellDetailState<never> = { status: 'idle' }
+export const IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE: CellTranscriptDistributionState<never> =
+  { status: 'idle' }
+
+export function cellDetailLoading(url: string, cellId: string): CellDetailState<never> {
+  return { status: 'loading', url, cellId }
+}
+
+export function cellDetailReady({
+  boundary,
+  cellId,
+  expression,
+  shape,
+  url,
+}: {
+  readonly url: string
+  readonly cellId: string
+  readonly expression: CellGeneExpressionSummary
+  readonly shape: CellShapeMetrics
+  readonly boundary: SpatialElement | null
+}): CellDetailState<never> {
+  return { status: 'ready', url, cellId, expression, shape, boundary }
+}
+
+export function cellDetailFailed<ErrorType extends CellLoadErrorSummary>(
+  url: string,
+  cellId: string,
+  error: ErrorType,
+): CellDetailState<ErrorType> {
+  return { status: 'error', url, cellId, error }
+}
+
+export function cellTranscriptDistributionLoading(
+  url: string,
+  cellId: string,
+): CellTranscriptDistributionState<never> {
+  return { status: 'loading', url, cellId }
+}
+
+export function cellTranscriptDistributionReady(
+  url: string,
+  cellId: string,
+  distribution: CellTranscriptZDistribution,
+): CellTranscriptDistributionState<never> {
+  return { status: 'ready', url, cellId, distribution }
+}
+
+export function cellTranscriptDistributionFailed<ErrorType extends CellLoadErrorSummary>(
+  url: string,
+  cellId: string,
+  error: ErrorType,
+): CellTranscriptDistributionState<ErrorType> {
+  return { status: 'error', url, cellId, error }
+}
+
 export function overviewCellToDatasetCell(cell: OverviewCellDatum): DatasetCell {
   return {
     id: asCellId(cell.id),

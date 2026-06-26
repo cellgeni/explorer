@@ -93,6 +93,143 @@ export type TranscriptLayerState<
       readonly error: ErrorType
     }
 
+export const IDLE_TRANSCRIPT_CAPABILITY_STATE: TranscriptCapabilityState<never> = {
+  status: 'idle',
+}
+export const IDLE_TRANSCRIPT_LAYER_STATE: TranscriptLayerState<never> = {
+  status: 'idle',
+}
+
+export function transcriptCapabilityStarted(
+  url: string,
+): TranscriptCapabilityState<never> {
+  return { status: 'loading', url }
+}
+
+export function transcriptCapabilityReady(
+  url: string,
+  capabilities: TranscriptCapabilities,
+): TranscriptCapabilityState<never> {
+  return { status: 'ready', url, capabilities }
+}
+
+export function transcriptCapabilityFailed<ErrorType extends TranscriptLoadErrorSummary>(
+  url: string,
+  error: ErrorType,
+): TranscriptCapabilityState<ErrorType> {
+  return { status: 'error', url, error }
+}
+
+interface TranscriptLayerWaitingOptions {
+  readonly message: string
+  readonly visibleTranscriptEstimate: number
+  readonly exactLoadRequestKey?: string
+  readonly exactLoadEstimate?: number
+}
+
+export function transcriptLayerWaiting({
+  exactLoadEstimate,
+  exactLoadRequestKey,
+  message,
+  visibleTranscriptEstimate,
+}: TranscriptLayerWaitingOptions): TranscriptLayerState<never> {
+  return {
+    status: 'waiting',
+    message,
+    visibleTranscriptEstimate,
+    ...(exactLoadRequestKey === undefined ? {} : { exactLoadRequestKey }),
+    ...(exactLoadEstimate === undefined ? {} : { exactLoadEstimate }),
+  }
+}
+
+export function transcriptLayerUnavailable(
+  message: string,
+  visibleTranscriptEstimate: number,
+): TranscriptLayerState<never> {
+  return { status: 'unavailable', message, visibleTranscriptEstimate }
+}
+
+export function transcriptLayerLoading<ErrorType extends TranscriptLoadErrorSummary>(
+  current: TranscriptLayerState<ErrorType>,
+  url: string,
+  visibleTranscriptEstimate: number,
+): TranscriptLayerState<ErrorType> {
+  const previousLayer = retainedTranscriptLayerState(current)
+
+  return {
+    status: 'loading',
+    url,
+    visibleTranscriptEstimate,
+    ...(previousLayer === undefined ? {} : { previousLayer }),
+  }
+}
+
+interface TranscriptLayerAggregateOptions {
+  readonly source: 'cell-summary' | 'native-zarr'
+  readonly mode: 'density'
+  readonly bins: readonly TranscriptAggregateBin[]
+  readonly message: string
+  readonly visibleTranscriptEstimate: number
+  readonly scaleMax?: number | undefined
+  readonly durationMs?: number | undefined
+}
+
+export function transcriptLayerAggregate({
+  bins,
+  durationMs,
+  message,
+  mode,
+  scaleMax,
+  source,
+  visibleTranscriptEstimate,
+}: TranscriptLayerAggregateOptions): TranscriptLayerState<never> {
+  return {
+    status: 'aggregate',
+    source,
+    mode,
+    bins,
+    message,
+    visibleTranscriptEstimate,
+    ...(scaleMax === undefined ? {} : { scaleMax }),
+    ...(durationMs === undefined ? {} : { durationMs }),
+  }
+}
+
+interface TranscriptLayerReadyOptions {
+  readonly url: string
+  readonly points: readonly TranscriptPoint[]
+  readonly groups: readonly TranscriptGroupSummary[]
+  readonly visibleTranscriptEstimate: number
+  readonly hitPointLimit: boolean
+  readonly durationMs: number
+}
+
+export function transcriptLayerReady({
+  durationMs,
+  groups,
+  hitPointLimit,
+  points,
+  url,
+  visibleTranscriptEstimate,
+}: TranscriptLayerReadyOptions): TranscriptLayerState<never> {
+  return {
+    status: 'ready',
+    url,
+    points,
+    groups,
+    visibleTranscriptEstimate,
+    hitPointLimit,
+    durationMs,
+  }
+}
+
+export function transcriptLayerFailed<ErrorType extends TranscriptLoadErrorSummary>(
+  url: string,
+  error: ErrorType,
+): TranscriptLayerState<ErrorType> {
+  return { status: 'error', url, error }
+}
+
 export type TranscriptRetainedLayerState =
   | {
       readonly kind: 'exact'

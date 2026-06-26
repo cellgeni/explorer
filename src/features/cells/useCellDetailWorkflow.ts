@@ -28,7 +28,14 @@ import {
 } from '../errors/loadErrorModel'
 import {
   CELL_GENE_EXPRESSION_LIMIT,
+  IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE,
+  cellDetailFailed,
+  cellDetailLoading,
+  cellDetailReady,
   cellExpressionSummaryFromStats,
+  cellTranscriptDistributionFailed,
+  cellTranscriptDistributionLoading,
+  cellTranscriptDistributionReady,
   loadSelectedCellBoundary,
   overviewCellToDatasetCell,
   summarizeCellShape,
@@ -112,11 +119,7 @@ export function useCellDetailWorkflow({
         return
       }
 
-      setCellDetailState({
-        status: 'loading',
-        url: loadState.url,
-        cellId: selectedCell.id,
-      })
+      setCellDetailState(cellDetailLoading(loadState.url, selectedCell.id))
     })
     appendDebugEvent(`Cell details started: ${shortIdentifier(selectedCell.id)}`, {
       coalesceKey: 'cell-details',
@@ -144,14 +147,15 @@ export function useCellDetailWorkflow({
         return
       }
 
-      setCellDetailState({
-        status: 'ready',
-        url: loadState.url,
-        cellId: selectedCell.id,
-        expression: cellExpressionSummaryFromStats(stats),
-        shape: summarizeCellShape(selectedCell, boundaryElement),
-        boundary: boundaryElement,
-      })
+      setCellDetailState(
+        cellDetailReady({
+          url: loadState.url,
+          cellId: selectedCell.id,
+          expression: cellExpressionSummaryFromStats(stats),
+          shape: summarizeCellShape(selectedCell, boundaryElement),
+          boundary: boundaryElement,
+        }),
+      )
       appendDebugEvent(
         `Cell details ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
           detailStartedAt,
@@ -164,12 +168,13 @@ export function useCellDetailWorkflow({
           return
         }
 
-        setCellDetailState({
-          status: 'error',
-          url: loadState.url,
-          cellId: selectedCell.id,
-          error: createStructuredLoadError('Cell details', error),
-        })
+        setCellDetailState(
+          cellDetailFailed(
+            loadState.url,
+            selectedCell.id,
+            createStructuredLoadError('Cell details', error),
+          ),
+        )
         appendDebugEvent(`Cell details failed (${formatElapsed(detailStartedAt)})`, {
           coalesceKey: 'cell-details',
         })
@@ -202,7 +207,7 @@ export function useCellDetailWorkflow({
       })
       queueMicrotask(() => {
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
-          setCellTranscriptDistributionState({ status: 'idle' })
+          setCellTranscriptDistributionState(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
         }
       })
       return
@@ -221,12 +226,13 @@ export function useCellDetailWorkflow({
       )
       queueMicrotask(() => {
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
-          setCellTranscriptDistributionState({
-            status: 'error',
-            url: loadState.url,
-            cellId: selectedCell.id,
-            error: createStructuredLoadError('Cell transcripts', error),
-          })
+          setCellTranscriptDistributionState(
+            cellTranscriptDistributionFailed(
+              loadState.url,
+              selectedCell.id,
+              createStructuredLoadError('Cell transcripts', error),
+            ),
+          )
         }
       })
       return
@@ -242,11 +248,9 @@ export function useCellDetailWorkflow({
       })
       queueMicrotask(() => {
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
-          setCellTranscriptDistributionState({
-            status: 'loading',
-            url: loadState.url,
-            cellId: selectedCell.id,
-          })
+          setCellTranscriptDistributionState(
+            cellTranscriptDistributionLoading(loadState.url, selectedCell.id),
+          )
         }
       })
       return
@@ -267,12 +271,13 @@ export function useCellDetailWorkflow({
       )
       queueMicrotask(() => {
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
-          setCellTranscriptDistributionState({
-            status: 'error',
-            url: loadState.url,
-            cellId: selectedCell.id,
-            error: createStructuredLoadError('Cell transcripts', error),
-          })
+          setCellTranscriptDistributionState(
+            cellTranscriptDistributionFailed(
+              loadState.url,
+              selectedCell.id,
+              createStructuredLoadError('Cell transcripts', error),
+            ),
+          )
         }
       })
       return
@@ -289,11 +294,9 @@ export function useCellDetailWorkflow({
         return
       }
 
-      setCellTranscriptDistributionState({
-        status: 'loading',
-        url: loadState.url,
-        cellId: selectedCell.id,
-      })
+      setCellTranscriptDistributionState(
+        cellTranscriptDistributionLoading(loadState.url, selectedCell.id),
+      )
     })
     appendDebugEvent(
       `Cell transcript z distribution started: ${shortIdentifier(selectedCell.id)}`,
@@ -312,12 +315,9 @@ export function useCellDetailWorkflow({
           return
         }
 
-        setCellTranscriptDistributionState({
-          status: 'ready',
-          url: loadState.url,
-          cellId: selectedCell.id,
-          distribution,
-        })
+        setCellTranscriptDistributionState(
+          cellTranscriptDistributionReady(loadState.url, selectedCell.id, distribution),
+        )
         appendDebugEvent(
           `Cell transcript z distribution ready: ${distribution.zCount.toLocaleString()} z records in ${formatElapsed(
             distributionStartedAt,
@@ -330,12 +330,13 @@ export function useCellDetailWorkflow({
           return
         }
 
-        setCellTranscriptDistributionState({
-          status: 'error',
-          url: loadState.url,
-          cellId: selectedCell.id,
-          error: createStructuredLoadError('Cell transcripts', error),
-        })
+        setCellTranscriptDistributionState(
+          cellTranscriptDistributionFailed(
+            loadState.url,
+            selectedCell.id,
+            createStructuredLoadError('Cell transcripts', error),
+          ),
+        )
         appendDebugEvent(
           `Cell transcript z distribution failed (${formatElapsed(
             distributionStartedAt,

@@ -1,8 +1,49 @@
 import { describe, expect, it } from 'vitest'
 import type { GexResult } from '../../data/gexTypes'
-import { cellExpressionSummaryFromGexCells } from './cellExpressionProfileModel'
+import {
+  IDLE_CELL_EXPRESSION_PROFILE_STATE,
+  cellExpressionProfileFailed,
+  cellExpressionProfileLoading,
+  cellExpressionProfileReady,
+  cellExpressionProfileUnavailable,
+  cellExpressionSummaryFromGexCells,
+} from './cellExpressionProfileModel'
 
 describe('cellExpressionSummaryFromGexCells', () => {
+  it('constructs expression-profile async transitions', () => {
+    const selection = { id: 'BC-1', kind: 'bin' as const }
+    const expression = { genes: [], totalCount: 0, hitGeneLimit: false }
+    const error = { title: 'Failed', message: 'No data' }
+
+    expect(IDLE_CELL_EXPRESSION_PROFILE_STATE).toEqual({ status: 'idle' })
+    expect(cellExpressionProfileUnavailable(selection, 'Choose a bin size')).toEqual({
+      status: 'unavailable',
+      selectionId: 'BC-1',
+      selectionKind: 'bin',
+      reason: 'Choose a bin size',
+    })
+    expect(cellExpressionProfileLoading(selection)).toEqual({
+      status: 'loading',
+      selectionId: 'BC-1',
+      selectionKind: 'bin',
+    })
+    expect(
+      cellExpressionProfileReady({ selection, expression, sourceLabel: 'Selected bin' }),
+    ).toEqual({
+      status: 'ready',
+      selectionId: 'BC-1',
+      selectionKind: 'bin',
+      expression,
+      sourceLabel: 'Selected bin',
+    })
+    expect(cellExpressionProfileFailed(selection, error)).toEqual({
+      status: 'error',
+      selectionId: 'BC-1',
+      selectionKind: 'bin',
+      error,
+    })
+  })
+
   it('aggregates sparse gene counts across selected matrix rows', () => {
     const matrix: GexResult<string> = {
       geneNames: ['Actb', 'Gad1', 'Snap25'],

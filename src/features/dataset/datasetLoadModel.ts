@@ -16,6 +16,39 @@ export type DatasetWarmupState =
   | { readonly status: 'ready'; readonly url: string }
   | { readonly status: 'error'; readonly url: string }
 
+export const IDLE_DATASET_LOAD_STATE: DatasetLoadState<never> = { status: 'idle' }
+export const IDLE_DATASET_WARMUP_STATE: DatasetWarmupState = { status: 'idle' }
+
+export function datasetLoadStarted(url: string): DatasetLoadState<never> {
+  return { status: 'loading', url }
+}
+
+export function datasetLoadReady(
+  url: string,
+  cellCount: number,
+): DatasetLoadState<never> {
+  return { status: 'ready', url, cellCount }
+}
+
+export function datasetLoadFailed<ErrorType>(
+  url: string,
+  error: ErrorType,
+): DatasetLoadState<ErrorType> {
+  return { status: 'error', url, error }
+}
+
+export function datasetWarmupStarted(url: string): DatasetWarmupState {
+  return { status: 'loading', url }
+}
+
+export function datasetWarmupReady(url: string): DatasetWarmupState {
+  return { status: 'ready', url }
+}
+
+export function datasetWarmupFailed(url: string): DatasetWarmupState {
+  return { status: 'error', url }
+}
+
 export type CellFeatureMatrixCapabilityState =
   | { readonly status: 'idle' }
   | {

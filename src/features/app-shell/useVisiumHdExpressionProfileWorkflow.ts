@@ -4,6 +4,11 @@ import type { SpatialElementId } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { GridCellDatum } from '../../rendering/deckLayers'
 import {
+  IDLE_CELL_EXPRESSION_PROFILE_STATE,
+  cellExpressionProfileFailed,
+  cellExpressionProfileLoading,
+  cellExpressionProfileReady,
+  cellExpressionProfileUnavailable,
   cellExpressionSummaryFromGexCells,
   type CellExpressionProfileSelection,
   type CellExpressionProfileState,
@@ -78,11 +83,6 @@ interface UseVisiumHdExpressionProfileWorkflowResult {
   readonly handleLoadVisiumHdExpressionProfile: () => void
 }
 
-const IDLE_CELL_EXPRESSION_PROFILE_STATE: CellExpressionProfileState<StructuredLoadError> =
-  {
-    status: 'idle',
-  }
-
 export function useVisiumHdExpressionProfileWorkflow({
   callbacks: { appendDebugEvent },
   controls: { activeBinSize, isVisiumHdDataset, rowBudget },
@@ -116,21 +116,17 @@ export function useVisiumHdExpressionProfileWorkflow({
     const binSize = selectedVisiumHdProfileBinSize(activeBinSize, selectedGridCell)
 
     if (binSize === undefined) {
-      setExpressionProfileState({
-        status: 'unavailable',
-        selectionId: selection.id,
-        selectionKind: selection.kind,
-        reason: 'Select a Visium HD bin size to load this expression profile.',
-      })
+      setExpressionProfileState(
+        cellExpressionProfileUnavailable(
+          selection,
+          'Select a Visium HD bin size to load this expression profile.',
+        ),
+      )
       return
     }
 
     const request = startLatestRequest({ abortRef, requestIdRef })
-    setExpressionProfileState({
-      status: 'loading',
-      selectionId: selection.id,
-      selectionKind: selection.kind,
-    })
+    setExpressionProfileState(cellExpressionProfileLoading(selection))
 
     void loadVisiumHdExpressionProfile({
       binSize,
@@ -145,13 +141,9 @@ export function useVisiumHdExpressionProfileWorkflow({
           return
         }
 
-        setExpressionProfileState({
-          status: 'ready',
-          selectionId: selection.id,
-          selectionKind: selection.kind,
-          expression,
-          sourceLabel,
-        })
+        setExpressionProfileState(
+          cellExpressionProfileReady({ selection, expression, sourceLabel }),
+        )
         appendDebugEvent(
           `Loaded Visium HD ${selection.kind} expression profile: ${expression.genes.length.toLocaleString()} genes`,
           { coalesceKey: 'visium-hd-expression-profile' },
@@ -162,12 +154,12 @@ export function useVisiumHdExpressionProfileWorkflow({
           return
         }
 
-        setExpressionProfileState({
-          status: 'error',
-          selectionId: selection.id,
-          selectionKind: selection.kind,
-          error: createStructuredLoadError('Gene expression', error),
-        })
+        setExpressionProfileState(
+          cellExpressionProfileFailed(
+            selection,
+            createStructuredLoadError('Gene expression', error),
+          ),
+        )
       })
       .finally(() => {
         request.complete()

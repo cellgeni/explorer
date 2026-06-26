@@ -29,6 +29,10 @@ import {
 } from '../errors/loadErrorModel'
 import { type MagicLensScope, type MagicLensState } from './magicLensModel'
 import {
+  IDLE_ROI_GENE_STATS_STATE,
+  IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE,
+  IDLE_ROI_STATE,
+  IDLE_ROI_TRANSCRIPT_EXPORT_STATE,
   ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
   ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT,
   ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS,
@@ -36,9 +40,20 @@ import {
   deferRoiGeneRefinement,
   emptyRoiGeneStats,
   roiCellsToCsv,
+  roiFailed,
   roiGeneDatasetWarmupKey,
+  roiGeneStatsFailed,
+  roiGeneStatsLoading,
+  roiGeneStatsReady,
+  roiGeneViewportWarmupFailed,
+  roiGeneViewportWarmupLoading,
+  roiGeneViewportWarmupReady,
+  roiLoading,
+  roiReady,
   roiSelectionLabel,
   roiSelectionToGeoJson,
+  roiTranscriptExportFailed,
+  roiTranscriptExportLoading,
   roiTranscriptsToCsv,
   type RoiGeneStatsState,
   type RoiGeneViewportWarmupState,
@@ -202,7 +217,7 @@ export function useRoiWorkflow({
 
       if (hadPendingWarmup) {
         roiGeneViewportWarmupKeyRef.current = null
-        setRoiGeneViewportWarmupState({ status: 'idle' })
+        setRoiGeneViewportWarmupState(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
       }
 
       return
@@ -220,7 +235,7 @@ export function useRoiWorkflow({
       requestIdRef: roiGeneViewportWarmupRequestIdRef,
     })
     roiGeneViewportWarmupKeyRef.current = warmupKey
-    setRoiGeneViewportWarmupState({ status: 'loading', key: warmupKey })
+    setRoiGeneViewportWarmupState(roiGeneViewportWarmupLoading(warmupKey))
 
     roiGeneViewportWarmupTimeoutRef.current = window.setTimeout(() => {
       roiGeneViewportWarmupTimeoutRef.current = null
@@ -257,7 +272,7 @@ export function useRoiWorkflow({
                 coalesceKey: 'roi-gene-warmup',
               },
             )
-            setRoiGeneViewportWarmupState({ status: 'ready', key: warmupKey })
+            setRoiGeneViewportWarmupState(roiGeneViewportWarmupReady(warmupKey))
             return
           }
 
@@ -287,7 +302,7 @@ export function useRoiWorkflow({
           appendDebugEvent(`ROI gene warmup ready (${formatElapsed(warmupStartedAt)})`, {
             coalesceKey: 'roi-gene-warmup',
           })
-          setRoiGeneViewportWarmupState({ status: 'ready', key: warmupKey })
+          setRoiGeneViewportWarmupState(roiGeneViewportWarmupReady(warmupKey))
         } catch (error) {
           if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
             return
@@ -299,7 +314,7 @@ export function useRoiWorkflow({
               coalesceKey: 'roi-gene-warmup',
             },
           )
-          setRoiGeneViewportWarmupState({ status: 'error', key: warmupKey })
+          setRoiGeneViewportWarmupState(roiGeneViewportWarmupFailed(warmupKey))
         } finally {
           request.complete()
         }
@@ -348,10 +363,10 @@ export function useRoiWorkflow({
         abortRef: roiGeneViewportWarmupAbortRef,
         requestIdRef: roiGeneViewportWarmupRequestIdRef,
       })
-      setRoiGeneViewportWarmupState({ status: 'idle' })
-      setRoiState({ status: 'loading', url: loadState.url, bbox, selection })
-      setRoiGeneStatsState({ status: 'idle' })
-      setRoiTranscriptExportState({ status: 'idle' })
+      setRoiGeneViewportWarmupState(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
+      setRoiState(roiLoading(loadState.url, bbox, selection))
+      setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
+      setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
       setMagicLensState({ status: 'idle' })
       appendDebugEvent(`${roiSelectionLabel(selection)} drawn: ROI cells started`)
 
@@ -361,14 +376,15 @@ export function useRoiWorkflow({
             return
           }
 
-          setRoiState({
-            status: 'ready',
-            url: loadState.url,
-            bbox,
-            selection,
-            cells,
-            hitCellLimit: cells.length >= ROI_CELL_EXPORT_LIMIT,
-          })
+          setRoiState(
+            roiReady(
+              loadState.url,
+              bbox,
+              selection,
+              cells,
+              cells.length >= ROI_CELL_EXPORT_LIMIT,
+            ),
+          )
           appendDebugEvent(
             `ROI cells ready: ${cells.length.toLocaleString()}${
               cells.length >= ROI_CELL_EXPORT_LIMIT ? '+' : ''
@@ -376,19 +392,11 @@ export function useRoiWorkflow({
           )
 
           if (cells.length === 0) {
-            setRoiGeneStatsState({
-              status: 'ready',
-              url: loadState.url,
-              stats: emptyRoiGeneStats(),
-            })
+            setRoiGeneStatsState(roiGeneStatsReady(loadState.url, emptyRoiGeneStats()))
             return undefined
           }
 
-          setRoiGeneStatsState({
-            status: 'loading',
-            url: loadState.url,
-            cellCount: cells.length,
-          })
+          setRoiGeneStatsState(roiGeneStatsLoading(loadState.url, cells.length))
           const previewStartedAt = readTimestamp()
           appendDebugEvent(
             `ROI genes preview started: sample ${Math.min(
@@ -408,11 +416,7 @@ export function useRoiWorkflow({
                 return
               }
 
-              setRoiGeneStatsState({
-                status: 'ready',
-                url: loadState.url,
-                stats: previewStats,
-              })
+              setRoiGeneStatsState(roiGeneStatsReady(loadState.url, previewStats))
               appendDebugEvent(
                 `ROI genes preview ready: ${previewStats.genes.length.toLocaleString()} genes in ${formatElapsed(
                   previewStartedAt,
@@ -447,11 +451,7 @@ export function useRoiWorkflow({
                     return
                   }
 
-                  setRoiGeneStatsState({
-                    status: 'ready',
-                    url: loadState.url,
-                    stats,
-                  })
+                  setRoiGeneStatsState(roiGeneStatsReady(loadState.url, stats))
                   appendDebugEvent(
                     `ROI genes ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
                       refinementStartedAt,
@@ -477,11 +477,12 @@ export function useRoiWorkflow({
                 return
               }
 
-              setRoiGeneStatsState({
-                status: 'error',
-                url: loadState.url,
-                error: createStructuredLoadError('ROI genes', error),
-              })
+              setRoiGeneStatsState(
+                roiGeneStatsFailed(
+                  loadState.url,
+                  createStructuredLoadError('ROI genes', error),
+                ),
+              )
               appendDebugEvent(
                 `ROI genes unsupported (${formatElapsed(previewStartedAt)})`,
               )
@@ -492,14 +493,15 @@ export function useRoiWorkflow({
             return
           }
 
-          setRoiState({
-            status: 'error',
-            url: loadState.url,
-            bbox,
-            selection,
-            error: createStructuredLoadError('ROI cells', error),
-          })
-          setRoiGeneStatsState({ status: 'idle' })
+          setRoiState(
+            roiFailed(
+              loadState.url,
+              bbox,
+              selection,
+              createStructuredLoadError('ROI cells', error),
+            ),
+          )
+          setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
           appendDebugEvent(`ROI cells failed (${formatElapsed(roiCellsStartedAt)})`)
         })
         .finally(() => {
@@ -575,9 +577,9 @@ export function useRoiWorkflow({
       setMagicLensState({ status: 'idle' })
     }
     setRoiMode('idle')
-    setRoiState({ status: 'idle' })
-    setRoiGeneStatsState({ status: 'idle' })
-    setRoiTranscriptExportState({ status: 'idle' })
+    setRoiState(IDLE_ROI_STATE)
+    setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
+    setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
     appendDebugEvent('Cleared ROI')
   }, [
     appendDebugEvent,
@@ -636,7 +638,7 @@ export function useRoiWorkflow({
       requestIdRef: roiTranscriptExportRequestIdRef,
     })
     const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
-    setRoiTranscriptExportState({ status: 'loading', url: roiState.url })
+    setRoiTranscriptExportState(roiTranscriptExportLoading(roiState.url))
     appendDebugEvent(`Exporting ROI transcripts ${name}`)
 
     void loadRoiTranscripts(roiState.url, roiState.selection, {
@@ -651,7 +653,7 @@ export function useRoiWorkflow({
           `${slug(name)}-transcripts.csv`,
           roiTranscriptsToCsv(transcripts),
         )
-        setRoiTranscriptExportState({ status: 'idle' })
+        setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
         appendDebugEvent(
           `Exported ROI transcripts: ${transcripts.length.toLocaleString()} rows`,
         )
@@ -661,11 +663,12 @@ export function useRoiWorkflow({
           return
         }
 
-        setRoiTranscriptExportState({
-          status: 'error',
-          url: roiState.url,
-          error: createStructuredLoadError('ROI transcripts', error),
-        })
+        setRoiTranscriptExportState(
+          roiTranscriptExportFailed(
+            roiState.url,
+            createStructuredLoadError('ROI transcripts', error),
+          ),
+        )
         appendDebugEvent('ROI transcript export failed')
       })
       .finally(() => {

@@ -69,10 +69,92 @@ export type RoiTranscriptExportState<
       readonly error: ErrorType
     }
 
+export const IDLE_ROI_STATE: RoiState<never> = { status: 'idle' }
+export const IDLE_ROI_GENE_STATS_STATE: RoiGeneStatsState<never> = {
+  status: 'idle',
+}
+export const IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE: RoiGeneViewportWarmupState = {
+  status: 'idle',
+}
+export const IDLE_ROI_TRANSCRIPT_EXPORT_STATE: RoiTranscriptExportState<never> = {
+  status: 'idle',
+}
+
 export interface RoiSummary {
   readonly cellCount: number
   readonly meanTranscriptCount: number
   readonly meanCellArea: number | undefined
+}
+
+export function roiLoading(
+  url: string,
+  bbox: BBox,
+  selection: RoiSelection,
+): RoiState<never> {
+  return { status: 'loading', url, bbox, selection }
+}
+
+export function roiReady(
+  url: string,
+  bbox: BBox,
+  selection: RoiSelection,
+  cells: readonly DatasetCell[],
+  hitCellLimit: boolean,
+): RoiState<never> {
+  return { status: 'ready', url, bbox, selection, cells, hitCellLimit }
+}
+
+export function roiFailed<ErrorType extends RoiLoadErrorSummary>(
+  url: string,
+  bbox: BBox,
+  selection: RoiSelection,
+  error: ErrorType,
+): RoiState<ErrorType> {
+  return { status: 'error', url, bbox, selection, error }
+}
+
+export function roiGeneStatsLoading(
+  url: string,
+  cellCount: number,
+): RoiGeneStatsState<never> {
+  return { status: 'loading', url, cellCount }
+}
+
+export function roiGeneStatsReady(
+  url: string,
+  stats: RoiGeneStats,
+): RoiGeneStatsState<never> {
+  return { status: 'ready', url, stats }
+}
+
+export function roiGeneStatsFailed<ErrorType extends RoiLoadErrorSummary>(
+  url: string,
+  error: ErrorType,
+): RoiGeneStatsState<ErrorType> {
+  return { status: 'error', url, error }
+}
+
+export function roiGeneViewportWarmupLoading(key: string): RoiGeneViewportWarmupState {
+  return { status: 'loading', key }
+}
+
+export function roiGeneViewportWarmupReady(key: string): RoiGeneViewportWarmupState {
+  return { status: 'ready', key }
+}
+
+export function roiGeneViewportWarmupFailed(key: string): RoiGeneViewportWarmupState {
+  return { status: 'error', key }
+}
+
+export function roiTranscriptExportLoading(url: string): RoiTranscriptExportState<never> {
+  return { status: 'loading', url }
+}
+
+export function roiTranscriptExportFailed<ErrorType extends RoiLoadErrorSummary>(
+  url: string,
+  error: ErrorType,
+): RoiTranscriptExportState<ErrorType> {
+  return { status: 'error', url, error }
 }
 
 export function roiStatusCopy<ErrorType extends RoiLoadErrorSummary>(

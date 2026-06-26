@@ -7,6 +7,8 @@ import type {
 } from '../../data/transcriptOverlay'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import {
+  IDLE_TRANSCRIPT_CAPABILITY_STATE,
+  IDLE_TRANSCRIPT_LAYER_STATE,
   buildCellSummaryTranscriptBins,
   estimateVisibleTranscriptsFromCells,
   isTranscriptExactManualLoadRequired,
@@ -18,6 +20,15 @@ import {
   parseTranscriptFeatureFilterMode,
   parseTranscriptPointColorMode,
   retainedTranscriptLayerState,
+  transcriptCapabilityFailed,
+  transcriptCapabilityReady,
+  transcriptCapabilityStarted,
+  transcriptLayerAggregate,
+  transcriptLayerFailed,
+  transcriptLayerLoading,
+  transcriptLayerReady,
+  transcriptLayerUnavailable,
+  transcriptLayerWaiting,
   transcriptAggregateBinsForRendering,
   transcriptAggregateFallbackMessage,
   transcriptAggregateScaleMaxForRendering,
@@ -153,6 +164,115 @@ describe('transcriptLayerModel', () => {
         scaleMax: 9,
       }),
     ).toEqual({ kind: 'aggregate', bins: [bin], scaleMax: 9 })
+  })
+
+  it('constructs transcript capability and layer transitions', () => {
+    const error = { message: 'failed' }
+
+    expect(IDLE_TRANSCRIPT_CAPABILITY_STATE).toEqual({ status: 'idle' })
+    expect(transcriptCapabilityStarted('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(
+      transcriptCapabilityReady('https://example.test/output', {
+        rawParquet: true,
+        nativeZarr: false,
+      }),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      capabilities: { rawParquet: true, nativeZarr: false },
+    })
+    expect(transcriptCapabilityFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+
+    expect(IDLE_TRANSCRIPT_LAYER_STATE).toEqual({ status: 'idle' })
+    expect(
+      transcriptLayerWaiting({
+        message: 'Zoom in',
+        visibleTranscriptEstimate: 80,
+        exactLoadRequestKey: 'request-key',
+        exactLoadEstimate: 80,
+      }),
+    ).toEqual({
+      status: 'waiting',
+      message: 'Zoom in',
+      visibleTranscriptEstimate: 80,
+      exactLoadRequestKey: 'request-key',
+      exactLoadEstimate: 80,
+    })
+    expect(transcriptLayerUnavailable('Missing output', 12)).toEqual({
+      status: 'unavailable',
+      message: 'Missing output',
+      visibleTranscriptEstimate: 12,
+    })
+    expect(
+      transcriptLayerLoading(
+        {
+          status: 'ready',
+          url: 'https://example.test/output',
+          points: [point],
+          groups: [],
+          visibleTranscriptEstimate: 1,
+          hitPointLimit: false,
+          durationMs: 3,
+        },
+        'https://example.test/output',
+        10,
+      ),
+    ).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+      visibleTranscriptEstimate: 10,
+      previousLayer: { kind: 'exact', points: [point] },
+    })
+    expect(
+      transcriptLayerAggregate({
+        source: 'native-zarr',
+        mode: 'density',
+        bins: [bin],
+        message: 'density',
+        visibleTranscriptEstimate: 10,
+        scaleMax: 9,
+        durationMs: 4,
+      }),
+    ).toEqual({
+      status: 'aggregate',
+      source: 'native-zarr',
+      mode: 'density',
+      bins: [bin],
+      message: 'density',
+      visibleTranscriptEstimate: 10,
+      scaleMax: 9,
+      durationMs: 4,
+    })
+    expect(
+      transcriptLayerReady({
+        url: 'https://example.test/output',
+        points: [point],
+        groups: [],
+        visibleTranscriptEstimate: 1,
+        hitPointLimit: false,
+        durationMs: 3,
+      }),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      points: [point],
+      groups: [],
+      visibleTranscriptEstimate: 1,
+      hitPointLimit: false,
+      durationMs: 3,
+    })
+    expect(transcriptLayerFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
   })
 
   it('parses and normalizes transcript controls', () => {

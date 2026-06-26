@@ -37,9 +37,11 @@ import {
   type TranscriptDensityColorScale,
   type TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
-import type {
-  CellDetailState,
-  CellTranscriptDistributionState,
+import {
+  IDLE_CELL_DETAIL_STATE,
+  IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE,
+  type CellDetailState,
+  type CellTranscriptDistributionState,
 } from '../cells/cellDetailModel'
 import type { AnalysisEmbeddingState } from '../analysis/analysisEmbeddingModel'
 import type {
@@ -65,13 +67,18 @@ import type {
   CustomMorphologyLayerLoadState,
 } from '../morphology/customMorphologyLayers'
 import type { MagicLensState } from '../roi/magicLensModel'
-import type {
-  RoiGeneStatsState,
-  RoiGeneViewportWarmupState,
-  RoiState,
-  RoiTranscriptExportState,
+import {
+  IDLE_ROI_GENE_STATS_STATE,
+  IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE,
+  IDLE_ROI_STATE,
+  IDLE_ROI_TRANSCRIPT_EXPORT_STATE,
+  type RoiGeneStatsState,
+  type RoiGeneViewportWarmupState,
+  type RoiState,
+  type RoiTranscriptExportState,
 } from '../roi/roiModel'
 import {
+  IDLE_TRANSCRIPT_LAYER_STATE,
   parseTranscriptDensityColorScale,
   parseTranscriptPointColorMode,
   type TranscriptCapabilityState,
@@ -98,13 +105,20 @@ import {
   type DebugLogAppendOptions,
 } from './appRuntimeModel'
 import { parseObservationColorMode } from './appShellModel'
-import type {
-  BoundaryLoadState,
-  CellFeatureMatrixCapabilityState,
-  DatasetDiagnosticsState,
-  DatasetLoadState,
-  DatasetWarmupState,
-  MorphologyLoadState,
+import {
+  IDLE_DATASET_WARMUP_STATE,
+  datasetLoadFailed,
+  datasetLoadReady,
+  datasetLoadStarted,
+  datasetWarmupFailed,
+  datasetWarmupReady,
+  datasetWarmupStarted,
+  type BoundaryLoadState,
+  type CellFeatureMatrixCapabilityState,
+  type DatasetDiagnosticsState,
+  type DatasetLoadState,
+  type DatasetWarmupState,
+  type MorphologyLoadState,
 } from '../dataset/datasetLoadModel'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import {
@@ -500,7 +514,7 @@ export function useDatasetLifecycle({
       requestIdRef: datasetWarmupRequestIdRef,
     })
     const warmupStartedAt = readTimestamp()
-    setDatasetWarmupState({ status: 'loading', url: requestedUrl })
+    setDatasetWarmupState(datasetWarmupStarted(requestedUrl))
     appendDebugEvent('Dataset prep started')
     const applyCellFeatureMatrixCapability = (result: WarmDatasetForRoiResult | void) => {
       const capability = result?.cellFeatureMatrix
@@ -552,7 +566,7 @@ export function useDatasetLifecycle({
         }
 
         applyCellFeatureMatrixCapability(result)
-        setDatasetWarmupState({ status: 'ready', url: requestedUrl })
+        setDatasetWarmupState(datasetWarmupReady(requestedUrl))
         appendDebugEvent(`Dataset prep ready (${formatElapsed(warmupStartedAt)})`)
       })
       .catch((error) => {
@@ -565,7 +579,7 @@ export function useDatasetLifecycle({
           return
         }
 
-        setDatasetWarmupState({ status: 'error', url: requestedUrl })
+        setDatasetWarmupState(datasetWarmupFailed(requestedUrl))
         appendDebugEvent(`Dataset prep incomplete (${formatElapsed(warmupStartedAt)})`)
       })
       .finally(() => {
@@ -653,7 +667,7 @@ export function useDatasetLifecycle({
       setDatasetUrl(requestedUrl)
       setDatasetPlatform(null)
       setVisiumHdControlState({ status: 'idle' })
-      setDatasetWarmupState({ status: 'idle' })
+      setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
       setCellFeatureMatrixCapabilityState({ status: 'idle' })
       cellFeatureMatrixCapabilityKeyRef.current = null
       setOverviewCells([])
@@ -730,15 +744,15 @@ export function useDatasetLifecycle({
       setMeasurementEnabled(false)
       setMeasurementResetKey((current) => current + 1)
       setRoiName('ROI 1')
-      setRoiState({ status: 'idle' })
-      setRoiGeneStatsState({ status: 'idle' })
-      setRoiGeneViewportWarmupState({ status: 'idle' })
-      setRoiTranscriptExportState({ status: 'idle' })
+      setRoiState(IDLE_ROI_STATE)
+      setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
+      setRoiGeneViewportWarmupState(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
+      setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
       setTranscriptCapabilityState({ status: 'idle' })
-      setTranscriptLayerState({ status: 'idle' })
+      setTranscriptLayerState(IDLE_TRANSCRIPT_LAYER_STATE)
       setMagicLensState({ status: 'idle' })
-      setCellDetailState({ status: 'idle' })
-      setCellTranscriptDistributionState({ status: 'idle' })
+      setCellDetailState(IDLE_CELL_DETAIL_STATE)
+      setCellTranscriptDistributionState(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
       setMagicLensActive(
         shouldRestoreSharedState ? (sharedState?.magicLensActive ?? false) : false,
       )
@@ -746,7 +760,7 @@ export function useDatasetLifecycle({
       setSelectedGridCell(null)
       setCurrentViewportDetail(null)
       setViewportCellCount(null)
-      setLoadState({ status: 'loading', url: requestedUrl })
+      setLoadState(datasetLoadStarted(requestedUrl))
       setMorphologyState(
         loadImage ? { status: 'loading', url: requestedUrl } : { status: 'idle' },
       )
@@ -851,11 +865,7 @@ export function useDatasetLifecycle({
             ),
           )
           initialShareableStateRef.current = null
-          setLoadState({
-            status: 'ready',
-            url: requestedUrl,
-            cellCount: overview.gridCells.ids.length,
-          })
+          setLoadState(datasetLoadReady(requestedUrl, overview.gridCells.ids.length))
           appendDebugEvent(
             `Visium HD ready: ${overview.gridCells.ids.length.toLocaleString()} ${overview.binSizeMicrometers} µm bins in ${formatElapsed(
               loadStartedAt,
@@ -1002,11 +1012,7 @@ export function useDatasetLifecycle({
 
         setOverviewCells(overviewCellsToLayerData(cells))
         initialShareableStateRef.current = null
-        setLoadState({
-          status: 'ready',
-          url: requestedUrl,
-          cellCount: cells.length,
-        })
+        setLoadState(datasetLoadReady(requestedUrl, cells.length))
         appendDebugEvent(
           `Dataset ready: ${cells.length.toLocaleString()} cells in ${formatElapsed(
             loadStartedAt,
@@ -1078,11 +1084,12 @@ export function useDatasetLifecycle({
           return
         }
 
-        setLoadState({
-          status: 'error',
-          url: requestedUrl,
-          error: createStructuredLoadError('Dataset overview', error),
-        })
+        setLoadState(
+          datasetLoadFailed(
+            requestedUrl,
+            createStructuredLoadError('Dataset overview', error),
+          ),
+        )
         setDatasetPlatform(null)
         setVisiumHdControlState({ status: 'idle' })
         setSpatialGridCells([])
@@ -1099,14 +1106,14 @@ export function useDatasetLifecycle({
           abortRef: datasetWarmupAbortRef,
           requestIdRef: datasetWarmupRequestIdRef,
         })
-        setDatasetWarmupState({ status: 'idle' })
+        setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
         setCellFeatureMatrixCapabilityState({ status: 'idle' })
         cellFeatureMatrixCapabilityKeyRef.current = null
         setMorphologyState({ status: 'idle' })
         setGenePanelState({ status: 'idle' })
         setAnnotationGroupState({ status: 'idle' })
         setTranscriptCapabilityState({ status: 'idle' })
-        setTranscriptLayerState({ status: 'idle' })
+        setTranscriptLayerState(IDLE_TRANSCRIPT_LAYER_STATE)
       }
     }
   }

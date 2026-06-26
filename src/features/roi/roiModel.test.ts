@@ -3,14 +3,29 @@ import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { DatasetCell, DatasetTranscript } from '../../datasets/xeniumDataset'
 import {
+  IDLE_ROI_GENE_STATS_STATE,
+  IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE,
+  IDLE_ROI_STATE,
+  IDLE_ROI_TRANSCRIPT_EXPORT_STATE,
   defaultRoiName,
   emptyRoiGeneStats,
   roiCellsToCsv,
+  roiFailed,
   roiGeneDatasetWarmupKey,
+  roiGeneStatsFailed,
+  roiGeneStatsLoading,
+  roiGeneStatsReady,
+  roiGeneViewportWarmupFailed,
+  roiGeneViewportWarmupLoading,
+  roiGeneViewportWarmupReady,
+  roiLoading,
+  roiReady,
   roiGeneStatsStatusCopy,
   roiSelectionLabel,
   roiSelectionToGeoJson,
   roiStatusCopy,
+  roiTranscriptExportFailed,
+  roiTranscriptExportLoading,
   roiTranscriptsToCsv,
   summarizeRoiCells,
 } from './roiModel'
@@ -30,7 +45,91 @@ const cells: readonly DatasetCell[] = [
   },
 ]
 
+const bbox = {
+  minX: micrometers(0),
+  minY: micrometers(0),
+  maxX: micrometers(10),
+  maxY: micrometers(20),
+}
+
+const selection = {
+  kind: 'box' as const,
+  bbox,
+}
+
 describe('roiModel', () => {
+  it('constructs ROI async transitions', () => {
+    const stats = emptyRoiGeneStats()
+    const error = { title: 'Failed' }
+
+    expect(IDLE_ROI_STATE).toEqual({ status: 'idle' })
+    expect(roiLoading('https://example.test/output', bbox, selection)).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+      bbox,
+      selection,
+    })
+    expect(roiReady('https://example.test/output', bbox, selection, cells, true)).toEqual(
+      {
+        status: 'ready',
+        url: 'https://example.test/output',
+        bbox,
+        selection,
+        cells,
+        hitCellLimit: true,
+      },
+    )
+    expect(roiFailed('https://example.test/output', bbox, selection, error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      bbox,
+      selection,
+      error,
+    })
+
+    expect(IDLE_ROI_GENE_STATS_STATE).toEqual({ status: 'idle' })
+    expect(roiGeneStatsLoading('https://example.test/output', 2)).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+      cellCount: 2,
+    })
+    expect(roiGeneStatsReady('https://example.test/output', stats)).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      stats,
+    })
+    expect(roiGeneStatsFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+
+    expect(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE).toEqual({ status: 'idle' })
+    expect(roiGeneViewportWarmupLoading('warmup-key')).toEqual({
+      status: 'loading',
+      key: 'warmup-key',
+    })
+    expect(roiGeneViewportWarmupReady('warmup-key')).toEqual({
+      status: 'ready',
+      key: 'warmup-key',
+    })
+    expect(roiGeneViewportWarmupFailed('warmup-key')).toEqual({
+      status: 'error',
+      key: 'warmup-key',
+    })
+
+    expect(IDLE_ROI_TRANSCRIPT_EXPORT_STATE).toEqual({ status: 'idle' })
+    expect(roiTranscriptExportLoading('https://example.test/output')).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+    })
+    expect(roiTranscriptExportFailed('https://example.test/output', error)).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error,
+    })
+  })
+
   it('formats ROI and gene-stat statuses', () => {
     expect(roiStatusCopy({ status: 'idle' }, 'box')).toBe('Drawing box')
     expect(
