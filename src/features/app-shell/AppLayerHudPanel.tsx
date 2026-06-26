@@ -20,6 +20,7 @@ type AppLayerControlIds = Pick<
   | 'cellFillOpacityInputId'
   | 'cellBoundaryVisibilityInputId'
   | 'nucleusBoundaryVisibilityInputId'
+  | 'hoverTooltipsInputId'
   | 'cellBoundaryOpacityInputId'
   | 'coordinateUnitInputId'
   | 'measurementModeInputId'
@@ -50,11 +51,13 @@ export interface AppLayerHudPanelProps {
   readonly performanceBudget: PerformanceBudget
   readonly showCellBoundaries: boolean
   readonly showNucleusBoundaries: boolean
+  readonly showHoverTooltips: boolean
   readonly nucleusBoundaryControlsVisible: boolean
   readonly setCellBoundaryOpacity: Dispatch<SetStateAction<number>>
   readonly setCellFillOpacity: Dispatch<SetStateAction<number>>
   readonly setShowCellBoundaries: Dispatch<SetStateAction<boolean>>
   readonly setShowNucleusBoundaries: Dispatch<SetStateAction<boolean>>
+  readonly setShowHoverTooltips: Dispatch<SetStateAction<boolean>>
   readonly setCoordinateUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
   readonly setCustomLayerOpacity: (imageUrl: string, opacity: number) => void
   readonly setImageLayerOpacity: Dispatch<SetStateAction<number>>
@@ -93,11 +96,13 @@ export function AppLayerHudPanel({
   performanceBudget,
   showCellBoundaries,
   showNucleusBoundaries,
+  showHoverTooltips,
   nucleusBoundaryControlsVisible,
   setCellBoundaryOpacity,
   setCellFillOpacity,
   setShowCellBoundaries,
   setShowNucleusBoundaries,
+  setShowHoverTooltips,
   setCoordinateUnit,
   setCustomLayerOpacity,
   setImageLayerOpacity,
@@ -118,6 +123,7 @@ export function AppLayerHudPanel({
       cellFillOpacityInputId={controlIds.cellFillOpacityInputId}
       cellBoundaryVisibilityInputId={controlIds.cellBoundaryVisibilityInputId}
       nucleusBoundaryVisibilityInputId={controlIds.nucleusBoundaryVisibilityInputId}
+      hoverTooltipsInputId={controlIds.hoverTooltipsInputId}
       cellBoundaryOpacityInputId={controlIds.cellBoundaryOpacityInputId}
       coordinateUnitInputId={controlIds.coordinateUnitInputId}
       measurementModeInputId={controlIds.measurementModeInputId}
@@ -130,6 +136,7 @@ export function AppLayerHudPanel({
       cellFillOpacity={cellFillOpacity}
       showCellBoundaries={showCellBoundaries}
       showNucleusBoundaries={showNucleusBoundaries}
+      showHoverTooltips={showHoverTooltips}
       nucleusBoundaryControlsVisible={nucleusBoundaryControlsVisible}
       cellBoundaryOpacity={cellBoundaryOpacity}
       coordinateUnit={coordinateUnit}
@@ -176,6 +183,17 @@ export function AppLayerHudPanel({
         appendDebugEvent(
           nextEnabled ? 'Nucleus boundaries shown' : 'Nucleus boundaries hidden',
           { coalesceKey: 'nucleus-boundaries-visible' },
+        )
+      }}
+      onShowHoverTooltipsChange={(nextEnabled) => {
+        if (showHoverTooltips === nextEnabled) {
+          return
+        }
+
+        setShowHoverTooltips(nextEnabled)
+        appendDebugEvent(
+          nextEnabled ? 'Hover tooltips enabled' : 'Hover tooltips disabled',
+          { coalesceKey: 'hover-tooltips-visible' },
         )
       }}
       onCellBoundaryOpacityPercentChange={(nextPercent) => {

@@ -29,6 +29,7 @@ export interface ShareableState {
   readonly cellFillOpacity?: number
   readonly showCellBoundaries?: boolean
   readonly showNucleusBoundaries?: boolean
+  readonly showHoverTooltips?: boolean
   readonly cellBoundaryOpacity?: number
   readonly morphologyEnabledChannelIds?: readonly string[]
   readonly transcriptOverlay?: boolean
@@ -80,6 +81,7 @@ export function parseShareableState(hash: string): ShareableState {
   const cellFillOpacity = parseUnitNumber(params.get('cellFill'))
   const showCellBoundaries = parseBoolean(params.get('cellBounds'))
   const showNucleusBoundaries = parseBoolean(params.get('nucleusBounds'))
+  const showHoverTooltips = parseBoolean(params.get('hoverTips'))
   const cellBoundaryOpacity = parseUnitNumber(params.get('cellBoundary'))
   const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')
   const transcriptOverlay = parseBoolean(params.get('tx'))
@@ -175,6 +177,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (showNucleusBoundaries !== undefined) {
     state.showNucleusBoundaries = showNucleusBoundaries
+  }
+
+  if (showHoverTooltips !== undefined) {
+    state.showHoverTooltips = showHoverTooltips
   }
 
   if (cellBoundaryOpacity !== undefined) {
@@ -314,6 +320,10 @@ export function formatShareableState(state: ShareableState): string {
 
   if (state.showNucleusBoundaries !== undefined) {
     params.set('nucleusBounds', state.showNucleusBoundaries ? '1' : '0')
+  }
+
+  if (state.showHoverTooltips !== undefined) {
+    params.set('hoverTips', state.showHoverTooltips ? '1' : '0')
   }
 
   if (

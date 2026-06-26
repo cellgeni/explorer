@@ -41,6 +41,7 @@ describe('shareableState', () => {
       cellFillOpacity: 0.7,
       showCellBoundaries: false,
       showNucleusBoundaries: true,
+      showHoverTooltips: false,
       cellBoundaryOpacity: 0.35,
       morphologyEnabledChannelIds: ['Channel:1', 'Channel:3'],
       transcriptOverlay: true,
@@ -81,6 +82,7 @@ describe('shareableState', () => {
     expect(state.cellFillOpacity).toBe(0.7)
     expect(state.showCellBoundaries).toBe(false)
     expect(state.showNucleusBoundaries).toBe(true)
+    expect(state.showHoverTooltips).toBe(false)
     expect(state.cellBoundaryOpacity).toBe(0.35)
     expect(state.morphologyEnabledChannelIds).toEqual(['Channel:1', 'Channel:3'])
     expect(state.transcriptOverlay).toBe(true)

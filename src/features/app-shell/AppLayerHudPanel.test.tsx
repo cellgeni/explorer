@@ -17,6 +17,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       cellBoundaryVisibilityInputId: 'cell-boundary-visibility',
       cellFillOpacityInputId: 'cell-fill-opacity',
       coordinateUnitInputId: 'coordinate-unit',
+      hoverTooltipsInputId: 'hover-tooltips',
       imageOpacityInputId: 'image-opacity',
       measurementModeInputId: 'measurement-mode',
       measurementUnitInputId: 'measurement-unit',
@@ -38,6 +39,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     morphologyChannels: [],
     showCellBoundaries: true,
     showNucleusBoundaries: true,
+    showHoverTooltips: true,
     nucleusBoundaryControlsVisible: true,
     performanceBudget: {
       boundaryCellLimit: 50_000,
@@ -51,6 +53,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     setCellFillOpacity: vi.fn(),
     setShowCellBoundaries: vi.fn(),
     setShowNucleusBoundaries: vi.fn(),
+    setShowHoverTooltips: vi.fn(),
     setCoordinateUnit: vi.fn(),
     setCustomLayerOpacity: vi.fn(),
     setImageLayerOpacity: vi.fn(),
@@ -101,14 +104,19 @@ describe('AppLayerHudPanel', () => {
 
     fireEvent.click(screen.getByLabelText('Cell boundaries'))
     fireEvent.click(screen.getByLabelText('Nucleus boundaries'))
+    fireEvent.click(screen.getByLabelText('Hover tooltips'))
 
     expect(props.setShowCellBoundaries).toHaveBeenCalledWith(false)
     expect(props.setShowNucleusBoundaries).toHaveBeenCalledWith(false)
+    expect(props.setShowHoverTooltips).toHaveBeenCalledWith(false)
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Cell boundaries hidden', {
       coalesceKey: 'cell-boundaries-visible',
     })
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Nucleus boundaries hidden', {
       coalesceKey: 'nucleus-boundaries-visible',
+    })
+    expect(props.appendDebugEvent).toHaveBeenCalledWith('Hover tooltips disabled', {
+      coalesceKey: 'hover-tooltips-visible',
     })
   })
 

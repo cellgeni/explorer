@@ -83,6 +83,7 @@ export interface ViewerCoreProps {
   readonly boundaries?: readonly CellBoundaryDatum[]
   readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled?: boolean
+  readonly hoverTooltipsEnabled?: boolean
   readonly gridCells?: readonly GridCellDatum[]
   readonly fitGridCells?: readonly GridCellDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
@@ -196,6 +197,11 @@ export interface ViewerCellBoundaryHoverDetail {
   readonly screen: ScreenPoint
 }
 
+export interface ViewerOverviewCellHoverDetail {
+  readonly cell: OverviewCellDatum
+  readonly screen: ScreenPoint
+}
+
 export type RoiDrawMode = 'idle' | 'box' | 'lasso'
 
 export function ViewerCore({
@@ -207,6 +213,7 @@ export function ViewerCore({
   boundaries = [],
   nucleusBoundaries = [],
   cellBoundaryHoverEnabled = false,
+  hoverTooltipsEnabled = true,
   gridCells = [],
   fitGridCells,
   transcriptAggregateBins = [],
@@ -282,6 +289,7 @@ export function ViewerCore({
       boundaries={boundaries}
       nucleusBoundaries={nucleusBoundaries}
       cellBoundaryHoverEnabled={cellBoundaryHoverEnabled}
+      hoverTooltipsEnabled={hoverTooltipsEnabled}
       gridCells={gridCells}
       viewportCountGridCells={viewFitGridCells}
       transcriptAggregateBins={transcriptAggregateBins}
@@ -346,6 +354,7 @@ interface ViewerSurfaceProps {
   readonly boundaries: readonly CellBoundaryDatum[]
   readonly nucleusBoundaries: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled: boolean
+  readonly hoverTooltipsEnabled: boolean
   readonly gridCells: readonly GridCellDatum[]
   readonly viewportCountGridCells: readonly GridCellDatum[]
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
@@ -453,6 +462,7 @@ function ViewerSurface({
   boundaries,
   nucleusBoundaries,
   cellBoundaryHoverEnabled,
+  hoverTooltipsEnabled,
   gridCells,
   viewportCountGridCells,
   transcriptAggregateBins,
@@ -528,6 +538,7 @@ function ViewerSurface({
   )
   const [cellBoundaryHover, setCellBoundaryHover] =
     useState<ViewerCellBoundaryHoverDetail | null>(null)
+  const [cellHover, setCellHover] = useState<ViewerOverviewCellHoverDetail | null>(null)
   const [boundaryStyleViewport, setBoundaryStyleViewport] =
     useState<BoundaryStyleViewport | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
@@ -1097,6 +1108,7 @@ function ViewerSurface({
         setTranscriptHover(detail)
         setGridCellHover(null)
         setCellBoundaryHover(null)
+        setCellHover(null)
         onTranscriptHover?.(detail)
         return
       }
@@ -1112,6 +1124,7 @@ function ViewerSurface({
         setTranscriptHover(detail)
         setGridCellHover(null)
         setCellBoundaryHover(null)
+        setCellHover(null)
         onTranscriptHover?.(detail)
         return
       }
@@ -1124,7 +1137,8 @@ function ViewerSurface({
 
           return null
         })
-        if (magicLensActive) {
+        setCellHover(null)
+        if (magicLensActive || !hoverTooltipsEnabled) {
           setGridCellHover(null)
           setCellBoundaryHover(null)
           return
@@ -1154,8 +1168,9 @@ function ViewerSurface({
           return null
         })
         setGridCellHover(null)
+        setCellHover(null)
 
-        if (magicLensActive) {
+        if (magicLensActive || !hoverTooltipsEnabled) {
           setCellBoundaryHover(null)
           return
         }
@@ -1176,6 +1191,32 @@ function ViewerSurface({
         return
       }
 
+      if (isOverviewCellDatum(info.object)) {
+        setTranscriptHover((current) => {
+          if (current !== null) {
+            onTranscriptHover?.(null)
+          }
+
+          return null
+        })
+        setGridCellHover(null)
+        setCellBoundaryHover(null)
+
+        if (magicLensActive || !hoverTooltipsEnabled) {
+          setCellHover(null)
+          return
+        }
+
+        setCellHover({
+          cell: info.object,
+          screen: {
+            x: info.x,
+            y: info.y,
+          },
+        })
+        return
+      }
+
       setTranscriptHover((current) => {
         if (current !== null) {
           onTranscriptHover?.(null)
@@ -1185,10 +1226,12 @@ function ViewerSurface({
       })
       setGridCellHover(null)
       setCellBoundaryHover(null)
+      setCellHover(null)
     },
     [
       cellBoundaryHoverEnabled,
       geneExpressionPointStyleIndex,
+      hoverTooltipsEnabled,
       magicLensActive,
       onTranscriptHover,
     ],
@@ -1208,6 +1251,7 @@ function ViewerSurface({
       if (magicLensActive && roiMode === 'idle' && !measurementEnabled) {
         setGridCellHover((current) => (current === null ? current : null))
         setCellBoundaryHover((current) => (current === null ? current : null))
+        setCellHover((current) => (current === null ? current : null))
         const rect = event.currentTarget.getBoundingClientRect()
         const screen = {
           x: event.clientX - rect.left,
@@ -1240,6 +1284,8 @@ function ViewerSurface({
     setMagicLensScreen(null)
     setTranscriptHover(null)
     setGridCellHover(null)
+    setCellBoundaryHover(null)
+    setCellHover(null)
     onTranscriptHover?.(null)
     onMagicLensLeave?.()
   }, [clearMouseCoordinate, onMagicLensLeave, onTranscriptHover])
@@ -1594,6 +1640,9 @@ function ViewerSurface({
       {transcriptHover === null ? null : (
         <TranscriptHoverTooltip detail={transcriptHover} />
       )}
+      {cellHover === null || magicLensActive ? null : (
+        <OverviewCellHoverTooltip detail={cellHover} />
+      )}
       {gridCellHover === null || magicLensActive ? null : (
         <GridCellHoverTooltip detail={gridCellHover} />
       )}
@@ -1833,6 +1882,70 @@ function GridCellHoverTooltip({
           <div>
             <dt>Expression</dt>
             <dd>{formatCoordinateValue(cell.expressionCount)}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  )
+}
+
+function OverviewCellHoverTooltip({
+  detail,
+}: {
+  readonly detail: ViewerOverviewCellHoverDetail
+}) {
+  const cell = detail.cell
+  const cellCount = cell.cellCount
+  const isAggregateBin = cellCount !== undefined || cell.id.startsWith('cell-bin:')
+
+  return (
+    <div
+      className="transcript-hover-tooltip grid-cell-hover-tooltip overview-cell-hover-tooltip"
+      style={{
+        left: detail.screen.x,
+        top: detail.screen.y,
+      }}
+      aria-hidden="true"
+    >
+      <p>{cell.id}</p>
+      <dl>
+        <div>
+          <dt>{isAggregateBin ? 'Bin' : 'Cell'}</dt>
+          <dd>{isAggregateBin ? 'Overview' : 'Xenium'}</dd>
+        </div>
+        {cellCount === undefined ? null : (
+          <div>
+            <dt>Count</dt>
+            <dd>{cellCount.toLocaleString()}</dd>
+          </div>
+        )}
+        <div>
+          <dt>X/Y</dt>
+          <dd>{formatOverviewCellPosition(cell)}</dd>
+        </div>
+        {cell.transcriptCount === undefined ? null : (
+          <div>
+            <dt>Tx</dt>
+            <dd>{cell.transcriptCount.toLocaleString()}</dd>
+          </div>
+        )}
+        {cell.cellArea === undefined ? null : (
+          <div>
+            <dt>Area</dt>
+            <dd>{formatCoordinateValue(cell.cellArea)} um^2</dd>
+          </div>
+        )}
+        {cell.expressionCount === undefined ? null : (
+          <div>
+            <dt>Expression</dt>
+            <dd>{formatCoordinateValue(cell.expressionCount)}</dd>
+          </div>
+        )}
+        {cell.expressionGenes === undefined ||
+        cell.expressionGenes.length === 0 ? null : (
+          <div>
+            <dt>Genes</dt>
+            <dd>{formatExpressionGeneList(cell.expressionGenes)}</dd>
           </div>
         )}
       </dl>
@@ -2241,6 +2354,12 @@ function formatGridCellBinSize(cell: GridCellDatum): string {
   return cell.binSizeMicrometers === undefined
     ? 'Unknown'
     : `${formatCoordinateValue(cell.binSizeMicrometers)} μm`
+}
+
+function formatOverviewCellPosition(cell: OverviewCellDatum): string {
+  return `${formatCoordinateValue(cell.position[0] ?? 0)}, ${formatCoordinateValue(
+    -(cell.position[1] ?? 0),
+  )} um`
 }
 
 function formatGridCellImageCoordinate(cell: GridCellDatum): string {

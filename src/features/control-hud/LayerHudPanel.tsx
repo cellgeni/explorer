@@ -19,6 +19,7 @@ interface LayerHudPanelProps {
   readonly cellFillOpacityInputId: string
   readonly cellBoundaryVisibilityInputId: string
   readonly nucleusBoundaryVisibilityInputId: string
+  readonly hoverTooltipsInputId: string
   readonly cellBoundaryOpacityInputId: string
   readonly coordinateUnitInputId: string
   readonly measurementModeInputId: string
@@ -31,6 +32,7 @@ interface LayerHudPanelProps {
   readonly cellFillOpacity: number
   readonly showCellBoundaries: boolean
   readonly showNucleusBoundaries: boolean
+  readonly showHoverTooltips: boolean
   readonly nucleusBoundaryControlsVisible: boolean
   readonly cellBoundaryOpacity: number
   readonly coordinateUnit: ViewerCoordinateUnit
@@ -44,6 +46,7 @@ interface LayerHudPanelProps {
   readonly onCellFillOpacityPercentChange: (percent: number) => void
   readonly onShowCellBoundariesChange: (enabled: boolean) => void
   readonly onShowNucleusBoundariesChange: (enabled: boolean) => void
+  readonly onShowHoverTooltipsChange: (enabled: boolean) => void
   readonly onCellBoundaryOpacityPercentChange: (percent: number) => void
   readonly onCoordinateUnitChange: (unit: ViewerCoordinateUnit) => void
   readonly onMeasurementEnabledChange: (enabled: boolean) => void
@@ -67,6 +70,7 @@ export function LayerHudPanel({
   cellFillOpacityInputId,
   cellBoundaryVisibilityInputId,
   nucleusBoundaryVisibilityInputId,
+  hoverTooltipsInputId,
   cellBoundaryOpacityInputId,
   coordinateUnitInputId,
   measurementModeInputId,
@@ -79,6 +83,7 @@ export function LayerHudPanel({
   cellFillOpacity,
   showCellBoundaries,
   showNucleusBoundaries,
+  showHoverTooltips,
   nucleusBoundaryControlsVisible,
   cellBoundaryOpacity,
   coordinateUnit,
@@ -92,6 +97,7 @@ export function LayerHudPanel({
   onCellFillOpacityPercentChange,
   onShowCellBoundariesChange,
   onShowNucleusBoundariesChange,
+  onShowHoverTooltipsChange,
   onCellBoundaryOpacityPercentChange,
   onCoordinateUnitChange,
   onMeasurementEnabledChange,
@@ -142,7 +148,7 @@ export function LayerHudPanel({
           {performanceBudget.overviewRenderCellLimit.toLocaleString()} cells -{' '}
           {performanceBudget.maxConcurrentTileRequests} tile requests
         </p>
-        <div className="boundary-layer-toggles" aria-label="Boundary layers">
+        <div className="boundary-layer-toggles" aria-label="Layer display controls">
           <label htmlFor={cellBoundaryVisibilityInputId}>
             <input
               id={cellBoundaryVisibilityInputId}
@@ -169,6 +175,18 @@ export function LayerHudPanel({
               <span>Nucleus boundaries</span>
             </label>
           ) : null}
+          <label htmlFor={hoverTooltipsInputId}>
+            <input
+              id={hoverTooltipsInputId}
+              type="checkbox"
+              checked={showHoverTooltips}
+              title="Toggle bin and cell hover tooltips"
+              onChange={(event) => {
+                onShowHoverTooltipsChange(event.currentTarget.checked)
+              }}
+            />
+            <span>Hover tooltips</span>
+          </label>
         </div>
         <div className="layer-opacity-controls">
           <div className="layer-opacity-control">

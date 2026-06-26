@@ -9,6 +9,7 @@ describe('LayerHudPanel', () => {
     const onCellFillOpacityPercentChange = vi.fn()
     const onShowCellBoundariesChange = vi.fn()
     const onShowNucleusBoundariesChange = vi.fn()
+    const onShowHoverTooltipsChange = vi.fn()
     const onCellBoundaryOpacityPercentChange = vi.fn()
     const onCoordinateUnitChange = vi.fn()
     const onMeasurementEnabledChange = vi.fn()
@@ -32,6 +33,7 @@ describe('LayerHudPanel', () => {
         cellFillOpacityInputId="cell-fill-opacity"
         cellBoundaryVisibilityInputId="cell-boundary-visibility"
         nucleusBoundaryVisibilityInputId="nucleus-boundary-visibility"
+        hoverTooltipsInputId="hover-tooltips"
         cellBoundaryOpacityInputId="cell-boundary-opacity"
         coordinateUnitInputId="coordinate-unit"
         measurementModeInputId="measurement-mode"
@@ -56,6 +58,7 @@ describe('LayerHudPanel', () => {
         cellFillOpacity={0.6}
         showCellBoundaries
         showNucleusBoundaries
+        showHoverTooltips
         nucleusBoundaryControlsVisible
         cellBoundaryOpacity={0.4}
         coordinateUnit="um"
@@ -69,6 +72,7 @@ describe('LayerHudPanel', () => {
         onCellFillOpacityPercentChange={onCellFillOpacityPercentChange}
         onShowCellBoundariesChange={onShowCellBoundariesChange}
         onShowNucleusBoundariesChange={onShowNucleusBoundariesChange}
+        onShowHoverTooltipsChange={onShowHoverTooltipsChange}
         onCellBoundaryOpacityPercentChange={onCellBoundaryOpacityPercentChange}
         onCoordinateUnitChange={onCoordinateUnitChange}
         onMeasurementEnabledChange={onMeasurementEnabledChange}
@@ -92,6 +96,7 @@ describe('LayerHudPanel', () => {
     })
     fireEvent.click(screen.getByLabelText('Cell boundaries'))
     fireEvent.click(screen.getByLabelText('Nucleus boundaries'))
+    fireEvent.click(screen.getByLabelText('Hover tooltips'))
     fireEvent.change(screen.getByLabelText('Cell boundary opacity'), {
       target: { value: '65' },
     })
@@ -117,6 +122,7 @@ describe('LayerHudPanel', () => {
     expect(onCellFillOpacityPercentChange).toHaveBeenCalledWith(55)
     expect(onShowCellBoundariesChange).toHaveBeenCalledWith(false)
     expect(onShowNucleusBoundariesChange).toHaveBeenCalledWith(false)
+    expect(onShowHoverTooltipsChange).toHaveBeenCalledWith(false)
     expect(onCellBoundaryOpacityPercentChange).toHaveBeenCalledWith(65)
     expect(onCoordinateUnitChange).toHaveBeenCalledWith('px')
     expect(onMeasurementEnabledChange).toHaveBeenCalledWith(true)

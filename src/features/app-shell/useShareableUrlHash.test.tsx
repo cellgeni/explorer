@@ -29,6 +29,7 @@ function ShareableUrlHashProbe() {
       shouldLoadMorphology: true,
       showCellBoundaries: false,
       showNucleusBoundaries: true,
+      showHoverTooltips: false,
     },
     magicLens: {
       magicLensActive: true,
@@ -99,6 +100,7 @@ describe('useShareableUrlHash', () => {
     expect(window.location.hash).toContain('cellFill=0.7')
     expect(window.location.hash).toContain('cellBounds=0')
     expect(window.location.hash).toContain('nucleusBounds=1')
+    expect(window.location.hash).toContain('hoverTips=0')
     expect(window.location.hash).toContain('cellBoundary=0.35')
     expect(window.location.hash).toContain('channels=Channel%3A1')
     expect(window.location.hash).toContain('lens=1')

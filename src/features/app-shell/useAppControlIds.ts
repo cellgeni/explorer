@@ -9,6 +9,7 @@ export interface AppControlIds {
   readonly cellFillOpacityInputId: string
   readonly cellBoundaryVisibilityInputId: string
   readonly nucleusBoundaryVisibilityInputId: string
+  readonly hoverTooltipsInputId: string
   readonly cellBoundaryOpacityInputId: string
   readonly coordinateUnitInputId: string
   readonly measurementModeInputId: string
@@ -50,6 +51,7 @@ export function useAppControlIds(): AppControlIds {
     cellFillOpacityInputId: useId(),
     cellBoundaryVisibilityInputId: useId(),
     nucleusBoundaryVisibilityInputId: useId(),
+    hoverTooltipsInputId: useId(),
     cellBoundaryOpacityInputId: useId(),
     coordinateUnitInputId: useId(),
     measurementModeInputId: useId(),

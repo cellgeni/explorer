@@ -580,6 +580,52 @@ describe('ViewerCore', () => {
     expect(screen.getByText('Unassigned')).toBeInTheDocument()
   })
 
+  it('shows overview cell hover metadata', () => {
+    const cell: OverviewCellDatum = {
+      id: 'hover-cell-1',
+      position: [123.4, -56.7, 0],
+      radiusPixels: 4,
+      fillColor: [215, 63, 124, 220],
+      transcriptCount: 12,
+      cellArea: 40,
+      expressionCount: 7,
+      expressionGenes: ['Actb', 'Pecam1', 'Col1a1', 'Vim'],
+    }
+
+    render(<ViewerCore cells={[cell]} />)
+
+    act(() => {
+      deckGlMock.onHover?.({ object: cell, x: 18, y: 24 })
+    })
+
+    expect(screen.getByText('hover-cell-1')).toBeInTheDocument()
+    expect(screen.getByText('Xenium')).toBeInTheDocument()
+    expect(screen.getByText('123.4, 56.7 um')).toBeInTheDocument()
+    expect(screen.getByText('40 um^2')).toBeInTheDocument()
+    expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
+  })
+
+  it('shows aggregate overview bin hover metadata', () => {
+    const cell: OverviewCellDatum = {
+      id: 'cell-bin:0:0',
+      position: [50, -60, 0],
+      radiusPixels: 6,
+      fillColor: [215, 63, 124, 220],
+      cellCount: 14,
+    }
+
+    render(<ViewerCore cells={[cell]} />)
+
+    act(() => {
+      deckGlMock.onHover?.({ object: cell, x: 18, y: 24 })
+    })
+
+    expect(screen.getByText('cell-bin:0:0')).toBeInTheDocument()
+    expect(screen.getByText('Overview')).toBeInTheDocument()
+    expect(screen.getByText('14')).toBeInTheDocument()
+    expect(screen.getByText('50, 60 um')).toBeInTheDocument()
+  })
+
   it('shows grid-cell hover metadata', () => {
     const gridCell = gridCellDatum()
 
@@ -680,6 +726,54 @@ describe('ViewerCore', () => {
     expect(screen.getByText('Segmented')).toBeInTheDocument()
     expect(screen.getByText('100 um^2')).toBeInTheDocument()
     expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
+  })
+
+  it('suppresses bin and cell hover metadata when disabled without removing clicks', () => {
+    const cell: OverviewCellDatum = {
+      ...overviewCellDatum(),
+      id: 'hover-disabled-cell',
+    }
+    const gridCell = gridCellDatum({ id: 'hover-disabled-bin' })
+    const boundary: CellBoundaryDatum = {
+      id: 'hover-disabled-boundary',
+      polygon: [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, -10, 0],
+        [0, -10, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+    const onCellBoundaryClick = vi.fn()
+
+    render(
+      <ViewerCore
+        cells={[cell]}
+        gridCells={[gridCell]}
+        boundaries={[boundary]}
+        cellBoundaryHoverEnabled
+        hoverTooltipsEnabled={false}
+        onCellBoundaryClick={onCellBoundaryClick}
+      />,
+    )
+
+    expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
+      'data-count',
+      '1',
+    )
+
+    act(() => {
+      deckGlMock.onHover?.({ object: cell, x: 18, y: 24 })
+      deckGlMock.onHover?.({ object: gridCell, x: 18, y: 24 })
+      deckGlMock.onHover?.({ object: boundary, x: 18, y: 24 })
+      deckGlMock.onClick?.({ object: boundary, x: 18, y: 24 })
+    })
+
+    expect(screen.queryByText('hover-disabled-cell')).not.toBeInTheDocument()
+    expect(screen.queryByText('hover-disabled-bin')).not.toBeInTheDocument()
+    expect(screen.queryByText('hover-disabled-boundary')).not.toBeInTheDocument()
+    expect(onCellBoundaryClick).toHaveBeenCalledWith(boundary)
   })
 
   it('suppresses segmented cell boundary hover metadata while cursor magic lens is active', async () => {

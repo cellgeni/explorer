@@ -500,6 +500,9 @@ export function App({
   const [showNucleusBoundaries, setShowNucleusBoundaries] = useState(
     initialShareableState.showNucleusBoundaries ?? true,
   )
+  const [showHoverTooltips, setShowHoverTooltips] = useState(
+    initialShareableState.showHoverTooltips ?? true,
+  )
   const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(() =>
     normalizeLayerOpacity(initialShareableState.cellBoundaryOpacity ?? 1),
   )
@@ -2297,6 +2300,7 @@ export function App({
       shouldLoadMorphology,
       showCellBoundaries,
       showNucleusBoundaries,
+      showHoverTooltips,
     },
     magicLens: {
       magicLensActive,
@@ -2385,11 +2389,13 @@ export function App({
           performanceBudget={performanceBudget}
           showCellBoundaries={showCellBoundaries}
           showNucleusBoundaries={showNucleusBoundaries}
+          showHoverTooltips={showHoverTooltips}
           nucleusBoundaryControlsVisible={isVisiumHdDataset}
           setCellBoundaryOpacity={setCellBoundaryOpacity}
           setCellFillOpacity={setCellFillOpacity}
           setShowCellBoundaries={setShowCellBoundaries}
           setShowNucleusBoundaries={setShowNucleusBoundaries}
+          setShowHoverTooltips={setShowHoverTooltips}
           setCoordinateUnit={setCoordinateUnit}
           setCustomLayerOpacity={handleCustomImageLayerOpacityChange}
           setImageLayerOpacity={setImageLayerOpacity}
@@ -2664,6 +2670,7 @@ export function App({
           boundaries={expressionStyledBoundaryLayerData}
           nucleusBoundaries={visibleNucleusBoundaryLayerData}
           cellBoundaryHoverEnabled={isVisiumHdDataset && showCellBoundaries}
+          hoverTooltipsEnabled={showHoverTooltips}
           gridCells={viewerGridCells}
           fitGridCells={spatialGridCells}
           transcriptAggregateBins={transcriptLayerAggregateBins}
