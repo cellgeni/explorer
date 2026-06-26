@@ -115,32 +115,42 @@ function GeneControlsProbe({
   )
 
   const api = useGeneControlsWorkflow({
-    appendDebugEvent: (message) => {
-      debugMessagesRef.current.push(message)
+    callbacks: {
+      appendDebugEvent: (message) => {
+        debugMessagesRef.current.push(message)
+      },
+      rememberGeneExpressionScaleMax: vi.fn(),
+      resetGeneExpressionSelectionState,
+      toggleGene,
     },
-    geneExpressionBatch,
-    geneExpressionScaleDatasetUrl: 'https://example.test/output',
-    geneExpressionScoreMode,
-    geneOptions: ['Actb', 'Gad1', 'Slc17a7'],
-    geneSetIdRef,
-    geneSetName,
-    geneSetSymbols,
-    rememberGeneExpressionScaleMax: vi.fn(),
-    savedGeneSets,
-    selectedGenes,
-    setGeneExpressionColorScale,
-    setGeneExpressionDetailMode,
-    setGeneExpressionScaleDomain,
-    setGeneExpressionScoreMode,
-    setGeneSearch,
-    setGeneSetName,
-    setManualTranscriptExactRequestKey,
-    setObservationColorMode,
-    setSavedGeneSets,
-    setSelectedGenes,
-    transcriptViewportKeyRef,
-    resetGeneExpressionSelectionState,
-    toggleGene,
+    controls: {
+      geneExpressionScoreMode,
+      geneSetName,
+      geneSetSymbols,
+    },
+    data: {
+      geneExpressionBatch,
+      geneExpressionScaleDatasetUrl: 'https://example.test/output',
+      geneOptions: ['Actb', 'Gad1', 'Slc17a7'],
+      savedGeneSets,
+      selectedGenes,
+    },
+    refs: {
+      geneSetIdRef,
+      transcriptViewportKeyRef,
+    },
+    setters: {
+      setGeneExpressionColorScale,
+      setGeneExpressionDetailMode,
+      setGeneExpressionScaleDomain,
+      setGeneExpressionScoreMode,
+      setGeneSearch,
+      setGeneSetName,
+      setManualTranscriptExactRequestKey,
+      setObservationColorMode,
+      setSavedGeneSets,
+      setSelectedGenes,
+    },
   })
 
   React.useEffect(() => {

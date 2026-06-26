@@ -51,55 +51,89 @@ const EMPTY_MORPHOLOGY_CHANNEL_OPACITIES: ReadonlyMap<string, number> = new Map(
 const EMPTY_GRID_CELLS: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 
-interface UseViewerLayerDataOptions {
+interface ViewerLayerAnnotationOptions {
   readonly annotationState: AnnotationState<StructuredLoadError>
   readonly annotationColors: Readonly<Record<string, string>>
+}
+
+interface ViewerLayerCellOptions {
   readonly cellMetadataTrack: CellMetadataColorStyle | null
   readonly observationColorMode: ObservationColorMode
   readonly overviewCells: readonly OverviewCellDatum[]
   readonly gridCells?: readonly GridCellDatum[]
   readonly currentViewportBbox: BBox | null
+}
+
+interface ViewerLayerGeneExpressionOptions {
   readonly geneExpressionScaleDatasetUrl: string
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
   readonly selectedGenes: readonly string[]
   readonly geneExpressionBatch: GeneExpressionBatch | null
   readonly geneExpressionScaleDomain: GeneExpressionScaleDomain
   readonly geneExpressionColorScale: GeneExpressionColorScale
+}
+
+interface ViewerLayerTranscriptOptions {
   readonly transcriptLayerState: TranscriptLayerState<StructuredLoadError>
   readonly transcriptPointColorMode: TranscriptPointColorMode
   readonly transcriptDensityColorScale: TranscriptDensityColorScale
+}
+
+interface ViewerLayerMorphologyOptions {
   readonly morphologyImage: MorphologyImage | null
   readonly morphologyChannels: readonly MorphologyImageChannel[]
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
   readonly morphologyChannelOpacities?: ReadonlyMap<string, number>
+}
+
+interface ViewerLayerBoundaryOptions {
   readonly boundaryElements: readonly SpatialElement[]
   readonly nucleusBoundaryElements?: readonly SpatialElement[]
 }
 
+interface UseViewerLayerDataOptions {
+  readonly annotations: ViewerLayerAnnotationOptions
+  readonly cells: ViewerLayerCellOptions
+  readonly geneExpression: ViewerLayerGeneExpressionOptions
+  readonly transcripts: ViewerLayerTranscriptOptions
+  readonly morphology: ViewerLayerMorphologyOptions
+  readonly boundaries: ViewerLayerBoundaryOptions
+}
+
 export function useViewerLayerData({
-  annotationState,
-  annotationColors,
-  cellMetadataTrack,
-  observationColorMode,
-  overviewCells,
-  gridCells = EMPTY_GRID_CELLS,
-  currentViewportBbox,
-  geneExpressionScaleDatasetUrl,
-  geneExpressionScoreMode,
-  selectedGenes,
-  geneExpressionBatch,
-  geneExpressionScaleDomain,
-  geneExpressionColorScale,
-  transcriptLayerState,
-  transcriptPointColorMode,
-  transcriptDensityColorScale,
-  morphologyImage,
-  morphologyChannels,
-  morphologyChannelSettings,
-  morphologyChannelOpacities = EMPTY_MORPHOLOGY_CHANNEL_OPACITIES,
-  boundaryElements,
-  nucleusBoundaryElements = EMPTY_SPATIAL_ELEMENTS,
+  annotations,
+  boundaries,
+  cells,
+  geneExpression,
+  morphology,
+  transcripts,
 }: UseViewerLayerDataOptions) {
+  const { annotationColors, annotationState } = annotations
+  const {
+    cellMetadataTrack,
+    currentViewportBbox,
+    gridCells = EMPTY_GRID_CELLS,
+    observationColorMode,
+    overviewCells,
+  } = cells
+  const {
+    geneExpressionBatch,
+    geneExpressionColorScale,
+    geneExpressionScaleDatasetUrl,
+    geneExpressionScaleDomain,
+    geneExpressionScoreMode,
+    selectedGenes,
+  } = geneExpression
+  const { transcriptDensityColorScale, transcriptLayerState, transcriptPointColorMode } =
+    transcripts
+  const {
+    morphologyChannelOpacities = EMPTY_MORPHOLOGY_CHANNEL_OPACITIES,
+    morphologyChannelSettings,
+    morphologyChannels,
+    morphologyImage,
+  } = morphology
+  const { boundaryElements, nucleusBoundaryElements = EMPTY_SPATIAL_ELEMENTS } =
+    boundaries
   const annotationStyleColors = useMemo(
     () =>
       annotationState.status === 'ready'

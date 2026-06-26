@@ -58,15 +58,31 @@ interface VisiumHdExpressionProjectionDataset {
   ) => Promise<readonly VisiumHdExpressionCellAssignment[]>
 }
 
-interface UseVisiumHdExpressionProjectionWorkflowOptions {
+interface VisiumHdExpressionProjectionWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly boundaryElements: readonly SpatialElement[]
-  readonly geneExpressionBatch: GeneExpressionBatch | null
-  readonly getSpatialDataset: SpatialDatasetLoader
+}
+
+interface VisiumHdExpressionProjectionWorkflowControls {
   readonly isVisiumHdDataset: boolean
-  readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly rowBudget: number | undefined
   readonly selectedBinSize: VisiumHdBinSizeMicrometers | undefined
+}
+
+interface VisiumHdExpressionProjectionWorkflowData {
+  readonly boundaryElements: readonly SpatialElement[]
+  readonly geneExpressionBatch: GeneExpressionBatch | null
+  readonly loadState: DatasetLoadState<StructuredLoadError>
+}
+
+interface VisiumHdExpressionProjectionWorkflowLoaders {
+  readonly getSpatialDataset: SpatialDatasetLoader
+}
+
+interface UseVisiumHdExpressionProjectionWorkflowOptions {
+  readonly callbacks: VisiumHdExpressionProjectionWorkflowCallbacks
+  readonly controls: VisiumHdExpressionProjectionWorkflowControls
+  readonly data: VisiumHdExpressionProjectionWorkflowData
+  readonly loaders: VisiumHdExpressionProjectionWorkflowLoaders
 }
 
 const IDLE_VISIUM_HD_EXPRESSION_PROJECTION_STATE: VisiumHdExpressionProjectionState = {
@@ -74,15 +90,15 @@ const IDLE_VISIUM_HD_EXPRESSION_PROJECTION_STATE: VisiumHdExpressionProjectionSt
 }
 
 export function useVisiumHdExpressionProjectionWorkflow({
-  appendDebugEvent,
-  boundaryElements,
-  geneExpressionBatch,
-  getSpatialDataset,
-  isVisiumHdDataset,
-  loadState,
-  rowBudget,
-  selectedBinSize,
+  callbacks,
+  controls,
+  data,
+  loaders,
 }: UseVisiumHdExpressionProjectionWorkflowOptions): VisiumHdExpressionProjectionState {
+  const { appendDebugEvent } = callbacks
+  const { isVisiumHdDataset, rowBudget, selectedBinSize } = controls
+  const { boundaryElements, geneExpressionBatch, loadState } = data
+  const { getSpatialDataset } = loaders
   const [state, setState] = useState<VisiumHdExpressionProjectionState>(
     IDLE_VISIUM_HD_EXPRESSION_PROJECTION_STATE,
   )

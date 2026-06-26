@@ -144,22 +144,29 @@ function Probe({
   const rememberGeneExpressionScaleMax = React.useMemo(() => vi.fn(), [])
 
   const nextApi = useViewportDataWorkflow({
-    appendDebugEvent,
-    boundaryCellLimit: 10,
-    boundaryLoadingEnabled,
-    geneExpressionDetailMode: 'auto',
-    geneExpressionDisabledMessage,
-    geneExpressionLoadingEnabled,
-    geneExpressionScaleKey: 'scale-key',
-    geneExpressionScoreMode: 'sum',
-    loadState: readyLoadState,
+    callbacks: {
+      appendDebugEvent,
+      recordTelemetry,
+      rememberGeneExpressionScaleMax,
+    },
+    controls: {
+      boundaryCellLimit: 10,
+      boundaryLoadingEnabled,
+      geneExpressionDetailMode: 'auto',
+      geneExpressionDisabledMessage,
+      geneExpressionLoadingEnabled,
+      geneExpressionScaleKey: 'scale-key',
+      geneExpressionScoreMode: 'sum',
+    },
+    data: {
+      loadState: readyLoadState,
+      overviewExtent: bbox,
+      selectedGenes: selectedGenes ?? defaultSelectedGenes,
+    },
     loaders: {
       boundaryElements: loadBoundaryElements,
       geneExpression: loadGeneExpression,
     },
-    overviewExtent: bbox,
-    recordTelemetry,
-    rememberGeneExpressionScaleMax,
     requests: {
       boundary: {
         abortRef: boundaryAbortRef,
@@ -173,7 +180,6 @@ function Probe({
       },
       lastViewportDetailRef,
     },
-    selectedGenes: selectedGenes ?? defaultSelectedGenes,
     setters: {
       setBoundaryElements,
       setBoundaryState,

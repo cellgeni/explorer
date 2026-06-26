@@ -63,30 +63,38 @@ function TranscriptControlsProbe({ onReady }: TranscriptControlsProbeProps) {
   const toggledGenesRef = React.useRef<string[]>([])
 
   const api = useTranscriptControlsWorkflow({
-    appendDebugEvent: (message) => {
-      debugMessagesRef.current.push(message)
+    callbacks: {
+      appendDebugEvent: (message) => {
+        debugMessagesRef.current.push(message)
+      },
+      resetGeneExpressionSelectionState: () => {
+        resetGeneExpressionCountRef.current += 1
+      },
+      toggleGene: (gene) => {
+        toggledGenesRef.current.push(gene)
+      },
     },
-    geneOptions: ['Actb', 'Gad1', 'Slc17a7'],
-    resetGeneExpressionSelectionState: () => {
-      resetGeneExpressionCountRef.current += 1
+    data: {
+      geneOptions: ['Actb', 'Gad1', 'Slc17a7'],
     },
-    setManualTranscriptExactRequestKey,
-    setSelectedGenes,
-    setShowTranscriptOverlay,
-    setTranscriptDensityColorScale,
-    setTranscriptDetailMode,
-    setTranscriptExactPointLimit,
-    setTranscriptFeatureFilterMode,
-    setTranscriptFeatureSearch,
-    setTranscriptGeneOnly,
-    setTranscriptMinQv,
-    setTranscriptOpacity,
-    setTranscriptPointColorMode,
-    setTranscriptPointSize,
-    toggleGene: (gene) => {
-      toggledGenesRef.current.push(gene)
+    refs: {
+      transcriptViewportKeyRef,
     },
-    transcriptViewportKeyRef,
+    setters: {
+      setManualTranscriptExactRequestKey,
+      setSelectedGenes,
+      setShowTranscriptOverlay,
+      setTranscriptDensityColorScale,
+      setTranscriptDetailMode,
+      setTranscriptExactPointLimit,
+      setTranscriptFeatureFilterMode,
+      setTranscriptFeatureSearch,
+      setTranscriptGeneOnly,
+      setTranscriptMinQv,
+      setTranscriptOpacity,
+      setTranscriptPointColorMode,
+      setTranscriptPointSize,
+    },
   })
 
   React.useEffect(() => {

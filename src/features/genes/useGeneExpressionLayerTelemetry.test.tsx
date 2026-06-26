@@ -43,13 +43,21 @@ function Probe({
   const timingKeyRef = React.useRef<string | null>(null)
 
   useGeneExpressionLayerTelemetry({
-    appendDebugEvent: vi.fn(),
-    geneExpressionBatch: batch,
-    geneExpressionLayerDataDurationMs: 12,
-    geneExpressionRestyleDurationMs: 7,
-    geneExpressionState: readyState,
-    recordTelemetry,
-    timingKeyRef,
+    callbacks: {
+      appendDebugEvent: vi.fn(),
+      recordTelemetry,
+    },
+    data: {
+      geneExpressionBatch: batch,
+      geneExpressionState: readyState,
+    },
+    refs: {
+      timingKeyRef,
+    },
+    timings: {
+      geneExpressionLayerDataDurationMs: 12,
+      geneExpressionRestyleDurationMs: 7,
+    },
   })
 
   return null

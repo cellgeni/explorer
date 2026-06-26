@@ -60,14 +60,18 @@ function Probe({
     [],
   )
   const state = useVisiumHdExpressionProjectionWorkflow({
-    appendDebugEvent,
-    boundaryElements,
-    geneExpressionBatch: expressionBatch,
-    getSpatialDataset,
-    isVisiumHdDataset: true,
-    loadState,
-    rowBudget,
-    selectedBinSize: 16,
+    callbacks: { appendDebugEvent },
+    controls: {
+      isVisiumHdDataset: true,
+      rowBudget,
+      selectedBinSize: 16,
+    },
+    data: {
+      boundaryElements,
+      geneExpressionBatch: expressionBatch,
+      loadState,
+    },
+    loaders: { getSpatialDataset },
   })
 
   React.useEffect(() => {

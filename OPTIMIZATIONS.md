@@ -66,6 +66,12 @@ the app shell, platform workflows, and rendering modules.
   option shape used by the other app-shell workflows while preserving the
   existing bin switching, morphology reuse, barcode assignment, auto-contrast,
   custom image layer, embedding selection, Magic Lens, and annotation behavior.
+- 2026-06-26: Finished item 2 by grouping the remaining workflow option bags
+  for diagnostics, Visium HD expression projection, viewer-layer derivation,
+  viewport data loads, shareable URL hashing, gene/transcript control handlers,
+  and expression-layer telemetry. These hooks now expose callbacks, controls,
+  data, loaders, refs, setters, and specialized payload groups where applicable,
+  preserving behavior while making the app-shell wiring easier to scan.
 
 ## Recommendations
 

@@ -23,15 +23,36 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseDatasetDiagnosticsWorkflowOptions extends DiagnosticsDumpOptions {
+interface DatasetDiagnosticsWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly diagnosticsAbortRef: MutableRef<AbortController | null>
   readonly recordTelemetry: (event: TelemetryEvent) => void
+}
+
+interface DatasetDiagnosticsWorkflowControls {
+  readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
+}
+
+interface DatasetDiagnosticsWorkflowLoaders {
   readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
+}
+
+interface DatasetDiagnosticsWorkflowRefs {
+  readonly diagnosticsAbortRef: MutableRef<AbortController | null>
+}
+
+interface DatasetDiagnosticsWorkflowSetters {
   readonly setDiagnosticsState: Dispatch<
     SetStateAction<DatasetDiagnosticsState<StructuredLoadError>>
   >
-  readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
+}
+
+interface UseDatasetDiagnosticsWorkflowOptions {
+  readonly callbacks: DatasetDiagnosticsWorkflowCallbacks
+  readonly controls: DatasetDiagnosticsWorkflowControls
+  readonly dump: DiagnosticsDumpOptions
+  readonly loaders: DatasetDiagnosticsWorkflowLoaders
+  readonly refs: DatasetDiagnosticsWorkflowRefs
+  readonly setters: DatasetDiagnosticsWorkflowSetters
 }
 
 interface UseDatasetDiagnosticsWorkflowResult {
@@ -40,50 +61,57 @@ interface UseDatasetDiagnosticsWorkflowResult {
 }
 
 export function useDatasetDiagnosticsWorkflow({
-  activeControlHudTab,
-  activeErrors,
-  appendDebugEvent,
-  boundaryCellLimit,
-  coordinateUnit,
-  datasetUrl,
-  debugLog,
-  diagnosticsAbortRef,
-  diagnosticsState,
-  geneExpressionBatch,
-  geneExpressionColorScale,
-  geneExpressionDetailMode,
-  geneExpressionScoreMode,
-  geneExpressionState,
-  hoveredTranscript,
-  loadState,
-  manualTranscriptExactRequestKey,
-  measurementEnabled,
-  measurementUnit,
-  observationColorMode,
-  performanceBudget,
-  pinnedTranscript,
-  recordTelemetry,
-  runDatasetDiagnostics,
-  selectedGenes,
-  setDiagnosticsState,
-  shareableViewState,
-  shouldLoadMorphology,
-  showTranscriptOverlay,
-  telemetryEvents,
-  transcriptCapabilityState,
-  transcriptDensityColorScale,
-  transcriptDetailMode,
-  transcriptExactManualLoadRatio,
-  transcriptExactPointLimit,
-  transcriptFeatureFilterMode,
-  transcriptGeneOnly,
-  transcriptLayerState,
-  transcriptMinQv,
-  transcriptOpacity,
-  transcriptPointColorMode,
-  transcriptPointSize,
-  visiumHdBinSizeMicrometers,
+  callbacks,
+  controls,
+  dump,
+  loaders,
+  refs,
+  setters,
 }: UseDatasetDiagnosticsWorkflowOptions): UseDatasetDiagnosticsWorkflowResult {
+  const { appendDebugEvent, recordTelemetry } = callbacks
+  const { visiumHdBinSizeMicrometers } = controls
+  const { runDatasetDiagnostics } = loaders
+  const { diagnosticsAbortRef } = refs
+  const { setDiagnosticsState } = setters
+  const {
+    activeControlHudTab,
+    activeErrors,
+    boundaryCellLimit,
+    coordinateUnit,
+    datasetUrl,
+    debugLog,
+    diagnosticsState,
+    geneExpressionBatch,
+    geneExpressionColorScale,
+    geneExpressionDetailMode,
+    geneExpressionScoreMode,
+    geneExpressionState,
+    hoveredTranscript,
+    loadState,
+    manualTranscriptExactRequestKey,
+    measurementEnabled,
+    measurementUnit,
+    observationColorMode,
+    performanceBudget,
+    pinnedTranscript,
+    selectedGenes,
+    shareableViewState,
+    shouldLoadMorphology,
+    showTranscriptOverlay,
+    telemetryEvents,
+    transcriptCapabilityState,
+    transcriptDensityColorScale,
+    transcriptDetailMode,
+    transcriptExactManualLoadRatio,
+    transcriptExactPointLimit,
+    transcriptFeatureFilterMode,
+    transcriptGeneOnly,
+    transcriptLayerState,
+    transcriptMinQv,
+    transcriptOpacity,
+    transcriptPointColorMode,
+    transcriptPointSize,
+  } = dump
   const diagnosticsRequestIdRef = useRef(0)
 
   const handleRunDatasetDiagnostics = useCallback(async () => {

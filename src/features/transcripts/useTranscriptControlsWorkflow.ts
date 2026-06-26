@@ -19,10 +19,21 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseTranscriptControlsWorkflowOptions {
+interface TranscriptControlsCallbackOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly geneOptions: readonly string[]
   readonly resetGeneExpressionSelectionState: () => void
+  readonly toggleGene: (gene: string) => void
+}
+
+interface TranscriptControlsDataOptions {
+  readonly geneOptions: readonly string[]
+}
+
+interface TranscriptControlsRefOptions {
+  readonly transcriptViewportKeyRef: MutableRef<string | null>
+}
+
+interface TranscriptControlsSetterOptions {
   readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
   readonly setSelectedGenes: Dispatch<SetStateAction<readonly string[]>>
   readonly setShowTranscriptOverlay: Dispatch<SetStateAction<boolean>>
@@ -40,8 +51,13 @@ interface UseTranscriptControlsWorkflowOptions {
   readonly setTranscriptOpacity: Dispatch<SetStateAction<number>>
   readonly setTranscriptPointColorMode: Dispatch<SetStateAction<TranscriptPointColorMode>>
   readonly setTranscriptPointSize: Dispatch<SetStateAction<number>>
-  readonly toggleGene: (gene: string) => void
-  readonly transcriptViewportKeyRef: MutableRef<string | null>
+}
+
+interface UseTranscriptControlsWorkflowOptions {
+  readonly callbacks: TranscriptControlsCallbackOptions
+  readonly data: TranscriptControlsDataOptions
+  readonly refs: TranscriptControlsRefOptions
+  readonly setters: TranscriptControlsSetterOptions
 }
 
 interface UseTranscriptControlsWorkflowResult {
@@ -67,24 +83,24 @@ interface UseTranscriptControlsWorkflowResult {
 }
 
 export function useTranscriptControlsWorkflow({
-  appendDebugEvent,
-  geneOptions,
-  resetGeneExpressionSelectionState,
-  setManualTranscriptExactRequestKey,
-  setSelectedGenes,
-  setShowTranscriptOverlay,
-  setTranscriptDensityColorScale,
-  setTranscriptDetailMode,
-  setTranscriptExactPointLimit,
-  setTranscriptFeatureFilterMode,
-  setTranscriptFeatureSearch,
-  setTranscriptGeneOnly,
-  setTranscriptMinQv,
-  setTranscriptOpacity,
-  setTranscriptPointColorMode,
-  setTranscriptPointSize,
-  toggleGene,
-  transcriptViewportKeyRef,
+  callbacks: { appendDebugEvent, resetGeneExpressionSelectionState, toggleGene },
+  data: { geneOptions },
+  refs: { transcriptViewportKeyRef },
+  setters: {
+    setManualTranscriptExactRequestKey,
+    setSelectedGenes,
+    setShowTranscriptOverlay,
+    setTranscriptDensityColorScale,
+    setTranscriptDetailMode,
+    setTranscriptExactPointLimit,
+    setTranscriptFeatureFilterMode,
+    setTranscriptFeatureSearch,
+    setTranscriptGeneOnly,
+    setTranscriptMinQv,
+    setTranscriptOpacity,
+    setTranscriptPointColorMode,
+    setTranscriptPointSize,
+  },
 }: UseTranscriptControlsWorkflowOptions): UseTranscriptControlsWorkflowResult {
   const resetTranscriptViewportRequest = useCallback(() => {
     transcriptViewportKeyRef.current = null

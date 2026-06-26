@@ -83,8 +83,17 @@ interface ViewportDataWorkflowSetters {
   readonly setShareableViewState: Setter<ShareableViewState | undefined>
 }
 
-interface UseViewportDataWorkflowOptions {
+interface ViewportDataWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly recordTelemetry: (event: TelemetryEvent) => void
+  readonly rememberGeneExpressionScaleMax: (
+    key: string,
+    batch: GeneExpressionBatch,
+    scoreMode: GeneExpressionScoreMode,
+  ) => void
+}
+
+interface ViewportDataWorkflowControls {
   readonly boundaryCellLimit: number
   readonly boundaryLoadingEnabled?: boolean
   readonly geneExpressionDetailMode: GeneExpressionDetailMode
@@ -92,17 +101,20 @@ interface UseViewportDataWorkflowOptions {
   readonly geneExpressionLoadingEnabled?: boolean
   readonly geneExpressionScaleKey: string
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
+}
+
+interface ViewportDataWorkflowData {
   readonly loadState: DatasetLoadState<StructuredLoadError>
-  readonly loaders: ViewportDataWorkflowLoaders
   readonly overviewExtent: BBox | null
-  readonly recordTelemetry: (event: TelemetryEvent) => void
-  readonly rememberGeneExpressionScaleMax: (
-    key: string,
-    batch: GeneExpressionBatch,
-    scoreMode: GeneExpressionScoreMode,
-  ) => void
-  readonly requests: ViewportDataWorkflowRequests
   readonly selectedGenes: readonly string[]
+}
+
+interface UseViewportDataWorkflowOptions {
+  readonly callbacks: ViewportDataWorkflowCallbacks
+  readonly controls: ViewportDataWorkflowControls
+  readonly data: ViewportDataWorkflowData
+  readonly loaders: ViewportDataWorkflowLoaders
+  readonly requests: ViewportDataWorkflowRequests
   readonly setters: ViewportDataWorkflowSetters
 }
 
@@ -111,21 +123,19 @@ interface UseViewportDataWorkflowResult {
 }
 
 export function useViewportDataWorkflow({
-  appendDebugEvent,
-  boundaryCellLimit,
-  boundaryLoadingEnabled = true,
-  geneExpressionDetailMode,
-  geneExpressionDisabledMessage,
-  geneExpressionLoadingEnabled = true,
-  geneExpressionScaleKey,
-  geneExpressionScoreMode,
-  loadState,
+  callbacks: { appendDebugEvent, recordTelemetry, rememberGeneExpressionScaleMax },
+  controls: {
+    boundaryCellLimit,
+    boundaryLoadingEnabled = true,
+    geneExpressionDetailMode,
+    geneExpressionDisabledMessage,
+    geneExpressionLoadingEnabled = true,
+    geneExpressionScaleKey,
+    geneExpressionScoreMode,
+  },
+  data: { loadState, overviewExtent, selectedGenes },
   loaders,
-  overviewExtent,
-  recordTelemetry,
-  rememberGeneExpressionScaleMax,
   requests,
-  selectedGenes,
   setters,
 }: UseViewportDataWorkflowOptions): UseViewportDataWorkflowResult {
   const {

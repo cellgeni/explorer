@@ -19,22 +19,37 @@ interface MutableRef<T> {
   current: T
 }
 
-interface UseGeneControlsWorkflowOptions {
+interface GeneControlsCallbackOptions {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly geneExpressionBatch: GeneExpressionBatch | null
-  readonly geneExpressionScaleDatasetUrl: string
-  readonly geneExpressionScoreMode: GeneExpressionScoreMode
-  readonly geneOptions: readonly string[]
-  readonly geneSetIdRef: MutableRef<number>
-  readonly geneSetName: string
-  readonly geneSetSymbols: string
   readonly rememberGeneExpressionScaleMax: (
     key: string,
     batch: GeneExpressionBatch,
     scoreMode: GeneExpressionScoreMode,
   ) => void
+  readonly resetGeneExpressionSelectionState: () => void
+  readonly toggleGene: (gene: string) => void
+}
+
+interface GeneControlsDataOptions {
+  readonly geneExpressionBatch: GeneExpressionBatch | null
+  readonly geneExpressionScaleDatasetUrl: string
+  readonly geneOptions: readonly string[]
   readonly savedGeneSets: readonly SavedGeneSet[]
   readonly selectedGenes: readonly string[]
+}
+
+interface GeneControlsControlOptions {
+  readonly geneExpressionScoreMode: GeneExpressionScoreMode
+  readonly geneSetName: string
+  readonly geneSetSymbols: string
+}
+
+interface GeneControlsRefOptions {
+  readonly geneSetIdRef: MutableRef<number>
+  readonly transcriptViewportKeyRef: MutableRef<string | null>
+}
+
+interface GeneControlsSetterOptions {
   readonly setGeneExpressionColorScale: Dispatch<SetStateAction<GeneExpressionColorScale>>
   readonly setGeneExpressionDetailMode: Dispatch<SetStateAction<GeneExpressionDetailMode>>
   readonly setGeneExpressionScaleDomain: Dispatch<
@@ -47,9 +62,14 @@ interface UseGeneControlsWorkflowOptions {
   readonly setObservationColorMode: Dispatch<SetStateAction<ObservationColorMode>>
   readonly setSavedGeneSets: Dispatch<SetStateAction<readonly SavedGeneSet[]>>
   readonly setSelectedGenes: Dispatch<SetStateAction<readonly string[]>>
-  readonly transcriptViewportKeyRef: MutableRef<string | null>
-  readonly resetGeneExpressionSelectionState: () => void
-  readonly toggleGene: (gene: string) => void
+}
+
+interface UseGeneControlsWorkflowOptions {
+  readonly callbacks: GeneControlsCallbackOptions
+  readonly controls: GeneControlsControlOptions
+  readonly data: GeneControlsDataOptions
+  readonly refs: GeneControlsRefOptions
+  readonly setters: GeneControlsSetterOptions
 }
 
 interface UseGeneControlsWorkflowResult {
@@ -71,30 +91,33 @@ interface UseGeneControlsWorkflowResult {
 }
 
 export function useGeneControlsWorkflow({
-  appendDebugEvent,
-  geneExpressionBatch,
-  geneExpressionScaleDatasetUrl,
-  geneExpressionScoreMode,
-  geneOptions,
-  geneSetIdRef,
-  geneSetName,
-  geneSetSymbols,
-  rememberGeneExpressionScaleMax,
-  savedGeneSets,
-  selectedGenes,
-  setGeneExpressionColorScale,
-  setGeneExpressionDetailMode,
-  setGeneExpressionScaleDomain,
-  setGeneExpressionScoreMode,
-  setGeneSearch,
-  setGeneSetName,
-  setManualTranscriptExactRequestKey,
-  setObservationColorMode,
-  setSavedGeneSets,
-  setSelectedGenes,
-  transcriptViewportKeyRef,
-  resetGeneExpressionSelectionState,
-  toggleGene,
+  callbacks: {
+    appendDebugEvent,
+    rememberGeneExpressionScaleMax,
+    resetGeneExpressionSelectionState,
+    toggleGene,
+  },
+  controls: { geneExpressionScoreMode, geneSetName, geneSetSymbols },
+  data: {
+    geneExpressionBatch,
+    geneExpressionScaleDatasetUrl,
+    geneOptions,
+    savedGeneSets,
+    selectedGenes,
+  },
+  refs: { geneSetIdRef, transcriptViewportKeyRef },
+  setters: {
+    setGeneExpressionColorScale,
+    setGeneExpressionDetailMode,
+    setGeneExpressionScaleDomain,
+    setGeneExpressionScoreMode,
+    setGeneSearch,
+    setGeneSetName,
+    setManualTranscriptExactRequestKey,
+    setObservationColorMode,
+    setSavedGeneSets,
+    setSelectedGenes,
+  },
 }: UseGeneControlsWorkflowOptions): UseGeneControlsWorkflowResult {
   const applyGeneSetSymbols = useCallback(() => {
     const genes = parseGeneSetSymbols(geneSetSymbols, geneOptions)

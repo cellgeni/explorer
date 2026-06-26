@@ -8,28 +8,43 @@ import {
   type GeneExpressionState,
 } from './geneControlsModel'
 
+interface GeneExpressionLayerTelemetryCallbackOptions {
+  readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
+  readonly recordTelemetry: (event: TelemetryEvent) => void
+}
+
+interface GeneExpressionLayerTelemetryDataOptions<
+  ErrorType extends GeneExpressionLoadErrorSummary,
+> {
+  readonly geneExpressionBatch: GeneExpressionBatch | null
+  readonly geneExpressionState: GeneExpressionState<ErrorType>
+}
+
+interface GeneExpressionLayerTelemetryTimingOptions {
+  readonly geneExpressionLayerDataDurationMs: number
+  readonly geneExpressionRestyleDurationMs: number
+}
+
+interface GeneExpressionLayerTelemetryRefOptions {
+  readonly timingKeyRef: { current: string | null }
+}
+
 interface UseGeneExpressionLayerTelemetryOptions<
   ErrorType extends GeneExpressionLoadErrorSummary,
 > {
-  readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
-  readonly geneExpressionBatch: GeneExpressionBatch | null
-  readonly geneExpressionLayerDataDurationMs: number
-  readonly geneExpressionRestyleDurationMs: number
-  readonly geneExpressionState: GeneExpressionState<ErrorType>
-  readonly recordTelemetry: (event: TelemetryEvent) => void
-  readonly timingKeyRef: { current: string | null }
+  readonly callbacks: GeneExpressionLayerTelemetryCallbackOptions
+  readonly data: GeneExpressionLayerTelemetryDataOptions<ErrorType>
+  readonly refs: GeneExpressionLayerTelemetryRefOptions
+  readonly timings: GeneExpressionLayerTelemetryTimingOptions
 }
 
 export function useGeneExpressionLayerTelemetry<
   ErrorType extends GeneExpressionLoadErrorSummary,
 >({
-  appendDebugEvent,
-  geneExpressionBatch,
-  geneExpressionLayerDataDurationMs,
-  geneExpressionRestyleDurationMs,
-  geneExpressionState,
-  recordTelemetry,
-  timingKeyRef,
+  callbacks: { appendDebugEvent, recordTelemetry },
+  data: { geneExpressionBatch, geneExpressionState },
+  refs: { timingKeyRef },
+  timings: { geneExpressionLayerDataDurationMs, geneExpressionRestyleDurationMs },
 }: UseGeneExpressionLayerTelemetryOptions<ErrorType>): void {
   useEffect(() => {
     if (geneExpressionBatch === null || geneExpressionState.status !== 'ready') {

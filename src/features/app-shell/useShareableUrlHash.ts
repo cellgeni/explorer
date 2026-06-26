@@ -2,33 +2,41 @@ import { useEffect } from 'react'
 import type { RoiSelection } from '../../data/roiSelection'
 import { formatShareableState, type ShareableViewState } from '../../data/shareableState'
 
-interface UseShareableUrlHashOptions {
-  readonly activeControlHudTab: string
-  readonly activeRoiSelection: RoiSelection | null
+interface ShareableDatasetHashOptions {
   readonly annotationUrl: string
-  readonly boundaryCellLimit: number
-  readonly coordinateUnit: string
   readonly customImageOpacities: readonly number[] | undefined
   readonly customImageUrls: readonly string[]
   readonly datasetUrl: string
-  readonly geneExpressionColorScale: string
-  readonly geneExpressionDetailMode: string
-  readonly geneExpressionScoreMode: string
+}
+
+interface ShareableViewHashOptions {
+  readonly activeControlHudTab: string
+  readonly activeRoiSelection: RoiSelection | null
+  readonly shareableViewState: ShareableViewState | undefined
+}
+
+interface ShareableLayerHashOptions {
+  readonly boundaryCellLimit: number
+  readonly coordinateUnit: string
   readonly imageOpacity: number
   readonly cellFillOpacity: number
   readonly showCellBoundaries: boolean
   readonly showNucleusBoundaries: boolean
   readonly cellBoundaryOpacity: number
   readonly morphologyEnabledChannelIds: readonly string[] | undefined
-  readonly magicLensActive: boolean
-  readonly magicLensMinQv: number
-  readonly magicLensRadiusMicrometers: number
-  readonly magicLensScope: string
   readonly measurementUnit: string
   readonly observationColorMode: string
-  readonly selectedGenes: readonly string[]
-  readonly shareableViewState: ShareableViewState | undefined
   readonly shouldLoadMorphology: boolean
+}
+
+interface ShareableGeneHashOptions {
+  readonly geneExpressionColorScale: string
+  readonly geneExpressionDetailMode: string
+  readonly geneExpressionScoreMode: string
+  readonly selectedGenes: readonly string[]
+}
+
+interface ShareableTranscriptHashOptions {
   readonly showTranscriptOverlay: boolean
   readonly transcriptDensityColorScale: string
   readonly transcriptDetailMode: string
@@ -41,44 +49,65 @@ interface UseShareableUrlHashOptions {
   readonly transcriptPointSize: number
 }
 
+interface ShareableMagicLensHashOptions {
+  readonly magicLensActive: boolean
+  readonly magicLensMinQv: number
+  readonly magicLensRadiusMicrometers: number
+  readonly magicLensScope: string
+}
+
+interface UseShareableUrlHashOptions {
+  readonly dataset: ShareableDatasetHashOptions
+  readonly view: ShareableViewHashOptions
+  readonly layers: ShareableLayerHashOptions
+  readonly genes: ShareableGeneHashOptions
+  readonly transcripts: ShareableTranscriptHashOptions
+  readonly magicLens: ShareableMagicLensHashOptions
+}
+
 export function useShareableUrlHash({
-  activeControlHudTab,
-  activeRoiSelection,
-  annotationUrl,
-  boundaryCellLimit,
-  coordinateUnit,
-  customImageOpacities,
-  customImageUrls,
-  datasetUrl,
-  geneExpressionColorScale,
-  geneExpressionDetailMode,
-  geneExpressionScoreMode,
-  imageOpacity,
-  cellFillOpacity,
-  showCellBoundaries,
-  showNucleusBoundaries,
-  cellBoundaryOpacity,
-  morphologyEnabledChannelIds,
-  magicLensActive,
-  magicLensMinQv,
-  magicLensRadiusMicrometers,
-  magicLensScope,
-  measurementUnit,
-  observationColorMode,
-  selectedGenes,
-  shareableViewState,
-  shouldLoadMorphology,
-  showTranscriptOverlay,
-  transcriptDensityColorScale,
-  transcriptDetailMode,
-  transcriptExactPointLimit,
-  transcriptFeatureFilterMode,
-  transcriptGeneOnly,
-  transcriptMinQv,
-  transcriptOpacity,
-  transcriptPointColorMode,
-  transcriptPointSize,
+  dataset,
+  genes,
+  layers,
+  magicLens,
+  transcripts,
+  view,
 }: UseShareableUrlHashOptions): void {
+  const { annotationUrl, customImageOpacities, customImageUrls, datasetUrl } = dataset
+  const { activeControlHudTab, activeRoiSelection, shareableViewState } = view
+  const {
+    boundaryCellLimit,
+    cellBoundaryOpacity,
+    cellFillOpacity,
+    coordinateUnit,
+    imageOpacity,
+    measurementUnit,
+    morphologyEnabledChannelIds,
+    observationColorMode,
+    shouldLoadMorphology,
+    showCellBoundaries,
+    showNucleusBoundaries,
+  } = layers
+  const {
+    geneExpressionColorScale,
+    geneExpressionDetailMode,
+    geneExpressionScoreMode,
+    selectedGenes,
+  } = genes
+  const {
+    showTranscriptOverlay,
+    transcriptDensityColorScale,
+    transcriptDetailMode,
+    transcriptExactPointLimit,
+    transcriptFeatureFilterMode,
+    transcriptGeneOnly,
+    transcriptMinQv,
+    transcriptOpacity,
+    transcriptPointColorMode,
+    transcriptPointSize,
+  } = transcripts
+  const { magicLensActive, magicLensMinQv, magicLensRadiusMicrometers, magicLensScope } =
+    magicLens
   useEffect(() => {
     if (typeof window === 'undefined') {
       return

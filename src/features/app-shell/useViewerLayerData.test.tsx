@@ -34,39 +34,11 @@ const expressionBatch: GeneExpressionBatch = {
 }
 
 type Result = ReturnType<typeof useViewerLayerData>
+type ViewerLayerOptions = Parameters<typeof useViewerLayerData>[0]
 let result: Result
 
 function Probe({ onReady }: { readonly onReady: (nextResult: Result) => void }) {
-  const nextResult = useViewerLayerData({
-    annotationColors: {},
-    annotationState: {
-      status: 'ready',
-      url: 'https://example.test/output',
-      annotations: [{ id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] }],
-    },
-    cellMetadataTrack: null,
-    boundaryElements: [],
-    currentViewportBbox: {
-      minX: micrometers(0),
-      minY: micrometers(0),
-      maxX: micrometers(10),
-      maxY: micrometers(10),
-    },
-    geneExpressionBatch: expressionBatch,
-    geneExpressionColorScale: 'plasma',
-    geneExpressionScaleDatasetUrl: 'https://example.test/output',
-    geneExpressionScaleDomain: { key: '', max: 0 },
-    geneExpressionScoreMode: 'sum',
-    morphologyChannelSettings: [],
-    morphologyChannels: [],
-    morphologyImage: null,
-    observationColorMode: 'annotations',
-    overviewCells,
-    selectedGenes: ['Actb'],
-    transcriptDensityColorScale: 'thermal',
-    transcriptLayerState: { status: 'idle' },
-    transcriptPointColorMode: 'feature',
-  })
+  const nextResult = useViewerLayerData(viewerLayerOptions())
 
   React.useEffect(() => {
     onReady(nextResult)
@@ -99,32 +71,25 @@ describe('useViewerLayerData', () => {
     }: {
       readonly onReady: (nextResult: Result) => void
     }) {
-      const nextResult = useViewerLayerData({
-        annotationColors: {},
-        annotationState: { status: 'idle' },
-        cellMetadataTrack: {
-          id: 'metadata:confidence',
-          values: [{ cellId: asCellId('aaaaaaaa-1'), value: 0.5 }],
-          min: 0,
-          max: 1,
-        },
-        boundaryElements: [],
-        currentViewportBbox: null,
-        geneExpressionBatch: null,
-        geneExpressionColorScale: 'plasma',
-        geneExpressionScaleDatasetUrl: 'https://example.test/output',
-        geneExpressionScaleDomain: { key: '', max: 0 },
-        geneExpressionScoreMode: 'sum',
-        morphologyChannelSettings: [],
-        morphologyChannels: [],
-        morphologyImage: null,
-        observationColorMode: 'metadata',
-        overviewCells,
-        selectedGenes: [],
-        transcriptDensityColorScale: 'thermal',
-        transcriptLayerState: { status: 'idle' },
-        transcriptPointColorMode: 'feature',
-      })
+      const nextResult = useViewerLayerData(
+        viewerLayerOptions({
+          annotations: { annotationState: { status: 'idle' } },
+          cells: {
+            cellMetadataTrack: {
+              id: 'metadata:confidence',
+              values: [{ cellId: asCellId('aaaaaaaa-1'), value: 0.5 }],
+              min: 0,
+              max: 1,
+            },
+            currentViewportBbox: null,
+            observationColorMode: 'metadata',
+          },
+          geneExpression: {
+            geneExpressionBatch: null,
+            selectedGenes: [],
+          },
+        }),
+      )
 
       React.useEffect(() => {
         onReady(nextResult)
@@ -164,28 +129,21 @@ describe('useViewerLayerData', () => {
     ]
 
     function GridProbe({ onReady }: { readonly onReady: (nextResult: Result) => void }) {
-      const nextResult = useViewerLayerData({
-        annotationColors: {},
-        annotationState: { status: 'idle' },
-        cellMetadataTrack: null,
-        boundaryElements: [],
-        currentViewportBbox: null,
-        geneExpressionBatch: null,
-        geneExpressionColorScale: 'plasma',
-        geneExpressionScaleDatasetUrl: 'https://example.test/visium',
-        geneExpressionScaleDomain: { key: '', max: 0 },
-        geneExpressionScoreMode: 'sum',
-        gridCells,
-        morphologyChannelSettings: [],
-        morphologyChannels: [],
-        morphologyImage: null,
-        observationColorMode: 'annotations',
-        overviewCells: [],
-        selectedGenes: [],
-        transcriptDensityColorScale: 'thermal',
-        transcriptLayerState: { status: 'idle' },
-        transcriptPointColorMode: 'feature',
-      })
+      const nextResult = useViewerLayerData(
+        viewerLayerOptions({
+          annotations: { annotationState: { status: 'idle' } },
+          cells: {
+            currentViewportBbox: null,
+            gridCells,
+            overviewCells: [],
+          },
+          geneExpression: {
+            geneExpressionBatch: null,
+            geneExpressionScaleDatasetUrl: 'https://example.test/visium',
+            selectedGenes: [],
+          },
+        }),
+      )
 
       React.useEffect(() => {
         onReady(nextResult)
@@ -243,28 +201,17 @@ describe('useViewerLayerData', () => {
     }: {
       readonly onReady: (nextResult: Result) => void
     }) {
-      const nextResult = useViewerLayerData({
-        annotationColors: {},
-        annotationState: { status: 'idle' },
-        cellMetadataTrack: null,
-        boundaryElements: [],
-        currentViewportBbox: null,
-        geneExpressionBatch: null,
-        geneExpressionColorScale: 'plasma',
-        geneExpressionScaleDatasetUrl: 'https://example.test/output',
-        geneExpressionScaleDomain: { key: '', max: 0 },
-        geneExpressionScoreMode: 'sum',
-        morphologyChannelSettings: [],
-        morphologyChannels: [],
-        morphologyImage: null,
-        nucleusBoundaryElements,
-        observationColorMode: 'annotations',
-        overviewCells,
-        selectedGenes: [],
-        transcriptDensityColorScale: 'thermal',
-        transcriptLayerState: { status: 'idle' },
-        transcriptPointColorMode: 'feature',
-      })
+      const nextResult = useViewerLayerData(
+        viewerLayerOptions({
+          annotations: { annotationState: { status: 'idle' } },
+          boundaries: { nucleusBoundaryElements },
+          cells: { currentViewportBbox: null },
+          geneExpression: {
+            geneExpressionBatch: null,
+            selectedGenes: [],
+          },
+        }),
+      )
 
       React.useEffect(() => {
         onReady(nextResult)
@@ -321,28 +268,21 @@ describe('useViewerLayerData', () => {
     }: {
       readonly onReady: (nextResult: Result) => void
     }) {
-      const nextResult = useViewerLayerData({
-        annotationColors: {},
-        annotationState: { status: 'idle' },
-        cellMetadataTrack: null,
-        boundaryElements: [],
-        currentViewportBbox: null,
-        geneExpressionBatch: null,
-        geneExpressionColorScale: 'plasma',
-        geneExpressionScaleDatasetUrl: 'https://example.test/output',
-        geneExpressionScaleDomain: { key: '', max: 0 },
-        geneExpressionScoreMode: 'sum',
-        morphologyChannelSettings,
-        morphologyChannelOpacities: new Map([['custom-layer:1:Channel:0:0', 0.35]]),
-        morphologyChannels,
-        morphologyImage: null,
-        observationColorMode: 'annotations',
-        overviewCells,
-        selectedGenes: [],
-        transcriptDensityColorScale: 'thermal',
-        transcriptLayerState: { status: 'idle' },
-        transcriptPointColorMode: 'feature',
-      })
+      const nextResult = useViewerLayerData(
+        viewerLayerOptions({
+          annotations: { annotationState: { status: 'idle' } },
+          cells: { currentViewportBbox: null },
+          geneExpression: {
+            geneExpressionBatch: null,
+            selectedGenes: [],
+          },
+          morphology: {
+            morphologyChannelOpacities: new Map([['custom-layer:1:Channel:0:0', 0.35]]),
+            morphologyChannelSettings,
+            morphologyChannels,
+          },
+        }),
+      )
 
       React.useEffect(() => {
         onReady(nextResult)
@@ -367,3 +307,70 @@ describe('useViewerLayerData', () => {
     })
   })
 })
+
+function viewerLayerOptions({
+  annotations = {},
+  boundaries = {},
+  cells = {},
+  geneExpression = {},
+  morphology = {},
+  transcripts = {},
+}: {
+  readonly annotations?: Partial<ViewerLayerOptions['annotations']>
+  readonly boundaries?: Partial<ViewerLayerOptions['boundaries']>
+  readonly cells?: Partial<ViewerLayerOptions['cells']>
+  readonly geneExpression?: Partial<ViewerLayerOptions['geneExpression']>
+  readonly morphology?: Partial<ViewerLayerOptions['morphology']>
+  readonly transcripts?: Partial<ViewerLayerOptions['transcripts']>
+} = {}): ViewerLayerOptions {
+  return {
+    annotations: {
+      annotationColors: {},
+      annotationState: {
+        status: 'ready',
+        url: 'https://example.test/output',
+        annotations: [
+          { id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] },
+        ],
+      },
+      ...annotations,
+    },
+    boundaries: {
+      boundaryElements: [],
+      ...boundaries,
+    },
+    cells: {
+      cellMetadataTrack: null,
+      currentViewportBbox: {
+        minX: micrometers(0),
+        minY: micrometers(0),
+        maxX: micrometers(10),
+        maxY: micrometers(10),
+      },
+      observationColorMode: 'annotations',
+      overviewCells,
+      ...cells,
+    },
+    geneExpression: {
+      geneExpressionBatch: expressionBatch,
+      geneExpressionColorScale: 'plasma',
+      geneExpressionScaleDatasetUrl: 'https://example.test/output',
+      geneExpressionScaleDomain: { key: '', max: 0 },
+      geneExpressionScoreMode: 'sum',
+      selectedGenes: ['Actb'],
+      ...geneExpression,
+    },
+    morphology: {
+      morphologyChannelSettings: [],
+      morphologyChannels: [],
+      morphologyImage: null,
+      ...morphology,
+    },
+    transcripts: {
+      transcriptDensityColorScale: 'thermal',
+      transcriptLayerState: { status: 'idle' },
+      transcriptPointColorMode: 'feature',
+      ...transcripts,
+    },
+  }
+}
