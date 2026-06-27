@@ -17,8 +17,6 @@ import {
   type RoiCellsLoader,
   type RoiGeneStatsLoader,
   type RoiTranscriptsLoader,
-  type SpatialDatasetDetector,
-  type SpatialDatasetLoader,
   type TranscriptAggregateLoader,
   type TranscriptCapabilitiesLoader,
   type TranscriptViewportLoader,
@@ -28,9 +26,21 @@ import { micrometers } from './data/coords'
 import { warmDatasetForRoi } from './data/datasetWarmup'
 import { GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT } from './data/geneExpressionLod'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
-import type { VisiumHdBinnedOverview } from './datasets/visiumHdDataset'
 import type { SpatialElement } from './datasets/spatialDataset'
 import type { TiffPyramidLoader } from './tiff/loader'
+import {
+  appViewportRectFixture,
+  createSpatialDatasetLoaderMock,
+  createVisiumHdDatasetMock,
+  createVisiumHdDetectorMock,
+  deferredPromise,
+  installAppViewportFixture,
+  openHudTab,
+  pendingPromise,
+  visiumHdDetectionFixture,
+  visiumHdMetaFixture,
+  visiumOverviewFixture,
+} from './test/appTestHarness'
 
 vi.mock('@deck.gl/react', () => ({
   DeckGL: ({
@@ -97,67 +107,6 @@ vi.mock('./data/datasetAnnotations', async (importOriginal) => {
 vi.mock('./data/datasetWarmup', () => ({
   warmDatasetForRoi: vi.fn(async () => undefined),
 }))
-
-function openHudTab(name: string): void {
-  fireEvent.click(screen.getByRole('tab', { name }))
-}
-
-function pendingPromise<T>(): Promise<T> {
-  return new Promise<T>(() => {})
-}
-
-function deferredPromise<T>(): {
-  readonly promise: Promise<T>
-  readonly resolve: (value: T) => void
-} {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((nextResolve) => {
-    resolve = nextResolve
-  })
-
-  return { promise, resolve }
-}
-
-function visiumOverviewFixture(): VisiumHdBinnedOverview {
-  const grid = {
-    id: 'grid-16um',
-    binSizeMicrometers: micrometers(16),
-    basis: {
-      origin: { x: micrometers(10), y: micrometers(5) },
-      rowStep: { x: micrometers(0), y: micrometers(10) },
-      colStep: { x: micrometers(10), y: micrometers(0) },
-    },
-  }
-
-  return {
-    binSizeMicrometers: 16,
-    scalefactors: {
-      micronsPerPixel: 1,
-      tissueHiresScale: 1,
-      tissueLowresScale: 0.1,
-      binSizeMicrometers: 16,
-      spotDiameterFullres: 16,
-    },
-    grid,
-    gridCells: {
-      kind: 'grid-cells',
-      gridId: grid.id,
-      ids: ['BC-1', 'BC-2'],
-      rows: new Int32Array([0, 0]),
-      cols: new Int32Array([0, 1]),
-    },
-    fullresRows: new Float64Array([5, 5]),
-    fullresCols: new Float64Array([10, 20]),
-    inTissue: new Uint8Array([1, 1]),
-    sourcePaths: {
-      tissuePositions: 'binned_outputs/square_016um/spatial/tissue_positions.parquet',
-      scalefactors: 'binned_outputs/square_016um/spatial/scalefactors_json.json',
-      tissueHiresImage: 'binned_outputs/square_016um/spatial/tissue_hires_image.png',
-      tissueLowresImage: 'binned_outputs/square_016um/spatial/tissue_lowres_image.png',
-      filteredMatrixH5: 'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
-    },
-  }
-}
 
 describe('App', () => {
   beforeEach(() => {
@@ -303,23 +252,7 @@ describe('App', () => {
   it('draws a Visium HD ROI, exports barcodes, and links barcode embeddings', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 190,
-      top: 0,
-      right: 320,
-      bottom: 190,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture()
     const createObjectUrlSpy = vi
       .spyOn(URL, 'createObjectURL')
       .mockReturnValue('blob:visium-roi-barcodes')
@@ -330,55 +263,11 @@ describe('App', () => {
       .spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => undefined)
     const overview = visiumOverviewFixture()
-    const detectSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetDetector>> = vi.fn(
-      async () => ({
-        platform: 'visium-hd',
-        baseUrl: visiumUrl,
-        bins: [
-          {
-            binSizeMicrometers: 16,
-            outputPath: 'binned_outputs/square_016um',
-            tissuePositionsPath:
-              'binned_outputs/square_016um/spatial/tissue_positions.parquet',
-            scalefactorsPath:
-              'binned_outputs/square_016um/spatial/scalefactors_json.json',
-            filteredMatrixH5Path:
-              'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
-          },
-        ],
-        checked: [],
-      }),
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
     )
-    const visiumDataset = {
-      readBinnedOverview: vi.fn(async () => overview),
-      meta: vi.fn(async () => ({
-        platform: 'visium-hd' as const,
-        units: {
-          dataUnit: 'micrometer' as const,
-          imageUnit: 'pixel' as const,
-          micrometersPerPixel: micrometers(1),
-          origin: 'top-left' as const,
-          imageYAxis: 'down' as const,
-        },
-        extent: {
-          minX: micrometers(0),
-          maxX: micrometers(40),
-          minY: micrometers(0),
-          maxY: micrometers(20),
-        },
-        capabilities: {
-          transcripts: false,
-          cellBoundaries: false,
-          pyramidImage: false,
-          multiChannel: false,
-        },
-        grids: [overview.grid],
-      })),
-      image: vi.fn(async () => null),
-    }
-    const getSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetLoader>> = vi.fn(
-      async () => visiumDataset as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
-    )
+    const visiumDataset = createVisiumHdDatasetMock({ overview })
+    const getSpatialDataset = createSpatialDatasetLoaderMock(visiumDataset)
     const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
       vi.fn(async () => [
         {
@@ -472,8 +361,7 @@ describe('App', () => {
       expect(await screen.findByText('Selected bin')).toBeInTheDocument()
       expect(screen.getByText('BC-1')).toBeInTheDocument()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
       createObjectUrlSpy.mockRestore()
       revokeObjectUrlSpy.mockRestore()
       downloadClickSpy.mockRestore()
@@ -483,106 +371,50 @@ describe('App', () => {
   it('scans Visium HD viewport bins with selected-gene magic lens expression', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 190,
-      top: 0,
-      right: 320,
-      bottom: 190,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture()
     const overview = visiumOverviewFixture()
-    const detectSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetDetector>> = vi.fn(
-      async () => ({
-        platform: 'visium-hd',
-        baseUrl: visiumUrl,
-        bins: [
-          {
-            binSizeMicrometers: 16,
-            outputPath: 'binned_outputs/square_016um',
-            tissuePositionsPath:
-              'binned_outputs/square_016um/spatial/tissue_positions.parquet',
-            scalefactorsPath:
-              'binned_outputs/square_016um/spatial/scalefactors_json.json',
-            filteredMatrixH5Path:
-              'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
-          },
-        ],
-        checked: [],
-      }),
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
     )
-    const visiumDataset = {
-      readBinnedOverview: vi.fn(async () => overview),
-      meta: vi.fn(async () => ({
-        platform: 'visium-hd' as const,
-        units: {
-          dataUnit: 'micrometer' as const,
-          imageUnit: 'pixel' as const,
-          micrometersPerPixel: micrometers(1),
-          origin: 'top-left' as const,
-          imageYAxis: 'down' as const,
-        },
-        extent: {
-          minX: micrometers(0),
-          maxX: micrometers(40),
-          minY: micrometers(0),
-          maxY: micrometers(20),
-        },
-        capabilities: {
-          transcripts: false,
-          cellBoundaries: false,
-          pyramidImage: false,
-          multiChannel: false,
-        },
-        grids: [overview.grid],
-      })),
-      image: vi.fn(async () => null),
-      genePanel: vi.fn(async () => ['A2M', 'GAD1']),
-      matrix: vi.fn(async () => ({
-        geneNames: ['A2M', 'GAD1'],
-        cells: new Map([
-          [
-            'BC-1',
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      overrides: {
+        genePanel: vi.fn(async () => ['A2M', 'GAD1']),
+        matrix: vi.fn(async () => ({
+          geneNames: ['A2M', 'GAD1'],
+          cells: new Map([
+            [
+              'BC-1',
+              {
+                geneNames: ['A2M', 'GAD1'],
+                counts: [7, 2],
+              },
+            ],
+            [
+              'BC-2',
+              {
+                geneNames: ['GAD1'],
+                counts: [3],
+              },
+            ],
+          ]),
+        })),
+        geneExpression: vi.fn(async () => ({
+          cells: [
             {
-              geneNames: ['A2M', 'GAD1'],
-              counts: [7, 2],
+              id: 'BC-1',
+              position: { x: micrometers(10), y: micrometers(5) },
+              count: 7,
+              cellArea: 256,
             },
           ],
-          [
-            'BC-2',
-            {
-              geneNames: ['GAD1'],
-              counts: [3],
-            },
-          ],
-        ]),
-      })),
-      geneExpression: vi.fn(async () => ({
-        cells: [
-          {
-            id: 'BC-1',
-            position: { x: micrometers(10), y: micrometers(5) },
-            count: 7,
-            cellArea: 256,
-          },
-        ],
-        genes: ['A2M'],
-        geneCounts: [{ gene: 'A2M', count: 7 }],
-        maxCount: 7,
-      })),
-    }
-    const getSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetLoader>> = vi.fn(
-      async () => visiumDataset as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
-    )
+          genes: ['A2M'],
+          geneCounts: [{ gene: 'A2M', count: 7 }],
+          maxCount: 7,
+        })),
+      },
+    })
+    const getSpatialDataset = createSpatialDatasetLoaderMock(visiumDataset)
     const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [])
 
     try {
@@ -671,105 +503,48 @@ describe('App', () => {
         'A2M',
       )
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('updates selected Visium HD bin info when selected-gene expression loads', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 190,
-      top: 0,
-      right: 320,
-      bottom: 190,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture()
     const overview = visiumOverviewFixture()
-    const detectSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetDetector>> = vi.fn(
-      async () => ({
-        platform: 'visium-hd',
-        baseUrl: visiumUrl,
-        bins: [
-          {
-            binSizeMicrometers: 16,
-            outputPath: 'binned_outputs/square_016um',
-            tissuePositionsPath:
-              'binned_outputs/square_016um/spatial/tissue_positions.parquet',
-            scalefactorsPath:
-              'binned_outputs/square_016um/spatial/scalefactors_json.json',
-            filteredMatrixH5Path:
-              'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
-          },
-        ],
-        checked: [],
-      }),
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
     )
-    const visiumDataset = {
-      readBinnedOverview: vi.fn(async () => overview),
-      meta: vi.fn(async () => ({
-        platform: 'visium-hd' as const,
-        units: {
-          dataUnit: 'micrometer' as const,
-          imageUnit: 'pixel' as const,
-          micrometersPerPixel: micrometers(1),
-          origin: 'top-left' as const,
-          imageYAxis: 'down' as const,
-        },
-        extent: {
-          minX: micrometers(0),
-          maxX: micrometers(40),
-          minY: micrometers(0),
-          maxY: micrometers(20),
-        },
-        capabilities: {
-          transcripts: false,
-          cellBoundaries: false,
-          pyramidImage: false,
-          multiChannel: false,
-        },
-        grids: [overview.grid],
-      })),
-      image: vi.fn(async () => null),
-      genePanel: vi.fn(async () => ['Actb']),
-      geneExpression: vi.fn(async () => ({
-        cells: [
-          {
-            id: 'BC-1',
-            position: { x: micrometers(10), y: micrometers(5) },
-            count: 7,
-          },
-        ],
-        genes: ['Actb'],
-        maxCount: 7,
-      })),
-      matrix: vi.fn(async () => ({
-        geneNames: ['Actb', 'Gad1'],
-        cells: new Map([
-          [
-            'BC-1',
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      overrides: {
+        genePanel: vi.fn(async () => ['Actb']),
+        geneExpression: vi.fn(async () => ({
+          cells: [
             {
-              geneNames: ['Actb', 'Gad1'],
-              counts: [9, 3],
+              id: 'BC-1',
+              position: { x: micrometers(10), y: micrometers(5) },
+              count: 7,
             },
           ],
-        ]),
-      })),
-    }
-    const getSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetLoader>> = vi.fn(
-      async () => visiumDataset as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
-    )
+          genes: ['Actb'],
+          maxCount: 7,
+        })),
+        matrix: vi.fn(async () => ({
+          geneNames: ['Actb', 'Gad1'],
+          cells: new Map([
+            [
+              'BC-1',
+              {
+                geneNames: ['Actb', 'Gad1'],
+                counts: [9, 3],
+              },
+            ],
+          ]),
+        })),
+      },
+    })
+    const getSpatialDataset = createSpatialDatasetLoaderMock(visiumDataset)
 
     try {
       render(
@@ -839,53 +614,22 @@ describe('App', () => {
         within(updatedBinInfo).queryByText('No expression loaded'),
       ).not.toBeInTheDocument()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('loads Visium HD segmented boundaries through the active spatial dataset', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 190,
-      top: 0,
-      right: 320,
-      bottom: 190,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture()
     const overview = visiumOverviewFixture()
-    const detectSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetDetector>> = vi.fn(
-      async () => ({
-        platform: 'visium-hd',
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({
         baseUrl: visiumUrl,
-        bins: [
-          {
-            binSizeMicrometers: 16,
-            outputPath: 'binned_outputs/square_016um',
-            tissuePositionsPath:
-              'binned_outputs/square_016um/spatial/tissue_positions.parquet',
-            scalefactorsPath:
-              'binned_outputs/square_016um/spatial/scalefactors_json.json',
-            filteredMatrixH5Path:
-              'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
-          },
-        ],
         segmentedOutputs: {
           cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
           nucleusInstanceMaskTiffPath: 'segmented_outputs/nucleus_instance_mask.tiff',
         },
-        checked: [],
       }),
     )
     const cellBoundaryBatch: { readonly elements: readonly SpatialElement[] } = {
@@ -908,30 +652,12 @@ describe('App', () => {
     const cellBoundaryDeferred = deferredPromise<{
       readonly elements: readonly SpatialElement[]
     }>()
-    const visiumDataset = {
-      readBinnedOverview: vi.fn(async () => overview),
-      meta: vi.fn(async () => ({
-        platform: 'visium-hd' as const,
-        units: {
-          dataUnit: 'micrometer' as const,
-          imageUnit: 'pixel' as const,
-          micrometersPerPixel: micrometers(1),
-          origin: 'top-left' as const,
-          imageYAxis: 'down' as const,
-        },
-        extent: {
-          minX: micrometers(0),
-          maxX: micrometers(40),
-          minY: micrometers(0),
-          maxY: micrometers(20),
-        },
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      meta: visiumHdMetaFixture(overview, {
         capabilities: {
-          transcripts: false,
           cellBoundaries: true,
-          pyramidImage: false,
-          multiChannel: false,
         },
-        grids: [overview.grid],
         segmentations: [
           {
             id: 'visium-hd-cell-segmentations',
@@ -948,50 +674,49 @@ describe('App', () => {
             path: 'segmented_outputs/nucleus_instance_mask.tiff',
           },
         ],
-      })),
-      image: vi.fn(async () => null),
-      elements: vi.fn(() => cellBoundaryDeferred.promise),
-      barcodeMappingsForCell: vi.fn(async () => [
-        {
-          square002um: 's_002um_000001_000002-1',
-          square008um: 's_008um_000000_000000-1',
-          square016um: 'BC-1',
-          cellId: 'cellid_000000001-1',
-          inNucleus: false,
-          inCell: true,
-        },
-      ]),
-      matrix: vi.fn(async () => ({
-        geneNames: ['Actb', 'Gad1'],
-        cells: new Map([
-          [
-            'BC-1',
-            {
-              geneNames: ['Actb', 'Gad1'],
-              counts: [8, 4],
-            },
-          ],
-        ]),
-      })),
-      segmentationElements: vi.fn(async () => [
-        {
-          id: 'nucleus_000000001',
-          geometry: {
-            kind: 'polygon' as const,
-            rings: [
-              [
-                { x: micrometers(1), y: micrometers(1) },
-                { x: micrometers(4), y: micrometers(1) },
-                { x: micrometers(4), y: micrometers(4) },
-              ],
-            ],
+      }),
+      overrides: {
+        elements: vi.fn(() => cellBoundaryDeferred.promise),
+        barcodeMappingsForCell: vi.fn(async () => [
+          {
+            square002um: 's_002um_000001_000002-1',
+            square008um: 's_008um_000000_000000-1',
+            square016um: 'BC-1',
+            cellId: 'cellid_000000001-1',
+            inNucleus: false,
+            inCell: true,
           },
-        },
-      ]),
-    }
-    const getSpatialDataset: ReturnType<typeof vi.fn<SpatialDatasetLoader>> = vi.fn(
-      async () => visiumDataset as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
-    )
+        ]),
+        matrix: vi.fn(async () => ({
+          geneNames: ['Actb', 'Gad1'],
+          cells: new Map([
+            [
+              'BC-1',
+              {
+                geneNames: ['Actb', 'Gad1'],
+                counts: [8, 4],
+              },
+            ],
+          ]),
+        })),
+        segmentationElements: vi.fn(async () => [
+          {
+            id: 'nucleus_000000001',
+            geometry: {
+              kind: 'polygon' as const,
+              rings: [
+                [
+                  { x: micrometers(1), y: micrometers(1) },
+                  { x: micrometers(4), y: micrometers(1) },
+                  { x: micrometers(4), y: micrometers(4) },
+                ],
+              ],
+            },
+          },
+        ]),
+      },
+    })
+    const getSpatialDataset = createSpatialDatasetLoaderMock(visiumDataset)
     const loadBoundaryElements: ReturnType<typeof vi.fn<BoundaryElementsLoader>> = vi.fn(
       async () => ({ elements: [] }),
     )
@@ -1121,8 +846,7 @@ describe('App', () => {
       expect(within(selectedCellInfo).getByText('Gad1')).toBeInTheDocument()
       expect(loadBoundaryElements).not.toHaveBeenCalled()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
@@ -1546,23 +1270,9 @@ describe('App', () => {
   })
 
   it('scans current viewport cells with the magic lens', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -1678,29 +1388,14 @@ describe('App', () => {
       expect(distribution).toHaveTextContent('Actb')
       expect(distribution).toHaveTextContent('Gad1')
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('aborts an active magic lens scan when drawing a new ROI', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -1785,29 +1480,14 @@ describe('App', () => {
         'true',
       )
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('scans exact circle cells while cursor magic lens is enabled', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -1924,8 +1604,7 @@ describe('App', () => {
         'Gad1',
       )
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
@@ -2022,23 +1701,9 @@ describe('App', () => {
   })
 
   it('loads an embedding panel linked to ROI cells', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const cellId = intToCellId(1, 1)
     const loadDatasetOverview = vi.fn(async () => [
       {
@@ -2122,29 +1787,14 @@ describe('App', () => {
       expect(embeddingSummary).toHaveTextContent('ROI')
       expect(embeddingSummary).toHaveTextContent('1')
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('loads full expression and shape metrics for a selected cell', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const cellId = intToCellId(1, 1)
     const loadDatasetOverview = vi.fn(async () => [
       {
@@ -2328,29 +1978,14 @@ describe('App', () => {
         within(cellInfoSection).queryByRole('button', { name: 'Clear Cell' }),
       ).not.toBeInTheDocument()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('loads exact expression for the current region when requested', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const overviewCells = Array.from({ length: 6000 }, (_value, index) => ({
       cellId: intToCellId(1, index + 1),
       position: {
@@ -2416,29 +2051,14 @@ describe('App', () => {
       expect(screen.getByLabelText('Gene scale values')).toHaveTextContent('4')
       expect(screen.getByLabelText('Gene scale values')).toHaveTextContent('8')
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('loads a stable whole-slide expression sample at overview zoom', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const overviewCells = Array.from({ length: 50_001 }, (_value, index) => ({
       cellId: intToCellId(1, index + 1),
       position: {
@@ -2497,29 +2117,14 @@ describe('App', () => {
         ),
       ).toBeInTheDocument()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('can request gene expression across all slide cells without sampling', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const overviewCells = Array.from({ length: 50_001 }, (_value, index) => ({
       cellId: intToCellId(1, index + 1),
       position: {
@@ -2581,8 +2186,7 @@ describe('App', () => {
         ),
       ).toBeInTheDocument()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
@@ -2727,23 +2331,9 @@ describe('App', () => {
   })
 
   it('requires an explicit load action for near-budget exact transcript viewports', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -2801,29 +2391,14 @@ describe('App', () => {
         )
       })
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('renders density squares when native transcript LOD planning is selected', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -2914,29 +2489,14 @@ describe('App', () => {
         }),
       )
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('keeps selected-gene transcript Density on all-transcript squares', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -3025,29 +2585,14 @@ describe('App', () => {
         }),
       )
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('uses density squares in Auto when the transcript estimate exceeds budget', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -3116,29 +2661,14 @@ describe('App', () => {
       expect(loadTranscriptAggregates).toHaveBeenCalled()
       expect(loadTranscriptViewport).not.toHaveBeenCalled()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('switches Auto to exact transcripts when the estimate is inside budget', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -3219,29 +2749,14 @@ describe('App', () => {
       expect(loadTranscriptAggregates).not.toHaveBeenCalled()
       expect(await screen.findByText('1 points')).toBeInTheDocument()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('times out exact transcript loading instead of staying busy forever', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -3311,29 +2826,14 @@ describe('App', () => {
       ).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('keeps the previous exact transcript layer visible while panning loads the next viewport', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -3426,8 +2926,7 @@ describe('App', () => {
       )
     } finally {
       vi.useRealTimers()
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
@@ -3888,23 +3387,9 @@ ${cd16Negative},CD16- NK cells`,
   })
 
   it('shows ROI query loading while drawn ROI cells are pending', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -3953,8 +3438,7 @@ ${cd16Negative},CD16- NK cells`,
         'true',
       )
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
@@ -4024,23 +3508,9 @@ ${cd16Negative},CD16- NK cells`,
   })
 
   it('shows sampled ROI genes before the full ROI gene refinement finishes', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -4132,29 +3602,14 @@ ${cd16Negative},CD16- NK cells`,
         }),
       )
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('keeps ROI drawing enabled while viewport ROI gene warmup is pending', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const overviewCells = Array.from({ length: 200 }, (_value, index) => ({
       cellId: intToCellId(1, index + 1),
       position: {
@@ -4208,29 +3663,14 @@ ${cd16Negative},CD16- NK cells`,
         within(loadingStatus).getByText('Preparing cell feature matrix'),
       ).toBeInTheDocument()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('prewarms ROI gene stats for the visible ROI viewport', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const overviewCells = Array.from({ length: 200 }, (_value, index) => ({
       cellId: intToCellId(1, index + 1),
       position: {
@@ -4313,29 +3753,14 @@ ${cd16Negative},CD16- NK cells`,
         { timeout: 2_000 },
       )
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
   it('draws a box ROI, summarizes true cells, and saves it as an annotation', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const createObjectUrlSpy = vi
       .spyOn(URL, 'createObjectURL')
       .mockReturnValue('blob:roi-transcripts')
@@ -4506,8 +3931,7 @@ ${cd16Negative},CD16- NK cells`,
         'annotations',
       )
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
       createObjectUrlSpy.mockRestore()
       revokeObjectUrlSpy.mockRestore()
       downloadClickSpy.mockRestore()
@@ -4515,23 +3939,9 @@ ${cd16Negative},CD16- NK cells`,
   })
 
   it('starts a bbox-backed ROI query from a lasso selection', async () => {
-    const rect = {
-      x: 0,
-      y: 0,
-      width: 1000,
-      height: 1000,
-      top: 0,
-      right: 1000,
-      bottom: 1000,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect
-    const rectSpy = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockReturnValue(rect)
-    const contextSpy = vi
-      .spyOn(HTMLCanvasElement.prototype, 'getContext')
-      .mockReturnValue(null)
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
     const cellId = intToCellId(1, 1)
     const loadDatasetOverview = vi.fn(async () => [
       {
@@ -4591,8 +4001,7 @@ ${cd16Negative},CD16- NK cells`,
       })
       expect(await screen.findByText('0 cells')).toBeInTheDocument()
     } finally {
-      rectSpy.mockRestore()
-      contextSpy.mockRestore()
+      viewport.restore()
     }
   })
 
