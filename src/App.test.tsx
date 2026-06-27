@@ -29,6 +29,7 @@ import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/vi
 import type { SpatialElement } from './datasets/spatialDataset'
 import type { TiffPyramidLoader } from './tiff/loader'
 import {
+  appTestDependencies,
   appViewportRectFixture,
   createSpatialDatasetLoaderMock,
   createVisiumHdDatasetMock,
@@ -40,6 +41,7 @@ import {
   visiumHdDetectionFixture,
   visiumHdMetaFixture,
   visiumOverviewFixture,
+  type AppTestDependencyProps,
 } from './test/appTestHarness'
 
 vi.mock('@deck.gl/react', () => ({
@@ -108,6 +110,10 @@ vi.mock('./data/datasetWarmup', () => ({
   warmDatasetForRoi: vi.fn(async () => undefined),
 }))
 
+function TestApp(props: AppTestDependencyProps) {
+  return <App dependencies={appTestDependencies(props)} />
+}
+
 describe('App', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/')
@@ -116,7 +122,7 @@ describe('App', () => {
   })
 
   it('renders the Xenium viewer shell', () => {
-    render(<App />)
+    render(<TestApp />)
 
     const datasetInput = screen.getByLabelText('Dataset URL')
 
@@ -285,7 +291,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           detectSpatialDataset={detectSpatialDataset}
           getSpatialDataset={getSpatialDataset}
           loadAnalysisEmbeddings={loadAnalysisEmbeddings}
@@ -419,7 +425,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           detectSpatialDataset={detectSpatialDataset}
           getSpatialDataset={getSpatialDataset}
           loadRoiCells={loadRoiCells}
@@ -548,7 +554,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           detectSpatialDataset={detectSpatialDataset}
           getSpatialDataset={getSpatialDataset}
         />,
@@ -723,7 +729,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           detectSpatialDataset={detectSpatialDataset}
           getSpatialDataset={getSpatialDataset}
           loadBoundaryElements={loadBoundaryElements}
@@ -851,7 +857,7 @@ describe('App', () => {
   })
 
   it('lets the user configure image and cell layer opacity', () => {
-    render(<App />)
+    render(<TestApp />)
     openHudTab('Layers')
 
     const imageOpacityInput = screen.getByRole('slider', {
@@ -903,7 +909,7 @@ describe('App', () => {
       channelLoaders: [{ info: customChannel, loader: customLoader }],
     }))
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={vi.fn(async () => [])}
         loadMorphologyImage={vi.fn(async () => ({
@@ -959,7 +965,7 @@ describe('App', () => {
   })
 
   it('records compact debug activity entries', () => {
-    render(<App />)
+    render(<TestApp />)
 
     const activityLog = screen.getByLabelText('Activity log')
 
@@ -991,7 +997,7 @@ describe('App', () => {
   })
 
   it('collapses and expands the control HUD', () => {
-    render(<App />)
+    render(<TestApp />)
 
     const hideButton = screen.getByRole('button', { name: 'Hide Controls' })
     expect(hideButton).toHaveAttribute('aria-expanded', 'true')
@@ -1084,7 +1090,7 @@ describe('App', () => {
     }))
 
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={loadGenePanel}
         loadMorphologyImage={loadMorphologyImage}
@@ -1170,7 +1176,7 @@ describe('App', () => {
     }))
 
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={loadGenePanel}
         loadMorphologyImage={loadMorphologyImage}
@@ -1222,7 +1228,7 @@ describe('App', () => {
 
     render(
       <StrictMode>
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadMorphologyImage={loadMorphologyImage}
@@ -1257,7 +1263,7 @@ describe('App', () => {
         ],
       }))
 
-    render(<App runDatasetDiagnostics={runDatasetDiagnostics} />)
+    render(<TestApp runDatasetDiagnostics={runDatasetDiagnostics} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Diagnose Dataset' }))
 
@@ -1323,7 +1329,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
@@ -1432,7 +1438,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiTranscripts={loadRoiTranscripts}
@@ -1537,7 +1543,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
@@ -1620,7 +1626,7 @@ describe('App', () => {
     )
 
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={loadGenePanel}
         loadAnnotationGroups={loadAnnotationGroups}
@@ -1660,7 +1666,7 @@ describe('App', () => {
   })
 
   it('lets the user configure the boundary polygon visible-cell limit', () => {
-    render(<App />)
+    render(<TestApp />)
 
     const boundaryLimitInput = screen.getByRole('spinbutton', {
       name: 'Boundary limit',
@@ -1672,7 +1678,7 @@ describe('App', () => {
   })
 
   it('lets the user configure the gene expression color scale', () => {
-    render(<App />)
+    render(<TestApp />)
     openHudTab('Genes')
 
     const geneScaleInput = screen.getByRole('combobox', {
@@ -1752,7 +1758,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadAnalysisEmbeddings={loadAnalysisEmbeddings}
@@ -1885,7 +1891,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadAnnotations={loadAnnotations}
@@ -2013,7 +2019,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadGeneExpression={loadGeneExpression}
@@ -2080,7 +2086,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadGeneExpression={loadGeneExpression}
@@ -2146,7 +2152,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadGeneExpression={loadGeneExpression}
@@ -2207,7 +2213,7 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => [])
 
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadMorphologyImage={loadMorphologyImage}
         loadGenePanel={loadGenePanel}
@@ -2261,7 +2267,7 @@ describe('App', () => {
     }))
 
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={loadGenePanel}
         loadTranscriptCapabilities={loadTranscriptCapabilities}
@@ -2303,7 +2309,7 @@ describe('App', () => {
     }))
 
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={loadGenePanel}
         loadTranscriptCapabilities={loadTranscriptCapabilities}
@@ -2357,7 +2363,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadTranscriptCapabilities={loadTranscriptCapabilities}
@@ -2446,7 +2452,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadTranscriptCapabilities={loadTranscriptCapabilities}
@@ -2540,7 +2546,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadTranscriptCapabilities={loadTranscriptCapabilities}
@@ -2637,7 +2643,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadTranscriptCapabilities={loadTranscriptCapabilities}
@@ -2717,7 +2723,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadTranscriptCapabilities={loadTranscriptCapabilities}
@@ -2776,7 +2782,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadTranscriptCapabilities={loadTranscriptCapabilities}
@@ -2869,7 +2875,7 @@ describe('App', () => {
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadTranscriptCapabilities={loadTranscriptCapabilities}
@@ -2979,7 +2985,7 @@ describe('App', () => {
     }))
 
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadMorphologyImage={loadMorphologyImage}
         loadGenePanel={loadGenePanel}
@@ -3044,7 +3050,7 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => [])
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3062,7 +3068,7 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => [])
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3085,7 +3091,7 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => [])
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3114,7 +3120,7 @@ describe('App', () => {
     })
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3136,7 +3142,7 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => [])
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3164,7 +3170,7 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1', 'Slc17a7'])
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3217,7 +3223,7 @@ describe('App', () => {
     )
 
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={loadGenePanel}
         loadAnnotationGroups={loadAnnotationGroups}
@@ -3300,7 +3306,7 @@ describe('App', () => {
     })
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3360,7 +3366,7 @@ ${cd16Negative},CD16- NK cells`,
     )
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3404,7 +3410,7 @@ ${cd16Negative},CD16- NK cells`,
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
@@ -3455,7 +3461,7 @@ ${cd16Negative},CD16- NK cells`,
     const loadGenePanel = vi.fn(async () => [])
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3490,7 +3496,7 @@ ${cd16Negative},CD16- NK cells`,
     )
 
     render(
-      <App
+      <TestApp
         loadDatasetOverview={loadDatasetOverview}
         loadGenePanel={loadGenePanel}
         warmDatasetForRoi={warmDatasetForRoi}
@@ -3550,7 +3556,7 @@ ${cd16Negative},CD16- NK cells`,
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
@@ -3636,7 +3642,7 @@ ${cd16Negative},CD16- NK cells`,
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
@@ -3703,7 +3709,7 @@ ${cd16Negative},CD16- NK cells`,
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
@@ -3830,7 +3836,7 @@ ${cd16Negative},CD16- NK cells`,
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
@@ -3956,7 +3962,7 @@ ${cd16Negative},CD16- NK cells`,
 
     try {
       render(
-        <App
+        <TestApp
           loadDatasetOverview={loadDatasetOverview}
           loadGenePanel={loadGenePanel}
           loadRoiCells={loadRoiCells}
@@ -4017,7 +4023,7 @@ ${cd16Negative},CD16- NK cells`,
     const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1', 'Slc17a7'])
 
     render(
-      <App loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 

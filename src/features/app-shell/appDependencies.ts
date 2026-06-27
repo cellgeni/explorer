@@ -215,53 +215,164 @@ export type SpatialDatasetLoader = (
   options?: CachedSpatialDatasetOptions,
 ) => Promise<AnySpatialDataset>
 
+export interface AppDependencies {
+  readonly dataset: {
+    readonly loadDatasetOverview: DatasetOverviewLoader
+    readonly loadGenePanel: GenePanelLoader
+    readonly detectSpatialDataset: SpatialDatasetDetector
+    readonly getSpatialDataset: SpatialDatasetLoader
+    readonly warmDatasetForRoi: DatasetWarmupLoader
+  }
+  readonly morphology: {
+    readonly loadMorphologyImage: MorphologyImageLoader
+    readonly loadCustomMorphologyLayer: CustomMorphologyLayerLoader
+    readonly computeAutoChannelContrast: AutoChannelContrastLoader
+  }
+  readonly spatialElements: {
+    readonly loadBoundaryElements: BoundaryElementsLoader
+  }
+  readonly annotations: {
+    readonly loadAnnotations: AnnotationLoader
+    readonly loadAnnotationGroups: AnnotationGroupLoader
+  }
+  readonly analysis: {
+    readonly loadAnalysisEmbeddings: AnalysisEmbeddingsLoader
+  }
+  readonly roi: {
+    readonly loadRoiCells: RoiCellsLoader
+    readonly loadRoiGeneStats: RoiGeneStatsLoader
+    readonly loadRoiTranscripts: RoiTranscriptsLoader
+  }
+  readonly transcripts: {
+    readonly loadCellTranscriptDistribution: CellTranscriptDistributionLoader
+    readonly loadTranscriptCapabilities: TranscriptCapabilitiesLoader
+    readonly loadTranscriptAggregates: TranscriptAggregateLoader
+    readonly loadTranscriptViewport: TranscriptViewportLoader
+  }
+  readonly genes: {
+    readonly loadGeneExpression: GeneExpressionLoader
+  }
+  readonly diagnostics: {
+    readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
+  }
+}
+
+export type AppDependencyOverrides = {
+  readonly [Group in keyof AppDependencies]?: Partial<AppDependencies[Group]>
+}
+
+export type AppDependencySlotOverrides = Partial<{
+  readonly loadDatasetOverview: DatasetOverviewLoader
+  readonly loadMorphologyImage: MorphologyImageLoader
+  readonly loadCustomMorphologyLayer: CustomMorphologyLayerLoader
+  readonly loadBoundaryElements: BoundaryElementsLoader
+  readonly loadGenePanel: GenePanelLoader
+  readonly loadAnnotations: AnnotationLoader
+  readonly loadAnnotationGroups: AnnotationGroupLoader
+  readonly loadAnalysisEmbeddings: AnalysisEmbeddingsLoader
+  readonly loadRoiCells: RoiCellsLoader
+  readonly loadRoiGeneStats: RoiGeneStatsLoader
+  readonly loadRoiTranscripts: RoiTranscriptsLoader
+  readonly loadCellTranscriptDistribution: CellTranscriptDistributionLoader
+  readonly loadTranscriptCapabilities: TranscriptCapabilitiesLoader
+  readonly loadTranscriptAggregates: TranscriptAggregateLoader
+  readonly loadTranscriptViewport: TranscriptViewportLoader
+  readonly loadGeneExpression: GeneExpressionLoader
+  readonly warmDatasetForRoi: DatasetWarmupLoader
+  readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
+  readonly detectSpatialDataset: SpatialDatasetDetector
+  readonly getSpatialDataset: SpatialDatasetLoader
+  readonly computeAutoChannelContrast: AutoChannelContrastLoader
+}>
+
 export interface AppProps {
-  readonly loadDatasetOverview?: DatasetOverviewLoader
-  readonly loadMorphologyImage?: MorphologyImageLoader
-  readonly loadCustomMorphologyLayer?: CustomMorphologyLayerLoader
-  readonly loadBoundaryElements?: BoundaryElementsLoader
-  readonly loadGenePanel?: GenePanelLoader
-  readonly loadAnnotations?: AnnotationLoader
-  readonly loadAnnotationGroups?: AnnotationGroupLoader
-  readonly loadAnalysisEmbeddings?: AnalysisEmbeddingsLoader
-  readonly loadRoiCells?: RoiCellsLoader
-  readonly loadRoiGeneStats?: RoiGeneStatsLoader
-  readonly loadRoiTranscripts?: RoiTranscriptsLoader
-  readonly loadCellTranscriptDistribution?: CellTranscriptDistributionLoader
-  readonly loadTranscriptCapabilities?: TranscriptCapabilitiesLoader
-  readonly loadTranscriptAggregates?: TranscriptAggregateLoader
-  readonly loadTranscriptViewport?: TranscriptViewportLoader
-  readonly loadGeneExpression?: GeneExpressionLoader
-  readonly warmDatasetForRoi?: DatasetWarmupLoader
-  readonly runDatasetDiagnostics?: DatasetDiagnosticsRunner
-  readonly detectSpatialDataset?: SpatialDatasetDetector
-  readonly getSpatialDataset?: SpatialDatasetLoader
-  readonly computeAutoChannelContrast?: AutoChannelContrastLoader
+  readonly dependencies?: AppDependencyOverrides
 }
 
 export const defaultAppDependencies = {
-  loadDatasetOverview,
-  loadMorphologyImage,
-  loadCustomMorphologyLayer,
-  loadBoundaryElements: loadDatasetBoundaryElements,
-  loadGenePanel,
-  loadAnnotations: loadDatasetAnnotations,
-  loadAnnotationGroups: loadDatasetAnnotationGroups,
-  loadAnalysisEmbeddings: loadDatasetAnalysisEmbeddings,
-  loadRoiCells: loadDatasetRoiCells,
-  loadRoiGeneStats: loadDatasetRoiGeneStats,
-  loadRoiTranscripts: loadDatasetRoiTranscripts,
-  loadCellTranscriptDistribution: loadDatasetCellTranscriptDistribution,
-  loadTranscriptCapabilities: loadDatasetTranscriptCapabilities,
-  loadTranscriptAggregates: loadDatasetTranscriptAggregates,
-  loadTranscriptViewport: loadDatasetTranscriptViewport,
-  loadGeneExpression: loadDatasetGeneExpression,
-  warmDatasetForRoi,
-  runDatasetDiagnostics,
-  detectSpatialDataset,
-  getSpatialDataset: cachedSpatialDataset,
-  computeAutoChannelContrast: defaultComputeAutoChannelContrast,
-} satisfies Required<AppProps>
+  dataset: {
+    loadDatasetOverview,
+    loadGenePanel,
+    detectSpatialDataset,
+    getSpatialDataset: cachedSpatialDataset,
+    warmDatasetForRoi,
+  },
+  morphology: {
+    loadMorphologyImage,
+    loadCustomMorphologyLayer,
+    computeAutoChannelContrast: defaultComputeAutoChannelContrast,
+  },
+  spatialElements: {
+    loadBoundaryElements: loadDatasetBoundaryElements,
+  },
+  annotations: {
+    loadAnnotations: loadDatasetAnnotations,
+    loadAnnotationGroups: loadDatasetAnnotationGroups,
+  },
+  analysis: {
+    loadAnalysisEmbeddings: loadDatasetAnalysisEmbeddings,
+  },
+  roi: {
+    loadRoiCells: loadDatasetRoiCells,
+    loadRoiGeneStats: loadDatasetRoiGeneStats,
+    loadRoiTranscripts: loadDatasetRoiTranscripts,
+  },
+  transcripts: {
+    loadCellTranscriptDistribution: loadDatasetCellTranscriptDistribution,
+    loadTranscriptCapabilities: loadDatasetTranscriptCapabilities,
+    loadTranscriptAggregates: loadDatasetTranscriptAggregates,
+    loadTranscriptViewport: loadDatasetTranscriptViewport,
+  },
+  genes: {
+    loadGeneExpression: loadDatasetGeneExpression,
+  },
+  diagnostics: {
+    runDatasetDiagnostics,
+  },
+} satisfies AppDependencies
+
+export function resolveAppDependencies(
+  overrides: AppDependencyOverrides = {},
+): AppDependencies {
+  return {
+    dataset: {
+      ...defaultAppDependencies.dataset,
+      ...overrides.dataset,
+    },
+    morphology: {
+      ...defaultAppDependencies.morphology,
+      ...overrides.morphology,
+    },
+    spatialElements: {
+      ...defaultAppDependencies.spatialElements,
+      ...overrides.spatialElements,
+    },
+    annotations: {
+      ...defaultAppDependencies.annotations,
+      ...overrides.annotations,
+    },
+    analysis: {
+      ...defaultAppDependencies.analysis,
+      ...overrides.analysis,
+    },
+    roi: {
+      ...defaultAppDependencies.roi,
+      ...overrides.roi,
+    },
+    transcripts: {
+      ...defaultAppDependencies.transcripts,
+      ...overrides.transcripts,
+    },
+    genes: {
+      ...defaultAppDependencies.genes,
+      ...overrides.genes,
+    },
+    diagnostics: {
+      ...defaultAppDependencies.diagnostics,
+      ...overrides.diagnostics,
+    },
+  }
+}
 
 async function defaultComputeAutoChannelContrast(
   channel: MorphologyImageChannel,

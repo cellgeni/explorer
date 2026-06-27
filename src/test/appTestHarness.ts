@@ -2,6 +2,9 @@ import { fireEvent, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 import { micrometers } from '../data/coords'
 import type {
+  AppDependencies,
+  AppDependencyOverrides,
+  AppDependencySlotOverrides,
   SpatialDatasetDetector,
   SpatialDatasetLoader,
 } from '../features/app-shell/appDependencies'
@@ -30,6 +33,14 @@ type AppViewportFixture = {
   readonly restore: () => void
 }
 
+type MutableDependencyGroup<TGroup> = {
+  -readonly [Key in keyof TGroup]?: TGroup[Key]
+}
+
+type MutableDependencyOverrides = {
+  -readonly [Group in keyof AppDependencyOverrides]?: AppDependencyOverrides[Group]
+}
+
 interface CreateVisiumHdDetectionOptions {
   readonly baseUrl?: string
   readonly bins?: readonly VisiumHdBinDescriptor[]
@@ -54,6 +65,106 @@ interface CreateVisiumHdDatasetMockOptions<
 }
 
 export const VISIUM_HD_TEST_URL = 'https://example.test/visium-hd'
+
+export type AppTestDependencyProps = AppDependencySlotOverrides
+
+export function appTestDependencies({
+  computeAutoChannelContrast,
+  detectSpatialDataset,
+  getSpatialDataset,
+  loadAnalysisEmbeddings,
+  loadAnnotationGroups,
+  loadAnnotations,
+  loadBoundaryElements,
+  loadCellTranscriptDistribution,
+  loadCustomMorphologyLayer,
+  loadDatasetOverview,
+  loadGeneExpression,
+  loadGenePanel,
+  loadMorphologyImage,
+  loadRoiCells,
+  loadRoiGeneStats,
+  loadRoiTranscripts,
+  loadTranscriptAggregates,
+  loadTranscriptCapabilities,
+  loadTranscriptViewport,
+  runDatasetDiagnostics,
+  warmDatasetForRoi,
+}: AppTestDependencyProps = {}): AppDependencyOverrides {
+  const dataset: MutableDependencyGroup<AppDependencies['dataset']> = {}
+  const morphology: MutableDependencyGroup<AppDependencies['morphology']> = {}
+  const spatialElements: MutableDependencyGroup<AppDependencies['spatialElements']> = {}
+  const annotations: MutableDependencyGroup<AppDependencies['annotations']> = {}
+  const analysis: MutableDependencyGroup<AppDependencies['analysis']> = {}
+  const roi: MutableDependencyGroup<AppDependencies['roi']> = {}
+  const transcripts: MutableDependencyGroup<AppDependencies['transcripts']> = {}
+  const genes: MutableDependencyGroup<AppDependencies['genes']> = {}
+  const diagnostics: MutableDependencyGroup<AppDependencies['diagnostics']> = {}
+  const dependencies: MutableDependencyOverrides = {}
+
+  if (loadDatasetOverview !== undefined) dataset.loadDatasetOverview = loadDatasetOverview
+  if (loadGenePanel !== undefined) dataset.loadGenePanel = loadGenePanel
+  if (detectSpatialDataset !== undefined) dataset.detectSpatialDataset = detectSpatialDataset
+  if (getSpatialDataset !== undefined) dataset.getSpatialDataset = getSpatialDataset
+  if (warmDatasetForRoi !== undefined) dataset.warmDatasetForRoi = warmDatasetForRoi
+
+  if (loadMorphologyImage !== undefined) morphology.loadMorphologyImage = loadMorphologyImage
+  if (loadCustomMorphologyLayer !== undefined) {
+    morphology.loadCustomMorphologyLayer = loadCustomMorphologyLayer
+  }
+  if (computeAutoChannelContrast !== undefined) {
+    morphology.computeAutoChannelContrast = computeAutoChannelContrast
+  }
+
+  if (loadBoundaryElements !== undefined) {
+    spatialElements.loadBoundaryElements = loadBoundaryElements
+  }
+
+  if (loadAnnotations !== undefined) annotations.loadAnnotations = loadAnnotations
+  if (loadAnnotationGroups !== undefined) {
+    annotations.loadAnnotationGroups = loadAnnotationGroups
+  }
+
+  if (loadAnalysisEmbeddings !== undefined) {
+    analysis.loadAnalysisEmbeddings = loadAnalysisEmbeddings
+  }
+
+  if (loadRoiCells !== undefined) roi.loadRoiCells = loadRoiCells
+  if (loadRoiGeneStats !== undefined) roi.loadRoiGeneStats = loadRoiGeneStats
+  if (loadRoiTranscripts !== undefined) roi.loadRoiTranscripts = loadRoiTranscripts
+
+  if (loadCellTranscriptDistribution !== undefined) {
+    transcripts.loadCellTranscriptDistribution = loadCellTranscriptDistribution
+  }
+  if (loadTranscriptCapabilities !== undefined) {
+    transcripts.loadTranscriptCapabilities = loadTranscriptCapabilities
+  }
+  if (loadTranscriptAggregates !== undefined) {
+    transcripts.loadTranscriptAggregates = loadTranscriptAggregates
+  }
+  if (loadTranscriptViewport !== undefined) {
+    transcripts.loadTranscriptViewport = loadTranscriptViewport
+  }
+
+  if (loadGeneExpression !== undefined) genes.loadGeneExpression = loadGeneExpression
+  if (runDatasetDiagnostics !== undefined) {
+    diagnostics.runDatasetDiagnostics = runDatasetDiagnostics
+  }
+
+  if (Object.keys(dataset).length > 0) dependencies.dataset = dataset
+  if (Object.keys(morphology).length > 0) dependencies.morphology = morphology
+  if (Object.keys(spatialElements).length > 0) {
+    dependencies.spatialElements = spatialElements
+  }
+  if (Object.keys(annotations).length > 0) dependencies.annotations = annotations
+  if (Object.keys(analysis).length > 0) dependencies.analysis = analysis
+  if (Object.keys(roi).length > 0) dependencies.roi = roi
+  if (Object.keys(transcripts).length > 0) dependencies.transcripts = transcripts
+  if (Object.keys(genes).length > 0) dependencies.genes = genes
+  if (Object.keys(diagnostics).length > 0) dependencies.diagnostics = diagnostics
+
+  return dependencies
+}
 
 export function openHudTab(name: string): void {
   fireEvent.click(screen.getByRole('tab', { name }))

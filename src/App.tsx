@@ -34,7 +34,7 @@ import {
   platformSelectedEmbeddingElementId,
 } from './features/app-shell/platformAdapter'
 import {
-  defaultAppDependencies,
+  resolveAppDependencies,
   type AppProps,
   type BoundaryElementsLoader,
   type GeneExpressionLoader,
@@ -156,6 +156,8 @@ export type {
   AnnotationGroupLoader,
   AnnotationLoader,
   AutoChannelContrastLoader,
+  AppDependencies,
+  AppDependencyOverrides,
   BoundaryElementsLoader,
   CellTranscriptDistributionLoader,
   DatasetDiagnosticsRunner,
@@ -175,29 +177,34 @@ export type {
   TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
 
-export function App({
-  loadDatasetOverview = defaultAppDependencies.loadDatasetOverview,
-  loadMorphologyImage = defaultAppDependencies.loadMorphologyImage,
-  loadCustomMorphologyLayer = defaultAppDependencies.loadCustomMorphologyLayer,
-  loadBoundaryElements = defaultAppDependencies.loadBoundaryElements,
-  loadGenePanel = defaultAppDependencies.loadGenePanel,
-  loadAnnotations = defaultAppDependencies.loadAnnotations,
-  loadAnnotationGroups = defaultAppDependencies.loadAnnotationGroups,
-  loadAnalysisEmbeddings = defaultAppDependencies.loadAnalysisEmbeddings,
-  loadRoiCells = defaultAppDependencies.loadRoiCells,
-  loadRoiGeneStats = defaultAppDependencies.loadRoiGeneStats,
-  loadRoiTranscripts = defaultAppDependencies.loadRoiTranscripts,
-  loadCellTranscriptDistribution = defaultAppDependencies.loadCellTranscriptDistribution,
-  loadTranscriptCapabilities = defaultAppDependencies.loadTranscriptCapabilities,
-  loadTranscriptAggregates = defaultAppDependencies.loadTranscriptAggregates,
-  loadTranscriptViewport = defaultAppDependencies.loadTranscriptViewport,
-  loadGeneExpression = defaultAppDependencies.loadGeneExpression,
-  warmDatasetForRoi = defaultAppDependencies.warmDatasetForRoi,
-  runDatasetDiagnostics = defaultAppDependencies.runDatasetDiagnostics,
-  detectSpatialDataset = defaultAppDependencies.detectSpatialDataset,
-  getSpatialDataset = defaultAppDependencies.getSpatialDataset,
-  computeAutoChannelContrast = defaultAppDependencies.computeAutoChannelContrast,
-}: AppProps) {
+export function App({ dependencies }: AppProps = {}) {
+  const {
+    dataset: {
+      detectSpatialDataset,
+      getSpatialDataset,
+      loadDatasetOverview,
+      loadGenePanel,
+      warmDatasetForRoi,
+    },
+    morphology: {
+      computeAutoChannelContrast,
+      loadCustomMorphologyLayer,
+      loadMorphologyImage,
+    },
+    spatialElements: { loadBoundaryElements },
+    annotations: { loadAnnotationGroups, loadAnnotations },
+    analysis: { loadAnalysisEmbeddings },
+    roi: { loadRoiCells, loadRoiGeneStats, loadRoiTranscripts },
+    transcripts: {
+      loadCellTranscriptDistribution,
+      loadTranscriptAggregates,
+      loadTranscriptCapabilities,
+      loadTranscriptViewport,
+    },
+    genes: { loadGeneExpression },
+    diagnostics: { runDatasetDiagnostics },
+  } = resolveAppDependencies(dependencies)
+
   const controlIds = useAppControlIds()
   const [initialShareableState] = useState<ShareableState>(() =>
     readShareableStateFromLocation(),
