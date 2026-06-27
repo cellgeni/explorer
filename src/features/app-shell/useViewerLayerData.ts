@@ -12,9 +12,9 @@ import type {
 import { styleOverviewCellsByObservation } from '../../rendering/cellStyling'
 import {
   boundaryElementsToLayerData,
-  geneExpressionCellsToLayerData,
+  geneExpressionElementsToLayerData,
   geneExpressionScoreDomainMax,
-  styleGeneExpressionCellsByScale,
+  styleGeneExpressionElementsByScale,
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
   type GeneExpressionColorScale,
@@ -203,7 +203,7 @@ export function useViewerLayerData({
     }
 
     const startedAt = readTimestamp()
-    const cells = geneExpressionCellsToLayerData(
+    const cells = geneExpressionElementsToLayerData(
       geneExpressionBatch.cells,
       geneExpressionBatch.genes,
       geneExpressionColorScale,
@@ -218,12 +218,12 @@ export function useViewerLayerData({
     geneExpressionScaleMax,
     geneExpressionScoreMode,
   ])
-  const geneExpressionCells = geneExpressionLayerData.cells
+  const geneExpressionElements = geneExpressionLayerData.cells
   const geneExpressionLayerDataDurationMs = geneExpressionLayerData.durationMs
   const styledGeneExpressionLayerData = useMemo(() => {
     const startedAt = readTimestamp()
-    const cells = styleGeneExpressionCellsByScale(
-      geneExpressionCells,
+    const cells = styleGeneExpressionElementsByScale(
+      geneExpressionElements,
       geneExpressionColorScale,
       {
         scaleMax: geneExpressionScaleMax,
@@ -231,8 +231,8 @@ export function useViewerLayerData({
     )
 
     return { cells, durationMs: Math.max(0, readTimestamp() - startedAt) }
-  }, [geneExpressionCells, geneExpressionColorScale, geneExpressionScaleMax])
-  const styledGeneExpressionCells = styledGeneExpressionLayerData.cells
+  }, [geneExpressionElements, geneExpressionColorScale, geneExpressionScaleMax])
+  const styledGeneExpressionElements = styledGeneExpressionLayerData.cells
   const geneExpressionRestyleDurationMs = styledGeneExpressionLayerData.durationMs
   const transcriptLayerPoints = useMemo(
     () =>
@@ -315,7 +315,7 @@ export function useViewerLayerData({
     morphologyCanvasChannels,
     morphologyMicrometersPerPixel,
     overviewExtent,
-    styledGeneExpressionCells,
+    styledGeneExpressionElements,
     styledOverviewCells,
     transcriptDensityScaleLabels,
     transcriptDensityScaleMax,

@@ -7,7 +7,7 @@ export const OVERVIEW_AGGREGATION_INDIVIDUAL_MICROMETERS = 12
 export const DEFAULT_OVERVIEW_RENDER_CELL_LIMIT = 250_000
 export const EXPRESSION_AGGREGATION_BIN_MICROMETERS = 220
 export const EXPRESSION_AGGREGATION_EXACT_ZOOM = -0.25
-export const EXPRESSION_AGGREGATION_EXACT_CELL_LIMIT = 800
+export const EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT = 800
 
 export interface OverviewAggregationOptions {
   readonly bbox?: BBox
@@ -85,14 +85,14 @@ export function aggregateOverviewCells(
   return aggregateCellsIntoBins(candidates, binSize)
 }
 
-export function aggregateExpressionCells(
+export function aggregateExpressionElements(
   cells: readonly OverviewCellDatum[],
   viewState: OverviewViewState,
   options: {
     readonly bbox?: BBox
     readonly binMicrometers?: number
     readonly exactZoom?: number
-    readonly exactCellLimit?: number
+    readonly exactElementLimit?: number
   } = {},
 ): readonly OverviewCellDatum[] {
   if (cells.length === 0) {
@@ -107,13 +107,13 @@ export function aggregateExpressionCells(
   }
 
   const exactZoom = options.exactZoom ?? EXPRESSION_AGGREGATION_EXACT_ZOOM
-  const exactCellLimit = options.exactCellLimit ?? EXPRESSION_AGGREGATION_EXACT_CELL_LIMIT
+  const exactElementLimit = options.exactElementLimit ?? EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT
 
-  if (viewState.zoom >= exactZoom || candidates.length <= exactCellLimit) {
+  if (viewState.zoom >= exactZoom || candidates.length <= exactElementLimit) {
     return candidates
   }
 
-  return aggregateExpressionCellsIntoBins(
+  return aggregateExpressionElementsIntoBins(
     candidates,
     options.binMicrometers ?? EXPRESSION_AGGREGATION_BIN_MICROMETERS,
   )
@@ -352,7 +352,7 @@ function normalizeRenderCellLimit(value: number | undefined): number {
   return Math.max(1, Math.round(value))
 }
 
-function aggregateExpressionCellsIntoBins(
+function aggregateExpressionElementsIntoBins(
   cells: readonly OverviewCellDatum[],
   binSize: number,
 ): readonly OverviewCellDatum[] {

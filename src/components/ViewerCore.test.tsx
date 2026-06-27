@@ -193,7 +193,7 @@ describe('ViewerCore', () => {
         geneExpressionActive
         geneExpressionOverlayEnabled={false}
         gridCells={[gridCellDatum()]}
-        expressionCells={[
+        expressionElements={[
           {
             id: 'BC-1',
             position: [8, -8, 0],
@@ -412,7 +412,7 @@ describe('ViewerCore', () => {
           },
         ]}
         geneExpressionActive
-        expressionCells={[
+        expressionElements={[
           {
             id: 'overview-cell-1',
             position: [0, 0, 0],
@@ -480,7 +480,7 @@ describe('ViewerCore', () => {
         cells={[cell]}
         boundaries={[boundary]}
         geneExpressionActive
-        expressionCells={[
+        expressionElements={[
           {
             ...cell,
             fillColor: [240, 128, 120, 220],
@@ -700,7 +700,7 @@ describe('ViewerCore', () => {
       <ViewerCore
         boundaries={[boundary]}
         cellBoundaryHoverEnabled
-        expressionCells={[
+        expressionElements={[
           {
             id: boundary.id,
             position: [5, -5, 0],
@@ -1174,7 +1174,7 @@ describe('ViewerCore', () => {
         lineColor: [246, 242, 232, 210],
       },
     ]
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         ...cells[0]!,
         fillColor: [240, 128, 120, 220],
@@ -1189,7 +1189,7 @@ describe('ViewerCore', () => {
       <ViewerCore
         cells={cells}
         boundaries={boundaries}
-        expressionCells={expressionCells}
+        expressionElements={expressionElements}
         geneExpressionActive
         initialViewStateOverride={{ target: [0, 0, 0], zoom: 0 }}
       />,

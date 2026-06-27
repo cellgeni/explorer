@@ -187,22 +187,22 @@ export async function summarizeVisiumHdMagicLensSelection({
       limit: MAGIC_LENS_CELL_LIMIT,
       signal: loaderOptions.signal,
     }))
-  const filteredExpressionCells = expressionBatch.cells.filter((cell) =>
+  const filteredExpressionElements = expressionBatch.cells.filter((cell) =>
     selectedBinIds.has(cell.id),
   )
-  const filteredMaxCount = filteredExpressionCells.reduce(
+  const filteredMaxCount = filteredExpressionElements.reduce(
     (maxCount, cell) => Math.max(maxCount, cell.count),
     0,
   )
   const filteredExpressionBatch =
-    filteredExpressionCells.length === expressionBatch.cells.length
+    filteredExpressionElements.length === expressionBatch.cells.length
       ? {
           ...expressionBatch,
-          cells: filteredExpressionCells,
+          cells: filteredExpressionElements,
           maxCount: filteredMaxCount,
         }
       : {
-          cells: filteredExpressionCells,
+          cells: filteredExpressionElements,
           genes: expressionBatch.genes,
           maxCount: filteredMaxCount,
         }

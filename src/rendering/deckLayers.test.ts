@@ -12,10 +12,10 @@ import {
   boundaryElementsToLayerData,
   createCellBoundaryLayerGeometry,
   createCellBoundaryLayerStyle,
-  createGeneExpressionCellStyleIndex,
+  createGeneExpressionElementStyleIndex,
   createOverviewLayers,
   createOverviewViewState,
-  geneExpressionCellsToLayerData,
+  geneExpressionElementsToLayerData,
   geneExpressionScoreDomainMax,
   gridCellBatchesToLayerData,
   overviewCellsToLayerData,
@@ -24,7 +24,7 @@ import {
   styleCellBoundariesByGeneExpression,
   styleCellsByGeneExpression,
   styleGridCellsByGeneExpression,
-  styleGeneExpressionCellsByScale,
+  styleGeneExpressionElementsByScale,
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
 } from './deckLayers'
@@ -434,7 +434,7 @@ describe('deck layer factory', () => {
   })
 
   it('merges gene expression color into the existing point layer', () => {
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         id: 'cell-1',
         position: [10, -20, 0],
@@ -446,7 +446,7 @@ describe('deck layer factory', () => {
     ]
     const expressionStyledCells = styleCellsByGeneExpression(
       fixtureCells,
-      expressionCells,
+      expressionElements,
     )
     const layers = createOverviewLayers(expressionStyledCells, [], {
       cellFillOpacity: 0.45,
@@ -527,7 +527,7 @@ describe('deck layer factory', () => {
   })
 
   it('adds a non-pickable gene expression overlay when expression cells need direct drawing', () => {
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         id: 'expression-cell-1',
         position: [120, -140, 0],
@@ -540,7 +540,7 @@ describe('deck layer factory', () => {
     const layers = createOverviewLayers(fixtureCells, [], {
       cellFillOpacity: 0.45,
       cellBoundaryOpacity: 0.4,
-      geneExpressionOverlayCells: expressionCells,
+      geneExpressionOverlayElements: expressionElements,
     })
 
     expect(layers).toHaveLength(2)
@@ -554,7 +554,7 @@ describe('deck layer factory', () => {
     }
 
     expect(expressionLayer.id).toBe('gene-expression-scatter')
-    expect(expressionLayer.props.data).toBe(expressionCells)
+    expect(expressionLayer.props.data).toBe(expressionElements)
     expect(expressionLayer.props.pickable).toBe(false)
     expect(expressionLayer.props.filled).toBe(true)
     expect(expressionLayer.props.radiusMinPixels).toBe(1.5)
@@ -577,7 +577,7 @@ describe('deck layer factory', () => {
         lineColor: [246, 242, 232, 210],
       },
     ]
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         id: 'cell-1',
         position: [10, -20, 0],
@@ -596,14 +596,14 @@ describe('deck layer factory', () => {
     const geometry = createCellBoundaryLayerGeometry(boundaries, {
       includeFill: true,
     })
-    const style = createCellBoundaryLayerStyle(geometry, [], expressionCells)
+    const style = createCellBoundaryLayerStyle(geometry, [], expressionElements)
     const layers = createOverviewLayers(fixtureCells, boundaries, {
       cellFillOpacity: 0.45,
       cellBoundaryOpacity: 0.4,
       cellBoundaryGeometry: geometry,
       cellBoundaryStyle: style,
       geneExpressionActive: true,
-      geneExpressionOverlayCells: expressionCells,
+      geneExpressionOverlayElements: expressionElements,
     })
     const fillLayer = layers.find((layer) => {
       return layer instanceof SolidPolygonLayer && layer.id === 'cell-boundary-fills'
@@ -625,7 +625,7 @@ describe('deck layer factory', () => {
     expect(Array.from(fillData.attributes.getFillColor.value.slice(0, 4))).toEqual([
       240, 128, 120, 115,
     ])
-    expect(expressionLayer.props.data).toEqual([expressionCells[1]])
+    expect(expressionLayer.props.data).toEqual([expressionElements[1]])
   })
 
   it('merges gene expression color into sampled overview points by spatial bin', () => {
@@ -643,7 +643,7 @@ describe('deck layer factory', () => {
         fillColor: [215, 63, 124, 220],
       },
     ]
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         id: 'cell-42',
         position: [40, -45, 0],
@@ -654,7 +654,7 @@ describe('deck layer factory', () => {
       },
     ]
 
-    const expressionStyleIndex = createGeneExpressionCellStyleIndex(expressionCells, {
+    const expressionStyleIndex = createGeneExpressionElementStyleIndex(expressionElements, {
       binMicrometers: 100,
     })
     const expressionStyledCells = styleCellsByGeneExpression(cells, expressionStyleIndex)
@@ -677,7 +677,7 @@ describe('deck layer factory', () => {
         fillColor: [215, 63, 124, 220],
       },
     ]
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         id: 'cell-1',
         position: [65, -70, 0],
@@ -694,7 +694,7 @@ describe('deck layer factory', () => {
       },
     ]
 
-    const expressionStyledCells = styleCellsByGeneExpression(cells, expressionCells, {
+    const expressionStyledCells = styleCellsByGeneExpression(cells, expressionElements, {
       binMicrometers: 100,
     })
 
@@ -717,7 +717,7 @@ describe('deck layer factory', () => {
         lineColor: [246, 242, 232, 210],
       },
     ]
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         id: 'cell-2',
         position: [12, -24, 0],
@@ -728,7 +728,7 @@ describe('deck layer factory', () => {
     ]
     const expressionStyledBoundaries = styleCellBoundariesByGeneExpression(
       boundaries,
-      expressionCells,
+      expressionElements,
     )
     const layers = createOverviewLayers(fixtureCells, expressionStyledBoundaries, {
       cellFillOpacity: 0.5,
@@ -788,7 +788,7 @@ describe('deck layer factory', () => {
         lineColor: [246, 242, 232, 210],
       },
     ]
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         id: 'cell-2',
         position: [12, -24, 0],
@@ -799,7 +799,7 @@ describe('deck layer factory', () => {
     ]
     const expressionStyledBoundaries = styleCellBoundariesByGeneExpression(
       boundaries,
-      expressionCells,
+      expressionElements,
     )
     const layers = createOverviewLayers(fixtureCells, expressionStyledBoundaries, {
       cellFillOpacity: 0,
@@ -993,7 +993,7 @@ describe('deck layer factory', () => {
   })
 
   it('converts expression cells into deck.gl overlay coordinates', () => {
-    const [datum] = geneExpressionCellsToLayerData(
+    const [datum] = geneExpressionElementsToLayerData(
       [
         {
           id: intToCellId(1, 1),
@@ -1375,7 +1375,7 @@ describe('deck layer factory', () => {
   })
 
   it('scores multi-gene expression by mean count', () => {
-    const [datum] = geneExpressionCellsToLayerData(
+    const [datum] = geneExpressionElementsToLayerData(
       [
         {
           id: intToCellId(1, 1),
@@ -1393,7 +1393,7 @@ describe('deck layer factory', () => {
   })
 
   it('scores expression signatures as z-scores across visible cells', () => {
-    const data = geneExpressionCellsToLayerData(
+    const data = geneExpressionElementsToLayerData(
       [
         {
           id: intToCellId(1, 1),
@@ -1423,7 +1423,7 @@ describe('deck layer factory', () => {
   })
 
   it('colors expression cells with the selected scale', () => {
-    const [goldDatum] = geneExpressionCellsToLayerData(
+    const [goldDatum] = geneExpressionElementsToLayerData(
       [
         {
           id: intToCellId(1, 1),
@@ -1434,7 +1434,7 @@ describe('deck layer factory', () => {
       ['Gad1'],
       'gold',
     )
-    const [viridisDatum] = geneExpressionCellsToLayerData(
+    const [viridisDatum] = geneExpressionElementsToLayerData(
       [
         {
           id: intToCellId(1, 1),
@@ -1452,7 +1452,7 @@ describe('deck layer factory', () => {
   })
 
   it('uses a supplied global expression scale maximum when coloring cells', () => {
-    const [datum] = geneExpressionCellsToLayerData(
+    const [datum] = geneExpressionElementsToLayerData(
       [
         {
           id: intToCellId(1, 1),
@@ -1484,7 +1484,7 @@ describe('deck layer factory', () => {
   })
 
   it('restyles existing expression layer data without changing positions', () => {
-    const [datum] = geneExpressionCellsToLayerData(
+    const [datum] = geneExpressionElementsToLayerData(
       [
         {
           id: intToCellId(1, 1),
@@ -1500,7 +1500,7 @@ describe('deck layer factory', () => {
       throw new Error('Expected expression layer datum.')
     }
 
-    const [restyled] = styleGeneExpressionCellsByScale([datum], 'magma')
+    const [restyled] = styleGeneExpressionElementsByScale([datum], 'magma')
 
     expect(restyled).toMatchObject({
       id: datum.id,

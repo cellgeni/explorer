@@ -39,6 +39,8 @@ export type {
   CellBoundaryLayerStyle,
   GeneExpressionCellStyleIndex,
   GeneExpressionCellStyleOptions,
+  GeneExpressionElementStyleIndex,
+  GeneExpressionElementStyleOptions,
   GeneExpressionColorScale,
   GeneExpressionColorScaleOption,
   GeneExpressionLayerDataOptions,
@@ -82,10 +84,13 @@ export {
 } from './deckLayerColors'
 export {
   createGeneExpressionCellStyleIndex,
+  createGeneExpressionElementStyleIndex,
   geneExpressionCellsToLayerData,
+  geneExpressionElementsToLayerData,
   geneExpressionScoreDomainMax,
   styleCellsByGeneExpression,
   styleGeneExpressionCellsByScale,
+  styleGeneExpressionElementsByScale,
   styleGridCellsByGeneExpression,
 } from './geneExpressionRenderer'
 export { gridCellBatchesToLayerData } from './gridCellRenderer'
@@ -114,11 +119,11 @@ export function createOverviewLayers(
     options.cellBoundaryOpacity ?? DEFAULT_LAYER_OPACITY,
   )
   const cellBoundaryFillEnabled = options.cellBoundaryFillEnabled ?? false
-  const geneExpressionOverlayCells = options.geneExpressionOverlayCells ?? []
+  const geneExpressionOverlayElements = options.geneExpressionOverlayElements ?? []
   const boundaryFillLayerEnabled =
     cellBoundaryFillEnabled ||
     options.geneExpressionActive === true ||
-    geneExpressionOverlayCells.length > 0
+    geneExpressionOverlayElements.length > 0
   const cellBoundaryGeometry =
     options.cellBoundaryGeometry ??
     (boundaries.length > 0
@@ -139,8 +144,8 @@ export function createOverviewLayers(
   const transcriptPoints = options.transcriptPoints ?? []
   const visibleGeneExpressionOverlayCells =
     cellBoundaryGeometry.boundaryCellIds.size === 0
-      ? geneExpressionOverlayCells
-      : geneExpressionOverlayCells.filter(
+      ? geneExpressionOverlayElements
+      : geneExpressionOverlayElements.filter(
           (cell) => !cellBoundaryGeometry.boundaryCellIds.has(cell.id),
         )
   const pointCells = cellsWithoutVisibleBoundaryIds(

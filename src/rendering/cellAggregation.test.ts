@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers } from '../data/coords'
 import {
-  aggregateExpressionCells,
+  aggregateExpressionElements,
   aggregateOverviewCells,
   estimateOverviewCellCountInBbox,
   overviewAggregationBinMicrometers,
@@ -110,7 +110,7 @@ describe('overview cell aggregation', () => {
   })
 
   it('uses fixed data-space bin centers for sampled expression cells across overview zooms', () => {
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         id: 'cell-1',
         position: [0, 0, 0],
@@ -127,17 +127,17 @@ describe('overview cell aggregation', () => {
       },
     ]
 
-    const firstZoom = aggregateExpressionCells(expressionCells, viewState, {
+    const firstZoom = aggregateExpressionElements(expressionElements, viewState, {
       binMicrometers: 100,
-      exactCellLimit: 0,
+      exactElementLimit: 0,
       exactZoom: 0,
     })
-    const secondZoom = aggregateExpressionCells(
-      expressionCells,
+    const secondZoom = aggregateExpressionElements(
+      expressionElements,
       { ...viewState, zoom: -1.25 },
       {
         binMicrometers: 100,
-        exactCellLimit: 0,
+        exactElementLimit: 0,
         exactZoom: 0,
       },
     )
@@ -155,8 +155,8 @@ describe('overview cell aggregation', () => {
 
   it('returns exact expression cells when the viewport is small enough', () => {
     expect(
-      aggregateExpressionCells(cells, viewState, {
-        exactCellLimit: cells.length,
+      aggregateExpressionElements(cells, viewState, {
+        exactElementLimit: cells.length,
       }),
     ).toBe(cells)
   })

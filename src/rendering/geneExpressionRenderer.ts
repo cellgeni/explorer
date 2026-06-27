@@ -1,5 +1,5 @@
 import type { Position } from '@deck.gl/core'
-import type { GeneExpressionCell } from '../datasets/xeniumDataset'
+import type { GeneExpressionElement } from '../datasets/xeniumDataset'
 import {
   boundaryLineColor,
   cellAreaToRadiusMicrometers,
@@ -10,8 +10,8 @@ import {
 } from './deckLayerColors'
 import type {
   GeneExpressionBinStyle,
-  GeneExpressionCellStyleIndex,
-  GeneExpressionCellStyleOptions,
+  GeneExpressionElementStyleIndex,
+  GeneExpressionElementStyleOptions,
   GeneExpressionColorScale,
   GeneExpressionLayerDataOptions,
   GeneExpressionScoreMode,
@@ -19,95 +19,103 @@ import type {
   OverviewCellDatum,
 } from './deckLayerTypes'
 
-export function geneExpressionCellsToLayerData(
-  cells: readonly GeneExpressionCell[],
+export function geneExpressionElementsToLayerData(
+  elements: readonly GeneExpressionElement[],
   genes: readonly string[],
   colorScale: GeneExpressionColorScale = DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
   scoreMode: GeneExpressionScoreMode = DEFAULT_GENE_EXPRESSION_SCORE_MODE,
   options: GeneExpressionLayerDataOptions = {},
 ): readonly OverviewCellDatum[] {
-  if (cells.length === 0) {
+  if (elements.length === 0) {
     return []
   }
 
-  const scores = scoreExpressionCells(cells, genes, scoreMode)
+  const scores = scoreExpressionElements(elements, genes, scoreMode)
   const scoreDenominator = expressionScoreDenominator(scores, options.scaleMax)
 
-  const layerData = cells.map((cell, index): OverviewCellDatum => {
+  const layerData = elements.map((element, index): OverviewCellDatum => {
     const score = scores[index] ?? 0
     const intensity = Math.sqrt(Math.max(score, 0) / scoreDenominator)
-    const radiusMicrometers = cellAreaToRadiusMicrometers(cell.cellArea)
+    const radiusMicrometers = cellAreaToRadiusMicrometers(element.cellArea)
 
     return {
-      id: cell.id,
-      position: [cell.position.x, -cell.position.y, 0],
+      id: element.id,
+      position: [element.position.x, -element.position.y, 0],
       radiusPixels: 4 + intensity * 6,
       ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
       fillColor: geneExpressionColor(colorScale, intensity),
       expressionCount: score,
       expressionGenes: genes,
-      ...(cell.transcriptCount === undefined
+      ...(element.transcriptCount === undefined
         ? {}
-        : { transcriptCount: cell.transcriptCount }),
-      ...(cell.cellArea === undefined ? {} : { cellArea: cell.cellArea }),
-      ...(cell.nucleusCount === undefined ? {} : { nucleusCount: cell.nucleusCount }),
-      ...(cell.segmentationMethod === undefined
+        : { transcriptCount: element.transcriptCount }),
+      ...(element.cellArea === undefined ? {} : { cellArea: element.cellArea }),
+      ...(element.nucleusCount === undefined
         ? {}
-        : { segmentationMethod: cell.segmentationMethod }),
+        : { nucleusCount: element.nucleusCount }),
+      ...(element.segmentationMethod === undefined
+        ? {}
+        : { segmentationMethod: element.segmentationMethod }),
     }
   })
 
-  return styleGeneExpressionCellsByScale(layerData, colorScale, options)
+  return styleGeneExpressionElementsByScale(layerData, colorScale, options)
 }
 
-export function styleGeneExpressionCellsByScale(
-  cells: readonly OverviewCellDatum[],
+export const geneExpressionCellsToLayerData = geneExpressionElementsToLayerData
+
+export function styleGeneExpressionElementsByScale(
+  elements: readonly OverviewCellDatum[],
   colorScale: GeneExpressionColorScale,
   options: GeneExpressionLayerDataOptions = {},
 ): readonly OverviewCellDatum[] {
-  if (cells.length === 0) {
-    return cells
+  if (elements.length === 0) {
+    return elements
   }
 
   const scoreDenominator = expressionScoreDenominator(
-    cells.map((cell) => cell.expressionCount ?? 0),
+    elements.map((element) => element.expressionCount ?? 0),
     options.scaleMax,
   )
 
-  return cells.map((cell) => {
-    const intensity = Math.sqrt(Math.max(cell.expressionCount ?? 0, 0) / scoreDenominator)
+  return elements.map((element) => {
+    const intensity = Math.sqrt(
+      Math.max(element.expressionCount ?? 0, 0) / scoreDenominator,
+    )
 
     return {
-      ...cell,
+      ...element,
       fillColor: geneExpressionColor(colorScale, intensity),
     }
   })
 }
 
+export const styleGeneExpressionCellsByScale = styleGeneExpressionElementsByScale
+
 export function geneExpressionScoreDomainMax(
-  cells: readonly GeneExpressionCell[],
+  elements: readonly GeneExpressionElement[],
   genes: readonly string[],
   scoreMode: GeneExpressionScoreMode,
 ): number {
-  return maxExpressionScore(scoreExpressionCells(cells, genes, scoreMode))
+  return maxExpressionScore(scoreExpressionElements(elements, genes, scoreMode))
 }
 
 export function styleCellsByGeneExpression(
   cells: readonly OverviewCellDatum[],
-  expressionSource: readonly OverviewCellDatum[] | GeneExpressionCellStyleIndex,
-  options: GeneExpressionCellStyleOptions = {},
+  expressionSource: readonly OverviewCellDatum[] | GeneExpressionElementStyleIndex,
+  options: GeneExpressionElementStyleOptions = {},
 ): readonly OverviewCellDatum[] {
   if (cells.length === 0) {
     return cells
   }
 
   const styleIndex = isOverviewCellDatumArray(expressionSource)
-    ? createGeneExpressionCellStyleIndex(expressionSource, options)
+    ? createGeneExpressionElementStyleIndex(expressionSource, options)
     : expressionSource
   const styleUnmatchedCells = options.styleUnmatchedCells ?? false
 
   if (
-    styleIndex.expressionByCellId.size === 0 &&
+    styleIndex.expressionByElementId.size === 0 &&
     (styleIndex.expressionByBinKey?.size ?? 0) === 0 &&
     !styleUnmatchedCells
   ) {
@@ -116,8 +124,8 @@ export function styleCellsByGeneExpression(
 
   let hasExpressionStyle = false
   const styledCells = cells.map((cell) => {
-    const expressionCell =
-      styleIndex.expressionByCellId.get(cell.id) ??
+    const expressionElement =
+      styleIndex.expressionByElementId.get(cell.id) ??
       (styleIndex.expressionByBinKey === undefined ||
       styleIndex.binMicrometers === undefined
         ? undefined
@@ -125,7 +133,7 @@ export function styleCellsByGeneExpression(
             positionBinKey(cell.position, styleIndex.binMicrometers),
           ))
 
-    if (expressionCell === undefined) {
+    if (expressionElement === undefined) {
       if (!styleUnmatchedCells) {
         return cell
       }
@@ -142,13 +150,13 @@ export function styleCellsByGeneExpression(
     hasExpressionStyle = true
     return {
       ...cell,
-      fillColor: expressionCell.fillColor,
-      ...(expressionCell.expressionCount === undefined
+      fillColor: expressionElement.fillColor,
+      ...(expressionElement.expressionCount === undefined
         ? {}
-        : { expressionCount: expressionCell.expressionCount }),
-      ...(expressionCell.expressionGenes === undefined
+        : { expressionCount: expressionElement.expressionCount }),
+      ...(expressionElement.expressionGenes === undefined
         ? {}
-        : { expressionGenes: expressionCell.expressionGenes }),
+        : { expressionGenes: expressionElement.expressionGenes }),
     }
   })
 
@@ -157,27 +165,27 @@ export function styleCellsByGeneExpression(
 
 export function styleGridCellsByGeneExpression(
   cells: readonly GridCellDatum[],
-  expressionSource: readonly OverviewCellDatum[] | GeneExpressionCellStyleIndex,
-  options: GeneExpressionCellStyleOptions = {},
+  expressionSource: readonly OverviewCellDatum[] | GeneExpressionElementStyleIndex,
+  options: GeneExpressionElementStyleOptions = {},
 ): readonly GridCellDatum[] {
   if (cells.length === 0) {
     return cells
   }
 
   const styleIndex = isOverviewCellDatumArray(expressionSource)
-    ? createGeneExpressionCellStyleIndex(expressionSource, options)
+    ? createGeneExpressionElementStyleIndex(expressionSource, options)
     : expressionSource
   const styleUnmatchedCells = options.styleUnmatchedCells ?? false
 
-  if (styleIndex.expressionByCellId.size === 0 && !styleUnmatchedCells) {
+  if (styleIndex.expressionByElementId.size === 0 && !styleUnmatchedCells) {
     return cells
   }
 
   let hasExpressionStyle = false
   const styledCells = cells.map((cell) => {
-    const expressionCell = styleIndex.expressionByCellId.get(cell.id)
+    const expressionElement = styleIndex.expressionByElementId.get(cell.id)
 
-    if (expressionCell === undefined) {
+    if (expressionElement === undefined) {
       if (!styleUnmatchedCells) {
         return cell
       }
@@ -195,54 +203,56 @@ export function styleGridCellsByGeneExpression(
     hasExpressionStyle = true
     return {
       ...cell,
-      fillColor: expressionCell.fillColor,
-      lineColor: boundaryLineColor(expressionCell.fillColor),
-      ...(expressionCell.expressionCount === undefined
+      fillColor: expressionElement.fillColor,
+      lineColor: boundaryLineColor(expressionElement.fillColor),
+      ...(expressionElement.expressionCount === undefined
         ? {}
-        : { expressionCount: expressionCell.expressionCount }),
-      ...(expressionCell.expressionGenes === undefined
+        : { expressionCount: expressionElement.expressionCount }),
+      ...(expressionElement.expressionGenes === undefined
         ? {}
-        : { expressionGenes: expressionCell.expressionGenes }),
+        : { expressionGenes: expressionElement.expressionGenes }),
     }
   })
 
   return hasExpressionStyle ? styledCells : cells
 }
 
-export function createGeneExpressionCellStyleIndex(
-  expressionCells: readonly OverviewCellDatum[],
-  options: GeneExpressionCellStyleOptions = {},
-): GeneExpressionCellStyleIndex {
-  const expressionByCellId = new Map<string, OverviewCellDatum>()
+export function createGeneExpressionElementStyleIndex(
+  expressionElements: readonly OverviewCellDatum[],
+  options: GeneExpressionElementStyleOptions = {},
+): GeneExpressionElementStyleIndex {
+  const expressionByElementId = new Map<string, OverviewCellDatum>()
   const binMicrometers = normalizeGeneExpressionBinMicrometers(options.binMicrometers)
 
-  for (const cell of expressionCells) {
-    expressionByCellId.set(cell.id, cell)
+  for (const cell of expressionElements) {
+    expressionByElementId.set(cell.id, cell)
   }
 
   if (binMicrometers === undefined) {
-    return { expressionByCellId }
+    return { expressionByElementId }
   }
 
   return {
-    expressionByCellId,
-    expressionByBinKey: expressionBinStylesByKey(expressionCells, binMicrometers),
+    expressionByElementId,
+    expressionByBinKey: expressionBinStylesByKey(expressionElements, binMicrometers),
     binMicrometers,
   }
 }
 
-function scoreExpressionCells(
-  cells: readonly GeneExpressionCell[],
+export const createGeneExpressionCellStyleIndex = createGeneExpressionElementStyleIndex
+
+function scoreExpressionElements(
+  elements: readonly GeneExpressionElement[],
   genes: readonly string[],
   scoreMode: GeneExpressionScoreMode,
 ): readonly number[] {
   const geneCount = Math.max(genes.length, 1)
 
   if (scoreMode === 'sum') {
-    return cells.map((cell) => cell.count)
+    return elements.map((element) => element.count)
   }
 
-  const meanScores = cells.map((cell) => cell.count / geneCount)
+  const meanScores = elements.map((element) => element.count / geneCount)
 
   if (scoreMode === 'mean') {
     return meanScores
@@ -291,18 +301,18 @@ function maxExpressionScore(scores: readonly number[]): number {
 }
 
 function isOverviewCellDatumArray(
-  value: readonly OverviewCellDatum[] | GeneExpressionCellStyleIndex,
+  value: readonly OverviewCellDatum[] | GeneExpressionElementStyleIndex,
 ): value is readonly OverviewCellDatum[] {
   return Array.isArray(value)
 }
 
 function expressionBinStylesByKey(
-  expressionCells: readonly OverviewCellDatum[],
+  expressionElements: readonly OverviewCellDatum[],
   binMicrometers: number,
 ): ReadonlyMap<string, OverviewCellDatum> {
   const bins = new Map<string, GeneExpressionBinStyle>()
 
-  for (const cell of expressionCells) {
+  for (const cell of expressionElements) {
     const key = positionBinKey(cell.position, binMicrometers)
     const bin = bins.get(key)
     const alpha = cell.fillColor[3] ?? 220

@@ -241,11 +241,11 @@ export function createCellBoundaryLayerGeometry(
 export function createCellBoundaryLayerStyle(
   geometry: CellBoundaryLayerGeometry,
   cells: readonly OverviewCellDatum[],
-  expressionCells: readonly OverviewCellDatum[],
+  expressionElements: readonly OverviewCellDatum[],
 ): CellBoundaryLayerStyle {
   if (
     geometry.boundaryCellIds.size === 0 ||
-    (cells.length === 0 && expressionCells.length === 0)
+    (cells.length === 0 && expressionElements.length === 0)
   ) {
     return EMPTY_CELL_BOUNDARY_LAYER_STYLE
   }
@@ -262,7 +262,7 @@ export function createCellBoundaryLayerStyle(
     lineColorByCellId.set(cell.id, boundaryLineColor(cell.fillColor))
   }
 
-  for (const cell of expressionCells) {
+  for (const cell of expressionElements) {
     if (!geometry.boundaryCellIds.has(cell.id)) {
       continue
     }
@@ -350,37 +350,37 @@ export function styleCellBoundariesByCells(
 
 export function styleCellBoundariesByGeneExpression(
   boundaries: readonly CellBoundaryDatum[],
-  expressionCells: readonly OverviewCellDatum[],
+  expressionElements: readonly OverviewCellDatum[],
 ): readonly CellBoundaryDatum[] {
-  if (boundaries.length === 0 || expressionCells.length === 0) {
+  if (boundaries.length === 0 || expressionElements.length === 0) {
     return boundaries
   }
 
-  const expressionByCellId = new Map<string, OverviewCellDatum>()
+  const expressionByElementId = new Map<string, OverviewCellDatum>()
 
-  for (const cell of expressionCells) {
-    expressionByCellId.set(cell.id, cell)
+  for (const cell of expressionElements) {
+    expressionByElementId.set(cell.id, cell)
   }
 
   let hasExpressionMatch = false
   const styledBoundaries = boundaries.map((boundary) => {
-    const expressionCell = expressionByCellId.get(boundary.id)
+    const expressionElement = expressionByElementId.get(boundary.id)
 
-    if (expressionCell === undefined) {
+    if (expressionElement === undefined) {
       return boundary
     }
 
     hasExpressionMatch = true
     return {
       ...boundary,
-      fillColor: expressionCell.fillColor,
-      lineColor: boundaryLineColor(expressionCell.fillColor),
-      ...(expressionCell.expressionCount === undefined
+      fillColor: expressionElement.fillColor,
+      lineColor: boundaryLineColor(expressionElement.fillColor),
+      ...(expressionElement.expressionCount === undefined
         ? {}
-        : { expressionCount: expressionCell.expressionCount }),
-      ...(expressionCell.expressionGenes === undefined
+        : { expressionCount: expressionElement.expressionCount }),
+      ...(expressionElement.expressionGenes === undefined
         ? {}
-        : { expressionGenes: expressionCell.expressionGenes }),
+        : { expressionGenes: expressionElement.expressionGenes }),
     }
   })
 

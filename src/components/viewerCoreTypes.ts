@@ -27,7 +27,7 @@ export type ViewerCoordinateUnit = ViewerDistanceUnit
 export interface ViewerCoreProps {
   readonly cells?: readonly OverviewCellDatum[]
   readonly fitCells?: readonly OverviewCellDatum[]
-  readonly expressionCells?: readonly OverviewCellDatum[]
+  readonly expressionElements?: readonly OverviewCellDatum[]
   readonly geneExpressionActive?: boolean
   readonly geneExpressionOverlayEnabled?: boolean
   readonly boundaries?: readonly CellBoundaryDatum[]

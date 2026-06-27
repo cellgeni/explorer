@@ -166,7 +166,7 @@ export interface OverviewLayerOptions {
   readonly cellBoundaryGeometry?: CellBoundaryLayerGeometry
   readonly cellBoundaryStyle?: CellBoundaryLayerStyle
   readonly geneExpressionActive?: boolean
-  readonly geneExpressionOverlayCells?: readonly OverviewCellDatum[]
+  readonly geneExpressionOverlayElements?: readonly OverviewCellDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
   readonly transcriptOpacity?: number
@@ -215,16 +215,19 @@ export interface GeneExpressionLayerDataOptions {
   readonly scaleMax?: number
 }
 
-export interface GeneExpressionCellStyleOptions {
+export interface GeneExpressionElementStyleOptions {
   readonly binMicrometers?: number
   readonly styleUnmatchedCells?: boolean
 }
 
-export interface GeneExpressionCellStyleIndex {
-  readonly expressionByCellId: ReadonlyMap<string, OverviewCellDatum>
+export interface GeneExpressionElementStyleIndex {
+  readonly expressionByElementId: ReadonlyMap<string, OverviewCellDatum>
   readonly expressionByBinKey?: ReadonlyMap<string, OverviewCellDatum>
   readonly binMicrometers?: number
 }
+
+export type GeneExpressionCellStyleOptions = GeneExpressionElementStyleOptions
+export type GeneExpressionCellStyleIndex = GeneExpressionElementStyleIndex
 
 export interface TranscriptAggregateLayerDataOptions {
   readonly scaleMax?: number

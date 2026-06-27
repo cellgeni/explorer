@@ -59,7 +59,7 @@ describe('useViewerLayerData', () => {
 
     expect(result.activeAnnotationStyleColors).toHaveLength(1)
     expect(result.viewerObservationColorMode).toBe('annotations')
-    expect(result.styledGeneExpressionCells).toHaveLength(1)
+    expect(result.styledGeneExpressionElements).toHaveLength(1)
     expect(result.geneExpressionScaleMax).toBeGreaterThan(0)
     expect(result.overviewExtent).not.toBeNull()
     expect(result.visibleTranscriptEstimate).toBe(4)

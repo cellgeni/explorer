@@ -642,7 +642,7 @@ export function App({
     morphologyMicrometersPerPixel,
     nucleusBoundaryLayerData,
     overviewExtent,
-    styledGeneExpressionCells,
+    styledGeneExpressionElements,
     styledOverviewCells,
     transcriptDensityScaleLabels,
     transcriptDensityScaleMax,
@@ -693,9 +693,9 @@ export function App({
     () =>
       styleCellBoundariesByGeneExpression(
         visibleBoundaryLayerData,
-        styledGeneExpressionCells,
+        styledGeneExpressionElements,
       ),
-    [styledGeneExpressionCells, visibleBoundaryLayerData],
+    [styledGeneExpressionElements, visibleBoundaryLayerData],
   )
   const visibleNucleusBoundaryLayerData = showNucleusBoundaries
     ? nucleusBoundaryLayerData
@@ -710,10 +710,10 @@ export function App({
   )
   const expressionStyledSpatialGridCells = useMemo(
     () =>
-      styleGridCellsByGeneExpression(spatialGridCells, styledGeneExpressionCells, {
+      styleGridCellsByGeneExpression(spatialGridCells, styledGeneExpressionElements, {
         styleUnmatchedCells: geneExpressionState.status === 'ready',
       }),
-    [geneExpressionState.status, spatialGridCells, styledGeneExpressionCells],
+    [geneExpressionState.status, spatialGridCells, styledGeneExpressionElements],
   )
   const viewerGridCells = isVisiumHdBoundarySurfaceReserved
     ? EMPTY_GRID_CELL_DATA
@@ -2488,7 +2488,7 @@ export function App({
 
         <ViewerCore
           cells={styledOverviewCells}
-          expressionCells={styledGeneExpressionCells}
+          expressionElements={styledGeneExpressionElements}
           geneExpressionActive={geneExpressionState.status === 'ready'}
           geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
           boundaries={expressionStyledBoundaryLayerData}

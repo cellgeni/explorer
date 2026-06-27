@@ -100,7 +100,7 @@ export interface XeniumDuckDbConnection extends TranscriptDuckDbConnection {
   prepare(sql: string): Promise<DuckDbPreparedStatementLike>
 }
 
-export interface GeneExpressionCell {
+export interface GeneExpressionElement {
   readonly id: string
   readonly position: DataPoint
   readonly count: number
@@ -110,13 +110,15 @@ export interface GeneExpressionCell {
   readonly segmentationMethod?: string
 }
 
+export type GeneExpressionCell = GeneExpressionElement
+
 export interface GeneExpressionGeneCount {
   readonly gene: string
   readonly count: number
 }
 
 export interface GeneExpressionBatch {
-  readonly cells: readonly GeneExpressionCell[]
+  readonly cells: readonly GeneExpressionElement[]
   readonly genes: readonly string[]
   readonly geneCounts?: readonly GeneExpressionGeneCount[]
   readonly maxCount: number
@@ -689,7 +691,7 @@ LIMIT ?
     const scoreCellsStartedAt = Date.now()
     const selectedGeneSet = new Set(selectedGenes)
     const geneCounts = selectedGeneCounts(matrix, selectedGenes)
-    const cells: GeneExpressionCell[] = []
+    const cells: GeneExpressionElement[] = []
     let maxCount = 0
 
     for (const cell of viewportCells) {

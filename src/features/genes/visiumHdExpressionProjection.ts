@@ -2,7 +2,7 @@ import { micrometers, type DataPoint } from '../../data/coords'
 import type { SpatialElementId } from '../../datasets/spatialDataset'
 import type {
   GeneExpressionBatch,
-  GeneExpressionCell,
+  GeneExpressionElement,
 } from '../../datasets/xeniumDataset'
 import type { CellBoundaryDatum } from '../../rendering/deckLayers'
 
@@ -87,7 +87,7 @@ export function projectVisiumHdExpressionToBoundaryCells(
     cellWeights.set(assignment.cellId, (cellWeights.get(assignment.cellId) ?? 0) + 1)
   }
 
-  const expressionByCellId = new Map<SpatialElementId, CellExpressionAccumulator>()
+  const expressionByElementId = new Map<SpatialElementId, CellExpressionAccumulator>()
   const mappedCellIds = new Set<SpatialElementId>()
 
   for (const [binId, cellWeights] of assignmentWeightsByBinId) {
@@ -113,23 +113,23 @@ export function projectVisiumHdExpressionToBoundaryCells(
       }
 
       const count = (expressionBin.count * weight) / totalWeight
-      const accumulator = expressionByCellId.get(cellId)
+      const accumulator = expressionByElementId.get(cellId)
 
       mappedCellIds.add(cellId)
 
       if (accumulator === undefined) {
-        expressionByCellId.set(cellId, { count })
+        expressionByElementId.set(cellId, { count })
       } else {
         accumulator.count += count
       }
     }
   }
 
-  const cells: GeneExpressionCell[] = []
+  const cells: GeneExpressionElement[] = []
   let maxCount = 0
 
   for (const boundaryCell of boundaryCells) {
-    const count = expressionByCellId.get(boundaryCell.id)?.count ?? 0
+    const count = expressionByElementId.get(boundaryCell.id)?.count ?? 0
 
     maxCount = Math.max(maxCount, count)
     cells.push({
@@ -153,9 +153,9 @@ export function projectVisiumHdExpressionToBoundaryCells(
 }
 
 function expressionBinsById(
-  cells: readonly GeneExpressionCell[],
-): ReadonlyMap<SpatialElementId, GeneExpressionCell> {
-  const expressionByBinId = new Map<SpatialElementId, GeneExpressionCell>()
+  cells: readonly GeneExpressionElement[],
+): ReadonlyMap<SpatialElementId, GeneExpressionElement> {
+  const expressionByBinId = new Map<SpatialElementId, GeneExpressionElement>()
 
   for (const cell of cells) {
     const existing = expressionByBinId.get(cell.id)

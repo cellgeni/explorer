@@ -11,7 +11,7 @@ describe('cell boundary expression styling', () => {
       boundary('cell-a'),
       boundary('cell-b'),
     ]
-    const expressionCells: readonly OverviewCellDatum[] = [
+    const expressionElements: readonly OverviewCellDatum[] = [
       {
         id: 'cell-a',
         position: [5, -5, 0],
@@ -24,7 +24,7 @@ describe('cell boundary expression styling', () => {
 
     const styledBoundaries = styleCellBoundariesByGeneExpression(
       boundaries,
-      expressionCells,
+      expressionElements,
     )
 
     expect(styledBoundaries[0]).toEqual(

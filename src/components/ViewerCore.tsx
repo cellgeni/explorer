@@ -48,7 +48,7 @@ import { readViewportMessage } from './viewerStatus'
 import {
   createCellBoundaryLayerGeometry,
   createCellBoundaryLayerStyle,
-  createGeneExpressionCellStyleIndex,
+  createGeneExpressionElementStyleIndex,
   createOverviewLayers,
   createOverviewViewState,
   spatialOverviewView,
@@ -58,7 +58,7 @@ import {
 import {
   EXPRESSION_AGGREGATION_BIN_MICROMETERS,
   EXPRESSION_AGGREGATION_EXACT_ZOOM,
-  aggregateExpressionCells,
+  aggregateExpressionElements,
   estimateOverviewCellCountInBbox,
   overviewCellsExtentBbox,
   overviewCellsInBbox,
@@ -139,7 +139,7 @@ const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 export function ViewerCore({
   cells = [],
   fitCells,
-  expressionCells = [],
+  expressionElements = [],
   geneExpressionActive = false,
   geneExpressionOverlayEnabled = true,
   boundaries = [],
@@ -215,7 +215,7 @@ export function ViewerCore({
   return (
     <ViewerSurface
       cells={cells}
-      expressionCells={expressionCells}
+      expressionElements={expressionElements}
       geneExpressionActive={geneExpressionActive}
       geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
       boundaries={boundaries}
@@ -280,7 +280,7 @@ export function ViewerCore({
 
 interface ViewerSurfaceProps {
   readonly cells: readonly OverviewCellDatum[]
-  readonly expressionCells: readonly OverviewCellDatum[]
+  readonly expressionElements: readonly OverviewCellDatum[]
   readonly geneExpressionActive: boolean
   readonly geneExpressionOverlayEnabled: boolean
   readonly boundaries: readonly CellBoundaryDatum[]
@@ -343,7 +343,7 @@ interface ViewerSurfaceProps {
 
 function ViewerSurface({
   cells,
-  expressionCells,
+  expressionElements,
   geneExpressionActive,
   geneExpressionOverlayEnabled,
   boundaries,
@@ -501,13 +501,13 @@ function ViewerSurface({
   const shouldUseExpressionPointBins = viewState.zoom < EXPRESSION_AGGREGATION_EXACT_ZOOM
   const geneExpressionPointStyleIndex = useMemo(
     () =>
-      createGeneExpressionCellStyleIndex(
-        expressionCells,
+      createGeneExpressionElementStyleIndex(
+        expressionElements,
         shouldUseExpressionPointBins
           ? { binMicrometers: EXPRESSION_AGGREGATION_BIN_MICROMETERS }
           : {},
       ),
-    [expressionCells, shouldUseExpressionPointBins],
+    [expressionElements, shouldUseExpressionPointBins],
   )
   const expressionStyledRenderCells = useMemo(
     () =>
@@ -523,16 +523,16 @@ function ViewerSurface({
       }),
     [geneExpressionActive, geneExpressionPointStyleIndex, gridCells],
   )
-  const geneExpressionOverlayCells = useMemo(
+  const geneExpressionOverlayElements = useMemo(
     () =>
       geneExpressionOverlayEnabled
         ? expressionOverlayCellsForRendering({
-            expressionCells,
+            expressionElements,
             viewState,
             viewportBbox,
           })
         : EMPTY_OVERVIEW_CELLS,
-    [expressionCells, geneExpressionOverlayEnabled, viewState, viewportBbox],
+    [expressionElements, geneExpressionOverlayEnabled, viewState, viewportBbox],
   )
   const cellById = useMemo(() => {
     const nextCellById = new Map<string, OverviewCellDatum>()
@@ -554,12 +554,12 @@ function ViewerSurface({
       }),
     [boundaries, cellBoundaryFillEnabled],
   )
-  const boundaryExpressionCells = useMemo(
+  const boundaryExpressionElements = useMemo(
     () =>
       boundaries.length === 0 || boundaryStyleViewport === null
         ? EMPTY_OVERVIEW_CELLS
-        : overviewCellsInBbox(expressionCells, boundaryStyleViewport.bbox),
-    [boundaries.length, boundaryStyleViewport, expressionCells],
+        : overviewCellsInBbox(expressionElements, boundaryStyleViewport.bbox),
+    [boundaries.length, boundaryStyleViewport, expressionElements],
   )
   const boundaryStyleCells = useMemo(() => {
     if (boundaryLayerGeometry.boundaryCellIds.size === 0) {
@@ -583,12 +583,12 @@ function ViewerSurface({
       cellMetadataTrack,
     )
 
-    return styleCellsByGeneExpression(observationStyledCells, boundaryExpressionCells, {
+    return styleCellsByGeneExpression(observationStyledCells, boundaryExpressionElements, {
       styleUnmatchedCells: geneExpressionActive,
     })
   }, [
     annotationStyleColors,
-    boundaryExpressionCells,
+    boundaryExpressionElements,
     boundaryLayerGeometry,
     cellById,
     cellMetadataTrack,
@@ -600,10 +600,10 @@ function ViewerSurface({
       createCellBoundaryLayerStyle(
         boundaryLayerGeometry,
         cellBoundaryFillEnabled ? boundaryStyleCells : EMPTY_OVERVIEW_CELLS,
-        boundaryExpressionCells,
+        boundaryExpressionElements,
       ),
     [
-      boundaryExpressionCells,
+      boundaryExpressionElements,
       boundaryLayerGeometry,
       boundaryStyleCells,
       cellBoundaryFillEnabled,
@@ -621,7 +621,7 @@ function ViewerSurface({
         cellBoundaryGeometry: boundaryLayerGeometry,
         cellBoundaryStyle: boundaryLayerStyle,
         geneExpressionActive,
-        geneExpressionOverlayCells,
+        geneExpressionOverlayElements,
         transcriptAggregateBins,
         transcriptPoints,
         transcriptOpacity,
@@ -639,7 +639,7 @@ function ViewerSurface({
       expressionStyledRenderCells,
       expressionStyledGridCells,
       geneExpressionActive,
-      geneExpressionOverlayCells,
+      geneExpressionOverlayElements,
       transcriptAggregateBins,
       transcriptOpacity,
       transcriptPointSize,
@@ -1043,7 +1043,7 @@ function ViewerSurface({
       }
 
       if (cellBoundaryHoverEnabled && isCellBoundaryDatum(info.object)) {
-        const expressionCell = geneExpressionPointStyleIndex.expressionByCellId.get(
+        const expressionElement = geneExpressionPointStyleIndex.expressionByElementId.get(
           info.object.id,
         )
 
@@ -1064,12 +1064,12 @@ function ViewerSurface({
 
         setCellBoundaryHover({
           boundary: info.object,
-          ...(expressionCell?.expressionCount === undefined
+          ...(expressionElement?.expressionCount === undefined
             ? {}
-            : { expressionCount: expressionCell.expressionCount }),
-          ...(expressionCell?.expressionGenes === undefined
+            : { expressionCount: expressionElement.expressionCount }),
+          ...(expressionElement?.expressionGenes === undefined
             ? {}
-            : { expressionGenes: expressionCell.expressionGenes }),
+            : { expressionGenes: expressionElement.expressionGenes }),
           screen: {
             x: info.x,
             y: info.y,
@@ -1568,19 +1568,19 @@ function ViewerSurface({
 }
 
 function expressionOverlayCellsForRendering({
-  expressionCells,
+  expressionElements,
   viewState,
   viewportBbox,
 }: {
-  readonly expressionCells: readonly OverviewCellDatum[]
+  readonly expressionElements: readonly OverviewCellDatum[]
   readonly viewState: OverviewViewState
   readonly viewportBbox: BBox | null
 }): readonly OverviewCellDatum[] {
-  if (expressionCells.length === 0) {
+  if (expressionElements.length === 0) {
     return EMPTY_OVERVIEW_CELLS
   }
 
-  const overlayCells = aggregateExpressionCells(expressionCells, viewState, {
+  const overlayCells = aggregateExpressionElements(expressionElements, viewState, {
     ...(viewportBbox === null ? {} : { bbox: viewportBbox }),
     binMicrometers: EXPRESSION_AGGREGATION_BIN_MICROMETERS,
     exactZoom: EXPRESSION_AGGREGATION_EXACT_ZOOM,
