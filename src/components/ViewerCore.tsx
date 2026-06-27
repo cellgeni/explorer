@@ -543,6 +543,10 @@ function ViewerSurface({
 
     return nextCellById
   }, [cells])
+  const annotationLabelsByCellId = useMemo(
+    () => annotationLabelsByCellIdForStyles(annotationStyleColors),
+    [annotationStyleColors],
+  )
   const cellBoundaryFillEnabled =
     (observationColorMode === 'annotations' && annotationStyleColors.length > 0) ||
     (observationColorMode === 'metadata' && cellMetadataTrack !== null) ||
@@ -1043,9 +1047,16 @@ function ViewerSurface({
       }
 
       if (cellBoundaryHoverEnabled && isCellBoundaryDatum(info.object)) {
+        const boundary = info.object
         const expressionElement = geneExpressionPointStyleIndex.expressionByElementId.get(
-          info.object.id,
+          boundary.id,
         )
+        const expressionCount =
+          expressionElement?.expressionCount ?? boundary.expressionCount
+        const expressionGenes =
+          expressionElement?.expressionGenes ?? boundary.expressionGenes
+        const annotationLabels = annotationLabelsByCellId.get(boundary.id)
+        const cell = cellById.get(boundary.id)
 
         setTranscriptHover((current) => {
           if (current !== null) {
@@ -1063,13 +1074,15 @@ function ViewerSurface({
         }
 
         setCellBoundaryHover({
-          boundary: info.object,
-          ...(expressionElement?.expressionCount === undefined
+          boundary,
+          ...(cell === undefined ? {} : { cell }),
+          ...(annotationLabels === undefined ? {} : { annotationLabels }),
+          ...(expressionCount === undefined
             ? {}
-            : { expressionCount: expressionElement.expressionCount }),
-          ...(expressionElement?.expressionGenes === undefined
+            : { expressionCount }),
+          ...(expressionGenes === undefined
             ? {}
-            : { expressionGenes: expressionElement.expressionGenes }),
+            : { expressionGenes }),
           screen: {
             x: info.x,
             y: info.y,
@@ -1079,6 +1092,8 @@ function ViewerSurface({
       }
 
       if (isOverviewCellDatum(info.object)) {
+        const annotationLabels = annotationLabelsByCellId.get(info.object.id)
+
         setTranscriptHover((current) => {
           if (current !== null) {
             onTranscriptHover?.(null)
@@ -1096,6 +1111,7 @@ function ViewerSurface({
 
         setCellHover({
           cell: info.object,
+          ...(annotationLabels === undefined ? {} : { annotationLabels }),
           screen: {
             x: info.x,
             y: info.y,
@@ -1116,7 +1132,9 @@ function ViewerSurface({
       setCellHover(null)
     },
     [
+      annotationLabelsByCellId,
       cellBoundaryHoverEnabled,
+      cellById,
       geneExpressionPointStyleIndex,
       hoverTooltipsEnabled,
       magicLensActive,
@@ -1616,4 +1634,27 @@ function styleCellsForObservation(
     annotations: annotationStyleColors,
     metadataTrack: cellMetadataTrack,
   })
+}
+
+function annotationLabelsByCellIdForStyles(
+  annotationStyles: readonly AnnotationColorStyle[],
+): ReadonlyMap<string, readonly string[]> {
+  const labelsByCellId = new Map<string, string[]>()
+
+  for (const annotationStyle of annotationStyles) {
+    const label = annotationStyle.label ?? annotationStyle.id
+
+    for (const cellId of annotationStyle.cellIds) {
+      const labels = labelsByCellId.get(cellId)
+
+      if (labels === undefined) {
+        labelsByCellId.set(cellId, [label])
+        continue
+      }
+
+      labels.push(label)
+    }
+  }
+
+  return labelsByCellId
 }

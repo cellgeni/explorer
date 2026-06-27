@@ -581,8 +581,9 @@ describe('ViewerCore', () => {
   })
 
   it('shows overview cell hover metadata', () => {
+    const cellId = asCellId('aaaaaaaa-1')
     const cell: OverviewCellDatum = {
-      id: 'hover-cell-1',
+      id: cellId,
       position: [123.4, -56.7, 0],
       radiusPixels: 4,
       fillColor: [215, 63, 124, 220],
@@ -592,17 +593,37 @@ describe('ViewerCore', () => {
       expressionGenes: ['Actb', 'Pecam1', 'Col1a1', 'Vim'],
     }
 
-    render(<ViewerCore cells={[cell]} />)
+    render(
+      <ViewerCore
+        cells={[cell]}
+        annotationStyleColors={[
+          {
+            id: 'annotation-1',
+            label: 'T cells',
+            cellIds: [cellId],
+            color: '#1f9b8f',
+          },
+          {
+            id: 'annotation-2',
+            label: 'Portal macrophages',
+            cellIds: [cellId],
+            color: '#be5f7c',
+          },
+        ]}
+      />,
+    )
 
     act(() => {
       deckGlMock.onHover?.({ object: cell, x: 18, y: 24 })
     })
 
-    expect(screen.getByText('hover-cell-1')).toBeInTheDocument()
+    expect(screen.getByText('aaaaaaaa-1')).toBeInTheDocument()
     expect(screen.getByText('Xenium')).toBeInTheDocument()
     expect(screen.getByText('123.4, 56.7 um')).toBeInTheDocument()
     expect(screen.getByText('40 um^2')).toBeInTheDocument()
     expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
+    expect(screen.getByText('Annotations')).toBeInTheDocument()
+    expect(screen.getByText('T cells, Portal macrophages')).toBeInTheDocument()
   })
 
   it('shows aggregate overview bin hover metadata', () => {
@@ -726,6 +747,63 @@ describe('ViewerCore', () => {
     expect(screen.getByText('Segmented')).toBeInTheDocument()
     expect(screen.getByText('100 um^2')).toBeInTheDocument()
     expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
+  })
+
+  it('shows matched cell metadata and annotations from boundary hover', () => {
+    const cellId = asCellId('aaaaaaab-1')
+    const cell: OverviewCellDatum = {
+      id: cellId,
+      position: [123.4, -56.7, 0],
+      radiusPixels: 4,
+      fillColor: [215, 63, 124, 220],
+      transcriptCount: 12,
+      cellArea: 40,
+    }
+    const boundary: CellBoundaryDatum = {
+      id: cell.id,
+      polygon: [
+        [0, 0, 0],
+        [10, 0, 0],
+        [10, -10, 0],
+        [0, -10, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+
+    render(
+      <ViewerCore
+        cells={[cell]}
+        boundaries={[boundary]}
+        cellBoundaryHoverEnabled
+        annotationStyleColors={[
+          {
+            id: 'annotation-1',
+            label: 'T cells',
+            cellIds: [cellId],
+            color: '#1f9b8f',
+          },
+          {
+            id: 'annotation-2',
+            label: 'Portal macrophages',
+            cellIds: [cellId],
+            color: '#be5f7c',
+          },
+        ]}
+      />,
+    )
+
+    act(() => {
+      deckGlMock.onHover?.({ object: boundary, x: 18, y: 24 })
+    })
+
+    expect(screen.getByText('aaaaaaab-1')).toBeInTheDocument()
+    expect(screen.getByText('Xenium')).toBeInTheDocument()
+    expect(screen.getByText('123.4, 56.7 um')).toBeInTheDocument()
+    expect(screen.getByText('12')).toBeInTheDocument()
+    expect(screen.getByText('40 um^2')).toBeInTheDocument()
+    expect(screen.getByText('T cells, Portal macrophages')).toBeInTheDocument()
+    expect(screen.getByText('100 um^2')).toBeInTheDocument()
   })
 
   it('suppresses bin and cell hover metadata when disabled without removing clicks', () => {

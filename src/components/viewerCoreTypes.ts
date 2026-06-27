@@ -142,6 +142,8 @@ export interface ViewerGridCellHoverDetail {
 
 export interface ViewerCellBoundaryHoverDetail {
   readonly boundary: CellBoundaryDatum
+  readonly cell?: OverviewCellDatum
+  readonly annotationLabels?: readonly string[]
   readonly expressionCount?: number
   readonly expressionGenes?: readonly string[]
   readonly screen: ScreenPoint
@@ -149,6 +151,7 @@ export interface ViewerCellBoundaryHoverDetail {
 
 export interface ViewerOverviewCellHoverDetail {
   readonly cell: OverviewCellDatum
+  readonly annotationLabels?: readonly string[]
   readonly screen: ScreenPoint
 }
 

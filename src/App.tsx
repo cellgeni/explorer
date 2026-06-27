@@ -637,7 +637,6 @@ export function App({ dependencies }: AppProps = {}) {
     ? EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
     : geneExpressionScaleDomain
   const {
-    activeAnnotationStyleColors,
     activeCellMetadataTrack,
     annotationStyleColors,
     boundaryLayerData,
@@ -2517,7 +2516,7 @@ export function App({ dependencies }: AppProps = {}) {
           transcriptOpacity={transcriptOpacity}
           transcriptPointSize={transcriptPointSize}
           observationColorMode={viewerObservationColorMode}
-          annotationStyleColors={activeAnnotationStyleColors}
+          annotationStyleColors={annotationStyleColors}
           cellMetadataTrack={activeCellMetadataTrack}
           loadingTasks={loadingTasks}
           coordinateUnit={coordinateUnit}

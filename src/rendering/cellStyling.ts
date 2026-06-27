@@ -10,6 +10,7 @@ export type ObservationColorMode =
 
 export interface AnnotationColorStyle {
   readonly id: string
+  readonly label?: string
   readonly cellIds: readonly CellId[]
   readonly color: string
 }

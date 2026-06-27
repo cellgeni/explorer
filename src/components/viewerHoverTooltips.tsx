@@ -118,6 +118,7 @@ export function OverviewCellHoverTooltip({
             <dd>{formatExpressionGeneList(cell.expressionGenes)}</dd>
           </div>
         )}
+        <AnnotationLabelsRow labels={detail.annotationLabels} />
       </dl>
     </div>
   )
@@ -129,6 +130,7 @@ export function CellBoundaryHoverTooltip({
   readonly detail: ViewerCellBoundaryHoverDetail
 }) {
   const boundary = detail.boundary
+  const cell = detail.cell
 
   return (
     <div
@@ -143,12 +145,31 @@ export function CellBoundaryHoverTooltip({
       <dl>
         <div>
           <dt>Cell</dt>
-          <dd>Segmented</dd>
+          <dd>{cell === undefined ? 'Segmented' : 'Xenium'}</dd>
         </div>
         {boundary.annotationLabel === undefined ? null : (
           <div>
             <dt>Annotation</dt>
             <dd>{boundary.annotationLabel}</dd>
+          </div>
+        )}
+        <AnnotationLabelsRow labels={detail.annotationLabels} />
+        {cell === undefined ? null : (
+          <div>
+            <dt>X/Y</dt>
+            <dd>{formatOverviewCellPosition(cell)}</dd>
+          </div>
+        )}
+        {cell?.transcriptCount === undefined ? null : (
+          <div>
+            <dt>Tx</dt>
+            <dd>{cell.transcriptCount.toLocaleString()}</dd>
+          </div>
+        )}
+        {cell?.cellArea === undefined ? null : (
+          <div>
+            <dt>Cell Area</dt>
+            <dd>{formatCoordinateValue(cell.cellArea)} um^2</dd>
           </div>
         )}
         <div>
@@ -173,6 +194,19 @@ export function CellBoundaryHoverTooltip({
           </div>
         )}
       </dl>
+    </div>
+  )
+}
+
+function AnnotationLabelsRow({
+  labels,
+}: {
+  readonly labels: readonly string[] | undefined
+}) {
+  return labels === undefined || labels.length === 0 ? null : (
+    <div>
+      <dt>Annotations</dt>
+      <dd>{formatAnnotationLabels(labels)}</dd>
     </div>
   )
 }
@@ -374,4 +408,12 @@ function formatExpressionGeneList(genes: readonly string[]): string {
   const suffix = omittedCount <= 0 ? '' : ` +${omittedCount.toLocaleString()}`
 
   return `${shownGenes.join(', ')}${suffix}`
+}
+
+function formatAnnotationLabels(labels: readonly string[]): string {
+  const shownLabels = labels.slice(0, 3)
+  const omittedCount = labels.length - shownLabels.length
+  const suffix = omittedCount <= 0 ? '' : ` +${omittedCount.toLocaleString()}`
+
+  return `${shownLabels.join(', ')}${suffix}`
 }

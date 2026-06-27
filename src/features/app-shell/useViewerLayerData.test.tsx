@@ -58,6 +58,10 @@ describe('useViewerLayerData', () => {
     )
 
     expect(result.activeAnnotationStyleColors).toHaveLength(1)
+    expect(result.annotationStyleColors[0]).toMatchObject({
+      id: 'a',
+      label: 'Astrocytes',
+    })
     expect(result.viewerObservationColorMode).toBe('annotations')
     expect(result.styledGeneExpressionElements).toHaveLength(1)
     expect(result.geneExpressionScaleMax).toBeGreaterThan(0)

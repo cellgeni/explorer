@@ -139,6 +139,7 @@ export function useViewerLayerData({
       annotationState.status === 'ready'
         ? annotationState.annotations.map((annotation, annotationIndex) => ({
             id: annotation.id,
+            label: annotation.label,
             cellIds: annotation.cellIds,
             color:
               annotationColors[annotation.id] ?? annotationPaletteColor(annotationIndex),
