@@ -624,6 +624,9 @@ describe('ViewerCore', () => {
     expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
     expect(screen.getByText('Annotations')).toBeInTheDocument()
     expect(screen.getByText('T cells, Portal macrophages')).toBeInTheDocument()
+    expect(screen.getByText('Annotations').closest('div')).toHaveClass(
+      'hover-tooltip-annotation-row',
+    )
   })
 
   it('shows aggregate overview bin hover metadata', () => {
@@ -803,6 +806,9 @@ describe('ViewerCore', () => {
     expect(screen.getByText('12')).toBeInTheDocument()
     expect(screen.getByText('40 um^2')).toBeInTheDocument()
     expect(screen.getByText('T cells, Portal macrophages')).toBeInTheDocument()
+    expect(screen.getByText('T cells, Portal macrophages').closest('div')).toHaveClass(
+      'hover-tooltip-annotation-row',
+    )
     expect(screen.getByText('100 um^2')).toBeInTheDocument()
   })
 

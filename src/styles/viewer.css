@@ -162,7 +162,7 @@
   z-index: 6;
   display: grid;
   gap: 5px;
-  width: 218px;
+  width: min(320px, calc(100% - 18px));
   max-width: calc(100% - 18px);
   padding: 7px 8px;
   border: 1px solid rgba(255, 253, 247, 0.2);
@@ -218,6 +218,19 @@
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.transcript-hover-tooltip .hover-tooltip-annotation-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  align-items: start;
+}
+
+.transcript-hover-tooltip .hover-tooltip-annotation-row dd {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .roi-draw-layer {

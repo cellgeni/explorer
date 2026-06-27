@@ -204,7 +204,7 @@ function AnnotationLabelsRow({
   readonly labels: readonly string[] | undefined
 }) {
   return labels === undefined || labels.length === 0 ? null : (
-    <div>
+    <div className="hover-tooltip-annotation-row">
       <dt>Annotations</dt>
       <dd>{formatAnnotationLabels(labels)}</dd>
     </div>
