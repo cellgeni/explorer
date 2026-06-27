@@ -3,8 +3,10 @@ import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { micrometers } from '../data/coords'
 import {
   DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
-  VISIUM_HD_TISSUE_POSITION_COLUMNS,
   VisiumHdDataset,
+} from './visiumHdDataset'
+import {
+  VISIUM_HD_TISSUE_POSITION_COLUMNS,
   createVisiumHdBinnedOverview,
   createVisiumHdBinnedOverviewFromSquareBarcodes,
   parseVisiumHdFeatureRows,
@@ -12,7 +14,7 @@ import {
   parseVisiumHdTissuePositionRows,
   readVisiumHdFeatureGenePanel,
   readVisiumHdTissuePositions,
-} from './visiumHdDataset'
+} from './visiumHdOverview'
 import type { AsyncBuffer } from 'hyparquet'
 import type {
   ReadVisiumHdTissuePositionsOptions,

@@ -31,3 +31,13 @@ export function normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(
 
   return Math.floor(value)
 }
+
+export function normalizeVisiumHdBarcodeMappingRowBudget(value: number): number {
+  if (!Number.isFinite(value) || value < 1) {
+    throw new RangeError(
+      `Barcode mapping row budget must be a positive finite number, received ${value}.`,
+    )
+  }
+
+  return Math.floor(value)
+}

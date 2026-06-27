@@ -1,48 +1,31 @@
 import { datasetFileUrl } from '../data/datasetFiles'
-import {
-  gexFromFeatureBarcodeMatrixH5LazyRangeWorker,
-  type CellFeatureMatrixReadOptions,
-  type GexCell,
-  type GexResult,
-} from '../data/gex'
-import {
-  gexFromVisiumFeatureSliceH5,
-  type VisiumFeatureSliceReadOptions,
-  type VisiumFeatureSliceTarget,
+import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from '../data/gex'
+import type {
+  VisiumFeatureSliceReadOptions,
+  VisiumFeatureSliceTarget,
 } from '../data/visiumFeatureSlice'
-import {
-  readVisiumHdFilteredMatrixBarcodes,
-  type ReadVisiumHdFilteredMatrixBarcodesOptions,
-  type VisiumHdSquareBarcode,
+import type {
+  ReadVisiumHdFilteredMatrixBarcodesOptions,
+  VisiumHdSquareBarcode,
 } from './visiumHdBarcodes'
 import {
   filterVisiumHdSegmentationElementsByBbox,
-  readVisiumHdSegmentationElements,
   visiumHdSegmentationInfos,
-  type ReadVisiumHdSegmentationElementsOptions,
   type VisiumHdSegmentedOutputPaths,
   type VisiumHdSegmentationKind,
-} from './visiumHdSegmentations'
+} from './visiumHdSegmentationModel'
+import type { ReadVisiumHdSegmentationElementsOptions } from './visiumHdSegmentations'
 import {
-  normalizeVisiumHdBarcodeMappingRowBudget,
-  readVisiumHdBarcodeMappings,
-  selectVisiumHdBarcodeMappingAssignments,
   type ReadVisiumHdBarcodeMappingsOptions,
   type VisiumHdBarcodeMapping,
   type VisiumHdBarcodeMappingCellAssignment,
 } from './visiumHdBarcodeMappings'
 import {
   VisiumHdTwoMicrometerOverviewDisabledError,
+  normalizeVisiumHdBarcodeMappingRowBudget,
   normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget,
 } from './visiumHdStrategy'
 import { micrometers } from '../data/coords'
-import {
-  createVisiumHdBinnedOverviewFromSquareBarcodes,
-  readVisiumHdBinnedOverview,
-  readVisiumHdFeatureGenePanel,
-  readVisiumHdScalefactors,
-  readVisiumHdTissuePositions,
-} from './visiumHdOverview'
 import {
   deriveNestedGridBasis,
   deriveSubdividedGridBasis,
@@ -62,6 +45,7 @@ import type {
   SpatialElementId,
 } from './spatialDataset'
 import type {
+  ReadVisiumHdBinnedOverviewOptions,
   ReadVisiumHdFeatureGenePanelOptions,
   ReadVisiumHdScalefactorsOptions,
   ReadVisiumHdTissuePositionsOptions,
@@ -76,19 +60,6 @@ import type {
   GeneExpressionQueryOptions,
 } from './xeniumDataset'
 
-export {
-  VISIUM_HD_TISSUE_POSITION_COLUMNS,
-  VisiumHdTissuePositionsDecodeError,
-  createVisiumHdBinnedOverview,
-  createVisiumHdBinnedOverviewFromSquareBarcodes,
-  parseVisiumHdFeatureRows,
-  parseVisiumHdScalefactors,
-  parseVisiumHdTissuePositionRows,
-  readVisiumHdBinnedOverview,
-  readVisiumHdFeatureGenePanel,
-  readVisiumHdScalefactors,
-  readVisiumHdTissuePositions,
-} from './visiumHdOverview'
 export type {
   CreateVisiumHdBinnedOverviewOptions,
   ReadVisiumHdBinnedOverviewOptions,
@@ -185,6 +156,54 @@ export type VisiumHdBarcodeMappingsForCellReader = (
 
 export const DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET = 128 * 1024 * 1024
 
+const readVisiumHdTissuePositionsLazy = async (
+  options: ReadVisiumHdTissuePositionsOptions,
+): Promise<VisiumHdTissuePositions> => {
+  const { readVisiumHdTissuePositions } = await import('./visiumHdOverview')
+  return readVisiumHdTissuePositions(options)
+}
+
+const readVisiumHdScalefactorsLazy = async (
+  url: string,
+  options: ReadVisiumHdScalefactorsOptions,
+): Promise<VisiumHdScalefactors> => {
+  const { readVisiumHdScalefactors } = await import('./visiumHdOverview')
+  return readVisiumHdScalefactors(url, options)
+}
+
+const readVisiumHdFeatureGenePanelLazy = async (
+  baseUrl: string,
+  bin: VisiumHdBinDescriptor,
+  options: ReadVisiumHdFeatureGenePanelOptions,
+): Promise<readonly string[]> => {
+  const { readVisiumHdFeatureGenePanel } = await import('./visiumHdOverview')
+  return readVisiumHdFeatureGenePanel(baseUrl, bin, options)
+}
+
+const readVisiumHdBinnedOverviewLazy = async (
+  options: ReadVisiumHdBinnedOverviewOptions,
+): Promise<VisiumHdBinnedOverview> => {
+  const { readVisiumHdBinnedOverview } = await import('./visiumHdOverview')
+  return readVisiumHdBinnedOverview(options)
+}
+
+const readVisiumHdFilteredMatrixBarcodesLazy = async (
+  baseUrl: string,
+  bin: VisiumHdBinDescriptor,
+  options: ReadVisiumHdFilteredMatrixBarcodesOptions,
+): Promise<readonly VisiumHdSquareBarcode[]> => {
+  const { readVisiumHdFilteredMatrixBarcodes } = await import('./visiumHdBarcodes')
+  return readVisiumHdFilteredMatrixBarcodes(baseUrl, bin, options)
+}
+
+const readVisiumHdBarcodeMappingsLazy = async (
+  baseUrl: string,
+  options: ReadVisiumHdBarcodeMappingsOptions,
+): Promise<readonly VisiumHdBarcodeMapping[]> => {
+  const { readVisiumHdBarcodeMappings } = await import('./visiumHdBarcodeMappings')
+  return readVisiumHdBarcodeMappings(baseUrl, options)
+}
+
 const readVisiumHdBarcodeMappingsForCellWithDuckDb: VisiumHdBarcodeMappingsForCellReader =
   async (baseUrl, cellId, options) => {
     const { readVisiumHdBarcodeMappingsForCellWithDuckDb: readWithDuckDb } =
@@ -192,6 +211,33 @@ const readVisiumHdBarcodeMappingsForCellWithDuckDb: VisiumHdBarcodeMappingsForCe
 
     return readWithDuckDb(baseUrl, cellId, options)
   }
+
+const readVisiumHdSegmentationElementsLazy = async (
+  baseUrl: string,
+  options: ReadVisiumHdSegmentationElementsOptions,
+): Promise<readonly SpatialElement[]> => {
+  const { readVisiumHdSegmentationElements } = await import('./visiumHdSegmentations')
+  return readVisiumHdSegmentationElements(baseUrl, options)
+}
+
+const gexFromFeatureBarcodeMatrixH5LazyRangeWorkerLazy = async (
+  url: string,
+  ids: readonly SpatialElementId[],
+  options?: CellFeatureMatrixReadOptions,
+): Promise<GexResult<SpatialElementId>> => {
+  const { gexFromFeatureBarcodeMatrixH5LazyRangeWorker } = await import('../data/gex')
+  return gexFromFeatureBarcodeMatrixH5LazyRangeWorker(url, ids, options)
+}
+
+const gexFromVisiumFeatureSliceH5Lazy = async (
+  url: string,
+  targets: readonly VisiumFeatureSliceTarget<SpatialElementId>[],
+  genes: readonly string[],
+  options: VisiumFeatureSliceReadOptions,
+): Promise<GexResult<SpatialElementId>> => {
+  const { gexFromVisiumFeatureSliceH5 } = await import('../data/visiumFeatureSlice')
+  return gexFromVisiumFeatureSliceH5(url, targets, genes, options)
+}
 
 export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   readonly baseUrl: string
@@ -275,23 +321,23 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       options.defaultBinSizeMicrometers ?? preferredDefaultBinSize(options.bins)
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.tissuePositionsReader =
-      options.tissuePositionsReader ?? readVisiumHdTissuePositions
-    this.scalefactorsReader = options.scalefactorsReader ?? readVisiumHdScalefactors
+      options.tissuePositionsReader ?? readVisiumHdTissuePositionsLazy
+    this.scalefactorsReader = options.scalefactorsReader ?? readVisiumHdScalefactorsLazy
     this.featureGenePanelReader =
-      options.featureGenePanelReader ?? readVisiumHdFeatureGenePanel
+      options.featureGenePanelReader ?? readVisiumHdFeatureGenePanelLazy
     this.filteredMatrixBarcodeReader =
-      options.filteredMatrixBarcodeReader ?? readVisiumHdFilteredMatrixBarcodes
+      options.filteredMatrixBarcodeReader ?? readVisiumHdFilteredMatrixBarcodesLazy
     this.barcodeMappingsReader =
-      options.barcodeMappingsReader ?? readVisiumHdBarcodeMappings
+      options.barcodeMappingsReader ?? readVisiumHdBarcodeMappingsLazy
     this.barcodeMappingsForCellReader =
       options.barcodeMappingsForCellReader ?? readVisiumHdBarcodeMappingsForCellWithDuckDb
     this.segmentedOutputs = options.segmentedOutputs
     this.segmentationReader =
-      options.segmentationReader ?? readVisiumHdSegmentationElements
+      options.segmentationReader ?? readVisiumHdSegmentationElementsLazy
     this.featureMatrixReader =
-      options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5LazyRangeWorker
+      options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5LazyRangeWorkerLazy
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
-    this.featureSliceReader = options.featureSliceReader ?? gexFromVisiumFeatureSliceH5
+    this.featureSliceReader = options.featureSliceReader ?? gexFromVisiumFeatureSliceH5Lazy
     this.maxTwoMicrometerFilteredBarcodes =
       normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(
         options.maxTwoMicrometerFilteredBarcodes,
@@ -492,9 +538,16 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
       return []
     }
 
-    const mappings = await this.barcodeMappings(options)
+    const [mappings, barcodeMappingsModule] = await Promise.all([
+      this.barcodeMappings(options),
+      import('./visiumHdBarcodeMappings'),
+    ])
 
-    return selectVisiumHdBarcodeMappingAssignments(mappings, binSizeMicrometers, binIds)
+    return barcodeMappingsModule.selectVisiumHdBarcodeMappingAssignments(
+      mappings,
+      binSizeMicrometers,
+      binIds,
+    )
   }
 
   async segmentationElements(
@@ -671,7 +724,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
               binSizeMicrometers / basisSourceBinSize,
             ),
           )
-    const promise = readVisiumHdBinnedOverview({
+    const promise = readVisiumHdBinnedOverviewLazy({
       baseUrl: this.baseUrl,
       bin,
       ...(basis === undefined ? {} : { basis }),
@@ -715,7 +768,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     }
 
     const promise = (async () => {
-      const [sourceOverview, scalefactors, barcodes] = await Promise.all([
+      const [sourceOverview, scalefactors, barcodes, overviewModule] = await Promise.all([
         this.readBinnedOverview(sourceBinSize),
         this.scalefactorsReader(datasetFileUrl(this.baseUrl, bin.scalefactorsPath), {
           fetcher: this.fetcher,
@@ -726,13 +779,14 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
             ? {}
             : { maxBarcodeCount: this.maxTwoMicrometerFilteredBarcodes }),
         }),
+        import('./visiumHdOverview'),
       ])
       const basis = deriveSubdividedGridBasis(
         sourceOverview.grid.basis,
         sourceOverview.binSizeMicrometers / 2,
       )
 
-      return createVisiumHdBinnedOverviewFromSquareBarcodes(
+      return overviewModule.createVisiumHdBinnedOverviewFromSquareBarcodes(
         bin,
         barcodes,
         scalefactors,

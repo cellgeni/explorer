@@ -1,6 +1,6 @@
 import { datasetFileUrl } from '../data/datasetFiles'
 import type { CellId } from '../data/cellid'
-import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentations'
+import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
 

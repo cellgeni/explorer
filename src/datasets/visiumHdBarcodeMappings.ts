@@ -5,6 +5,7 @@ import {
   defaultPersistentByteRangeCache,
 } from '../data/persistentByteRangeCache'
 import { parseVisiumHdSquareBarcode } from './visiumHdBarcodes'
+import { normalizeVisiumHdBarcodeMappingRowBudget } from './visiumHdStrategy'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type { SpatialElementId } from './spatialDataset'
@@ -19,6 +20,8 @@ export const VISIUM_HD_BARCODE_MAPPING_COLUMNS = [
   'in_nucleus',
   'in_cell',
 ] as const
+
+export { normalizeVisiumHdBarcodeMappingRowBudget } from './visiumHdStrategy'
 
 export interface VisiumHdBarcodeMapping {
   readonly square002um: SpatialElementId
@@ -281,14 +284,4 @@ function readBooleanFlag(
   throw new Error(
     `Expected barcode_mappings.parquet ${key} to be a boolean or 0/1 flag on row ${rowIndex}.`,
   )
-}
-
-export function normalizeVisiumHdBarcodeMappingRowBudget(value: number): number {
-  if (!Number.isFinite(value) || value < 1) {
-    throw new RangeError(
-      `Barcode mapping row budget must be a positive finite number, received ${value}.`,
-    )
-  }
-
-  return Math.floor(value)
 }

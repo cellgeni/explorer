@@ -111,6 +111,12 @@ the app shell, platform workflows, and rendering modules.
   facade and `createOverviewLayers` assembly point, with cell points,
   boundaries, grid cells, transcripts, gene-expression styling, palette helpers,
   and view fitting moved into renderer modules.
+- 2026-06-27: Continued item 14 by hardening Visium HD capability loading.
+  `VisiumHdDataset` now keeps overview, barcode, barcode-mapping, segmentation,
+  H5 matrix, and Feature Slice readers behind statically analyzable dynamic
+  imports, while the segmentation metadata/filtering helpers live in a small
+  platform model module. Production build output now keeps these capability
+  paths as lazy chunks instead of pulling them through the Visium HD facade.
 
 ## Recommendations
 
