@@ -1,0 +1,244 @@
+
+.cell-info-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.cell-detail-panel {
+  display: grid;
+  gap: 7px;
+}
+
+.cell-info-list div {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 6px;
+  align-items: baseline;
+}
+
+.cell-info-list dt,
+.cell-info-list dd {
+  min-width: 0;
+  margin: 0;
+  color: #2f2b22;
+  font-size: 0.68rem;
+}
+
+.cell-info-list dt {
+  color: #7b4d1d;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cell-info-list dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-info-list dd.cell-annotation-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.cell-annotation-chip {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(28, 96, 77, 0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: rgba(28, 96, 77, 0.08);
+  color: #1c604d;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-expression-panel {
+  display: grid;
+  gap: 5px;
+}
+
+.cell-z-panel {
+  display: grid;
+  gap: 5px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(23, 21, 17, 0.1);
+}
+
+.cell-z-bars {
+  display: grid;
+  grid-template-columns: repeat(var(--cell-z-bin-count, 16), minmax(0, 1fr));
+  align-items: end;
+  gap: 2px;
+  height: 54px;
+  padding: 5px 5px 3px;
+  border: 1px solid rgba(23, 21, 17, 0.12);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(23, 21, 17, 0.08) 1px, transparent 1px),
+    rgba(255, 253, 247, 0.72);
+  background-size: 100% 16px;
+}
+
+.cell-z-bar {
+  display: block;
+  width: 100%;
+  height: var(--cell-z-height);
+  min-height: 1px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(180deg, #d73f7c, #174d3e);
+}
+
+.cell-z-axis {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 5px;
+  align-items: center;
+  color: #5f5848;
+  font-size: 0.56rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-z-axis span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-z-axis span:last-child {
+  text-align: right;
+}
+
+.cell-z-caption {
+  min-width: 0;
+  margin: 0;
+  color: #5f5848;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.cell-expression-heading,
+.cell-expression-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.cell-expression-heading span {
+  color: #2f2b22;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cell-expression-heading small {
+  color: #7b4d1d;
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-expression-status {
+  margin: 0;
+  padding: 5px 6px;
+  border: 1px solid rgba(23, 21, 17, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 253, 247, 0.62);
+  color: #5f5848;
+  font-size: 0.64rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.cell-expression-status.is-error {
+  border-color: rgba(166, 94, 78, 0.32);
+  background: rgba(166, 94, 78, 0.1);
+  color: #6f332a;
+}
+
+.cell-expression-load-action {
+  justify-self: start;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.cell-expression-filter {
+  color: #7b4d1d;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cell-expression-search {
+  width: 100%;
+}
+
+.cell-expression-list {
+  display: grid;
+  max-height: 230px;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.cell-expression-list li {
+  display: grid;
+  gap: 2px;
+  padding: 4px 6px;
+  border: 1px solid rgba(23, 21, 17, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 253, 247, 0.72);
+}
+
+.cell-expression-row span {
+  overflow: hidden;
+  color: #2f2b22;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-expression-row strong {
+  color: #7b4d1d;
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-expression-bar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(23, 21, 17, 0.08);
+}
+
+.cell-expression-bar::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--cell-gene-width);
+  border-radius: inherit;
+  background: linear-gradient(90deg, #174d3e, #d73f7c);
+  content: '';
+}
+
+.cell-expression-list small {
+  color: #5f5848;
+  font-size: 0.58rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

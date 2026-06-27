@@ -1,0 +1,75 @@
+:root {
+  color: #171511;
+  color-scheme: light;
+  background: #f6f2e8;
+  font-family: 'Avenir Next', 'DIN Alternate', 'Segoe UI', system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  height: 100%;
+  min-height: 100%;
+  background: #f6f2e8;
+}
+
+body {
+  min-width: 320px;
+  height: 100%;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    linear-gradient(90deg, rgba(32, 102, 83, 0.08) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(32, 102, 83, 0.08) 1px, transparent 1px), #f6f2e8;
+  background-size: 44px 44px;
+  -webkit-tap-highlight-color: rgba(32, 102, 83, 0.18);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #d73f7c;
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 10;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #171511;
+  color: #fffdf7;
+  font-weight: 800;
+  text-decoration: none;
+  transform: translateY(calc(-100% - 18px));
+  transition: transform 160ms ease;
+}
+
+.skip-link:focus-visible {
+  outline: 3px solid #d73f7c;
+  outline-offset: 3px;
+  transform: translateY(0);
+}

@@ -1,0 +1,152 @@
+
+.gene-chip-row,
+.gene-option-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gene-chip,
+.gene-option-list button {
+  min-height: 23px;
+  padding: 3px 7px;
+  border: 1px solid rgba(23, 21, 17, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.86);
+  color: #2f2b22;
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.gene-chip,
+.gene-option-list button.selected {
+  border-color: rgba(215, 63, 124, 0.66);
+  background: rgba(215, 63, 124, 0.12);
+  color: #7f2048;
+}
+
+.gene-option-list {
+  max-height: 84px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.gene-option-list.is-virtualized {
+  position: relative;
+  display: block;
+  flex-wrap: nowrap;
+  max-height: none;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.gene-option-list-spacer {
+  position: relative;
+  min-width: 0;
+}
+
+.gene-option-list.is-virtualized button {
+  position: absolute;
+  right: 2px;
+  left: 0;
+  display: block;
+  width: calc(100% - 2px);
+  min-height: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 6px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.option-empty {
+  color: #5f5848;
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.gene-set-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.gene-set-actions button,
+.gene-set-apply,
+.gene-set-remove {
+  min-width: 0;
+  min-height: 25px;
+  padding: 4px 7px;
+  border: 1px solid rgba(23, 21, 17, 0.16);
+  border-radius: 6px;
+  background: #171511;
+  color: #fffdf7;
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.gene-set-actions button:hover,
+.gene-set-apply:hover,
+.gene-set-remove:hover {
+  background: #206653;
+  color: #fffdf7;
+}
+
+.gene-set-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.gene-set-list {
+  display: grid;
+  gap: 4px;
+}
+
+.gene-set-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gene-set-apply {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  background: rgba(32, 102, 83, 0.1);
+  color: #174d3e;
+  text-align: left;
+}
+
+.gene-set-remove {
+  padding: 0;
+  background: rgba(215, 63, 124, 0.1);
+  color: #7f2048;
+}
+
+.gene-set-apply span,
+.gene-set-apply small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gene-set-apply small {
+  flex: 0 0 auto;
+  color: #7b4d1d;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.gene-set-apply:hover small {
+  color: #f0c84b;
+}
