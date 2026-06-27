@@ -1,17 +1,6 @@
 import { asCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
-import {
-  gexFromCellFeatureMatrixZarr,
-  gexFromCellFeatureMatrixZarrRows,
-  gexFromCellFeatureMatrixZarrSelectedGenes,
-  gexFromTranscriptsParquet,
-  selectionToSql,
-} from '../data/gex'
-import { createDuckDbClient } from '../data/duckdb'
-import { readAnalysisZarrAnnotations } from '../data/analysisAnnotations'
-import { readCellsOverview } from '../data/hyparquetCells'
-import { loadMorphologyImage } from '../data/morphologyImage'
-import { openTiff } from '../tiff/loader'
+import { selectionToSql } from '../data/gexSelection'
 import {
   normalizeRoiSelection,
   roiSelectionToSpatialSelection,
@@ -45,11 +34,9 @@ import type {
   CellFeatureMatrixReadOptions,
   DuckDbPreparedStatementLike,
   GexResult,
-  Selection,
-  SqlParameter,
   TranscriptDuckDbConnection,
-  TranscriptScope,
 } from '../data/gex'
+import type { Selection, SqlParameter, TranscriptScope } from '../data/gexSelection'
 import type {
   GeneExpressionStageTiming,
   GeneExpressionStageTimingHandler,
@@ -66,20 +53,31 @@ import type {
   TranscriptViewportResult,
 } from '../data/transcriptOverlay'
 
+type MatrixReader = (url: string, ids: readonly CellId[]) => Promise<GexResult>
+type GeneExpressionMatrixReader = (
+  url: string,
+  ids: readonly CellId[],
+  genes: readonly string[],
+  options?: CellFeatureMatrixReadOptions,
+) => Promise<GexResult>
+type TranscriptReader = (
+  conn: TranscriptDuckDbConnection,
+  url: string,
+  selection: Selection,
+  scope?: TranscriptScope,
+  cellIds?: readonly CellId[],
+  minQv?: number,
+) => Promise<GexResult>
+
 export interface XeniumDatasetOptions {
   readonly baseUrl: string
   readonly fetcher?: typeof fetch
   readonly duckDbClient?: DuckDbClientLike | Promise<DuckDbClientLike>
   readonly createDuckDbClient?: () => Promise<DuckDbClientLike>
   readonly openTiff?: (url: string, signal?: AbortSignal) => Promise<TiffPyramidLoader>
-  readonly matrixReader?: (url: string, ids: readonly CellId[]) => Promise<GexResult>
-  readonly geneExpressionMatrixReader?: (
-    url: string,
-    ids: readonly CellId[],
-    genes: readonly string[],
-    options?: CellFeatureMatrixReadOptions,
-  ) => Promise<GexResult>
-  readonly transcriptReader?: typeof gexFromTranscriptsParquet
+  readonly matrixReader?: MatrixReader
+  readonly geneExpressionMatrixReader?: GeneExpressionMatrixReader
+  readonly transcriptReader?: TranscriptReader
   readonly overviewReader?: (
     url: string,
     limit?: number,
@@ -192,6 +190,37 @@ const BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS = 75
 const DEFAULT_TRANSCRIPT_QUERY_LIMIT = 100_000
 const DEFAULT_TRANSCRIPT_Z_DISTRIBUTION_BIN_COUNT = 16
 
+const openTiffLazy = async (
+  url: string,
+  signal?: AbortSignal,
+): Promise<TiffPyramidLoader> => {
+  const { openTiff } = await import('../tiff/loader')
+  return openTiff(url, signal)
+}
+
+const gexFromCellFeatureMatrixZarrLazy: MatrixReader = async (url, ids) => {
+  const { gexFromCellFeatureMatrixZarr } = await import('../data/gex')
+  return gexFromCellFeatureMatrixZarr(url, ids)
+}
+
+const gexFromCellFeatureMatrixZarrSelectedGenesLazy: GeneExpressionMatrixReader =
+  async (url, ids, genes, options) => {
+    const { gexFromCellFeatureMatrixZarrSelectedGenes } = await import('../data/gex')
+    return gexFromCellFeatureMatrixZarrSelectedGenes(url, ids, genes, options)
+  }
+
+const gexFromTranscriptsParquetLazy: TranscriptReader = async (
+  conn,
+  url,
+  selection,
+  scope,
+  cellIds,
+  minQv,
+) => {
+  const { gexFromTranscriptsParquet } = await import('../data/gex')
+  return gexFromTranscriptsParquet(conn, url, selection, scope, cellIds, minQv)
+}
+
 export class XeniumDataset implements SpatialDataset<CellId> {
   private readonly baseUrl: string
   private readonly fetcher: typeof fetch
@@ -200,17 +229,9 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     url: string,
     signal?: AbortSignal,
   ) => Promise<TiffPyramidLoader>
-  private readonly matrixReader: (
-    url: string,
-    ids: readonly CellId[],
-  ) => Promise<GexResult>
-  private readonly geneExpressionMatrixReader: (
-    url: string,
-    ids: readonly CellId[],
-    genes: readonly string[],
-    options?: CellFeatureMatrixReadOptions,
-  ) => Promise<GexResult>
-  private readonly transcriptReader: typeof gexFromTranscriptsParquet
+  private readonly matrixReader: MatrixReader
+  private readonly geneExpressionMatrixReader: GeneExpressionMatrixReader
+  private readonly transcriptReader: TranscriptReader
   private readonly overviewReader: (
     url: string,
     limit?: number,
@@ -226,24 +247,32 @@ export class XeniumDataset implements SpatialDataset<CellId> {
   constructor(options: XeniumDatasetOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl)
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
-    this.tiffOpener = options.openTiff ?? openTiff
-    this.matrixReader = options.matrixReader ?? gexFromCellFeatureMatrixZarr
+    this.tiffOpener = options.openTiff ?? openTiffLazy
+    this.matrixReader = options.matrixReader ?? gexFromCellFeatureMatrixZarrLazy
     this.geneExpressionMatrixReader =
       options.geneExpressionMatrixReader ??
       (options.matrixReader === undefined
-        ? gexFromCellFeatureMatrixZarrSelectedGenes
+        ? gexFromCellFeatureMatrixZarrSelectedGenesLazy
         : (url, ids) => this.matrixReader(url, ids))
-    this.transcriptReader = options.transcriptReader ?? gexFromTranscriptsParquet
+    this.transcriptReader = options.transcriptReader ?? gexFromTranscriptsParquetLazy
     this.overviewReader =
       options.overviewReader ??
-      ((url, limit) =>
-        readCellsOverview({
+      (async (url, limit) => {
+        const { readCellsOverview } = await import('../data/hyparquetCells')
+        return readCellsOverview({
           url,
           fetcher: this.fetcher,
           ...(limit === undefined ? {} : { limit }),
-        }))
+        })
+      })
     this.analysisAnnotationReader =
-      options.analysisAnnotationReader ?? readAnalysisZarrAnnotations
+      options.analysisAnnotationReader ??
+      (async (analysisUrl, matrixUrl, annotationOptions) => {
+        const { readAnalysisZarrAnnotations } = await import(
+          '../data/analysisAnnotations'
+        )
+        return readAnalysisZarrAnnotations(analysisUrl, matrixUrl, annotationOptions)
+      })
     this.duckFactory =
       options.createDuckDbClient ??
       (() => {
@@ -251,7 +280,12 @@ export class XeniumDataset implements SpatialDataset<CellId> {
           return Promise.resolve(options.duckDbClient)
         }
 
-        return createDuckDbClient()
+        const createDuckDbClientPromise = import('../data/duckdb').then(
+          (module) => module.createDuckDbClient,
+        )
+        return createDuckDbClientPromise.then((createDuckDbClient) =>
+          createDuckDbClient(),
+        )
       })
   }
 
@@ -329,7 +363,7 @@ ORDER BY b.cell_id, b.file_row_number
     return this.matrixReader(this.urlFor('cell_feature_matrix.zarr.zip'), ids)
   }
 
-  matrixForCells(cells: readonly DatasetCell[]): Promise<GexResult> {
+  async matrixForCells(cells: readonly DatasetCell[]): Promise<GexResult> {
     const targets = cells.flatMap((cell) =>
       cell.cellFeatureMatrixRow === undefined
         ? []
@@ -340,6 +374,7 @@ ORDER BY b.cell_id, b.file_row_number
       return this.matrix(cells.map((cell) => cell.id))
     }
 
+    const { gexFromCellFeatureMatrixZarrRows } = await import('../data/gex')
     return gexFromCellFeatureMatrixZarrRows(
       this.urlFor('cell_feature_matrix.zarr.zip'),
       targets,
@@ -746,6 +781,7 @@ LIMIT ?
   }
 
   async image(): Promise<ImageSource | null> {
+    const { loadMorphologyImage } = await import('../data/morphologyImage')
     const image = await loadMorphologyImage(this.baseUrl, {
       fetcher: this.fetcher,
       openImage: this.tiffOpener,

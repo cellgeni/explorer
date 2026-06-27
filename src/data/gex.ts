@@ -8,35 +8,34 @@ import {
 } from './persistentByteRangeCache'
 import { geneExpressionStageTiming } from './geneExpressionTiming'
 import { createGeneFeatureIndex } from './geneFeatures'
+import { selectionToSql } from './gexSelection'
 import type {
   FeatureBarcodeMatrixWorkerRequest,
   FeatureBarcodeMatrixWorkerResponse,
   FeatureBarcodeMatrixWorkerSuccess,
 } from '../workers/featureBarcodeMatrixMessages'
 import type { CellId } from './cellid'
-import type { DataPoint, Micrometers } from './coords'
 import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
 import type { PersistentByteRangeCache } from './persistentByteRangeCache'
+import type {
+  Selection,
+  SqlFragment,
+  SqlParameter,
+  TranscriptScope,
+} from './gexSelection'
 import type { Array as ZarrArray, DataType, Group as ZarrGroup } from 'zarrita'
 
 export type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
+export type {
+  CircleSelection,
+  PolygonSelection,
+  Selection,
+  SqlFragment,
+  SqlParameter,
+  TranscriptScope,
+} from './gexSelection'
+export { selectionToSql } from './gexSelection'
 export { createGeneFeatureIndex, isGeneFeature } from './geneFeatures'
-
-export type TranscriptScope = 'spatial' | 'cells-only'
-
-export interface CircleSelection {
-  readonly kind: 'circle'
-  readonly cx: Micrometers
-  readonly cy: Micrometers
-  readonly radius: Micrometers
-}
-
-export interface PolygonSelection {
-  readonly kind: 'polygon'
-  readonly points: readonly DataPoint[]
-}
-
-export type Selection = CircleSelection | PolygonSelection
 
 export interface AggregatedGene {
   readonly gene: string
@@ -49,8 +48,6 @@ export interface CellFeatureMatrixZarrCapability {
   readonly cellCount: number
   readonly featureCount: number
 }
-
-export type SqlParameter = string | number
 
 type NumericArrayLike =
   | Int8Array
@@ -101,11 +98,6 @@ interface ZarrMatrixCellIdCache extends ZarrMatrixCache {
 export interface CellFeatureMatrixRowTarget {
   readonly id: CellId
   readonly row: number
-}
-
-export interface SqlFragment {
-  readonly sql: string
-  readonly params: readonly SqlParameter[]
 }
 
 export interface ArrowTableLike {
@@ -236,51 +228,6 @@ export class FullFileMatrixBudgetExceededError extends Error {
         byteLength,
       )}, exceeding the interactive full-file budget of ${formatByteCount(maxBytes)}.`,
     )
-  }
-}
-
-export function selectionToSql(
-  selection: Selection,
-  xCol: string,
-  yCol: string,
-): SqlFragment {
-  if (selection.kind === 'circle') {
-    const { cx, cy, radius } = selection
-
-    return {
-      sql: `${xCol} BETWEEN ? AND ?
-AND ${yCol} BETWEEN ? AND ?
-AND (${xCol}-?)*(${xCol}-?) + (${yCol}-?)*(${yCol}-?) <= ?`,
-      params: [
-        cx - radius,
-        cx + radius,
-        cy - radius,
-        cy + radius,
-        cx,
-        cx,
-        cy,
-        cy,
-        radius * radius,
-      ],
-    }
-  }
-
-  const firstPoint = selection.points[0]
-
-  if (firstPoint === undefined) {
-    throw new Error('Polygon selection requires at least one point.')
-  }
-
-  const xs = selection.points.map((point) => point.x)
-  const ys = selection.points.map((point) => point.y)
-  const ring = selection.points.map((point) => `${point.x} ${point.y}`).join(', ')
-  const wkt = `POLYGON((${ring}, ${firstPoint.x} ${firstPoint.y}))`
-
-  return {
-    sql: `${xCol} BETWEEN ? AND ?
-AND ${yCol} BETWEEN ? AND ?
-AND ST_Within(ST_Point(${xCol}, ${yCol}), ST_GeomFromText(?))`,
-    params: [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys), wkt],
   }
 }
 

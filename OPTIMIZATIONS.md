@@ -117,6 +117,11 @@ the app shell, platform workflows, and rendering modules.
   imports, while the segmentation metadata/filtering helpers live in a small
   platform model module. Production build output now keeps these capability
   paths as lazy chunks instead of pulling them through the Visium HD facade.
+- 2026-06-27: Continued item 14 for Xenium by moving selection SQL helpers into
+  a lightweight GEX selection module and keeping Xenium DuckDB, matrix,
+  transcript, annotation, overview, morphology, and TIFF default readers behind
+  statically analyzable dynamic imports. Constructor-injected readers remain
+  eager-free for tests while production capability paths load only when used.
 
 ## Recommendations
 
