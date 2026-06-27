@@ -120,7 +120,8 @@ describe('platformAdapter', () => {
     expect(adapter.boundaryLoadingEnabled(false, true)).toBe(false)
     expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('enabled:no-nucleus')
     expect(adapter.geneExpressionOverlayEnabled(25)).toBe(true)
-    expect(adapter.cellBoundaryHoverEnabled(true)).toBe(false)
+    expect(adapter.cellBoundaryHoverEnabled(false)).toBe(false)
+    expect(adapter.cellBoundaryHoverEnabled(true)).toBe(true)
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
       loadEnabled: true,
     })

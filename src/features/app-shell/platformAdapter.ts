@@ -84,7 +84,7 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
   boundaryOverlayRequestKey: (showCellBoundaries) =>
     `${showCellBoundaries ? 'enabled' : 'disabled'}:no-nucleus`,
   geneExpressionOverlayEnabled: () => true,
-  cellBoundaryHoverEnabled: () => false,
+  cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,
   magicLensAvailability: (loadState) => ({
     loadEnabled: loadState.status === 'ready',
   }),
