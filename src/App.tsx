@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ViewerCore,
-  type ViewerCoordinateUnit,
-  type ViewerFocusRequest,
-  type ViewerTranscriptHoverDetail,
-} from './components/ViewerCore'
-import type { FlatMorphologyCanvasImage } from './components/MorphologyCanvas'
+import { ViewerCore, type ViewerTranscriptHoverDetail } from './components/ViewerCore'
 import { AppControlHud } from './features/app-shell/AppControlHud'
 import { AppDatasetHudPanel } from './features/app-shell/AppDatasetHudPanel'
 import { AppGeneHudPanel } from './features/app-shell/AppGeneHudPanel'
@@ -21,13 +15,7 @@ import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import { RoiHudPanel, VisiumHdRoiHudPanel } from './features/control-hud/RoiHudPanel'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
-import {
-  parseControlHudTab,
-  parseObservationColorMode,
-  parseViewerCoordinateUnit,
-  readShareableStateFromLocation,
-  type ControlHudTab,
-} from './features/app-shell/appShellModel'
+import { readShareableStateFromLocation } from './features/app-shell/appShellModel'
 import {
   activeVisiumHdRoiStateForPlatform,
   appPlatformAdapterFor,
@@ -54,6 +42,7 @@ import {
 import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
+import { useAppDomainState } from './features/app-shell/useAppDomainState'
 import { useVisiumHdBinWorkflow } from './features/app-shell/useVisiumHdBinWorkflow'
 import { useVisiumHdExpressionProfileWorkflow } from './features/app-shell/useVisiumHdExpressionProfileWorkflow'
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
@@ -67,114 +56,56 @@ import {
   createDebugLogEntry,
   invalidateLatestRequest,
   type DebugLogAppendOptions,
-  type DebugLogEntry,
-  type FallbackNoticeEntry,
 } from './features/app-shell/appRuntimeModel'
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
-  IDLE_TRANSCRIPT_CAPABILITY_STATE,
-  IDLE_TRANSCRIPT_LAYER_STATE,
-  parseTranscriptDensityColorScale,
-  parseTranscriptDetailMode,
-  parseTranscriptFeatureFilterMode,
-  parseTranscriptPointColorMode,
   transcriptStatusCopy,
-  type TranscriptCapabilityState,
-  type TranscriptLayerState,
 } from './features/transcripts/transcriptLayerModel'
-import {
-  IDLE_CELL_DETAIL_STATE,
-  IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE,
-  cellDetailStatusCopy,
-  type CellDetailState,
-  type CellTranscriptDistributionState,
-} from './features/cells/cellDetailModel'
+import { cellDetailStatusCopy } from './features/cells/cellDetailModel'
 import {
   IDLE_CELL_EXPRESSION_PROFILE_STATE,
   cellExpressionProfileMatchesSelection,
-  type CellExpressionProfileState,
 } from './features/cells/cellExpressionProfileModel'
 import type { CellGeneExpressionStatus } from './features/cells/cellGeneExpressionStatus'
 import { useCellDetailWorkflow } from './features/cells/useCellDetailWorkflow'
-import {
-  IDLE_GRID_CELL_ASSIGNMENT_STATE,
-  type GridCellAssignmentState,
-} from './features/cells/gridCellAssignmentModel'
 import { useGridCellAssignmentWorkflow } from './features/cells/useGridCellAssignmentWorkflow'
-import {
-  IDLE_ANALYSIS_EMBEDDING_STATE,
-  analysisEmbeddingStatusCopy,
-  type AnalysisEmbeddingState,
-} from './features/analysis/analysisEmbeddingModel'
+import { analysisEmbeddingStatusCopy } from './features/analysis/analysisEmbeddingModel'
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
-import type { MorphologyChannelSetting } from './features/morphology/morphologyChannels'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
-import {
-  IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE,
-  customMorphologyLayerChannels,
-  type CustomMorphologyLayer,
-  type CustomMorphologyLayerLoadState,
-} from './features/morphology/customMorphologyLayers'
+import { customMorphologyLayerChannels } from './features/morphology/customMorphologyLayers'
 import { useCustomMorphologyLayerWorkflow } from './features/morphology/useCustomMorphologyLayerWorkflow'
-import {
-  IDLE_MAGIC_LENS_STATE,
-  magicLensScopeLabel,
-  magicLensStatusCopy,
-  normalizeMagicLensMinQv,
-  normalizeMagicLensRadius,
-  parseMagicLensScope,
-  type MagicLensScope,
-  type MagicLensState,
-} from './features/roi/magicLensModel'
+import { magicLensScopeLabel, magicLensStatusCopy } from './features/roi/magicLensModel'
 import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
 import { useVisiumHdMagicLensSummary } from './features/roi/useVisiumHdMagicLensSummary'
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import { useVisiumHdRoiWorkflow } from './features/roi/useVisiumHdRoiWorkflow'
 import {
-  IDLE_ROI_GENE_STATS_STATE,
-  IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE,
-  IDLE_ROI_STATE,
-  IDLE_ROI_TRANSCRIPT_EXPORT_STATE,
   roiGeneDatasetWarmupKey,
   roiGeneStatsStatusCopy,
   roiStatusCopy,
   summarizeRoiCells,
-  type RoiGeneStatsState,
-  type RoiGeneViewportWarmupState,
-  type RoiState,
-  type RoiTranscriptExportState,
 } from './features/roi/roiModel'
 import {
   gridCellDatumDeckCenter,
-  IDLE_VISIUM_HD_ROI_STATE,
   summarizeVisiumHdRoiBins,
   visiumHdRoiStatusCopy,
-  type VisiumHdRoiState,
 } from './features/roi/visiumHdRoiModel'
 import { useDatasetDiagnosticsWorkflow } from './features/diagnostics/useDatasetDiagnosticsWorkflow'
 import {
-  IDLE_ANNOTATION_GROUP_STATE,
-  IDLE_ANNOTATION_STATE,
   annotationLabelsForCell,
   annotationStatusCopy,
   filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
-  type AnnotationGroupState,
   type AnnotationState,
 } from './features/annotations/annotationModel'
 import { useAnnotationWorkflow } from './features/annotations/useAnnotationWorkflow'
 import {
   IDLE_GENE_EXPRESSION_STATE,
-  IDLE_GENE_PANEL_STATE,
   type GeneExpressionScaleDomain,
   type GeneExpressionState,
   geneExpressionModeLabel,
   geneExpressionStatusCopy,
   genePanelStatusCopy,
-  type GenePanelState,
-  parseGeneExpressionColorScale,
-  parseGeneExpressionDetailMode,
-  parseGeneExpressionScoreMode,
 } from './features/genes/geneControlsModel'
 import {
   collectStructuredLoadErrors,
@@ -182,78 +113,34 @@ import {
   formatStructuredError,
   type StructuredLoadError,
 } from './features/errors/loadErrorModel'
-import {
-  IDLE_BOUNDARY_LOAD_STATE,
-  IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE,
-  IDLE_DATASET_DIAGNOSTICS_STATE,
-  IDLE_DATASET_LOAD_STATE,
-  IDLE_DATASET_WARMUP_STATE,
-  IDLE_MORPHOLOGY_LOAD_STATE,
-  morphologyLoadFailed,
-  type BoundaryLoadState,
-  type CellFeatureMatrixCapabilityState,
-  type DatasetDiagnosticsState,
-  type DatasetLoadState,
-  type DatasetWarmupState,
-  type MorphologyLoadState,
-} from './features/dataset/datasetLoadModel'
-import {
-  IDLE_VISIUM_HD_CONTROL_STATE,
-  type VisiumHdControlState,
-} from './features/dataset/visiumHdModel'
-import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
-import {
-  normalizeTranscriptExactPointLimit,
-  type TranscriptDetailMode,
-  type TranscriptFeatureFilterMode,
-} from './data/transcriptOverlay'
+import { morphologyLoadFailed } from './features/dataset/datasetLoadModel'
+import type { TranscriptFeatureFilterMode } from './data/transcriptOverlay'
 import type { RoiSelection } from './data/roiSelection'
-import type { ContinuousCellMetadataTrack } from './data/customAnnotations'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
-import { type ShareableState, type ShareableViewState } from './data/shareableState'
+import type { ShareableState } from './data/shareableState'
 import {
   appendTelemetryEvent,
   telemetryEvent,
   type TelemetryEvent,
 } from './data/telemetry'
-import { normalizeBoundaryCellLimit } from './rendering/boundaryViewport'
 import type { FallbackNotice } from './data/fallbackNotice'
+import { normalizeLayerOpacity } from './rendering/layerOpacity'
 import {
-  DEFAULT_CELL_FILL_OPACITY,
-  normalizeLayerOpacity,
-} from './rendering/layerOpacity'
-import {
-  DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
-  DEFAULT_GENE_EXPRESSION_SCORE_MODE,
-  DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
-  DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
   geneExpressionScoreDomainMax,
   styleCellBoundariesByGeneExpression,
   styleGridCellsByGeneExpression,
 } from './rendering/deckLayers'
 import { useViewerStore } from './store/viewerStore'
 import type { GeneExpressionBatch } from './datasets/xeniumDataset'
-import {
-  normalizeCustomMorphologyLayerUrl,
-  type MorphologyImage,
-} from './data/morphologyImage'
-import type { ObservationColorMode } from './rendering/cellStyling'
-import type { AnalysisEmbeddingKind } from './data/analysisEmbeddings'
-import type { Platform, SpatialElement } from './datasets/spatialDataset'
-import type { GeneExpressionDetailMode } from './data/geneExpressionLod'
-import type {
-  GeneExpressionColorScale,
-  GeneExpressionScoreMode,
-  TranscriptDensityColorScale,
-  TranscriptPointColorMode,
-} from './rendering/deckLayers'
+import { normalizeCustomMorphologyLayerUrl } from './data/morphologyImage'
+import type { SpatialElement } from './datasets/spatialDataset'
+import type { GeneExpressionScoreMode } from './rendering/deckLayers'
 import type {
   CellBoundaryDatum,
   GridCellDatum,
   OverviewCellDatum,
 } from './rendering/deckLayers'
 import type {
-  RoiDrawMode,
   ViewerMagicLensDetail,
   ViewerMagicLensStatus,
   ViewerViewportDetail,
@@ -318,270 +205,224 @@ export function App({
   const [performanceBudget] = useState<PerformanceBudget>(() => detectPerformanceBudget())
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
-  const [loadState, setLoadState] = useState<DatasetLoadState<StructuredLoadError>>(
-    IDLE_DATASET_LOAD_STATE,
-  )
-  const [datasetWarmupState, setDatasetWarmupState] = useState<DatasetWarmupState>(
-    IDLE_DATASET_WARMUP_STATE,
-  )
-  const [cellFeatureMatrixCapabilityState, setCellFeatureMatrixCapabilityState] =
-    useState<CellFeatureMatrixCapabilityState>(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
-  const [diagnosticsState, setDiagnosticsState] = useState<
-    DatasetDiagnosticsState<StructuredLoadError>
-  >(IDLE_DATASET_DIAGNOSTICS_STATE)
-  const [morphologyState, setMorphologyState] = useState<
-    MorphologyLoadState<StructuredLoadError>
-  >(IDLE_MORPHOLOGY_LOAD_STATE)
-  const [boundaryState, setBoundaryState] = useState<
-    BoundaryLoadState<StructuredLoadError>
-  >(IDLE_BOUNDARY_LOAD_STATE)
-  const [genePanelState, setGenePanelState] =
-    useState<GenePanelState<StructuredLoadError>>(IDLE_GENE_PANEL_STATE)
-  const [annotationState, setAnnotationState] =
-    useState<AnnotationState<StructuredLoadError>>(IDLE_ANNOTATION_STATE)
-  const [annotationGroupState, setAnnotationGroupState] = useState<
-    AnnotationGroupState<StructuredLoadError>
-  >(IDLE_ANNOTATION_GROUP_STATE)
-  const [analysisEmbeddingState, setAnalysisEmbeddingState] = useState<
-    AnalysisEmbeddingState<StructuredLoadError>
-  >(IDLE_ANALYSIS_EMBEDDING_STATE)
-  const [annotationColors, setAnnotationColors] = useState<
-    Readonly<Record<string, string>>
-  >({})
-  const [selectedAnnotationGroupId, setSelectedAnnotationGroupId] = useState(
-    ALL_ANNOTATION_GROUP_ID,
-  )
-  const [annotationImportUrl, setAnnotationImportUrl] = useState(
-    initialShareableState.annotationUrl ?? '',
-  )
-  const [hiddenAnnotationSetIds, setHiddenAnnotationSetIds] = useState<readonly string[]>(
-    [],
-  )
-  const [hiddenAnnotationIds, setHiddenAnnotationIds] = useState<readonly string[]>([])
-  const [cellMetadataTracks, setCellMetadataTracks] = useState<
-    readonly ContinuousCellMetadataTrack[]
-  >([])
-  const [selectedCellMetadataTrackId, setSelectedCellMetadataTrackId] = useState<
-    string | null
-  >(null)
-  const [selectedEmbeddingKind, setSelectedEmbeddingKind] =
-    useState<AnalysisEmbeddingKind>('umap')
-  const [roiState, setRoiState] = useState<RoiState<StructuredLoadError>>(IDLE_ROI_STATE)
-  const [visiumHdRoiState, setVisiumHdRoiState] = useState<VisiumHdRoiState>(
-    IDLE_VISIUM_HD_ROI_STATE,
-  )
-  const [roiGeneStatsState, setRoiGeneStatsState] = useState<
-    RoiGeneStatsState<StructuredLoadError>
-  >(IDLE_ROI_GENE_STATS_STATE)
-  const [roiGeneViewportWarmupState, setRoiGeneViewportWarmupState] =
-    useState<RoiGeneViewportWarmupState>(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
-  const [roiTranscriptExportState, setRoiTranscriptExportState] = useState<
-    RoiTranscriptExportState<StructuredLoadError>
-  >(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
-  const [transcriptCapabilityState, setTranscriptCapabilityState] = useState<
-    TranscriptCapabilityState<StructuredLoadError>
-  >(IDLE_TRANSCRIPT_CAPABILITY_STATE)
-  const [transcriptLayerState, setTranscriptLayerState] = useState<
-    TranscriptLayerState<StructuredLoadError>
-  >(IDLE_TRANSCRIPT_LAYER_STATE)
-  const [magicLensState, setMagicLensState] =
-    useState<MagicLensState<StructuredLoadError>>(IDLE_MAGIC_LENS_STATE)
-  const [cellDetailState, setCellDetailState] =
-    useState<CellDetailState<StructuredLoadError>>(IDLE_CELL_DETAIL_STATE)
-  const [cellTranscriptDistributionState, setCellTranscriptDistributionState] = useState<
-    CellTranscriptDistributionState<StructuredLoadError>
-  >(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
-  const [magicLensScope, setMagicLensScope] = useState<MagicLensScope>(
-    () => parseMagicLensScope(initialShareableState.magicLensScope) ?? 'cursor',
-  )
-  const [magicLensActive, setMagicLensActive] = useState(
-    initialShareableState.magicLensActive ?? false,
-  )
-  const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(() =>
-    normalizeMagicLensRadius(initialShareableState.magicLensRadiusMicrometers ?? 80),
-  )
-  const [magicLensMinQv, setMagicLensMinQv] = useState(() =>
-    normalizeMagicLensMinQv(initialShareableState.magicLensMinQv ?? 20),
-  )
-  const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(
-    initialShareableState.transcriptOverlay ?? false,
-  )
-  const [transcriptDetailMode, setTranscriptDetailMode] = useState<TranscriptDetailMode>(
-    () => parseTranscriptDetailMode(initialShareableState.transcriptDetailMode) ?? 'auto',
-  )
-  const [transcriptMinQv, setTranscriptMinQv] = useState(
-    initialShareableState.transcriptMinQv ?? 20,
-  )
-  const [transcriptGeneOnly, setTranscriptGeneOnly] = useState(
-    initialShareableState.transcriptGeneOnly ?? true,
-  )
-  const [transcriptFeatureFilterMode, setTranscriptFeatureFilterMode] =
-    useState<TranscriptFeatureFilterMode>(
-      () =>
-        parseTranscriptFeatureFilterMode(
-          initialShareableState.transcriptFeatureFilterMode,
-        ) ?? 'selected',
-    )
-  const [transcriptDensityColorScale, setTranscriptDensityColorScale] =
-    useState<TranscriptDensityColorScale>(
-      () =>
-        parseTranscriptDensityColorScale(
-          initialShareableState.transcriptDensityColorScale,
-        ) ?? DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
-    )
-  const [transcriptPointColorMode, setTranscriptPointColorMode] =
-    useState<TranscriptPointColorMode>(
-      () =>
-        parseTranscriptPointColorMode(initialShareableState.transcriptPointColorMode) ??
-        DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
-    )
-  const [transcriptExactPointLimit, setTranscriptExactPointLimit] = useState(() =>
-    normalizeTranscriptExactPointLimit(initialShareableState.transcriptExactPointLimit),
-  )
-  const [transcriptOpacity, setTranscriptOpacity] = useState(
-    initialShareableState.transcriptOpacity ?? 0.85,
-  )
-  const [transcriptPointSize, setTranscriptPointSize] = useState(
-    initialShareableState.transcriptPointSize ?? 2,
-  )
-  const [hoveredTranscript, setHoveredTranscript] =
-    useState<ViewerTranscriptHoverDetail | null>(null)
-  const [pinnedTranscript, setPinnedTranscript] =
-    useState<ViewerTranscriptHoverDetail | null>(null)
-  const [manualTranscriptExactRequestKey, setManualTranscriptExactRequestKey] = useState<
-    string | null
-  >(null)
-  const [debugLog, setDebugLog] = useState<readonly DebugLogEntry[]>([])
-  const [fallbackNotices, setFallbackNotices] = useState<readonly FallbackNoticeEntry[]>(
-    [],
-  )
-  const [telemetryEvents, setTelemetryEvents] = useState<readonly TelemetryEvent[]>([])
-  const [isControlHudCollapsed, setIsControlHudCollapsed] = useState(false)
-  const [activeControlHudTab, setActiveControlHudTab] = useState<ControlHudTab>(
-    () => parseControlHudTab(initialShareableState.activeTab) ?? 'dataset',
-  )
-  const [geneExpressionState, setGeneExpressionState] = useState<
-    GeneExpressionState<StructuredLoadError>
-  >(IDLE_GENE_EXPRESSION_STATE)
-  const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
-  const [spatialGridCells, setSpatialGridCells] = useState<readonly GridCellDatum[]>([])
-  const [geneExpressionBatch, setGeneExpressionBatch] =
-    useState<GeneExpressionBatch | null>(null)
-  const [geneExpressionScaleDomain, setGeneExpressionScaleDomain] =
-    useState<GeneExpressionScaleDomain>({ key: '', max: 0 })
-  const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
-  const [flatMorphologyImage, setFlatMorphologyImage] =
-    useState<FlatMorphologyCanvasImage | null>(null)
-  const [customMorphologyLayers, setCustomMorphologyLayers] = useState<
-    readonly CustomMorphologyLayer[]
-  >([])
-  const [customMorphologyLayerState, setCustomMorphologyLayerState] = useState<
-    CustomMorphologyLayerLoadState<StructuredLoadError>
-  >(IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE)
-  const [customImageLayerOpacities, setCustomImageLayerOpacities] = useState<
-    Readonly<Record<string, number>>
-  >({})
-  const [morphologyChannelSettings, setMorphologyChannelSettings] = useState<
-    readonly MorphologyChannelSetting[]
-  >([])
-  const [autoContrastChannelIds, setAutoContrastChannelIds] = useState<readonly string[]>(
-    [],
-  )
-  const [boundaryElements, setBoundaryElements] = useState<readonly SpatialElement[]>([])
-  const [nucleusBoundaryElements, setNucleusBoundaryElements] = useState<
-    readonly SpatialElement[]
-  >([])
-  const [shouldLoadMorphology, setShouldLoadMorphology] = useState(
-    initialShareableState.shouldLoadMorphology ?? true,
-  )
-  const [boundaryCellLimit, setBoundaryCellLimit] = useState(() =>
-    normalizeBoundaryCellLimit(
-      initialShareableState.boundaryCellLimit ?? performanceBudget.boundaryCellLimit,
-    ),
-  )
-  const [imageLayerOpacity, setImageLayerOpacity] = useState(() =>
-    normalizeLayerOpacity(initialShareableState.imageOpacity ?? 1),
-  )
-  const [cellFillOpacity, setCellFillOpacity] = useState(() =>
-    normalizeLayerOpacity(
-      initialShareableState.cellFillOpacity ?? DEFAULT_CELL_FILL_OPACITY,
-    ),
-  )
-  const [showCellBoundaries, setShowCellBoundaries] = useState(
-    initialShareableState.showCellBoundaries ?? true,
-  )
-  const [showNucleusBoundaries, setShowNucleusBoundaries] = useState(
-    initialShareableState.showNucleusBoundaries ?? true,
-  )
-  const [showHoverTooltips, setShowHoverTooltips] = useState(
-    initialShareableState.showHoverTooltips ?? true,
-  )
-  const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(() =>
-    normalizeLayerOpacity(initialShareableState.cellBoundaryOpacity ?? 1),
-  )
-  const [coordinateUnit, setCoordinateUnit] = useState<ViewerCoordinateUnit>(
-    () => parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ?? 'um',
-  )
-  const [measurementEnabled, setMeasurementEnabled] = useState(false)
-  const [measurementUnit, setMeasurementUnit] = useState<ViewerCoordinateUnit>(
-    () =>
-      parseViewerCoordinateUnit(initialShareableState.measurementUnit) ??
-      parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ??
-      'um',
-  )
-  const [measurementResetKey, setMeasurementResetKey] = useState(0)
-  const [geneExpressionColorScale, setGeneExpressionColorScale] =
-    useState<GeneExpressionColorScale>(
-      () =>
-        parseGeneExpressionColorScale(initialShareableState.geneExpressionColorScale) ??
-        DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
-    )
-  const [geneExpressionScoreMode, setGeneExpressionScoreMode] =
-    useState<GeneExpressionScoreMode>(
-      () =>
-        parseGeneExpressionScoreMode(initialShareableState.geneExpressionScoreMode) ??
-        DEFAULT_GENE_EXPRESSION_SCORE_MODE,
-    )
-  const [geneExpressionDetailMode, setGeneExpressionDetailMode] =
-    useState<GeneExpressionDetailMode>(
-      () =>
-        parseGeneExpressionDetailMode(initialShareableState.geneExpressionDetailMode) ??
-        'auto',
-    )
-  const [selectedGenes, setSelectedGenes] = useState<readonly string[]>(
-    initialShareableState.selectedGenes ?? [],
-  )
+  const appState = useAppDomainState({ initialShareableState, performanceBudget })
+  const {
+    annotations: {
+      annotationColors,
+      annotationGroupState,
+      annotationImportUrl,
+      annotationState,
+      cellMetadataTracks,
+      hiddenAnnotationIds,
+      hiddenAnnotationSetIds,
+      selectedAnnotationGroupId,
+      selectedCellMetadataTrackId,
+      setAnnotationColors,
+      setAnnotationGroupState,
+      setAnnotationImportUrl,
+      setAnnotationState,
+      setCellMetadataTracks,
+      setHiddenAnnotationIds,
+      setHiddenAnnotationSetIds,
+      setSelectedAnnotationGroupId,
+      setSelectedCellMetadataTrackId,
+    },
+    analysis: {
+      analysisEmbeddingState,
+      selectedEmbeddingKind,
+      setAnalysisEmbeddingState,
+      setSelectedEmbeddingKind,
+    },
+    cells: {
+      cellDetailState,
+      cellTranscriptDistributionState,
+      setCellDetailState,
+      setCellTranscriptDistributionState,
+    },
+    dataset: {
+      boundaryState,
+      cellFeatureMatrixCapabilityState,
+      datasetPlatform,
+      datasetWarmupState,
+      diagnosticsState,
+      loadState,
+      morphologyState,
+      setBoundaryState,
+      setCellFeatureMatrixCapabilityState,
+      setDatasetPlatform,
+      setDatasetWarmupState,
+      setDiagnosticsState,
+      setLoadState,
+      setMorphologyState,
+    },
+    genes: {
+      geneExpressionBatch,
+      geneExpressionColorScale,
+      geneExpressionDetailMode,
+      geneExpressionScaleDomain,
+      geneExpressionScoreMode,
+      geneExpressionState,
+      genePanelState,
+      selectedGenes,
+      setGeneExpressionBatch,
+      setGeneExpressionColorScale,
+      setGeneExpressionDetailMode,
+      setGeneExpressionScaleDomain,
+      setGeneExpressionScoreMode,
+      setGeneExpressionState,
+      setGenePanelState,
+      setSelectedGenes,
+    },
+    layers: {
+      boundaryCellLimit,
+      cellBoundaryOpacity,
+      cellFillOpacity,
+      coordinateUnit,
+      imageLayerOpacity,
+      measurementEnabled,
+      measurementResetKey,
+      measurementUnit,
+      observationColorMode,
+      setBoundaryCellLimit,
+      setCellBoundaryOpacity,
+      setCellFillOpacity,
+      setCoordinateUnit,
+      setImageLayerOpacity,
+      setMeasurementEnabled,
+      setMeasurementResetKey,
+      setMeasurementUnit,
+      setObservationColorMode,
+      setShowCellBoundaries,
+      setShowHoverTooltips,
+      setShowNucleusBoundaries,
+      showCellBoundaries,
+      showHoverTooltips,
+      showNucleusBoundaries,
+    },
+    magicLens: {
+      magicLensActive,
+      magicLensMinQv,
+      magicLensRadiusMicrometers,
+      magicLensScope,
+      magicLensState,
+      setMagicLensActive,
+      setMagicLensMinQv,
+      setMagicLensRadiusMicrometers,
+      setMagicLensScope,
+      setMagicLensState,
+    },
+    morphology: {
+      autoContrastChannelIds,
+      boundaryElements,
+      customImageLayerOpacities,
+      customMorphologyLayerState,
+      customMorphologyLayers,
+      flatMorphologyImage,
+      morphologyChannelSettings,
+      morphologyImage,
+      nucleusBoundaryElements,
+      setAutoContrastChannelIds,
+      setBoundaryElements,
+      setCustomImageLayerOpacities,
+      setCustomMorphologyLayerState,
+      setCustomMorphologyLayers,
+      setFlatMorphologyImage,
+      setMorphologyChannelSettings,
+      setMorphologyImage,
+      setNucleusBoundaryElements,
+      setShouldLoadMorphology,
+      shouldLoadMorphology,
+    },
+    roi: {
+      roiGeneStatsState,
+      roiGeneViewportWarmupState,
+      roiMode,
+      roiName,
+      roiState,
+      roiTranscriptExportState,
+      setRoiGeneStatsState,
+      setRoiGeneViewportWarmupState,
+      setRoiMode,
+      setRoiName,
+      setRoiState,
+      setRoiTranscriptExportState,
+      setVisiumHdRoiState,
+      visiumHdRoiState,
+    },
+    runtime: {
+      activeControlHudTab,
+      debugLog,
+      fallbackNotices,
+      isControlHudCollapsed,
+      setActiveControlHudTab,
+      setDebugLog,
+      setFallbackNotices,
+      setIsControlHudCollapsed,
+      setTelemetryEvents,
+      telemetryEvents,
+    },
+    selection: {
+      currentViewportDetail,
+      selectedBoundaryCell,
+      selectedCell,
+      selectedGridCell,
+      setCurrentViewportDetail,
+      setSelectedBoundaryCell,
+      setSelectedCell,
+      setSelectedGridCell,
+      setShareableViewState,
+      setSpatialFocusRequest,
+      setViewportCellCount,
+      shareableViewState,
+      spatialFocusRequest,
+    },
+    transcripts: {
+      hoveredTranscript,
+      manualTranscriptExactRequestKey,
+      pinnedTranscript,
+      setHoveredTranscript,
+      setManualTranscriptExactRequestKey,
+      setPinnedTranscript,
+      setShowTranscriptOverlay,
+      setTranscriptCapabilityState,
+      setTranscriptDensityColorScale,
+      setTranscriptDetailMode,
+      setTranscriptExactPointLimit,
+      setTranscriptFeatureFilterMode,
+      setTranscriptGeneOnly,
+      setTranscriptLayerState,
+      setTranscriptMinQv,
+      setTranscriptOpacity,
+      setTranscriptPointColorMode,
+      setTranscriptPointSize,
+      showTranscriptOverlay,
+      transcriptCapabilityState,
+      transcriptDensityColorScale,
+      transcriptDetailMode,
+      transcriptExactPointLimit,
+      transcriptFeatureFilterMode,
+      transcriptGeneOnly,
+      transcriptLayerState,
+      transcriptMinQv,
+      transcriptOpacity,
+      transcriptPointColorMode,
+      transcriptPointSize,
+    },
+    visiumHd: {
+      gridCellAssignmentState,
+      overviewCells,
+      setGridCellAssignmentState,
+      setOverviewCells,
+      setSpatialGridCells,
+      setVisiumHdControlState,
+      setVisiumHdExpressionProfileState,
+      spatialGridCells,
+      visiumHdControlState,
+      visiumHdExpressionProfileState,
+    },
+  } = appState
   const effectiveTranscriptFeatureFilterMode: TranscriptFeatureFilterMode =
     selectedGenes.length === 0 ? 'all' : transcriptFeatureFilterMode
-  const [roiMode, setRoiMode] = useState<RoiDrawMode>('idle')
-  const [roiName, setRoiName] = useState('ROI 1')
-  const [observationColorMode, setObservationColorMode] = useState<ObservationColorMode>(
-    () =>
-      parseObservationColorMode(initialShareableState.observationColorMode) ??
-      'transcript-count',
-  )
-  const [shareableViewState, setShareableViewState] = useState<
-    ShareableViewState | undefined
-  >(initialShareableState.viewState)
-  const [selectedCell, setSelectedCell] = useState<OverviewCellDatum | null>(null)
-  const [selectedGridCell, setSelectedGridCell] = useState<GridCellDatum | null>(null)
-  const [selectedBoundaryCell, setSelectedBoundaryCell] =
-    useState<CellBoundaryDatum | null>(null)
-  const [spatialFocusRequest, setSpatialFocusRequest] =
-    useState<ViewerFocusRequest | null>(null)
-  const [currentViewportDetail, setCurrentViewportDetail] =
-    useState<ViewerViewportDetail | null>(null)
-  const [, setViewportCellCount] = useState<number | null>(null)
-  const [datasetPlatform, setDatasetPlatform] = useState<Platform | null>(null)
-  const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>(
-    IDLE_VISIUM_HD_CONTROL_STATE,
-  )
-  const [gridCellAssignmentState, setGridCellAssignmentState] = useState<
-    GridCellAssignmentState<StructuredLoadError>
-  >(IDLE_GRID_CELL_ASSIGNMENT_STATE)
-  const [visiumHdExpressionProfileState, setVisiumHdExpressionProfileState] = useState<
-    CellExpressionProfileState<StructuredLoadError>
-  >(IDLE_CELL_EXPRESSION_PROFILE_STATE)
   const loadRequestId = useRef(0)
   const visiumHdBinRequestId = useRef(0)
   const analysisEmbeddingRequestId = useRef(0)
@@ -703,7 +544,7 @@ export function App({
 
       setDebugLog((current) => appendDebugLogEntry(current, entry))
     },
-    [],
+    [setDebugLog],
   )
   const morphologyChannels = useMemo(
     () => [
@@ -1073,7 +914,7 @@ export function App({
         return current.includes(setId) ? current : [...current, setId]
       })
     },
-    [],
+    [setHiddenAnnotationSetIds],
   )
   const handleAnnotationVisibilityChange = useCallback(
     (annotationId: string, visible: boolean) => {
@@ -1087,22 +928,28 @@ export function App({
         return current.includes(annotationId) ? current : [...current, annotationId]
       })
     },
-    [],
+    [setHiddenAnnotationIds],
   )
-  const focusSpatialViewOnCell = useCallback((cell: OverviewCellDatum) => {
-    spatialFocusRequestIdRef.current += 1
-    setSpatialFocusRequest({
-      key: spatialFocusRequestIdRef.current,
-      target: [cell.position[0] ?? 0, cell.position[1] ?? 0, cell.position[2] ?? 0],
-    })
-  }, [])
-  const focusSpatialViewOnGridCell = useCallback((cell: GridCellDatum) => {
-    spatialFocusRequestIdRef.current += 1
-    setSpatialFocusRequest({
-      key: spatialFocusRequestIdRef.current,
-      target: gridCellDatumDeckCenter(cell),
-    })
-  }, [])
+  const focusSpatialViewOnCell = useCallback(
+    (cell: OverviewCellDatum) => {
+      spatialFocusRequestIdRef.current += 1
+      setSpatialFocusRequest({
+        key: spatialFocusRequestIdRef.current,
+        target: [cell.position[0] ?? 0, cell.position[1] ?? 0, cell.position[2] ?? 0],
+      })
+    },
+    [setSpatialFocusRequest],
+  )
+  const focusSpatialViewOnGridCell = useCallback(
+    (cell: GridCellDatum) => {
+      spatialFocusRequestIdRef.current += 1
+      setSpatialFocusRequest({
+        key: spatialFocusRequestIdRef.current,
+        target: gridCellDatumDeckCenter(cell),
+      })
+    },
+    [setSpatialFocusRequest],
+  )
   const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
   const roiCopy = roiStatusCopy(roiState, roiMode)
   const visiumHdRoiCopy = visiumHdRoiStatusCopy(activeVisiumHdRoiState, roiMode)
@@ -1298,7 +1145,7 @@ export function App({
         ...(notice.coalesceKey === undefined ? {} : { coalesceKey: notice.coalesceKey }),
       })
     },
-    [appendDebugEvent],
+    [appendDebugEvent, setFallbackNotices],
   )
   const recordTelemetry = useCallback(
     (event: TelemetryEvent) => {
@@ -1306,7 +1153,7 @@ export function App({
         appendTelemetryEvent(current, event, performanceBudget.telemetryEventLimit),
       )
     },
-    [performanceBudget.telemetryEventLimit],
+    [performanceBudget.telemetryEventLimit, setTelemetryEvents],
   )
   const handleTileCacheEviction = useCallback(
     (evictedTileCount: number) => {
@@ -1434,18 +1281,21 @@ export function App({
       refs: { diagnosticsAbortRef },
       setters: { setDiagnosticsState },
     })
-  const handleImageTileError = useCallback((error: Error) => {
-    setMorphologyState((current) => {
-      if (current.status !== 'ready') {
-        return current
-      }
+  const handleImageTileError = useCallback(
+    (error: Error) => {
+      setMorphologyState((current) => {
+        if (current.status !== 'ready') {
+          return current
+        }
 
-      return morphologyLoadFailed(
-        current.url,
-        createStructuredLoadError('Image tiles', error),
-      )
-    })
-  }, [])
+        return morphologyLoadFailed(
+          current.url,
+          createStructuredLoadError('Image tiles', error),
+        )
+      })
+    },
+    [setMorphologyState],
+  )
   const rememberGeneExpressionScaleMax = useCallback(
     (key: string, batch: GeneExpressionBatch, scoreMode: GeneExpressionScoreMode) => {
       const max = geneExpressionScoreDomainMax(batch.cells, batch.genes, scoreMode)
@@ -1464,7 +1314,7 @@ export function App({
         return { key, max }
       })
     },
-    [],
+    [setGeneExpressionScaleDomain],
   )
   const resetGeneExpressionSelectionState = useCallback(() => {
     invalidateLatestRequest({
@@ -1475,7 +1325,7 @@ export function App({
     setGeneExpressionBatch(null)
     setGeneExpressionScaleDomain({ key: '', max: 0 })
     setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
-  }, [])
+  }, [setGeneExpressionBatch, setGeneExpressionScaleDomain, setGeneExpressionState])
   const loadActiveAnalysisEmbeddings = useCallback(
     (...args: Parameters<typeof loadAnalysisEmbeddings>) => {
       const [baseUrl, options = {}] = args
@@ -1547,7 +1397,13 @@ export function App({
           : [...current, gene].sort((a, b) => a.localeCompare(b)),
       )
     },
-    [appendDebugEvent, resetGeneExpressionSelectionState, selectedGenes],
+    [
+      appendDebugEvent,
+      resetGeneExpressionSelectionState,
+      selectedGenes,
+      setManualTranscriptExactRequestKey,
+      setSelectedGenes,
+    ],
   )
   const handlePinTranscript = useCallback(
     (detail: ViewerTranscriptHoverDetail) => {
@@ -1560,7 +1416,7 @@ export function App({
         { coalesceKey: 'transcript-pin' },
       )
     },
-    [appendDebugEvent],
+    [appendDebugEvent, setActiveControlHudTab, setPinnedTranscript],
   )
   const { handleViewportChange } = useViewportDataWorkflow({
     callbacks: {
@@ -1800,7 +1656,7 @@ export function App({
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
     setFallbackNotices([])
-  }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState])
+  }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState, setFallbackNotices])
   const handleBeforeVisiumHdBinSizeChange = useCallback(() => {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
@@ -1900,6 +1756,9 @@ export function App({
       gridCellById,
       handleEmbeddingCellSelect,
       isVisiumHdDataset,
+      setSelectedBoundaryCell,
+      setSelectedCell,
+      setSelectedGridCell,
     ],
   )
 
@@ -1996,7 +1855,7 @@ export function App({
         [imageUrl]: normalizeLayerOpacity(opacity),
       }))
     },
-    [],
+    [setCustomImageLayerOpacities],
   )
   const handleRemoveCustomImageLayer = useCallback(
     (layerId: string) => {
@@ -2013,7 +1872,7 @@ export function App({
         return remaining
       })
     },
-    [customMorphologyLayers, handleRemoveCustomLayer],
+    [customMorphologyLayers, handleRemoveCustomLayer, setCustomImageLayerOpacities],
   )
 
   useEffect(() => {
