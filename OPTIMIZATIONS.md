@@ -122,74 +122,130 @@ the app shell, platform workflows, and rendering modules.
   transcript, annotation, overview, morphology, and TIFF default readers behind
   statically analyzable dynamic imports. Constructor-injected readers remain
   eager-free for tests while production capability paths load only when used.
+- 2026-06-27: Re-audited open recommendations against the source tree and
+  closed items 1, 7, 8, 11, 12, 13, and 14. Domain state now enters `App.tsx`
+  through `useAppDomainState`; viewer interaction and renderer concerns have
+  focused modules while `ViewerCore` and `deckLayers.ts` remain wiring/facade
+  surfaces; CSS is split under `src/styles`; app tests have a shared dependency
+  and Visium HD fixture harness; app dependency injection is a single grouped
+  object; and heavy Xenium/Visium HD readers use explicit lazy imports. Items 9
+  and 10 remain open: dataset facades still contain substantial query
+  orchestration, and platform-neutral naming is only partially migrated.
+- 2026-06-27: Finished item 9 by extracting dataset reader orchestration out of
+  the platform facades. `XeniumDataset` now delegates DuckDB boundary, cell,
+  transcript, extent, matrix-row, metadata, and gene-expression queries to
+  `xeniumDatasetReaders.ts`. `VisiumHdDataset` now delegates overview caching,
+  barcode and mapping readers, segmentation selection, image construction,
+  matrix reads, and gene-expression scoring to `VisiumHdDatasetReaderController`
+  in `visiumHdDatasetReaders.ts`. The existing public dataset method and type
+  surface remains in the facade files.
 
 ## Recommendations
 
-1. **Create domain state bundles for `App.tsx`.**
+1. **Closed - Create domain state bundles for `App.tsx`.**
    `App.tsx` should remain the orchestration root, but related state can be
    grouped by domain: dataset, viewport/layers, genes, ROI, transcripts,
    Visium HD, and selection. Prefer focused bundles over a generic `useAppState`.
+   Closed 2026-06-27: `useAppDomainState` owns the domain state groups and
+   `App.tsx` consumes those bundles.
 
-2. **Replace huge hook option bags with grouped objects.**
+2. **Closed - Replace huge hook option bags with grouped objects.**
    Hooks such as `useDatasetLifecycle` receive many loosely related refs,
    setters, loaders, and callbacks. Grouping those as `requests`, `setters`,
    `loaders`, and `initialState` makes call sites easier to scan and future
    changes less fragile.
+   Closed 2026-06-26: the remaining workflow option bags now use grouped
+   callbacks, controls, data, loaders, refs, requests, and setters.
 
-3. **Introduce a shared latest-request runner.**
+3. **Closed - Introduce a shared latest-request runner.**
    Many workflows repeat the same cancellation shape: abort the previous
    request, increment a request id, create an `AbortController`, ignore stale
    completions, and clear the abort ref. A reusable helper should own this
    lifecycle.
+   Closed 2026-06-24: abortable latest-request workflows use the shared
+   request helpers; non-abortable sequencing and cleanup-only aborts remain
+   outside the pattern intentionally.
 
-4. **Use explicit transition helpers for complex async states.**
+4. **Closed - Use explicit transition helpers for complex async states.**
    Dataset loading, transcript overlays, ROI gene stats, Visium HD tier
    switching, and selected cell/bin detail all have multi-step states. Focused
    transition helpers or reducers would make invalid combinations harder to
    produce and easier to test.
+   Closed 2026-06-26: runtime async workflows now call named transition
+   constructors and focused model tests cover those constructors.
 
-5. **Extract a platform adapter layer.**
+5. **Closed - Extract a platform adapter layer.**
    Xenium and Visium HD platform branching is spread through app orchestration.
    A platform adapter can centralize supported capabilities, labels, loaders,
    disabled states, and platform-specific actions.
+   Closed 2026-06-26: `platformAdapter.ts` centralizes Xenium-like and Visium
+   HD feature gates, labels, visibility policy, and routing helpers.
 
-6. **Move Visium HD orchestration into a controller/helper module.**
+6. **Closed - Move Visium HD orchestration into a controller/helper module.**
    Bin switching, segmentation gating, mapping assignments, Magic Lens bin
    summaries, and selected-bin profile loading should live behind a focused
    Visium HD app boundary rather than directly in `App.tsx`.
+   Closed 2026-06-25: focused Visium HD workflows/helpers now own expression
+   profile, ROI, Magic Lens summary, bin-control, and app-controller
+   orchestration.
 
-7. **Split `ViewerCore` by interaction concern.**
+7. **Closed - Split `ViewerCore` by interaction concern.**
    `ViewerCore` combines viewport navigation, deck rendering, picking, ROI
    drawing, measurement, hover tooltips, keyboard handling, and overlays.
    Extracting targeted models/hooks reduces the cost of changing one interaction
    without regressing another.
+   Closed 2026-06-27: viewer types, navigation, ROI interaction, measurement,
+   Magic Lens overlays, hover tooltips, picking, and status messages now live in
+   focused viewer modules while `ViewerCore` remains the surface wiring
+   component.
 
-8. **Split `deckLayers.ts` into renderer modules.**
+8. **Closed - Split `deckLayers.ts` into renderer modules.**
    Cell points, binary boundaries, grid cells, transcripts, expression styling,
    and color scales can move into smaller renderer files while
    `createOverviewLayers` remains the assembly point.
+   Closed 2026-06-27: cell points, boundaries, grid cells, transcripts,
+   expression styling, colors, opacity, and view fitting live in renderer/model
+   modules while `deckLayers.ts` remains the compatibility facade and assembly
+   point.
 
-9. **Decompose dataset implementation files into reader modules.**
+9. **Closed - Decompose dataset implementation files into reader modules.**
    Keep `XeniumDataset` and `VisiumHdDataset` as capability facades, but move
    lower-level readers and parsers into platform-specific modules.
+   Closed 2026-06-27: Xenium DuckDB/query readers now live in
+   `xeniumDatasetReaders.ts`, and Visium HD overview, barcode, segmentation,
+   image, matrix, and expression reader orchestration lives in
+   `visiumHdDatasetReaders.ts`.
 
-10. **Rename platform-neutral cell concepts.**
+10. **Open - Rename platform-neutral cell concepts.**
     Generic expression/result contracts should prefer `element`, `target`, or
     `spatialElement` terminology where values may be Visium HD bins rather than
     Xenium cells.
+    Partially complete: element-oriented aliases and `SpatialElement` contracts
+    exist, but renderer/app contracts still expose cell-centric names for some
+    Visium HD bin paths.
 
-11. **Split global CSS by surface.**
+11. **Closed - Split global CSS by surface.**
     `index.css` can be divided into tokens, app shell, viewer, HUD, forms, and
     feature-specific files to reduce accidental style coupling.
+    Closed 2026-06-27: `src/index.css` is now an import list for surface-specific
+    files under `src/styles`.
 
-12. **Create reusable test harnesses.**
+12. **Closed - Create reusable test harnesses.**
     Large app tests would be easier to extend with shared dependency builders
     and platform scenario fixtures.
+    Closed 2026-06-27: `src/test/appTestHarness.ts` provides the app dependency
+    builder, viewport helpers, deferred promises, and Visium HD detection/meta
+    fixtures used by `App.test.tsx`.
 
-13. **Group app dependency injection.**
+13. **Closed - Group app dependency injection.**
     Instead of destructuring many dependency props at the `App` boundary, accept
     a single dependency object with targeted test overrides.
+    Closed 2026-06-27: `App` accepts one `dependencies` object, resolved through
+    grouped app dependency defaults and partial grouped overrides.
 
-14. **Keep heavy platform capabilities lazily loaded.**
+14. **Closed - Keep heavy platform capabilities lazily loaded.**
     The Vite chunk groups are already a good start. Platform adapters can make
     it clearer which heavy readers are Xenium-only or Visium-only.
+    Closed 2026-06-27: heavy Xenium and Visium HD capability readers are behind
+    explicit, statically analyzable dynamic imports, with constructor-injected
+    reader seams preserved for tests.
