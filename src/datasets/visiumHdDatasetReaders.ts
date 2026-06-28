@@ -35,6 +35,7 @@ import {
   deriveNestedGridBasis,
   deriveSubdividedGridBasis,
   gridCellCenter,
+  gridCellIntersectsBbox,
 } from './spatialGrid'
 import type { Compressors } from 'hyparquet'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
@@ -869,14 +870,8 @@ function selectGridCellsInBbox(
   for (let index = 0; index < overview.gridCells.rows.length; index += 1) {
     const row = overview.gridCells.rows[index] ?? 0
     const col = overview.gridCells.cols[index] ?? 0
-    const center = gridCellCenter(overview.grid, row, col)
 
-    if (
-      center.x >= bbox.minX &&
-      center.x <= bbox.maxX &&
-      center.y >= bbox.minY &&
-      center.y <= bbox.maxY
-    ) {
+    if (gridCellIntersectsBbox(overview.grid, row, col, bbox)) {
       count += 1
     }
   }
@@ -889,14 +884,8 @@ function selectGridCellsInBbox(
   for (let index = 0; index < overview.gridCells.rows.length; index += 1) {
     const row = overview.gridCells.rows[index] ?? 0
     const col = overview.gridCells.cols[index] ?? 0
-    const center = gridCellCenter(overview.grid, row, col)
 
-    if (
-      center.x < bbox.minX ||
-      center.x > bbox.maxX ||
-      center.y < bbox.minY ||
-      center.y > bbox.maxY
-    ) {
+    if (!gridCellIntersectsBbox(overview.grid, row, col, bbox)) {
       continue
     }
 
@@ -1072,16 +1061,12 @@ function selectExpressionBinsInBbox(
   for (let index = 0; index < overview.gridCells.rows.length; index += 1) {
     const row = overview.gridCells.rows[index] ?? 0
     const col = overview.gridCells.cols[index] ?? 0
-    const center = gridCellCenter(overview.grid, row, col)
 
-    if (
-      center.x < bbox.minX ||
-      center.x > bbox.maxX ||
-      center.y < bbox.minY ||
-      center.y > bbox.maxY
-    ) {
+    if (!gridCellIntersectsBbox(overview.grid, row, col, bbox)) {
       continue
     }
+
+    const center = gridCellCenter(overview.grid, row, col)
 
     if (candidateIndex % options.sampleStride === 0) {
       bins.push({

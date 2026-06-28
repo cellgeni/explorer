@@ -23,7 +23,6 @@ import {
   platformAnalysisEmbeddingOptions,
   platformBoundarySurfaceReserved,
   platformExpressionProfileSelection,
-  platformProjectedExpressionActive,
   platformRoiElementIds,
   platformRoiCompleteHandler,
   platformRoiSelection,
@@ -240,10 +239,6 @@ describe('platformAdapter', () => {
       visiumHd: () => 'visium-hd',
     }
 
-    expect(platformProjectedExpressionActive(xenium, 1, {})).toBe(false)
-    expect(platformProjectedExpressionActive(visiumHd, 0, {})).toBe(false)
-    expect(platformProjectedExpressionActive(visiumHd, 1, null)).toBe(false)
-    expect(platformProjectedExpressionActive(visiumHd, 1, {})).toBe(true)
     expect(
       platformBoundarySurfaceReserved(visiumHd, {
         boundaryState: { status: 'loading', url: readyLoadState.url },
@@ -251,6 +246,13 @@ describe('platformAdapter', () => {
         showCellBoundaries: true,
       }),
     ).toBe(true)
+    expect(
+      platformBoundarySurfaceReserved(visiumHd, {
+        boundaryState: { status: 'ready', url: readyLoadState.url, cellCount: 1 },
+        expressionBoundaryCount: 1,
+        showCellBoundaries: true,
+      }),
+    ).toBe(false)
     expect(
       platformBoundarySurfaceReserved(xenium, {
         boundaryState: { status: 'loading', url: readyLoadState.url },

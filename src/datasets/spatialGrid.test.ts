@@ -6,6 +6,7 @@ import {
   fitGridBasis,
   gridCellCenter,
   gridCellCorners,
+  gridCellIntersectsBbox,
   signedPolygonArea,
 } from './spatialGrid'
 import type { SpatialGridBasis } from './spatialDataset'
@@ -44,6 +45,31 @@ describe('spatial grid geometry', () => {
 
     expect(signedPolygonArea(clockwise)).toBeLessThan(0)
     expect(signedPolygonArea(counterclockwise)).toBeGreaterThan(0)
+  })
+
+  it('detects grid cells clipped by a viewport edge', () => {
+    const basis: SpatialGridBasis = {
+      origin: { x: micrometers(100), y: micrometers(200) },
+      rowStep: { x: micrometers(0), y: micrometers(16) },
+      colStep: { x: micrometers(16), y: micrometers(0) },
+    }
+
+    expect(
+      gridCellIntersectsBbox(basis, 0, 0, {
+        minX: micrometers(107),
+        maxX: micrometers(115),
+        minY: micrometers(195),
+        maxY: micrometers(205),
+      }),
+    ).toBe(true)
+    expect(
+      gridCellIntersectsBbox(basis, 0, 0, {
+        minX: micrometers(109),
+        maxX: micrometers(115),
+        minY: micrometers(195),
+        maxY: micrometers(205),
+      }),
+    ).toBe(false)
   })
 
   it('fits an affine basis from array row and column samples', () => {

@@ -1,4 +1,4 @@
-import { micrometers, type DataPoint, type Micrometers } from '../data/coords'
+import { micrometers, type BBox, type DataPoint, type Micrometers } from '../data/coords'
 import type { SpatialGrid, SpatialGridBasis } from './spatialDataset'
 
 export type PolygonWinding = 'clockwise' | 'counterclockwise'
@@ -47,6 +47,28 @@ export function gridCellCorners(
   }
 
   return [corners[3], corners[2], corners[1], corners[0]]
+}
+
+export function gridCellIntersectsBbox(
+  grid: GridLike,
+  row: number,
+  col: number,
+  bbox: BBox,
+): boolean {
+  const corners = gridCellCorners(grid, row, col)
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const corner of corners) {
+    minX = Math.min(minX, corner.x)
+    maxX = Math.max(maxX, corner.x)
+    minY = Math.min(minY, corner.y)
+    maxY = Math.max(maxY, corner.y)
+  }
+
+  return maxX >= bbox.minX && minX <= bbox.maxX && maxY >= bbox.minY && minY <= bbox.maxY
 }
 
 export function fitGridBasis(samples: readonly GridBasisFitSample[]): SpatialGridBasis {

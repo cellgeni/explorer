@@ -208,18 +208,6 @@ export function platformAnalysisEmbeddingOptions(
     : {}
 }
 
-export function platformProjectedExpressionActive(
-  adapter: AppPlatformAdapter,
-  visibleBoundaryCount: number,
-  projectedExpressionBatch: unknown,
-): boolean {
-  return (
-    adapter.kind === 'visium-hd' &&
-    visibleBoundaryCount > 0 &&
-    projectedExpressionBatch !== null
-  )
-}
-
 export function platformBoundarySurfaceReserved(
   adapter: AppPlatformAdapter,
   options: {
@@ -231,7 +219,7 @@ export function platformBoundarySurfaceReserved(
   return (
     adapter.kind === 'visium-hd' &&
     options.showCellBoundaries &&
-    (options.boundaryState.status === 'loading' || options.expressionBoundaryCount > 0)
+    options.boundaryState.status === 'loading'
   )
 }
 

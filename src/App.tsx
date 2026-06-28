@@ -27,7 +27,6 @@ import {
   platformActiveBoundaryCell,
   platformBoundarySurfaceReserved,
   platformExpressionProfileSelection,
-  platformProjectedExpressionActive,
   platformRoiElementIds,
   platformRoiCompleteHandler,
   platformRoiSelection,
@@ -101,7 +100,6 @@ import {
 import { useAnnotationWorkflow } from './features/annotations/useAnnotationWorkflow'
 import {
   IDLE_GENE_EXPRESSION_STATE,
-  type GeneExpressionScaleDomain,
   type GeneExpressionState,
   geneExpressionModeLabel,
   geneExpressionStatusCopy,
@@ -149,7 +147,6 @@ import type {
 const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
 const EMPTY_GRID_CELL_DATA: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
-const EMPTY_GENE_EXPRESSION_SCALE_DOMAIN: GeneExpressionScaleDomain = { key: '', max: 0 }
 
 export type {
   AnalysisEmbeddingsLoader,
@@ -621,21 +618,6 @@ export function App({ dependencies }: AppProps = {}) {
     },
     loaders: { getSpatialDataset },
   })
-  const projectedVisiumHdExpressionBatch =
-    visiumHdExpressionProjectionState.status === 'ready'
-      ? visiumHdExpressionProjectionState.batch
-      : null
-  const isProjectedVisiumHdExpressionActive = platformProjectedExpressionActive(
-    platformAdapter,
-    visibleCellBoundaryElements.length,
-    projectedVisiumHdExpressionBatch,
-  )
-  const viewerGeneExpressionBatch = isProjectedVisiumHdExpressionActive
-    ? projectedVisiumHdExpressionBatch
-    : geneExpressionBatch
-  const viewerGeneExpressionScaleDomain = isProjectedVisiumHdExpressionActive
-    ? EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
-    : geneExpressionScaleDomain
   const {
     activeCellMetadataTrack,
     annotationStyleColors,
@@ -673,10 +655,10 @@ export function App({ dependencies }: AppProps = {}) {
       overviewCells,
     },
     geneExpression: {
-      geneExpressionBatch: viewerGeneExpressionBatch,
+      geneExpressionBatch,
       geneExpressionColorScale,
       geneExpressionScaleDatasetUrl,
-      geneExpressionScaleDomain: viewerGeneExpressionScaleDomain,
+      geneExpressionScaleDomain,
       geneExpressionScoreMode,
       selectedGenes,
     },

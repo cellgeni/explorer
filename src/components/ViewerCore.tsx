@@ -61,6 +61,7 @@ import {
   aggregateExpressionElements,
   estimateOverviewCellCountInBbox,
   overviewCellsExtentBbox,
+  overviewCellsIntersectingBbox,
   overviewCellsInBbox,
   sampleOverviewCellsForRendering,
 } from '../rendering/cellAggregation'
@@ -562,7 +563,7 @@ function ViewerSurface({
     () =>
       boundaries.length === 0 || boundaryStyleViewport === null
         ? EMPTY_OVERVIEW_CELLS
-        : overviewCellsInBbox(expressionElements, boundaryStyleViewport.bbox),
+        : overviewCellsIntersectingBbox(expressionElements, boundaryStyleViewport.bbox),
     [boundaries.length, boundaryStyleViewport, expressionElements],
   )
   const boundaryStyleCells = useMemo(() => {
@@ -587,9 +588,13 @@ function ViewerSurface({
       cellMetadataTrack,
     )
 
-    return styleCellsByGeneExpression(observationStyledCells, boundaryExpressionElements, {
-      styleUnmatchedCells: geneExpressionActive,
-    })
+    return styleCellsByGeneExpression(
+      observationStyledCells,
+      boundaryExpressionElements,
+      {
+        styleUnmatchedCells: geneExpressionActive,
+      },
+    )
   }, [
     annotationStyleColors,
     boundaryExpressionElements,
@@ -1077,12 +1082,8 @@ function ViewerSurface({
           boundary,
           ...(cell === undefined ? {} : { cell }),
           ...(annotationLabels === undefined ? {} : { annotationLabels }),
-          ...(expressionCount === undefined
-            ? {}
-            : { expressionCount }),
-          ...(expressionGenes === undefined
-            ? {}
-            : { expressionGenes }),
+          ...(expressionCount === undefined ? {} : { expressionCount }),
+          ...(expressionGenes === undefined ? {} : { expressionGenes }),
           screen: {
             x: info.x,
             y: info.y,

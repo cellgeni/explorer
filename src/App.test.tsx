@@ -770,7 +770,10 @@ describe('App', () => {
         await cellBoundaryDeferred.promise
       })
       await waitFor(() => {
-        expect(screen.queryByTestId('deck-layer-spatial-grid-cells')).toBeNull()
+        expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+          'data-count',
+          '2',
+        )
         expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
           'data-count',
           '1',
@@ -810,7 +813,10 @@ describe('App', () => {
 
       fireEvent.click(screen.getByLabelText('Cell boundaries'))
       await waitFor(() => {
-        expect(screen.queryByTestId('deck-layer-spatial-grid-cells')).toBeNull()
+        expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+          'data-count',
+          '2',
+        )
         expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
           'data-count',
           '1',

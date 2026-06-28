@@ -427,10 +427,16 @@ describe('Visium HD dataset readers', () => {
 
     const meta = await dataset.meta()
     const batch = await dataset.elements({
-      minX: micrometers(90),
-      maxX: micrometers(110),
-      minY: micrometers(190),
-      maxY: micrometers(210),
+      minX: micrometers(96),
+      maxX: micrometers(104),
+      minY: micrometers(196),
+      maxY: micrometers(204),
+    })
+    const edgeBatch = await dataset.elements({
+      minX: micrometers(91),
+      maxX: micrometers(92),
+      minY: micrometers(196),
+      maxY: micrometers(204),
     })
 
     expect(meta).toMatchObject({
@@ -448,6 +454,7 @@ describe('Visium HD dataset readers', () => {
     expect(batch.gridCells?.[0]?.ids).toEqual(['BC-0'])
     expect(Array.from(batch.gridCells?.[0]?.rows ?? [])).toEqual([0])
     expect(Array.from(batch.gridCells?.[0]?.cols ?? [])).toEqual([0])
+    expect(edgeBatch.gridCells?.[0]?.ids).toEqual(['BC-0'])
     expect(tissuePositionCalls).toHaveLength(1)
   })
 
@@ -1148,10 +1155,10 @@ describe('Visium HD dataset readers', () => {
 
     const batch = await dataset.geneExpression(
       {
-        minX: micrometers(90),
-        maxX: micrometers(110),
-        minY: micrometers(190),
-        maxY: micrometers(210),
+        minX: micrometers(96),
+        maxX: micrometers(104),
+        minY: micrometers(196),
+        maxY: micrometers(204),
       },
       ['Actb', 'Gad1', 'Actb'],
       {
@@ -1192,6 +1199,66 @@ describe('Visium HD dataset readers', () => {
     expect(batch.elements[0]?.position.x).toBeCloseTo(100)
     expect(batch.elements[0]?.position.y).toBeCloseTo(200)
     expect(stageTimings).toEqual(['viewport-cells', 'matrix-read', 'score-cells'])
+  })
+
+  it('scores selected genes for Visium HD bins clipped by the viewport edge', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const featureSliceReader = vi.fn(async () => ({
+      geneNames: ['Actb'],
+      cells: new Map([
+        [
+          'BC-0',
+          {
+            geneNames: ['Actb'],
+            counts: [5],
+          },
+        ],
+      ]),
+    }))
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+      featureSliceReader,
+    })
+
+    const batch = await dataset.geneExpression(
+      {
+        minX: micrometers(91),
+        maxX: micrometers(92),
+        minY: micrometers(196),
+        maxY: micrometers(204),
+      },
+      ['Actb'],
+      { limit: 10 },
+    )
+
+    expect(featureSliceReader).toHaveBeenCalledWith(
+      'https://example.test/visium/feature_slice.h5',
+      [
+        expect.objectContaining({
+          id: 'BC-0',
+          row: 0,
+          col: 0,
+        }),
+      ],
+      ['Actb'],
+      expect.objectContaining({
+        backend: 'lazy-range-worker',
+        binSizeMicrometers: 16,
+      }),
+    )
+    expect(batch.elements).toEqual([
+      expect.objectContaining({
+        id: 'BC-0',
+        count: 5,
+      }),
+    ])
   })
 
   it('returns the binned high-resolution tissue PNG as a flat image source', async () => {

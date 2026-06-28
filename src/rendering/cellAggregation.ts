@@ -100,14 +100,17 @@ export function aggregateExpressionElements(
   }
 
   const candidates =
-    options.bbox === undefined ? cells : overviewCellsInBbox(cells, options.bbox)
+    options.bbox === undefined
+      ? cells
+      : overviewCellsIntersectingBbox(cells, options.bbox)
 
   if (candidates.length === 0) {
     return []
   }
 
   const exactZoom = options.exactZoom ?? EXPRESSION_AGGREGATION_EXACT_ZOOM
-  const exactElementLimit = options.exactElementLimit ?? EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT
+  const exactElementLimit =
+    options.exactElementLimit ?? EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT
 
   if (viewState.zoom >= exactZoom || candidates.length <= exactElementLimit) {
     return candidates
@@ -142,6 +145,21 @@ export function overviewCellsInBbox(
     const rawY = -deckY
 
     if (x >= bbox.minX && x <= bbox.maxX && rawY >= bbox.minY && rawY <= bbox.maxY) {
+      visibleCells.push(cell)
+    }
+  }
+
+  return visibleCells
+}
+
+export function overviewCellsIntersectingBbox(
+  cells: readonly OverviewCellDatum[],
+  bbox: BBox,
+): readonly OverviewCellDatum[] {
+  const visibleCells: OverviewCellDatum[] = []
+
+  for (const cell of cells) {
+    if (overviewCellIntersectsBbox(cell, bbox)) {
       visibleCells.push(cell)
     }
   }
@@ -342,6 +360,27 @@ function bboxIntersectionArea(first: BBox, second: BBox): number {
 
 function pointInBbox(x: number, y: number, bbox: BBox): boolean {
   return x >= bbox.minX && x <= bbox.maxX && y >= bbox.minY && y <= bbox.maxY
+}
+
+function overviewCellIntersectsBbox(cell: OverviewCellDatum, bbox: BBox): boolean {
+  const [x = 0, deckY = 0] = cell.position
+  const rawY = -deckY
+  const radius = normalizeCellRadiusMicrometers(cell.radiusMicrometers)
+
+  return (
+    x + radius >= bbox.minX &&
+    x - radius <= bbox.maxX &&
+    rawY + radius >= bbox.minY &&
+    rawY - radius <= bbox.maxY
+  )
+}
+
+function normalizeCellRadiusMicrometers(radius: number | undefined): number {
+  if (radius === undefined || !Number.isFinite(radius) || radius <= 0) {
+    return 0
+  }
+
+  return radius
 }
 
 function normalizeRenderCellLimit(value: number | undefined): number {
