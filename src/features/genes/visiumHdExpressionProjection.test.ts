@@ -11,7 +11,7 @@ import {
 describe('Visium HD expression projection', () => {
   it('splits binned expression across mapped visible boundary cells', () => {
     const batch: GeneExpressionBatch = {
-      cells: [
+      elements: [
         {
           id: 's_016um_000001_000001-1',
           position: { x: micrometers(8), y: micrometers(8) },
@@ -53,7 +53,7 @@ describe('Visium HD expression projection', () => {
     expect(result.mappedBinCount).toBe(2)
     expect(result.mappedCellCount).toBe(2)
     expect(result.batch.maxCount).toBe(8)
-    expect(result.batch.cells).toEqual([
+    expect(result.batch.elements).toEqual([
       {
         id: 'cell-a',
         position: { x: micrometers(5), y: micrometers(5) },
@@ -78,7 +78,7 @@ describe('Visium HD expression projection', () => {
   it('deduplicates expression bin ids before requesting barcode mappings', () => {
     expect(
       visiumHdExpressionBinIds({
-        cells: [
+        elements: [
           {
             id: 'bin-1',
             position: { x: micrometers(0), y: micrometers(0) },

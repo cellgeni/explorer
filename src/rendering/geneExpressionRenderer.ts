@@ -62,8 +62,6 @@ export function geneExpressionElementsToLayerData(
   return styleGeneExpressionElementsByScale(layerData, colorScale, options)
 }
 
-export const geneExpressionCellsToLayerData = geneExpressionElementsToLayerData
-
 export function styleGeneExpressionElementsByScale(
   elements: readonly OverviewCellDatum[],
   colorScale: GeneExpressionColorScale,
@@ -89,8 +87,6 @@ export function styleGeneExpressionElementsByScale(
     }
   })
 }
-
-export const styleGeneExpressionCellsByScale = styleGeneExpressionElementsByScale
 
 export function geneExpressionScoreDomainMax(
   elements: readonly GeneExpressionElement[],
@@ -238,8 +234,6 @@ export function createGeneExpressionElementStyleIndex(
     binMicrometers,
   }
 }
-
-export const createGeneExpressionCellStyleIndex = createGeneExpressionElementStyleIndex
 
 function scoreExpressionElements(
   elements: readonly GeneExpressionElement[],

@@ -667,7 +667,7 @@ describe('XeniumDataset', () => {
       expect.objectContaining({
         genes: ['Gad1', 'Slc17a7'],
         maxCount: 5,
-        cells: [
+        elements: [
           {
             id: cellId,
             position: { x: micrometers(2), y: micrometers(3) },

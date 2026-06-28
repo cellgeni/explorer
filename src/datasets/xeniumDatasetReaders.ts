@@ -424,7 +424,7 @@ export async function readXeniumGeneExpression(options: {
 
   if (selectedGenes.length === 0) {
     return {
-      cells: [],
+      elements: [],
       genes: [],
       maxCount: 0,
     }
@@ -452,7 +452,7 @@ export async function readXeniumGeneExpression(options: {
 
   if (viewportCells.length === 0) {
     return {
-      cells: [],
+      elements: [],
       genes: selectedGenes,
       maxCount: 0,
       timing: {
@@ -487,7 +487,7 @@ export async function readXeniumGeneExpression(options: {
   const scoreCellsStartedAt = Date.now()
   const selectedGeneSet = new Set(selectedGenes)
   const geneCounts = selectedGeneCounts(matrix, selectedGenes)
-  const cells: GeneExpressionElement[] = []
+  const elements: GeneExpressionElement[] = []
   let maxCount = 0
 
   for (const cell of viewportCells) {
@@ -503,7 +503,7 @@ export async function readXeniumGeneExpression(options: {
       continue
     }
 
-    cells.push({
+    elements.push({
       ...cell,
       count,
     })
@@ -514,11 +514,11 @@ export async function readXeniumGeneExpression(options: {
     stage: 'score-cells',
     label: 'Expression scoring',
     durationMs: scoreCellsMs,
-    detail: `${cells.length.toLocaleString()} positive cells`,
+    detail: `${elements.length.toLocaleString()} positive cells`,
   })
 
   return {
-    cells,
+    elements,
     genes: selectedGenes,
     geneCounts,
     maxCount,

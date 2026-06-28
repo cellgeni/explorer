@@ -406,7 +406,7 @@ describe('App', () => {
           ]),
         })),
         geneExpression: vi.fn(async () => ({
-          cells: [
+          elements: [
             {
               id: 'BC-1',
               position: { x: micrometers(10), y: micrometers(5) },
@@ -526,7 +526,7 @@ describe('App', () => {
       overrides: {
         genePanel: vi.fn(async () => ['Actb']),
         geneExpression: vi.fn(async () => ({
-          cells: [
+          elements: [
             {
               id: 'BC-1',
               position: { x: micrometers(10), y: micrometers(5) },
@@ -2005,7 +2005,7 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => ['Actb'])
     const loadGeneExpression: ReturnType<typeof vi.fn<GeneExpressionLoader>> = vi.fn(
       async () => ({
-        cells: [
+        elements: [
           {
             id: intToCellId(1, 1),
             position: { x: micrometers(0), y: micrometers(0) },
@@ -2078,7 +2078,7 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => ['Actb'])
     const loadGeneExpression: ReturnType<typeof vi.fn<GeneExpressionLoader>> = vi.fn(
       async () => ({
-        cells: [],
+        elements: [],
         genes: ['Actb'],
         maxCount: 0,
       }),
@@ -2144,7 +2144,7 @@ describe('App', () => {
     const loadGenePanel = vi.fn(async () => ['Actb'])
     const loadGeneExpression: ReturnType<typeof vi.fn<GeneExpressionLoader>> = vi.fn(
       async () => ({
-        cells: [],
+        elements: [],
         genes: ['Actb'],
         maxCount: 0,
       }),

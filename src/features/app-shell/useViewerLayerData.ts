@@ -184,7 +184,7 @@ export function useViewerLayerData({
       geneExpressionBatch === null
         ? 0
         : geneExpressionScoreDomainMax(
-            geneExpressionBatch.cells,
+            geneExpressionBatch.elements,
             geneExpressionBatch.genes,
             geneExpressionScoreMode,
           ),
@@ -200,30 +200,30 @@ export function useViewerLayerData({
   )
   const geneExpressionLayerData = useMemo(() => {
     if (geneExpressionBatch === null) {
-      return { cells: [], durationMs: 0 }
+      return { elements: [], durationMs: 0 }
     }
 
     const startedAt = readTimestamp()
-    const cells = geneExpressionElementsToLayerData(
-      geneExpressionBatch.cells,
+    const elements = geneExpressionElementsToLayerData(
+      geneExpressionBatch.elements,
       geneExpressionBatch.genes,
       geneExpressionColorScale,
       geneExpressionScoreMode,
       { scaleMax: geneExpressionScaleMax },
     )
 
-    return { cells, durationMs: Math.max(0, readTimestamp() - startedAt) }
+    return { elements, durationMs: Math.max(0, readTimestamp() - startedAt) }
   }, [
     geneExpressionBatch,
     geneExpressionColorScale,
     geneExpressionScaleMax,
     geneExpressionScoreMode,
   ])
-  const geneExpressionElements = geneExpressionLayerData.cells
+  const geneExpressionElements = geneExpressionLayerData.elements
   const geneExpressionLayerDataDurationMs = geneExpressionLayerData.durationMs
   const styledGeneExpressionLayerData = useMemo(() => {
     const startedAt = readTimestamp()
-    const cells = styleGeneExpressionElementsByScale(
+    const elements = styleGeneExpressionElementsByScale(
       geneExpressionElements,
       geneExpressionColorScale,
       {
@@ -231,9 +231,9 @@ export function useViewerLayerData({
       },
     )
 
-    return { cells, durationMs: Math.max(0, readTimestamp() - startedAt) }
+    return { elements, durationMs: Math.max(0, readTimestamp() - startedAt) }
   }, [geneExpressionElements, geneExpressionColorScale, geneExpressionScaleMax])
-  const styledGeneExpressionElements = styledGeneExpressionLayerData.cells
+  const styledGeneExpressionElements = styledGeneExpressionLayerData.elements
   const geneExpressionRestyleDurationMs = styledGeneExpressionLayerData.durationMs
   const transcriptLayerPoints = useMemo(
     () =>

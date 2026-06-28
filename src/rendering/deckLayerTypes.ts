@@ -226,9 +226,6 @@ export interface GeneExpressionElementStyleIndex {
   readonly binMicrometers?: number
 }
 
-export type GeneExpressionCellStyleOptions = GeneExpressionElementStyleOptions
-export type GeneExpressionCellStyleIndex = GeneExpressionElementStyleIndex
-
 export interface TranscriptAggregateLayerDataOptions {
   readonly scaleMax?: number
 }

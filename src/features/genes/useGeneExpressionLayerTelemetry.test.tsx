@@ -9,7 +9,7 @@ import type { GeneExpressionState } from './geneControlsModel'
 import { useGeneExpressionLayerTelemetry } from './useGeneExpressionLayerTelemetry'
 
 const batch: GeneExpressionBatch = {
-  cells: [
+  elements: [
     {
       id: asCellId('aaaaaaaa-1'),
       position: { x: micrometers(1), y: micrometers(2) },

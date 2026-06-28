@@ -941,7 +941,7 @@ async function readVisiumHdGeneExpression(options: {
 
   if (selectedGenes.length === 0) {
     return {
-      cells: [],
+      elements: [],
       genes: [],
       maxCount: 0,
     }
@@ -967,7 +967,7 @@ async function readVisiumHdGeneExpression(options: {
 
   if (viewportBins.length === 0) {
     return {
-      cells: [],
+      elements: [],
       genes: selectedGenes,
       maxCount: 0,
       timing: {
@@ -1006,7 +1006,7 @@ async function readVisiumHdGeneExpression(options: {
   const scoreCellsStartedAt = Date.now()
   const selectedGeneSet = new Set(selectedGenes)
   const geneCounts = selectedGeneCounts(matrix, selectedGenes)
-  const cells: GeneExpressionBatch['cells'][number][] = []
+  const elements: GeneExpressionBatch['elements'][number][] = []
   let maxCount = 0
 
   for (const bin of viewportBins) {
@@ -1022,7 +1022,7 @@ async function readVisiumHdGeneExpression(options: {
       continue
     }
 
-    cells.push({
+    elements.push({
       id: bin.id,
       position: bin.position,
       count,
@@ -1035,11 +1035,11 @@ async function readVisiumHdGeneExpression(options: {
     stage: 'score-cells',
     label: 'Expression scoring',
     durationMs: scoreCellsMs,
-    detail: `${cells.length.toLocaleString()} positive bins`,
+    detail: `${elements.length.toLocaleString()} positive bins`,
   })
 
   return {
-    cells,
+    elements,
     genes: selectedGenes,
     geneCounts,
     maxCount,

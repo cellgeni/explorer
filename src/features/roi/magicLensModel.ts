@@ -175,14 +175,17 @@ export function summarizeMagicLensCells(
 
 export function summarizeMagicLensExpressionBins(
   binCount: number,
-  expressionBatch: Pick<GeneExpressionBatch, 'cells' | 'genes' | 'geneCounts'>,
+  expressionBatch: Pick<GeneExpressionBatch, 'elements' | 'genes' | 'geneCounts'>,
   selectedGenes: readonly string[],
   options: {
     readonly hitLimit?: boolean
   },
 ): MagicLensSummary {
   const selectedGeneKeys = new Set(selectedGenes.map((gene) => gene.toLocaleLowerCase()))
-  const totalCount = expressionBatch.cells.reduce((sum, cell) => sum + cell.count, 0)
+  const totalCount = expressionBatch.elements.reduce(
+    (sum, element) => sum + element.count,
+    0,
+  )
   const geneCounts =
     expressionBatch.geneCounts ??
     (expressionBatch.genes.length === 1 && totalCount > 0

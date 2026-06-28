@@ -37,8 +37,6 @@ export type {
   CellBoundaryLayerGeometry,
   CellBoundaryLayerGeometryOptions,
   CellBoundaryLayerStyle,
-  GeneExpressionCellStyleIndex,
-  GeneExpressionCellStyleOptions,
   GeneExpressionElementStyleIndex,
   GeneExpressionElementStyleOptions,
   GeneExpressionColorScale,
@@ -83,13 +81,10 @@ export {
   TRANSCRIPT_POINT_COLOR_MODE_OPTIONS,
 } from './deckLayerColors'
 export {
-  createGeneExpressionCellStyleIndex,
   createGeneExpressionElementStyleIndex,
-  geneExpressionCellsToLayerData,
   geneExpressionElementsToLayerData,
   geneExpressionScoreDomainMax,
   styleCellsByGeneExpression,
-  styleGeneExpressionCellsByScale,
   styleGeneExpressionElementsByScale,
   styleGridCellsByGeneExpression,
 } from './geneExpressionRenderer'

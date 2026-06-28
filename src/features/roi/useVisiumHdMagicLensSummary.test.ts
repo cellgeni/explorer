@@ -212,14 +212,14 @@ function geneExpressionBatch(
   genes: readonly string[],
   counts: readonly number[],
 ): GeneExpressionBatch {
-  const cells = ids.map((id, index) => ({
+  const elements = ids.map((id, index) => ({
     id,
     position: { x: micrometers(index * 20 + 5), y: micrometers(5) },
     count: counts[index] ?? 0,
   }))
 
   return {
-    cells,
+    elements,
     genes,
     geneCounts: genes.length === 1 ? [{ gene: genes[0] ?? '', count: sum(counts) }] : [],
     maxCount: Math.max(0, ...counts),

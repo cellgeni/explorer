@@ -451,7 +451,7 @@ export function useViewportDataWorkflow({
               loadState.url,
               batch.genes,
               expressionPlan.mode,
-              batch.cells.length,
+              batch.elements.length,
               expressionPlan.sourceCellCount,
             ),
           )
@@ -459,7 +459,7 @@ export function useViewportDataWorkflow({
             telemetryEvent('gene-expression.load', 'success', {
               startedAt: expressionStartedAt,
               detail: [
-                `${geneExpressionModeLabel(expressionPlan.mode)}: ${batch.cells.length.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
+                `${geneExpressionModeLabel(expressionPlan.mode)}: ${batch.elements.length.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
                 memoryDetail === undefined ? undefined : `memory ${memoryDetail}`,
               ]
                 .filter((part): part is string => part !== undefined)
@@ -467,7 +467,7 @@ export function useViewportDataWorkflow({
             }),
           )
           appendDebugEvent(
-            `${geneExpressionModeLabel(expressionPlan.mode)} ready: ${batch.cells.length.toLocaleString()} positive cells in ${formatElapsed(
+            `${geneExpressionModeLabel(expressionPlan.mode)} ready: ${batch.elements.length.toLocaleString()} positive cells in ${formatElapsed(
               expressionStartedAt,
             )} (${formatProfileTimingDetail(timingDetail, memoryDetail)})`,
             { coalesceKey: 'gene-expression-query' },

@@ -26,7 +26,7 @@ export async function loadDatasetGeneExpression(
 ): Promise<GeneExpressionBatch> {
   if (genes.length === 0) {
     return {
-      cells: [],
+      elements: [],
       genes: [],
       maxCount: 0,
     }

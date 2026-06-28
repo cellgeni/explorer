@@ -22,7 +22,7 @@ const overviewCells: readonly OverviewCellDatum[] = [
 ]
 
 const expressionBatch: GeneExpressionBatch = {
-  cells: [
+  elements: [
     {
       id: asCellId('aaaaaaaa-1'),
       position: { x: micrometers(5), y: micrometers(5) },

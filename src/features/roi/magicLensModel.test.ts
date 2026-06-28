@@ -172,7 +172,7 @@ describe('magicLensModel', () => {
     const summary = summarizeMagicLensExpressionBins(
       3,
       {
-        cells: [
+        elements: [
           {
             id: 'BC-1',
             position: { x: micrometers(0), y: micrometers(0) },

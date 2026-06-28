@@ -280,7 +280,7 @@ describe('platformAdapter', () => {
     const adapter = appPlatformAdapterFor(readyLoadState, 'xenium')
     const boundaryBatch = { elements: [] }
     const expressionBatch = {
-      cells: [],
+      elements: [],
       genes: ['Actb'],
       maxCount: 0,
     }
@@ -334,7 +334,7 @@ describe('platformAdapter', () => {
       { id: 'nucleus-1', geometry: { kind: 'polygon' as const, rings: [] } },
     ]
     const expressionBatch = {
-      cells: [],
+      elements: [],
       genes: ['Actb'],
       maxCount: 0,
     }

@@ -1182,15 +1182,15 @@ describe('Visium HD dataset readers', () => {
     )
     expect(batch.genes).toEqual(['Actb', 'Gad1'])
     expect(batch.maxCount).toBe(8)
-    expect(batch.cells).toEqual([
+    expect(batch.elements).toEqual([
       expect.objectContaining({
         id: 'BC-0',
         count: 8,
         cellArea: 256,
       }),
     ])
-    expect(batch.cells[0]?.position.x).toBeCloseTo(100)
-    expect(batch.cells[0]?.position.y).toBeCloseTo(200)
+    expect(batch.elements[0]?.position.x).toBeCloseTo(100)
+    expect(batch.elements[0]?.position.y).toBeCloseTo(200)
     expect(stageTimings).toEqual(['viewport-cells', 'matrix-read', 'score-cells'])
   })
 

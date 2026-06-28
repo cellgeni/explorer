@@ -38,7 +38,7 @@ describe('createDiagnosticsDump', () => {
           report,
         },
         geneExpressionBatch: {
-          cells: [{ id: 'aaaaaaaa-1' }],
+          elements: [{ id: 'aaaaaaaa-1' }],
           genes: ['Actb'],
           maxCount: 4,
           timing: {
@@ -144,7 +144,7 @@ describe('createDiagnosticsDump', () => {
           cellCount: 1,
           visibleCellCount: 12,
           batch: {
-            positiveCellCount: 1,
+            positiveElementCount: 1,
             maxCount: 4,
             timing: {
               stageSummary: 'Viewport cell query 1 ms',

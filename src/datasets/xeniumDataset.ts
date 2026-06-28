@@ -95,15 +95,13 @@ export interface GeneExpressionElement {
   readonly segmentationMethod?: string
 }
 
-export type GeneExpressionCell = GeneExpressionElement
-
 export interface GeneExpressionGeneCount {
   readonly gene: string
   readonly count: number
 }
 
 export interface GeneExpressionBatch {
-  readonly cells: readonly GeneExpressionElement[]
+  readonly elements: readonly GeneExpressionElement[]
   readonly genes: readonly string[]
   readonly geneCounts?: readonly GeneExpressionGeneCount[]
   readonly maxCount: number

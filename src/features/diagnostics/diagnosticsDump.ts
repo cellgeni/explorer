@@ -46,7 +46,7 @@ interface GeneExpressionDiagnosticState {
 }
 
 interface GeneExpressionDiagnosticBatch {
-  readonly cells: readonly unknown[]
+  readonly elements: readonly unknown[]
   readonly genes: readonly string[]
   readonly maxCount: number
   readonly timing?: GeneExpressionBatchTiming
@@ -190,7 +190,7 @@ function summarizeGeneExpressionState(
       ? {}
       : {
           batch: {
-            positiveCellCount: batch.cells.length,
+            positiveElementCount: batch.elements.length,
             genes: batch.genes,
             maxCount: batch.maxCount,
             timing: batch.timing,

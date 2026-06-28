@@ -24,7 +24,7 @@ describe('dataset gene expression loader', () => {
     await expect(
       loadDatasetGeneExpression('https://example.test/xenium/', bbox, []),
     ).resolves.toEqual({
-      cells: [],
+      elements: [],
       genes: [],
       maxCount: 0,
     })
@@ -32,7 +32,7 @@ describe('dataset gene expression loader', () => {
   })
 
   it('validates feature-matrix Range support before delegating to the cached dataset', async () => {
-    const batch = { cells: [], genes: ['Gad1'], maxCount: 0 }
+    const batch = { elements: [], genes: ['Gad1'], maxCount: 0 }
     const geneExpression = vi.fn(async () => batch)
     const validateRangeSupport = vi.fn(async () => undefined)
 
@@ -63,7 +63,7 @@ describe('dataset gene expression loader', () => {
 
   it('reports stage timings and preserves them on timed batches', async () => {
     const batch = {
-      cells: [],
+      elements: [],
       genes: ['Gad1'],
       maxCount: 0,
       timing: {

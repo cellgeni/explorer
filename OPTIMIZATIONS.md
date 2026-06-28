@@ -139,6 +139,13 @@ the app shell, platform workflows, and rendering modules.
   matrix reads, and gene-expression scoring to `VisiumHdDatasetReaderController`
   in `visiumHdDatasetReaders.ts`. The existing public dataset method and type
   surface remains in the facade files.
+- 2026-06-28: Finished item 10 by renaming the shared gene-expression result
+  contract from `cells` to `elements`, updating Xenium and Visium HD expression
+  readers, app-shell layer derivation, diagnostics, Magic Lens summaries,
+  Visium HD expression projection, and tests. Removed the older
+  `GeneExpressionCell` and cell-named renderer compatibility exports so generic
+  expression APIs now use element-oriented names where Visium HD bins may flow
+  through.
 
 ## Recommendations
 
@@ -216,13 +223,13 @@ the app shell, platform workflows, and rendering modules.
    image, matrix, and expression reader orchestration lives in
    `visiumHdDatasetReaders.ts`.
 
-10. **Open - Rename platform-neutral cell concepts.**
+10. **Closed - Rename platform-neutral cell concepts.**
     Generic expression/result contracts should prefer `element`, `target`, or
     `spatialElement` terminology where values may be Visium HD bins rather than
     Xenium cells.
-    Partially complete: element-oriented aliases and `SpatialElement` contracts
-    exist, but renderer/app contracts still expose cell-centric names for some
-    Visium HD bin paths.
+    Closed 2026-06-28: `GeneExpressionBatch` now exposes `elements`, expression
+    readers and app/rendering consumers use element-oriented names, and the old
+    cell-named expression aliases were removed.
 
 11. **Closed - Split global CSS by surface.**
     `index.css` can be divided into tokens, app shell, viewer, HUD, forms, and

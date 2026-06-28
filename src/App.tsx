@@ -1304,7 +1304,7 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const rememberGeneExpressionScaleMax = useCallback(
     (key: string, batch: GeneExpressionBatch, scoreMode: GeneExpressionScoreMode) => {
-      const max = geneExpressionScoreDomainMax(batch.cells, batch.genes, scoreMode)
+      const max = geneExpressionScoreDomainMax(batch.elements, batch.genes, scoreMode)
 
       if (max <= 0) {
         return

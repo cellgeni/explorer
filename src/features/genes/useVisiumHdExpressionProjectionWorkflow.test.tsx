@@ -23,7 +23,7 @@ const DEFAULT_BOUNDARY_ELEMENTS: readonly SpatialElement[] = [
 ]
 
 const DEFAULT_EXPRESSION_BATCH: GeneExpressionBatch = {
-  cells: [
+  elements: [
     {
       id: 'bin-1',
       position: { x: micrometers(5), y: micrometers(5) },
@@ -189,7 +189,7 @@ describe('useVisiumHdExpressionProjectionWorkflow', () => {
 
     expect(state.mappedBinCount).toBe(1)
     expect(state.mappedCellCount).toBe(2)
-    expect(state.batch.cells.map((cell) => [cell.id, cell.count])).toEqual([
+    expect(state.batch.elements.map((element) => [element.id, element.count])).toEqual([
       ['cell-a', 6],
       ['cell-b', 3],
     ])
@@ -206,7 +206,7 @@ describe('useVisiumHdExpressionProjectionWorkflow', () => {
 
     render(
       <Probe
-        expressionBatch={{ cells: [], genes: ['Actb'], maxCount: 0 }}
+        expressionBatch={{ elements: [], genes: ['Actb'], maxCount: 0 }}
         getSpatialDataset={getSpatialDataset}
         rowBudget={undefined}
         onReady={(snapshot) => {
@@ -228,7 +228,7 @@ describe('useVisiumHdExpressionProjectionWorkflow', () => {
       throw new Error('Expected ready projection state.')
     }
 
-    expect(state.batch.cells.map((cell) => [cell.id, cell.count])).toEqual([
+    expect(state.batch.elements.map((element) => [element.id, element.count])).toEqual([
       ['cell-a', 0],
       ['cell-b', 0],
     ])
