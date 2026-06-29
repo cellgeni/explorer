@@ -1,4 +1,5 @@
 import type { BinaryAttribute, Color, Position } from '@deck.gl/core'
+import type { BBox } from '../data/coords'
 import type {
   TranscriptAggregateFeatureSummary,
   TranscriptCellAssignment,
@@ -46,6 +47,8 @@ export interface GridCellDatum {
   readonly inTissue?: boolean
   readonly fullresRow?: number
   readonly fullresCol?: number
+  readonly bbox?: BBox
+  readonly renderLodSourceBinSizeMicrometers?: number
   readonly polygon: readonly Position[]
   readonly fillColor: Color
   readonly lineColor: Color

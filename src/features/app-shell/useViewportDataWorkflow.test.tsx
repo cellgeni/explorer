@@ -372,7 +372,7 @@ describe('useViewportDataWorkflow', () => {
         limit: readyLoadState.cellCount,
         sampleStride: 1,
         signal: expect.any(AbortSignal),
-        visiumHdBinSizeMicrometers: 8,
+        visiumHdBinSizeMicrometers: 16,
       }),
     )
     expect(snapshot.geneExpressionState.status).toBe('ready')

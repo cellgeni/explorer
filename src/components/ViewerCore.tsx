@@ -21,7 +21,6 @@ import { MagicLensOverlay } from './viewerMagicLensOverlay'
 import { magicLensOverlayModel } from './viewerMagicLensModel'
 import {
   bboxFromCircle,
-  countGridCellsInBbox,
   equivalentBoundaryStyleViewport,
   equivalentViewState,
   equivalentViewportSize,
@@ -34,6 +33,14 @@ import {
   type BoundaryStyleViewport,
   type MouseCoordinate,
 } from './viewerNavigation'
+import {
+  countGridCellsInSpatialIndex,
+  createGridCellRenderLods,
+  createGridCellSpatialIndex,
+  gridCellsInBbox,
+  isRenderLodGridCell,
+  selectGridCellsForRenderLod,
+} from './viewerGridCellIndex'
 import {
   dataPointsToBbox,
   dataPointsToPathOverlay,
@@ -134,6 +141,7 @@ export type {
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
 const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
+const GRID_CELL_RENDER_VIEWPORT_PADDING_RATIO = 0.15
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 
@@ -473,6 +481,31 @@ function ViewerSurface({
 
     return morphologyViewportBbox(viewState, viewport)
   }, [viewState, viewport])
+  const renderGridCellLods = useMemo(
+    () => createGridCellRenderLods(gridCells),
+    [gridCells],
+  )
+  const renderLodGridCells = useMemo(
+    () => selectGridCellsForRenderLod(renderGridCellLods, viewState.zoom),
+    [renderGridCellLods, viewState.zoom],
+  )
+  const renderGridCellIndex = useMemo(
+    () => createGridCellSpatialIndex(renderLodGridCells),
+    [renderLodGridCells],
+  )
+  const viewportCountGridCellIndex = useMemo(
+    () => createGridCellSpatialIndex(viewportCountGridCells),
+    [viewportCountGridCells],
+  )
+  const renderGridCells = useMemo(
+    () =>
+      viewportBbox === null
+        ? renderLodGridCells
+        : gridCellsInBbox(renderGridCellIndex, viewportBbox, {
+            paddingMicrometers: gridCellRenderPaddingMicrometers(viewportBbox),
+          }),
+    [renderGridCellIndex, renderLodGridCells, viewportBbox],
+  )
   const visibleCells = useMemo(
     () =>
       viewportBbox === null || viewState.zoom <= OVERVIEW_CELL_CLIP_MIN_ZOOM
@@ -519,10 +552,10 @@ function ViewerSurface({
   )
   const expressionStyledGridCells = useMemo(
     () =>
-      styleGridCellsByGeneExpression(gridCells, geneExpressionPointStyleIndex, {
+      styleGridCellsByGeneExpression(renderGridCells, geneExpressionPointStyleIndex, {
         styleUnmatchedCells: geneExpressionActive,
       }),
-    [geneExpressionActive, geneExpressionPointStyleIndex, gridCells],
+    [geneExpressionActive, geneExpressionPointStyleIndex, renderGridCells],
   )
   const geneExpressionOverlayElements = useMemo(
     () =>
@@ -668,8 +701,8 @@ function ViewerSurface({
     () =>
       viewportBbox === null
         ? viewportCountGridCells.length
-        : countGridCellsInBbox(viewportCountGridCells, viewportBbox),
-    [viewportBbox, viewportCountGridCells],
+        : countGridCellsInSpatialIndex(viewportCountGridCellIndex, viewportBbox),
+    [viewportBbox, viewportCountGridCells.length, viewportCountGridCellIndex],
   )
   const estimatedViewportCellCount = useMemo(() => {
     if (!hasCells && hasViewportCountGridCells) {
@@ -844,6 +877,7 @@ function ViewerSurface({
     !canTrackMouseCoordinates || mouseCoordinate === null
       ? null
       : formatMouseCoordinate(mouseCoordinate, coordinateUnit, micrometersPerPixel)
+  const zoomLevelText = formatViewportZoom(viewState.zoom)
   const scaleBar = useMemo(
     () =>
       !canTrackMouseCoordinates || viewport.width <= 0 || viewport.height <= 0
@@ -945,6 +979,10 @@ function ViewerSurface({
       }
 
       if (isGridCellDatum(info.object)) {
+        if (isRenderLodGridCell(info.object)) {
+          return
+        }
+
         onGridCellClick?.(info.object)
         return
       }
@@ -1034,7 +1072,11 @@ function ViewerSurface({
           return null
         })
         setCellHover(null)
-        if (magicLensActive || !hoverTooltipsEnabled) {
+        if (
+          isRenderLodGridCell(info.object) ||
+          magicLensActive ||
+          !hoverTooltipsEnabled
+        ) {
           setGridCellHover(null)
           setCellBoundaryHover(null)
           return
@@ -1560,13 +1602,20 @@ function ViewerSurface({
           Please load a dataset
         </div>
       ) : null}
-      {mouseCoordinateText === null ? null : (
-        <p
-          className="viewport-coordinate-readout"
-          aria-label={`Mouse coordinates ${mouseCoordinateText}`}
-        >
-          {mouseCoordinateText}
-        </p>
+      {!canTrackMouseCoordinates ? null : (
+        <div className="viewport-bottom-center-readout">
+          <p className="viewport-zoom-readout" aria-label={`Zoom level ${zoomLevelText}`}>
+            Zoom {zoomLevelText}
+          </p>
+          {mouseCoordinateText === null ? null : (
+            <p
+              className="viewport-coordinate-readout"
+              aria-label={`Mouse coordinates ${mouseCoordinateText}`}
+            >
+              {mouseCoordinateText}
+            </p>
+          )}
+        </div>
       )}
       {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
       {loadingTasks.length === 0 && viewportMessage === null ? null : (
@@ -1606,6 +1655,17 @@ function expressionOverlayCellsForRendering({
   })
 
   return overlayCells.length === 0 ? EMPTY_OVERVIEW_CELLS : overlayCells
+}
+
+function gridCellRenderPaddingMicrometers(bbox: BBox): number {
+  return (
+    Math.max(bbox.maxX - bbox.minX, bbox.maxY - bbox.minY, 1) *
+    GRID_CELL_RENDER_VIEWPORT_PADDING_RATIO
+  )
+}
+
+function formatViewportZoom(zoom: number): string {
+  return Number.isFinite(zoom) ? zoom.toFixed(2) : '0.00'
 }
 
 function ScaleBar({ model }: { readonly model: ScaleBarModel }) {

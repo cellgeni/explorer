@@ -279,12 +279,12 @@ describe('gene expression LOD planner', () => {
     })
   })
 
-  it('uses dense 8um then 16um LOD for Visium HD 2um expression zoom outs', () => {
+  it('uses dense 16um LOD for Visium HD 2um expression until close zoom', () => {
     expect(
       planGeneExpressionLod(
         detail({
           visibleCellCount: 60_000,
-          viewState: { target: [150, -250, 0], zoom: -1.5 },
+          viewState: { target: [150, -250, 0], zoom: 2.9 },
         }),
         {
           detailMode: 'auto',
@@ -295,43 +295,45 @@ describe('gene expression LOD planner', () => {
       ),
     ).toMatchObject({
       kind: 'request',
-      mode: 'all-cells',
-      bbox: slideBbox,
+      mode: 'exact',
+      bbox: viewportBbox,
       cellLimit: 120_000,
       sampleStride: 1,
-      sourceCellCount: 120_000,
-      visiumHdBinSizeMicrometers: 8,
-    })
-
-    expect(
-      planGeneExpressionLod(
-        detail({
-          visibleCellCount: 60_000,
-          viewState: { target: [150, -250, 0], zoom: -2.5 },
-        }),
-        {
-          detailMode: 'auto',
-          slideBbox,
-          totalCellCount: 120_000,
-          visiumHdBinSizeMicrometers: 2,
-        },
-      ),
-    ).toMatchObject({
-      kind: 'request',
-      mode: 'all-cells',
-      bbox: slideBbox,
-      cellLimit: 120_000,
-      sampleStride: 1,
-      sourceCellCount: 120_000,
+      sourceCellCount: 60_000,
       visiumHdBinSizeMicrometers: 16,
     })
   })
 
+  it('uses exact 2um Visium HD expression at close zoom', () => {
+    expect(
+      planGeneExpressionLod(
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: 3 },
+        }),
+        {
+          detailMode: 'auto',
+          slideBbox,
+          totalCellCount: 120_000,
+          visiumHdBinSizeMicrometers: 2,
+        },
+      ),
+    ).toMatchObject({
+      kind: 'request',
+      mode: 'exact',
+      bbox: viewportBbox,
+      cellLimit: 120_000,
+      sampleStride: 1,
+      sourceCellCount: 60_000,
+      visiumHdBinSizeMicrometers: 2,
+    })
+  })
+
   it('keys dense Visium HD LOD requests by requested bin size', () => {
-    const lod8Plan = planGeneExpressionLod(
+    const lod2Plan = planGeneExpressionLod(
       detail({
         visibleCellCount: 60_000,
-        viewState: { target: [150, -250, 0], zoom: -1.5 },
+        viewState: { target: [150, -250, 0], zoom: 3 },
       }),
       {
         detailMode: 'auto',
@@ -343,7 +345,7 @@ describe('gene expression LOD planner', () => {
     const lod16Plan = planGeneExpressionLod(
       detail({
         visibleCellCount: 60_000,
-        viewState: { target: [150, -250, 0], zoom: -1.5 },
+        viewState: { target: [150, -250, 0], zoom: 3 },
       }),
       {
         detailMode: 'auto',
@@ -353,7 +355,7 @@ describe('gene expression LOD planner', () => {
       },
     )
 
-    if (lod8Plan.kind !== 'request' || lod16Plan.kind !== 'request') {
+    if (lod2Plan.kind !== 'request' || lod16Plan.kind !== 'request') {
       throw new Error('Expected expression request plans.')
     }
 
@@ -362,9 +364,9 @@ describe('gene expression LOD planner', () => {
         'https://example.test/visium/',
         detail({
           visibleCellCount: 60_000,
-          viewState: { target: [150, -250, 0], zoom: -1.5 },
+          viewState: { target: [150, -250, 0], zoom: 3 },
         }),
-        lod8Plan,
+        lod2Plan,
         ['Actb'],
       ),
     ).not.toBe(
@@ -372,7 +374,7 @@ describe('gene expression LOD planner', () => {
         'https://example.test/visium/',
         detail({
           visibleCellCount: 60_000,
-          viewState: { target: [150, -250, 0], zoom: -1.5 },
+          viewState: { target: [150, -250, 0], zoom: 3 },
         }),
         lod16Plan,
         ['Actb'],

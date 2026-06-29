@@ -1,5 +1,6 @@
 import { micrometers } from './coords'
 import type { BBox } from './coords'
+import { VISIUM_HD_2UM_EXACT_GRID_ZOOM_MIN } from './visiumHdGridLod'
 import type { VisiumHdBinSizeMicrometers } from '../datasets/visiumHdDataset'
 
 export const GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT = 50_000
@@ -11,7 +12,8 @@ export const GENE_EXPRESSION_OVERVIEW_ZOOM_MAX = -1.25
 export const GENE_EXPRESSION_OVERVIEW_VISIBLE_CELL_MIN = 100_000
 export const VISIUM_HD_GENE_EXPRESSION_8UM_LOD_ZOOM_MAX =
   GENE_EXPRESSION_OVERVIEW_ZOOM_MAX
-export const VISIUM_HD_GENE_EXPRESSION_16UM_LOD_ZOOM_MAX = -2.25
+export const VISIUM_HD_GENE_EXPRESSION_2UM_EXACT_ZOOM_MIN =
+  VISIUM_HD_2UM_EXACT_GRID_ZOOM_MIN
 
 export type GeneExpressionLoadMode =
   | 'exact'
@@ -252,15 +254,7 @@ function visiumHdGeneExpressionLodBinSize(
   zoom: number,
 ): VisiumHdBinSizeMicrometers {
   if (activeBinSizeMicrometers === 2) {
-    if (zoom <= VISIUM_HD_GENE_EXPRESSION_16UM_LOD_ZOOM_MAX) {
-      return 16
-    }
-
-    if (zoom <= VISIUM_HD_GENE_EXPRESSION_8UM_LOD_ZOOM_MAX) {
-      return 8
-    }
-
-    return 2
+    return zoom >= VISIUM_HD_GENE_EXPRESSION_2UM_EXACT_ZOOM_MIN ? 2 : 16
   }
 
   if (

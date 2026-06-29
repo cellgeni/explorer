@@ -28,7 +28,6 @@ import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import {
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
-  gridCellBatchesToLayerData,
   overviewCellsToLayerData,
   type GridCellDatum,
   type GeneExpressionColorScale,
@@ -157,6 +156,7 @@ import {
   flatMorphologyImageFromSource,
   isVisiumHdOverviewDataset,
 } from './useVisiumHdBinWorkflow'
+import { visiumHdOverviewToGridCellLayerData } from './visiumHdGridLayerData'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
 
@@ -870,18 +870,7 @@ export function useDatasetLifecycle({
             return
           }
 
-          setSpatialGridCells(
-            gridCellBatchesToLayerData([overview.grid], [overview.gridCells], {
-              metadata: [
-                {
-                  binSizeMicrometers: overview.binSizeMicrometers,
-                  inTissue: overview.inTissue,
-                  fullresRows: overview.fullresRows,
-                  fullresCols: overview.fullresCols,
-                },
-              ],
-            }),
-          )
+          setSpatialGridCells(visiumHdOverviewToGridCellLayerData(overview))
           setVisiumHdControlState(
             visiumHdControlStateFromOverview(
               requestedUrl,

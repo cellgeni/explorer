@@ -87,6 +87,34 @@ describe('Visium HD controls model', () => {
       ],
       binCount: 2,
     })
+    if (switchedReady.status === 'idle') {
+      throw new Error('Expected ready Visium HD control state.')
+    }
+
+    expect(
+      visiumHdControlReadyFromOptions(
+        'https://example.test/visium',
+        switchedReady.options,
+        overview(16, ['BC-16']),
+        2,
+      ),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/visium',
+      selectedBinSize: 2,
+      loadedBinSize: 16,
+      options: [
+        { size: 16, available: true, disabled: false, binCount: 1 },
+        { size: 8, available: true, disabled: false, binCount: 2 },
+        {
+          size: 2,
+          available: false,
+          disabled: true,
+          reason: '2 µm binned output was not detected.',
+        },
+      ],
+      binCount: 1,
+    })
     expect(visiumHdControlFailed(switchedReady, 'Failed')).toEqual({
       ...switchedReady,
       status: 'error',

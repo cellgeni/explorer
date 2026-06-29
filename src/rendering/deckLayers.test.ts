@@ -1678,6 +1678,12 @@ describe('deck layer factory', () => {
         col: 0,
         fillColor: [34, 120, 108, 28],
         lineColor: [22, 90, 82, 150],
+        bbox: {
+          minX: micrometers(4),
+          maxX: micrometers(16),
+          minY: micrometers(15),
+          maxY: micrometers(25),
+        },
         polygon: [
           [4, -15, 0],
           [16, -15, 0],
@@ -1692,6 +1698,12 @@ describe('deck layer factory', () => {
         col: 1,
         fillColor: [34, 120, 108, 28],
         lineColor: [22, 90, 82, 150],
+        bbox: {
+          minX: micrometers(16),
+          maxX: micrometers(28),
+          minY: micrometers(5),
+          maxY: micrometers(15),
+        },
         polygon: [
           [16, -5, 0],
           [28, -5, 0],

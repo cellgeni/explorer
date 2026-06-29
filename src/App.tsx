@@ -43,6 +43,7 @@ import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
 import { useAppDomainState } from './features/app-shell/useAppDomainState'
 import { useVisiumHdBinWorkflow } from './features/app-shell/useVisiumHdBinWorkflow'
+import { useVisiumHdGridLodWorkflow } from './features/app-shell/useVisiumHdGridLodWorkflow'
 import { useVisiumHdExpressionProfileWorkflow } from './features/app-shell/useVisiumHdExpressionProfileWorkflow'
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
@@ -2056,6 +2057,7 @@ export function App({ dependencies }: AppProps = {}) {
       onBeforeBinSizeChange: handleBeforeVisiumHdBinSizeChange,
     },
     controls: {
+      currentViewportDetail,
       shouldLoadMorphology,
       visiumHdControlState,
     },
@@ -2081,6 +2083,23 @@ export function App({ dependencies }: AppProps = {}) {
       setLoadState,
       setMorphologyState,
       setSelectedGridCell,
+      setSpatialGridCells,
+      setVisiumHdControlState,
+    },
+  })
+
+  useVisiumHdGridLodWorkflow({
+    callbacks: { appendDebugEvent },
+    controls: { visiumHdControlState },
+    data: {
+      currentViewportDetail,
+      loadedDatasetUrl,
+      spatialGridCells,
+    },
+    loaders: { getSpatialDataset },
+    refs: { visiumHdBinRequestIdRef: visiumHdBinRequestId },
+    setters: {
+      setLoadState,
       setSpatialGridCells,
       setVisiumHdControlState,
     },

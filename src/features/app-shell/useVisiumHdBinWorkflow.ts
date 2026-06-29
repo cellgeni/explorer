@@ -1,14 +1,16 @@
 import { useCallback, useRef } from 'react'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
+import type { ViewerViewportDetail } from '../../components/ViewerCore'
+import {
+  visiumHdAvailableBinSizes,
+  visiumHdGridLoadBinSize,
+} from '../../data/visiumHdGridLod'
 import type { DatasetMeta, ImageSource } from '../../datasets/spatialDataset'
 import type {
   VisiumHdBinnedOverview,
   VisiumHdBinSizeMicrometers,
 } from '../../datasets/visiumHdDataset'
-import {
-  gridCellBatchesToLayerData,
-  type GridCellDatum,
-} from '../../rendering/deckLayers'
+import { type GridCellDatum } from '../../rendering/deckLayers'
 import {
   IDLE_MORPHOLOGY_LOAD_STATE,
   datasetLoadFailed,
@@ -53,6 +55,7 @@ import {
   readTimestamp,
   type DebugLogAppendOptions,
 } from './appRuntimeModel'
+import { visiumHdOverviewToGridCellLayerData } from './visiumHdGridLayerData'
 
 interface MutableRef<T> {
   current: T
@@ -81,6 +84,7 @@ interface VisiumHdBinWorkflowCallbacks {
 }
 
 interface VisiumHdBinWorkflowControls {
+  readonly currentViewportDetail: ViewerViewportDetail | null
   readonly shouldLoadMorphology: boolean
   readonly visiumHdControlState: VisiumHdControlState
 }
@@ -140,7 +144,7 @@ export function useVisiumHdBinWorkflow({
   setters,
 }: UseVisiumHdBinWorkflowOptions): UseVisiumHdBinWorkflowResult {
   const { appendDebugEvent, onBeforeBinSizeChange } = callbacks
-  const { shouldLoadMorphology, visiumHdControlState } = controls
+  const { currentViewportDetail, shouldLoadMorphology, visiumHdControlState } = controls
   const { flatMorphologyImage, loadedDatasetUrl } = data
   const { getSpatialDataset } = loaders
   const {
@@ -179,6 +183,11 @@ export function useVisiumHdBinWorkflow({
       }
 
       const datasetUrl = loadedDatasetUrl ?? visiumHdControlState.url
+      const overviewBinSize = visiumHdGridLoadBinSize(
+        binSize,
+        currentViewportDetail?.viewState.zoom,
+        visiumHdAvailableBinSizes(visiumHdControlState.options),
+      )
       const requestId = requestIdRef.current + 1
       const startedAt = readTimestamp()
       requestIdRef.current = requestId
@@ -193,7 +202,11 @@ export function useVisiumHdBinWorkflow({
         setGeneExpressionState,
       })
       setVisiumHdControlState((current) => visiumHdControlLoading(current, binSize))
-      appendDebugEvent(`Loading Visium HD ${binSize} µm bins`)
+      appendDebugEvent(
+        overviewBinSize === binSize
+          ? `Loading Visium HD ${binSize} µm bins`
+          : `Loading Visium HD ${overviewBinSize} µm view for selected ${binSize} µm bins`,
+      )
 
       try {
         const dataset = await getSpatialDataset(datasetUrl)
@@ -232,26 +245,15 @@ export function useVisiumHdBinWorkflow({
         }
 
         const [overview, meta] = await Promise.all([
-          dataset.readBinnedOverview(binSize),
-          dataset.meta(binSize),
+          dataset.readBinnedOverview(overviewBinSize),
+          dataset.meta(overviewBinSize),
         ])
 
         if (requestIdRef.current !== requestId) {
           return
         }
 
-        setSpatialGridCells(
-          gridCellBatchesToLayerData([overview.grid], [overview.gridCells], {
-            metadata: [
-              {
-                binSizeMicrometers: overview.binSizeMicrometers,
-                inTissue: overview.inTissue,
-                fullresRows: overview.fullresRows,
-                fullresCols: overview.fullresCols,
-              },
-            ],
-          }),
-        )
+        setSpatialGridCells(visiumHdOverviewToGridCellLayerData(overview, binSize))
         setLoadState(datasetLoadReady(datasetUrl, overview.gridCells.ids.length))
 
         setVisiumHdControlState(
@@ -259,10 +261,11 @@ export function useVisiumHdBinWorkflow({
             datasetUrl,
             visiumHdControlState.options,
             overview,
+            binSize,
           ),
         )
         appendDebugEvent(
-          `Visium HD ${overview.binSizeMicrometers} µm bins ready: ${overview.gridCells.ids.length.toLocaleString()} in ${formatElapsed(
+          `Visium HD ${overview.binSizeMicrometers} µm view ready for selected ${binSize} µm bins: ${overview.gridCells.ids.length.toLocaleString()} in ${formatElapsed(
             startedAt,
           )}${formatMemorySuffix()}`,
         )
@@ -279,7 +282,7 @@ export function useVisiumHdBinWorkflow({
         }
 
         setMorphologyState(morphologyLoadStarted(datasetUrl))
-        const imageSource = await dataset.image(overview.binSizeMicrometers)
+        const imageSource = await dataset.image(overviewBinSize)
 
         if (requestIdRef.current !== requestId) {
           return
@@ -314,6 +317,7 @@ export function useVisiumHdBinWorkflow({
     },
     [
       appendDebugEvent,
+      currentViewportDetail,
       flatMorphologyImage,
       geneExpressionAbortRef,
       geneExpressionRequestIdRef,

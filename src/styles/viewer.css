@@ -1,4 +1,3 @@
-
 .viewer-region {
   position: relative;
   display: block;
@@ -376,12 +375,22 @@
   transform: translate(-50%, -50%);
 }
 
-.viewport-coordinate-readout {
+.viewport-bottom-center-readout {
   position: absolute;
   z-index: 4;
   left: 50%;
   bottom: 10px;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
   max-width: min(260px, calc(100% - 32px));
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.viewport-coordinate-readout,
+.viewport-zoom-readout {
+  max-width: 100%;
   padding: 4px 6px;
   margin: 0;
   border: 1px solid rgba(246, 242, 232, 0.18);
@@ -393,11 +402,17 @@
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
   overflow: hidden;
-  pointer-events: none;
   text-overflow: ellipsis;
   text-transform: none;
-  transform: translateX(-50%);
   white-space: nowrap;
+}
+
+.viewport-zoom-readout {
+  padding: 3px 6px;
+  background: rgba(23, 21, 17, 0.76);
+  color: rgba(255, 253, 247, 0.86);
+  font-size: 0.52rem;
+  text-transform: uppercase;
 }
 
 .viewport-scale-bar {

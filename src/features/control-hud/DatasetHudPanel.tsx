@@ -184,6 +184,9 @@ function VisiumHdDatasetControls({
   const selectedOption = state.options.find(
     (option) => option.size === state.selectedBinSize,
   )
+  const loadedBinSize = state.loadedBinSize ?? state.selectedBinSize
+  const binCount =
+    state.binCount?.toLocaleString() ?? selectedOption?.binCount?.toLocaleString() ?? '…'
   const disabledReason = state.options.find(
     (option) => option.size === 2 && option.reason !== undefined,
   )?.reason
@@ -197,10 +200,10 @@ function VisiumHdDatasetControls({
       <div className="dataset-platform-row">
         <span>Active bins</span>
         <strong>
-          {state.binCount?.toLocaleString() ??
-            selectedOption?.binCount?.toLocaleString() ??
-            '…'}{' '}
-          at {visiumHdBinSizeLabel(state.selectedBinSize)}
+          {binCount} at {visiumHdBinSizeLabel(loadedBinSize)}
+          {loadedBinSize === state.selectedBinSize
+            ? ''
+            : ` view; ${visiumHdBinSizeLabel(state.selectedBinSize)} selected`}
         </strong>
       </div>
       <div className="visium-bin-control">

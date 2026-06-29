@@ -187,6 +187,115 @@ describe('ViewerCore', () => {
     expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
   })
 
+  it('clips rendered grid-cell polygons to the viewport', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const nearGridCell = gridCellDatum()
+    const farGridCell = gridCellDatum({
+      id: 'BC-far',
+      col: 600,
+      polygon: [
+        [1000, 0, 0],
+        [1016, 0, 0],
+        [1016, -16, 0],
+        [1000, -16, 0],
+      ],
+    })
+
+    render(
+      <ViewerCore
+        fitGridCells={[nearGridCell]}
+        gridCells={[nearGridCell, farGridCell]}
+        initialViewStateOverride={{ target: [8, -8, 0], zoom: 4 }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+        'data-count',
+        '1',
+      )
+    })
+
+    const gridLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'spatial-grid-cells'
+    }) as
+      | {
+          readonly props?: {
+            readonly data?: readonly GridCellDatum[]
+          }
+        }
+      | undefined
+
+    expect(gridLayer?.props?.data?.map((cell) => cell.id)).toEqual(['BC-1'])
+  })
+
+  it('renders selected 2um grid cells as coarse 16um bins until close zoom', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const gridCells: GridCellDatum[] = []
+
+    for (let row = 0; row < 8; row += 1) {
+      for (let col = 0; col < 8; col += 1) {
+        gridCells.push(twoMicrometerGridCell(row, col))
+      }
+    }
+
+    const onGridCellClick = vi.fn()
+    render(
+      <ViewerCore
+        fitGridCells={[gridCells[0] as GridCellDatum]}
+        gridCells={gridCells}
+        initialViewStateOverride={{ target: [8, -8, 0], zoom: 0 }}
+        onGridCellClick={onGridCellClick}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+        'data-count',
+        '1',
+      )
+    })
+
+    const gridLayer = deckGlMock.layers.find((layer) => {
+      const candidate = layer as { readonly id?: string }
+
+      return candidate.id === 'spatial-grid-cells'
+    }) as
+      | {
+          readonly props?: {
+            readonly data?: readonly GridCellDatum[]
+          }
+        }
+      | undefined
+    const renderCell = gridLayer?.props?.data?.[0]
+
+    expect(renderCell).toMatchObject({
+      id: 'render-lod-16um:0:0',
+      binSizeMicrometers: 16,
+      renderLodSourceBinSizeMicrometers: 2,
+    })
+
+    act(() => {
+      deckGlMock.onClick?.({
+        object: renderCell,
+        x: 18,
+        y: 24,
+      })
+      deckGlMock.onHover?.({
+        object: renderCell,
+        x: 18,
+        y: 24,
+      })
+    })
+
+    expect(onGridCellClick).not.toHaveBeenCalled()
+    expect(screen.queryByText('render-lod-16um:0:0')).not.toBeInTheDocument()
+  })
+
   it('suppresses expression dots while keeping grid-cell expression fills', () => {
     render(
       <ViewerCore
@@ -1399,6 +1508,7 @@ describe('ViewerCore', () => {
     const { rerender } = render(<ViewerCore cells={cells} />)
     const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
 
+    expect(await screen.findByLabelText('Zoom level 4.00')).toHaveTextContent('Zoom 4.00')
     expect(await screen.findByLabelText('Scale bar 5 μm')).toBeInTheDocument()
     expect(document.querySelector('.viewport-scale-bar-track')).toHaveStyle({
       width: '80px',
@@ -1419,6 +1529,7 @@ describe('ViewerCore', () => {
     await waitFor(() => {
       expect(screen.queryByText('X 2468 px | Y 11356 px')).not.toBeInTheDocument()
     })
+    expect(screen.getByLabelText('Zoom level 4.00')).toBeInTheDocument()
   })
 
   it('draws and clears a distance measurement in micrometers and image pixels', async () => {
@@ -1666,4 +1777,27 @@ function gridCellDatum(values: Partial<GridCellDatum> = {}): GridCellDatum {
     lineColor: [22, 90, 82, 150],
     ...values,
   }
+}
+
+function twoMicrometerGridCell(row: number, col: number): GridCellDatum {
+  const minX = col * 2
+  const maxX = minX + 2
+  const minY = row * 2
+  const maxY = minY + 2
+
+  return gridCellDatum({
+    id: `2um-${row}-${col}`,
+    gridId: 'grid-2um',
+    row,
+    col,
+    binSizeMicrometers: 2,
+    fullresRow: row,
+    fullresCol: col,
+    polygon: [
+      [minX, -minY, 0],
+      [maxX, -minY, 0],
+      [maxX, -maxY, 0],
+      [minX, -maxY, 0],
+    ],
+  })
 }

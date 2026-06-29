@@ -17,6 +17,7 @@ export type VisiumHdControlState =
       readonly status: 'ready' | 'loading' | 'error'
       readonly url: string
       readonly selectedBinSize: VisiumHdBinSizeMicrometers
+      readonly loadedBinSize?: VisiumHdBinSizeMicrometers
       readonly options: readonly VisiumHdBinOption[]
       readonly binCount?: number
       readonly error?: string
@@ -74,11 +75,15 @@ export function visiumHdControlReadyFromOptions(
   url: string,
   options: readonly VisiumHdBinOption[],
   overview: VisiumHdBinnedOverview,
+  selectedBinSize: VisiumHdBinSizeMicrometers = overview.binSizeMicrometers,
 ): VisiumHdControlState {
   return {
     status: 'ready',
     url,
-    selectedBinSize: overview.binSizeMicrometers,
+    selectedBinSize,
+    ...(overview.binSizeMicrometers === selectedBinSize
+      ? {}
+      : { loadedBinSize: overview.binSizeMicrometers }),
     options: updateVisiumHdBinOptionCount(
       options,
       overview.binSizeMicrometers,

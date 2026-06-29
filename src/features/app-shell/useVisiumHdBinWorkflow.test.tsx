@@ -2,6 +2,7 @@ import { act, render, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
+import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import { micrometers } from '../../data/coords'
 import type {
   DatasetMeta,
@@ -25,6 +26,7 @@ function Probe({
   state,
   getSpatialDataset,
   onReady,
+  currentViewportDetail = null,
   flatMorphologyImage,
   setFlatMorphologyImage,
   setGeneExpressionBatch,
@@ -40,6 +42,7 @@ function Probe({
   readonly state: VisiumHdControlState
   readonly getSpatialDataset: VisiumHdBinWorkflowLoaderOptions['getSpatialDataset']
   readonly onReady: (nextApi: UseVisiumHdBinWorkflowResult) => void
+  readonly currentViewportDetail?: UseVisiumHdBinWorkflowOptions['controls']['currentViewportDetail']
   readonly flatMorphologyImage?: VisiumHdBinWorkflowDataOptions['flatMorphologyImage']
   readonly setFlatMorphologyImage: VisiumHdBinWorkflowSetterOptions['setFlatMorphologyImage']
   readonly setGeneExpressionBatch?: VisiumHdBinWorkflowSetterOptions['setGeneExpressionBatch']
@@ -55,6 +58,7 @@ function Probe({
   const options: UseVisiumHdBinWorkflowOptions = {
     callbacks: { appendDebugEvent: vi.fn() },
     controls: {
+      currentViewportDetail,
       shouldLoadMorphology: true,
       visiumHdControlState: state,
     },
@@ -416,6 +420,7 @@ describe('useVisiumHdBinWorkflow', () => {
         onReady={(nextApi) => {
           api = nextApi
         }}
+        currentViewportDetail={viewportDetail(3)}
         setFlatMorphologyImage={vi.fn()}
         setGenePanelState={vi.fn()}
         setLoadState={vi.fn()}
@@ -434,6 +439,91 @@ describe('useVisiumHdBinWorkflow', () => {
     expect(dataset.genePanel).toHaveBeenCalledWith(2)
     expect(dataset.readBinnedOverview).toHaveBeenCalledWith(2)
     expect(dataset.meta).toHaveBeenCalledWith(2)
+  })
+
+  it('loads a 16 µm view for selected 2 µm bins below close zoom', async () => {
+    const datasetUrl = 'https://example.test/visium'
+    const grid = visiumGrid(16)
+    const overview: VisiumHdBinnedOverview = {
+      binSizeMicrometers: 16,
+      scalefactors: {
+        micronsPerPixel: 0.5,
+        tissueHiresScale: 0.2,
+        tissueLowresScale: 0.02,
+      },
+      grid,
+      gridCells: gridCells(grid, 's_016um_000001_000002-1'),
+      fullresRows: new Float64Array([16]),
+      fullresCols: new Float64Array([16]),
+      inTissue: new Uint8Array([1]),
+      sourcePaths: {
+        tissuePositions: 'binned_outputs/square_016um/spatial/tissue_positions.parquet',
+        scalefactors: 'binned_outputs/square_016um/spatial/scalefactors_json.json',
+        tissueHiresImage: 'binned_outputs/square_016um/spatial/tissue_hires_image.png',
+        tissueLowresImage: 'binned_outputs/square_016um/spatial/tissue_lowres_image.png',
+        filteredMatrixH5: 'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
+      },
+    }
+    const dataset = {
+      annotations: vi.fn(async () => []),
+      elements: vi.fn(async () => ({ elements: [] })),
+      image: vi.fn(async () => null),
+      matrix: vi.fn(async () => {
+        throw new Error('unused')
+      }),
+      genePanel: vi.fn(async () => ['Actb']),
+      meta: vi.fn(async () => visiumMeta(grid)),
+      readBinnedOverview: vi.fn(async () => overview),
+    }
+    const getSpatialDataset = vi.fn(async () => dataset)
+    const setSpatialGridCells = vi.fn()
+    const setVisiumHdControlState = vi.fn()
+    let api: UseVisiumHdBinWorkflowResult | null = null
+
+    render(
+      <Probe
+        state={visiumControlState()}
+        getSpatialDataset={getSpatialDataset}
+        onReady={(nextApi) => {
+          api = nextApi
+        }}
+        currentViewportDetail={viewportDetail(2.9)}
+        flatMorphologyImage={{
+          url: `${datasetUrl}/binned_outputs/square_016um/spatial/tissue_hires_image.png`,
+          scaleFactor: 0.2,
+          micrometersPerPixel: micrometers(0.5),
+        }}
+        setFlatMorphologyImage={vi.fn()}
+        setGenePanelState={vi.fn()}
+        setLoadState={vi.fn()}
+        setMorphologyState={vi.fn()}
+        setSelectedGridCell={vi.fn()}
+        setSpatialGridCells={setSpatialGridCells}
+        setVisiumHdControlState={setVisiumHdControlState}
+      />,
+    )
+
+    await act(async () => {
+      await api?.handleVisiumHdBinSizeChange(2)
+    })
+
+    expect(dataset.genePanel).toHaveBeenCalledWith(2)
+    expect(dataset.readBinnedOverview).toHaveBeenCalledWith(16)
+    expect(dataset.meta).toHaveBeenCalledWith(16)
+    expect(setSpatialGridCells).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 's_016um_000001_000002-1',
+        binSizeMicrometers: 16,
+        renderLodSourceBinSizeMicrometers: 2,
+      }),
+    ])
+    expect(setVisiumHdControlState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'ready',
+        selectedBinSize: 2,
+        loadedBinSize: 16,
+      }),
+    )
   })
 })
 
@@ -467,6 +557,24 @@ function visiumControlStateWithMissingTwoMicrometer(): VisiumHdControlState {
       },
     ],
     binCount: 54_504,
+  }
+}
+
+function viewportDetail(zoom: number): ViewerViewportDetail {
+  return {
+    bbox: {
+      minX: micrometers(0),
+      maxX: micrometers(100),
+      minY: micrometers(0),
+      maxY: micrometers(100),
+    },
+    visibleCellCount: 1,
+    viewState: {
+      target: [0, 0, 0],
+      zoom,
+      minZoom: -8,
+      maxZoom: 8,
+    },
   }
 }
 
