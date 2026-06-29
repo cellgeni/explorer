@@ -60,6 +60,7 @@ import type {
   GeneExpressionBatch,
 } from '../../datasets/xeniumDataset'
 import type { Annotation, ElementBatch } from '../../datasets/spatialDataset'
+import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { RoiSelectionInput } from '../../data/roiSelection'
 
 export type DatasetOverviewLoader = (
@@ -192,6 +193,7 @@ export type GeneExpressionLoader = (
     readonly sampleStride?: number
     readonly signal?: AbortSignal
     readonly onStageTiming?: GeneExpressionStageTimingHandler
+    readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
   },
 ) => Promise<GeneExpressionBatch>
 

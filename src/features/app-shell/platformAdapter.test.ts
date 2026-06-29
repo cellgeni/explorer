@@ -396,6 +396,46 @@ describe('platformAdapter', () => {
     })
   })
 
+  it('lets Visium HD expression LOD override the active display bin size', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'visium-hd')
+    const expressionBatch = {
+      elements: [],
+      genes: ['Actb'],
+      maxCount: 0,
+    }
+    const dataset = {
+      geneExpression: vi.fn(async () => expressionBatch),
+    }
+    const getSpatialDataset = vi.fn(async () => dataset)
+    const loadGeneExpression = vi.fn()
+
+    await expect(
+      loadPlatformGeneExpression(
+        adapter,
+        {
+          activeBinSize: 2,
+          getSpatialDataset: getSpatialDataset as unknown as SpatialDatasetLoader,
+          loadGeneExpression: loadGeneExpression as GeneExpressionLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+        ['Actb'],
+        {
+          limit: 120_000,
+          sampleStride: 1,
+          visiumHdBinSizeMicrometers: 8,
+        },
+      ),
+    ).resolves.toBe(expressionBatch)
+
+    expect(loadGeneExpression).not.toHaveBeenCalled()
+    expect(dataset.geneExpression).toHaveBeenCalledWith(selection.bbox, ['Actb'], {
+      limit: 120_000,
+      sampleStride: 1,
+      binSizeMicrometers: 8,
+    })
+  })
+
   it('returns empty Visium HD overlays when boundary capabilities are absent', async () => {
     const adapter = appPlatformAdapterFor(readyLoadState, 'visium-hd')
     const dataset = {

@@ -1418,6 +1418,9 @@ export function App({ dependencies }: AppProps = {}) {
       geneExpressionDetailMode,
       geneExpressionScaleKey,
       geneExpressionScoreMode,
+      ...(activeVisiumHdBinSize === undefined
+        ? {}
+        : { visiumHdBinSizeMicrometers: activeVisiumHdBinSize }),
     },
     data: {
       loadState,

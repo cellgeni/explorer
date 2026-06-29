@@ -91,6 +91,7 @@ export interface GeneExpressionElement {
   readonly count: number
   readonly transcriptCount?: number
   readonly cellArea?: number
+  readonly binSizeMicrometers?: number
   readonly nucleusCount?: number
   readonly segmentationMethod?: string
 }

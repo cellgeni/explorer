@@ -176,6 +176,210 @@ describe('gene expression LOD planner', () => {
     })
   })
 
+  it('keeps Visium HD 16um expression dense at overview zooms', () => {
+    expect(
+      planGeneExpressionLod(
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: -3 },
+        }),
+        {
+          detailMode: 'auto',
+          slideBbox,
+          totalCellCount: 120_000,
+          visiumHdBinSizeMicrometers: 16,
+        },
+      ),
+    ).toEqual({
+      kind: 'request',
+      mode: 'all-cells',
+      bbox: slideBbox,
+      cellLimit: 120_000,
+      sampleStride: 1,
+      sourceCellCount: 120_000,
+      visiumHdBinSizeMicrometers: 16,
+    })
+  })
+
+  it('keeps Visium HD 8um expression unsampled when zoomed in', () => {
+    expect(
+      planGeneExpressionLod(
+        detail({
+          visibleCellCount: 75_000,
+          viewState: { target: [150, -250, 0], zoom: 0 },
+        }),
+        {
+          detailMode: 'auto',
+          slideBbox,
+          totalCellCount: 120_000,
+          visiumHdBinSizeMicrometers: 8,
+        },
+      ),
+    ).toEqual({
+      kind: 'request',
+      mode: 'exact',
+      bbox: viewportBbox,
+      cellLimit: 120_000,
+      sampleStride: 1,
+      sourceCellCount: 75_000,
+      visiumHdBinSizeMicrometers: 8,
+    })
+  })
+
+  it.each([16, 8, 2] as const)(
+    'honours selected Visium HD %ium expression at maximum zoom-in',
+    (selectedBinSize) => {
+      expect(
+        planGeneExpressionLod(
+          detail({
+            visibleCellCount: 75_000,
+            viewState: { target: [150, -250, 0], zoom: 8 },
+          }),
+          {
+            detailMode: 'auto',
+            slideBbox,
+            totalCellCount: 120_000,
+            visiumHdBinSizeMicrometers: selectedBinSize,
+          },
+        ),
+      ).toEqual({
+        kind: 'request',
+        mode: 'exact',
+        bbox: viewportBbox,
+        cellLimit: 120_000,
+        sampleStride: 1,
+        sourceCellCount: 75_000,
+        visiumHdBinSizeMicrometers: selectedBinSize,
+      })
+    },
+  )
+
+  it('uses dense 16um LOD for Visium HD 8um expression when zoomed out', () => {
+    expect(
+      planGeneExpressionLod(
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: -1.5 },
+        }),
+        {
+          detailMode: 'auto',
+          slideBbox,
+          totalCellCount: 120_000,
+          visiumHdBinSizeMicrometers: 8,
+        },
+      ),
+    ).toEqual({
+      kind: 'request',
+      mode: 'all-cells',
+      bbox: slideBbox,
+      cellLimit: 120_000,
+      sampleStride: 1,
+      sourceCellCount: 120_000,
+      visiumHdBinSizeMicrometers: 16,
+    })
+  })
+
+  it('uses dense 8um then 16um LOD for Visium HD 2um expression zoom outs', () => {
+    expect(
+      planGeneExpressionLod(
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: -1.5 },
+        }),
+        {
+          detailMode: 'auto',
+          slideBbox,
+          totalCellCount: 120_000,
+          visiumHdBinSizeMicrometers: 2,
+        },
+      ),
+    ).toMatchObject({
+      kind: 'request',
+      mode: 'all-cells',
+      bbox: slideBbox,
+      cellLimit: 120_000,
+      sampleStride: 1,
+      sourceCellCount: 120_000,
+      visiumHdBinSizeMicrometers: 8,
+    })
+
+    expect(
+      planGeneExpressionLod(
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: -2.5 },
+        }),
+        {
+          detailMode: 'auto',
+          slideBbox,
+          totalCellCount: 120_000,
+          visiumHdBinSizeMicrometers: 2,
+        },
+      ),
+    ).toMatchObject({
+      kind: 'request',
+      mode: 'all-cells',
+      bbox: slideBbox,
+      cellLimit: 120_000,
+      sampleStride: 1,
+      sourceCellCount: 120_000,
+      visiumHdBinSizeMicrometers: 16,
+    })
+  })
+
+  it('keys dense Visium HD LOD requests by requested bin size', () => {
+    const lod8Plan = planGeneExpressionLod(
+      detail({
+        visibleCellCount: 60_000,
+        viewState: { target: [150, -250, 0], zoom: -1.5 },
+      }),
+      {
+        detailMode: 'auto',
+        slideBbox,
+        totalCellCount: 120_000,
+        visiumHdBinSizeMicrometers: 2,
+      },
+    )
+    const lod16Plan = planGeneExpressionLod(
+      detail({
+        visibleCellCount: 60_000,
+        viewState: { target: [150, -250, 0], zoom: -1.5 },
+      }),
+      {
+        detailMode: 'auto',
+        slideBbox,
+        totalCellCount: 120_000,
+        visiumHdBinSizeMicrometers: 8,
+      },
+    )
+
+    if (lod8Plan.kind !== 'request' || lod16Plan.kind !== 'request') {
+      throw new Error('Expected expression request plans.')
+    }
+
+    expect(
+      geneExpressionRequestKey(
+        'https://example.test/visium/',
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: -1.5 },
+        }),
+        lod8Plan,
+        ['Actb'],
+      ),
+    ).not.toBe(
+      geneExpressionRequestKey(
+        'https://example.test/visium/',
+        detail({
+          visibleCellCount: 60_000,
+          viewState: { target: [150, -250, 0], zoom: -1.5 },
+        }),
+        lod16Plan,
+        ['Actb'],
+      ),
+    )
+  })
+
   it('keeps whole-slide request keys independent from pan and zoom buckets', () => {
     const plan = planGeneExpressionLod(
       detail({

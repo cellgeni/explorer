@@ -8,6 +8,7 @@ import type { ShareableViewState } from '../../data/shareableState'
 import type { TelemetryEvent } from '../../data/telemetry'
 import type { SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { BoundaryLoadState, DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { GeneExpressionState } from '../genes/geneControlsModel'
@@ -94,6 +95,7 @@ function Probe({
   loadGeneExpression,
   onReady,
   selectedGenes = ['Actb'],
+  visiumHdBinSizeMicrometers,
 }: {
   readonly loadBoundaryElements: Parameters<
     typeof useViewportDataWorkflow
@@ -109,6 +111,7 @@ function Probe({
     nextSnapshot: Snapshot,
   ) => void
   readonly selectedGenes?: readonly string[]
+  readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
 }) {
   const [boundaryElements, setBoundaryElements] = React.useState<
     readonly SpatialElement[]
@@ -157,6 +160,7 @@ function Probe({
       geneExpressionLoadingEnabled,
       geneExpressionScaleKey: 'scale-key',
       geneExpressionScoreMode: 'sum',
+      ...(visiumHdBinSizeMicrometers === undefined ? {} : { visiumHdBinSizeMicrometers }),
     },
     data: {
       loadState: readyLoadState,
@@ -329,6 +333,98 @@ describe('useViewportDataWorkflow', () => {
       ]),
     )
   })
+
+  it('passes dense Visium HD expression LOD options to the gene-expression loader', async () => {
+    const loadGeneExpression = vi.fn(async () => batch)
+    const visiumOverviewDetail: ViewerViewportDetail = {
+      ...detailWithoutBoundaryLoad,
+      viewState: {
+        ...detailWithoutBoundaryLoad.viewState,
+        zoom: -1.5,
+      },
+    }
+
+    render(
+      <Probe
+        loadBoundaryElements={vi.fn(async () => ({ elements: [] }))}
+        loadGeneExpression={loadGeneExpression}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+        visiumHdBinSizeMicrometers={2}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(visiumOverviewDetail)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loadGeneExpression).toHaveBeenCalledWith(
+      'https://example.test/output',
+      bbox,
+      ['Actb'],
+      expect.objectContaining({
+        limit: readyLoadState.cellCount,
+        sampleStride: 1,
+        signal: expect.any(AbortSignal),
+        visiumHdBinSizeMicrometers: 8,
+      }),
+    )
+    expect(snapshot.geneExpressionState.status).toBe('ready')
+  })
+
+  it.each([16, 8, 2] as const)(
+    'passes selected Visium HD %ium expression options at maximum zoom-in',
+    async (selectedBinSize) => {
+      const loadGeneExpression = vi.fn(async () => batch)
+      const visiumZoomedInDetail: ViewerViewportDetail = {
+        ...detailWithoutBoundaryLoad,
+        visibleCellCount: 8,
+        viewState: {
+          ...detailWithoutBoundaryLoad.viewState,
+          zoom: 8,
+        },
+      }
+
+      render(
+        <Probe
+          loadBoundaryElements={vi.fn(async () => ({ elements: [] }))}
+          loadGeneExpression={loadGeneExpression}
+          onReady={(nextApi, nextSnapshot) => {
+            api = nextApi
+            snapshot = nextSnapshot
+          }}
+          visiumHdBinSizeMicrometers={selectedBinSize}
+        />,
+      )
+
+      act(() => {
+        api.handleViewportChange(visiumZoomedInDetail)
+      })
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(loadGeneExpression).toHaveBeenCalledWith(
+        'https://example.test/output',
+        bbox,
+        ['Actb'],
+        expect.objectContaining({
+          limit: readyLoadState.cellCount,
+          sampleStride: 1,
+          signal: expect.any(AbortSignal),
+          visiumHdBinSizeMicrometers: selectedBinSize,
+        }),
+      )
+      expect(snapshot.geneExpressionState.status).toBe('ready')
+    },
+  )
 
   it('reports when true boundary polygons are deferred by viewport density', async () => {
     const loadBoundaryElements = vi.fn(async () => ({ elements: [] }))

@@ -13,6 +13,7 @@ export interface OverviewCellDatum {
   readonly cellCount?: number
   readonly transcriptCount?: number
   readonly cellArea?: number
+  readonly binSizeMicrometers?: number
   readonly nucleusCount?: number
   readonly segmentationMethod?: string
   readonly expressionCount?: number

@@ -332,9 +332,10 @@ export async function loadPlatformGeneExpression(
   ...args: Parameters<GeneExpressionLoader>
 ): ReturnType<GeneExpressionLoader> {
   const [baseUrl, bbox, genes, options = {}] = args
+  const { visiumHdBinSizeMicrometers, ...geneExpressionOptions } = options
 
   if (adapter.kind !== 'visium-hd') {
-    return dependencies.loadGeneExpression(baseUrl, bbox, genes, options)
+    return dependencies.loadGeneExpression(baseUrl, bbox, genes, geneExpressionOptions)
   }
 
   const dataset = await dependencies.getSpatialDataset(baseUrl)
@@ -343,10 +344,10 @@ export async function loadPlatformGeneExpression(
     throw new Error('Loaded dataset does not expose selected-gene expression.')
   }
 
+  const binSizeMicrometers = visiumHdBinSizeMicrometers ?? dependencies.activeBinSize
+
   return dataset.geneExpression(bbox, genes, {
-    ...options,
-    ...(dependencies.activeBinSize === undefined
-      ? {}
-      : { binSizeMicrometers: dependencies.activeBinSize }),
+    ...geneExpressionOptions,
+    ...(binSizeMicrometers === undefined ? {} : { binSizeMicrometers }),
   })
 }

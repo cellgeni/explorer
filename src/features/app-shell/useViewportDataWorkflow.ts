@@ -20,6 +20,7 @@ import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { BBox } from '../../data/coords'
 import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
   boundaryViewportKey,
   shouldLoadBoundaryPolygons,
@@ -113,6 +114,7 @@ interface ViewportDataWorkflowControls {
   readonly geneExpressionLoadingEnabled?: boolean
   readonly geneExpressionScaleKey: string
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
+  readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
 }
 
 interface ViewportDataWorkflowData {
@@ -144,6 +146,7 @@ export function useViewportDataWorkflow({
     geneExpressionLoadingEnabled = true,
     geneExpressionScaleKey,
     geneExpressionScoreMode,
+    visiumHdBinSizeMicrometers,
   },
   data: { loadState, overviewExtent, selectedGenes },
   loaders,
@@ -333,6 +336,9 @@ export function useViewportDataWorkflow({
         detailMode: geneExpressionDetailMode,
         slideBbox: overviewExtent,
         totalCellCount: loadState.cellCount,
+        ...(visiumHdBinSizeMicrometers === undefined
+          ? {}
+          : { visiumHdBinSizeMicrometers }),
       })
 
       if (expressionPlan.kind === 'waiting') {
@@ -391,6 +397,9 @@ export function useViewportDataWorkflow({
         signal: expressionRequest.signal,
         limit: expressionPlan.cellLimit,
         sampleStride: expressionPlan.sampleStride,
+        ...(expressionPlan.visiumHdBinSizeMicrometers === undefined
+          ? {}
+          : { visiumHdBinSizeMicrometers: expressionPlan.visiumHdBinSizeMicrometers }),
         onStageTiming: (timing) => {
           if (expressionRequest.signal.aborted || !expressionRequest.isCurrent()) {
             return
@@ -516,6 +525,7 @@ export function useViewportDataWorkflow({
       geneExpressionLoadingEnabled,
       geneExpressionScaleKey,
       geneExpressionScoreMode,
+      visiumHdBinSizeMicrometers,
       geneExpressionRequestIdRef,
       geneExpressionViewportKeyRef,
       lastViewportDetailRef,

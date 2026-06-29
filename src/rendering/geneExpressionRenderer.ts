@@ -50,6 +50,9 @@ export function geneExpressionElementsToLayerData(
         ? {}
         : { transcriptCount: element.transcriptCount }),
       ...(element.cellArea === undefined ? {} : { cellArea: element.cellArea }),
+      ...(element.binSizeMicrometers === undefined
+        ? {}
+        : { binSizeMicrometers: element.binSizeMicrometers }),
       ...(element.nucleusCount === undefined
         ? {}
         : { nucleusCount: element.nucleusCount }),
@@ -173,13 +176,24 @@ export function styleGridCellsByGeneExpression(
     : expressionSource
   const styleUnmatchedCells = options.styleUnmatchedCells ?? false
 
-  if (styleIndex.expressionByElementId.size === 0 && !styleUnmatchedCells) {
+  if (
+    styleIndex.expressionByElementId.size === 0 &&
+    (styleIndex.expressionByBinKey?.size ?? 0) === 0 &&
+    !styleUnmatchedCells
+  ) {
     return cells
   }
 
   let hasExpressionStyle = false
   const styledCells = cells.map((cell) => {
-    const expressionElement = styleIndex.expressionByElementId.get(cell.id)
+    const expressionElement =
+      styleIndex.expressionByElementId.get(cell.id) ??
+      (styleIndex.expressionByBinKey === undefined ||
+      styleIndex.binMicrometers === undefined
+        ? undefined
+        : styleIndex.expressionByBinKey.get(
+            gridCellBinKey(cell, styleIndex.binMicrometers),
+          ))
 
     if (expressionElement === undefined) {
       if (!styleUnmatchedCells) {
@@ -218,7 +232,9 @@ export function createGeneExpressionElementStyleIndex(
   options: GeneExpressionElementStyleOptions = {},
 ): GeneExpressionElementStyleIndex {
   const expressionByElementId = new Map<string, OverviewCellDatum>()
-  const binMicrometers = normalizeGeneExpressionBinMicrometers(options.binMicrometers)
+  const binMicrometers = normalizeGeneExpressionBinMicrometers(
+    expressionElementsBinMicrometers(expressionElements) ?? options.binMicrometers,
+  )
 
   for (const cell of expressionElements) {
     expressionByElementId.set(cell.id, cell)
@@ -367,6 +383,57 @@ function positionBinKey(position: Position, binMicrometers: number): string {
   const rawY = -deckY
 
   return `${Math.floor(x / binMicrometers)}:${Math.floor(rawY / binMicrometers)}`
+}
+
+function gridCellBinKey(cell: GridCellDatum, binMicrometers: number): string {
+  return positionBinKey(gridCellCenterPosition(cell), binMicrometers)
+}
+
+function gridCellCenterPosition(cell: GridCellDatum): Position {
+  if (cell.polygon.length === 0) {
+    return [0, 0, 0]
+  }
+
+  let xTotal = 0
+  let yTotal = 0
+  let zTotal = 0
+
+  for (const position of cell.polygon) {
+    xTotal += position[0] ?? 0
+    yTotal += position[1] ?? 0
+    zTotal += position[2] ?? 0
+  }
+
+  const count = cell.polygon.length
+
+  return [xTotal / count, yTotal / count, zTotal / count]
+}
+
+function expressionElementsBinMicrometers(
+  expressionElements: readonly OverviewCellDatum[],
+): number | undefined {
+  let binMicrometers: number | undefined
+
+  for (const element of expressionElements) {
+    const nextBinMicrometers = normalizeGeneExpressionBinMicrometers(
+      element.binSizeMicrometers,
+    )
+
+    if (nextBinMicrometers === undefined) {
+      continue
+    }
+
+    if (binMicrometers === undefined) {
+      binMicrometers = nextBinMicrometers
+      continue
+    }
+
+    if (binMicrometers !== nextBinMicrometers) {
+      return undefined
+    }
+  }
+
+  return binMicrometers
 }
 
 function normalizeGeneExpressionBinMicrometers(

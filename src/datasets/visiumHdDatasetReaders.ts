@@ -1016,6 +1016,7 @@ async function readVisiumHdGeneExpression(options: {
       position: bin.position,
       count,
       cellArea: overview.binSizeMicrometers * overview.binSizeMicrometers,
+      binSizeMicrometers: overview.binSizeMicrometers,
     })
     maxCount = Math.max(maxCount, count)
   }

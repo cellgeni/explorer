@@ -654,9 +654,12 @@ describe('deck layer factory', () => {
       },
     ]
 
-    const expressionStyleIndex = createGeneExpressionElementStyleIndex(expressionElements, {
-      binMicrometers: 100,
-    })
+    const expressionStyleIndex = createGeneExpressionElementStyleIndex(
+      expressionElements,
+      {
+        binMicrometers: 100,
+      },
+    )
     const expressionStyledCells = styleCellsByGeneExpression(cells, expressionStyleIndex)
 
     expect(expressionStyledCells[0]).toMatchObject({
@@ -1146,6 +1149,38 @@ describe('deck layer factory', () => {
     ) => readonly number[]
 
     expect(getFillColor(expressionStyledGridCells[0]!)).toEqual([240, 128, 120, 110])
+  })
+
+  it('maps coarser binned gene expression colors onto affine grid cells by position', () => {
+    const gridCells = gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])
+    const expressionStyledGridCells = styleGridCellsByGeneExpression(
+      gridCells,
+      [
+        {
+          id: 's_016um_0_1',
+          position: [10, -20, 0],
+          radiusPixels: 6,
+          fillColor: [240, 128, 120, 220],
+          expressionCount: 7,
+          expressionGenes: ['Actb'],
+          binSizeMicrometers: 16,
+        },
+      ],
+      { styleUnmatchedCells: true },
+    )
+
+    expect(expressionStyledGridCells[0]).toMatchObject({
+      id: 'BC-1',
+      fillColor: [240, 128, 120, 222],
+      lineColor: [240, 128, 120, 222],
+      expressionCount: 7,
+      expressionGenes: ['Actb'],
+    })
+    expect(expressionStyledGridCells[1]).toMatchObject({
+      id: 'BC-2',
+      fillColor: [72, 68, 58, 84],
+      expressionCount: 0,
+    })
   })
 
   it('keeps active affine-grid gene expression visible at low grid opacity', () => {

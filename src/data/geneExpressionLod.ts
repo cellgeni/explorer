@@ -1,5 +1,6 @@
 import { micrometers } from './coords'
 import type { BBox } from './coords'
+import type { VisiumHdBinSizeMicrometers } from '../datasets/visiumHdDataset'
 
 export const GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT = 50_000
 export const GENE_EXPRESSION_EXACT_CELL_LIMIT = GENE_EXPRESSION_EXACT_REGION_CELL_LIMIT
@@ -8,6 +9,9 @@ export const GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT = 15_000
 export const GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO = 0.2
 export const GENE_EXPRESSION_OVERVIEW_ZOOM_MAX = -1.25
 export const GENE_EXPRESSION_OVERVIEW_VISIBLE_CELL_MIN = 100_000
+export const VISIUM_HD_GENE_EXPRESSION_8UM_LOD_ZOOM_MAX =
+  GENE_EXPRESSION_OVERVIEW_ZOOM_MAX
+export const VISIUM_HD_GENE_EXPRESSION_16UM_LOD_ZOOM_MAX = -2.25
 
 export type GeneExpressionLoadMode =
   | 'exact'
@@ -34,6 +38,7 @@ export type GeneExpressionLodPlan =
       readonly cellLimit: number
       readonly sampleStride: number
       readonly sourceCellCount: number
+      readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
     }
   | {
       readonly kind: 'waiting'
@@ -46,6 +51,7 @@ export function planGeneExpressionLod(
     readonly detailMode: GeneExpressionDetailMode
     readonly slideBbox: BBox | null
     readonly totalCellCount: number
+    readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
   },
 ): GeneExpressionLodPlan {
   if (options.detailMode === 'all-cells') {
@@ -59,6 +65,9 @@ export function planGeneExpressionLod(
       cellLimit: Math.max(1, sourceCellCount),
       sampleStride: 1,
       sourceCellCount,
+      ...(options.visiumHdBinSizeMicrometers === undefined
+        ? {}
+        : { visiumHdBinSizeMicrometers: options.visiumHdBinSizeMicrometers }),
     }
   }
 
@@ -70,10 +79,26 @@ export function planGeneExpressionLod(
       kind: 'request',
       mode: 'exact-region',
       bbox: detail.bbox,
-      cellLimit: Math.max(1, detail.visibleCellCount),
+      cellLimit: Math.max(
+        1,
+        options.visiumHdBinSizeMicrometers === undefined
+          ? detail.visibleCellCount
+          : options.totalCellCount,
+      ),
       sampleStride: 1,
       sourceCellCount: detail.visibleCellCount,
+      ...(options.visiumHdBinSizeMicrometers === undefined
+        ? {}
+        : { visiumHdBinSizeMicrometers: options.visiumHdBinSizeMicrometers }),
     }
+  }
+
+  if (options.visiumHdBinSizeMicrometers !== undefined) {
+    return planVisiumHdGeneExpressionLod(
+      detail,
+      options,
+      options.visiumHdBinSizeMicrometers,
+    )
   }
 
   if (
@@ -125,9 +150,15 @@ export function geneExpressionRequestKey(
   plan: Extract<GeneExpressionLodPlan, { readonly kind: 'request' }>,
   genes: readonly string[],
 ): string {
+  const visiumBinKey =
+    plan.visiumHdBinSizeMicrometers === undefined
+      ? 'bin-default'
+      : `${plan.visiumHdBinSizeMicrometers}um`
+
   if (plan.mode === 'overview-sampled' || plan.mode === 'all-cells') {
     return [
       baseUrl.replace(/\/+$/, ''),
+      visiumBinKey,
       plan.mode,
       bboxKey(plan.bbox, 1),
       plan.cellLimit,
@@ -149,6 +180,7 @@ export function geneExpressionRequestKey(
 
   return [
     baseUrl.replace(/\/+$/, ''),
+    visiumBinKey,
     Math.round(targetX / targetBucket) * targetBucket,
     Math.round(targetY / targetBucket) * targetBucket,
     roundedZoom,
@@ -177,6 +209,68 @@ export function geneExpressionWaitingKey(
     detail.visibleCellCount,
     genes.join('|'),
   ].join(':')
+}
+
+function planVisiumHdGeneExpressionLod(
+  detail: GeneExpressionViewportDetail,
+  options: {
+    readonly detailMode: GeneExpressionDetailMode
+    readonly slideBbox: BBox | null
+    readonly totalCellCount: number
+  },
+  activeBinSizeMicrometers: VisiumHdBinSizeMicrometers,
+): GeneExpressionLodPlan {
+  const lodBinSizeMicrometers = visiumHdGeneExpressionLodBinSize(
+    activeBinSizeMicrometers,
+    detail.viewState.zoom,
+  )
+  const useSlideBbox =
+    options.slideBbox !== null &&
+    detail.viewState.zoom <= GENE_EXPRESSION_OVERVIEW_ZOOM_MAX
+  const sourceCellCount = useSlideBbox ? options.totalCellCount : detail.visibleCellCount
+  const requestBbox =
+    useSlideBbox && options.slideBbox !== null ? options.slideBbox : detail.bbox
+  const mode: GeneExpressionLoadMode = useSlideBbox
+    ? 'all-cells'
+    : options.detailMode === 'exact-region'
+      ? 'exact-region'
+      : 'exact'
+
+  return {
+    kind: 'request',
+    mode,
+    bbox: requestBbox,
+    cellLimit: Math.max(1, options.totalCellCount, sourceCellCount),
+    sampleStride: 1,
+    sourceCellCount,
+    visiumHdBinSizeMicrometers: lodBinSizeMicrometers,
+  }
+}
+
+function visiumHdGeneExpressionLodBinSize(
+  activeBinSizeMicrometers: VisiumHdBinSizeMicrometers,
+  zoom: number,
+): VisiumHdBinSizeMicrometers {
+  if (activeBinSizeMicrometers === 2) {
+    if (zoom <= VISIUM_HD_GENE_EXPRESSION_16UM_LOD_ZOOM_MAX) {
+      return 16
+    }
+
+    if (zoom <= VISIUM_HD_GENE_EXPRESSION_8UM_LOD_ZOOM_MAX) {
+      return 8
+    }
+
+    return 2
+  }
+
+  if (
+    activeBinSizeMicrometers === 8 &&
+    zoom <= VISIUM_HD_GENE_EXPRESSION_8UM_LOD_ZOOM_MAX
+  ) {
+    return 16
+  }
+
+  return activeBinSizeMicrometers
 }
 
 function padBbox(bbox: BBox, ratio: number): BBox {
