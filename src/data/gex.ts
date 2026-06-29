@@ -192,8 +192,8 @@ export function clearCellFeatureMatrixZarrCache(retainUrl?: string): void {
   }
 }
 
-export function aggregateGex(
-  cells: ReadonlyMap<CellId, GexCell>,
+export function aggregateGex<ElementId extends string = CellId>(
+  cells: ReadonlyMap<ElementId, GexCell>,
 ): readonly AggregatedGene[] {
   const totals = new Map<string, number>()
 

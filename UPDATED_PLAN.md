@@ -581,6 +581,11 @@ unless the phase order is explicitly changed.
       than random. Exact transcript points use the same feature-name hash as
       feature-circle glyphs, and regression coverage now locks same-gene points
       to the same color while preserving QV-based coloring as an explicit mode.
+- [x] Fixed Visium HD ROI drawing so selected-bin ROI workflows load detected
+      genes for all selected barcodes at the active bin size. Visium HD uses
+      the dataset matrix path directly instead of the Xenium ROI gene loader,
+      labels the panel `ROI genes` rather than `Top ROI genes`, and keeps
+      the shared Xenium ROI gene warmup disabled on Visium HD.
 - [ ] Optimization pass: after correctness is stable, tune interaction
       performance, memory pressure, fetch/decode concurrency, and rendering
       costs without changing product behavior.

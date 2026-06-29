@@ -5,9 +5,11 @@ import type { RoiDrawMode } from '../../components/ViewerCore'
 import { micrometers } from '../../data/coords'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { GridCellDatum } from '../../rendering/deckLayers'
+import type { SpatialDatasetLoader } from '../app-shell/appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { IDLE_VISIUM_HD_ROI_STATE, type VisiumHdRoiState } from './visiumHdRoiModel'
+import type { RoiGeneStatsState } from './roiModel'
 import { useVisiumHdRoiWorkflow } from './useVisiumHdRoiWorkflow'
 
 const selection: RoiSelection = {
@@ -63,6 +65,7 @@ const readyVisiumHdRoiState: VisiumHdRoiState = {
 interface Snapshot {
   readonly debugMessages: readonly string[]
   readonly initialSharedSelection: RoiSelection | null
+  readonly roiGeneStatsState: RoiGeneStatsState<StructuredLoadError>
   readonly roiMode: RoiDrawMode
   readonly roiName: string
   readonly visiumHdRoiState: VisiumHdRoiState
@@ -77,6 +80,7 @@ afterEach(() => {
 
 function Probe({
   clearRoi = vi.fn(),
+  getSpatialDataset = defaultSpatialDatasetLoader(),
   initialSharedSelection = null,
   initialVisiumHdRoiState = IDLE_VISIUM_HD_ROI_STATE,
   isVisiumHdDataset = true,
@@ -85,6 +89,7 @@ function Probe({
   roiName: initialRoiName = 'ROI 1',
 }: {
   readonly clearRoi?: () => void
+  readonly getSpatialDataset?: SpatialDatasetLoader
   readonly initialSharedSelection?: RoiSelection | null
   readonly initialVisiumHdRoiState?: VisiumHdRoiState
   readonly isVisiumHdDataset?: boolean
@@ -98,10 +103,15 @@ function Probe({
   const [roiMode, setRoiMode] = React.useState<RoiDrawMode>('box')
   const [roiName, setRoiName] = React.useState(initialRoiName)
   const [visiumHdRoiState, setVisiumHdRoiState] = React.useState(initialVisiumHdRoiState)
+  const [roiGeneStatsState, setRoiGeneStatsState] = React.useState<
+    RoiGeneStatsState<StructuredLoadError>
+  >({ status: 'idle' })
   const debugMessagesRef = React.useRef<string[]>([])
   const initialSharedRoiSelectionRef = React.useRef<RoiSelection | null>(
     initialSharedSelection,
   )
+  const roiGeneAbortRef = React.useRef<AbortController | null>(null)
+  const roiGeneRequestIdRef = React.useRef(0)
   const roiIdRef = React.useRef(0)
 
   const nextApi = useVisiumHdRoiWorkflow({
@@ -121,11 +131,17 @@ function Probe({
       gridCells: selectedGridCells,
       loadState,
     },
+    loaders: {
+      getSpatialDataset,
+    },
     refs: {
       initialSharedRoiSelectionRef,
+      roiGeneAbortRef,
+      roiGeneRequestIdRef,
       roiIdRef,
     },
     setters: {
+      setRoiGeneStatsState,
       setRoiMode,
       setRoiName,
       setVisiumHdRoiState,
@@ -136,6 +152,7 @@ function Probe({
     onReady(nextApi, {
       debugMessages: debugMessagesRef.current,
       initialSharedSelection: initialSharedRoiSelectionRef.current,
+      roiGeneStatsState,
       roiMode,
       roiName,
       visiumHdRoiState,
@@ -145,10 +162,36 @@ function Probe({
   return null
 }
 
+function defaultSpatialDatasetLoader(): SpatialDatasetLoader {
+  return vi.fn(async () => ({
+    matrix: vi.fn(async () => ({
+      geneNames: ['A2M', 'GAD1'],
+      cells: new Map([
+        [
+          's_008um_1_1',
+          {
+            geneNames: ['A2M', 'GAD1'],
+            counts: [7, 2],
+          },
+        ],
+      ]),
+    })),
+  })) as unknown as SpatialDatasetLoader
+}
+
 describe('useVisiumHdRoiWorkflow', () => {
-  it('completes Visium HD ROI selections from styled grid cells', () => {
+  it('completes Visium HD ROI selections and loads bin-size ROI genes', async () => {
+    const matrix = vi.fn(async () => ({
+      geneNames: ['A2M', 'GAD1'],
+      cells: new Map([['s_008um_1_1', { geneNames: ['A2M', 'GAD1'], counts: [7, 2] }]]),
+    }))
+    const getSpatialDataset = vi.fn(async () => ({
+      matrix,
+    })) as unknown as SpatialDatasetLoader
+
     render(
       <Probe
+        getSpatialDataset={getSpatialDataset}
         roiName="   "
         onReady={(nextApi, nextSnapshot) => {
           api = nextApi
@@ -176,6 +219,27 @@ describe('useVisiumHdRoiWorkflow', () => {
       hitBinLimit: false,
     })
     expect(snapshot.debugMessages).toContain('ROI box drawn: 1 Visium HD bins')
+
+    await waitFor(() => {
+      expect(snapshot.roiGeneStatsState.status).toBe('ready')
+    })
+    expect(matrix).toHaveBeenCalledWith(
+      ['s_008um_1_1'],
+      8,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(snapshot.roiGeneStatsState).toMatchObject({
+      status: 'ready',
+      stats: {
+        genes: [
+          expect.objectContaining({ gene: 'A2M', count: 7 }),
+          expect.objectContaining({ gene: 'GAD1', count: 2 }),
+        ],
+        cellCount: 1,
+        sampledCellCount: 1,
+        totalCount: 9,
+      },
+    })
   })
 
   it('replays an initial shared ROI selection once the Visium HD dataset is ready', async () => {
@@ -198,6 +262,9 @@ describe('useVisiumHdRoiWorkflow', () => {
     expect(snapshot.visiumHdRoiState).toMatchObject({
       status: 'ready',
       bins: [expect.objectContaining({ barcode: 's_008um_1_1' })],
+    })
+    await waitFor(() => {
+      expect(snapshot.roiGeneStatsState.status).toBe('ready')
     })
     void api
   })
@@ -311,6 +378,7 @@ describe('useVisiumHdRoiWorkflow', () => {
     expect(clearRoi).not.toHaveBeenCalled()
     expect(snapshot.roiMode).toBe('idle')
     expect(snapshot.visiumHdRoiState).toEqual({ status: 'idle' })
+    expect(snapshot.roiGeneStatsState).toEqual({ status: 'idle' })
     expect(snapshot.debugMessages).toContain('Cleared ROI')
   })
 

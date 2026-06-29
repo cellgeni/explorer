@@ -93,11 +93,11 @@ export async function loadDatasetRoiGeneStats(
   })
 }
 
-export function summarizeRoiGeneExpression(
-  matrix: GexResult,
+export function summarizeRoiGeneExpression<ElementId extends string = CellId>(
+  matrix: GexResult<ElementId>,
   options: {
     readonly cellCount: number
-    readonly sampledCellIds: readonly CellId[]
+    readonly sampledCellIds: readonly ElementId[]
     readonly geneLimit?: number
   },
 ): RoiGeneStats {

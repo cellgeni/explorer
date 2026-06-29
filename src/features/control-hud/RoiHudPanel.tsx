@@ -205,6 +205,8 @@ interface VisiumHdRoiHudPanelProps {
   readonly loadEnabled: boolean
   readonly roiState: VisiumHdRoiState
   readonly roiSummary: VisiumHdRoiSummary | null
+  readonly roiGeneStatsCopy: string
+  readonly roiGeneStatsState: RoiGeneStatsState
   readonly onRoiModeChange: (mode: RoiDrawMode) => void
   readonly onClearRoi: () => void
   readonly onRoiNameChange: (name: string) => void
@@ -222,6 +224,8 @@ export function VisiumHdRoiHudPanel({
   loadEnabled,
   roiState,
   roiSummary,
+  roiGeneStatsCopy,
+  roiGeneStatsState,
   onRoiModeChange,
   onClearRoi,
   onRoiNameChange,
@@ -318,6 +322,20 @@ export function VisiumHdRoiHudPanel({
             )}
           </dl>
         )}
+
+        <RoiGeneStatsPanel
+          copy={roiGeneStatsCopy}
+          elementPlural="bins"
+          elementSingular="bin"
+          state={roiGeneStatsState}
+          title="ROI genes"
+        />
+
+        {roiGeneStatsState.status === 'idle' && roiState.status === 'ready' ? (
+          <p className="roi-gene-status" aria-live="polite">
+            No detected ROI gene expression
+          </p>
+        ) : null}
 
         <div className="roi-action-row">
           <button

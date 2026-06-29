@@ -267,7 +267,17 @@ describe('App', () => {
     const detectSpatialDataset = createVisiumHdDetectorMock(
       visiumHdDetectionFixture({ baseUrl: visiumUrl }),
     )
-    const visiumDataset = createVisiumHdDatasetMock({ overview })
+    const matrix = vi.fn(async () => ({
+      geneNames: ['A2M', 'GAD1'],
+      cells: new Map([
+        ['BC-1', { geneNames: ['A2M', 'GAD1'], counts: [7, 2] }],
+        ['BC-2', { geneNames: ['GAD1'], counts: [3] }],
+      ]),
+    }))
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      overrides: { matrix },
+    })
     const getSpatialDataset = createSpatialDatasetLoaderMock(visiumDataset)
 
     try {
@@ -326,7 +336,17 @@ describe('App', () => {
     const detectSpatialDataset = createVisiumHdDetectorMock(
       visiumHdDetectionFixture({ baseUrl: visiumUrl }),
     )
-    const visiumDataset = createVisiumHdDatasetMock({ overview })
+    const matrix = vi.fn(async () => ({
+      geneNames: ['A2M', 'GAD1'],
+      cells: new Map([
+        ['BC-1', { geneNames: ['A2M', 'GAD1'], counts: [7, 2] }],
+        ['BC-2', { geneNames: ['GAD1'], counts: [3] }],
+      ]),
+    }))
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      overrides: { matrix },
+    })
     const getSpatialDataset = createSpatialDatasetLoaderMock(visiumDataset)
     const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
       vi.fn(async () => [
@@ -389,10 +409,18 @@ describe('App', () => {
       expect(screen.getByRole('button', { name: 'Export Barcodes' })).toBeEnabled()
       expect(screen.queryByRole('button', { name: 'Export Cells' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Export Transcripts' })).toBeNull()
-      expect(screen.queryByLabelText('ROI gene distribution')).toBeNull()
+      const roiGeneDistribution = await screen.findByLabelText('ROI gene distribution')
+      expect(roiGeneDistribution).toHaveTextContent('ROI genes')
+      expect(roiGeneDistribution).toHaveTextContent('A2M')
+      expect(roiGeneDistribution).toHaveTextContent('GAD1')
       expect(screen.queryByText('Top ROI genes')).toBeNull()
       expect(loadRoiCells).not.toHaveBeenCalled()
       expect(loadRoiGeneStats).not.toHaveBeenCalled()
+      expect(matrix).toHaveBeenCalledWith(
+        ['BC-1', 'BC-2'],
+        16,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
 
       fireEvent.click(screen.getByRole('button', { name: 'Export Barcodes' }))
 

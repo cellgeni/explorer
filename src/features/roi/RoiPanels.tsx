@@ -104,10 +104,16 @@ export function MagicLensPanel({ state }: { readonly state: MagicLensState }) {
 
 export function RoiGeneStatsPanel({
   copy,
+  elementPlural = 'cells',
+  elementSingular = 'cell',
   state,
+  title = 'Top ROI genes',
 }: {
   readonly copy: string
+  readonly elementPlural?: string
+  readonly elementSingular?: string
   readonly state: RoiGeneStatsState
+  readonly title?: string
 }) {
   if (state.status === 'idle') {
     return null
@@ -142,11 +148,13 @@ export function RoiGeneStatsPanel({
   return (
     <section className="roi-gene-panel" aria-label="ROI gene distribution">
       <div className="roi-gene-heading">
-        <span>Top ROI genes</span>
+        <span>{title}</span>
         <small>
           {state.stats.hitCellLimit
             ? `${state.stats.sampledCellCount.toLocaleString()} sampled`
-            : `${state.stats.sampledCellCount.toLocaleString()} cells`}
+            : `${state.stats.sampledCellCount.toLocaleString()} ${
+                state.stats.sampledCellCount === 1 ? elementSingular : elementPlural
+              }`}
         </small>
       </div>
       <ol className="roi-gene-list">
@@ -166,8 +174,8 @@ export function RoiGeneStatsPanel({
             <div className="roi-gene-bar" aria-hidden="true" />
             <small>
               {formatPercent(gene.percentTotal)} total ·{' '}
-              {formatPercent(gene.percentCells)} cells · {formatNumber(gene.meanPerCell)}
-              /cell
+              {formatPercent(gene.percentCells)} {elementPlural} ·{' '}
+              {formatNumber(gene.meanPerCell)}/{elementSingular}
             </small>
           </li>
         ))}

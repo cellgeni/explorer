@@ -956,6 +956,7 @@ export function App({ dependencies }: AppProps = {}) {
     loadState.status === 'ready' ? roiGeneDatasetWarmupKey(loadState.url) : null
   const isRoiGeneViewportWarmupLoading =
     roiGeneViewportWarmupRequiredKey !== null &&
+    !isVisiumHdDataset &&
     roiGeneViewportWarmupState.status === 'loading' &&
     roiGeneViewportWarmupState.key === roiGeneViewportWarmupRequiredKey
   const isDatasetPreparationPending =
@@ -1654,11 +1655,17 @@ export function App({ dependencies }: AppProps = {}) {
       gridCells: expressionStyledSpatialGridCells,
       loadState,
     },
+    loaders: {
+      getSpatialDataset,
+    },
     refs: {
       initialSharedRoiSelectionRef,
+      roiGeneAbortRef: roiAbortRef,
+      roiGeneRequestIdRef: roiRequestId,
       roiIdRef,
     },
     setters: {
+      setRoiGeneStatsState,
       setRoiMode,
       setRoiName,
       setVisiumHdRoiState,
@@ -2452,6 +2459,8 @@ export function App({ dependencies }: AppProps = {}) {
             loadEnabled={loadState.status === 'ready'}
             roiState={activeVisiumHdRoiState}
             roiSummary={visiumHdRoiSummary}
+            roiGeneStatsCopy={roiGeneStatsCopy}
+            roiGeneStatsState={roiGeneStatsState}
             onRoiModeChange={(nextMode) => {
               if (nextMode !== 'idle') {
                 setMeasurementEnabled(false)

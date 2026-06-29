@@ -142,6 +142,27 @@ describe('RoiHudPanel', () => {
           hitBinLimit: false,
         }}
         roiSummary={{ binCount: 2, binSizeMicrometers: 16, inTissueCount: 1 }}
+        roiGeneStatsCopy="Genes: top 1"
+        roiGeneStatsState={{
+          status: 'ready',
+          url: 'https://example.test/visium',
+          stats: {
+            genes: [
+              {
+                gene: 'A2M',
+                count: 9,
+                detectedCells: 2,
+                percentCells: 100,
+                meanPerCell: 4.5,
+                percentTotal: 100,
+              },
+            ],
+            cellCount: 2,
+            sampledCellCount: 2,
+            totalCount: 9,
+            hitCellLimit: false,
+          },
+        }}
         onRoiModeChange={onRoiModeChange}
         onClearRoi={onClearRoi}
         onRoiNameChange={vi.fn()}
@@ -153,6 +174,11 @@ describe('RoiHudPanel', () => {
     expect(screen.getByLabelText('ROI summary')).toHaveTextContent('Bins')
     expect(screen.getByLabelText('ROI summary')).toHaveTextContent('16 um')
     expect(screen.getByLabelText('ROI summary')).toHaveTextContent('In tissue')
+    expect(screen.getByLabelText('ROI gene distribution')).toHaveTextContent('ROI genes')
+    expect(screen.getByLabelText('ROI gene distribution')).not.toHaveTextContent(
+      'Top ROI genes',
+    )
+    expect(screen.getByLabelText('ROI gene distribution')).toHaveTextContent('bins')
 
     fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
