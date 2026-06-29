@@ -7,6 +7,7 @@ interface AppControlHudProps {
   readonly activeControlHudTab: ControlHudTab
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly children: ReactNode
+  readonly hiddenTabIds?: ReadonlySet<ControlHudTab> | undefined
   readonly isControlHudCollapsed: boolean
   readonly loadingTabIds: ReadonlySet<ControlHudTab>
   readonly setActiveControlHudTab: Dispatch<SetStateAction<ControlHudTab>>
@@ -17,6 +18,7 @@ export function AppControlHud({
   activeControlHudTab,
   appendDebugEvent,
   children,
+  hiddenTabIds,
   isControlHudCollapsed,
   loadingTabIds,
   setActiveControlHudTab,
@@ -26,6 +28,7 @@ export function AppControlHud({
     <ControlHudShell
       collapsed={isControlHudCollapsed}
       activeTab={activeControlHudTab}
+      hiddenTabIds={hiddenTabIds}
       loadingTabIds={loadingTabIds}
       onCollapsedChange={(nextCollapsed) => {
         setIsControlHudCollapsed(nextCollapsed)

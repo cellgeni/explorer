@@ -4,6 +4,7 @@ import { CONTROL_HUD_TABS, type ControlHudTab } from '../app-shell/appShellModel
 interface ControlHudShellProps {
   readonly collapsed: boolean
   readonly activeTab: ControlHudTab
+  readonly hiddenTabIds?: ReadonlySet<ControlHudTab> | undefined
   readonly loadingTabIds: ReadonlySet<ControlHudTab>
   readonly children: ReactNode
   readonly onCollapsedChange: (collapsed: boolean) => void
@@ -13,11 +14,17 @@ interface ControlHudShellProps {
 export function ControlHudShell({
   collapsed,
   activeTab,
+  hiddenTabIds,
   loadingTabIds,
   children,
   onCollapsedChange,
   onActiveTabChange,
 }: ControlHudShellProps) {
+  const visibleTabs =
+    hiddenTabIds === undefined
+      ? CONTROL_HUD_TABS
+      : CONTROL_HUD_TABS.filter((tab) => !hiddenTabIds.has(tab.id))
+
   return (
     <aside
       className={`control-hud${collapsed ? ' is-collapsed' : ''}`}
@@ -39,7 +46,7 @@ export function ControlHudShell({
       </div>
       <div id="control-hud-content" className="control-hud-content" hidden={collapsed}>
         <div className="hud-tab-list" role="tablist" aria-label="Control categories">
-          {CONTROL_HUD_TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               id={`hud-tab-${tab.id}`}

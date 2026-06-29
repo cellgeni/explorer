@@ -15,7 +15,10 @@ import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import { RoiHudPanel, VisiumHdRoiHudPanel } from './features/control-hud/RoiHudPanel'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
-import { readShareableStateFromLocation } from './features/app-shell/appShellModel'
+import {
+  readShareableStateFromLocation,
+  type ControlHudTab,
+} from './features/app-shell/appShellModel'
 import {
   activeVisiumHdRoiStateForPlatform,
   appPlatformAdapterFor,
@@ -1053,6 +1056,15 @@ export function App({ dependencies }: AppProps = {}) {
     () => new Set(loadingTasks.map((task) => task.tabId)),
     [loadingTasks],
   )
+  const hiddenControlHudTabIds = useMemo<ReadonlySet<ControlHudTab>>(() => {
+    const hiddenTabIds = new Set<ControlHudTab>()
+
+    if (!platformAdapter.capabilities.transcripts) {
+      hiddenTabIds.add('transcripts')
+    }
+
+    return hiddenTabIds
+  }, [platformAdapter.capabilities.transcripts])
   const activeRoiSelection = platformRoiSelection(
     platformAdapter,
     roiState,
@@ -1458,6 +1470,14 @@ export function App({ dependencies }: AppProps = {}) {
       setShareableViewState,
     },
   })
+  useEffect(() => {
+    if (!hiddenControlHudTabIds.has(activeControlHudTab)) {
+      return
+    }
+
+    setActiveControlHudTab('dataset')
+  }, [activeControlHudTab, hiddenControlHudTabIds, setActiveControlHudTab])
+
   useEffect(() => {
     if (boundaryOverlayRequestKeyRef.current === boundaryOverlayRequestKey) {
       return
@@ -2165,6 +2185,7 @@ export function App({ dependencies }: AppProps = {}) {
       <AppControlHud
         activeControlHudTab={activeControlHudTab}
         appendDebugEvent={appendDebugEvent}
+        hiddenTabIds={hiddenControlHudTabIds}
         isControlHudCollapsed={isControlHudCollapsed}
         loadingTabIds={loadingTabIds}
         setActiveControlHudTab={setActiveControlHudTab}
@@ -2273,52 +2294,52 @@ export function App({ dependencies }: AppProps = {}) {
           transcriptViewportKeyRef={transcriptViewportKeyRef}
         />
 
-        <AppTranscriptHudPanel
-          active={activeControlHudTab === 'transcripts'}
-          appendDebugEvent={appendDebugEvent}
-          controlIds={controlIds}
-          effectiveTranscriptFeatureFilterMode={effectiveTranscriptFeatureFilterMode}
-          geneOptions={geneOptions}
-          genePanelState={genePanelState}
-          handlePinTranscript={handlePinTranscript}
-          hoveredTranscript={hoveredTranscript}
-          loadEnabled={
-            platformAdapter.capabilities.transcripts && platformFeatureLoadEnabled
-          }
-          pinnedTranscript={pinnedTranscript}
-          resetGeneExpressionSelectionState={resetGeneExpressionSelectionState}
-          selectedGenes={selectedGenes}
-          setManualTranscriptExactRequestKey={setManualTranscriptExactRequestKey}
-          setPinnedTranscript={setPinnedTranscript}
-          setSelectedGenes={setSelectedGenes}
-          setShowTranscriptOverlay={setShowTranscriptOverlay}
-          setTranscriptDensityColorScale={setTranscriptDensityColorScale}
-          setTranscriptDetailMode={setTranscriptDetailMode}
-          setTranscriptExactPointLimit={setTranscriptExactPointLimit}
-          setTranscriptFeatureFilterMode={setTranscriptFeatureFilterMode}
-          setTranscriptGeneOnly={setTranscriptGeneOnly}
-          setTranscriptMinQv={setTranscriptMinQv}
-          setTranscriptOpacity={setTranscriptOpacity}
-          setTranscriptPointColorMode={setTranscriptPointColorMode}
-          setTranscriptPointSize={setTranscriptPointSize}
-          showTranscriptOverlay={effectiveShowTranscriptOverlay}
-          toggleGene={toggleGene}
-          transcriptCapabilityState={transcriptCapabilityState}
-          transcriptCopy={transcriptCopy}
-          transcriptDensityColorScale={transcriptDensityColorScale}
-          transcriptDensityScaleLabels={transcriptDensityScaleLabels}
-          transcriptDensityScaleMax={transcriptDensityScaleMax}
-          transcriptDetailMode={transcriptDetailMode}
-          transcriptExactPointLimit={transcriptExactPointLimit}
-          transcriptGeneOnly={transcriptGeneOnly}
-          transcriptLayerState={transcriptLayerState}
-          transcriptMinQv={transcriptMinQv}
-          transcriptOpacity={transcriptOpacity}
-          transcriptPointColorMode={transcriptPointColorMode}
-          transcriptPointSize={transcriptPointSize}
-          transcriptViewportKeyRef={transcriptViewportKeyRef}
-          visibleTranscriptEstimate={visibleTranscriptEstimate}
-        />
+        {platformAdapter.capabilities.transcripts ? (
+          <AppTranscriptHudPanel
+            active={activeControlHudTab === 'transcripts'}
+            appendDebugEvent={appendDebugEvent}
+            controlIds={controlIds}
+            effectiveTranscriptFeatureFilterMode={effectiveTranscriptFeatureFilterMode}
+            geneOptions={geneOptions}
+            genePanelState={genePanelState}
+            handlePinTranscript={handlePinTranscript}
+            hoveredTranscript={hoveredTranscript}
+            loadEnabled={platformFeatureLoadEnabled}
+            pinnedTranscript={pinnedTranscript}
+            resetGeneExpressionSelectionState={resetGeneExpressionSelectionState}
+            selectedGenes={selectedGenes}
+            setManualTranscriptExactRequestKey={setManualTranscriptExactRequestKey}
+            setPinnedTranscript={setPinnedTranscript}
+            setSelectedGenes={setSelectedGenes}
+            setShowTranscriptOverlay={setShowTranscriptOverlay}
+            setTranscriptDensityColorScale={setTranscriptDensityColorScale}
+            setTranscriptDetailMode={setTranscriptDetailMode}
+            setTranscriptExactPointLimit={setTranscriptExactPointLimit}
+            setTranscriptFeatureFilterMode={setTranscriptFeatureFilterMode}
+            setTranscriptGeneOnly={setTranscriptGeneOnly}
+            setTranscriptMinQv={setTranscriptMinQv}
+            setTranscriptOpacity={setTranscriptOpacity}
+            setTranscriptPointColorMode={setTranscriptPointColorMode}
+            setTranscriptPointSize={setTranscriptPointSize}
+            showTranscriptOverlay={effectiveShowTranscriptOverlay}
+            toggleGene={toggleGene}
+            transcriptCapabilityState={transcriptCapabilityState}
+            transcriptCopy={transcriptCopy}
+            transcriptDensityColorScale={transcriptDensityColorScale}
+            transcriptDensityScaleLabels={transcriptDensityScaleLabels}
+            transcriptDensityScaleMax={transcriptDensityScaleMax}
+            transcriptDetailMode={transcriptDetailMode}
+            transcriptExactPointLimit={transcriptExactPointLimit}
+            transcriptGeneOnly={transcriptGeneOnly}
+            transcriptLayerState={transcriptLayerState}
+            transcriptMinQv={transcriptMinQv}
+            transcriptOpacity={transcriptOpacity}
+            transcriptPointColorMode={transcriptPointColorMode}
+            transcriptPointSize={transcriptPointSize}
+            transcriptViewportKeyRef={transcriptViewportKeyRef}
+            visibleTranscriptEstimate={visibleTranscriptEstimate}
+          />
+        ) : null}
 
         <MagicLensHudPanel
           active={activeControlHudTab === 'magic-lens'}

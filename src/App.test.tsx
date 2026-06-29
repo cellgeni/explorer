@@ -255,6 +255,60 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
   })
 
+  it('hides transcript controls for Visium HD datasets', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(
+      null,
+      '',
+      `/#dataset=${encodeURIComponent(visiumUrl)}&tab=transcripts`,
+    )
+    const viewport = installAppViewportFixture()
+    const overview = visiumOverviewFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
+    )
+    const visiumDataset = createVisiumHdDatasetMock({ overview })
+    const getSpatialDataset = createSpatialDatasetLoaderMock(visiumDataset)
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={getSpatialDataset}
+        />,
+      )
+
+      expect(screen.getByRole('tab', { name: 'Transcripts' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset', hidden: true }))
+
+      await waitFor(() => {
+        expect(detectSpatialDataset).toHaveBeenCalled()
+        expect(visiumDataset.readBinnedOverview).toHaveBeenCalled()
+      })
+      await screen.findAllByText(/Visium HD ready/)
+
+      await waitFor(() => {
+        expect(screen.queryByRole('tab', { name: 'Transcripts' })).not.toBeInTheDocument()
+        expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
+          'aria-selected',
+          'true',
+        )
+      })
+      expect(
+        screen.queryByRole('heading', { name: 'Transcripts' }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('checkbox', { name: 'Show transcripts' }),
+      ).not.toBeInTheDocument()
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('draws a Visium HD ROI, exports barcodes, and links barcode embeddings', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
@@ -288,6 +342,11 @@ describe('App', () => {
         },
       ])
     const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [])
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      async () => {
+        throw new Error('Visium HD ROI drawing must not request top ROI genes.')
+      },
+    )
 
     try {
       render(
@@ -296,6 +355,7 @@ describe('App', () => {
           getSpatialDataset={getSpatialDataset}
           loadAnalysisEmbeddings={loadAnalysisEmbeddings}
           loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
         />,
       )
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
@@ -329,7 +389,10 @@ describe('App', () => {
       expect(screen.getByRole('button', { name: 'Export Barcodes' })).toBeEnabled()
       expect(screen.queryByRole('button', { name: 'Export Cells' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Export Transcripts' })).toBeNull()
+      expect(screen.queryByLabelText('ROI gene distribution')).toBeNull()
+      expect(screen.queryByText('Top ROI genes')).toBeNull()
       expect(loadRoiCells).not.toHaveBeenCalled()
+      expect(loadRoiGeneStats).not.toHaveBeenCalled()
 
       fireEvent.click(screen.getByRole('button', { name: 'Export Barcodes' }))
 
