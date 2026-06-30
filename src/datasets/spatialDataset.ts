@@ -10,7 +10,7 @@ import type { GexResult, Selection, TranscriptScope } from '../data/gex'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 
-export type Platform = 'xenium' | 'visium' | 'visium-hd'
+export type Platform = 'xenium' | 'visium' | 'visium-hd' | 'h5ad'
 export type SpatialElementId = string
 
 export interface SpatialGridBasis {

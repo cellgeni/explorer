@@ -37,9 +37,13 @@ import {
 } from './features/app-shell/platformAdapter'
 import {
   resolveAppDependencies,
+  type AnalysisEmbeddingsLoader,
   type AppProps,
   type BoundaryElementsLoader,
   type GeneExpressionLoader,
+  type RoiCellsLoader,
+  type RoiGeneStatsLoader,
+  type RoiTranscriptsLoader,
 } from './features/app-shell/appDependencies'
 import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
@@ -88,6 +92,7 @@ import {
   roiStatusCopy,
   summarizeRoiCells,
 } from './features/roi/roiModel'
+import { summarizeRoiGeneExpression } from './data/roiGeneStats'
 import {
   gridCellDatumDeckCenter,
   summarizeVisiumHdRoiBins,
@@ -133,9 +138,11 @@ import {
   styleGridCellsByGeneExpression,
 } from './rendering/deckLayers'
 import { useViewerStore } from './store/viewerStore'
-import type { GeneExpressionBatch } from './datasets/xeniumDataset'
+import type { DatasetCell, GeneExpressionBatch } from './datasets/xeniumDataset'
 import { normalizeCustomMorphologyLayerUrl } from './data/morphologyImage'
-import type { SpatialElement } from './datasets/spatialDataset'
+import type { SpatialElement, SpatialElementId } from './datasets/spatialDataset'
+import type { GexResult } from './data/gex'
+import type { AnalysisEmbedding } from './data/analysisEmbeddings'
 import type { GeneExpressionScoreMode } from './rendering/deckLayers'
 import type {
   CellBoundaryDatum,
@@ -1328,16 +1335,28 @@ export function App({ dependencies }: AppProps = {}) {
     setGeneExpressionScaleDomain({ key: '', max: 0 })
     setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
   }, [setGeneExpressionBatch, setGeneExpressionScaleDomain, setGeneExpressionState])
-  const loadActiveAnalysisEmbeddings = useCallback(
-    (...args: Parameters<typeof loadAnalysisEmbeddings>) => {
+  const loadActiveAnalysisEmbeddings = useCallback<AnalysisEmbeddingsLoader>(
+    async (...args) => {
       const [baseUrl, options = {}] = args
+
+      if (platformAdapter.kind === 'h5ad') {
+        const dataset = await getSpatialDataset(baseUrl)
+
+        if (!isH5adEmbeddingDataset(dataset)) {
+          throw new Error('Loaded H5AD dataset does not expose embeddings.')
+        }
+
+        return dataset.embeddings({
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+        })
+      }
 
       return loadAnalysisEmbeddings(baseUrl, {
         ...options,
         ...platformAnalysisEmbeddingOptions(platformAdapter, activeVisiumHdBinSize),
       })
     },
-    [activeVisiumHdBinSize, loadAnalysisEmbeddings, platformAdapter],
+    [activeVisiumHdBinSize, getSpatialDataset, loadAnalysisEmbeddings, platformAdapter],
   )
   const loadActiveBoundaryElements = useCallback<BoundaryElementsLoader>(
     (...args) =>
@@ -1369,6 +1388,65 @@ export function App({ dependencies }: AppProps = {}) {
         ...args,
       ),
     [activeVisiumHdBinSize, getSpatialDataset, loadGeneExpression, platformAdapter],
+  )
+  const loadActiveRoiCells = useCallback<RoiCellsLoader>(
+    async (...args) => {
+      const [baseUrl, selection, options = {}] = args
+
+      if (platformAdapter.kind !== 'h5ad') {
+        return loadRoiCells(baseUrl, selection, options)
+      }
+
+      const dataset = await getSpatialDataset(baseUrl)
+
+      if (!isH5adRoiDataset(dataset)) {
+        throw new Error('Loaded H5AD dataset does not expose ROI cell lookup.')
+      }
+
+      return dataset.cells(selection, {
+        ...(options.limit === undefined ? {} : { limit: options.limit }),
+      })
+    },
+    [getSpatialDataset, loadRoiCells, platformAdapter],
+  )
+  const loadActiveRoiGeneStats = useCallback<RoiGeneStatsLoader>(
+    async (...args) => {
+      const [baseUrl, cells, options = {}] = args
+
+      if (platformAdapter.kind !== 'h5ad') {
+        return loadRoiGeneStats(baseUrl, cells, options)
+      }
+
+      const dataset = await getSpatialDataset(baseUrl)
+
+      if (!isH5adExpressionDataset(dataset)) {
+        throw new Error('Loaded H5AD dataset does not expose expression matrix reads.')
+      }
+
+      const h5adDataset: H5adExpressionDataset = dataset
+      const sampledCells = h5adSampleCells(cells, options.cellLimit)
+      const sampledCellIds = sampledCells.map((cell) => cell.id as SpatialElementId)
+      const matrix = await h5adDataset.matrix(sampledCellIds)
+
+      return summarizeRoiGeneExpression(matrix, {
+        cellCount: cells.length,
+        sampledCellIds,
+        ...(options.geneLimit === undefined ? {} : { geneLimit: options.geneLimit }),
+      })
+    },
+    [getSpatialDataset, loadRoiGeneStats, platformAdapter],
+  )
+  const loadActiveRoiTranscripts = useCallback<RoiTranscriptsLoader>(
+    (...args) => {
+      if (platformAdapter.kind !== 'h5ad') {
+        return loadRoiTranscripts(...args)
+      }
+
+      return Promise.reject(
+        new Error('H5AD files do not expose Xenium-style transcript records.'),
+      )
+    },
+    [loadRoiTranscripts, platformAdapter],
   )
   const loadVisiumHdMagicLensSummary = useVisiumHdMagicLensSummary({
     controls: {
@@ -1546,11 +1624,12 @@ export function App({ dependencies }: AppProps = {}) {
       cellDetailState,
       loadState,
       selectedCell,
+      transcriptDistributionEnabled: platformAdapter.capabilities.transcripts,
     },
     loaders: {
       loadBoundaryElements: loadActiveBoundaryElements,
       loadCellTranscriptDistribution,
-      loadRoiGeneStats,
+      loadRoiGeneStats: loadActiveRoiGeneStats,
     },
     refs: {
       cellDetailAbortRef,
@@ -1604,9 +1683,9 @@ export function App({ dependencies }: AppProps = {}) {
       roiState,
     },
     loaders: {
-      loadRoiCells,
-      loadRoiGeneStats,
-      loadRoiTranscripts,
+      loadRoiCells: loadActiveRoiCells,
+      loadRoiGeneStats: loadActiveRoiGeneStats,
+      loadRoiTranscripts: loadActiveRoiTranscripts,
     },
     refs: {
       initialSharedRoiSelectionRef,
@@ -2547,6 +2626,7 @@ export function App({ dependencies }: AppProps = {}) {
           imageOpacity={morphologyCanvasChannels.length === 0 ? imageLayerOpacity : 1}
           cellFillOpacity={cellFillOpacity}
           cellBoundaryOpacity={cellBoundaryOpacity}
+          pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
           transcriptOpacity={transcriptOpacity}
           transcriptPointSize={transcriptPointSize}
           observationColorMode={viewerObservationColorMode}
@@ -2714,4 +2794,57 @@ function boundarySelectionGeneExpressionStatus(
     status: 'unavailable',
     message: 'Selected-gene bin expression is loaded. Cell projection is pending.',
   }
+}
+
+interface H5adRoiDataset {
+  cells(
+    selection: Parameters<RoiCellsLoader>[1],
+    options?: { readonly limit?: number },
+  ): Promise<readonly DatasetCell[]>
+}
+
+interface H5adExpressionDataset {
+  matrix(ids: readonly SpatialElementId[]): Promise<GexResult<SpatialElementId>>
+}
+
+interface H5adEmbeddingDataset {
+  embeddings(options?: {
+    readonly signal?: AbortSignal
+  }): Promise<readonly AnalysisEmbedding[]>
+}
+
+function isH5adRoiDataset(dataset: unknown): dataset is H5adRoiDataset {
+  return hasFunction(dataset, 'cells')
+}
+
+function isH5adExpressionDataset(dataset: unknown): dataset is H5adExpressionDataset {
+  return hasFunction(dataset, 'matrix')
+}
+
+function isH5adEmbeddingDataset(dataset: unknown): dataset is H5adEmbeddingDataset {
+  return hasFunction(dataset, 'embeddings')
+}
+
+function hasFunction<T extends string>(
+  value: unknown,
+  key: T,
+): value is Record<T, (...args: never[]) => unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    key in value &&
+    typeof (value as Record<T, unknown>)[key] === 'function'
+  )
+}
+
+function h5adSampleCells(
+  cells: readonly DatasetCell[],
+  limit: number | undefined,
+): readonly DatasetCell[] {
+  const normalizedLimit =
+    limit === undefined || !Number.isFinite(limit)
+      ? cells.length
+      : Math.max(1, Math.floor(limit))
+
+  return cells.length <= normalizedLimit ? cells : cells.slice(0, normalizedLimit)
 }

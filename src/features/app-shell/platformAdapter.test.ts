@@ -91,10 +91,15 @@ describe('platformAdapter', () => {
     const idleVisium = appPlatformAdapterFor({ status: 'idle' }, 'visium-hd')
     const xenium = appPlatformAdapterFor(readyLoadState, 'xenium')
     const visiumHd = appPlatformAdapterFor(readyLoadState, 'visium-hd')
+    const h5ad = appPlatformAdapterFor(readyLoadState, 'h5ad')
 
     expect(idleVisium.kind).toBe('xenium')
     expect(xenium.kind).toBe('xenium')
     expect(visiumHd.kind).toBe('visium-hd')
+    expect(h5ad.kind).toBe('h5ad')
+    expect(xenium.pointSizeFullViewScale).toBe(1)
+    expect(visiumHd.pointSizeFullViewScale).toBe(1)
+    expect(h5ad.pointSizeFullViewScale).toBe(0.5)
     expect(isVisiumHdPlatform(visiumHd)).toBe(true)
   })
 

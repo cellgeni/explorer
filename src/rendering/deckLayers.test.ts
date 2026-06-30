@@ -118,6 +118,64 @@ describe('deck layer factory', () => {
     expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 220])
   })
 
+  it('shrinks overview point caps at the fitted dataset zoom', () => {
+    const fullViewLayers = createOverviewLayers(fixtureCells, [], {
+      pointSizeZoomDelta: 0,
+    })
+    const closeViewLayers = createOverviewLayers(fixtureCells, [], {
+      pointSizeZoomDelta: 8,
+    })
+    const fullViewLayer = fullViewLayers[0]
+    const closeViewLayer = closeViewLayers[0]
+
+    if (
+      !(fullViewLayer instanceof ScatterplotLayer) ||
+      !(closeViewLayer instanceof ScatterplotLayer)
+    ) {
+      throw new Error('Expected overview cell layers to be ScatterplotLayer instances.')
+    }
+
+    expect(fullViewLayer.props.radiusMaxPixels).toBe(10)
+    expect(closeViewLayer.props.radiusMaxPixels).toBe(24)
+  })
+
+  it('keeps overview point caps compact through intermediate zooms', () => {
+    const layers = createOverviewLayers(fixtureCells, [], {
+      pointSizeZoomDelta: 3,
+      pointSizeFullViewScale: 0.5,
+    })
+    const layer = layers[0]
+
+    if (!(layer instanceof ScatterplotLayer)) {
+      throw new Error('Expected overview cell layer to be a ScatterplotLayer.')
+    }
+
+    expect(layer.props.radiusMaxPixels).toBe(8.8)
+  })
+
+  it('applies a full-view point-size scale without changing close zoom caps', () => {
+    const fullViewLayers = createOverviewLayers(fixtureCells, [], {
+      pointSizeZoomDelta: 0,
+      pointSizeFullViewScale: 0.5,
+    })
+    const closeViewLayers = createOverviewLayers(fixtureCells, [], {
+      pointSizeZoomDelta: 8,
+      pointSizeFullViewScale: 0.5,
+    })
+    const fullViewLayer = fullViewLayers[0]
+    const closeViewLayer = closeViewLayers[0]
+
+    if (
+      !(fullViewLayer instanceof ScatterplotLayer) ||
+      !(closeViewLayer instanceof ScatterplotLayer)
+    ) {
+      throw new Error('Expected overview cell layers to be ScatterplotLayer instances.')
+    }
+
+    expect(fullViewLayer.props.radiusMaxPixels).toBe(5)
+    expect(closeViewLayer.props.radiusMaxPixels).toBe(24)
+  })
+
   it('fills fallback overview cell proxies when boundary fill is enabled without boundary data', () => {
     const layers = createOverviewLayers(fixtureCells, [], {
       cellFillOpacity: 0.5,
@@ -558,10 +616,66 @@ describe('deck layer factory', () => {
     expect(expressionLayer.props.pickable).toBe(false)
     expect(expressionLayer.props.filled).toBe(true)
     expect(expressionLayer.props.radiusMinPixels).toBe(1.5)
+    expect(expressionLayer.props.radiusMaxPixels).toBe(28)
     expect(expressionLayer.props.updateTriggers).toMatchObject({
       getFillColor: [0.5],
       getLineColor: [0.4],
     })
+  })
+
+  it('shrinks gene expression point caps at the fitted dataset zoom', () => {
+    const expressionElements: readonly OverviewCellDatum[] = [
+      {
+        id: 'expression-cell-1',
+        position: [120, -140, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 5,
+        expressionGenes: ['A2ML1'],
+      },
+    ]
+    const layers = createOverviewLayers(fixtureCells, [], {
+      geneExpressionOverlayElements: expressionElements,
+      pointSizeZoomDelta: 0,
+    })
+    const expressionLayer = layers.find(
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter',
+    )
+
+    if (!(expressionLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected expression overlay to be a ScatterplotLayer.')
+    }
+
+    expect(expressionLayer.props.radiusMaxPixels).toBe(12)
+  })
+
+  it('applies the full-view point-size scale to gene expression point caps', () => {
+    const expressionElements: readonly OverviewCellDatum[] = [
+      {
+        id: 'expression-cell-1',
+        position: [120, -140, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 5,
+        expressionGenes: ['A2ML1'],
+      },
+    ]
+    const layers = createOverviewLayers(fixtureCells, [], {
+      geneExpressionOverlayElements: expressionElements,
+      pointSizeZoomDelta: 0,
+      pointSizeFullViewScale: 0.5,
+    })
+    const expressionLayer = layers.find(
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter',
+    )
+
+    if (!(expressionLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected expression overlay to be a ScatterplotLayer.')
+    }
+
+    expect(expressionLayer.props.radiusMaxPixels).toBe(6)
   })
 
   it('paints expression-matched boundary polygons instead of overlaying points', () => {

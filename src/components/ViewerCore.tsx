@@ -165,6 +165,7 @@ export function ViewerCore({
   imageOpacity = 1,
   cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
   cellBoundaryOpacity = 1,
+  pointSizeFullViewScale = 1,
   transcriptOpacity = 1,
   transcriptPointSize = 2,
   observationColorMode = 'transcript-count',
@@ -241,6 +242,7 @@ export function ViewerCore({
       imageOpacity={imageOpacity}
       cellFillOpacity={cellFillOpacity}
       cellBoundaryOpacity={cellBoundaryOpacity}
+      pointSizeFullViewScale={pointSizeFullViewScale}
       transcriptOpacity={transcriptOpacity}
       transcriptPointSize={transcriptPointSize}
       observationColorMode={observationColorMode}
@@ -253,6 +255,7 @@ export function ViewerCore({
       measurementResetKey={measurementResetKey}
       micrometersPerPixel={micrometersPerPixel}
       initialViewState={initialViewState}
+      fittedViewZoom={fittedViewState.zoom}
       viewResetKey={resetKey}
       focusRequest={focusRequest}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
@@ -306,6 +309,7 @@ interface ViewerSurfaceProps {
   readonly imageOpacity: number
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
+  readonly pointSizeFullViewScale: number
   readonly transcriptOpacity: number
   readonly transcriptPointSize: number
   readonly observationColorMode: ObservationColorMode
@@ -318,6 +322,7 @@ interface ViewerSurfaceProps {
   readonly measurementResetKey: number
   readonly micrometersPerPixel: number
   readonly initialViewState: OverviewViewState
+  readonly fittedViewZoom: number
   readonly viewResetKey: string
   readonly focusRequest: ViewerFocusRequest | null
   readonly overviewRenderCellLimit?: number
@@ -369,6 +374,7 @@ function ViewerSurface({
   imageOpacity,
   cellFillOpacity,
   cellBoundaryOpacity,
+  pointSizeFullViewScale,
   transcriptOpacity,
   transcriptPointSize,
   observationColorMode,
@@ -381,6 +387,7 @@ function ViewerSurface({
   measurementResetKey,
   micrometersPerPixel,
   initialViewState,
+  fittedViewZoom,
   viewResetKey,
   focusRequest,
   overviewRenderCellLimit,
@@ -668,6 +675,8 @@ function ViewerSurface({
         transcriptPoints,
         transcriptOpacity,
         transcriptPointSize,
+        pointSizeZoomDelta: viewState.zoom - fittedViewZoom,
+        pointSizeFullViewScale,
       }),
     [
       cellBoundaryOpacity,
@@ -686,6 +695,9 @@ function ViewerSurface({
       transcriptOpacity,
       transcriptPointSize,
       transcriptPoints,
+      pointSizeFullViewScale,
+      viewState.zoom,
+      fittedViewZoom,
     ],
   )
   const hasCells = cells.length > 0

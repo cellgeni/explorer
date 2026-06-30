@@ -98,6 +98,18 @@ describe('loadErrorModel', () => {
       action:
         'Raise or remove the Visium HD segmentation GeoJSON budget, or provide a smaller segmentation source.',
     })
+    const h5adOverLimit = new Error(
+      'H5AD file is 350.0 MB, exceeding the browser load limit of 300.0 MB.',
+    )
+    h5adOverLimit.name = 'H5adFileSizeLimitExceededError'
+
+    expect(createStructuredLoadError('Dataset overview', h5adOverLimit)).toMatchObject({
+      code: 'size-limit',
+      title: 'H5AD file too large',
+      detail: 'H5adFileSizeLimitExceededError',
+      action:
+        'The file was not loaded. Use an H5AD file of 300 MB or smaller, or add a lazy H5AD reader before opening larger files.',
+    })
     expect(
       createStructuredLoadError(
         'Morphology image',

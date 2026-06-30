@@ -1,4 +1,3 @@
-import { asCellId } from '../../data/cellid'
 import type { CellTranscriptZDistribution } from '../../data/cellTranscripts'
 import { micrometers, type BBox, type DataPoint } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
@@ -140,7 +139,7 @@ export function cellTranscriptDistributionFailed<ErrorType extends CellLoadError
 
 export function overviewCellToDatasetCell(cell: OverviewCellDatum): DatasetCell {
   return {
-    id: asCellId(cell.id),
+    id: cell.id as never,
     position: overviewCellToDataPoint(cell),
     ...(cell.transcriptCount === undefined
       ? {}

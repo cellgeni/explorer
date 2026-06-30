@@ -55,3 +55,46 @@ curl -r 0-0 -i https://bucket.example/path/to/output/cells.parquet
 ```
 
 The response should be `206 Partial Content` and include `Content-Range`.
+
+# Host Your Own H5AD Data
+
+The app can also load a direct AnnData `.h5ad` file URL. Enter the full file URL
+in `Dataset URL`, for example:
+
+```text
+https://bucket.example/path/to/sample.h5ad
+```
+
+The first H5AD implementation expects:
+
+- `/obs` with a readable dataframe index for cell IDs.
+- `/var` with a readable dataframe index or gene-name column.
+- `/obsm/X_spatial`, `/obsm/spatial`, or a supported embedding such as
+  `/obsm/X_umap` with an `n_obs x 2+` coordinate matrix.
+- `/X` as either a dense `n_obs x n_vars` dataset or a CSR/CSC sparse group
+  with `data`, `indices`, `indptr`, and `shape`.
+
+Supported H5AD views:
+
+- Cell rendering as pickable points from spatial or embedding coordinates.
+- Embedding view options from numeric 2D `/obsm/*` matrices such as
+  `/obsm/X_umap`, `/obsm/X_tsne`, and `/obsm/X_pca`.
+- Categorical `obs` columns as annotation labels.
+- Numeric `obs` columns as continuous metadata tracks.
+- Selected-gene expression coloring, selected-cell gene profile, and ROI gene
+  summaries from `/X`.
+
+H5AD files do not provide Xenium transcript records, morphology images, or cell
+boundary polygons by default, so those controls are disabled or unavailable for
+H5AD datasets.
+
+For hosted H5AD files, use the same CORS and byte-range rules as large Xenium
+assets. The browser HDF5 path currently opens the H5AD file client-side, so keep
+early hosted fixtures small enough for interactive browser use until the H5AD
+reader is moved fully onto lazy byte-range reads.
+
+Reference hosted fixture:
+
+```text
+https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad
+```

@@ -74,7 +74,11 @@ export function genePanelLoadReady(
   url: string,
   genes: readonly string[],
 ): GenePanelState<never> {
-  return { status: 'ready', url, genes }
+  return {
+    status: 'ready',
+    url,
+    genes: [...genes].sort((left, right) => left.localeCompare(right)),
+  }
 }
 
 export function genePanelLoadFailed<ErrorType>(

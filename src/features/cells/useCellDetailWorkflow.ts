@@ -56,6 +56,7 @@ interface UseCellDetailWorkflowData {
   readonly cellDetailState: CellDetailState<StructuredLoadError>
   readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly selectedCell: OverviewCellDatum | null
+  readonly transcriptDistributionEnabled?: boolean
 }
 
 interface UseCellDetailWorkflowLoaders {
@@ -90,7 +91,12 @@ interface UseCellDetailWorkflowOptions {
 
 export function useCellDetailWorkflow({
   callbacks: { appendDebugEvent, appendFallbackNotice },
-  data: { cellDetailState, loadState, selectedCell },
+  data: {
+    cellDetailState,
+    loadState,
+    selectedCell,
+    transcriptDistributionEnabled = true,
+  },
   loaders: { loadBoundaryElements, loadCellTranscriptDistribution, loadRoiGeneStats },
   refs: {
     cellDetailAbortRef,
@@ -200,7 +206,11 @@ export function useCellDetailWorkflow({
   ])
 
   useEffect(() => {
-    if (selectedCell === null || loadState.status !== 'ready') {
+    if (
+      !transcriptDistributionEnabled ||
+      selectedCell === null ||
+      loadState.status !== 'ready'
+    ) {
       const requestId = invalidateLatestRequest({
         abortRef: cellTranscriptDistributionAbortRef,
         requestIdRef: cellTranscriptDistributionRequestIdRef,
@@ -361,5 +371,6 @@ export function useCellDetailWorkflow({
     loadState,
     selectedCell,
     setCellTranscriptDistributionState,
+    transcriptDistributionEnabled,
   ])
 }

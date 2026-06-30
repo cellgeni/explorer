@@ -44,6 +44,7 @@ export interface ViewerCoreProps {
   readonly imageOpacity?: number
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
+  readonly pointSizeFullViewScale?: number
   readonly transcriptOpacity?: number
   readonly transcriptPointSize?: number
   readonly observationColorMode?: ObservationColorMode

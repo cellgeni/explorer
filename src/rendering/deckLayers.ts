@@ -11,7 +11,9 @@ import {
   cellsWithoutVisibleBoundaryIds,
   createCellPointLayer,
   createGeneExpressionScatterLayer,
+  geneExpressionRadiusMaxPixels,
   hasGeneExpressionStyle,
+  overviewCellRadiusMaxPixels,
 } from './cellPointRenderer'
 import { GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY } from './deckLayerColors'
 import type {
@@ -151,6 +153,7 @@ export function createOverviewLayers(
     options.geneExpressionActive ??
     (visibleGeneExpressionOverlayCells.length > 0 ||
       pointCells.some(hasGeneExpressionStyle))
+  const pointSizeFullViewScale = options.pointSizeFullViewScale ?? 1
   const effectiveBoundaryFillEnabled = boundaryFillLayerEnabled || geneExpressionActive
   const cellPointFillOpacity = geneExpressionActive
     ? Math.max(cellFillOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
@@ -176,6 +179,10 @@ export function createOverviewLayers(
       cellFillOpacity: cellPointFillOpacity,
       cellBoundaryOpacity,
       filled: effectiveBoundaryFillEnabled,
+      radiusMaxPixels: overviewCellRadiusMaxPixels(
+        options.pointSizeZoomDelta,
+        pointSizeFullViewScale,
+      ),
     }),
   )
 
@@ -188,6 +195,10 @@ export function createOverviewLayers(
       ),
       cellBoundaryOpacity,
       filled: true,
+      radiusMaxPixels: geneExpressionRadiusMaxPixels(
+        options.pointSizeZoomDelta,
+        pointSizeFullViewScale,
+      ),
     },
   )
 

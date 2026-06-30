@@ -245,7 +245,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Load Annotations' })).toBeDisabled()
 
     openHudTab('Cell')
-    expect(screen.getByRole('heading', { name: 'UMAP/tSNE' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Embeddings' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Embedding view' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Load Embeddings' })).toBeDisabled()
     expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
@@ -1889,6 +1889,87 @@ describe('App', () => {
       const embeddingSummary = await screen.findByLabelText('Embedding link summary')
       expect(embeddingSummary).toHaveTextContent('ROI')
       expect(embeddingSummary).toHaveTextContent('1')
+    } finally {
+      viewport.restore()
+    }
+  })
+
+  it('loads H5AD obsm embeddings into the embedding selector', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const h5adUrl = 'https://example.test/sample.h5ad'
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'h5ad' as const,
+      baseUrl: h5adUrl,
+      h5adUrl,
+      checked: [],
+    }))
+    const h5adDataset = {
+      overview: vi.fn(async () => [
+        {
+          cellId: 'cell-a',
+          position: { x: micrometers(0), y: micrometers(0) },
+          transcriptCount: 0,
+        },
+      ]),
+      genePanel: vi.fn(async () => []),
+      annotations: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => []),
+      embeddings: vi.fn(async () => [
+        {
+          kind: 'X_umap',
+          label: 'UMAP',
+          sourcePath: '/obsm/X_umap',
+          points: [{ id: 'cell-a', x: 0, y: 0 }],
+        },
+        {
+          kind: 'X_pca',
+          label: 'PCA',
+          sourcePath: '/obsm/X_pca',
+          points: [{ id: 'cell-a', x: 1, y: 1 }],
+        },
+      ]),
+    }
+    const getSpatialDataset = createSpatialDatasetLoaderMock(h5adDataset)
+    const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
+      vi.fn(async () => [])
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={getSpatialDataset}
+          loadAnalysisEmbeddings={loadAnalysisEmbeddings}
+        />,
+      )
+      fireEvent.change(screen.getByLabelText('Dataset URL'), {
+        target: { value: h5adUrl },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      await screen.findByText(/H5AD ready: 1 cells, 0 genes/)
+
+      openHudTab('Cell')
+      fireEvent.click(screen.getByRole('button', { name: 'Load Embeddings' }))
+
+      expect(await screen.findByText('UMAP: 1 cells')).toBeInTheDocument()
+      const embeddingView = screen.getByRole('combobox', { name: 'Embedding view' })
+
+      expect(within(embeddingView).getByRole('option', { name: 'UMAP' })).toHaveValue(
+        'X_umap',
+      )
+      expect(within(embeddingView).getByRole('option', { name: 'PCA' })).toHaveValue(
+        'X_pca',
+      )
+      expect(screen.getByLabelText('UMAP embedding, 1 cells')).toBeInTheDocument()
+      expect(h5adDataset.embeddings).toHaveBeenCalledTimes(1)
+      expect(loadAnalysisEmbeddings).not.toHaveBeenCalled()
+
+      fireEvent.change(embeddingView, { target: { value: 'X_pca' } })
+
+      expect(screen.getByText('PCA: 1 cells')).toBeInTheDocument()
+      expect(screen.getByLabelText('PCA embedding, 1 cells')).toBeInTheDocument()
     } finally {
       viewport.restore()
     }

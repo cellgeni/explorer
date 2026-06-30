@@ -1,7 +1,7 @@
 import { datasetFileUrl } from './datasetFiles'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 
-export type AnalysisEmbeddingKind = 'umap' | 'tsne'
+export type AnalysisEmbeddingKind = string
 export type AnalysisEmbeddingElementLabel = 'cells' | 'bins'
 export type AnalysisEmbeddingVisiumHdBinSize = 2 | 8 | 16
 
@@ -121,6 +121,38 @@ export async function loadDatasetAnalysisEmbeddings(
   }
 
   return embeddings
+}
+
+export function analysisEmbeddingLabel(kind: AnalysisEmbeddingKind): string {
+  const normalized = kind.trim().replace(/^X[_-]/i, '')
+  const compact = normalizeHeader(normalized)
+
+  if (compact === 'umap') {
+    return 'UMAP'
+  }
+
+  if (compact === 'tsne') {
+    return 't-SNE'
+  }
+
+  if (compact === 'pca') {
+    return 'PCA'
+  }
+
+  if (compact === 'spatial') {
+    return 'Spatial'
+  }
+
+  const words = normalized
+    .split(/[_\-\s]+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0)
+
+  if (words.length === 0) {
+    return kind
+  }
+
+  return words.map(titleCaseEmbeddingWord).join(' ')
 }
 
 export function parseAnalysisEmbeddingCsv(
@@ -271,7 +303,7 @@ function findEmbeddingAxisColumn(
   kind: AnalysisEmbeddingKind,
   axis: '1' | '2',
 ): number | undefined {
-  const kindPrefix = kind === 'umap' ? 'umap' : 'tsne'
+  const kindPrefix = normalizeHeader(kind.replace(/^X[_-]/i, ''))
   const index = header.findIndex((value) => {
     const normalized = normalizeHeader(value)
 
@@ -291,6 +323,24 @@ function fallbackAxisIndex(index: number): number {
 
 function normalizeHeader(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function titleCaseEmbeddingWord(word: string): string {
+  const compact = normalizeHeader(word)
+
+  if (compact === 'umap') {
+    return 'UMAP'
+  }
+
+  if (compact === 'tsne') {
+    return 't-SNE'
+  }
+
+  if (compact === 'pca') {
+    return 'PCA'
+  }
+
+  return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`
 }
 
 function parseCsvRows(csv: string): readonly (readonly string[])[] {

@@ -83,6 +83,14 @@ export function CellInfoPanel({
                 ))}
           </dd>
         </div>
+        {cell.metadata === undefined
+          ? null
+          : Object.entries(cell.metadata).map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{formatMetadataValue(value)}</dd>
+              </div>
+            ))}
         <div>
           <dt>Cell Area</dt>
           <dd>{formatMetric(shape?.areaMicrometersSquared, 'um2')}</dd>
@@ -307,6 +315,14 @@ function formatMetric(value: number | undefined, unit?: string): string {
   })
 
   return unit === undefined ? formatted : `${formatted} ${unit}`
+}
+
+function formatMetadataValue(value: string | number | boolean): string {
+  if (typeof value === 'number') {
+    return formatNumber(value)
+  }
+
+  return String(value)
 }
 
 function formatLoadError(error: CellLoadErrorSummary): string {

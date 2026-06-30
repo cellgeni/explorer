@@ -17,6 +17,7 @@ export interface OverviewCellDatum {
   readonly binSizeMicrometers?: number
   readonly nucleusCount?: number
   readonly segmentationMethod?: string
+  readonly metadata?: Readonly<Record<string, string | number | boolean>>
   readonly expressionCount?: number
   readonly expressionGenes?: readonly string[]
 }
@@ -163,6 +164,8 @@ export interface OverviewLayerOptions {
   readonly cellBoundaryOpacity?: number
   readonly cellBoundaryFillEnabled?: boolean
   readonly cellBoundaryPickable?: boolean
+  readonly pointSizeZoomDelta?: number
+  readonly pointSizeFullViewScale?: number
   readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
   readonly nucleusBoundaryOpacity?: number
   readonly gridCells?: readonly GridCellDatum[]

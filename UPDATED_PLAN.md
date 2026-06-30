@@ -1498,3 +1498,155 @@ Visium HD Space Ranger output directly from a hosted `outs/` directory.
 - [ ] Consider direct tests for small uncolocated pure helpers and leaf
       components if they gain behavior, especially assignment/status helpers,
       cell expression leaf panels, and worker-message wrappers.
+
+## Phase 7 New Phase - AnnData H5AD Visualization
+
+User-added requirement: add support for AnnData `.h5ad` files. The request used
+`5AD`; treat this as H5AD, the HDF5-backed AnnData storage format. The first
+scope is point-based cell rendering with per-cell gene expression and per-cell
+observations from `obs`, where observations can be categorical annotations or
+continuous metadata tracks.
+
+Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
+
+### Product Decisions
+
+- [x] Implement H5AD as a new dataset platform through an `AnnDataH5adDataset`,
+      not as a Xenium or Visium HD branch. Extend `Platform` and
+      `AppPlatformAdapter` rather than special-casing H5AD inside existing
+      platform paths.
+- [x] Accept a direct `.h5ad` file URL in the existing Dataset URL field. The
+      detector/cache layer must support both directory-style dataset roots and
+      direct file locators without appending Xenium/Visium file names to H5AD
+      URLs.
+- [x] Start with a point-only H5AD MVP. H5AD datasets do not imply morphology
+      images, cell-boundary polygons, nucleus overlays, or transcript records;
+      those controls should be hidden or disabled with clear platform-aware
+      labels.
+- [x] Require a usable 2D coordinate matrix for first paint, preferring
+      `/obsm/X_spatial` and `/obsm/spatial`, then common embedding coordinates
+      such as `/obsm/X_umap`. If no supported coordinate matrix is present, stop
+      with an actionable schema error instead of falling back to arbitrary row
+      order.
+- [x] Treat `/obs` as the primary source for annotations and observations.
+      Categorical `obs` columns become colorable annotation tracks; numeric and
+      boolean `obs` columns become continuous metadata tracks and Cell Info
+      fields.
+- [x] Treat `/X` as the first expression source, with later support for
+      `/layers/*` and `/raw/X` as selectable expression layers. AnnData matrix
+      orientation is `n_obs x n_vars`; cell ids come from `obs` and genes come
+      from `var`.
+- [ ] Use the existing HDF5 dependency (`h5wasm`) through a worker-backed,
+      range-capable reader. Remote `.h5ad` loading must require HTTP Range/CORS
+      support for large files and avoid full-file fetches except for tiny test
+      fixtures or explicitly budgeted local paths.
+- [x] Preserve existing Xenium and Visium HD behavior. H5AD work must not
+      regress transcript LOD, Visium HD grids/segmentations, custom image
+      layers, or current ROI/gene-expression flows.
+
+### Implementation Slices
+
+- [x] Slice 1: dataset detection and file-locator plumbing.
+      Add H5AD detection for direct `.h5ad` URLs, extend
+      `SpatialDatasetDetection`, update dataset cache keys, and route creation
+      to a new `AnnDataH5adDataset`. Keep directory-root detection for Xenium
+      and Visium HD unchanged.
+- [x] Slice 2: H5AD schema reader.
+      Add `src/datasets/h5ad*` reader modules that inspect HDF5 groups,
+      AnnData encoding attributes, `obs`/`var` dataframe indexes, `obsm`
+      coordinate keys, matrix layout, optional `layers`, and optional `raw`.
+      Normalize duplicate or missing cell/gene ids deterministically and expose
+      a compact schema summary for diagnostics.
+- [x] Slice 3: point overview rendering.
+      Read the selected 2D coordinate matrix into a viewport-renderable point
+      overview, compute dataset extent, and represent H5AD cells with stable
+      ids, positions, and lightweight observation summaries. Add a generic
+      point-batch path if needed so H5AD points do not have to masquerade as
+      Xenium `cells.parquet` rows.
+- [x] Slice 4: observation and annotation tracks.
+      Lazily read selected `obs` columns, classify categorical versus
+      continuous tracks, map categorical codes to labels/colors, compute numeric
+      domains for continuous tracks, and wire these tracks into the existing
+      cell-color, hover, Cell Info, and annotation surfaces without
+      materializing large category-to-cell-id lists unless explicitly needed.
+- [x] Slice 5: gene panel and expression reads.
+      Build the gene panel from `var` index/name columns, then support selected
+      gene coloring, ROI gene summaries, and selected-cell all-gene profiles
+      from `/X`. Handle dense arrays plus CSR/CSC sparse encodings, apply
+      viewport/ROI budgets, run HDF5 reads in a worker, and make requests
+      abortable.
+- [x] Slice 6: app lifecycle and platform gating.
+      Add an H5AD platform adapter with cell labels, point ROI support,
+      observation annotations enabled, and transcript, morphology, boundary,
+      nucleus, and transcript-Magic-Lens capabilities disabled. Ensure dataset
+      reset, URL hash state, ROI selection, embedding/cell selection, and
+      expression overlays clear or restore state by platform.
+- [x] Slice 7 partial: diagnostics, errors, and performance guardrails.
+      Extend diagnostics to probe the `.h5ad` URL, Range support, schema
+      summary, coordinate availability, `obs`/`var` track counts, matrix layout,
+      and estimated read cost. Add structured errors for unsupported AnnData
+      encodings, missing coordinates, missing genes, oversized reads, and
+      HDF5/lazy-range failures.
+- [x] Slice 8 partial: tests, docs, and browser verification.
+      Generate tiny H5AD fixtures with `h5wasm` in unit tests, covering dense
+      and sparse matrices, categorical and continuous `obs`, coordinate
+      detection, expression reads, and failure cases. Add app-level regression
+      coverage for an H5AD load, point rendering, observation coloring,
+      selected-gene coloring, ROI selection, and Cell Info. Add a hosted
+      fixture or local preview E2E smoke before closeout, then document the
+      expected H5AD schema and hosting/CORS requirements.
+
+### Phase 7 Execution Notes
+
+- [x] Added `AnnDataH5adDataset` and direct `.h5ad` URL detection. H5AD no
+      longer goes through directory-style Xenium/Visium probes, and the dataset
+      factory passes custom fetchers into H5AD instances for tests and embedded
+      callers.
+- [x] Implemented first-pass H5AD parsing for `/obs`, `/var`, `/obsm/X_spatial`
+      or `/obsm/spatial`, embedding fallback such as `/obsm/X_umap`, dense
+      `/X`, and CSR/CSC sparse `/X`. Duplicate or missing obs/var names are
+      normalized deterministically.
+- [x] Added support for AnnData dataframe category sidecars such as
+      `/obs/__categories/leiden`, so PBMC-style categorical observation columns
+      become annotation tracks instead of numeric metadata.
+- [x] H5AD first paint renders cells as pickable point marks with arbitrary
+      AnnData obs IDs, point extent fitting, categorical obs annotations,
+      numeric obs metadata tracks, hover/Cell Info observation values, selected
+      gene overlays, ROI gene summaries, and selected-cell expression profiles.
+- [x] H5AD Cell-tab embeddings now enumerate valid numeric 2D `/obsm/*`
+      matrices such as `/obsm/X_umap`, `/obsm/X_tsne`, and `/obsm/X_pca`,
+      preserving the spatial coordinate priority for first paint while exposing
+      all embedding choices in the selector.
+- [x] Added H5AD platform gating: transcripts, morphology-derived boundaries,
+      nucleus overlays, and transcript Magic Lens are disabled; point ROI,
+      annotations, metadata coloring, and gene expression remain enabled.
+- [x] Dataset diagnostics now recognizes direct H5AD files and checks the H5AD
+      URL rather than Xenium manifest/Parquet files.
+- [x] Verification completed with `npm run typecheck`, `npm run lint`,
+      `npm test`, `npm run build`, and a focused Chromium Playwright smoke for
+      the H5AD path.
+- [x] Added the hosted PBMC3K H5AD fixture
+      `https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad` to browser
+      verification. The file is 32,080,465 bytes and advertises byte ranges plus
+      browser CORS headers.
+- [ ] Remaining H5AD hardening: move remote HDF5 reads onto a worker-backed
+      lazy byte-range path, add selectable `/layers/*` and `/raw/X` expression
+      sources, and add richer schema diagnostics.
+
+### Definition Of Done For The First H5AD MVP
+
+- [x] A direct `.h5ad` URL with `obs`, `var`, `/X`, and a supported 2D `obsm`
+      coordinate matrix loads in the app and renders cells as pickable points.
+- [x] Categorical `obs` tracks can color cells as annotations, and continuous
+      `obs` tracks can color cells with a numeric scale and appear in hover or
+      Cell Info.
+- [x] Selected-gene expression coloring, ROI gene summaries, and selected-cell
+      expression profiles work from AnnData `/X` for supported dense/CSR/CSC
+      layouts within explicit budgets.
+- [x] H5AD platform gating is clear: unsupported Xenium/Visium-only controls do
+      not start misleading network or matrix work.
+- [ ] Remote H5AD reads are range-aware, worker-backed, cancellable, and fail
+      with structured errors when the host or file layout is unsuitable for
+      browser-side HDF5 access.
+- [x] Unit tests, integration tests, TypeScript, ESLint, production build, and
+      a browser smoke pass for the H5AD path.

@@ -18,10 +18,11 @@ import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 import { type RoiSelection } from '../../data/roiSelection'
 import type { ShareableState } from '../../data/shareableState'
+import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
-import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
+import type { Annotation, Platform, SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { AnalysisEmbeddingKind } from '../../data/analysisEmbeddings'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
@@ -49,6 +50,8 @@ import {
 import {
   IDLE_ANNOTATION_GROUP_STATE,
   IDLE_ANNOTATION_STATE,
+  annotationLoadReady,
+  colorsForAnnotations,
   annotationGroupLoadFailed,
   annotationGroupLoadReady,
   annotationGroupLoadStarted,
@@ -173,6 +176,13 @@ type QueueAutoContrast = (
   channels: readonly MorphologyImageChannel[],
   options?: QueueAutoContrastOptions,
 ) => void
+
+interface H5adLifecycleDataset {
+  overview(): Promise<readonly CellOverviewPoint[]>
+  genePanel(): Promise<readonly string[]>
+  annotations(): Promise<readonly Annotation[]>
+  metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]>
+}
 
 interface UseDatasetLifecycleCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
@@ -812,6 +822,57 @@ export function useDatasetLifecycle({
           return
         }
 
+        if (detection.platform === 'h5ad') {
+          setDatasetPlatform('h5ad')
+          setShowCellBoundaries(false)
+          setShowNucleusBoundaries(false)
+          setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          const dataset = await getSpatialDataset(detection.baseUrl)
+
+          if (!isH5adLifecycleDataset(dataset)) {
+            throw new Error('Detected H5AD dataset does not expose AnnData readers.')
+          }
+
+          const h5adDataset: H5adLifecycleDataset = dataset
+          const [cells, genes, annotations, metadataTracks] = await Promise.all([
+            h5adDataset.overview(),
+            h5adDataset.genePanel(),
+            h5adDataset.annotations(),
+            h5adDataset.metadataTracks(),
+          ])
+
+          if (!isCurrentDatasetLoad()) {
+            return
+          }
+
+          setOverviewCells(overviewCellsToLayerData(cells))
+          setGenePanelState(genePanelLoadReady(requestedUrl, genes))
+          setCellMetadataTracks(metadataTracks)
+          setSelectedCellMetadataTrackId(metadataTracks[0]?.id ?? null)
+          if (annotations.length > 0) {
+            setAnnotationState(annotationLoadReady(requestedUrl, annotations))
+            setAnnotationColors((current) => colorsForAnnotations(annotations, current))
+            setObservationColorMode('annotations')
+          } else if (metadataTracks.length > 0) {
+            setObservationColorMode('metadata')
+          }
+          initialShareableStateRef.current = null
+          setLoadState(datasetLoadReady(requestedUrl, cells.length))
+          appendDebugEvent(
+            `H5AD ready: ${cells.length.toLocaleString()} cells, ${genes.length.toLocaleString()} genes in ${formatElapsed(
+              loadStartedAt,
+            )}`,
+          )
+          recordTelemetry(
+            telemetryEvent('dataset.load', 'success', {
+              startedAt: loadStartedAt,
+              detail: `${cells.length.toLocaleString()} H5AD cells`,
+            }),
+          )
+          return
+        }
+
         if (detection.platform === 'visium-hd') {
           setDatasetPlatform('visium-hd')
           setShowCellBoundaries(
@@ -1166,4 +1227,25 @@ export function useDatasetLifecycle({
   ])
 
   return { handleDatasetSubmit }
+}
+
+function isH5adLifecycleDataset(dataset: unknown): dataset is H5adLifecycleDataset {
+  return (
+    hasFunction(dataset, 'overview') &&
+    hasFunction(dataset, 'genePanel') &&
+    hasFunction(dataset, 'annotations') &&
+    hasFunction(dataset, 'metadataTracks')
+  )
+}
+
+function hasFunction<T extends string>(
+  value: unknown,
+  key: T,
+): value is Record<T, (...args: never[]) => unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    key in value &&
+    typeof (value as Record<T, unknown>)[key] === 'function'
+  )
 }

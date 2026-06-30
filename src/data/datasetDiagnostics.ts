@@ -149,6 +149,26 @@ export async function runDatasetDiagnostics(
     }
   }
 
+  if (detection.platform === 'h5ad') {
+    checks.push(
+      await checkDirectRangeFile(
+        detection.h5adUrl,
+        'h5ad-file',
+        'H5AD file',
+        true,
+        options,
+      ),
+    )
+
+    return {
+      baseUrl,
+      platform: detection.platform,
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      checks,
+    }
+  }
+
   if (detection.platform === 'unknown') {
     return {
       baseUrl,
@@ -422,6 +442,44 @@ async function checkRangeFile(
   }
 }
 
+async function checkDirectRangeFile(
+  url: string,
+  id: string,
+  label: string,
+  required: boolean,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const startedAt = Date.now()
+
+  try {
+    await (options.rangeValidator ?? assertHttpRangeSupport)(url, {
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      label,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+
+    return diagnosticCheck({
+      id,
+      label,
+      url,
+      required,
+      status: 'pass',
+      message: 'Byte-range readable',
+      startedAt,
+    })
+  } catch (cause) {
+    return diagnosticCheck({
+      id,
+      label,
+      url,
+      required,
+      status: required ? 'fail' : 'warning',
+      message: errorMessage(cause),
+      startedAt,
+    })
+  }
+}
+
 async function checkReadableFile(
   baseUrl: string,
   file: { readonly id: string; readonly label: string; readonly path: string },
@@ -512,7 +570,9 @@ function detectionDiagnosticCheck(
         ? `Detected Visium HD (${detection.bins
             .map((bin) => `${bin.binSizeMicrometers} µm`)
             .join(', ')})`
-        : 'Detected Xenium',
+        : detection.platform === 'h5ad'
+          ? 'Detected H5AD'
+          : 'Detected Xenium',
     startedAt,
   })
 }

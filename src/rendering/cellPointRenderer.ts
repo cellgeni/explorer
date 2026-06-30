@@ -13,7 +13,15 @@ export interface CellPointLayerOptions {
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
   readonly filled: boolean
+  readonly radiusMaxPixels?: number
 }
+
+const DEFAULT_CELL_RADIUS_MAX_PIXELS = 24
+const DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS = 28
+const OVERVIEW_FULL_VIEW_RADIUS_MAX_PIXELS = 10
+const GENE_EXPRESSION_FULL_VIEW_RADIUS_MAX_PIXELS = 12
+const POINT_SIZE_ZOOM_EASE_START = 1
+const POINT_SIZE_ZOOM_EASE_END = 8
 
 export function createCellPointLayer(
   cells: readonly OverviewCellDatum[],
@@ -25,7 +33,7 @@ export function createCellPointLayer(
     pickable: true,
     radiusUnits: 'common',
     radiusMinPixels: 0.12,
-    radiusMaxPixels: 24,
+    radiusMaxPixels: options.radiusMaxPixels ?? DEFAULT_CELL_RADIUS_MAX_PIXELS,
     stroked: true,
     filled: options.filled,
     opacity: 1,
@@ -61,7 +69,7 @@ export function createGeneExpressionScatterLayer(
     pickable: false,
     radiusUnits: 'common',
     radiusMinPixels: 1.5,
-    radiusMaxPixels: 28,
+    radiusMaxPixels: options.radiusMaxPixels ?? DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS,
     stroked: true,
     filled: true,
     opacity: 1,
@@ -81,6 +89,29 @@ export function createGeneExpressionScatterLayer(
       getLineColor: [options.cellBoundaryOpacity],
     },
   })
+}
+
+export function overviewCellRadiusMaxPixels(
+  zoomDelta: number | undefined,
+  fullViewScale = 1,
+): number {
+  return zoomResponsiveRadiusMaxPixels(
+    zoomDelta,
+    OVERVIEW_FULL_VIEW_RADIUS_MAX_PIXELS * normalizedFullViewScale(fullViewScale),
+    DEFAULT_CELL_RADIUS_MAX_PIXELS,
+  )
+}
+
+export function geneExpressionRadiusMaxPixels(
+  zoomDelta: number | undefined,
+  fullViewScale = 1,
+): number {
+  return zoomResponsiveRadiusMaxPixels(
+    zoomDelta,
+    GENE_EXPRESSION_FULL_VIEW_RADIUS_MAX_PIXELS *
+      normalizedFullViewScale(fullViewScale),
+    DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS,
+  )
 }
 
 export function overviewCellsToLayerData(
@@ -112,6 +143,7 @@ export function overviewCellsToLayerData(
       ...(cell.segmentationMethod === undefined
         ? {}
         : { segmentationMethod: cell.segmentationMethod }),
+      ...(cell.metadata === undefined ? {} : { metadata: cell.metadata }),
     }
   })
 }
@@ -125,6 +157,41 @@ export function cellsWithoutVisibleBoundaryIds(
   }
 
   return cells.filter((cell) => !boundaryCellIds.has(cell.id))
+}
+
+function zoomResponsiveRadiusMaxPixels(
+  zoomDelta: number | undefined,
+  fullViewPixels: number,
+  closeViewPixels: number,
+): number {
+  if (zoomDelta === undefined || !Number.isFinite(zoomDelta)) {
+    return closeViewPixels
+  }
+
+  const progress = smoothstep(
+    clamp01(
+      (zoomDelta - POINT_SIZE_ZOOM_EASE_START) /
+        (POINT_SIZE_ZOOM_EASE_END - POINT_SIZE_ZOOM_EASE_START),
+    ),
+  )
+
+  return roundToTenth(fullViewPixels + (closeViewPixels - fullViewPixels) * progress)
+}
+
+function normalizedFullViewScale(scale: number): number {
+  return Number.isFinite(scale) ? Math.max(0.1, scale) : 1
+}
+
+function smoothstep(value: number): number {
+  return value * value * (3 - 2 * value)
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
+}
+
+function roundToTenth(value: number): number {
+  return Math.round(value * 10) / 10
 }
 
 export function hasGeneExpressionStyle(cell: OverviewCellDatum): boolean {

@@ -39,6 +39,7 @@ export interface CellOverviewPoint {
   readonly cellArea?: number
   readonly nucleusCount?: number
   readonly segmentationMethod?: string
+  readonly metadata?: Readonly<Record<string, string | number | boolean>>
 }
 
 export interface HyparquetReadObjectsOptions {

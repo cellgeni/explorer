@@ -21,7 +21,7 @@ import {
   isSpatialSegmentationDataset,
 } from './visiumHdAppController'
 
-export type AppPlatformKind = 'xenium' | 'visium-hd'
+export type AppPlatformKind = 'xenium' | 'visium-hd' | 'h5ad'
 
 export interface AppPlatformLabels {
   readonly embeddingElementPlural: 'cells' | 'bins'
@@ -43,6 +43,7 @@ export interface AppPlatformAdapter {
   readonly kind: AppPlatformKind
   readonly labels: AppPlatformLabels
   readonly capabilities: AppPlatformCapabilities
+  readonly pointSizeFullViewScale: number
   featureLoadEnabled(loadState: DatasetLoadState): boolean
   effectiveTranscriptOverlay(showTranscriptOverlay: boolean): boolean
   boundaryLoadingEnabled(
@@ -78,6 +79,7 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
     nucleusBoundaries: false,
     transcripts: true,
   },
+  pointSizeFullViewScale: 1,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: (showTranscriptOverlay) => showTranscriptOverlay,
   boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
@@ -101,6 +103,7 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     nucleusBoundaries: true,
     transcripts: false,
   },
+  pointSizeFullViewScale: 1,
   featureLoadEnabled: () => false,
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: (showCellBoundaries, showNucleusBoundaries) =>
@@ -129,17 +132,50 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     visiumHdControlState.status !== 'loading',
 }
 
+const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
+  kind: 'h5ad',
+  labels: { embeddingElementPlural: 'cells' },
+  capabilities: {
+    annotations: true,
+    magicLensMinQv: false,
+    nucleusBoundaries: false,
+    transcripts: false,
+  },
+  pointSizeFullViewScale: 0.5,
+  featureLoadEnabled: (loadState) => loadState.status === 'ready',
+  effectiveTranscriptOverlay: () => false,
+  boundaryLoadingEnabled: () => false,
+  boundaryOverlayRequestKey: () => 'disabled:no-nucleus',
+  geneExpressionOverlayEnabled: () => true,
+  cellBoundaryHoverEnabled: () => false,
+  magicLensAvailability: () => ({
+    loadEnabled: false,
+    unavailableReason: 'Unavailable for H5AD',
+  }),
+  canDrawRoi: ({ loadState }) => loadState.status === 'ready',
+}
+
 export function appPlatformAdapterFor(
   loadState: DatasetLoadState,
   datasetPlatform: Platform | null,
 ): AppPlatformAdapter {
-  return loadState.status === 'ready' && datasetPlatform === 'visium-hd'
-    ? VISIUM_HD_PLATFORM_ADAPTER
-    : XENIUM_PLATFORM_ADAPTER
+  if (loadState.status === 'ready' && datasetPlatform === 'visium-hd') {
+    return VISIUM_HD_PLATFORM_ADAPTER
+  }
+
+  if (loadState.status === 'ready' && datasetPlatform === 'h5ad') {
+    return H5AD_PLATFORM_ADAPTER
+  }
+
+  return XENIUM_PLATFORM_ADAPTER
 }
 
 export function isVisiumHdPlatform(adapter: AppPlatformAdapter): boolean {
   return adapter.kind === 'visium-hd'
+}
+
+export function isH5adPlatform(adapter: AppPlatformAdapter): boolean {
+  return adapter.kind === 'h5ad'
 }
 
 export function activeVisiumHdRoiStateForPlatform(options: {
@@ -334,7 +370,7 @@ export async function loadPlatformGeneExpression(
   const [baseUrl, bbox, genes, options = {}] = args
   const { visiumHdBinSizeMicrometers, ...geneExpressionOptions } = options
 
-  if (adapter.kind !== 'visium-hd') {
+  if (adapter.kind === 'xenium') {
     return dependencies.loadGeneExpression(baseUrl, bbox, genes, geneExpressionOptions)
   }
 
@@ -348,6 +384,8 @@ export async function loadPlatformGeneExpression(
 
   return dataset.geneExpression(bbox, genes, {
     ...geneExpressionOptions,
-    ...(binSizeMicrometers === undefined ? {} : { binSizeMicrometers }),
+    ...(adapter.kind === 'visium-hd' && binSizeMicrometers !== undefined
+      ? { binSizeMicrometers }
+      : {}),
   })
 }

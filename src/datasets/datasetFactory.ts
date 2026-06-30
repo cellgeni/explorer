@@ -13,6 +13,12 @@ export type SpatialDatasetDetection =
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
+      readonly platform: 'h5ad'
+      readonly baseUrl: string
+      readonly h5adUrl: string
+      readonly checked: readonly DatasetProbeResult[]
+    }
+  | {
       readonly platform: 'visium-hd'
       readonly baseUrl: string
       readonly bins: readonly VisiumHdBinDescriptor[]
@@ -95,6 +101,7 @@ const VISIUM_HD_SEGMENTED_OUTPUT_PROBES = [
 }[]
 
 const spatialDatasetCache = new Map<string, Promise<AnySpatialDataset>>()
+const DATASET_PROBE_TIMEOUT_MS = 15_000
 
 export async function detectSpatialDataset(
   baseUrl: string,
@@ -102,6 +109,29 @@ export async function detectSpatialDataset(
 ): Promise<SpatialDatasetDetection> {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
   const checked: DatasetProbeResult[] = []
+
+  if (isH5adUrl(normalizedBaseUrl)) {
+    const h5adProbe = await probeDirectDatasetUrl(
+      normalizedBaseUrl,
+      'dataset.h5ad',
+      options,
+    )
+    checked.push(h5adProbe)
+
+    return h5adProbe.ok
+      ? {
+          platform: 'h5ad',
+          baseUrl: normalizedBaseUrl,
+          h5adUrl: normalizedBaseUrl,
+          checked,
+        }
+      : {
+          platform: 'unknown',
+          baseUrl: normalizedBaseUrl,
+          checked,
+        }
+  }
+
   const xeniumManifest = await probeDatasetPath(
     normalizedBaseUrl,
     'experiment.xenium',
@@ -180,6 +210,14 @@ export async function createSpatialDataset(
     return new XeniumDataset({ baseUrl: detection.baseUrl })
   }
 
+  if (detection.platform === 'h5ad') {
+    const { AnnDataH5adDataset } = await import('./h5adDataset')
+    return new AnnDataH5adDataset({
+      url: detection.h5adUrl,
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+    })
+  }
+
   if (detection.platform === 'visium-hd') {
     const { VisiumHdDataset } = await import('./visiumHdDataset')
     return new VisiumHdDataset({
@@ -240,12 +278,22 @@ async function probeDatasetPath(
   options: DetectSpatialDatasetOptions,
 ): Promise<DatasetProbeResult> {
   const url = datasetFileUrl(baseUrl, path)
+  return probeDirectDatasetUrl(url, path, options)
+}
 
+async function probeDirectDatasetUrl(
+  url: string,
+  path: string,
+  options: DetectSpatialDatasetOptions,
+): Promise<DatasetProbeResult> {
   try {
-    const response = await (options.fetcher ?? fetch)(url, {
-      method: 'HEAD',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await fetchWithTimeout(
+      options.fetcher ?? fetch,
+      url,
+      { method: 'HEAD' },
+      options.signal,
+      DATASET_PROBE_TIMEOUT_MS,
+    )
 
     return {
       path,
@@ -263,8 +311,55 @@ async function probeDatasetPath(
   }
 }
 
+async function fetchWithTimeout(
+  fetcher: typeof fetch,
+  input: RequestInfo | URL,
+  init: RequestInit,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<Response> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return fetcher(input, signal === undefined ? init : { ...init, signal })
+  }
+
+  const controller = new AbortController()
+  let timedOut = false
+  const abortFromParent = () => {
+    controller.abort(signal?.reason)
+  }
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+
+  if (signal?.aborted === true) {
+    abortFromParent()
+  } else {
+    signal?.addEventListener('abort', abortFromParent, { once: true })
+  }
+
+  try {
+    return await fetcher(input, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(`Request timed out after ${timeoutMs.toLocaleString()} ms.`, {
+        cause: error,
+      })
+    }
+
+    throw error
+  } finally {
+    globalThis.clearTimeout(timeout)
+    signal?.removeEventListener('abort', abortFromParent)
+  }
+}
+
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
+}
+
+function isH5adUrl(url: string): boolean {
+  return /\.h5ad(?:$|[?#])/i.test(url)
 }
 
 function segmentedOutputPathsFromProbes(

@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  analysisEmbeddingLabel,
   loadDatasetAnalysisEmbeddings,
   parseAnalysisEmbeddingCsv,
 } from './analysisEmbeddings'
 
 describe('analysis embeddings', () => {
+  it('formats generic embedding labels from AnnData keys', () => {
+    expect(analysisEmbeddingLabel('X_umap')).toBe('UMAP')
+    expect(analysisEmbeddingLabel('X_tSNE')).toBe('t-SNE')
+    expect(analysisEmbeddingLabel('X_pca')).toBe('PCA')
+    expect(analysisEmbeddingLabel('draw_graph_fa')).toBe('Draw Graph Fa')
+  })
+
   it('parses UMAP projection CSV rows', () => {
     expect(
       parseAnalysisEmbeddingCsv(

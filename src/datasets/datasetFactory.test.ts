@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createSpatialDataset, detectSpatialDataset } from './datasetFactory'
+import { AnnDataH5adDataset } from './h5adDataset'
 import { VisiumHdDataset } from './visiumHdDataset'
 
 describe('spatial dataset detection', () => {
@@ -68,6 +69,69 @@ describe('spatial dataset detection', () => {
 
     expect(detection.platform).toBe('unknown')
     expect(detection.checked.length).toBeGreaterThan(1)
+  })
+
+  it('detects a direct H5AD file URL without directory-style probes', async () => {
+    const fetcher = fetcherForOkPaths(['/spatial/sample.h5ad'])
+
+    await expect(
+      detectSpatialDataset('https://example.test/spatial/sample.h5ad', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'h5ad',
+      baseUrl: 'https://example.test/spatial/sample.h5ad',
+      h5adUrl: 'https://example.test/spatial/sample.h5ad',
+    })
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/spatial/sample.h5ad',
+      expect.objectContaining({ method: 'HEAD' }),
+    )
+  })
+
+  it('times out direct H5AD probes that never answer', async () => {
+    vi.useFakeTimers()
+    const fetcher = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            const error = new Error('aborted')
+            error.name = 'AbortError'
+            reject(error)
+          })
+        }),
+    ) as unknown as typeof fetch
+
+    try {
+      const detection = detectSpatialDataset('https://example.test/spatial/sample.h5ad', {
+        fetcher,
+      })
+
+      await vi.advanceTimersByTimeAsync(15_000)
+
+      await expect(detection).resolves.toMatchObject({
+        platform: 'unknown',
+        checked: [
+          {
+            ok: false,
+            error: 'Request timed out after 15,000 ms.',
+          },
+        ],
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('creates an AnnData H5AD dataset for direct file URLs', async () => {
+    const dataset = await createSpatialDataset(
+      'https://example.test/spatial/sample.h5ad',
+      {
+        fetcher: fetcherForOkPaths(['/spatial/sample.h5ad']),
+      },
+    )
+
+    expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
   })
 
   it('passes an explicit Visium HD 2 µm barcode budget into created datasets', async () => {

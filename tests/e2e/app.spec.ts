@@ -1,13 +1,18 @@
 import { readFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 const VISIUM_HD_REFERENCE_URL =
   'https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f'
+const H5AD_PBMC3K_REFERENCE_URL = 'https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad'
 const XENIUM_LOAD_TIMEOUT_MS = 120_000
 const XENIUM_TRANSCRIPT_TIMEOUT_MS = 120_000
 const XENIUM_ROI_TIMEOUT_MS = 120_000
 const VISIUM_HD_LOAD_TIMEOUT_MS = 90_000
+const H5AD_LOAD_TIMEOUT_MS = 60_000
+const H5AD_HOSTED_LOAD_TIMEOUT_MS = 120_000
+const HOSTED_FIXTURE_PREFLIGHT_TIMEOUT_MS = 10_000
 
 async function loadDefaultXeniumDataset(page: Page) {
   await page.goto('/')
@@ -50,6 +55,104 @@ async function expectVisiumHdBoundaryLayersOffByDefault(page: Page) {
   await expect(layersPanel.getByLabel('Nucleus boundaries')).not.toBeChecked()
 }
 
+async function routeTinyH5adFixture(page: Page, path = '/h5ad-smoke.h5ad') {
+  const bytes = await createTinyH5adFixture()
+  await page.route(`**${path}`, async (route) => {
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Accept-Ranges': 'bytes',
+      'Content-Length': String(bytes.byteLength),
+      'Content-Type': 'application/octet-stream',
+    }
+
+    if (route.request().method() === 'HEAD') {
+      await route.fulfill({ status: 200, headers })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      headers,
+      body: Buffer.from(bytes),
+    })
+  })
+}
+
+async function hostedFixtureAvailable(page: Page, url: string): Promise<boolean> {
+  return page.evaluate(
+    async ({ targetUrl, timeoutMs }) => {
+      const controller = new AbortController()
+      const timeout = window.setTimeout(() => {
+        controller.abort()
+      }, timeoutMs)
+
+      try {
+        const response = await fetch(targetUrl, {
+          method: 'HEAD',
+          signal: controller.signal,
+        })
+
+        return response.ok
+      } catch {
+        return false
+      } finally {
+        window.clearTimeout(timeout)
+      }
+    },
+    { targetUrl: url, timeoutMs: HOSTED_FIXTURE_PREFLIGHT_TIMEOUT_MS },
+  )
+}
+
+async function createTinyH5adFixture(): Promise<Uint8Array> {
+  const h5wasm = (await import('h5wasm')).default
+  const { FS } = await h5wasm.ready
+  const fileName = `/playwright-${randomUUID()}.h5ad`
+
+  const file = new h5wasm.File(fileName, 'w')
+  const obs = file.create_group('obs')
+  obs.create_attribute('_index', 'cell_id')
+  obs.create_attribute('column-order', ['cluster', 'score'])
+  obs.create_dataset({
+    name: 'cell_id',
+    data: ['cell-a', 'cell-b', 'cell-c', 'cell-d'],
+  })
+  obs.create_dataset({
+    name: 'score',
+    data: new Float32Array([0.1, 0.5, 0.9, 0.2]),
+  })
+  obs.create_dataset({ name: 'cluster', data: new Int8Array([0, 1, 0, 1]) })
+  const categories = obs.create_group('__categories')
+  categories.create_dataset({ name: 'cluster', data: ['A', 'B'] })
+
+  const varGroup = file.create_group('var')
+  varGroup.create_attribute('_index', 'gene_ids')
+  varGroup.create_dataset({ name: 'gene_ids', data: ['Actb', 'Gad1', 'Gapdh'] })
+
+  const obsm = file.create_group('obsm')
+  obsm.create_dataset({
+    name: 'X_umap',
+    data: new Float32Array([0, 0, 10, 0, 0, 10, 10, 10]),
+    shape: [4, 2],
+  })
+  obsm.create_dataset({
+    name: 'X_pca',
+    data: new Float32Array([1, 0, 9, 0, 1, 8, -1, 0, 7, 0, -1, 6]),
+    shape: [4, 3],
+  })
+
+  file.create_dataset({
+    name: 'X',
+    data: new Float32Array([1, 0, 5, 2, 3, 0, 0, 4, 6, 7, 0, 8]),
+    shape: [4, 3],
+  })
+  file.close()
+
+  const bytes = FS.readFile(fileName)
+  FS.unlink(fileName)
+
+  return bytes
+}
+
 test('shows the scaffolded viewer shell', async ({ page }) => {
   await page.goto('/')
 
@@ -76,6 +179,90 @@ test('shows transcript overlay controls in the browser shell', async ({ page }) 
     'thermal',
   )
   await expect(page.getByRole('combobox', { name: 'Point color' })).toHaveValue('feature')
+})
+
+test('loads a local H5AD fixture with obs tracks and gene expression', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+
+  await routeTinyH5adFixture(page)
+  await page.goto('/')
+
+  const fixtureUrl = new URL('/h5ad-smoke.h5ad', page.url()).toString()
+  await page.getByLabel('Dataset URL').fill(fixtureUrl)
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+
+  await expect(page.getByText(/H5AD ready: 4 cells, 3 genes/)).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(
+    page.getByRole('img', { name: 'Spatial viewer canvas area' }),
+  ).toBeVisible()
+
+  await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
+
+  await page.getByRole('tab', { name: 'Genes' }).click()
+  const genesPanel = page.locator('#hud-panel-genes')
+  await expect(
+    genesPanel.getByRole('button', { name: 'Actb', exact: true }),
+  ).toBeVisible()
+  await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
+
+  await genesPanel.getByRole('button', { name: 'Actb', exact: true }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText(
+    /Expression: [1-9][0-9,]* cells/,
+    { timeout: H5AD_LOAD_TIMEOUT_MS },
+  )
+
+  await genesPanel.getByLabel('Cell color').selectOption('metadata')
+  await expect(genesPanel.getByLabel('Metadata track')).toContainText('score')
+
+  await page.getByRole('tab', { name: 'Cell' }).click()
+  const cellPanel = page.locator('#hud-panel-cell')
+  await cellPanel.getByRole('button', { name: 'Load Embeddings' }).click()
+  await expect(cellPanel.getByLabel('Embedding view')).toContainText('UMAP', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(cellPanel.getByLabel('Embedding view')).toContainText('PCA')
+  await expect(
+    cellPanel.getByRole('img', { name: 'UMAP embedding, 4 cells' }),
+  ).toBeVisible()
+})
+
+test('loads the hosted PBMC3K H5AD fixture', async ({ page }) => {
+  test.setTimeout(180_000)
+
+  await page.goto('/')
+
+  test.skip(
+    !(await hostedFixtureAvailable(page, H5AD_PBMC3K_REFERENCE_URL)),
+    'Hosted PBMC3K H5AD fixture is unavailable.',
+  )
+
+  await page.getByLabel('Dataset URL').fill(H5AD_PBMC3K_REFERENCE_URL)
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+
+  await expect(page.getByText(/H5AD ready: 2,638 cells, 1,838 genes/)).toBeVisible({
+    timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS,
+  })
+  await expect(
+    page.getByRole('img', { name: 'Spatial viewer canvas area' }),
+  ).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
+
+  await page.getByRole('tab', { name: 'Genes' }).click()
+  const genesPanel = page.locator('#hud-panel-genes')
+  await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
+  await genesPanel.getByLabel('Gene selection').fill('CD79A')
+  await genesPanel.getByRole('button', { name: 'CD79A', exact: true }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText(
+    /Expression: [1-9][0-9,]* cells/,
+    { timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS },
+  )
+
+  await genesPanel.getByLabel('Cell color').selectOption('metadata')
+  await expect(genesPanel.getByLabel('Metadata track')).toContainText('n_genes')
 })
 
 test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell panels', async ({

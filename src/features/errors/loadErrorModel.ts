@@ -2,6 +2,7 @@ export type LoadErrorCode =
   | 'network'
   | 'http'
   | 'range-not-supported'
+  | 'size-limit'
   | 'unsupported'
   | 'parquet-decode'
   | 'manifest'
@@ -185,6 +186,20 @@ export function createStructuredLoadError(
     )
   }
 
+  if (isH5adFileSizeLimitError(error, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'size-limit',
+        title: 'H5AD file too large',
+        message,
+        action:
+          'The file was not loaded. Use an H5AD file of 300 MB or smaller, or add a lazy H5AD reader before opening larger files.',
+      },
+      detail,
+    )
+  }
+
   if (
     normalizedMessage.includes('experiment.xenium') ||
     normalizedMessage.includes('no supported xenium ome-tiff')
@@ -289,6 +304,17 @@ function isFeatureSliceBudgetError(error: unknown, normalizedMessage: string): b
     (error instanceof Error &&
       error.name === 'FeatureSliceFullFileBudgetExceededError') ||
     normalizedMessage.includes('feature slice h5')
+  )
+}
+
+function isH5adFileSizeLimitError(
+  error: unknown,
+  normalizedMessage: string,
+): boolean {
+  return (
+    (error instanceof Error && error.name === 'H5adFileSizeLimitExceededError') ||
+    (normalizedMessage.includes('h5ad file') &&
+      normalizedMessage.includes('browser load limit'))
   )
 }
 

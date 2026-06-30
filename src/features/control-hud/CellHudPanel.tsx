@@ -111,7 +111,7 @@ export function CellHudPanel({
     >
       <section className="analysis-section" aria-labelledby="embedding-heading">
         <div className="section-heading-row">
-          <h2 id="embedding-heading">UMAP/tSNE</h2>
+          <h2 id="embedding-heading">Embeddings</h2>
           <span
             className={
               analysisEmbeddingState.status === 'loading'
@@ -155,7 +155,7 @@ export function CellHudPanel({
             type="button"
             className="secondary-action"
             disabled={!loadEnabled || analysisEmbeddingState.status === 'loading'}
-            title="Load analysis embeddings"
+            title="Load embeddings"
             onClick={onLoadAnalysisEmbeddings}
           >
             {analysisEmbeddingState.status === 'loading'

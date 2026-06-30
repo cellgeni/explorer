@@ -32,10 +32,12 @@ describe('geneControlsModel', () => {
       status: 'loading',
       url: 'https://example.test/output',
     })
-    expect(genePanelLoadReady('https://example.test/output', ['Actb'])).toEqual({
+    expect(
+      genePanelLoadReady('https://example.test/output', ['Gapdh', 'Actb', 'Gad1']),
+    ).toEqual({
       status: 'ready',
       url: 'https://example.test/output',
-      genes: ['Actb'],
+      genes: ['Actb', 'Gad1', 'Gapdh'],
     })
     expect(genePanelLoadFailed('https://example.test/output', error)).toEqual({
       status: 'error',
