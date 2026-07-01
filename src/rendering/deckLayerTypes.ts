@@ -163,6 +163,7 @@ export interface OverviewLayerOptions {
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
   readonly cellBoundaryFillEnabled?: boolean
+  readonly cellPointPickable?: boolean
   readonly cellBoundaryPickable?: boolean
   readonly pointSizeZoomDelta?: number
   readonly pointSizeFullViewScale?: number

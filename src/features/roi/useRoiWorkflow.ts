@@ -79,6 +79,7 @@ interface UseRoiWorkflowControls {
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly enabled?: boolean
   readonly magicLensScope: MagicLensScope
+  readonly viewportGeneWarmupEnabled?: boolean
   readonly roiName: string
 }
 
@@ -147,7 +148,13 @@ interface UseRoiWorkflowResult {
 
 export function useRoiWorkflow({
   callbacks: { appendDebugEvent, appendFallbackNotice },
-  controls: { currentViewportDetail, enabled = true, magicLensScope, roiName },
+  controls: {
+    currentViewportDetail,
+    enabled = true,
+    magicLensScope,
+    viewportGeneWarmupEnabled = true,
+    roiName,
+  },
   data: { loadState, roiState },
   loaders: { loadRoiCells, loadRoiGeneStats, loadRoiTranscripts },
   refs: {
@@ -205,6 +212,7 @@ export function useRoiWorkflow({
 
     if (
       !enabled ||
+      !viewportGeneWarmupEnabled ||
       readyDatasetUrl === null ||
       detail === null ||
       roiState.status !== 'idle' ||
@@ -338,6 +346,7 @@ export function useRoiWorkflow({
     roiGeneViewportWarmupTimeoutRef,
     roiState.status,
     setRoiGeneViewportWarmupState,
+    viewportGeneWarmupEnabled,
   ])
 
   const handleRoiComplete = useCallback(

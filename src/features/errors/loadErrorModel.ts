@@ -186,6 +186,20 @@ export function createStructuredLoadError(
     )
   }
 
+  if (isH5adReferenceUnavailableError(error, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'size-limit',
+        title: 'H5AD reference file unavailable',
+        message,
+        action:
+          'Generate and host a companion DATASET.h5ad.json kerchunk reference next to the oversized H5AD file.',
+      },
+      detail,
+    )
+  }
+
   if (isH5adFileSizeLimitError(error, normalizedMessage)) {
     return withOptionalDetail(
       {
@@ -315,6 +329,17 @@ function isH5adFileSizeLimitError(
     (error instanceof Error && error.name === 'H5adFileSizeLimitExceededError') ||
     (normalizedMessage.includes('h5ad file') &&
       normalizedMessage.includes('browser load limit'))
+  )
+}
+
+function isH5adReferenceUnavailableError(
+  error: unknown,
+  normalizedMessage: string,
+): boolean {
+  return (
+    (error instanceof Error && error.name === 'H5adReferenceFileUnavailableError') ||
+    (normalizedMessage.includes('h5ad file') &&
+      normalizedMessage.includes('kerchunk reference file'))
   )
 }
 

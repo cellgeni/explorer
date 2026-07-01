@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
+import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
@@ -171,6 +172,28 @@ describe('useAnnotationWorkflow', () => {
     expect(snapshot.annotationColors.a).toBe('#1f77b4')
     expect(snapshot.hiddenAnnotationIds).toEqual([])
     expect(snapshot.debugMessages).toContain('Annotations loaded: 1 labels')
+  })
+
+  it('does not load annotations when no annotation group is selected', () => {
+    const loadAnnotations = vi.fn(async () => [])
+
+    render(
+      <Probe
+        loadAnnotations={loadAnnotations}
+        selectedAnnotationGroupId={NO_ANNOTATION_GROUP_ID}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleLoadAnnotations()
+    })
+
+    expect(loadAnnotations).not.toHaveBeenCalled()
+    expect(snapshot.annotationState).toEqual({ status: 'idle' })
   })
 
   it('removes annotations without leaving stale hidden visibility ids', () => {

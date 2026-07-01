@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
+import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import { AnnotationHudPanel } from './AnnotationHudPanel'
 
 describe('AnnotationHudPanel', () => {
@@ -139,6 +140,65 @@ describe('AnnotationHudPanel', () => {
     ).toHaveTextContent('confidence')
   })
 
+  it('keeps annotation loading disabled until a group is selected', () => {
+    const onAnnotationGroupChange = vi.fn()
+
+    render(
+      <AnnotationHudPanel
+        active
+        annotationGroupInputId="annotation-group"
+        annotationImportInputId="annotation-import"
+        annotationImportUrlInputId="annotation-import-url"
+        annotationImportUrl=""
+        annotationHeaderCopy="Idle"
+        loadEnabled
+        selectedAnnotationGroupId={NO_ANNOTATION_GROUP_ID}
+        annotationGroupOptions={[
+          {
+            id: 'analysis:cell-type',
+            label: 'cell_type',
+            groupingName: 'cell_type',
+            groupCount: 4,
+          },
+        ]}
+        annotationState={{ status: 'idle' }}
+        annotationGroupState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          groups: [],
+        }}
+        annotationColors={{}}
+        hiddenAnnotationSetIds={[]}
+        hiddenAnnotationIds={[]}
+        cellMetadataTracks={[]}
+        onAnnotationGroupChange={onAnnotationGroupChange}
+        onLoadAnnotations={vi.fn()}
+        onClearAnnotations={vi.fn()}
+        onExportAnnotations={vi.fn()}
+        onImportAnnotations={vi.fn()}
+        onAnnotationImportUrlChange={vi.fn()}
+        onImportAnnotationUrl={vi.fn(async () => true)}
+        onAnnotationColorChange={vi.fn()}
+        onAnnotationSetVisibilityChange={vi.fn()}
+        onAnnotationVisibilityChange={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+        onRemoveCellMetadataTrack={vi.fn()}
+      />,
+    )
+
+    const annotationSet = screen.getByRole('combobox', { name: 'Annotation set' })
+
+    expect(annotationSet).toHaveValue(NO_ANNOTATION_GROUP_ID)
+    expect(screen.getByRole('button', { name: 'Load Annotations' })).toBeDisabled()
+    expect(within(annotationSet).getByRole('option', { name: 'cell_type' })).toHaveValue(
+      'analysis:cell-type',
+    )
+
+    fireEvent.change(annotationSet, { target: { value: 'analysis:cell-type' } })
+
+    expect(onAnnotationGroupChange).toHaveBeenCalledWith('analysis:cell-type')
+  })
+
   it('renders annotation size plots grouped by annotation set', () => {
     render(
       <AnnotationHudPanel
@@ -215,5 +275,73 @@ describe('AnnotationHudPanel', () => {
     expect(kmeansRows[0]).toHaveTextContent('100%')
     expect(screen.getByLabelText('graphclust visible')).not.toBeChecked()
     expect(screen.getByLabelText('kmeans 3 visible')).toBeChecked()
+  })
+
+  it('virtualizes large annotation lists and size plots', () => {
+    const annotations = Array.from({ length: 80 }, (_value, index) => ({
+      id: `analysis:0:${index}`,
+      label: `group: Label ${String(index).padStart(2, '0')}`,
+      cellIds: [asCellId(`aaaaaaaa-${index}`)],
+    }))
+
+    render(
+      <AnnotationHudPanel
+        active
+        annotationGroupInputId="annotation-group"
+        annotationImportInputId="annotation-import"
+        annotationImportUrlInputId="annotation-import-url"
+        annotationImportUrl=""
+        annotationHeaderCopy="80 labels"
+        loadEnabled
+        selectedAnnotationGroupId="all"
+        annotationGroupOptions={[]}
+        annotationState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          annotations,
+        }}
+        annotationGroupState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          groups: [],
+        }}
+        annotationColors={{}}
+        hiddenAnnotationSetIds={[]}
+        hiddenAnnotationIds={[]}
+        cellMetadataTracks={[]}
+        onAnnotationGroupChange={vi.fn()}
+        onLoadAnnotations={vi.fn()}
+        onClearAnnotations={vi.fn()}
+        onExportAnnotations={vi.fn()}
+        onImportAnnotations={vi.fn()}
+        onAnnotationImportUrlChange={vi.fn()}
+        onImportAnnotationUrl={vi.fn(async () => true)}
+        onAnnotationColorChange={vi.fn()}
+        onAnnotationSetVisibilityChange={vi.fn()}
+        onAnnotationVisibilityChange={vi.fn()}
+        onRemoveAnnotation={vi.fn()}
+        onRemoveCellMetadataTrack={vi.fn()}
+      />,
+    )
+
+    const annotationList = screen.getByRole('list', { name: 'Loaded annotations' })
+    expect(within(annotationList).getAllByRole('listitem')).toHaveLength(12)
+    expect(within(annotationList).queryByText('group: Label 79')).not.toBeInTheDocument()
+
+    fireEvent.scroll(annotationList, {
+      target: { scrollTop: 80 * 34 },
+    })
+
+    expect(within(annotationList).getByText('group: Label 79')).toBeInTheDocument()
+
+    const sizeList = screen.getByLabelText('group cell counts')
+    expect(within(sizeList).getAllByRole('listitem')).toHaveLength(12)
+    expect(within(sizeList).queryByText('Label 79')).not.toBeInTheDocument()
+
+    fireEvent.scroll(sizeList, {
+      target: { scrollTop: 80 * 22 },
+    })
+
+    expect(within(sizeList).getByText('Label 79')).toBeInTheDocument()
   })
 })

@@ -6,6 +6,8 @@ import {
   analysisEmbeddingLoadFailed,
   analysisEmbeddingLoadReady,
   analysisEmbeddingLoadStarted,
+  analysisEmbeddingOptionsForState,
+  analysisEmbeddingOptionsReady,
   analysisEmbeddingStatusCopy,
 } from './analysisEmbeddingModel'
 
@@ -24,6 +26,25 @@ describe('analysisEmbeddingStatusCopy', () => {
     const error = new Error('failed')
 
     expect(IDLE_ANALYSIS_EMBEDDING_STATE).toEqual({ status: 'idle' })
+    expect(
+      analysisEmbeddingOptionsReady('https://example.test/output', [
+        {
+          kind: 'umap',
+          label: 'UMAP',
+          sourcePath: 'analysis/umap/projection.csv',
+        },
+      ]),
+    ).toEqual({
+      status: 'available',
+      url: 'https://example.test/output',
+      options: [
+        {
+          kind: 'umap',
+          label: 'UMAP',
+          sourcePath: 'analysis/umap/projection.csv',
+        },
+      ],
+    })
     expect(analysisEmbeddingLoadStarted('https://example.test/output')).toEqual({
       status: 'loading',
       url: 'https://example.test/output',
@@ -54,6 +75,24 @@ describe('analysisEmbeddingStatusCopy', () => {
     expect(
       analysisEmbeddingStatusCopy(
         {
+          status: 'available',
+          url: 'https://example.test/output',
+          options: [
+            {
+              kind: 'umap',
+              label: 'UMAP',
+              sourcePath: 'analysis/umap/projection.csv',
+            },
+          ],
+        },
+        null,
+        [],
+        null,
+      ),
+    ).toBe('1 view available')
+    expect(
+      analysisEmbeddingStatusCopy(
+        {
           status: 'error',
           url: 'https://example.test/output',
           error: new Error('failed'),
@@ -81,5 +120,12 @@ describe('analysisEmbeddingStatusCopy', () => {
     expect(analysisEmbeddingStatusCopy(state, embedding, [], null, 'bins')).toBe(
       'UMAP: 2 bins',
     )
+    expect(analysisEmbeddingOptionsForState(state)).toEqual([
+      {
+        kind: 'umap',
+        label: 'UMAP',
+        sourcePath: 'analysis/umap/projection.csv',
+      },
+    ])
   })
 })

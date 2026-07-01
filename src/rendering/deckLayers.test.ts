@@ -118,12 +118,28 @@ describe('deck layer factory', () => {
     expect(getLineColor(fixtureCells[0]!)).toEqual([215, 63, 124, 220])
   })
 
+  it('fills overview point proxies when outlines are disabled', () => {
+    const layers = createOverviewLayers(fixtureCells, [], {
+      cellBoundaryOpacity: 0,
+    })
+    const [layer] = layers
+
+    expect(layer).toBeInstanceOf(ScatterplotLayer)
+
+    if (!(layer instanceof ScatterplotLayer)) {
+      throw new Error('Expected first overview layer to be a ScatterplotLayer.')
+    }
+
+    expect(layer.props.filled).toBe(true)
+    expect(layer.props.stroked).toBe(false)
+  })
+
   it('shrinks overview point caps at the fitted dataset zoom', () => {
     const fullViewLayers = createOverviewLayers(fixtureCells, [], {
       pointSizeZoomDelta: 0,
     })
     const closeViewLayers = createOverviewLayers(fixtureCells, [], {
-      pointSizeZoomDelta: 8,
+      pointSizeZoomDelta: 10,
     })
     const fullViewLayer = fullViewLayers[0]
     const closeViewLayer = closeViewLayers[0]
@@ -139,6 +155,19 @@ describe('deck layer factory', () => {
     expect(closeViewLayer.props.radiusMaxPixels).toBe(24)
   })
 
+  it('reduces overview point caps by 30% at intermediate zoom', () => {
+    const layers = createOverviewLayers(fixtureCells, [], {
+      pointSizeZoomDelta: 8,
+    })
+    const layer = layers[0]
+
+    if (!(layer instanceof ScatterplotLayer)) {
+      throw new Error('Expected overview cell layer to be a ScatterplotLayer.')
+    }
+
+    expect(layer.props.radiusMaxPixels).toBe(16.8)
+  })
+
   it('keeps overview point caps compact through intermediate zooms', () => {
     const layers = createOverviewLayers(fixtureCells, [], {
       pointSizeZoomDelta: 3,
@@ -150,7 +179,7 @@ describe('deck layer factory', () => {
       throw new Error('Expected overview cell layer to be a ScatterplotLayer.')
     }
 
-    expect(layer.props.radiusMaxPixels).toBe(8.8)
+    expect(layer.props.radiusMaxPixels).toBe(7.3)
   })
 
   it('applies a full-view point-size scale without changing close zoom caps', () => {
@@ -159,7 +188,7 @@ describe('deck layer factory', () => {
       pointSizeFullViewScale: 0.5,
     })
     const closeViewLayers = createOverviewLayers(fixtureCells, [], {
-      pointSizeZoomDelta: 8,
+      pointSizeZoomDelta: 10,
       pointSizeFullViewScale: 0.5,
     })
     const fullViewLayer = fullViewLayers[0]
@@ -546,6 +575,19 @@ describe('deck layer factory', () => {
     expect(getLineColor(expressionStyledCells[0]!)).toEqual([240, 128, 120, 88])
   })
 
+  it('can render overview points without GPU picking', () => {
+    const layers = createOverviewLayers(fixtureCells, [], {
+      cellPointPickable: false,
+    })
+    const cellLayer = layers.find(
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'cells-overview-scatter',
+    )
+
+    expect(cellLayer).toBeInstanceOf(ScatterplotLayer)
+    expect((cellLayer as ScatterplotLayer<OverviewCellDatum>).props.pickable).toBe(false)
+  })
+
   it('styles unmatched visible cells as expression-zero cells while expression is active', () => {
     const cells: readonly OverviewCellDatum[] = [
       {
@@ -648,6 +690,33 @@ describe('deck layer factory', () => {
     }
 
     expect(expressionLayer.props.radiusMaxPixels).toBe(12)
+  })
+
+  it('reduces gene expression point caps by 30% at intermediate zoom', () => {
+    const expressionElements: readonly OverviewCellDatum[] = [
+      {
+        id: 'expression-cell-1',
+        position: [120, -140, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 5,
+        expressionGenes: ['A2ML1'],
+      },
+    ]
+    const layers = createOverviewLayers(fixtureCells, [], {
+      geneExpressionOverlayElements: expressionElements,
+      pointSizeZoomDelta: 8,
+    })
+    const expressionLayer = layers.find(
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter',
+    )
+
+    if (!(expressionLayer instanceof ScatterplotLayer)) {
+      throw new Error('Expected expression overlay to be a ScatterplotLayer.')
+    }
+
+    expect(expressionLayer.props.radiusMaxPixels).toBe(19.6)
   })
 
   it('applies the full-view point-size scale to gene expression point caps', () => {

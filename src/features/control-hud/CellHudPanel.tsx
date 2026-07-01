@@ -6,7 +6,10 @@ import {
   expressionStatusLabel,
   type CellGeneExpressionStatus,
 } from '../cells/cellGeneExpressionStatus'
-import type { AnalysisEmbeddingState } from '../analysis/analysisEmbeddingModel'
+import {
+  analysisEmbeddingOptionsForState,
+  type AnalysisEmbeddingState,
+} from '../analysis/analysisEmbeddingModel'
 import type {
   CellDetailState,
   CellTranscriptDistributionState,
@@ -45,6 +48,7 @@ interface CellHudPanelProps {
   readonly cellDetailCopy: string
   readonly cellDetailState: CellDetailState
   readonly cellTranscriptDistributionState: CellTranscriptDistributionState
+  readonly cellTranscriptDistributionVisible?: boolean
   readonly loadEnabled: boolean
   readonly onEmbeddingKindChange: (kind: AnalysisEmbeddingKind) => void
   readonly onLoadAnalysisEmbeddings: () => void
@@ -76,6 +80,7 @@ export function CellHudPanel({
   cellDetailCopy,
   cellDetailState,
   cellTranscriptDistributionState,
+  cellTranscriptDistributionVisible = true,
   loadEnabled,
   onEmbeddingKindChange,
   onLoadAnalysisEmbeddings,
@@ -100,6 +105,8 @@ export function CellHudPanel({
   const selectedEmbeddingElementId = isVisiumHdDataset
     ? (selectedGridCell?.id ?? null)
     : (selectedCell?.id ?? null)
+  const embeddingOptions = analysisEmbeddingOptionsForState(analysisEmbeddingState)
+  const selectedEmbeddingValue = activeEmbedding?.kind ?? selectedEmbeddingKind
 
   return (
     <div
@@ -127,21 +134,17 @@ export function CellHudPanel({
           <label htmlFor={embeddingViewInputId}>Embedding view</label>
           <select
             id={embeddingViewInputId}
-            value={activeEmbedding?.kind ?? selectedEmbeddingKind}
-            disabled={
-              analysisEmbeddingState.status !== 'ready' ||
-              analysisEmbeddingState.embeddings.length === 0
-            }
+            value={selectedEmbeddingValue}
+            disabled={embeddingOptions.length === 0}
             title="Embedding view"
             onChange={(event) => {
               onEmbeddingKindChange(event.currentTarget.value as AnalysisEmbeddingKind)
             }}
           >
-            {analysisEmbeddingState.status === 'ready' &&
-            analysisEmbeddingState.embeddings.length > 0 ? (
-              analysisEmbeddingState.embeddings.map((embedding) => (
-                <option key={embedding.kind} value={embedding.kind}>
-                  {embedding.label}
+            {embeddingOptions.length > 0 ? (
+              embeddingOptions.map((embeddingOption) => (
+                <option key={embeddingOption.kind} value={embeddingOption.kind}>
+                  {embeddingOption.label}
                 </option>
               ))
             ) : (
@@ -245,6 +248,7 @@ export function CellHudPanel({
             annotationLabels={selectedCellAnnotationLabels}
             state={cellDetailState}
             transcriptDistributionState={cellTranscriptDistributionState}
+            transcriptDistributionVisible={cellTranscriptDistributionVisible}
           />
         )}
       </section>

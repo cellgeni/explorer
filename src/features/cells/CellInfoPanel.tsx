@@ -18,6 +18,7 @@ interface CellInfoPanelProps {
   readonly annotationLabels?: readonly string[]
   readonly state: CellDetailState
   readonly transcriptDistributionState: CellTranscriptDistributionState
+  readonly transcriptDistributionVisible?: boolean
 }
 
 const EMPTY_ANNOTATION_LABELS: readonly string[] = []
@@ -27,6 +28,7 @@ export function CellInfoPanel({
   annotationLabels = EMPTY_ANNOTATION_LABELS,
   state,
   transcriptDistributionState,
+  transcriptDistributionVisible = true,
 }: CellInfoPanelProps) {
   const readyState =
     cell !== null && state.status === 'ready' && state.cellId === cell.id ? state : null
@@ -121,7 +123,9 @@ export function CellInfoPanel({
         </div>
       </dl>
 
-      <CellTranscriptZDistributionPanel cell={cell} state={transcriptDistributionState} />
+      {transcriptDistributionVisible ? (
+        <CellTranscriptZDistributionPanel cell={cell} state={transcriptDistributionState} />
+      ) : null}
 
       <div className="cell-expression-panel">
         <div className="cell-expression-heading">

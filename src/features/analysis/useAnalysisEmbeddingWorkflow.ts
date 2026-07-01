@@ -17,6 +17,7 @@ import {
   analysisEmbeddingLoadFailed,
   analysisEmbeddingLoadReady,
   analysisEmbeddingLoadStarted,
+  analysisEmbeddingOptionsForState,
   type AnalysisEmbeddingState,
 } from './analysisEmbeddingModel'
 
@@ -90,11 +91,18 @@ export function useAnalysisEmbeddingWorkflow({
       abortRef: analysisEmbeddingAbortRef,
       requestIdRef: analysisEmbeddingRequestIdRef,
     })
-    setAnalysisEmbeddingState(analysisEmbeddingLoadStarted(loadState.url))
-    appendDebugEvent('Loading embeddings')
+    const embeddingOptions = analysisEmbeddingOptionsForState(analysisEmbeddingState)
+    setAnalysisEmbeddingState(
+      analysisEmbeddingLoadStarted(
+        loadState.url,
+        embeddingOptions.length === 0 ? undefined : embeddingOptions,
+      ),
+    )
+    appendDebugEvent(`Loading embedding ${selectedEmbeddingKind}`)
 
     void loadAnalysisEmbeddings(loadState.url, {
       signal: request.signal,
+      kind: selectedEmbeddingKind,
       onFallback: appendFallbackNotice,
     })
       .then((embeddings) => {
@@ -102,7 +110,13 @@ export function useAnalysisEmbeddingWorkflow({
           return
         }
 
-        setAnalysisEmbeddingState(analysisEmbeddingLoadReady(loadState.url, embeddings))
+        setAnalysisEmbeddingState(
+          analysisEmbeddingLoadReady(
+            loadState.url,
+            embeddings,
+            embeddingOptions.length === 0 ? undefined : embeddingOptions,
+          ),
+        )
 
         if (
           embeddings.length > 0 &&

@@ -4,7 +4,10 @@ import {
   parseCustomAnnotationImport,
   type ContinuousCellMetadataTrack,
 } from '../../data/customAnnotations'
-import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
+import {
+  ALL_ANNOTATION_GROUP_ID,
+  NO_ANNOTATION_GROUP_ID,
+} from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import {
   annotationPaletteColor,
@@ -144,6 +147,10 @@ export function useAnnotationWorkflow({
 
   const handleLoadAnnotations = useCallback(() => {
     if (loadState.status !== 'ready' || annotationState.status === 'loading') {
+      return
+    }
+
+    if (selectedAnnotationGroupId === NO_ANNOTATION_GROUP_ID) {
       return
     }
 

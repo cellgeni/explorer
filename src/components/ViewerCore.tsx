@@ -140,6 +140,7 @@ export type {
 } from './viewerCoreTypes'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
+const STABLE_OVERVIEW_RENDER_CLIP_ZOOM_DELTA = 3
 const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
 const GRID_CELL_RENDER_VIEWPORT_PADDING_RATIO = 0.15
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
@@ -155,6 +156,7 @@ export function ViewerCore({
   nucleusBoundaries = [],
   cellBoundaryHoverEnabled = false,
   hoverTooltipsEnabled = true,
+  overviewCellSourceLabel = 'Xenium',
   gridCells = [],
   fitGridCells,
   transcriptAggregateBins = [],
@@ -166,6 +168,7 @@ export function ViewerCore({
   cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
   cellBoundaryOpacity = 1,
   pointSizeFullViewScale = 1,
+  cellPointPickable = true,
   transcriptOpacity = 1,
   transcriptPointSize = 2,
   observationColorMode = 'transcript-count',
@@ -194,6 +197,7 @@ export function ViewerCore({
   viewResetKey,
   focusRequest = null,
   overviewRenderCellLimit,
+  clipOverviewCellsToViewport = true,
   maxConcurrentTileRequests,
   tileCacheMaxTiles,
   onImageTileError,
@@ -232,6 +236,7 @@ export function ViewerCore({
       nucleusBoundaries={nucleusBoundaries}
       cellBoundaryHoverEnabled={cellBoundaryHoverEnabled}
       hoverTooltipsEnabled={hoverTooltipsEnabled}
+      overviewCellSourceLabel={overviewCellSourceLabel}
       gridCells={gridCells}
       viewportCountGridCells={viewFitGridCells}
       transcriptAggregateBins={transcriptAggregateBins}
@@ -243,6 +248,7 @@ export function ViewerCore({
       cellFillOpacity={cellFillOpacity}
       cellBoundaryOpacity={cellBoundaryOpacity}
       pointSizeFullViewScale={pointSizeFullViewScale}
+      cellPointPickable={cellPointPickable}
       transcriptOpacity={transcriptOpacity}
       transcriptPointSize={transcriptPointSize}
       observationColorMode={observationColorMode}
@@ -259,6 +265,7 @@ export function ViewerCore({
       viewResetKey={resetKey}
       focusRequest={focusRequest}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
+      clipOverviewCellsToViewport={clipOverviewCellsToViewport}
       {...(maxConcurrentTileRequests === undefined ? {} : { maxConcurrentTileRequests })}
       {...(tileCacheMaxTiles === undefined ? {} : { tileCacheMaxTiles })}
       status={status}
@@ -299,6 +306,7 @@ interface ViewerSurfaceProps {
   readonly nucleusBoundaries: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled: boolean
   readonly hoverTooltipsEnabled: boolean
+  readonly overviewCellSourceLabel: string
   readonly gridCells: readonly GridCellDatum[]
   readonly viewportCountGridCells: readonly GridCellDatum[]
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
@@ -310,6 +318,7 @@ interface ViewerSurfaceProps {
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
   readonly pointSizeFullViewScale: number
+  readonly cellPointPickable: boolean
   readonly transcriptOpacity: number
   readonly transcriptPointSize: number
   readonly observationColorMode: ObservationColorMode
@@ -325,7 +334,8 @@ interface ViewerSurfaceProps {
   readonly fittedViewZoom: number
   readonly viewResetKey: string
   readonly focusRequest: ViewerFocusRequest | null
-  readonly overviewRenderCellLimit?: number
+  readonly overviewRenderCellLimit?: number | null
+  readonly clipOverviewCellsToViewport: boolean
   readonly maxConcurrentTileRequests?: number
   readonly tileCacheMaxTiles?: number
   readonly status: ViewerLoadStatus
@@ -364,6 +374,7 @@ function ViewerSurface({
   nucleusBoundaries,
   cellBoundaryHoverEnabled,
   hoverTooltipsEnabled,
+  overviewCellSourceLabel,
   gridCells,
   viewportCountGridCells,
   transcriptAggregateBins,
@@ -375,6 +386,7 @@ function ViewerSurface({
   cellFillOpacity,
   cellBoundaryOpacity,
   pointSizeFullViewScale,
+  cellPointPickable,
   transcriptOpacity,
   transcriptPointSize,
   observationColorMode,
@@ -391,6 +403,7 @@ function ViewerSurface({
   viewResetKey,
   focusRequest,
   overviewRenderCellLimit,
+  clipOverviewCellsToViewport,
   maxConcurrentTileRequests,
   tileCacheMaxTiles,
   status,
@@ -520,15 +533,22 @@ function ViewerSurface({
         : overviewCellsInBbox(cells, viewportBbox),
     [cells, viewportBbox, viewState.zoom],
   )
-  const renderSourceCells = useMemo(
-    () =>
-      sampleOverviewCellsForRendering(visibleCells, {
-        ...(overviewRenderCellLimit === undefined
-          ? {}
-          : { maxCells: overviewRenderCellLimit }),
-      }),
-    [overviewRenderCellLimit, visibleCells],
-  )
+  const shouldClipRenderCells =
+    clipOverviewCellsToViewport ||
+    (overviewRenderCellLimit !== null &&
+      viewState.zoom - fittedViewZoom >= STABLE_OVERVIEW_RENDER_CLIP_ZOOM_DELTA)
+  const renderVisibleCells = shouldClipRenderCells ? visibleCells : cells
+  const renderSourceCells = useMemo(() => {
+    if (overviewRenderCellLimit === null) {
+      return renderVisibleCells
+    }
+
+    return sampleOverviewCellsForRendering(renderVisibleCells, {
+      ...(overviewRenderCellLimit === undefined
+        ? {}
+        : { maxCells: overviewRenderCellLimit }),
+    })
+  }, [overviewRenderCellLimit, renderVisibleCells])
   const renderCells = useMemo(
     () =>
       styleCellsForObservation(
@@ -663,6 +683,7 @@ function ViewerSurface({
       createOverviewLayers(expressionStyledRenderCells, boundaries, {
         cellFillOpacity,
         cellBoundaryOpacity,
+        cellPointPickable,
         cellBoundaryFillEnabled,
         cellBoundaryPickable: cellBoundaryHoverEnabled,
         nucleusBoundaries,
@@ -680,6 +701,7 @@ function ViewerSurface({
       }),
     [
       cellBoundaryOpacity,
+      cellPointPickable,
       cellFillOpacity,
       cellBoundaryFillEnabled,
       cellBoundaryHoverEnabled,
@@ -1196,6 +1218,10 @@ function ViewerSurface({
       onTranscriptHover,
     ],
   )
+  const deckHoverEnabled =
+    hoverTooltipsEnabled ||
+    transcriptPoints.length > 0 ||
+    transcriptAggregateBins.length > 0
   const handleMouseCoordinatePointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       if (!canTrackMouseCoordinates || viewport.width <= 0 || viewport.height <= 0) {
@@ -1545,7 +1571,7 @@ function ViewerSurface({
             viewState={viewState}
             onViewStateChange={handleViewStateChange}
             onClick={handleDeckClick}
-            onHover={handleDeckHover}
+            {...(deckHoverEnabled ? { onHover: handleDeckHover } : {})}
             controller
             layers={layers}
           />
@@ -1601,7 +1627,10 @@ function ViewerSurface({
         <TranscriptHoverTooltip detail={transcriptHover} />
       )}
       {cellHover === null || magicLensActive ? null : (
-        <OverviewCellHoverTooltip detail={cellHover} />
+        <OverviewCellHoverTooltip
+          detail={cellHover}
+          sourceLabel={overviewCellSourceLabel}
+        />
       )}
       {gridCellHover === null || magicLensActive ? null : (
         <GridCellHoverTooltip detail={gridCellHover} />

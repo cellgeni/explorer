@@ -212,11 +212,13 @@ function WarmupProbe({
   datasetUrl = 'https://example.test/output',
   loadRoiCells,
   loadRoiGeneStats,
+  viewportGeneWarmupEnabled = true,
 }: {
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly datasetUrl?: string
   readonly loadRoiCells: RoiCellsLoader
   readonly loadRoiGeneStats: RoiGeneStatsLoader
+  readonly viewportGeneWarmupEnabled?: boolean
 }) {
   const [magicLensState, setMagicLensState] = React.useState<
     MagicLensState<StructuredLoadError>
@@ -265,6 +267,7 @@ function WarmupProbe({
       currentViewportDetail,
       magicLensScope: 'roi',
       roiName,
+      viewportGeneWarmupEnabled,
     },
     data: {
       loadState,
@@ -459,6 +462,32 @@ describe('useRoiWorkflow', () => {
       expect(loadRoiCells).toHaveBeenCalledTimes(1)
       expect(loadRoiGeneStats).toHaveBeenCalledTimes(1)
       view.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not prewarm ROI gene stats when viewport warmup is disabled', async () => {
+    vi.useFakeTimers()
+    const loadRoiCells = roiCellsLoader()
+    const loadRoiGeneStats = roiGeneStatsLoader()
+
+    try {
+      render(
+        <WarmupProbe
+          currentViewportDetail={firstViewportDetail}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+          viewportGeneWarmupEnabled={false}
+        />,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
+      })
+
+      expect(loadRoiCells).not.toHaveBeenCalled()
+      expect(loadRoiGeneStats).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }

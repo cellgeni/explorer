@@ -18,7 +18,13 @@ export interface AnalysisEmbedding {
   readonly points: readonly AnalysisEmbeddingPoint[]
 }
 
+export type AnalysisEmbeddingOption = Pick<
+  AnalysisEmbedding,
+  'kind' | 'label' | 'sourcePath'
+>
+
 export interface LoadDatasetAnalysisEmbeddingsOptions {
+  readonly kind?: AnalysisEmbeddingKind
   readonly signal?: AbortSignal
   readonly fetcher?: typeof fetch
   readonly visiumHdBinSizeMicrometers?: AnalysisEmbeddingVisiumHdBinSize

@@ -69,6 +69,20 @@ describe('CellInfoPanel', () => {
 
     expect(annotationsTerm.nextElementSibling).toHaveTextContent('None')
   })
+
+  it('hides transcript z-axis details when transcript distributions are disabled', () => {
+    render(
+      <CellInfoPanel
+        cell={cellDatum()}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+        transcriptDistributionVisible={false}
+      />,
+    )
+
+    expect(screen.queryByText('Z-axis transcripts')).not.toBeInTheDocument()
+    expect(screen.getByText('Gene expression')).toBeInTheDocument()
+  })
 })
 
 function cellDatum(values: Partial<OverviewCellDatum> = {}): OverviewCellDatum {

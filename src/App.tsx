@@ -38,6 +38,7 @@ import {
 import {
   resolveAppDependencies,
   type AnalysisEmbeddingsLoader,
+  type AnnotationLoader,
   type AppProps,
   type BoundaryElementsLoader,
   type GeneExpressionLoader,
@@ -140,7 +141,11 @@ import {
 import { useViewerStore } from './store/viewerStore'
 import type { DatasetCell, GeneExpressionBatch } from './datasets/xeniumDataset'
 import { normalizeCustomMorphologyLayerUrl } from './data/morphologyImage'
-import type { SpatialElement, SpatialElementId } from './datasets/spatialDataset'
+import type {
+  Annotation,
+  SpatialElement,
+  SpatialElementId,
+} from './datasets/spatialDataset'
 import type { GexResult } from './data/gex'
 import type { AnalysisEmbedding } from './data/analysisEmbeddings'
 import type { GeneExpressionScoreMode } from './rendering/deckLayers'
@@ -488,6 +493,9 @@ export function App({ dependencies }: AppProps = {}) {
   const transcriptViewportKeyRef = useRef<string | null>(null)
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
   const initialShareableStateRef = useRef<ShareableState | null>(initialShareableState)
+  const initialAnnotationImportUrlRef = useRef(
+    initialShareableState.annotationUrl?.trim() || null,
+  )
   const initialSharedRoiSelectionRef = useRef<RoiSelection | null>(
     initialShareableState.roiSelection ?? null,
   )
@@ -752,6 +760,10 @@ export function App({ dependencies }: AppProps = {}) {
         : null
   const viewerViewResetKey =
     loadState.status === 'idle' ? 'idle' : `${loadState.status}:${loadState.url}`
+  const viewerOverviewRenderCellLimit =
+    platformAdapter.kind === 'h5ad'
+      ? null
+      : performanceBudget.overviewRenderCellLimit
   const geneOptions = useMemo(
     () => (genePanelState.status === 'ready' ? genePanelState.genes : []),
     [genePanelState],
@@ -1335,6 +1347,27 @@ export function App({ dependencies }: AppProps = {}) {
     setGeneExpressionScaleDomain({ key: '', max: 0 })
     setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
   }, [setGeneExpressionBatch, setGeneExpressionScaleDomain, setGeneExpressionState])
+  const loadActiveAnnotations = useCallback<AnnotationLoader>(
+    async (...args) => {
+      const [baseUrl, options = {}] = args
+
+      if (platformAdapter.kind === 'h5ad') {
+        const dataset = await getSpatialDataset(baseUrl)
+
+        if (!isH5adAnnotationDataset(dataset)) {
+          throw new Error('Loaded H5AD dataset does not expose annotations.')
+        }
+
+        return dataset.annotations({
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+          ...(options.groupId === undefined ? {} : { groupId: options.groupId }),
+        })
+      }
+
+      return loadAnnotations(baseUrl, options)
+    },
+    [getSpatialDataset, loadAnnotations, platformAdapter],
+  )
   const loadActiveAnalysisEmbeddings = useCallback<AnalysisEmbeddingsLoader>(
     async (...args) => {
       const [baseUrl, options = {}] = args
@@ -1348,6 +1381,7 @@ export function App({ dependencies }: AppProps = {}) {
 
         return dataset.embeddings({
           ...(options.signal === undefined ? {} : { signal: options.signal }),
+          ...(options.kind === undefined ? {} : { kind: options.kind }),
         })
       }
 
@@ -1676,6 +1710,7 @@ export function App({ dependencies }: AppProps = {}) {
       currentViewportDetail,
       enabled: platformAdapter.kind !== 'visium-hd',
       magicLensScope,
+      viewportGeneWarmupEnabled: platformAdapter.kind !== 'h5ad',
       roiName,
     },
     data: {
@@ -1782,7 +1817,7 @@ export function App({ dependencies }: AppProps = {}) {
       roiState,
       selectedAnnotationGroupId,
     },
-    loaders: { loadAnnotations },
+    loaders: { loadAnnotations: loadActiveAnnotations },
     refs: {
       datasetAbortRef,
       loadRequestIdRef: loadRequestId,
@@ -1800,6 +1835,24 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCellMetadataTrackId,
     },
   })
+  useEffect(() => {
+    if (loadedDatasetUrl === null) {
+      return
+    }
+
+    const initialAnnotationUrl = initialAnnotationImportUrlRef.current
+
+    if (initialAnnotationUrl === null) {
+      return
+    }
+
+    initialAnnotationImportUrlRef.current = null
+    void handleImportAnnotationUrl(initialAnnotationUrl).then((imported) => {
+      if (imported) {
+        setAnnotationImportUrl(initialAnnotationUrl)
+      }
+    })
+  }, [handleImportAnnotationUrl, loadedDatasetUrl, setAnnotationImportUrl])
 
   const { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings } =
     useAnalysisEmbeddingWorkflow({
@@ -2504,6 +2557,7 @@ export function App({ dependencies }: AppProps = {}) {
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
           cellTranscriptDistributionState={cellTranscriptDistributionState}
+          cellTranscriptDistributionVisible={platformAdapter.capabilities.transcripts}
           loadEnabled={loadState.status === 'ready'}
           onEmbeddingKindChange={(nextEmbeddingKind) => {
             setSelectedEmbeddingKind(nextEmbeddingKind)
@@ -2616,6 +2670,7 @@ export function App({ dependencies }: AppProps = {}) {
             showCellBoundaries,
           )}
           hoverTooltipsEnabled={showHoverTooltips}
+          overviewCellSourceLabel={platformAdapter.kind === 'h5ad' ? 'H5AD' : 'Xenium'}
           gridCells={viewerGridCells}
           fitGridCells={spatialGridCells}
           transcriptAggregateBins={transcriptLayerAggregateBins}
@@ -2625,7 +2680,7 @@ export function App({ dependencies }: AppProps = {}) {
           flatImage={flatMorphologyImage}
           imageOpacity={morphologyCanvasChannels.length === 0 ? imageLayerOpacity : 1}
           cellFillOpacity={cellFillOpacity}
-          cellBoundaryOpacity={cellBoundaryOpacity}
+          cellBoundaryOpacity={platformAdapter.kind === 'h5ad' ? 0 : cellBoundaryOpacity}
           pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
           transcriptOpacity={transcriptOpacity}
           transcriptPointSize={transcriptPointSize}
@@ -2640,7 +2695,8 @@ export function App({ dependencies }: AppProps = {}) {
           status={loadState.status}
           imageStatus={viewerImageStatus}
           boundaryStatus={boundaryState.status}
-          overviewRenderCellLimit={performanceBudget.overviewRenderCellLimit}
+          overviewRenderCellLimit={viewerOverviewRenderCellLimit}
+          clipOverviewCellsToViewport={platformAdapter.kind !== 'h5ad'}
           maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
           tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
           roiMode={roiMode}
@@ -2807,8 +2863,16 @@ interface H5adExpressionDataset {
   matrix(ids: readonly SpatialElementId[]): Promise<GexResult<SpatialElementId>>
 }
 
+interface H5adAnnotationDataset {
+  annotations(options?: {
+    readonly groupId?: string
+    readonly signal?: AbortSignal
+  }): Promise<readonly Annotation[]>
+}
+
 interface H5adEmbeddingDataset {
   embeddings(options?: {
+    readonly kind?: string
     readonly signal?: AbortSignal
   }): Promise<readonly AnalysisEmbedding[]>
 }
@@ -2819,6 +2883,10 @@ function isH5adRoiDataset(dataset: unknown): dataset is H5adRoiDataset {
 
 function isH5adExpressionDataset(dataset: unknown): dataset is H5adExpressionDataset {
   return hasFunction(dataset, 'matrix')
+}
+
+function isH5adAnnotationDataset(dataset: unknown): dataset is H5adAnnotationDataset {
+  return hasFunction(dataset, 'annotations')
 }
 
 function isH5adEmbeddingDataset(dataset: unknown): dataset is H5adEmbeddingDataset {

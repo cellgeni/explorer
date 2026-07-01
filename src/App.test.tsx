@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { StrictMode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   App,
   type AnalysisEmbeddingsLoader,
@@ -23,6 +23,7 @@ import {
 } from './App'
 import { intToCellId } from './data/cellid'
 import { micrometers } from './data/coords'
+import { NO_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import { warmDatasetForRoi } from './data/datasetWarmup'
 import { GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT } from './data/geneExpressionLod'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
@@ -119,6 +120,10 @@ describe('App', () => {
     window.history.replaceState(null, '', '/')
     useViewerStore.setState(initialViewerState)
     vi.mocked(warmDatasetForRoi).mockClear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   it('renders the Xenium viewer shell', () => {
@@ -1185,6 +1190,11 @@ describe('App', () => {
         sampleCount: 32,
       },
     }))
+    const fetchAnnotations = vi.fn(
+      async () =>
+        new Response(`cell_id,label\n${intToCellId(1, 1)},Manual annotation`),
+    )
+    vi.stubGlobal('fetch', fetchAnnotations)
 
     render(
       <TestApp
@@ -1246,6 +1256,13 @@ describe('App', () => {
     expect(screen.getByLabelText('Annotation URL')).toHaveValue(
       'https://example.test/annotations/manual.csv',
     )
+    await waitFor(() => {
+      expect(fetchAnnotations).toHaveBeenCalledWith(
+        'https://example.test/annotations/manual.csv',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
+    })
+    expect(await screen.findAllByText('Manual annotation')).not.toHaveLength(0)
   })
 
   it('auto-loads a dataset URL from the query string without waiting for a click', async () => {
@@ -1894,7 +1911,7 @@ describe('App', () => {
     }
   })
 
-  it('loads H5AD obsm embeddings into the embedding selector', async () => {
+  it('lists H5AD annotations and obsm embeddings without loading them by default', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
     )
@@ -1905,31 +1922,53 @@ describe('App', () => {
       h5adUrl,
       checked: [],
     }))
+    const h5adCells = Array.from({ length: 3_005 }, (_value, index) => ({
+      cellId: index === 0 ? 'cell-a' : `cell-${index}`,
+      position: { x: micrometers(index % 100), y: micrometers(Math.floor(index / 100)) },
+      transcriptCount: 0,
+    }))
     const h5adDataset = {
-      overview: vi.fn(async () => [
-        {
-          cellId: 'cell-a',
-          position: { x: micrometers(0), y: micrometers(0) },
-          transcriptCount: 0,
-        },
-      ]),
+      overview: vi.fn(async () => h5adCells),
       genePanel: vi.fn(async () => []),
-      annotations: vi.fn(async () => []),
-      metadataTracks: vi.fn(async () => []),
-      embeddings: vi.fn(async () => [
+      annotationGroups: vi.fn(async () => [
         {
-          kind: 'X_umap',
-          label: 'UMAP',
-          sourcePath: '/obsm/X_umap',
-          points: [{ id: 'cell-a', x: 0, y: 0 }],
-        },
-        {
-          kind: 'X_pca',
-          label: 'PCA',
-          sourcePath: '/obsm/X_pca',
-          points: [{ id: 'cell-a', x: 1, y: 1 }],
+          id: 'analysis:cell-type',
+          label: 'cell_type',
+          groupingName: 'cell_type',
+          groupCount: 2,
         },
       ]),
+      annotations: vi.fn(async () => [
+        {
+          id: 'analysis:cell-type:t-cell',
+          label: 'cell_type: T cell',
+          cellIds: ['cell-a'],
+        },
+      ]),
+      metadataTracks: vi.fn(async () => []),
+      embeddingOptions: vi.fn(async () => [
+        { kind: 'X_umap', label: 'UMAP', sourcePath: '/obsm/X_umap' },
+        { kind: 'X_pca', label: 'PCA', sourcePath: '/obsm/X_pca' },
+      ]),
+      embeddings: vi.fn(async (options?: { readonly kind?: string }) =>
+        options?.kind === 'X_pca'
+          ? [
+              {
+                kind: 'X_pca',
+                label: 'PCA',
+                sourcePath: '/obsm/X_pca',
+                points: [{ id: 'cell-a', x: 1, y: 1 }],
+              },
+            ]
+          : [
+              {
+                kind: 'X_umap',
+                label: 'UMAP',
+                sourcePath: '/obsm/X_umap',
+                points: [{ id: 'cell-a', x: 0, y: 0 }],
+              },
+            ],
+      ),
     }
     const getSpatialDataset = createSpatialDatasetLoaderMock(h5adDataset)
     const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
@@ -1948,12 +1987,36 @@ describe('App', () => {
       })
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
-      await screen.findByText(/H5AD ready: 1 cells, 0 genes/)
+      await screen.findByText(/H5AD ready: 3,005 cells, 0 genes/)
+      expect(screen.getByTestId('deck-layer-cells-overview-scatter')).toHaveAttribute(
+        'data-count',
+        '3005',
+      )
+
+      openHudTab('Annotations')
+      const annotationSet = screen.getByRole('combobox', { name: 'Annotation set' })
+      const loadAnnotationsButton = screen.getByRole('button', {
+        name: 'Load Annotations',
+      })
+
+      expect(annotationSet).toHaveValue(NO_ANNOTATION_GROUP_ID)
+      expect(within(annotationSet).getByRole('option', { name: 'cell_type' })).toHaveValue(
+        'analysis:cell-type',
+      )
+      expect(loadAnnotationsButton).toBeDisabled()
+      expect(h5adDataset.annotations).not.toHaveBeenCalled()
+      expect(h5adDataset.metadataTracks).not.toHaveBeenCalled()
+
+      fireEvent.change(annotationSet, { target: { value: 'analysis:cell-type' } })
+      expect(loadAnnotationsButton).toBeEnabled()
+      fireEvent.click(loadAnnotationsButton)
+
+      await screen.findByText('Annotations loaded: 1 labels')
+      expect(h5adDataset.annotations).toHaveBeenCalledWith(
+        expect.objectContaining({ groupId: 'analysis:cell-type' }),
+      )
 
       openHudTab('Cell')
-      fireEvent.click(screen.getByRole('button', { name: 'Load Embeddings' }))
-
-      expect(await screen.findByText('UMAP: 1 cells')).toBeInTheDocument()
       const embeddingView = screen.getByRole('combobox', { name: 'Embedding view' })
 
       expect(within(embeddingView).getByRole('option', { name: 'UMAP' })).toHaveValue(
@@ -1962,14 +2025,25 @@ describe('App', () => {
       expect(within(embeddingView).getByRole('option', { name: 'PCA' })).toHaveValue(
         'X_pca',
       )
+      expect(h5adDataset.embeddings).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Load Embeddings' }))
+
+      expect(await screen.findByText('UMAP: 1 cells')).toBeInTheDocument()
       expect(screen.getByLabelText('UMAP embedding, 1 cells')).toBeInTheDocument()
-      expect(h5adDataset.embeddings).toHaveBeenCalledTimes(1)
+      expect(h5adDataset.embeddings).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'X_umap' }),
+      )
       expect(loadAnalysisEmbeddings).not.toHaveBeenCalled()
 
       fireEvent.change(embeddingView, { target: { value: 'X_pca' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Load Embeddings' }))
 
-      expect(screen.getByText('PCA: 1 cells')).toBeInTheDocument()
+      expect(await screen.findByText('PCA: 1 cells')).toBeInTheDocument()
       expect(screen.getByLabelText('PCA embedding, 1 cells')).toBeInTheDocument()
+      expect(h5adDataset.embeddings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: 'X_pca' }),
+      )
     } finally {
       viewport.restore()
     }

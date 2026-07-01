@@ -13,6 +13,7 @@ export interface CellPointLayerOptions {
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
   readonly filled: boolean
+  readonly pickable?: boolean
   readonly radiusMaxPixels?: number
 }
 
@@ -21,7 +22,9 @@ const DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS = 28
 const OVERVIEW_FULL_VIEW_RADIUS_MAX_PIXELS = 10
 const GENE_EXPRESSION_FULL_VIEW_RADIUS_MAX_PIXELS = 12
 const POINT_SIZE_ZOOM_EASE_START = 1
-const POINT_SIZE_ZOOM_EASE_END = 8
+const POINT_SIZE_ZOOM_EASE_MID = 8
+const POINT_SIZE_ZOOM_EASE_END = 10
+const POINT_SIZE_ZOOM_MID_CLOSE_SCALE = 0.7
 
 export function createCellPointLayer(
   cells: readonly OverviewCellDatum[],
@@ -30,11 +33,11 @@ export function createCellPointLayer(
   return new ScatterplotLayer<OverviewCellDatum>({
     id: 'cells-overview-scatter',
     data: cells,
-    pickable: true,
+    pickable: options.pickable ?? true,
     radiusUnits: 'common',
     radiusMinPixels: 0.12,
     radiusMaxPixels: options.radiusMaxPixels ?? DEFAULT_CELL_RADIUS_MAX_PIXELS,
-    stroked: true,
+    stroked: options.cellBoundaryOpacity > 0,
     filled: options.filled,
     opacity: 1,
     lineWidthUnits: 'pixels',
@@ -70,7 +73,7 @@ export function createGeneExpressionScatterLayer(
     radiusUnits: 'common',
     radiusMinPixels: 1.5,
     radiusMaxPixels: options.radiusMaxPixels ?? DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS,
-    stroked: true,
+    stroked: options.cellBoundaryOpacity > 0,
     filled: true,
     opacity: 1,
     lineWidthUnits: 'pixels',
@@ -108,8 +111,7 @@ export function geneExpressionRadiusMaxPixels(
 ): number {
   return zoomResponsiveRadiusMaxPixels(
     zoomDelta,
-    GENE_EXPRESSION_FULL_VIEW_RADIUS_MAX_PIXELS *
-      normalizedFullViewScale(fullViewScale),
+    GENE_EXPRESSION_FULL_VIEW_RADIUS_MAX_PIXELS * normalizedFullViewScale(fullViewScale),
     DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS,
   )
 }
@@ -168,14 +170,30 @@ function zoomResponsiveRadiusMaxPixels(
     return closeViewPixels
   }
 
+  const midViewPixels = Math.max(
+    fullViewPixels,
+    closeViewPixels * POINT_SIZE_ZOOM_MID_CLOSE_SCALE,
+  )
+
+  if (zoomDelta <= POINT_SIZE_ZOOM_EASE_MID) {
+    const progress = smoothstep(
+      clamp01(
+        (zoomDelta - POINT_SIZE_ZOOM_EASE_START) /
+          (POINT_SIZE_ZOOM_EASE_MID - POINT_SIZE_ZOOM_EASE_START),
+      ),
+    )
+
+    return roundToTenth(fullViewPixels + (midViewPixels - fullViewPixels) * progress)
+  }
+
   const progress = smoothstep(
     clamp01(
-      (zoomDelta - POINT_SIZE_ZOOM_EASE_START) /
-        (POINT_SIZE_ZOOM_EASE_END - POINT_SIZE_ZOOM_EASE_START),
+      (zoomDelta - POINT_SIZE_ZOOM_EASE_MID) /
+        (POINT_SIZE_ZOOM_EASE_END - POINT_SIZE_ZOOM_EASE_MID),
     ),
   )
 
-  return roundToTenth(fullViewPixels + (closeViewPixels - fullViewPixels) * progress)
+  return roundToTenth(midViewPixels + (closeViewPixels - midViewPixels) * progress)
 }
 
 function normalizedFullViewScale(scale: number): number {

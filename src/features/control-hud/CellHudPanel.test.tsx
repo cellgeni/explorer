@@ -73,6 +73,57 @@ describe('CellHudPanel', () => {
     expect(onLoadAnalysisEmbeddings).toHaveBeenCalledTimes(1)
   })
 
+  it('lists available embedding options before a projection is loaded', () => {
+    const onEmbeddingKindChange = vi.fn()
+    const onLoadAnalysisEmbeddings = vi.fn()
+
+    render(
+      <CellHudPanel
+        active
+        embeddingViewInputId="embedding-view"
+        embeddingCopy="2 views available"
+        analysisEmbeddingState={{
+          status: 'available',
+          url: 'https://example.test/output',
+          options: [
+            { kind: 'X_umap', label: 'UMAP', sourcePath: '/obsm/X_umap' },
+            { kind: 'X_pca', label: 'PCA', sourcePath: '/obsm/X_pca' },
+          ],
+        }}
+        activeEmbedding={null}
+        annotationStyles={[]}
+        selectedEmbeddingKind="X_umap"
+        roiCellIds={[]}
+        isVisiumHdDataset={false}
+        selectedCell={null}
+        selectedGridCell={null}
+        selectedGridCellAssignmentState={{ status: 'idle' }}
+        selectedBoundaryCell={null}
+        selectedCellAnnotationLabels={[]}
+        cellDetailCopy="No selection"
+        cellDetailState={{ status: 'idle' }}
+        cellTranscriptDistributionState={{ status: 'idle' }}
+        loadEnabled
+        onEmbeddingKindChange={onEmbeddingKindChange}
+        onLoadAnalysisEmbeddings={onLoadAnalysisEmbeddings}
+        onClearSelectedCell={vi.fn()}
+        onClearSelectedGridCell={vi.fn()}
+        onClearSelectedBoundaryCell={vi.fn()}
+        onSelectEmbeddingCell={vi.fn()}
+      />,
+    )
+
+    const embeddingView = screen.getByRole('combobox', { name: 'Embedding view' })
+
+    expect(embeddingView).toBeEnabled()
+    expect(screen.getByText('No embedding loaded')).toBeInTheDocument()
+    fireEvent.change(embeddingView, { target: { value: 'X_pca' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Embeddings' }))
+
+    expect(onEmbeddingKindChange).toHaveBeenCalledWith('X_pca')
+    expect(onLoadAnalysisEmbeddings).toHaveBeenCalledTimes(1)
+  })
+
   it('forwards selected-cell clearing from the cell info header', () => {
     const onClearSelectedCell = vi.fn()
 

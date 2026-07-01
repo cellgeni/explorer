@@ -12,7 +12,11 @@ import type {
   ViewerViewportDetail,
 } from '../../components/ViewerCore'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
-import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
+import {
+  ALL_ANNOTATION_GROUP_ID,
+  NO_ANNOTATION_GROUP_ID,
+  type AnnotationGroupOption,
+} from '../../data/datasetAnnotations'
 import type { WarmDatasetForRoiResult } from '../../data/datasetWarmup'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
@@ -22,9 +26,12 @@ import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
-import type { Annotation, Platform, SpatialElement } from '../../datasets/spatialDataset'
+import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
-import type { AnalysisEmbeddingKind } from '../../data/analysisEmbeddings'
+import type {
+  AnalysisEmbeddingKind,
+  AnalysisEmbeddingOption,
+} from '../../data/analysisEmbeddings'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import {
@@ -45,13 +52,12 @@ import {
 } from '../cells/cellDetailModel'
 import {
   IDLE_ANALYSIS_EMBEDDING_STATE,
+  analysisEmbeddingOptionsReady,
   type AnalysisEmbeddingState,
 } from '../analysis/analysisEmbeddingModel'
 import {
   IDLE_ANNOTATION_GROUP_STATE,
   IDLE_ANNOTATION_STATE,
-  annotationLoadReady,
-  colorsForAnnotations,
   annotationGroupLoadFailed,
   annotationGroupLoadReady,
   annotationGroupLoadStarted,
@@ -180,8 +186,8 @@ type QueueAutoContrast = (
 interface H5adLifecycleDataset {
   overview(): Promise<readonly CellOverviewPoint[]>
   genePanel(): Promise<readonly string[]>
-  annotations(): Promise<readonly Annotation[]>
-  metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]>
+  annotationGroups(): Promise<readonly AnnotationGroupOption[]>
+  embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]>
 }
 
 interface UseDatasetLifecycleCallbacks {
@@ -828,18 +834,20 @@ export function useDatasetLifecycle({
           setShowNucleusBoundaries(false)
           setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
           setGenePanelState(genePanelLoadStarted(requestedUrl))
-          const dataset = await getSpatialDataset(detection.baseUrl)
+          const dataset = await getSpatialDataset(detection.baseUrl, {
+            onH5adLoadProgress: appendDebugEvent,
+          })
 
           if (!isH5adLifecycleDataset(dataset)) {
             throw new Error('Detected H5AD dataset does not expose AnnData readers.')
           }
 
           const h5adDataset: H5adLifecycleDataset = dataset
-          const [cells, genes, annotations, metadataTracks] = await Promise.all([
+          const [cells, genes, annotationGroups, embeddingOptions] = await Promise.all([
             h5adDataset.overview(),
             h5adDataset.genePanel(),
-            h5adDataset.annotations(),
-            h5adDataset.metadataTracks(),
+            h5adDataset.annotationGroups(),
+            h5adDataset.embeddingOptions(),
           ])
 
           if (!isCurrentDatasetLoad()) {
@@ -848,14 +856,15 @@ export function useDatasetLifecycle({
 
           setOverviewCells(overviewCellsToLayerData(cells))
           setGenePanelState(genePanelLoadReady(requestedUrl, genes))
-          setCellMetadataTracks(metadataTracks)
-          setSelectedCellMetadataTrackId(metadataTracks[0]?.id ?? null)
-          if (annotations.length > 0) {
-            setAnnotationState(annotationLoadReady(requestedUrl, annotations))
-            setAnnotationColors((current) => colorsForAnnotations(annotations, current))
-            setObservationColorMode('annotations')
-          } else if (metadataTracks.length > 0) {
-            setObservationColorMode('metadata')
+          setAnnotationGroupState(
+            annotationGroupLoadReady(requestedUrl, annotationGroups),
+          )
+          setSelectedAnnotationGroupId(NO_ANNOTATION_GROUP_ID)
+          if (embeddingOptions.length > 0) {
+            setAnalysisEmbeddingState(
+              analysisEmbeddingOptionsReady(requestedUrl, embeddingOptions),
+            )
+            setSelectedEmbeddingKind(embeddingOptions[0]?.kind ?? 'umap')
           }
           initialShareableStateRef.current = null
           setLoadState(datasetLoadReady(requestedUrl, cells.length))
@@ -863,6 +872,14 @@ export function useDatasetLifecycle({
             `H5AD ready: ${cells.length.toLocaleString()} cells, ${genes.length.toLocaleString()} genes in ${formatElapsed(
               loadStartedAt,
             )}`,
+          )
+          appendDebugEvent(
+            `H5AD annotation sets ready: ${annotationGroups.length.toLocaleString()} groups`,
+            { coalesceKey: 'h5ad-annotation-groups' },
+          )
+          appendDebugEvent(
+            `H5AD embeddings ready: ${embeddingOptions.length.toLocaleString()} obsm views`,
+            { coalesceKey: 'h5ad-embedding-options' },
           )
           recordTelemetry(
             telemetryEvent('dataset.load', 'success', {
@@ -1233,8 +1250,8 @@ function isH5adLifecycleDataset(dataset: unknown): dataset is H5adLifecycleDatas
   return (
     hasFunction(dataset, 'overview') &&
     hasFunction(dataset, 'genePanel') &&
-    hasFunction(dataset, 'annotations') &&
-    hasFunction(dataset, 'metadataTracks')
+    hasFunction(dataset, 'annotationGroups') &&
+    hasFunction(dataset, 'embeddingOptions')
   )
 }
 

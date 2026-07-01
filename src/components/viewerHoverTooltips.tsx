@@ -61,8 +61,10 @@ export function GridCellHoverTooltip({
 
 export function OverviewCellHoverTooltip({
   detail,
+  sourceLabel = 'Xenium',
 }: {
   readonly detail: ViewerOverviewCellHoverDetail
+  readonly sourceLabel?: string
 }) {
   const cell = detail.cell
   const cellCount = cell.cellCount
@@ -81,7 +83,7 @@ export function OverviewCellHoverTooltip({
       <dl>
         <div>
           <dt>{isAggregateBin ? 'Bin' : 'Cell'}</dt>
-          <dd>{isAggregateBin ? 'Overview' : 'Xenium'}</dd>
+          <dd>{isAggregateBin ? 'Overview' : sourceLabel}</dd>
         </div>
         {cellCount === undefined ? null : (
           <div>

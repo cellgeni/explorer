@@ -89,9 +89,19 @@ boundary polygons by default, so those controls are disabled or unavailable for
 H5AD datasets.
 
 For hosted H5AD files, use the same CORS and byte-range rules as large Xenium
-assets. The browser HDF5 path currently opens the H5AD file client-side, so keep
-early hosted fixtures small enough for interactive browser use until the H5AD
-reader is moved fully onto lazy byte-range reads.
+assets. Files up to 300 MB use the browser HDF5 path and are opened
+client-side. Files larger than 300 MB require a sibling kerchunk reference JSON
+at the H5AD URL plus `.json`; for example:
+
+```text
+https://bucket.example/path/to/sample.h5ad
+https://bucket.example/path/to/sample.h5ad.json
+```
+
+Generate the reference with `kerchunk.hdf.SingleHdf5ToZarr` using
+`inline_threshold=0`, then host both files with CORS and byte-range support. The
+app probes the H5AD size first; when the file exceeds 300 MB it opens the JSON
+with Zarrita `ReferenceStore` and lazily reads the referenced HDF5 chunks.
 
 Reference hosted fixture:
 

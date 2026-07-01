@@ -7,6 +7,7 @@ import {
 import type { Annotation } from '../datasets/spatialDataset'
 
 export const ALL_ANNOTATION_GROUP_ID = 'all'
+export const NO_ANNOTATION_GROUP_ID = 'none'
 
 export interface LoadDatasetAnnotationsOptions {
   readonly groupId?: string

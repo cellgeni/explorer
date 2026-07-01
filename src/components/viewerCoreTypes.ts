@@ -34,6 +34,7 @@ export interface ViewerCoreProps {
   readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled?: boolean
   readonly hoverTooltipsEnabled?: boolean
+  readonly overviewCellSourceLabel?: string
   readonly gridCells?: readonly GridCellDatum[]
   readonly fitGridCells?: readonly GridCellDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
@@ -45,6 +46,7 @@ export interface ViewerCoreProps {
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
   readonly pointSizeFullViewScale?: number
+  readonly cellPointPickable?: boolean
   readonly transcriptOpacity?: number
   readonly transcriptPointSize?: number
   readonly observationColorMode?: ObservationColorMode
@@ -72,7 +74,8 @@ export interface ViewerCoreProps {
   readonly initialViewStateOverride?: InitialViewStateOverride
   readonly viewResetKey?: string | number
   readonly focusRequest?: ViewerFocusRequest | null
-  readonly overviewRenderCellLimit?: number
+  readonly overviewRenderCellLimit?: number | null
+  readonly clipOverviewCellsToViewport?: boolean
   readonly maxConcurrentTileRequests?: number
   readonly tileCacheMaxTiles?: number
   readonly onImageTileError?: (error: Error) => void

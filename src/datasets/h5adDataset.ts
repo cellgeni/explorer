@@ -1,3 +1,5 @@
+import { ReferenceStore } from '@zarrita/storage'
+import * as zarr from 'zarrita'
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { RoiSelectionInput } from '../data/roiSelection'
@@ -8,7 +10,13 @@ import type { CellOverviewPoint } from '../data/hyparquetCells'
 import {
   analysisEmbeddingLabel,
   type AnalysisEmbedding,
+  type AnalysisEmbeddingKind,
+  type AnalysisEmbeddingOption,
 } from '../data/analysisEmbeddings'
+import type {
+  AnnotationGroupOption,
+  LoadDatasetAnnotationsOptions,
+} from '../data/datasetAnnotations'
 import type {
   Annotation,
   DatasetMeta,
@@ -22,14 +30,18 @@ import type { DatasetCell, GeneExpressionBatch } from './xeniumDataset'
 export interface AnnDataH5adDatasetOptions {
   readonly url: string
   readonly fetcher?: typeof fetch
+  readonly onProgress?: H5adLoadProgressReporter
 }
+
+export type H5adLoadProgressReporter = (message: string) => void
 
 interface H5adCache {
   readonly url: string
   readonly cellIds: readonly string[]
   readonly geneNames: readonly string[]
   readonly coordinates: readonly DataPoint[]
-  readonly embeddings: readonly AnalysisEmbedding[]
+  readonly root: H5GroupLike
+  readonly embeddingOptions: readonly AnalysisEmbeddingOption[]
   readonly categoricalTracks: readonly H5adCategoricalTrack[]
   readonly continuousTracks: readonly H5adContinuousTrack[]
   readonly matrix: H5adMatrix
@@ -39,6 +51,7 @@ interface H5adCache {
 interface H5adCategoricalTrack {
   readonly id: string
   readonly label: string
+  readonly categoryCount: number
   readonly values: readonly (string | null)[]
 }
 
@@ -73,6 +86,28 @@ type H5adMatrix =
       readonly rows: number
       readonly cols: number
     }
+  | {
+      readonly kind: 'dense-zarr'
+      readonly values: H5adZarrArray
+      readonly rows: number
+      readonly cols: number
+    }
+  | {
+      readonly kind: 'csr-zarr'
+      readonly data: H5adZarrArray
+      readonly indices: H5adZarrArray
+      readonly indptr: NumericArrayLike
+      readonly rows: number
+      readonly cols: number
+    }
+  | {
+      readonly kind: 'csc-zarr'
+      readonly data: H5adZarrArray
+      readonly indices: H5adZarrArray
+      readonly indptr: NumericArrayLike
+      readonly rows: number
+      readonly cols: number
+    }
 
 type NumericArrayLike =
   | readonly number[]
@@ -98,12 +133,20 @@ interface H5EntityLike {
 interface H5DatasetLike extends H5EntityLike {
   readonly shape: readonly number[] | null
   readonly value: unknown
+  readonly source?: H5adArraySource
 }
 
 interface H5GroupLike extends H5EntityLike {
   keys(): string[]
   get(path: string): unknown
 }
+
+interface H5adArraySource {
+  readonly kind: 'zarr'
+  readonly array: H5adZarrArray
+}
+
+type H5adZarrArray = zarr.Array<zarr.DataType, ReferenceStore>
 
 const DEFAULT_H5AD_UNITS = {
   dataUnit: 'micrometer',
@@ -137,6 +180,7 @@ const H5AD_EMBEDDING_DISPLAY_KEYS = [
 
 const H5AD_FETCH_TIMEOUT_MS = 60_000
 const H5AD_MAX_FILE_BYTES = 300 * 1024 * 1024
+const H5AD_REFERENCE_FETCH_CONCURRENCY = 6
 
 export class H5adFileSizeLimitExceededError extends Error {
   readonly url: string
@@ -156,14 +200,43 @@ export class H5adFileSizeLimitExceededError extends Error {
   }
 }
 
+export class H5adReferenceFileUnavailableError extends Error {
+  readonly url: string
+  readonly referenceUrl: string
+  readonly byteLength: number
+  readonly maxBytes: number
+
+  constructor(
+    url: string,
+    referenceUrl: string,
+    byteLength: number,
+    maxBytes = H5AD_MAX_FILE_BYTES,
+  ) {
+    super(
+      `H5AD file is ${formatByteCount(
+        byteLength,
+      )}, exceeding the browser load limit of ${formatByteCount(
+        maxBytes,
+      )}, and no readable kerchunk reference file was found at ${referenceUrl}.`,
+    )
+    this.name = 'H5adReferenceFileUnavailableError'
+    this.url = url
+    this.referenceUrl = referenceUrl
+    this.byteLength = byteLength
+    this.maxBytes = maxBytes
+  }
+}
+
 export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   readonly url: string
   private readonly fetcher: typeof fetch
+  private readonly onProgress: H5adLoadProgressReporter | undefined
   private cachePromise: Promise<H5adCache> | null = null
 
   constructor(options: AnnDataH5adDatasetOptions) {
     this.url = options.url
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+    this.onProgress = options.onProgress
   }
 
   async meta(): Promise<DatasetMeta> {
@@ -210,7 +283,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     const cache = await this.cache()
     throwIfAborted(options.signal)
     const selectedCells = h5adCellsInBbox(cache, bbox, options.limit)
-    const matrix = h5adMatrixForCells(
+    const matrix = await h5adMatrixForCells(
       cache,
       selectedCells.map((cell) => cell.id),
       genes,
@@ -238,11 +311,32 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  async annotations(): Promise<readonly Annotation<SpatialElementId>[]> {
+  async annotationGroups(): Promise<readonly AnnotationGroupOption[]> {
     const cache = await this.cache()
+
+    return cache.categoricalTracks.map((track) => ({
+      id: h5adAnnotationGroupId(track),
+      label: track.label,
+      groupingName: track.id,
+      groupCount: track.categoryCount,
+    }))
+  }
+
+  async annotations(
+    options: LoadDatasetAnnotationsOptions = {},
+  ): Promise<readonly Annotation<SpatialElementId>[]> {
+    throwIfAborted(options.signal)
+    const cache = await this.cache()
+    throwIfAborted(options.signal)
+    const selectedTracks =
+      options.groupId === undefined || options.groupId === 'all'
+        ? cache.categoricalTracks
+        : cache.categoricalTracks.filter(
+            (track) => h5adAnnotationGroupId(track) === options.groupId,
+          )
     const annotations: Annotation<SpatialElementId>[] = []
 
-    for (const track of cache.categoricalTracks) {
+    for (const track of selectedTracks) {
       const cellIdsByLabel = new Map<string, string[]>()
 
       for (let index = 0; index < track.values.length; index += 1) {
@@ -286,13 +380,34 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   }
 
   async embeddings(
-    options: { readonly signal?: AbortSignal } = {},
+    options: {
+      readonly kind?: AnalysisEmbeddingKind
+      readonly signal?: AbortSignal
+    } = {},
   ): Promise<readonly AnalysisEmbedding[]> {
     throwIfAborted(options.signal)
     const cache = await this.cache()
     throwIfAborted(options.signal)
 
-    return cache.embeddings
+    const optionsToLoad =
+      options.kind === undefined
+        ? cache.embeddingOptions
+        : cache.embeddingOptions.filter((embedding) => embedding.kind === options.kind)
+    const embeddings: AnalysisEmbedding[] = []
+
+    for (const embeddingOption of optionsToLoad) {
+      throwIfAborted(options.signal)
+      embeddings.push(
+        await readObsmEmbeddingFromRoot(cache.root, embeddingOption.kind, cache.cellIds),
+      )
+    }
+
+    return embeddings
+  }
+
+  async embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]> {
+    const cache = await this.cache()
+    return cache.embeddingOptions
   }
 
   async genePanel(): Promise<readonly string[]> {
@@ -328,6 +443,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     if (this.cachePromise === null) {
       this.cachePromise = readH5ad(this.url, {
         fetcher: this.fetcher,
+        ...(this.onProgress === undefined ? {} : { onProgress: this.onProgress }),
       }).catch((error: unknown) => {
         this.cachePromise = null
         throw error
@@ -340,15 +456,67 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
 async function readH5ad(
   url: string,
-  options: { readonly fetcher: typeof fetch },
+  options: {
+    readonly fetcher: typeof fetch
+    readonly onProgress?: H5adLoadProgressReporter
+  },
 ): Promise<H5adCache> {
-  const response = await fetchH5adFile(url, options.fetcher)
+  const { fetcher, onProgress } = options
+  reportH5adProgress(onProgress, 'H5AD size check started')
+  const headResponse = await fetchH5adHead(url, fetcher).catch(() => null)
+  const declaredByteLength =
+    headResponse?.ok === true ? readContentLength(headResponse.headers) : null
+
+  if (declaredByteLength !== null && declaredByteLength > H5AD_MAX_FILE_BYTES) {
+    reportH5adProgress(
+      onProgress,
+      `H5AD file is ${formatByteCount(
+        declaredByteLength,
+      )}, above the ${formatByteCount(H5AD_MAX_FILE_BYTES)} browser limit`,
+    )
+    return readH5adReferenceOrThrow(url, fetcher, declaredByteLength, onProgress)
+  }
+
+  if (declaredByteLength === null) {
+    reportH5adProgress(
+      onProgress,
+      `H5AD size check unavailable; loading with ${formatByteCount(
+        H5AD_MAX_FILE_BYTES,
+      )} guard`,
+    )
+  } else {
+    reportH5adProgress(
+      onProgress,
+      `H5AD file is ${formatByteCount(declaredByteLength)}; loading directly`,
+    )
+  }
+
+  const response = await fetchH5adFile(url, fetcher)
 
   if (!response.ok) {
     throw new Error(`H5AD file returned HTTP ${response.status}.`)
   }
 
-  const bytes = await readH5adResponseBytes(url, response)
+  let bytes: Uint8Array
+
+  try {
+    bytes = await readH5adResponseBytes(url, response)
+  } catch (error) {
+    if (error instanceof H5adFileSizeLimitExceededError) {
+      reportH5adProgress(
+        onProgress,
+        `H5AD stream exceeded ${formatByteCount(
+          H5AD_MAX_FILE_BYTES,
+        )}; looking for companion reference`,
+      )
+      return readH5adReferenceOrThrow(url, fetcher, error.byteLength, onProgress)
+    }
+
+    throw error
+  }
+
+  reportH5adProgress(onProgress, 'H5AD file loaded; opening AnnData arrays')
+
   const h5wasm = (await import('h5wasm')).default
   const { FS } = await h5wasm.ready
   const fileName = `/anndata-${hashString(url)}.h5ad`
@@ -364,31 +532,7 @@ async function readH5ad(
   const file = new h5wasm.File(fileName, 'r') as H5GroupLike & { close(): unknown }
 
   try {
-    const obs = expectGroup(file.get('/obs'), '/obs')
-    const varGroup = expectGroup(file.get('/var'), '/var')
-    const cellIds = uniqueNames(
-      readDataframeIndex(obs, 'obs').map((id, index) =>
-        id.length === 0 ? `obs-${index}` : id,
-      ),
-      'obs',
-    )
-    const geneNames = uniqueNames(readGeneNames(varGroup), 'var')
-    const embeddings = readObsmEmbeddings(file, cellIds)
-    const coordinates = selectOverviewCoordinates(embeddings)
-    const observationTracks = readObservationTracks(obs, cellIds.length)
-    const matrix = readMatrix(file, cellIds.length, geneNames.length)
-
-    return {
-      url,
-      cellIds,
-      geneNames,
-      coordinates,
-      embeddings,
-      categoricalTracks: observationTracks.categoricalTracks,
-      continuousTracks: observationTracks.continuousTracks,
-      matrix,
-      extent: bboxForPoints(coordinates),
-    }
+    return readH5adCacheFromGroup(url, file)
   } catch (error) {
     try {
       file.close()
@@ -399,7 +543,345 @@ async function readH5ad(
   }
 }
 
-function readDataframeIndex(group: H5GroupLike, label: string): readonly string[] {
+async function readH5adReferenceOrThrow(
+  url: string,
+  fetcher: typeof fetch,
+  byteLength: number,
+  onProgress: H5adLoadProgressReporter | undefined,
+): Promise<H5adCache> {
+  const referenceUrl = h5adReferenceUrl(url)
+  reportH5adProgress(onProgress, `Looking for H5AD reference ${referenceUrl}`)
+  const response = await fetchH5adReferenceFile(referenceUrl, fetcher).catch(() => {
+    throw new H5adReferenceFileUnavailableError(url, referenceUrl, byteLength)
+  })
+
+  if (!response.ok) {
+    throw new H5adReferenceFileUnavailableError(url, referenceUrl, byteLength)
+  }
+
+  reportH5adProgress(onProgress, `Loading H5AD reference ${referenceUrl}`)
+  const spec = h5adReferenceSpecWithTarget(
+    objectRecord(await response.json(), 'H5AD reference spec'),
+    url,
+  )
+  reportH5adProgress(onProgress, 'H5AD reference loaded; opening referenced arrays')
+  const store = ReferenceStore.fromSpec(spec, {
+    fetch: referenceStoreFetch(fetcher),
+  })
+  const root = await hydrateH5adReferenceRoot(store, spec)
+  const cache = await readH5adCacheFromGroup(url, root)
+  reportH5adProgress(
+    onProgress,
+    `H5AD reference ready: ${cache.cellIds.length.toLocaleString()} cells, ${cache.geneNames.length.toLocaleString()} genes`,
+  )
+  return cache
+}
+
+function reportH5adProgress(
+  onProgress: H5adLoadProgressReporter | undefined,
+  message: string,
+): void {
+  onProgress?.(message)
+}
+
+async function readH5adCacheFromGroup(
+  url: string,
+  file: H5GroupLike,
+): Promise<H5adCache> {
+  const obs = expectGroup(file.get('/obs'), '/obs')
+  const varGroup = expectGroup(file.get('/var'), '/var')
+  const cellIds = uniqueNames(
+    (await readDataframeIndex(obs, 'obs')).map((id, index) =>
+      id.length === 0 ? `obs-${index}` : id,
+    ),
+    'obs',
+  )
+  const geneNames = uniqueNames(await readGeneNames(varGroup), 'var')
+  const embeddingOptions = readObsmEmbeddingOptions(file, cellIds.length)
+  const coordinateEmbedding = await readOverviewCoordinateEmbedding(
+    file,
+    embeddingOptions,
+    cellIds,
+  )
+  const coordinates = embeddingToCoordinates(coordinateEmbedding)
+  const observationTracks = await readObservationTracks(obs, cellIds.length)
+  const matrix = await readMatrix(file, cellIds.length, geneNames.length)
+
+  return {
+    url,
+    cellIds,
+    geneNames,
+    coordinates,
+    root: file,
+    embeddingOptions,
+    categoricalTracks: observationTracks.categoricalTracks,
+    continuousTracks: observationTracks.continuousTracks,
+    matrix,
+    extent: bboxForPoints(coordinates),
+  }
+}
+
+class HydratedH5adGroup implements H5GroupLike {
+  readonly attrs?: Readonly<Record<string, H5AttributeLike>>
+  readonly children: ReadonlyMap<string, unknown>
+
+  constructor(
+    attrs: Readonly<Record<string, H5AttributeLike>>,
+    children: ReadonlyMap<string, unknown>,
+  ) {
+    this.attrs = attrs
+    this.children = children
+  }
+
+  keys(): string[] {
+    return Array.from(this.children.keys())
+  }
+
+  get(path: string): unknown {
+    const parts = normalizeH5Path(path)
+
+    if (parts.length === 0) {
+      return this
+    }
+
+    return hydratedH5adGroupGet(this, parts)
+  }
+}
+
+function hydratedH5adGroupGet(
+  group: HydratedH5adGroup,
+  parts: readonly string[],
+): unknown {
+  let current: unknown = group
+
+  for (const part of parts) {
+    if (!isGroup(current)) {
+      return undefined
+    }
+
+    current =
+      current instanceof HydratedH5adGroup
+        ? current.children.get(part)
+        : current.get(part)
+  }
+
+  return current
+}
+
+interface H5adReferenceIndex {
+  readonly nodeKinds: ReadonlyMap<string, 'array' | 'group'>
+  readonly childrenByPath: ReadonlyMap<string, readonly string[]>
+}
+
+async function hydrateH5adReferenceRoot(
+  store: ReferenceStore,
+  spec: unknown,
+): Promise<H5GroupLike> {
+  const index = h5adReferenceIndexFromSpec(spec)
+  return hydrateH5adReferenceGroup(store, index, '')
+}
+
+async function hydrateH5adReferenceGroup(
+  store: ReferenceStore,
+  index: H5adReferenceIndex,
+  path: string,
+): Promise<H5GroupLike> {
+  const location = path === '' ? zarr.root(store) : zarr.root(store).resolve(path)
+  const group = await zarr.open.v2(location, { kind: 'group' })
+  const children = new Map<string, unknown>()
+
+  for (const childName of index.childrenByPath.get(path) ?? []) {
+    const childPath = joinZarrPath(path, childName)
+    const childKind = index.nodeKinds.get(childPath)
+
+    if (childKind === 'group') {
+      children.set(childName, await hydrateH5adReferenceGroup(store, index, childPath))
+      continue
+    }
+
+    if (childKind === 'array') {
+      children.set(childName, await hydrateH5adReferenceDataset(store, childPath))
+    }
+  }
+
+  return new HydratedH5adGroup(h5AttrsFromRecord(group.attrs), children)
+}
+
+async function hydrateH5adReferenceDataset(
+  store: ReferenceStore,
+  path: string,
+): Promise<H5DatasetLike> {
+  const array = await zarr.open.v2(zarr.root(store).resolve(path), { kind: 'array' })
+  const source = { kind: 'zarr', array } as const
+
+  return {
+    attrs: h5AttrsFromRecord(array.attrs),
+    shape: array.shape,
+    value: undefined,
+    source,
+  }
+}
+
+function h5adReferenceIndexFromSpec(spec: unknown): H5adReferenceIndex {
+  const refs = objectRecord(objectRecord(spec, 'H5AD reference spec').refs, 'refs')
+  const nodeKinds = new Map<string, 'array' | 'group'>()
+  const childrenByPath = new Map<string, Set<string>>()
+
+  for (const rawKey of Object.keys(refs)) {
+    const key = rawKey.replace(/^\/+/, '')
+    const metadataMatch = /^(.*?)(?:\/)?\.(zarray|zgroup)$/.exec(key)
+
+    if (metadataMatch === null) {
+      continue
+    }
+
+    const path = normalizeZarrPath(metadataMatch[1] ?? '')
+    const kind = metadataMatch[2] === 'zarray' ? 'array' : 'group'
+    nodeKinds.set(path, kind)
+
+    if (path === '') {
+      continue
+    }
+
+    const parts = path.split('/')
+    const childName = parts.at(-1)
+
+    if (childName === undefined) {
+      continue
+    }
+
+    const parentPath = parts.slice(0, -1).join('/')
+    const children = childrenByPath.get(parentPath) ?? new Set<string>()
+    children.add(childName)
+    childrenByPath.set(parentPath, children)
+  }
+
+  return {
+    nodeKinds,
+    childrenByPath: new Map(
+      Array.from(childrenByPath, ([path, children]) => [
+        path,
+        Array.from(children).sort((left, right) => left.localeCompare(right)),
+      ]),
+    ),
+  }
+}
+
+function h5adReferenceSpecWithTarget(
+  spec: Record<string, unknown>,
+  targetUrl: string,
+): Record<string, unknown> {
+  const refs = objectRecord(spec.refs, 'refs')
+  const targetedRefs: Record<string, unknown> = {}
+
+  for (const [key, value] of Object.entries(refs)) {
+    targetedRefs[key] = h5adReferenceEntryWithTarget(value, targetUrl)
+  }
+
+  return { ...spec, refs: targetedRefs }
+}
+
+function h5adReferenceEntryWithTarget(value: unknown, targetUrl: string): unknown {
+  if (!Array.isArray(value)) {
+    return value
+  }
+
+  if (value.length !== 1 && value.length !== 3) {
+    return value
+  }
+
+  return typeof value[0] === 'string' || value[0] === null
+    ? [targetUrl, ...value.slice(1)]
+    : value
+}
+
+function h5AttrsFromRecord(
+  attrs: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, H5AttributeLike>> {
+  const h5Attrs: Record<string, H5AttributeLike> = {}
+
+  for (const [key, value] of Object.entries(attrs)) {
+    h5Attrs[key] = { value }
+  }
+
+  return h5Attrs
+}
+
+function normalizeH5Path(path: string): readonly string[] {
+  return path
+    .replace(/^\/+/, '')
+    .split('/')
+    .filter((part) => part.length > 0)
+}
+
+function normalizeZarrPath(path: string): string {
+  return path.replace(/^\/+|\/+$/g, '')
+}
+
+function joinZarrPath(parent: string, child: string): string {
+  return parent.length === 0 ? child : `${parent}/${child}`
+}
+
+function h5adReferenceUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    parsed.pathname = `${parsed.pathname}.json`
+    return parsed.toString()
+  } catch {
+    return `${url}.json`
+  }
+}
+
+function referenceStoreFetch(
+  fetcher: typeof fetch,
+): (request: Request) => Promise<Response> {
+  const limit = createAsyncLimiter(H5AD_REFERENCE_FETCH_CONCURRENCY)
+
+  return (request: Request) =>
+    limit(() => {
+      const resolvedUrl = ReferenceStore.resolveUri(request.url)
+      const resolvedRequest =
+        resolvedUrl === request.url ? request : new Request(resolvedUrl, request)
+      return fetcher(resolvedRequest)
+    })
+}
+
+function createAsyncLimiter(
+  maxConcurrent: number,
+): <T>(task: () => Promise<T>) => Promise<T> {
+  const queue: Array<() => void> = []
+  let active = 0
+
+  return async function runLimited<T>(task: () => Promise<T>): Promise<T> {
+    if (active >= maxConcurrent) {
+      await new Promise<void>((resolve) => {
+        queue.push(resolve)
+      })
+    }
+
+    active += 1
+
+    try {
+      return await task()
+    } finally {
+      active -= 1
+      queue.shift()?.()
+    }
+  }
+}
+
+function objectRecord(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+
+  throw new Error(`Expected ${label} to be an object.`)
+}
+
+async function readDataframeIndex(
+  group: H5GroupLike,
+  label: string,
+): Promise<readonly string[]> {
   const indexKey = readStringAttribute(group, '_index')
   const candidateKeys = [
     indexKey,
@@ -413,15 +895,15 @@ function readDataframeIndex(group: H5GroupLike, label: string): readonly string[
     const dataset = group.get(key)
 
     if (isDataset(dataset)) {
-      return readStringArray(dataset.value, `/${label}/${key}`)
+      return readStringArray(await readDatasetValue(dataset), `/${label}/${key}`)
     }
   }
 
   throw new Error(`H5AD /${label} dataframe does not expose a readable index column.`)
 }
 
-function readGeneNames(varGroup: H5GroupLike): readonly string[] {
-  const indexNames = readDataframeIndex(varGroup, 'var')
+async function readGeneNames(varGroup: H5GroupLike): Promise<readonly string[]> {
+  const indexNames = await readDataframeIndex(varGroup, 'var')
 
   for (const key of ['gene_symbols', 'gene_symbol', 'feature_name', 'name']) {
     const dataset = varGroup.get(key)
@@ -430,7 +912,7 @@ function readGeneNames(varGroup: H5GroupLike): readonly string[] {
       continue
     }
 
-    const values = readStringArray(dataset.value, `/var/${key}`)
+    const values = readStringArray(await readDatasetValue(dataset), `/var/${key}`)
 
     if (values.length === indexNames.length && values.some((value) => value !== '')) {
       return values
@@ -440,12 +922,12 @@ function readGeneNames(varGroup: H5GroupLike): readonly string[] {
   return indexNames
 }
 
-function readObsmEmbeddings(
+function readObsmEmbeddingOptions(
   file: H5GroupLike,
-  cellIds: readonly string[],
-): readonly AnalysisEmbedding[] {
+  cellCount: number,
+): readonly AnalysisEmbeddingOption[] {
   const obsm = expectGroup(file.get('/obsm'), '/obsm')
-  const embeddings: AnalysisEmbedding[] = []
+  const embeddings: AnalysisEmbeddingOption[] = []
 
   for (const key of obsm.keys()) {
     const dataset = obsm.get(key)
@@ -454,37 +936,68 @@ function readObsmEmbeddings(
       continue
     }
 
-    const embedding = readObsmEmbedding(key, dataset, cellIds)
-
-    if (embedding === null) {
+    if (!isObsmEmbeddingDataset(key, dataset, cellCount)) {
       continue
     }
 
-    embeddings.push(embedding)
+    embeddings.push({
+      kind: key,
+      label: analysisEmbeddingLabel(key),
+      sourcePath: `/obsm/${key}`,
+    })
   }
 
   return embeddings.sort(compareH5adEmbeddings)
 }
 
-function readObsmEmbedding(
+function isObsmEmbeddingDataset(
   key: string,
   dataset: H5DatasetLike,
-  cellIds: readonly string[],
-): AnalysisEmbedding | null {
+  cellCount: number,
+): boolean {
   const shape = dataset.shape
 
   if (shape === null || shape.length !== 2) {
-    return null
+    return false
+  }
+
+  const rows = readShapeDimension(shape, 0, `/obsm/${key}`)
+  const cols = readShapeDimension(shape, 1, `/obsm/${key}`)
+
+  return rows === cellCount && cols >= 2
+}
+
+async function readObsmEmbeddingFromRoot(
+  file: H5GroupLike,
+  key: string,
+  cellIds: readonly string[],
+): Promise<AnalysisEmbedding> {
+  return readObsmEmbedding(
+    key,
+    expectDataset(file.get(`/obsm/${key}`), `/obsm/${key}`),
+    cellIds,
+  )
+}
+
+async function readObsmEmbedding(
+  key: string,
+  dataset: H5DatasetLike,
+  cellIds: readonly string[],
+): Promise<AnalysisEmbedding> {
+  const shape = dataset.shape
+
+  if (shape === null || shape.length !== 2) {
+    throw new Error(`H5AD /obsm/${key} is not a 2D matrix.`)
   }
 
   const rows = readShapeDimension(shape, 0, `/obsm/${key}`)
   const cols = readShapeDimension(shape, 1, `/obsm/${key}`)
 
   if (rows !== cellIds.length || cols < 2) {
-    return null
+    throw new Error(`H5AD /obsm/${key} does not match the cell count.`)
   }
 
-  const values = readNumericArray(dataset.value, `/obsm/${key}`)
+  const values = readNumericArray(await readDatasetValue(dataset), `/obsm/${key}`)
 
   if (values.length < rows * cols) {
     throw new Error(`H5AD /obsm/${key} is shorter than its declared shape.`)
@@ -509,17 +1022,16 @@ function readObsmEmbedding(
   }
 }
 
-function selectOverviewCoordinates(
-  embeddings: readonly AnalysisEmbedding[],
-): readonly DataPoint[] {
+async function readOverviewCoordinateEmbedding(
+  file: H5GroupLike,
+  embeddings: readonly AnalysisEmbeddingOption[],
+  cellIds: readonly string[],
+): Promise<AnalysisEmbedding> {
   for (const key of H5AD_COORDINATE_KEYS) {
     const embedding = embeddings.find((candidate) => candidate.kind === key)
 
     if (embedding !== undefined) {
-      return embedding.points.map((point) => ({
-        x: micrometers(point.x),
-        y: micrometers(point.y),
-      }))
+      return readObsmEmbeddingFromRoot(file, embedding.kind, cellIds)
     }
   }
 
@@ -530,9 +1042,16 @@ function selectOverviewCoordinates(
   )
 }
 
+function embeddingToCoordinates(embedding: AnalysisEmbedding): readonly DataPoint[] {
+  return embedding.points.map((point) => ({
+    x: micrometers(point.x),
+    y: micrometers(point.y),
+  }))
+}
+
 function compareH5adEmbeddings(
-  left: AnalysisEmbedding,
-  right: AnalysisEmbedding,
+  left: AnalysisEmbeddingOption,
+  right: AnalysisEmbeddingOption,
 ): number {
   const leftRank = h5adEmbeddingDisplayRank(left.kind)
   const rightRank = h5adEmbeddingDisplayRank(right.kind)
@@ -549,13 +1068,13 @@ function h5adEmbeddingDisplayRank(kind: string): number {
   return index < 0 ? H5AD_EMBEDDING_DISPLAY_KEYS.length : index
 }
 
-function readObservationTracks(
+async function readObservationTracks(
   obs: H5GroupLike,
   rowCount: number,
-): {
+): Promise<{
   readonly categoricalTracks: readonly H5adCategoricalTrack[]
   readonly continuousTracks: readonly H5adContinuousTrack[]
-} {
+}> {
   const indexKey = readStringAttribute(obs, '_index')
   const columnOrder = readStringArrayAttribute(obs, 'column-order')
   const keys =
@@ -576,11 +1095,13 @@ function readObservationTracks(
 
     if (isCategoricalGroup(entity)) {
       const codes = readNumericArray(
-        expectDataset(entity.get('codes'), `/obs/${key}/codes`).value,
+        await readDatasetValue(expectDataset(entity.get('codes'), `/obs/${key}/codes`)),
         `/obs/${key}/codes`,
       )
-      const categories = readStringArray(
-        expectDataset(entity.get('categories'), `/obs/${key}/categories`).value,
+      const categories = readCategoryLabels(
+        await readDatasetValue(
+          expectDataset(entity.get('categories'), `/obs/${key}/categories`),
+        ),
         `/obs/${key}/categories`,
       )
 
@@ -591,6 +1112,7 @@ function readObservationTracks(
       categoricalTracks.push({
         id: key,
         label: key,
+        categoryCount: categories.length,
         values: Array.from({ length: rowCount }, (_value, index) => {
           const code = Math.trunc(numericValue(codes, index))
           return code < 0 ? null : (categories[code] ?? null)
@@ -609,14 +1131,16 @@ function readObservationTracks(
       continue
     }
 
-    const categories = readDataframeCategories(obs, key)
+    const categories = await readDataframeCategories(obs, key)
+    const entityValue = await readDatasetValue(entity)
 
-    if (categories !== null && isNumericArray(entity.value)) {
-      const codes = readNumericArray(entity.value, `/obs/${key}`)
+    if (categories !== null && isNumericArray(entityValue)) {
+      const codes = readNumericArray(entityValue, `/obs/${key}`)
 
       categoricalTracks.push({
         id: key,
         label: key,
+        categoryCount: categories.length,
         values: Array.from({ length: rowCount }, (_value, index) => {
           const code = Math.trunc(numericValue(codes, index))
           return code < 0 ? null : (categories[code] ?? null)
@@ -625,8 +1149,8 @@ function readObservationTracks(
       continue
     }
 
-    if (isNumericArray(entity.value)) {
-      const values = numericArrayToNumbers(readNumericArray(entity.value, `/obs/${key}`))
+    if (isNumericArray(entityValue)) {
+      const values = numericArrayToNumbers(readNumericArray(entityValue, `/obs/${key}`))
       const finiteValues = values.filter(Number.isFinite)
 
       if (finiteValues.length === 0) {
@@ -643,12 +1167,13 @@ function readObservationTracks(
       continue
     }
 
-    const labels = readStringArray(entity.value, `/obs/${key}`)
+    const labels = readStringArray(entityValue, `/obs/${key}`)
 
     if (labels.length === rowCount) {
       categoricalTracks.push({
         id: key,
         label: key,
+        categoryCount: countUniqueLabels(labels),
         values: labels.map((value) => (value.length === 0 ? null : value)),
       })
     }
@@ -657,7 +1182,27 @@ function readObservationTracks(
   return { categoricalTracks, continuousTracks }
 }
 
+async function fetchH5adHead(url: string, fetcher: typeof fetch): Promise<Response> {
+  return fetchH5adRequest(url, fetcher, { method: 'HEAD' }, 'H5AD file metadata')
+}
+
 async function fetchH5adFile(url: string, fetcher: typeof fetch): Promise<Response> {
+  return fetchH5adRequest(url, fetcher, {}, 'H5AD file')
+}
+
+async function fetchH5adReferenceFile(
+  url: string,
+  fetcher: typeof fetch,
+): Promise<Response> {
+  return fetchH5adRequest(url, fetcher, {}, 'H5AD reference file')
+}
+
+async function fetchH5adRequest(
+  url: string,
+  fetcher: typeof fetch,
+  init: RequestInit,
+  label: string,
+): Promise<Response> {
   const controller = new AbortController()
   let timedOut = false
   const timeout = globalThis.setTimeout(() => {
@@ -666,11 +1211,11 @@ async function fetchH5adFile(url: string, fetcher: typeof fetch): Promise<Respon
   }, H5AD_FETCH_TIMEOUT_MS)
 
   try {
-    return await fetcher(url, { signal: controller.signal })
+    return await fetcher(url, { ...init, signal: controller.signal })
   } catch (error) {
     if (timedOut) {
       throw new Error(
-        `H5AD file request timed out after ${H5AD_FETCH_TIMEOUT_MS.toLocaleString()} ms.`,
+        `${label} request timed out after ${H5AD_FETCH_TIMEOUT_MS.toLocaleString()} ms.`,
         { cause: error },
       )
     }
@@ -767,10 +1312,10 @@ function formatByteCount(byteLength: number): string {
   return `${byteLength.toLocaleString()} B`
 }
 
-function readDataframeCategories(
+async function readDataframeCategories(
   obs: H5GroupLike,
   key: string,
-): readonly string[] | null {
+): Promise<readonly string[] | null> {
   const categoryGroup = obs.get('__categories')
 
   if (!isGroup(categoryGroup)) {
@@ -783,11 +1328,18 @@ function readDataframeCategories(
     return null
   }
 
-  const categories = readStringArray(categoryDataset.value, `/obs/__categories/${key}`)
+  const categories = readCategoryLabels(
+    await readDatasetValue(categoryDataset),
+    `/obs/__categories/${key}`,
+  )
   return categories.length === 0 ? null : categories
 }
 
-function readMatrix(file: H5GroupLike, rows: number, cols: number): H5adMatrix {
+async function readMatrix(
+  file: H5GroupLike,
+  rows: number,
+  cols: number,
+): Promise<H5adMatrix> {
   const x = file.get('/X')
 
   if (isDataset(x)) {
@@ -801,9 +1353,18 @@ function readMatrix(file: H5GroupLike, rows: number, cols: number): H5adMatrix {
       throw new Error('H5AD /X dense matrix shape does not match obs x var.')
     }
 
+    if (isZarrDataset(x)) {
+      return {
+        kind: 'dense-zarr',
+        values: x.source.array,
+        rows,
+        cols,
+      }
+    }
+
     return {
       kind: 'dense',
-      values: readNumericArray(x.value, '/X'),
+      values: readNumericArray(await readDatasetValue(x), '/X'),
       rows,
       cols,
     }
@@ -819,16 +1380,35 @@ function readMatrix(file: H5GroupLike, rows: number, cols: number): H5adMatrix {
     throw new Error('H5AD /X sparse matrix shape does not match obs x var.')
   }
 
+  const data = expectDataset(group.get('data'), '/X/data')
+  const indices = expectDataset(group.get('indices'), '/X/indices')
+  const indptrDataset = expectDataset(group.get('indptr'), '/X/indptr')
+  const indptr = readNumericArray(await readDatasetValue(indptrDataset), '/X/indptr')
+
+  if (isZarrDataset(data) || isZarrDataset(indices)) {
+    if (!isZarrDataset(data) || !isZarrDataset(indices)) {
+      throw new Error('H5AD /X sparse reference arrays must expose data and indices.')
+    }
+
+    const matrix = {
+      data: data.source.array,
+      indices: indices.source.array,
+      indptr,
+      rows,
+      cols,
+    }
+
+    if (encodingType === 'csc_matrix') {
+      return { kind: 'csc-zarr', ...matrix }
+    }
+
+    return { kind: 'csr-zarr', ...matrix }
+  }
+
   const matrix = {
-    data: readNumericArray(expectDataset(group.get('data'), '/X/data').value, '/X/data'),
-    indices: readNumericArray(
-      expectDataset(group.get('indices'), '/X/indices').value,
-      '/X/indices',
-    ),
-    indptr: readNumericArray(
-      expectDataset(group.get('indptr'), '/X/indptr').value,
-      '/X/indptr',
-    ),
+    data: readNumericArray(await readDatasetValue(data), '/X/data'),
+    indices: readNumericArray(await readDatasetValue(indices), '/X/indices'),
+    indptr,
     rows,
     cols,
   }
@@ -840,11 +1420,11 @@ function readMatrix(file: H5GroupLike, rows: number, cols: number): H5adMatrix {
   return { kind: 'csr', ...matrix }
 }
 
-function h5adMatrixForCells(
+async function h5adMatrixForCells(
   cache: H5adCache,
   ids: readonly SpatialElementId[],
   genes: readonly string[],
-): GexResult<SpatialElementId> {
+): Promise<GexResult<SpatialElementId>> {
   const rowByCellId = new Map<string, number>()
   const colByGeneName = new Map<string, number>()
 
@@ -859,36 +1439,301 @@ function h5adMatrixForCells(
     .map((gene) => colByGeneName.get(gene))
     .filter((col): col is number => col !== undefined)
   const requestedGenes = requestedCols.map((col) => cache.geneNames[col] ?? '')
-  const cells = new Map<SpatialElementId, { geneNames: string[]; counts: number[] }>()
+  const requestedRows = ids
+    .map((id) => {
+      const row = rowByCellId.get(id)
+      return row === undefined ? null : { id, row }
+    })
+    .filter(
+      (target): target is { readonly id: SpatialElementId; readonly row: number } =>
+        target !== null,
+    )
 
-  for (const id of ids) {
-    const row = rowByCellId.get(id)
-
-    if (row === undefined) {
-      continue
+  if (requestedRows.length === 0) {
+    return {
+      geneNames: requestedGenes,
+      cells: new Map(),
     }
-
-    const geneNames: string[] = []
-    const counts: number[] = []
-
-    for (const col of requestedCols) {
-      const count = matrixValue(cache.matrix, row, col)
-
-      if (count <= 0 && genes.length !== 1) {
-        continue
-      }
-
-      geneNames.push(cache.geneNames[col] ?? `var-${col}`)
-      counts.push(count)
-    }
-
-    cells.set(id, { geneNames, counts })
   }
+
+  if (requestedCols.length === 0) {
+    return {
+      geneNames: requestedGenes,
+      cells: emptyH5adCells(requestedRows),
+    }
+  }
+
+  const includeZeroCounts = genes.length === 1
+  const cells = await h5adMatrixCellsForRows(
+    cache.matrix,
+    requestedRows,
+    requestedCols,
+    cache.geneNames,
+    includeZeroCounts,
+  )
 
   return {
     geneNames: requestedGenes,
     cells,
   }
+}
+
+async function h5adMatrixCellsForRows(
+  matrix: H5adMatrix,
+  rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
+  requestedCols: readonly number[],
+  geneNames: readonly string[],
+  includeZeroCounts: boolean,
+): Promise<ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }>> {
+  const cells = new Map<SpatialElementId, { geneNames: string[]; counts: number[] }>()
+  const allGenesRequested = requestedCols.length === matrix.cols
+
+  if (matrix.kind === 'dense') {
+    for (const { id, row } of rows) {
+      cells.set(
+        id,
+        denseRowCell(matrix.values, row, matrix.cols, requestedCols, geneNames, {
+          includeZeroCounts,
+        }),
+      )
+    }
+
+    return cells
+  }
+
+  if (matrix.kind === 'dense-zarr') {
+    for (const { id, row } of rows) {
+      cells.set(
+        id,
+        denseRowCell(
+          readNumericArray(
+            zarrChunkValue(await zarr.get(matrix.values, [row, null])),
+            matrix.values.path,
+          ),
+          0,
+          matrix.cols,
+          requestedCols,
+          geneNames,
+          { includeZeroCounts },
+        ),
+      )
+    }
+
+    return cells
+  }
+
+  if (matrix.kind === 'csr') {
+    for (const { id, row } of rows) {
+      const start = Math.trunc(numericValue(matrix.indptr, row))
+      const end = Math.trunc(numericValue(matrix.indptr, row + 1))
+      cells.set(
+        id,
+        sparseVectorCell(
+          matrix.indices,
+          matrix.data,
+          start,
+          end,
+          requestedCols,
+          geneNames,
+          {
+            allGenesRequested,
+            includeZeroCounts,
+          },
+        ),
+      )
+    }
+
+    return cells
+  }
+
+  if (matrix.kind === 'csr-zarr') {
+    for (const { id, row } of rows) {
+      const start = Math.trunc(numericValue(matrix.indptr, row))
+      const end = Math.trunc(numericValue(matrix.indptr, row + 1))
+
+      if (start >= end) {
+        cells.set(
+          id,
+          sparseVectorCell([], [], 0, 0, requestedCols, geneNames, {
+            allGenesRequested,
+            includeZeroCounts,
+          }),
+        )
+        continue
+      }
+
+      const [indices, data] = await Promise.all([
+        zarrNumericVector(matrix.indices, start, end),
+        zarrNumericVector(matrix.data, start, end),
+      ])
+      cells.set(
+        id,
+        sparseVectorCell(indices, data, 0, indices.length, requestedCols, geneNames, {
+          allGenesRequested,
+          includeZeroCounts,
+        }),
+      )
+    }
+
+    return cells
+  }
+
+  if (matrix.kind === 'csc-zarr' && allGenesRequested) {
+    throw new Error(
+      'H5AD reference-backed CSC matrices cannot be scanned across all genes interactively.',
+    )
+  }
+
+  return h5adMatrixCellsFromColumns(
+    matrix,
+    rows,
+    requestedCols,
+    geneNames,
+    includeZeroCounts,
+  )
+}
+
+async function h5adMatrixCellsFromColumns(
+  matrix: Extract<H5adMatrix, { readonly kind: 'csc' | 'csc-zarr' }>,
+  rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
+  requestedCols: readonly number[],
+  geneNames: readonly string[],
+  includeZeroCounts: boolean,
+): Promise<ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }>> {
+  const rowByIndex = new Map<number, SpatialElementId>()
+  const valuesByCell = new Map<SpatialElementId, Map<number, number>>()
+
+  for (const { id, row } of rows) {
+    rowByIndex.set(row, id)
+    valuesByCell.set(id, new Map())
+  }
+
+  for (const col of requestedCols) {
+    const start = Math.trunc(numericValue(matrix.indptr, col))
+    const end = Math.trunc(numericValue(matrix.indptr, col + 1))
+
+    if (start >= end) {
+      continue
+    }
+
+    const [indices, data] =
+      matrix.kind === 'csc-zarr'
+        ? await Promise.all([
+            zarrNumericVector(matrix.indices, start, end),
+            zarrNumericVector(matrix.data, start, end),
+          ])
+        : [matrix.indices, matrix.data]
+    const offset = matrix.kind === 'csc-zarr' ? 0 : start
+
+    for (let index = offset; index < offset + (end - start); index += 1) {
+      const row = Math.trunc(numericValue(indices, index))
+      const id = rowByIndex.get(row)
+
+      if (id === undefined) {
+        continue
+      }
+
+      valuesByCell.get(id)?.set(col, numericValue(data, index))
+    }
+  }
+
+  const cells = new Map<SpatialElementId, { geneNames: string[]; counts: number[] }>()
+
+  for (const { id } of rows) {
+    cells.set(
+      id,
+      cellFromCountsByColumn(
+        valuesByCell.get(id) ?? new Map(),
+        requestedCols,
+        geneNames,
+        {
+          includeZeroCounts,
+        },
+      ),
+    )
+  }
+
+  return cells
+}
+
+function denseRowCell(
+  values: NumericArrayLike,
+  row: number,
+  cols: number,
+  requestedCols: readonly number[],
+  geneNames: readonly string[],
+  options: { readonly includeZeroCounts: boolean },
+): { geneNames: string[]; counts: number[] } {
+  const countsByColumn = new Map<number, number>()
+
+  for (const col of requestedCols) {
+    countsByColumn.set(col, numericValue(values, row * cols + col))
+  }
+
+  return cellFromCountsByColumn(countsByColumn, requestedCols, geneNames, options)
+}
+
+function sparseVectorCell(
+  indices: NumericArrayLike,
+  data: NumericArrayLike,
+  start: number,
+  end: number,
+  requestedCols: readonly number[],
+  geneNames: readonly string[],
+  options: {
+    readonly allGenesRequested: boolean
+    readonly includeZeroCounts: boolean
+  },
+): { geneNames: string[]; counts: number[] } {
+  const requestedColSet = options.allGenesRequested ? null : new Set(requestedCols)
+  const countsByColumn = new Map<number, number>()
+
+  for (let index = start; index < end; index += 1) {
+    const col = Math.trunc(numericValue(indices, index))
+
+    if (requestedColSet !== null && !requestedColSet.has(col)) {
+      continue
+    }
+
+    countsByColumn.set(col, numericValue(data, index))
+  }
+
+  const outputCols = options.allGenesRequested
+    ? Array.from(countsByColumn.keys()).sort((left, right) => left - right)
+    : requestedCols
+
+  return cellFromCountsByColumn(countsByColumn, outputCols, geneNames, {
+    includeZeroCounts: options.includeZeroCounts,
+  })
+}
+
+function cellFromCountsByColumn(
+  countsByColumn: ReadonlyMap<number, number>,
+  outputCols: readonly number[],
+  geneNames: readonly string[],
+  options: { readonly includeZeroCounts: boolean },
+): { geneNames: string[]; counts: number[] } {
+  const cellGeneNames: string[] = []
+  const counts: number[] = []
+
+  for (const col of outputCols) {
+    const count = countsByColumn.get(col) ?? 0
+
+    if (count <= 0 && !options.includeZeroCounts) {
+      continue
+    }
+
+    cellGeneNames.push(geneNames[col] ?? `var-${col}`)
+    counts.push(count)
+  }
+
+  return { geneNames: cellGeneNames, counts }
+}
+
+function emptyH5adCells(
+  rows: readonly { readonly id: SpatialElementId }[],
+): ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }> {
+  return new Map(rows.map(({ id }) => [id, { geneNames: [], counts: [] }]))
 }
 
 function h5adCellsInBbox(
@@ -929,36 +1774,6 @@ function h5adCellsInBbox(
   return cells
 }
 
-function matrixValue(matrix: H5adMatrix, row: number, col: number): number {
-  if (matrix.kind === 'dense') {
-    return numericValue(matrix.values, row * matrix.cols + col)
-  }
-
-  if (matrix.kind === 'csr') {
-    const start = Math.trunc(numericValue(matrix.indptr, row))
-    const end = Math.trunc(numericValue(matrix.indptr, row + 1))
-
-    for (let index = start; index < end; index += 1) {
-      if (Math.trunc(numericValue(matrix.indices, index)) === col) {
-        return numericValue(matrix.data, index)
-      }
-    }
-
-    return 0
-  }
-
-  const start = Math.trunc(numericValue(matrix.indptr, col))
-  const end = Math.trunc(numericValue(matrix.indptr, col + 1))
-
-  for (let index = start; index < end; index += 1) {
-    if (Math.trunc(numericValue(matrix.indices, index)) === row) {
-      return numericValue(matrix.data, index)
-    }
-  }
-
-  return 0
-}
-
 function h5adCellMetadata(
   cache: H5adCache,
   row: number,
@@ -982,6 +1797,22 @@ function h5adCellMetadata(
   }
 
   return metadata
+}
+
+function h5adAnnotationGroupId(track: H5adCategoricalTrack): string {
+  return `analysis:${slug(track.label)}`
+}
+
+function countUniqueLabels(labels: readonly string[]): number {
+  const values = new Set<string>()
+
+  for (const label of labels) {
+    if (label.length > 0) {
+      values.add(label)
+    }
+  }
+
+  return values.size
 }
 
 function pointInPolygon(point: DataPoint, polygon: readonly DataPoint[]): boolean {
@@ -1086,7 +1917,21 @@ function readStringArray(value: unknown, label: string): readonly string[] {
     return value
   }
 
+  if (isStringArrayLike(value)) {
+    return Array.from(value)
+  }
+
   throw new Error(`Expected H5AD ${label} to contain strings.`)
+}
+
+function readCategoryLabels(value: unknown, label: string): readonly string[] {
+  if (isNumericArray(value)) {
+    return Array.from({ length: value.length }, (_item, index) =>
+      String(numericValue(value, index)),
+    )
+  }
+
+  return readStringArray(value, label)
 }
 
 function readNumericArray(value: unknown, label: string): NumericArrayLike {
@@ -1095,6 +1940,20 @@ function readNumericArray(value: unknown, label: string): NumericArrayLike {
   }
 
   throw new Error(`Expected H5AD ${label} to contain numeric values.`)
+}
+
+async function readDatasetValue(dataset: H5DatasetLike): Promise<unknown> {
+  if (dataset.value !== undefined) {
+    return dataset.value
+  }
+
+  if (isZarrDataset(dataset)) {
+    return zarrChunkValue(
+      await zarr.get(dataset.source.array, fullArraySelection(dataset.source.array)),
+    )
+  }
+
+  return dataset.value
 }
 
 function isNumericArray(value: unknown): value is NumericArrayLike {
@@ -1128,6 +1987,53 @@ function numericArrayToNumbers(values: NumericArrayLike): readonly number[] {
   return numbers
 }
 
+function fullArraySelection(array: H5adZarrArray): null[] {
+  return Array.from({ length: array.shape.length }, () => null)
+}
+
+function zarrChunkValue(value: unknown): unknown {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'data' in value &&
+    isZarrChunkData((value as { readonly data?: unknown }).data)
+  ) {
+    return (value as { readonly data: unknown }).data
+  }
+
+  return value
+}
+
+async function zarrNumericVector(
+  array: H5adZarrArray,
+  start: number,
+  end: number,
+): Promise<NumericArrayLike> {
+  if (start >= end) {
+    return []
+  }
+
+  const value = zarrChunkValue(await zarr.get(array, [zarr.slice(start, end, 1)]))
+  return readNumericArray(value, array.path)
+}
+
+function isZarrChunkData(value: unknown): boolean {
+  return isNumericArray(value) || isStringArrayLike(value)
+}
+
+function isStringArrayLike(value: unknown): value is Iterable<string> {
+  if (Array.isArray(value)) {
+    return value.every((item) => typeof item === 'string')
+  }
+
+  if (typeof value !== 'object' || value === null || !(Symbol.iterator in value)) {
+    return false
+  }
+
+  const preview = Array.from(value as Iterable<unknown>)
+  return preview.every((item) => typeof item === 'string')
+}
+
 function readShapeDimension(
   shape: readonly number[],
   index: number,
@@ -1148,6 +2054,12 @@ function isDataset(value: unknown): value is H5DatasetLike {
   )
 }
 
+function isZarrDataset(value: H5DatasetLike): value is H5DatasetLike & {
+  readonly source: H5adArraySource
+} {
+  return value.source?.kind === 'zarr'
+}
+
 function isGroup(value: unknown): value is H5GroupLike {
   return (
     typeof value === 'object' &&
@@ -1160,7 +2072,13 @@ function isGroup(value: unknown): value is H5GroupLike {
 }
 
 function isCategoricalGroup(value: unknown): value is H5GroupLike {
-  return isGroup(value) && value.get('codes') !== null && value.get('categories') !== null
+  return (
+    isGroup(value) &&
+    value.get('codes') !== null &&
+    value.get('codes') !== undefined &&
+    value.get('categories') !== null &&
+    value.get('categories') !== undefined
+  )
 }
 
 function expectDataset(value: unknown, label: string): H5DatasetLike {

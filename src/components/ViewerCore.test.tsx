@@ -232,6 +232,76 @@ describe('ViewerCore', () => {
     expect(gridLayer?.props?.data?.map((cell) => cell.id)).toEqual(['BC-1'])
   })
 
+  it('keeps overview point render data stable when viewport clipping is disabled', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const nearCell = overviewCellDatum()
+    const farCell: OverviewCellDatum = {
+      ...overviewCellDatum(),
+      id: 'far-overview-cell',
+      position: [1000, -1000, 0],
+    }
+
+    render(
+      <ViewerCore
+        cells={[nearCell, farCell]}
+        fitCells={[nearCell]}
+        clipOverviewCellsToViewport={false}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: 4 }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('deck-layer-cells-overview-scatter')).toHaveAttribute(
+        'data-count',
+        '2',
+      )
+    })
+
+    act(() => {
+      deckGlMock.onViewStateChange?.({
+        viewState: {
+          target: [8, -8, 0],
+          zoom: 5,
+          minZoom: -8,
+          maxZoom: 12,
+        },
+      })
+    })
+
+    expect(screen.getByTestId('deck-layer-cells-overview-scatter')).toHaveAttribute(
+      'data-count',
+      '2',
+    )
+  })
+
+  it('renders every overview point when the render limit is disabled', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells: readonly OverviewCellDatum[] = Array.from({ length: 10 }, (_value, index) => ({
+      ...overviewCellDatum(),
+      id: `overview-cell-${index}`,
+      position: [index * 10, -index * 10, 0],
+    }))
+
+    render(
+      <ViewerCore
+        cells={cells}
+        fitCells={[cells[0] as OverviewCellDatum]}
+        clipOverviewCellsToViewport={false}
+        overviewRenderCellLimit={null}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: 8 }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('deck-layer-cells-overview-scatter')).toHaveAttribute(
+        'data-count',
+        '10',
+      )
+    })
+  })
+
   it('renders selected 2um grid cells as coarse 16um bins until close zoom', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
@@ -738,6 +808,32 @@ describe('ViewerCore', () => {
     )
   })
 
+  it('shows overview cell hover metadata with a dataset-specific source label', () => {
+    const cell: OverviewCellDatum = {
+      ...overviewCellDatum(),
+      id: 'AAACCCAAGAAACACT-1',
+      position: [12.3, -45.6, 0],
+      expressionCount: 27,
+    }
+
+    render(
+      <ViewerCore
+        cells={[cell]}
+        overviewCellSourceLabel="H5AD"
+        hoverTooltipsEnabled
+      />,
+    )
+
+    act(() => {
+      deckGlMock.onHover?.({ object: cell, x: 18, y: 24 })
+    })
+
+    expect(screen.getByText('AAACCCAAGAAACACT-1')).toBeInTheDocument()
+    expect(screen.getByText('H5AD')).toBeInTheDocument()
+    expect(screen.getByText('12.3, 45.6 um')).toBeInTheDocument()
+    expect(screen.getByText('27')).toBeInTheDocument()
+  })
+
   it('shows aggregate overview bin hover metadata', () => {
     const cell: OverviewCellDatum = {
       id: 'cell-bin:0:0',
@@ -955,6 +1051,7 @@ describe('ViewerCore', () => {
       'data-count',
       '1',
     )
+    expect(deckGlMock.onHover).toBeUndefined()
 
     act(() => {
       deckGlMock.onHover?.({ object: cell, x: 18, y: 24 })

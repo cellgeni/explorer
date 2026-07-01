@@ -3,6 +3,7 @@ import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
+import type { H5adLoadProgressReporter } from './h5adDataset'
 
 export type AnySpatialDataset = SpatialDataset<CellId> | SpatialDataset<SpatialElementId>
 
@@ -47,10 +48,12 @@ export interface DetectSpatialDatasetOptions {
 
 export interface CreateSpatialDatasetOptions extends DetectSpatialDatasetOptions {
   readonly visiumHdMaxTwoMicrometerFilteredBarcodes?: number
+  readonly onH5adLoadProgress?: H5adLoadProgressReporter
 }
 
 export interface CachedSpatialDatasetOptions {
   readonly visiumHdMaxTwoMicrometerFilteredBarcodes?: number
+  readonly onH5adLoadProgress?: H5adLoadProgressReporter
 }
 
 const VISIUM_HD_BINS: readonly {
@@ -215,6 +218,9 @@ export async function createSpatialDataset(
     return new AnnDataH5adDataset({
       url: detection.h5adUrl,
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.onH5adLoadProgress === undefined
+        ? {}
+        : { onProgress: options.onH5adLoadProgress }),
     })
   }
 
@@ -261,6 +267,9 @@ export function cachedSpatialDataset(
       : {
           visiumHdMaxTwoMicrometerFilteredBarcodes: maxTwoMicrometerFilteredBarcodes,
         }),
+    ...(options.onH5adLoadProgress === undefined
+      ? {}
+      : { onH5adLoadProgress: options.onH5adLoadProgress }),
   }).catch((error: unknown) => {
     if (spatialDatasetCache.get(cacheKey) === promise) {
       spatialDatasetCache.delete(cacheKey)
