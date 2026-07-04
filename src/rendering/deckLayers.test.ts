@@ -1246,11 +1246,12 @@ describe('deck layer factory', () => {
     ])
   })
 
-  it('renders affine grid cells as pickable polygons', () => {
+  it('renders affine grid cells as pickable polygons using cell opacities', () => {
     const gridCells = gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])
     const layers = createOverviewLayers([], [], {
       gridCells,
-      gridCellOpacity: 0.5,
+      cellFillOpacity: 0.25,
+      cellBoundaryOpacity: 0.4,
     })
     const gridLayer = layers.find(
       (layer) => layer instanceof PolygonLayer && layer.id === 'spatial-grid-cells',
@@ -1281,8 +1282,8 @@ describe('deck layer factory', () => {
       [16, -25, 0],
       [4, -25, 0],
     ])
-    expect(getFillColor(gridCells[0]!)).toEqual([34, 120, 108, 14])
-    expect(getLineColor(gridCells[0]!)).toEqual([22, 90, 82, 75])
+    expect(getFillColor(gridCells[0]!)).toEqual([34, 120, 108, 7])
+    expect(getLineColor(gridCells[0]!)).toEqual([22, 90, 82, 60])
   })
 
   it('merges gene expression color into affine grid cells', () => {
@@ -1317,7 +1318,7 @@ describe('deck layer factory', () => {
 
     const layers = createOverviewLayers([], [], {
       gridCells: expressionStyledGridCells,
-      gridCellOpacity: 0.5,
+      cellFillOpacity: 0.5,
     })
     const gridLayer = layers.find(
       (layer) => layer instanceof PolygonLayer && layer.id === 'spatial-grid-cells',
@@ -1366,7 +1367,7 @@ describe('deck layer factory', () => {
     })
   })
 
-  it('keeps active affine-grid gene expression visible at low grid opacity', () => {
+  it('keeps active affine-grid gene expression visible at low cell fill opacity', () => {
     const gridCells = styleGridCellsByGeneExpression(
       gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch]),
       [
@@ -1384,7 +1385,7 @@ describe('deck layer factory', () => {
     const layers = createOverviewLayers([], [], {
       geneExpressionActive: true,
       gridCells,
-      gridCellOpacity: 0.1,
+      cellFillOpacity: 0.1,
     })
     const gridLayer = layers.find(
       (layer) => layer instanceof PolygonLayer && layer.id === 'spatial-grid-cells',

@@ -131,6 +131,10 @@ export function createOverviewLayers(
   const cellBoundaryStyle = options.cellBoundaryStyle ?? EMPTY_CELL_BOUNDARY_LAYER_STYLE
   const transcriptAggregateBins = options.transcriptAggregateBins ?? []
   const gridCells = options.gridCells ?? []
+  const gridCellOpacity =
+    options.gridCellOpacity === undefined
+      ? undefined
+      : normalizeLayerOpacity(options.gridCellOpacity)
   const nucleusBoundaries = options.nucleusBoundaries ?? []
   const transcriptDensityBins = transcriptAggregateBins.filter(
     (bin) => bin.glyphType !== 'feature-circle',
@@ -218,9 +222,8 @@ export function createOverviewLayers(
   }
 
   const gridCellLayer = createGridCellLayer(gridCells, {
-    ...(options.gridCellOpacity === undefined
-      ? {}
-      : { opacity: options.gridCellOpacity }),
+    fillOpacity: gridCellOpacity ?? cellFillOpacity,
+    lineOpacity: gridCellOpacity ?? cellBoundaryOpacity,
     geneExpressionActive,
   })
 

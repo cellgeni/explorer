@@ -7,12 +7,18 @@ import {
   GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY,
 } from './deckLayerColors'
 import type { GridCellDatum, GridCellLayerDataOptions } from './deckLayerTypes'
-import { DEFAULT_LAYER_OPACITY, normalizeLayerOpacity } from './layerOpacity'
+import {
+  DEFAULT_CELL_FILL_OPACITY,
+  DEFAULT_LAYER_OPACITY,
+  normalizeLayerOpacity,
+} from './layerOpacity'
 
 export function createGridCellLayer(
   gridCells: readonly GridCellDatum[],
   options: {
     readonly opacity?: number
+    readonly fillOpacity?: number
+    readonly lineOpacity?: number
     readonly geneExpressionActive: boolean
   },
 ): PolygonLayer<GridCellDatum> | null {
@@ -20,10 +26,15 @@ export function createGridCellLayer(
     return null
   }
 
-  const gridCellOpacity = normalizeLayerOpacity(options.opacity ?? DEFAULT_LAYER_OPACITY)
-  const effectiveGridCellOpacity = options.geneExpressionActive
-    ? Math.max(gridCellOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
-    : gridCellOpacity
+  const gridCellFillOpacity = normalizeLayerOpacity(
+    options.fillOpacity ?? options.opacity ?? DEFAULT_CELL_FILL_OPACITY,
+  )
+  const gridCellLineOpacity = normalizeLayerOpacity(
+    options.lineOpacity ?? options.opacity ?? DEFAULT_LAYER_OPACITY,
+  )
+  const effectiveGridCellFillOpacity = options.geneExpressionActive
+    ? Math.max(gridCellFillOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
+    : gridCellFillOpacity
 
   return new PolygonLayer<GridCellDatum>({
     id: 'spatial-grid-cells',
@@ -35,12 +46,13 @@ export function createGridCellLayer(
     lineWidthUnits: 'pixels',
     lineWidthMinPixels: 0.25,
     getPolygon: (cell) => cell.polygon,
-    getFillColor: (cell) => colorWithOpacity(cell.fillColor, effectiveGridCellOpacity),
-    getLineColor: (cell) => colorWithOpacity(cell.lineColor, effectiveGridCellOpacity),
+    getFillColor: (cell) =>
+      colorWithOpacity(cell.fillColor, effectiveGridCellFillOpacity),
+    getLineColor: (cell) => colorWithOpacity(cell.lineColor, gridCellLineOpacity),
     getLineWidth: 0.25,
     updateTriggers: {
-      getFillColor: [effectiveGridCellOpacity],
-      getLineColor: [effectiveGridCellOpacity],
+      getFillColor: [effectiveGridCellFillOpacity],
+      getLineColor: [gridCellLineOpacity],
     },
   })
 }
