@@ -159,6 +159,15 @@ export interface TranscriptAggregateDatum {
   readonly fillColor: Color
 }
 
+export interface GeometricAnnotationDatum {
+  readonly id: string
+  readonly annotationId: string
+  readonly label: string
+  readonly polygon: readonly (readonly Position[])[]
+  readonly fillColor: Color
+  readonly lineColor: Color
+}
+
 export interface OverviewLayerOptions {
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
@@ -177,6 +186,7 @@ export interface OverviewLayerOptions {
   readonly geneExpressionOverlayElements?: readonly OverviewCellDatum[]
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
+  readonly geometricAnnotations?: readonly GeometricAnnotationDatum[]
   readonly transcriptOpacity?: number
   readonly transcriptPointSize?: number
 }

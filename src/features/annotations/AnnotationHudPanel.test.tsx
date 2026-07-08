@@ -4,6 +4,19 @@ import { asCellId } from '../../data/cellid'
 import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import { AnnotationHudPanel } from './AnnotationHudPanel'
 
+function disabledGeometricAnnotationProps() {
+  return {
+    geometricAnnotations: [],
+    geometricAnnotationsEnabled: false,
+    onImportGeometricAnnotations: vi.fn(),
+    onExportGeometricAnnotations: vi.fn(),
+    onClearGeometricAnnotations: vi.fn(),
+    onGeometricAnnotationColorChange: vi.fn(),
+    onGeometricAnnotationVisibilityChange: vi.fn(),
+    onRemoveGeometricAnnotation: vi.fn(),
+  }
+}
+
 describe('AnnotationHudPanel', () => {
   it('renders annotation controls and forwards user actions', async () => {
     const onAnnotationGroupChange = vi.fn()
@@ -68,6 +81,7 @@ describe('AnnotationHudPanel', () => {
             max: 0.7,
           },
         ]}
+        {...disabledGeometricAnnotationProps()}
         onAnnotationGroupChange={onAnnotationGroupChange}
         onLoadAnnotations={onLoadAnnotations}
         onClearAnnotations={onClearAnnotations}
@@ -171,6 +185,7 @@ describe('AnnotationHudPanel', () => {
         hiddenAnnotationSetIds={[]}
         hiddenAnnotationIds={[]}
         cellMetadataTracks={[]}
+        {...disabledGeometricAnnotationProps()}
         onAnnotationGroupChange={onAnnotationGroupChange}
         onLoadAnnotations={vi.fn()}
         onClearAnnotations={vi.fn()}
@@ -245,6 +260,7 @@ describe('AnnotationHudPanel', () => {
         hiddenAnnotationSetIds={['analysis:graphclust']}
         hiddenAnnotationIds={[]}
         cellMetadataTracks={[]}
+        {...disabledGeometricAnnotationProps()}
         onAnnotationGroupChange={vi.fn()}
         onLoadAnnotations={vi.fn()}
         onClearAnnotations={vi.fn()}
@@ -309,6 +325,7 @@ describe('AnnotationHudPanel', () => {
         hiddenAnnotationSetIds={[]}
         hiddenAnnotationIds={[]}
         cellMetadataTracks={[]}
+        {...disabledGeometricAnnotationProps()}
         onAnnotationGroupChange={vi.fn()}
         onLoadAnnotations={vi.fn()}
         onClearAnnotations={vi.fn()}

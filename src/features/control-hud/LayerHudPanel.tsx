@@ -30,6 +30,7 @@ interface LayerHudPanelProps {
   readonly loadEnabled: boolean
   readonly imageLayerOpacity: number
   readonly cellFillOpacity: number
+  readonly cellLayerControlsVisible: boolean
   readonly showCellBoundaries: boolean
   readonly showNucleusBoundaries: boolean
   readonly showHoverTooltips: boolean
@@ -81,6 +82,7 @@ export function LayerHudPanel({
   loadEnabled,
   imageLayerOpacity,
   cellFillOpacity,
+  cellLayerControlsVisible,
   showCellBoundaries,
   showNucleusBoundaries,
   showHoverTooltips,
@@ -149,19 +151,21 @@ export function LayerHudPanel({
           {performanceBudget.maxConcurrentTileRequests} tile requests
         </p>
         <div className="boundary-layer-toggles" aria-label="Layer display controls">
-          <label htmlFor={cellBoundaryVisibilityInputId}>
-            <input
-              id={cellBoundaryVisibilityInputId}
-              type="checkbox"
-              checked={showCellBoundaries}
-              title="Toggle cell boundary layer"
-              onChange={(event) => {
-                onShowCellBoundariesChange(event.currentTarget.checked)
-              }}
-            />
-            <span>Cell boundaries</span>
-          </label>
-          {nucleusBoundaryControlsVisible ? (
+          {cellLayerControlsVisible ? (
+            <label htmlFor={cellBoundaryVisibilityInputId}>
+              <input
+                id={cellBoundaryVisibilityInputId}
+                type="checkbox"
+                checked={showCellBoundaries}
+                title="Toggle cell boundary layer"
+                onChange={(event) => {
+                  onShowCellBoundariesChange(event.currentTarget.checked)
+                }}
+              />
+              <span>Cell boundaries</span>
+            </label>
+          ) : null}
+          {cellLayerControlsVisible && nucleusBoundaryControlsVisible ? (
             <label htmlFor={nucleusBoundaryVisibilityInputId}>
               <input
                 id={nucleusBoundaryVisibilityInputId}
@@ -208,44 +212,48 @@ export function LayerHudPanel({
               }}
             />
           </div>
-          <div className="layer-opacity-control">
-            <div className="layer-opacity-header">
-              <label htmlFor={cellFillOpacityInputId}>Cell fill opacity</label>
-              <span>{cellFillOpacityPercent}%</span>
+          {cellLayerControlsVisible ? (
+            <div className="layer-opacity-control">
+              <div className="layer-opacity-header">
+                <label htmlFor={cellFillOpacityInputId}>Cell fill opacity</label>
+                <span>{cellFillOpacityPercent}%</span>
+              </div>
+              <input
+                id={cellFillOpacityInputId}
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={cellFillOpacityPercent}
+                aria-valuetext={`${cellFillOpacityPercent}%`}
+                title="Cell fill opacity"
+                onChange={(event) => {
+                  onCellFillOpacityPercentChange(event.currentTarget.valueAsNumber)
+                }}
+              />
             </div>
-            <input
-              id={cellFillOpacityInputId}
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              value={cellFillOpacityPercent}
-              aria-valuetext={`${cellFillOpacityPercent}%`}
-              title="Cell fill opacity"
-              onChange={(event) => {
-                onCellFillOpacityPercentChange(event.currentTarget.valueAsNumber)
-              }}
-            />
-          </div>
-          <div className="layer-opacity-control">
-            <div className="layer-opacity-header">
-              <label htmlFor={cellBoundaryOpacityInputId}>Cell boundary opacity</label>
-              <span>{cellBoundaryOpacityPercent}%</span>
+          ) : null}
+          {cellLayerControlsVisible ? (
+            <div className="layer-opacity-control">
+              <div className="layer-opacity-header">
+                <label htmlFor={cellBoundaryOpacityInputId}>Cell boundary opacity</label>
+                <span>{cellBoundaryOpacityPercent}%</span>
+              </div>
+              <input
+                id={cellBoundaryOpacityInputId}
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={cellBoundaryOpacityPercent}
+                aria-valuetext={`${cellBoundaryOpacityPercent}%`}
+                title="Cell boundary opacity"
+                onChange={(event) => {
+                  onCellBoundaryOpacityPercentChange(event.currentTarget.valueAsNumber)
+                }}
+              />
             </div>
-            <input
-              id={cellBoundaryOpacityInputId}
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              value={cellBoundaryOpacityPercent}
-              aria-valuetext={`${cellBoundaryOpacityPercent}%`}
-              title="Cell boundary opacity"
-              onChange={(event) => {
-                onCellBoundaryOpacityPercentChange(event.currentTarget.valueAsNumber)
-              }}
-            />
-          </div>
+          ) : null}
         </div>
         <div className="coordinate-unit-control">
           <span id={coordinateUnitInputId}>Mouse coordinates</span>

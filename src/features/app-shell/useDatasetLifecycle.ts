@@ -890,6 +890,48 @@ export function useDatasetLifecycle({
           return
         }
 
+        if (detection.platform === 'image') {
+          setDatasetPlatform('image')
+          setShowCellBoundaries(false)
+          setShowNucleusBoundaries(false)
+          setMorphologyState(morphologyLoadStarted(detection.imageUrl))
+          const dataset = await getSpatialDataset(detection.baseUrl)
+          const [meta, imageSource] = await Promise.all([dataset.meta(), dataset.image()])
+
+          if (!isCurrentDatasetLoad()) {
+            return
+          }
+
+          if (imageSource?.kind !== 'pyramid') {
+            throw new Error('Image-only sources must expose a tiled TIFF pyramid.')
+          }
+
+          setMorphologyImage({
+            url: detection.imageUrl,
+            loader: imageSource.loader,
+            channels: imageSource.loader.channels,
+            channelLoaders: [],
+          })
+          setMorphologyChannelSettings([])
+          setMorphologyState(morphologyLoadReady(detection.imageUrl))
+          initialShareableStateRef.current = null
+          setLoadState(datasetLoadReady(requestedUrl, 0))
+          appendDebugEvent(
+            `Image ready: ${Math.round(
+              meta.extent.maxX - meta.extent.minX,
+            ).toLocaleString()} x ${Math.round(
+              meta.extent.maxY - meta.extent.minY,
+            ).toLocaleString()} µm in ${formatElapsed(loadStartedAt)}`,
+          )
+          recordTelemetry(
+            telemetryEvent('dataset.load', 'success', {
+              startedAt: loadStartedAt,
+              detail: 'image-only source',
+            }),
+          )
+          return
+        }
+
         if (detection.platform === 'visium-hd') {
           setDatasetPlatform('visium-hd')
           setShowCellBoundaries(

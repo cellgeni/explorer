@@ -12,6 +12,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     autoContrastChannelIds: [],
     cellBoundaryOpacity: 1,
     cellFillOpacity: 1,
+    cellLayerControlsVisible: true,
     controlIds: {
       cellBoundaryOpacityInputId: 'cell-boundary-opacity',
       cellBoundaryVisibilityInputId: 'cell-boundary-visibility',

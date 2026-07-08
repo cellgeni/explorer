@@ -21,7 +21,7 @@ import {
   isSpatialSegmentationDataset,
 } from './visiumHdAppController'
 
-export type AppPlatformKind = 'xenium' | 'visium-hd' | 'h5ad'
+export type AppPlatformKind = 'xenium' | 'visium-hd' | 'h5ad' | 'image'
 
 export interface AppPlatformLabels {
   readonly embeddingElementPlural: 'cells' | 'bins'
@@ -29,6 +29,7 @@ export interface AppPlatformLabels {
 
 export interface AppPlatformCapabilities {
   readonly annotations: boolean
+  readonly geometricAnnotations: boolean
   readonly magicLensMinQv: boolean
   readonly nucleusBoundaries: boolean
   readonly transcripts: boolean
@@ -75,6 +76,7 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
   labels: { embeddingElementPlural: 'cells' },
   capabilities: {
     annotations: true,
+    geometricAnnotations: true,
     magicLensMinQv: true,
     nucleusBoundaries: false,
     transcripts: true,
@@ -99,6 +101,7 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   labels: { embeddingElementPlural: 'bins' },
   capabilities: {
     annotations: false,
+    geometricAnnotations: true,
     magicLensMinQv: false,
     nucleusBoundaries: true,
     transcripts: false,
@@ -137,6 +140,7 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   labels: { embeddingElementPlural: 'cells' },
   capabilities: {
     annotations: true,
+    geometricAnnotations: true,
     magicLensMinQv: false,
     nucleusBoundaries: false,
     transcripts: false,
@@ -155,10 +159,38 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   canDrawRoi: ({ loadState }) => loadState.status === 'ready',
 }
 
+const IMAGE_PLATFORM_ADAPTER: AppPlatformAdapter = {
+  kind: 'image',
+  labels: { embeddingElementPlural: 'cells' },
+  capabilities: {
+    annotations: false,
+    geometricAnnotations: true,
+    magicLensMinQv: false,
+    nucleusBoundaries: false,
+    transcripts: false,
+  },
+  pointSizeFullViewScale: 1,
+  featureLoadEnabled: () => false,
+  effectiveTranscriptOverlay: () => false,
+  boundaryLoadingEnabled: () => false,
+  boundaryOverlayRequestKey: () => 'disabled:no-nucleus',
+  geneExpressionOverlayEnabled: () => false,
+  cellBoundaryHoverEnabled: () => false,
+  magicLensAvailability: () => ({
+    loadEnabled: false,
+    unavailableReason: 'Unavailable for image-only sources',
+  }),
+  canDrawRoi: ({ loadState }) => loadState.status === 'ready',
+}
+
 export function appPlatformAdapterFor(
   loadState: DatasetLoadState,
   datasetPlatform: Platform | null,
 ): AppPlatformAdapter {
+  if (loadState.status === 'ready' && datasetPlatform === 'image') {
+    return IMAGE_PLATFORM_ADAPTER
+  }
+
   if (loadState.status === 'ready' && datasetPlatform === 'visium-hd') {
     return VISIUM_HD_PLATFORM_ADAPTER
   }
@@ -204,6 +236,10 @@ export function platformRoiElementIds(
   roiState: RoiState,
   visiumHdRoiState: VisiumHdRoiState,
 ): readonly string[] {
+  if (adapter.kind === 'image') {
+    return []
+  }
+
   if (adapter.kind === 'visium-hd') {
     return visiumHdRoiState.status === 'ready'
       ? visiumHdRoiState.bins.map((bin) => bin.barcode)
@@ -218,6 +254,10 @@ export function platformRoiSelection(
   roiState: RoiState,
   visiumHdRoiState: VisiumHdRoiState,
 ): RoiSelection | null {
+  if (adapter.kind === 'image') {
+    return null
+  }
+
   if (adapter.kind === 'visium-hd') {
     return visiumHdRoiState.status === 'ready' ? visiumHdRoiState.selection : null
   }
@@ -230,6 +270,10 @@ export function platformSelectedEmbeddingElementId(
   selectedCell: Pick<OverviewCellDatum, 'id'> | null,
   selectedGridCell: Pick<GridCellDatum, 'id'> | null,
 ): string | null {
+  if (adapter.kind === 'image') {
+    return null
+  }
+
   return adapter.kind === 'visium-hd'
     ? (selectedGridCell?.id ?? null)
     : (selectedCell?.id ?? null)
@@ -300,11 +344,20 @@ export function platformExpressionProfileSelection(
 export function platformRoiCompleteHandler<Handler>(
   adapter: AppPlatformAdapter,
   handlers: {
+    readonly image?: Handler
     readonly visiumHd: Handler
     readonly xenium: Handler
   },
 ): Handler {
-  return adapter.kind === 'visium-hd' ? handlers.visiumHd : handlers.xenium
+  if (adapter.kind === 'visium-hd') {
+    return handlers.visiumHd
+  }
+
+  if (adapter.kind === 'image' && handlers.image !== undefined) {
+    return handlers.image
+  }
+
+  return handlers.xenium
 }
 
 export async function loadPlatformBoundaryElements(
@@ -316,6 +369,10 @@ export async function loadPlatformBoundaryElements(
   ...args: Parameters<BoundaryElementsLoader>
 ): ReturnType<BoundaryElementsLoader> {
   const [baseUrl, bbox, options = {}] = args
+
+  if (adapter.kind === 'h5ad' || adapter.kind === 'image') {
+    return { elements: [] }
+  }
 
   if (adapter.kind !== 'visium-hd') {
     return dependencies.loadBoundaryElements(baseUrl, bbox, options)
@@ -369,6 +426,14 @@ export async function loadPlatformGeneExpression(
 ): ReturnType<GeneExpressionLoader> {
   const [baseUrl, bbox, genes, options = {}] = args
   const { visiumHdBinSizeMicrometers, ...geneExpressionOptions } = options
+
+  if (adapter.kind === 'image') {
+    return {
+      genes,
+      elements: [],
+      maxCount: 0,
+    }
+  }
 
   if (adapter.kind === 'xenium') {
     return dependencies.loadGeneExpression(baseUrl, bbox, genes, geneExpressionOptions)

@@ -84,7 +84,7 @@ export function DatasetHudPanel({
       hidden={!active}
     >
       <form className="dataset-form" onSubmit={onSubmit}>
-        <label htmlFor={datasetInputId}>Dataset URL</label>
+        <label htmlFor={datasetInputId}>Dataset or image URL</label>
         <input
           id={datasetInputId}
           name="datasetUrl"
@@ -93,8 +93,8 @@ export function DatasetHudPanel({
           autoComplete="off"
           spellCheck={false}
           value={datasetUrl}
-          placeholder="https://bucket.example/output…"
-          title="Dataset URL"
+          placeholder="https://bucket.example/output-or-image.ome.tif"
+          title="Dataset or image URL"
           onChange={(event) => {
             onDatasetUrlChange(event.currentTarget.value)
           }}
@@ -129,7 +129,7 @@ export function DatasetHudPanel({
             onBoundaryCellLimitChange(event.currentTarget.valueAsNumber)
           }}
         />
-        <button type="submit" disabled={isLoading} title="Load dataset">
+        <button type="submit" disabled={isLoading} title="Load dataset or image">
           {isLoading ? 'Loading…' : 'Load Dataset'}
         </button>
       </form>

@@ -13,7 +13,11 @@ import {
 } from './features/genes/useVisiumHdExpressionProjectionWorkflow'
 import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
-import { RoiHudPanel, VisiumHdRoiHudPanel } from './features/control-hud/RoiHudPanel'
+import {
+  GeometricRoiHudPanel,
+  RoiHudPanel,
+  VisiumHdRoiHudPanel,
+} from './features/control-hud/RoiHudPanel'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
   readShareableStateFromLocation,
@@ -31,7 +35,6 @@ import {
   platformBoundarySurfaceReserved,
   platformExpressionProfileSelection,
   platformRoiElementIds,
-  platformRoiCompleteHandler,
   platformRoiSelection,
   platformSelectedEmbeddingElementId,
 } from './features/app-shell/platformAdapter'
@@ -62,6 +65,7 @@ import {
   createLoadingTasks,
   createFallbackNoticeEntry,
   createDebugLogEntry,
+  downloadTextFile,
   invalidateLatestRequest,
   type DebugLogAppendOptions,
 } from './features/app-shell/appRuntimeModel'
@@ -91,6 +95,7 @@ import {
   roiGeneDatasetWarmupKey,
   roiGeneStatsStatusCopy,
   roiStatusCopy,
+  defaultRoiName,
   summarizeRoiCells,
 } from './features/roi/roiModel'
 import { summarizeRoiGeneExpression } from './data/roiGeneStats'
@@ -107,6 +112,14 @@ import {
   filterAnnotationsByVisibleSets,
   type AnnotationState,
 } from './features/annotations/annotationModel'
+import {
+  geometricAnnotationFromRoiSelection,
+  geometricAnnotationsToGeoJson,
+  parseGeometricAnnotationsGeoJson,
+  removeGeometricAnnotation,
+  updateGeometricAnnotationColor,
+  updateGeometricAnnotationVisibility,
+} from './features/annotations/geometricAnnotationModel'
 import { useAnnotationWorkflow } from './features/annotations/useAnnotationWorkflow'
 import {
   IDLE_GENE_EXPRESSION_STATE,
@@ -134,13 +147,20 @@ import {
 import type { FallbackNotice } from './data/fallbackNotice'
 import { normalizeLayerOpacity } from './rendering/layerOpacity'
 import {
+  geometricAnnotationsToLayerData,
   geneExpressionScoreDomainMax,
   styleCellBoundariesByGeneExpression,
   styleGridCellsByGeneExpression,
 } from './rendering/deckLayers'
+import { annotationPaletteColor } from './rendering/annotationPalette'
 import { useViewerStore } from './store/viewerStore'
 import type { DatasetCell, GeneExpressionBatch } from './datasets/xeniumDataset'
-import { normalizeCustomMorphologyLayerUrl } from './data/morphologyImage'
+import {
+  normalizeCustomMorphologyLayerUrl,
+  type MorphologyImage,
+} from './data/morphologyImage'
+import { micrometers, type BBox } from './data/coords'
+import { slug } from './utils/slug'
 import type {
   Annotation,
   SpatialElement,
@@ -233,6 +253,7 @@ export function App({ dependencies }: AppProps = {}) {
       annotationImportUrl,
       annotationState,
       cellMetadataTracks,
+      geometricAnnotations,
       hiddenAnnotationIds,
       hiddenAnnotationSetIds,
       selectedAnnotationGroupId,
@@ -242,6 +263,7 @@ export function App({ dependencies }: AppProps = {}) {
       setAnnotationImportUrl,
       setAnnotationState,
       setCellMetadataTracks,
+      setGeometricAnnotations,
       setHiddenAnnotationIds,
       setHiddenAnnotationSetIds,
       setSelectedAnnotationGroupId,
@@ -487,6 +509,7 @@ export function App({ dependencies }: AppProps = {}) {
   const customMorphologyLayerIdRef = useRef(0)
   const customMorphologyLayerRequestIdRef = useRef(0)
   const roiIdRef = useRef(0)
+  const geometricAnnotationIdRef = useRef(0)
   const boundaryViewportKeyRef = useRef<string | null>(null)
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
   const geneExpressionLayerTimingKeyRef = useRef<string | null>(null)
@@ -746,6 +769,17 @@ export function App({ dependencies }: AppProps = {}) {
   }, [expressionStyledBoundaryLayerData, platformAdapter, selectedBoundaryCell])
   const viewerMicrometersPerPixel =
     morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
+  const geometricAnnotationLayerData = useMemo(
+    () => geometricAnnotationsToLayerData(geometricAnnotations),
+    [geometricAnnotations],
+  )
+  const imageFitExtent = useMemo(
+    () =>
+      platformAdapter.kind === 'image'
+        ? imageFitExtentFromMorphologyImage(morphologyImage)
+        : null,
+    [morphologyImage, platformAdapter.kind],
+  )
   const viewerImageStatus =
     customMorphologyLayerState.status === 'error' ||
     (customMorphologyLayerState.status === 'loading' &&
@@ -761,9 +795,7 @@ export function App({ dependencies }: AppProps = {}) {
   const viewerViewResetKey =
     loadState.status === 'idle' ? 'idle' : `${loadState.status}:${loadState.url}`
   const viewerOverviewRenderCellLimit =
-    platformAdapter.kind === 'h5ad'
-      ? null
-      : performanceBudget.overviewRenderCellLimit
+    platformAdapter.kind === 'h5ad' ? null : performanceBudget.overviewRenderCellLimit
   const geneOptions = useMemo(
     () => (genePanelState.status === 'ready' ? genePanelState.genes : []),
     [genePanelState],
@@ -995,6 +1027,14 @@ export function App({ dependencies }: AppProps = {}) {
         : isRoiGeneViewportWarmupLoading
           ? 'Preparing genes'
           : roiCopy
+  const geometricRoiHeaderCopy =
+    roiMode === 'box'
+      ? 'Drawing box'
+      : roiMode === 'lasso'
+        ? 'Drawing lasso'
+        : `${geometricAnnotations.length.toLocaleString()} ${
+            geometricAnnotations.length === 1 ? 'shape' : 'shapes'
+          }`
   const isRoiTabLoading =
     roiState.status === 'loading' ||
     roiGeneStatsState.status === 'loading' ||
@@ -1079,12 +1119,20 @@ export function App({ dependencies }: AppProps = {}) {
   const hiddenControlHudTabIds = useMemo<ReadonlySet<ControlHudTab>>(() => {
     const hiddenTabIds = new Set<ControlHudTab>()
 
+    if (platformAdapter.kind === 'image') {
+      hiddenTabIds.add('genes')
+      hiddenTabIds.add('transcripts')
+      hiddenTabIds.add('magic-lens')
+      hiddenTabIds.add('cell')
+      return hiddenTabIds
+    }
+
     if (!platformAdapter.capabilities.transcripts) {
       hiddenTabIds.add('transcripts')
     }
 
     return hiddenTabIds
-  }, [platformAdapter.capabilities.transcripts])
+  }, [platformAdapter.capabilities.transcripts, platformAdapter.kind])
   const activeRoiSelection = platformRoiSelection(
     platformAdapter,
     roiState,
@@ -1788,8 +1836,14 @@ export function App({ dependencies }: AppProps = {}) {
   const handleBeforeDatasetLoad = useCallback(() => {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
+    setGeometricAnnotations([])
     setFallbackNotices([])
-  }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState, setFallbackNotices])
+  }, [
+    clearVisiumHdExpressionProfileState,
+    clearVisiumHdRoiState,
+    setFallbackNotices,
+    setGeometricAnnotations,
+  ])
   const handleBeforeVisiumHdBinSizeChange = useCallback(() => {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
@@ -1835,6 +1889,121 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCellMetadataTrackId,
     },
   })
+  const handleImportGeometricAnnotations = useCallback(
+    async (file: File | null) => {
+      if (file === null) {
+        return
+      }
+
+      try {
+        geometricAnnotationIdRef.current += 1
+        const imported = parseGeometricAnnotationsGeoJson(await file.text(), {
+          defaultCoordinateUnit:
+            platformAdapter.kind === 'image' ? 'pixel' : 'micrometer',
+          micrometersPerPixel: viewerMicrometersPerPixel ?? 1,
+          idPrefix: `geojson:${geometricAnnotationIdRef.current}`,
+        })
+
+        if (imported.length === 0) {
+          appendDebugEvent('GeoJSON annotations empty')
+          return
+        }
+
+        setGeometricAnnotations((current) => [...imported, ...current])
+        appendDebugEvent(
+          `GeoJSON annotations imported: ${imported.length.toLocaleString()} shapes`,
+        )
+      } catch {
+        appendDebugEvent('GeoJSON annotation import failed')
+      }
+    },
+    [
+      appendDebugEvent,
+      platformAdapter.kind,
+      setGeometricAnnotations,
+      viewerMicrometersPerPixel,
+    ],
+  )
+  const handleExportGeometricAnnotations = useCallback(() => {
+    if (geometricAnnotations.length === 0) {
+      return
+    }
+
+    downloadTextFile(
+      'geometric-annotations.geojson',
+      geometricAnnotationsToGeoJson(geometricAnnotations),
+    )
+    appendDebugEvent(
+      `GeoJSON annotations exported: ${geometricAnnotations.length.toLocaleString()} shapes`,
+    )
+  }, [appendDebugEvent, geometricAnnotations])
+  const handleClearGeometricAnnotations = useCallback(() => {
+    if (geometricAnnotations.length === 0) {
+      return
+    }
+
+    setGeometricAnnotations([])
+    appendDebugEvent('Cleared GeoJSON annotations')
+  }, [appendDebugEvent, geometricAnnotations.length, setGeometricAnnotations])
+  const handleGeometricAnnotationColorChange = useCallback(
+    (annotationId: string, color: string) => {
+      setGeometricAnnotations((current) =>
+        updateGeometricAnnotationColor(current, annotationId, color),
+      )
+      appendDebugEvent(`GeoJSON annotation color ${annotationId}`, {
+        coalesceKey: `geometric-annotation-color:${annotationId}`,
+      })
+    },
+    [appendDebugEvent, setGeometricAnnotations],
+  )
+  const handleGeometricAnnotationVisibilityChange = useCallback(
+    (annotationId: string, visible: boolean) => {
+      setGeometricAnnotations((current) =>
+        updateGeometricAnnotationVisibility(current, annotationId, visible),
+      )
+    },
+    [setGeometricAnnotations],
+  )
+  const handleRemoveGeometricAnnotation = useCallback(
+    (annotationId: string) => {
+      setGeometricAnnotations((current) =>
+        removeGeometricAnnotation(current, annotationId),
+      )
+      appendDebugEvent(`Removed GeoJSON annotation ${annotationId}`)
+    },
+    [appendDebugEvent, setGeometricAnnotations],
+  )
+  const handleImageRoiComplete = useCallback(
+    (selection: RoiSelection) => {
+      if (loadState.status !== 'ready') {
+        return
+      }
+
+      geometricAnnotationIdRef.current += 1
+      const name = roiName.trim() || defaultRoiName(geometricAnnotationIdRef.current)
+      const id = `geometry:${geometricAnnotationIdRef.current}:${slug(name) || 'shape'}`
+      const feature = geometricAnnotationFromRoiSelection({
+        id,
+        label: name,
+        color: annotationPaletteColor(geometricAnnotations.length),
+        selection,
+      })
+
+      setGeometricAnnotations((current) => [feature, ...current])
+      setRoiMode('idle')
+      setRoiName(defaultRoiName(geometricAnnotationIdRef.current + 1))
+      appendDebugEvent(`Saved geometric annotation ${name}`)
+    },
+    [
+      appendDebugEvent,
+      geometricAnnotations.length,
+      loadState.status,
+      roiName,
+      setGeometricAnnotations,
+      setRoiMode,
+      setRoiName,
+    ],
+  )
   useEffect(() => {
     if (loadedDatasetUrl === null) {
       return
@@ -2316,6 +2485,13 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
+  const activeRoiCompleteHandler =
+    platformAdapter.kind === 'image'
+      ? handleImageRoiComplete
+      : platformAdapter.kind === 'visium-hd'
+        ? handleVisiumHdRoiComplete
+        : handleRoiComplete
+
   return (
     <main className="app-shell">
       <a className="skip-link" href="#viewer-heading">
@@ -2361,6 +2537,7 @@ export function App({ dependencies }: AppProps = {}) {
           autoContrastChannelIds={autoContrastChannelIds}
           cellBoundaryOpacity={cellBoundaryOpacity}
           cellFillOpacity={cellFillOpacity}
+          cellLayerControlsVisible={platformAdapter.kind !== 'image'}
           controlIds={controlIds}
           coordinateUnit={coordinateUnit}
           customLayerLoadState={customMorphologyLayerState}
@@ -2520,6 +2697,11 @@ export function App({ dependencies }: AppProps = {}) {
           hiddenAnnotationSetIds={hiddenAnnotationSetIds}
           hiddenAnnotationIds={hiddenAnnotationIds}
           cellMetadataTracks={cellMetadataTracks}
+          geometricAnnotations={geometricAnnotations}
+          geometricAnnotationsEnabled={
+            platformAdapter.capabilities.geometricAnnotations &&
+            loadState.status === 'ready'
+          }
           onAnnotationGroupChange={handleAnnotationGroupChange}
           onLoadAnnotations={handleLoadAnnotations}
           onClearAnnotations={handleClearAnnotations}
@@ -2534,6 +2716,16 @@ export function App({ dependencies }: AppProps = {}) {
           onAnnotationVisibilityChange={handleAnnotationVisibilityChange}
           onRemoveAnnotation={handleRemoveAnnotation}
           onRemoveCellMetadataTrack={handleRemoveCellMetadataTrack}
+          onImportGeometricAnnotations={(file) => {
+            void handleImportGeometricAnnotations(file)
+          }}
+          onExportGeometricAnnotations={handleExportGeometricAnnotations}
+          onClearGeometricAnnotations={handleClearGeometricAnnotations}
+          onGeometricAnnotationColorChange={handleGeometricAnnotationColorChange}
+          onGeometricAnnotationVisibilityChange={
+            handleGeometricAnnotationVisibilityChange
+          }
+          onRemoveGeometricAnnotation={handleRemoveGeometricAnnotation}
         />
 
         <CellHudPanel
@@ -2554,6 +2746,9 @@ export function App({ dependencies }: AppProps = {}) {
           selectedBoundaryCellExpressionStatus={selectedBoundaryCellExpressionStatus}
           selectedExpressionProfileState={activeVisiumHdExpressionProfileState}
           selectedCellAnnotationLabels={selectedCellAnnotationLabels}
+          selectedCellInfoVariant={
+            platformAdapter.kind === 'h5ad' ? 'observations' : 'default'
+          }
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
           cellTranscriptDistributionState={cellTranscriptDistributionState}
@@ -2581,7 +2776,33 @@ export function App({ dependencies }: AppProps = {}) {
           onLoadSelectedExpressionProfile={handleLoadVisiumHdExpressionProfile}
         />
 
-        {isVisiumHdDataset ? (
+        {platformAdapter.kind === 'image' ? (
+          <GeometricRoiHudPanel
+            active={activeControlHudTab === 'roi'}
+            roiNameInputId={controlIds.roiNameInputId}
+            roiHeaderCopy={geometricRoiHeaderCopy}
+            canDrawRoi={canDrawRoi}
+            roiMode={roiMode}
+            roiName={roiName}
+            loadEnabled={loadState.status === 'ready'}
+            onRoiModeChange={(nextMode) => {
+              if (nextMode !== 'idle') {
+                setMeasurementEnabled(false)
+                setMeasurementResetKey((current) => current + 1)
+              }
+
+              setRoiMode(nextMode)
+              appendDebugEvent(
+                nextMode === 'idle'
+                  ? 'Geometry draw cancelled'
+                  : nextMode === 'box'
+                    ? 'Geometry box mode enabled'
+                    : 'Geometry lasso mode enabled',
+              )
+            }}
+            onRoiNameChange={setRoiName}
+          />
+        ) : isVisiumHdDataset ? (
           <VisiumHdRoiHudPanel
             active={activeControlHudTab === 'roi'}
             roiNameInputId={controlIds.roiNameInputId}
@@ -2673,8 +2894,10 @@ export function App({ dependencies }: AppProps = {}) {
           overviewCellSourceLabel={platformAdapter.kind === 'h5ad' ? 'H5AD' : 'Xenium'}
           gridCells={viewerGridCells}
           fitGridCells={spatialGridCells}
+          fitImageExtent={imageFitExtent}
           transcriptAggregateBins={transcriptLayerAggregateBins}
           transcriptPoints={transcriptLayerPoints}
+          geometricAnnotations={geometricAnnotationLayerData}
           imageLoader={morphologyImage?.loader ?? null}
           imageChannels={morphologyCanvasChannels}
           flatImage={flatMorphologyImage}
@@ -2731,10 +2954,7 @@ export function App({ dependencies }: AppProps = {}) {
             setSelectedBoundaryCell(null)
             setSelectedGridCell(cell)
           }}
-          onRoiComplete={platformRoiCompleteHandler(platformAdapter, {
-            visiumHd: handleVisiumHdRoiComplete,
-            xenium: handleRoiComplete,
-          })}
+          onRoiComplete={activeRoiCompleteHandler}
           onMagicLensMove={handleMagicLensMove}
           onMagicLensLeave={handleMagicLensLeave}
           {...(initialShareableState.viewState === undefined
@@ -2915,4 +3135,20 @@ function h5adSampleCells(
       : Math.max(1, Math.floor(limit))
 
   return cells.length <= normalizedLimit ? cells : cells.slice(0, normalizedLimit)
+}
+
+function imageFitExtentFromMorphologyImage(image: MorphologyImage | null): BBox | null {
+  if (image === null) {
+    return null
+  }
+
+  const loader = image.loader
+  const micrometersPerPixel = loader.units.micrometersPerPixel
+
+  return {
+    minX: micrometers(0),
+    maxX: micrometers(loader.imageWidth * micrometersPerPixel),
+    minY: micrometers(0),
+    maxY: micrometers(loader.imageHeight * micrometersPerPixel),
+  }
 }

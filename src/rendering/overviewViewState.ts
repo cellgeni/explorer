@@ -1,3 +1,4 @@
+import type { BBox } from '../data/coords'
 import type {
   GridCellDatum,
   OverviewCellDatum,
@@ -14,8 +15,9 @@ const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
 export function createOverviewViewState(
   cells: readonly OverviewCellDatum[],
   gridCells: readonly GridCellDatum[] = [],
+  imageExtent: BBox | null = null,
 ): OverviewViewState {
-  if (cells.length === 0 && gridCells.length === 0) {
+  if (cells.length === 0 && gridCells.length === 0 && imageExtent === null) {
     return DEFAULT_OVERVIEW_VIEW_STATE
   }
 
@@ -39,6 +41,13 @@ export function createOverviewViewState(
       minY = Math.min(minY, y)
       maxY = Math.max(maxY, y)
     }
+  }
+
+  if (imageExtent !== null) {
+    minX = Math.min(minX, imageExtent.minX)
+    maxX = Math.max(maxX, imageExtent.maxX)
+    minY = Math.min(minY, -imageExtent.maxY)
+    maxY = Math.max(maxY, -imageExtent.minY)
   }
 
   const span = Math.max(maxX - minX, maxY - minY, 1)

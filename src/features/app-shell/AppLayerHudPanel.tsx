@@ -33,6 +33,7 @@ export interface AppLayerHudPanelProps {
   readonly autoContrastChannelIds: readonly string[]
   readonly cellBoundaryOpacity: number
   readonly cellFillOpacity: number
+  readonly cellLayerControlsVisible: boolean
   readonly controlIds: AppLayerControlIds
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly customLayerLoadState: CustomMorphologyLayerLoadState
@@ -78,6 +79,7 @@ export function AppLayerHudPanel({
   autoContrastChannelIds,
   cellBoundaryOpacity,
   cellFillOpacity,
+  cellLayerControlsVisible,
   controlIds,
   coordinateUnit,
   customLayerLoadState,
@@ -134,6 +136,7 @@ export function AppLayerHudPanel({
       loadEnabled={loadEnabled}
       imageLayerOpacity={imageLayerOpacity}
       cellFillOpacity={cellFillOpacity}
+      cellLayerControlsVisible={cellLayerControlsVisible}
       showCellBoundaries={showCellBoundaries}
       showNucleusBoundaries={showNucleusBoundaries}
       showHoverTooltips={showHoverTooltips}

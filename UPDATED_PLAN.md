@@ -1654,3 +1654,59 @@ Keep `PLAN.md` unchanged; record this new phase only in `UPDATED_PLAN.md`.
       errors when the reference file is unavailable.
 - [x] Unit tests, integration tests, TypeScript, ESLint, production build, and
       a browser smoke pass for the H5AD path.
+
+## Phase 8 New Phase - Image-Only Viewer And GeoJSON Annotations
+
+User-added requirement: support first-class image-only sources so the viewer can
+load direct OME-TIFF URLs, and later validated NDPI files, without spatial
+transcriptomics data. Add geometric annotations as a separate overlay model
+instead of extending the existing cell-id annotation model.
+
+### Product Decisions
+
+- [ ] Add `image` as a dataset platform. Image-only datasets use the existing
+      tiled TIFF renderer, compute extent from image dimensions and
+      microns-per-pixel, and keep Xenium, Visium HD, and H5AD behavior
+      unchanged.
+- [ ] Detect direct `.ome.tif`, `.ome.tiff`, `.tif`, `.tiff`, and `.ndpi` URLs as
+      image-only candidates. OME-TIFF is the supported v1 path; NDPI detection is
+      present but rendering succeeds only for variants validated by the browser
+      TIFF loader.
+- [ ] Disable spatial-transcriptomics workflows for image-only sources:
+      transcripts, gene expression, cell details, cell annotations, cell
+      boundaries, magic lens, ROI gene stats, and ROI transcript export.
+- [ ] Let image extent define the initial camera when no cells, grid cells, or
+      segmentation boundaries exist.
+- [ ] Rename loading copy from strictly `Dataset URL` toward
+      `Dataset or image URL`, while keeping the existing load action compatible.
+
+### Geometric Annotation Plan
+
+- [ ] Add a geometric annotation model independent of existing cell-id
+      annotations. Features store Polygon or MultiPolygon geometry, label, color,
+      visibility, and source metadata.
+- [ ] Reuse the existing box/lasso ROI drawing interaction to save drawn
+      geometry directly as a geometric annotation feature for image-only sources.
+- [ ] Import/export GeoJSON FeatureCollection documents with Polygon and
+      MultiPolygon support. For image-only sources, pixel coordinates are the
+      default import unit; `properties.coordinate_unit = micrometer` preserves
+      viewer micrometer coordinates directly.
+- [ ] Render geometric annotations as deck.gl polygon/path overlays with color,
+      visibility, label, remove, and export controls.
+- [ ] Document conversion to pyramidal OME-TIFF as the fallback for unsupported
+      NDPI variants.
+
+### Test Plan
+
+- [ ] Unit test direct image URL detection for OME-TIFF, TIFF, and NDPI
+      extensions.
+- [ ] Unit test `ImageOnlyDataset.meta()` extent, capabilities, and `image()`
+      behavior.
+- [ ] Unit test image platform adapter capability gating.
+- [ ] Unit test viewer initial fit from image extent when no cells/grid cells
+      exist.
+- [ ] Unit test GeoJSON import for Polygon, MultiPolygon, empty files, invalid
+      geometry, pixel coordinates, and micrometer coordinates.
+- [ ] Component test loading an image-only source shows the image, disables
+      transcript/gene/cell controls, and allows annotation import/export.
+- [ ] Keep existing Xenium, Visium HD, and H5AD tests passing unchanged.

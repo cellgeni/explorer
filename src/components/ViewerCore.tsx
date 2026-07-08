@@ -86,6 +86,7 @@ import type {
 } from './MorphologyCanvas'
 import type {
   CellBoundaryDatum,
+  GeometricAnnotationDatum,
   GridCellDatum,
   OverviewCellDatum,
   TranscriptAggregateDatum,
@@ -145,6 +146,7 @@ const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
 const GRID_CELL_RENDER_VIEWPORT_PADDING_RATIO = 0.15
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
+const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
 
 export function ViewerCore({
   cells = [],
@@ -159,8 +161,10 @@ export function ViewerCore({
   overviewCellSourceLabel = 'Xenium',
   gridCells = [],
   fitGridCells,
+  fitImageExtent = null,
   transcriptAggregateBins = [],
   transcriptPoints = [],
+  geometricAnnotations = EMPTY_GEOMETRIC_ANNOTATIONS,
   imageLoader = null,
   imageChannels = [],
   flatImage = null,
@@ -216,8 +220,8 @@ export function ViewerCore({
   const viewFitCells = fitCells ?? cells
   const viewFitGridCells = fitGridCells ?? gridCells
   const fittedViewState = useMemo(
-    () => createOverviewViewState(viewFitCells, viewFitGridCells),
-    [viewFitCells, viewFitGridCells],
+    () => createOverviewViewState(viewFitCells, viewFitGridCells, fitImageExtent),
+    [fitImageExtent, viewFitCells, viewFitGridCells],
   )
   const initialViewState = useMemo(
     () => mergeInitialViewState(fittedViewState, initialViewStateOverride),
@@ -241,6 +245,7 @@ export function ViewerCore({
       viewportCountGridCells={viewFitGridCells}
       transcriptAggregateBins={transcriptAggregateBins}
       transcriptPoints={transcriptPoints}
+      geometricAnnotations={geometricAnnotations}
       imageLoader={imageLoader}
       imageChannels={imageChannels}
       flatImage={flatImage}
@@ -311,6 +316,7 @@ interface ViewerSurfaceProps {
   readonly viewportCountGridCells: readonly GridCellDatum[]
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints: readonly TranscriptPointDatum[]
+  readonly geometricAnnotations: readonly GeometricAnnotationDatum[]
   readonly imageLoader: TiffPyramidLoader | null
   readonly imageChannels: readonly MorphologyCanvasChannel[]
   readonly flatImage: FlatMorphologyCanvasImage | null
@@ -379,6 +385,7 @@ function ViewerSurface({
   viewportCountGridCells,
   transcriptAggregateBins,
   transcriptPoints,
+  geometricAnnotations,
   imageLoader,
   imageChannels,
   flatImage,
@@ -694,6 +701,7 @@ function ViewerSurface({
         geneExpressionOverlayElements,
         transcriptAggregateBins,
         transcriptPoints,
+        geometricAnnotations,
         transcriptOpacity,
         transcriptPointSize,
         pointSizeZoomDelta: viewState.zoom - fittedViewZoom,
@@ -713,6 +721,7 @@ function ViewerSurface({
       expressionStyledGridCells,
       geneExpressionActive,
       geneExpressionOverlayElements,
+      geometricAnnotations,
       transcriptAggregateBins,
       transcriptOpacity,
       transcriptPointSize,
@@ -727,8 +736,15 @@ function ViewerSurface({
   const hasViewportCountGridCells = viewportCountGridCells.length > 0
   const hasBoundaries = boundaries.length > 0
   const hasNucleusBoundaries = nucleusBoundaries.length > 0
-  const hasSpatialData = hasCells || hasGridCells || hasBoundaries || hasNucleusBoundaries
   const hasImage = imageLoader !== null || imageChannels.length > 0 || flatImage !== null
+  const hasGeometricAnnotations = geometricAnnotations.length > 0
+  const hasSpatialData =
+    hasCells ||
+    hasGridCells ||
+    hasBoundaries ||
+    hasNucleusBoundaries ||
+    hasImage ||
+    hasGeometricAnnotations
   const canTrackMouseCoordinates = hasSpatialData || hasImage
   const visibleCellCount = visibleCells.length
   const visibleGridCellCount = useMemo(

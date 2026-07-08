@@ -27,6 +27,7 @@ import {
   createTranscriptFeatureCircleLayer,
   createTranscriptPointLayer,
 } from './transcriptRenderer'
+import { createGeometricAnnotationLayers } from './geometricAnnotationRenderer'
 import {
   DEFAULT_CELL_FILL_OPACITY,
   DEFAULT_LAYER_OPACITY,
@@ -46,6 +47,7 @@ export type {
   GeneExpressionLayerDataOptions,
   GeneExpressionScoreMode,
   GeneExpressionScoreModeOption,
+  GeometricAnnotationDatum,
   GridCellDatum,
   GridCellLayerBatchMetadata,
   GridCellLayerDataOptions,
@@ -96,6 +98,7 @@ export {
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
 } from './transcriptRenderer'
+export { geometricAnnotationsToLayerData } from './geometricAnnotationRenderer'
 
 export const spatialOverviewView = new OrthographicView({
   id: 'spatial-overview',
@@ -130,6 +133,7 @@ export function createOverviewLayers(
       : EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY)
   const cellBoundaryStyle = options.cellBoundaryStyle ?? EMPTY_CELL_BOUNDARY_LAYER_STYLE
   const transcriptAggregateBins = options.transcriptAggregateBins ?? []
+  const geometricAnnotations = options.geometricAnnotations ?? []
   const gridCells = options.gridCells ?? []
   const gridCellOpacity =
     options.gridCellOpacity === undefined
@@ -230,6 +234,8 @@ export function createOverviewLayers(
   if (gridCellLayer !== null) {
     layers.push(gridCellLayer)
   }
+
+  layers.push(...createGeometricAnnotationLayers(geometricAnnotations))
 
   const transcriptFeatureCircleLayer = createTranscriptFeatureCircleLayer(
     transcriptFeatureCircleBins,

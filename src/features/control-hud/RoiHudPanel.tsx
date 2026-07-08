@@ -195,6 +195,89 @@ export function RoiHudPanel({
   )
 }
 
+interface GeometricRoiHudPanelProps {
+  readonly active: boolean
+  readonly roiNameInputId: string
+  readonly roiHeaderCopy: string
+  readonly canDrawRoi: boolean
+  readonly roiMode: RoiDrawMode
+  readonly roiName: string
+  readonly loadEnabled: boolean
+  readonly onRoiModeChange: (mode: RoiDrawMode) => void
+  readonly onRoiNameChange: (name: string) => void
+}
+
+export function GeometricRoiHudPanel({
+  active,
+  roiNameInputId,
+  roiHeaderCopy,
+  canDrawRoi,
+  roiMode,
+  roiName,
+  loadEnabled,
+  onRoiModeChange,
+  onRoiNameChange,
+}: GeometricRoiHudPanelProps) {
+  return (
+    <div
+      id="hud-panel-roi"
+      className="hud-tab-panel"
+      role="tabpanel"
+      aria-labelledby="hud-tab-roi"
+      hidden={!active}
+    >
+      <section className="analysis-section" aria-labelledby="roi-heading">
+        <div className="section-heading-row">
+          <h2 id="roi-heading">Geometry</h2>
+          <span className="status-chip" aria-live="polite">
+            {roiHeaderCopy}
+          </span>
+        </div>
+        <div className="roi-action-row">
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={!canDrawRoi}
+            aria-pressed={roiMode === 'box'}
+            title={roiMode === 'box' ? 'Stop drawing box' : 'Draw box'}
+            onClick={() => {
+              onRoiModeChange(roiMode === 'box' ? 'idle' : 'box')
+            }}
+          >
+            {roiMode === 'box' ? 'Drawing Box' : 'Draw Box'}
+          </button>
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={!canDrawRoi}
+            aria-pressed={roiMode === 'lasso'}
+            title={roiMode === 'lasso' ? 'Stop drawing lasso' : 'Draw lasso'}
+            onClick={() => {
+              onRoiModeChange(roiMode === 'lasso' ? 'idle' : 'lasso')
+            }}
+          >
+            {roiMode === 'lasso' ? 'Drawing Lasso' : 'Draw Lasso'}
+          </button>
+        </div>
+
+        <label htmlFor={roiNameInputId}>Shape name</label>
+        <input
+          id={roiNameInputId}
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          value={roiName}
+          disabled={!loadEnabled}
+          title="Shape name"
+          onChange={(event) => {
+            onRoiNameChange(event.currentTarget.value)
+          }}
+        />
+      </section>
+    </div>
+  )
+}
+
 interface VisiumHdRoiHudPanelProps {
   readonly active: boolean
   readonly roiNameInputId: string

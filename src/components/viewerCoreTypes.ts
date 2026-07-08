@@ -11,6 +11,7 @@ import type {
   OverviewCellDatum,
   OverviewViewState,
   TranscriptAggregateDatum,
+  GeometricAnnotationDatum,
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
 import type { TiffPyramidLoader } from '../tiff/loader'
@@ -37,8 +38,10 @@ export interface ViewerCoreProps {
   readonly overviewCellSourceLabel?: string
   readonly gridCells?: readonly GridCellDatum[]
   readonly fitGridCells?: readonly GridCellDatum[]
+  readonly fitImageExtent?: BBox | null
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
+  readonly geometricAnnotations?: readonly GeometricAnnotationDatum[]
   readonly imageLoader?: TiffPyramidLoader | null
   readonly imageChannels?: readonly MorphologyCanvasChannel[]
   readonly flatImage?: FlatMorphologyCanvasImage | null

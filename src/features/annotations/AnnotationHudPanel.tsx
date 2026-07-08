@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
+import { memo, useId, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import {
   ALL_ANNOTATION_GROUP_ID,
   NO_ANNOTATION_GROUP_ID,
@@ -7,6 +7,7 @@ import {
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
 import type { Annotation } from '../../datasets/spatialDataset'
+import type { GeometricAnnotationFeature } from './geometricAnnotationModel'
 import {
   annotationSizePlots,
   type AnnotationGroupState,
@@ -40,6 +41,8 @@ interface AnnotationHudPanelProps {
   readonly hiddenAnnotationSetIds: readonly string[]
   readonly hiddenAnnotationIds: readonly string[]
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
+  readonly geometricAnnotations: readonly GeometricAnnotationFeature[]
+  readonly geometricAnnotationsEnabled: boolean
   readonly onAnnotationGroupChange: (groupId: string) => void
   readonly onLoadAnnotations: () => void
   readonly onClearAnnotations: () => void
@@ -52,6 +55,15 @@ interface AnnotationHudPanelProps {
   readonly onAnnotationVisibilityChange: (annotationId: string, visible: boolean) => void
   readonly onRemoveAnnotation: (annotationId: string) => void
   readonly onRemoveCellMetadataTrack: (trackId: string) => void
+  readonly onImportGeometricAnnotations: (file: File | null) => void
+  readonly onExportGeometricAnnotations: () => void
+  readonly onClearGeometricAnnotations: () => void
+  readonly onGeometricAnnotationColorChange: (annotationId: string, color: string) => void
+  readonly onGeometricAnnotationVisibilityChange: (
+    annotationId: string,
+    visible: boolean,
+  ) => void
+  readonly onRemoveGeometricAnnotation: (annotationId: string) => void
 }
 
 export const AnnotationHudPanel = memo(function AnnotationHudPanel({
@@ -70,6 +82,8 @@ export const AnnotationHudPanel = memo(function AnnotationHudPanel({
   hiddenAnnotationSetIds,
   hiddenAnnotationIds,
   cellMetadataTracks,
+  geometricAnnotations,
+  geometricAnnotationsEnabled,
   onAnnotationGroupChange,
   onLoadAnnotations,
   onClearAnnotations,
@@ -82,7 +96,14 @@ export const AnnotationHudPanel = memo(function AnnotationHudPanel({
   onAnnotationVisibilityChange,
   onRemoveAnnotation,
   onRemoveCellMetadataTrack,
+  onImportGeometricAnnotations,
+  onExportGeometricAnnotations,
+  onClearGeometricAnnotations,
+  onGeometricAnnotationColorChange,
+  onGeometricAnnotationVisibilityChange,
+  onRemoveGeometricAnnotation,
 }: AnnotationHudPanelProps) {
+  const geometricAnnotationInputId = useId()
   const [isImportingAnnotationUrl, setIsImportingAnnotationUrl] = useState(false)
   const isAnnotationLoading =
     annotationState.status === 'loading' || annotationGroupState.status === 'loading'
@@ -92,6 +113,12 @@ export const AnnotationHudPanel = memo(function AnnotationHudPanel({
   const loadedAnnotations =
     annotationState.status === 'ready' ? annotationState.annotations : []
   const trimmedAnnotationImportUrl = annotationImportUrl.trim()
+  const showCellAnnotationControls =
+    !geometricAnnotationsEnabled ||
+    loadEnabled ||
+    annotationState.status !== 'idle' ||
+    annotationGroupState.status !== 'idle' ||
+    cellMetadataTracks.length > 0
 
   async function handleAnnotationUrlSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -141,110 +168,117 @@ export const AnnotationHudPanel = memo(function AnnotationHudPanel({
             {annotationHeaderCopy}
           </span>
         </div>
-        <label htmlFor={annotationGroupInputId}>Annotation set</label>
-        <select
-          id={annotationGroupInputId}
-          value={selectedAnnotationGroupId}
-          disabled={!loadEnabled}
-          title="Annotation set"
-          onChange={(event) => {
-            onAnnotationGroupChange(event.currentTarget.value)
-          }}
-        >
-          <option value={NO_ANNOTATION_GROUP_ID}>None</option>
-          <option value={ALL_ANNOTATION_GROUP_ID}>All</option>
-          {annotationGroupOptions.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.label}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={annotationLoadDisabled}
-          title="Load annotations"
-          onClick={onLoadAnnotations}
-        >
-          {annotationState.status === 'loading' ? 'Loading…' : 'Load Annotations'}
-        </button>
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={annotationState.status !== 'ready' && cellMetadataTracks.length === 0}
-          title="Clear annotations"
-          onClick={onClearAnnotations}
-        >
-          Clear Annotations
-        </button>
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={
-            annotationState.status !== 'ready' || annotationState.annotations.length === 0
-          }
-          title="Export annotations"
-          onClick={onExportAnnotations}
-        >
-          Export Annotations
-        </button>
-        <label
-          className="secondary-file-action"
-          htmlFor={annotationImportInputId}
-          title="Import annotation file"
-        >
-          Import File
-        </label>
-        <input
-          id={annotationImportInputId}
-          className="visually-hidden-file"
-          type="file"
-          accept=".csv,.json,application/json,text/csv"
-          disabled={!loadEnabled}
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0] ?? null
-            onImportAnnotations(file)
-            event.currentTarget.value = ''
-          }}
-        />
-        <form
-          className="annotation-url-import"
-          aria-label="Import annotation URL"
-          onSubmit={(event) => {
-            void handleAnnotationUrlSubmit(event)
-          }}
-        >
-          <label htmlFor={annotationImportUrlInputId}>Annotation URL</label>
-          <div className="annotation-url-row">
-            <input
-              id={annotationImportUrlInputId}
-              type="url"
-              name="annotation-url"
-              inputMode="url"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="https://example.org/labels.csv…"
-              title="Annotation URL"
-              value={annotationImportUrl}
-              disabled={!loadEnabled || isImportingAnnotationUrl}
+        {showCellAnnotationControls ? (
+          <>
+            <label htmlFor={annotationGroupInputId}>Annotation set</label>
+            <select
+              id={annotationGroupInputId}
+              value={selectedAnnotationGroupId}
+              disabled={!loadEnabled}
+              title="Annotation set"
               onChange={(event) => {
-                onAnnotationImportUrlChange(event.currentTarget.value)
+                onAnnotationGroupChange(event.currentTarget.value)
               }}
-            />
+            >
+              <option value={NO_ANNOTATION_GROUP_ID}>None</option>
+              <option value={ALL_ANNOTATION_GROUP_ID}>All</option>
+              {annotationGroupOptions.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.label}
+                </option>
+              ))}
+            </select>
             <button
-              type="submit"
+              type="button"
+              className="secondary-action"
+              disabled={annotationLoadDisabled}
+              title="Load annotations"
+              onClick={onLoadAnnotations}
+            >
+              {annotationState.status === 'loading' ? 'Loading…' : 'Load Annotations'}
+            </button>
+            <button
+              type="button"
               className="secondary-action"
               disabled={
-                !loadEnabled ||
-                isImportingAnnotationUrl ||
-                trimmedAnnotationImportUrl.length === 0
+                annotationState.status !== 'ready' && cellMetadataTracks.length === 0
               }
-              title="Import annotation URL"
+              title="Clear annotations"
+              onClick={onClearAnnotations}
             >
-              {isImportingAnnotationUrl ? 'Importing…' : 'Import URL'}
+              Clear Annotations
             </button>
-          </div>
-        </form>
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={
+                annotationState.status !== 'ready' ||
+                annotationState.annotations.length === 0
+              }
+              title="Export annotations"
+              onClick={onExportAnnotations}
+            >
+              Export Annotations
+            </button>
+            <label
+              className="secondary-file-action"
+              htmlFor={annotationImportInputId}
+              title="Import annotation file"
+            >
+              Import File
+            </label>
+            <input
+              id={annotationImportInputId}
+              className="visually-hidden-file"
+              type="file"
+              accept=".csv,.json,application/json,text/csv"
+              disabled={!loadEnabled}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null
+                onImportAnnotations(file)
+                event.currentTarget.value = ''
+              }}
+            />
+            <form
+              className="annotation-url-import"
+              aria-label="Import annotation URL"
+              onSubmit={(event) => {
+                void handleAnnotationUrlSubmit(event)
+              }}
+            >
+              <label htmlFor={annotationImportUrlInputId}>Annotation URL</label>
+              <div className="annotation-url-row">
+                <input
+                  id={annotationImportUrlInputId}
+                  type="url"
+                  name="annotation-url"
+                  inputMode="url"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="https://example.org/labels.csv…"
+                  title="Annotation URL"
+                  value={annotationImportUrl}
+                  disabled={!loadEnabled || isImportingAnnotationUrl}
+                  onChange={(event) => {
+                    onAnnotationImportUrlChange(event.currentTarget.value)
+                  }}
+                />
+                <button
+                  type="submit"
+                  className="secondary-action"
+                  disabled={
+                    !loadEnabled ||
+                    isImportingAnnotationUrl ||
+                    trimmedAnnotationImportUrl.length === 0
+                  }
+                  title="Import annotation URL"
+                >
+                  {isImportingAnnotationUrl ? 'Importing…' : 'Import URL'}
+                </button>
+              </div>
+            </form>
+          </>
+        ) : null}
         {annotationState.status === 'ready' && annotationState.annotations.length > 0 ? (
           <>
             <AnnotationSizeCharts
@@ -278,10 +312,135 @@ export const AnnotationHudPanel = memo(function AnnotationHudPanel({
             />
           </section>
         ) : null}
+        <section
+          className="annotation-size-panel"
+          aria-labelledby="geometric-annotation-heading"
+        >
+          <div className="annotation-size-heading">
+            <h3 id="geometric-annotation-heading">GeoJSON shapes</h3>
+            <small>{geometricAnnotations.length.toLocaleString()} loaded</small>
+          </div>
+          <div className="roi-action-row">
+            <label
+              className="secondary-file-action"
+              htmlFor={geometricAnnotationInputId}
+              title="Import GeoJSON"
+            >
+              Import GeoJSON
+            </label>
+            <input
+              id={geometricAnnotationInputId}
+              className="visually-hidden-file"
+              type="file"
+              accept=".geojson,.json,application/geo+json,application/json"
+              disabled={!geometricAnnotationsEnabled}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null
+                onImportGeometricAnnotations(file)
+                event.currentTarget.value = ''
+              }}
+            />
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={geometricAnnotations.length === 0}
+              title="Export GeoJSON"
+              onClick={onExportGeometricAnnotations}
+            >
+              Export GeoJSON
+            </button>
+            <button
+              type="button"
+              className="secondary-action"
+              disabled={geometricAnnotations.length === 0}
+              title="Clear GeoJSON"
+              onClick={onClearGeometricAnnotations}
+            >
+              Clear GeoJSON
+            </button>
+          </div>
+          {geometricAnnotations.length > 0 ? (
+            <GeometricAnnotationList
+              annotations={geometricAnnotations}
+              onColorChange={onGeometricAnnotationColorChange}
+              onVisibilityChange={onGeometricAnnotationVisibilityChange}
+              onRemove={onRemoveGeometricAnnotation}
+            />
+          ) : null}
+        </section>
       </section>
     </div>
   )
 })
+
+function GeometricAnnotationList({
+  annotations,
+  onColorChange,
+  onVisibilityChange,
+  onRemove,
+}: {
+  readonly annotations: readonly GeometricAnnotationFeature[]
+  readonly onColorChange: (annotationId: string, color: string) => void
+  readonly onVisibilityChange: (annotationId: string, visible: boolean) => void
+  readonly onRemove: (annotationId: string) => void
+}) {
+  return (
+    <ul className="annotation-list" aria-label="Loaded GeoJSON shapes">
+      {annotations.map((annotation) => (
+        <li key={annotation.id} className={annotation.visible ? undefined : 'is-hidden'}>
+          <label
+            className="annotation-color-picker"
+            style={{ '--annotation-color': annotation.color } as CSSProperties}
+          >
+            <input
+              className="annotation-color-input"
+              type="color"
+              aria-label={`${annotation.label} color`}
+              value={annotation.color}
+              title={`${annotation.label} color`}
+              onChange={(event) => {
+                onColorChange(annotation.id, event.currentTarget.value)
+              }}
+            />
+            <span className="annotation-color-swatch" aria-hidden="true" />
+          </label>
+          <label className="annotation-visibility-toggle">
+            <input
+              type="checkbox"
+              checked={annotation.visible}
+              aria-label={`${annotation.label} visible`}
+              title={`${annotation.label} visible`}
+              onChange={(event) => {
+                onVisibilityChange(annotation.id, event.currentTarget.checked)
+              }}
+            />
+          </label>
+          <span>{annotation.label}</span>
+          <small>{geometryTypeLabel(annotation)}</small>
+          <button
+            type="button"
+            className="annotation-remove"
+            aria-label={`Remove ${annotation.label}`}
+            title={`Remove ${annotation.label}`}
+            onClick={() => {
+              onRemove(annotation.id)
+            }}
+          >
+            x
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function geometryTypeLabel(annotation: GeometricAnnotationFeature): string {
+  if (annotation.geometry.type === 'Polygon') {
+    return 'Polygon'
+  }
+
+  return `${annotation.geometry.coordinates.length.toLocaleString()} polygons`
+}
 
 function AnnotationList({
   annotations,

@@ -46,7 +46,7 @@ describe('AppDatasetHudPanel', () => {
 
     render(<AppDatasetHudPanel {...props} />)
 
-    fireEvent.change(screen.getByLabelText('Dataset URL'), {
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
       target: { value: 'https://example.test/next' },
     })
     fireEvent.click(screen.getByLabelText('Morphology image'))

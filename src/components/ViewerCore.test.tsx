@@ -10,6 +10,8 @@ import type {
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
 import { asCellId } from '../data/cellid'
+import { micrometers } from '../data/coords'
+import type { TiffPyramidLoader } from '../tiff/loader'
 
 type MockDeckHover = (info: {
   readonly object?: unknown
@@ -187,6 +189,55 @@ describe('ViewerCore', () => {
     expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
   })
 
+  it('fits the initial view from an image extent without cells or grid cells', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+
+    render(
+      <ViewerCore
+        imageLoader={imageLoaderFixture()}
+        fitImageExtent={{
+          minX: micrometers(0),
+          maxX: micrometers(100),
+          minY: micrometers(0),
+          maxY: micrometers(50),
+        }}
+      />,
+    )
+
+    expect(deckGlMock.viewState?.target).toEqual([50, -25, 0])
+    expect(deckGlMock.viewState?.zoom).toBeCloseTo(Math.log2(720 / 100))
+    expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
+  })
+
+  it('renders geometric annotations as polygon overlays', () => {
+    render(
+      <ViewerCore
+        geometricAnnotations={[
+          {
+            id: 'shape-1:0',
+            annotationId: 'shape-1',
+            label: 'Shape 1',
+            polygon: [
+              [
+                [0, 0, 0],
+                [20, 0, 0],
+                [20, -10, 0],
+                [0, -10, 0],
+              ],
+            ],
+            fillColor: [31, 119, 180, 42],
+            lineColor: [31, 119, 180, 230],
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByTestId('deck-layer-geometric-annotations')).toHaveAttribute(
+      'data-count',
+      '1',
+    )
+  })
+
   it('clips rendered grid-cell polygons to the viewport', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
@@ -278,11 +329,14 @@ describe('ViewerCore', () => {
   it('renders every overview point when the render limit is disabled', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
-    const cells: readonly OverviewCellDatum[] = Array.from({ length: 10 }, (_value, index) => ({
-      ...overviewCellDatum(),
-      id: `overview-cell-${index}`,
-      position: [index * 10, -index * 10, 0],
-    }))
+    const cells: readonly OverviewCellDatum[] = Array.from(
+      { length: 10 },
+      (_value, index) => ({
+        ...overviewCellDatum(),
+        id: `overview-cell-${index}`,
+        position: [index * 10, -index * 10, 0],
+      }),
+    )
 
     render(
       <ViewerCore
@@ -817,11 +871,7 @@ describe('ViewerCore', () => {
     }
 
     render(
-      <ViewerCore
-        cells={[cell]}
-        overviewCellSourceLabel="H5AD"
-        hoverTooltipsEnabled
-      />,
+      <ViewerCore cells={[cell]} overviewCellSourceLabel="H5AD" hoverTooltipsEnabled />,
     )
 
     act(() => {
@@ -1897,4 +1947,11 @@ function twoMicrometerGridCell(row: number, col: number): GridCellDatum {
       [minX, -maxY, 0],
     ],
   })
+}
+
+function imageLoaderFixture(): TiffPyramidLoader {
+  return {
+    url: 'https://example.test/sample.ome.tif',
+    channels: [],
+  } as unknown as TiffPyramidLoader
 }

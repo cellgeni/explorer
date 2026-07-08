@@ -22,7 +22,7 @@ import {
   type TranscriptViewportLoader,
 } from './App'
 import { intToCellId } from './data/cellid'
-import { micrometers } from './data/coords'
+import { imagePixels, micrometers } from './data/coords'
 import { NO_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import { warmDatasetForRoi } from './data/datasetWarmup'
 import { GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT } from './data/geneExpressionLod'
@@ -129,7 +129,7 @@ describe('App', () => {
   it('renders the Xenium viewer shell', () => {
     render(<TestApp />)
 
-    const datasetInput = screen.getByLabelText('Dataset URL')
+    const datasetInput = screen.getByLabelText('Dataset or image URL')
 
     expect(screen.queryByText('Xenium Explorer')).not.toBeInTheDocument()
     expect(datasetInput).toBeInstanceOf(HTMLInputElement)
@@ -321,6 +321,142 @@ describe('App', () => {
       ).not.toBeInTheDocument()
     } finally {
       viewport.restore()
+    }
+  })
+
+  it('loads an image-only source and enables GeoJSON shape annotations', async () => {
+    const imageUrl = 'https://example.test/images/sample.ome.tif'
+    window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(imageUrl)}`)
+    const viewport = installAppViewportFixture()
+    const createObjectUrlSpy = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:geometric-annotations')
+    const revokeObjectUrlSpy = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+    const downloadClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
+    const loader = imageOnlyTiffLoaderFixture(imageUrl)
+    const imageDataset = {
+      meta: vi.fn(async () => ({
+        platform: 'image' as const,
+        units: loader.units,
+        extent: {
+          minX: micrometers(0),
+          maxX: micrometers(80),
+          minY: micrometers(0),
+          maxY: micrometers(40),
+        },
+        capabilities: {
+          transcripts: false,
+          cellBoundaries: false,
+          pyramidImage: true,
+          multiChannel: false,
+        },
+        channels: [],
+      })),
+      image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
+    }
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'image' as const,
+      baseUrl: imageUrl,
+      imageUrl,
+      checked: [],
+    }))
+    const getSpatialDataset = createSpatialDatasetLoaderMock(imageDataset)
+    const loadDatasetOverview: ReturnType<typeof vi.fn<DatasetOverviewLoader>> = vi.fn(
+      async () => {
+        throw new Error('Image-only loading must not request overview cells.')
+      },
+    )
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={getSpatialDataset}
+          loadDatasetOverview={loadDatasetOverview}
+        />,
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      await waitFor(() => {
+        expect(imageDataset.image).toHaveBeenCalledTimes(1)
+      })
+      expect(imageDataset.meta).toHaveBeenCalled()
+      expect(loadDatasetOverview).not.toHaveBeenCalled()
+      expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
+      expect(screen.queryByRole('tab', { name: 'Genes' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('tab', { name: 'Transcripts' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('tab', { name: 'Magic Lens' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('tab', { name: 'Cell' })).not.toBeInTheDocument()
+
+      openHudTab('Layers')
+      expect(screen.queryByRole('slider', { name: 'Cell fill opacity' })).toBeNull()
+      expect(screen.queryByRole('slider', { name: 'Cell boundary opacity' })).toBeNull()
+      expect(screen.queryByLabelText('Cell boundaries')).toBeNull()
+
+      openHudTab('ROI')
+      expect(screen.getByRole('heading', { name: 'Geometry' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      expect(screen.queryByRole('button', { name: 'Export Cells' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Export Transcripts' })).toBeNull()
+
+      openHudTab('Annotations')
+      expect(screen.getByRole('heading', { name: 'GeoJSON shapes' })).toBeInTheDocument()
+      expect(screen.queryByRole('combobox', { name: 'Annotation set' })).toBeNull()
+
+      fireEvent.change(screen.getByLabelText('Import GeoJSON'), {
+        target: {
+          files: [
+            new File(
+              [
+                JSON.stringify({
+                  type: 'Feature',
+                  properties: { label: 'Image region' },
+                  geometry: {
+                    type: 'Polygon',
+                    coordinates: [
+                      [
+                        [10, 10],
+                        [20, 10],
+                        [20, 20],
+                        [10, 10],
+                      ],
+                    ],
+                  },
+                }),
+              ],
+              'region.geojson',
+              { type: 'application/geo+json' },
+            ),
+          ],
+        },
+      })
+
+      expect(await screen.findByText('Image region')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Export GeoJSON' })).toBeEnabled()
+      expect(screen.getByTestId('deck-layer-geometric-annotations')).toHaveAttribute(
+        'data-count',
+        '1',
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Export GeoJSON' }))
+
+      expect(downloadClickSpy).toHaveBeenCalledTimes(1)
+      const blob = createObjectUrlSpy.mock.calls[0]?.[0]
+      expect(blob).toBeInstanceOf(Blob)
+
+      if (blob instanceof Blob) {
+        await expect(blob.text()).resolves.toContain('"coordinate_unit": "micrometer"')
+      }
+    } finally {
+      viewport.restore()
+      createObjectUrlSpy.mockRestore()
+      revokeObjectUrlSpy.mockRestore()
+      downloadClickSpy.mockRestore()
     }
   })
 
@@ -1191,8 +1327,7 @@ describe('App', () => {
       },
     }))
     const fetchAnnotations = vi.fn(
-      async () =>
-        new Response(`cell_id,label\n${intToCellId(1, 1)},Manual annotation`),
+      async () => new Response(`cell_id,label\n${intToCellId(1, 1)},Manual annotation`),
     )
     vi.stubGlobal('fetch', fetchAnnotations)
 
@@ -1215,7 +1350,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Gad1' })).toBeInTheDocument()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Dataset URL')).toHaveValue(
+      expect(screen.getByLabelText('Dataset or image URL')).toHaveValue(
         'https://example.test/xenium',
       )
     })
@@ -1307,9 +1442,9 @@ describe('App', () => {
         }),
       )
     })
-    expect(screen.getByLabelText('Dataset URL')).toHaveValue(queryDatasetUrl)
+    expect(screen.getByLabelText('Dataset or image URL')).toHaveValue(queryDatasetUrl)
 
-    fireEvent.change(screen.getByLabelText('Dataset URL'), {
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
       target: { value: 'https://example.test/typed' },
     })
 
@@ -1982,7 +2117,7 @@ describe('App', () => {
           loadAnalysisEmbeddings={loadAnalysisEmbeddings}
         />,
       )
-      fireEvent.change(screen.getByLabelText('Dataset URL'), {
+      fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
         target: { value: h5adUrl },
       })
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
@@ -2000,9 +2135,9 @@ describe('App', () => {
       })
 
       expect(annotationSet).toHaveValue(NO_ANNOTATION_GROUP_ID)
-      expect(within(annotationSet).getByRole('option', { name: 'cell_type' })).toHaveValue(
-        'analysis:cell-type',
-      )
+      expect(
+        within(annotationSet).getByRole('option', { name: 'cell_type' }),
+      ).toHaveValue('analysis:cell-type')
       expect(loadAnnotationsButton).toBeDisabled()
       expect(h5adDataset.annotations).not.toHaveBeenCalled()
       expect(h5adDataset.metadataTracks).not.toHaveBeenCalled()
@@ -2044,6 +2179,84 @@ describe('App', () => {
       expect(h5adDataset.embeddings).toHaveBeenLastCalledWith(
         expect.objectContaining({ kind: 'X_pca' }),
       )
+    } finally {
+      viewport.restore()
+    }
+  })
+
+  it('loads H5AD selected-cell observations and expression from the matrix', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const h5adUrl = 'https://example.test/sample.h5ad'
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'h5ad' as const,
+      baseUrl: h5adUrl,
+      h5adUrl,
+      checked: [],
+    }))
+    const h5adDataset = {
+      overview: vi.fn(async () => [
+        {
+          cellId: 'cell-a',
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 0,
+          metadata: {
+            BARCODE_SAMPLE_CROP: 'TTCTCTCTCACTCCGT-1_WSSS_PLA8810751_1',
+            FINAL_ANNOT_INV_TROPH_CORRECTED: 'INV_TROPH',
+            N_GENES: 5395,
+          },
+        },
+      ]),
+      genePanel: vi.fn(async () => ['Actb', 'Gad1']),
+      annotationGroups: vi.fn(async () => []),
+      embeddingOptions: vi.fn(async () => []),
+      matrix: vi.fn(async () => ({
+        geneNames: ['Actb', 'Gad1'],
+        cells: new Map([['cell-a', { geneNames: ['Actb', 'Gad1'], counts: [7, 3] }]]),
+      })),
+    }
+    const getSpatialDataset = createSpatialDatasetLoaderMock(h5adDataset)
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={getSpatialDataset}
+        />,
+      )
+      fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+        target: { value: h5adUrl },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      await screen.findByText(/H5AD ready: 1 cells, 2 genes/)
+      fireEvent.click(screen.getByTestId('deck-layer-cells-overview-scatter'))
+      openHudTab('Cell')
+
+      const cellInfoSection = screen.getByRole('region', { name: 'Cell Info' })
+      await waitFor(() => {
+        expect(h5adDataset.matrix).toHaveBeenCalledWith(['cell-a'])
+      })
+
+      expect(within(cellInfoSection).getByText('BARCODE_SAMPLE_CROP')).toBeInTheDocument()
+      expect(
+        within(cellInfoSection).getByText('TTCTCTCTCACTCCGT-1_WSSS_PLA8810751_1'),
+      ).toBeInTheDocument()
+      expect(
+        within(cellInfoSection).getByText('FINAL_ANNOT_INV_TROPH_CORRECTED'),
+      ).toBeInTheDocument()
+      expect(within(cellInfoSection).getByText('N_GENES')).toBeInTheDocument()
+      expect(within(cellInfoSection).queryByText('Cell Area')).not.toBeInTheDocument()
+      expect(within(cellInfoSection).queryByText('Eccentricity')).not.toBeInTheDocument()
+      expect(within(cellInfoSection).queryByText('Major Axis')).not.toBeInTheDocument()
+      expect(within(cellInfoSection).queryByText('Circularity')).not.toBeInTheDocument()
+
+      const expressionList =
+        await within(cellInfoSection).findByLabelText('Cell gene expression')
+      expect(expressionList).toHaveTextContent('Actb')
+      expect(expressionList).toHaveTextContent('Gad1')
+      expect(within(cellInfoSection).getByText('10 counts')).toBeInTheDocument()
     } finally {
       viewport.restore()
     }
@@ -4317,3 +4530,22 @@ ${cd16Negative},CD16- NK cells`,
     expect(screen.queryByLabelText('Saved gene sets')).not.toBeInTheDocument()
   })
 })
+
+function imageOnlyTiffLoaderFixture(url: string): TiffPyramidLoader {
+  return {
+    url,
+    imageWidth: imagePixels(160),
+    imageHeight: imagePixels(80),
+    tileWidth: imagePixels(256),
+    tileHeight: imagePixels(256),
+    numLevels: 1,
+    units: {
+      dataUnit: 'micrometer',
+      imageUnit: 'pixel',
+      micrometersPerPixel: micrometers(0.5),
+      origin: 'top-left',
+      imageYAxis: 'down',
+    },
+    channels: [],
+  } as unknown as TiffPyramidLoader
+}

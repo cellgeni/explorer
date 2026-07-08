@@ -47,6 +47,7 @@ import {
   IDLE_ANNOTATION_GROUP_STATE,
   IDLE_ANNOTATION_STATE,
 } from '../annotations/annotationModel'
+import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotationModel'
 import {
   type AnalysisEmbeddingState,
   IDLE_ANALYSIS_EMBEDDING_STATE,
@@ -188,6 +189,9 @@ export function useAppDomainState({
   const [hiddenAnnotationIds, setHiddenAnnotationIds] = useState<readonly string[]>([])
   const [cellMetadataTracks, setCellMetadataTracks] = useState<
     readonly ContinuousCellMetadataTrack[]
+  >([])
+  const [geometricAnnotations, setGeometricAnnotations] = useState<
+    readonly GeometricAnnotationFeature[]
   >([])
   const [selectedCellMetadataTrackId, setSelectedCellMetadataTrackId] = useState<
     string | null
@@ -416,6 +420,7 @@ export function useAppDomainState({
       annotationImportUrl,
       annotationState,
       cellMetadataTracks,
+      geometricAnnotations,
       hiddenAnnotationIds,
       hiddenAnnotationSetIds,
       selectedAnnotationGroupId,
@@ -425,6 +430,7 @@ export function useAppDomainState({
       setAnnotationImportUrl,
       setAnnotationState,
       setCellMetadataTracks,
+      setGeometricAnnotations,
       setHiddenAnnotationIds,
       setHiddenAnnotationSetIds,
       setSelectedAnnotationGroupId,

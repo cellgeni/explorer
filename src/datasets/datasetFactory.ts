@@ -20,6 +20,12 @@ export type SpatialDatasetDetection =
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
+      readonly platform: 'image'
+      readonly baseUrl: string
+      readonly imageUrl: string
+      readonly checked: readonly DatasetProbeResult[]
+    }
+  | {
       readonly platform: 'visium-hd'
       readonly baseUrl: string
       readonly bins: readonly VisiumHdBinDescriptor[]
@@ -135,6 +141,28 @@ export async function detectSpatialDataset(
         }
   }
 
+  if (isImageOnlyUrl(normalizedBaseUrl)) {
+    const imageProbe = await probeDirectDatasetUrl(
+      normalizedBaseUrl,
+      imagePathLabel(normalizedBaseUrl),
+      options,
+    )
+    checked.push(imageProbe)
+
+    return imageProbe.ok
+      ? {
+          platform: 'image',
+          baseUrl: normalizedBaseUrl,
+          imageUrl: normalizedBaseUrl,
+          checked,
+        }
+      : {
+          platform: 'unknown',
+          baseUrl: normalizedBaseUrl,
+          checked,
+        }
+  }
+
   const xeniumManifest = await probeDatasetPath(
     normalizedBaseUrl,
     'experiment.xenium',
@@ -222,6 +250,11 @@ export async function createSpatialDataset(
         ? {}
         : { onProgress: options.onH5adLoadProgress }),
     })
+  }
+
+  if (detection.platform === 'image') {
+    const { ImageOnlyDataset } = await import('./imageOnlyDataset')
+    return new ImageOnlyDataset({ imageUrl: detection.imageUrl })
   }
 
   if (detection.platform === 'visium-hd') {
@@ -369,6 +402,15 @@ function normalizeBaseUrl(baseUrl: string): string {
 
 function isH5adUrl(url: string): boolean {
   return /\.h5ad(?:$|[?#])/i.test(url)
+}
+
+export function isImageOnlyUrl(url: string): boolean {
+  return /\.(?:(?:ome\.)?tiff?|ndpi)(?:$|[?#])/i.test(url)
+}
+
+function imagePathLabel(url: string): string {
+  const pathname = new URL(url).pathname
+  return pathname.split('/').filter(Boolean).at(-1) ?? 'image'
 }
 
 function segmentedOutputPathsFromProbes(

@@ -92,15 +92,94 @@ describe('platformAdapter', () => {
     const xenium = appPlatformAdapterFor(readyLoadState, 'xenium')
     const visiumHd = appPlatformAdapterFor(readyLoadState, 'visium-hd')
     const h5ad = appPlatformAdapterFor(readyLoadState, 'h5ad')
+    const image = appPlatformAdapterFor(readyLoadState, 'image')
 
     expect(idleVisium.kind).toBe('xenium')
     expect(xenium.kind).toBe('xenium')
     expect(visiumHd.kind).toBe('visium-hd')
     expect(h5ad.kind).toBe('h5ad')
+    expect(image.kind).toBe('image')
     expect(xenium.pointSizeFullViewScale).toBe(1)
     expect(visiumHd.pointSizeFullViewScale).toBe(1)
     expect(h5ad.pointSizeFullViewScale).toBe(0.5)
     expect(isVisiumHdPlatform(visiumHd)).toBe(true)
+  })
+
+  it('disables spatial transcriptomics workflows for image-only datasets', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'image')
+    const handlers = {
+      image: () => 'image',
+      xenium: () => 'xenium',
+      visiumHd: () => 'visium-hd',
+    }
+    const getSpatialDataset = vi.fn()
+    const loadBoundaryElements = vi.fn()
+    const loadGeneExpression = vi.fn()
+
+    expect(adapter.capabilities).toMatchObject({
+      annotations: false,
+      geometricAnnotations: true,
+      magicLensMinQv: false,
+      nucleusBoundaries: false,
+      transcripts: false,
+    })
+    expect(adapter.featureLoadEnabled(readyLoadState)).toBe(false)
+    expect(adapter.effectiveTranscriptOverlay(true)).toBe(false)
+    expect(adapter.boundaryLoadingEnabled(true, true)).toBe(false)
+    expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('disabled:no-nucleus')
+    expect(adapter.geneExpressionOverlayEnabled(0)).toBe(false)
+    expect(adapter.cellBoundaryHoverEnabled(true)).toBe(false)
+    expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
+      loadEnabled: false,
+      unavailableReason: 'Unavailable for image-only sources',
+    })
+    expect(
+      adapter.canDrawRoi({
+        isDatasetPreparationPending: false,
+        loadState: readyLoadState,
+        spatialGridCellCount: 0,
+        visiumHdControlState: { status: 'idle' },
+      }),
+    ).toBe(true)
+    expect(platformRoiElementIds(adapter, roiState, visiumHdRoiState)).toEqual([])
+    expect(platformRoiSelection(adapter, roiState, visiumHdRoiState)).toBeNull()
+    expect(
+      platformSelectedEmbeddingElementId(adapter, { id: 'cell-1' }, { id: 'bin-1' }),
+    ).toBeNull()
+    expect(platformRoiCompleteHandler(adapter, handlers)()).toBe('image')
+
+    await expect(
+      loadPlatformBoundaryElements(
+        adapter,
+        {
+          getSpatialDataset: getSpatialDataset as unknown as SpatialDatasetLoader,
+          loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+      ),
+    ).resolves.toEqual({ elements: [] })
+    expect(loadBoundaryElements).not.toHaveBeenCalled()
+
+    await expect(
+      loadPlatformGeneExpression(
+        adapter,
+        {
+          activeBinSize: undefined,
+          getSpatialDataset: getSpatialDataset as unknown as SpatialDatasetLoader,
+          loadGeneExpression: loadGeneExpression as GeneExpressionLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+        ['Actb'],
+      ),
+    ).resolves.toEqual({
+      genes: ['Actb'],
+      elements: [],
+      maxCount: 0,
+    })
+    expect(getSpatialDataset).not.toHaveBeenCalled()
+    expect(loadGeneExpression).not.toHaveBeenCalled()
   })
 
   it('centralizes Xenium feature gates and labels', () => {
@@ -332,6 +411,26 @@ describe('platformAdapter', () => {
       ['Actb'],
       {},
     )
+  })
+
+  it('does not request boundary elements for H5AD datasets', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'h5ad')
+    const loadBoundaryElements = vi.fn()
+    const getSpatialDataset = vi.fn()
+
+    await expect(
+      loadPlatformBoundaryElements(
+        adapter,
+        {
+          getSpatialDataset: getSpatialDataset as unknown as SpatialDatasetLoader,
+          loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+      ),
+    ).resolves.toEqual({ elements: [] })
+    expect(loadBoundaryElements).not.toHaveBeenCalled()
+    expect(getSpatialDataset).not.toHaveBeenCalled()
   })
 
   it('loads Visium HD boundary, nucleus, and expression data through dataset capabilities', async () => {

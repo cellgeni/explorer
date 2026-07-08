@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createSpatialDataset, detectSpatialDataset } from './datasetFactory'
+import {
+  createSpatialDataset,
+  detectSpatialDataset,
+  isImageOnlyUrl,
+} from './datasetFactory'
 import { AnnDataH5adDataset } from './h5adDataset'
+import { ImageOnlyDataset } from './imageOnlyDataset'
 import { VisiumHdDataset } from './visiumHdDataset'
 
 describe('spatial dataset detection', () => {
@@ -89,6 +94,41 @@ describe('spatial dataset detection', () => {
     )
   })
 
+  it.each([
+    ['OME-TIFF', 'https://example.test/images/sample.ome.tif'],
+    ['OME-TIFF long extension', 'https://example.test/images/sample.ome.tiff?token=1'],
+    ['TIFF', 'https://example.test/images/sample.tif'],
+    ['TIFF long extension', 'https://example.test/images/sample.tiff#view'],
+    ['NDPI', 'https://example.test/images/sample.ndpi'],
+  ])(
+    'detects a direct %s image URL without directory-style probes',
+    async (_name, url) => {
+      const fetcher = fetcherForOkPaths([new URL(url).pathname])
+
+      await expect(detectSpatialDataset(url, { fetcher })).resolves.toMatchObject({
+        platform: 'image',
+        baseUrl: url,
+        imageUrl: url,
+      })
+
+      expect(fetcher).toHaveBeenCalledTimes(1)
+      expect(fetcher).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({ method: 'HEAD' }),
+      )
+    },
+  )
+
+  it('classifies only direct image extensions as image-only URLs', () => {
+    expect(isImageOnlyUrl('https://example.test/sample.ome.tif')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.ome.tiff?token=1')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.tif')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.tiff#view')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.ndpi')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.tif/metadata.json')).toBe(false)
+    expect(isImageOnlyUrl('https://example.test/sample.h5ad')).toBe(false)
+  })
+
   it('times out direct H5AD probes that never answer', async () => {
     vi.useFakeTimers()
     const fetcher = vi.fn(
@@ -132,6 +172,17 @@ describe('spatial dataset detection', () => {
     )
 
     expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
+  })
+
+  it('creates an image-only dataset for direct image URLs', async () => {
+    const dataset = await createSpatialDataset(
+      'https://example.test/images/sample.ome.tif',
+      {
+        fetcher: fetcherForOkPaths(['/images/sample.ome.tif']),
+      },
+    )
+
+    expect(dataset).toBeInstanceOf(ImageOnlyDataset)
   })
 
   it('passes an explicit Visium HD 2 µm barcode budget into created datasets', async () => {

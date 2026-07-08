@@ -56,6 +56,7 @@ describe('LayerHudPanel', () => {
         loadEnabled
         imageLayerOpacity={0.8}
         cellFillOpacity={0.6}
+        cellLayerControlsVisible
         showCellBoundaries
         showNucleusBoundaries
         showHoverTooltips
