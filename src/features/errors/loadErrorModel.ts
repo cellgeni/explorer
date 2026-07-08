@@ -186,6 +186,20 @@ export function createStructuredLoadError(
     )
   }
 
+  if (isH5adAllGeneCscMatrixUnsupportedError(error, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'unsupported',
+        title: 'H5AD cell profile unavailable',
+        message,
+        action:
+          'Use selected-gene expression for this H5AD, or provide a row-major CSR/dense matrix reference for full selected-cell profiles.',
+      },
+      detail,
+    )
+  }
+
   if (isH5adReferenceUnavailableError(error, normalizedMessage)) {
     return withOptionalDetail(
       {
@@ -321,10 +335,18 @@ function isFeatureSliceBudgetError(error: unknown, normalizedMessage: string): b
   )
 }
 
-function isH5adFileSizeLimitError(
+function isH5adAllGeneCscMatrixUnsupportedError(
   error: unknown,
   normalizedMessage: string,
 ): boolean {
+  return (
+    (error instanceof Error && error.name === 'H5adAllGeneCscMatrixUnsupportedError') ||
+    (normalizedMessage.includes('h5ad reference-backed csc matrices') &&
+      normalizedMessage.includes('scanning the whole expression matrix'))
+  )
+}
+
+function isH5adFileSizeLimitError(error: unknown, normalizedMessage: string): boolean {
   return (
     (error instanceof Error && error.name === 'H5adFileSizeLimitExceededError') ||
     (normalizedMessage.includes('h5ad file') &&

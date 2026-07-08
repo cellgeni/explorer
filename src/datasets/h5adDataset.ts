@@ -227,6 +227,20 @@ export class H5adReferenceFileUnavailableError extends Error {
   }
 }
 
+export class H5adAllGeneCscMatrixUnsupportedError extends Error {
+  readonly rowCount: number
+  readonly geneCount: number
+
+  constructor(rowCount: number, geneCount: number) {
+    super(
+      `H5AD reference-backed CSC matrices cannot load all genes for selected cells without scanning the whole expression matrix (${rowCount.toLocaleString()} cells x ${geneCount.toLocaleString()} genes).`,
+    )
+    this.name = 'H5adAllGeneCscMatrixUnsupportedError'
+    this.rowCount = rowCount
+    this.geneCount = geneCount
+  }
+}
+
 export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   readonly url: string
   private readonly fetcher: typeof fetch
@@ -1579,9 +1593,7 @@ async function h5adMatrixCellsForRows(
   }
 
   if (matrix.kind === 'csc-zarr' && allGenesRequested) {
-    throw new Error(
-      'H5AD reference-backed CSC matrices cannot be scanned across all genes interactively.',
-    )
+    throw new H5adAllGeneCscMatrixUnsupportedError(matrix.rows, matrix.cols)
   }
 
   return h5adMatrixCellsFromColumns(

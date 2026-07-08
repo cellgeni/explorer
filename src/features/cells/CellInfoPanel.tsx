@@ -19,7 +19,10 @@ interface CellInfoPanelProps {
   readonly state: CellDetailState
   readonly transcriptDistributionState: CellTranscriptDistributionState
   readonly transcriptDistributionVisible?: boolean
+  readonly variant?: CellInfoPanelVariant
 }
+
+export type CellInfoPanelVariant = 'default' | 'observations'
 
 const EMPTY_ANNOTATION_LABELS: readonly string[] = []
 
@@ -29,6 +32,7 @@ export function CellInfoPanel({
   state,
   transcriptDistributionState,
   transcriptDistributionVisible = true,
+  variant = 'default',
 }: CellInfoPanelProps) {
   const readyState =
     cell !== null && state.status === 'ready' && state.cellId === cell.id ? state : null
@@ -43,6 +47,8 @@ export function CellInfoPanel({
         : summarizeCellShape(cell, null)
       : readyState.shape
   const expression = readyState?.expression ?? null
+  const metadataEntries =
+    cell?.metadata === undefined ? [] : Object.entries(cell.metadata)
 
   if (cell === null) {
     return <p className="cell-info-empty">No cell selected</p>
@@ -50,81 +56,99 @@ export function CellInfoPanel({
 
   return (
     <div className="cell-detail-panel">
-      <dl className="cell-info-list">
-        <div>
-          <dt>ID</dt>
-          <dd>{cell.id}</dd>
-        </div>
-        <div>
-          <dt>Position</dt>
-          <dd>
-            {formatNumber(cell.position[0])}, {formatNumber(-(cell.position[1] ?? 0))}
-          </dd>
-        </div>
-        <div>
-          <dt>Transcripts</dt>
-          <dd>{formatOptionalNumber(cell.transcriptCount)}</dd>
-        </div>
-        <div>
-          <dt>Nuclei</dt>
-          <dd>{formatOptionalNumber(cell.nucleusCount)}</dd>
-        </div>
-        <div>
-          <dt>Segmentation</dt>
-          <dd>{formatOptionalText(cell.segmentationMethod)}</dd>
-        </div>
-        <div>
-          <dt>Annotations</dt>
-          <dd className="cell-annotation-values">
-            {annotationLabels.length === 0
-              ? 'None'
-              : annotationLabels.map((label, labelIndex) => (
-                  <span className="cell-annotation-chip" key={`${label}:${labelIndex}`}>
-                    {label}
-                  </span>
-                ))}
-          </dd>
-        </div>
-        {cell.metadata === undefined
-          ? null
-          : Object.entries(cell.metadata).map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{formatMetadataValue(value)}</dd>
-              </div>
-            ))}
-        <div>
-          <dt>Cell Area</dt>
-          <dd>{formatMetric(shape?.areaMicrometersSquared, 'um2')}</dd>
-        </div>
-        <div>
-          <dt>Diameter</dt>
-          <dd>{formatMetric(shape?.equivalentDiameterMicrometers, 'um')}</dd>
-        </div>
-        <div>
-          <dt>Eccentricity</dt>
-          <dd>{formatMetric(shape?.eccentricity)}</dd>
-        </div>
-        <div>
-          <dt>Major Axis</dt>
-          <dd>{formatMetric(shape?.majorAxisMicrometers, 'um')}</dd>
-        </div>
-        <div>
-          <dt>Minor Axis</dt>
-          <dd>{formatMetric(shape?.minorAxisMicrometers, 'um')}</dd>
-        </div>
-        <div>
-          <dt>Perimeter</dt>
-          <dd>{formatMetric(shape?.perimeterMicrometers, 'um')}</dd>
-        </div>
-        <div>
-          <dt>Circularity</dt>
-          <dd>{formatMetric(shape?.circularity)}</dd>
-        </div>
+      <dl
+        className={
+          variant === 'observations' ? 'cell-info-list is-observations' : 'cell-info-list'
+        }
+      >
+        {variant === 'observations' ? (
+          metadataEntries.length === 0 ? (
+            <div>
+              <dt>Observations</dt>
+              <dd>None</dd>
+            </div>
+          ) : (
+            <MetadataRows entries={metadataEntries} />
+          )
+        ) : (
+          <>
+            <div>
+              <dt>ID</dt>
+              <dd title={cell.id}>{cell.id}</dd>
+            </div>
+            <div>
+              <dt>Position</dt>
+              <dd>
+                {formatNumber(cell.position[0])}, {formatNumber(-(cell.position[1] ?? 0))}
+              </dd>
+            </div>
+            <div>
+              <dt>Transcripts</dt>
+              <dd>{formatOptionalNumber(cell.transcriptCount)}</dd>
+            </div>
+            <div>
+              <dt>Nuclei</dt>
+              <dd>{formatOptionalNumber(cell.nucleusCount)}</dd>
+            </div>
+            <div>
+              <dt>Segmentation</dt>
+              <dd title={formatOptionalText(cell.segmentationMethod)}>
+                {formatOptionalText(cell.segmentationMethod)}
+              </dd>
+            </div>
+            <div>
+              <dt>Annotations</dt>
+              <dd className="cell-annotation-values">
+                {annotationLabels.length === 0
+                  ? 'None'
+                  : annotationLabels.map((label, labelIndex) => (
+                      <span
+                        className="cell-annotation-chip"
+                        key={`${label}:${labelIndex}`}
+                      >
+                        {label}
+                      </span>
+                    ))}
+              </dd>
+            </div>
+            <MetadataRows entries={metadataEntries} />
+            <div>
+              <dt>Cell Area</dt>
+              <dd>{formatMetric(shape?.areaMicrometersSquared, 'um2')}</dd>
+            </div>
+            <div>
+              <dt>Diameter</dt>
+              <dd>{formatMetric(shape?.equivalentDiameterMicrometers, 'um')}</dd>
+            </div>
+            <div>
+              <dt>Eccentricity</dt>
+              <dd>{formatMetric(shape?.eccentricity)}</dd>
+            </div>
+            <div>
+              <dt>Major Axis</dt>
+              <dd>{formatMetric(shape?.majorAxisMicrometers, 'um')}</dd>
+            </div>
+            <div>
+              <dt>Minor Axis</dt>
+              <dd>{formatMetric(shape?.minorAxisMicrometers, 'um')}</dd>
+            </div>
+            <div>
+              <dt>Perimeter</dt>
+              <dd>{formatMetric(shape?.perimeterMicrometers, 'um')}</dd>
+            </div>
+            <div>
+              <dt>Circularity</dt>
+              <dd>{formatMetric(shape?.circularity)}</dd>
+            </div>
+          </>
+        )}
       </dl>
 
       {transcriptDistributionVisible ? (
-        <CellTranscriptZDistributionPanel cell={cell} state={transcriptDistributionState} />
+        <CellTranscriptZDistributionPanel
+          cell={cell}
+          state={transcriptDistributionState}
+        />
       ) : null}
 
       <div className="cell-expression-panel">
@@ -155,6 +179,23 @@ export function CellInfoPanel({
       </div>
     </div>
   )
+}
+
+function MetadataRows({
+  entries,
+}: {
+  readonly entries: readonly [string, string | number | boolean][]
+}) {
+  return entries.map(([label, value]) => {
+    const formattedValue = formatMetadataValue(value)
+
+    return (
+      <div key={label}>
+        <dt title={label}>{label}</dt>
+        <dd title={formattedValue}>{formattedValue}</dd>
+      </div>
+    )
+  })
 }
 
 function CellTranscriptZDistributionPanel({

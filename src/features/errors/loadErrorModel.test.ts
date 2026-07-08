@@ -124,6 +124,20 @@ describe('loadErrorModel', () => {
       action:
         'Generate and host a companion DATASET.h5ad.json kerchunk reference next to the oversized H5AD file.',
     })
+    const h5adCscCellProfileUnavailable = new Error(
+      'H5AD reference-backed CSC matrices cannot load all genes for selected cells without scanning the whole expression matrix (1,000 cells x 20,000 genes).',
+    )
+    h5adCscCellProfileUnavailable.name = 'H5adAllGeneCscMatrixUnsupportedError'
+
+    expect(
+      createStructuredLoadError('Cell details', h5adCscCellProfileUnavailable),
+    ).toMatchObject({
+      code: 'unsupported',
+      title: 'H5AD cell profile unavailable',
+      detail: 'H5adAllGeneCscMatrixUnsupportedError',
+      action:
+        'Use selected-gene expression for this H5AD, or provide a row-major CSR/dense matrix reference for full selected-cell profiles.',
+    })
     expect(
       createStructuredLoadError(
         'Morphology image',

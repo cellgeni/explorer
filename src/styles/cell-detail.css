@@ -1,4 +1,3 @@
-
 .cell-info-list {
   display: grid;
   gap: 4px;
@@ -12,9 +11,13 @@
 
 .cell-info-list div {
   display: grid;
-  grid-template-columns: 86px minmax(0, 1fr);
+  grid-template-columns: minmax(84px, 42%) minmax(0, 1fr);
   gap: 6px;
-  align-items: baseline;
+  align-items: start;
+}
+
+.cell-info-list.is-observations div {
+  grid-template-columns: minmax(0, 48%) minmax(0, 1fr);
 }
 
 .cell-info-list dt,
@@ -28,6 +31,8 @@
 .cell-info-list dt {
   color: #7b4d1d;
   font-weight: 700;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
   text-transform: uppercase;
 }
 
@@ -35,6 +40,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cell-info-list.is-observations dd {
+  line-height: 1.18;
 }
 
 .cell-info-list dd.cell-annotation-values {

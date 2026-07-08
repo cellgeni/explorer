@@ -83,6 +83,33 @@ describe('CellInfoPanel', () => {
     expect(screen.queryByText('Z-axis transcripts')).not.toBeInTheDocument()
     expect(screen.getByText('Gene expression')).toBeInTheDocument()
   })
+
+  it('shows only observation metadata in the observations variant', () => {
+    render(
+      <CellInfoPanel
+        cell={cellDatum({
+          metadata: {
+            BARCODE_SAMPLE_CROP: 'TTCTCTCTCACTCCGT-1_WSSS_PLA8810751_1',
+            FINAL_ANNOT_INV_TROPH_CORRECTED: 'INV_TROPH',
+            N_GENES: 5395,
+          },
+        })}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+        transcriptDistributionVisible={false}
+        variant="observations"
+      />,
+    )
+
+    expect(screen.getByText('BARCODE_SAMPLE_CROP')).toBeInTheDocument()
+    expect(screen.getByText('TTCTCTCTCACTCCGT-1_WSSS_PLA8810751_1')).toBeInTheDocument()
+    expect(screen.getByText('FINAL_ANNOT_INV_TROPH_CORRECTED')).toBeInTheDocument()
+    expect(screen.getByText('N_GENES')).toBeInTheDocument()
+    expect(screen.queryByText('Cell Area')).not.toBeInTheDocument()
+    expect(screen.queryByText('Eccentricity')).not.toBeInTheDocument()
+    expect(screen.queryByText('Transcripts')).not.toBeInTheDocument()
+    expect(screen.getByText('Gene expression')).toBeInTheDocument()
+  })
 })
 
 function cellDatum(values: Partial<OverviewCellDatum> = {}): OverviewCellDatum {

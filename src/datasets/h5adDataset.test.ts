@@ -292,6 +292,50 @@ describe('AnnDataH5adDataset', () => {
     ])
   })
 
+  it('blocks all-gene selected-cell profiles from reference-backed CSC matrices', async () => {
+    const readBody = vi.fn(() => {
+      throw new Error('body should not be read')
+    })
+    const byteLength = 350 * 1024 * 1024
+    const chunks = new RemoteH5adReferenceChunks()
+    const referenceSpec = createTinyH5adReferenceSpec((value) => chunks.ref(value), 'csc')
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/reference-csc.h5ad',
+      fetcher: h5adRemoteReferenceFetcher(
+        byteLength,
+        referenceSpec,
+        chunks.bytes(),
+        readBody,
+      ),
+    })
+
+    await expect(dataset.matrix(['cell-b'])).rejects.toMatchObject({
+      name: 'H5adAllGeneCscMatrixUnsupportedError',
+      rowCount: 4,
+      geneCount: 3,
+    })
+
+    const selectedGeneExpression = await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(20),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+      ['Actb'],
+    )
+
+    expect(
+      selectedGeneExpression.elements.map((element) => [element.id, element.count]),
+    ).toEqual([
+      ['cell-a', 1],
+      ['cell-b', 2],
+      ['cell-c', 0],
+      ['cell-d', 7],
+    ])
+    expect(readBody).not.toHaveBeenCalled()
+  })
+
   it('warns when oversized H5AD files do not have a companion reference', async () => {
     const readBody = vi.fn(() => {
       throw new Error('body should not be read')
@@ -313,7 +357,7 @@ describe('AnnDataH5adDataset', () => {
   })
 })
 
-type MatrixKind = 'dense' | 'csr'
+type MatrixKind = 'dense' | 'csr' | 'csc'
 type CategoricalEncoding = 'group' | 'dataframe-categories'
 
 interface TinyH5adOptions {
@@ -381,11 +425,15 @@ async function createTinyH5ad(
     })
   } else {
     const x = file.create_group('X')
-    x.create_attribute('encoding-type', 'csr_matrix')
+    x.create_attribute(
+      'encoding-type',
+      matrixKind === 'csc' ? 'csc_matrix' : 'csr_matrix',
+    )
     x.create_attribute('shape', new Int32Array([4, 3]))
-    x.create_dataset({ name: 'data', data: new Float32Array([1, 5, 2, 3, 4, 6, 7, 8]) })
-    x.create_dataset({ name: 'indices', data: new Int32Array([0, 2, 0, 1, 1, 2, 0, 2]) })
-    x.create_dataset({ name: 'indptr', data: new Int32Array([0, 2, 4, 6, 8]) })
+    const sparse = tinySparseMatrixFixture(matrixKind)
+    x.create_dataset({ name: 'data', data: sparse.data })
+    x.create_dataset({ name: 'indices', data: sparse.indices })
+    x.create_dataset({ name: 'indptr', data: sparse.indptr })
   }
 
   file.close()
@@ -495,7 +543,10 @@ type ChunkRefFactory = (value: ArrayBufferView) => string | [string, number, num
 
 function createTinyH5adReferenceSpec(
   chunkRef: ChunkRefFactory = bytesRef,
+  matrixKind: Extract<MatrixKind, 'csr' | 'csc'> = 'csr',
 ): Record<string, unknown> {
+  const sparse = tinySparseMatrixFixture(matrixKind)
+
   return {
     version: 1,
     refs: {
@@ -525,16 +576,40 @@ function createTinyH5adReferenceSpec(
       'obsm/X_umap/0.0': chunkRef(new Float32Array([0, 0, 10, 0, 0, 10, 10, 10])),
       'X/.zgroup': jsonRef({ zarr_format: 2 }),
       'X/.zattrs': jsonRef({
-        'encoding-type': 'csr_matrix',
+        'encoding-type': matrixKind === 'csc' ? 'csc_matrix' : 'csr_matrix',
         shape: [4, 3],
       }),
       'X/data/.zarray': zarrArrayRef([8], [8], '<f4'),
-      'X/data/0': chunkRef(new Float32Array([1, 5, 2, 3, 4, 6, 7, 8])),
+      'X/data/0': chunkRef(sparse.data),
       'X/indices/.zarray': zarrArrayRef([8], [8], '<i4'),
-      'X/indices/0': chunkRef(new Int32Array([0, 2, 0, 1, 1, 2, 0, 2])),
-      'X/indptr/.zarray': zarrArrayRef([5], [5], '<i4'),
-      'X/indptr/0': chunkRef(new Int32Array([0, 2, 4, 6, 8])),
+      'X/indices/0': chunkRef(sparse.indices),
+      'X/indptr/.zarray': zarrArrayRef(
+        [sparse.indptr.length],
+        [sparse.indptr.length],
+        '<i4',
+      ),
+      'X/indptr/0': chunkRef(sparse.indptr),
     },
+  }
+}
+
+function tinySparseMatrixFixture(matrixKind: Extract<MatrixKind, 'csr' | 'csc'>): {
+  readonly data: Float32Array
+  readonly indices: Int32Array
+  readonly indptr: Int32Array
+} {
+  if (matrixKind === 'csc') {
+    return {
+      data: new Float32Array([1, 2, 7, 3, 4, 5, 6, 8]),
+      indices: new Int32Array([0, 1, 3, 1, 2, 0, 2, 3]),
+      indptr: new Int32Array([0, 3, 5, 8]),
+    }
+  }
+
+  return {
+    data: new Float32Array([1, 5, 2, 3, 4, 6, 7, 8]),
+    indices: new Int32Array([0, 2, 0, 1, 1, 2, 0, 2]),
+    indptr: new Int32Array([0, 2, 4, 6, 8]),
   }
 }
 

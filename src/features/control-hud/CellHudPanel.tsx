@@ -1,6 +1,6 @@
 import { EmbeddingPanel } from '../analysis/EmbeddingPanel'
 import { CellExpressionProfilePanel } from '../cells/CellExpressionProfilePanel'
-import { CellInfoPanel } from '../cells/CellInfoPanel'
+import { CellInfoPanel, type CellInfoPanelVariant } from '../cells/CellInfoPanel'
 import { GridCellInfoPanel } from '../cells/GridCellInfoPanel'
 import {
   expressionStatusLabel,
@@ -45,6 +45,7 @@ interface CellHudPanelProps {
   readonly selectedBoundaryCellExpressionStatus?: CellGeneExpressionStatus | undefined
   readonly selectedExpressionProfileState?: CellExpressionProfileState | undefined
   readonly selectedCellAnnotationLabels: readonly string[]
+  readonly selectedCellInfoVariant?: CellInfoPanelVariant
   readonly cellDetailCopy: string
   readonly cellDetailState: CellDetailState
   readonly cellTranscriptDistributionState: CellTranscriptDistributionState
@@ -77,6 +78,7 @@ export function CellHudPanel({
   selectedBoundaryCellExpressionStatus,
   selectedExpressionProfileState,
   selectedCellAnnotationLabels,
+  selectedCellInfoVariant = 'default',
   cellDetailCopy,
   cellDetailState,
   cellTranscriptDistributionState,
@@ -249,6 +251,7 @@ export function CellHudPanel({
             state={cellDetailState}
             transcriptDistributionState={cellTranscriptDistributionState}
             transcriptDistributionVisible={cellTranscriptDistributionVisible}
+            variant={selectedCellInfoVariant}
           />
         )}
       </section>
