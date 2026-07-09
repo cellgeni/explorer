@@ -1,4 +1,5 @@
 import { datasetFileUrl } from '../data/datasetFiles'
+import { isOmeZarrImageUrl, omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
 import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
@@ -23,6 +24,7 @@ export type SpatialDatasetDetection =
       readonly platform: 'image'
       readonly baseUrl: string
       readonly imageUrl: string
+      readonly imageKind?: 'tiff' | 'ndpi' | 'ome-zarr'
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
@@ -141,6 +143,30 @@ export async function detectSpatialDataset(
         }
   }
 
+  if (isZarrImageOnlyUrl(normalizedBaseUrl)) {
+    const zarrRootUrl = omeZarrImageRootUrl(normalizedBaseUrl)
+    const probes = await Promise.all(
+      zarrMetadataProbePaths(normalizedBaseUrl).map((path) =>
+        probeDatasetPath(zarrRootUrl, path, options),
+      ),
+    )
+    checked.push(...probes)
+
+    return probes.some((probe) => probe.ok)
+      ? {
+          platform: 'image',
+          baseUrl: normalizedBaseUrl,
+          imageUrl: normalizedBaseUrl,
+          imageKind: 'ome-zarr',
+          checked,
+        }
+      : {
+          platform: 'unknown',
+          baseUrl: normalizedBaseUrl,
+          checked,
+        }
+  }
+
   if (isImageOnlyUrl(normalizedBaseUrl)) {
     const imageProbe = await probeDirectDatasetUrl(
       normalizedBaseUrl,
@@ -154,6 +180,7 @@ export async function detectSpatialDataset(
           platform: 'image',
           baseUrl: normalizedBaseUrl,
           imageUrl: normalizedBaseUrl,
+          imageKind: isNdpiUrl(normalizedBaseUrl) ? 'ndpi' : 'tiff',
           checked,
         }
       : {
@@ -174,6 +201,20 @@ export async function detectSpatialDataset(
     return {
       platform: 'xenium',
       baseUrl: normalizedBaseUrl,
+      checked,
+    }
+  }
+
+  const zarrMetadataProbes = await probeZarrMetadata(normalizedBaseUrl, options)
+  checked.push(...zarrMetadataProbes)
+  const zarrMetadataProbe = zarrMetadataProbes.find((probe) => probe.ok)
+
+  if (zarrMetadataProbe !== undefined) {
+    return {
+      platform: 'image',
+      baseUrl: normalizedBaseUrl,
+      imageUrl: datasetFileUrl(normalizedBaseUrl, zarrMetadataProbe.path),
+      imageKind: 'ome-zarr',
       checked,
     }
   }
@@ -405,7 +446,44 @@ function isH5adUrl(url: string): boolean {
 }
 
 export function isImageOnlyUrl(url: string): boolean {
+  return isTiffOrNdpiUrl(url) || isZarrImageOnlyUrl(url)
+}
+
+function isTiffOrNdpiUrl(url: string): boolean {
   return /\.(?:(?:ome\.)?tiff?|ndpi)(?:$|[?#])/i.test(url)
+}
+
+function isNdpiUrl(url: string): boolean {
+  return /\.ndpi(?:$|[?#])/i.test(url)
+}
+
+function isZarrImageOnlyUrl(url: string): boolean {
+  return isOmeZarrImageUrl(url)
+}
+
+function zarrMetadataProbePaths(url: string): readonly string[] {
+  const pathname = new URL(url).pathname
+
+  if (/\/zarr\.json$/i.test(pathname)) {
+    return ['zarr.json']
+  }
+
+  if (/\/\.zattrs$/i.test(pathname)) {
+    return ['.zattrs']
+  }
+
+  return ['zarr.json', '.zattrs']
+}
+
+async function probeZarrMetadata(
+  baseUrl: string,
+  options: DetectSpatialDatasetOptions,
+): Promise<readonly DatasetProbeResult[]> {
+  return Promise.all(
+    zarrMetadataProbePaths(baseUrl).map((path) =>
+      probeDatasetPath(baseUrl, path, options),
+    ),
+  )
 }
 
 function imagePathLabel(url: string): string {

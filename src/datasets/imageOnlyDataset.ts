@@ -1,7 +1,7 @@
 import { micrometers } from '../data/coords'
-import { openTiff } from '../tiff/loader'
+import { openImagePyramid } from '../data/morphologyImage'
 import type { GexResult } from '../data/gex'
-import type { TiffPyramidLoader } from '../tiff/loader'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 import type {
   Annotation,
   DatasetMeta,
@@ -11,21 +11,21 @@ import type {
   SpatialElementId,
 } from './spatialDataset'
 
-export type ImageOnlyTiffLoader = (url: string) => Promise<TiffPyramidLoader>
+export type ImageOnlyImageLoader = (url: string) => Promise<ImagePyramidLoader>
 
 export interface ImageOnlyDatasetOptions {
   readonly imageUrl: string
-  readonly openImage?: ImageOnlyTiffLoader
+  readonly openImage?: ImageOnlyImageLoader
 }
 
 export class ImageOnlyDataset implements SpatialDataset<SpatialElementId> {
   readonly imageUrl: string
-  private readonly openImage: ImageOnlyTiffLoader
-  private loaderPromise: Promise<TiffPyramidLoader> | null = null
+  private readonly openImage: ImageOnlyImageLoader
+  private loaderPromise: Promise<ImagePyramidLoader> | null = null
 
   constructor(options: ImageOnlyDatasetOptions) {
     this.imageUrl = options.imageUrl
-    this.openImage = options.openImage ?? openTiff
+    this.openImage = options.openImage ?? openImagePyramid
   }
 
   async meta(): Promise<DatasetMeta> {
@@ -79,7 +79,7 @@ export class ImageOnlyDataset implements SpatialDataset<SpatialElementId> {
     return { kind: 'pyramid', loader: await this.loader() }
   }
 
-  private loader(): Promise<TiffPyramidLoader> {
+  private loader(): Promise<ImagePyramidLoader> {
     this.loaderPromise ??= this.openImage(this.imageUrl)
     return this.loaderPromise
   }

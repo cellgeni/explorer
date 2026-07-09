@@ -7,8 +7,8 @@ import type {
 } from '../data/coords'
 import type { CellId } from '../data/cellid'
 import type { GexResult, Selection, TranscriptScope } from '../data/gex'
-import type { TiffPyramidLoader } from '../tiff/loader'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 
 export type Platform = 'xenium' | 'visium' | 'visium-hd' | 'h5ad' | 'image'
 export type SpatialElementId = string
@@ -119,7 +119,7 @@ export interface DatasetMeta {
 }
 
 export type ImageSource =
-  | { readonly kind: 'pyramid'; readonly loader: TiffPyramidLoader }
+  | { readonly kind: 'pyramid'; readonly loader: ImagePyramidLoader }
   | {
       readonly kind: 'flat'
       readonly url: string

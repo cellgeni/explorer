@@ -11,14 +11,14 @@ import { tileSchedulingForLoader } from '../rendering/morphologyTileScheduling'
 import { TileCache } from '../tiff/tileCache'
 import type { DisplayWindow } from '../codecs/jpeg2000'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
-import type { TiffPyramidLoader } from '../tiff/loader'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 import type { ReadyTile, TileCacheEntry } from '../tiff/tileCache'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
 const MAX_CONCURRENT_TILE_REQUESTS = 4
 
 export interface MorphologyCanvasProps {
-  readonly loader?: TiffPyramidLoader | null
+  readonly loader?: ImagePyramidLoader | null
   readonly channels?: readonly MorphologyCanvasChannel[]
   readonly flatImage?: FlatMorphologyCanvasImage | null
   readonly opacity?: number
@@ -31,7 +31,7 @@ export interface MorphologyCanvasProps {
 
 export interface MorphologyCanvasChannel {
   readonly id: string
-  readonly loader: TiffPyramidLoader
+  readonly loader: ImagePyramidLoader
   readonly enabled: boolean
   readonly color: readonly [number, number, number]
   readonly contrast?: DisplayWindow
@@ -295,7 +295,7 @@ export function MorphologyCanvas({
 interface RequestTilesOptions {
   readonly cache: TileCache
   readonly level: number
-  readonly loader: TiffPyramidLoader
+  readonly loader: ImagePyramidLoader
   readonly maxConcurrentRequests: number
   readonly onTileSettled: () => void
   readonly signal: AbortSignal
@@ -419,7 +419,7 @@ function requestedTilesAreReadyToDraw(requests: readonly ChannelRequest[]): bool
 }
 
 function visibleMorphologyChannels(
-  loader: TiffPyramidLoader | null | undefined,
+  loader: ImagePyramidLoader | null | undefined,
   channels: readonly MorphologyCanvasChannel[] | undefined,
 ): readonly MorphologyCanvasChannel[] {
   if (channels !== undefined && channels.length > 0) {

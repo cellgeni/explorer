@@ -22,6 +22,19 @@ describe('spatial dataset detection', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
+  it('prefers Xenium manifests over generic Zarr metadata probes', async () => {
+    const fetcher = fetcherForOkPaths(['/xenium/experiment.xenium', '/xenium/zarr.json'])
+
+    await expect(
+      detectSpatialDataset('https://example.test/xenium/', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'xenium',
+      baseUrl: 'https://example.test/xenium',
+    })
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
   it('detects Visium HD binned outputs and segmented output sidecars', async () => {
     const fetcher = fetcherForOkPaths([
       '/visium/binned_outputs/square_002um/spatial/tissue_positions.parquet',
@@ -125,8 +138,71 @@ describe('spatial dataset detection', () => {
     expect(isImageOnlyUrl('https://example.test/sample.tif')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.tiff#view')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.ndpi')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.ome.zarr')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.zarr?token=1')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample/zarr.json')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample/.zattrs')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.tif/metadata.json')).toBe(false)
     expect(isImageOnlyUrl('https://example.test/sample.h5ad')).toBe(false)
+  })
+
+  it.each([
+    [
+      'OME-Zarr directory',
+      'https://example.test/images/sample.ome.zarr/',
+      '/images/sample.ome.zarr/zarr.json',
+    ],
+    [
+      'Zarr directory',
+      'https://example.test/images/sample.zarr',
+      '/images/sample.zarr/.zattrs',
+    ],
+    [
+      'OME-Zarr v3 metadata URL',
+      'https://example.test/images/sample/zarr.json',
+      '/images/sample/zarr.json',
+    ],
+    [
+      'OME-Zarr v2 metadata URL',
+      'https://example.test/images/sample/.zattrs',
+      '/images/sample/.zattrs',
+    ],
+  ])('detects a direct %s image source', async (_name, url, okPath) => {
+    const fetcher = fetcherForOkPaths([okPath])
+
+    await expect(detectSpatialDataset(url, { fetcher })).resolves.toMatchObject({
+      platform: 'image',
+      baseUrl: url.replace(/\/+$/, ''),
+      imageUrl: url.replace(/\/+$/, ''),
+      imageKind: 'ome-zarr',
+    })
+
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining(okPath),
+      expect.objectContaining({ method: 'HEAD' }),
+    )
+  })
+
+  it('detects OME-Zarr metadata from a plain directory URL after Xenium probing', async () => {
+    const fetcher = fetcherForOkPaths(['/images/plain/zarr.json'])
+
+    await expect(
+      detectSpatialDataset('https://example.test/images/plain/', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'image',
+      baseUrl: 'https://example.test/images/plain',
+      imageUrl: 'https://example.test/images/plain/zarr.json',
+      imageKind: 'ome-zarr',
+    })
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/images/plain/experiment.xenium',
+      expect.objectContaining({ method: 'HEAD' }),
+    )
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/images/plain/zarr.json',
+      expect.objectContaining({ method: 'HEAD' }),
+    )
   })
 
   it('times out direct H5AD probes that never answer', async () => {
@@ -179,6 +255,17 @@ describe('spatial dataset detection', () => {
       'https://example.test/images/sample.ome.tif',
       {
         fetcher: fetcherForOkPaths(['/images/sample.ome.tif']),
+      },
+    )
+
+    expect(dataset).toBeInstanceOf(ImageOnlyDataset)
+  })
+
+  it('creates an image-only dataset for direct OME-Zarr URLs', async () => {
+    const dataset = await createSpatialDataset(
+      'https://example.test/images/sample.ome.zarr',
+      {
+        fetcher: fetcherForOkPaths(['/images/sample.ome.zarr/zarr.json']),
       },
     )
 

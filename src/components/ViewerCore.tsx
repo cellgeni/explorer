@@ -79,7 +79,7 @@ import type { PickingInfo, ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
-import type { TiffPyramidLoader } from '../tiff/loader'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 import type {
   FlatMorphologyCanvasImage,
   MorphologyCanvasChannel,
@@ -317,7 +317,7 @@ interface ViewerSurfaceProps {
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints: readonly TranscriptPointDatum[]
   readonly geometricAnnotations: readonly GeometricAnnotationDatum[]
-  readonly imageLoader: TiffPyramidLoader | null
+  readonly imageLoader: ImagePyramidLoader | null
   readonly imageChannels: readonly MorphologyCanvasChannel[]
   readonly flatImage: FlatMorphologyCanvasImage | null
   readonly imageOpacity: number

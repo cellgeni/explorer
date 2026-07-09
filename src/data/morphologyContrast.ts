@@ -1,7 +1,8 @@
 import { decodeTiffTilePixels } from '../codecs/tiffTile'
-import type { DecodedJpeg2000, Jpeg2000Pixels } from '../codecs/jpeg2000'
+import type { DecodedJpeg2000 } from '../codecs/jpeg2000'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { ImagePixels, TileIndex } from './coords'
+import type { ImagePyramidTilePixels } from './imagePyramid'
 
 export interface ChannelAutoContrast {
   readonly min: number
@@ -25,13 +26,19 @@ export interface AutoContrastTileLoader {
     col: number,
     row: number,
   ): { readonly width: ImagePixels; readonly height: ImagePixels }
-  fetchTileBytes(
+  fetchTileBytes?(
     level: number,
     col: number,
     row: number,
     signal?: AbortSignal,
   ): Promise<Uint8Array>
   tileDecodeOptions?(level: number, col: number, row: number): TiffTileDecodeMetadata
+  loadTilePixels?(
+    level: number,
+    col: number,
+    row: number,
+    signal?: AbortSignal,
+  ): Promise<ImagePyramidTilePixels>
 }
 
 export interface ComputeChannelAutoContrastOptions {
@@ -63,14 +70,17 @@ export async function computeChannelAutoContrast(
   for (const tile of tiles) {
     throwIfAborted(options.signal)
 
-    const bytes = await loader.fetchTileBytes(level, tile.col, tile.row, options.signal)
     const decoded =
-      decodeTile === undefined
-        ? await decodeTiffTilePixels(
-            bytes,
-            loader.tileDecodeOptions?.(level, tile.col, tile.row),
-          )
-        : await decodeTile(bytes)
+      loader.loadTilePixels === undefined
+        ? await decodeByteTile({
+            decodeTile,
+            loader,
+            level,
+            col: tile.col,
+            row: tile.row,
+            signal: options.signal,
+          })
+        : await loader.loadTilePixels(level, tile.col, tile.row, options.signal)
     const sourceSize = loader.tileSourceSize(level, tile.col, tile.row)
     const width = Math.min(sourceSize.width, decoded.width)
     const height = Math.min(sourceSize.height, decoded.height)
@@ -105,6 +115,33 @@ export async function computeChannelAutoContrast(
   }
 }
 
+async function decodeByteTile(options: {
+  readonly decodeTile: ComputeChannelAutoContrastOptions['decodeTile']
+  readonly loader: AutoContrastTileLoader
+  readonly level: number
+  readonly col: number
+  readonly row: number
+  readonly signal: AbortSignal | undefined
+}): Promise<ImagePyramidTilePixels> {
+  if (options.loader.fetchTileBytes === undefined) {
+    throw new Error('Unable to auto-contrast channel without readable tile pixels.')
+  }
+
+  const bytes = await options.loader.fetchTileBytes(
+    options.level,
+    options.col,
+    options.row,
+    options.signal,
+  )
+
+  return options.decodeTile === undefined
+    ? await decodeTiffTilePixels(
+        bytes,
+        options.loader.tileDecodeOptions?.(options.level, options.col, options.row),
+      )
+    : await options.decodeTile(bytes)
+}
+
 function countVisiblePixels(
   loader: AutoContrastTileLoader,
   level: number,
@@ -123,7 +160,7 @@ function countVisiblePixels(
 function collectTileSamples(options: {
   readonly height: number
   readonly pixelIndex: number
-  readonly pixels: Jpeg2000Pixels
+  readonly pixels: ImagePyramidTilePixels['pixels']
   readonly samples: number[]
   readonly sampleStride: number
   readonly sourceWidth: number

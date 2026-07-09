@@ -1,19 +1,23 @@
 import { openTiff, tiffImageSelectionUrl } from '../tiff/loader'
+import {
+  isOmeZarrImageUrl,
+  omeZarrImageRootUrl,
+  openOmeZarrImage,
+} from '../zarr/omeZarrLoader'
 import { datasetFileUrl } from './datasetFiles'
 import type { FallbackNotifier } from './fallbackNotice'
-import type { TiffPyramidLoader } from '../tiff/loader'
-import type { TiffChannelInfo } from '../tiff/omeMetadata'
+import type { ImagePyramidChannelInfo, ImagePyramidLoader } from './imagePyramid'
 
 export interface MorphologyImage {
   readonly url: string
-  readonly loader: TiffPyramidLoader
-  readonly channels: readonly TiffChannelInfo[]
+  readonly loader: ImagePyramidLoader
+  readonly channels: readonly ImagePyramidChannelInfo[]
   readonly channelLoaders: readonly MorphologyImageChannel[]
 }
 
 export interface MorphologyImageChannel {
-  readonly info: TiffChannelInfo
-  readonly loader: TiffPyramidLoader
+  readonly info: ImagePyramidChannelInfo
+  readonly loader: ImagePyramidLoader
 }
 
 export interface LoadMorphologyImageOptions {
@@ -22,7 +26,7 @@ export interface LoadMorphologyImageOptions {
     url: string,
     signal?: AbortSignal,
     onFallback?: FallbackNotifier,
-  ) => Promise<TiffPyramidLoader>
+  ) => Promise<ImagePyramidLoader>
   readonly candidates?: readonly string[]
   readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
@@ -33,7 +37,7 @@ export interface LoadCustomMorphologyLayerOptions {
     url: string,
     signal?: AbortSignal,
     onFallback?: FallbackNotifier,
-  ) => Promise<TiffPyramidLoader>
+  ) => Promise<ImagePyramidLoader>
   readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
 }
@@ -51,7 +55,7 @@ export async function loadMorphologyImage(
   options: LoadMorphologyImageOptions = {},
 ): Promise<MorphologyImage> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
-  const openImage = options.openImage ?? openTiff
+  const openImage = options.openImage ?? openImagePyramid
   const candidates =
     options.candidates ??
     (await loadMorphologyImageCandidatesFromManifest(baseUrl, fetcher, options.signal))
@@ -87,7 +91,7 @@ export async function loadCustomMorphologyLayer(
   options: LoadCustomMorphologyLayerOptions = {},
 ): Promise<MorphologyImage> {
   const url = normalizeCustomMorphologyLayerUrl(imageUrl)
-  const openImage = options.openImage ?? openTiff
+  const openImage = options.openImage ?? openImagePyramid
 
   return loadMorphologyImageFromUrl(url, {
     openImage,
@@ -98,10 +102,10 @@ export async function loadCustomMorphologyLayer(
 
 export async function morphologyImageFromPyramidLoader(
   url: string,
-  loader: TiffPyramidLoader,
+  loader: ImagePyramidLoader,
   options: LoadCustomMorphologyLayerOptions = {},
 ): Promise<MorphologyImage> {
-  const openImage = options.openImage ?? openTiff
+  const openImage = options.openImage ?? openImagePyramid
 
   return {
     url,
@@ -170,7 +174,7 @@ async function loadMorphologyImageFromUrl(
 
 interface LoadMorphologyChannelLoadersOptions {
   readonly imageUrl: string
-  readonly loader: TiffPyramidLoader
+  readonly loader: ImagePyramidLoader
   readonly openImage: NonNullable<LoadMorphologyImageOptions['openImage']>
   readonly onFallback: FallbackNotifier | undefined
   readonly signal?: AbortSignal
@@ -185,7 +189,7 @@ async function loadMorphologyChannelLoaders(
     return []
   }
 
-  const loaderByUrl = new Map<string, TiffPyramidLoader>([
+  const loaderByUrl = new Map<string, ImagePyramidLoader>([
     [options.imageUrl, options.loader],
   ])
 
@@ -217,7 +221,7 @@ async function openMorphologyImageLoader(
     readonly onFallback: FallbackNotifier | undefined
     readonly signal: AbortSignal | undefined
   },
-): Promise<TiffPyramidLoader> {
+): Promise<ImagePyramidLoader> {
   if (options.signal === undefined && options.onFallback === undefined) {
     return openImage(url)
   }
@@ -225,7 +229,28 @@ async function openMorphologyImageLoader(
   return openImage(url, options.signal, options.onFallback)
 }
 
-function morphologyChannelImageUrl(imageUrl: string, channel: TiffChannelInfo): string {
+export async function openImagePyramid(
+  url: string,
+  signal?: AbortSignal,
+  onFallback?: FallbackNotifier,
+): Promise<ImagePyramidLoader> {
+  const rootUrl = omeZarrImageRootUrl(url)
+
+  if (isOmeZarrImageUrl(url) || isOmeZarrImageUrl(rootUrl)) {
+    return openOmeZarrImage(url, signal)
+  }
+
+  return openTiff(url, signal, onFallback)
+}
+
+function morphologyChannelImageUrl(
+  imageUrl: string,
+  channel: ImagePyramidChannelInfo,
+): string {
+  if (channel.sourceUrl !== undefined) {
+    return channel.sourceUrl
+  }
+
   if (channel.fileName !== undefined) {
     const channelUrl = new URL(channel.fileName, imageUrl).toString()
 

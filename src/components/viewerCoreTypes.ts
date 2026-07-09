@@ -14,7 +14,7 @@ import type {
   GeometricAnnotationDatum,
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
-import type { TiffPyramidLoader } from '../tiff/loader'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 import type { LoadingTaskSummary } from './AppStatusPanels'
 import type {
   FlatMorphologyCanvasImage,
@@ -42,7 +42,7 @@ export interface ViewerCoreProps {
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]
   readonly geometricAnnotations?: readonly GeometricAnnotationDatum[]
-  readonly imageLoader?: TiffPyramidLoader | null
+  readonly imageLoader?: ImagePyramidLoader | null
   readonly imageChannels?: readonly MorphologyCanvasChannel[]
   readonly flatImage?: FlatMorphologyCanvasImage | null
   readonly imageOpacity?: number

@@ -1,5 +1,5 @@
 import { TIFF_COMPRESSION_LZW, TIFF_COMPRESSION_NONE } from '../codecs/tiffTile'
-import type { TiffPyramidLoader } from '../tiff/loader'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 
 const MAX_INITIAL_TILE_REQUESTS = 96
 const MAX_HEAVY_INITIAL_TILE_REQUESTS = 18
@@ -21,11 +21,14 @@ export interface TileSchedulingProfile {
 }
 
 export function tileSchedulingForLoader(
-  loader: Pick<TiffPyramidLoader, 'tileDecodeOptions'>,
+  loader: Pick<ImagePyramidLoader, 'tileDecodeOptions'> &
+    Partial<Pick<ImagePyramidLoader, 'tileWidth' | 'tileHeight'>>,
   options: TileSchedulingOptions,
 ): TileSchedulingProfile {
-  const decodeOptions = loader.tileDecodeOptions()
-  const tilePixelCount = (decodeOptions.tileWidth ?? 0) * (decodeOptions.tileHeight ?? 0)
+  const decodeOptions = loader.tileDecodeOptions?.() ?? {}
+  const tilePixelCount =
+    (decodeOptions.tileWidth ?? loader.tileWidth ?? 0) *
+    (decodeOptions.tileHeight ?? loader.tileHeight ?? 0)
   const isLargeRawTile =
     tilePixelCount >= LARGE_TILE_PIXEL_COUNT &&
     (decodeOptions.compression === TIFF_COMPRESSION_LZW ||
