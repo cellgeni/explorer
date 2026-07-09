@@ -19,7 +19,11 @@ import {
 } from '../../data/datasetAnnotations'
 import type { WarmDatasetForRoiResult } from '../../data/datasetWarmup'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
-import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
+import {
+  morphologyImageFromPyramidLoader,
+  type MorphologyImage,
+  type MorphologyImageChannel,
+} from '../../data/morphologyImage'
 import { type RoiSelection } from '../../data/roiSelection'
 import type { ShareableState } from '../../data/shareableState'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
@@ -906,13 +910,34 @@ export function useDatasetLifecycle({
             throw new Error('Image-only sources must expose a tiled TIFF pyramid.')
           }
 
-          setMorphologyImage({
-            url: detection.imageUrl,
-            loader: imageSource.loader,
-            channels: imageSource.loader.channels,
-            channelLoaders: [],
+          const image = await morphologyImageFromPyramidLoader(
+            detection.imageUrl,
+            imageSource.loader,
+            {
+              onFallback: appendFallbackNotice,
+              signal: request.signal,
+            },
+          )
+
+          if (!isCurrentDatasetLoad()) {
+            return
+          }
+
+          const enabledChannelIds = shouldRestoreSharedState
+            ? sharedState?.morphologyEnabledChannelIds
+            : image.channelLoaders.map((channel) => channel.info.id)
+
+          setMorphologyImage(image)
+          setMorphologyChannelSettings(
+            createMorphologyChannelSettings(
+              image,
+              enabledChannelIds === undefined ? {} : { enabledChannelIds },
+            ),
+          )
+          queueAutoContrast(image.channelLoaders, {
+            requestId,
+            signal: request.signal,
           })
-          setMorphologyChannelSettings([])
           setMorphologyState(morphologyLoadReady(detection.imageUrl))
           initialShareableStateRef.current = null
           setLoadState(datasetLoadReady(requestedUrl, 0))

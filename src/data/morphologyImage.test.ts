@@ -3,6 +3,7 @@ import { datasetFileUrl } from './datasetFiles'
 import {
   loadCustomMorphologyLayer,
   loadMorphologyImage,
+  morphologyImageFromPyramidLoader,
   morphologyImagePathsFromExperiment,
   normalizeCustomMorphologyLayerUrl,
 } from './morphologyImage'
@@ -212,6 +213,56 @@ describe('morphology image loader', () => {
     )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/layers/rgb.ome.tif#ifd=2',
+    )
+  })
+
+  it('creates a full morphology image from an already-opened pyramid loader', async () => {
+    const channel0 = {
+      id: 'Channel:0:0',
+      index: 0,
+      name: 'DAPI',
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 255 },
+      fileName: 'image.ome.tif',
+      ifdIndex: 0,
+    }
+    const channel1 = {
+      id: 'Channel:0:1',
+      index: 1,
+      name: 'Marker',
+      color: [215, 63, 124] as const,
+      contrast: { min: 0, max: 255 },
+      fileName: 'image.ome.tif',
+      ifdIndex: 1,
+    }
+    const loader0 = {
+      channels: [channel0, channel1],
+    } as unknown as TiffPyramidLoader
+    const loader1 = {
+      channels: [channel0, channel1],
+    } as unknown as TiffPyramidLoader
+    const openImage = vi.fn(async (url: string) =>
+      url.endsWith('#ifd=1') ? loader1 : loader0,
+    )
+
+    await expect(
+      morphologyImageFromPyramidLoader(
+        'https://example.test/images/image.ome.tif',
+        loader0,
+        { openImage },
+      ),
+    ).resolves.toEqual({
+      url: 'https://example.test/images/image.ome.tif',
+      loader: loader0,
+      channels: [channel0, channel1],
+      channelLoaders: [
+        { info: channel0, loader: loader0 },
+        { info: channel1, loader: loader1 },
+      ],
+    })
+    expect(openImage).toHaveBeenCalledTimes(1)
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/images/image.ome.tif#ifd=1',
     )
   })
 

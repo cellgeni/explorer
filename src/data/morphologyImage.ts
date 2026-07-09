@@ -96,6 +96,27 @@ export async function loadCustomMorphologyLayer(
   })
 }
 
+export async function morphologyImageFromPyramidLoader(
+  url: string,
+  loader: TiffPyramidLoader,
+  options: LoadCustomMorphologyLayerOptions = {},
+): Promise<MorphologyImage> {
+  const openImage = options.openImage ?? openTiff
+
+  return {
+    url,
+    loader,
+    channels: loader.channels ?? [],
+    channelLoaders: await loadMorphologyChannelLoaders({
+      imageUrl: url,
+      loader,
+      openImage,
+      onFallback: options.onFallback,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    }),
+  }
+}
+
 export function normalizeCustomMorphologyLayerUrl(imageUrl: string): string {
   const trimmedUrl = imageUrl.trim()
 

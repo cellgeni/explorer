@@ -352,12 +352,23 @@ describe('App', () => {
           transcripts: false,
           cellBoundaries: false,
           pyramidImage: true,
-          multiChannel: false,
+          multiChannel: true,
         },
-        channels: [],
+        channels: loader.channels,
       })),
       image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
     }
+    const computeAutoChannelContrast = vi.fn(async () => ({
+      min: 0,
+      max: 255,
+      histogram: {
+        bins: Array.from({ length: 32 }, () => 1),
+        maxCount: 1,
+        min: 0,
+        max: 255,
+        sampleCount: 32,
+      },
+    }))
     const detectSpatialDataset = vi.fn(async () => ({
       platform: 'image' as const,
       baseUrl: imageUrl,
@@ -374,6 +385,7 @@ describe('App', () => {
     try {
       render(
         <TestApp
+          computeAutoChannelContrast={computeAutoChannelContrast}
           detectSpatialDataset={detectSpatialDataset}
           getSpatialDataset={getSpatialDataset}
           loadDatasetOverview={loadDatasetOverview}
@@ -394,6 +406,9 @@ describe('App', () => {
       expect(screen.queryByRole('tab', { name: 'Cell' })).not.toBeInTheDocument()
 
       openHudTab('Layers')
+      expect(screen.getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'Marker' })).toBeChecked()
+      expect(screen.getByLabelText('DAPI color')).toHaveValue('#5890ff')
       expect(screen.queryByRole('slider', { name: 'Cell fill opacity' })).toBeNull()
       expect(screen.queryByRole('slider', { name: 'Cell boundary opacity' })).toBeNull()
       expect(screen.queryByLabelText('Cell boundaries')).toBeNull()
@@ -4546,6 +4561,21 @@ function imageOnlyTiffLoaderFixture(url: string): TiffPyramidLoader {
       origin: 'top-left',
       imageYAxis: 'down',
     },
-    channels: [],
+    channels: [
+      {
+        id: 'Channel:0',
+        index: 0,
+        name: 'DAPI',
+        color: [88, 144, 255],
+        contrast: { min: 0, max: 255 },
+      },
+      {
+        id: 'Channel:1',
+        index: 1,
+        name: 'Marker',
+        color: [215, 63, 124],
+        contrast: { min: 0, max: 255 },
+      },
+    ],
   } as unknown as TiffPyramidLoader
 }
