@@ -9,13 +9,14 @@ that file is too large for the same eager overview path used by 16 µm and 8 µm
 
 - Dataset detection may still report the 2 µm tier when the Space Ranger files
   are present.
-- The Dataset tab keeps 2 µm visible but disabled unless the dataset loader is
-  created with an explicit filtered-barcode rendering budget from the UI or
-  environment.
-- `VisiumHdDataset.readBinnedOverview(2)` rejects by default before reading
+- The Dataset tab enables 2 µm when the tier is detected.
+- `VisiumHdDataset.readBinnedOverview(2)` does not read the full
   `tissue_positions.parquet`.
-- When `maxTwoMicrometerFilteredBarcodes` is configured, the dataset can build a
-  2 µm overview from `filtered_feature_bc_matrix/barcodes.tsv.gz` instead.
+- The 2 µm overview is built from
+  `filtered_feature_bc_matrix/barcodes.tsv.gz` and an affine grid basis derived
+  from a detected 8 µm or 16 µm tier.
+- Lower-level callers and tests may still pass
+  `maxTwoMicrometerFilteredBarcodes` to impose an explicit barcode-count cap.
 
 ## Budgeted Barcode Path
 
@@ -25,31 +26,20 @@ grid basis from a loaded 8 µm or 16 µm basis, and emits a columnar
 `GridCellBatch`.
 
 This path intentionally uses the filtered matrix sidecar because those barcodes
-represent in-tissue bins and avoid materializing out-of-tissue positions. If the
-barcode count exceeds the supplied budget, parsing fails with
-`VisiumHdFilteredBarcodeBudgetExceededError`.
+represent in-tissue bins and avoid materializing out-of-tissue positions. If a
+caller supplies a barcode budget and the barcode count exceeds it, parsing fails
+with `VisiumHdFilteredBarcodeBudgetExceededError`.
 
 ## UI Enablement
 
-The app enables the 2 µm segmented control when the constructed
-`VisiumHdDataset` exposes `maxTwoMicrometerFilteredBarcodes`. The default
-production loader leaves this unset, so the public reference dataset remains
-disabled with the explanatory reason.
+The app enables the 2 µm segmented control when the 2 µm binned output is
+detected. The older `2 µm budget` Dataset HUD control was removed; normal app
+loading uses the barcode-sidecar path without a UI budget field.
 
-The Dataset HUD exposes a `2 µm budget` numeric field. Leaving it blank uses the
-build-time default. Entering a positive integer passes that runtime value to the
-cached dataset loader as `visiumHdMaxTwoMicrometerFilteredBarcodes`, and dataset
-cache entries are keyed by the effective budget so switching budgets rebuilds the
-Visium HD dataset safely.
-
-For controlled deployments or tests, set
-`VITE_VISIUM_HD_MAX_TWO_MICROMETER_FILTERED_BARCODES` to a positive integer. The
-constant `VISIUM_HD_TWO_MICROMETER_FILTERED_BARCODE_BUDGET_ENV` reads that key.
-The UI value takes precedence when present; otherwise the loader passes the env
-value into `VisiumHdDataset`, and the Dataset tab allows the 2 µm tier to be
-selected. The current gzip reader still buffers
-`barcodes.tsv.gz`, so do not enable this for large hosted datasets until a
-streaming or viewport-scoped barcode path is available.
+The current gzip barcode reader still buffers `barcodes.tsv.gz`. This is much
+smaller than full 2 µm positions for typical filtered in-tissue bins, but very
+large hosted deployments should still consider a streaming or viewport-scoped
+barcode reader before treating 2 µm first paint as unbounded.
 
 ## Barcode Mapping Bridge
 
@@ -57,6 +47,6 @@ streaming or viewport-scoped barcode path is available.
 16 µm squares and segmented cell assignments. Selected segmented-cell expression
 profiles use an on-demand DuckDB-WASM query for one `cell_id`, projecting only
 `square_002um`, `square_008um`, `square_016um`, `cell_id`, `in_nucleus`, and
-`in_cell`. The Dataset HUD `Mapping rows` budget remains for bulk mapping paths
-such as viewport-wide selected-gene projection and legacy bin-to-cell assignment.
-Default rendering still does not touch `barcode_mappings.parquet`.
+`in_cell`. Default rendering still does not touch `barcode_mappings.parquet`;
+bulk mapping readers remain available to specialized callers with explicit row
+budgets.

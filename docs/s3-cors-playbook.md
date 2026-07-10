@@ -1,10 +1,11 @@
 # S3-Compatible CORS Hosting Playbook
 
-The viewer reads Xenium output directly from object storage. AWS S3 and
-S3-compatible services such as Ceph RADOS Gateway (RGW) are both valid targets
-as long as the bucket, gateway, CDN, or reverse proxy supports browser HTTP
-Range requests. Otherwise Parquet, Zarr zip, and OME TIFF reads will either fail
-or silently become full-file downloads.
+The viewer reads spatial datasets and image sources directly from object
+storage. AWS S3 and S3-compatible services such as Ceph RADOS Gateway (RGW) are
+both valid targets as long as the bucket, gateway, CDN, or reverse proxy
+supports browser HTTP Range requests. Otherwise Parquet, Zarr zip, OME-Zarr,
+HDF5, and OME-TIFF reads will either fail or silently become full-file
+downloads.
 
 ## Required CORS Policy
 
@@ -23,8 +24,8 @@ through your object-store administration tooling.
 ## Object Serving Rules
 
 - Do not apply transfer compression (`Content-Encoding`) to Parquet, TIFF, Zarr
-  zip, or HDF5 files. These formats are already compressed, and transfer gzip
-  breaks byte offsets.
+  zip, OME-Zarr chunks, or HDF5 files. These formats are already compressed, and
+  transfer gzip breaks byte offsets.
 - Keep dataset paths immutable and serve long-lived `Cache-Control` plus `ETag`.
 - Prefer HTTP/2 or HTTP/3 on the CDN or fronting proxy because the app makes
   many small Range requests.
@@ -36,8 +37,9 @@ through your object-store administration tooling.
 ## Manual Range Check
 
 Run this against key files such as `cells.parquet`, `cell_boundaries.parquet`,
-`transcripts.parquet`, `transcripts.zarr.zip`, cell-feature matrix files, and
-image TIFFs:
+`transcripts.parquet`, `transcripts.zarr.zip`, Visium HD
+`tissue_positions.parquet`, `feature_slice.h5`, H5AD files, cell-feature matrix
+files, image TIFFs, and representative OME-Zarr chunk URLs:
 
 ```sh
 curl -r 0-0 -i https://bucket.example/path/to/cells.parquet

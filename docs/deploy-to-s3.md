@@ -2,8 +2,8 @@
 
 This project builds to a static Vite app. There is no server-side application to
 deploy: the browser downloads the React bundle, workers, and WASM assets from
-`dist/`, then reads Xenium output folders directly from the dataset URLs entered
-in the UI or restored from the shareable URL hash.
+`dist/`, then reads Xenium, Visium HD, H5AD, or image-only sources directly from
+the URLs entered in the UI or restored from the shareable URL hash.
 
 Use this guide for the app bucket or object-store prefix. It applies to AWS S3
 and S3-compatible services such as Ceph RADOS Gateway (RGW). Dataset buckets
@@ -16,8 +16,8 @@ still need the byte-range and CORS rules in
 - Put a CDN or HTTPS reverse proxy in front of that bucket for TLS, custom
   headers, and caching. On AWS this is usually CloudFront; for Ceph RGW this may
   be an institutional CDN, nginx, HAProxy, or another edge service.
-- Keep Xenium data in a separate bucket or prefix so deploys cannot delete large
-  dataset objects by accident.
+- Keep spatial data and image sources in a separate bucket or prefix so deploys
+  cannot delete large dataset objects by accident.
 - Serve the app at the distribution root unless you intentionally build with a
   Vite `base` path.
 
@@ -124,8 +124,8 @@ aws --endpoint-url "$S3_ENDPOINT_URL" s3 sync dist "s3://$APP_BUCKET" \
 ```
 
 Do not run `aws s3 sync dist s3://bucket --delete` at the root of a bucket that
-also contains Xenium datasets. Use a dedicated app bucket, or deploy the app to a
-scoped prefix and build with the matching Vite `base`.
+also contains spatial datasets or image sources. Use a dedicated app bucket, or
+deploy the app to a scoped prefix and build with the matching Vite `base`.
 
 ## Configure The Edge Layer
 
@@ -164,9 +164,10 @@ the no-cache `Cache-Control` headers above so clients revalidate them.
 
 ## Dataset Bucket Requirements
 
-The app can point at any Xenium output folder URL, but the browser must be able
-to range-read those files. For S3 or S3-compatible datasets, configure the
-dataset bucket, gateway, CDN, or reverse proxy with:
+The app can point at Xenium output folders, Visium HD output folders, direct
+H5AD files, and image-only URLs, but the browser must be able to range-read
+large binary assets. For S3 or S3-compatible datasets, configure the dataset
+bucket, gateway, CDN, or reverse proxy with:
 
 ```json
 [
@@ -196,8 +197,8 @@ aws --endpoint-url "$S3_ENDPOINT_URL" s3api put-bucket-cors \
   --cors-configuration file://cors.json
 ```
 
-Do not serve Parquet, TIFF, Zarr zip, or HDF5 files with transfer
-`Content-Encoding`. These formats are read by byte offset.
+Do not serve Parquet, TIFF, Zarr zip, OME-Zarr chunks, or HDF5 files with
+transfer `Content-Encoding`. These formats are read by byte offset.
 
 ## Verify Production
 
@@ -226,5 +227,5 @@ Expected result:
 - `Content-Range: bytes 0-0/...`
 - no `Content-Encoding`
 
-Finally, open the deployed app, paste the hosted Xenium output folder URL, run
-`Diagnose Dataset`, and load the dataset.
+Finally, open the deployed app, paste a hosted source URL, run
+`Diagnose Dataset`, and load the dataset or image.
