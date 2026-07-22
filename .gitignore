@@ -8,5 +8,6 @@ test-results/
 
 # Temporary scaffold output created by the sandboxed Vite generator.
 /private/tmp/
+old
 
 .DS_Store
