@@ -9,6 +9,7 @@ export interface TiffChannelInfo {
   readonly name: string
   readonly color: readonly [number, number, number]
   readonly contrast: TiffChannelContrast
+  readonly samplesPerPixel?: number
   readonly fileName?: string
   readonly ifdIndex?: number
   readonly alphaFromIntensity?: boolean
@@ -63,16 +64,20 @@ export function parseOmeTiffMetadata(description: string | undefined): OmeTiffMe
   const channels = elements(pixels, 'Channel').map((channel, index) => {
     const channelIndex = readChannelIndex(channel, index)
     const purpose = readChannelPurpose(channel, purposes)
+    const samplesPerPixel = readIntegerAttribute(channel, 'SamplesPerPixel') ?? 1
+    const interleaved = pixels.getAttribute('Interleaved') === 'true'
+    const isRgb = samplesPerPixel >= 3 || (interleaved && samplesPerPixel > 1)
     const name =
       readOptionalAttribute(channel, 'Name') ?? purpose ?? `Channel ${channelIndex + 1}`
     const tiffData = tiffDataByChannel.get(channelIndex)
-    const color =
-      parseOmeColor(channel.getAttribute('Color')) ??
-      defaultChannelColor({
-        index: channelIndex,
-        name,
-        ...(purpose === undefined ? {} : { purpose }),
-      })
+    const color = isRgb
+      ? ([255, 255, 255] as const)
+      : (parseOmeColor(channel.getAttribute('Color')) ??
+        defaultChannelColor({
+          index: channelIndex,
+          name,
+          ...(purpose === undefined ? {} : { purpose }),
+        }))
 
     return {
       id: readOptionalAttribute(channel, 'ID') ?? `Channel:${channelIndex}`,
@@ -80,8 +85,10 @@ export function parseOmeTiffMetadata(description: string | undefined): OmeTiffMe
       name,
       color,
       contrast,
+      ...(samplesPerPixel > 1 ? { samplesPerPixel } : {}),
       ...(tiffData?.fileName === undefined ? {} : { fileName: tiffData.fileName }),
       ...(tiffData?.ifdIndex === undefined ? {} : { ifdIndex: tiffData.ifdIndex }),
+      ...(isRgb ? { alphaFromIntensity: false } : {}),
       ...(purpose === undefined ? {} : { purpose }),
     }
   })
@@ -99,10 +106,17 @@ export function parsePhysicalSizeMicrometersPerPixel(
     return DEFAULT_MICROMETERS_PER_PIXEL
   }
 
-  const match = description.match(/PhysicalSizeX="([^"]+)"/)
-  const value = match?.[1] === undefined ? Number.NaN : Number.parseFloat(match[1])
+  const rawValue = readXmlAttributeFromText(description, 'PhysicalSizeX')
+  const value = rawValue === undefined ? Number.NaN : Number.parseFloat(rawValue)
 
-  return value > 0 ? value : DEFAULT_MICROMETERS_PER_PIXEL
+  if (!(value > 0)) {
+    return DEFAULT_MICROMETERS_PER_PIXEL
+  }
+
+  return micrometersPerPixelFromPhysicalSize(
+    value,
+    readXmlAttributeFromText(description, 'PhysicalSizeXUnit'),
+  )
 }
 
 function parseXml(xml: string): Document | null {
@@ -302,4 +316,104 @@ function readIntegerAttribute(element: Element, name: string): number | undefine
   const parsed = value === null ? Number.NaN : Number(value)
 
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined
+}
+
+function readXmlAttributeFromText(xml: string, name: string): string | undefined {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = xml.match(new RegExp(`${escapedName}=(["'])(.*?)\\1`))
+  const value = match?.[2]?.trim()
+
+  return value === undefined || value.length === 0 ? undefined : value
+}
+
+function micrometersPerPixelFromPhysicalSize(
+  value: number,
+  unit: string | undefined,
+): number {
+  const normalizedUnit = normalizePhysicalSizeUnit(unit)
+  const micrometersPerUnit = micrometersPerUnitFor(normalizedUnit)
+
+  if (micrometersPerUnit === undefined) {
+    return value
+  }
+
+  if (looksLikePixelsPerUnit(value, normalizedUnit)) {
+    return micrometersPerUnit / value
+  }
+
+  return value * micrometersPerUnit
+}
+
+function normalizePhysicalSizeUnit(unit: string | undefined): string | undefined {
+  const normalized = unit?.trim().toLowerCase().replace(/[\u03bc\u00b5]/g, 'u')
+
+  if (normalized === undefined || normalized.length === 0) {
+    return undefined
+  }
+
+  switch (normalized) {
+    case 'um':
+    case 'micrometer':
+    case 'micrometers':
+    case 'micrometre':
+    case 'micrometres':
+    case 'micron':
+    case 'microns':
+      return 'um'
+    case 'nm':
+    case 'nanometer':
+    case 'nanometers':
+    case 'nanometre':
+    case 'nanometres':
+      return 'nm'
+    case 'mm':
+    case 'millimeter':
+    case 'millimeters':
+    case 'millimetre':
+    case 'millimetres':
+      return 'mm'
+    case 'cm':
+    case 'centimeter':
+    case 'centimeters':
+    case 'centimetre':
+    case 'centimetres':
+      return 'cm'
+    case 'm':
+    case 'meter':
+    case 'meters':
+    case 'metre':
+    case 'metres':
+      return 'm'
+    default:
+      return normalized
+  }
+}
+
+function micrometersPerUnitFor(unit: string | undefined): number | undefined {
+  switch (unit) {
+    case undefined:
+    case 'um':
+      return 1
+    case 'nm':
+      return 0.001
+    case 'mm':
+      return 1_000
+    case 'cm':
+      return 10_000
+    case 'm':
+      return 1_000_000
+    default:
+      return undefined
+  }
+}
+
+function looksLikePixelsPerUnit(value: number, unit: string | undefined): boolean {
+  switch (unit) {
+    case 'cm':
+      return value >= 1_000
+    case 'mm':
+      return value >= 100
+    default:
+      return false
+  }
 }

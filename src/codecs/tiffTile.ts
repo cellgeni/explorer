@@ -5,6 +5,10 @@ import type { DecodedJpeg2000, Jpeg2000Pixels } from './jpeg2000'
 export const TIFF_COMPRESSION_NONE = 1
 export const TIFF_COMPRESSION_LZW = 5
 
+export const TIFF_COMPRESSION_JPEG = 7
+export const TIFF_COMPRESSION_DEFLATE = 8
+export const TIFF_COMPRESSION_ADOBE_DEFLATE = 32946
+
 const TIFF_COMPRESSION_JPEG_2000 = 34712
 const TIFF_COMPRESSION_JPEG_2000_LOSSLESS = 33003
 const TIFF_COMPRESSION_JPEG_2000_LOSSY = 33004
@@ -26,6 +30,7 @@ export interface TiffTileDecodeMetadata {
   readonly predictor?: number
   readonly planarConfiguration?: number
   readonly littleEndian?: boolean
+  readonly jpegTables?: Uint8Array
 }
 
 export async function decodeTiffTilePixels(
@@ -39,16 +44,7 @@ export async function decodeTiffTilePixels(
     return decodeJpeg2000(bytes)
   }
 
-  if (
-    metadata.compression === TIFF_COMPRESSION_NONE ||
-    metadata.compression === TIFF_COMPRESSION_LZW
-  ) {
-    return decodeGeotiffCompressedTile(bytes, metadata)
-  }
-
-  throw new Error(
-    `Unsupported TIFF tile compression ${metadata.compression}. Supported tile compressions are uncompressed, JPEG-2000, and LZW.`,
-  )
+  return decodeGeotiffCompressedTile(bytes, metadata)
 }
 
 async function decodeGeotiffCompressedTile(
@@ -66,9 +62,15 @@ async function decodeGeotiffCompressedTile(
   const predictor = metadata.predictor ?? 1
   const planarConfiguration = metadata.planarConfiguration ?? 1
 
-  if (samplesPerPixel !== 1) {
+  if (samplesPerPixel !== 1 && samplesPerPixel !== 3 && samplesPerPixel !== 4) {
     throw new Error(
-      `Unsupported TIFF tile sample count ${samplesPerPixel}. Only single-sample grayscale tiles are supported.`,
+      `Unsupported TIFF tile sample count ${samplesPerPixel}. Supported values are 1, 3, and 4.`,
+    )
+  }
+
+  if (samplesPerPixel > 1 && planarConfiguration !== 1) {
+    throw new Error(
+      `Unsupported TIFF planar configuration ${planarConfiguration} for multi-sample tiles. Only interleaved tiles are supported.`,
     )
   }
 
@@ -78,11 +80,14 @@ async function decodeGeotiffCompressedTile(
       : compression === TIFF_COMPRESSION_LZW && predictor === 1
         ? decompressTiffLzw(
             bytes,
-            decodedByteLength(tileWidth, tileHeight, bitsPerSample),
+            decodedByteLength(tileWidth, tileHeight, bitsPerSample, samplesPerPixel),
           )
         : await decodeWithGeotiff(bytes, {
             bitsPerSample,
             compression,
+            ...(metadata.jpegTables === undefined
+              ? {}
+              : { jpegTables: metadata.jpegTables }),
             planarConfiguration,
             predictor,
             samplesPerPixel,
@@ -100,6 +105,7 @@ async function decodeGeotiffCompressedTile(
     }),
     width: tileWidth,
     height: tileHeight,
+    samplesPerPixel,
   }
 }
 
@@ -114,18 +120,18 @@ function pixelsFromDecodedBuffer(
   },
 ): Jpeg2000Pixels {
   const bitsPerSample = options.bitsPerSample[0] ?? 8
-  const pixelCount = options.tileWidth * options.tileHeight
+  const sampleCount = options.tileWidth * options.tileHeight * options.samplesPerPixel
 
   if (bitsPerSample <= 8) {
-    return copyUint8Pixels(buffer, pixelCount)
+    return copyUint8Pixels(buffer, sampleCount)
   }
 
   if (bitsPerSample <= 16) {
-    return copyUint16Pixels(buffer, pixelCount, options.littleEndian)
+    return copyUint16Pixels(buffer, sampleCount, options.littleEndian)
   }
 
   throw new Error(
-    `Unsupported TIFF tile bit depth ${bitsPerSample}. Only 8-bit and 16-bit grayscale tiles are supported.`,
+    `Unsupported TIFF tile bit depth ${bitsPerSample}. Only 8-bit and 16-bit tiles are supported.`,
   )
 }
 
@@ -134,6 +140,7 @@ async function decodeWithGeotiff(
   options: {
     readonly bitsPerSample: readonly number[]
     readonly compression: number
+    readonly jpegTables?: Uint8Array
     readonly planarConfiguration: number
     readonly predictor: number
     readonly samplesPerPixel: number
@@ -141,14 +148,17 @@ async function decodeWithGeotiff(
     readonly tileWidth: number
   },
 ): Promise<ArrayBufferLike> {
-  const decoder = await getDecoder(options.compression, {
+  const decoderParameters = {
     bitsPerSample: [...options.bitsPerSample],
+    ...(options.jpegTables === undefined ? {} : { JPEGTables: options.jpegTables }),
     planarConfiguration: options.planarConfiguration,
     predictor: options.predictor,
     samplesPerPixel: options.samplesPerPixel,
     tileHeight: options.tileHeight,
     tileWidth: options.tileWidth,
-  })
+  }
+
+  const decoder = await getDecoder(options.compression, decoderParameters)
 
   return decoder.decode(copyToArrayBuffer(bytes))
 }
@@ -157,11 +167,12 @@ function decodedByteLength(
   tileWidth: number,
   tileHeight: number,
   bitsPerSample: readonly number[],
+  samplesPerPixel: number,
 ): number {
   const bits = bitsPerSample[0] ?? 8
   const bytesPerSample = Math.ceil(bits / 8)
 
-  return tileWidth * tileHeight * bytesPerSample
+  return tileWidth * tileHeight * bytesPerSample * samplesPerPixel
 }
 
 function decompressTiffLzw(bytes: Uint8Array, expectedByteLength: number): ArrayBuffer {

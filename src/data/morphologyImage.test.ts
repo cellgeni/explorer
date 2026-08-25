@@ -310,6 +310,43 @@ describe('morphology image loader', () => {
     )
   })
 
+  it('retries remote HTTP custom morphology layers over HTTPS', async () => {
+    const loader = {} as TiffPyramidLoader
+    const openImage = vi.fn(async (url: string) => {
+      if (url.startsWith('http://')) {
+        throw new TypeError('Failed to fetch')
+      }
+
+      return loader
+    })
+
+    await expect(
+      loadCustomMorphologyLayer('http://example.test/layers/custom.ome.tif', {
+        openImage,
+      }),
+    ).resolves.toMatchObject({
+      url: 'https://example.test/layers/custom.ome.tif',
+      loader,
+    })
+    expect(openImage).toHaveBeenCalledWith('http://example.test/layers/custom.ome.tif')
+    expect(openImage).toHaveBeenCalledWith('https://example.test/layers/custom.ome.tif')
+  })
+
+  it('does not rewrite localhost custom morphology layer URLs', async () => {
+    const error = new TypeError('Failed to fetch')
+    const openImage = vi.fn(async () => {
+      throw error
+    })
+
+    await expect(
+      loadCustomMorphologyLayer('http://localhost:3100/custom.ome.tif', {
+        openImage,
+      }),
+    ).rejects.toBe(error)
+    expect(openImage).toHaveBeenCalledTimes(1)
+    expect(openImage).toHaveBeenCalledWith('http://localhost:3100/custom.ome.tif')
+  })
+
   it('normalizes custom morphology layer URLs', () => {
     expect(
       normalizeCustomMorphologyLayerUrl(' https://example.test/layers/custom.ome.tif '),

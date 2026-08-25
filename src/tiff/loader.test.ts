@@ -31,6 +31,11 @@ const units: UnitsDescriptor = {
 describe('TIFF metadata parsing', () => {
   it('parses OME PhysicalSizeX with the Xenium fallback', () => {
     expect(parsePhysicalSizeMicrometersPerPixel('PhysicalSizeX="0.2125"')).toBe(0.2125)
+    expect(
+      parsePhysicalSizeMicrometersPerPixel(
+        'PhysicalSizeX="45206" PhysicalSizeXUnit="cm"',
+      ),
+    ).toBeCloseTo(0.22120957395036056)
     expect(parsePhysicalSizeMicrometersPerPixel(undefined)).toBe(0.2125)
     expect(parsePhysicalSizeMicrometersPerPixel('PhysicalSizeX="-1"')).toBe(0.2125)
   })

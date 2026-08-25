@@ -103,6 +103,44 @@ describe('OME-TIFF metadata parsing', () => {
     ])
   })
 
+  it('marks interleaved RGB OME-TIFF channels as true-color single channels', () => {
+    const metadata = parseOmeTiffMetadata(`<?xml version="1.0" encoding="UTF-8"?>
+<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZCT" Type="uint8" SizeX="2" SizeY="2" SizeZ="1" SizeC="3" SizeT="1" Interleaved="true" PhysicalSizeX="0.5" PhysicalSizeY="0.5">
+      <Channel ID="Channel:0:0" SamplesPerPixel="3"><LightPath/></Channel>
+      <TiffData IFD="0" PlaneCount="1"/>
+    </Pixels>
+  </Image>
+</OME>`)
+
+    expect(metadata.channels).toHaveLength(1)
+    expect(metadata.channels[0]).toEqual({
+      id: 'Channel:0:0',
+      index: 0,
+      name: 'Channel 1',
+      color: [255, 255, 255],
+      contrast: { min: 0, max: 255 },
+      samplesPerPixel: 3,
+      ifdIndex: 0,
+      alphaFromIntensity: false,
+    })
+  })
+
+  it('keeps single-sample OME channels additive-only', () => {
+    const metadata = parseOmeTiffMetadata(`
+<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
+  <Image ID="Image:0">
+    <Pixels Type="uint8" Interleaved="true">
+      <Channel ID="Channel:0" Name="DAPI" SamplesPerPixel="1"/>
+    </Pixels>
+  </Image>
+</OME>`)
+
+    expect(metadata.channels[0]).not.toHaveProperty('samplesPerPixel')
+    expect(metadata.channels[0]).not.toHaveProperty('alphaFromIntensity')
+  })
+
   it('maps OME TiffData plane runs to per-channel IFD indices', () => {
     const metadata = parseOmeTiffMetadata(`
 <OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
@@ -130,5 +168,36 @@ describe('OME-TIFF metadata parsing', () => {
       channels: [],
     })
     expect(parsePhysicalSizeMicrometersPerPixel('PhysicalSizeX="-1"')).toBe(0.2125)
+  })
+
+  it('converts OME physical size units to micrometers per pixel', () => {
+    expect(
+      parsePhysicalSizeMicrometersPerPixel(
+        'PhysicalSizeX="0.00002125" PhysicalSizeXUnit="cm"',
+      ),
+    ).toBeCloseTo(0.2125)
+    expect(
+      parsePhysicalSizeMicrometersPerPixel(
+        'PhysicalSizeX="0.0002125" PhysicalSizeXUnit="mm"',
+      ),
+    ).toBeCloseTo(0.2125)
+    expect(
+      parsePhysicalSizeMicrometersPerPixel(
+        'PhysicalSizeX="212.5" PhysicalSizeXUnit="nm"',
+      ),
+    ).toBeCloseTo(0.2125)
+    expect(
+      parsePhysicalSizeMicrometersPerPixel(
+        'PhysicalSizeX="0.2125" PhysicalSizeXUnit="um"',
+      ),
+    ).toBeCloseTo(0.2125)
+  })
+
+  it('handles tifffile resolution-like OME physical size values', () => {
+    expect(
+      parsePhysicalSizeMicrometersPerPixel(
+        'PhysicalSizeX="45206" PhysicalSizeXUnit="cm"',
+      ),
+    ).toBeCloseTo(10_000 / 45_206)
   })
 })

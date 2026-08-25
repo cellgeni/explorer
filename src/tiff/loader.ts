@@ -58,6 +58,7 @@ export interface TiffPyramidLoaderOptions {
   readonly predictor?: number
   readonly planarConfiguration?: number
   readonly littleEndian?: boolean
+  readonly jpegTables?: Uint8Array
   readonly fetcher?: typeof fetch
   readonly byteRangeCache?: PersistentByteRangeCache | null
 }
@@ -229,6 +230,7 @@ async function readTileDecodeMetadata(
     directory,
     'PlanarConfiguration',
   )
+  const jpegTables = await readOptionalByteArrayTag(directory, 'JPEGTables')
 
   return {
     ...(compression === undefined ? {} : { compression }),
@@ -236,6 +238,7 @@ async function readTileDecodeMetadata(
     ...(samplesPerPixel === undefined ? {} : { samplesPerPixel }),
     ...(predictor === undefined ? {} : { predictor }),
     ...(planarConfiguration === undefined ? {} : { planarConfiguration }),
+    ...(jpegTables === undefined ? {} : { jpegTables }),
     littleEndian: tiff.littleEndian,
   }
 }
@@ -255,6 +258,7 @@ export class TiffPyramidLoader {
   private readonly predictor: number | undefined
   private readonly planarConfiguration: number | undefined
   private readonly littleEndian: boolean | undefined
+  private readonly jpegTables: Uint8Array | undefined
   private readonly chunks: ReadonlyMap<string, TiffChunk>
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly fetcher: typeof fetch
@@ -279,6 +283,7 @@ export class TiffPyramidLoader {
     this.predictor = options.predictor
     this.planarConfiguration = options.planarConfiguration
     this.littleEndian = options.littleEndian
+    this.jpegTables = options.jpegTables
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.byteRangeCache =
       options.byteRangeCache === undefined
@@ -350,6 +355,7 @@ export class TiffPyramidLoader {
         ? {}
         : { planarConfiguration: this.planarConfiguration }),
       ...(this.littleEndian === undefined ? {} : { littleEndian: this.littleEndian }),
+      ...(this.jpegTables === undefined ? {} : { jpegTables: this.jpegTables }),
     }
   }
 
@@ -550,6 +556,50 @@ export async function readNumberArrayTag(
   }
 
   throw new Error(`Expected TIFF tag ${key} to be a number array.`)
+}
+
+async function readOptionalByteArrayTag(
+  directory: TiffDirectoryValueLoader,
+  key: string,
+): Promise<Uint8Array | undefined> {
+  const value = await directory.loadValue(key)
+
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value instanceof Uint8Array) {
+    return value
+  }
+
+  if (Array.isArray(value) && value.every(isNumberLike)) {
+    return bytesFromNumberLikes(value, key)
+  }
+
+  if (ArrayBuffer.isView(value) && !(value instanceof DataView) && 'length' in value) {
+    return bytesFromNumberLikes(value as unknown as ArrayLike<number | bigint>, key)
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value)
+  }
+
+  throw new Error(`Expected TIFF tag ${key} to be a byte array.`)
+}
+
+function bytesFromNumberLikes(
+  values: ArrayLike<number | bigint>,
+  key: string,
+): Uint8Array {
+  return Uint8Array.from(values, (item) => {
+    const byte = numberLikeToNumber(item, key)
+
+    if (byte < 0 || byte > 255) {
+      throw new Error(`Expected TIFF tag ${key} to contain byte values.`)
+    }
+
+    return byte
+  })
 }
 
 function isNumberLike(value: unknown): value is number | bigint {

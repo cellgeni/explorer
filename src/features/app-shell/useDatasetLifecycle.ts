@@ -928,11 +928,15 @@ export function useDatasetLifecycle({
             : image.channelLoaders.map((channel) => channel.info.id)
 
           setMorphologyImage(image)
-          setMorphologyChannelSettings(
-            createMorphologyChannelSettings(
-              image,
-              enabledChannelIds === undefined ? {} : { enabledChannelIds },
-            ),
+          setMorphologyChannelSettings((current) =>
+            mergeMorphologyChannelSettings({
+              baseChannelIds: image.channelLoaders.map((channel) => channel.info.id),
+              currentSettings: current,
+              nextBaseSettings: createMorphologyChannelSettings(
+                image,
+                enabledChannelIds === undefined ? {} : { enabledChannelIds },
+              ),
+            }),
           )
           queueAutoContrast(image.channelLoaders, {
             requestId,
@@ -1198,11 +1202,15 @@ export function useDatasetLifecycle({
               : undefined
 
             setMorphologyImage(image)
-            setMorphologyChannelSettings(
-              createMorphologyChannelSettings(
-                image,
-                enabledChannelIds === undefined ? {} : { enabledChannelIds },
-              ),
+            setMorphologyChannelSettings((current) =>
+              mergeMorphologyChannelSettings({
+                baseChannelIds: image.channelLoaders.map((channel) => channel.info.id),
+                currentSettings: current,
+                nextBaseSettings: createMorphologyChannelSettings(
+                  image,
+                  enabledChannelIds === undefined ? {} : { enabledChannelIds },
+                ),
+              }),
             )
             setMorphologyState(morphologyLoadReady(image.url))
             appendDebugEvent('Morphology image ready')
@@ -1311,6 +1319,19 @@ export function useDatasetLifecycle({
   ])
 
   return { handleDatasetSubmit }
+}
+
+export function mergeMorphologyChannelSettings(options: {
+  readonly baseChannelIds: readonly string[]
+  readonly currentSettings: readonly MorphologyChannelSetting[]
+  readonly nextBaseSettings: readonly MorphologyChannelSetting[]
+}): readonly MorphologyChannelSetting[] {
+  const baseChannelIds = new Set(options.baseChannelIds)
+  const preservedSettings = options.currentSettings.filter(
+    (setting) => !baseChannelIds.has(setting.id),
+  )
+
+  return [...options.nextBaseSettings, ...preservedSettings]
 }
 
 function isH5adLifecycleDataset(dataset: unknown): dataset is H5adLifecycleDataset {

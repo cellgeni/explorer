@@ -157,4 +157,33 @@ describe('customMorphologyLayers', () => {
       'custom-layer:3:Channel:0:2',
     ])
   })
+
+  it('preserves custom layer loaders without inferred transforms', () => {
+    const imageLoader = {} as TiffPyramidLoader
+    const channelLoader = {} as TiffPyramidLoader
+    const image: MorphologyImage = {
+      url: 'https://example.test/layers/he.ome.tif',
+      loader: imageLoader,
+      channels: [],
+      channelLoaders: [
+        {
+          info: {
+            id: 'Channel:0',
+            index: 0,
+            name: 'H&E',
+            color: [255, 255, 255],
+            contrast: { min: 0, max: 255 },
+            alphaFromIntensity: false,
+          },
+          loader: channelLoader,
+        },
+      ],
+    }
+
+    const layer = createCustomMorphologyLayer('custom-layer:4', image)
+
+    expect(layer.image).toBe(image)
+    expect(layer.image.loader).toBe(imageLoader)
+    expect(layer.channels[0]?.loader).toBe(channelLoader)
+  })
 })

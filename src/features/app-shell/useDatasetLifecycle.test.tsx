@@ -12,7 +12,10 @@ import type {
   VisiumHdBinSizeMicrometers,
 } from '../../datasets/visiumHdDataset'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
-import { useDatasetLifecycle } from './useDatasetLifecycle'
+import {
+  mergeMorphologyChannelSettings,
+  useDatasetLifecycle,
+} from './useDatasetLifecycle'
 
 function abortRef() {
   return { current: new AbortController() }
@@ -262,6 +265,68 @@ function createLifecycleRefs() {
 }
 
 describe('useDatasetLifecycle', () => {
+  it('preserves custom-layer channel settings when base morphology settings refresh', () => {
+    expect(
+      mergeMorphologyChannelSettings({
+        baseChannelIds: ['Channel:0', 'Channel:1'],
+        currentSettings: [
+          {
+            id: 'Channel:0',
+            enabled: false,
+            color: [1, 2, 3],
+            contrastMin: 0,
+            contrastMax: 1,
+          },
+          {
+            id: 'custom-layer:1:Channel:0:0',
+            enabled: true,
+            color: [255, 255, 255],
+            contrastMin: 0,
+            contrastMax: 255,
+          },
+        ],
+        nextBaseSettings: [
+          {
+            id: 'Channel:0',
+            enabled: false,
+            color: [88, 144, 255],
+            contrastMin: 0,
+            contrastMax: 65_535,
+          },
+          {
+            id: 'Channel:1',
+            enabled: false,
+            color: [32, 166, 122],
+            contrastMin: 0,
+            contrastMax: 65_535,
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        id: 'Channel:0',
+        enabled: false,
+        color: [88, 144, 255],
+        contrastMin: 0,
+        contrastMax: 65_535,
+      },
+      {
+        id: 'Channel:1',
+        enabled: false,
+        color: [32, 166, 122],
+        contrastMin: 0,
+        contrastMax: 65_535,
+      },
+      {
+        id: 'custom-layer:1:Channel:0:0',
+        enabled: true,
+        color: [255, 255, 255],
+        contrastMin: 0,
+        contrastMax: 255,
+      },
+    ])
+  })
+
   it('aborts active feature requests on unmount', () => {
     const refs = createLifecycleRefs()
     const { unmount } = render(<Probe refs={refs} />)

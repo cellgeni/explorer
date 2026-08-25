@@ -93,11 +93,27 @@ export async function loadCustomMorphologyLayer(
   const url = normalizeCustomMorphologyLayerUrl(imageUrl)
   const openImage = options.openImage ?? openImagePyramid
 
-  return loadMorphologyImageFromUrl(url, {
+  const loadOptions = {
     openImage,
     onFallback: options.onFallback,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
-  })
+  }
+
+  try {
+    return await loadMorphologyImageFromUrl(url, loadOptions)
+  } catch (error) {
+    if (options.signal?.aborted) {
+      throw error
+    }
+
+    const fallbackUrl = httpsFallbackUrl(url)
+
+    if (fallbackUrl === null) {
+      throw error
+    }
+
+    return loadMorphologyImageFromUrl(fallbackUrl, loadOptions)
+  }
 }
 
 export async function morphologyImageFromPyramidLoader(
@@ -141,6 +157,26 @@ export function normalizeCustomMorphologyLayerUrl(imageUrl: string): string {
   }
 
   return url.toString()
+}
+
+function httpsFallbackUrl(url: string): string | null {
+  const parsedUrl = new URL(url)
+
+  if (parsedUrl.protocol !== 'http:' || isLoopbackHostname(parsedUrl.hostname)) {
+    return null
+  }
+
+  parsedUrl.protocol = 'https:'
+  return parsedUrl.toString()
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.endsWith('.localhost')
+  )
 }
 
 interface LoadMorphologyImageFromUrlOptions {

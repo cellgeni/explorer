@@ -23,6 +23,9 @@ async function decodeTile(request: TileDecodeRequest): Promise<void> {
         ...(request.alphaFromIntensity === undefined
           ? {}
           : { alphaFromIntensity: request.alphaFromIntensity }),
+        ...(decoded.samplesPerPixel === undefined
+          ? {}
+          : { samplesPerPixel: decoded.samplesPerPixel }),
       },
     )
     const imageDataArray: Uint8ClampedArray<ArrayBuffer> = new Uint8ClampedArray(

@@ -70,4 +70,37 @@ describe('MorphologyChannelControls', () => {
       'DAPI histogram, 6 samples',
     )
   })
+
+  it('hides the color picker for true-color channels', () => {
+    render(
+      <MorphologyChannelControls
+        channels={[
+          {
+            ...channel,
+            info: {
+              ...channel.info,
+              id: 'rgb',
+              name: 'RGB',
+              samplesPerPixel: 3,
+            },
+          },
+        ]}
+        settings={[
+          {
+            id: 'rgb',
+            enabled: true,
+            color: [255, 255, 255],
+            contrastMin: 0,
+            contrastMax: 255,
+          },
+        ]}
+        autoContrastChannelIds={[]}
+        onAutoContrast={vi.fn()}
+        onUpdate={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByLabelText('RGB color')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('RGB histogram')).toBeInTheDocument()
+  })
 })

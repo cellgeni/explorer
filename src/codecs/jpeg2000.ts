@@ -6,6 +6,7 @@ export interface DecodedJpeg2000 {
   readonly pixels: Jpeg2000Pixels
   readonly width: number
   readonly height: number
+  readonly samplesPerPixel?: number
 }
 
 export interface DisplayWindow {
@@ -52,11 +53,23 @@ export async function decodeJpeg2000(bytes: Uint8Array): Promise<DecodedJpeg2000
   }
 
   const expectedPixels = frameInfo.width * frameInfo.height
+  const rawComponentCount = frameInfo.componentCount
+  const frameComponentCount =
+    rawComponentCount !== undefined &&
+    Number.isInteger(rawComponentCount) &&
+    rawComponentCount > 0
+      ? rawComponentCount
+      : undefined
+  const assumedComponentCount = frameComponentCount ?? 1
   const buffer = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)
   const pixels =
-    raw.byteLength === expectedPixels * 2
+    raw.byteLength === expectedPixels * assumedComponentCount * 2
       ? new Uint16Array(buffer)
       : new Uint8Array(buffer)
+  const bytesPerSample = pixels.BYTES_PER_ELEMENT
+  const samplesPerPixel =
+    frameComponentCount ??
+    Math.max(1, Math.round(raw.byteLength / (expectedPixels * bytesPerSample)))
 
   decoder.delete?.()
 
@@ -64,6 +77,7 @@ export async function decodeJpeg2000(bytes: Uint8Array): Promise<DecodedJpeg2000
     pixels,
     width: frameInfo.width,
     height: frameInfo.height,
+    samplesPerPixel,
   }
 }
 
@@ -72,8 +86,34 @@ export function normaliseToRgba(
   width: number,
   height: number,
   displayWindow?: DisplayWindow,
-  options: RgbaRenderOptions = {},
+  options: RgbaRenderOptions & { readonly samplesPerPixel?: number } = {},
 ): RgbaTile {
+  const samplesPerPixel = options.samplesPerPixel ?? 1
+
+  if (samplesPerPixel >= 3) {
+    const rgba = new Uint8ClampedArray(width * height * 4)
+    const max = pixels instanceof Uint16Array ? 65_535 : 255
+
+    for (let index = 0; index < width * height; index += 1) {
+      const sampleOffset = index * samplesPerPixel
+      const rgbaOffset = index * 4
+
+      rgba[rgbaOffset] = scaleSampleToByte(pixels[sampleOffset] ?? 0, max)
+      rgba[rgbaOffset + 1] = scaleSampleToByte(pixels[sampleOffset + 1] ?? 0, max)
+      rgba[rgbaOffset + 2] = scaleSampleToByte(pixels[sampleOffset + 2] ?? 0, max)
+      rgba[rgbaOffset + 3] =
+        samplesPerPixel >= 4
+          ? scaleSampleToByte(pixels[sampleOffset + 3] ?? 0, max)
+          : 255
+    }
+
+    return {
+      rgba,
+      lo: 0,
+      hi: max,
+    }
+  }
+
   const window = displayWindow ?? percentileWindow(pixels)
   const range = Math.max(1, window.hi - window.lo)
   const rgba = new Uint8ClampedArray(width * height * 4)
@@ -139,4 +179,8 @@ function percentileWindow(pixels: Jpeg2000Pixels): DisplayWindow {
 
 function clampByte(value: number): number {
   return Math.max(0, Math.min(255, value))
+}
+
+function scaleSampleToByte(value: number, max: number): number {
+  return max === 255 ? value : clampByte(Math.round((value / max) * 255))
 }

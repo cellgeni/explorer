@@ -3,6 +3,7 @@ declare module '@cornerstonejs/codec-openjpeg' {
     readonly width: number
     readonly height: number
     readonly bitsAllocated?: number
+    readonly componentCount?: number
   }
 
   export interface J2KDecoder {

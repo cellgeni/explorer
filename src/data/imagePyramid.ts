@@ -13,6 +13,7 @@ export interface ImagePyramidChannelInfo {
   readonly name: string
   readonly color: readonly [number, number, number]
   readonly contrast: ImagePyramidChannelContrast
+  readonly samplesPerPixel?: number
   readonly fileName?: string
   readonly ifdIndex?: number
   readonly sourceUrl?: string

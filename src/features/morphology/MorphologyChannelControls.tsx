@@ -35,6 +35,7 @@ export function MorphologyChannelControls({
         const contrastMax = setting?.contrastMax ?? channel.info.contrast.max
         const isAutoContrastLoading = autoContrastChannelIds.includes(channel.info.id)
         const histogram = setting?.histogram
+        const isTrueColor = (channel.info.samplesPerPixel ?? 1) > 1
 
         return (
           <div className="channel-control" key={channel.info.id}>
@@ -49,16 +50,18 @@ export function MorphologyChannelControls({
               />
               <span>{channel.info.name}</span>
             </label>
-            <input
-              className="channel-color"
-              type="color"
-              aria-label={`${channel.info.name} color`}
-              value={rgbToHex(color)}
-              title={`${channel.info.name} color`}
-              onChange={(event) => {
-                onUpdate(channel.info.id, { color: hexToRgb(event.currentTarget.value) })
-              }}
-            />
+            {isTrueColor ? null : (
+              <input
+                className="channel-color"
+                type="color"
+                aria-label={`${channel.info.name} color`}
+                value={rgbToHex(color)}
+                title={`${channel.info.name} color`}
+                onChange={(event) => {
+                  onUpdate(channel.info.id, { color: hexToRgb(event.currentTarget.value) })
+                }}
+              />
+            )}
             <button
               className="channel-auto-button"
               type="button"
