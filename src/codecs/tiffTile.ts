@@ -29,6 +29,7 @@ export interface TiffTileDecodeMetadata {
   readonly samplesPerPixel?: number
   readonly predictor?: number
   readonly planarConfiguration?: number
+  readonly planarSampleByteLengths?: readonly number[]
   readonly littleEndian?: boolean
   readonly jpegTables?: Uint8Array
 }
@@ -37,6 +38,13 @@ export async function decodeTiffTilePixels(
   bytes: Uint8Array,
   metadata: TiffTileDecodeMetadata = {},
 ): Promise<DecodedJpeg2000> {
+  if (
+    isPlanarSeparatedMultiSample(metadata) &&
+    (metadata.compression !== undefined || metadata.planarSampleByteLengths !== undefined)
+  ) {
+    return decodePlanarSeparatedTile(bytes, metadata)
+  }
+
   if (
     metadata.compression === undefined ||
     JPEG_2000_COMPRESSION_CODES.has(metadata.compression)
@@ -70,7 +78,7 @@ async function decodeGeotiffCompressedTile(
 
   if (samplesPerPixel > 1 && planarConfiguration !== 1) {
     throw new Error(
-      `Unsupported TIFF planar configuration ${planarConfiguration} for multi-sample tiles. Only interleaved tiles are supported.`,
+      `Unsupported TIFF planar configuration ${planarConfiguration} for multi-sample tiles.`,
     )
   }
 
@@ -107,6 +115,196 @@ async function decodeGeotiffCompressedTile(
     height: tileHeight,
     samplesPerPixel,
   }
+}
+
+async function decodePlanarSeparatedTile(
+  bytes: Uint8Array,
+  metadata: TiffTileDecodeMetadata,
+): Promise<DecodedJpeg2000> {
+  const compression = metadata.compression
+  const tileWidth = positiveInteger(metadata.tileWidth, 'tile width')
+  const tileHeight = positiveInteger(metadata.tileHeight, 'tile height')
+  const bitsPerSample =
+    metadata.bitsPerSample === undefined || metadata.bitsPerSample.length === 0
+      ? [8]
+      : [...metadata.bitsPerSample]
+  const samplesPerPixel = metadata.samplesPerPixel ?? bitsPerSample.length
+
+  if (samplesPerPixel !== 3 && samplesPerPixel !== 4) {
+    throw new Error(
+      `Unsupported TIFF tile sample count ${samplesPerPixel}. Supported values are 3 and 4 for separated planar tiles.`,
+    )
+  }
+
+  const sampleChunks = splitPlanarSampleBytes(bytes, {
+    bitsPerSample,
+    compression,
+    lengths: metadata.planarSampleByteLengths,
+    samplesPerPixel,
+    tileHeight,
+    tileWidth,
+  })
+  const decodedPlanes = await Promise.all(
+    sampleChunks.map((sampleBytes, sampleIndex) =>
+      decodeTiffTilePixels(
+        sampleBytes,
+        singleSampleMetadata(metadata, bitsPerSample, sampleIndex, tileWidth, tileHeight),
+      ),
+    ),
+  )
+  const firstPlane = decodedPlanes[0]
+
+  if (firstPlane === undefined) {
+    throw new Error('Separated planar TIFF tile did not contain any sample planes.')
+  }
+
+  for (const plane of decodedPlanes) {
+    if (plane.width !== firstPlane.width || plane.height !== firstPlane.height) {
+      throw new Error('Separated planar TIFF tile sample planes have mismatched sizes.')
+    }
+
+    if ((plane.samplesPerPixel ?? 1) !== 1) {
+      throw new Error('Separated planar TIFF sample chunk decoded multiple samples.')
+    }
+  }
+
+  return {
+    pixels: interleavePlanarPixels(
+      decodedPlanes.map((plane) => plane.pixels),
+      firstPlane.width * firstPlane.height,
+      samplesPerPixel,
+    ),
+    width: firstPlane.width,
+    height: firstPlane.height,
+    samplesPerPixel,
+  }
+}
+
+function isPlanarSeparatedMultiSample(metadata: TiffTileDecodeMetadata): boolean {
+  const bitsPerSample =
+    metadata.bitsPerSample === undefined || metadata.bitsPerSample.length === 0
+      ? [8]
+      : metadata.bitsPerSample
+  const samplesPerPixel = metadata.samplesPerPixel ?? bitsPerSample.length
+
+  return samplesPerPixel > 1 && (metadata.planarConfiguration ?? 1) === 2
+}
+
+function splitPlanarSampleBytes(
+  bytes: Uint8Array,
+  options: {
+    readonly bitsPerSample: readonly number[]
+    readonly compression: number | undefined
+    readonly lengths: readonly number[] | undefined
+    readonly samplesPerPixel: number
+    readonly tileHeight: number
+    readonly tileWidth: number
+  },
+): readonly Uint8Array[] {
+  if (options.lengths !== undefined) {
+    if (options.lengths.length !== options.samplesPerPixel) {
+      throw new Error(
+        `TIFF planar sample byte lengths contain ${options.lengths.length} entries for ${options.samplesPerPixel} samples.`,
+      )
+    }
+
+    const totalLength = options.lengths.reduce((sum, length) => sum + length, 0)
+
+    if (totalLength !== bytes.byteLength) {
+      throw new Error(
+        `TIFF planar sample byte lengths total ${totalLength} bytes, but tile payload contains ${bytes.byteLength} bytes.`,
+      )
+    }
+
+    let offset = 0
+
+    return options.lengths.map((length) => {
+      const chunk = bytes.slice(offset, offset + length)
+
+      offset += length
+      return chunk
+    })
+  }
+
+  if (options.compression !== TIFF_COMPRESSION_NONE) {
+    throw new Error(
+      'Missing TIFF planar sample byte lengths for compressed multi-sample tile.',
+    )
+  }
+
+  let offset = 0
+
+  return Array.from({ length: options.samplesPerPixel }, (_unused, sampleIndex) => {
+    const sampleByteLength = decodedByteLength(
+      options.tileWidth,
+      options.tileHeight,
+      [options.bitsPerSample[sampleIndex] ?? options.bitsPerSample[0] ?? 8],
+      1,
+    )
+    const chunk = bytes.slice(offset, offset + sampleByteLength)
+
+    offset += sampleByteLength
+    return chunk
+  })
+}
+
+function singleSampleMetadata(
+  metadata: TiffTileDecodeMetadata,
+  bitsPerSample: readonly number[],
+  sampleIndex: number,
+  tileWidth: number,
+  tileHeight: number,
+): TiffTileDecodeMetadata {
+  return {
+    ...(metadata.compression === undefined ? {} : { compression: metadata.compression }),
+    tileWidth,
+    tileHeight,
+    bitsPerSample: [bitsPerSample[sampleIndex] ?? bitsPerSample[0] ?? 8],
+    samplesPerPixel: 1,
+    ...(metadata.predictor === undefined ? {} : { predictor: metadata.predictor }),
+    planarConfiguration: 1,
+    ...(metadata.littleEndian === undefined
+      ? {}
+      : { littleEndian: metadata.littleEndian }),
+    ...(metadata.jpegTables === undefined ? {} : { jpegTables: metadata.jpegTables }),
+  }
+}
+
+function interleavePlanarPixels(
+  planes: readonly Jpeg2000Pixels[],
+  pixelCount: number,
+  samplesPerPixel: number,
+): Jpeg2000Pixels {
+  const firstPlane = planes[0]
+
+  if (firstPlane === undefined) {
+    throw new Error('Separated planar TIFF tile did not contain any sample planes.')
+  }
+
+  const useUint16 = firstPlane instanceof Uint16Array
+  const pixels = useUint16
+    ? new Uint16Array(pixelCount * samplesPerPixel)
+    : new Uint8Array(pixelCount * samplesPerPixel)
+
+  for (let sampleIndex = 0; sampleIndex < samplesPerPixel; sampleIndex += 1) {
+    const plane = planes[sampleIndex]
+
+    if (plane === undefined) {
+      continue
+    }
+
+    if (plane instanceof Uint16Array !== useUint16) {
+      throw new Error('Separated planar TIFF tile sample planes have mixed bit depths.')
+    }
+
+    const availablePixels = Math.min(pixelCount, plane.length)
+
+    for (let pixelIndex = 0; pixelIndex < availablePixels; pixelIndex += 1) {
+      pixels[pixelIndex * samplesPerPixel + sampleIndex] = plane[pixelIndex] ?? 0
+    }
+  }
+
+  return pixels
 }
 
 function pixelsFromDecodedBuffer(

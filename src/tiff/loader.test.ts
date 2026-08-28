@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { fromUrl } from 'geotiff'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { imagePixels, micrometers } from '../data/coords'
 import {
   byteRangeCacheRecordId,
   TIFF_TILE_CACHE_NAMESPACE,
 } from '../data/persistentByteRangeCache'
 import {
+  openTiff,
   parsePhysicalSizeMicrometersPerPixel,
   readNumberArrayTag,
   readOptionalNumberTag,
@@ -20,6 +22,12 @@ import type {
   PersistentByteRangeCache,
 } from '../data/persistentByteRangeCache'
 
+vi.mock('geotiff', () => ({
+  fromUrl: vi.fn(),
+}))
+
+const mockedFromUrl = vi.mocked(fromUrl)
+
 const units: UnitsDescriptor = {
   dataUnit: 'micrometer',
   imageUnit: 'pixel',
@@ -27,6 +35,11 @@ const units: UnitsDescriptor = {
   origin: 'top-left',
   imageYAxis: 'down',
 }
+
+afterEach(() => {
+  mockedFromUrl.mockReset()
+  vi.unstubAllGlobals()
+})
 
 describe('TIFF metadata parsing', () => {
   it('parses OME PhysicalSizeX with the Xenium fallback', () => {
@@ -206,6 +219,105 @@ describe('TiffPyramidLoader', () => {
     })
   })
 
+  it('fetches separated planar sample chunks and reports split lengths', async () => {
+    const levels = new Map<number, TiffLevelMeta>([
+      [0, { width: imagePixels(100), height: imagePixels(100), nCols: 1, nRows: 1 }],
+    ])
+    const fetches: RequestInit[] = []
+    const payloads = new Map<string, readonly number[]>([
+      ['bytes=10-11', [1, 2]],
+      ['bytes=20-22', [3, 4, 5]],
+      ['bytes=30-33', [6, 7, 8, 9]],
+    ])
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/image.ome.tif',
+      bitsPerSample: [8, 8, 8],
+      byteRangeCache: null,
+      chunkIndex: new Map([
+        [
+          '0/0/0',
+          {
+            offset: 10,
+            length: 2,
+            sampleChunks: [
+              { offset: 10, length: 2 },
+              { offset: 20, length: 3 },
+              { offset: 30, length: 4 },
+            ],
+          },
+        ],
+      ]),
+      imageHeight: imagePixels(100),
+      imageWidth: imagePixels(100),
+      levelMeta: levels,
+      numLevels: 1,
+      planarConfiguration: 2,
+      samplesPerPixel: 3,
+      tileHeight: imagePixels(100),
+      tileWidth: imagePixels(100),
+      units,
+      fetcher: async (_input, init) => {
+        fetches.push(init ?? {})
+        const range = (init?.headers as Record<string, string> | undefined)?.Range
+        const payload = range === undefined ? undefined : payloads.get(range)
+
+        return new Response(new Uint8Array(payload ?? []), {
+          status: payload === undefined ? 404 : 206,
+        })
+      },
+    })
+
+    await expect(loader.fetchTileBytes(0, 0, 0)).resolves.toEqual(
+      new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9]),
+    )
+    expect(loader.tileDecodeOptions(0, 0, 0)).toMatchObject({
+      planarConfiguration: 2,
+      planarSampleByteLengths: [2, 3, 4],
+      samplesPerPixel: 3,
+    })
+    expect(fetches.map((init) => init.headers)).toEqual([
+      { Range: 'bytes=10-11' },
+      { Range: 'bytes=20-22' },
+      { Range: 'bytes=30-33' },
+    ])
+  })
+
+  it('indexes separated planar TIFF offsets by sample plane', async () => {
+    const directory = tiffDirectory({
+      BitsPerSample: new Uint16Array([8, 8, 8]),
+      Compression: 1,
+      PlanarConfiguration: 2,
+      SamplesPerPixel: 3,
+      TileByteCounts: new Uint32Array([1, 2, 3, 4, 5, 6]),
+      TileOffsets: new BigUint64Array([10n, 20n, 30n, 40n, 50n, 60n]),
+    })
+    const image = {
+      getFileDirectory: () => directory,
+      getHeight: () => 100,
+      getTileHeight: () => 100,
+      getTileWidth: () => 100,
+      getWidth: () => 200,
+    }
+
+    mockedFromUrl.mockResolvedValue({
+      getImage: vi.fn(async () => image),
+      littleEndian: true,
+      parser: { parseFileDirectoryAt: vi.fn() },
+    } as unknown as Awaited<ReturnType<typeof fromUrl>>)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 404 })),
+    )
+
+    const loader = await openTiff('https://example.test/aligned.ome.tif')
+
+    expect(loader.tileDecodeOptions(0, 1, 0)).toMatchObject({
+      planarConfiguration: 2,
+      planarSampleByteLengths: [2, 4, 6],
+      samplesPerPixel: 3,
+    })
+  })
+
   it('enumerates all tiles for a pyramid level, including partial edges', () => {
     const levels = new Map<number, TiffLevelMeta>([
       [0, { width: imagePixels(260), height: imagePixels(180), nCols: 3, nRows: 2 }],
@@ -299,6 +411,53 @@ describe('TiffPyramidLoader', () => {
     expect(loader.bestLevel(0.8)).toBe(0)
     expect(loader.bestLevel(2)).toBe(0)
   })
+
+  it('uses actual level dimensions for non-power-of-two TIFF pyramids', () => {
+    const xeniumUnits: UnitsDescriptor = {
+      ...units,
+      micrometersPerPixel: micrometers(0.2125),
+    }
+    const levels = new Map<number, TiffLevelMeta>([
+      [
+        0,
+        { width: imagePixels(53915), height: imagePixels(40894), nCols: 211, nRows: 160 },
+      ],
+      [
+        1,
+        { width: imagePixels(26958), height: imagePixels(20447), nCols: 106, nRows: 80 },
+      ],
+      [2, { width: imagePixels(6740), height: imagePixels(5112), nCols: 27, nRows: 20 }],
+      [3, { width: imagePixels(842), height: imagePixels(639), nCols: 4, nRows: 3 }],
+      [4, { width: imagePixels(210), height: imagePixels(160), nCols: 1, nRows: 1 }],
+    ])
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/aligned.ome.tif',
+      chunkIndex: new Map<string, TiffChunk>(),
+      levelMeta: levels,
+      units: xeniumUnits,
+      tileWidth: imagePixels(256),
+      tileHeight: imagePixels(256),
+      numLevels: 5,
+      imageWidth: imagePixels(53915),
+      imageHeight: imagePixels(40894),
+    })
+
+    expect(loader.tileBounds(4, 0, 0)).toEqual({
+      minX: micrometers(0),
+      maxX: micrometers(11456.9375),
+      minY: micrometers(0),
+      maxY: micrometers(8689.975),
+    })
+    expect(
+      loader.tilesForBbox(4, {
+        minX: micrometers(1000),
+        maxX: micrometers(11000),
+        minY: micrometers(1000),
+        maxY: micrometers(8000),
+      }),
+    ).toEqual([{ col: 0, row: 0 }])
+    expect(loader.bestLevel(0.1)).toBe(3)
+  })
 })
 
 class MemoryByteRangeCache implements PersistentByteRangeCache {
@@ -324,4 +483,12 @@ function copyToArrayBuffer(bytes: Uint8Array | ArrayBuffer): ArrayBuffer {
 
   copy.set(source)
   return copy.buffer
+}
+
+function tiffDirectory(values: Readonly<Record<string, unknown>>) {
+  return {
+    async loadValue(tagIdentifier: string | number): Promise<unknown> {
+      return values[String(tagIdentifier)]
+    },
+  }
 }

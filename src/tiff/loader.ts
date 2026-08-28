@@ -6,23 +6,12 @@ import {
   fetchByteRangeWithCache,
   TIFF_TILE_CACHE_NAMESPACE,
 } from '../data/persistentByteRangeCache'
-import {
-  imagePixels,
-  micrometers,
-  tileBounds as coordsTileBounds,
-  tilesForBbox,
-} from '../data/coords'
+import { imagePixels, micrometers } from '../data/coords'
 import { tiffChunkKey } from './chunkKeys'
 import { loadZchunkStorePyramidOptions } from './zchunkStore'
 import { parseOmeTiffMetadata } from './omeMetadata'
 import { notifyFallback, type FallbackNotifier } from '../data/fallbackNotice'
-import type {
-  BBox,
-  ImagePixels,
-  TileGrid,
-  TileIndex,
-  UnitsDescriptor,
-} from '../data/coords'
+import type { BBox, ImagePixels, TileIndex, UnitsDescriptor } from '../data/coords'
 import type { TileSourceSize } from './tileCache'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
@@ -33,17 +22,23 @@ export interface TiffChunk {
   readonly length: number
 }
 
+export interface TiffChunkIndexEntry extends TiffChunk {
+  readonly sampleChunks?: readonly TiffChunk[]
+}
+
 export interface TiffLevelMeta {
   readonly width: ImagePixels
   readonly height: ImagePixels
   readonly nCols: number
   readonly nRows: number
+  readonly scaleX?: number
+  readonly scaleY?: number
 }
 
 export interface TiffPyramidLoaderOptions {
   readonly url: string
   readonly sourceUrl?: string
-  readonly chunkIndex: ReadonlyMap<string, TiffChunk>
+  readonly chunkIndex: ReadonlyMap<string, TiffChunkIndexEntry>
   readonly levelMeta: ReadonlyMap<number, TiffLevelMeta>
   readonly units: UnitsDescriptor
   readonly tileWidth: ImagePixels
@@ -121,6 +116,9 @@ export async function openTiff(
   const tileWidth = imagePixels(firstImage.getTileWidth() || 256)
   const tileHeight = imagePixels(firstImage.getTileHeight() || 256)
   const decodeMetadata = await readTileDecodeMetadata(tiff, firstDirectory)
+  const indexPlanarConfiguration = decodeMetadata.planarConfiguration
+  const indexSamplesPerPixel =
+    decodeMetadata.samplesPerPixel ?? decodeMetadata.bitsPerSample?.length
   const units: UnitsDescriptor = {
     dataUnit: 'micrometer',
     imageUnit: 'pixel',
@@ -128,7 +126,7 @@ export async function openTiff(
     origin: 'top-left',
     imageYAxis: 'down',
   }
-  const chunkIndex = new Map<string, TiffChunk>()
+  const chunkIndex = new Map<string, TiffChunkIndexEntry>()
   const levelMeta = new Map<number, TiffLevelMeta>()
 
   await indexLevel({
@@ -137,9 +135,17 @@ export async function openTiff(
     height: imageHeight,
     level: 0,
     levelMeta,
+    ...(indexPlanarConfiguration === undefined
+      ? {}
+      : { planarConfiguration: indexPlanarConfiguration }),
+    ...(indexSamplesPerPixel === undefined
+      ? {}
+      : { samplesPerPixel: indexSamplesPerPixel }),
     tileHeight,
     tileWidth,
     width: imageWidth,
+    fullWidth: imageWidth,
+    fullHeight: imageHeight,
   })
 
   const subIfds = await readNumberArrayTag(firstDirectory, 'SubIFDs')
@@ -156,9 +162,17 @@ export async function openTiff(
         height,
         level,
         levelMeta,
+        ...(indexPlanarConfiguration === undefined
+          ? {}
+          : { planarConfiguration: indexPlanarConfiguration }),
+        ...(indexSamplesPerPixel === undefined
+          ? {}
+          : { samplesPerPixel: indexSamplesPerPixel }),
         tileHeight,
         tileWidth,
         width,
+        fullWidth: imageWidth,
+        fullHeight: imageHeight,
       })
     }),
   )
@@ -259,7 +273,7 @@ export class TiffPyramidLoader {
   private readonly planarConfiguration: number | undefined
   private readonly littleEndian: boolean | undefined
   private readonly jpegTables: Uint8Array | undefined
-  private readonly chunks: ReadonlyMap<string, TiffChunk>
+  private readonly chunks: ReadonlyMap<string, TiffChunkIndexEntry>
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly fetcher: typeof fetch
   private readonly sourceUrl: string
@@ -295,8 +309,9 @@ export class TiffPyramidLoader {
     const maxSourcePixelScreenSize = 1.5
 
     for (let level = this.numLevels - 1; level >= 0; level -= 1) {
+      const scale = this.levelScaleFor(this.levelMetaFor(level))
       const sourcePixelScreenSize =
-        this.units.micrometersPerPixel * 2 ** level * deckScale
+        this.units.micrometersPerPixel * Math.max(scale.x, scale.y) * deckScale
 
       if (sourcePixelScreenSize <= maxSourcePixelScreenSize) {
         return level
@@ -307,17 +322,43 @@ export class TiffPyramidLoader {
   }
 
   tilesForBbox(level: number, bbox: BBox): readonly TileIndex[] {
-    return tilesForBbox(level, bbox, this.gridForLevel(level), this.units)
+    const meta = this.levelMetaFor(level)
+    const scale = this.levelScaleFor(meta)
+    const levelScaleX = this.units.micrometersPerPixel * scale.x
+    const levelScaleY = this.units.micrometersPerPixel * scale.y
+    const col0 = Math.max(
+      0,
+      Math.floor(Math.max(0, bbox.minX / levelScaleX) / this.tileWidth),
+    )
+    const col1 = Math.min(
+      meta.nCols - 1,
+      Math.floor(Math.max(0, bbox.maxX / levelScaleX - 1e-9) / this.tileWidth),
+    )
+    const row0 = Math.max(
+      0,
+      Math.floor(Math.max(0, bbox.minY / levelScaleY) / this.tileHeight),
+    )
+    const row1 = Math.min(
+      meta.nRows - 1,
+      Math.floor(Math.max(0, bbox.maxY / levelScaleY - 1e-9) / this.tileHeight),
+    )
+    const tiles: TileIndex[] = []
+
+    for (let row = row0; row <= row1; row += 1) {
+      for (let col = col0; col <= col1; col += 1) {
+        tiles.push({ col, row })
+      }
+    }
+
+    return tiles
   }
 
   tilesForLevel(level: number): readonly TileIndex[] {
-    const grid = this.gridForLevel(level)
+    const meta = this.levelMetaFor(level)
     const tiles: TileIndex[] = []
-    const nCols = Math.ceil(grid.imageWidth / grid.tileWidth)
-    const nRows = Math.ceil(grid.imageHeight / grid.tileHeight)
 
-    for (let row = 0; row < nRows; row += 1) {
-      for (let col = 0; col < nCols; col += 1) {
+    for (let row = 0; row < meta.nRows; row += 1) {
+      for (let col = 0; col < meta.nCols; col += 1) {
         tiles.push({ col, row })
       }
     }
@@ -326,7 +367,21 @@ export class TiffPyramidLoader {
   }
 
   tileBounds(level: number, col: number, row: number): BBox {
-    return coordsTileBounds(level, col, row, this.gridForLevel(level), this.units)
+    const meta = this.levelMetaFor(level)
+    const scale = this.levelScaleFor(meta)
+    const left = col * this.tileWidth * scale.x * this.units.micrometersPerPixel
+    const right = (col + 1) * this.tileWidth * scale.x * this.units.micrometersPerPixel
+    const bottom = row * this.tileHeight * scale.y * this.units.micrometersPerPixel
+    const top = (row + 1) * this.tileHeight * scale.y * this.units.micrometersPerPixel
+    const imageWidthMicrometers = this.imageWidth * this.units.micrometersPerPixel
+    const imageHeightMicrometers = this.imageHeight * this.units.micrometersPerPixel
+
+    return {
+      minX: micrometers(Math.max(0, left)),
+      maxX: micrometers(Math.min(imageWidthMicrometers, right)),
+      minY: micrometers(Math.max(0, bottom)),
+      maxY: micrometers(Math.min(imageHeightMicrometers, top)),
+    }
   }
 
   tileSourceSize(level: number, col: number, row: number): TileSourceSize {
@@ -341,7 +396,12 @@ export class TiffPyramidLoader {
     return { width, height }
   }
 
-  tileDecodeOptions(): TiffTileDecodeMetadata {
+  tileDecodeOptions(level?: number, col?: number, row?: number): TiffTileDecodeMetadata {
+    const planarSampleByteLengths =
+      level === undefined || col === undefined || row === undefined
+        ? undefined
+        : this.planarSampleByteLengths(level, col, row)
+
     return {
       ...(this.compression === undefined ? {} : { compression: this.compression }),
       tileWidth: this.tileWidth,
@@ -354,6 +414,7 @@ export class TiffPyramidLoader {
       ...(this.planarConfiguration === undefined
         ? {}
         : { planarConfiguration: this.planarConfiguration }),
+      ...(planarSampleByteLengths === undefined ? {} : { planarSampleByteLengths }),
       ...(this.littleEndian === undefined ? {} : { littleEndian: this.littleEndian }),
       ...(this.jpegTables === undefined ? {} : { jpegTables: this.jpegTables }),
     }
@@ -371,6 +432,40 @@ export class TiffPyramidLoader {
       throw new Error(`No TIFF chunk for level=${level} row=${row} col=${col}.`)
     }
 
+    if (this.isSeparatedPlanarMultiSample()) {
+      if (!hasSampleChunks(chunk)) {
+        throw new Error(
+          `No separated planar TIFF sample chunks for level=${level} row=${row} col=${col}.`,
+        )
+      }
+
+      const sampleBytes = await Promise.all(
+        chunk.sampleChunks.map((sampleChunk) =>
+          this.fetchChunkBytes(sampleChunk, signal),
+        ),
+      )
+      const totalByteLength = sampleBytes.reduce(
+        (sum, bytes) => sum + bytes.byteLength,
+        0,
+      )
+      const bytes = new Uint8Array(totalByteLength)
+      let offset = 0
+
+      for (const sample of sampleBytes) {
+        bytes.set(sample, offset)
+        offset += sample.byteLength
+      }
+
+      return bytes
+    }
+
+    return this.fetchChunkBytes(chunk, signal)
+  }
+
+  private async fetchChunkBytes(
+    chunk: TiffChunk,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
     const start = chunk.offset
     const end = chunk.offset + chunk.length
 
@@ -405,16 +500,33 @@ export class TiffPyramidLoader {
     })
   }
 
-  private gridForLevel(level: number): TileGrid {
-    const meta = this.levelMetaFor(level)
+  private planarSampleByteLengths(
+    level: number,
+    col: number,
+    row: number,
+  ): readonly number[] | undefined {
+    if (!this.isSeparatedPlanarMultiSample()) {
+      return undefined
+    }
 
+    const chunk = this.chunks.get(tiffChunkKey(level, row, col))
+
+    return hasSampleChunks(chunk)
+      ? chunk.sampleChunks.map((sampleChunk) => sampleChunk.length)
+      : undefined
+  }
+
+  private isSeparatedPlanarMultiSample(): boolean {
+    return (this.samplesPerPixel ?? 1) > 1 && (this.planarConfiguration ?? 1) === 2
+  }
+
+  private levelScaleFor(meta: TiffLevelMeta): {
+    readonly x: number
+    readonly y: number
+  } {
     return {
-      fullImageWidth: this.imageWidth,
-      fullImageHeight: this.imageHeight,
-      imageWidth: meta.width,
-      imageHeight: meta.height,
-      tileWidth: this.tileWidth,
-      tileHeight: this.tileHeight,
+      x: positiveFiniteScale(meta.scaleX ?? this.imageWidth / meta.width),
+      y: positiveFiniteScale(meta.scaleY ?? this.imageHeight / meta.height),
     }
   }
 
@@ -430,14 +542,18 @@ export class TiffPyramidLoader {
 }
 
 interface IndexLevelOptions {
-  readonly chunkIndex: Map<string, TiffChunk>
+  readonly chunkIndex: Map<string, TiffChunkIndexEntry>
   readonly directory: ImageFileDirectory
   readonly height: ImagePixels
   readonly level: number
   readonly levelMeta: Map<number, TiffLevelMeta>
+  readonly planarConfiguration?: number
+  readonly samplesPerPixel?: number
   readonly tileHeight: ImagePixels
   readonly tileWidth: ImagePixels
   readonly width: ImagePixels
+  readonly fullWidth: ImagePixels
+  readonly fullHeight: ImagePixels
 }
 
 async function indexLevel(options: IndexLevelOptions): Promise<void> {
@@ -445,6 +561,9 @@ async function indexLevel(options: IndexLevelOptions): Promise<void> {
   const byteCounts = await readNumberArrayTag(options.directory, 'TileByteCounts')
   const nCols = Math.ceil(options.width / options.tileWidth)
   const nRows = Math.ceil(options.height / options.tileHeight)
+  const tileCount = nCols * nRows
+  const samplesPerPixel = options.samplesPerPixel ?? 1
+  const separatedPlanar = samplesPerPixel > 1 && (options.planarConfiguration ?? 1) === 2
 
   if (offsets.length !== byteCounts.length) {
     throw new Error(
@@ -452,21 +571,61 @@ async function indexLevel(options: IndexLevelOptions): Promise<void> {
     )
   }
 
-  for (let index = 0; index < offsets.length; index += 1) {
-    const offset = offsets[index]
-    const length = byteCounts[index]
+  if (separatedPlanar) {
+    const expectedChunks = tileCount * samplesPerPixel
 
-    if (offset === undefined || length === undefined) {
-      throw new Error(`TIFF level ${options.level} has an incomplete tile index.`)
+    if (offsets.length < expectedChunks) {
+      throw new Error(
+        `TIFF level ${options.level} has ${offsets.length} planar sample chunks, expected ${expectedChunks}.`,
+      )
     }
 
-    options.chunkIndex.set(
-      tiffChunkKey(options.level, Math.floor(index / nCols), index % nCols),
-      {
-        offset,
-        length,
-      },
-    )
+    for (let tileIndex = 0; tileIndex < tileCount; tileIndex += 1) {
+      const sampleChunks: TiffChunk[] = []
+
+      for (let sampleIndex = 0; sampleIndex < samplesPerPixel; sampleIndex += 1) {
+        const index = sampleIndex * tileCount + tileIndex
+        const offset = offsets[index]
+        const length = byteCounts[index]
+
+        if (offset === undefined || length === undefined) {
+          throw new Error(`TIFF level ${options.level} has an incomplete tile index.`)
+        }
+
+        sampleChunks.push({ offset, length })
+      }
+
+      const firstChunk = sampleChunks[0]
+
+      if (firstChunk === undefined) {
+        throw new Error(`TIFF level ${options.level} has an incomplete tile index.`)
+      }
+
+      options.chunkIndex.set(
+        tiffChunkKey(options.level, Math.floor(tileIndex / nCols), tileIndex % nCols),
+        {
+          ...firstChunk,
+          sampleChunks,
+        },
+      )
+    }
+  } else {
+    for (let index = 0; index < offsets.length; index += 1) {
+      const offset = offsets[index]
+      const length = byteCounts[index]
+
+      if (offset === undefined || length === undefined) {
+        throw new Error(`TIFF level ${options.level} has an incomplete tile index.`)
+      }
+
+      options.chunkIndex.set(
+        tiffChunkKey(options.level, Math.floor(index / nCols), index % nCols),
+        {
+          offset,
+          length,
+        },
+      )
+    }
   }
 
   options.levelMeta.set(options.level, {
@@ -474,7 +633,15 @@ async function indexLevel(options: IndexLevelOptions): Promise<void> {
     height: options.height,
     nCols,
     nRows,
+    scaleX: options.fullWidth / options.width,
+    scaleY: options.fullHeight / options.height,
   })
+}
+
+function hasSampleChunks(
+  chunk: TiffChunkIndexEntry | undefined,
+): chunk is TiffChunkIndexEntry & { readonly sampleChunks: readonly TiffChunk[] } {
+  return chunk?.sampleChunks !== undefined && chunk.sampleChunks.length > 0
 }
 
 async function parseFileDirectoryAt(
@@ -614,6 +781,10 @@ function numberLikeToNumber(value: number | bigint, key: string): number {
   }
 
   return numberValue
+}
+
+function positiveFiniteScale(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 1
 }
 
 function isAbortError(cause: unknown): boolean {
