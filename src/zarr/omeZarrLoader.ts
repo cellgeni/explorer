@@ -1,4 +1,3 @@
-import FetchStore from '@zarrita/storage/fetch'
 import * as zarr from 'zarrita'
 import {
   imagePixels,
@@ -17,6 +16,11 @@ import type {
   ImagePyramidTileRenderOptions,
 } from '../data/imagePyramid'
 import type { Array as ZarrArray, DataType } from 'zarrita'
+import {
+  consolidatedZarrStore,
+  createZarrFetchStore,
+  readConsolidatedZarrMetadata,
+} from './zarrStores'
 
 const DEFAULT_TILE_SIZE = 256
 const MAX_SOURCE_PIXEL_SCREEN_SIZE = 1.5
@@ -77,7 +81,7 @@ interface OmeZarrOmeroChannel {
 
 interface OmeZarrLevelMeta {
   readonly path: string
-  readonly array: ZarrArray<DataType, FetchStore>
+  readonly array: ZarrArray<DataType, zarr.Readable>
   readonly width: ImagePixels
   readonly height: ImagePixels
   readonly tileWidth: ImagePixels
@@ -113,11 +117,7 @@ export async function openOmeZarrImageWithOptions(
 ): Promise<OmeZarrImagePyramidLoader> {
   const selection = parseOmeZarrImageSelection(url)
   const sourceUrl = omeZarrImageRootUrl(selection.sourceUrl)
-  const store = new FetchStore(sourceUrl, {
-    ...(options.fetcher === undefined
-      ? {}
-      : { fetch: (request: Request) => options.fetcher?.(request) ?? fetch(request) }),
-  })
+  const store = await openImageStore(sourceUrl, options)
   const group = await zarr.open(store, {
     kind: 'group',
     ...(options.signal === undefined ? {} : { signal: options.signal }),
@@ -193,6 +193,26 @@ export async function openOmeZarrImageWithOptions(
     units,
     createBitmap: options.createBitmap ?? createBitmapFromImageData,
   })
+}
+
+// Uses consolidated metadata when the image root has it, so opening each
+// pyramid level needs no per-array metadata requests.
+async function openImageStore(
+  url: string,
+  options: Pick<OpenOmeZarrImageOptions, 'fetcher' | 'signal'>,
+): Promise<zarr.AsyncReadable> {
+  const base = createZarrFetchStore(
+    url,
+    options.fetcher === undefined ? {} : { fetcher: options.fetcher },
+  )
+  const consolidated = await readConsolidatedZarrMetadata(
+    base,
+    options.signal === undefined ? {} : { signal: options.signal },
+  )
+
+  return consolidated === null
+    ? base
+    : consolidatedZarrStore(base, consolidated.knownMetadata)
 }
 
 export function isOmeZarrImageUrl(url: string): boolean {
@@ -542,7 +562,7 @@ function firstOmeZarrMultiscale(
 
 function normalizeAxes(
   rawAxes: readonly unknown[] | undefined,
-  array: ZarrArray<DataType, FetchStore>,
+  array: ZarrArray<DataType, zarr.Readable>,
 ): readonly OmeZarrAxis[] {
   const axes =
     rawAxes === undefined || rawAxes.length === 0
@@ -558,7 +578,9 @@ function normalizeAxes(
   return axes
 }
 
-function axesFromArray(array: ZarrArray<DataType, FetchStore>): readonly OmeZarrAxis[] {
+function axesFromArray(
+  array: ZarrArray<DataType, zarr.Readable>,
+): readonly OmeZarrAxis[] {
   if (array.dimensionNames !== undefined && array.dimensionNames.length > 0) {
     return array.dimensionNames.map((name) => ({
       name,
@@ -628,7 +650,7 @@ function findOptionalChannelAxis(axes: readonly OmeZarrAxis[]): number | undefin
 }
 
 function levelMetaFromArray(options: {
-  readonly array: ZarrArray<DataType, FetchStore>
+  readonly array: ZarrArray<DataType, zarr.Readable>
   readonly axes: readonly OmeZarrAxis[]
   readonly dataset: OmeZarrDatasetMetadata
   readonly multiscale: OmeZarrMultiscaleMetadata
@@ -743,7 +765,7 @@ function micrometerMultiplierForUnit(unit: string | undefined): number {
 }
 
 function buildOmeZarrChannels(options: {
-  readonly array: ZarrArray<DataType, FetchStore>
+  readonly array: ZarrArray<DataType, zarr.Readable>
   readonly attrs: Readonly<Record<string, unknown>>
   readonly channelAxis: number | undefined
   readonly sourceUrl: string

@@ -152,6 +152,64 @@ describe('OME-Zarr image loader', () => {
     }
   })
 
+  it('treats 403s for missing metadata keys as absent on buckets that deny listing', async () => {
+    const rootPath = '/images/sample.ome.zarr'
+    const files = legacyV2OmeZarrFiles(rootPath)
+    files.delete(`${rootPath}/0/.zattrs`)
+    files.delete(`${rootPath}/1/.zattrs`)
+    const fetcher = fetcherForFiles(files, { missingStatus: 403 })
+    const loader = await openOmeZarrImageWithOptions(
+      `https://example.test${rootPath}#c=1`,
+      { fetcher },
+    )
+
+    expect(loader.imageWidth).toBe(4)
+    expect(loader.channels).toHaveLength(3)
+    await expect(loader.loadTilePixels(0, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([10, 20, 30, 40]),
+    })
+
+    const channelZero = await openOmeZarrImageWithOptions(
+      `https://example.test${rootPath}#c=0`,
+      { fetcher },
+    )
+
+    // Chunk 403s are real access failures, not missing (fill-value) chunks.
+    await expect(channelZero.loadTilePixels(0, 0, 0)).rejects.toThrow('403')
+  })
+
+  it('reads level metadata from consolidated metadata when the image root has it', async () => {
+    const rootPath = '/images/sample.ome.zarr'
+    const files = legacyV2OmeZarrFiles(rootPath)
+    const metadata = Object.fromEntries(
+      Array.from(files)
+        .filter(([path]) => /\/\.z(?:group|attrs|array)$/.test(path))
+        .map(([path, bytes]) => [
+          path.slice(rootPath.length + 1),
+          JSON.parse(new TextDecoder().decode(bytes)) as unknown,
+        ]),
+    )
+    const fetcher = fetcherForFiles(
+      new Map([
+        [`${rootPath}/.zmetadata`, jsonBytes({ zarr_consolidated_format: 1, metadata })],
+        [`${rootPath}/0/1.0.0`, files.get(`${rootPath}/0/1.0.0`) ?? new Uint8Array()],
+      ]),
+      { missingStatus: 403 },
+    )
+    const loader = await openOmeZarrImageWithOptions(
+      `https://example.test${rootPath}#c=1`,
+      { fetcher },
+    )
+
+    expect(loader.imageWidth).toBe(4)
+    await expect(loader.loadTilePixels(0, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([10, 20, 30, 40]),
+    })
+    expect(requestedPaths(fetcher)).not.toContainEqual(
+      expect.stringMatching(/\.z(?:group|attrs|array)$/),
+    )
+  })
+
   it('normalizes metadata URLs to their Zarr root', () => {
     expect(omeZarrImageRootUrl('https://example.test/image/zarr.json')).toBe(
       'https://example.test/image',
@@ -293,15 +351,26 @@ function jsonBytes(value: unknown): Uint8Array {
   return encoder.encode(JSON.stringify(value))
 }
 
-function fetcherForFiles(files: ReadonlyMap<string, Uint8Array>): typeof fetch {
+function fetcherForFiles(
+  files: ReadonlyMap<string, Uint8Array>,
+  options: { readonly missingStatus?: number } = {},
+): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL) => {
-    const url = input instanceof Request ? new URL(input.url) : new URL(String(input))
+    const url = requestUrl(input)
     const bytes = files.get(url.pathname)
 
     return bytes === undefined
-      ? new Response(null, { status: 404 })
+      ? new Response(null, { status: options.missingStatus ?? 404 })
       : new Response(copyToArrayBuffer(bytes))
   }) as unknown as typeof fetch
+}
+
+function requestedPaths(fetcher: typeof fetch): string[] {
+  return vi.mocked(fetcher).mock.calls.map(([input]) => requestUrl(input).pathname)
+}
+
+function requestUrl(input: RequestInfo | URL): URL {
+  return input instanceof Request ? new URL(input.url) : new URL(String(input))
 }
 
 function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
