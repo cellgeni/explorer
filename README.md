@@ -2,7 +2,8 @@
 
 Browser-based explorer for hosted spatial-omics and image data. The app loads
 10x Xenium output folders, Visium HD Space Ranger output folders, direct AnnData
-`.h5ad` files, and image-only OME-TIFF/TIFF/OME-Zarr URLs from object storage.
+`.h5ad` files, SpatialData Zarr stores, and image-only OME-TIFF/TIFF/OME-Zarr
+URLs from object storage.
 It renders spatial cells, bins, image pyramids, morphology channels, expression
 overlays, transcript density/exact overlays, annotations, ROI queries,
 shareable view state, and dataset diagnostics without a server-side data
@@ -50,7 +51,8 @@ headers needed by the browser-side WASM and decoding paths.
   outputs, annotations, ROI queries, diagnostics, range checks, telemetry, and
   shareable state.
 - `src/datasets/` defines the spatial dataset interface and platform
-  implementations for Xenium, Visium HD, H5AD, and image-only sources.
+  implementations for Xenium, Visium HD, H5AD, SpatialData, and image-only
+  sources.
 - `src/features/` contains domain UI and workflow modules for the app shell,
   genes, transcripts, annotations, ROI, morphology, cells, diagnostics, and
   platform-specific behavior.
@@ -73,6 +75,8 @@ Enter a source in the `Dataset or image URL` field:
   filtered feature-barcode matrix.
 - H5AD: direct `.h5ad` file URL with `obs`, `var`, `/X`, and a supported 2D
   `obsm` coordinate matrix.
+- SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
+  table annotating a shapes element, and optionally an image element.
 - Image-only: direct OME-TIFF, TIFF, OME-Zarr, or validated NDPI URL.
 
 Because data is read directly by the browser, hosted datasets must support CORS
@@ -89,7 +93,8 @@ the active source.
   build the Vite app, upload `dist/` to AWS S3 or Ceph RGW-style storage,
   configure edge headers, and validate production.
 - [Host your own data](docs/host-your-own-data.md): required and optional files
-  for Xenium, Visium HD, H5AD, and image-only sources, plus HTTP requirements
+  for Xenium, Visium HD, H5AD, SpatialData, and image-only sources, plus HTTP
+  requirements
   and quick validation commands.
 - [Image-only and GeoJSON annotations](docs/image-only-and-geojson.md): direct
   image URL support, platform gating, and GeoJSON shape import/export rules.

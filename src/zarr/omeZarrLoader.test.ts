@@ -99,6 +99,32 @@ describe('OME-Zarr image loader', () => {
     })
   })
 
+  it('places levels in an external coordinate system with a planar transform', async () => {
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/sample.ome.zarr',
+      {
+        fetcher: fetcherForFiles(legacyV2OmeZarrFiles('/images/sample.ome.zarr')),
+        planarTransform: { scaleX: 2, scaleY: 3, translateX: 100, translateY: 50 },
+      },
+    )
+
+    expect(loader.units.micrometersPerPixel).toBe(1)
+    expect(loader.tileBounds(0, 1, 1)).toEqual({
+      minX: 102,
+      maxX: 104,
+      minY: 53,
+      maxY: 56,
+    })
+    expect(
+      loader.tilesForBbox(0, {
+        minX: micrometers(100),
+        maxX: micrometers(101),
+        minY: micrometers(54),
+        maxY: micrometers(55),
+      }),
+    ).toEqual([{ col: 0, row: 1 }])
+  })
+
   it('reads a selected Zarr channel tile as decoded pixels and bitmap data', async () => {
     vi.stubGlobal(
       'ImageData',

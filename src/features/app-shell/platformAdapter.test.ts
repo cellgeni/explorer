@@ -15,6 +15,7 @@ import { IDLE_VISIUM_HD_ROI_STATE, type VisiumHdRoiState } from '../roi/visiumHd
 import {
   activeVisiumHdRoiStateForPlatform,
   appPlatformAdapterFor,
+  isAnnDataPlatform,
   isVisiumHdPlatform,
   loadPlatformBoundaryElements,
   loadPlatformGeneExpression,
@@ -431,6 +432,51 @@ describe('platformAdapter', () => {
     ).resolves.toEqual({ elements: [] })
     expect(loadBoundaryElements).not.toHaveBeenCalled()
     expect(getSpatialDataset).not.toHaveBeenCalled()
+  })
+
+  it('reads SpatialData through AnnData workflows with dataset boundaries', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'spatialdata')
+    const elements = [
+      {
+        id: 'cell-a',
+        geometry: {
+          kind: 'polygon' as const,
+          rings: [[{ x: micrometers(0), y: micrometers(0) }]],
+        },
+      },
+    ]
+    const dataset = {
+      meta: vi.fn(async () => ({ capabilities: { cellBoundaries: true } })),
+      elements: vi.fn(async () => ({ elements })),
+    }
+    const loadBoundaryElements = vi.fn()
+
+    expect(adapter.kind).toBe('spatialdata')
+    expect(isAnnDataPlatform(adapter)).toBe(true)
+    expect(isAnnDataPlatform(appPlatformAdapterFor(readyLoadState, 'h5ad'))).toBe(true)
+    expect(isAnnDataPlatform(appPlatformAdapterFor(readyLoadState, 'xenium'))).toBe(false)
+    expect(adapter.capabilities).toMatchObject({ annotations: true, transcripts: false })
+    expect(adapter.boundaryLoadingEnabled(true, false)).toBe(true)
+    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
+    expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
+      loadEnabled: false,
+      unavailableReason: 'Unavailable for SpatialData',
+    })
+    await expect(
+      loadPlatformBoundaryElements(
+        adapter,
+        {
+          getSpatialDataset: vi.fn(
+            async () => dataset,
+          ) as unknown as SpatialDatasetLoader,
+          loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+      ),
+    ).resolves.toEqual({ elements })
+    expect(dataset.elements).toHaveBeenCalledWith(selection.bbox)
+    expect(loadBoundaryElements).not.toHaveBeenCalled()
   })
 
   it('loads Visium HD boundary, nucleus, and expression data through dataset capabilities', async () => {

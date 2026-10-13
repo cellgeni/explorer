@@ -386,6 +386,85 @@ describe('useDatasetLifecycle', () => {
     })
   })
 
+  it('loads SpatialData tables through AnnData readers and shows boundaries', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const datasetUrl = 'https://example.test/sample.sdata.zarr'
+    const dataset = {
+      overview: vi.fn(async () => [
+        {
+          cellId: 'cell-a',
+          position: { x: micrometers(1), y: micrometers(2) },
+          transcriptCount: 0,
+        },
+      ]),
+      genePanel: vi.fn(async () => ['Actb']),
+      annotationGroups: vi.fn(async () => []),
+      embeddingOptions: vi.fn(async () => []),
+      image: vi.fn(async () => null),
+      summary: vi.fn(async () => ({
+        coordinateSystem: 'global',
+        coordinateSystems: ['global'],
+        regions: ['cells'],
+        skippedElements: [],
+      })),
+    }
+    const loadDatasetOverview = vi.fn(async () => [])
+    const setDatasetPlatform = vi.fn()
+    const setGenePanelState = vi.fn()
+    const setLoadState = vi.fn()
+    const setMorphologyState = vi.fn()
+    const setShowCellBoundaries = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'spatialdata' as const,
+          baseUrl: datasetUrl,
+          spatialDataUrl: datasetUrl,
+          checked: [],
+        }))}
+        getSpatialDataset={
+          vi.fn(
+            async () => dataset,
+          ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+        }
+        loadDatasetOverview={loadDatasetOverview}
+        setDatasetPlatform={setDatasetPlatform}
+        setGenePanelState={setGenePanelState}
+        setLoadState={setLoadState}
+        setMorphologyState={setMorphologyState}
+        setShowCellBoundaries={setShowCellBoundaries}
+        startDatasetLoadRef={startDatasetLoadRef}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(datasetUrl, true)
+    })
+
+    expect(setDatasetPlatform).toHaveBeenCalledWith('spatialdata')
+    expect(setShowCellBoundaries).toHaveBeenCalledWith(true)
+    expect(setGenePanelState).toHaveBeenLastCalledWith({
+      status: 'ready',
+      url: datasetUrl,
+      genes: ['Actb'],
+    })
+    expect(setLoadState).toHaveBeenLastCalledWith({
+      status: 'ready',
+      url: datasetUrl,
+      cellCount: 1,
+    })
+    await waitFor(() => {
+      expect(setMorphologyState).toHaveBeenLastCalledWith({ status: 'idle' })
+    })
+    expect(dataset.image).toHaveBeenCalled()
+    expect(loadDatasetOverview).not.toHaveBeenCalled()
+  })
+
   it('loads Visium HD binned overview without starting Xenium loaders', async () => {
     const refs = createLifecycleRefs()
     const startDatasetLoadRef = {

@@ -31,6 +31,7 @@ import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
+import type { SpatialDataSummary } from '../../datasets/spatialDataDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type {
   AnalysisEmbeddingKind,
@@ -192,6 +193,10 @@ interface H5adLifecycleDataset {
   genePanel(): Promise<readonly string[]>
   annotationGroups(): Promise<readonly AnnotationGroupOption[]>
   embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]>
+}
+
+interface SpatialDataSummaryDataset {
+  summary(): Promise<SpatialDataSummary>
 }
 
 interface UseDatasetLifecycleCallbacks {
@@ -654,6 +659,78 @@ export function useDatasetLifecycle({
       })
       const requestId = request.requestId
       const isCurrentDatasetLoad = () => request.isCurrent() && !request.signal.aborted
+      const loadMorphologyInBackground = (
+        load: () => Promise<MorphologyImage | null>,
+        options: {
+          readonly enableAllChannelsByDefault?: boolean
+          readonly skipNativeRgbAutoContrast?: boolean
+        } = {},
+      ) => {
+        void load()
+          .then((image) => {
+            if (!isCurrentDatasetLoad()) {
+              return
+            }
+
+            if (image === null) {
+              setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+              return
+            }
+
+            const defaultEnabledChannelIds =
+              options.enableAllChannelsByDefault === true
+                ? image.channelLoaders.map((channel) => channel.info.id)
+                : undefined
+            const enabledChannelIds = shouldRestoreSharedState
+              ? (sharedState?.morphologyEnabledChannelIds ?? defaultEnabledChannelIds)
+              : defaultEnabledChannelIds
+
+            setMorphologyImage(image)
+            setMorphologyChannelSettings((current) =>
+              mergeMorphologyChannelSettings({
+                baseChannelIds: image.channelLoaders.map((channel) => channel.info.id),
+                currentSettings: current,
+                nextBaseSettings: createMorphologyChannelSettings(
+                  image,
+                  enabledChannelIds === undefined ? {} : { enabledChannelIds },
+                ),
+              }),
+            )
+            setMorphologyState(morphologyLoadReady(image.url))
+            appendDebugEvent('Morphology image ready')
+
+            // Stretching R, G, and B independently shifts colour in brightfield
+            // (H&E) images, so native RGB keeps its full 0-255 window.
+            if (
+              options.skipNativeRgbAutoContrast === true &&
+              isNativeRgbMorphologyImage(image)
+            ) {
+              return
+            }
+
+            queueAutoContrast(image.channelLoaders, {
+              requestId,
+              signal: request.signal,
+            })
+          })
+          .catch((error) => {
+            if (isAbortError(error)) {
+              return
+            }
+
+            if (!isCurrentDatasetLoad()) {
+              return
+            }
+
+            setMorphologyState(
+              morphologyLoadFailed(
+                requestedUrl,
+                createStructuredLoadError('Morphology image', error),
+              ),
+            )
+            appendDebugEvent('Morphology image failed')
+          })
+      }
       invalidateLatestRequest({
         abortRef: datasetWarmupAbortRef,
         requestIdRef: datasetWarmupRequestIdRef,
@@ -832,32 +909,27 @@ export function useDatasetLifecycle({
           return
         }
 
-        if (detection.platform === 'h5ad') {
-          setDatasetPlatform('h5ad')
-          setShowCellBoundaries(false)
-          setShowNucleusBoundaries(false)
-          setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
-          setGenePanelState(genePanelLoadStarted(requestedUrl))
-          const dataset = await getSpatialDataset(detection.baseUrl, {
-            onH5adLoadProgress: appendDebugEvent,
-          })
-
+        const loadAnnDataOverview = async (
+          dataset: unknown,
+          label: 'H5AD' | 'SpatialData',
+        ): Promise<boolean> => {
           if (!isH5adLifecycleDataset(dataset)) {
-            throw new Error('Detected H5AD dataset does not expose AnnData readers.')
+            throw new Error(`Detected ${label} dataset does not expose AnnData readers.`)
           }
 
-          const h5adDataset: H5adLifecycleDataset = dataset
+          const annDataset: H5adLifecycleDataset = dataset
           const [cells, genes, annotationGroups, embeddingOptions] = await Promise.all([
-            h5adDataset.overview(),
-            h5adDataset.genePanel(),
-            h5adDataset.annotationGroups(),
-            h5adDataset.embeddingOptions(),
+            annDataset.overview(),
+            annDataset.genePanel(),
+            annDataset.annotationGroups(),
+            annDataset.embeddingOptions(),
           ])
 
           if (!isCurrentDatasetLoad()) {
-            return
+            return false
           }
 
+          const coalescePrefix = label === 'H5AD' ? 'h5ad' : 'spatialdata'
           setOverviewCells(overviewCellsToLayerData(cells))
           setGenePanelState(genePanelLoadReady(requestedUrl, genes))
           setAnnotationGroupState(
@@ -873,23 +945,95 @@ export function useDatasetLifecycle({
           initialShareableStateRef.current = null
           setLoadState(datasetLoadReady(requestedUrl, cells.length))
           appendDebugEvent(
-            `H5AD ready: ${cells.length.toLocaleString()} cells, ${genes.length.toLocaleString()} genes in ${formatElapsed(
+            `${label} ready: ${cells.length.toLocaleString()} cells, ${genes.length.toLocaleString()} genes in ${formatElapsed(
               loadStartedAt,
             )}`,
           )
           appendDebugEvent(
-            `H5AD annotation sets ready: ${annotationGroups.length.toLocaleString()} groups`,
-            { coalesceKey: 'h5ad-annotation-groups' },
+            `${label} annotation sets ready: ${annotationGroups.length.toLocaleString()} groups`,
+            { coalesceKey: `${coalescePrefix}-annotation-groups` },
           )
           appendDebugEvent(
-            `H5AD embeddings ready: ${embeddingOptions.length.toLocaleString()} obsm views`,
-            { coalesceKey: 'h5ad-embedding-options' },
+            `${label} embeddings ready: ${embeddingOptions.length.toLocaleString()} obsm views`,
+            { coalesceKey: `${coalescePrefix}-embedding-options` },
           )
           recordTelemetry(
             telemetryEvent('dataset.load', 'success', {
               startedAt: loadStartedAt,
-              detail: `${cells.length.toLocaleString()} H5AD cells`,
+              detail: `${cells.length.toLocaleString()} ${label} cells`,
             }),
+          )
+          return true
+        }
+
+        if (detection.platform === 'h5ad') {
+          setDatasetPlatform('h5ad')
+          setShowCellBoundaries(false)
+          setShowNucleusBoundaries(false)
+          setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          const dataset = await getSpatialDataset(detection.baseUrl, {
+            onH5adLoadProgress: appendDebugEvent,
+          })
+
+          await loadAnnDataOverview(dataset, 'H5AD')
+          return
+        }
+
+        if (detection.platform === 'spatialdata') {
+          setDatasetPlatform('spatialdata')
+          setShowCellBoundaries(
+            shouldRestoreSharedState ? (sharedState?.showCellBoundaries ?? true) : true,
+          )
+          setShowNucleusBoundaries(false)
+          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          const dataset = await getSpatialDataset(detection.baseUrl, {
+            onH5adLoadProgress: appendDebugEvent,
+          })
+
+          if (isSpatialDataSummaryDataset(dataset)) {
+            const summary = await dataset.summary()
+            appendDebugEvent(
+              `SpatialData view: coordinate system ${summary.coordinateSystem}; image ${
+                summary.image ?? 'none'
+              }; table ${summary.table ?? 'none'}${
+                summary.skippedElements.length > 0
+                  ? `; not shown ${summary.skippedElements.join(', ')}`
+                  : ''
+              }`,
+            )
+          }
+
+          if (!(await loadAnnDataOverview(dataset, 'SpatialData'))) {
+            return
+          }
+
+          if (!loadImage) {
+            setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+            return
+          }
+
+          loadMorphologyInBackground(
+            async () => {
+              const imageSource = await dataset.image()
+
+              if (imageSource?.kind !== 'pyramid') {
+                return null
+              }
+
+              return morphologyImageFromPyramidLoader(
+                imageSource.loader.url,
+                imageSource.loader,
+                {
+                  onFallback: appendFallbackNotice,
+                  signal: request.signal,
+                  ...(imageSource.openChannelLoader === undefined
+                    ? {}
+                    : { openImage: imageSource.openChannelLoader }),
+                },
+              )
+            },
+            { enableAllChannelsByDefault: true, skipNativeRgbAutoContrast: true },
           )
           return
         }
@@ -1188,54 +1332,12 @@ export function useDatasetLifecycle({
           return
         }
 
-        void loadMorphologyImage(requestedUrl, {
-          signal: request.signal,
-          onFallback: appendFallbackNotice,
-        })
-          .then((image) => {
-            if (!isCurrentDatasetLoad()) {
-              return
-            }
-
-            const enabledChannelIds = shouldRestoreSharedState
-              ? sharedState?.morphologyEnabledChannelIds
-              : undefined
-
-            setMorphologyImage(image)
-            setMorphologyChannelSettings((current) =>
-              mergeMorphologyChannelSettings({
-                baseChannelIds: image.channelLoaders.map((channel) => channel.info.id),
-                currentSettings: current,
-                nextBaseSettings: createMorphologyChannelSettings(
-                  image,
-                  enabledChannelIds === undefined ? {} : { enabledChannelIds },
-                ),
-              }),
-            )
-            setMorphologyState(morphologyLoadReady(image.url))
-            appendDebugEvent('Morphology image ready')
-            queueAutoContrast(image.channelLoaders, {
-              requestId,
-              signal: request.signal,
-            })
-          })
-          .catch((error) => {
-            if (isAbortError(error)) {
-              return
-            }
-
-            if (!isCurrentDatasetLoad()) {
-              return
-            }
-
-            setMorphologyState(
-              morphologyLoadFailed(
-                requestedUrl,
-                createStructuredLoadError('Morphology image', error),
-              ),
-            )
-            appendDebugEvent('Morphology image failed')
-          })
+        loadMorphologyInBackground(() =>
+          loadMorphologyImage(requestedUrl, {
+            signal: request.signal,
+            onFallback: appendFallbackNotice,
+          }),
+        )
       } catch (error) {
         if (isAbortError(error)) {
           return
@@ -1341,6 +1443,19 @@ function isH5adLifecycleDataset(dataset: unknown): dataset is H5adLifecycleDatas
     hasFunction(dataset, 'annotationGroups') &&
     hasFunction(dataset, 'embeddingOptions')
   )
+}
+
+function isNativeRgbMorphologyImage(image: MorphologyImage): boolean {
+  return (
+    image.channelLoaders.length === 3 &&
+    image.channelLoaders.every((channel) => channel.info.alphaFromIntensity === false)
+  )
+}
+
+function isSpatialDataSummaryDataset(
+  dataset: unknown,
+): dataset is SpatialDataSummaryDataset {
+  return hasFunction(dataset, 'summary')
 }
 
 function hasFunction<T extends string>(

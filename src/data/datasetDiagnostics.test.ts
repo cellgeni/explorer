@@ -39,6 +39,64 @@ describe('runDatasetDiagnostics', () => {
     expect(summarizeDatasetDiagnostics(report)).toContain('warnings')
   })
 
+  it('checks SpatialData metadata and region shapes instead of Xenium files', async () => {
+    const storeUrl = 'https://example.test/sample.sdata.zarr'
+    const detection: SpatialDatasetDetection = {
+      platform: 'spatialdata',
+      baseUrl: storeUrl,
+      spatialDataUrl: storeUrl,
+      checked: [],
+    }
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input)
+
+      return url.endsWith('/zmetadata')
+        ? Response.json({
+            zarr_consolidated_format: 1,
+            metadata: {
+              '.zgroup': { zarr_format: 2 },
+              'shapes/spots/.zgroup': { zarr_format: 2 },
+              'shapes/spots/.zattrs': {
+                coordinateTransformations: [
+                  {
+                    type: 'identity',
+                    input: { axes: ['x', 'y'] },
+                    output: { name: 'global' },
+                  },
+                ],
+              },
+              'tables/table/.zgroup': { zarr_format: 2 },
+              'tables/table/.zattrs': { region: 'spots', instance_key: 'spot_id' },
+            },
+          })
+        : new Response(null, { status: 404 })
+    }) as unknown as typeof fetch
+    const rangeValidator = vi.fn(async () => undefined)
+
+    const report = await runDatasetDiagnostics(storeUrl, {
+      detectDataset: vi.fn(async () => detection),
+      fetcher,
+      rangeValidator,
+    })
+
+    expect(report.platform).toBe('spatialdata')
+    expect(report.checks.map((check) => [check.id, check.status, check.message])).toEqual(
+      [
+        ['dataset-layout', 'pass', 'Detected SpatialData'],
+        [
+          'spatialdata-metadata',
+          'pass',
+          'Coordinate system global; image none; table table',
+        ],
+        ['spatialdata-shapes-spots', 'pass', 'Byte-range readable'],
+      ],
+    )
+    expect(rangeValidator).toHaveBeenCalledWith(
+      `${storeUrl}/shapes/spots/shapes.parquet`,
+      expect.objectContaining({ label: 'SpatialData shapes spots' }),
+    )
+  })
+
   it('checks Visium HD binned outputs instead of Xenium files', async () => {
     const detection: SpatialDatasetDetection = {
       platform: 'visium-hd',

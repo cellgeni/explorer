@@ -1,5 +1,6 @@
 import { datasetFileUrl } from '../data/datasetFiles'
 import { isOmeZarrImageUrl, omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
+import { isSpatialDataRootMetadata } from './spatialDataCatalog'
 import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
@@ -18,6 +19,12 @@ export type SpatialDatasetDetection =
       readonly platform: 'h5ad'
       readonly baseUrl: string
       readonly h5adUrl: string
+      readonly checked: readonly DatasetProbeResult[]
+    }
+  | {
+      readonly platform: 'spatialdata'
+      readonly baseUrl: string
+      readonly spatialDataUrl: string
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
@@ -152,6 +159,18 @@ export async function detectSpatialDataset(
     )
     checked.push(...probes)
 
+    const spatialDataProbe = await probeSpatialDataRoot(zarrRootUrl, probes, options)
+
+    if (spatialDataProbe !== null) {
+      checked.push(spatialDataProbe)
+      return {
+        platform: 'spatialdata',
+        baseUrl: normalizedBaseUrl,
+        spatialDataUrl: zarrRootUrl,
+        checked,
+      }
+    }
+
     return probes.some((probe) => probe.ok)
       ? {
           platform: 'image',
@@ -208,6 +227,21 @@ export async function detectSpatialDataset(
   const zarrMetadataProbes = await probeZarrMetadata(normalizedBaseUrl, options)
   checked.push(...zarrMetadataProbes)
   const zarrMetadataProbe = zarrMetadataProbes.find((probe) => probe.ok)
+  const spatialDataProbe = await probeSpatialDataRoot(
+    normalizedBaseUrl,
+    zarrMetadataProbes,
+    options,
+  )
+
+  if (spatialDataProbe !== null) {
+    checked.push(spatialDataProbe)
+    return {
+      platform: 'spatialdata',
+      baseUrl: normalizedBaseUrl,
+      spatialDataUrl: normalizedBaseUrl,
+      checked,
+    }
+  }
 
   if (zarrMetadataProbe !== undefined) {
     return {
@@ -286,6 +320,17 @@ export async function createSpatialDataset(
     const { AnnDataH5adDataset } = await import('./h5adDataset')
     return new AnnDataH5adDataset({
       url: detection.h5adUrl,
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.onH5adLoadProgress === undefined
+        ? {}
+        : { onProgress: options.onH5adLoadProgress }),
+    })
+  }
+
+  if (detection.platform === 'spatialdata') {
+    const { SpatialDataDataset } = await import('./spatialDataDataset')
+    return new SpatialDataDataset({
+      url: detection.spatialDataUrl,
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       ...(options.onH5adLoadProgress === undefined
         ? {}
@@ -392,6 +437,45 @@ async function probeDirectDatasetUrl(
       error: cause instanceof Error ? cause.message : String(cause),
     }
   }
+}
+
+// A Zarr group is a SpatialData store when its root attributes carry
+// `spatialdata_attrs`; plain OME-Zarr images do not.
+async function probeSpatialDataRoot(
+  rootUrl: string,
+  metadataProbes: readonly DatasetProbeResult[],
+  options: DetectSpatialDatasetOptions,
+): Promise<DatasetProbeResult | null> {
+  for (const probe of metadataProbes) {
+    if (!probe.ok) {
+      continue
+    }
+
+    const url = datasetFileUrl(rootUrl, probe.path)
+
+    try {
+      const response = await fetchWithTimeout(
+        options.fetcher ?? fetch,
+        url,
+        {},
+        options.signal,
+        DATASET_PROBE_TIMEOUT_MS,
+      )
+
+      if (response.ok && isSpatialDataRootMetadata(await response.json())) {
+        return {
+          path: `${probe.path} (SpatialData)`,
+          url,
+          ok: true,
+          status: response.status,
+        }
+      }
+    } catch {
+      // Unreadable or non-JSON metadata is not a SpatialData root.
+    }
+  }
+
+  return null
 }
 
 async function fetchWithTimeout(

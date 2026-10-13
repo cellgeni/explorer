@@ -10,7 +10,13 @@ import type { GexResult, Selection, TranscriptScope } from '../data/gex'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 
-export type Platform = 'xenium' | 'visium' | 'visium-hd' | 'h5ad' | 'image'
+export type Platform =
+  | 'xenium'
+  | 'visium'
+  | 'visium-hd'
+  | 'h5ad'
+  | 'spatialdata'
+  | 'image'
 export type SpatialElementId = string
 
 export interface SpatialGridBasis {
@@ -119,7 +125,16 @@ export interface DatasetMeta {
 }
 
 export type ImageSource =
-  | { readonly kind: 'pyramid'; readonly loader: ImagePyramidLoader }
+  | {
+      readonly kind: 'pyramid'
+      readonly loader: ImagePyramidLoader
+      // Re-opens per-channel loaders (`#c=N` selection URLs) with the same
+      // placement as `loader`; defaults to the generic image opener.
+      readonly openChannelLoader?: (
+        url: string,
+        signal?: AbortSignal,
+      ) => Promise<ImagePyramidLoader>
+    }
   | {
       readonly kind: 'flat'
       readonly url: string
