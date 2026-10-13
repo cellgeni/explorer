@@ -186,6 +186,20 @@ export function createStructuredLoadError(
     )
   }
 
+  if (isSpatialDataConsolidatedMetadataError(error, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'unsupported',
+        title: 'SpatialData metadata not consolidated',
+        message,
+        action:
+          'Re-write the store with consolidated Zarr metadata, for example sdata.write(path, consolidate_metadata=True) or zarr.consolidate_metadata(path).',
+      },
+      detail,
+    )
+  }
+
   if (isH5adAllGeneCscMatrixUnsupportedError(error, normalizedMessage)) {
     return withOptionalDetail(
       {
@@ -332,6 +346,17 @@ function isFeatureSliceBudgetError(error: unknown, normalizedMessage: string): b
     (error instanceof Error &&
       error.name === 'FeatureSliceFullFileBudgetExceededError') ||
     normalizedMessage.includes('feature slice h5')
+  )
+}
+
+function isSpatialDataConsolidatedMetadataError(
+  error: unknown,
+  normalizedMessage: string,
+): boolean {
+  return (
+    (error instanceof Error && error.name === 'SpatialDataConsolidatedMetadataError') ||
+    (normalizedMessage.includes('spatialdata store') &&
+      normalizedMessage.includes('consolidated zarr metadata'))
   )
 }
 

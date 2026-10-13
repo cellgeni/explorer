@@ -31,9 +31,38 @@ export interface AnnDataH5adDatasetOptions {
   readonly url: string
   readonly fetcher?: typeof fetch
   readonly onProgress?: H5adLoadProgressReporter
+  // Reads AnnData from a group inside an already-open Zarr store (for example
+  // a SpatialData table) instead of fetching an .h5ad file.
+  readonly zarrSource?: AnnDataZarrSource
 }
 
 export type H5adLoadProgressReporter = (message: string) => void
+
+export interface AnnDataZarrSource {
+  readonly store: zarr.Readable
+  readonly zarrFormat: 2 | 3
+  readonly path: string
+  readonly nodes: readonly AnnDataZarrNode[]
+  readonly label?: string
+  readonly resolveCoordinates?: AnnDataCoordinateResolver
+}
+
+export interface AnnDataZarrNode {
+  readonly path: string
+  readonly kind: 'array' | 'group'
+}
+
+export interface AnnDataObsAccess {
+  readonly cellIds: readonly string[]
+  readObsColumn(key: string): Promise<readonly (string | number | null)[] | null>
+  readObsmPoints(): Promise<readonly { readonly x: number; readonly y: number }[] | null>
+}
+
+// Returns one coordinate per obs row. Rows that cannot be placed use NaN and
+// are left out of spatial queries.
+export type AnnDataCoordinateResolver = (
+  obs: AnnDataObsAccess,
+) => Promise<readonly DataPoint[] | null>
 
 interface H5adCache {
   readonly url: string
@@ -146,7 +175,7 @@ interface H5adArraySource {
   readonly array: H5adZarrArray
 }
 
-type H5adZarrArray = zarr.Array<zarr.DataType, ReferenceStore>
+type H5adZarrArray = zarr.Array<zarr.DataType, zarr.Readable>
 
 const DEFAULT_H5AD_UNITS = {
   dataUnit: 'micrometer',
@@ -181,6 +210,8 @@ const H5AD_EMBEDDING_DISPLAY_KEYS = [
 const H5AD_FETCH_TIMEOUT_MS = 60_000
 const H5AD_MAX_FILE_BYTES = 300 * 1024 * 1024
 const H5AD_REFERENCE_FETCH_CONCURRENCY = 6
+const CSR_ZARR_BATCH_MAX_VALUES = 4_000_000
+const CSR_ZARR_BATCH_MAX_GAP_VALUES = 262_144
 
 export class H5adFileSizeLimitExceededError extends Error {
   readonly url: string
@@ -245,12 +276,14 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   readonly url: string
   private readonly fetcher: typeof fetch
   private readonly onProgress: H5adLoadProgressReporter | undefined
+  private readonly zarrSource: AnnDataZarrSource | undefined
   private cachePromise: Promise<H5adCache> | null = null
 
   constructor(options: AnnDataH5adDatasetOptions) {
     this.url = options.url
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.onProgress = options.onProgress
+    this.zarrSource = options.zarrSource
   }
 
   async meta(): Promise<DatasetMeta> {
@@ -276,12 +309,24 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   async overview(): Promise<readonly CellOverviewPoint[]> {
     const cache = await this.cache()
 
-    return cache.cellIds.map((cellId, index) => ({
-      cellId: cellId as never,
-      position: cache.coordinates[index] ?? { x: micrometers(0), y: micrometers(0) },
-      transcriptCount: 0,
-      metadata: h5adCellMetadata(cache, index),
-    }))
+    const points: CellOverviewPoint[] = []
+
+    cache.cellIds.forEach((cellId, index) => {
+      const position = cache.coordinates[index]
+
+      if (position === undefined || !isFinitePoint(position)) {
+        return
+      }
+
+      points.push({
+        cellId: cellId as never,
+        position,
+        transcriptCount: 0,
+        metadata: h5adCellMetadata(cache, index),
+      })
+    })
+
+    return points
   }
 
   async matrix(ids: readonly SpatialElementId[]): Promise<GexResult<SpatialElementId>> {
@@ -455,10 +500,14 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   private cache(): Promise<H5adCache> {
     if (this.cachePromise === null) {
-      this.cachePromise = readH5ad(this.url, {
-        fetcher: this.fetcher,
-        ...(this.onProgress === undefined ? {} : { onProgress: this.onProgress }),
-      }).catch((error: unknown) => {
+      this.cachePromise = (
+        this.zarrSource === undefined
+          ? readH5ad(this.url, {
+              fetcher: this.fetcher,
+              ...(this.onProgress === undefined ? {} : { onProgress: this.onProgress }),
+            })
+          : readAnnDataZarr(this.url, this.zarrSource, this.onProgress)
+      ).catch((error: unknown) => {
         this.cachePromise = null
         throw error
       })
@@ -582,11 +631,36 @@ async function readH5adReferenceOrThrow(
   const store = ReferenceStore.fromSpec(spec, {
     fetch: referenceStoreFetch(fetcher),
   })
-  const root = await hydrateH5adReferenceRoot(store, spec)
+  const root = await hydrateZarrAnnDataGroup(
+    { store, zarrFormat: 2, rootPath: '' },
+    h5adReferenceIndexFromSpec(spec),
+    '',
+  )
   const cache = await readH5adCacheFromGroup(url, root)
   reportH5adProgress(
     onProgress,
     `H5AD reference ready: ${cache.cellIds.length.toLocaleString()} cells, ${cache.geneNames.length.toLocaleString()} genes`,
+  )
+  return cache
+}
+
+async function readAnnDataZarr(
+  url: string,
+  source: AnnDataZarrSource,
+  onProgress: H5adLoadProgressReporter | undefined,
+): Promise<H5adCache> {
+  const label = source.label ?? 'AnnData table'
+  const rootPath = normalizeZarrPath(source.path)
+  reportH5adProgress(onProgress, `Opening ${label} arrays`)
+  const root = await hydrateZarrAnnDataGroup(
+    { store: source.store, zarrFormat: source.zarrFormat, rootPath },
+    annDataIndexFromNodes(source.nodes, rootPath),
+    '',
+  )
+  const cache = await readH5adCacheFromGroup(url, root, source.resolveCoordinates)
+  reportH5adProgress(
+    onProgress,
+    `${label} ready: ${cache.cellIds.length.toLocaleString()} observations, ${cache.geneNames.length.toLocaleString()} genes`,
   )
   return cache
 }
@@ -601,6 +675,7 @@ function reportH5adProgress(
 async function readH5adCacheFromGroup(
   url: string,
   file: H5GroupLike,
+  resolveCoordinates?: AnnDataCoordinateResolver,
 ): Promise<H5adCache> {
   const obs = expectGroup(file.get('/obs'), '/obs')
   const varGroup = expectGroup(file.get('/var'), '/var')
@@ -612,12 +687,26 @@ async function readH5adCacheFromGroup(
   )
   const geneNames = uniqueNames(await readGeneNames(varGroup), 'var')
   const embeddingOptions = readObsmEmbeddingOptions(file, cellIds.length)
-  const coordinateEmbedding = await readOverviewCoordinateEmbedding(
-    file,
-    embeddingOptions,
-    cellIds,
-  )
-  const coordinates = embeddingToCoordinates(coordinateEmbedding)
+  const resolvedCoordinates =
+    resolveCoordinates === undefined
+      ? null
+      : await resolveCoordinates({
+          cellIds,
+          readObsColumn: (key) => readObsColumnValues(obs, key, cellIds.length),
+          readObsmPoints: async () => {
+            const embedding = await readOverviewCoordinateEmbedding(
+              file,
+              embeddingOptions,
+              cellIds,
+            ).catch(() => null)
+            return embedding?.points ?? null
+          },
+        })
+  const coordinates =
+    resolvedCoordinates ??
+    embeddingToCoordinates(
+      await readOverviewCoordinateEmbedding(file, embeddingOptions, cellIds),
+    )
   const observationTracks = await readObservationTracks(obs, cellIds.length)
   const matrix = await readMatrix(file, cellIds.length, geneNames.length)
 
@@ -687,21 +776,32 @@ interface H5adReferenceIndex {
   readonly childrenByPath: ReadonlyMap<string, readonly string[]>
 }
 
-async function hydrateH5adReferenceRoot(
-  store: ReferenceStore,
-  spec: unknown,
-): Promise<H5GroupLike> {
-  const index = h5adReferenceIndexFromSpec(spec)
-  return hydrateH5adReferenceGroup(store, index, '')
+interface ZarrAnnDataLocation {
+  readonly store: zarr.Readable
+  readonly zarrFormat: 2 | 3
+  readonly rootPath: string
 }
 
-async function hydrateH5adReferenceGroup(
-  store: ReferenceStore,
+function zarrAnnDataNodeLocation(
+  location: ZarrAnnDataLocation,
+  path: string,
+): zarr.Location<zarr.Readable> {
+  const fullPath = joinZarrPath(location.rootPath, path)
+  return fullPath === ''
+    ? zarr.root(location.store)
+    : zarr.root(location.store).resolve(fullPath)
+}
+
+async function hydrateZarrAnnDataGroup(
+  location: ZarrAnnDataLocation,
   index: H5adReferenceIndex,
   path: string,
 ): Promise<H5GroupLike> {
-  const location = path === '' ? zarr.root(store) : zarr.root(store).resolve(path)
-  const group = await zarr.open.v2(location, { kind: 'group' })
+  const nodeLocation = zarrAnnDataNodeLocation(location, path)
+  const group =
+    location.zarrFormat === 3
+      ? await zarr.open.v3(nodeLocation, { kind: 'group' })
+      : await zarr.open.v2(nodeLocation, { kind: 'group' })
   const children = new Map<string, unknown>()
 
   for (const childName of index.childrenByPath.get(path) ?? []) {
@@ -709,23 +809,27 @@ async function hydrateH5adReferenceGroup(
     const childKind = index.nodeKinds.get(childPath)
 
     if (childKind === 'group') {
-      children.set(childName, await hydrateH5adReferenceGroup(store, index, childPath))
+      children.set(childName, await hydrateZarrAnnDataGroup(location, index, childPath))
       continue
     }
 
     if (childKind === 'array') {
-      children.set(childName, await hydrateH5adReferenceDataset(store, childPath))
+      children.set(childName, await hydrateZarrAnnDataDataset(location, childPath))
     }
   }
 
   return new HydratedH5adGroup(h5AttrsFromRecord(group.attrs), children)
 }
 
-async function hydrateH5adReferenceDataset(
-  store: ReferenceStore,
+async function hydrateZarrAnnDataDataset(
+  location: ZarrAnnDataLocation,
   path: string,
 ): Promise<H5DatasetLike> {
-  const array = await zarr.open.v2(zarr.root(store).resolve(path), { kind: 'array' })
+  const nodeLocation = zarrAnnDataNodeLocation(location, path)
+  const array: H5adZarrArray =
+    location.zarrFormat === 3
+      ? await zarr.open.v3(nodeLocation, { kind: 'array' })
+      : await zarr.open.v2(nodeLocation, { kind: 'array' })
   const source = { kind: 'zarr', array } as const
 
   return {
@@ -757,6 +861,52 @@ function h5adReferenceIndexFromSpec(spec: unknown): H5adReferenceIndex {
       continue
     }
 
+    const parts = path.split('/')
+    const childName = parts.at(-1)
+
+    if (childName === undefined) {
+      continue
+    }
+
+    const parentPath = parts.slice(0, -1).join('/')
+    const children = childrenByPath.get(parentPath) ?? new Set<string>()
+    children.add(childName)
+    childrenByPath.set(parentPath, children)
+  }
+
+  return {
+    nodeKinds,
+    childrenByPath: new Map(
+      Array.from(childrenByPath, ([path, children]) => [
+        path,
+        Array.from(children).sort((left, right) => left.localeCompare(right)),
+      ]),
+    ),
+  }
+}
+
+function annDataIndexFromNodes(
+  nodes: readonly AnnDataZarrNode[],
+  rootPath: string,
+): H5adReferenceIndex {
+  const nodeKinds = new Map<string, 'array' | 'group'>()
+  const childrenByPath = new Map<string, Set<string>>()
+  const prefix = rootPath === '' ? '' : `${rootPath}/`
+
+  for (const node of nodes) {
+    const fullPath = normalizeZarrPath(node.path)
+
+    if (prefix !== '' && !fullPath.startsWith(prefix)) {
+      continue
+    }
+
+    const path = fullPath.slice(prefix.length)
+
+    if (path === '') {
+      continue
+    }
+
+    nodeKinds.set(path, node.kind)
     const parts = path.split('/')
     const childName = parts.at(-1)
 
@@ -1349,6 +1499,51 @@ async function readDataframeCategories(
   return categories.length === 0 ? null : categories
 }
 
+async function readObsColumnValues(
+  obs: H5GroupLike,
+  key: string,
+  rowCount: number,
+): Promise<readonly (string | number | null)[] | null> {
+  const entity = obs.get(key)
+
+  if (isCategoricalGroup(entity)) {
+    const codes = readNumericArray(
+      await readDatasetValue(expectDataset(entity.get('codes'), `/obs/${key}/codes`)),
+      `/obs/${key}/codes`,
+    )
+    const categories = readCategoryLabels(
+      await readDatasetValue(
+        expectDataset(entity.get('categories'), `/obs/${key}/categories`),
+      ),
+      `/obs/${key}/categories`,
+    )
+
+    return codes.length === rowCount
+      ? Array.from({ length: rowCount }, (_value, index) => {
+          const code = Math.trunc(numericValue(codes, index))
+          return code < 0 ? null : (categories[code] ?? null)
+        })
+      : null
+  }
+
+  if (!isDataset(entity)) {
+    return null
+  }
+
+  const value = await readDatasetValue(entity)
+
+  if (isNumericArray(value)) {
+    return value.length === rowCount ? numericArrayToNumbers(value) : null
+  }
+
+  if (isStringArrayLike(value)) {
+    const strings = Array.from(value)
+    return strings.length === rowCount ? strings : null
+  }
+
+  return null
+}
+
 async function readMatrix(
   file: H5GroupLike,
   rows: number,
@@ -1561,32 +1756,32 @@ async function h5adMatrixCellsForRows(
   }
 
   if (matrix.kind === 'csr-zarr') {
-    for (const { id, row } of rows) {
-      const start = Math.trunc(numericValue(matrix.indptr, row))
-      const end = Math.trunc(numericValue(matrix.indptr, row + 1))
+    for (const batch of csrZarrRowBatches(matrix.indptr, rows)) {
+      const [indices, data] =
+        batch.end > batch.start
+          ? await Promise.all([
+              zarrNumericVector(matrix.indices, batch.start, batch.end),
+              zarrNumericVector(matrix.data, batch.start, batch.end),
+            ])
+          : [[], []]
 
-      if (start >= end) {
+      for (const { id, start, end } of batch.rows) {
         cells.set(
           id,
-          sparseVectorCell([], [], 0, 0, requestedCols, geneNames, {
-            allGenesRequested,
-            includeZeroCounts,
-          }),
+          sparseVectorCell(
+            indices,
+            data,
+            start - batch.start,
+            end - batch.start,
+            requestedCols,
+            geneNames,
+            {
+              allGenesRequested,
+              includeZeroCounts,
+            },
+          ),
         )
-        continue
       }
-
-      const [indices, data] = await Promise.all([
-        zarrNumericVector(matrix.indices, start, end),
-        zarrNumericVector(matrix.data, start, end),
-      ])
-      cells.set(
-        id,
-        sparseVectorCell(indices, data, 0, indices.length, requestedCols, geneNames, {
-          allGenesRequested,
-          includeZeroCounts,
-        }),
-      )
     }
 
     return cells
@@ -1603,6 +1798,61 @@ async function h5adMatrixCellsForRows(
     geneNames,
     includeZeroCounts,
   )
+}
+
+interface CsrZarrRowBatch {
+  readonly start: number
+  readonly end: number
+  readonly rows: readonly {
+    readonly id: SpatialElementId
+    readonly start: number
+    readonly end: number
+  }[]
+}
+
+// Groups CSR rows into contiguous value ranges so nearby rows share one zarr
+// read instead of re-reading the same chunks row by row.
+function csrZarrRowBatches(
+  indptr: NumericArrayLike,
+  rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
+): readonly CsrZarrRowBatch[] {
+  const spans = rows
+    .map(({ id, row }) => ({
+      id,
+      start: Math.trunc(numericValue(indptr, row)),
+      end: Math.trunc(numericValue(indptr, row + 1)),
+    }))
+    .sort((left, right) => left.start - right.start)
+  const batches: CsrZarrRowBatch[] = []
+  let current: {
+    start: number
+    end: number
+    rows: { id: SpatialElementId; start: number; end: number }[]
+  } | null = null
+
+  for (const span of spans) {
+    if (
+      current !== null &&
+      span.start - current.end <= CSR_ZARR_BATCH_MAX_GAP_VALUES &&
+      Math.max(current.end, span.end) - current.start <= CSR_ZARR_BATCH_MAX_VALUES
+    ) {
+      current.end = Math.max(current.end, span.end)
+      current.rows.push(span)
+      continue
+    }
+
+    if (current !== null) {
+      batches.push(current)
+    }
+
+    current = { start: span.start, end: span.end, rows: [span] }
+  }
+
+  if (current !== null) {
+    batches.push(current)
+  }
+
+  return batches
 }
 
 async function h5adMatrixCellsFromColumns(
@@ -1760,7 +2010,7 @@ function h5adCellsInBbox(
     const position = cache.coordinates[index]
     const id = cache.cellIds[index]
 
-    if (position === undefined || id === undefined) {
+    if (position === undefined || id === undefined || !isFinitePoint(position)) {
       continue
     }
 
@@ -1868,10 +2118,18 @@ function bboxForPoints(points: readonly DataPoint[]): BBox {
   let maxY = Number.NEGATIVE_INFINITY
 
   for (const point of points) {
+    if (!isFinitePoint(point)) {
+      continue
+    }
+
     minX = Math.min(minX, point.x)
     maxX = Math.max(maxX, point.x)
     minY = Math.min(minY, point.y)
     maxY = Math.max(maxY, point.y)
+  }
+
+  if (!Number.isFinite(minX)) {
+    return bboxForPoints([])
   }
 
   return {
@@ -1880,6 +2138,10 @@ function bboxForPoints(points: readonly DataPoint[]): BBox {
     minY: micrometers(minY),
     maxY: micrometers(maxY),
   }
+}
+
+function isFinitePoint(point: DataPoint): boolean {
+  return Number.isFinite(point.x) && Number.isFinite(point.y)
 }
 
 function uniqueNames(

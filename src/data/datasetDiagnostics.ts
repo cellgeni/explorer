@@ -5,6 +5,11 @@ import {
   type SpatialDatasetDetection,
 } from '../datasets/datasetFactory'
 import type { Platform } from '../datasets/spatialDataset'
+import {
+  openSpatialDataStore,
+  readSpatialDataCatalog,
+  selectSpatialDataView,
+} from '../datasets/spatialDataCatalog'
 import type {
   VisiumHdBinDescriptor,
   VisiumHdBinSizeMicrometers,
@@ -169,6 +174,18 @@ export async function runDatasetDiagnostics(
     }
   }
 
+  if (detection.platform === 'spatialdata') {
+    checks.push(...(await runSpatialDataDiagnostics(detection, options)))
+
+    return {
+      baseUrl,
+      platform: detection.platform,
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      checks,
+    }
+  }
+
   if (detection.platform === 'unknown') {
     return {
       baseUrl,
@@ -258,6 +275,80 @@ async function checkManifest(
       startedAt,
     })
   }
+}
+
+async function runSpatialDataDiagnostics(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'spatialdata' }>,
+  options: DatasetDiagnosticsOptions,
+): Promise<readonly DatasetDiagnosticCheck[]> {
+  const url = detection.spatialDataUrl
+  const startedAt = Date.now()
+  let view: ReturnType<typeof selectSpatialDataView>
+
+  try {
+    const { store, zarrFormat } = await openSpatialDataStore(url, {
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+    })
+    const catalog = await readSpatialDataCatalog(store, zarrFormat)
+    view = selectSpatialDataView(catalog)
+  } catch (cause) {
+    return [
+      diagnosticCheck({
+        id: 'spatialdata-metadata',
+        label: 'SpatialData metadata',
+        url,
+        required: true,
+        status: 'fail',
+        message: errorMessage(cause),
+        startedAt,
+      }),
+    ]
+  }
+
+  const checks: DatasetDiagnosticCheck[] = [
+    diagnosticCheck({
+      id: 'spatialdata-metadata',
+      label: 'SpatialData metadata',
+      url,
+      required: true,
+      status: 'pass',
+      message: `Coordinate system ${view.coordinateSystem}; image ${
+        view.image?.element.name ?? 'none'
+      }; table ${view.table?.name ?? 'none'}`,
+      startedAt,
+    }),
+  ]
+
+  if (view.table === undefined) {
+    checks.push(
+      diagnosticCheck({
+        id: 'spatialdata-table',
+        label: 'SpatialData table',
+        url,
+        required: false,
+        status: 'warning',
+        message: 'No AnnData table; cells, genes, and annotations are unavailable.',
+        startedAt: Date.now(),
+      }),
+    )
+  }
+
+  for (const entry of view.regionShapes) {
+    checks.push(
+      await checkRangeFile(
+        url,
+        {
+          id: `spatialdata-shapes-${entry.element.name}`,
+          label: `SpatialData shapes ${entry.element.name}`,
+          path: `${entry.element.path}/shapes.parquet`,
+        },
+        true,
+        options,
+      ),
+    )
+  }
+
+  return checks
 }
 
 async function runVisiumHdDiagnostics(
@@ -572,7 +663,9 @@ function detectionDiagnosticCheck(
             .join(', ')})`
         : detection.platform === 'h5ad'
           ? 'Detected H5AD'
-          : 'Detected Xenium',
+          : detection.platform === 'spatialdata'
+            ? 'Detected SpatialData'
+            : 'Detected Xenium',
     startedAt,
   })
 }

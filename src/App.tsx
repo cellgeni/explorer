@@ -26,6 +26,7 @@ import {
 import {
   activeVisiumHdRoiStateForPlatform,
   appPlatformAdapterFor,
+  isAnnDataPlatform,
   isVisiumHdPlatform,
   loadPlatformBoundaryElements,
   loadPlatformGeneExpression,
@@ -794,8 +795,9 @@ export function App({ dependencies }: AppProps = {}) {
         : null
   const viewerViewResetKey =
     loadState.status === 'idle' ? 'idle' : `${loadState.status}:${loadState.url}`
-  const viewerOverviewRenderCellLimit =
-    platformAdapter.kind === 'h5ad' ? null : performanceBudget.overviewRenderCellLimit
+  const viewerOverviewRenderCellLimit = isAnnDataPlatform(platformAdapter)
+    ? null
+    : performanceBudget.overviewRenderCellLimit
   const geneOptions = useMemo(
     () => (genePanelState.status === 'ready' ? genePanelState.genes : []),
     [genePanelState],
@@ -1399,7 +1401,7 @@ export function App({ dependencies }: AppProps = {}) {
     async (...args) => {
       const [baseUrl, options = {}] = args
 
-      if (platformAdapter.kind === 'h5ad') {
+      if (isAnnDataPlatform(platformAdapter)) {
         const dataset = await getSpatialDataset(baseUrl)
 
         if (!isH5adAnnotationDataset(dataset)) {
@@ -1420,7 +1422,7 @@ export function App({ dependencies }: AppProps = {}) {
     async (...args) => {
       const [baseUrl, options = {}] = args
 
-      if (platformAdapter.kind === 'h5ad') {
+      if (isAnnDataPlatform(platformAdapter)) {
         const dataset = await getSpatialDataset(baseUrl)
 
         if (!isH5adEmbeddingDataset(dataset)) {
@@ -1475,7 +1477,7 @@ export function App({ dependencies }: AppProps = {}) {
     async (...args) => {
       const [baseUrl, selection, options = {}] = args
 
-      if (platformAdapter.kind !== 'h5ad') {
+      if (!isAnnDataPlatform(platformAdapter)) {
         return loadRoiCells(baseUrl, selection, options)
       }
 
@@ -1495,7 +1497,7 @@ export function App({ dependencies }: AppProps = {}) {
     async (...args) => {
       const [baseUrl, cells, options = {}] = args
 
-      if (platformAdapter.kind !== 'h5ad') {
+      if (!isAnnDataPlatform(platformAdapter)) {
         return loadRoiGeneStats(baseUrl, cells, options)
       }
 
@@ -1520,7 +1522,7 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const loadActiveRoiTranscripts = useCallback<RoiTranscriptsLoader>(
     (...args) => {
-      if (platformAdapter.kind !== 'h5ad') {
+      if (!isAnnDataPlatform(platformAdapter)) {
         return loadRoiTranscripts(...args)
       }
 
@@ -1758,7 +1760,7 @@ export function App({ dependencies }: AppProps = {}) {
       currentViewportDetail,
       enabled: platformAdapter.kind !== 'visium-hd',
       magicLensScope,
-      viewportGeneWarmupEnabled: platformAdapter.kind !== 'h5ad',
+      viewportGeneWarmupEnabled: !isAnnDataPlatform(platformAdapter),
       roiName,
     },
     data: {
@@ -2747,7 +2749,7 @@ export function App({ dependencies }: AppProps = {}) {
           selectedExpressionProfileState={activeVisiumHdExpressionProfileState}
           selectedCellAnnotationLabels={selectedCellAnnotationLabels}
           selectedCellInfoVariant={
-            platformAdapter.kind === 'h5ad' ? 'observations' : 'default'
+            isAnnDataPlatform(platformAdapter) ? 'observations' : 'default'
           }
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
@@ -2891,7 +2893,13 @@ export function App({ dependencies }: AppProps = {}) {
             showCellBoundaries,
           )}
           hoverTooltipsEnabled={showHoverTooltips}
-          overviewCellSourceLabel={platformAdapter.kind === 'h5ad' ? 'H5AD' : 'Xenium'}
+          overviewCellSourceLabel={
+            platformAdapter.kind === 'h5ad'
+              ? 'H5AD'
+              : platformAdapter.kind === 'spatialdata'
+                ? 'SpatialData'
+                : 'Xenium'
+          }
           gridCells={viewerGridCells}
           fitGridCells={spatialGridCells}
           fitImageExtent={imageFitExtent}
@@ -2919,7 +2927,7 @@ export function App({ dependencies }: AppProps = {}) {
           imageStatus={viewerImageStatus}
           boundaryStatus={boundaryState.status}
           overviewRenderCellLimit={viewerOverviewRenderCellLimit}
-          clipOverviewCellsToViewport={platformAdapter.kind !== 'h5ad'}
+          clipOverviewCellsToViewport={!isAnnDataPlatform(platformAdapter)}
           maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
           tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
           roiMode={roiMode}

@@ -6,6 +6,7 @@ import {
 } from './datasetFactory'
 import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
+import { SpatialDataDataset } from './spatialDataDataset'
 import { VisiumHdDataset } from './visiumHdDataset'
 
 describe('spatial dataset detection', () => {
@@ -205,6 +206,65 @@ describe('spatial dataset detection', () => {
     )
   })
 
+  it('detects a SpatialData store from root attributes on a .zarr URL', async () => {
+    const fetcher = fetcherForJsonPaths({
+      '/stores/sample.sdata.zarr/.zattrs': { spatialdata_attrs: { version: '0.1' } },
+    })
+
+    await expect(
+      detectSpatialDataset('https://example.test/stores/sample.sdata.zarr/', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'spatialdata',
+      baseUrl: 'https://example.test/stores/sample.sdata.zarr',
+      spatialDataUrl: 'https://example.test/stores/sample.sdata.zarr',
+    })
+  })
+
+  it('detects a Zarr v3 SpatialData store from a plain directory URL', async () => {
+    const fetcher = fetcherForJsonPaths({
+      '/stores/sample.sdata/zarr.json': {
+        zarr_format: 3,
+        node_type: 'group',
+        attributes: { spatialdata_attrs: { version: '0.2' } },
+      },
+    })
+
+    await expect(
+      detectSpatialDataset('https://example.test/stores/sample.sdata', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'spatialdata',
+      spatialDataUrl: 'https://example.test/stores/sample.sdata',
+    })
+  })
+
+  it('keeps SpatialData image elements on the OME-Zarr image path', async () => {
+    const fetcher = fetcherForJsonPaths({
+      '/stores/sample.zarr/images/he/.zattrs': {
+        spatialdata_attrs: { version: '0.1' },
+        multiscales: [{ datasets: [{ path: '0' }] }],
+      },
+    })
+
+    await expect(
+      detectSpatialDataset('https://example.test/stores/sample.zarr/images/he', {
+        fetcher,
+      }),
+    ).resolves.toMatchObject({ platform: 'image', imageKind: 'ome-zarr' })
+  })
+
+  it('creates a SpatialData dataset for SpatialData stores', async () => {
+    const dataset = await createSpatialDataset(
+      'https://example.test/stores/sample.sdata.zarr',
+      {
+        fetcher: fetcherForJsonPaths({
+          '/stores/sample.sdata.zarr/.zattrs': { spatialdata_attrs: { version: '0.1' } },
+        }),
+      },
+    )
+
+    expect(dataset).toBeInstanceOf(SpatialDataDataset)
+  })
+
   it('times out direct H5AD probes that never answer', async () => {
     vi.useFakeTimers()
     const fetcher = vi.fn(
@@ -299,5 +359,15 @@ function fetcherForOkPaths(paths: readonly string[]): typeof fetch {
     const url = new URL(String(input))
     const status = okPaths.has(url.pathname) ? 200 : 404
     return new Response(null, { status })
+  }) as unknown as typeof fetch
+}
+
+function fetcherForJsonPaths(bodies: Readonly<Record<string, unknown>>): typeof fetch {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const body = bodies[new URL(String(input)).pathname]
+
+    return body === undefined
+      ? new Response(null, { status: 404 })
+      : Response.json(body, { status: 200 })
   }) as unknown as typeof fetch
 }

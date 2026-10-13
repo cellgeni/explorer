@@ -8,6 +8,7 @@ Supported sources are:
 - Xenium output folders containing `experiment.xenium`.
 - Visium HD Space Ranger output folders containing `binned_outputs/`.
 - Direct AnnData `.h5ad` file URLs.
+- SpatialData Zarr store URLs, such as `sample.sdata.zarr`.
 - Direct OME-TIFF, TIFF, OME-Zarr, or validated NDPI image URLs.
 
 `Morphology image` is enabled by default so the OME-TIFF layer loads with the
@@ -18,8 +19,8 @@ requested for the current viewport.
 
 The app detects the source platform before loading. Platform-specific controls
 appear only when the active source supports them. For example, image-only
-sources hide Genes, Transcripts, Magic Lens, and Cell tabs, while Visium HD and
-H5AD hide Xenium transcript controls.
+sources hide Genes, Transcripts, Magic Lens, and Cell tabs, while Visium HD,
+H5AD, and SpatialData hide Xenium transcript controls.
 
 ## Spatial Navigation
 
@@ -147,6 +148,18 @@ CSC layouts.
 
 Files up to 300 MB load through the browser HDF5 path. Larger hosted H5AD files
 need a sibling kerchunk reference JSON named `DATASET.h5ad.json`.
+
+## SpatialData
+
+SpatialData stores combine an AnnData table, shapes, and images. The app picks
+one coordinate system and logs the choice, together with the image, table, and
+any elements it does not show, in the `Dataset` tab log. Table rows render as
+cells placed on their annotated shapes. Circles and polygons appear as cell
+boundaries, and the highest-resolution image loads as the morphology layer.
+
+Genes, annotations, metadata tracks, embeddings, selected-cell profiles, and ROI
+summaries work as they do for H5AD. Transcripts (`points`), `labels` rasters,
+and Magic Lens are not available for SpatialData yet.
 
 ## Image-Only Sources
 

@@ -21,7 +21,7 @@ import {
   isSpatialSegmentationDataset,
 } from './visiumHdAppController'
 
-export type AppPlatformKind = 'xenium' | 'visium-hd' | 'h5ad' | 'image'
+export type AppPlatformKind = 'xenium' | 'visium-hd' | 'h5ad' | 'spatialdata' | 'image'
 
 export interface AppPlatformLabels {
   readonly embeddingElementPlural: 'cells' | 'bins'
@@ -159,6 +159,31 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   canDrawRoi: ({ loadState }) => loadState.status === 'ready',
 }
 
+const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
+  kind: 'spatialdata',
+  labels: { embeddingElementPlural: 'cells' },
+  capabilities: {
+    annotations: true,
+    geometricAnnotations: true,
+    magicLensMinQv: false,
+    nucleusBoundaries: false,
+    transcripts: false,
+  },
+  pointSizeFullViewScale: 0.5,
+  featureLoadEnabled: (loadState) => loadState.status === 'ready',
+  effectiveTranscriptOverlay: () => false,
+  boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
+  boundaryOverlayRequestKey: (showCellBoundaries) =>
+    `${showCellBoundaries ? 'enabled' : 'disabled'}:no-nucleus`,
+  geneExpressionOverlayEnabled: () => true,
+  cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,
+  magicLensAvailability: () => ({
+    loadEnabled: false,
+    unavailableReason: 'Unavailable for SpatialData',
+  }),
+  canDrawRoi: ({ loadState }) => loadState.status === 'ready',
+}
+
 const IMAGE_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'image',
   labels: { embeddingElementPlural: 'cells' },
@@ -199,6 +224,10 @@ export function appPlatformAdapterFor(
     return H5AD_PLATFORM_ADAPTER
   }
 
+  if (loadState.status === 'ready' && datasetPlatform === 'spatialdata') {
+    return SPATIALDATA_PLATFORM_ADAPTER
+  }
+
   return XENIUM_PLATFORM_ADAPTER
 }
 
@@ -208,6 +237,12 @@ export function isVisiumHdPlatform(adapter: AppPlatformAdapter): boolean {
 
 export function isH5adPlatform(adapter: AppPlatformAdapter): boolean {
   return adapter.kind === 'h5ad'
+}
+
+// H5AD and SpatialData both read cells, genes, annotations, embeddings, and
+// ROI queries from an AnnData table exposed by the spatial dataset.
+export function isAnnDataPlatform(adapter: AppPlatformAdapter): boolean {
+  return adapter.kind === 'h5ad' || adapter.kind === 'spatialdata'
 }
 
 export function activeVisiumHdRoiStateForPlatform(options: {
@@ -374,7 +409,7 @@ export async function loadPlatformBoundaryElements(
     return { elements: [] }
   }
 
-  if (adapter.kind !== 'visium-hd') {
+  if (adapter.kind !== 'visium-hd' && adapter.kind !== 'spatialdata') {
     return dependencies.loadBoundaryElements(baseUrl, bbox, options)
   }
 

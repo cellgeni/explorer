@@ -1,8 +1,8 @@
 # Host Your Own Data
 
 The viewer reads data directly from browser-accessible URLs. It supports Xenium
-output folders, Visium HD Space Ranger output folders, direct H5AD files, and
-direct image URLs.
+output folders, Visium HD Space Ranger output folders, direct H5AD files,
+SpatialData Zarr stores, and direct image URLs.
 
 ## HTTP Requirements
 
@@ -138,6 +138,54 @@ Reference hosted fixture:
 https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad
 ```
 
+## Host Your Own SpatialData Data
+
+The app can load a [SpatialData](https://spatialdata.scverse.org/) Zarr store
+written by `spatialdata` (Zarr v2 or v3). Enter the store root URL in
+`Dataset or image URL`, for example:
+
+```text
+https://bucket.example/path/to/sample.sdata.zarr
+```
+
+The store is detected from `spatialdata_attrs` in the root `.zattrs` or
+`zarr.json`. It must be written with consolidated metadata (`zmetadata`,
+`.zmetadata`, or `consolidated_metadata` in the root `zarr.json`), which
+`spatialdata` does by default. The browser cannot list object-store prefixes,
+so the consolidated metadata is how the app finds elements. Re-consolidate with
+`sdata.write(path, consolidate_metadata=True)` or
+`zarr.consolidate_metadata(path)` if the store was edited in place.
+
+What the app reads:
+
+- One coordinate system. The app prefers the system that holds the table's
+  annotated shapes and an image, then `global`, then the one with the most
+  elements. The selection appears in the debug log.
+- One AnnData table, preferably one annotating a shapes element through
+  `region`, `region_key`, and `instance_key`. `X`, `obs`, `var`, and `obsm` are
+  read the same way as H5AD: dense, CSR, or CSC matrices, categorical
+  annotations, numeric metadata tracks, and `obsm` embeddings.
+- Shapes from GeoParquet `shapes/<name>/shapes.parquet`. Table rows are placed
+  at the centroid of their annotated circle or polygon, and those shapes are
+  drawn as cell boundaries. When the annotated shapes are circles (for example
+  Xenium `cell_circles`), a polygon element named like `cell_boundaries` that
+  shares the same index is drawn instead.
+- The highest-resolution image element in the chosen coordinate system, as an
+  OME-Zarr pyramid. Scale and translation transforms are applied. Rotated or
+  sheared images are skipped. Native RGB (H&E) images keep their full 0-255
+  display window instead of per-channel auto contrast.
+
+Not yet shown: `points` (transcripts), `labels` rasters, and additional images.
+Tables that annotate labels fall back to `obsm` spatial coordinates mapped
+through the labels transform. Coordinates are shown in the coordinate system's
+own units at 1 unit per µm; spatialdata-io Visium stores, for example, use
+full-resolution pixels.
+
+Large shapes elements are read whole through the browser Parquet reader, and
+sparse matrix chunks are cached in memory (up to 256 MB) so switching genes does
+not refetch them. Serve the store with the same CORS and byte-range rules
+listed above. Object stores that answer missing keys with `403` are supported.
+
 ## Host Your Own Image-Only Data
 
 Enter a direct image URL in `Dataset or image URL`. Supported URL forms are:
@@ -159,8 +207,8 @@ and GeoJSON shape annotation import/export available.
 Use the app's `Diagnose Dataset` button against the hosted source before sharing
 the link. For command-line validation, run a one-byte Range check against a key
 large file. This example checks Xenium `cells.parquet`; substitute a Visium HD
-positions Parquet, H5AD file, image TIFF, or other large asset for other source
-types:
+positions Parquet, H5AD file, SpatialData `shapes.parquet`, image TIFF, or
+other large asset for other source types:
 
 ```sh
 curl -r 0-0 -i https://bucket.example/path/to/output/cells.parquet

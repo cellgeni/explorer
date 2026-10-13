@@ -44,6 +44,21 @@ interface OpenOmeZarrImageOptions {
   readonly fetcher?: typeof fetch
   readonly signal?: AbortSignal
   readonly createBitmap?: (imageData: ImageData) => Promise<ImageBitmap>
+  // Places level-0 pixels into an external coordinate system (for example a
+  // SpatialData coordinate system). Replaces the multiscale-level
+  // coordinateTransformations and axis units; per-level dataset scales still
+  // apply.
+  readonly planarTransform?: OmeZarrPlanarTransform
+  // Opens the image group from an existing Zarr location (for example a
+  // SpatialData store with consolidated metadata) instead of fetching `url`.
+  readonly location?: zarr.Location<zarr.Readable>
+}
+
+export interface OmeZarrPlanarTransform {
+  readonly scaleX: number
+  readonly scaleY: number
+  readonly translateX: number
+  readonly translateY: number
 }
 
 interface OmeZarrImageSelection {
@@ -101,6 +116,7 @@ interface OmeZarrLoaderOptions {
   readonly selectedChannelIndex?: number
   readonly channels: readonly ImagePyramidChannelInfo[]
   readonly units: UnitsDescriptor
+  readonly origin?: { readonly x: number; readonly y: number }
   readonly createBitmap: (imageData: ImageData) => Promise<ImageBitmap>
 }
 
@@ -117,12 +133,22 @@ export async function openOmeZarrImageWithOptions(
 ): Promise<OmeZarrImagePyramidLoader> {
   const selection = parseOmeZarrImageSelection(url)
   const sourceUrl = omeZarrImageRootUrl(selection.sourceUrl)
-  const store = await openImageStore(sourceUrl, options)
-  const group = await zarr.open(store, {
+  const location = options.location ?? (await openImageStore(sourceUrl, options))
+  const group = await zarr.open(location, {
     kind: 'group',
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
-  const multiscale = firstOmeZarrMultiscale(group.attrs)
+  const declaredMultiscale = firstOmeZarrMultiscale(group.attrs)
+  const planarTransform = options.planarTransform
+  const multiscale: OmeZarrMultiscaleMetadata =
+    planarTransform === undefined
+      ? declaredMultiscale
+      : {
+          ...(declaredMultiscale.axes === undefined
+            ? {}
+            : { axes: declaredMultiscale.axes }),
+          datasets: declaredMultiscale.datasets,
+        }
   const firstDataset = multiscale.datasets[0]
 
   if (firstDataset === undefined) {
@@ -155,6 +181,11 @@ export async function openOmeZarrImageWithOptions(
         path: dataset.path,
         xAxis,
         yAxis,
+        ...(planarTransform === undefined
+          ? {}
+          : {
+              planarScale: { x: planarTransform.scaleX, y: planarTransform.scaleY },
+            }),
       })
     }),
   )
@@ -191,6 +222,9 @@ export async function openOmeZarrImageWithOptions(
       : { selectedChannelIndex: selection.channelIndex }),
     channels,
     units,
+    ...(planarTransform === undefined
+      ? {}
+      : { origin: { x: planarTransform.translateX, y: planarTransform.translateY } }),
     createBitmap: options.createBitmap ?? createBitmapFromImageData,
   })
 }
@@ -261,6 +295,8 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   private readonly yAxis: number
   private readonly channelAxis: number | undefined
   private readonly selectedChannelIndex: number | undefined
+  private readonly originX: number
+  private readonly originY: number
   private readonly createBitmap: (imageData: ImageData) => Promise<ImageBitmap>
 
   constructor(options: OmeZarrLoaderOptions) {
@@ -284,6 +320,8 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     this.numLevels = options.levels.length
     this.imageWidth = firstLevel.width
     this.imageHeight = firstLevel.height
+    this.originX = options.origin?.x ?? 0
+    this.originY = options.origin?.y ?? 0
     this.createBitmap = options.createBitmap
   }
 
@@ -300,8 +338,14 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     return 0
   }
 
-  tilesForBbox(level: number, bbox: BBox): readonly TileIndex[] {
+  tilesForBbox(level: number, imageBbox: BBox): readonly TileIndex[] {
     const meta = this.levelMetaFor(level)
+    const bbox = {
+      minX: imageBbox.minX - this.originX,
+      maxX: imageBbox.maxX - this.originX,
+      minY: imageBbox.minY - this.originY,
+      maxY: imageBbox.maxY - this.originY,
+    }
     const nCols = Math.ceil(meta.width / meta.tileWidth)
     const nRows = Math.ceil(meta.height / meta.tileHeight)
     const col0 = Math.max(
@@ -361,10 +405,10 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     const imageHeightMicrometers = baseLevel.height * baseLevel.yMicrometersPerPixel
 
     return {
-      minX: micrometers(Math.max(0, left)),
-      maxX: micrometers(Math.min(imageWidthMicrometers, right)),
-      minY: micrometers(Math.max(0, top)),
-      maxY: micrometers(Math.min(imageHeightMicrometers, bottom)),
+      minX: micrometers(this.originX + Math.max(0, left)),
+      maxX: micrometers(this.originX + Math.min(imageWidthMicrometers, right)),
+      minY: micrometers(this.originY + Math.max(0, top)),
+      maxY: micrometers(this.originY + Math.min(imageHeightMicrometers, bottom)),
     }
   }
 
@@ -657,6 +701,7 @@ function levelMetaFromArray(options: {
   readonly path: string
   readonly xAxis: number
   readonly yAxis: number
+  readonly planarScale?: { readonly x: number; readonly y: number }
 }): OmeZarrLevelMeta {
   const chunkShape = options.array.chunks
   const xScale = micrometersPerPixelForAxis({
@@ -664,12 +709,14 @@ function levelMetaFromArray(options: {
     axes: options.axes,
     dataset: options.dataset,
     multiscale: options.multiscale,
+    ...(options.planarScale === undefined ? {} : { planarScale: options.planarScale.x }),
   })
   const yScale = micrometersPerPixelForAxis({
     axis: options.yAxis,
     axes: options.axes,
     dataset: options.dataset,
     multiscale: options.multiscale,
+    ...(options.planarScale === undefined ? {} : { planarScale: options.planarScale.y }),
   })
 
   return {
@@ -693,11 +740,13 @@ function micrometersPerPixelForAxis(options: {
   readonly axes: readonly OmeZarrAxis[]
   readonly dataset: OmeZarrDatasetMetadata
   readonly multiscale: OmeZarrMultiscaleMetadata
+  readonly planarScale?: number
 }): number {
   const scale =
     scaleForAxis(options.axis, options.multiscale.coordinateTransformations) *
     scaleForAxis(options.axis, options.dataset.coordinateTransformations)
-  const unitMultiplier = micrometerMultiplierForUnit(options.axes[options.axis]?.unit)
+  const unitMultiplier =
+    options.planarScale ?? micrometerMultiplierForUnit(options.axes[options.axis]?.unit)
   const value = scale * unitMultiplier
 
   return Number.isFinite(value) && value > 0 ? value : 1
@@ -832,8 +881,11 @@ function isNativeRgbChannelSet(
     const label = typeof omeroChannel?.label === 'string' ? omeroChannel.label : ''
     const color = parseOmeroColor(omeroChannel?.color)
 
+    const normalizedLabel = label.trim().toLowerCase()
+
     return (
-      label.trim().toLowerCase() === channel.name.toLowerCase() ||
+      normalizedLabel === channel.name.toLowerCase() ||
+      normalizedLabel === channel.name.charAt(0).toLowerCase() ||
       colorsEqual(color, channel.color)
     )
   })
