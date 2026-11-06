@@ -3,8 +3,6 @@ import { micrometers } from './coords'
 import {
   GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT,
   GENE_EXPRESSION_EXACT_CELL_LIMIT,
-  GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
-  GENE_EXPRESSION_SAMPLE_CELL_LIMIT,
   geneExpressionRequestKey,
   planGeneExpressionLod,
 } from './geneExpressionLod'
@@ -102,7 +100,7 @@ describe('gene expression LOD planner', () => {
         minY: micrometers(160),
         maxY: micrometers(440),
       },
-      cellLimit: GENE_EXPRESSION_SAMPLE_CELL_LIMIT,
+      cellLimit: 120_000,
       sampleStride: 5,
       sourceCellCount: 75_000,
     })
@@ -125,7 +123,7 @@ describe('gene expression LOD planner', () => {
       kind: 'request',
       mode: 'overview-sampled',
       bbox: slideBbox,
-      cellLimit: GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
+      cellLimit: 60_000,
       sampleStride: 4,
       sourceCellCount: 60_000,
     })
@@ -174,7 +172,7 @@ describe('gene expression LOD planner', () => {
       kind: 'request',
       mode: 'overview-sampled',
       bbox: slideBbox,
-      cellLimit: GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
+      cellLimit: 600_000,
       sampleStride: 40,
       sourceCellCount: 600_000,
     })
@@ -511,7 +509,7 @@ describe('gene expression LOD planner', () => {
         minY: micrometers(160),
         maxY: micrometers(440),
       },
-      cellLimit: GENE_EXPRESSION_SAMPLE_CELL_LIMIT,
+      cellLimit: 600_000,
       sampleStride: 5,
       sourceCellCount: 75_000,
     })

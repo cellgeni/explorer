@@ -157,13 +157,8 @@ export function geneExpressionStatusCopy<
       return `Expression all cells: ${geneExpressionState.cellCount.toLocaleString()} positive ${noun} across ${geneExpressionState.visibleCellCount.toLocaleString()} slide cells`
     }
 
-    if (
-      geneExpressionState.mode === 'sampled' &&
-      geneExpressionState.visibleCellCount > geneExpressionState.cellCount
-    ) {
-      const visibleNoun = geneExpressionState.visibleCellCount === 1 ? 'cell' : 'cells'
-
-      return `Expression sample: ${geneExpressionState.cellCount.toLocaleString()} of ${geneExpressionState.visibleCellCount.toLocaleString()} visible ${visibleNoun}`
+    if (geneExpressionState.mode === 'sampled') {
+      return `Expression sample: ${geneExpressionState.cellCount.toLocaleString()} positive ${noun} across ${geneExpressionState.visibleCellCount.toLocaleString()} visible cells`
     }
 
     return `Expression: ${geneExpressionState.cellCount.toLocaleString()} ${noun}`

@@ -826,7 +826,7 @@ describe('XeniumDataset', () => {
     )
   })
 
-  it('applies a deterministic viewport-cell stride for sampled expression queries', async () => {
+  it('reads every viewport cell for sampled expression queries', async () => {
     const cellId = intToCellId(1, 2)
     const conn = new FakeConnection([
       [
@@ -858,14 +858,13 @@ describe('XeniumDataset', () => {
       { limit: 100, sampleStride: 3 },
     )
 
-    expect(conn.preparedSql[0]).toContain('hash(cell_id) % ? = 0')
+    expect(conn.preparedSql[0]).not.toContain('hash(cell_id)')
     expect(conn.statements[0]?.params).toEqual([
       'https://example.test/xenium/cells.parquet',
       micrometers(0),
       micrometers(10),
       micrometers(0),
       micrometers(20),
-      3,
       100,
     ])
   })

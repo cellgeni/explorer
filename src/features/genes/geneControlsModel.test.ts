@@ -114,6 +114,16 @@ describe('geneControlsModel', () => {
         status: 'ready',
         url: 'https://example.test/output',
         genes: ['Actb'],
+        mode: 'sampled',
+        cellCount: 25,
+        visibleCellCount: 1000,
+      }),
+    ).toBe('Expression sample: 25 positive cells across 1,000 visible cells')
+    expect(
+      geneExpressionStatusCopy({
+        status: 'ready',
+        url: 'https://example.test/output',
+        genes: ['Actb'],
         mode: 'all-cells',
         cellCount: 25,
         visibleCellCount: 1000,

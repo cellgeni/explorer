@@ -26,7 +26,11 @@ import type {
   SpatialDataset,
   SpatialElementId,
 } from './spatialDataset'
-import type { DatasetCell, GeneExpressionBatch } from './xeniumDataset'
+import type {
+  DatasetCell,
+  GeneExpressionBatch,
+  GeneExpressionElement,
+} from './xeniumDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
 
 export interface AnnDataH5adDatasetOptions {
@@ -351,27 +355,36 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   ): Promise<GeneExpressionBatch> {
     const cache = await this.cache()
     throwIfAborted(options.signal)
-    const selectedCells = h5adCellsInBbox(
-      cache,
-      bbox,
-      options.limit,
-      options.sampleStride,
-    )
+    const selectedCells = h5adCellsInBbox(cache, bbox, options.limit)
     const matrix = await h5adMatrixForCells(
       cache,
       selectedCells.map((cell) => cell.id),
       genes,
     )
-    const elements = selectedCells.map((cell) => {
+    // A sample keeps every cell with expression and every Nth cell without.
+    const sampleStride = normalizeSampleStride(options.sampleStride)
+    const elements: GeneExpressionElement[] = []
+    let zeroCellIndex = 0
+
+    for (const cell of selectedCells) {
       const expression = matrix.cells.get(cell.id)
       const count = expression?.counts.reduce((sum, value) => sum + value, 0) ?? 0
 
-      return {
+      if (count === 0) {
+        zeroCellIndex += 1
+
+        if ((zeroCellIndex - 1) % sampleStride !== 0) {
+          continue
+        }
+      }
+
+      elements.push({
         id: cell.id,
         position: cell.position,
         count,
-      }
-    })
+      })
+    }
+
     let maxCount = 0
 
     for (const element of elements) {
@@ -1763,6 +1776,20 @@ async function h5adMatrixCellsForRows(
     return cells
   }
 
+  if (
+    matrix.kind === 'dense-zarr' &&
+    !allGenesRequested &&
+    rows.length > requestedCols.length
+  ) {
+    return denseZarrCellsFromColumns(
+      matrix,
+      rows,
+      requestedCols,
+      geneNames,
+      includeZeroCounts,
+    )
+  }
+
   if (matrix.kind === 'dense-zarr') {
     for (const { id, row } of rows) {
       cells.set(
@@ -1908,6 +1935,47 @@ function csrZarrRowBatches(
   return batches
 }
 
+// Reads each requested column once, which touches every row chunk once
+// instead of once per requested row.
+async function denseZarrCellsFromColumns(
+  matrix: Extract<H5adMatrix, { readonly kind: 'dense-zarr' }>,
+  rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
+  requestedCols: readonly number[],
+  geneNames: readonly string[],
+  includeZeroCounts: boolean,
+): Promise<ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }>> {
+  const columns = new Map<number, NumericArrayLike>()
+
+  for (const col of requestedCols) {
+    columns.set(
+      col,
+      readNumericArray(
+        zarrChunkValue(await zarr.get(matrix.values, [null, col])),
+        matrix.values.path,
+      ),
+    )
+  }
+
+  const cells = new Map<SpatialElementId, { geneNames: string[]; counts: number[] }>()
+
+  for (const { id, row } of rows) {
+    const countsByColumn = new Map<number, number>()
+
+    for (const [col, values] of columns) {
+      countsByColumn.set(col, numericValue(values, row))
+    }
+
+    cells.set(
+      id,
+      cellFromCountsByColumn(countsByColumn, requestedCols, geneNames, {
+        includeZeroCounts,
+      }),
+    )
+  }
+
+  return cells
+}
+
 async function h5adMatrixCellsFromColumns(
   matrix: Extract<H5adMatrix, { readonly kind: 'csc' | 'csc-zarr' }>,
   rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
@@ -2051,18 +2119,13 @@ function emptyH5adCells(
   return new Map(rows.map(({ id }) => [id, { geneNames: [], counts: [] }]))
 }
 
-// Every `sampleStride`-th cell inside the box, so a sample spreads over the
-// whole area instead of stopping after the first rows of the table.
 function h5adCellsInBbox(
   cache: H5adCache,
   bbox: BBox,
   limit: number | undefined,
-  sampleStride = 1,
 ): readonly DatasetCell[] {
   const cells: DatasetCell[] = []
   const maxCells = limit === undefined ? Number.POSITIVE_INFINITY : Math.max(0, limit)
-  const stride = normalizeSampleStride(sampleStride)
-  let candidateIndex = 0
 
   for (let index = 0; index < cache.cellIds.length; index += 1) {
     const position = cache.coordinates[index]
@@ -2078,12 +2141,6 @@ function h5adCellsInBbox(
       position.y < bbox.minY ||
       position.y > bbox.maxY
     ) {
-      continue
-    }
-
-    candidateIndex += 1
-
-    if ((candidateIndex - 1) % stride !== 0) {
       continue
     }
 

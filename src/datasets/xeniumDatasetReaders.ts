@@ -28,7 +28,6 @@ import {
   normalizeGeneList,
   normalizeMinQv,
   normalizePositiveInteger,
-  normalizeSampleStride,
   parseBoundaryRow,
   parseCellTranscriptZDistributionRows,
   parseExtentRow,
@@ -430,23 +429,18 @@ export async function readXeniumGeneExpression(options: {
     }
   }
 
+  // Only cells with expression are returned, so `sampleStride` has nothing to
+  // thin: every cell in the box is read so that no expressing cell is lost.
   const limit = queryOptions.limit ?? 5_000
-  const sampleStride = normalizeSampleStride(queryOptions.sampleStride)
   throwIfAborted(queryOptions.signal)
   const viewportCellsStartedAt = Date.now()
-  const viewportCells = await readXeniumCellsInBbox(
-    conn,
-    cellsUrl,
-    bbox,
-    limit,
-    sampleStride,
-  )
+  const viewportCells = await readXeniumCellsInBbox(conn, cellsUrl, bbox, limit)
   const viewportCellsMs = elapsedMs(viewportCellsStartedAt)
   queryOptions.onStageTiming?.({
     stage: 'viewport-cells',
     label: 'Viewport cell query',
     durationMs: viewportCellsMs,
-    detail: `${viewportCells.length.toLocaleString()} cells, limit ${limit.toLocaleString()}, stride ${sampleStride.toLocaleString()}`,
+    detail: `${viewportCells.length.toLocaleString()} cells, limit ${limit.toLocaleString()}`,
   })
   throwIfAborted(queryOptions.signal)
 
@@ -610,13 +604,7 @@ async function readXeniumCellsInBbox(
   cellsUrl: string,
   bbox: BBox,
   limit: number,
-  sampleStride = 1,
 ): Promise<readonly DatasetCell[]> {
-  const samplePredicate =
-    sampleStride > 1
-      ? `
-  AND hash(cell_id) % ? = 0`
-      : ''
   const stmt = await conn.prepare(`
 SELECT cell_id,
        file_row_number AS cell_feature_matrix_row,
@@ -627,22 +615,17 @@ SELECT cell_id,
 FROM read_parquet( ? )
 WHERE x_centroid BETWEEN ? AND ?
   AND y_centroid BETWEEN ? AND ?
-${samplePredicate}
 ORDER BY file_row_number
 LIMIT ?
 `)
-  const result =
-    sampleStride > 1
-      ? await stmt.query(
-          cellsUrl,
-          bbox.minX,
-          bbox.maxX,
-          bbox.minY,
-          bbox.maxY,
-          sampleStride,
-          limit,
-        )
-      : await stmt.query(cellsUrl, bbox.minX, bbox.maxX, bbox.minY, bbox.maxY, limit)
+  const result = await stmt.query(
+    cellsUrl,
+    bbox.minX,
+    bbox.maxX,
+    bbox.minY,
+    bbox.maxY,
+    limit,
+  )
 
   return result.toArray().map(parseViewportCellRow)
 }
