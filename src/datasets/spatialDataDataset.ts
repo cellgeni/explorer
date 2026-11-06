@@ -338,7 +338,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   async geneExpression(
     bbox: BBox,
     genes: readonly string[],
-    options: CellFeatureMatrixReadOptions & { readonly limit?: number } = {},
+    options: CellFeatureMatrixReadOptions & {
+      readonly limit?: number
+      readonly sampleStride?: number
+    } = {},
   ): Promise<GeneExpressionBatch> {
     const table = await this.tableOrNull()
 

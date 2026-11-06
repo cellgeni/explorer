@@ -183,6 +183,19 @@ describe('AnnDataH5adDataset', () => {
       ['cell-c', 6],
       ['cell-d', 8],
     ])
+
+    const sampled = await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(20),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+      ['Gapdh'],
+      { limit: 2, sampleStride: 2 },
+    )
+
+    expect(sampled.elements.map((element) => element.id)).toEqual(['cell-a', 'cell-c'])
   })
 
   it('uses embedding coordinates and dataframe category sidecars', async () => {

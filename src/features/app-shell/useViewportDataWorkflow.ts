@@ -469,6 +469,10 @@ export function useViewportDataWorkflow({
 
           const timingDetail = formatGeneExpressionTiming(batch.timing)
           const memoryDetail = currentMemoryDetail()
+          // Some readers also return cells with zero expression.
+          const positiveCellCount = batch.elements.filter(
+            (element) => element.count > 0,
+          ).length
 
           rememberGeneExpressionScaleMax(
             geneExpressionScaleKey,
@@ -481,7 +485,7 @@ export function useViewportDataWorkflow({
               loadState.url,
               batch.genes,
               expressionPlan.mode,
-              batch.elements.length,
+              positiveCellCount,
               expressionPlan.sourceCellCount,
             ),
           )
@@ -489,7 +493,7 @@ export function useViewportDataWorkflow({
             telemetryEvent('gene-expression.load', 'success', {
               startedAt: expressionStartedAt,
               detail: [
-                `${geneExpressionModeLabel(expressionPlan.mode)}: ${batch.elements.length.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
+                `${geneExpressionModeLabel(expressionPlan.mode)}: ${positiveCellCount.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
                 memoryDetail === undefined ? undefined : `memory ${memoryDetail}`,
               ]
                 .filter((part): part is string => part !== undefined)
@@ -497,7 +501,7 @@ export function useViewportDataWorkflow({
             }),
           )
           appendDebugEvent(
-            `${geneExpressionModeLabel(expressionPlan.mode)} ready: ${batch.elements.length.toLocaleString()} positive cells in ${formatElapsed(
+            `${geneExpressionModeLabel(expressionPlan.mode)} ready: ${positiveCellCount.toLocaleString()} positive cells in ${formatElapsed(
               expressionStartedAt,
             )} (${formatProfileTimingDetail(timingDetail, memoryDetail)})`,
             { coalesceKey: 'gene-expression-query' },

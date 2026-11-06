@@ -47,9 +47,12 @@ Custom image layers accept remote OME-TIFF or OME-Zarr URLs and render through
 the same channel controls as dataset morphology.
 
 The `Genes` tab supports individual gene selection and multi-gene signatures for
-Xenium, Visium HD, and H5AD. `Auto LOD` chooses an appropriate expression query
-for the current zoom and viewport; `Exact region` keeps the current viewport
-exact when the region is small enough. The default gene scale is Plasma.
+Xenium, Visium HD, and H5AD. `Auto LOD` loads expression for every cell in
+datasets of up to 500,000 cells, the same as `All cells`. Larger datasets load
+the cells in view when zoomed in and an even sample of the slide when zoomed
+out. `Exact region` keeps the current viewport exact when the region is small
+enough. Visium HD uses coarser bins when zoomed out. The default gene scale is
+Plasma.
 
 For H5AD, categorical `obs` columns load as annotations and numeric or boolean
 `obs` columns load as metadata tracks. Set `Cell color` to `Metadata` to color

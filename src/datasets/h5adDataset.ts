@@ -27,6 +27,7 @@ import type {
   SpatialElementId,
 } from './spatialDataset'
 import type { DatasetCell, GeneExpressionBatch } from './xeniumDataset'
+import { normalizeSampleStride } from './xeniumDatasetRows'
 
 export interface AnnDataH5adDatasetOptions {
   readonly url: string
@@ -343,11 +344,19 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   async geneExpression(
     bbox: BBox,
     genes: readonly string[],
-    options: CellFeatureMatrixReadOptions & { readonly limit?: number } = {},
+    options: CellFeatureMatrixReadOptions & {
+      readonly limit?: number
+      readonly sampleStride?: number
+    } = {},
   ): Promise<GeneExpressionBatch> {
     const cache = await this.cache()
     throwIfAborted(options.signal)
-    const selectedCells = h5adCellsInBbox(cache, bbox, options.limit)
+    const selectedCells = h5adCellsInBbox(
+      cache,
+      bbox,
+      options.limit,
+      options.sampleStride,
+    )
     const matrix = await h5adMatrixForCells(
       cache,
       selectedCells.map((cell) => cell.id),
@@ -2042,13 +2051,18 @@ function emptyH5adCells(
   return new Map(rows.map(({ id }) => [id, { geneNames: [], counts: [] }]))
 }
 
+// Every `sampleStride`-th cell inside the box, so a sample spreads over the
+// whole area instead of stopping after the first rows of the table.
 function h5adCellsInBbox(
   cache: H5adCache,
   bbox: BBox,
   limit: number | undefined,
+  sampleStride = 1,
 ): readonly DatasetCell[] {
   const cells: DatasetCell[] = []
   const maxCells = limit === undefined ? Number.POSITIVE_INFINITY : Math.max(0, limit)
+  const stride = normalizeSampleStride(sampleStride)
+  let candidateIndex = 0
 
   for (let index = 0; index < cache.cellIds.length; index += 1) {
     const position = cache.coordinates[index]
@@ -2064,6 +2078,12 @@ function h5adCellsInBbox(
       position.y < bbox.minY ||
       position.y > bbox.maxY
     ) {
+      continue
+    }
+
+    candidateIndex += 1
+
+    if ((candidateIndex - 1) % stride !== 0) {
       continue
     }
 

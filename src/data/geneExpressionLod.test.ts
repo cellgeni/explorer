@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers } from './coords'
 import {
+  GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT,
   GENE_EXPRESSION_EXACT_CELL_LIMIT,
   GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
   GENE_EXPRESSION_SAMPLE_CELL_LIMIT,
@@ -130,17 +131,43 @@ describe('gene expression LOD planner', () => {
     })
   })
 
-  it('uses a stable whole-slide sample for low overview zooms', () => {
+  it.each([-3, 0, 4])(
+    'loads every cell in auto mode up to the auto limit (zoom %d)',
+    (zoom) => {
+      expect(
+        planGeneExpressionLod(
+          detail({
+            visibleCellCount: 60_000,
+            viewState: { target: [150, -250, 0], zoom },
+          }),
+          {
+            detailMode: 'auto',
+            slideBbox,
+            totalCellCount: GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT,
+          },
+        ),
+      ).toEqual({
+        kind: 'request',
+        mode: 'all-cells',
+        bbox: slideBbox,
+        cellLimit: GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT,
+        sampleStride: 1,
+        sourceCellCount: GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT,
+      })
+    },
+  )
+
+  it('uses a stable whole-slide sample for low overview zooms above the auto limit', () => {
     expect(
       planGeneExpressionLod(
         detail({
-          visibleCellCount: 60_000,
+          visibleCellCount: 600_000,
           viewState: { target: [150, -250, 0], zoom: -3 },
         }),
         {
           detailMode: 'auto',
           slideBbox,
-          totalCellCount: 60_000,
+          totalCellCount: 600_000,
         },
       ),
     ).toEqual({
@@ -148,12 +175,12 @@ describe('gene expression LOD planner', () => {
       mode: 'overview-sampled',
       bbox: slideBbox,
       cellLimit: GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
-      sampleStride: 4,
-      sourceCellCount: 60_000,
+      sampleStride: 40,
+      sourceCellCount: 600_000,
     })
   })
 
-  it('uses exact visible expression in auto mode up to the exact cap', () => {
+  it('uses exact visible expression in auto mode above the auto limit', () => {
     expect(
       planGeneExpressionLod(
         detail({
@@ -163,7 +190,7 @@ describe('gene expression LOD planner', () => {
         {
           detailMode: 'auto',
           slideBbox,
-          totalCellCount: 60_000,
+          totalCellCount: 600_000,
         },
       ),
     ).toEqual({
@@ -471,7 +498,7 @@ describe('gene expression LOD planner', () => {
       {
         detailMode: 'auto',
         slideBbox,
-        totalCellCount: 120_000,
+        totalCellCount: 600_000,
       },
     )
 
