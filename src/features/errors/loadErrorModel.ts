@@ -83,6 +83,20 @@ export function createStructuredLoadError(
     )
   }
 
+  if (isIncompleteZarrStoreError(error, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'http',
+        title: 'Store objects missing or unreadable',
+        message,
+        action:
+          'Check that every object in the store finished uploading and is publicly readable, then reload. Diagnose Dataset lists the missing chunks.',
+      },
+      detail,
+    )
+  }
+
   const httpStatus = /\bhttp\s+(\d{3})\b/i.exec(message)?.[1]
 
   if (httpStatus !== undefined) {
@@ -346,6 +360,16 @@ function isFeatureSliceBudgetError(error: unknown, normalizedMessage: string): b
     (error instanceof Error &&
       error.name === 'FeatureSliceFullFileBudgetExceededError') ||
     normalizedMessage.includes('feature slice h5')
+  )
+}
+
+function isIncompleteZarrStoreError(error: unknown, normalizedMessage: string): boolean {
+  return (
+    (error instanceof Error &&
+      (error.name === 'ZarrChunkUnavailableError' ||
+        error.name === 'SpatialDataIncompleteStoreError')) ||
+    normalizedMessage.startsWith('spatialdata store is incomplete') ||
+    /^zarr chunk .* could not be read \(http \d{3}\)/.test(normalizedMessage)
   )
 }
 

@@ -160,7 +160,7 @@ What the app reads:
 
 - One coordinate system. The app prefers the system that holds the table's
   annotated shapes and an image, then `global`, then the one with the most
-  elements. The selection appears in the debug log.
+  elements. Pick another one in the `Dataset` tab.
 - One AnnData table, preferably one annotating a shapes element through
   `region`, `region_key`, and `instance_key`. `X`, `obs`, `var`, and `obsm` are
   read the same way as H5AD: dense, CSR, or CSC matrices, categorical
@@ -170,21 +170,42 @@ What the app reads:
   drawn as cell boundaries. When the annotated shapes are circles (for example
   Xenium `cell_circles`), a polygon element named like `cell_boundaries` that
   shares the same index is drawn instead.
-- The highest-resolution image element in the chosen coordinate system, as an
-  OME-Zarr pyramid. Scale and translation transforms are applied. Rotated or
-  sheared images are skipped. Native RGB (H&E) images keep their full 0-255
-  display window instead of per-channel auto contrast.
+- Labels (segmentation masks) annotated by the table. Rows are placed at their
+  `obsm` spatial coordinates, read as label-pixel positions and mapped through
+  the labels transform. Cell outlines are traced from the label pixels of the
+  visible area when you zoom in below `Boundary limit`. Label ids come from the
+  `instance_key` column when it holds integers, otherwise from an integer `obs`
+  column named like `cell_labels`.
+- One image element, as an OME-Zarr pyramid. The finest image is shown by
+  default; pick another one in the `Dataset` tab. Scale and translation
+  transforms are applied. Rotated or sheared images are skipped. Three-channel
+  8-bit images without channel names or colors (including SpatialData's default
+  channel labels `0`, `1`, `2`) are shown as RGB (H&E) with the full 0-255
+  display window. Chunks larger than 512 pixels are split into smaller tiles.
 
-Not yet shown: `points` (transcripts), `labels` rasters, and additional images.
-Tables that annotate labels fall back to `obsm` spatial coordinates mapped
-through the labels transform. Coordinates are shown in the coordinate system's
-own units at 1 unit per µm; spatialdata-io Visium stores, for example, use
-full-resolution pixels.
+Units: the viewer works in micrometers. The app uses the axis units the store
+declares for the coordinate system. spatialdata-io stores usually declare none
+(`unit`), so the app estimates the scale from Xenium-style `cell_area` against
+segmentation areas, from the Visium 100 µm spot pitch (tables with `array_row`
+and `array_col`), or from Visium HD `square_NNNum` bin names. When nothing
+applies, distances are labelled as units. The `µm per unit` field in the
+`Dataset` tab overrides the scale, for example `0.2125` for Xenium morphology
+pixels. The coordinate system, image, and scale are kept in the shareable URL
+(`sdCs`, `sdImage`, `sdUm`).
+
+Not yet shown: `points` (transcripts) and more than one image at a time.
 
 Large shapes elements are read whole through the browser Parquet reader, and
 sparse matrix chunks are cached in memory (up to 256 MB) so switching genes does
 not refetch them. Serve the store with the same CORS and byte-range rules
 listed above. Object stores that answer missing keys with `403` are supported.
+
+Incomplete uploads: Zarr reads a missing chunk as the array fill value, so a
+partly uploaded store can load with empty columns. The app logs table chunks
+read that way, fails with `Store objects missing or unreadable` when a string
+array or a required array cannot be read, and skips optional `obs` columns
+whose chunks return `403`. `Diagnose Dataset` checks every table chunk and one
+image chunk.
 
 ## Host Your Own Image-Only Data
 

@@ -6,6 +6,7 @@ import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
 import type { H5adLoadProgressReporter } from './h5adDataset'
+import type { SpatialDataSelection } from './spatialDataDataset'
 
 export type AnySpatialDataset = SpatialDataset<CellId> | SpatialDataset<SpatialElementId>
 
@@ -119,6 +120,34 @@ const VISIUM_HD_SEGMENTED_OUTPUT_PROBES = [
 }[]
 
 const spatialDatasetCache = new Map<string, Promise<AnySpatialDataset>>()
+// Coordinate system, image, and unit choices per SpatialData store URL. Kept
+// here so every caller that only knows the URL gets the matching instance.
+const spatialDataSelections = new Map<string, SpatialDataSelection>()
+
+export function setSpatialDataSelection(
+  baseUrl: string,
+  selection: SpatialDataSelection | undefined,
+): void {
+  const key = normalizeBaseUrl(baseUrl)
+
+  if (selection === undefined || Object.keys(selection).length === 0) {
+    spatialDataSelections.delete(key)
+  } else {
+    spatialDataSelections.set(key, selection)
+  }
+
+  // Drop instances built for earlier selections so their tables, label
+  // traces, and chunk caches can be released.
+  for (const cacheKey of spatialDatasetCache.keys()) {
+    if (cacheKey.startsWith(`${key}\n`)) {
+      spatialDatasetCache.delete(cacheKey)
+    }
+  }
+}
+
+export function spatialDataSelectionFor(baseUrl: string): SpatialDataSelection {
+  return spatialDataSelections.get(normalizeBaseUrl(baseUrl)) ?? {}
+}
 const DATASET_PROBE_TIMEOUT_MS = 15_000
 
 export async function detectSpatialDataset(
@@ -330,6 +359,7 @@ export async function createSpatialDataset(
   if (detection.platform === 'spatialdata') {
     const { SpatialDataDataset } = await import('./spatialDataDataset')
     return new SpatialDataDataset({
+      ...spatialDataSelectionFor(baseUrl),
       url: detection.spatialDataUrl,
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       ...(options.onH5adLoadProgress === undefined
@@ -373,6 +403,7 @@ export function cachedSpatialDataset(
   const cacheKey = spatialDatasetCacheKey(
     normalizedBaseUrl,
     maxTwoMicrometerFilteredBarcodes,
+    spatialDataSelections.get(normalizedBaseUrl),
   )
   const existing = spatialDatasetCache.get(cacheKey)
 
@@ -604,6 +635,7 @@ function hasSegmentedOutputPaths(paths: VisiumHdSegmentedOutputPaths): boolean {
 function spatialDatasetCacheKey(
   baseUrl: string,
   visiumHdMaxTwoMicrometerFilteredBarcodes: number | undefined,
+  spatialDataSelection: SpatialDataSelection | undefined,
 ): string {
-  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}`
+  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}`
 }

@@ -137,6 +137,10 @@ import {
   type ControlHudTab,
 } from './appShellModel'
 import type { DebugLogEntry, FallbackNoticeEntry } from './appRuntimeModel'
+import {
+  IDLE_SPATIALDATA_CONTROL_STATE,
+  type SpatialDataControlState,
+} from '../dataset/spatialDataModel'
 
 export interface UseAppDomainStateOptions {
   readonly initialShareableState: ShareableState
@@ -406,6 +410,8 @@ export function useAppDomainState({
   const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>(
     IDLE_VISIUM_HD_CONTROL_STATE,
   )
+  const [spatialDataControlState, setSpatialDataControlState] =
+    useState<SpatialDataControlState>(IDLE_SPATIALDATA_CONTROL_STATE)
   const [gridCellAssignmentState, setGridCellAssignmentState] = useState<
     GridCellAssignmentState<StructuredLoadError>
   >(IDLE_GRID_CELL_ASSIGNMENT_STATE)
@@ -616,6 +622,10 @@ export function useAppDomainState({
       transcriptOpacity,
       transcriptPointColorMode,
       transcriptPointSize,
+    },
+    spatialData: {
+      setSpatialDataControlState,
+      spatialDataControlState,
     },
     visiumHd: {
       gridCellAssignmentState,

@@ -8,6 +8,29 @@ import {
 } from './loadErrorModel'
 
 describe('loadErrorModel', () => {
+  it('explains incomplete Zarr stores instead of the downstream decode error', () => {
+    const chunkError = Object.assign(
+      new Error(
+        'Zarr chunk tables/table/var/_index/0 could not be read (HTTP 404). String arrays have no fill value, so the store is incomplete.',
+      ),
+      { name: 'ZarrChunkUnavailableError' },
+    )
+    const incomplete = Object.assign(
+      new Error(
+        'SpatialData store is incomplete: 1 chunk is missing (tables/table/obsm/spatial/0/0). The read then failed with: boom',
+      ),
+      { name: 'SpatialDataIncompleteStoreError' },
+    )
+
+    for (const error of [chunkError, incomplete]) {
+      expect(createStructuredLoadError('Dataset overview', error)).toMatchObject({
+        code: 'http',
+        title: 'Store objects missing or unreadable',
+        message: error.message,
+      })
+    }
+  })
+
   it('classifies common dataset load failures', () => {
     expect(
       createStructuredLoadError(

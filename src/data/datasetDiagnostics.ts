@@ -9,7 +9,11 @@ import {
   openSpatialDataStore,
   readSpatialDataCatalog,
   selectSpatialDataView,
+  type SpatialDataCatalog,
+  type SpatialDataStore,
+  type SpatialDataView,
 } from '../datasets/spatialDataCatalog'
+import { isStringArrayMetadata, zarrChunkKeys } from '../zarr/zarrStores'
 import type {
   VisiumHdBinDescriptor,
   VisiumHdBinSizeMicrometers,
@@ -283,13 +287,16 @@ async function runSpatialDataDiagnostics(
 ): Promise<readonly DatasetDiagnosticCheck[]> {
   const url = detection.spatialDataUrl
   const startedAt = Date.now()
-  let view: ReturnType<typeof selectSpatialDataView>
+  let store: SpatialDataStore
+  let catalog: SpatialDataCatalog
+  let view: SpatialDataView
 
   try {
-    const { store, zarrFormat } = await openSpatialDataStore(url, {
+    const opened = await openSpatialDataStore(url, {
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
     })
-    const catalog = await readSpatialDataCatalog(store, zarrFormat)
+    store = opened.store
+    catalog = await readSpatialDataCatalog(store, opened.zarrFormat)
     view = selectSpatialDataView(catalog)
   } catch (cause) {
     return [
@@ -333,6 +340,14 @@ async function runSpatialDataDiagnostics(
     )
   }
 
+  if (view.table !== undefined) {
+    checks.push(await checkSpatialDataTableChunks(url, store, catalog, view, options))
+  }
+
+  if (view.image !== undefined) {
+    checks.push(await checkSpatialDataImageChunk(url, store, view, options))
+  }
+
   for (const entry of view.regionShapes) {
     checks.push(
       await checkRangeFile(
@@ -349,6 +364,213 @@ async function runSpatialDataDiagnostics(
   }
 
   return checks
+}
+
+const SPATIALDATA_MAX_CHECKED_CHUNKS = 2_000
+const SPATIALDATA_CHUNK_CHECK_CONCURRENCY = 8
+
+interface ChunkProbe {
+  readonly key: string
+  readonly status: number | 'error'
+  readonly stringArray: boolean
+}
+
+// Zarr reads absent chunks as fill values, so an interrupted upload loads
+// without errors but with empty columns. HEAD every table chunk to find them.
+async function checkSpatialDataTableChunks(
+  url: string,
+  store: SpatialDataStore,
+  catalog: SpatialDataCatalog,
+  view: SpatialDataView,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const startedAt = Date.now()
+  const tablePath = view.table?.path ?? ''
+  const targets: { readonly key: string; readonly stringArray: boolean }[] = []
+
+  for (const node of catalog.nodes) {
+    if (node.kind !== 'array' || !node.path.startsWith(`${tablePath}/`)) {
+      continue
+    }
+
+    const metadata = await readZarrArrayMetadata(store, node.path)
+
+    if (metadata === null) {
+      continue
+    }
+
+    const stringArray = isStringArrayMetadata(metadata)
+
+    for (const chunkKey of zarrChunkKeys(metadata, {
+      limit: SPATIALDATA_MAX_CHECKED_CHUNKS,
+    })) {
+      targets.push({ key: `${node.path}/${chunkKey}`, stringArray })
+    }
+  }
+
+  const checked = targets.slice(0, SPATIALDATA_MAX_CHECKED_CHUNKS)
+  const probes = await probeChunks(url, checked, options)
+  const failed = probes.filter((probe) => probe.status !== 200 && probe.status !== 206)
+  const blocking = failed.filter((probe) => probe.status !== 404 || probe.stringArray)
+  const scope =
+    checked.length < targets.length
+      ? `first ${checked.length.toLocaleString()} of ${targets.length.toLocaleString()}`
+      : checked.length.toLocaleString()
+
+  return diagnosticCheck({
+    id: 'spatialdata-table-chunks',
+    label: `SpatialData table ${view.table?.name ?? ''} chunks`,
+    url: datasetFileUrl(url, tablePath),
+    required: true,
+    status: failed.length === 0 ? 'pass' : blocking.length > 0 ? 'fail' : 'warning',
+    message:
+      failed.length === 0
+        ? `All ${scope} table chunks readable`
+        : `${failed.length.toLocaleString()} of ${scope} table chunks missing or unreadable: ${describeChunkProbes(failed)}${
+            blocking.length === 0
+              ? '. Numeric chunks read as fill values; this is only expected when the writer skipped empty chunks.'
+              : ''
+          }`,
+    startedAt,
+  })
+}
+
+async function checkSpatialDataImageChunk(
+  url: string,
+  store: SpatialDataStore,
+  view: SpatialDataView,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const startedAt = Date.now()
+  const element = view.image?.element
+  const multiscales =
+    element?.attrs.multiscales ?? recordValue(element?.attrs.ome)?.multiscales
+  const datasets = Array.isArray(multiscales)
+    ? recordValue(multiscales[0])?.datasets
+    : undefined
+  const coarsest = Array.isArray(datasets)
+    ? recordValue(datasets.at(-1))?.path
+    : undefined
+  const levelPath =
+    element === undefined || typeof coarsest !== 'string'
+      ? undefined
+      : `${element.path}/${coarsest}`
+  const metadata =
+    levelPath === undefined ? null : await readZarrArrayMetadata(store, levelPath)
+  const chunkKey =
+    metadata === null ? undefined : zarrChunkKeys(metadata, { limit: 1 })[0]
+  const label = `SpatialData image ${element?.name ?? ''}`
+
+  if (levelPath === undefined || chunkKey === undefined) {
+    return diagnosticCheck({
+      id: 'spatialdata-image-chunk',
+      label,
+      url,
+      required: false,
+      status: 'warning',
+      message: 'Image multiscale metadata could not be read.',
+      startedAt,
+    })
+  }
+
+  const [probe] = await probeChunks(
+    url,
+    [{ key: `${levelPath}/${chunkKey}`, stringArray: false }],
+    options,
+  )
+  const ok = probe?.status === 200 || probe?.status === 206
+
+  return diagnosticCheck({
+    id: 'spatialdata-image-chunk',
+    label,
+    url: datasetFileUrl(url, `${levelPath}/${chunkKey}`),
+    required: false,
+    status: ok ? 'pass' : probe?.status === 404 ? 'warning' : 'fail',
+    message: ok
+      ? 'Coarsest level chunk readable'
+      : probe === undefined
+        ? 'Not checked'
+        : `Coarsest level chunk ${describeChunkProbes([probe])}`,
+    startedAt,
+  })
+}
+
+async function probeChunks(
+  url: string,
+  targets: readonly { readonly key: string; readonly stringArray: boolean }[],
+  options: DatasetDiagnosticsOptions,
+): Promise<readonly ChunkProbe[]> {
+  const results: ChunkProbe[] = new Array<ChunkProbe>(targets.length)
+  let next = 0
+
+  const worker = async () => {
+    while (next < targets.length) {
+      const index = next
+      next += 1
+      const target = targets[index]
+
+      if (target === undefined) {
+        continue
+      }
+
+      try {
+        const response = await (options.fetcher ?? fetch)(
+          datasetFileUrl(url, target.key),
+          {
+            method: 'HEAD',
+            ...(options.signal === undefined ? {} : { signal: options.signal }),
+          },
+        )
+        results[index] = { ...target, status: response.status }
+      } catch {
+        results[index] = { ...target, status: 'error' }
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(SPATIALDATA_CHUNK_CHECK_CONCURRENCY, targets.length) },
+      worker,
+    ),
+  )
+  return results
+}
+
+function describeChunkProbes(probes: readonly ChunkProbe[]): string {
+  const shown = probes
+    .slice(0, 4)
+    .map((probe) =>
+      probe.status === 'error'
+        ? `${probe.key} (request failed)`
+        : `${probe.key} (HTTP ${probe.status})`,
+    )
+    .join(', ')
+
+  return probes.length > 4
+    ? `${shown}, and ${(probes.length - 4).toLocaleString()} more`
+    : shown
+}
+
+async function readZarrArrayMetadata(
+  store: SpatialDataStore,
+  path: string,
+): Promise<Record<string, unknown> | null> {
+  for (const key of [`/${path}/.zarray`, `/${path}/zarr.json`] as const) {
+    const bytes = await store.get(key)
+
+    if (bytes !== undefined) {
+      return recordValue(JSON.parse(new TextDecoder().decode(bytes)))
+    }
+  }
+
+  return null
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
 }
 
 async function runVisiumHdDiagnostics(

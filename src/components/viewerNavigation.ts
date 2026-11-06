@@ -60,6 +60,7 @@ export function formatMouseCoordinate(
   coordinate: MouseCoordinate,
   unit: ViewerCoordinateUnit,
   micrometersPerPixel: number,
+  physicalUnitLabel = 'μm',
 ): string {
   if (unit === 'px') {
     const pixelSize = safeMicrometersPerPixel(micrometersPerPixel)
@@ -67,7 +68,7 @@ export function formatMouseCoordinate(
     return `X ${formatCoordinateValue(coordinate.xMicrometers / pixelSize)} px | Y ${formatCoordinateValue(coordinate.yMicrometers / pixelSize)} px`
   }
 
-  return `X ${formatCoordinateValue(coordinate.xMicrometers)} μm | Y ${formatCoordinateValue(coordinate.yMicrometers)} μm`
+  return `X ${formatCoordinateValue(coordinate.xMicrometers)} ${physicalUnitLabel} | Y ${formatCoordinateValue(coordinate.yMicrometers)} ${physicalUnitLabel}`
 }
 
 export function mergeInitialViewState(

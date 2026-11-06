@@ -7,6 +7,11 @@ interface ShareableDatasetHashOptions {
   readonly customImageOpacities: readonly number[] | undefined
   readonly customImageUrls: readonly string[]
   readonly datasetUrl: string
+  readonly spatialDataSelection?: {
+    readonly spatialDataCoordinateSystem?: string
+    readonly spatialDataImage?: string
+    readonly spatialDataMicrometersPerUnit?: number
+  }
 }
 
 interface ShareableViewHashOptions {
@@ -75,6 +80,11 @@ export function useShareableUrlHash({
   view,
 }: UseShareableUrlHashOptions): void {
   const { annotationUrl, customImageOpacities, customImageUrls, datasetUrl } = dataset
+  const spatialDataCoordinateSystem =
+    dataset.spatialDataSelection?.spatialDataCoordinateSystem
+  const spatialDataImage = dataset.spatialDataSelection?.spatialDataImage
+  const spatialDataMicrometersPerUnit =
+    dataset.spatialDataSelection?.spatialDataMicrometersPerUnit
   const { activeControlHudTab, activeRoiSelection, shareableViewState } = view
   const {
     boundaryCellLimit,
@@ -156,6 +166,13 @@ export function useShareableUrlHash({
         magicLensActive,
         magicLensRadiusMicrometers,
         magicLensMinQv,
+        ...(spatialDataCoordinateSystem === undefined
+          ? {}
+          : { spatialDataCoordinateSystem }),
+        ...(spatialDataImage === undefined ? {} : { spatialDataImage }),
+        ...(spatialDataMicrometersPerUnit === undefined
+          ? {}
+          : { spatialDataMicrometersPerUnit }),
       })
 
       if (window.location.hash !== hash) {
@@ -199,6 +216,9 @@ export function useShareableUrlHash({
     shareableViewState,
     shouldLoadMorphology,
     showTranscriptOverlay,
+    spatialDataCoordinateSystem,
+    spatialDataImage,
+    spatialDataMicrometersPerUnit,
     transcriptDensityColorScale,
     transcriptDetailMode,
     transcriptExactPointLimit,

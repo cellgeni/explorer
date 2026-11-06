@@ -41,6 +41,101 @@ describe('OME-Zarr image loader', () => {
     ])
   })
 
+  it('splits large chunks into virtual tiles that share one chunk read', async () => {
+    const rootPath = '/images/big.zarr'
+    const size = 600
+    const pixels = new Uint8Array(size * size)
+
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        pixels[y * size + x] = (x + y) % 251
+      }
+    }
+
+    const fetcher = fetcherForFiles(
+      new Map([
+        [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+        [
+          `${rootPath}/.zattrs`,
+          jsonBytes({
+            multiscales: [
+              {
+                axes: [
+                  { name: 'y', type: 'space' },
+                  { name: 'x', type: 'space' },
+                ],
+                datasets: [{ path: '0' }],
+              },
+            ],
+          }),
+        ],
+        [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([size, size], [size, size]))],
+        [`${rootPath}/0/0.0`, pixels],
+      ]),
+    )
+    const loader = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher,
+    })
+
+    expect([loader.tileWidth, loader.tileHeight]).toEqual([300, 300])
+    expect(loader.tilesForLevel(0)).toHaveLength(4)
+
+    const tiles = await Promise.all(
+      loader.tilesForLevel(0).map((tile) => loader.loadTilePixels(0, tile.col, tile.row)),
+    )
+    const bottomRight = tiles[3]
+
+    expect(bottomRight?.width).toBe(300)
+    // Pixel (x=310, y=305) of the image is (10, 5) in the bottom-right tile.
+    expect(bottomRight?.pixels[5 * 300 + 10]).toBe((310 + 305) % 251)
+    expect(
+      requestedPaths(fetcher).filter((path) => path === `${rootPath}/0/0.0`),
+    ).toHaveLength(1)
+  })
+
+  it('treats SpatialData index-labelled 8-bit three-channel images as RGB', async () => {
+    const rootUrl = 'https://example.test/images/he.zarr'
+    const loader = await openOmeZarrImageWithOptions(rootUrl, {
+      fetcher: fetcherForFiles(
+        legacyV2OmeZarrFiles('/images/he.zarr', {
+          omero: { channels: [{ label: 0 }, { label: 1 }, { label: '2' }] },
+        }),
+      ),
+    })
+
+    expect(loader.channels.map((channel) => [channel.name, channel.color])).toEqual([
+      ['Red', [255, 0, 0]],
+      ['Green', [0, 255, 0]],
+      ['Blue', [0, 0, 255]],
+    ])
+    expect(loader.channels.every((channel) => channel.alphaFromIntensity === false)).toBe(
+      true,
+    )
+  })
+
+  it('keeps index-labelled 16-bit three-channel images as fluorescence channels', async () => {
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/if.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/if.zarr', {
+            omero: { channels: [{ label: 0 }, { label: 1 }, { label: 2 }] },
+            dtype: '<u2',
+          }),
+        ),
+      },
+    )
+
+    expect(loader.channels.map((channel) => channel.name)).toEqual([
+      'Channel 1',
+      'Channel 2',
+      'Channel 3',
+    ])
+    expect(loader.channels.some((channel) => channel.alphaFromIntensity === false)).toBe(
+      false,
+    )
+  })
+
   it('parses v0.5 metadata under the ome attribute and converts spatial units', async () => {
     const loader = await openOmeZarrImageWithOptions(
       'https://example.test/plain/zarr.json',
@@ -259,8 +354,12 @@ describe('OME-Zarr image loader', () => {
   })
 })
 
-function legacyV2OmeZarrFiles(rootPath: string): Map<string, Uint8Array> {
+function legacyV2OmeZarrFiles(
+  rootPath: string,
+  options: { readonly omero?: unknown; readonly dtype?: string } = {},
+): Map<string, Uint8Array> {
   const attrs = {
+    ...(options.omero === undefined ? {} : { omero: options.omero }),
     multiscales: [
       {
         axes: [
@@ -285,9 +384,15 @@ function legacyV2OmeZarrFiles(rootPath: string): Map<string, Uint8Array> {
   return new Map([
     [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
     [`${rootPath}/.zattrs`, jsonBytes(attrs)],
-    [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([3, 4, 4], [1, 2, 2]))],
+    [
+      `${rootPath}/0/.zarray`,
+      jsonBytes(v2ArrayMetadata([3, 4, 4], [1, 2, 2], options.dtype)),
+    ],
     [`${rootPath}/0/.zattrs`, jsonBytes({ _ARRAY_DIMENSIONS: ['c', 'y', 'x'] })],
-    [`${rootPath}/1/.zarray`, jsonBytes(v2ArrayMetadata([3, 2, 2], [1, 2, 2]))],
+    [
+      `${rootPath}/1/.zarray`,
+      jsonBytes(v2ArrayMetadata([3, 2, 2], [1, 2, 2], options.dtype)),
+    ],
     [`${rootPath}/1/.zattrs`, jsonBytes({ _ARRAY_DIMENSIONS: ['c', 'y', 'x'] })],
     [`${rootPath}/0/1.0.0`, new Uint8Array([10, 20, 30, 40])],
   ])
@@ -339,12 +444,16 @@ function v3OmeZarrFiles(rootPath: string): Map<string, Uint8Array> {
   ])
 }
 
-function v2ArrayMetadata(shape: readonly number[], chunks: readonly number[]) {
+function v2ArrayMetadata(
+  shape: readonly number[],
+  chunks: readonly number[],
+  dtype = '|u1',
+) {
   return {
     zarr_format: 2,
     shape,
     chunks,
-    dtype: '|u1',
+    dtype,
     compressor: null,
     fill_value: 0,
     order: 'C',

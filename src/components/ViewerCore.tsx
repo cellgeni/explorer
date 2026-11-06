@@ -184,6 +184,7 @@ export function ViewerCore({
   measurementUnit = 'um',
   measurementResetKey = 0,
   micrometersPerPixel = DEFAULT_MICROMETERS_PER_PIXEL,
+  physicalUnitLabel = 'μm',
   status = 'idle',
   imageStatus = 'idle',
   boundaryStatus = 'idle',
@@ -265,6 +266,7 @@ export function ViewerCore({
       measurementUnit={measurementUnit}
       measurementResetKey={measurementResetKey}
       micrometersPerPixel={micrometersPerPixel}
+      physicalUnitLabel={physicalUnitLabel}
       initialViewState={initialViewState}
       fittedViewZoom={fittedViewState.zoom}
       viewResetKey={resetKey}
@@ -336,6 +338,7 @@ interface ViewerSurfaceProps {
   readonly measurementUnit: ViewerCoordinateUnit
   readonly measurementResetKey: number
   readonly micrometersPerPixel: number
+  readonly physicalUnitLabel: string
   readonly initialViewState: OverviewViewState
   readonly fittedViewZoom: number
   readonly viewResetKey: string
@@ -405,6 +408,7 @@ function ViewerSurface({
   measurementUnit,
   measurementResetKey,
   micrometersPerPixel,
+  physicalUnitLabel,
   initialViewState,
   fittedViewZoom,
   viewResetKey,
@@ -899,12 +903,14 @@ function ViewerSurface({
           viewport,
           measurementUnit,
           micrometersPerPixel,
+          physicalUnitLabel,
         )
   }, [
     activeMeasurementDraft,
     activeMeasurementLine,
     measurementUnit,
     micrometersPerPixel,
+    physicalUnitLabel,
     viewState,
     viewport,
   ])
@@ -926,14 +932,32 @@ function ViewerSurface({
   const mouseCoordinateText =
     !canTrackMouseCoordinates || mouseCoordinate === null
       ? null
-      : formatMouseCoordinate(mouseCoordinate, coordinateUnit, micrometersPerPixel)
+      : formatMouseCoordinate(
+          mouseCoordinate,
+          coordinateUnit,
+          micrometersPerPixel,
+          physicalUnitLabel,
+        )
   const zoomLevelText = formatViewportZoom(viewState.zoom)
   const scaleBar = useMemo(
     () =>
       !canTrackMouseCoordinates || viewport.width <= 0 || viewport.height <= 0
         ? null
-        : scaleBarModel(viewState, viewport, coordinateUnit, micrometersPerPixel),
-    [canTrackMouseCoordinates, coordinateUnit, micrometersPerPixel, viewState, viewport],
+        : scaleBarModel(
+            viewState,
+            viewport,
+            coordinateUnit,
+            micrometersPerPixel,
+            physicalUnitLabel,
+          ),
+    [
+      canTrackMouseCoordinates,
+      coordinateUnit,
+      micrometersPerPixel,
+      physicalUnitLabel,
+      viewState,
+      viewport,
+    ],
   )
   const flushMouseCoordinate = useCallback(() => {
     mouseCoordinateFrameRef.current = null

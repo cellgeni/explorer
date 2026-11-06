@@ -23,6 +23,11 @@ import {
 } from './zarrStores'
 
 const DEFAULT_TILE_SIZE = 256
+// Chunks larger than this are served as several virtual tiles, so a 4096²
+// chunk does not become a 64 MB bitmap. The decoded chunk is cached and shared
+// by its tiles and by per-channel loaders.
+const MAX_VIRTUAL_TILE_SIZE = 512
+const DECODED_CHUNK_CACHE_MAX_BYTES = 256 * 1024 * 1024
 const MAX_SOURCE_PIXEL_SCREEN_SIZE = 1.5
 const DEFAULT_CHANNEL_COLORS: readonly (readonly [number, number, number])[] = [
   [88, 144, 255],
@@ -99,6 +104,8 @@ interface OmeZarrLevelMeta {
   readonly array: ZarrArray<DataType, zarr.Readable>
   readonly width: ImagePixels
   readonly height: ImagePixels
+  readonly chunkWidth: number
+  readonly chunkHeight: number
   readonly tileWidth: ImagePixels
   readonly tileHeight: ImagePixels
   readonly xMicrometersPerPixel: number
@@ -297,6 +304,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   private readonly selectedChannelIndex: number | undefined
   private readonly originX: number
   private readonly originY: number
+  private readonly sourceKey: string
   private readonly createBitmap: (imageData: ImageData) => Promise<ImageBitmap>
 
   constructor(options: OmeZarrLoaderOptions) {
@@ -322,6 +330,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     this.imageHeight = firstLevel.height
     this.originX = options.origin?.x ?? 0
     this.originY = options.origin?.y ?? 0
+    this.sourceKey = options.sourceUrl
     this.createBitmap = options.createBitmap
   }
 
@@ -439,6 +448,12 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   ): Promise<ImagePyramidTilePixels> {
     const meta = this.levelMetaFor(level)
     const selection = this.tileSelection(meta, col, row)
+    const fromChunk = await this.loadTilePixelsFromChunk(meta, selection, signal)
+
+    if (fromChunk !== null) {
+      return fromChunk
+    }
+
     const chunk = await zarr.get(meta.array, selection.projection, {
       ...(signal === undefined ? {} : { signal }),
     })
@@ -488,6 +503,73 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     }
   }
 
+  // Copies a tile that lies inside one chunk from the shared decoded-chunk
+  // cache. Returns null for tiles that straddle chunks.
+  private async loadTilePixelsFromChunk(
+    meta: OmeZarrLevelMeta,
+    selection: ReturnType<OmeZarrImagePyramidLoader['tileSelection']>,
+    signal: AbortSignal | undefined,
+  ): Promise<ImagePyramidTilePixels | null> {
+    const chunkCol = Math.floor(selection.xStart / meta.chunkWidth)
+    const chunkRow = Math.floor(selection.yStart / meta.chunkHeight)
+
+    if (
+      Math.floor((selection.xStart + selection.width - 1) / meta.chunkWidth) !==
+        chunkCol ||
+      Math.floor((selection.yStart + selection.height - 1) / meta.chunkHeight) !==
+        chunkRow
+    ) {
+      return null
+    }
+
+    const chunkShape = meta.array.chunks
+    const coords = selection.projection.map((index, axis) =>
+      axis === this.xAxis
+        ? chunkCol
+        : axis === this.yAxis
+          ? chunkRow
+          : Math.floor((index as number) / (chunkShape[axis] ?? 1)),
+    )
+    const chunk = await decodedChunk(
+      `${this.sourceKey}\n${meta.path}\n${coords.join(',')}`,
+      meta.array,
+      coords,
+    )
+    throwIfAborted(signal)
+
+    const data = chunk.data
+
+    if (!isSupportedPixelArray(data)) {
+      throw new Error('Unsupported OME-Zarr image dtype for tile rendering.')
+    }
+
+    let offset = 0
+
+    selection.projection.forEach((index, axis) => {
+      if (axis !== this.xAxis && axis !== this.yAxis) {
+        offset +=
+          ((index as number) % (chunkShape[axis] ?? 1)) * (chunk.stride[axis] ?? 0)
+      }
+    })
+
+    const xStride = chunk.stride[this.xAxis] ?? 1
+    const yStride = chunk.stride[this.yAxis] ?? meta.chunkWidth
+    const x0 = selection.xStart - chunkCol * meta.chunkWidth
+    const y0 = selection.yStart - chunkRow * meta.chunkHeight
+    const pixels = newPixelArray(data, selection.width * selection.height)
+
+    for (let y = 0; y < selection.height; y += 1) {
+      const sourceRow = offset + (y0 + y) * yStride + x0 * xStride
+      const targetRow = y * selection.width
+
+      for (let x = 0; x < selection.width; x += 1) {
+        pixels[targetRow + x] = data[sourceRow + x * xStride] ?? 0
+      }
+    }
+
+    return { pixels, width: selection.width, height: selection.height }
+  }
+
   private tileSelection(
     meta: OmeZarrLevelMeta,
     col: number,
@@ -495,6 +577,8 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   ): {
     readonly projection: (number | zarr.Slice)[]
     readonly outputAxes: readonly ('x' | 'y')[]
+    readonly xStart: number
+    readonly yStart: number
     readonly width: number
     readonly height: number
   } {
@@ -529,6 +613,8 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     return {
       projection,
       outputAxes,
+      xStart,
+      yStart,
       width,
       height,
     }
@@ -719,17 +805,24 @@ function levelMetaFromArray(options: {
     ...(options.planarScale === undefined ? {} : { planarScale: options.planarScale.y }),
   })
 
+  const chunkWidth = positiveDimension(
+    chunkShape[options.xAxis] ?? DEFAULT_TILE_SIZE,
+    'tile width',
+  )
+  const chunkHeight = positiveDimension(
+    chunkShape[options.yAxis] ?? DEFAULT_TILE_SIZE,
+    'tile height',
+  )
+
   return {
     path: options.path,
     array: options.array,
     width: imagePixels(positiveDimension(options.array.shape[options.xAxis], 'width')),
     height: imagePixels(positiveDimension(options.array.shape[options.yAxis], 'height')),
-    tileWidth: imagePixels(
-      positiveDimension(chunkShape[options.xAxis] ?? DEFAULT_TILE_SIZE, 'tile width'),
-    ),
-    tileHeight: imagePixels(
-      positiveDimension(chunkShape[options.yAxis] ?? DEFAULT_TILE_SIZE, 'tile height'),
-    ),
+    chunkWidth,
+    chunkHeight,
+    tileWidth: imagePixels(virtualTileSize(chunkWidth)),
+    tileHeight: imagePixels(virtualTileSize(chunkHeight)),
     xMicrometersPerPixel: xScale,
     yMicrometersPerPixel: yScale,
   }
@@ -835,7 +928,11 @@ function buildOmeZarrChannels(options: {
   const omeroChannels = Array.isArray(omero?.channels)
     ? omero.channels.map((channel) => objectRecord(channel) ?? {})
     : []
-  const nativeRgb = isNativeRgbChannelSet(channelCount, omeroChannels)
+  const nativeRgb = isNativeRgbChannelSet(
+    channelCount,
+    omeroChannels,
+    options.array.dtype,
+  )
   const dtypeContrast = contrastForDataType(options.array.dtype)
 
   return Array.from({ length: channelCount }, (_value, index) => {
@@ -864,16 +961,23 @@ function buildOmeZarrChannels(options: {
   })
 }
 
+// Three 8-bit channels without channel names or colors are treated as an RGB
+// image (for example H&E). SpatialData writes the channel coordinate as the
+// omero label, so default-named images carry labels 0, 1, 2.
 function isNativeRgbChannelSet(
   channelCount: number,
   omeroChannels: readonly Record<string, unknown>[],
+  dtype: DataType,
 ): boolean {
   if (channelCount !== RGB_CHANNELS.length) {
     return false
   }
 
-  if (omeroChannels.length === 0) {
-    return true
+  if (
+    omeroChannels.length === 0 ||
+    omeroChannels.every((channel, index) => isUnnamedOmeroChannel(channel, index))
+  ) {
+    return dtype === 'uint8'
   }
 
   return RGB_CHANNELS.every((channel, index) => {
@@ -889,6 +993,17 @@ function isNativeRgbChannelSet(
       colorsEqual(color, channel.color)
     )
   })
+}
+
+function isUnnamedOmeroChannel(channel: Record<string, unknown>, index: number): boolean {
+  const label = channel.label
+  const unnamed =
+    label === undefined ||
+    label === null ||
+    label === index ||
+    (typeof label === 'string' && (label.trim() === '' || label.trim() === String(index)))
+
+  return unnamed && parseOmeroColor(channel.color) === undefined
 }
 
 function contrastFromOmeroWindow(
@@ -918,6 +1033,92 @@ function contrastForDataType(dtype: DataType): {
       return { min: 0, max: 1 }
     default:
       return { min: 0, max: 65_535 }
+  }
+}
+
+// Splits a chunk dimension into the fewest equal tiles of at most
+// MAX_VIRTUAL_TILE_SIZE pixels.
+function virtualTileSize(chunkSize: number): number {
+  return Math.ceil(chunkSize / Math.ceil(chunkSize / MAX_VIRTUAL_TILE_SIZE))
+}
+
+interface DecodedChunkEntry {
+  readonly promise: Promise<zarr.Chunk<DataType>>
+  bytes: number
+}
+
+const decodedChunks = new Map<string, DecodedChunkEntry>()
+let decodedChunkBytes = 0
+
+// Decoded chunks shared by virtual tiles, channels, and loaders of the same
+// source. Requests are not aborted individually because other tiles wait on
+// the same chunk.
+function decodedChunk(
+  key: string,
+  array: ZarrArray<DataType, zarr.Readable>,
+  coords: readonly number[],
+): Promise<zarr.Chunk<DataType>> {
+  const existing = decodedChunks.get(key)
+
+  if (existing !== undefined) {
+    decodedChunks.delete(key)
+    decodedChunks.set(key, existing)
+    return existing.promise
+  }
+
+  const entry: DecodedChunkEntry = {
+    promise: array.getChunk([...coords]),
+    bytes: 0,
+  }
+  decodedChunks.set(key, entry)
+  entry.promise.then(
+    (chunk) => {
+      if (decodedChunks.get(key) !== entry) {
+        return
+      }
+
+      entry.bytes = chunkByteLength(chunk)
+      decodedChunkBytes += entry.bytes
+      evictDecodedChunks()
+    },
+    () => {
+      if (decodedChunks.get(key) === entry) {
+        decodedChunks.delete(key)
+      }
+    },
+  )
+  return entry.promise
+}
+
+function evictDecodedChunks(): void {
+  for (const [key, entry] of decodedChunks) {
+    if (decodedChunkBytes <= DECODED_CHUNK_CACHE_MAX_BYTES || decodedChunks.size <= 1) {
+      return
+    }
+
+    if (entry.bytes === 0) {
+      continue
+    }
+
+    decodedChunks.delete(key)
+    decodedChunkBytes -= entry.bytes
+  }
+}
+
+function chunkByteLength(chunk: zarr.Chunk<DataType>): number {
+  const data = chunk.data as { readonly byteLength?: unknown; readonly length?: unknown }
+  return typeof data.byteLength === 'number'
+    ? data.byteLength
+    : typeof data.length === 'number'
+      ? data.length * 8
+      : 0
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new DOMException('The operation was aborted.', 'AbortError')
   }
 }
 

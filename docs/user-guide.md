@@ -151,15 +151,24 @@ need a sibling kerchunk reference JSON named `DATASET.h5ad.json`.
 
 ## SpatialData
 
-SpatialData stores combine an AnnData table, shapes, and images. The app picks
-one coordinate system and logs the choice, together with the image, table, and
-any elements it does not show, in the `Dataset` tab log. Table rows render as
-cells placed on their annotated shapes. Circles and polygons appear as cell
-boundaries, and the highest-resolution image loads as the morphology layer.
+SpatialData stores combine an AnnData table, shapes, labels, and images. The
+app picks one coordinate system and image and logs them, together with any
+elements it does not show, in the `Dataset` tab log. Table rows render as cells
+placed on their annotated shapes or labels. Circles and polygons appear as cell
+boundaries; labels (segmentation masks) are traced into cell outlines when you
+zoom in below `Boundary limit`.
+
+The `Dataset` tab shows the SpatialData view controls:
+
+- `Coordinate system` and `Image` switch the view and reload the dataset.
+- `µm per unit` shows the scale used for distances, scale bars, and areas, and
+  where it came from (declared by the store, estimated, or set by you). Enter a
+  value and press `Set` to override it, or `Auto` to go back. When the scale is
+  unknown, distances are labelled as units.
 
 Genes, annotations, metadata tracks, embeddings, selected-cell profiles, and ROI
-summaries work as they do for H5AD. Transcripts (`points`), `labels` rasters,
-and Magic Lens are not available for SpatialData yet.
+summaries work as they do for H5AD. Transcripts (`points`) and Magic Lens are
+not available for SpatialData yet.
 
 ## Image-Only Sources
 

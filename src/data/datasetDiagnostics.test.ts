@@ -88,6 +88,7 @@ describe('runDatasetDiagnostics', () => {
           'pass',
           'Coordinate system global; image none; table table',
         ],
+        ['spatialdata-table-chunks', 'pass', 'All 0 table chunks readable'],
         ['spatialdata-shapes-spots', 'pass', 'Byte-range readable'],
       ],
     )
@@ -95,6 +96,77 @@ describe('runDatasetDiagnostics', () => {
       `${storeUrl}/shapes/spots/shapes.parquet`,
       expect.objectContaining({ label: 'SpatialData shapes spots' }),
     )
+  })
+
+  it('reports SpatialData table chunks that are missing or unreadable', async () => {
+    const storeUrl = 'https://example.test/upload.sdata.zarr'
+    const array = (dtype: string, extra: Record<string, unknown> = {}) => ({
+      zarr_format: 2,
+      shape: [4],
+      chunks: [2],
+      dtype,
+      compressor: null,
+      fill_value: 0,
+      order: 'C',
+      filters: null,
+      dimension_separator: '/',
+      ...extra,
+    })
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input)
+
+      if (url.endsWith('/zmetadata')) {
+        return Response.json({
+          zarr_consolidated_format: 1,
+          metadata: {
+            '.zgroup': { zarr_format: 2 },
+            'tables/table/.zgroup': { zarr_format: 2 },
+            'shapes/cells/.zgroup': { zarr_format: 2 },
+            'shapes/cells/.zattrs': {
+              coordinateTransformations: [
+                {
+                  type: 'identity',
+                  input: { axes: ['x', 'y'] },
+                  output: { name: 'global' },
+                },
+              ],
+            },
+            'tables/table/.zattrs': { region: 'cells', instance_key: 'cell_id' },
+            'tables/table/obs/.zgroup': { zarr_format: 2 },
+            'tables/table/obs/_index/.zarray': array('|O', {
+              filters: [{ id: 'vlen-utf8' }],
+            }),
+            'tables/table/obs/area/.zarray': array('<f8'),
+          },
+        })
+      }
+
+      expect(init?.method).toBe('HEAD')
+      const status = url.endsWith('obs/_index/1')
+        ? 403
+        : url.endsWith('obs/area/1')
+          ? 404
+          : 200
+      return new Response(null, { status })
+    }) as unknown as typeof fetch
+
+    const report = await runDatasetDiagnostics(storeUrl, {
+      detectDataset: vi.fn(async () => ({
+        platform: 'spatialdata' as const,
+        baseUrl: storeUrl,
+        spatialDataUrl: storeUrl,
+        checked: [],
+      })),
+      fetcher,
+      rangeValidator: vi.fn(async () => undefined),
+    })
+    const chunks = report.checks.find((check) => check.id === 'spatialdata-table-chunks')
+
+    expect(chunks).toMatchObject({
+      status: 'fail',
+      message:
+        '2 of 4 table chunks missing or unreadable: tables/table/obs/_index/1 (HTTP 403), tables/table/obs/area/1 (HTTP 404)',
+    })
   })
 
   it('checks Visium HD binned outputs instead of Xenium files', async () => {

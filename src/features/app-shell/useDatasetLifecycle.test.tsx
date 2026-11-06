@@ -235,6 +235,7 @@ function Probe({
       setTranscriptLayerState: noopSetter,
       setTranscriptPointColorMode: noopSetter,
       setVisiumHdControlState,
+      setSpatialDataControlState: noopSetter,
       setViewportCellCount: noopSetter,
     },
   })

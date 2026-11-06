@@ -1,5 +1,6 @@
 import { ReferenceStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
+import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { RoiSelectionInput } from '../data/roiSelection'
@@ -45,6 +46,10 @@ export interface AnnDataZarrSource {
   readonly nodes: readonly AnnDataZarrNode[]
   readonly label?: string
   readonly resolveCoordinates?: AnnDataCoordinateResolver
+  // Replaces read errors with a source-specific explanation, for example an
+  // incomplete SpatialData store.
+  readonly describeError?: (error: unknown) => unknown
+  readonly onReady?: () => void
 }
 
 export interface AnnDataZarrNode {
@@ -54,6 +59,7 @@ export interface AnnDataZarrNode {
 
 export interface AnnDataObsAccess {
   readonly cellIds: readonly string[]
+  readonly columnNames: readonly string[]
   readObsColumn(key: string): Promise<readonly (string | number | null)[] | null>
   readObsmPoints(): Promise<readonly { readonly x: number; readonly y: number }[] | null>
 }
@@ -652,17 +658,33 @@ async function readAnnDataZarr(
   const label = source.label ?? 'AnnData table'
   const rootPath = normalizeZarrPath(source.path)
   reportH5adProgress(onProgress, `Opening ${label} arrays`)
-  const root = await hydrateZarrAnnDataGroup(
-    { store: source.store, zarrFormat: source.zarrFormat, rootPath },
-    annDataIndexFromNodes(source.nodes, rootPath),
-    '',
-  )
-  const cache = await readH5adCacheFromGroup(url, root, source.resolveCoordinates)
-  reportH5adProgress(
-    onProgress,
-    `${label} ready: ${cache.cellIds.length.toLocaleString()} observations, ${cache.geneNames.length.toLocaleString()} genes`,
-  )
-  return cache
+
+  try {
+    const root = await hydrateZarrAnnDataGroup(
+      { store: source.store, zarrFormat: source.zarrFormat, rootPath },
+      annDataIndexFromNodes(source.nodes, rootPath),
+      '',
+    )
+    const cache = await readH5adCacheFromGroup(
+      url,
+      root,
+      source.resolveCoordinates,
+      (key, error) => {
+        reportH5adProgress(
+          onProgress,
+          `${label}: skipped obs column ${key}. ${error.message}`,
+        )
+      },
+    )
+    reportH5adProgress(
+      onProgress,
+      `${label} ready: ${cache.cellIds.length.toLocaleString()} observations, ${cache.geneNames.length.toLocaleString()} genes`,
+    )
+    source.onReady?.()
+    return cache
+  } catch (error) {
+    throw source.describeError?.(error) ?? error
+  }
 }
 
 function reportH5adProgress(
@@ -676,6 +698,7 @@ async function readH5adCacheFromGroup(
   url: string,
   file: H5GroupLike,
   resolveCoordinates?: AnnDataCoordinateResolver,
+  onUnreadableColumn?: (key: string, error: ZarrChunkUnavailableError) => void,
 ): Promise<H5adCache> {
   const obs = expectGroup(file.get('/obs'), '/obs')
   const varGroup = expectGroup(file.get('/var'), '/var')
@@ -692,6 +715,9 @@ async function readH5adCacheFromGroup(
       ? null
       : await resolveCoordinates({
           cellIds,
+          columnNames: obs
+            .keys()
+            .filter((key) => key !== '_index' && !key.startsWith('__')),
           readObsColumn: (key) => readObsColumnValues(obs, key, cellIds.length),
           readObsmPoints: async () => {
             const embedding = await readOverviewCoordinateEmbedding(
@@ -707,7 +733,11 @@ async function readH5adCacheFromGroup(
     embeddingToCoordinates(
       await readOverviewCoordinateEmbedding(file, embeddingOptions, cellIds),
     )
-  const observationTracks = await readObservationTracks(obs, cellIds.length)
+  const observationTracks = await readObservationTracks(
+    obs,
+    cellIds.length,
+    onUnreadableColumn,
+  )
   const matrix = await readMatrix(file, cellIds.length, geneNames.length)
 
   return {
@@ -1235,6 +1265,7 @@ function h5adEmbeddingDisplayRank(kind: string): number {
 async function readObservationTracks(
   obs: H5GroupLike,
   rowCount: number,
+  onUnreadableColumn?: (key: string, error: ZarrChunkUnavailableError) => void,
 ): Promise<{
   readonly categoricalTracks: readonly H5adCategoricalTrack[]
   readonly continuousTracks: readonly H5adContinuousTrack[]
@@ -1251,95 +1282,108 @@ async function readObservationTracks(
   const continuousTracks: H5adContinuousTrack[] = []
 
   for (const key of keys) {
-    const entity = obs.get(key)
+    try {
+      const entity = obs.get(key)
 
-    if (entity === null || entity === undefined || key === indexKey) {
-      continue
-    }
-
-    if (isCategoricalGroup(entity)) {
-      const codes = readNumericArray(
-        await readDatasetValue(expectDataset(entity.get('codes'), `/obs/${key}/codes`)),
-        `/obs/${key}/codes`,
-      )
-      const categories = readCategoryLabels(
-        await readDatasetValue(
-          expectDataset(entity.get('categories'), `/obs/${key}/categories`),
-        ),
-        `/obs/${key}/categories`,
-      )
-
-      if (codes.length !== rowCount) {
+      if (entity === null || entity === undefined || key === indexKey) {
         continue
       }
 
-      categoricalTracks.push({
-        id: key,
-        label: key,
-        categoryCount: categories.length,
-        values: Array.from({ length: rowCount }, (_value, index) => {
-          const code = Math.trunc(numericValue(codes, index))
-          return code < 0 ? null : (categories[code] ?? null)
-        }),
-      })
-      continue
-    }
+      if (isCategoricalGroup(entity)) {
+        const codes = readNumericArray(
+          await readDatasetValue(expectDataset(entity.get('codes'), `/obs/${key}/codes`)),
+          `/obs/${key}/codes`,
+        )
+        const categories = readCategoryLabels(
+          await readDatasetValue(
+            expectDataset(entity.get('categories'), `/obs/${key}/categories`),
+          ),
+          `/obs/${key}/categories`,
+        )
 
-    if (!isDataset(entity)) {
-      continue
-    }
+        if (codes.length !== rowCount) {
+          continue
+        }
 
-    const shape = entity.shape
-
-    if (shape === null || readShapeDimension(shape, 0, `/obs/${key}`) !== rowCount) {
-      continue
-    }
-
-    const categories = await readDataframeCategories(obs, key)
-    const entityValue = await readDatasetValue(entity)
-
-    if (categories !== null && isNumericArray(entityValue)) {
-      const codes = readNumericArray(entityValue, `/obs/${key}`)
-
-      categoricalTracks.push({
-        id: key,
-        label: key,
-        categoryCount: categories.length,
-        values: Array.from({ length: rowCount }, (_value, index) => {
-          const code = Math.trunc(numericValue(codes, index))
-          return code < 0 ? null : (categories[code] ?? null)
-        }),
-      })
-      continue
-    }
-
-    if (isNumericArray(entityValue)) {
-      const values = numericArrayToNumbers(readNumericArray(entityValue, `/obs/${key}`))
-      const finiteValues = values.filter(Number.isFinite)
-
-      if (finiteValues.length === 0) {
+        categoricalTracks.push({
+          id: key,
+          label: key,
+          categoryCount: categories.length,
+          values: Array.from({ length: rowCount }, (_value, index) => {
+            const code = Math.trunc(numericValue(codes, index))
+            return code < 0 ? null : (categories[code] ?? null)
+          }),
+        })
         continue
       }
 
-      continuousTracks.push({
-        id: key,
-        label: key,
-        values,
-        min: Math.min(...finiteValues),
-        max: Math.max(...finiteValues),
-      })
-      continue
-    }
+      if (!isDataset(entity)) {
+        continue
+      }
 
-    const labels = readStringArray(entityValue, `/obs/${key}`)
+      const shape = entity.shape
 
-    if (labels.length === rowCount) {
-      categoricalTracks.push({
-        id: key,
-        label: key,
-        categoryCount: countUniqueLabels(labels),
-        values: labels.map((value) => (value.length === 0 ? null : value)),
-      })
+      if (shape === null || readShapeDimension(shape, 0, `/obs/${key}`) !== rowCount) {
+        continue
+      }
+
+      const categories = await readDataframeCategories(obs, key)
+      const entityValue = await readDatasetValue(entity)
+
+      if (categories !== null && isNumericArray(entityValue)) {
+        const codes = readNumericArray(entityValue, `/obs/${key}`)
+
+        categoricalTracks.push({
+          id: key,
+          label: key,
+          categoryCount: categories.length,
+          values: Array.from({ length: rowCount }, (_value, index) => {
+            const code = Math.trunc(numericValue(codes, index))
+            return code < 0 ? null : (categories[code] ?? null)
+          }),
+        })
+        continue
+      }
+
+      if (isNumericArray(entityValue)) {
+        const values = numericArrayToNumbers(readNumericArray(entityValue, `/obs/${key}`))
+        const finiteValues = values.filter(Number.isFinite)
+
+        if (finiteValues.length === 0) {
+          continue
+        }
+
+        continuousTracks.push({
+          id: key,
+          label: key,
+          values,
+          min: Math.min(...finiteValues),
+          max: Math.max(...finiteValues),
+        })
+        continue
+      }
+
+      const labels = readStringArray(entityValue, `/obs/${key}`)
+
+      if (labels.length === rowCount) {
+        categoricalTracks.push({
+          id: key,
+          label: key,
+          categoryCount: countUniqueLabels(labels),
+          values: labels.map((value) => (value.length === 0 ? null : value)),
+        })
+      }
+    } catch (error) {
+      // Optional columns with unreadable chunks are skipped when the caller
+      // can report them; other failures still fail the load.
+      if (
+        onUnreadableColumn === undefined ||
+        !(error instanceof ZarrChunkUnavailableError)
+      ) {
+        throw error
+      }
+
+      onUnreadableColumn(key, error)
     }
   }
 

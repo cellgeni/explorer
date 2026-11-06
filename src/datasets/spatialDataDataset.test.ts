@@ -25,10 +25,16 @@ describe('SpatialDataDataset', () => {
       coordinateSystem: 'global',
       coordinateSystems: ['global'],
       image: 'he',
+      images: ['he'],
       table: 'table',
       regions: ['cells'],
       boundaries: 'cells',
       skippedElements: [],
+      units: {
+        micrometersPerUnit: 1,
+        source: 'unknown',
+        detail: 'coordinate system axes have no physical unit',
+      },
     })
 
     const overview = await dataset.overview()
@@ -135,8 +141,196 @@ describe('SpatialDataDataset', () => {
   })
 })
 
+describe('SpatialDataDataset units and labels', () => {
+  it('scales placements, boundaries, and the image by the µm-per-unit override', async () => {
+    const openImage = imageOpenerFixture()
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture()),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage,
+      micrometersPerUnit: 0.25,
+    })
+
+    const overview = await dataset.overview()
+    expect(overview[0]?.position).toEqual({ x: 0.25, y: 0.25 })
+    await expect(dataset.units()).resolves.toMatchObject({
+      micrometersPerUnit: 0.25,
+      source: 'override',
+    })
+
+    await dataset.meta()
+    expect(openImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transform: { scaleX: 0.125, scaleY: 0.125, translateX: 5, translateY: 2.5 },
+      }),
+    )
+
+    const elements = await dataset.elements({
+      minX: micrometers(0),
+      maxX: micrometers(1),
+      minY: micrometers(0),
+      maxY: micrometers(1),
+    })
+    const ring = elements.elements[0]?.geometry
+    expect(ring?.kind === 'polygon' ? ring.rings[0]?.[2] : undefined).toEqual({
+      x: 0.5,
+      y: 0.5,
+    })
+  })
+
+  it('selects a requested image from the coordinate system', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture({ secondImage: true })),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+      image: 'if',
+    })
+
+    await expect(dataset.summary()).resolves.toMatchObject({
+      image: 'if',
+      images: ['he', 'if'],
+    })
+    await expect(dataset.imageUrl()).resolves.toBe(`${STORE_URL}/images/if`)
+  })
+
+  it('places label-annotated rows and traces their outlines', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(labelsStoreFixture()),
+      openImage: imageOpenerFixture(),
+    })
+
+    const overview = await dataset.overview()
+    expect(overview.map((cell) => [cell.cellId, cell.position])).toEqual([
+      ['cell-a', { x: 4, y: 2 }],
+      ['cell-b', { x: 11, y: 3 }],
+    ])
+    await expect(dataset.summary()).resolves.toMatchObject({
+      regions: ['seg'],
+      boundaries: 'seg',
+    })
+    await expect(dataset.meta()).resolves.toMatchObject({
+      capabilities: { cellBoundaries: true },
+    })
+
+    const elements = await dataset.elements({
+      minX: micrometers(0),
+      maxX: micrometers(12),
+      minY: micrometers(0),
+      maxY: micrometers(8),
+    })
+    const bounds = new Map(
+      elements.elements.map((element) => {
+        const ring =
+          element.geometry.kind === 'polygon' ? (element.geometry.rings[0] ?? []) : []
+        return [
+          element.id,
+          [
+            Math.min(...ring.map((point) => point.x)),
+            Math.max(...ring.map((point) => point.x)),
+            Math.min(...ring.map((point) => point.y)),
+            Math.max(...ring.map((point) => point.y)),
+          ],
+        ]
+      }),
+    )
+
+    // Label 1 spans both chunks and is drawn as one outline.
+    expect(bounds.get('cell-a')).toEqual([0, 8, 0, 4])
+    expect(bounds.get('cell-b')).toEqual([10, 12, 2, 6])
+  })
+})
+
+describe('SpatialDataDataset incomplete stores', () => {
+  it('logs table chunks that were read as fill values', async () => {
+    const progress: string[] = []
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(
+        withoutFiles(storeFixture(), '/tables/table/obs/region/codes/0'),
+        {
+          missingStatus: 404,
+        },
+      ),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+      onProgress: (message) => {
+        progress.push(message)
+      },
+    })
+
+    await expect(dataset.overview()).resolves.toHaveLength(2)
+    expect(progress).toContain(
+      'SpatialData table read missing chunks as fill values; the store may be incomplete: 1 chunk is missing (tables/table/obs/region/codes/0).',
+    )
+  })
+
+  it('blames missing chunks when the table cannot be placed', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(
+        withoutFiles(storeFixture(), '/tables/table/obs/cell_id/0'),
+        { missingStatus: 404 },
+      ),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+    })
+
+    await expect(dataset.overview()).rejects.toMatchObject({
+      name: 'SpatialDataIncompleteStoreError',
+      missingKeys: ['tables/table/obs/cell_id/0'],
+    })
+  })
+
+  it('skips an unreadable region column for a single-region table', async () => {
+    const progress: string[] = []
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(
+        withoutFiles(storeFixture(), '/tables/table/obs/region/codes/0'),
+      ),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+      onProgress: (message) => {
+        progress.push(message)
+      },
+    })
+
+    await expect(dataset.overview()).resolves.toHaveLength(2)
+    expect(progress).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /^SpatialData table table: region column unreadable, using cells\./,
+        ),
+        expect.stringMatching(/^SpatialData table table: skipped obs column region\./),
+      ]),
+    )
+  })
+
+  it('reports forbidden chunks directly', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(
+        withoutFiles(storeFixture(), '/tables/table/var/_index/0'),
+      ),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+    })
+
+    await expect(dataset.overview()).rejects.toMatchObject({
+      name: 'ZarrChunkUnavailableError',
+      status: 403,
+    })
+  })
+})
+
 function storeFixture(
-  options: { readonly companionBoundaries?: boolean } = {},
+  options: {
+    readonly companionBoundaries?: boolean
+    readonly secondImage?: boolean
+  } = {},
 ): ReadonlyMap<string, Uint8Array> {
   const shapesTransform = (name: string) => ({
     'encoding-type': 'ngff:shapes',
@@ -179,6 +373,27 @@ function storeFixture(
         },
       ],
     },
+    ...(options.secondImage === true
+      ? {
+          'images/if/.zgroup': { zarr_format: 2 },
+          'images/if/.zattrs': {
+            multiscales: [
+              {
+                axes: CYX.axes,
+                datasets: [{ path: '0' }],
+                coordinateTransformations: [
+                  {
+                    type: 'scale',
+                    scale: [1, 1, 1],
+                    input: CYX,
+                    output: { name: 'global', axes: CYX.axes },
+                  },
+                ],
+              },
+            ],
+          },
+        }
+      : {}),
     'shapes/.zgroup': { zarr_format: 2 },
     'shapes/cells/.zgroup': { zarr_format: 2 },
     'shapes/cells/.zattrs': shapesTransform('cells'),
@@ -233,6 +448,98 @@ function storeFixture(
     ['/tables/table/X/data/0', bytes(new Float32Array([1, 2, 3, 4]))],
     ['/tables/table/X/indices/0', bytes(new Int32Array([0, 1, 0, 1]))],
     ['/tables/table/X/indptr/0', bytes(new Int32Array([0, 1, 2, 4]))],
+  ])
+}
+
+// Labels raster (6 x 4 pixels in two 3-column chunks) annotated by a table
+// whose instance key holds strings and whose `cell_labels` column holds the
+// label ids. Label pixels are 2 global units.
+function labelsStoreFixture(): ReadonlyMap<string, Uint8Array> {
+  const YX = { name: 'yx', axes: [{ name: 'y' }, { name: 'x' }] }
+  const metadata: Record<string, unknown> = {
+    '.zgroup': { zarr_format: 2 },
+    '.zattrs': { spatialdata_attrs: { version: '0.1' } },
+    'labels/.zgroup': { zarr_format: 2 },
+    'labels/seg/.zgroup': { zarr_format: 2 },
+    'labels/seg/.zattrs': {
+      'image-label': { version: '0.4' },
+      multiscales: [
+        {
+          axes: YX.axes,
+          datasets: [
+            { path: '0', coordinateTransformations: [{ type: 'scale', scale: [1, 1] }] },
+          ],
+          coordinateTransformations: [
+            {
+              type: 'scale',
+              scale: [2, 2],
+              input: YX,
+              output: { name: 'global', axes: YX.axes },
+            },
+          ],
+        },
+      ],
+    },
+    'labels/seg/0/.zarray': { ...arrayMeta([4, 6], '<i4'), chunks: [4, 3] },
+    'tables/.zgroup': { zarr_format: 2 },
+    'tables/table/.zgroup': { zarr_format: 2 },
+    'tables/table/.zattrs': {
+      'encoding-type': 'anndata',
+      region: 'seg',
+      region_key: 'region',
+      instance_key: 'cell_id',
+    },
+    'tables/table/obs/.zgroup': { zarr_format: 2 },
+    'tables/table/obs/.zattrs': {
+      _index: '_index',
+      'column-order': ['region', 'cell_id', 'cell_labels'],
+      'encoding-type': 'dataframe',
+    },
+    'tables/table/obs/_index/.zarray': arrayMeta([2], '|S6'),
+    'tables/table/obs/cell_id/.zarray': arrayMeta([2], '|S2'),
+    'tables/table/obs/cell_labels/.zarray': arrayMeta([2], '<i8'),
+    'tables/table/obs/region/.zgroup': { zarr_format: 2 },
+    'tables/table/obs/region/.zattrs': { 'encoding-type': 'categorical' },
+    'tables/table/obs/region/codes/.zarray': arrayMeta([2], '|i1'),
+    'tables/table/obs/region/categories/.zarray': arrayMeta([1], '|S3'),
+    'tables/table/obsm/.zgroup': { zarr_format: 2 },
+    'tables/table/obsm/spatial/.zarray': arrayMeta([2, 2], '<f8'),
+    'tables/table/var/.zgroup': { zarr_format: 2 },
+    'tables/table/var/.zattrs': { _index: '_index', 'encoding-type': 'dataframe' },
+    'tables/table/var/_index/.zarray': arrayMeta([1], '|S4'),
+    'tables/table/X/.zgroup': { zarr_format: 2 },
+    'tables/table/X/.zattrs': { 'encoding-type': 'csr_matrix', shape: [2, 1] },
+    'tables/table/X/data/.zarray': arrayMeta([1], '<f4'),
+    'tables/table/X/indices/.zarray': arrayMeta([1], '<i4'),
+    'tables/table/X/indptr/.zarray': arrayMeta([3], '<i4'),
+  }
+  const encoder = new TextEncoder()
+  // Full raster:
+  //   1 1 1 | 1 0 0
+  //   1 1 1 | 1 0 2
+  //   0 0 0 | 0 0 2
+  //   0 0 0 | 0 0 0
+  const leftChunk = new Int32Array([1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0])
+  const rightChunk = new Int32Array([1, 0, 0, 1, 0, 2, 0, 0, 2, 0, 0, 0])
+
+  return new Map<string, Uint8Array>([
+    [
+      '/zmetadata',
+      encoder.encode(JSON.stringify({ zarr_consolidated_format: 1, metadata })),
+    ],
+    ['/labels/seg/0/0.0', bytes(leftChunk)],
+    ['/labels/seg/0/0.1', bytes(rightChunk)],
+    ['/tables/table/obs/_index/0', fixedStrings(['cell-a', 'cell-b'], 6)],
+    ['/tables/table/obs/cell_id/0', fixedStrings(['aa', 'bb'], 2)],
+    ['/tables/table/obs/cell_labels/0', bytes(new BigInt64Array([1n, 2n]))],
+    ['/tables/table/obs/region/codes/0', bytes(new Int8Array([0, 0]))],
+    ['/tables/table/obs/region/categories/0', fixedStrings(['seg'], 3)],
+    // Label-pixel centroids.
+    ['/tables/table/obsm/spatial/0.0', bytes(new Float64Array([2, 1, 5.5, 1.5]))],
+    ['/tables/table/var/_index/0', fixedStrings(['Actb'], 4)],
+    ['/tables/table/X/data/0', bytes(new Float32Array([1]))],
+    ['/tables/table/X/indices/0', bytes(new Int32Array([0]))],
+    ['/tables/table/X/indptr/0', bytes(new Int32Array([0, 1, 1]))],
   ])
 }
 
@@ -297,7 +604,10 @@ function imageOpenerFixture() {
   })
 }
 
-function inMemoryZarrFetcher(files: ReadonlyMap<string, Uint8Array>): typeof fetch {
+function inMemoryZarrFetcher(
+  files: ReadonlyMap<string, Uint8Array>,
+  options: { readonly missingStatus?: number } = {},
+): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     const path = url.pathname.replace(/^\/sample\.sdata\.zarr/, '')
@@ -305,9 +615,16 @@ function inMemoryZarrFetcher(files: ReadonlyMap<string, Uint8Array>): typeof fet
 
     // Object stores that deny listing answer missing keys with 403.
     return body === undefined
-      ? new Response('Forbidden', { status: 403 })
+      ? new Response(null, { status: options.missingStatus ?? 403 })
       : new Response(Uint8Array.from(body), { status: 200 })
   }) as unknown as typeof fetch
+}
+
+function withoutFiles(
+  files: ReadonlyMap<string, Uint8Array>,
+  ...paths: readonly string[]
+): ReadonlyMap<string, Uint8Array> {
+  return new Map(Array.from(files).filter(([path]) => !paths.includes(path)))
 }
 
 function arrayMeta(shape: readonly number[], dtype: string): Record<string, unknown> {

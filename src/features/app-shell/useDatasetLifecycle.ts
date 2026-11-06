@@ -162,6 +162,16 @@ import {
   type VisiumHdControlState,
 } from '../dataset/visiumHdModel'
 import {
+  IDLE_SPATIALDATA_CONTROL_STATE,
+  spatialDataControlReady,
+  spatialDataSelectionFromShareable,
+  type SpatialDataControlState,
+} from '../dataset/spatialDataModel'
+import {
+  setSpatialDataSelection,
+  spatialDataSelectionFor,
+} from '../../datasets/datasetFactory'
+import {
   createStructuredLoadError,
   readErrorMessage,
   type StructuredLoadError,
@@ -349,6 +359,7 @@ interface UseDatasetLifecycleSetters {
   readonly setTranscriptLayerState: Setter<TranscriptLayerState<StructuredLoadError>>
   readonly setTranscriptPointColorMode: Setter<TranscriptPointColorMode>
   readonly setVisiumHdControlState: Setter<VisiumHdControlState>
+  readonly setSpatialDataControlState: Setter<SpatialDataControlState>
   readonly setViewportCellCount: Setter<number | null>
 }
 
@@ -499,6 +510,7 @@ export function useDatasetLifecycle({
     setTranscriptLayerState,
     setTranscriptPointColorMode,
     setVisiumHdControlState,
+    setSpatialDataControlState,
     setViewportCellCount,
   },
 }: UseDatasetLifecycleOptions): UseDatasetLifecycleResult {
@@ -650,6 +662,12 @@ export function useDatasetLifecycle({
         : []
       if (!shouldRestoreSharedState) {
         initialShareableStateRef.current = null
+      } else {
+        const sharedSelection = spatialDataSelectionFromShareable(sharedState)
+
+        if (Object.keys(sharedSelection).length > 0) {
+          setSpatialDataSelection(requestedUrl, sharedSelection)
+        }
       }
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
       onBeforeDatasetLoad?.()
@@ -788,6 +806,7 @@ export function useDatasetLifecycle({
       setDatasetUrl(requestedUrl)
       setDatasetPlatform(null)
       setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
+      setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
       setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
       setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
       cellFeatureMatrixCapabilityKeyRef.current = null
@@ -993,6 +1012,12 @@ export function useDatasetLifecycle({
 
           if (isSpatialDataSummaryDataset(dataset)) {
             const summary = await dataset.summary()
+            setSpatialDataControlState(
+              spatialDataControlReady(
+                summary,
+                spatialDataSelectionFor(detection.baseUrl),
+              ),
+            )
             appendDebugEvent(
               `SpatialData view: coordinate system ${summary.coordinateSystem}; image ${
                 summary.image ?? 'none'
@@ -1355,6 +1380,7 @@ export function useDatasetLifecycle({
         )
         setDatasetPlatform(null)
         setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
+        setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
         setSpatialGridCells([])
         setFlatMorphologyImage(null)
         initialShareableStateRef.current = null

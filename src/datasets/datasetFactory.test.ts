@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  cachedSpatialDataset,
   createSpatialDataset,
   detectSpatialDataset,
   isImageOnlyUrl,
+  setSpatialDataSelection,
+  spatialDataSelectionFor,
 } from './datasetFactory'
 import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
@@ -263,6 +266,34 @@ describe('spatial dataset detection', () => {
     )
 
     expect(dataset).toBeInstanceOf(SpatialDataDataset)
+  })
+
+  it('builds a fresh cached SpatialData instance when the selection changes', async () => {
+    const url = 'https://example.test/stores/selected.zarr'
+    vi.stubGlobal(
+      'fetch',
+      fetcherForJsonPaths({
+        '/stores/selected.zarr/.zattrs': { spatialdata_attrs: { version: '0.1' } },
+      }),
+    )
+
+    try {
+      const first = await cachedSpatialDataset(url)
+      await expect(cachedSpatialDataset(`${url}/`)).resolves.toBe(first)
+
+      setSpatialDataSelection(url, { image: 'he', micrometersPerUnit: 0.2125 })
+      expect(spatialDataSelectionFor(`${url}/`)).toEqual({
+        image: 'he',
+        micrometersPerUnit: 0.2125,
+      })
+
+      const second = await cachedSpatialDataset(url)
+      expect(second).toBeInstanceOf(SpatialDataDataset)
+      expect(second).not.toBe(first)
+    } finally {
+      setSpatialDataSelection(url, undefined)
+      vi.unstubAllGlobals()
+    }
   })
 
   it('times out direct H5AD probes that never answer', async () => {

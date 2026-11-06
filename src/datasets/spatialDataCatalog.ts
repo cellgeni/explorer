@@ -51,6 +51,8 @@ export interface SpatialDataView {
   readonly coordinateSystem: string
   readonly coordinateSystems: readonly string[]
   readonly image?: SpatialDataPlacedElement
+  // Images that can be shown in this coordinate system, finest first.
+  readonly images: readonly SpatialDataPlacedElement[]
   readonly table?: SpatialDataTableInfo
   // Shapes elements annotated by the table; their geometry places each row.
   readonly regionShapes: readonly SpatialDataPlacedElement[]
@@ -76,6 +78,31 @@ export class SpatialDataConsolidatedMetadataError extends Error {
   }
 }
 
+// Table reads failed and the host reported chunks as absent, which usually
+// means an interrupted or in-progress upload.
+export class SpatialDataIncompleteStoreError extends Error {
+  readonly url: string
+  readonly missingKeys: readonly string[]
+
+  constructor(url: string, missingKeys: readonly string[], cause: unknown) {
+    super(
+      `SpatialData store is incomplete: ${describeMissingChunks(missingKeys)} The read then failed with: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+      { cause },
+    )
+    this.name = 'SpatialDataIncompleteStoreError'
+    this.url = url
+    this.missingKeys = missingKeys
+  }
+}
+
+export function describeMissingChunks(keys: readonly string[]): string {
+  const shown = keys.slice(0, 3).join(', ')
+  const more = keys.length > 3 ? `, and ${(keys.length - 3).toLocaleString()} more` : ''
+  return `${keys.length.toLocaleString()} chunk${keys.length === 1 ? ' is' : 's are'} missing (${shown}${more}).`
+}
+
 const ELEMENT_KINDS: readonly SpatialDataElementKind[] = [
   'images',
   'labels',
@@ -84,8 +111,8 @@ const ELEMENT_KINDS: readonly SpatialDataElementKind[] = [
   'tables',
 ]
 
-// Compressed chunk bytes kept per store so repeated expression reads (for
-// example switching genes on a CSR table) do not refetch matrix chunks.
+// Compressed table chunk bytes kept per store so repeated expression reads
+// (for example switching genes on a CSR table) do not refetch matrix chunks.
 const CHUNK_CACHE_MAX_BYTES = 256 * 1024 * 1024
 
 const SPATIALDATA_ELEMENT_ATTRIBUTE_KEYS = [
@@ -125,6 +152,8 @@ export async function openSpatialDataStore(
   return {
     store: consolidatedZarrStore(base, consolidated.knownMetadata, {
       chunkCacheMaxBytes: CHUNK_CACHE_MAX_BYTES,
+      // Image tiles and label traces keep their own decoded caches.
+      cacheChunk: (key) => key.startsWith('/tables/'),
     }),
     zarrFormat: consolidated.zarrFormat,
   }
@@ -181,7 +210,7 @@ export async function readSpatialDataCatalog(
 
 export function selectSpatialDataView(
   catalog: SpatialDataCatalog,
-  options: { readonly coordinateSystem?: string } = {},
+  options: { readonly coordinateSystem?: string; readonly image?: string } = {},
 ): SpatialDataView {
   const spatialElements = catalog.elements.filter((element) => element.kind !== 'tables')
   const elementsByName = new Map(
@@ -222,11 +251,12 @@ export function selectSpatialDataView(
   const regionLabels = placed.filter(
     (entry) => entry.element.kind === 'labels' && regionNames.has(entry.element.name),
   )
-  const image = placed
+  const images = placed
     .filter(
       (entry) => entry.element.kind === 'images' && isAxisAlignedAffine(entry.affine),
     )
-    .sort((left, right) => left.affine.a - right.affine.a)[0]
+    .sort((left, right) => left.affine.a - right.affine.a)
+  const image = images.find((entry) => entry.element.name === options.image) ?? images[0]
   const boundaryCandidates = placed.filter(
     (entry) =>
       entry.element.kind === 'shapes' &&
@@ -244,6 +274,7 @@ export function selectSpatialDataView(
     coordinateSystem,
     coordinateSystems,
     ...(image === undefined ? {} : { image }),
+    images,
     ...(table === undefined ? {} : { table }),
     regionShapes,
     regionLabels,
