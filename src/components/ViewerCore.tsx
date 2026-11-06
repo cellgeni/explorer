@@ -630,9 +630,13 @@ function ViewerSurface({
       }),
     [boundaries, cellBoundaryFillEnabled],
   )
+  // Without expression data this stays the same empty list, so pan stops do
+  // not restyle every boundary.
   const boundaryExpressionElements = useMemo(
     () =>
-      boundaries.length === 0 || boundaryStyleViewport === null
+      boundaries.length === 0 ||
+      boundaryStyleViewport === null ||
+      expressionElements.length === 0
         ? EMPTY_OVERVIEW_CELLS
         : overviewCellsIntersectingBbox(expressionElements, boundaryStyleViewport.bbox),
     [boundaries.length, boundaryStyleViewport, expressionElements],

@@ -345,28 +345,10 @@ export function zarrChunkKeys(
   options: { readonly limit?: number } = {},
 ): readonly string[] {
   const shape = numberList(metadata.shape)
-  const v3Grid = recordOrNull(recordOrNull(metadata.chunk_grid)?.configuration)
-  const chunks = numberList(v3Grid?.chunk_shape ?? metadata.chunks)
-  const keyEncoding = recordOrNull(metadata.chunk_key_encoding)
-  const isV3 = metadata.zarr_format === 3
-  const v3Separator = recordOrNull(keyEncoding?.configuration)?.separator
-  const separator = isV3
-    ? typeof v3Separator === 'string'
-      ? v3Separator
-      : keyEncoding?.name === 'v2'
-        ? '.'
-        : '/'
-    : metadata.dimension_separator === '/'
-      ? '/'
-      : '.'
-  const prefix = isV3 && keyEncoding?.name !== 'v2' ? `c${separator}` : ''
+  const chunks = chunkShape(metadata)
 
   if (shape === null || chunks === null || shape.length !== chunks.length) {
     return []
-  }
-
-  if (shape.length === 0) {
-    return [isV3 && keyEncoding?.name !== 'v2' ? 'c' : '0']
   }
 
   const counts = shape.map((size, index) => Math.ceil(size / (chunks[index] ?? size)))
@@ -384,10 +366,97 @@ export function zarrChunkKeys(
       rest = Math.floor(rest / count)
     }
 
-    keys.push(`${prefix}${coords.join(separator)}`)
+    keys.push(zarrChunkKey(metadata, coords))
   }
 
   return keys
+}
+
+// Key of one chunk relative to the array path, following the array's chunk
+// key encoding.
+export function zarrChunkKey(
+  metadata: Record<string, unknown>,
+  coords: readonly number[],
+): string {
+  const keyEncoding = recordOrNull(metadata.chunk_key_encoding)
+  const isV3 = metadata.zarr_format === 3
+  const v2Style = !isV3 || keyEncoding?.name === 'v2'
+  const configuredSeparator = recordOrNull(keyEncoding?.configuration)?.separator
+  const separator =
+    typeof configuredSeparator === 'string'
+      ? configuredSeparator
+      : isV3
+        ? v2Style
+          ? '.'
+          : '/'
+        : metadata.dimension_separator === '/'
+          ? '/'
+          : '.'
+
+  if (coords.length === 0) {
+    return v2Style ? '0' : 'c'
+  }
+
+  return `${v2Style ? '' : `c${separator}`}${coords.join(separator)}`
+}
+
+export interface ZarrArrayMetadata {
+  readonly metadataKey: '.zarray' | 'zarr.json'
+  readonly metadata: Record<string, unknown>
+}
+
+const arrayMetadataCache = new WeakMap<object, Promise<ZarrArrayMetadata | null>>()
+
+// Raw metadata of an opened array, for decoding its chunks elsewhere (for
+// example in a worker). Null for sharded arrays, whose chunks are not
+// standalone objects, and when the metadata cannot be read.
+export function zarrArrayMetadata(
+  array: zarr.Array<zarr.DataType, zarr.Readable>,
+): Promise<ZarrArrayMetadata | null> {
+  const cached = arrayMetadataCache.get(array)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const promise = (async (): Promise<ZarrArrayMetadata | null> => {
+    const path = array.path === '/' ? '' : array.path
+
+    for (const metadataKey of ['.zarray', 'zarr.json'] as const) {
+      const bytes = await array.store.get(`${path}/${metadataKey}`)
+
+      if (bytes === undefined) {
+        continue
+      }
+
+      const metadata = recordOrNull(jsonFromBytes(bytes))
+
+      if (
+        metadata === null ||
+        (metadataKey === 'zarr.json' && isShardedMetadata(metadata))
+      ) {
+        return null
+      }
+
+      return { metadataKey, metadata }
+    }
+
+    return null
+  })().catch(() => null)
+  arrayMetadataCache.set(array, promise)
+  return promise
+}
+
+function isShardedMetadata(metadata: Record<string, unknown>): boolean {
+  return (
+    Array.isArray(metadata.codecs) &&
+    metadata.codecs.some((codec) => recordOrNull(codec)?.name === 'sharding_indexed')
+  )
+}
+
+function chunkShape(metadata: Record<string, unknown>): readonly number[] | null {
+  const v3Grid = recordOrNull(recordOrNull(metadata.chunk_grid)?.configuration)
+  return numberList(v3Grid?.chunk_shape ?? metadata.chunks)
 }
 
 function numberList(value: unknown): readonly number[] | null {

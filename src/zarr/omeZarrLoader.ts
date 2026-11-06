@@ -11,7 +11,6 @@ import type {
   ImagePyramidChannelInfo,
   ImagePyramidDecodedTile,
   ImagePyramidLoader,
-  ImagePyramidPixelArray,
   ImagePyramidTilePixels,
   ImagePyramidTileRenderOptions,
 } from '../data/imagePyramid'
@@ -20,7 +19,16 @@ import {
   consolidatedZarrStore,
   createZarrFetchStore,
   readConsolidatedZarrMetadata,
+  ZarrChunkUnavailableError,
+  zarrArrayMetadata,
+  zarrChunkKey,
 } from './zarrStores'
+import { sharedZarrDecodePool, type ZarrDecodePool } from '../workers/zarrDecodePool'
+import {
+  isSupportedPixelArray,
+  newPixelArray,
+  numericPixelsToRgba,
+} from './omeZarrPixels'
 
 const DEFAULT_TILE_SIZE = 256
 // Chunks larger than this are served as several virtual tiles, so a 4096²
@@ -57,6 +65,9 @@ interface OpenOmeZarrImageOptions {
   // Opens the image group from an existing Zarr location (for example a
   // SpatialData store with consolidated metadata) instead of fetching `url`.
   readonly location?: zarr.Location<zarr.Readable>
+  // Decodes tiles in workers; null decodes on the main thread. Defaults to the
+  // shared pool when workers are available.
+  readonly decodePool?: ZarrDecodePool | null
 }
 
 export interface OmeZarrPlanarTransform {
@@ -125,6 +136,7 @@ interface OmeZarrLoaderOptions {
   readonly units: UnitsDescriptor
   readonly origin?: { readonly x: number; readonly y: number }
   readonly createBitmap: (imageData: ImageData) => Promise<ImageBitmap>
+  readonly decodePool?: ZarrDecodePool | null
 }
 
 export async function openOmeZarrImage(
@@ -233,6 +245,8 @@ export async function openOmeZarrImageWithOptions(
       ? {}
       : { origin: { x: planarTransform.translateX, y: planarTransform.translateY } }),
     createBitmap: options.createBitmap ?? createBitmapFromImageData,
+    decodePool:
+      options.decodePool === undefined ? sharedZarrDecodePool() : options.decodePool,
   })
 }
 
@@ -306,6 +320,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   private readonly originY: number
   private readonly sourceKey: string
   private readonly createBitmap: (imageData: ImageData) => Promise<ImageBitmap>
+  private readonly decodePool: ZarrDecodePool | null
 
   constructor(options: OmeZarrLoaderOptions) {
     const firstLevel = options.levels[0]
@@ -332,6 +347,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     this.originY = options.origin?.y ?? 0
     this.sourceKey = options.sourceUrl
     this.createBitmap = options.createBitmap
+    this.decodePool = options.decodePool ?? null
   }
 
   bestLevel(deckScale: number): number {
@@ -477,6 +493,12 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     options: ImagePyramidTileRenderOptions = {},
     signal?: AbortSignal,
   ): Promise<ImagePyramidDecodedTile> {
+    const fromWorker = await this.loadTileInWorker(level, col, row, options, signal)
+
+    if (fromWorker !== null) {
+      return fromWorker
+    }
+
     const tile = await this.loadTilePixels(level, col, row, signal)
     const rgba = numericPixelsToRgba(tile.pixels, tile.width, tile.height, {
       ...(options.displayWindow === undefined
@@ -503,13 +525,94 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     }
   }
 
-  // Copies a tile that lies inside one chunk from the shared decoded-chunk
-  // cache. Returns null for tiles that straddle chunks.
-  private async loadTilePixelsFromChunk(
+  // Decodes and renders a tile in a worker that caches its chunk. Returns null
+  // when workers are unavailable or cannot handle the tile, so the caller
+  // decodes on the main thread.
+  private async loadTileInWorker(
+    level: number,
+    col: number,
+    row: number,
+    options: ImagePyramidTileRenderOptions,
+    signal: AbortSignal | undefined,
+  ): Promise<ImagePyramidDecodedTile | null> {
+    const pool = this.decodePool
+    const meta = this.levelMetaFor(level)
+    const selection = this.tileSelection(meta, col, row)
+    const placement = this.chunkPlacement(meta, selection)
+
+    if (pool === null || placement === null) {
+      return null
+    }
+
+    const arrayMetadata = await zarrArrayMetadata(meta.array)
+
+    if (arrayMetadata === null) {
+      return null
+    }
+
+    const chunkKey = zarrChunkKey(arrayMetadata.metadata, placement.coords)
+    const arrayPath = meta.array.path === '/' ? '' : meta.array.path
+
+    try {
+      const tile = await pool.renderTile({
+        cacheKey: placement.cacheKey,
+        source: { ...arrayMetadata, chunkKey, coords: placement.coords },
+        loadBytes: () =>
+          Promise.resolve(
+            meta.array.store.get(`${arrayPath}/${chunkKey}` as `/${string}`),
+          ),
+        window: {
+          xAxis: this.xAxis,
+          yAxis: this.yAxis,
+          x0: placement.x0,
+          y0: placement.y0,
+          width: selection.width,
+          height: selection.height,
+          fixedAxes: placement.fixedAxes,
+        },
+        render: {
+          ...(options.displayWindow === undefined
+            ? {}
+            : { displayWindow: options.displayWindow }),
+          ...(options.color === undefined ? {} : { color: options.color }),
+          ...(options.alphaFromIntensity === undefined
+            ? {}
+            : { alphaFromIntensity: options.alphaFromIntensity }),
+        },
+      })
+
+      if (signal?.aborted === true) {
+        tile.bitmap.close()
+        throwIfAborted(signal)
+      }
+
+      return tile
+    } catch (error) {
+      // Store errors and aborts are final; worker failures fall back to the
+      // main thread.
+      if (
+        error instanceof ZarrChunkUnavailableError ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
+        throw error
+      }
+
+      return null
+    }
+  }
+
+  // Chunk coordinates and in-chunk origin of a tile that lies inside one
+  // chunk, or null for tiles that straddle chunks.
+  private chunkPlacement(
     meta: OmeZarrLevelMeta,
     selection: ReturnType<OmeZarrImagePyramidLoader['tileSelection']>,
-    signal: AbortSignal | undefined,
-  ): Promise<ImagePyramidTilePixels | null> {
+  ): {
+    readonly coords: readonly number[]
+    readonly cacheKey: string
+    readonly x0: number
+    readonly y0: number
+    readonly fixedAxes: readonly { readonly axis: number; readonly index: number }[]
+  } | null {
     const chunkCol = Math.floor(selection.xStart / meta.chunkWidth)
     const chunkRow = Math.floor(selection.yStart / meta.chunkHeight)
 
@@ -530,11 +633,38 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
           ? chunkRow
           : Math.floor((index as number) / (chunkShape[axis] ?? 1)),
     )
-    const chunk = await decodedChunk(
-      `${this.sourceKey}\n${meta.path}\n${coords.join(',')}`,
-      meta.array,
-      coords,
+    const fixedAxes = selection.projection.flatMap((index, axis) =>
+      axis === this.xAxis || axis === this.yAxis
+        ? []
+        : [{ axis, index: (index as number) % (chunkShape[axis] ?? 1) }],
     )
+
+    return {
+      coords,
+      cacheKey: `${this.sourceKey}\n${meta.path}\n${coords.join(',')}`,
+      x0: selection.xStart - chunkCol * meta.chunkWidth,
+      y0: selection.yStart - chunkRow * meta.chunkHeight,
+      fixedAxes,
+    }
+  }
+
+  // Copies a tile that lies inside one chunk from the shared decoded-chunk
+  // cache. Returns null for tiles that straddle chunks.
+  private async loadTilePixelsFromChunk(
+    meta: OmeZarrLevelMeta,
+    selection: ReturnType<OmeZarrImagePyramidLoader['tileSelection']>,
+    signal: AbortSignal | undefined,
+  ): Promise<ImagePyramidTilePixels | null> {
+    const placement = this.chunkPlacement(meta, selection)
+
+    if (placement === null) {
+      return null
+    }
+
+    const chunkShape = meta.array.chunks
+    const chunkCol = placement.coords[this.xAxis] ?? 0
+    const chunkRow = placement.coords[this.yAxis] ?? 0
+    const chunk = await decodedChunk(placement.cacheKey, meta.array, placement.coords)
     throwIfAborted(signal)
 
     const data = chunk.data
@@ -1159,83 +1289,6 @@ function copyTilePixels(options: {
   }
 }
 
-function newPixelArray(
-  source: ImagePyramidPixelArray,
-  length: number,
-): ImagePyramidPixelArray {
-  if (source instanceof Uint8Array) return new Uint8Array(length)
-  if (source instanceof Uint16Array) return new Uint16Array(length)
-  if (source instanceof Int8Array) return new Int8Array(length)
-  if (source instanceof Int16Array) return new Int16Array(length)
-  if (source instanceof Int32Array) return new Int32Array(length)
-  if (source instanceof Uint32Array) return new Uint32Array(length)
-  if (source instanceof Float32Array) return new Float32Array(length)
-  return new Float64Array(length)
-}
-
-function numericPixelsToRgba(
-  pixels: ImagePyramidPixelArray,
-  width: number,
-  height: number,
-  options: {
-    readonly displayWindow?: { readonly lo: number; readonly hi: number }
-    readonly color?: readonly [number, number, number]
-    readonly alphaFromIntensity?: boolean
-  },
-): { readonly rgba: Uint8ClampedArray; readonly lo: number; readonly hi: number } {
-  const window = options.displayWindow ?? percentileWindow(pixels)
-  const range = Math.max(1e-12, window.hi - window.lo)
-  const rgba = new Uint8ClampedArray(width * height * 4)
-
-  for (let index = 0; index < pixels.length; index += 1) {
-    const pixel = pixels[index] ?? 0
-    const value = clampByte(Math.round(((pixel - window.lo) / range) * 255))
-    const offset = index * 4
-
-    if (options.color === undefined) {
-      rgba[offset] = value
-      rgba[offset + 1] = value
-      rgba[offset + 2] = value
-      rgba[offset + 3] = 255
-      continue
-    }
-
-    rgba[offset] = Math.round((options.color[0] * value) / 255)
-    rgba[offset + 1] = Math.round((options.color[1] * value) / 255)
-    rgba[offset + 2] = Math.round((options.color[2] * value) / 255)
-    rgba[offset + 3] = options.alphaFromIntensity === true ? value : 255
-  }
-
-  return {
-    rgba,
-    lo: window.lo,
-    hi: window.hi,
-  }
-}
-
-function percentileWindow(pixels: ImagePyramidPixelArray): {
-  readonly lo: number
-  readonly hi: number
-} {
-  if (pixels.length === 0) {
-    return { lo: 0, hi: 1 }
-  }
-
-  const step = Math.max(1, Math.floor(pixels.length / 10_000))
-  const sample: number[] = []
-
-  for (let index = 0; index < pixels.length; index += step) {
-    sample.push(pixels[index] ?? 0)
-  }
-
-  sample.sort((a, b) => a - b)
-
-  const lo = sample[Math.floor(sample.length * 0.02)] ?? 0
-  const hi = sample[Math.floor(sample.length * 0.98)] ?? lo + 1
-
-  return { lo, hi: hi === lo ? lo + 1 : hi }
-}
-
 function createBitmapFromImageData(imageData: ImageData): Promise<ImageBitmap> {
   return createImageBitmap(imageData)
 }
@@ -1291,21 +1344,4 @@ function positiveDimension(value: unknown, label: string): number {
 function spatialAxisName(name: string): boolean {
   const normalized = name.toLowerCase()
   return normalized === 'x' || normalized === 'y' || normalized === 'z'
-}
-
-function isSupportedPixelArray(value: unknown): value is ImagePyramidPixelArray {
-  return (
-    value instanceof Uint8Array ||
-    value instanceof Uint16Array ||
-    value instanceof Int8Array ||
-    value instanceof Int16Array ||
-    value instanceof Int32Array ||
-    value instanceof Uint32Array ||
-    value instanceof Float32Array ||
-    value instanceof Float64Array
-  )
-}
-
-function clampByte(value: number): number {
-  return Math.max(0, Math.min(255, value))
 }

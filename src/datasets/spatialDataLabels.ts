@@ -1,5 +1,17 @@
 import * as zarr from 'zarrita'
+import {
+  labelWindow,
+  outerRing,
+  traceLabelEdges,
+  type PackedLabelTrace,
+} from './spatialDataLabelTrace'
 import { applyAffine, composeAffine, type Affine2D } from './spatialDataTransforms'
+import { sharedZarrDecodePool, type ZarrDecodePool } from '../workers/zarrDecodePool'
+import {
+  ZarrChunkUnavailableError,
+  zarrArrayMetadata,
+  zarrChunkKey,
+} from '../zarr/zarrStores'
 
 // Reads SpatialData `labels` rasters (integer segmentation masks) and turns
 // them into per-label outlines on demand. Outlines are traced per chunk along
@@ -31,42 +43,146 @@ export interface SpatialDataLabelLevel {
   readonly scaleY: number
 }
 
-export interface SpatialDataLabelChunkTrace {
+export interface SpatialDataLabelChunkTrace extends PackedLabelTrace {
   readonly level: number
   readonly col: number
   readonly row: number
-  // Directed pixel edges per label, encoded by `edgeKey`.
-  readonly edgesByLabel: ReadonlyMap<number, readonly number[]>
-  readonly pixelCounts: ReadonlyMap<number, number>
   readonly approximateBytes: number
 }
 
 export interface SpatialDataLabelOutline {
   readonly label: number
-  // Outer ring in target coordinates.
-  readonly ring: readonly SpatialDataLabelPoint[]
+  // Outer ring in target coordinates as [x0, y0, x1, y1, ...]. The same array
+  // is returned for a label until the chunks contributing to it change.
+  readonly ring: Float64Array
 }
 
-const RIGHT = 0
-const DOWN = 1
-const LEFT = 2
-const UP = 3
+// Decodes one chunk window and traces it, on the main thread or in a worker.
+export interface SpatialDataLabelTraceRequest {
+  readonly level: SpatialDataLabelLevel
+  readonly coords: readonly number[]
+  readonly x0: number
+  readonly y0: number
+  readonly width: number
+  readonly height: number
+  readonly signal?: AbortSignal
+}
+
+export type SpatialDataLabelTracer = (
+  request: SpatialDataLabelTraceRequest,
+) => Promise<PackedLabelTrace>
+
+interface CachedRing {
+  readonly contributions: readonly SpatialDataLabelChunkTrace[]
+  readonly ring: Float64Array
+}
+
 const DEFAULT_MAX_TRACE_CACHE_BYTES = 192 * 1024 * 1024
+const MAX_CACHED_RINGS = 250_000
+// Outlines are simplified to within this many level pixels; smoothed
+// staircases are straight, so this drops most points without clipping small
+// cells.
+const RING_TOLERANCE_PIXELS = 0.25
+
+export const traceLabelChunkOnMainThread: SpatialDataLabelTracer = async (request) => {
+  const { level } = request
+  const chunk = await level.array.getChunk(
+    [...request.coords],
+    request.signal === undefined ? undefined : { signal: request.signal },
+  )
+  const labels = labelWindow(
+    chunk.data as unknown as ArrayLike<number | bigint>,
+    chunk.stride,
+    level.xAxis,
+    level.yAxis,
+    request.width,
+    request.height,
+  )
+
+  return traceLabelEdges(
+    labels,
+    request.width,
+    request.height,
+    request.x0,
+    request.y0,
+    level.width,
+  )
+}
+
+// Fetches the chunk on the main thread (so store error handling and missing
+// chunk tracking apply) and decodes and traces it in a worker.
+export function createWorkerLabelTracer(pool: ZarrDecodePool): SpatialDataLabelTracer {
+  return async (request) => {
+    const { level } = request
+    const arrayMetadata = await zarrArrayMetadata(level.array)
+
+    if (arrayMetadata === null) {
+      return traceLabelChunkOnMainThread(request)
+    }
+
+    const chunkKey = zarrChunkKey(arrayMetadata.metadata, request.coords)
+    const arrayPath = level.array.path === '/' ? '' : level.array.path
+    const bytes = await level.array.store.get(
+      `${arrayPath}/${chunkKey}` as `/${string}`,
+      request.signal === undefined ? undefined : { signal: request.signal },
+    )
+
+    try {
+      return await pool.traceLabels({
+        source: { ...arrayMetadata, chunkKey, coords: request.coords },
+        bytes,
+        window: {
+          xAxis: level.xAxis,
+          yAxis: level.yAxis,
+          x0: 0,
+          y0: 0,
+          width: request.width,
+          height: request.height,
+          fixedAxes: [],
+        },
+        levelX0: request.x0,
+        levelY0: request.y0,
+        levelWidth: level.width,
+      })
+    } catch (error) {
+      if (error instanceof ZarrChunkUnavailableError) {
+        throw error
+      }
+
+      return traceLabelChunkOnMainThread(request)
+    }
+  }
+}
+
+// Worker tracing where workers exist, otherwise the main thread.
+export function defaultLabelTracer(): SpatialDataLabelTracer {
+  const pool = sharedZarrDecodePool()
+  return pool === null ? traceLabelChunkOnMainThread : createWorkerLabelTracer(pool)
+}
 
 export class SpatialDataLabelsReader {
   readonly levels: readonly SpatialDataLabelLevel[]
   // Element (level-0) coordinates -> target coordinates.
   readonly toTarget: Affine2D
   private readonly fromTarget: Affine2D
+  private readonly tracer: SpatialDataLabelTracer
   private readonly traces = new Map<string, Promise<SpatialDataLabelChunkTrace>>()
   private readonly traceBytes = new Map<string, number>()
+  private readonly traceLabelIndexes = new WeakMap<
+    SpatialDataLabelChunkTrace,
+    ReadonlyMap<number, number>
+  >()
+  private readonly rings = new Map<number, Map<number, CachedRing>>()
   private readonly maxTraceCacheBytes: number
   private cachedBytes = 0
 
   constructor(
     levels: readonly SpatialDataLabelLevel[],
     toTarget: Affine2D,
-    options: { readonly maxTraceCacheBytes?: number } = {},
+    options: {
+      readonly maxTraceCacheBytes?: number
+      readonly tracer?: SpatialDataLabelTracer
+    } = {},
   ) {
     if (levels.length === 0) {
       throw new Error('SpatialData labels element has no readable levels.')
@@ -75,6 +191,7 @@ export class SpatialDataLabelsReader {
     this.levels = levels
     this.toTarget = toTarget
     this.fromTarget = invertAffine(toTarget)
+    this.tracer = options.tracer ?? defaultLabelTracer()
     this.maxTraceCacheBytes = options.maxTraceCacheBytes ?? DEFAULT_MAX_TRACE_CACHE_BYTES
   }
 
@@ -84,6 +201,7 @@ export class SpatialDataLabelsReader {
     elementPath: string,
     attrs: Readonly<Record<string, unknown>>,
     toTarget: Affine2D,
+    options: { readonly tracer?: SpatialDataLabelTracer } = {},
   ): Promise<SpatialDataLabelsReader> {
     const multiscale = firstMultiscale(attrs)
     const axes = axisNames(multiscale?.axes)
@@ -139,7 +257,7 @@ export class SpatialDataLabelsReader {
       })
     }
 
-    return new SpatialDataLabelsReader(levels, toTarget)
+    return new SpatialDataLabelsReader(levels, toTarget, options)
   }
 
   // Finest level whose pixels covering `bounds` fit the budget.
@@ -161,19 +279,16 @@ export class SpatialDataLabelsReader {
   ): readonly { readonly col: number; readonly row: number }[] {
     const meta = this.levelMeta(level)
     const window = this.pixelWindow(level, bounds)
-    const col0 = Math.floor(window.x0 / meta.chunkWidth)
-    const col1 = Math.floor(
-      Math.max(window.x0, window.x0 + window.width - 1) / meta.chunkWidth,
-    )
-    const row0 = Math.floor(window.y0 / meta.chunkHeight)
-    const row1 = Math.floor(
-      Math.max(window.y0, window.y0 + window.height - 1) / meta.chunkHeight,
-    )
     const chunks: { col: number; row: number }[] = []
 
     if (window.width <= 0 || window.height <= 0) {
       return chunks
     }
+
+    const col0 = Math.floor(window.x0 / meta.chunkWidth)
+    const col1 = Math.floor((window.x0 + window.width - 1) / meta.chunkWidth)
+    const row0 = Math.floor(window.y0 / meta.chunkHeight)
+    const row1 = Math.floor((window.y0 + window.height - 1) / meta.chunkHeight)
 
     for (let row = row0; row <= row1; row += 1) {
       for (let col = col0; col <= col1; col += 1) {
@@ -238,6 +353,9 @@ export class SpatialDataLabelsReader {
     return promise
   }
 
+  // Outlines of labels that overlap `bounds`. Only overlapping labels are
+  // joined, and joined rings are reused while their source chunks stay
+  // loaded, so panning only joins labels that newly come into view.
   async outlines(
     bounds: SpatialDataLabelBounds,
     options: {
@@ -247,46 +365,72 @@ export class SpatialDataLabelsReader {
     },
   ): Promise<readonly SpatialDataLabelOutline[]> {
     const level = this.levelForBounds(bounds, options.maxPixels)
-    const chunks = this.chunksForBounds(level, bounds)
+    const window = this.pixelWindow(level, bounds)
     const traces = await Promise.all(
-      chunks.map((chunk) => this.trace(level, chunk.col, chunk.row, options.signal)),
+      this.chunksForBounds(level, bounds).map((chunk) =>
+        this.trace(level, chunk.col, chunk.row, options.signal),
+      ),
     )
-    const edgesByLabel = new Map<number, (readonly number[])[]>()
+    const visible = new Set<number>()
 
     for (const trace of traces) {
-      for (const [label, edges] of trace.edgesByLabel) {
-        if (options.include !== undefined && !options.include(label)) {
-          continue
-        }
+      const { labels, bounds: labelBounds } = trace
 
-        const lists = edgesByLabel.get(label)
+      for (let index = 0; index < labels.length; index += 1) {
+        const label = labels[index] ?? 0
+        const offset = index * 4
 
-        if (lists === undefined) {
-          edgesByLabel.set(label, [edges])
-        } else {
-          lists.push(edges)
+        if (
+          (labelBounds[offset] ?? 0) <= window.x0 + window.width &&
+          (labelBounds[offset + 2] ?? 0) >= window.x0 &&
+          (labelBounds[offset + 1] ?? 0) <= window.y0 + window.height &&
+          (labelBounds[offset + 3] ?? 0) >= window.y0 &&
+          (options.include === undefined || options.include(label))
+        ) {
+          visible.add(label)
         }
       }
     }
 
     const meta = this.levelMeta(level)
     const affine = this.levelToTarget(level)
+    const rings = this.ringCache(level)
     const outlines: SpatialDataLabelOutline[] = []
 
-    for (const [label, lists] of edgesByLabel) {
-      const ring = outerRing(lists, meta.width)
+    for (const label of visible) {
+      const contributions = traces.filter((trace) => this.labelIndex(trace).has(label))
+      const cached = rings.get(label)
 
-      if (ring.length < 3) {
+      if (cached !== undefined && sameTraces(cached.contributions, contributions)) {
+        rings.delete(label)
+        rings.set(label, cached)
+        outlines.push({ label, ring: cached.ring })
         continue
       }
 
-      const target = ring.map((point) => applyAffine(affine, point.x, point.y))
+      const ring = outerRing(
+        contributions.map((trace) =>
+          labelEdges(trace, this.labelIndex(trace).get(label)),
+        ),
+        meta.width,
+        RING_TOLERANCE_PIXELS,
+      )
 
-      if (ringIntersects(target, bounds)) {
-        outlines.push({ label, ring: target })
+      if (ring.length < 6) {
+        continue
       }
+
+      for (let index = 0; index < ring.length; index += 2) {
+        const point = applyAffine(affine, ring[index] ?? 0, ring[index + 1] ?? 0)
+        ring[index] = point.x
+        ring[index + 1] = point.y
+      }
+
+      rings.set(label, { contributions, ring })
+      outlines.push({ label, ring })
     }
 
+    this.evictRings(rings)
     return outlines
   }
 
@@ -300,6 +444,38 @@ export class SpatialDataLabelsReader {
       e: meta.scaleY,
       f: 0,
     })
+  }
+
+  private labelIndex(trace: SpatialDataLabelChunkTrace): ReadonlyMap<number, number> {
+    let index = this.traceLabelIndexes.get(trace)
+
+    if (index === undefined) {
+      index = new Map(Array.from(trace.labels, (label, position) => [label, position]))
+      this.traceLabelIndexes.set(trace, index)
+    }
+
+    return index
+  }
+
+  private ringCache(level: number): Map<number, CachedRing> {
+    let rings = this.rings.get(level)
+
+    if (rings === undefined) {
+      rings = new Map()
+      this.rings.set(level, rings)
+    }
+
+    return rings
+  }
+
+  private evictRings(rings: Map<number, CachedRing>): void {
+    for (const label of rings.keys()) {
+      if (rings.size <= MAX_CACHED_RINGS) {
+        return
+      }
+
+      rings.delete(label)
+    }
   }
 
   private levelMeta(level: number): SpatialDataLabelLevel {
@@ -345,31 +521,30 @@ export class SpatialDataLabelsReader {
     signal?: AbortSignal,
   ): Promise<SpatialDataLabelChunkTrace> {
     const meta = this.levelMeta(level)
-    const coords = meta.array.shape.map((_size, axis) =>
-      axis === meta.xAxis ? col : axis === meta.yAxis ? row : 0,
-    )
-    const chunk = await meta.array.getChunk(
-      coords,
-      signal === undefined ? undefined : { signal },
-    )
     const x0 = col * meta.chunkWidth
     const y0 = row * meta.chunkHeight
-    const width = Math.max(0, Math.min(meta.chunkWidth, meta.width - x0))
-    const height = Math.max(0, Math.min(meta.chunkHeight, meta.height - y0))
-    const labels = labelWindow(
-      chunk.data as unknown as ArrayLike<number | bigint>,
-      chunk.stride,
-      meta.xAxis,
-      meta.yAxis,
-      width,
-      height,
-    )
+    const packed = await this.tracer({
+      level: meta,
+      coords: meta.array.shape.map((_size, axis) =>
+        axis === meta.xAxis ? col : axis === meta.yAxis ? row : 0,
+      ),
+      x0,
+      y0,
+      width: Math.max(0, Math.min(meta.chunkWidth, meta.width - x0)),
+      height: Math.max(0, Math.min(meta.chunkHeight, meta.height - y0)),
+      ...(signal === undefined ? {} : { signal }),
+    })
 
     return {
+      ...packed,
       level,
       col,
       row,
-      ...traceLabelEdges(labels, width, height, x0, y0, meta.width),
+      approximateBytes:
+        packed.edges.byteLength +
+        packed.labels.byteLength * 4 +
+        packed.bounds.byteLength +
+        packed.labels.length * 64,
     }
   }
 
@@ -393,306 +568,25 @@ export class SpatialDataLabelsReader {
   }
 }
 
-// Copies the 2D x/y window of a decoded chunk into Int32 labels. 64-bit label
-// arrays are read through their low 32-bit words, which hold every label id a
-// segmentation realistically uses.
-export function labelWindow(
-  data: ArrayLike<number | bigint>,
-  stride: readonly number[],
-  xAxis: number,
-  yAxis: number,
-  width: number,
-  height: number,
-): Int32Array {
-  const output = new Int32Array(width * height)
-  const strideX = stride[xAxis] ?? 1
-  const strideY = stride[yAxis] ?? width
-  const words = int64LowWords(data)
-
-  for (let y = 0; y < height; y += 1) {
-    const rowOffset = y * strideY
-    const outputOffset = y * width
-
-    for (let x = 0; x < width; x += 1) {
-      const index = rowOffset + x * strideX
-
-      if (words !== null) {
-        const high = words[index * 2 + 1] ?? 0
-        output[outputOffset + x] =
-          high === 0
-            ? (words[index * 2] ?? 0)
-            : Number((data as BigInt64Array)[index] ?? 0n)
-      } else {
-        output[outputOffset + x] = Number(data[index] ?? 0)
-      }
-    }
-  }
-
-  return output
+function labelEdges(
+  trace: SpatialDataLabelChunkTrace,
+  index: number | undefined,
+): Float64Array {
+  return index === undefined
+    ? new Float64Array(0)
+    : trace.edges.subarray(
+        trace.edgeOffsets[index] ?? 0,
+        trace.edgeOffsets[index + 1] ?? 0,
+      )
 }
 
-// Emits directed pixel edges (interior on the right, y pointing down) for
-// every non-zero label, in level-pixel coordinates, and counts label pixels.
-export function traceLabelEdges(
-  labels: Int32Array,
-  width: number,
-  height: number,
-  x0: number,
-  y0: number,
-  levelWidth: number,
-): Omit<SpatialDataLabelChunkTrace, 'level' | 'col' | 'row'> {
-  const edgesByLabel = new Map<number, number[]>()
-  const pixelCounts = new Map<number, number>()
-  const stride = levelWidth + 1
-  let edgeCount = 0
-  let currentLabel = 0
-  let currentEdges: number[] | undefined
-  let runLabel = 0
-  let runLength = 0
-
-  const flushRun = () => {
-    if (runLabel !== 0 && runLength > 0) {
-      pixelCounts.set(runLabel, (pixelCounts.get(runLabel) ?? 0) + runLength)
-    }
-  }
-
-  for (let y = 0; y < height; y += 1) {
-    const row = y * width
-
-    for (let x = 0; x < width; x += 1) {
-      const label = labels[row + x] ?? 0
-
-      if (label !== runLabel) {
-        flushRun()
-        runLabel = label
-        runLength = 0
-      }
-
-      runLength += 1
-
-      if (label === 0) {
-        continue
-      }
-
-      const up = y > 0 ? labels[row - width + x] : -1
-      const down = y < height - 1 ? labels[row + width + x] : -1
-      const left = x > 0 ? labels[row + x - 1] : -1
-      const right = x < width - 1 ? labels[row + x + 1] : -1
-
-      if (up === label && down === label && left === label && right === label) {
-        continue
-      }
-
-      if (label !== currentLabel || currentEdges === undefined) {
-        currentLabel = label
-        currentEdges = edgesByLabel.get(label)
-
-        if (currentEdges === undefined) {
-          currentEdges = []
-          edgesByLabel.set(label, currentEdges)
-        }
-      }
-
-      const vx = x0 + x
-      const vy = y0 + y
-      const topLeft = vy * stride + vx
-
-      if (up !== label) {
-        currentEdges.push(topLeft * 4 + RIGHT)
-        edgeCount += 1
-      }
-
-      if (right !== label) {
-        currentEdges.push((topLeft + 1) * 4 + DOWN)
-        edgeCount += 1
-      }
-
-      if (down !== label) {
-        currentEdges.push((topLeft + stride + 1) * 4 + LEFT)
-        edgeCount += 1
-      }
-
-      if (left !== label) {
-        currentEdges.push((topLeft + stride) * 4 + UP)
-        edgeCount += 1
-      }
-    }
-
-    flushRun()
-    runLabel = 0
-    runLength = 0
-  }
-
-  return {
-    edgesByLabel,
-    pixelCounts,
-    approximateBytes: edgeCount * 8 + edgesByLabel.size * 96 + pixelCounts.size * 48,
-  }
-}
-
-// Joins one label's edges from every loaded chunk into its outer ring, in
-// level-pixel coordinates. Opposite edges on shared chunk borders cancel.
-export function outerRing(
-  edgeLists: readonly (readonly number[])[],
-  levelWidth: number,
-): readonly SpatialDataLabelPoint[] {
-  const stride = levelWidth + 1
-  const delta = [1, stride, -1, -stride]
-  const remaining = new Set<number>()
-
-  for (const edges of edgeLists) {
-    for (const edge of edges) {
-      const dir = edge & 3
-      const start = (edge - dir) / 4
-      const opposite = (start + (delta[dir] ?? 0)) * 4 + ((dir + 2) & 3)
-
-      if (remaining.has(opposite)) {
-        remaining.delete(opposite)
-      } else {
-        remaining.add(edge)
-      }
-    }
-  }
-
-  let best: SpatialDataLabelPoint[] = []
-  let bestArea = 0
-
-  while (remaining.size > 0) {
-    const first = remaining.values().next().value as number
-    const corners: SpatialDataLabelPoint[] = []
-    let edge: number | undefined = first
-    let previousDir = -1
-
-    while (edge !== undefined && remaining.has(edge)) {
-      remaining.delete(edge)
-      const dir: number = edge & 3
-      const start: number = (edge - dir) / 4
-
-      if (dir !== previousDir) {
-        corners.push({ x: start % stride, y: Math.floor(start / stride) })
-        previousDir = dir
-      }
-
-      const end: number = start + (delta[dir] ?? 0)
-      edge = undefined
-
-      // Turn right first so diagonally touching pixels form separate rings.
-      for (const turn of [1, 0, 3]) {
-        const candidate: number = end * 4 + ((dir + turn) & 3)
-
-        if (remaining.has(candidate)) {
-          edge = candidate
-          break
-        }
-      }
-    }
-
-    const area = Math.abs(ringArea(corners))
-
-    if (area > bestArea) {
-      best = corners
-      bestArea = area
-    }
-  }
-
-  return smoothRing(best)
-}
-
-// Cuts each staircase corner by up to half a pixel along both sides. One-pixel
-// steps become diagonals while long straight sides keep their shape.
-function smoothRing(corners: readonly SpatialDataLabelPoint[]): SpatialDataLabelPoint[] {
-  if (corners.length < 4) {
-    return [...corners]
-  }
-
-  const smoothed: SpatialDataLabelPoint[] = []
-  const push = (point: SpatialDataLabelPoint) => {
-    const last = smoothed.at(-1)
-
-    if (last === undefined || last.x !== point.x || last.y !== point.y) {
-      smoothed.push(point)
-    }
-  }
-
-  corners.forEach((corner, index) => {
-    const previous = corners[(index + corners.length - 1) % corners.length] ?? corner
-    const next = corners[(index + 1) % corners.length] ?? corner
-    push(towards(corner, previous))
-    push(towards(corner, next))
-  })
-
-  const first = smoothed[0]
-  const last = smoothed.at(-1)
-
-  if (
-    first !== undefined &&
-    last !== undefined &&
-    first.x === last.x &&
-    first.y === last.y
-  ) {
-    smoothed.pop()
-  }
-
-  return smoothed
-}
-
-function towards(
-  from: SpatialDataLabelPoint,
-  to: SpatialDataLabelPoint,
-): SpatialDataLabelPoint {
-  const length = Math.hypot(to.x - from.x, to.y - from.y)
-  const fraction = length === 0 ? 0 : Math.min(0.5, 0.5 / length)
-  return {
-    x: from.x + (to.x - from.x) * fraction,
-    y: from.y + (to.y - from.y) * fraction,
-  }
-}
-
-function ringArea(ring: readonly SpatialDataLabelPoint[]): number {
-  let area = 0
-
-  for (let index = 0; index < ring.length; index += 1) {
-    const current = ring[index]
-    const next = ring[(index + 1) % ring.length]
-
-    if (current !== undefined && next !== undefined) {
-      area += current.x * next.y - next.x * current.y
-    }
-  }
-
-  return area / 2
-}
-
-function ringIntersects(
-  ring: readonly SpatialDataLabelPoint[],
-  bounds: SpatialDataLabelBounds,
+function sameTraces(
+  left: readonly SpatialDataLabelChunkTrace[],
+  right: readonly SpatialDataLabelChunkTrace[],
 ): boolean {
-  let minX = Infinity
-  let maxX = -Infinity
-  let minY = Infinity
-  let maxY = -Infinity
-
-  for (const point of ring) {
-    minX = Math.min(minX, point.x)
-    maxX = Math.max(maxX, point.x)
-    minY = Math.min(minY, point.y)
-    maxY = Math.max(maxY, point.y)
-  }
-
   return (
-    minX <= bounds.maxX &&
-    maxX >= bounds.minX &&
-    minY <= bounds.maxY &&
-    maxY >= bounds.minY
+    left.length === right.length && left.every((trace, index) => trace === right[index])
   )
-}
-
-function int64LowWords(data: ArrayLike<number | bigint>): Int32Array | null {
-  if (data instanceof BigInt64Array || data instanceof BigUint64Array) {
-    return new Int32Array(data.buffer, data.byteOffset, data.length * 2)
-  }
-
-  return null
 }
 
 export function invertAffine(affine: Affine2D): Affine2D {

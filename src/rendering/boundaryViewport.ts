@@ -49,6 +49,57 @@ function normalizeCellScaleZoom(value: number | undefined): number {
     : value
 }
 
+// Boundary requests cover the viewport plus this fraction of its width and
+// height on each side, so short pans stay inside the loaded area.
+export const BOUNDARY_VIEWPORT_PADDING = 0.25
+// Zooming in by this much re-requests boundaries for finer label levels.
+const BOUNDARY_REQUEST_ZOOM_STEP = 1
+
+export interface BoundaryRequestArea {
+  readonly bbox: BBox
+  readonly zoom: number
+}
+
+// Pads the viewport, shrinking the padding when the padded area would hold
+// more cells than the boundary limit.
+export function paddedBoundaryBbox(
+  candidate: BoundaryViewportCandidate,
+  options: BoundaryViewportOptions = {},
+): BBox {
+  const limit = normalizeBoundaryCellLimit(options.cellLimit)
+  const areaHeadroom =
+    candidate.visibleCellCount > 0 ? limit / candidate.visibleCellCount : Infinity
+  const padding = Math.max(
+    0,
+    Math.min(BOUNDARY_VIEWPORT_PADDING, (Math.sqrt(Math.max(1, areaHeadroom)) - 1) / 2),
+  )
+  const { bbox } = candidate
+  const padX = (bbox.maxX - bbox.minX) * padding
+  const padY = (bbox.maxY - bbox.minY) * padding
+
+  return {
+    minX: (bbox.minX - padX) as BBox['minX'],
+    maxX: (bbox.maxX + padX) as BBox['maxX'],
+    minY: (bbox.minY - padY) as BBox['minY'],
+    maxY: (bbox.maxY + padY) as BBox['maxY'],
+  }
+}
+
+// True when the last request already covers the viewport at a similar zoom.
+export function boundaryRequestCovers(
+  request: BoundaryRequestArea | null,
+  candidate: BoundaryViewportCandidate,
+): boolean {
+  return (
+    request !== null &&
+    candidate.viewState.zoom - request.zoom < BOUNDARY_REQUEST_ZOOM_STEP &&
+    request.bbox.minX <= candidate.bbox.minX &&
+    request.bbox.maxX >= candidate.bbox.maxX &&
+    request.bbox.minY <= candidate.bbox.minY &&
+    request.bbox.maxY >= candidate.bbox.maxY
+  )
+}
+
 export function boundaryViewportKey(baseUrl: string, bbox: BBox): string {
   return [
     baseUrl.replace(/\/+$/, ''),

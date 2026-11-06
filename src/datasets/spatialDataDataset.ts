@@ -174,6 +174,9 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   private imagePromise: Promise<ImagePyramidLoader | null> | null = null
   private boundaryIndexPromise: Promise<readonly BoundaryIndexEntry[]> | null = null
   private readonly labelReaders = new Map<string, Promise<SpatialDataLabelsReader>>()
+  // Cell elements for cached label rings, so unchanged cells keep the same
+  // objects across viewport requests.
+  private readonly labelElementsByRing = new WeakMap<Float64Array, SpatialElement>()
   // Filled while the table resolves row coordinates; shapes are in µm.
   private readonly regionShapeByCellId = new Map<string, SpatialDataShape>()
   private readonly cellIdByInstanceId = new Map<string, string>()
@@ -772,8 +775,9 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     const trace = await reader.trace(0, busiest.col, busiest.row)
     const pixelArea = reader.pixelArea(0)
 
-    return Array.from(trace.pixelCounts, ([label, count]) => {
+    return Array.from(trace.labels, (label, index) => {
       const row = rowsByLabel.get(label)
+      const count = trace.pixelCounts[index] ?? 0
       return {
         micrometersSquared: row === undefined ? Number.NaN : numericOrNaN(areas[row]),
         unitsSquared: count * pixelArea,
@@ -865,23 +869,35 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     )
 
     return outlines.flatMap((outline) => {
+      const cached = this.labelElementsByRing.get(outline.ring)
+
+      if (cached !== undefined) {
+        return [cached]
+      }
+
       const cellId = cellIds.get(outline.label)
 
-      return cellId === undefined
-        ? []
-        : [
-            {
-              id: cellId,
-              geometry: {
-                kind: 'polygon' as const,
-                rings: [
-                  outline.ring.map((point) =>
-                    dataPoint(point.x * scale, point.y * scale),
-                  ),
-                ],
-              },
-            },
-          ]
+      if (cellId === undefined) {
+        return []
+      }
+
+      const ring: DataPoint[] = []
+
+      for (let index = 0; index < outline.ring.length; index += 2) {
+        ring.push(
+          dataPoint(
+            (outline.ring[index] ?? 0) * scale,
+            (outline.ring[index + 1] ?? 0) * scale,
+          ),
+        )
+      }
+
+      const element: SpatialElement = {
+        id: cellId,
+        geometry: { kind: 'polygon', rings: [ring] },
+      }
+      this.labelElementsByRing.set(outline.ring, element)
+      return [element]
     })
   }
 
