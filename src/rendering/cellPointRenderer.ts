@@ -1,4 +1,8 @@
+import type { GetPickingInfoParams, PickingInfo } from '@deck.gl/core'
+import { DataFilterExtension } from '@deck.gl/extensions'
+import type { DataFilterExtensionProps } from '@deck.gl/extensions'
 import { ScatterplotLayer } from '@deck.gl/layers'
+import type { ScatterplotLayerProps } from '@deck.gl/layers'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import {
   cellAreaToRadiusMicrometers,
@@ -7,6 +11,7 @@ import {
   colorWithOpacity,
   DEFAULT_OVERVIEW_CELL_FILL_RGB,
 } from './deckLayerColors'
+import type { CellPointGeometry, CellPointLayerColors } from './cellPointStyle'
 import type { OverviewCellDatum } from './deckLayerTypes'
 
 export interface CellPointLayerOptions {
@@ -15,6 +20,86 @@ export interface CellPointLayerOptions {
   readonly filled: boolean
   readonly pickable?: boolean
   readonly radiusMaxPixels?: number
+  // Packed per-cell geometry, colours (opacity applied) and GPU filter values.
+  readonly packed?: {
+    readonly geometry: CellPointGeometry
+    readonly colors: CellPointLayerColors
+    readonly filterValues: Float32Array
+    readonly sampleFraction: number
+  }
+}
+
+// Shared so the layer's extensions stay the same between renders.
+const CELL_POINT_FILTER = new DataFilterExtension({ filterSize: 2 })
+
+type PackedCellPointLayerProps = ScatterplotLayerProps<OverviewCellDatum> &
+  Partial<DataFilterExtensionProps<OverviewCellDatum>> & {
+    // Cells by index, for picking: the layer data itself is packed arrays.
+    readonly cells: readonly OverviewCellDatum[]
+  }
+
+class PackedCellPointLayer extends ScatterplotLayer<
+  OverviewCellDatum,
+  Partial<DataFilterExtensionProps<OverviewCellDatum>> & {
+    readonly cells: readonly OverviewCellDatum[]
+  }
+> {
+  static override layerName = 'PackedCellPointLayer'
+  // deck.gl merges these with the ScatterplotLayer defaults.
+  static override defaultProps = {
+    cells: { type: 'object', value: [], compare: false },
+  } as unknown as typeof ScatterplotLayer.defaultProps
+
+  override getPickingInfo(params: GetPickingInfoParams): PickingInfo {
+    const info = super.getPickingInfo(params)
+
+    if (info.index >= 0) {
+      info.object = this.props.cells[info.index]
+    }
+
+    return info
+  }
+}
+
+function samePackedCellPointData(next: unknown, previous: unknown): boolean {
+  const nextData = next as PackedCellPointData | null
+  const previousData = previous as PackedCellPointData | null
+
+  if (nextData === null || previousData === null) {
+    return nextData === previousData
+  }
+
+  return (
+    nextData.length === previousData.length &&
+    Object.keys(nextData.attributes).every(
+      (name) => nextData.attributes[name] === previousData.attributes[name],
+    )
+  )
+}
+
+interface PackedCellPointData {
+  readonly length: number
+  readonly attributes: Readonly<Record<string, object>>
+}
+
+// deck.gl re-uploads a packed attribute whenever its descriptor object changes,
+// so each typed array keeps one descriptor.
+const attributeDescriptors = new WeakMap<ArrayBufferView, object>()
+
+function attributeDescriptor(
+  value: Float64Array | Float32Array | Uint8Array,
+  size: number,
+  normalized = false,
+): object {
+  const cached = attributeDescriptors.get(value)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const descriptor = { value, size, ...(normalized ? { normalized: true } : {}) }
+  attributeDescriptors.set(value, descriptor)
+  return descriptor
 }
 
 const DEFAULT_CELL_RADIUS_MAX_PIXELS = 24
@@ -29,10 +114,9 @@ const POINT_SIZE_ZOOM_MID_CLOSE_SCALE = 0.7
 export function createCellPointLayer(
   cells: readonly OverviewCellDatum[],
   options: CellPointLayerOptions,
-): ScatterplotLayer<OverviewCellDatum> {
-  return new ScatterplotLayer<OverviewCellDatum>({
+): ScatterplotLayer<OverviewCellDatum> | PackedCellPointLayer {
+  const common = {
     id: 'cells-overview-scatter',
-    data: cells,
     pickable: options.pickable ?? true,
     radiusUnits: 'common',
     radiusMinPixels: 0.12,
@@ -42,6 +126,41 @@ export function createCellPointLayer(
     opacity: 1,
     lineWidthUnits: 'pixels',
     lineWidthMinPixels: 1,
+    getLineWidth: 1,
+  } as const
+  const packed = options.packed
+
+  if (packed !== undefined) {
+    const props: PackedCellPointLayerProps = {
+      ...common,
+      cells,
+      data: {
+        length: cells.length,
+        attributes: {
+          getPosition: attributeDescriptor(packed.geometry.positions, 2),
+          getRadius: attributeDescriptor(packed.geometry.radii, 1),
+          getFillColor: attributeDescriptor(packed.colors.fill, 4, true),
+          getLineColor: attributeDescriptor(packed.colors.line, 4, true),
+          getFilterValue: attributeDescriptor(packed.filterValues, 2),
+        },
+      } as unknown as PackedCellPointLayerProps['data'],
+      // The data wrapper is rebuilt every render; only changed arrays count as
+      // new data, or deck.gl would regenerate picking colours on every frame.
+      dataComparator: samePackedCellPointData,
+      // Sampled cells by rank, and no point where an outline is drawn.
+      filterRange: [
+        [0, packed.sampleFraction],
+        [0, 0.5],
+      ],
+      extensions: [CELL_POINT_FILTER],
+    }
+
+    return new PackedCellPointLayer(props)
+  }
+
+  return new ScatterplotLayer<OverviewCellDatum>({
+    ...common,
+    data: cells,
     getPosition: (cell) => cell.position,
     getRadius: (cell) => cell.radiusMicrometers ?? cell.radiusPixels,
     getFillColor: (cell) => colorWithFillOpacity(cell.fillColor, options.cellFillOpacity),
@@ -50,7 +169,6 @@ export function createCellPointLayer(
         cellPointOutlineColor(cell.fillColor),
         options.cellBoundaryOpacity,
       ),
-    getLineWidth: 1,
     updateTriggers: {
       getFillColor: [options.cellFillOpacity],
       getLineColor: [options.cellBoundaryOpacity],

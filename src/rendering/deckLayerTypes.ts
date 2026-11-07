@@ -1,3 +1,4 @@
+import type { CellPointGeometry } from './cellPointStyle'
 import type { BinaryAttribute, Color, Position } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
 import type {
@@ -189,6 +190,19 @@ export interface OverviewLayerOptions {
   readonly geometricAnnotations?: readonly GeometricAnnotationDatum[]
   readonly transcriptOpacity?: number
   readonly transcriptPointSize?: number
+  // Packed colours and GPU sampling for the cell point layer. When set, the
+  // cells are drawn in full and filtered on the GPU.
+  readonly cellPointPacking?: CellPointPacking
+}
+
+export interface CellPointPacking {
+  readonly geometry: CellPointGeometry
+  // RGBA per cell before layer opacity.
+  readonly colors: Uint8Array
+  // Rank and outlined flag per cell (see cellPointFilterValues).
+  readonly filterValues: Float32Array
+  // Cells ranked at or below this fraction are drawn.
+  readonly sampleFraction: number
 }
 
 export type GeneExpressionColorScale =

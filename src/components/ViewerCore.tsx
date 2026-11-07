@@ -63,17 +63,36 @@ import {
   styleGridCellsByGeneExpression,
 } from '../rendering/deckLayers'
 import {
+  DEFAULT_OVERVIEW_RENDER_CELL_LIMIT,
   EXPRESSION_AGGREGATION_BIN_MICROMETERS,
+  EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT,
   EXPRESSION_AGGREGATION_EXACT_ZOOM,
-  aggregateExpressionElements,
   estimateOverviewCellCountInBbox,
+  expressionElementBins,
+  overviewCellIntersectsBbox,
   overviewCellsExtentBbox,
   overviewCellsIntersectingBbox,
-  overviewCellsInBbox,
-  sampleOverviewCellsForRendering,
 } from '../rendering/cellAggregation'
+import {
+  cellPointFilterValues,
+  cellPointRanks,
+  cellPointSampleFraction,
+  createCellPointStyler,
+  packCellPointColors,
+  packCellPointGeometry,
+} from '../rendering/cellPointStyle'
+import {
+  countOverviewCellsInBbox,
+  createOverviewCellIndex,
+  hasMoreOverviewCellsThan,
+  overviewCellIndicesNear,
+} from '../rendering/overviewCellIndex'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
-import { styleOverviewCellsByObservation } from '../rendering/cellStyling'
+import {
+  snappedViewportClipKey,
+  viewportClipBboxFromKey,
+} from '../rendering/viewportClip'
+import { createObservationColorizer } from '../rendering/cellStyling'
 import { scaleFromZoom } from '../data/coords'
 import type { PickingInfo, ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
@@ -142,8 +161,13 @@ export type {
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
 const STABLE_OVERVIEW_RENDER_CLIP_ZOOM_DELTA = 3
+const GRID_CELL_FULL_RENDER_LIMIT = 1_000_000
+const CELL_POINT_LAYER_ID = 'cells-overview-scatter'
+
+interface OverviewCellLookup {
+  get(id: string): OverviewCellDatum | undefined
+}
 const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
-const GRID_CELL_RENDER_VIEWPORT_PADDING_RATIO = 0.15
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
@@ -520,57 +544,68 @@ function ViewerSurface({
     () => selectGridCellsForRenderLod(renderGridCellLods, viewState.zoom),
     [renderGridCellLods, viewState.zoom],
   )
-  const renderGridCellIndex = useMemo(
-    () => createGridCellSpatialIndex(renderLodGridCells),
-    [renderLodGridCells],
-  )
   const viewportCountGridCellIndex = useMemo(
     () => createGridCellSpatialIndex(viewportCountGridCells),
     [viewportCountGridCells],
   )
+  // Grids up to GRID_CELL_FULL_RENDER_LIMIT bins are drawn whole and the GPU
+  // culls bins off screen. Larger ones (exact 2 µm bins) are clipped to a
+  // snapped box around the view, which only changes every half view of panning.
+  const renderGridCellIndex = useMemo(
+    () =>
+      renderLodGridCells.length > GRID_CELL_FULL_RENDER_LIMIT
+        ? createGridCellSpatialIndex(renderLodGridCells)
+        : null,
+    [renderLodGridCells],
+  )
+  const gridCellClipKey =
+    renderGridCellIndex === null || viewportBbox === null
+      ? null
+      : snappedViewportClipKey(viewportBbox)
   const renderGridCells = useMemo(
     () =>
-      viewportBbox === null
+      renderGridCellIndex === null || gridCellClipKey === null
         ? renderLodGridCells
-        : gridCellsInBbox(renderGridCellIndex, viewportBbox, {
-            paddingMicrometers: gridCellRenderPaddingMicrometers(viewportBbox),
-          }),
-    [renderGridCellIndex, renderLodGridCells, viewportBbox],
+        : gridCellsInBbox(renderGridCellIndex, viewportClipBboxFromKey(gridCellClipKey)),
+    [gridCellClipKey, renderGridCellIndex, renderLodGridCells],
   )
-  const visibleCells = useMemo(
+  // Every overview cell stays on the GPU. Panning only changes how many of them
+  // the GPU draws: cells are sampled by a fixed rank down to the render limit,
+  // counted against the cells in view once the view is zoomed in.
+  const overviewCellIndex = useMemo(() => createOverviewCellIndex(cells), [cells])
+  const clipsCellsToViewport =
+    viewportBbox !== null && viewState.zoom > OVERVIEW_CELL_CLIP_MIN_ZOOM
+  const visibleCellCount = useMemo(
     () =>
-      viewportBbox === null || viewState.zoom <= OVERVIEW_CELL_CLIP_MIN_ZOOM
-        ? cells
-        : overviewCellsInBbox(cells, viewportBbox),
-    [cells, viewportBbox, viewState.zoom],
+      clipsCellsToViewport && viewportBbox !== null
+        ? countOverviewCellsInBbox(overviewCellIndex, viewportBbox)
+        : cells.length,
+    [cells.length, clipsCellsToViewport, overviewCellIndex, viewportBbox],
   )
   const shouldClipRenderCells =
     clipOverviewCellsToViewport ||
     (overviewRenderCellLimit !== null &&
       viewState.zoom - fittedViewZoom >= STABLE_OVERVIEW_RENDER_CLIP_ZOOM_DELTA)
-  const renderVisibleCells = shouldClipRenderCells ? visibleCells : cells
-  const renderSourceCells = useMemo(() => {
-    if (overviewRenderCellLimit === null) {
-      return renderVisibleCells
-    }
-
-    return sampleOverviewCellsForRendering(renderVisibleCells, {
-      ...(overviewRenderCellLimit === undefined
-        ? {}
-        : { maxCells: overviewRenderCellLimit }),
-    })
-  }, [overviewRenderCellLimit, renderVisibleCells])
-  const renderCells = useMemo(
-    () =>
-      styleCellsForObservation(
-        renderSourceCells,
-        observationColorMode,
-        annotationStyleColors,
-        cellMetadataTrack,
-      ),
-    [annotationStyleColors, cellMetadataTrack, observationColorMode, renderSourceCells],
+  const cellPointSample = cellPointSampleFraction(
+    overviewRenderCellLimit === null
+      ? null
+      : (overviewRenderCellLimit ?? DEFAULT_OVERVIEW_RENDER_CELL_LIMIT),
+    shouldClipRenderCells ? visibleCellCount : cells.length,
   )
-  const shouldUseExpressionPointBins = viewState.zoom < EXPRESSION_AGGREGATION_EXACT_ZOOM
+  const observationColorizer = useMemo(
+    () =>
+      observationColorMode === 'transcript-count'
+        ? null
+        : createObservationColorizer(cells, observationColorMode, {
+            annotations: annotationStyleColors,
+            metadataTrack: cellMetadataTrack,
+          }),
+    [annotationStyleColors, cellMetadataTrack, cells, observationColorMode],
+  )
+  // Without expression data the index stays the same across the bin zoom, so
+  // crossing it does not restyle every cell.
+  const shouldUseExpressionPointBins =
+    expressionElements.length > 0 && viewState.zoom < EXPRESSION_AGGREGATION_EXACT_ZOOM
   const geneExpressionPointStyleIndex = useMemo(
     () =>
       createGeneExpressionElementStyleIndex(
@@ -581,13 +616,21 @@ function ViewerSurface({
       ),
     [expressionElements, shouldUseExpressionPointBins],
   )
-  const expressionStyledRenderCells = useMemo(
+  const cellPointStyler = useMemo(
     () =>
-      styleCellsByGeneExpression(renderCells, geneExpressionPointStyleIndex, {
+      createCellPointStyler({
+        observationColor: observationColorizer,
+        expressionIndex: geneExpressionPointStyleIndex,
         styleUnmatchedCells: geneExpressionActive,
       }),
-    [geneExpressionActive, geneExpressionPointStyleIndex, renderCells],
+    [geneExpressionActive, geneExpressionPointStyleIndex, observationColorizer],
   )
+  const cellPointColors = useMemo(
+    () => packCellPointColors(cells, cellPointStyler),
+    [cellPointStyler, cells],
+  )
+  const cellPointRankValues = useMemo(() => cellPointRanks(cells.length), [cells.length])
+  const cellPointGeometry = useMemo(() => packCellPointGeometry(cells), [cells])
   const expressionStyledGridCells = useMemo(
     () =>
       styleGridCellsByGeneExpression(renderGridCells, geneExpressionPointStyleIndex, {
@@ -595,26 +638,59 @@ function ViewerSurface({
       }),
     [geneExpressionActive, geneExpressionPointStyleIndex, renderGridCells],
   )
-  const geneExpressionOverlayElements = useMemo(
+  // The overlay draws every expressing cell, or the whole slide's bins when
+  // zoomed out with more of them in view than are drawn one by one. Either list
+  // only changes with the data or that choice, not with every pan.
+  const expressionElementIndex = useMemo(
     () =>
-      geneExpressionOverlayEnabled
-        ? expressionOverlayCellsForRendering({
-            expressionElements,
-            viewState,
-            viewportBbox,
-          })
-        : EMPTY_OVERVIEW_CELLS,
-    [expressionElements, geneExpressionOverlayEnabled, viewState, viewportBbox],
+      geneExpressionOverlayEnabled &&
+      expressionElements.length > EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT
+        ? createOverviewCellIndex(expressionElements)
+        : null,
+    [expressionElements, geneExpressionOverlayEnabled],
   )
-  const cellById = useMemo(() => {
-    const nextCellById = new Map<string, OverviewCellDatum>()
-
-    for (const cell of cells) {
-      nextCellById.set(cell.id, cell)
+  const expressionOverlayBinned =
+    expressionElementIndex !== null &&
+    viewState.zoom < EXPRESSION_AGGREGATION_EXACT_ZOOM &&
+    (viewportBbox === null ||
+      hasMoreOverviewCellsThan(
+        expressionElementIndex,
+        viewportBbox,
+        EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT,
+        (index) => {
+          const element = expressionElements[index]
+          return (
+            element !== undefined && overviewCellIntersectsBbox(element, viewportBbox)
+          )
+        },
+      ))
+  const geneExpressionOverlayElements = useMemo(() => {
+    if (!geneExpressionOverlayEnabled || expressionElements.length === 0) {
+      return EMPTY_OVERVIEW_CELLS
     }
 
-    return nextCellById
+    return expressionOverlayBinned
+      ? expressionElementBins(expressionElements, EXPRESSION_AGGREGATION_BIN_MICROMETERS)
+      : expressionElements
+  }, [expressionElements, expressionOverlayBinned, geneExpressionOverlayEnabled])
+  const cellIndexById = useMemo(() => {
+    const nextCellIndexById = new Map<string, number>()
+
+    cells.forEach((cell, index) => {
+      nextCellIndexById.set(cell.id, index)
+    })
+
+    return nextCellIndexById
   }, [cells])
+  const cellById = useMemo<OverviewCellLookup>(
+    () => ({
+      get: (id) => {
+        const index = cellIndexById.get(id)
+        return index === undefined ? undefined : cells[index]
+      },
+    }),
+    [cellIndexById, cells],
+  )
   const annotationLabelsByCellId = useMemo(
     () => annotationLabelsByCellIdForStyles(annotationStyleColors),
     [annotationStyleColors],
@@ -656,12 +732,13 @@ function ViewerSurface({
       }
     }
 
-    const observationStyledCells = styleCellsForObservation(
-      boundaryCells,
-      observationColorMode,
-      annotationStyleColors,
-      cellMetadataTrack,
-    )
+    const observationStyledCells =
+      observationColorizer === null
+        ? boundaryCells
+        : boundaryCells.map((cell) => ({
+            ...cell,
+            fillColor: observationColorizer(cell),
+          }))
 
     return styleCellsByGeneExpression(
       observationStyledCells,
@@ -671,14 +748,34 @@ function ViewerSurface({
       },
     )
   }, [
-    annotationStyleColors,
     boundaryExpressionElements,
     boundaryLayerGeometry,
     cellById,
-    cellMetadataTrack,
     geneExpressionActive,
-    observationColorMode,
+    observationColorizer,
   ])
+  const cellPointFilter = useMemo(() => {
+    const outlinedCellIndices: number[] = []
+
+    for (const cellId of boundaryLayerGeometry.boundaryCellIds) {
+      const index = cellIndexById.get(cellId)
+
+      if (index !== undefined) {
+        outlinedCellIndices.push(index)
+      }
+    }
+
+    return cellPointFilterValues(cellPointRankValues, outlinedCellIndices)
+  }, [boundaryLayerGeometry, cellIndexById, cellPointRankValues])
+  const cellPointPacking = useMemo(
+    () => ({
+      geometry: cellPointGeometry,
+      colors: cellPointColors,
+      filterValues: cellPointFilter,
+      sampleFraction: cellPointSample,
+    }),
+    [cellPointColors, cellPointFilter, cellPointGeometry, cellPointSample],
+  )
   const boundaryLayerStyle = useMemo(
     () =>
       createCellBoundaryLayerStyle(
@@ -695,7 +792,7 @@ function ViewerSurface({
   )
   const layers = useMemo(
     () =>
-      createOverviewLayers(expressionStyledRenderCells, boundaries, {
+      createOverviewLayers(cells, boundaries, {
         cellFillOpacity,
         cellBoundaryOpacity,
         cellPointPickable,
@@ -714,6 +811,7 @@ function ViewerSurface({
         transcriptPointSize,
         pointSizeZoomDelta: viewState.zoom - fittedViewZoom,
         pointSizeFullViewScale,
+        cellPointPacking,
       }),
     [
       cellBoundaryOpacity,
@@ -725,7 +823,8 @@ function ViewerSurface({
       boundaryLayerStyle,
       boundaries,
       nucleusBoundaries,
-      expressionStyledRenderCells,
+      cells,
+      cellPointPacking,
       expressionStyledGridCells,
       geneExpressionActive,
       geneExpressionOverlayElements,
@@ -754,7 +853,6 @@ function ViewerSurface({
     hasImage ||
     hasGeometricAnnotations
   const canTrackMouseCoordinates = hasSpatialData || hasImage
-  const visibleCellCount = visibleCells.length
   const visibleGridCellCount = useMemo(
     () =>
       viewportBbox === null
@@ -1086,10 +1184,18 @@ function ViewerSurface({
         return
       }
 
+      const [x, deckY] = info.coordinate ?? []
+      const nearbyCells =
+        x === undefined || deckY === undefined
+          ? []
+          : overviewCellIndicesNear(overviewCellIndex, x, -deckY).flatMap((index) => {
+              const cell = cells[index]
+              return cell === undefined ? [] : [cell]
+            })
       const coordinateCell = cellForDeckCoordinate(
         info.coordinate,
         boundaries,
-        visibleCells,
+        nearbyCells,
         cellById,
       )
 
@@ -1102,9 +1208,10 @@ function ViewerSurface({
       cellById,
       onCellBoundaryClick,
       onCellClick,
+      cells,
       onGridCellClick,
       onTranscriptClick,
-      visibleCells,
+      overviewCellIndex,
     ],
   )
   const handleDeckHover = useCallback(
@@ -1231,7 +1338,11 @@ function ViewerSurface({
         }
 
         setCellHover({
-          cell: info.object,
+          // The point layer holds unstyled cells; hover shows them styled.
+          cell:
+            info.layer?.id === CELL_POINT_LAYER_ID
+              ? cellPointStyler.styledCell(info.object)
+              : info.object,
           ...(annotationLabels === undefined ? {} : { annotationLabels }),
           screen: {
             x: info.x,
@@ -1256,6 +1367,7 @@ function ViewerSurface({
       annotationLabelsByCellId,
       cellBoundaryHoverEnabled,
       cellById,
+      cellPointStyler,
       geneExpressionPointStyleIndex,
       hoverTooltipsEnabled,
       magicLensActive,
@@ -1720,35 +1832,6 @@ function ViewerSurface({
   )
 }
 
-function expressionOverlayCellsForRendering({
-  expressionElements,
-  viewState,
-  viewportBbox,
-}: {
-  readonly expressionElements: readonly OverviewCellDatum[]
-  readonly viewState: OverviewViewState
-  readonly viewportBbox: BBox | null
-}): readonly OverviewCellDatum[] {
-  if (expressionElements.length === 0) {
-    return EMPTY_OVERVIEW_CELLS
-  }
-
-  const overlayCells = aggregateExpressionElements(expressionElements, viewState, {
-    ...(viewportBbox === null ? {} : { bbox: viewportBbox }),
-    binMicrometers: EXPRESSION_AGGREGATION_BIN_MICROMETERS,
-    exactZoom: EXPRESSION_AGGREGATION_EXACT_ZOOM,
-  })
-
-  return overlayCells.length === 0 ? EMPTY_OVERVIEW_CELLS : overlayCells
-}
-
-function gridCellRenderPaddingMicrometers(bbox: BBox): number {
-  return (
-    Math.max(bbox.maxX - bbox.minX, bbox.maxY - bbox.minY, 1) *
-    GRID_CELL_RENDER_VIEWPORT_PADDING_RATIO
-  )
-}
-
 function formatViewportZoom(zoom: number): string {
   return Number.isFinite(zoom) ? zoom.toFixed(2) : '0.00'
 }
@@ -1764,22 +1847,6 @@ function ScaleBar({ model }: { readonly model: ScaleBarModel }) {
       />
     </div>
   )
-}
-
-function styleCellsForObservation(
-  cells: readonly OverviewCellDatum[],
-  observationColorMode: ObservationColorMode,
-  annotationStyleColors: readonly AnnotationColorStyle[],
-  cellMetadataTrack: CellMetadataColorStyle | null,
-): readonly OverviewCellDatum[] {
-  if (observationColorMode === 'transcript-count') {
-    return cells
-  }
-
-  return styleOverviewCellsByObservation(cells, observationColorMode, {
-    annotations: annotationStyleColors,
-    metadataTrack: cellMetadataTrack,
-  })
 }
 
 function annotationLabelsByCellIdForStyles(

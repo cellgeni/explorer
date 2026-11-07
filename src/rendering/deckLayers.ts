@@ -15,11 +15,13 @@ import {
   hasGeneExpressionStyle,
   overviewCellRadiusMaxPixels,
 } from './cellPointRenderer'
+import { cellPointLayerColors, type CellPointLayerColors } from './cellPointStyle'
 import { GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY } from './deckLayerColors'
 import type {
   CellBoundaryDatum,
   OverviewCellDatum,
   OverviewLayerOptions,
+  TranscriptAggregateDatum,
 } from './deckLayerTypes'
 import { createGridCellLayer } from './gridCellRenderer'
 import {
@@ -107,6 +109,81 @@ export const spatialOverviewView = new OrthographicView({
 
 export const bundledDeckVersion = deckVersion
 
+// Layers are rebuilt on every view change, so derived arrays are cached by
+// their inputs to keep layer data identical between frames.
+const transcriptBinSplits = new WeakMap<
+  readonly TranscriptAggregateDatum[],
+  {
+    readonly density: readonly TranscriptAggregateDatum[]
+    readonly featureCircles: readonly TranscriptAggregateDatum[]
+  }
+>()
+const cellsWithoutBoundariesCache = new WeakMap<
+  readonly OverviewCellDatum[],
+  { readonly ids: ReadonlySet<string>; readonly cells: readonly OverviewCellDatum[] }
+>()
+const cellPointLayerColorsCache = new WeakMap<
+  Uint8Array,
+  {
+    readonly fillOpacity: number
+    readonly lineOpacity: number
+    readonly colors: CellPointLayerColors
+  }
+>()
+
+function splitTranscriptAggregateBins(bins: readonly TranscriptAggregateDatum[]): {
+  readonly density: readonly TranscriptAggregateDatum[]
+  readonly featureCircles: readonly TranscriptAggregateDatum[]
+} {
+  const cached = transcriptBinSplits.get(bins)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const split = {
+    density: bins.filter((bin) => bin.glyphType !== 'feature-circle'),
+    featureCircles: bins.filter((bin) => bin.glyphType === 'feature-circle'),
+  }
+  transcriptBinSplits.set(bins, split)
+  return split
+}
+
+function cellsWithoutBoundaries(
+  cells: readonly OverviewCellDatum[],
+  boundaryCellIds: ReadonlySet<string>,
+): readonly OverviewCellDatum[] {
+  if (boundaryCellIds.size === 0) {
+    return cells
+  }
+
+  const cached = cellsWithoutBoundariesCache.get(cells)
+
+  if (cached?.ids === boundaryCellIds) {
+    return cached.cells
+  }
+
+  const filtered = cellsWithoutVisibleBoundaryIds(cells, boundaryCellIds)
+  cellsWithoutBoundariesCache.set(cells, { ids: boundaryCellIds, cells: filtered })
+  return filtered
+}
+
+function cachedCellPointLayerColors(
+  colors: Uint8Array,
+  fillOpacity: number,
+  lineOpacity: number,
+): CellPointLayerColors {
+  const cached = cellPointLayerColorsCache.get(colors)
+
+  if (cached?.fillOpacity === fillOpacity && cached.lineOpacity === lineOpacity) {
+    return cached.colors
+  }
+
+  const layerColors = cellPointLayerColors(colors, fillOpacity, lineOpacity)
+  cellPointLayerColorsCache.set(colors, { fillOpacity, lineOpacity, colors: layerColors })
+  return layerColors
+}
+
 export function createOverviewLayers(
   cells: readonly OverviewCellDatum[],
   boundaries: readonly CellBoundaryDatum[] = [],
@@ -140,23 +217,19 @@ export function createOverviewLayers(
       ? undefined
       : normalizeLayerOpacity(options.gridCellOpacity)
   const nucleusBoundaries = options.nucleusBoundaries ?? []
-  const transcriptDensityBins = transcriptAggregateBins.filter(
-    (bin) => bin.glyphType !== 'feature-circle',
-  )
-  const transcriptFeatureCircleBins = transcriptAggregateBins.filter(
-    (bin) => bin.glyphType === 'feature-circle',
-  )
+  const { density: transcriptDensityBins, featureCircles: transcriptFeatureCircleBins } =
+    splitTranscriptAggregateBins(transcriptAggregateBins)
   const transcriptPoints = options.transcriptPoints ?? []
-  const visibleGeneExpressionOverlayCells =
-    cellBoundaryGeometry.boundaryCellIds.size === 0
-      ? geneExpressionOverlayElements
-      : geneExpressionOverlayElements.filter(
-          (cell) => !cellBoundaryGeometry.boundaryCellIds.has(cell.id),
-        )
-  const pointCells = cellsWithoutVisibleBoundaryIds(
-    cells,
+  const visibleGeneExpressionOverlayCells = cellsWithoutBoundaries(
+    geneExpressionOverlayElements,
     cellBoundaryGeometry.boundaryCellIds,
   )
+  const cellPointPacking = options.cellPointPacking
+  // Packed points hide outlined cells on the GPU instead.
+  const pointCells =
+    cellPointPacking === undefined
+      ? cellsWithoutBoundaries(cells, cellBoundaryGeometry.boundaryCellIds)
+      : cells
   const geneExpressionActive =
     options.geneExpressionActive ??
     (visibleGeneExpressionOverlayCells.length > 0 ||
@@ -193,6 +266,20 @@ export function createOverviewLayers(
         options.pointSizeZoomDelta,
         pointSizeFullViewScale,
       ),
+      ...(cellPointPacking === undefined
+        ? {}
+        : {
+            packed: {
+              geometry: cellPointPacking.geometry,
+              colors: cachedCellPointLayerColors(
+                cellPointPacking.colors,
+                cellPointFillOpacity,
+                cellBoundaryOpacity,
+              ),
+              filterValues: cellPointPacking.filterValues,
+              sampleFraction: cellPointPacking.sampleFraction,
+            },
+          }),
     }),
   )
 

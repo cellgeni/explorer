@@ -9,10 +9,11 @@ import {
 } from '../rendering/morphologyCanvas'
 import { tileSchedulingForLoader } from '../rendering/morphologyTileScheduling'
 import { TileCache } from '../tiff/tileCache'
+import { TileRequestScheduler } from '../tiff/tileRequestScheduler'
 import type { DisplayWindow } from '../codecs/jpeg2000'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
-import type { ReadyTile, TileCacheEntry } from '../tiff/tileCache'
+import type { ReadyTile } from '../tiff/tileCache'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
 const MAX_CONCURRENT_TILE_REQUESTS = 4
@@ -77,6 +78,8 @@ export function MorphologyCanvas({
   const [flatImageElement, setFlatImageElement] = useState<LoadedFlatImage | null>(null)
   const flatImageUrl = flatImage?.url ?? null
   const onTileErrorRef = useRef(onTileError)
+  // Tile loads outlive view changes, so they redraw with the latest view.
+  const drawRef = useRef<(() => void) | null>(null)
   const renderChannels = useMemo(
     () => visibleMorphologyChannels(loader, channels),
     [channels, loader],
@@ -85,6 +88,16 @@ export function MorphologyCanvas({
   useEffect(() => {
     onTileErrorRef.current = onTileError
   }, [onTileError])
+
+  useEffect(() => {
+    const cacheRecords = cacheRecordsRef.current
+
+    return () => {
+      for (const record of cacheRecords.values()) {
+        record.scheduler.cancel()
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -226,7 +239,6 @@ export function MorphologyCanvas({
       }),
     )
     const activeKeys = new Set(channelRequests.map((request) => request.cacheKey))
-    const abortController = new AbortController()
     let cancelled = false
     let drewCurrentRequest = false
 
@@ -251,24 +263,23 @@ export function MorphologyCanvas({
       drawMorphologyTileChannels(context, batches, viewState, viewport)
     }
 
+    drawRef.current = drawReadyTiles
     drawReadyTiles()
-    void Promise.allSettled(
-      channelRequests.map((request) =>
-        requestTilesInPriorityOrder({
-          cache: request.cache,
-          level: request.level,
-          loader: request.channel.loader,
-          maxConcurrentRequests: request.maxConcurrentRequests,
-          onTileSettled: drawReadyTiles,
-          signal: abortController.signal,
-          tiles: request.tiles,
-        }),
-      ),
-    ).then(drawReadyTiles)
+
+    for (const request of channelRequests) {
+      request.scheduler.update({
+        loader: request.channel.loader,
+        level: request.level,
+        tiles: request.tiles,
+        maxConcurrentRequests: request.maxConcurrentRequests,
+        onSettled: () => {
+          drawRef.current?.()
+        },
+      })
+    }
 
     return () => {
       cancelled = true
-      abortController.abort()
     }
   }, [
     flatImage,
@@ -292,51 +303,15 @@ export function MorphologyCanvas({
   )
 }
 
-interface RequestTilesOptions {
-  readonly cache: TileCache
-  readonly level: number
-  readonly loader: ImagePyramidLoader
-  readonly maxConcurrentRequests: number
-  readonly onTileSettled: () => void
-  readonly signal: AbortSignal
-  readonly tiles: readonly TileIndex[]
-}
-
-async function requestTilesInPriorityOrder(options: RequestTilesOptions): Promise<void> {
-  const queue = [...options.tiles]
-  const workerCount = Math.min(options.maxConcurrentRequests, queue.length)
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (!options.signal.aborted) {
-      const tile = queue.shift()
-
-      if (tile === undefined) {
-        return
-      }
-
-      const entry = await options.cache.request(
-        options.loader,
-        options.level,
-        tile.col,
-        tile.row,
-        options.signal,
-      )
-
-      if (!isAbortEntry(entry)) {
-        options.onTileSettled()
-      }
-    }
-  })
-
-  await Promise.allSettled(workers)
-}
-
 interface ChannelCacheRecord {
   readonly cache: TileCache
+  readonly scheduler: TileRequestScheduler<ImagePyramidLoader>
   readonly maxTiles: number
 }
 
 interface ChannelRequest {
   readonly cache: TileCache
+  readonly scheduler: TileRequestScheduler<ImagePyramidLoader>
   readonly cacheKey: string
   readonly channel: MorphologyCanvasChannel
   readonly level: number
@@ -473,19 +448,21 @@ function prepareChannelRequest(options: {
       Math.floor(options.maxCacheTiles / Math.max(1, options.cacheRecords.size + 1)),
     )
     const maxTiles = Math.min(scheduling.maxCacheTiles, normalMaxTiles)
+    const cache = new TileCache({
+      maxTiles,
+      color: options.channel.color,
+      alphaFromIntensity: options.channel.alphaFromIntensity ?? true,
+      ...(options.channel.contrast === undefined
+        ? {}
+        : { displayWindow: options.channel.contrast }),
+      ...(options.onTileError === undefined ? {} : { onError: options.onTileError }),
+      ...(options.onTileCacheEviction === undefined
+        ? {}
+        : { onEvict: options.onTileCacheEviction }),
+    })
     record = {
-      cache: new TileCache({
-        maxTiles,
-        color: options.channel.color,
-        alphaFromIntensity: options.channel.alphaFromIntensity ?? true,
-        ...(options.channel.contrast === undefined
-          ? {}
-          : { displayWindow: options.channel.contrast }),
-        ...(options.onTileError === undefined ? {} : { onError: options.onTileError }),
-        ...(options.onTileCacheEviction === undefined
-          ? {}
-          : { onEvict: options.onTileCacheEviction }),
-      }),
+      cache,
+      scheduler: new TileRequestScheduler<ImagePyramidLoader>(cache),
       maxTiles,
     }
     options.cacheRecords.set(cacheKey, record)
@@ -493,6 +470,7 @@ function prepareChannelRequest(options: {
 
   return {
     cache: record.cache,
+    scheduler: record.scheduler,
     cacheKey,
     channel: options.channel,
     level,
@@ -524,6 +502,7 @@ function pruneInactiveCacheRecords(
       continue
     }
 
+    record.scheduler.cancel()
     record.cache.clear()
     records.delete(key)
   }
@@ -531,14 +510,11 @@ function pruneInactiveCacheRecords(
 
 function clearCacheRecords(records: Map<string, ChannelCacheRecord>): void {
   for (const record of records.values()) {
+    record.scheduler.cancel()
     record.cache.clear()
   }
 
   records.clear()
-}
-
-function isAbortEntry(entry: TileCacheEntry): boolean {
-  return entry.state === 'error' && entry.error.name === 'AbortError'
 }
 
 function expandBboxByScreenPixels(bbox: BBox, zoom: number, screenPixels: number): BBox {

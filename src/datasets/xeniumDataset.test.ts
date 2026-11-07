@@ -826,6 +826,141 @@ describe('XeniumDataset', () => {
     )
   })
 
+  it("scores expression from the selected genes' expressing matrix rows", async () => {
+    const cellIds = [1, 2, 3, 4].map((suffix) => intToCellId(7, suffix))
+    const conn = new FakeConnection([
+      [0, 1, 2, 3].map((row) => ({
+        cell_feature_matrix_row: row,
+        x_centroid: row * 10,
+        y_centroid: row * 20,
+        transcript_counts: 30 + row,
+        cell_area: 40 + row,
+      })),
+      [0, 1, 2, 3].map((row) => ({
+        cell_feature_matrix_row: row,
+        cell_id: cellIds[row],
+      })),
+    ])
+    const matrixReader = vi.fn()
+    const selectedGeneRowsReader = vi.fn(async () => ({
+      nCells: 4,
+      features: [
+        { gene: 'Actb', rows: new Uint32Array([1, 3]), counts: new Uint32Array([2, 5]) },
+        { gene: 'Gad1', rows: new Uint32Array([3]), counts: new Uint32Array([1]) },
+      ],
+      cellIdForRow: (row: number) => cellIds[row] ?? intToCellId(0, 0),
+    }))
+    const dataset = makeDataset(conn, {
+      baseUrl: 'https://example.test/xenium-rows/',
+      matrixReader,
+      selectedGeneRowsReader,
+    })
+
+    const batch = await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(100),
+        minY: micrometers(0),
+        maxY: micrometers(100),
+      },
+      ['Gad1', 'Actb'],
+      { limit: 1_000, sampleStride: 40 },
+    )
+
+    expect(batch).toMatchObject({
+      genes: ['Actb', 'Gad1'],
+      maxCount: 6,
+      geneCounts: [
+        { gene: 'Actb', count: 7 },
+        { gene: 'Gad1', count: 1 },
+      ],
+      elements: [
+        {
+          id: cellIds[1],
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 31,
+          cellArea: 41,
+          cellFeatureMatrixRow: 1,
+          count: 2,
+        },
+        {
+          id: cellIds[3],
+          position: { x: micrometers(30), y: micrometers(60) },
+          transcriptCount: 33,
+          cellArea: 43,
+          cellFeatureMatrixRow: 3,
+          count: 6,
+        },
+      ],
+    })
+    expect(matrixReader).not.toHaveBeenCalled()
+    expect(conn.preparedSql[0]).not.toContain('cell_id')
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium-rows/cells.parquet',
+      micrometers(0),
+      micrometers(100),
+      micrometers(0),
+      micrometers(100),
+      1_000,
+    ])
+    expect(conn.preparedSql[1]).toContain('file_row_number IN')
+  })
+
+  it('falls back to per-cell matrix reads when cell rows do not match the matrix', async () => {
+    const cellId = intToCellId(8, 1)
+    const conn = new FakeConnection([
+      [
+        {
+          cell_feature_matrix_row: 0,
+          x_centroid: 1,
+          y_centroid: 2,
+          transcript_counts: 3,
+          cell_area: 4,
+        },
+      ],
+      [{ cell_feature_matrix_row: 0, cell_id: intToCellId(9, 9) }],
+      [
+        {
+          cell_id: cellId,
+          x_centroid: 1,
+          y_centroid: 2,
+          transcript_counts: 3,
+          cell_area: 4,
+        },
+      ],
+    ])
+    const matrixReader = vi.fn(
+      async (_url: string, ids: readonly CellId[]): Promise<GexResult> => ({
+        geneNames: ['Actb'],
+        cells: new Map(ids.map((id) => [id, { geneNames: ['Actb'], counts: [4] }])),
+      }),
+    )
+    const dataset = makeDataset(conn, {
+      baseUrl: 'https://example.test/xenium-misaligned/',
+      matrixReader,
+      selectedGeneRowsReader: async () => ({
+        nCells: 1,
+        features: [
+          { gene: 'Actb', rows: new Uint32Array([0]), counts: new Uint32Array([4]) },
+        ],
+        cellIdForRow: () => cellId,
+      }),
+    })
+
+    const batch = await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(10),
+        minY: micrometers(0),
+        maxY: micrometers(10),
+      },
+      ['Actb'],
+    )
+
+    expect(matrixReader).toHaveBeenCalledOnce()
+    expect(batch.elements).toMatchObject([{ id: cellId, count: 4 }])
+  })
+
   it('reads every viewport cell for sampled expression queries', async () => {
     const cellId = intToCellId(1, 2)
     const conn = new FakeConnection([

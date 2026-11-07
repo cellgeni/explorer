@@ -21,6 +21,7 @@ const lazyMocks = vi.hoisted(() => ({
   gexFromCellFeatureMatrixZarrRows: vi.fn(),
   gexFromCellFeatureMatrixZarrSelectedGenes: vi.fn(),
   gexFromTranscriptsParquet: vi.fn(),
+  selectedGeneRowsFromCellFeatureMatrixZarr: vi.fn(),
   loadMorphologyImage: vi.fn(),
   openTiff: vi.fn(),
   readAnalysisZarrAnnotations: vi.fn(),
@@ -48,6 +49,8 @@ vi.mock('../data/gex', () => {
     gexFromCellFeatureMatrixZarrRows: lazyMocks.gexFromCellFeatureMatrixZarrRows,
     gexFromCellFeatureMatrixZarrSelectedGenes:
       lazyMocks.gexFromCellFeatureMatrixZarrSelectedGenes,
+    selectedGeneRowsFromCellFeatureMatrixZarr:
+      lazyMocks.selectedGeneRowsFromCellFeatureMatrixZarr,
     gexFromTranscriptsParquet: lazyMocks.gexFromTranscriptsParquet,
   }
 })
@@ -154,6 +157,8 @@ describe('XeniumDataset lazy defaults', () => {
       gexResultFor(cellId, 3),
     )
     lazyMocks.gexFromTranscriptsParquet.mockResolvedValue(gexResultFor(cellId, 4))
+    // No feature-major rows: expression falls back to the per-cell matrix read.
+    lazyMocks.selectedGeneRowsFromCellFeatureMatrixZarr.mockResolvedValue(null)
     lazyMocks.readCellsOverview.mockResolvedValue([overviewPoint])
     lazyMocks.readAnalysisZarrAnnotations.mockResolvedValue([annotation])
     lazyMocks.openTiff.mockResolvedValue(tiffLoader)
@@ -215,6 +220,11 @@ describe('XeniumDataset lazy defaults', () => {
     )
     expect(lazyMocks.importedModules).toEqual(['gex', 'duckdb'])
     expect(lazyMocks.createDuckDbClient).toHaveBeenCalledOnce()
+    expect(lazyMocks.selectedGeneRowsFromCellFeatureMatrixZarr).toHaveBeenCalledWith(
+      'https://example.test/xenium/cell_feature_matrix.zarr.zip',
+      ['Actb'],
+      {},
+    )
     expect(lazyMocks.gexFromCellFeatureMatrixZarrSelectedGenes).toHaveBeenCalledWith(
       'https://example.test/xenium/cell_feature_matrix.zarr.zip',
       [cellId],

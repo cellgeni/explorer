@@ -30,6 +30,8 @@ export interface ObservationStyleOptions {
   readonly metadataTrack?: CellMetadataColorStyle | null
 }
 
+const UNSTYLED_OBSERVATION_COLOR: Color = [72, 68, 58, 44]
+
 export function styleOverviewCellsByObservation(
   cells: readonly OverviewCellDatum[],
   mode: ObservationColorMode,
@@ -39,12 +41,27 @@ export function styleOverviewCellsByObservation(
     return cells
   }
 
+  const colorize = createObservationColorizer(cells, mode, options)
+
+  return colorize === null
+    ? cells
+    : cells.map((cell) => ({ ...cell, fillColor: colorize(cell) }))
+}
+
+// A cell's colour under the observation mode, or null when the mode leaves
+// cells unchanged. Transcript-count and cell-area colours scale to the largest
+// value among `cells`; annotations take the first annotation listing the cell.
+export function createObservationColorizer(
+  cells: readonly OverviewCellDatum[],
+  mode: ObservationColorMode,
+  options: ObservationStyleOptions = {},
+): ((cell: OverviewCellDatum) => Color) | null {
   if (mode === 'annotations') {
-    return styleOverviewCellsByAnnotations(cells, options.annotations ?? [])
+    return annotationColorizer(options.annotations ?? [])
   }
 
   if (mode === 'metadata') {
-    return styleOverviewCellsByMetadata(cells, options.metadataTrack ?? null)
+    return metadataColorizer(options.metadataTrack ?? null)
   }
 
   let maxValue = 1
@@ -57,58 +74,36 @@ export function styleOverviewCellsByObservation(
     }
   }
 
-  return cells.map((cell) => ({
-    ...cell,
-    fillColor: observationColor(readObservationValue(cell, mode), maxValue, mode),
-  }))
+  return (cell) => observationColor(readObservationValue(cell, mode), maxValue, mode)
 }
 
-function styleOverviewCellsByAnnotations(
-  cells: readonly OverviewCellDatum[],
+function annotationColorizer(
   annotations: readonly AnnotationColorStyle[],
-): readonly OverviewCellDatum[] {
+): ((cell: OverviewCellDatum) => Color) | null {
   if (annotations.length === 0) {
-    return cells
+    return null
   }
 
   const colorByCellId = new Map<string, Color>()
-  const unstyledCellIds = new Set<string>()
-
-  for (const cell of cells) {
-    unstyledCellIds.add(cell.id)
-  }
 
   for (const annotation of annotations) {
     const color = hexToRgba(annotation.color, 230)
 
     for (const cellId of annotation.cellIds) {
-      if (unstyledCellIds.has(cellId)) {
+      if (!colorByCellId.has(cellId)) {
         colorByCellId.set(cellId, color)
-        unstyledCellIds.delete(cellId)
       }
-
-      if (unstyledCellIds.size === 0) {
-        break
-      }
-    }
-
-    if (unstyledCellIds.size === 0) {
-      break
     }
   }
 
-  return cells.map((cell) => ({
-    ...cell,
-    fillColor: colorByCellId.get(cell.id) ?? [72, 68, 58, 44],
-  }))
+  return (cell) => colorByCellId.get(cell.id) ?? UNSTYLED_OBSERVATION_COLOR
 }
 
-function styleOverviewCellsByMetadata(
-  cells: readonly OverviewCellDatum[],
+function metadataColorizer(
   metadataTrack: CellMetadataColorStyle | null,
-): readonly OverviewCellDatum[] {
+): ((cell: OverviewCellDatum) => Color) | null {
   if (metadataTrack === null || metadataTrack.values.length === 0) {
-    return cells
+    return null
   }
 
   const valueByCellId = new Map<string, number>()
@@ -117,17 +112,13 @@ function styleOverviewCellsByMetadata(
     valueByCellId.set(value.cellId, value.value)
   }
 
-  return cells.map((cell) => {
+  return (cell) => {
     const value = valueByCellId.get(cell.id)
 
-    return {
-      ...cell,
-      fillColor:
-        value === undefined
-          ? [72, 68, 58, 44]
-          : metadataColor(value, metadataTrack.min, metadataTrack.max),
-    }
-  })
+    return value === undefined
+      ? UNSTYLED_OBSERVATION_COLOR
+      : metadataColor(value, metadataTrack.min, metadataTrack.max)
+  }
 }
 
 function readObservationValue(

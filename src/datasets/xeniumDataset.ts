@@ -12,6 +12,7 @@ import {
   readXeniumTranscriptsForSelection,
   readXeniumTranscriptsForViewport,
   readXeniumTranscriptsInBbox,
+  type XeniumSelectedGeneRowsReader,
 } from './xeniumDatasetReaders'
 import type { CellId } from '../data/cellid'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
@@ -64,6 +65,9 @@ export interface XeniumDatasetOptions {
   readonly openTiff?: (url: string, signal?: AbortSignal) => Promise<TiffPyramidLoader>
   readonly matrixReader?: MatrixReader
   readonly geneExpressionMatrixReader?: GeneExpressionMatrixReader
+  // Lists the cells expressing the selected genes; null keeps reading the
+  // matrix for every cell in the box.
+  readonly selectedGeneRowsReader?: XeniumSelectedGeneRowsReader | null
   readonly transcriptReader?: TranscriptReader
   readonly overviewReader?: (
     url: string,
@@ -196,6 +200,12 @@ const gexFromCellFeatureMatrixZarrSelectedGenesLazy: GeneExpressionMatrixReader 
   return gexFromCellFeatureMatrixZarrSelectedGenes(url, ids, genes, options)
 }
 
+const selectedGeneRowsFromCellFeatureMatrixZarrLazy: XeniumSelectedGeneRowsReader =
+  async (url, genes, options) => {
+    const { selectedGeneRowsFromCellFeatureMatrixZarr } = await import('../data/gex')
+    return selectedGeneRowsFromCellFeatureMatrixZarr(url, genes, options)
+  }
+
 const gexFromTranscriptsParquetLazy: TranscriptReader = async (
   conn,
   url,
@@ -218,6 +228,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
   ) => Promise<TiffPyramidLoader>
   private readonly matrixReader: MatrixReader
   private readonly geneExpressionMatrixReader: GeneExpressionMatrixReader
+  private readonly selectedGeneRowsReader: XeniumSelectedGeneRowsReader | null
   private readonly transcriptReader: TranscriptReader
   private readonly overviewReader: (
     url: string,
@@ -241,6 +252,15 @@ export class XeniumDataset implements SpatialDataset<CellId> {
       (options.matrixReader === undefined
         ? gexFromCellFeatureMatrixZarrSelectedGenesLazy
         : (url, ids) => this.matrixReader(url, ids))
+    // Injected matrix readers stay in charge of expression unless a rows
+    // reader is injected too.
+    this.selectedGeneRowsReader =
+      options.selectedGeneRowsReader !== undefined
+        ? options.selectedGeneRowsReader
+        : options.matrixReader === undefined &&
+            options.geneExpressionMatrixReader === undefined
+          ? selectedGeneRowsFromCellFeatureMatrixZarrLazy
+          : null
     this.transcriptReader = options.transcriptReader ?? gexFromTranscriptsParquetLazy
     this.overviewReader =
       options.overviewReader ??
@@ -425,6 +445,9 @@ export class XeniumDataset implements SpatialDataset<CellId> {
       bbox,
       genes,
       matrixReader: this.geneExpressionMatrixReader,
+      ...(this.selectedGeneRowsReader === null
+        ? {}
+        : { selectedGeneRowsReader: this.selectedGeneRowsReader }),
       queryOptions: options,
     })
   }

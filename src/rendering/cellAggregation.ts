@@ -122,6 +122,15 @@ export function aggregateExpressionElements(
   )
 }
 
+// Expression elements binned on the fixed grid aggregateExpressionElements
+// uses when zoomed out.
+export function expressionElementBins(
+  cells: readonly OverviewCellDatum[],
+  binMicrometers = EXPRESSION_AGGREGATION_BIN_MICROMETERS,
+): readonly OverviewCellDatum[] {
+  return aggregateExpressionElementsIntoBins(cells, binMicrometers)
+}
+
 export function overviewAggregationBinMicrometers(
   viewState: OverviewViewState,
   options: OverviewAggregationOptions = {},
@@ -362,7 +371,7 @@ function pointInBbox(x: number, y: number, bbox: BBox): boolean {
   return x >= bbox.minX && x <= bbox.maxX && y >= bbox.minY && y <= bbox.maxY
 }
 
-function overviewCellIntersectsBbox(cell: OverviewCellDatum, bbox: BBox): boolean {
+export function overviewCellIntersectsBbox(cell: OverviewCellDatum, bbox: BBox): boolean {
   const [x = 0, deckY = 0] = cell.position
   const rawY = -deckY
   const radius = normalizeCellRadiusMicrometers(cell.radiusMicrometers)

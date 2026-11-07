@@ -102,6 +102,8 @@ export interface CellFeatureMatrixRowTarget {
 
 export interface ArrowTableLike {
   toArray(): readonly Record<string, unknown>[]
+  // Arrow tables expose typed column vectors.
+  getChild?(name: string): { toArray(): ArrayLike<number> | BigInt64Array } | null
 }
 
 export interface DuckDbPreparedStatementLike {
@@ -128,6 +130,7 @@ const FEATURE_BARCODE_MATRIX_WORKER_RETRY_DELAY_MS = 250
 const h5MatrixCache = new Map<string, Promise<H5MatrixCache>>()
 const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
 const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
+const zarrMatrixCellIdDataCache = new Map<string, Promise<Uint32Array>>()
 interface CellMajorIndptrCacheEntry {
   readonly promise: Promise<Uint32Array>
   state: 'pending' | 'ready'
@@ -908,6 +911,77 @@ export async function gexFromCellFeatureMatrixZarrSelectedGenes(
   }
 }
 
+export interface SelectedGeneFeatureRows {
+  readonly gene: string
+  // Matrix rows of the cells expressing the gene, with their counts.
+  readonly rows: Uint32Array
+  readonly counts: Uint32Array
+}
+
+export interface SelectedGeneMatrixRows {
+  readonly nCells: number
+  readonly features: readonly SelectedGeneFeatureRows[]
+  cellIdForRow(row: number): CellId
+}
+
+// Lists the cells expressing the selected genes straight from the
+// feature-major arrays, without mapping every cell id to its row. Returns null
+// when the matrix has no feature-major arrays or the gene list is large enough
+// that cell-major reads are used instead.
+export async function selectedGeneRowsFromCellFeatureMatrixZarr(
+  url: string,
+  genes: readonly string[],
+  options: CellFeatureMatrixReadOptions = {},
+): Promise<SelectedGeneMatrixRows | null> {
+  const selectedGenes = normalizeSelectedGeneList(genes)
+
+  if (
+    selectedGenes.length === 0 ||
+    selectedGenes.length > SELECTED_GENE_CELL_MAJOR_GENE_THRESHOLD
+  ) {
+    return null
+  }
+
+  const startedAt = Date.now()
+  const matrix = await loadZarrMatrixMetadata(url)
+  const selectedFeatures = selectedFeatureRows(
+    matrix.geneNames,
+    matrix.geneFeatureIndices,
+    selectedGenes,
+  )
+  let features: readonly SelectedGeneFeatureRows[]
+
+  try {
+    features = await readFeatureMajorRows(matrix, selectedFeatures)
+  } catch (error) {
+    if (isZarrNotFoundError(error)) {
+      return null
+    }
+
+    throw error
+  }
+
+  const cellIdData = await loadZarrMatrixCellIdData(url)
+  const stride = matrix.cellIdStride
+  options.onStageTiming?.(
+    geneExpressionStageTiming(
+      'matrix-feature-major-selected-genes',
+      'Matrix selected-gene rows',
+      startedAt,
+      `${selectedGenes.length.toLocaleString()} genes, ${features
+        .reduce((total, feature) => total + feature.rows.length, 0)
+        .toLocaleString()} entries`,
+    ),
+  )
+
+  return {
+    nCells: matrix.nCells,
+    features,
+    cellIdForRow: (row) =>
+      intToCellId(cellIdData[row * stride] ?? 0, cellIdData[row * stride + 1] ?? 0),
+  }
+}
+
 function shouldUseCellMajorSelectedGeneRead(
   cellIds: readonly CellId[],
   selectedGenes: readonly string[],
@@ -1132,8 +1206,7 @@ async function loadZarrMatrixWithCellIdsUncached(
   url: string,
 ): Promise<ZarrMatrixCellIdCache> {
   const matrix = await loadZarrMatrixMetadata(url)
-  const cellIdChunk = await zarr.get(matrix.cellIdArray, [null, null])
-  const cellIdData = expectUint32Array(cellIdChunk.data, 'cell_features/cell_id')
+  const cellIdData = await loadZarrMatrixCellIdData(url)
   const cellIdRows = cellIdRowsFromCellIdData(
     cellIdData,
     matrix.nCells,
@@ -1144,6 +1217,32 @@ async function loadZarrMatrixWithCellIdsUncached(
     ...matrix,
     cellIdRows,
   }
+}
+
+function loadZarrMatrixCellIdData(url: string): Promise<Uint32Array> {
+  const cached = zarrMatrixCellIdDataCache.get(url)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const promise = loadZarrMatrixMetadata(url)
+    .then(async (matrix) =>
+      expectUint32Array(
+        (await zarr.get(matrix.cellIdArray, [null, null])).data,
+        'cell_features/cell_id',
+      ),
+    )
+    .catch((error: unknown) => {
+      if (zarrMatrixCellIdDataCache.get(url) === promise) {
+        zarrMatrixCellIdDataCache.delete(url)
+      }
+
+      throw error
+    })
+
+  zarrMatrixCellIdDataCache.set(url, promise)
+  return promise
 }
 
 function cachedZipFileStoreFromUrl(url: string): ZipFileStore {
@@ -1245,6 +1344,28 @@ async function gexFromFeatureMajorCellFeatureMatrix(
     }
   }
 
+  for (const feature of await readFeatureMajorRows(matrix, selectedFeatures)) {
+    appendFeatureMajorCounts(
+      cells,
+      targetRows,
+      feature.gene,
+      feature.rows,
+      feature.counts,
+    )
+  }
+
+  return {
+    geneNames: selectedFeatures.map((feature) => feature.gene),
+    cells,
+  }
+}
+
+// Reads each feature's expressing cell rows and counts from the
+// feature-major arrays.
+async function readFeatureMajorRows(
+  matrix: ZarrMatrixCache,
+  features: readonly { readonly gene: string; readonly index: number }[],
+): Promise<readonly SelectedGeneFeatureRows[]> {
   const indptrArray = await zarr.open(matrix.cellFeatures.resolve('indptr'), {
     kind: 'array',
   })
@@ -1254,8 +1375,9 @@ async function gexFromFeatureMajorCellFeatureMatrix(
   const dataArray = await zarr.open(matrix.cellFeatures.resolve('data'), {
     kind: 'array',
   })
+  const rows: SelectedGeneFeatureRows[] = []
 
-  for (const feature of selectedFeatures) {
+  for (const feature of features) {
     const indptrChunk = await zarr.get(indptrArray, [
       zarr.slice(feature.index, feature.index + 2),
     ])
@@ -1267,25 +1389,28 @@ async function gexFromFeatureMajorCellFeatureMatrix(
     const end = Number(indptr[1] ?? start)
 
     if (end <= start) {
+      rows.push({
+        gene: feature.gene,
+        rows: new Uint32Array(0),
+        counts: new Uint32Array(0),
+      })
       continue
     }
 
-    const indices = expectUint32Array(
-      (await zarr.get(indicesArray, [zarr.slice(start, end)])).data,
-      `cell_features/indices feature ${feature.index}`,
-    )
-    const data = expectUint32Array(
-      (await zarr.get(dataArray, [zarr.slice(start, end)])).data,
-      `cell_features/data feature ${feature.index}`,
-    )
-
-    appendFeatureMajorCounts(cells, targetRows, feature.gene, indices, data)
+    rows.push({
+      gene: feature.gene,
+      rows: expectUint32Array(
+        (await zarr.get(indicesArray, [zarr.slice(start, end)])).data,
+        `cell_features/indices feature ${feature.index}`,
+      ),
+      counts: expectUint32Array(
+        (await zarr.get(dataArray, [zarr.slice(start, end)])).data,
+        `cell_features/data feature ${feature.index}`,
+      ),
+    })
   }
 
-  return {
-    geneNames: selectedFeatures.map((feature) => feature.gene),
-    cells,
-  }
+  return rows
 }
 
 async function openZarrArrayOrNull(
