@@ -1,5 +1,8 @@
 # Spatial Explorer User Guide
 
+This guide walks through common tasks. For a control-by-control reference see
+the [UI reference](./ui-reference.md).
+
 ## Loading Data
 
 Paste a source URL in `Dataset or image URL`, then choose `Load Dataset`.
@@ -47,17 +50,24 @@ Custom image layers accept remote OME-TIFF or OME-Zarr URLs and render through
 the same channel controls as dataset morphology.
 
 The `Genes` tab supports individual gene selection and multi-gene signatures for
-Xenium, Visium HD, and H5AD. `Auto LOD` chooses an appropriate expression query
-for the current zoom and viewport; `Exact region` keeps the current viewport
-exact when the region is small enough. The default gene scale is Plasma.
+Xenium, Visium HD, H5AD, and SpatialData. `Auto LOD` chooses an appropriate
+expression query for the current zoom and viewport; `Exact region` keeps the
+current viewport exact when the region is small enough; `All cells` scores
+every cell on the slide. The default gene scale is Plasma.
 
-For H5AD, categorical `obs` columns load as annotations and numeric or boolean
-`obs` columns load as metadata tracks. Set `Cell color` to `Metadata` to color
-cells by a loaded numeric track.
+For H5AD and SpatialData, categorical and string `obs` columns load as
+annotation sets, and numeric `obs` values appear in the `Cell` tab for the
+selected cell. Numeric `obs` columns are not yet available as `Cell color` →
+`Metadata` tracks.
 
-For Visium HD, selected-gene overlays use Feature Slice H5 when available and
-paint the active square-bin grid. The `Cell` tab becomes `Bin Info` and reports
-selected-gene scores separately from the all-gene bin profile.
+Imported CSV/JSON annotations and metadata tracks (Annotations tab) currently
+require Xenium-format cell IDs such as `aaabbbcc-1`, so files keyed by H5AD or
+SpatialData obs names are rejected.
+
+For Visium HD, selected-gene overlays read the dataset's `feature_slice.h5`
+(required for gene overlays) and paint the active square-bin grid. The `Cell`
+tab becomes `Bin Info` and reports selected-gene scores separately from the
+all-gene bin profile.
 
 ## Transcript Overlay
 
@@ -118,8 +128,9 @@ Visium HD ROIs select bins and export barcodes. Image-only ROIs save drawn
 geometry as GeoJSON shapes instead of querying cells or genes.
 
 `Magic Lens` is available for Xenium and Visium HD. Xenium lens scans summarize
-transcripts and cells with QV controls; Visium HD lens scans summarize UMIs and
-bins without transcript QV controls.
+cells, their transcript counts, and top genes from the cell-feature matrix; the
+`Min QV` control is shown for Xenium but does not yet change the result.
+Visium HD lens scans summarize UMIs and bins.
 
 The `Cell` tab loads UMAP/t-SNE or H5AD `obsm` embeddings when the dataset
 provides them. Clicking an embedding point selects the matching spatial cell or
@@ -133,7 +144,8 @@ Visium HD datasets show a `Visium HD dataset` panel in the Dataset tab. Use the
 bin-size segmented control to switch between detected 16 µm, 8 µm, and 2 µm
 tiers. The 2 µm tier uses filtered matrix barcodes and a grid basis derived
 from a coarser tier; it does not read the full 2 µm
-`tissue_positions.parquet` for first paint.
+`tissue_positions.parquet` for first paint. With 2 µm selected, the view shows
+16 µm bins until you zoom in past zoom level 3.
 
 When segmented outputs are present, `Cell boundaries` and `Nucleus boundaries`
 load viewport-scoped segmentation overlays. Annotated segmentation GeoJSON
@@ -146,8 +158,10 @@ a supported embedding such as `/obsm/X_umap`. The app reads genes from `var`,
 observations from `obs`, and expression from `/X` for supported dense, CSR, and
 CSC layouts.
 
-Files up to 300 MB load through the browser HDF5 path. Larger hosted H5AD files
-need a sibling kerchunk reference JSON named `DATASET.h5ad.json`.
+Files up to 300 MiB are downloaded whole and opened with the browser HDF5
+reader. Larger hosted H5AD files need a sibling kerchunk reference JSON named
+`DATASET.h5ad.json`. See [H5AD](./modalities/h5ad.md) for the exact layout
+the reader expects.
 
 ## SpatialData
 
@@ -157,27 +171,33 @@ any elements it does not show, in the `Dataset` tab log. Table rows render as
 cells placed on their annotated shapes. Circles and polygons appear as cell
 boundaries, and the highest-resolution image loads as the morphology layer.
 
-Genes, annotations, metadata tracks, embeddings, selected-cell profiles, and ROI
-summaries work as they do for H5AD. Transcripts (`points`), `labels` rasters,
-and Magic Lens are not available for SpatialData yet.
+Genes, annotations, embeddings, selected-cell profiles, and ROI summaries work
+as they do for H5AD. Transcripts (`points`), `labels` rasters, and Magic Lens
+are not available for SpatialData yet. See
+[SpatialData](./modalities/spatialdata.md) for how the coordinate system,
+table, shapes, and image are chosen.
 
 ## Image-Only Sources
 
 Image-only sources render the image pyramid without requiring transcriptomics
 files. Supported URL forms include `.ome.tif`, `.ome.tiff`, `.tif`, `.tiff`,
-`.ome.zarr`, `.zarr`, `zarr.json`, `.zattrs`, and validated `.ndpi` files.
+`.ome.zarr`, `.zarr`, `zarr.json`, `.zattrs`, and `.ndpi`. TIFFs must be tiled
+with `SubIFD` pyramid levels; see
+[Image-only and GeoJSON](./image-only-and-geojson.md#supported-image-urls).
 
 For image-only sources, use `Layers` for image channels and custom image layers,
-`ROI` for box or lasso geometry, and `Annotations` for GeoJSON shape
-import/export. Gene expression, transcripts, cell details, cell annotations, and
-Magic Lens remain hidden because there are no cells or molecules to query.
+`ROI` (shown as `Geometry`) for box or lasso shapes, and `Annotations` for
+GeoJSON shape import/export. Gene expression, transcripts, cell details, cell
+annotations, and Magic Lens remain hidden because there are no cells or
+molecules to query.
 
 ## Diagnostics
 
 `Diagnose Dataset` checks the detected source and required byte-range reads,
-then summarizes optional assets for that platform. `Download Diagnostics` writes
-a local JSON dump with current controls, active errors, diagnostics, performance
-budget, and local telemetry events. Transcript diagnostics include detected
+then summarizes optional assets for that platform. The download button next to
+it writes a local JSON dump (`xenium-diagnostics.json`, for every platform)
+with current controls, active errors, diagnostics, performance budget, and
+local telemetry events. Transcript diagnostics include detected
 transcript capabilities, native LOD availability, current transcript controls,
 exact-budget decisions, and summarized hovered or pinned transcript/bin
 inspection state. No telemetry is sent off-device by the app.

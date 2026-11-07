@@ -2,7 +2,8 @@
 
 The viewer can load a direct image URL without any spatial transcriptomics
 tables. This is useful for inspecting remote image pyramids and drawing or
-importing geometric annotations.
+importing geometric annotations. For how images are read and rendered, see
+[Image sources](./modalities/image.md).
 
 ## Supported Image URLs
 
@@ -10,11 +11,27 @@ Use `Dataset or image URL` with one of these direct URL forms:
 
 - `.ome.tif`, `.ome.tiff`, `.tif`, or `.tiff`
 - `.ome.zarr`, `.zarr`, `zarr.json`, or `.zattrs`
-- `.ndpi` when the browser TIFF loader can read the specific variant
+- `.ndpi`, read with the same TIFF loader (see the requirements below)
+- A folder URL whose `zarr.json` or `.zattrs` holds OME multiscales metadata
 
-OME-TIFF and TIFF sources should be tiled pyramids for responsive navigation.
-OME-Zarr sources must expose OME multiscales metadata. If an NDPI file fails to
-open, convert it to pyramidal OME-TIFF and host that output instead.
+A Zarr root whose attributes contain `spatialdata_attrs` loads as
+[SpatialData](./modalities/spatialdata.md) instead of as an image.
+
+TIFF requirements:
+
+- Tiled, not stripped. Stripped TIFFs open but no tiles load.
+- Pyramid levels stored as `SubIFDs` of the base image. Pyramids stored as
+  extra top-level IFDs are ignored, so only full resolution is shown.
+- 8- or 16-bit samples with 1, 3, or 4 samples per pixel.
+- Pixel size from OME-XML `PhysicalSizeX`. Without OME-XML the viewer assumes
+  0.2125 µm per pixel.
+
+Most NDPI files do not meet these requirements; convert them to pyramidal
+OME-TIFF (for example with `bfconvert` or `bioformats2raw` + `raw2ometiff`)
+and host that output instead.
+
+OME-Zarr sources must expose OME multiscales metadata with `x` and `y` axes.
+Only the first time point and z plane are shown.
 
 ## Platform Behavior
 
@@ -37,14 +54,21 @@ IDs, bins, molecules, or expression matrix:
 Open the `Annotations` tab and use `Import GeoJSON`. The importer accepts a
 GeoJSON `Feature` or `FeatureCollection` with Polygon or MultiPolygon geometry.
 Each imported feature becomes a geometric annotation with label, color,
-visibility, and remove controls.
+visibility, and remove controls. Features with `null` geometry are skipped; any
+other geometry type (Point, LineString, …) rejects the whole file. A failed
+import only adds "GeoJSON annotation import failed" to the Dataset tab log; the
+reason is not shown.
 
 The importer reads these optional properties:
 
-- `label`, `name`, or `title` for the shape label.
-- `color`, `stroke`, or `fill` for the initial color.
-- `coordinate_unit` or `coordinateUnit` set to `pixel`, `micrometer`, `px`, or
-  `um`.
+- `label`, `name`, or `title` for the shape label (default `Shape N`).
+- `color`, `stroke`, or `fill` for the initial color. The first non-empty one
+  is used and must be a `#rrggbb` hex value; anything else falls back to the
+  palette.
+- `coordinate_unit` or `coordinateUnit` set to `pixel`, `pixels`, `px`,
+  `micrometer`, `micrometers`, or `um` (case-insensitive).
+
+`id` and `visible` properties are not imported.
 
 For image-only sources, coordinates default to pixels and are converted through
 the image micrometers-per-pixel scale. For other platforms, coordinates default
@@ -53,10 +77,12 @@ coordinates are already in viewer coordinates.
 
 ## ROI And Export
 
-Use the `ROI` tab to draw a box or lasso on image-only sources. Completing the
-ROI saves the drawn geometry as a GeoJSON shape instead of querying cells or
-genes.
+On image-only sources the `ROI` tab shows the `Geometry` panel. Use
+`Draw Box` or `Draw Lasso`, optionally set `Shape name`, and draw on the image.
+Completing the drawing saves the geometry as a GeoJSON shape in the
+`Annotations` tab instead of querying cells or genes.
 
-Use `Export GeoJSON` to download all loaded geometric annotations. Exported
-features use `coordinate_unit = "micrometer"` so they round-trip in viewer
-coordinates.
+Use `Export GeoJSON` in the `Annotations` tab to download all loaded geometric
+annotations as `geometric-annotations.geojson`. Exported features use
+`coordinate_unit = "micrometer"` (also for image-only sources) so they
+round-trip in viewer coordinates.
