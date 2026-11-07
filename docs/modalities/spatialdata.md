@@ -62,11 +62,13 @@ element's coordinate transforms (`src/datasets/spatialDataTransforms.ts`).
 2. **Coordinate system** (`bestCoordinateSystem`): candidates are ranked by
    number of the table's region elements placed in the system, then whether it
    holds an image, then total elements, then whether it is named `global`, then
-   declaration order. The user cannot choose another system.
+   declaration order. The Dataset tab's `Coordinate system` select overrides
+   it (`sdCs` in the shareable URL).
 3. **Region shapes / labels**: region elements placed in that system.
 4. **Image**: images placed with an axis-aligned, positive-scale affine
    (rotated, sheared, and flipped images are skipped); the one with the
-   smallest x scale (highest resolution) wins.
+   smallest x scale (highest resolution) wins unless the Dataset tab's `Image`
+   select picks another (`sdImage`).
 5. **Boundary candidates**: non-region shapes whose name matches
    `/(?:^|[_-])cell[_-]?(?:boundar|segmentation|polygon)/i`, for example
    `cell_boundaries`.
@@ -91,16 +93,18 @@ coordinate system.
 
 ## Files Read
 
-| Store path                               | Read by                                                       | Library                            | Used for                              |
-| ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------- | ------------------------------------- |
-| `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                        | fetch + JSON                       | Detection                             |
-| `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                | fetch + JSON                       | Element discovery                     |
-| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                      | `zarrita`                          | Cells, genes, annotations, embeddings |
-| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`) | `hyparquet` (`HEAD` + range reads) | Cell positions and boundaries         |
-| `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)   | `zarrita`                          | Morphology layer                      |
+| Store path                               | Read by                                                         | Library                            | Used for                              |
+| ---------------------------------------- | --------------------------------------------------------------- | ---------------------------------- | ------------------------------------- |
+| `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                          | fetch + JSON                       | Detection                             |
+| `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                  | fetch + JSON                       | Element discovery                     |
+| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita`                          | Cells, genes, annotations, embeddings |
+| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`)   | `hyparquet` (`HEAD` + range reads) | Cell positions and boundaries         |
+| `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)     | `zarrita`                          | Morphology layer                      |
+| `labels/<name>/<level>/…`                | `SpatialDataLabelsReader` (`src/datasets/spatialDataLabels.ts`) | `zarrita` + decode worker          | Cell outlines                         |
 
-`points` (transcripts), `labels` rasters, extra images, and extra tables are
-not read.
+`points` (transcripts), extra images, and extra tables are not read. Label
+chunks in view are decoded and traced into cell outlines in the Zarr decode
+worker when you zoom in below `Boundary limit`.
 
 ## Table
 
@@ -164,13 +168,16 @@ passes `skipNativeRgbAutoContrast` and enables all channels.
 
 ## Units And Extent
 
-- `meta().units.micrometersPerPixel` comes from the image loader (affine x
-  scale × level-0 scale), else 1. Coordinate-system axis units are not read,
-  so values are shown in the system's own units at 1 unit = 1 µm. For
-  example, spatialdata-io Visium stores use full-resolution pixels.
+- Coordinates are scaled to micrometers by a factor per coordinate system
+  (`src/datasets/spatialDataUnits.ts`): the Dataset tab's `µm per unit`
+  override (`sdUm`), else the x/y axis unit the elements declare, else an
+  estimate (`cell_area` against segmentation areas, the Visium 100 µm spot
+  pitch, or Visium HD `square_NNNum` bin names). When none applies the factor
+  is 1 and distances are labelled as units. spatialdata-io stores usually
+  declare `unit`, for example full-resolution pixels for Visium.
 - `extent` is the union of the table points' bounding box and the image.
 - `capabilities.cellBoundaries` is true when there is a table and at least one
-  region shapes element. `meta()` waits for the image to open, so a broken
+  region shapes or labels element. `meta()` waits for the image to open, so a broken
   image also blocks boundary loading.
 
 ## Load Sequence
@@ -196,6 +203,8 @@ off.
 | `src/datasets/spatialDataCatalog.ts`    | Root check, store opening, catalog, view and table selection                      |
 | `src/datasets/spatialDataTransforms.ts` | Transform parsing and affine maths                                                |
 | `src/datasets/spatialDataShapes.ts`     | GeoParquet / WKB shapes reader                                                    |
+| `src/datasets/spatialDataLabels.ts`     | Label outline tracing and caching (`spatialDataLabelTrace.ts`)                    |
+| `src/datasets/spatialDataUnits.ts`      | µm-per-unit override, declared units, and estimates                               |
 | `src/datasets/spatialDataDataset.ts`    | `SpatialDataDataset`: coordinates, boundaries, image, delegation to the table     |
 | `src/datasets/h5adDataset.ts`           | AnnData table reader (`readAnnDataZarr`)                                          |
 | `src/zarr/zarrStores.ts`                | Fetch store, consolidated store, chunk LRU                                        |
