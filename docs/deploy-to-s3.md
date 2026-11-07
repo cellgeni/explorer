@@ -2,8 +2,8 @@
 
 This project builds to a static Vite app. There is no server-side application to
 deploy: the browser downloads the React bundle, workers, and WASM assets from
-`dist/`, then reads Xenium, Visium HD, H5AD, or image-only sources directly from
-the URLs entered in the UI or restored from the shareable URL hash.
+`dist/`, then reads Xenium, Visium HD, H5AD, SpatialData, or image-only sources
+directly from the URLs entered in the UI or restored from the shareable URL hash.
 
 Use this guide for the app bucket or object-store prefix. It applies to AWS S3
 and S3-compatible services such as Ceph RADOS Gateway (RGW). Dataset buckets
@@ -165,9 +165,9 @@ the no-cache `Cache-Control` headers above so clients revalidate them.
 ## Dataset Bucket Requirements
 
 The app can point at Xenium output folders, Visium HD output folders, direct
-H5AD files, and image-only URLs, but the browser must be able to range-read
-large binary assets. For S3 or S3-compatible datasets, configure the dataset
-bucket, gateway, CDN, or reverse proxy with:
+H5AD files, SpatialData Zarr stores, and image-only URLs, but the browser must
+be able to range-read large binary assets. For S3 or S3-compatible datasets,
+configure the dataset bucket, gateway, CDN, or reverse proxy with:
 
 ```json
 [

@@ -263,9 +263,10 @@ function parseOmeColor(color: string | null): readonly [number, number, number] 
     return null
   }
 
+  // OME packs Color as a signed 32-bit RGBA integer, red in the high byte.
   const unsigned = numeric >>> 0
 
-  return [(unsigned >> 16) & 0xff, (unsigned >> 8) & 0xff, unsigned & 0xff]
+  return [(unsigned >>> 24) & 0xff, (unsigned >>> 16) & 0xff, (unsigned >>> 8) & 0xff]
 }
 
 function defaultChannelColor(options: {
