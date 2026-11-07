@@ -72,7 +72,8 @@ Enter a source in the `Dataset or image URL` field:
   readable `cell_feature_matrix.zarr.zip` or `cell_feature_matrix.h5`.
 - Visium HD: Space Ranger `outs/` folder with at least one
   `binned_outputs/square_*um` tier containing positions, scalefactors, and a
-  filtered feature-barcode matrix.
+  filtered feature-barcode matrix, plus root `feature_slice.h5` for gene
+  overlays.
 - H5AD: direct `.h5ad` file URL with `obs`, `var`, `/X`, and a supported 2D
   `obsm` coordinate matrix.
 - SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
@@ -86,9 +87,20 @@ the active source.
 
 ## Additional Docs And Decisions
 
+The full index is in [docs/README.md](docs/README.md).
+
 - [User guide](docs/user-guide.md): loading supported sources, navigation,
   layers, genes, transcript overlays, annotations, ROI tools, embeddings,
   diagnostics, and shareable URLs.
+- [UI reference](docs/ui-reference.md): every tab, control, default, viewer
+  interaction, and shareable URL parameter, with platform availability.
+- [Architecture](docs/architecture.md): detection order, load pipeline,
+  platform gating, coordinates, caching, workers, and error handling.
+- Modality read paths: [Xenium](docs/modalities/xenium.md),
+  [Visium HD](docs/modalities/visium-hd.md), [H5AD](docs/modalities/h5ad.md),
+  [SpatialData](docs/modalities/spatialdata.md), and
+  [image sources](docs/modalities/image.md). Each lists the files read, the
+  libraries used, the source modules involved, and known limitations.
 - [Deploy the React app to S3-compatible object storage](docs/deploy-to-s3.md):
   build the Vite app, upload `dist/` to AWS S3 or Ceph RGW-style storage,
   configure edge headers, and validate production.
