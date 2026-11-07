@@ -82,12 +82,14 @@ describe('OME-TIFF metadata parsing', () => {
     ])
   })
 
-  it('uses explicit OME channel color values when available', () => {
+  it('decodes explicit OME channel colors as signed RGBA integers', () => {
     const metadata = parseOmeTiffMetadata(`
 <OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
   <Image ID="Image:0">
     <Pixels Type="uint8" PhysicalSizeX="1.5">
-      <Channel ID="Channel:0" Name="Custom" Color="16711935"/>
+      <Channel ID="Channel:0" Name="Red" Color="-16776961"/>
+      <Channel ID="Channel:1" Name="Green" Color="16711935"/>
+      <Channel ID="Channel:2" Name="Blue" Color="65535"/>
     </Pixels>
   </Image>
 </OME>`)
@@ -96,8 +98,22 @@ describe('OME-TIFF metadata parsing', () => {
       {
         id: 'Channel:0',
         index: 0,
-        name: 'Custom',
-        color: [255, 0, 255],
+        name: 'Red',
+        color: [255, 0, 0],
+        contrast: { min: 0, max: 255 },
+      },
+      {
+        id: 'Channel:1',
+        index: 1,
+        name: 'Green',
+        color: [0, 255, 0],
+        contrast: { min: 0, max: 255 },
+      },
+      {
+        id: 'Channel:2',
+        index: 2,
+        name: 'Blue',
+        color: [0, 0, 255],
         contrast: { min: 0, max: 255 },
       },
     ])
