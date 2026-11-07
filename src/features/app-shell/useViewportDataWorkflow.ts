@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import {
   geneExpressionRequestKey,
@@ -22,8 +22,11 @@ import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
+  boundaryRequestCovers,
   boundaryViewportKey,
+  paddedBoundaryBbox,
   shouldLoadBoundaryPolygons,
+  type BoundaryRequestArea,
 } from '../../rendering/boundaryViewport'
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayers'
 import type { BoundaryElementsLoader, GeneExpressionLoader } from './appDependencies'
@@ -180,6 +183,11 @@ export function useViewportDataWorkflow({
     setNucleusBoundaryElements,
     setShareableViewState,
   } = setters
+  // Area of the boundary request identified by boundaryViewportKeyRef; it is
+  // only trusted while that key is still current.
+  const boundaryRequestAreaRef = useRef<
+    (BoundaryRequestArea & { readonly key: string }) | null
+  >(null)
   const handleViewportChange = useCallback(
     (detail: ViewerViewportDetail) => {
       if (loadState.status !== 'ready') {
@@ -218,9 +226,22 @@ export function useViewportDataWorkflow({
           current.status === 'idle' ? current : IDLE_BOUNDARY_LOAD_STATE,
         )
       } else {
-        const requestKey = boundaryViewportKey(loadState.url, detail.bbox)
+        const lastArea = boundaryRequestAreaRef.current
+        const currentArea =
+          lastArea !== null &&
+          lastArea.key === boundaryViewportKeyRef.current &&
+          lastArea.key === boundaryViewportKey(loadState.url, lastArea.bbox)
+            ? lastArea
+            : null
+        const requestBbox = paddedBoundaryBbox(detail, { cellLimit: boundaryCellLimit })
+        const requestKey = boundaryViewportKey(loadState.url, requestBbox)
 
-        if (requestKey !== boundaryViewportKeyRef.current) {
+        if (!boundaryRequestCovers(currentArea, detail)) {
+          boundaryRequestAreaRef.current = {
+            key: requestKey,
+            bbox: requestBbox,
+            zoom: detail.viewState.zoom,
+          }
           const request = startLatestRequest({
             abortRef: boundaryAbortRef,
             requestIdRef: boundaryRequestIdRef,
@@ -236,7 +257,7 @@ export function useViewportDataWorkflow({
           const loadCellElements = loadProfiledBoundaryElements(
             loadBoundaryElements,
             loadState.url,
-            detail.bbox,
+            requestBbox,
             { signal: request.signal },
           )
           const loadNucleusElements =
@@ -245,7 +266,7 @@ export function useViewportDataWorkflow({
               : loadProfiledBoundaryElements(
                   loadNucleusBoundaryElements,
                   loadState.url,
-                  detail.bbox,
+                  requestBbox,
                   { signal: request.signal },
                 )
 
@@ -448,6 +469,10 @@ export function useViewportDataWorkflow({
 
           const timingDetail = formatGeneExpressionTiming(batch.timing)
           const memoryDetail = currentMemoryDetail()
+          // Some readers also return cells with zero expression.
+          const positiveCellCount = batch.elements.filter(
+            (element) => element.count > 0,
+          ).length
 
           rememberGeneExpressionScaleMax(
             geneExpressionScaleKey,
@@ -460,7 +485,7 @@ export function useViewportDataWorkflow({
               loadState.url,
               batch.genes,
               expressionPlan.mode,
-              batch.elements.length,
+              positiveCellCount,
               expressionPlan.sourceCellCount,
             ),
           )
@@ -468,7 +493,7 @@ export function useViewportDataWorkflow({
             telemetryEvent('gene-expression.load', 'success', {
               startedAt: expressionStartedAt,
               detail: [
-                `${geneExpressionModeLabel(expressionPlan.mode)}: ${batch.elements.length.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
+                `${geneExpressionModeLabel(expressionPlan.mode)}: ${positiveCellCount.toLocaleString()} positive cells across ${expressionPlan.sourceCellCount.toLocaleString()} source cells (${timingDetail})`,
                 memoryDetail === undefined ? undefined : `memory ${memoryDetail}`,
               ]
                 .filter((part): part is string => part !== undefined)
@@ -476,7 +501,7 @@ export function useViewportDataWorkflow({
             }),
           )
           appendDebugEvent(
-            `${geneExpressionModeLabel(expressionPlan.mode)} ready: ${batch.elements.length.toLocaleString()} positive cells in ${formatElapsed(
+            `${geneExpressionModeLabel(expressionPlan.mode)} ready: ${positiveCellCount.toLocaleString()} positive cells in ${formatElapsed(
               expressionStartedAt,
             )} (${formatProfileTimingDetail(timingDetail, memoryDetail)})`,
             { coalesceKey: 'gene-expression-query' },

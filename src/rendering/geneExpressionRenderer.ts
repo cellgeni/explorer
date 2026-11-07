@@ -123,14 +123,7 @@ export function styleCellsByGeneExpression(
 
   let hasExpressionStyle = false
   const styledCells = cells.map((cell) => {
-    const expressionElement =
-      styleIndex.expressionByElementId.get(cell.id) ??
-      (styleIndex.expressionByBinKey === undefined ||
-      styleIndex.binMicrometers === undefined
-        ? undefined
-        : styleIndex.expressionByBinKey.get(
-            positionBinKey(cell.position, styleIndex.binMicrometers),
-          ))
+    const expressionElement = geneExpressionElementForCell(styleIndex, cell)
 
     if (expressionElement === undefined) {
       if (!styleUnmatchedCells) {
@@ -160,6 +153,32 @@ export function styleCellsByGeneExpression(
   })
 
   return hasExpressionStyle ? styledCells : cells
+}
+
+// The expression element that styles a cell: its own, or its bin's when the
+// index is binned.
+export function geneExpressionElementForCell(
+  styleIndex: GeneExpressionElementStyleIndex,
+  cell: OverviewCellDatum,
+): OverviewCellDatum | undefined {
+  return (
+    styleIndex.expressionByElementId.get(cell.id) ??
+    (styleIndex.expressionByBinKey === undefined ||
+    styleIndex.binMicrometers === undefined
+      ? undefined
+      : styleIndex.expressionByBinKey.get(
+          positionBinKey(cell.position, styleIndex.binMicrometers),
+        ))
+  )
+}
+
+export function hasGeneExpressionElementStyles(
+  styleIndex: GeneExpressionElementStyleIndex,
+): boolean {
+  return (
+    styleIndex.expressionByElementId.size > 0 ||
+    (styleIndex.expressionByBinKey?.size ?? 0) > 0
+  )
 }
 
 export function styleGridCellsByGeneExpression(

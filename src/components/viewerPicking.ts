@@ -83,7 +83,7 @@ export function cellForDeckCoordinate(
   coordinate: readonly number[] | undefined,
   boundaries: readonly CellBoundaryDatum[],
   cells: readonly OverviewCellDatum[],
-  cellById: ReadonlyMap<string, OverviewCellDatum>,
+  cellById: { get(id: string): OverviewCellDatum | undefined },
 ): OverviewCellDatum | null {
   const x = coordinate?.[0]
   const y = coordinate?.[1]

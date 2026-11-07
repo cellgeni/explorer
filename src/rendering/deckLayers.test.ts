@@ -29,6 +29,7 @@ import {
   transcriptPointsToLayerData,
 } from './deckLayers'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
+import { GridBinLayer } from './gridBinLayer'
 import type { GridCellBatch, SpatialGrid } from '../datasets/spatialDataset'
 
 const fixtureCells: readonly OverviewCellDatum[] = [
@@ -1254,34 +1255,38 @@ describe('deck layer factory', () => {
       cellBoundaryOpacity: 0.4,
     })
     const gridLayer = layers.find(
-      (layer) => layer instanceof PolygonLayer && layer.id === 'spatial-grid-cells',
+      (layer) => layer instanceof GridBinLayer && layer.id === 'spatial-grid-cells',
     )
 
-    expect(gridLayer).toBeInstanceOf(PolygonLayer)
+    expect(gridLayer).toBeInstanceOf(GridBinLayer)
 
-    if (!(gridLayer instanceof PolygonLayer)) {
-      throw new Error('Expected grid cells to render as PolygonLayer.')
+    if (!(gridLayer instanceof GridBinLayer)) {
+      throw new Error('Expected grid cells to render as GridBinLayer.')
     }
 
     expect(gridLayer.props.pickable).toBe(true)
     expect(gridLayer.props.data).toEqual(gridCells)
 
-    const getPolygon = gridLayer.props.getPolygon as (
-      cell: (typeof gridCells)[number],
-    ) => readonly (readonly number[])[]
-    const getFillColor = gridLayer.props.getFillColor as (
+    const getCenter = gridLayer.props.getCenter as unknown as (
       cell: (typeof gridCells)[number],
     ) => readonly number[]
-    const getLineColor = gridLayer.props.getLineColor as (
+    const getColumnVector = gridLayer.props.getColumnVector as unknown as (
+      cell: (typeof gridCells)[number],
+    ) => readonly number[]
+    const getRowVector = gridLayer.props.getRowVector as unknown as (
+      cell: (typeof gridCells)[number],
+    ) => readonly number[]
+    const getFillColor = gridLayer.props.getFillColor as unknown as (
+      cell: (typeof gridCells)[number],
+    ) => readonly number[]
+    const getLineColor = gridLayer.props.getLineColor as unknown as (
       cell: (typeof gridCells)[number],
     ) => readonly number[]
 
-    expect(getPolygon(gridCells[0]!)).toEqual([
-      [4, -15, 0],
-      [16, -15, 0],
-      [16, -25, 0],
-      [4, -25, 0],
-    ])
+    // The cell polygon is (4, -15), (16, -15), (16, -25), (4, -25).
+    expect(getCenter(gridCells[0]!)).toEqual([10, -20, 0])
+    expect(getColumnVector(gridCells[0]!)).toEqual([12, 0])
+    expect(getRowVector(gridCells[0]!)).toEqual([0, -10])
     expect(getFillColor(gridCells[0]!)).toEqual([34, 120, 108, 7])
     expect(getLineColor(gridCells[0]!)).toEqual([22, 90, 82, 60])
   })
@@ -1321,14 +1326,14 @@ describe('deck layer factory', () => {
       cellFillOpacity: 0.5,
     })
     const gridLayer = layers.find(
-      (layer) => layer instanceof PolygonLayer && layer.id === 'spatial-grid-cells',
+      (layer) => layer instanceof GridBinLayer && layer.id === 'spatial-grid-cells',
     )
 
-    if (!(gridLayer instanceof PolygonLayer)) {
-      throw new Error('Expected grid cells to render as PolygonLayer.')
+    if (!(gridLayer instanceof GridBinLayer)) {
+      throw new Error('Expected grid cells to render as GridBinLayer.')
     }
 
-    const getFillColor = gridLayer.props.getFillColor as (
+    const getFillColor = gridLayer.props.getFillColor as unknown as (
       cell: (typeof expressionStyledGridCells)[number],
     ) => readonly number[]
 
@@ -1388,14 +1393,14 @@ describe('deck layer factory', () => {
       cellFillOpacity: 0.1,
     })
     const gridLayer = layers.find(
-      (layer) => layer instanceof PolygonLayer && layer.id === 'spatial-grid-cells',
+      (layer) => layer instanceof GridBinLayer && layer.id === 'spatial-grid-cells',
     )
 
-    if (!(gridLayer instanceof PolygonLayer)) {
-      throw new Error('Expected grid cells to render as PolygonLayer.')
+    if (!(gridLayer instanceof GridBinLayer)) {
+      throw new Error('Expected grid cells to render as GridBinLayer.')
     }
 
-    const getFillColor = gridLayer.props.getFillColor as (
+    const getFillColor = gridLayer.props.getFillColor as unknown as (
       cell: (typeof gridCells)[number],
     ) => readonly number[]
 

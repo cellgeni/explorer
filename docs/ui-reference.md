@@ -133,10 +133,13 @@ mode, …). Hidden for Image.
 
 `Expression detail` (`src/data/geneExpressionLod.ts`):
 
-- **Auto LOD**: whole-slide 15,000-cell sample when zoomed far out or more than
-  100,000 cells are visible; exact viewport when ≤ 50,000 are visible;
-  otherwise a 15,000-cell sample of the padded viewport.
-- **Exact region**: exact viewport when ≤ 50,000 cells are visible.
+- **Auto LOD**: every cell on the slide for datasets of up to 500,000 cells.
+  Larger datasets: a whole-slide sample when zoomed far out or more than
+  100,000 cells are visible, the exact viewport when ≤ 50,000 are visible,
+  otherwise a sample of the padded viewport. Samples keep every cell expressing
+  the selected genes and thin only the cells without.
+- **Exact region**: exact viewport when ≤ 50,000 cells are visible, sampled the
+  same way above that.
 - **All cells**: every cell on the slide.
 
 For Visium HD, gene overlays colour bins (see

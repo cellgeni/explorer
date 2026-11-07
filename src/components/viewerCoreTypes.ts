@@ -61,6 +61,8 @@ export interface ViewerCoreProps {
   readonly measurementUnit?: ViewerCoordinateUnit
   readonly measurementResetKey?: number
   readonly micrometersPerPixel?: number
+  // Label for data distances; "units" when the dataset's scale is unknown.
+  readonly physicalUnitLabel?: string
   readonly status?: ViewerLoadStatus
   readonly imageStatus?: ViewerLoadStatus
   readonly boundaryStatus?: ViewerLoadStatus

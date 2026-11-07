@@ -77,7 +77,7 @@ Enter a source in the `Dataset or image URL` field:
 - H5AD: direct `.h5ad` file URL with `obs`, `var`, `/X`, and a supported 2D
   `obsm` coordinate matrix.
 - SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
-  table annotating a shapes element, and optionally an image element.
+  table annotating a shapes or labels element, and optionally image elements.
 - Image-only: direct OME-TIFF, TIFF, OME-Zarr, or validated NDPI URL.
 
 Because data is read directly by the browser, hosted datasets must support CORS

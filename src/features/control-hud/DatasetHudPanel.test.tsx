@@ -31,6 +31,8 @@ describe('DatasetHudPanel', () => {
         diagnosticsState={{ status: 'idle' }}
         cellFeatureMatrixCapabilityState={{ status: 'idle' }}
         visiumHdControlState={{ status: 'idle' }}
+        spatialDataControlState={{ status: 'idle' }}
+        onSpatialDataSelectionChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[]}
         debugLog={[{ id: 1, timestamp: 1_700_000_000_000, message: 'Loaded' }]}
@@ -103,6 +105,8 @@ describe('DatasetHudPanel', () => {
             },
           ],
         }}
+        spatialDataControlState={{ status: 'idle' }}
+        onSpatialDataSelectionChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[]}
         debugLog={[]}
@@ -161,6 +165,8 @@ describe('DatasetHudPanel', () => {
             { size: 2, available: true, disabled: false },
           ],
         }}
+        spatialDataControlState={{ status: 'idle' }}
+        onSpatialDataSelectionChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[]}
         debugLog={[]}
@@ -183,6 +189,83 @@ describe('DatasetHudPanel', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('changes the SpatialData image and unit scale', () => {
+    const onSpatialDataSelectionChange = vi.fn()
+
+    render(
+      <DatasetHudPanel
+        active
+        datasetInputId="dataset-url"
+        morphologyInputId="morphology"
+        boundaryLimitInputId="boundary-limit"
+        visiumHdBinSizeInputId="visium-bin-size"
+        datasetUrl="https://example.test/sample.zarr"
+        shouldLoadMorphology
+        morphologyLabel="Morphology image"
+        boundaryCellLimit={50000}
+        maxBoundaryCellLimit={100000}
+        boundaryControlsDisabled={false}
+        isLoading={false}
+        diagnosticsState={{ status: 'idle' }}
+        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
+        visiumHdControlState={{ status: 'idle' }}
+        spatialDataControlState={{
+          status: 'ready',
+          coordinateSystem: 'global',
+          coordinateSystems: ['global', 'aligned'],
+          image: 'he',
+          images: ['he', 'morphology'],
+          units: {
+            micrometersPerUnit: 0.2125,
+            source: 'estimated',
+            detail: 'cell_area vs seg label pixels',
+          },
+          selection: {},
+        }}
+        onSpatialDataSelectionChange={onSpatialDataSelectionChange}
+        activeErrors={[]}
+        fallbackNotices={[]}
+        debugLog={[]}
+        onSubmit={vi.fn()}
+        onDatasetUrlChange={vi.fn()}
+        onShouldLoadMorphologyChange={vi.fn()}
+        onBoundaryCellLimitChange={vi.fn()}
+        onVisiumHdBinSizeChange={vi.fn()}
+        onRunDatasetDiagnostics={vi.fn()}
+        onDownloadDiagnostics={vi.fn()}
+        onClearDebugLog={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByText(
+        'Estimated from cell_area vs seg label pixels. Set the scale if you know it.',
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Image'), { target: { value: 'morphology' } })
+    expect(onSpatialDataSelectionChange).toHaveBeenLastCalledWith({
+      coordinateSystem: 'global',
+      image: 'morphology',
+    })
+
+    const units = screen.getByLabelText('Micrometers per coordinate-system unit')
+    expect(units).toHaveValue(0.2125)
+    fireEvent.change(units, { target: { value: '0.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    expect(onSpatialDataSelectionChange).toHaveBeenLastCalledWith({
+      coordinateSystem: 'global',
+      micrometersPerUnit: 0.5,
+    })
+
+    fireEvent.change(screen.getByLabelText('Coordinate system'), {
+      target: { value: 'aligned' },
+    })
+    expect(onSpatialDataSelectionChange).toHaveBeenLastCalledWith({
+      coordinateSystem: 'aligned',
+    })
+  })
+
   it('renders fallback notices in the dataset HUD', () => {
     render(
       <DatasetHudPanel
@@ -201,6 +284,8 @@ describe('DatasetHudPanel', () => {
         diagnosticsState={{ status: 'idle' }}
         cellFeatureMatrixCapabilityState={{ status: 'idle' }}
         visiumHdControlState={{ status: 'idle' }}
+        spatialDataControlState={{ status: 'idle' }}
+        onSpatialDataSelectionChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[
           {

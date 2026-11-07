@@ -25,7 +25,6 @@ import { intToCellId } from './data/cellid'
 import { imagePixels, micrometers } from './data/coords'
 import { NO_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import { warmDatasetForRoi } from './data/datasetWarmup'
-import { GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT } from './data/geneExpressionLod'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
 import type { SpatialElement } from './datasets/spatialDataset'
 import type { TiffPyramidLoader } from './tiff/loader'
@@ -64,10 +63,12 @@ vi.mock('@deck.gl/react', () => ({
           readonly props?: {
             readonly id?: string
             readonly data?: readonly unknown[]
+            // Packed layers keep their objects here for picking.
+            readonly cells?: readonly unknown[]
           }
         }
         const id = candidate.id ?? candidate.props?.id ?? 'unknown-layer'
-        const data = candidate.props?.data ?? []
+        const data = candidate.props?.cells ?? candidate.props?.data ?? []
         const clickObject = Array.isArray(data) ? data[0] : undefined
 
         return (
@@ -2541,7 +2542,7 @@ describe('App', () => {
     }
   })
 
-  it('loads a stable whole-slide expression sample at overview zoom', async () => {
+  it('loads expression for every slide cell in auto mode', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
     )
@@ -2592,14 +2593,14 @@ describe('App', () => {
       expect(lastCall?.[2]).toEqual(['Actb'])
       expect(lastCall?.[3]).toEqual(
         expect.objectContaining({
-          limit: GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
-          sampleStride: 4,
+          limit: 50_001,
+          sampleStride: 1,
           signal: expect.any(AbortSignal) as AbortSignal,
         }),
       )
       expect(
         await screen.findByText(
-          'Expression overview: 0 positive cells across 50,001 slide cells',
+          'Expression all cells: 0 positive cells across 50,001 slide cells',
         ),
       ).toBeInTheDocument()
     } finally {

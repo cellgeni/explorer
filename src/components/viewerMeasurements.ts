@@ -56,6 +56,7 @@ export function measurementOverlayModel(
   viewport: CssViewportSize,
   unit: ViewerDistanceUnit,
   micrometersPerPixel: number,
+  physicalUnitLabel = 'μm',
 ): MeasurementOverlayModel {
   const start = rawDataPointToScreen(measurement.start, viewState, viewport)
   const end = rawDataPointToScreen(measurement.end, viewState, viewport)
@@ -72,6 +73,7 @@ export function measurementOverlayModel(
       measurementDistanceMicrometers(measurement),
       unit,
       micrometersPerPixel,
+      physicalUnitLabel,
     ),
     labelStyle: {
       left: Math.max(8, Math.min(viewport.width - 8, midpoint.x)),
@@ -94,16 +96,19 @@ export function measurementDistanceMicrometers(measurement: MeasurementLine): nu
   )
 }
 
+// `physicalUnitLabel` names the data unit: µm, or "units" for datasets whose
+// coordinate system has no known physical size.
 export function formatMeasurementDistance(
   distanceMicrometers: number,
   unit: ViewerDistanceUnit,
   micrometersPerPixel: number,
+  physicalUnitLabel = 'μm',
 ): string {
   if (unit === 'px') {
     return `${formatScaleDistance(distanceMicrometers / safeMicrometersPerPixel(micrometersPerPixel))} px`
   }
 
-  return `${formatScaleDistance(distanceMicrometers)} μm`
+  return `${formatScaleDistance(distanceMicrometers)} ${physicalUnitLabel}`
 }
 
 export function scaleBarModel(
@@ -111,6 +116,7 @@ export function scaleBarModel(
   viewport: CssViewportSize,
   unit: ViewerDistanceUnit,
   micrometersPerPixel: number,
+  physicalUnitLabel = 'μm',
 ): ScaleBarModel | null {
   const scale = scaleFromZoom(viewState.zoom)
   const targetWidthPixels = Math.max(
@@ -132,7 +138,7 @@ export function scaleBarModel(
   const widthPixels = unitDistance * unitMicrometers * scale
 
   return {
-    label: `${formatScaleDistance(unitDistance)} ${unit === 'px' ? 'px' : 'μm'}`,
+    label: `${formatScaleDistance(unitDistance)} ${unit === 'px' ? 'px' : physicalUnitLabel}`,
     widthPixels,
   }
 }

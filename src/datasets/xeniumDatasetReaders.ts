@@ -1,7 +1,12 @@
 import { asCellId } from '../data/cellid'
-import type { BBox, DataPoint } from '../data/coords'
+import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type { CellTranscriptZDistribution } from '../data/cellTranscripts'
-import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
+import type {
+  ArrowTableLike,
+  CellFeatureMatrixReadOptions,
+  GexResult,
+  SelectedGeneMatrixRows,
+} from '../data/gex'
 import { selectionToSql, type Selection, type SqlParameter } from '../data/gexSelection'
 import {
   normalizeRoiSelection,
@@ -28,7 +33,6 @@ import {
   normalizeGeneList,
   normalizeMinQv,
   normalizePositiveInteger,
-  normalizeSampleStride,
   parseBoundaryRow,
   parseCellTranscriptZDistributionRows,
   parseExtentRow,
@@ -54,7 +58,14 @@ export type XeniumGeneExpressionMatrixReader = (
   options?: CellFeatureMatrixReadOptions,
 ) => Promise<GexResult>
 
+export type XeniumSelectedGeneRowsReader = (
+  url: string,
+  genes: readonly string[],
+  options?: CellFeatureMatrixReadOptions,
+) => Promise<SelectedGeneMatrixRows | null>
+
 const BOUNDARY_VERTEX_FETCH_MARGIN_MICROMETERS = 150
+const ROW_ALIGNMENT_SAMPLE_COUNT = 5
 const BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS = 75
 const DEFAULT_TRANSCRIPT_QUERY_LIMIT = 100_000
 const DEFAULT_TRANSCRIPT_Z_DISTRIBUTION_BIN_COUNT = 16
@@ -415,6 +426,7 @@ export async function readXeniumGeneExpression(options: {
   readonly bbox: BBox
   readonly genes: readonly string[]
   readonly matrixReader: XeniumGeneExpressionMatrixReader
+  readonly selectedGeneRowsReader?: XeniumSelectedGeneRowsReader
   readonly queryOptions?: GeneExpressionQueryOptions
 }): Promise<GeneExpressionBatch> {
   const { conn, cellsUrl, matrixUrl, bbox, genes, matrixReader } = options
@@ -430,23 +442,38 @@ export async function readXeniumGeneExpression(options: {
     }
   }
 
+  // Only cells with expression are returned, so `sampleStride` has nothing to
+  // thin: every cell in the box is considered so that no expressing cell is
+  // lost.
   const limit = queryOptions.limit ?? 5_000
-  const sampleStride = normalizeSampleStride(queryOptions.sampleStride)
   throwIfAborted(queryOptions.signal)
+
+  if (options.selectedGeneRowsReader !== undefined) {
+    const batch = await readXeniumGeneExpressionByMatrixRows({
+      conn,
+      cellsUrl,
+      matrixUrl,
+      bbox,
+      genes: selectedGenes,
+      limit,
+      reader: options.selectedGeneRowsReader,
+      queryOptions,
+      totalStartedAt,
+    })
+
+    if (batch !== null) {
+      return batch
+    }
+  }
+
   const viewportCellsStartedAt = Date.now()
-  const viewportCells = await readXeniumCellsInBbox(
-    conn,
-    cellsUrl,
-    bbox,
-    limit,
-    sampleStride,
-  )
+  const viewportCells = await readXeniumCellsInBbox(conn, cellsUrl, bbox, limit)
   const viewportCellsMs = elapsedMs(viewportCellsStartedAt)
   queryOptions.onStageTiming?.({
     stage: 'viewport-cells',
     label: 'Viewport cell query',
     durationMs: viewportCellsMs,
-    detail: `${viewportCells.length.toLocaleString()} cells, limit ${limit.toLocaleString()}, stride ${sampleStride.toLocaleString()}`,
+    detail: `${viewportCells.length.toLocaleString()} cells, limit ${limit.toLocaleString()}`,
   })
   throwIfAborted(queryOptions.signal)
 
@@ -531,6 +558,261 @@ export async function readXeniumGeneExpression(options: {
   }
 }
 
+// Reads the selected genes' expressing matrix rows first and joins them to the
+// cells in the box by row, so the cost follows the expressing cells rather
+// than every cell id. Returns null when the matrix cannot list rows this way
+// or cells.parquet rows do not line up with matrix rows.
+async function readXeniumGeneExpressionByMatrixRows(options: {
+  readonly conn: XeniumDuckDbConnection
+  readonly cellsUrl: string
+  readonly matrixUrl: string
+  readonly bbox: BBox
+  readonly genes: readonly string[]
+  readonly limit: number
+  readonly reader: XeniumSelectedGeneRowsReader
+  readonly queryOptions: GeneExpressionQueryOptions
+  readonly totalStartedAt: number
+}): Promise<GeneExpressionBatch | null> {
+  const { conn, cellsUrl, matrixUrl, genes, queryOptions } = options
+  const matrixReadStartedAt = Date.now()
+  const matrixRows = await options.reader(matrixUrl, genes, {
+    ...(queryOptions.signal === undefined ? {} : { signal: queryOptions.signal }),
+    ...(queryOptions.onStageTiming === undefined
+      ? {}
+      : { onStageTiming: queryOptions.onStageTiming }),
+  })
+  const matrixReadMs = elapsedMs(matrixReadStartedAt)
+
+  if (matrixRows === null) {
+    return null
+  }
+
+  throwIfAborted(queryOptions.signal)
+  const viewportCellsStartedAt = Date.now()
+  const cells = await readXeniumCellColumnsInBbox(
+    conn,
+    cellsUrl,
+    options.bbox,
+    options.limit,
+  )
+  const viewportCellsMs = elapsedMs(viewportCellsStartedAt)
+  queryOptions.onStageTiming?.({
+    stage: 'viewport-cells',
+    label: 'Viewport cell query',
+    durationMs: viewportCellsMs,
+    detail: `${cells.rows.length.toLocaleString()} cells, limit ${options.limit.toLocaleString()}`,
+  })
+  throwIfAborted(queryOptions.signal)
+
+  if (!(await cellRowsMatchMatrix(conn, cellsUrl, matrixUrl, matrixRows, cells.rows))) {
+    return null
+  }
+
+  const scoreCellsStartedAt = Date.now()
+  const { nCells } = matrixRows
+  const inBox = new Uint8Array(nCells)
+
+  for (let index = 0; index < cells.rows.length; index += 1) {
+    const row = cells.rows[index] ?? -1
+
+    if (row >= 0 && row < nCells) {
+      inBox[row] = 1
+    }
+  }
+
+  const countsByRow = new Float64Array(nCells)
+  const geneCounts: { gene: string; count: number }[] = []
+
+  for (const feature of matrixRows.features) {
+    let total = 0
+
+    for (let index = 0; index < feature.rows.length; index += 1) {
+      const row = feature.rows[index] ?? nCells
+      const count = feature.counts[index] ?? 0
+
+      if (row < nCells && inBox[row] === 1) {
+        countsByRow[row] = (countsByRow[row] ?? 0) + count
+        total += count
+      }
+    }
+
+    if (total > 0) {
+      geneCounts.push({ gene: feature.gene, count: total })
+    }
+  }
+
+  const elements: GeneExpressionElement[] = []
+  let maxCount = 0
+
+  for (let index = 0; index < cells.rows.length; index += 1) {
+    const row = cells.rows[index] ?? -1
+    const count = row >= 0 && row < nCells ? (countsByRow[row] ?? 0) : 0
+
+    if (count <= 0) {
+      continue
+    }
+
+    const cell: DatasetCell = {
+      id: matrixRows.cellIdForRow(row),
+      position: {
+        x: micrometers(cells.x[index] ?? 0),
+        y: micrometers(cells.y[index] ?? 0),
+      },
+      transcriptCount: cells.transcriptCounts[index] ?? 0,
+      cellArea: cells.cellAreas[index] ?? 0,
+      cellFeatureMatrixRow: row,
+    }
+    elements.push({ ...cell, count })
+    maxCount = Math.max(maxCount, count)
+  }
+
+  const scoreCellsMs = elapsedMs(scoreCellsStartedAt)
+  queryOptions.onStageTiming?.({
+    stage: 'score-cells',
+    label: 'Expression scoring',
+    durationMs: scoreCellsMs,
+    detail: `${elements.length.toLocaleString()} positive cells`,
+  })
+
+  return {
+    elements,
+    genes,
+    geneCounts: geneCounts.sort((left, right) => right.count - left.count),
+    maxCount,
+    timing: {
+      viewportCellsMs,
+      matrixReadMs,
+      scoreCellsMs,
+      totalMs: elapsedMs(options.totalStartedAt),
+    },
+  }
+}
+
+interface XeniumCellColumns {
+  readonly rows: ArrayLike<number>
+  readonly x: ArrayLike<number>
+  readonly y: ArrayLike<number>
+  readonly transcriptCounts: ArrayLike<number>
+  readonly cellAreas: ArrayLike<number>
+}
+
+// Numeric columns only, read as Arrow vectors where available, so a
+// whole-slide query does not build an object per cell.
+async function readXeniumCellColumnsInBbox(
+  conn: XeniumDuckDbConnection,
+  cellsUrl: string,
+  bbox: BBox,
+  limit: number,
+): Promise<XeniumCellColumns> {
+  const stmt = await conn.prepare(`
+SELECT CAST(file_row_number AS INTEGER) AS cell_feature_matrix_row,
+       CAST(x_centroid AS DOUBLE) AS x_centroid,
+       CAST(y_centroid AS DOUBLE) AS y_centroid,
+       CAST(transcript_counts AS DOUBLE) AS transcript_counts,
+       CAST(cell_area AS DOUBLE) AS cell_area
+FROM read_parquet( ? )
+WHERE x_centroid BETWEEN ? AND ?
+  AND y_centroid BETWEEN ? AND ?
+ORDER BY file_row_number
+LIMIT ?
+`)
+  const table = await stmt.query(
+    cellsUrl,
+    bbox.minX,
+    bbox.maxX,
+    bbox.minY,
+    bbox.maxY,
+    limit,
+  )
+
+  return {
+    rows: numericColumn(table, 'cell_feature_matrix_row'),
+    x: numericColumn(table, 'x_centroid'),
+    y: numericColumn(table, 'y_centroid'),
+    transcriptCounts: numericColumn(table, 'transcript_counts'),
+    cellAreas: numericColumn(table, 'cell_area'),
+  }
+}
+
+function numericColumn(table: ArrowTableLike, name: string): ArrayLike<number> {
+  const column = table.getChild?.(name)?.toArray()
+
+  if (column !== undefined && !(column instanceof BigInt64Array)) {
+    return column as ArrayLike<number>
+  }
+
+  return Float64Array.from(table.toArray(), (row) => Number(row[name] ?? 0))
+}
+
+const cellRowAlignment = new Map<string, Promise<boolean>>()
+
+// Expression rows are joined to cells.parquet by row number, which holds when
+// both list cells in the same order. A few rows are checked by cell id once
+// per dataset.
+function cellRowsMatchMatrix(
+  conn: XeniumDuckDbConnection,
+  cellsUrl: string,
+  matrixUrl: string,
+  matrixRows: SelectedGeneMatrixRows,
+  candidateRows: ArrayLike<number>,
+): Promise<boolean> {
+  const key = `${cellsUrl}\n${matrixUrl}`
+  const cached = cellRowAlignment.get(key)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const sampleRows = alignmentSampleRows(candidateRows, matrixRows.nCells)
+
+  if (sampleRows.length === 0) {
+    return Promise.resolve(true)
+  }
+
+  const check = (async () => {
+    const stmt = await conn.prepare(`
+SELECT CAST(file_row_number AS INTEGER) AS cell_feature_matrix_row, cell_id
+FROM read_parquet( ? )
+WHERE file_row_number IN (${sampleRows.map(() => '?').join(', ')})
+`)
+    const rows = (await stmt.query(cellsUrl, ...sampleRows)).toArray()
+
+    return (
+      rows.length === sampleRows.length &&
+      rows.every(
+        (row) =>
+          String(row.cell_id) ===
+          matrixRows.cellIdForRow(Number(row.cell_feature_matrix_row)),
+      )
+    )
+  })()
+  cellRowAlignment.set(key, check)
+  check.catch(() => {
+    if (cellRowAlignment.get(key) === check) {
+      cellRowAlignment.delete(key)
+    }
+  })
+
+  return check
+}
+
+function alignmentSampleRows(rows: ArrayLike<number>, nCells: number): number[] {
+  const sample = new Set<number>()
+
+  for (let index = 0; index < ROW_ALIGNMENT_SAMPLE_COUNT; index += 1) {
+    const position = Math.round(
+      (index * (rows.length - 1)) / Math.max(1, ROW_ALIGNMENT_SAMPLE_COUNT - 1),
+    )
+    const row = rows[position]
+
+    if (row !== undefined && row >= 0 && row < nCells) {
+      sample.add(row)
+    }
+  }
+
+  return [...sample]
+}
+
 export async function readXeniumExperimentMetadata(
   fetcher: typeof fetch,
   experimentUrl: string,
@@ -610,13 +892,7 @@ async function readXeniumCellsInBbox(
   cellsUrl: string,
   bbox: BBox,
   limit: number,
-  sampleStride = 1,
 ): Promise<readonly DatasetCell[]> {
-  const samplePredicate =
-    sampleStride > 1
-      ? `
-  AND hash(cell_id) % ? = 0`
-      : ''
   const stmt = await conn.prepare(`
 SELECT cell_id,
        file_row_number AS cell_feature_matrix_row,
@@ -627,22 +903,17 @@ SELECT cell_id,
 FROM read_parquet( ? )
 WHERE x_centroid BETWEEN ? AND ?
   AND y_centroid BETWEEN ? AND ?
-${samplePredicate}
 ORDER BY file_row_number
 LIMIT ?
 `)
-  const result =
-    sampleStride > 1
-      ? await stmt.query(
-          cellsUrl,
-          bbox.minX,
-          bbox.maxX,
-          bbox.minY,
-          bbox.maxY,
-          sampleStride,
-          limit,
-        )
-      : await stmt.query(cellsUrl, bbox.minX, bbox.maxX, bbox.minY, bbox.maxY, limit)
+  const result = await stmt.query(
+    cellsUrl,
+    bbox.minX,
+    bbox.maxX,
+    bbox.minY,
+    bbox.maxY,
+    limit,
+  )
 
   return result.toArray().map(parseViewportCellRow)
 }

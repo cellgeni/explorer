@@ -10,6 +10,9 @@ export const GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT = 15_000
 export const GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO = 0.2
 export const GENE_EXPRESSION_OVERVIEW_ZOOM_MAX = -1.25
 export const GENE_EXPRESSION_OVERVIEW_VISIBLE_CELL_MIN = 100_000
+// Auto loads every cell up to this many. Larger datasets fall back to
+// viewport and sampled requests.
+export const GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT = 500_000
 export const VISIUM_HD_GENE_EXPRESSION_8UM_LOD_ZOOM_MAX =
   GENE_EXPRESSION_OVERVIEW_ZOOM_MAX
 export const VISIUM_HD_GENE_EXPRESSION_2UM_EXACT_ZOOM_MIN =
@@ -57,20 +60,7 @@ export function planGeneExpressionLod(
   },
 ): GeneExpressionLodPlan {
   if (options.detailMode === 'all-cells') {
-    const sourceCellCount =
-      options.slideBbox === null ? detail.visibleCellCount : options.totalCellCount
-
-    return {
-      kind: 'request',
-      mode: 'all-cells',
-      bbox: options.slideBbox ?? detail.bbox,
-      cellLimit: Math.max(1, sourceCellCount),
-      sampleStride: 1,
-      sourceCellCount,
-      ...(options.visiumHdBinSizeMicrometers === undefined
-        ? {}
-        : { visiumHdBinSizeMicrometers: options.visiumHdBinSizeMicrometers }),
-    }
+    return allCellsPlan(detail, options)
   }
 
   if (
@@ -104,6 +94,16 @@ export function planGeneExpressionLod(
   }
 
   if (
+    options.detailMode === 'auto' &&
+    options.slideBbox !== null &&
+    options.totalCellCount <= GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT
+  ) {
+    return allCellsPlan(detail, options)
+  }
+
+  // Sampled requests read every cell in the box but keep only every
+  // `sampleStride`-th cell without expression, so no expressing cell is lost.
+  if (
     options.slideBbox !== null &&
     options.totalCellCount > GENE_EXPRESSION_SAMPLE_CELL_LIMIT &&
     (detail.viewState.zoom <= GENE_EXPRESSION_OVERVIEW_ZOOM_MAX ||
@@ -113,7 +113,7 @@ export function planGeneExpressionLod(
       kind: 'request',
       mode: 'overview-sampled',
       bbox: options.slideBbox,
-      cellLimit: GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT,
+      cellLimit: Math.max(1, options.totalCellCount),
       sampleStride: Math.max(
         1,
         Math.ceil(options.totalCellCount / GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT),
@@ -137,12 +137,36 @@ export function planGeneExpressionLod(
     kind: 'request',
     mode: 'sampled',
     bbox: padBbox(detail.bbox, GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO),
-    cellLimit: GENE_EXPRESSION_SAMPLE_CELL_LIMIT,
+    cellLimit: Math.max(1, options.totalCellCount),
     sampleStride: Math.max(
       1,
       Math.ceil(detail.visibleCellCount / GENE_EXPRESSION_SAMPLE_CELL_LIMIT),
     ),
     sourceCellCount: detail.visibleCellCount,
+  }
+}
+
+function allCellsPlan(
+  detail: GeneExpressionViewportDetail,
+  options: {
+    readonly slideBbox: BBox | null
+    readonly totalCellCount: number
+    readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
+  },
+): GeneExpressionLodPlan {
+  const sourceCellCount =
+    options.slideBbox === null ? detail.visibleCellCount : options.totalCellCount
+
+  return {
+    kind: 'request',
+    mode: 'all-cells',
+    bbox: options.slideBbox ?? detail.bbox,
+    cellLimit: Math.max(1, sourceCellCount),
+    sampleStride: 1,
+    sourceCellCount,
+    ...(options.visiumHdBinSizeMicrometers === undefined
+      ? {}
+      : { visiumHdBinSizeMicrometers: options.visiumHdBinSizeMicrometers }),
   }
 }
 

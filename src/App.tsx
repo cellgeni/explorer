@@ -2,6 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ViewerCore, type ViewerTranscriptHoverDetail } from './components/ViewerCore'
 import { AppControlHud } from './features/app-shell/AppControlHud'
 import { AppDatasetHudPanel } from './features/app-shell/AppDatasetHudPanel'
+import { setSpatialDataSelection } from './datasets/datasetFactory'
+import type { SpatialDataSelection } from './datasets/spatialDataDataset'
+import {
+  spatialDataControlLoading,
+  spatialDataSelectionToShareable,
+} from './features/dataset/spatialDataModel'
 import { AppGeneHudPanel } from './features/app-shell/AppGeneHudPanel'
 import { AppLayerHudPanel } from './features/app-shell/AppLayerHudPanel'
 import { AppTranscriptHudPanel } from './features/app-shell/AppTranscriptHudPanel'
@@ -451,6 +457,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptPointColorMode,
       transcriptPointSize,
     },
+    spatialData: { setSpatialDataControlState, spatialDataControlState },
     visiumHd: {
       gridCellAssignmentState,
       overviewCells,
@@ -2377,10 +2384,32 @@ export function App({ dependencies }: AppProps = {}) {
       setTranscriptLayerState,
       setTranscriptPointColorMode,
       setVisiumHdControlState,
+      setSpatialDataControlState,
       setViewportCellCount,
     },
   })
 
+  const handleSpatialDataSelectionChange = useCallback(
+    (selection: SpatialDataSelection) => {
+      setSpatialDataSelection(datasetUrl, selection)
+      setSpatialDataControlState((state) => spatialDataControlLoading(state, selection))
+      appendDebugEvent(
+        `SpatialData view change: ${[
+          selection.coordinateSystem === undefined
+            ? null
+            : `coordinate system ${selection.coordinateSystem}`,
+          selection.image === undefined ? null : `image ${selection.image}`,
+          selection.micrometersPerUnit === undefined
+            ? 'estimated units'
+            : `${selection.micrometersPerUnit.toString()} µm per unit`,
+        ]
+          .filter((part) => part !== null)
+          .join(', ')}`,
+      )
+      void startDatasetLoadRef.current?.(datasetUrl, shouldLoadMorphology)
+    },
+    [appendDebugEvent, datasetUrl, setSpatialDataControlState, shouldLoadMorphology],
+  )
   const { handleVisiumHdBinSizeChange } = useVisiumHdBinWorkflow({
     callbacks: {
       appendDebugEvent,
@@ -2441,6 +2470,7 @@ export function App({ dependencies }: AppProps = {}) {
       customImageOpacities,
       customImageUrls,
       datasetUrl,
+      spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
     },
     genes: {
       geneExpressionColorScale,
@@ -2531,6 +2561,8 @@ export function App({ dependencies }: AppProps = {}) {
           setShouldLoadMorphology={setShouldLoadMorphology}
           shouldLoadMorphology={shouldLoadMorphology}
           visiumHdControlState={visiumHdControlState}
+          spatialDataControlState={spatialDataControlState}
+          handleSpatialDataSelectionChange={handleSpatialDataSelectionChange}
         />
 
         <AppLayerHudPanel
@@ -2979,6 +3011,10 @@ export function App({ dependencies }: AppProps = {}) {
             : {
                 micrometersPerPixel: viewerMicrometersPerPixel,
               })}
+          {...(spatialDataControlState.status !== 'idle' &&
+          spatialDataControlState.units.source === 'unknown'
+            ? { physicalUnitLabel: 'units' }
+            : {})}
           {...(boundaryState.status === 'error'
             ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
             : {})}

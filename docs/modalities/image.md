@@ -112,6 +112,9 @@ JPEG-XR is not supported.
   channel window and colour (`normaliseToRgba`), and returns an `ImageBitmap`.
 - `TileCache` (`src/tiff/tileCache.ts`) is an LRU of decoded bitmaps keyed by
   `level:col:row`.
+- `TileRequestScheduler` (`src/tiff/tileRequestScheduler.ts`) loads the tiles
+  in view, nearest first. When the view moves, tiles still in view keep
+  loading and only those that left it are cancelled.
 
 ## OME-Zarr
 

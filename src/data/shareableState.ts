@@ -46,6 +46,9 @@ export interface ShareableState {
   readonly magicLensActive?: boolean
   readonly magicLensRadiusMicrometers?: number
   readonly magicLensMinQv?: number
+  readonly spatialDataCoordinateSystem?: string
+  readonly spatialDataImage?: string
+  readonly spatialDataMicrometersPerUnit?: number
 }
 
 type MutableShareableState = {
@@ -98,6 +101,9 @@ export function parseShareableState(hash: string): ShareableState {
   const magicLensActive = parseBoolean(params.get('lens'))
   const magicLensRadiusMicrometers = parsePositiveInteger(params.get('lensRadius'))
   const magicLensMinQv = parseNonNegativeInteger(params.get('lensQv'))
+  const spatialDataCoordinateSystem = readString(params, 'sdCs')
+  const spatialDataImage = readString(params, 'sdImage')
+  const spatialDataMicrometersPerUnit = parsePositiveNumber(params.get('sdUm'))
 
   if (datasetUrl !== undefined) {
     state.datasetUrl = datasetUrl
@@ -247,6 +253,18 @@ export function parseShareableState(hash: string): ShareableState {
     state.magicLensMinQv = magicLensMinQv
   }
 
+  if (spatialDataCoordinateSystem !== undefined) {
+    state.spatialDataCoordinateSystem = spatialDataCoordinateSystem
+  }
+
+  if (spatialDataImage !== undefined) {
+    state.spatialDataImage = spatialDataImage
+  }
+
+  if (spatialDataMicrometersPerUnit !== undefined) {
+    state.spatialDataMicrometersPerUnit = spatialDataMicrometersPerUnit
+  }
+
   return state
 }
 
@@ -394,6 +412,20 @@ export function formatShareableState(state: ShareableState): string {
 
   if (state.magicLensMinQv !== undefined && Number.isFinite(state.magicLensMinQv)) {
     params.set('lensQv', Math.max(0, Math.floor(state.magicLensMinQv)).toString())
+  }
+
+  setOptionalString(params, 'sdCs', state.spatialDataCoordinateSystem)
+  setOptionalString(params, 'sdImage', state.spatialDataImage)
+
+  if (
+    state.spatialDataMicrometersPerUnit !== undefined &&
+    Number.isFinite(state.spatialDataMicrometersPerUnit) &&
+    state.spatialDataMicrometersPerUnit > 0
+  ) {
+    params.set(
+      'sdUm',
+      Number(state.spatialDataMicrometersPerUnit.toPrecision(6)).toString(),
+    )
   }
 
   const text = params.toString()
@@ -657,6 +689,15 @@ function parseNonNegativeInteger(value: string | null): number | undefined {
 
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined
+}
+
+function parsePositiveNumber(value: string | null): number | undefined {
+  if (value === null) {
+    return undefined
+  }
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
 function parseUnitNumber(value: string | null): number | undefined {

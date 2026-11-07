@@ -36,6 +36,8 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     setShouldLoadMorphology: vi.fn(),
     shouldLoadMorphology: true,
     visiumHdControlState: { status: 'idle' },
+    spatialDataControlState: { status: 'idle' },
+    handleSpatialDataSelectionChange: vi.fn(),
     ...overrides,
   }
 }

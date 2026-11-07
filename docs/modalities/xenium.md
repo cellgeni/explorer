@@ -68,8 +68,11 @@ the platform to `xenium` (cell boundaries on by default), then:
 2. Awaits `loadDatasetOverview` (`src/data/datasetOverview.ts`): range probe on
    `cells.parquet`, then `hyparquet` reads every row. Missing optional columns
    are retried without them; low-level decode errors fall back to DuckDB.
-3. Renders the overview, sampled down to the performance budget's
-   `overviewRenderCellLimit` (75k / 150k / 250k).
+3. Renders the overview. Every cell is uploaded to the GPU once
+   (`createCellPointLayer` with packed arrays, `src/rendering/cellPointStyle.ts`)
+   and the GPU draws a fixed-rank sample of them, sized to the performance
+   budget's `overviewRenderCellLimit` (75k / 150k / 250k) against the cells in
+   view, so panning does not rebuild the layer.
 4. If `Morphology image` is enabled, loads the image in the background.
 
 ## Feature Read Paths
@@ -89,15 +92,23 @@ vertices, then rings with fewer than 3 vertices are dropped.
    the `Expression detail` control and the viewport:
    - `all-cells`: whole slide, every cell.
    - `exact-region`: the viewport, when ≤ 50,000 cells are visible.
-   - Auto: `overview-sampled` (whole slide, 15,000 cells) when zoomed far out
-     or more than 100,000 cells are visible; `exact` when ≤ 50,000 are
-     visible; otherwise `sampled` (padded viewport, 15,000 cells).
+   - Auto: `all-cells` for datasets of up to 500,000 cells. Larger datasets
+     use `overview-sampled` (whole slide) when zoomed far out or more than
+     100,000 cells are visible, `exact` when ≤ 50,000 are visible, otherwise
+     `sampled` (padded viewport). Only cells with expression are returned, so
+     sampled requests read every cell in the box.
 2. `loadDatasetGeneExpression` (`src/data/geneExpression.ts`) range-probes the
-   matrix, selects cells with DuckDB (hash-strided when sampling), and calls
-   `gexFromCellFeatureMatrixZarrSelectedGenes`.
-3. The reader uses the CSC group when it exists and the request has ≤ 2,000
-   cells or > 32 genes; otherwise it reads per-gene feature-major slices.
-   Byte ranges are coalesced and fetched 8 at a time.
+   matrix. For up to 32 genes it first lists the genes' expressing rows from
+   the feature-major arrays (`selectedGeneRowsFromCellFeatureMatrixZarr`), then
+   reads the numeric columns of the cells in the box with DuckDB and joins them
+   by row. A few rows are checked by `cell_id` once per dataset; if
+   `cells.parquet` and the matrix do not list cells in the same order, it falls
+   back to step 3.
+3. Otherwise it selects the cells in the box with DuckDB and calls
+   `gexFromCellFeatureMatrixZarrSelectedGenes`, which uses the CSC group when
+   it exists and the request has ≤ 2,000 cells or > 32 genes, and per-gene
+   feature-major slices otherwise. Byte ranges are coalesced and fetched 8 at a
+   time.
 4. A cell's score is the sum of the selected genes' counts.
 
 `cell_feature_matrix.h5` is never used for the overlay.

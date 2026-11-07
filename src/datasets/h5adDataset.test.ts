@@ -183,6 +183,24 @@ describe('AnnDataH5adDataset', () => {
       ['cell-c', 6],
       ['cell-d', 8],
     ])
+
+    const sampled = await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(20),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+      ['Gad1'],
+      { sampleStride: 2 },
+    )
+
+    // Every expressing cell (b, c) and every second cell without (a, not d).
+    expect(sampled.elements.map((element) => [element.id, element.count])).toEqual([
+      ['cell-a', 0],
+      ['cell-b', 3],
+      ['cell-c', 4],
+    ])
   })
 
   it('uses embedding coordinates and dataframe category sidecars', async () => {
@@ -334,6 +352,60 @@ describe('AnnDataH5adDataset', () => {
       ['cell-d', 7],
     ])
     expect(readBody).not.toHaveBeenCalled()
+  })
+
+  it('reads selected genes of dense reference-backed matrices by column', async () => {
+    const chunks = new RemoteH5adReferenceChunks()
+    const referenceSpec = createTinyH5adReferenceSpec(
+      (value) => chunks.ref(value),
+      'dense',
+    )
+    const fetcher = h5adRemoteReferenceFetcher(
+      350 * 1024 * 1024,
+      referenceSpec,
+      chunks.bytes(),
+      () => {
+        throw new Error('body should not be read')
+      },
+    )
+    const rangeRequests: string[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/reference-dense.h5ad',
+      fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init)
+        const range = request.headers.get('Range')
+
+        if (range !== null) {
+          rangeRequests.push(range)
+        }
+
+        return fetcher(request)
+      }) as typeof fetch,
+    })
+
+    await expect(dataset.matrix(['cell-b'])).resolves.toMatchObject({
+      cells: new Map([['cell-b', { geneNames: ['Actb', 'Gad1'], counts: [2, 3] }]]),
+    })
+    rangeRequests.length = 0
+
+    const expression = await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(20),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+      ['Gapdh'],
+    )
+
+    expect(expression.elements.map((element) => [element.id, element.count])).toEqual([
+      ['cell-a', 5],
+      ['cell-b', 0],
+      ['cell-c', 6],
+      ['cell-d', 8],
+    ])
+    // One read per row chunk, not one per cell.
+    expect(rangeRequests).toHaveLength(2)
   })
 
   it('warns when oversized H5AD files do not have a companion reference', async () => {
@@ -543,10 +615,8 @@ type ChunkRefFactory = (value: ArrayBufferView) => string | [string, number, num
 
 function createTinyH5adReferenceSpec(
   chunkRef: ChunkRefFactory = bytesRef,
-  matrixKind: Extract<MatrixKind, 'csr' | 'csc'> = 'csr',
+  matrixKind: MatrixKind = 'csr',
 ): Record<string, unknown> {
-  const sparse = tinySparseMatrixFixture(matrixKind)
-
   return {
     version: 1,
     refs: {
@@ -574,22 +644,44 @@ function createTinyH5adReferenceSpec(
       'obsm/.zgroup': jsonRef({ zarr_format: 2 }),
       'obsm/X_umap/.zarray': zarrArrayRef([4, 2], [4, 2], '<f4'),
       'obsm/X_umap/0.0': chunkRef(new Float32Array([0, 0, 10, 0, 0, 10, 10, 10])),
-      'X/.zgroup': jsonRef({ zarr_format: 2 }),
-      'X/.zattrs': jsonRef({
-        'encoding-type': matrixKind === 'csc' ? 'csc_matrix' : 'csr_matrix',
-        shape: [4, 3],
-      }),
-      'X/data/.zarray': zarrArrayRef([8], [8], '<f4'),
-      'X/data/0': chunkRef(sparse.data),
-      'X/indices/.zarray': zarrArrayRef([8], [8], '<i4'),
-      'X/indices/0': chunkRef(sparse.indices),
-      'X/indptr/.zarray': zarrArrayRef(
-        [sparse.indptr.length],
-        [sparse.indptr.length],
-        '<i4',
-      ),
-      'X/indptr/0': chunkRef(sparse.indptr),
+      ...(matrixKind === 'dense'
+        ? tinyDenseMatrixRefs(chunkRef)
+        : tinySparseMatrixRefs(chunkRef, matrixKind)),
     },
+  }
+}
+
+// Two row chunks of the 4 x 3 matrix.
+function tinyDenseMatrixRefs(chunkRef: ChunkRefFactory): Record<string, unknown> {
+  return {
+    'X/.zarray': zarrArrayRef([4, 3], [2, 3], '<f4'),
+    'X/0.0': chunkRef(new Float32Array([1, 0, 5, 2, 3, 0])),
+    'X/1.0': chunkRef(new Float32Array([0, 4, 6, 7, 0, 8])),
+  }
+}
+
+function tinySparseMatrixRefs(
+  chunkRef: ChunkRefFactory,
+  matrixKind: Extract<MatrixKind, 'csr' | 'csc'>,
+): Record<string, unknown> {
+  const sparse = tinySparseMatrixFixture(matrixKind)
+
+  return {
+    'X/.zgroup': jsonRef({ zarr_format: 2 }),
+    'X/.zattrs': jsonRef({
+      'encoding-type': matrixKind === 'csc' ? 'csc_matrix' : 'csr_matrix',
+      shape: [4, 3],
+    }),
+    'X/data/.zarray': zarrArrayRef([8], [8], '<f4'),
+    'X/data/0': chunkRef(sparse.data),
+    'X/indices/.zarray': zarrArrayRef([8], [8], '<i4'),
+    'X/indices/0': chunkRef(sparse.indices),
+    'X/indptr/.zarray': zarrArrayRef(
+      [sparse.indptr.length],
+      [sparse.indptr.length],
+      '<i4',
+    ),
+    'X/indptr/0': chunkRef(sparse.indptr),
   }
 }
 

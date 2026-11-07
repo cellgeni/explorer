@@ -10,6 +10,8 @@ import type {
 } from '../dataset/datasetLoadModel'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
+import type { SpatialDataControlState } from '../dataset/spatialDataModel'
+import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { DebugLogAppendOptions, DebugLogEntry } from './appRuntimeModel'
 import type { FallbackNoticeEntry } from './appRuntimeModel'
@@ -48,6 +50,8 @@ export interface AppDatasetHudPanelProps {
   readonly setShouldLoadMorphology: Dispatch<SetStateAction<boolean>>
   readonly shouldLoadMorphology: boolean
   readonly visiumHdControlState: VisiumHdControlState
+  readonly spatialDataControlState: SpatialDataControlState
+  readonly handleSpatialDataSelectionChange: (selection: SpatialDataSelection) => void
 }
 
 export function AppDatasetHudPanel({
@@ -73,6 +77,8 @@ export function AppDatasetHudPanel({
   setShouldLoadMorphology,
   shouldLoadMorphology,
   visiumHdControlState,
+  spatialDataControlState,
+  handleSpatialDataSelectionChange,
 }: AppDatasetHudPanelProps) {
   return (
     <DatasetHudPanel
@@ -91,6 +97,8 @@ export function AppDatasetHudPanel({
       diagnosticsState={diagnosticsState}
       cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
       visiumHdControlState={visiumHdControlState}
+      spatialDataControlState={spatialDataControlState}
+      onSpatialDataSelectionChange={handleSpatialDataSelectionChange}
       activeErrors={activeErrors}
       fallbackNotices={fallbackNotices}
       debugLog={debugLog}

@@ -238,7 +238,7 @@ describe('ViewerCore', () => {
     )
   })
 
-  it('clips rendered grid-cell polygons to the viewport', async () => {
+  it('draws whole grids and leaves off-screen bins to the GPU', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     const nearGridCell = gridCellDatum()
@@ -264,7 +264,7 @@ describe('ViewerCore', () => {
     await waitFor(() => {
       expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
         'data-count',
-        '1',
+        '2',
       )
     })
 
@@ -280,7 +280,7 @@ describe('ViewerCore', () => {
         }
       | undefined
 
-    expect(gridLayer?.props?.data?.map((cell) => cell.id)).toEqual(['BC-1'])
+    expect(gridLayer?.props?.data?.map((cell) => cell.id)).toEqual(['BC-1', 'BC-far'])
   })
 
   it('keeps overview point render data stable when viewport clipping is disabled', async () => {
@@ -1458,7 +1458,12 @@ describe('ViewerCore', () => {
     }) as
       | {
           readonly props?: {
-            readonly data?: readonly unknown[]
+            readonly cells?: readonly unknown[]
+            readonly data?: {
+              readonly attributes?: {
+                readonly getFilterValue?: { readonly value?: Float32Array }
+              }
+            }
             readonly filled?: boolean
           }
         }
@@ -1471,7 +1476,9 @@ describe('ViewerCore', () => {
       ),
     ).toEqual([31, 155, 143, 128])
     expect(cellLayer?.props?.filled).toBe(true)
-    expect(cellLayer?.props?.data).toEqual([])
+    // The outlined cell stays in the point data but is filtered out on the GPU.
+    expect(cellLayer?.props?.cells).toEqual([annotatedCell])
+    expect(cellLayer?.props?.data?.attributes?.getFilterValue?.value?.[1]).toBe(1)
   })
 
   it('defers boundary expression restyling until viewport movement is idle', async () => {

@@ -61,6 +61,52 @@ describe('Zarr cell feature matrix cache', () => {
     storageMock.ZipFileStore.mockClear()
   })
 
+  it("lists the selected genes' expressing rows without indexing every cell id", async () => {
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array([1, 1, 2, 1, 3, 1]),
+      indptr: new Uint32Array([0, 1, 2, 3]),
+      featureIndptr: new Uint32Array([0, 2, 3]),
+      featureIndices: new Uint32Array([0, 2, 1]),
+      featureData: new Uint32Array([4, 6, 9]),
+      hasCellMajorCsc: false,
+    })
+
+    const { selectedGeneRowsFromCellFeatureMatrixZarr } = await import('./gex')
+    const rows = await selectedGeneRowsFromCellFeatureMatrixZarr(
+      'https://example.test/xenium/feature-rows/cell_feature_matrix.zarr.zip',
+      ['Actb', 'Gad1'],
+    )
+
+    expect(rows?.nCells).toBe(3)
+    expect(rows?.features).toEqual([
+      { gene: 'Actb', rows: new Uint32Array([0, 2]), counts: new Uint32Array([4, 6]) },
+      { gene: 'Gad1', rows: new Uint32Array([1]), counts: new Uint32Array([9]) },
+    ])
+    expect(rows?.cellIdForRow(2)).toBe(intToCellId(3, 1))
+    expect(
+      zarrMock.get.mock.calls.filter(
+        ([target]) => target.path === 'cell_features/cell_id',
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('returns no selected-gene rows without feature-major arrays', async () => {
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array([1, 1]),
+      indptr: new Uint32Array([0, 1]),
+      hasFeatureMajor: false,
+    })
+
+    const { selectedGeneRowsFromCellFeatureMatrixZarr } = await import('./gex')
+
+    await expect(
+      selectedGeneRowsFromCellFeatureMatrixZarr(
+        'https://example.test/xenium/no-feature-major/cell_feature_matrix.zarr.zip',
+        ['Actb'],
+      ),
+    ).resolves.toBeNull()
+  })
+
   it('reads the full cell_id array once per dataset URL', async () => {
     const cellA = intToCellId(1, 1)
     const cellB = intToCellId(2, 1)
@@ -537,6 +583,7 @@ function setupZarrMatrixMock(options: {
   readonly featureIndices?: Uint32Array
   readonly featureData?: Uint32Array
   readonly hasCellMajorCsc?: boolean
+  readonly hasFeatureMajor?: boolean
 }): void {
   const root = node('')
   const cellFeatures = node('cell_features', {
@@ -559,6 +606,15 @@ function setupZarrMatrixMock(options: {
     }
 
     if (target.path.startsWith('cell_features/csc/') && !hasCellMajorCsc) {
+      throw new Error(`${target.path} not found`)
+    }
+
+    if (
+      options.hasFeatureMajor === false &&
+      ['cell_features/indptr', 'cell_features/indices', 'cell_features/data'].includes(
+        target.path,
+      )
+    ) {
       throw new Error(`${target.path} not found`)
     }
 

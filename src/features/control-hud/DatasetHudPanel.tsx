@@ -9,6 +9,9 @@ import {
 } from '../../components/AppStatusPanels'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import { visiumHdBinSizeLabel, type VisiumHdControlState } from '../dataset/visiumHdModel'
+import type { SpatialDataControlState } from '../dataset/spatialDataModel'
+import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
+import { useState } from 'react'
 
 type DatasetDiagnosticsState = ComponentProps<typeof DatasetDiagnosticsPanel>['state']
 type CellFeatureMatrixCompatibilityState = ComponentProps<
@@ -34,6 +37,8 @@ interface DatasetHudPanelProps {
   readonly diagnosticsState: DatasetDiagnosticsState
   readonly cellFeatureMatrixCapabilityState: CellFeatureMatrixCompatibilityState
   readonly visiumHdControlState: VisiumHdControlState
+  readonly spatialDataControlState: SpatialDataControlState
+  readonly onSpatialDataSelectionChange: (selection: SpatialDataSelection) => void
   readonly activeErrors: ErrorSummaryItems
   readonly fallbackNotices: FallbackNoticeItems
   readonly debugLog: ActivityLogEntries
@@ -63,6 +68,8 @@ export function DatasetHudPanel({
   diagnosticsState,
   cellFeatureMatrixCapabilityState,
   visiumHdControlState,
+  spatialDataControlState,
+  onSpatialDataSelectionChange,
   activeErrors,
   fallbackNotices,
   debugLog,
@@ -138,6 +145,14 @@ export function DatasetHudPanel({
         state={visiumHdControlState}
         onBinSizeChange={onVisiumHdBinSizeChange}
       />
+      {spatialDataControlState.status === 'idle' ? null : (
+        <SpatialDataDatasetControls
+          key={`${spatialDataControlState.coordinateSystem}:${spatialDataControlState.units.micrometersPerUnit.toString()}`}
+          state={spatialDataControlState}
+          disabled={isLoading || spatialDataControlState.status === 'loading'}
+          onSelectionChange={onSpatialDataSelectionChange}
+        />
+      )}
       <div className="dataset-action-row">
         <button
           type="button"
@@ -238,4 +253,144 @@ function VisiumHdDatasetControls({
       )}
     </section>
   )
+}
+
+function SpatialDataDatasetControls({
+  state,
+  disabled,
+  onSelectionChange,
+}: {
+  readonly state: Exclude<SpatialDataControlState, { readonly status: 'idle' }>
+  readonly disabled: boolean
+  readonly onSelectionChange: (selection: SpatialDataSelection) => void
+}) {
+  const { units } = state
+  const [unitDraft, setUnitDraft] = useState(
+    units.source === 'unknown' ? '' : formatMicrometersPerUnit(units.micrometersPerUnit),
+  )
+  const parsedDraft = Number(unitDraft)
+  const draftValid =
+    unitDraft.trim() !== '' && Number.isFinite(parsedDraft) && parsedDraft > 0
+  const { micrometersPerUnit: _override, ...withoutOverride } = state.selection
+  void _override
+
+  return (
+    <section
+      className="visium-hd-controls spatialdata-controls"
+      aria-label="SpatialData view"
+    >
+      <div className="dataset-platform-row">
+        <span>Dataset type</span>
+        <strong>SpatialData</strong>
+      </div>
+      <label className="visium-bin-control">
+        <span>Coordinate system</span>
+        <select
+          title="SpatialData coordinate system to show"
+          value={state.coordinateSystem}
+          disabled={disabled || state.coordinateSystems.length < 2}
+          onChange={(event) => {
+            // Images and units belong to a coordinate system.
+            onSelectionChange({ coordinateSystem: event.currentTarget.value })
+          }}
+        >
+          {state.coordinateSystems.map((system) => (
+            <option key={system} value={system}>
+              {system}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="visium-bin-control">
+        <span>Image</span>
+        <select
+          title="SpatialData image to show as the morphology layer"
+          value={state.image ?? ''}
+          disabled={disabled || state.images.length < 2}
+          onChange={(event) => {
+            onSelectionChange({
+              ...state.selection,
+              coordinateSystem: state.coordinateSystem,
+              image: event.currentTarget.value,
+            })
+          }}
+        >
+          {state.images.length === 0 ? <option value="">None</option> : null}
+          {state.images.map((image) => (
+            <option key={image} value={image}>
+              {image}
+            </option>
+          ))}
+        </select>
+      </label>
+      <form
+        className="visium-bin-control spatialdata-units-control"
+        onSubmit={(event) => {
+          event.preventDefault()
+
+          if (draftValid) {
+            onSelectionChange({
+              ...state.selection,
+              coordinateSystem: state.coordinateSystem,
+              micrometersPerUnit: parsedDraft,
+            })
+          }
+        }}
+      >
+        <span title="Micrometers per coordinate-system unit">µm per unit</span>
+        <span className="spatialdata-units-inputs">
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="any"
+            aria-label="Micrometers per coordinate-system unit"
+            title="Micrometers per coordinate-system unit"
+            placeholder="unknown"
+            value={unitDraft}
+            disabled={disabled}
+            onChange={(event) => {
+              setUnitDraft(event.currentTarget.value)
+            }}
+          />
+          <button type="submit" disabled={disabled || !draftValid} title="Use this scale">
+            Set
+          </button>
+          <button
+            type="button"
+            disabled={disabled || units.source !== 'override'}
+            title="Use declared or estimated units"
+            onClick={() => {
+              onSelectionChange({
+                ...withoutOverride,
+                coordinateSystem: state.coordinateSystem,
+              })
+            }}
+          >
+            Auto
+          </button>
+        </span>
+      </form>
+      <p className="visium-hd-note">{spatialDataUnitsNote(units)}</p>
+    </section>
+  )
+}
+
+function spatialDataUnitsNote(
+  units: Exclude<SpatialDataControlState, { readonly status: 'idle' }>['units'],
+): string {
+  switch (units.source) {
+    case 'override':
+      return 'Scale set in the viewer.'
+    case 'declared':
+      return `Declared by the store (${units.detail}).`
+    case 'estimated':
+      return `Estimated from ${units.detail}. Set the scale if you know it.`
+    case 'unknown':
+      return 'Units unknown: distances are in coordinate units. Set µm per unit if you know the pixel size.'
+  }
+}
+
+function formatMicrometersPerUnit(value: number): string {
+  return Number(value.toPrecision(4)).toString()
 }

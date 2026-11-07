@@ -1,4 +1,4 @@
-import { PolygonLayer } from '@deck.gl/layers'
+import type { Position } from '@deck.gl/core'
 import { micrometers, type BBox } from '../data/coords'
 import { gridCellCorners } from '../datasets/spatialGrid'
 import type { GridCellBatch, SpatialGrid } from '../datasets/spatialDataset'
@@ -7,6 +7,7 @@ import {
   GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY,
 } from './deckLayerColors'
 import type { GridCellDatum, GridCellLayerDataOptions } from './deckLayerTypes'
+import { GridBinLayer } from './gridBinLayer'
 import {
   DEFAULT_CELL_FILL_OPACITY,
   DEFAULT_LAYER_OPACITY,
@@ -21,7 +22,7 @@ export function createGridCellLayer(
     readonly lineOpacity?: number
     readonly geneExpressionActive: boolean
   },
-): PolygonLayer<GridCellDatum> | null {
+): GridBinLayer<GridCellDatum> | null {
   if (gridCells.length === 0) {
     return null
   }
@@ -36,25 +37,42 @@ export function createGridCellLayer(
     ? Math.max(gridCellFillOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
     : gridCellFillOpacity
 
-  return new PolygonLayer<GridCellDatum>({
+  return new GridBinLayer<GridCellDatum>({
     id: 'spatial-grid-cells',
     data: gridCells,
     pickable: true,
     stroked: true,
     filled: true,
     opacity: 1,
-    lineWidthUnits: 'pixels',
-    lineWidthMinPixels: 0.25,
-    getPolygon: (cell) => cell.polygon,
+    lineWidthPixels: GRID_CELL_LINE_WIDTH_PIXELS,
+    getCenter: gridCellCenter,
+    getColumnVector: (cell) => gridCellEdge(cell, 1),
+    getRowVector: (cell) => gridCellEdge(cell, 3),
     getFillColor: (cell) =>
       colorWithOpacity(cell.fillColor, effectiveGridCellFillOpacity),
     getLineColor: (cell) => colorWithOpacity(cell.lineColor, gridCellLineOpacity),
-    getLineWidth: 0.25,
     updateTriggers: {
       getFillColor: [effectiveGridCellFillOpacity],
       getLineColor: [gridCellLineOpacity],
     },
   })
+}
+
+const GRID_CELL_LINE_WIDTH_PIXELS = 0.25
+
+// Grid cell polygons list their corners as (row, col), (row, col + 1),
+// (row + 1, col + 1), (row + 1, col), so opposite corners give the centre and
+// corners 1 and 3 the column and row edges.
+function gridCellCenter(cell: GridCellDatum): Position {
+  const [x0 = 0, y0 = 0] = cell.polygon[0] ?? []
+  const [x2 = x0, y2 = y0] = cell.polygon[2] ?? []
+  return [(x0 + x2) / 2, (y0 + y2) / 2, 0]
+}
+
+function gridCellEdge(cell: GridCellDatum, corner: 1 | 3): [number, number] {
+  const [x0 = 0, y0 = 0] = cell.polygon[0] ?? []
+  const [x = x0, y = y0] = cell.polygon[corner] ?? []
+  return [x - x0, y - y0]
 }
 
 export function gridCellBatchesToLayerData(
