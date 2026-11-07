@@ -83,12 +83,24 @@ except the index and `__*` entries:
 - Legacy `/obs/__categories/<key>` sidecars with integer codes are also
   treated as categorical.
 - Numeric datasets become continuous tracks (skipped if no value is finite).
+  Boolean datasets load as 0/1 on both backends: `h5wasm` returns HDF5
+  booleans as `Int8`, and `zarrChunkValue` converts zarrita's `BoolArray`.
 - String datasets become categorical tracks; empty strings are missing.
 - Other groups (nullable integer/boolean, masked arrays) are skipped.
 
 Continuous `obs` values appear as per-cell "Observations" rows in the Cell
-tab. They are **not** offered as `Metadata` colour tracks; see
-[Known Limitations](#known-limitations).
+tab and as `Cell color: Metadata` tracks. `metadataTrackOptions()` lists them
+at load (id `h5ad:<column>`, with `-2`, `-3`, … when column slugs collide).
+`metadataTracks({ trackId })` builds one track's per-cell values only when it
+is selected (`useCellMetadataTrackWorkflow`). Non-finite values are left out
+of the track, so those cells use the missing-value colour.
+
+### Imported Annotations
+
+CSV/JSON annotation and metadata files imported in the Annotations tab are
+matched by obs name. On H5AD and SpatialData any non-empty cell ID is accepted
+(`asObsNameCellId`, `src/data/cellid.ts`); Xenium datasets keep the
+Xenium-format check.
 
 ### Coordinates (`/obsm`)
 
@@ -121,12 +133,13 @@ values with gaps up to 262,144 values (`csrZarrRowBatches`).
 `useDatasetLifecycle` (`src/features/app-shell/useDatasetLifecycle.ts`) runs
 `loadAnnDataOverview`, which calls these in parallel:
 
-| Call                 | Result                                                                                   |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| `overview()`         | One point per finite coordinate row, with categorical and numeric obs values as metadata |
-| `genePanel()`        | Gene names from `/var`                                                                   |
-| `annotationGroups()` | One `analysis:<column>` option per categorical obs column                                |
-| `embeddingOptions()` | obsm keys usable as embeddings; the first one is selected                                |
+| Call                     | Result                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| `overview()`             | One point per finite coordinate row, with categorical and numeric obs values as metadata    |
+| `genePanel()`            | Gene names from `/var`                                                                      |
+| `annotationGroups()`     | One `analysis:<column>` option per categorical obs column                                   |
+| `embeddingOptions()`     | obsm keys usable as embeddings; the first one is selected                                   |
+| `metadataTrackOptions()` | One `h5ad:<column>` option per numeric obs column, with its min and max; no per-cell values |
 
 H5AD has no morphology image and no boundary polygons, so cell boundaries are
 switched off and `meta()` reports all capabilities as `false`. `elements()`
@@ -140,6 +153,7 @@ returns `[]` and `image()` returns `null`.
 | Selected-gene colouring | `geneExpression(bbox, genes)` scans cells in the bbox in obs order, reads per-cell counts for the requested genes, and sums them for multi-gene signatures |
 | Annotations             | `annotations({ groupId })` on demand when an annotation set is loaded                                                                                      |
 | Embeddings              | `embeddings({ kind })` re-reads the selected obsm matrix                                                                                                   |
+| Metadata colouring      | `metadataTracks({ trackId })` on demand when `Cell color` is Metadata and the selected track is not loaded yet                                             |
 | Selected-cell profile   | `matrix([cellId])` over all genes, summarized by `summarizeRoiGeneExpression`                                                                              |
 | ROI cells               | `cells(bbox)` bbox scan plus point-in-polygon for lassos                                                                                                   |
 | ROI gene stats          | 32-cell preview, then a refinement over every ROI cell                                                                                                     |
@@ -149,16 +163,18 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
 
 ## Source Files
 
-| File                                            | Role                                                                |
-| ----------------------------------------------- | ------------------------------------------------------------------- |
-| `src/datasets/datasetFactory.ts`                | URL check, `HEAD` probe, lazy construction                          |
-| `src/datasets/h5adDataset.ts`                   | Both backends, HDF5 layout parsing, all dataset methods             |
-| `src/features/app-shell/useDatasetLifecycle.ts` | `loadAnnDataOverview` first-paint sequence                          |
-| `src/features/app-shell/platformAdapter.ts`     | `H5AD_PLATFORM_ADAPTER` feature gating, `isAnnDataPlatform` routing |
-| `src/features/cells/useCellDetailWorkflow.ts`   | Selected-cell gene profile                                          |
-| `src/features/roi/useRoiWorkflow.ts`            | ROI cells and gene statistics                                       |
-| `src/features/errors/loadErrorModel.ts`         | User-facing messages for H5AD errors                                |
-| `src/data/datasetDiagnostics.ts`                | Diagnostics: detection plus a range check on the `.h5ad` file       |
+| File                                                       | Role                                                                   |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `src/datasets/datasetFactory.ts`                           | URL check, `HEAD` probe, lazy construction                             |
+| `src/datasets/h5adDataset.ts`                              | Both backends, HDF5 layout parsing, all dataset methods                |
+| `src/features/app-shell/useDatasetLifecycle.ts`            | `loadAnnDataOverview` first-paint sequence                             |
+| `src/features/app-shell/platformAdapter.ts`                | `H5AD_PLATFORM_ADAPTER` feature gating, `isAnnDataPlatform` routing    |
+| `src/features/annotations/useCellMetadataTrackWorkflow.ts` | Lists obs metadata tracks with imported ones; loads the selected track |
+| `src/data/customAnnotations.ts`                            | CSV/JSON annotation import with obs-name cell IDs                      |
+| `src/features/cells/useCellDetailWorkflow.ts`              | Selected-cell gene profile                                             |
+| `src/features/roi/useRoiWorkflow.ts`                       | ROI cells and gene statistics                                          |
+| `src/features/errors/loadErrorModel.ts`                    | User-facing messages for H5AD errors                                   |
+| `src/data/datasetDiagnostics.ts`                           | Diagnostics: detection plus a range check on the `.h5ad` file          |
 
 ## Errors
 
@@ -166,19 +182,9 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
 | -------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `H5adReferenceFileUnavailableError`          | File is over 300 MiB and `<url>.json` is missing or not readable                       |
 | `H5adAllGeneCscMatrixUnsupportedError`       | All-gene read (selected-cell profile, ROI gene stats) on a reference-backed CSC matrix |
-| "Expected H5AD /obs/... to contain strings." | An obs dataset is neither numeric nor string                                           |
+| "Expected H5AD /obs/... to contain strings." | An obs dataset is neither numeric (including boolean) nor string                       |
 
 ## Known Limitations
 
-- Numeric `obs` columns are parsed by `metadataTracks()` but the app never
-  calls it, so they cannot be used as `Cell color: Metadata` tracks. Metadata
-  tracks currently come only from imported CSV/JSON annotation files.
-- Imported CSV/JSON annotation and metadata files are parsed with `asCellId`
-  (`src/data/cellid.ts`), which only accepts Xenium-format IDs
-  (`/^[a-p]{8}-\d+$/`). Files keyed by H5AD obs names are rejected.
-- Boolean `obs` columns load as 0/1 numbers on the `h5wasm` backend. On the
-  reference backend (and SpatialData tables), zarrita returns a `BoolArray`
-  that neither the numeric nor the string reader accepts, so a boolean column
-  is expected to fail the load (found by reading the code; not reproduced).
 - Diagnostics do not check the `.h5ad.json` reference.
 - The in-memory backend downloads the whole file before anything renders.

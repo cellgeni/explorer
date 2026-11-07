@@ -123,6 +123,14 @@ describe('AnnDataH5adDataset', () => {
         max: 0.8999999761581421,
       },
     ])
+    await expect(dataset.metadataTrackOptions()).resolves.toEqual([
+      {
+        id: 'h5ad:score',
+        label: 'score',
+        min: 0.10000000149011612,
+        max: 0.8999999761581421,
+      },
+    ])
 
     const matrix = await dataset.matrix(['cell-b'])
     expect(matrix.cells.get('cell-b')).toEqual({
@@ -290,6 +298,96 @@ describe('AnnDataH5adDataset', () => {
       'H5AD reference loaded; opening referenced arrays',
       'H5AD reference ready: 4 cells, 3 genes',
     ])
+  })
+
+  it('reads boolean obs columns from kerchunk references as 0/1 values', async () => {
+    const baseSpec = createTinyH5adReferenceSpec()
+    const referenceSpec = {
+      ...baseSpec,
+      refs: {
+        ...(baseSpec.refs as Record<string, unknown>),
+        'obs/.zattrs': jsonRef({
+          _index: 'cell_id',
+          'column-order': ['cluster', 'score', 'in_tissue'],
+        }),
+        'obs/in_tissue/.zarray': zarrArrayRef([4], [4], '|b1'),
+        'obs/in_tissue/0': bytesRef(new Uint8Array([1, 0, 1, 1])),
+      },
+    }
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/reference.h5ad',
+      fetcher: h5adReferenceFetcher(350 * 1024 * 1024, referenceSpec, () => {
+        throw new Error('body should not be read')
+      }),
+    })
+
+    await expect(dataset.overview()).resolves.toContainEqual(
+      expect.objectContaining({
+        cellId: 'cell-b',
+        metadata: { cluster: 'B', score: 0.5, in_tissue: 0 },
+      }),
+    )
+    await expect(dataset.metadataTracks()).resolves.toContainEqual({
+      id: 'h5ad:in-tissue',
+      label: 'in_tissue',
+      values: [
+        { cellId: 'cell-a', value: 1 },
+        { cellId: 'cell-b', value: 0 },
+        { cellId: 'cell-c', value: 1 },
+        { cellId: 'cell-d', value: 1 },
+      ],
+      min: 0,
+      max: 1,
+    })
+  })
+
+  it('lists numeric obs columns as metadata tracks with unique ids and loads one on request', async () => {
+    const baseSpec = createTinyH5adReferenceSpec()
+    const referenceSpec = {
+      ...baseSpec,
+      refs: {
+        ...(baseSpec.refs as Record<string, unknown>),
+        'obs/.zattrs': jsonRef({
+          _index: 'cell_id',
+          'column-order': ['cluster', 'score', 'n_genes', 'N_GENES'],
+        }),
+        'obs/n_genes/.zarray': zarrArrayRef([4], [4], '<f4'),
+        'obs/n_genes/0': bytesRef(new Float32Array([1, Number.NaN, 3, 4])),
+        'obs/N_GENES/.zarray': zarrArrayRef([4], [4], '<f4'),
+        'obs/N_GENES/0': bytesRef(new Float32Array([5, 6, 7, 8])),
+      },
+    }
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/reference.h5ad',
+      fetcher: h5adReferenceFetcher(350 * 1024 * 1024, referenceSpec, () => {
+        throw new Error('body should not be read')
+      }),
+    })
+
+    await expect(dataset.metadataTrackOptions()).resolves.toEqual([
+      {
+        id: 'h5ad:score',
+        label: 'score',
+        min: 0.10000000149011612,
+        max: 0.8999999761581421,
+      },
+      { id: 'h5ad:n-genes', label: 'n_genes', min: 1, max: 4 },
+      { id: 'h5ad:n-genes-2', label: 'N_GENES', min: 5, max: 8 },
+    ])
+    await expect(dataset.metadataTracks({ trackId: 'h5ad:n-genes' })).resolves.toEqual([
+      {
+        id: 'h5ad:n-genes',
+        label: 'n_genes',
+        values: [
+          { cellId: 'cell-a', value: 1 },
+          { cellId: 'cell-c', value: 3 },
+          { cellId: 'cell-d', value: 4 },
+        ],
+        min: 1,
+        max: 4,
+      },
+    ])
+    await expect(dataset.metadataTracks({ trackId: 'h5ad:missing' })).resolves.toEqual([])
   })
 
   it('blocks all-gene selected-cell profiles from reference-backed CSC matrices', async () => {

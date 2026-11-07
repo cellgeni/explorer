@@ -3,6 +3,7 @@ import {
   customCellMetadataFilePrefix,
   parseCustomAnnotationImport,
   type ContinuousCellMetadataTrack,
+  type CustomAnnotationCellIdFormat,
 } from '../../data/customAnnotations'
 import {
   ALL_ANNOTATION_GROUP_ID,
@@ -54,6 +55,7 @@ interface AnnotationWorkflowCallbacks {
 
 interface AnnotationWorkflowData {
   readonly annotationState: AnnotationState<StructuredLoadError>
+  readonly cellIdFormat: CustomAnnotationCellIdFormat
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly datasetUrl: string
   readonly loadState: DatasetLoadState<StructuredLoadError>
@@ -124,6 +126,7 @@ export function useAnnotationWorkflow({
   const { appendDebugEvent } = callbacks
   const {
     annotationState,
+    cellIdFormat,
     cellMetadataTracks,
     datasetUrl,
     loadState,
@@ -222,7 +225,7 @@ export function useAnnotationWorkflow({
   const importCustomAnnotationText = useCallback(
     (text: string, sourceName: string, sourceLabel: string) => {
       const { annotations: importedAnnotations, metadataTracks: importedMetadataTracks } =
-        parseCustomAnnotationImport(text, sourceName)
+        parseCustomAnnotationImport(text, sourceName, { cellIdFormat })
       const importedPrefix = customAnnotationFilePrefix(sourceName)
       const importedMetadataPrefix = customCellMetadataFilePrefix(sourceName)
       const nextCellMetadataTracks = mergeImportedCellMetadataTracks(
@@ -278,6 +281,7 @@ export function useAnnotationWorkflow({
     },
     [
       appendDebugEvent,
+      cellIdFormat,
       cellMetadataTracks,
       datasetUrl,
       loadState,

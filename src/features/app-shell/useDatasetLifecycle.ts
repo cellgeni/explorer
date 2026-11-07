@@ -37,7 +37,10 @@ import type {
   AnalysisEmbeddingKind,
   AnalysisEmbeddingOption,
 } from '../../data/analysisEmbeddings'
-import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
+import type {
+  CellMetadataTrackOption,
+  ContinuousCellMetadataTrack,
+} from '../../data/customAnnotations'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import {
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
@@ -199,6 +202,10 @@ interface SpatialDataSummaryDataset {
   summary(): Promise<SpatialDataSummary>
 }
 
+interface CellMetadataTrackOptionsDataset {
+  metadataTrackOptions(): Promise<readonly CellMetadataTrackOption[]>
+}
+
 interface UseDatasetLifecycleCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
@@ -284,6 +291,7 @@ interface UseDatasetLifecycleSetters {
   readonly setHiddenAnnotationIds: Setter<readonly string[]>
   readonly setHiddenAnnotationSetIds: Setter<readonly string[]>
   readonly setCellMetadataTracks: Setter<readonly ContinuousCellMetadataTrack[]>
+  readonly setCellMetadataTrackOptions: Setter<readonly CellMetadataTrackOption[]>
   readonly setSelectedCellMetadataTrackId: Setter<string | null>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
@@ -442,6 +450,7 @@ export function useDatasetLifecycle({
     setHiddenAnnotationIds,
     setHiddenAnnotationSetIds,
     setCellMetadataTracks,
+    setCellMetadataTrackOptions,
     setSelectedCellMetadataTrackId,
     setAutoContrastChannelIds,
     setBoundaryElements,
@@ -812,6 +821,7 @@ export function useDatasetLifecycle({
       setHiddenAnnotationIds([])
       setHiddenAnnotationSetIds([])
       setCellMetadataTracks([])
+      setCellMetadataTrackOptions([])
       setSelectedCellMetadataTrackId(null)
       setAnnotationGroupState(IDLE_ANNOTATION_GROUP_STATE)
       setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
@@ -918,12 +928,18 @@ export function useDatasetLifecycle({
           }
 
           const annDataset: H5adLifecycleDataset = dataset
-          const [cells, genes, annotationGroups, embeddingOptions] = await Promise.all([
-            annDataset.overview(),
-            annDataset.genePanel(),
-            annDataset.annotationGroups(),
-            annDataset.embeddingOptions(),
-          ])
+          // Lists numeric obs columns only; per-cell values load when a track
+          // is chosen for Cell color: Metadata.
+          const [cells, genes, annotationGroups, embeddingOptions, metadataTrackOptions] =
+            await Promise.all([
+              annDataset.overview(),
+              annDataset.genePanel(),
+              annDataset.annotationGroups(),
+              annDataset.embeddingOptions(),
+              isCellMetadataTrackOptionsDataset(dataset)
+                ? dataset.metadataTrackOptions()
+                : [],
+            ])
 
           if (!isCurrentDatasetLoad()) {
             return false
@@ -942,6 +958,7 @@ export function useDatasetLifecycle({
             )
             setSelectedEmbeddingKind(embeddingOptions[0]?.kind ?? 'umap')
           }
+          setCellMetadataTrackOptions(metadataTrackOptions)
           initialShareableStateRef.current = null
           setLoadState(datasetLoadReady(requestedUrl, cells.length))
           appendDebugEvent(
@@ -956,6 +973,10 @@ export function useDatasetLifecycle({
           appendDebugEvent(
             `${label} embeddings ready: ${embeddingOptions.length.toLocaleString()} obsm views`,
             { coalesceKey: `${coalescePrefix}-embedding-options` },
+          )
+          appendDebugEvent(
+            `${label} metadata tracks ready: ${metadataTrackOptions.length.toLocaleString()} numeric obs columns`,
+            { coalesceKey: `${coalescePrefix}-metadata-track-options` },
           )
           recordTelemetry(
             telemetryEvent('dataset.load', 'success', {
@@ -1456,6 +1477,12 @@ function isSpatialDataSummaryDataset(
   dataset: unknown,
 ): dataset is SpatialDataSummaryDataset {
   return hasFunction(dataset, 'summary')
+}
+
+function isCellMetadataTrackOptionsDataset(
+  dataset: unknown,
+): dataset is CellMetadataTrackOptionsDataset {
+  return hasFunction(dataset, 'metadataTrackOptions')
 }
 
 function hasFunction<T extends string>(

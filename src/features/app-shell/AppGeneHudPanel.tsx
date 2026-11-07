@@ -7,7 +7,7 @@ import {
   type SetStateAction,
 } from 'react'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
-import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
+import type { CellMetadataTrackOption } from '../../data/customAnnotations'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type {
@@ -55,7 +55,7 @@ export interface AppGeneHudPanelProps {
   readonly genePanelState: GenePanelState<StructuredLoadError>
   readonly geneOptions: readonly string[]
   readonly hasAnnotationColors: boolean
-  readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
+  readonly cellMetadataTracks: readonly CellMetadataTrackOption[]
   readonly selectedCellMetadataTrackId: string | null
   readonly observationColorMode: ObservationColorMode
   readonly rememberGeneExpressionScaleMax: (

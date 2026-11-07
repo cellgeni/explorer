@@ -3,7 +3,10 @@ import * as React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
-import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
+import type {
+  ContinuousCellMetadataTrack,
+  CustomAnnotationCellIdFormat,
+} from '../../data/customAnnotations'
 import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
@@ -28,6 +31,7 @@ let api: ReturnType<typeof useAnnotationWorkflow>
 let snapshot: Snapshot
 
 function Probe({
+  cellIdFormat = 'xenium',
   initialAnnotationState = { status: 'idle' },
   initialHiddenAnnotationIds = [],
   loadAnnotations,
@@ -35,6 +39,7 @@ function Probe({
   roiState = { status: 'idle' },
   selectedAnnotationGroupId = 'cluster-a',
 }: {
+  readonly cellIdFormat?: CustomAnnotationCellIdFormat
   readonly initialAnnotationState?: AnnotationState<StructuredLoadError>
   readonly initialHiddenAnnotationIds?: readonly string[]
   readonly loadAnnotations: Parameters<
@@ -84,6 +89,7 @@ function Probe({
     },
     data: {
       annotationState,
+      cellIdFormat,
       cellMetadataTracks,
       datasetUrl: 'https://example.test/output',
       loadState,
@@ -414,5 +420,53 @@ describe('useAnnotationWorkflow', () => {
     expect(snapshot.debugMessages).toContain(
       'Imported annotations: 0 labels, 1 metadata tracks',
     )
+  })
+
+  it('imports annotations keyed by AnnData obs names when the platform uses them', async () => {
+    const csv = 'cell_id,label\nAAACATACAACCAC-1,T cell'
+    const onReady = (
+      nextApi: ReturnType<typeof useAnnotationWorkflow>,
+      nextSnapshot: Snapshot,
+    ) => {
+      api = nextApi
+      snapshot = nextSnapshot
+    }
+    const { unmount } = render(
+      <Probe loadAnnotations={vi.fn(async () => [])} onReady={onReady} />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(new File([csv], 'obs.csv'))
+    })
+
+    expect(snapshot.annotationState).toMatchObject({
+      status: 'error',
+      error: { message: expect.stringMatching(/Invalid Xenium cell ID/) },
+    })
+    unmount()
+
+    render(
+      <Probe
+        cellIdFormat="obs-name"
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={onReady}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(new File([csv], 'obs.csv'))
+    })
+
+    expect(snapshot.annotationState).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      annotations: [
+        {
+          id: 'custom:obs-csv:t-cell',
+          label: 'T cell',
+          cellIds: ['AAACATACAACCAC-1'],
+        },
+      ],
+    })
   })
 })

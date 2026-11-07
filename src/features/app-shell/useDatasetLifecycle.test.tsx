@@ -63,6 +63,7 @@ function Probe({
   loadAnnotationGroups = vi.fn(async () => []),
   loadDatasetOverview = vi.fn(async () => []),
   loadGenePanel = vi.fn(async () => []),
+  setCellMetadataTrackOptions = vi.fn(),
   setDatasetPlatform = vi.fn(),
   setFlatMorphologyImage = vi.fn(),
   setGenePanelState = vi.fn(),
@@ -83,6 +84,7 @@ function Probe({
   readonly loadAnnotationGroups?: LifecycleOptions['loaders']['loadAnnotationGroups']
   readonly loadDatasetOverview?: LifecycleOptions['loaders']['loadDatasetOverview']
   readonly loadGenePanel?: LifecycleOptions['loaders']['loadGenePanel']
+  readonly setCellMetadataTrackOptions?: LifecycleOptions['setters']['setCellMetadataTrackOptions']
   readonly setDatasetPlatform?: LifecycleOptions['setters']['setDatasetPlatform']
   readonly setFlatMorphologyImage?: LifecycleOptions['setters']['setFlatMorphologyImage']
   readonly setGenePanelState?: LifecycleOptions['setters']['setGenePanelState']
@@ -179,6 +181,7 @@ function Probe({
       setHiddenAnnotationIds: noopSetter,
       setHiddenAnnotationSetIds: noopSetter,
       setCellMetadataTracks: noopSetter,
+      setCellMetadataTrackOptions,
       setSelectedCellMetadataTrackId: noopSetter,
       setAutoContrastChannelIds: noopSetter,
       setBoundaryElements: noopSetter,
@@ -403,6 +406,10 @@ describe('useDatasetLifecycle', () => {
       genePanel: vi.fn(async () => ['Actb']),
       annotationGroups: vi.fn(async () => []),
       embeddingOptions: vi.fn(async () => []),
+      metadataTrackOptions: vi.fn(async () => [
+        { id: 'h5ad:cell-area', label: 'cell_area', min: 4, max: 90 },
+      ]),
+      metadataTracks: vi.fn(async () => []),
       image: vi.fn(async () => null),
       summary: vi.fn(async () => ({
         coordinateSystem: 'global',
@@ -412,6 +419,7 @@ describe('useDatasetLifecycle', () => {
       })),
     }
     const loadDatasetOverview = vi.fn(async () => [])
+    const setCellMetadataTrackOptions = vi.fn()
     const setDatasetPlatform = vi.fn()
     const setGenePanelState = vi.fn()
     const setLoadState = vi.fn()
@@ -433,6 +441,7 @@ describe('useDatasetLifecycle', () => {
           ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
         }
         loadDatasetOverview={loadDatasetOverview}
+        setCellMetadataTrackOptions={setCellMetadataTrackOptions}
         setDatasetPlatform={setDatasetPlatform}
         setGenePanelState={setGenePanelState}
         setLoadState={setLoadState}
@@ -447,6 +456,10 @@ describe('useDatasetLifecycle', () => {
     })
 
     expect(setDatasetPlatform).toHaveBeenCalledWith('spatialdata')
+    expect(setCellMetadataTrackOptions).toHaveBeenLastCalledWith([
+      { id: 'h5ad:cell-area', label: 'cell_area', min: 4, max: 90 },
+    ])
+    expect(dataset.metadataTracks).not.toHaveBeenCalled()
     expect(setShowCellBoundaries).toHaveBeenCalledWith(true)
     expect(setGenePanelState).toHaveBeenLastCalledWith({
       status: 'ready',

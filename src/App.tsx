@@ -123,6 +123,10 @@ import {
 } from './features/annotations/geometricAnnotationModel'
 import { useAnnotationWorkflow } from './features/annotations/useAnnotationWorkflow'
 import {
+  useCellMetadataTrackWorkflow,
+  type CellMetadataTrackLoader,
+} from './features/annotations/useCellMetadataTrackWorkflow'
+import {
   IDLE_GENE_EXPRESSION_STATE,
   type GeneExpressionState,
   geneExpressionModeLabel,
@@ -169,6 +173,10 @@ import type {
 } from './datasets/spatialDataset'
 import type { GexResult } from './data/gex'
 import type { AnalysisEmbedding } from './data/analysisEmbeddings'
+import type {
+  ContinuousCellMetadataTrack,
+  LoadCellMetadataTracksOptions,
+} from './data/customAnnotations'
 import type { GeneExpressionScoreMode } from './rendering/deckLayers'
 import type {
   CellBoundaryDatum,
@@ -253,6 +261,7 @@ export function App({ dependencies }: AppProps = {}) {
       annotationGroupState,
       annotationImportUrl,
       annotationState,
+      cellMetadataTrackOptions,
       cellMetadataTracks,
       geometricAnnotations,
       hiddenAnnotationIds,
@@ -263,6 +272,7 @@ export function App({ dependencies }: AppProps = {}) {
       setAnnotationGroupState,
       setAnnotationImportUrl,
       setAnnotationState,
+      setCellMetadataTrackOptions,
       setCellMetadataTracks,
       setGeometricAnnotations,
       setHiddenAnnotationIds,
@@ -541,13 +551,6 @@ export function App({ dependencies }: AppProps = {}) {
   const platformFeatureLoadEnabled = platformAdapter.featureLoadEnabled(loadState)
   const geneExpressionScaleDatasetUrl =
     loadState.status === 'ready' ? loadState.url : datasetUrl
-  const selectedCellMetadataTrack = useMemo(
-    () =>
-      cellMetadataTracks.find((track) => track.id === selectedCellMetadataTrackId) ??
-      cellMetadataTracks[0] ??
-      null,
-    [cellMetadataTracks, selectedCellMetadataTrackId],
-  )
   const diagnosticsVisiumHdBinSize =
     visiumHdControlState.status === 'idle'
       ? undefined
@@ -593,6 +596,35 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setDebugLog],
   )
+  const loadDatasetCellMetadataTracks = useCallback<CellMetadataTrackLoader>(
+    async (baseUrl, options = {}) => {
+      const dataset = await getSpatialDataset(baseUrl)
+
+      if (!isCellMetadataTrackDataset(dataset)) {
+        throw new Error('Loaded dataset does not expose metadata tracks.')
+      }
+
+      return dataset.metadataTracks(options)
+    },
+    [getSpatialDataset],
+  )
+  const {
+    activeCellMetadataTrackId,
+    cellMetadataTrackChoices,
+    selectedCellMetadataTrack,
+  } = useCellMetadataTrackWorkflow({
+    callbacks: { appendDebugEvent },
+    data: {
+      cellMetadataTrackOptions,
+      cellMetadataTracks,
+      loadState,
+      observationColorMode,
+      selectedCellMetadataTrackId,
+    },
+    loaders: { loadCellMetadataTracks: loadDatasetCellMetadataTracks },
+    refs: { datasetAbortRef, loadRequestIdRef: loadRequestId },
+    setters: { setCellMetadataTracks },
+  })
   const morphologyChannels = useMemo(
     () => [
       ...(morphologyImage?.channelLoaders ?? []),
@@ -1866,6 +1898,7 @@ export function App({ dependencies }: AppProps = {}) {
     callbacks: { appendDebugEvent },
     data: {
       annotationState,
+      cellIdFormat: isAnnDataPlatform(platformAdapter) ? 'obs-name' : 'xenium',
       cellMetadataTracks,
       datasetUrl,
       loadState,
@@ -2320,6 +2353,7 @@ export function App({ dependencies }: AppProps = {}) {
       setHiddenAnnotationIds,
       setHiddenAnnotationSetIds,
       setCellMetadataTracks,
+      setCellMetadataTrackOptions,
       setSelectedCellMetadataTrackId,
       setAutoContrastChannelIds,
       setBoundaryElements,
@@ -2594,8 +2628,8 @@ export function App({ dependencies }: AppProps = {}) {
           hasAnnotationColors={
             annotationState.status === 'ready' && annotationState.annotations.length > 0
           }
-          cellMetadataTracks={cellMetadataTracks}
-          selectedCellMetadataTrackId={selectedCellMetadataTrack?.id ?? null}
+          cellMetadataTracks={cellMetadataTrackChoices}
+          selectedCellMetadataTrackId={activeCellMetadataTrackId}
           observationColorMode={observationColorMode}
           rememberGeneExpressionScaleMax={rememberGeneExpressionScaleMax}
           resetGeneExpressionSelectionState={resetGeneExpressionSelectionState}
@@ -3105,6 +3139,12 @@ interface H5adEmbeddingDataset {
   }): Promise<readonly AnalysisEmbedding[]>
 }
 
+interface CellMetadataTrackDataset {
+  metadataTracks(
+    options?: LoadCellMetadataTracksOptions,
+  ): Promise<readonly ContinuousCellMetadataTrack[]>
+}
+
 function isH5adRoiDataset(dataset: unknown): dataset is H5adRoiDataset {
   return hasFunction(dataset, 'cells')
 }
@@ -3119,6 +3159,12 @@ function isH5adAnnotationDataset(dataset: unknown): dataset is H5adAnnotationDat
 
 function isH5adEmbeddingDataset(dataset: unknown): dataset is H5adEmbeddingDataset {
   return hasFunction(dataset, 'embeddings')
+}
+
+function isCellMetadataTrackDataset(
+  dataset: unknown,
+): dataset is CellMetadataTrackDataset {
+  return hasFunction(dataset, 'metadataTracks')
 }
 
 function hasFunction<T extends string>(

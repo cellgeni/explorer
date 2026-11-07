@@ -46,6 +46,17 @@ export function asCellId(value: string): CellId {
   return value as CellId
 }
 
+// AnnData obs names (H5AD, SpatialData tables) are arbitrary strings such as
+// AAACATACAACCAC-1. They share the CellId brand so imported annotations can
+// match them.
+export function asObsNameCellId(value: string): CellId {
+  if (value.trim().length === 0) {
+    throw new Error('Cell ID must not be empty.')
+  }
+
+  return value as CellId
+}
+
 export function cellIdFromIntPair(pair: CellIdIntPair): CellId {
   const hex = (pair.prefix >>> 0).toString(16).padStart(8, '0')
   const shifted = [...hex].map((digit) => {

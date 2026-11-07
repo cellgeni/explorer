@@ -133,10 +133,35 @@ describe('SpatialDataDataset', () => {
       boundaries: 'cell_boundaries',
     })
   })
+
+  it('reads boolean table obs columns as 0/1 values', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture({ booleanObs: true })),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+    })
+
+    const overview = await dataset.overview()
+
+    expect(overview.map((cell) => cell.metadata?.['in_tissue'])).toEqual([1, 0])
+    await expect(dataset.metadataTracks()).resolves.toContainEqual(
+      expect.objectContaining({ label: 'in_tissue', min: 0, max: 1 }),
+    )
+    await expect(dataset.metadataTrackOptions()).resolves.toContainEqual({
+      id: 'h5ad:in-tissue',
+      label: 'in_tissue',
+      min: 0,
+      max: 1,
+    })
+  })
 })
 
 function storeFixture(
-  options: { readonly companionBoundaries?: boolean } = {},
+  options: {
+    readonly companionBoundaries?: boolean
+    readonly booleanObs?: boolean
+  } = {},
 ): ReadonlyMap<string, Uint8Array> {
   const shapesTransform = (name: string) => ({
     'encoding-type': 'ngff:shapes',
@@ -199,11 +224,17 @@ function storeFixture(
     'tables/table/obs/.zgroup': { zarr_format: 2 },
     'tables/table/obs/.zattrs': {
       _index: '_index',
-      'column-order': ['region', 'cell_id'],
+      'column-order':
+        options.booleanObs === true
+          ? ['region', 'cell_id', 'in_tissue']
+          : ['region', 'cell_id'],
       'encoding-type': 'dataframe',
     },
     'tables/table/obs/_index/.zarray': arrayMeta([3], '|S6'),
     'tables/table/obs/cell_id/.zarray': arrayMeta([3], '<i8'),
+    ...(options.booleanObs === true
+      ? { 'tables/table/obs/in_tissue/.zarray': arrayMeta([3], '|b1') }
+      : {}),
     'tables/table/obs/region/.zgroup': { zarr_format: 2 },
     'tables/table/obs/region/.zattrs': { 'encoding-type': 'categorical' },
     'tables/table/obs/region/codes/.zarray': arrayMeta([3], '|i1'),
@@ -227,6 +258,7 @@ function storeFixture(
     ],
     ['/tables/table/obs/_index/0', fixedStrings(['cell-a', 'cell-b', 'cell-c'], 6)],
     ['/tables/table/obs/cell_id/0', bytes(new BigInt64Array([10n, 11n, 99n]))],
+    ['/tables/table/obs/in_tissue/0', new Uint8Array([1, 0, 1])],
     ['/tables/table/obs/region/codes/0', bytes(new Int8Array([0, 0, 0]))],
     ['/tables/table/obs/region/categories/0', fixedStrings(['cells'], 5)],
     ['/tables/table/var/_index/0', fixedStrings(['Actb', 'Gad1'], 4)],

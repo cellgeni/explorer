@@ -91,13 +91,13 @@ coordinate system.
 
 ## Files Read
 
-| Store path                               | Read by                                                       | Library                            | Used for                              |
-| ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------- | ------------------------------------- |
-| `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                        | fetch + JSON                       | Detection                             |
-| `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                | fetch + JSON                       | Element discovery                     |
-| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                      | `zarrita`                          | Cells, genes, annotations, embeddings |
-| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`) | `hyparquet` (`HEAD` + range reads) | Cell positions and boundaries         |
-| `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)   | `zarrita`                          | Morphology layer                      |
+| Store path                               | Read by                                                       | Library                            | Used for                                               |
+| ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------ |
+| `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                        | fetch + JSON                       | Detection                                              |
+| `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                | fetch + JSON                       | Element discovery                                      |
+| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                      | `zarrita`                          | Cells, genes, annotations, metadata tracks, embeddings |
+| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`) | `hyparquet` (`HEAD` + range reads) | Cell positions and boundaries                          |
+| `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)   | `zarrita`                          | Morphology layer                                       |
 
 `points` (transcripts), `labels` rasters, extra images, and extra tables are
 not read.
@@ -108,8 +108,9 @@ not read.
 an `AnnDataH5adDataset` with a `zarrSource` over the consolidated store. The
 table's `obs`, `var`, `X`, and `obsm` follow exactly the
 [H5AD layout rules](./h5ad.md#hdf5-layout-read): index and gene-name
-selection, categorical annotations, dense/CSR/CSC expression, and obsm
-embeddings.
+selection, categorical annotations, numeric and boolean metadata tracks,
+dense/CSR/CSC expression, and obsm embeddings. Imported annotations match the
+table's obs names, as for [H5AD](./h5ad.md#imported-annotations).
 
 Coordinates come from `resolveTableCoordinates` instead of `obsm` when the
 table annotates regions in the chosen coordinate system:
@@ -180,7 +181,7 @@ passes `skipNativeRgbAutoContrast` and enables all channels.
 1. Sets the platform to `spatialdata`; cell boundaries default to on.
 2. Logs `summary()`: coordinate system, image, table, skipped elements.
 3. Runs the shared `loadAnnDataOverview` (cells, gene panel, annotation sets,
-   embedding options).
+   embedding options, metadata track options).
 4. If `Morphology image` is enabled, loads the image in the background.
 
 Gating is in `SPATIALDATA_PLATFORM_ADAPTER`
@@ -208,9 +209,4 @@ off.
   shown.
 - The coordinate system is chosen automatically; there is no picker.
 - Shapes are read whole, not by viewport.
-- Boolean `obs` columns in the table are expected to fail the load (see
-  [H5AD known limitations](./h5ad.md#known-limitations)).
-- Numeric `obs` columns are not offered as `Metadata` colour tracks, and
-  imported CSV/JSON annotations must use Xenium-format cell IDs, so they do
-  not match SpatialData obs names.
 - Diagnostics do not check the image or table arrays.

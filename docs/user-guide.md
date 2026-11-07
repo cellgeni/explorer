@@ -56,13 +56,13 @@ current viewport exact when the region is small enough; `All cells` scores
 every cell on the slide. The default gene scale is Plasma.
 
 For H5AD and SpatialData, categorical and string `obs` columns load as
-annotation sets, and numeric `obs` values appear in the `Cell` tab for the
-selected cell. Numeric `obs` columns are not yet available as `Cell color` →
-`Metadata` tracks.
+annotation sets. Numeric and boolean `obs` columns appear in the `Cell` tab for
+the selected cell and as `Cell color` → `Metadata` tracks; booleans show as 0
+and 1. A track's values are read the first time you select it.
 
-Imported CSV/JSON annotations and metadata tracks (Annotations tab) currently
-require Xenium-format cell IDs such as `aaabbbcc-1`, so files keyed by H5AD or
-SpatialData obs names are rejected.
+Imported CSV/JSON annotations and metadata tracks (Annotations tab) are matched
+by cell ID. Xenium datasets need Xenium-format IDs such as `aaabbbcc-1`; H5AD
+and SpatialData datasets use their obs names, such as `AAACATACAACCAC-1`.
 
 For Visium HD, selected-gene overlays read the dataset's `feature_slice.h5`
 (required for gene overlays) and paint the active square-bin grid. The `Cell`

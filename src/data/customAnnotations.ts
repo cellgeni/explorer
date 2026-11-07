@@ -1,4 +1,4 @@
-import { asCellId } from './cellid'
+import { asCellId, asObsNameCellId } from './cellid'
 import type { CellId } from './cellid'
 import type { Annotation } from '../datasets/spatialDataset'
 
@@ -7,12 +7,22 @@ export interface ContinuousCellMetadataValue {
   readonly value: number
 }
 
-export interface ContinuousCellMetadataTrack {
+// A metadata track without its per-cell values, for listing tracks a dataset
+// can provide before any of them are loaded.
+export interface CellMetadataTrackOption {
   readonly id: string
   readonly label: string
-  readonly values: readonly ContinuousCellMetadataValue[]
   readonly min: number
   readonly max: number
+}
+
+export interface ContinuousCellMetadataTrack extends CellMetadataTrackOption {
+  readonly values: readonly ContinuousCellMetadataValue[]
+}
+
+export interface LoadCellMetadataTracksOptions {
+  readonly trackId?: string
+  readonly signal?: AbortSignal
 }
 
 export interface CustomAnnotationImport {
@@ -20,16 +30,28 @@ export interface CustomAnnotationImport {
   readonly metadataTracks: readonly ContinuousCellMetadataTrack[]
 }
 
+// 'xenium' only accepts Xenium cell IDs; 'obs-name' accepts any non-empty
+// AnnData obs name (H5AD and SpatialData tables).
+export type CustomAnnotationCellIdFormat = 'xenium' | 'obs-name'
+
+export interface CustomAnnotationParseOptions {
+  readonly cellIdFormat?: CustomAnnotationCellIdFormat
+}
+
+type CellIdParser = (value: string) => CellId
+
 export function parseCustomAnnotations(
   text: string,
   fileName = 'annotations',
+  options: CustomAnnotationParseOptions = {},
 ): readonly Annotation[] {
-  return parseCustomAnnotationImport(text, fileName).annotations
+  return parseCustomAnnotationImport(text, fileName, options).annotations
 }
 
 export function parseCustomAnnotationImport(
   text: string,
   fileName = 'annotations',
+  options: CustomAnnotationParseOptions = {},
 ): CustomAnnotationImport {
   const trimmedText = text.trim()
 
@@ -37,9 +59,11 @@ export function parseCustomAnnotationImport(
     return { annotations: [], metadataTracks: [] }
   }
 
+  const parseCellId = options.cellIdFormat === 'obs-name' ? asObsNameCellId : asCellId
+
   return fileName.toLowerCase().endsWith('.json') || startsJson(trimmedText)
-    ? parseJsonAnnotations(trimmedText, fileName)
-    : parseCsvAnnotations(trimmedText, fileName)
+    ? parseJsonAnnotations(trimmedText, fileName, parseCellId)
+    : parseCsvAnnotations(trimmedText, fileName, parseCellId)
 }
 
 interface CustomAnnotationEntry {
@@ -48,19 +72,23 @@ interface CustomAnnotationEntry {
   readonly setName?: string
 }
 
-function parseJsonAnnotations(text: string, fileName: string): CustomAnnotationImport {
+function parseJsonAnnotations(
+  text: string,
+  fileName: string,
+  parseCellId: CellIdParser,
+): CustomAnnotationImport {
   const value: unknown = JSON.parse(text)
 
   if (Array.isArray(value)) {
     return {
-      annotations: annotationsFromJsonRows(value, fileName),
+      annotations: annotationsFromJsonRows(value, fileName, parseCellId),
       metadataTracks: [],
     }
   }
 
   if (isRecord(value)) {
     return {
-      annotations: annotationsFromJsonRecord(value, fileName),
+      annotations: annotationsFromJsonRecord(value, fileName, parseCellId),
       metadataTracks: [],
     }
   }
@@ -71,6 +99,7 @@ function parseJsonAnnotations(text: string, fileName: string): CustomAnnotationI
 function annotationsFromJsonRows(
   rows: readonly unknown[],
   fileName: string,
+  parseCellId: CellIdParser,
 ): readonly Annotation[] {
   const grouped = new Map<string, CellId[]>()
   const directAnnotations: CustomAnnotationEntry[] = []
@@ -81,7 +110,11 @@ function annotationsFromJsonRows(
     }
 
     const label = readStringField(row, ['label', 'annotation', 'group', 'cluster'])
-    const cellIds = readCellIdArrayField(row, ['cellIds', 'cell_ids', 'cells'])
+    const cellIds = readCellIdArrayField(
+      row,
+      ['cellIds', 'cell_ids', 'cells'],
+      parseCellId,
+    )
 
     if (label !== undefined && cellIds !== undefined) {
       directAnnotations.push({ label, cellIds })
@@ -96,7 +129,7 @@ function annotationsFromJsonRows(
       )
     }
 
-    appendGroupedCell(grouped, label, asCellId(cellId))
+    appendGroupedCell(grouped, label, parseCellId(cellId))
   }
 
   return createCustomAnnotations(fileName, [
@@ -108,6 +141,7 @@ function annotationsFromJsonRows(
 function annotationsFromJsonRecord(
   record: Readonly<Record<string, unknown>>,
   fileName: string,
+  parseCellId: CellIdParser,
 ): readonly Annotation[] {
   const annotations: CustomAnnotationEntry[] = []
 
@@ -123,7 +157,7 @@ function annotationsFromJsonRecord(
           throw new Error('JSON annotation cell ids must be strings.')
         }
 
-        return asCellId(cellId)
+        return parseCellId(cellId)
       }),
     })
   }
@@ -131,7 +165,11 @@ function annotationsFromJsonRecord(
   return createCustomAnnotations(fileName, annotations)
 }
 
-function parseCsvAnnotations(text: string, fileName: string): CustomAnnotationImport {
+function parseCsvAnnotations(
+  text: string,
+  fileName: string,
+  parseCellId: CellIdParser,
+): CustomAnnotationImport {
   const rows = parseCsvRows(text)
   const header = rows[0]
 
@@ -157,12 +195,13 @@ function parseCsvAnnotations(text: string, fileName: string): CustomAnnotationIm
         cellIdIndex,
         labelIndex,
         fileName,
+        parseCellId,
       ),
       metadataTracks: [],
     }
   }
 
-  return parseCsvWideAnnotations(rows, header, cellIdIndex, fileName)
+  return parseCsvWideAnnotations(rows, header, cellIdIndex, fileName, parseCellId)
 }
 
 function parseCsvSingleLabelAnnotations(
@@ -170,6 +209,7 @@ function parseCsvSingleLabelAnnotations(
   cellIdIndex: number,
   labelIndex: number,
   fileName: string,
+  parseCellId: CellIdParser,
 ): readonly Annotation[] {
   const grouped = new Map<string, CellId[]>()
 
@@ -186,7 +226,7 @@ function parseCsvSingleLabelAnnotations(
       continue
     }
 
-    appendGroupedCell(grouped, label, asCellId(cellId))
+    appendGroupedCell(grouped, label, parseCellId(cellId))
   }
 
   return createCustomAnnotations(fileName, annotationEntriesFromGroupedCells(grouped))
@@ -197,6 +237,7 @@ function parseCsvWideAnnotations(
   header: readonly string[],
   cellIdIndex: number,
   fileName: string,
+  parseCellId: CellIdParser,
 ): CustomAnnotationImport {
   const annotationColumns = header
     .map((column, index) => ({ index, name: column.trim() }))
@@ -223,6 +264,7 @@ function parseCsvWideAnnotations(
         index,
         fileName,
         name,
+        parseCellId,
       )
 
       if (metadataTrack !== null) {
@@ -249,7 +291,7 @@ function parseCsvWideAnnotations(
         continue
       }
 
-      appendGroupedCell(grouped, label, asCellId(cellId))
+      appendGroupedCell(grouped, label, parseCellId(cellId))
     }
 
     annotations.push(
@@ -272,6 +314,7 @@ function createContinuousMetadataTrack(
   valueIndex: number,
   fileName: string,
   label: string,
+  parseCellId: CellIdParser,
 ): ContinuousCellMetadataTrack | null {
   const values: ContinuousCellMetadataValue[] = []
   let min = Number.POSITIVE_INFINITY
@@ -296,7 +339,7 @@ function createContinuousMetadataTrack(
       continue
     }
 
-    values.push({ cellId: asCellId(cellId), value })
+    values.push({ cellId: parseCellId(cellId), value })
     min = Math.min(min, value)
     max = Math.max(max, value)
   }
@@ -480,6 +523,7 @@ function readStringField(
 function readCellIdArrayField(
   record: Readonly<Record<string, unknown>>,
   keys: readonly string[],
+  parseCellId: CellIdParser,
 ): readonly CellId[] | undefined {
   for (const key of keys) {
     const value = record[key]
@@ -492,7 +536,7 @@ function readCellIdArrayField(
       throw new Error(`${key} must be an array of cell-id strings.`)
     }
 
-    return value.map((cellId) => asCellId(cellId))
+    return value.map((cellId) => parseCellId(cellId))
   }
 
   return undefined

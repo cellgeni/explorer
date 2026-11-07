@@ -5,7 +5,12 @@ import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import { normalizeRoiSelection } from '../data/roiSelection'
 import { slug } from '../utils/slug'
-import type { ContinuousCellMetadataTrack } from '../data/customAnnotations'
+import type {
+  CellMetadataTrackOption,
+  ContinuousCellMetadataTrack,
+  ContinuousCellMetadataValue,
+  LoadCellMetadataTracksOptions,
+} from '../data/customAnnotations'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import {
   analysisEmbeddingLabel,
@@ -423,19 +428,41 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return annotations
   }
 
-  async metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]> {
+  async metadataTrackOptions(): Promise<readonly CellMetadataTrackOption[]> {
     const cache = await this.cache()
 
-    return cache.continuousTracks.map((track) => ({
-      id: `h5ad:${slug(track.id)}`,
+    return h5adMetadataTrackEntries(cache.continuousTracks).map(({ id, track }) => ({
+      id,
       label: track.label,
-      values: track.values.map((value, index) => ({
-        cellId: cache.cellIds[index] as never,
-        value,
-      })),
       min: track.min,
       max: track.max,
     }))
+  }
+
+  // Builds one value object per cell, so callers should request only the
+  // tracks they display.
+  async metadataTracks(
+    options: LoadCellMetadataTracksOptions = {},
+  ): Promise<readonly ContinuousCellMetadataTrack[]> {
+    throwIfAborted(options.signal)
+    const cache = await this.cache()
+    throwIfAborted(options.signal)
+
+    return h5adMetadataTrackEntries(cache.continuousTracks)
+      .filter(({ id }) => options.trackId === undefined || id === options.trackId)
+      .map(({ id, track }) => {
+        const values: ContinuousCellMetadataValue[] = []
+
+        track.values.forEach((value, index) => {
+          const cellId = cache.cellIds[index]
+
+          if (cellId !== undefined && Number.isFinite(value)) {
+            values.push({ cellId: cellId as never, value })
+          }
+        })
+
+        return { id, label: track.label, values, min: track.min, max: track.max }
+      })
   }
 
   async embeddings(
@@ -2065,6 +2092,25 @@ function h5adAnnotationGroupId(track: H5adCategoricalTrack): string {
   return `analysis:${slug(track.label)}`
 }
 
+// obs keys are unique but their slugs may not be (n_genes vs N_GENES).
+function h5adMetadataTrackEntries(
+  tracks: readonly H5adContinuousTrack[],
+): readonly { readonly id: string; readonly track: H5adContinuousTrack }[] {
+  const usedIds = new Set<string>()
+
+  return tracks.map((track) => {
+    const baseId = `h5ad:${slug(track.id)}`
+    let id = baseId
+
+    for (let suffix = 2; usedIds.has(id); suffix += 1) {
+      id = `${baseId}-${suffix}`
+    }
+
+    usedIds.add(id)
+    return { id, track }
+  })
+}
+
 function countUniqueLabels(labels: readonly string[]): number {
   const values = new Set<string>()
 
@@ -2266,16 +2312,19 @@ function fullArraySelection(array: H5adZarrArray): null[] {
 }
 
 function zarrChunkValue(value: unknown): unknown {
-  if (
-    typeof value === 'object' &&
-    value !== null &&
-    'data' in value &&
-    isZarrChunkData((value as { readonly data?: unknown }).data)
-  ) {
-    return (value as { readonly data: unknown }).data
+  if (typeof value !== 'object' || value === null || !('data' in value)) {
+    return value
   }
 
-  return value
+  const data = (value as { readonly data?: unknown }).data
+
+  // zarrita decodes bool arrays as BoolArray; h5wasm already returns HDF5
+  // booleans as Int8, so both backends see 0/1 numbers.
+  if (data instanceof zarr.BoolArray) {
+    return Uint8Array.from(data, (item) => (item ? 1 : 0))
+  }
+
+  return isZarrChunkData(data) ? data : value
 }
 
 async function zarrNumericVector(

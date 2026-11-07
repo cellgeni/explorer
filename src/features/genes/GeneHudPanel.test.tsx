@@ -61,14 +61,12 @@ describe('GeneHudPanel', () => {
           {
             id: 'metadata:confidence',
             label: 'confidence',
-            values: [],
             min: 0,
             max: 1,
           },
           {
             id: 'metadata:pseudotime',
             label: 'pseudotime',
-            values: [],
             min: 0.1,
             max: 0.9,
           },

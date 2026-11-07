@@ -191,4 +191,92 @@ ${cellC},T cell,0,,0.9`,
       },
     ])
   })
+
+  it('rejects AnnData obs names unless obs-name cell IDs are allowed', () => {
+    const csv = `cell_id,label,score
+AAACATACAACCAC-1,T cell,0.25
+AAACATTGAGCTAC-1,B cell,0.75`
+
+    expect(() => parseCustomAnnotationImport(csv, 'obs.csv')).toThrow(
+      /Invalid Xenium cell ID: AAACATACAACCAC-1/,
+    )
+    expect(() =>
+      parseCustomAnnotationImport(csv, 'obs.csv', { cellIdFormat: 'xenium' }),
+    ).toThrow(/Invalid Xenium cell ID/)
+  })
+
+  it('imports CSV labels and metadata tracks keyed by AnnData obs names', () => {
+    const imported = parseCustomAnnotationImport(
+      `cell_id,cell_type,score
+AAACATACAACCAC-1,T cell,0.25
+AAACATTGAGCTAC-1,B cell,0.75
+cell 3,T cell,0.5`,
+      'obs.csv',
+      { cellIdFormat: 'obs-name' },
+    )
+
+    expect(imported.annotations).toEqual([
+      {
+        id: 'custom:obs-csv:cell-type:t-cell',
+        label: 'cell_type: T cell',
+        cellIds: ['AAACATACAACCAC-1', 'cell 3'],
+      },
+      {
+        id: 'custom:obs-csv:cell-type:b-cell',
+        label: 'cell_type: B cell',
+        cellIds: ['AAACATTGAGCTAC-1'],
+      },
+    ])
+    expect(imported.metadataTracks).toEqual([
+      {
+        id: 'metadata:obs-csv:score',
+        label: 'score',
+        values: [
+          { cellId: 'AAACATACAACCAC-1', value: 0.25 },
+          { cellId: 'AAACATTGAGCTAC-1', value: 0.75 },
+          { cellId: 'cell 3', value: 0.5 },
+        ],
+        min: 0.25,
+        max: 0.75,
+      },
+    ])
+  })
+
+  it('imports JSON annotations keyed by AnnData obs names', () => {
+    const options = { cellIdFormat: 'obs-name' } as const
+
+    expect(
+      parseCustomAnnotations(
+        JSON.stringify({ Tumour: ['AAACATACAACCAC-1', 'spot_17'] }),
+        'labels.json',
+        options,
+      ),
+    ).toEqual([
+      {
+        id: 'custom:labels-json:tumour',
+        label: 'Tumour',
+        cellIds: ['AAACATACAACCAC-1', 'spot_17'],
+      },
+    ])
+    expect(
+      parseCustomAnnotations(
+        JSON.stringify([
+          { label: 'Selected', cellIds: ['spot_1', 'spot_2'] },
+          { label: 'Other', cell_id: 'spot_3' },
+        ]),
+        'rows.json',
+        options,
+      ),
+    ).toEqual([
+      {
+        id: 'custom:rows-json:selected',
+        label: 'Selected',
+        cellIds: ['spot_1', 'spot_2'],
+      },
+      { id: 'custom:rows-json:other', label: 'Other', cellIds: ['spot_3'] },
+    ])
+    expect(() =>
+      parseCustomAnnotations(JSON.stringify({ Empty: ['  '] }), 'empty.json', options),
+    ).toThrow(/Cell ID must not be empty/)
+  })
 })

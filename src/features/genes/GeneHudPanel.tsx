@@ -1,5 +1,5 @@
 import type { ObservationColorMode } from '../../rendering/cellStyling'
-import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
+import type { CellMetadataTrackOption } from '../../data/customAnnotations'
 import {
   GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
   GENE_EXPRESSION_SCORE_MODE_OPTIONS,
@@ -46,7 +46,7 @@ interface GeneHudPanelProps {
   readonly geneExpressionDetailMode: GeneExpressionDetailMode
   readonly observationColorMode: ObservationColorMode
   readonly hasAnnotationColors: boolean
-  readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
+  readonly cellMetadataTracks: readonly CellMetadataTrackOption[]
   readonly selectedCellMetadataTrackId: string | null
   readonly onGeneSearchChange: (search: string) => void
   readonly onToggleGene: (gene: string) => void
@@ -367,7 +367,7 @@ export function GeneHudPanel({
   )
 }
 
-function metadataTrackOptionLabel(track: ContinuousCellMetadataTrack): string {
+function metadataTrackOptionLabel(track: CellMetadataTrackOption): string {
   return `${track.label} (${formatMetadataValue(track.min)}-${formatMetadataValue(
     track.max,
   )})`

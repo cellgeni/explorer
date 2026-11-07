@@ -2061,7 +2061,7 @@ describe('App', () => {
     }
   })
 
-  it('lists H5AD annotations and obsm embeddings without loading them by default', async () => {
+  it('lists H5AD annotations, obsm embeddings, and metadata tracks without loading them by default', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
     )
@@ -2095,7 +2095,23 @@ describe('App', () => {
           cellIds: ['cell-a'],
         },
       ]),
-      metadataTracks: vi.fn(async () => []),
+      metadataTrackOptions: vi.fn(async () => [
+        { id: 'h5ad:n-genes', label: 'n_genes', min: 200, max: 5400 },
+        { id: 'h5ad:pct-mito', label: 'pct_mito', min: 0, max: 0.25 },
+      ]),
+      metadataTracks: vi.fn(async (options?: { readonly trackId?: string }) =>
+        options?.trackId === 'h5ad:pct-mito'
+          ? [
+              {
+                id: 'h5ad:pct-mito',
+                label: 'pct_mito',
+                values: [{ cellId: 'cell-a', value: 0.1 }],
+                min: 0,
+                max: 0.25,
+              },
+            ]
+          : [],
+      ),
       embeddingOptions: vi.fn(async () => [
         { kind: 'X_umap', label: 'UMAP', sourcePath: '/obsm/X_umap' },
         { kind: 'X_pca', label: 'PCA', sourcePath: '/obsm/X_pca' },
@@ -2194,9 +2210,84 @@ describe('App', () => {
       expect(h5adDataset.embeddings).toHaveBeenLastCalledWith(
         expect.objectContaining({ kind: 'X_pca' }),
       )
+
+      openHudTab('Genes')
+      const cellColor = screen.getByRole('combobox', { name: 'Cell color' })
+      expect(within(cellColor).getByRole('option', { name: 'Metadata' })).toHaveValue(
+        'metadata',
+      )
+      expect(h5adDataset.metadataTracks).not.toHaveBeenCalled()
+
+      fireEvent.change(cellColor, { target: { value: 'metadata' } })
+      const metadataTrack = screen.getByRole('combobox', { name: 'Metadata track' })
+      expect(
+        within(metadataTrack)
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['n_genes (200-5,400)', 'pct_mito (0-0.250)'])
+      await waitFor(() => {
+        expect(h5adDataset.metadataTracks).toHaveBeenCalledWith(
+          expect.objectContaining({ trackId: 'h5ad:n-genes' }),
+        )
+      })
+
+      fireEvent.change(metadataTrack, { target: { value: 'h5ad:pct-mito' } })
+      await waitFor(() => {
+        expect(h5adDataset.metadataTracks).toHaveBeenLastCalledWith(
+          expect.objectContaining({ trackId: 'h5ad:pct-mito' }),
+        )
+      })
+      expect(h5adDataset.metadataTracks).toHaveBeenCalledTimes(2)
+      expect(metadataTrack).toHaveValue('h5ad:pct-mito')
     } finally {
       viewport.restore()
     }
+  })
+
+  it('imports annotations keyed by H5AD obs names', async () => {
+    const h5adUrl = 'https://example.test/sample.h5ad'
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'h5ad' as const,
+      baseUrl: h5adUrl,
+      h5adUrl,
+      checked: [],
+    }))
+    const h5adDataset = {
+      overview: vi.fn(async () => [
+        {
+          cellId: 'AAACATACAACCAC-1',
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 0,
+        },
+      ]),
+      genePanel: vi.fn(async () => []),
+      annotationGroups: vi.fn(async () => []),
+      embeddingOptions: vi.fn(async () => []),
+    }
+    const file = new File(['cell_id,label\nAAACATACAACCAC-1,Manual ROI'], 'obs.csv', {
+      type: 'text/csv',
+    })
+
+    render(
+      <TestApp
+        detectSpatialDataset={detectSpatialDataset}
+        getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset)}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: h5adUrl },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByText(/H5AD ready: 1 cells, 0 genes/)
+
+    openHudTab('Annotations')
+    fireEvent.change(screen.getByLabelText('Import File'), {
+      target: { files: [file] },
+    })
+
+    expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
+      'Manual ROI',
+    )
   })
 
   it('loads H5AD selected-cell observations and expression from the matrix', async () => {

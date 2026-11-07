@@ -9,7 +9,10 @@ import type {
 } from '../../components/ViewerCore'
 import type { AnalysisEmbeddingKind } from '../../data/analysisEmbeddings'
 import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
-import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
+import type {
+  CellMetadataTrackOption,
+  ContinuousCellMetadataTrack,
+} from '../../data/customAnnotations'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import {
   normalizeTranscriptExactPointLimit,
@@ -189,6 +192,9 @@ export function useAppDomainState({
   const [hiddenAnnotationIds, setHiddenAnnotationIds] = useState<readonly string[]>([])
   const [cellMetadataTracks, setCellMetadataTracks] = useState<
     readonly ContinuousCellMetadataTrack[]
+  >([])
+  const [cellMetadataTrackOptions, setCellMetadataTrackOptions] = useState<
+    readonly CellMetadataTrackOption[]
   >([])
   const [geometricAnnotations, setGeometricAnnotations] = useState<
     readonly GeometricAnnotationFeature[]
@@ -419,6 +425,7 @@ export function useAppDomainState({
       annotationGroupState,
       annotationImportUrl,
       annotationState,
+      cellMetadataTrackOptions,
       cellMetadataTracks,
       geometricAnnotations,
       hiddenAnnotationIds,
@@ -429,6 +436,7 @@ export function useAppDomainState({
       setAnnotationGroupState,
       setAnnotationImportUrl,
       setAnnotationState,
+      setCellMetadataTrackOptions,
       setCellMetadataTracks,
       setGeometricAnnotations,
       setHiddenAnnotationIds,
