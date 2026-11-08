@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
-import { overviewCellIntersectsBbox, overviewCellsInBbox } from './cellAggregation'
+import { overviewCellsInBbox } from './cellAggregation'
 import {
   countOverviewCellsInBbox,
   createOverviewCellIndex,
-  hasMoreOverviewCellsThan,
   overviewCellIndicesNear,
 } from './overviewCellIndex'
 import type { OverviewCellDatum } from './deckLayerTypes'
@@ -48,18 +47,6 @@ describe('overview cell index', () => {
     expect(countOverviewCellsInBbox(index, box)).toBe(
       overviewCellsInBbox(cells, box).length,
     )
-  })
-
-  it('tells whether more cells than a limit touch the view', () => {
-    const box = bbox(120, 340, 760, 410)
-    const touching = cells.filter((cell) => overviewCellIntersectsBbox(cell, box)).length
-    const accepts = (cellIndex: number) => {
-      const cell = cells[cellIndex]
-      return cell !== undefined && overviewCellIntersectsBbox(cell, box)
-    }
-
-    expect(hasMoreOverviewCellsThan(index, box, touching - 1, accepts)).toBe(true)
-    expect(hasMoreOverviewCellsThan(index, box, touching, accepts)).toBe(false)
   })
 
   it('finds every cell that could contain a point', () => {

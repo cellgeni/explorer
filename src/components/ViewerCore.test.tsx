@@ -758,6 +758,80 @@ describe('ViewerCore', () => {
     expect(expressionLayer).toBeUndefined()
   })
 
+  it('draws each expressing cell zoomed out, highest scores on top', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells: readonly OverviewCellDatum[] = Array.from(
+      { length: 900 },
+      (_, index) => ({
+        id: `cell-${index}`,
+        position: [(index % 30) * 10 - 150, Math.floor(index / 30) * 5 - 75, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      }),
+    )
+    const expressionElements = cells.map(
+      (cell, index): OverviewCellDatum => ({
+        ...cell,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: index % 3,
+        expressionGenes: ['COL4A1'],
+      }),
+    )
+    const idsScoring = (count: number) =>
+      expressionElements
+        .filter((element) => element.expressionCount === count)
+        .map((element) => element.id)
+    const [x = 0, y = 0] = cells[1]?.position ?? []
+    const boundary: CellBoundaryDatum = {
+      id: 'cell-1',
+      polygon: [
+        [x - 2, y - 2, 0],
+        [x + 2, y - 2, 0],
+        [x + 2, y + 2, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [32, 102, 83, 190],
+    }
+    const viewer = (boundaries: readonly CellBoundaryDatum[]) => (
+      <ViewerCore
+        cells={cells}
+        boundaries={boundaries}
+        geneExpressionActive
+        expressionElements={expressionElements}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: -3 }}
+      />
+    )
+    const expressionOverlayIds = () => {
+      const expressionLayer = deckGlMock.layers.find((layer) => {
+        const candidate = layer as { readonly id?: string }
+
+        return candidate.id === 'gene-expression-scatter'
+      }) as { readonly props?: { readonly data?: readonly OverviewCellDatum[] } }
+
+      return expressionLayer.props?.data?.map((element) => element.id) ?? []
+    }
+    const { rerender } = render(viewer([]))
+
+    await act(async () => {
+      vi.advanceTimersByTime(200)
+    })
+
+    expect(expressionOverlayIds()).toEqual([...idsScoring(1), ...idsScoring(2)])
+
+    rerender(viewer([boundary]))
+
+    await act(async () => {
+      vi.advanceTimersByTime(200)
+    })
+
+    expect(expressionOverlayIds()).toEqual([
+      ...idsScoring(1).filter((id) => id !== 'cell-1'),
+      ...idsScoring(2),
+    ])
+  })
+
   it('omits transcript hover cell details when no cell id is present', () => {
     const transcript = transcriptDatum({
       id: 'tx-without-cell',

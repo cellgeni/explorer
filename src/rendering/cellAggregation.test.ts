@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers } from '../data/coords'
 import {
-  aggregateExpressionElements,
   aggregateOverviewCells,
   estimateOverviewCellCountInBbox,
   overviewAggregationBinMicrometers,
@@ -110,58 +109,6 @@ describe('overview cell aggregation', () => {
     })
   })
 
-  it('uses fixed data-space bin centers for sampled expression cells across overview zooms', () => {
-    const expressionElements: readonly OverviewCellDatum[] = [
-      {
-        id: 'cell-1',
-        position: [0, 0, 0],
-        radiusPixels: 3,
-        fillColor: [215, 63, 124, 180],
-        expressionCount: 1,
-      },
-      {
-        id: 'cell-2',
-        position: [20, -20, 0],
-        radiusPixels: 4,
-        fillColor: [240, 128, 120, 220],
-        expressionCount: 9,
-      },
-    ]
-
-    const firstZoom = aggregateExpressionElements(expressionElements, viewState, {
-      binMicrometers: 100,
-      exactElementLimit: 0,
-      exactZoom: 0,
-    })
-    const secondZoom = aggregateExpressionElements(
-      expressionElements,
-      { ...viewState, zoom: -1.25 },
-      {
-        binMicrometers: 100,
-        exactElementLimit: 0,
-        exactZoom: 0,
-      },
-    )
-
-    expect(firstZoom).toHaveLength(1)
-    expect(secondZoom).toHaveLength(1)
-    expect(firstZoom[0]?.id).toBe('expression-bin:0:0')
-    expect(firstZoom[0]?.position).toEqual(secondZoom[0]?.position)
-    expect(firstZoom[0]).toMatchObject({
-      position: [50, -50, 0],
-      expressionCount: 10,
-      cellCount: 2,
-    })
-  })
-
-  it('returns exact expression cells when the viewport is small enough', () => {
-    expect(
-      aggregateExpressionElements(cells, viewState, {
-        exactElementLimit: cells.length,
-      }),
-    ).toBe(cells)
-  })
-
   it('keeps expression cells that are clipped by the viewport edge', () => {
     const edgeCell: OverviewCellDatum = {
       id: 'edge-bin',
@@ -186,18 +133,7 @@ describe('overview cell aggregation', () => {
     }
 
     expect(overviewCellsIntersectingBbox([edgeCell], clippedBbox)).toEqual([edgeCell])
-    expect(
-      aggregateExpressionElements([edgeCell], viewState, {
-        bbox: clippedBbox,
-        exactElementLimit: 1,
-      }),
-    ).toEqual([edgeCell])
-    expect(
-      aggregateExpressionElements([pointOnlyCell], viewState, {
-        bbox: clippedBbox,
-        exactElementLimit: 1,
-      }),
-    ).toEqual([])
+    expect(overviewCellsIntersectingBbox([pointOnlyCell], clippedBbox)).toEqual([])
   })
 
   it('derives bin size from the current orthographic zoom', () => {

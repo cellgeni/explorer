@@ -91,6 +91,16 @@ export function styleGeneExpressionElementsByScale(
   })
 }
 
+// Elements scoring above zero, lowest first, so the highest draw on top where
+// they overlap.
+export function expressingElementsByScore(
+  elements: readonly OverviewCellDatum[],
+): readonly OverviewCellDatum[] {
+  return elements
+    .filter((element) => (element.expressionCount ?? 0) > 0)
+    .sort((first, second) => (first.expressionCount ?? 0) - (second.expressionCount ?? 0))
+}
+
 export function geneExpressionScoreDomainMax(
   elements: readonly GeneExpressionElement[],
   genes: readonly string[],

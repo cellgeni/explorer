@@ -88,6 +88,7 @@ export {
 } from './deckLayerColors'
 export {
   createGeneExpressionElementStyleIndex,
+  expressingElementsByScore,
   geneExpressionElementsToLayerData,
   geneExpressionScoreDomainMax,
   styleCellsByGeneExpression,

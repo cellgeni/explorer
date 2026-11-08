@@ -58,18 +58,14 @@ import {
   createGeneExpressionElementStyleIndex,
   createOverviewLayers,
   createOverviewViewState,
+  expressingElementsByScore,
   spatialOverviewView,
   styleCellsByGeneExpression,
   styleGridCellsByGeneExpression,
 } from '../rendering/deckLayers'
 import {
   DEFAULT_OVERVIEW_RENDER_CELL_LIMIT,
-  EXPRESSION_AGGREGATION_BIN_MICROMETERS,
-  EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT,
-  EXPRESSION_AGGREGATION_EXACT_ZOOM,
   estimateOverviewCellCountInBbox,
-  expressionElementBins,
-  overviewCellIntersectsBbox,
   overviewCellsExtentBbox,
   overviewCellsIntersectingBbox,
 } from '../rendering/cellAggregation'
@@ -84,7 +80,6 @@ import {
 import {
   countOverviewCellsInBbox,
   createOverviewCellIndex,
-  hasMoreOverviewCellsThan,
   overviewCellIndicesNear,
 } from '../rendering/overviewCellIndex'
 import { morphologyViewportBbox } from '../rendering/morphologyCanvas'
@@ -602,19 +597,9 @@ function ViewerSurface({
           }),
     [annotationStyleColors, cellMetadataTrack, cells, observationColorMode],
   )
-  // Without expression data the index stays the same across the bin zoom, so
-  // crossing it does not restyle every cell.
-  const shouldUseExpressionPointBins =
-    expressionElements.length > 0 && viewState.zoom < EXPRESSION_AGGREGATION_EXACT_ZOOM
   const geneExpressionPointStyleIndex = useMemo(
-    () =>
-      createGeneExpressionElementStyleIndex(
-        expressionElements,
-        shouldUseExpressionPointBins
-          ? { binMicrometers: EXPRESSION_AGGREGATION_BIN_MICROMETERS }
-          : {},
-      ),
-    [expressionElements, shouldUseExpressionPointBins],
+    () => createGeneExpressionElementStyleIndex(expressionElements),
+    [expressionElements],
   )
   const cellPointStyler = useMemo(
     () =>
@@ -638,41 +623,17 @@ function ViewerSurface({
       }),
     [geneExpressionActive, geneExpressionPointStyleIndex, renderGridCells],
   )
-  // The overlay draws every expressing cell, or the whole slide's bins when
-  // zoomed out with more of them in view than are drawn one by one. Either list
-  // only changes with the data or that choice, not with every pan.
-  const expressionElementIndex = useMemo(
+  // The overlay draws every expressing cell at every zoom, highest scores last
+  // so they stay on top where cells overlap zoomed out. Cells scoring zero are
+  // left to the cell points, which already colour them. The list only changes
+  // with the data, not with zoom or pan.
+  const geneExpressionOverlayElements = useMemo(
     () =>
-      geneExpressionOverlayEnabled &&
-      expressionElements.length > EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT
-        ? createOverviewCellIndex(expressionElements)
-        : null,
+      geneExpressionOverlayEnabled
+        ? expressingElementsByScore(expressionElements)
+        : EMPTY_OVERVIEW_CELLS,
     [expressionElements, geneExpressionOverlayEnabled],
   )
-  const expressionOverlayBinned =
-    expressionElementIndex !== null &&
-    viewState.zoom < EXPRESSION_AGGREGATION_EXACT_ZOOM &&
-    (viewportBbox === null ||
-      hasMoreOverviewCellsThan(
-        expressionElementIndex,
-        viewportBbox,
-        EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT,
-        (index) => {
-          const element = expressionElements[index]
-          return (
-            element !== undefined && overviewCellIntersectsBbox(element, viewportBbox)
-          )
-        },
-      ))
-  const geneExpressionOverlayElements = useMemo(() => {
-    if (!geneExpressionOverlayEnabled || expressionElements.length === 0) {
-      return EMPTY_OVERVIEW_CELLS
-    }
-
-    return expressionOverlayBinned
-      ? expressionElementBins(expressionElements, EXPRESSION_AGGREGATION_BIN_MICROMETERS)
-      : expressionElements
-  }, [expressionElements, expressionOverlayBinned, geneExpressionOverlayEnabled])
   const cellIndexById = useMemo(() => {
     const nextCellIndexById = new Map<string, number>()
 
