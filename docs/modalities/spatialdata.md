@@ -197,29 +197,33 @@ off.
 
 ## Source Files
 
-| File                                    | Role                                                                              |
-| --------------------------------------- | --------------------------------------------------------------------------------- |
-| `src/datasets/datasetFactory.ts`        | Root probes, `probeSpatialDataRoot`                                               |
-| `src/datasets/spatialDataCatalog.ts`    | Root check, store opening, catalog, view and table selection                      |
-| `src/datasets/spatialDataTransforms.ts` | Transform parsing and affine maths                                                |
-| `src/datasets/spatialDataShapes.ts`     | GeoParquet / WKB shapes reader                                                    |
-| `src/datasets/spatialDataLabels.ts`     | Label outline tracing and caching (`spatialDataLabelTrace.ts`)                    |
-| `src/datasets/spatialDataUnits.ts`      | µm-per-unit override, declared units, and estimates                               |
-| `src/datasets/spatialDataDataset.ts`    | `SpatialDataDataset`: coordinates, boundaries, image, delegation to the table     |
-| `src/datasets/h5adDataset.ts`           | AnnData table reader (`readAnnDataZarr`)                                          |
-| `src/zarr/zarrStores.ts`                | Fetch store, consolidated store, chunk LRU                                        |
-| `src/zarr/omeZarrLoader.ts`             | Image pyramid                                                                     |
-| `src/data/datasetDiagnostics.ts`        | Diagnostics: store, catalog, table presence, region `shapes.parquet` range checks |
+| File                                    | Role                                                                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `src/datasets/datasetFactory.ts`        | Root probes, `probeSpatialDataRoot`                                                                                      |
+| `src/datasets/spatialDataCatalog.ts`    | Root check, store opening, catalog, view and table selection                                                             |
+| `src/datasets/spatialDataTransforms.ts` | Transform parsing and affine maths                                                                                       |
+| `src/datasets/spatialDataShapes.ts`     | GeoParquet / WKB shapes reader                                                                                           |
+| `src/datasets/spatialDataLabels.ts`     | Label outline tracing and caching (`spatialDataLabelTrace.ts`)                                                           |
+| `src/datasets/spatialDataUnits.ts`      | µm-per-unit override, declared units, and estimates                                                                      |
+| `src/datasets/spatialDataDataset.ts`    | `SpatialDataDataset`: coordinates, boundaries, image, delegation to the table                                            |
+| `src/datasets/h5adDataset.ts`           | AnnData table reader (`readAnnDataZarr`)                                                                                 |
+| `src/zarr/zarrStores.ts`                | Fetch store, consolidated store, chunk LRU                                                                               |
+| `src/zarr/omeZarrLoader.ts`             | Image pyramid                                                                                                            |
+| `src/data/datasetDiagnostics.ts`        | Diagnostics: store, catalog, table presence and every table chunk, one image chunk, region `shapes.parquet` range checks |
 
 ## Known Limitations
 
-- `points`, `labels` rasters, additional images, and additional tables are not
-  shown.
-- The coordinate system is chosen automatically; there is no picker.
+- `points` (transcripts), additional images, and additional tables are not
+  shown. Labels elements are shown only as traced cell outlines, not as a
+  raster layer.
+- Only one coordinate system and one image are shown at a time. They are
+  chosen automatically; the Dataset tab's `Coordinate system` and `Image`
+  selects override the choice and reload the store.
 - Shapes are read whole, not by viewport.
 - Boolean `obs` columns in the table are expected to fail the load (see
   [H5AD known limitations](./h5ad.md#known-limitations)).
 - Numeric `obs` columns are not offered as `Metadata` colour tracks, and
   imported CSV/JSON annotations must use Xenium-format cell IDs, so they do
   not match SpatialData obs names.
-- Diagnostics do not check the image or table arrays.
+- Diagnostics send a `HEAD` for every table chunk but check only the first
+  chunk of the image's coarsest level, not every image chunk.

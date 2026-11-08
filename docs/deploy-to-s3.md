@@ -22,10 +22,16 @@ still need the byte-range and CORS rules in
   Vite `base` path.
 
 An edge layer is recommended because the production app should send the same
-cross-origin isolation headers used by the Vite dev and preview servers:
+cross-origin isolation headers used by the Vite dev and preview servers, so
+production behaves like the setup that was tested:
 
 - `Cross-Origin-Opener-Policy: same-origin`
 - `Cross-Origin-Embedder-Policy: require-corp`
+
+The current build does not depend on cross-origin isolation (nothing uses
+`SharedArrayBuffer`, and DuckDB-WASM uses its non-threaded bundles), so the app
+still works without these headers. Sending them keeps production identical to
+the dev and preview servers and keeps the option open for threaded WASM later.
 
 AWS S3 static website hosting alone cannot attach those arbitrary response
 headers. Some S3-compatible gateways can add headers directly, but the edge

@@ -215,15 +215,18 @@ at the same URL can serve stale bytes until site data is cleared.
 
 ## Workers
 
-| Worker                           | Created by                       | Purpose                                       |
-| -------------------------------- | -------------------------------- | --------------------------------------------- |
-| `tileDecode.worker.ts`           | `TileDecodeWorkerPool` (≤ 4)     | Decode TIFF tiles into `ImageBitmap`s         |
-| DuckDB-WASM worker               | `src/data/duckdb.ts`             | One per DuckDB client                         |
-| `featureBarcodeMatrix.worker.ts` | `src/data/gex.ts`                | Visium HD filtered matrix reads (per request) |
-| `visiumFeatureSlice.worker.ts`   | `src/data/visiumFeatureSlice.ts` | Visium HD Feature Slice reads (per request)   |
+| Worker                           | Created by                       | Purpose                                                                                        |
+| -------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `tileDecode.worker.ts`           | `TileDecodeWorkerPool` (≤ 4)     | Decode TIFF tiles into `ImageBitmap`s                                                          |
+| DuckDB-WASM worker               | `src/data/duckdb.ts`             | One per DuckDB client                                                                          |
+| `featureBarcodeMatrix.worker.ts` | `src/data/gex.ts`                | Visium HD filtered matrix reads (per request)                                                  |
+| `visiumFeatureSlice.worker.ts`   | `src/data/visiumFeatureSlice.ts` | Visium HD Feature Slice reads (per request)                                                    |
+| `zarrDecode.worker.ts`           | `ZarrDecodePool` (≤ 3)           | Decode OME-Zarr image chunks into `ImageBitmap`s; trace SpatialData label chunks into outlines |
 
-hyparquet, zarrita, h5wasm for H5AD, OME-Zarr tile conversion, and auto-contrast
-run on the main thread.
+hyparquet, zarrita reads (Xenium matrix, H5AD references, SpatialData tables),
+h5wasm for H5AD and the Xenium H5 fallback, and auto-contrast run on the main
+thread. OME-Zarr chunk bytes are fetched on the main thread and decoded in the
+Zarr decode workers, which fall back to the main thread if they fail.
 
 ## Performance Budget
 
@@ -266,6 +269,9 @@ it in sync. The field list is in the
 - `vite.config.ts` splits vendor chunks (`react-vendor`, `deck-vendor`,
   `duckdb-vendor`, `spatial-io-vendor`, `codec-vendor`) and serves
   `Cross-Origin-Opener-Policy: same-origin` and
-  `Cross-Origin-Embedder-Policy: require-corp` in dev and preview.
+  `Cross-Origin-Embedder-Policy: require-corp` in dev and preview. The app does not
+  depend on cross-origin isolation: nothing uses `SharedArrayBuffer`, and
+  DuckDB-WASM uses its non-threaded bundles. See
+  [Deploy to S3](./deploy-to-s3.md#recommended-shape) for production headers.
 - `npm run build` runs `tsc -b` then `vite build` into `dist/`. See
   [Deploy to S3](./deploy-to-s3.md).

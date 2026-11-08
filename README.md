@@ -119,3 +119,5 @@ The full index is in [docs/README.md](docs/README.md).
 - [Visium HD 2 µm strategy](docs/visium-hd-2um-strategy.md): why 2 µm first
   paint uses filtered matrix barcodes and a derived affine grid instead of the
   full `tissue_positions.parquet`.
+- [Unified plan](UNIFIED_PLAN.md): the build plan, phase records, architecture
+  decisions, refactor history, and open items.

@@ -29,10 +29,14 @@ through your object-store administration tooling.
 - Keep dataset paths immutable and serve long-lived `Cache-Control` plus `ETag`.
 - Prefer HTTP/2 or HTTP/3 on the CDN or fronting proxy because the app makes
   many small Range requests.
-- If cross-origin isolated threaded WASM is enabled later, serve the app with
-  `Cross-Origin-Opener-Policy: same-origin` and
-  `Cross-Origin-Embedder-Policy: require-corp`, and serve dataset assets with
-  `Cross-Origin-Resource-Policy: cross-origin`.
+- The app is served with `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` in development, preview, and the
+  recommended production setup ([Deploy to S3](./deploy-to-s3.md)). Under that
+  policy, every cross-origin dataset read must be a CORS request with a valid
+  CORS response. The app's reads are all CORS requests, so the policy above is
+  enough; `Cross-Origin-Resource-Policy: cross-origin` on dataset objects is
+  not required. The app does not need cross-origin isolation itself: nothing
+  uses `SharedArrayBuffer`, and DuckDB-WASM uses its non-threaded bundles.
 
 ## Manual Range Check
 
