@@ -162,33 +162,6 @@ export function overviewCellIndicesNear(
   return indices.sort((left, right) => left - right)
 }
 
-// Whether more than `limit` accepted cells have centres within the box padded
-// by the largest cell radius. Stops counting once past the limit.
-export function hasMoreOverviewCellsThan(
-  index: OverviewCellIndex,
-  bbox: BBox,
-  limit: number,
-  accepts: (cellIndex: number) => boolean,
-): boolean {
-  const padded = {
-    minX: bbox.minX - index.maxRadius,
-    maxX: bbox.maxX + index.maxRadius,
-    minY: bbox.minY - index.maxRadius,
-    maxY: bbox.maxY + index.maxRadius,
-  } as BBox
-  let count = 0
-
-  forEachBucketInBbox(index, padded, (start, end) => {
-    for (let cursor = start; cursor < end && count <= limit; cursor += 1) {
-      if (accepts(index.cellOrder[cursor] ?? 0)) {
-        count += 1
-      }
-    }
-  })
-
-  return count > limit
-}
-
 function forEachBucketInBbox(
   index: OverviewCellIndex,
   bbox: BBox,

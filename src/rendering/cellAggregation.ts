@@ -5,9 +5,6 @@ import type { OverviewCellDatum, OverviewViewState } from './deckLayers'
 export const OVERVIEW_AGGREGATION_TARGET_PIXELS = 10
 export const OVERVIEW_AGGREGATION_INDIVIDUAL_MICROMETERS = 12
 export const DEFAULT_OVERVIEW_RENDER_CELL_LIMIT = 250_000
-export const EXPRESSION_AGGREGATION_BIN_MICROMETERS = 220
-export const EXPRESSION_AGGREGATION_EXACT_ZOOM = -0.25
-export const EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT = 800
 
 export interface OverviewAggregationOptions {
   readonly bbox?: BBox
@@ -41,23 +38,6 @@ interface CellBin {
   expressionGenes: readonly string[] | undefined
 }
 
-interface ExpressionBin {
-  readonly key: string
-  readonly binX: number
-  readonly binY: number
-  count: number
-  maxRadiusPixels: number
-  maxRadiusMicrometers: number | undefined
-  maxAlpha: number
-  sumRed: number
-  sumGreen: number
-  sumBlue: number
-  sumExpressionCount: number
-  expressionGenes: readonly string[] | undefined
-  maxTranscriptCount: number | undefined
-  maxCellArea: number | undefined
-}
-
 export function aggregateOverviewCells(
   cells: readonly OverviewCellDatum[],
   viewState: OverviewViewState,
@@ -83,52 +63,6 @@ export function aggregateOverviewCells(
   }
 
   return aggregateCellsIntoBins(candidates, binSize)
-}
-
-export function aggregateExpressionElements(
-  cells: readonly OverviewCellDatum[],
-  viewState: OverviewViewState,
-  options: {
-    readonly bbox?: BBox
-    readonly binMicrometers?: number
-    readonly exactZoom?: number
-    readonly exactElementLimit?: number
-  } = {},
-): readonly OverviewCellDatum[] {
-  if (cells.length === 0) {
-    return []
-  }
-
-  const candidates =
-    options.bbox === undefined
-      ? cells
-      : overviewCellsIntersectingBbox(cells, options.bbox)
-
-  if (candidates.length === 0) {
-    return []
-  }
-
-  const exactZoom = options.exactZoom ?? EXPRESSION_AGGREGATION_EXACT_ZOOM
-  const exactElementLimit =
-    options.exactElementLimit ?? EXPRESSION_AGGREGATION_EXACT_ELEMENT_LIMIT
-
-  if (viewState.zoom >= exactZoom || candidates.length <= exactElementLimit) {
-    return candidates
-  }
-
-  return aggregateExpressionElementsIntoBins(
-    candidates,
-    options.binMicrometers ?? EXPRESSION_AGGREGATION_BIN_MICROMETERS,
-  )
-}
-
-// Expression elements binned on the fixed grid aggregateExpressionElements
-// uses when zoomed out.
-export function expressionElementBins(
-  cells: readonly OverviewCellDatum[],
-  binMicrometers = EXPRESSION_AGGREGATION_BIN_MICROMETERS,
-): readonly OverviewCellDatum[] {
-  return aggregateExpressionElementsIntoBins(cells, binMicrometers)
 }
 
 export function overviewAggregationBinMicrometers(
@@ -398,99 +332,6 @@ function normalizeRenderCellLimit(value: number | undefined): number {
   }
 
   return Math.max(1, Math.round(value))
-}
-
-function aggregateExpressionElementsIntoBins(
-  cells: readonly OverviewCellDatum[],
-  binSize: number,
-): readonly OverviewCellDatum[] {
-  const bins = new Map<string, ExpressionBin>()
-
-  for (const cell of cells) {
-    const [x = 0, deckY = 0] = cell.position
-    const rawY = -deckY
-    const binX = Math.floor(x / binSize)
-    const binY = Math.floor(rawY / binSize)
-    const key = `${binX}:${binY}`
-    const expressionCount = cell.expressionCount ?? 0
-    const bin = bins.get(key)
-    const alpha = readColorAlpha(cell)
-    const red = readColorChannel(cell, 0)
-    const green = readColorChannel(cell, 1)
-    const blue = readColorChannel(cell, 2)
-
-    if (bin === undefined) {
-      bins.set(key, {
-        key,
-        binX,
-        binY,
-        count: 1,
-        maxRadiusPixels: cell.radiusPixels,
-        maxRadiusMicrometers: cell.radiusMicrometers,
-        maxAlpha: alpha,
-        sumRed: red,
-        sumGreen: green,
-        sumBlue: blue,
-        sumExpressionCount: expressionCount,
-        expressionGenes: cell.expressionGenes,
-        maxTranscriptCount: cell.transcriptCount,
-        maxCellArea: cell.cellArea,
-      })
-      continue
-    }
-
-    bin.count += 1
-    bin.maxRadiusPixels = Math.max(bin.maxRadiusPixels, cell.radiusPixels)
-    bin.maxRadiusMicrometers = maxOptionalNumber(
-      bin.maxRadiusMicrometers,
-      cell.radiusMicrometers,
-    )
-    bin.maxAlpha = Math.max(bin.maxAlpha, alpha)
-    bin.sumRed += red
-    bin.sumGreen += green
-    bin.sumBlue += blue
-    bin.sumExpressionCount += expressionCount
-    bin.expressionGenes ??= cell.expressionGenes
-    bin.maxTranscriptCount = maxOptionalNumber(
-      bin.maxTranscriptCount,
-      cell.transcriptCount,
-    )
-    bin.maxCellArea = maxOptionalNumber(bin.maxCellArea, cell.cellArea)
-  }
-
-  const aggregatedCells: OverviewCellDatum[] = []
-
-  for (const bin of bins.values()) {
-    const countScale = Math.sqrt(bin.count)
-    const positionX = (bin.binX + 0.5) * binSize
-    const positionY = -(bin.binY + 0.5) * binSize
-
-    aggregatedCells.push({
-      id: `expression-bin:${bin.key}`,
-      position: [positionX, positionY, 0],
-      radiusPixels: Math.min(18, Math.max(bin.maxRadiusPixels, 4 + countScale * 1.7)),
-      ...(bin.maxRadiusMicrometers === undefined
-        ? {}
-        : { radiusMicrometers: bin.maxRadiusMicrometers }),
-      fillColor: [
-        Math.round(bin.sumRed / bin.count),
-        Math.round(bin.sumGreen / bin.count),
-        Math.round(bin.sumBlue / bin.count),
-        Math.min(245, bin.maxAlpha + bin.count * 2),
-      ],
-      cellCount: bin.count,
-      expressionCount: bin.sumExpressionCount,
-      ...(bin.expressionGenes === undefined
-        ? {}
-        : { expressionGenes: bin.expressionGenes }),
-      ...(bin.maxTranscriptCount === undefined
-        ? {}
-        : { transcriptCount: bin.maxTranscriptCount }),
-      ...(bin.maxCellArea === undefined ? {} : { cellArea: bin.maxCellArea }),
-    })
-  }
-
-  return aggregatedCells
 }
 
 function readColorChannel(cell: OverviewCellDatum, channel: 0 | 1 | 2): number {
