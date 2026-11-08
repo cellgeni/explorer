@@ -81,14 +81,14 @@ Zarr loaders add `loadTile`/`loadTilePixels`.
 
 ### OME-XML
 
-| Field                                         | Use                                                                                                                                  |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `Pixels@PhysicalSizeX` (+ unit)               | µm/px; `PhysicalSizeY` is ignored. Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored.  |
-| `Pixels@Type`                                 | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                     |
-| `Channel@Name`, MapAnnotation `Purpose`       | Channel name                                                                                                                         |
-| `Channel@Color`                               | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette       |
-| `TiffData` `FirstC`/`IFD`/`UUID@FileName`     | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`)                                                  |
-| `SamplesPerPixel ≥ 3` or `Interleaved="true"` | Native RGB, drawn without colour or window                                                                                           |
+| Field                                         | Use                                                                                                                                 |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `Pixels@PhysicalSizeX` (+ unit)               | µm/px; `PhysicalSizeY` is ignored. Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored. |
+| `Pixels@Type`                                 | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                    |
+| `Channel@Name`, MapAnnotation `Purpose`       | Channel name                                                                                                                        |
+| `Channel@Color`                               | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette      |
+| `TiffData` `FirstC`/`IFD`/`UUID@FileName`     | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`)                                                 |
+| `SamplesPerPixel ≥ 3` or `Interleaved="true"` | Native RGB, drawn without colour or window                                                                                          |
 
 ### Codecs
 
@@ -129,13 +129,20 @@ JPEG-XR is not supported.
 - µm/px is the product of multiscale and dataset `scale` values for x, with
   unit conversion (nm, µm, mm, m). Unknown units count as µm; a missing scale
   gives 1 µm/px. `translation` is ignored except for SpatialData placement.
-- Tile size is the x/y chunk shape (default 256).
+- Tile size is the x/y chunk shape (default 256). Chunks larger than 512 pixels
+  are served as several virtual tiles of at most 512 pixels that share one
+  decoded chunk.
 - `omero.channels` gives names, `RRGGBB` colours, and windows (`start`/`end`,
   else `min`/`max`). Channels after the first open as `#c=N` loaders.
 - Three channels with no omero data, or labelled/coloured R, G, B, are treated
   as native RGB.
-- Chunks are read with `zarr.get` and converted to RGBA on the main thread; no
-  worker or IndexedDB cache is used.
+- Chunk bytes are fetched on the main thread. Decoding and RGBA conversion run
+  in the Zarr decode worker pool (`src/workers/zarrDecodePool.ts`, up to
+  `min(3, hardwareConcurrency − 1)` workers). Each chunk is routed to one
+  worker, which keeps it for all of its virtual tiles. If a worker fails, the
+  tile is decoded on the main thread with `zarr.get`, through a 256 MiB
+  decoded-chunk cache. Store errors (for example a `403` chunk) are not retried.
+  No IndexedDB cache is used.
 
 ## Rendering
 
@@ -177,15 +184,15 @@ RGB images skip it.
 
 ## Constants
 
-| Constant                   | Value                                              | File                                 |
-| -------------------------- | -------------------------------------------------- | ------------------------------------ |
-| Default µm/px              | 0.2125 (TIFF), 1 (Zarr)                            | `omeMetadata.ts`, `omeZarrLoader.ts` |
-| Default tile size          | 256                                                | `loader.ts`, `omeZarrLoader.ts`      |
-| Level threshold            | 1.5 screen px per source px                        | `loader.ts`, `omeZarrLoader.ts`      |
-| Decode workers             | ≤ 4                                                | `tileDecodePool.ts`                  |
-| Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6 | `src/data/performanceBudget.ts`      |
-| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples, 32 bins   | `morphologyContrast.ts`              |
-| IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry           | `persistentByteRangeCache.ts`        |
+| Constant                   | Value                                              | File                                     |
+| -------------------------- | -------------------------------------------------- | ---------------------------------------- |
+| Default µm/px              | 0.2125 (TIFF), 1 (Zarr)                            | `omeMetadata.ts`, `omeZarrLoader.ts`     |
+| Default tile size          | 256                                                | `loader.ts`, `omeZarrLoader.ts`          |
+| Level threshold            | 1.5 screen px per source px                        | `loader.ts`, `omeZarrLoader.ts`          |
+| Decode workers             | TIFF ≤ 4; OME-Zarr ≤ 3                             | `tileDecodePool.ts`, `zarrDecodePool.ts` |
+| Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6 | `src/data/performanceBudget.ts`          |
+| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples, 32 bins   | `morphologyContrast.ts`                  |
+| IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry           | `persistentByteRangeCache.ts`            |
 
 ## Source Files
 
@@ -199,6 +206,7 @@ RGB images skip it.
 | `src/codecs/tiffTile.ts`, `jpeg2000.ts`                                                                   | Tile decoding                                                          |
 | `src/workers/tileDecode.worker.ts`, `tileDecodePool.ts`, `tileDecodeMessages.ts`                          | Decode workers                                                         |
 | `src/zarr/omeZarrLoader.ts`, `zarrStores.ts`                                                              | OME-Zarr loading                                                       |
+| `src/workers/zarrDecode.worker.ts`, `zarrDecodePool.ts`, `zarrDecodeCore.ts`                              | OME-Zarr chunk decoding and label tracing                              |
 | `src/components/MorphologyCanvas.tsx`, `src/rendering/morphologyCanvas.ts`, `morphologyTileScheduling.ts` | Drawing and scheduling                                                 |
 | `src/features/morphology/*`                                                                               | Channel controls and custom layers                                     |
 | `src/features/annotations/geometricAnnotationModel.ts`                                                    | GeoJSON shapes (image-only ROI output)                                 |

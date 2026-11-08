@@ -43,6 +43,9 @@
 
 ## Planning Records
 
-`PLAN.md`, `UPDATED_PLAN.md`, and `OPTIMIZATIONS.md` in the repository root
-record the original build plan, execution notes, and refactor progress. They
-describe intent and history; the pages above describe current behaviour.
+[`UNIFIED_PLAN.md`](../UNIFIED_PLAN.md) in the repository root records the
+build plan, phase-by-phase execution notes, architecture decisions, and
+refactor progress. It merges the former `PLAN.md`, `UPDATED_PLAN.md`, and
+`OPTIMIZATIONS.md`. It describes intent and history; the pages above describe
+current behaviour. [`PLAN_VS_DOCS.md`](../PLAN_VS_DOCS.md) lists where the plan
+and these pages differed as of 2026-11-08.
