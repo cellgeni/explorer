@@ -71,6 +71,28 @@ describe('transcriptOverlay', () => {
     expect(plan.kind).toBe('exact')
   })
 
+  it('keeps density when a per-gene output has no exact source', () => {
+    const options = {
+      detailMode: 'auto' as const,
+      visibleTranscriptEstimate: 20,
+      hasRawParquet: false,
+      hasNativeZarr: true,
+      hasSelectedFeatureFilter: true,
+    }
+
+    expect(planTranscriptLod({ viewState: { zoom: 3 } }, options).kind).toBe('exact')
+    expect(
+      planTranscriptLod({ viewState: { zoom: 3 } }, { ...options, hasExactSource: false })
+        .kind,
+    ).toBe('native-zarr')
+    expect(
+      planTranscriptLod(
+        { viewState: { zoom: 3 } },
+        { ...options, detailMode: 'exact', hasExactSource: false },
+      ).kind,
+    ).toBe('unavailable')
+  })
+
   it('waits instead of sampling exact rows when native LOD is unavailable', () => {
     const plan = planTranscriptLod(
       { viewState: { zoom: 0 } },

@@ -25,6 +25,12 @@ import type {
   VisiumHdBinSizeMicrometers,
 } from '../datasets/visiumHdDataset'
 import type { RangeSupportFetcher } from './rangeSupport'
+import {
+  ATERA_FILE_DEFAULTS,
+  parseAteraExperiment,
+  type AteraExperiment,
+  type AteraFileRole,
+} from '../datasets/ateraFormat'
 
 export type DatasetDiagnosticStatus = 'pass' | 'warning' | 'fail'
 export type DatasetDiagnosticPlatform = Platform | 'unknown'
@@ -235,6 +241,18 @@ export async function runDatasetDiagnostics(
     }
   }
 
+  if (detection.platform === 'atera') {
+    checks.push(...(await runAteraDiagnostics(detection, options)))
+
+    return {
+      baseUrl,
+      platform: detection.platform,
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      checks,
+    }
+  }
+
   if (detection.platform === 'spatialdata') {
     checks.push(...(await runSpatialDataDiagnostics(detection, options)))
 
@@ -379,6 +397,117 @@ async function checkManifest(
       startedAt,
     })
   }
+}
+
+const ATERA_RANGE_FILES: readonly {
+  readonly role: Exclude<AteraFileRole, 'experiment'>
+  readonly label: string
+  readonly required: boolean
+}[] = [
+  { role: 'cellFeatureMatrix', label: 'Cell-feature matrix', required: true },
+  { role: 'cscCellFeatureMatrix', label: 'CSC cell-feature matrix', required: true },
+  { role: 'cells', label: 'Cell segmentation', required: true },
+  // Only the Transcripts tab reads these.
+  { role: 'binnedTranscripts', label: 'Binned transcripts', required: false },
+  { role: 'transcripts', label: 'Transcripts', required: false },
+]
+
+// File locations follow the viewer: the dataset manifest, then
+// experiment.spatial's `explorer_files`, then the standard names.
+async function runAteraDiagnostics(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'atera' }>,
+  options: DatasetDiagnosticsOptions,
+): Promise<readonly DatasetDiagnosticCheck[]> {
+  const manifestFiles =
+    detection.manifest?.platform === 'atera' ? detection.manifest.files : {}
+  const fileUrl = (role: AteraFileRole, experiment: AteraExperiment | null): string =>
+    manifestFiles[role]?.url ??
+    datasetFileUrl(
+      detection.baseUrl,
+      experiment?.files[role] ?? ATERA_FILE_DEFAULTS[role],
+    )
+  const experimentUrl = fileUrl('experiment', null)
+  const startedAt = Date.now()
+  let experiment: AteraExperiment | null = null
+  const checks: DatasetDiagnosticCheck[] = []
+
+  try {
+    const response = await (options.fetcher ?? fetch)(experimentUrl, {
+      method: 'GET',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    experiment = parseAteraExperiment(await response.json())
+    checks.push(
+      diagnosticCheck({
+        id: 'experiment-manifest',
+        label: 'Experiment manifest',
+        url: experimentUrl,
+        required: true,
+        status: 'pass',
+        message: [
+          experiment.panelName,
+          experiment.cellCount === undefined
+            ? undefined
+            : `${experiment.cellCount.toLocaleString()} cells`,
+          experiment.micrometersPerPixel === undefined
+            ? undefined
+            : `${experiment.micrometersPerPixel} µm/px`,
+        ]
+          .filter((part) => part !== undefined)
+          .join('; '),
+        startedAt,
+      }),
+    )
+  } catch (cause) {
+    checks.push(
+      diagnosticCheck({
+        id: 'experiment-manifest',
+        label: 'Experiment manifest',
+        url: experimentUrl,
+        required: true,
+        status: 'fail',
+        message: errorMessage(cause),
+        startedAt,
+      }),
+    )
+  }
+
+  for (const file of ATERA_RANGE_FILES) {
+    checks.push(
+      await checkDirectRangeFile(
+        fileUrl(file.role, experiment),
+        file.role,
+        file.label,
+        file.required,
+        options,
+      ),
+    )
+  }
+
+  const morphologyUrl =
+    manifestFiles.morphology?.url ??
+    (experiment?.morphologyPath === undefined
+      ? undefined
+      : datasetFileUrl(detection.baseUrl, experiment.morphologyPath))
+
+  if (morphologyUrl !== undefined) {
+    checks.push(
+      await checkDirectRangeFile(
+        morphologyUrl,
+        'morphology',
+        'Morphology image',
+        false,
+        options,
+      ),
+    )
+  }
+
+  return checks
 }
 
 async function runSpatialDataDiagnostics(
@@ -1020,7 +1149,9 @@ function detectionDiagnosticCheck(
           ? 'Detected H5AD'
           : detection.platform === 'spatialdata'
             ? 'Detected SpatialData'
-            : 'Detected Xenium',
+            : detection.platform === 'atera'
+              ? 'Detected Atera'
+              : 'Detected Xenium',
     startedAt,
   })
 }

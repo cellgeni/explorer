@@ -12,6 +12,7 @@ import type { ImagePyramidLoader } from '../data/imagePyramid'
 
 export type Platform =
   | 'xenium'
+  | 'atera'
   | 'visium'
   | 'visium-hd'
   | 'h5ad'
@@ -104,7 +105,7 @@ export interface SegmentationInfo {
   readonly id: string
   readonly kind: 'cell' | 'nucleus'
   readonly label: string
-  readonly sourceKind: 'geojson' | 'tiff'
+  readonly sourceKind: 'geojson' | 'tiff' | 'zarr'
   readonly path: string
   readonly annotated?: boolean
 }

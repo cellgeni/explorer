@@ -65,6 +65,9 @@ function Probe({
   loadAnnotationGroups = vi.fn(async () => []),
   loadDatasetOverview = vi.fn(async () => []),
   loadGenePanel = vi.fn(async () => []),
+  loadMorphologyImage = vi.fn(async () => {
+    throw new Error('unused')
+  }),
   setCellMetadataTracks = vi.fn(),
   setSelectedCellMetadataTrackId = vi.fn(),
   setDatasetPlatform = vi.fn(),
@@ -89,6 +92,7 @@ function Probe({
   readonly loadAnnotationGroups?: LifecycleOptions['loaders']['loadAnnotationGroups']
   readonly loadDatasetOverview?: LifecycleOptions['loaders']['loadDatasetOverview']
   readonly loadGenePanel?: LifecycleOptions['loaders']['loadGenePanel']
+  readonly loadMorphologyImage?: LifecycleOptions['loaders']['loadMorphologyImage']
   readonly setCellMetadataTracks?: LifecycleOptions['setters']['setCellMetadataTracks']
   readonly setSelectedCellMetadataTrackId?: LifecycleOptions['setters']['setSelectedCellMetadataTrackId']
   readonly setDatasetPlatform?: LifecycleOptions['setters']['setDatasetPlatform']
@@ -129,9 +133,7 @@ function Probe({
       loadAnnotationGroups,
       loadDatasetOverview,
       loadGenePanel,
-      loadMorphologyImage: vi.fn(async () => {
-        throw new Error('unused')
-      }),
+      loadMorphologyImage,
       warmDatasetForRoi,
     },
     refs: {
@@ -566,6 +568,86 @@ describe('useDatasetLifecycle', () => {
     })
     expect(dataset.image).toHaveBeenCalled()
     expect(loadDatasetOverview).not.toHaveBeenCalled()
+  })
+
+  it('loads Atera through AnnData readers and opens its 2D morphology image', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const datasetUrl = 'https://example.test/atera'
+    const morphologyUrl = `${datasetUrl}/morphology_2d/ch0000_dapi.ome.tif`
+    const dataset = {
+      overview: vi.fn(async () => [
+        {
+          cellId: 'aaaaaaaa-1',
+          position: { x: micrometers(1), y: micrometers(2) },
+          transcriptCount: 12,
+        },
+      ]),
+      genePanel: vi.fn(async () => ['UMOD']),
+      annotationGroups: vi.fn(async () => []),
+      embeddingOptions: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => []),
+      morphologyUrl: vi.fn(async () => morphologyUrl),
+    }
+    const loadMorphologyImage = vi.fn(async () => ({
+      url: morphologyUrl,
+      loader: {} as never,
+      channels: [],
+      channelLoaders: [],
+    }))
+    const loadDatasetOverview = vi.fn(async () => [])
+    const setDatasetPlatform = vi.fn()
+    const setLoadState = vi.fn()
+    const setShowCellBoundaries = vi.fn()
+    const setShowNucleusBoundaries = vi.fn()
+    const warmDatasetForRoi = vi.fn(async () => undefined)
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'atera' as const,
+          baseUrl: datasetUrl,
+          checked: [],
+        }))}
+        getSpatialDataset={
+          vi.fn(
+            async () => dataset,
+          ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+        }
+        loadDatasetOverview={loadDatasetOverview}
+        loadMorphologyImage={loadMorphologyImage}
+        setDatasetPlatform={setDatasetPlatform}
+        setLoadState={setLoadState}
+        setShowCellBoundaries={setShowCellBoundaries}
+        setShowNucleusBoundaries={setShowNucleusBoundaries}
+        startDatasetLoadRef={startDatasetLoadRef}
+        warmDatasetForRoi={warmDatasetForRoi}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(datasetUrl, true)
+    })
+
+    expect(setDatasetPlatform).toHaveBeenCalledWith('atera')
+    expect(setShowCellBoundaries).toHaveBeenCalledWith(true)
+    expect(setShowNucleusBoundaries).toHaveBeenCalledWith(false)
+    expect(setLoadState).toHaveBeenLastCalledWith({
+      status: 'ready',
+      url: datasetUrl,
+      cellCount: 1,
+    })
+    await waitFor(() => {
+      expect(loadMorphologyImage).toHaveBeenCalledWith(
+        datasetUrl,
+        expect.objectContaining({ candidates: [morphologyUrl] }),
+      )
+    })
+    expect(loadDatasetOverview).not.toHaveBeenCalled()
+    expect(warmDatasetForRoi).not.toHaveBeenCalled()
   })
 
   it('loads Visium HD binned overview without starting Xenium loaders', async () => {

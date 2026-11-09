@@ -1,12 +1,14 @@
-import { useEffect, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import {
   TRANSCRIPT_GROUP_LIMIT,
   transcriptAggregateRequestKey,
   planTranscriptLod,
   transcriptViewportRequestKey,
+  type TranscriptAggregateResult,
   type TranscriptDetailMode,
   type TranscriptFeatureFilterMode,
+  type TranscriptLodPlan,
 } from '../../data/transcriptOverlay'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
@@ -48,12 +50,23 @@ import {
   transcriptAggregateFallbackMessage,
   transcriptExactManualLoadMessage,
   transcriptNativeAggregateMessage,
+  transcriptPerGeneCellSummaryMessage,
+  transcriptPerGeneExactNeedsGenesMessage,
+  transcriptPerGeneUnavailableMessage,
   type TranscriptCapabilityState,
   type TranscriptLayerState,
 } from './transcriptLayerModel'
 import { transcriptCapabilityLabel } from './transcriptLabels'
 
 const EMPTY_GENE_LIST: readonly string[] = []
+
+// Per-gene density for one viewport and gene set. Its selected-gene count is
+// the estimate that decides between density and exact points.
+interface GeneAggregate {
+  readonly key: string
+  readonly result: TranscriptAggregateResult
+  readonly durationMs: number
+}
 
 interface MutableRef<T> {
   current: T
@@ -152,6 +165,8 @@ export function useTranscriptWorkflow({
   },
   setters: { setTranscriptCapabilityState, setTranscriptLayerState },
 }: UseTranscriptWorkflowOptions): void {
+  const [geneAggregate, setGeneAggregate] = useState<GeneAggregate | null>(null)
+
   useEffect(() => {
     if (
       loadState.status !== 'ready' ||
@@ -296,17 +311,206 @@ export function useTranscriptWorkflow({
       effectiveTranscriptFeatureFilterMode === 'selected'
         ? selectedGenes
         : EMPTY_GENE_LIST
+    const capabilities = transcriptCapabilityState.capabilities
+    let plan: TranscriptLodPlan
+
+    // Per-gene outputs (Atera) read density and exact points per selected
+    // gene. Without genes the layer is cell-summary squares; with genes the
+    // per-gene density loads first, and its selected-gene count decides
+    // between showing it and loading exact points.
+    if (capabilities.geneRanges !== undefined) {
+      if (featureNames.length === 0) {
+        const summaryRequestId = invalidateLatestRequest({
+          abortRef: transcriptAbortRef,
+          requestIdRef: transcriptRequestIdRef,
+        })
+        const hasSelectedGenes = selectedGenes.length > 0
+        const bins =
+          transcriptDetailMode === 'exact'
+            ? null
+            : buildCellSummaryTranscriptBins(
+                overviewCells,
+                currentViewportDetail.bbox,
+                'density',
+              )
+        transcriptViewportKeyRef.current = null
+        queueMicrotask(() => {
+          if (transcriptRequestIdRef.current !== summaryRequestId) {
+            return
+          }
+
+          setTranscriptLayerState(
+            bins === null
+              ? transcriptLayerWaiting({
+                  message: transcriptPerGeneExactNeedsGenesMessage(hasSelectedGenes),
+                  visibleTranscriptEstimate,
+                })
+              : transcriptLayerAggregate({
+                  source: 'cell-summary',
+                  mode: 'density',
+                  bins,
+                  message: transcriptPerGeneCellSummaryMessage(hasSelectedGenes),
+                  visibleTranscriptEstimate,
+                  scaleMax: maxTranscriptAggregateCount(bins),
+                }),
+          )
+        })
+        return
+      }
+
+      if (!capabilities.nativeZarr) {
+        const unavailableRequestId = invalidateLatestRequest({
+          abortRef: transcriptAbortRef,
+          requestIdRef: transcriptRequestIdRef,
+        })
+        transcriptViewportKeyRef.current = null
+        queueMicrotask(() => {
+          if (transcriptRequestIdRef.current === unavailableRequestId) {
+            setTranscriptLayerState(
+              transcriptLayerUnavailable(
+                transcriptPerGeneUnavailableMessage(capabilities.nativeZarrError),
+                visibleTranscriptEstimate,
+              ),
+            )
+          }
+        })
+        return
+      }
+
+      const maxBins = TRANSCRIPT_NATIVE_DENSITY_MAX_BINS
+      const aggregateKey = transcriptAggregateRequestKey(
+        loadState.url,
+        currentViewportDetail.bbox,
+        { mode: 'density', featureNames, maxBins },
+      )
+
+      if (geneAggregate?.key !== aggregateKey) {
+        const request = startLatestRequest({
+          abortRef: transcriptAbortRef,
+          requestIdRef: transcriptRequestIdRef,
+        })
+        const transcriptStartedAt = readTimestamp()
+        const previousEstimate = geneAggregate?.result.visibleTranscriptCount ?? 0
+        // The layer turns to loading, so whatever the estimate picks loads again.
+        transcriptViewportKeyRef.current = null
+        queueMicrotask(() => {
+          if (request.isCurrent() && !request.signal.aborted) {
+            setTranscriptLayerState((current) =>
+              transcriptLayerLoading(current, loadState.url, previousEstimate),
+            )
+          }
+        })
+        appendDebugEvent('Per-gene transcript density query started', {
+          coalesceKey: 'transcript-query',
+        })
+
+        void loadTranscriptAggregates(loadState.url, currentViewportDetail.bbox, {
+          signal: request.signal,
+          mode: 'density',
+          featureNames,
+          maxBins,
+        })
+          .then((result) => {
+            if (!request.isCurrent() || request.signal.aborted) {
+              return
+            }
+
+            setGeneAggregate({
+              key: aggregateKey,
+              result,
+              durationMs: Math.max(0, readTimestamp() - transcriptStartedAt),
+            })
+            appendDebugEvent(
+              `Per-gene transcript density ready: ${result.bins.length.toLocaleString()} squares, ${(
+                result.visibleTranscriptCount ?? 0
+              ).toLocaleString()} visible, in ${formatElapsed(transcriptStartedAt)}`,
+              { coalesceKey: 'transcript-query' },
+            )
+          })
+          .catch((error) => {
+            if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
+              return
+            }
+
+            setTranscriptLayerState(
+              transcriptLayerFailed(
+                loadState.url,
+                createStructuredLoadError('Transcripts', error),
+              ),
+            )
+            appendDebugEvent('Per-gene transcript density query failed', {
+              coalesceKey: 'transcript-query',
+            })
+          })
+          .finally(() => {
+            request.complete()
+          })
+
+        return () => {
+          request.abortController.abort()
+          request.complete()
+        }
+      }
+
+      const geneEstimate = geneAggregate.result.visibleTranscriptCount ?? 0
+      plan = planTranscriptLod(currentViewportDetail, {
+        detailMode: transcriptDetailMode,
+        visibleTranscriptEstimate: geneEstimate,
+        exactLimit: transcriptExactPointLimit,
+        hasRawParquet: false,
+        hasNativeZarr: true,
+        hasExactSource: capabilities.geneRanges,
+        hasSelectedFeatureFilter: true,
+      })
+
+      if (plan.kind === 'native-zarr') {
+        if (transcriptViewportKeyRef.current === aggregateKey) {
+          return
+        }
+
+        const densityRequestId = invalidateLatestRequest({
+          abortRef: transcriptAbortRef,
+          requestIdRef: transcriptRequestIdRef,
+        })
+        const { durationMs, result } = geneAggregate
+        transcriptViewportKeyRef.current = aggregateKey
+        queueMicrotask(() => {
+          if (transcriptRequestIdRef.current === densityRequestId) {
+            setTranscriptLayerState(
+              transcriptLayerAggregate({
+                source: result.source,
+                mode: 'density',
+                bins: result.bins,
+                message: transcriptNativeAggregateMessage({
+                  mode: 'density',
+                  selectedFeatureCount: result.selectedFeatureNames.length,
+                  binCount: result.bins.length,
+                  sourceFile: result.sourceFile,
+                }),
+                visibleTranscriptEstimate: geneEstimate,
+                scaleMax: result.scaleMax,
+                durationMs,
+              }),
+            )
+          }
+        })
+        return
+      }
+    } else {
+      plan = planTranscriptLod(currentViewportDetail, {
+        detailMode: transcriptDetailMode,
+        visibleTranscriptEstimate,
+        exactLimit: transcriptExactPointLimit,
+        hasRawParquet: capabilities.rawParquet,
+        hasNativeZarr: capabilities.nativeZarr,
+        hasSelectedFeatureFilter:
+          effectiveTranscriptFeatureFilterMode !== 'selected' || featureNames.length > 0,
+      })
+    }
+
+    // Native Xenium density covers all transcripts; selected genes filter
+    // exact points only.
     const aggregateFeatureNames = EMPTY_GENE_LIST
-    const hasSelectedFeatureFilter =
-      effectiveTranscriptFeatureFilterMode !== 'selected' || featureNames.length > 0
-    const plan = planTranscriptLod(currentViewportDetail, {
-      detailMode: transcriptDetailMode,
-      visibleTranscriptEstimate,
-      exactLimit: transcriptExactPointLimit,
-      hasRawParquet: transcriptCapabilityState.capabilities.rawParquet,
-      hasNativeZarr: transcriptCapabilityState.capabilities.nativeZarr,
-      hasSelectedFeatureFilter,
-    })
 
     if (plan.kind === 'native-zarr') {
       const maxBins = TRANSCRIPT_NATIVE_DENSITY_MAX_BINS
@@ -408,7 +612,8 @@ export function useTranscriptWorkflow({
 
     if (
       (plan.kind === 'waiting' || plan.kind === 'unavailable') &&
-      !transcriptCapabilityState.capabilities.nativeZarr &&
+      capabilities.geneRanges === undefined &&
+      !capabilities.nativeZarr &&
       transcriptDetailMode !== 'exact' &&
       visibleTranscriptEstimate > 0
     ) {
@@ -683,6 +888,7 @@ export function useTranscriptWorkflow({
     appendFallbackNotice,
     currentViewportDetail,
     effectiveTranscriptFeatureFilterMode,
+    geneAggregate,
     loadState,
     loadTranscriptAggregates,
     loadTranscriptViewport,

@@ -526,6 +526,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return cache.geneNames
   }
 
+  // Every obs row's id in matrix row order, including rows without
+  // coordinates (which `overview` leaves out).
+  async cellIds(): Promise<readonly string[]> {
+    const cache = await this.cache()
+    return cache.cellIds
+  }
+
   async cells(
     selection: RoiSelectionInput,
     options: { readonly limit?: number } = {},
@@ -2414,7 +2421,18 @@ function fullArraySelection(array: H5adZarrArray): null[] {
   return Array.from({ length: array.shape.length }, () => null)
 }
 
+// Zarr boolean arrays read as 0/1 bytes, as h5wasm returns them, so boolean
+// columns load as numeric tracks on every backend.
 function zarrChunkValue(value: unknown): unknown {
+  const data =
+    typeof value === 'object' && value !== null && 'data' in value
+      ? (value as { readonly data?: unknown }).data
+      : undefined
+
+  if (data instanceof zarr.BoolArray) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.length)
+  }
+
   if (
     typeof value === 'object' &&
     value !== null &&

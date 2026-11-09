@@ -37,6 +37,9 @@ import {
   loadPlatformBoundaryElements,
   loadPlatformGeneExpression,
   loadPlatformNucleusBoundaryElements,
+  loadPlatformTranscriptAggregates,
+  loadPlatformTranscriptCapabilities,
+  loadPlatformTranscriptViewport,
   platformAnalysisEmbeddingOptions,
   platformActiveBoundaryCell,
   platformBoundarySurfaceReserved,
@@ -55,6 +58,9 @@ import {
   type RoiCellsLoader,
   type RoiGeneStatsLoader,
   type RoiTranscriptsLoader,
+  type TranscriptAggregateLoader,
+  type TranscriptCapabilitiesLoader,
+  type TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
 import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
@@ -1505,6 +1511,33 @@ export function App({ dependencies }: AppProps = {}) {
       ),
     [activeVisiumHdBinSize, getSpatialDataset, loadGeneExpression, platformAdapter],
   )
+  const loadActiveTranscriptCapabilities = useCallback<TranscriptCapabilitiesLoader>(
+    (...args) =>
+      loadPlatformTranscriptCapabilities(
+        platformAdapter,
+        { getSpatialDataset, loadTranscriptCapabilities },
+        ...args,
+      ),
+    [getSpatialDataset, loadTranscriptCapabilities, platformAdapter],
+  )
+  const loadActiveTranscriptAggregates = useCallback<TranscriptAggregateLoader>(
+    (...args) =>
+      loadPlatformTranscriptAggregates(
+        platformAdapter,
+        { getSpatialDataset, loadTranscriptAggregates },
+        ...args,
+      ),
+    [getSpatialDataset, loadTranscriptAggregates, platformAdapter],
+  )
+  const loadActiveTranscriptViewport = useCallback<TranscriptViewportLoader>(
+    (...args) =>
+      loadPlatformTranscriptViewport(
+        platformAdapter,
+        { getSpatialDataset, loadTranscriptViewport },
+        ...args,
+      ),
+    [getSpatialDataset, loadTranscriptViewport, platformAdapter],
+  )
   const loadActiveRoiCells = useCallback<RoiCellsLoader>(
     async (...args) => {
       const [baseUrl, selection, options = {}] = args
@@ -1559,7 +1592,9 @@ export function App({ dependencies }: AppProps = {}) {
       }
 
       return Promise.reject(
-        new Error('H5AD files do not expose Xenium-style transcript records.'),
+        new Error(
+          `${platformAdapter.kind === 'atera' ? 'Atera' : 'H5AD and SpatialData'} datasets do not support ROI transcript export.`,
+        ),
       )
     },
     [loadRoiTranscripts, platformAdapter],
@@ -1713,9 +1748,9 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptCapabilityState,
     },
     loaders: {
-      loadTranscriptAggregates,
-      loadTranscriptCapabilities,
-      loadTranscriptViewport,
+      loadTranscriptAggregates: loadActiveTranscriptAggregates,
+      loadTranscriptCapabilities: loadActiveTranscriptCapabilities,
+      loadTranscriptViewport: loadActiveTranscriptViewport,
     },
     refs: {
       loadRequestIdRef: loadRequestId,
@@ -1740,7 +1775,8 @@ export function App({ dependencies }: AppProps = {}) {
       cellDetailState,
       loadState,
       selectedCell,
-      transcriptDistributionEnabled: platformAdapter.capabilities.transcripts,
+      transcriptDistributionEnabled:
+        platformAdapter.capabilities.cellTranscriptDistribution,
     },
     loaders: {
       loadBoundaryElements: loadActiveBoundaryElements,
@@ -2734,6 +2770,7 @@ export function App({ dependencies }: AppProps = {}) {
             appendDebugEvent={appendDebugEvent}
             controlIds={controlIds}
             effectiveTranscriptFeatureFilterMode={effectiveTranscriptFeatureFilterMode}
+            geneOnlyFilterEnabled={platformAdapter.capabilities.transcriptGeneOnlyFilter}
             geneOptions={geneOptions}
             genePanelState={genePanelState}
             handlePinTranscript={handlePinTranscript}
@@ -2870,7 +2907,9 @@ export function App({ dependencies }: AppProps = {}) {
           cellDetailCopy={cellDetailCopy}
           cellDetailState={cellDetailState}
           cellTranscriptDistributionState={cellTranscriptDistributionState}
-          cellTranscriptDistributionVisible={platformAdapter.capabilities.transcripts}
+          cellTranscriptDistributionVisible={
+            platformAdapter.capabilities.cellTranscriptDistribution
+          }
           loadEnabled={loadState.status === 'ready'}
           onEmbeddingKindChange={(nextEmbeddingKind) => {
             setSelectedEmbeddingKind(nextEmbeddingKind)
@@ -3014,7 +3053,9 @@ export function App({ dependencies }: AppProps = {}) {
               ? 'H5AD'
               : platformAdapter.kind === 'spatialdata'
                 ? 'SpatialData'
-                : 'Xenium'
+                : platformAdapter.kind === 'atera'
+                  ? 'Atera'
+                  : 'Xenium'
           }
           gridCells={viewerGridCells}
           fitGridCells={spatialGridCells}

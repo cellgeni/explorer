@@ -89,6 +89,7 @@ export interface AppTranscriptHudPanelProps {
   readonly transcriptPointSize: number
   readonly transcriptViewportKeyRef: { current: string | null }
   readonly visibleTranscriptEstimate: number
+  readonly geneOnlyFilterEnabled?: boolean
 }
 
 export function AppTranscriptHudPanel({
@@ -134,6 +135,7 @@ export function AppTranscriptHudPanel({
   transcriptPointSize,
   transcriptViewportKeyRef,
   visibleTranscriptEstimate,
+  geneOnlyFilterEnabled = true,
 }: AppTranscriptHudPanelProps) {
   const [transcriptFeatureSearch, setTranscriptFeatureSearch] = useState('')
   const lastGenePanelLoadingUrlRef = useRef<string | null>(null)
@@ -229,6 +231,7 @@ export function AppTranscriptHudPanel({
       transcriptPointColorMode={transcriptPointColorMode}
       transcriptMinQv={transcriptMinQv}
       transcriptGeneOnly={transcriptGeneOnly}
+      geneOnlyFilterEnabled={geneOnlyFilterEnabled}
       transcriptOpacity={transcriptOpacity}
       transcriptPointSize={transcriptPointSize}
       transcriptCapabilityState={transcriptCapabilityState}

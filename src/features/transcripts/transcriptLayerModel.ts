@@ -546,17 +546,38 @@ export function maxTranscriptAggregateCount(
 export function transcriptNativeAggregateMessage({
   selectedFeatureCount,
   binCount,
+  sourceFile = 'transcripts.zarr.zip',
 }: {
   readonly mode: 'density'
   readonly selectedFeatureCount: number
   readonly binCount: number
+  readonly sourceFile?: string | undefined
 }): string {
   const featureLabel =
     selectedFeatureCount > 0
       ? `${selectedFeatureCount.toLocaleString()} selected-feature`
       : 'all-transcript'
 
-  return `Showing native ${featureLabel} density squares from transcripts.zarr.zip (${binCount.toLocaleString()} squares).`
+  return `Showing native ${featureLabel} density squares from ${sourceFile} (${binCount.toLocaleString()} squares).`
+}
+
+// Per-gene transcript outputs (Atera) have no all-gene density or points.
+export function transcriptPerGeneCellSummaryMessage(hasSelectedGenes: boolean): string {
+  return `Showing all-gene cell-summary density squares from cell transcript counts. ${transcriptPerGeneSelectGenesHint(hasSelectedGenes)} to see their transcript density and exact points.`
+}
+
+export function transcriptPerGeneExactNeedsGenesMessage(
+  hasSelectedGenes: boolean,
+): string {
+  return `${transcriptPerGeneSelectGenesHint(hasSelectedGenes)} to load exact transcript points. This dataset stores transcripts per gene.`
+}
+
+function transcriptPerGeneSelectGenesHint(hasSelectedGenes: boolean): string {
+  return hasSelectedGenes ? 'Set Feature filter to Selected genes' : 'Select genes'
+}
+
+export function transcriptPerGeneUnavailableMessage(error: string | undefined): string {
+  return `Per-gene transcript density is unavailable${error === undefined ? '.' : `: ${error}`}`
 }
 
 export function transcriptAggregateFallbackMessage({

@@ -14,6 +14,7 @@ import {
   setSpatialDataSelection,
   spatialDataSelectionFor,
 } from './datasetFactory'
+import { AteraDataset } from './ateraDataset'
 import { DatasetManifestError } from './datasetManifest'
 import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
@@ -31,8 +32,9 @@ describe('spatial dataset detection', () => {
       baseUrl: 'https://example.test/xenium',
     })
 
-    // The dataset manifest probe runs alongside the experiment.xenium probe.
-    expect(fetcher).toHaveBeenCalledTimes(2)
+    // The dataset manifest and experiment.spatial probes run alongside the
+    // experiment.xenium probe.
+    expect(fetcher).toHaveBeenCalledTimes(3)
     expect(fetcher).toHaveBeenCalledWith(
       'https://example.test/xenium/explorer.json',
       expect.objectContaining({ cache: 'no-cache' }),
@@ -49,7 +51,35 @@ describe('spatial dataset detection', () => {
       baseUrl: 'https://example.test/xenium',
     })
 
-    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(fetcher).toHaveBeenCalledTimes(3)
+  })
+
+  it('detects Atera from experiment.spatial without further probes', async () => {
+    const fetcher = fetcherForOkPaths(['/atera/experiment.spatial'])
+
+    await expect(
+      detectSpatialDataset('https://example.test/atera/', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'atera',
+      baseUrl: 'https://example.test/atera',
+      checked: [
+        expect.objectContaining({ path: 'explorer.json', ok: false }),
+        expect.objectContaining({ path: 'experiment.xenium', ok: false }),
+        expect.objectContaining({ path: 'experiment.spatial', ok: true }),
+      ],
+    })
+    expect(fetcher).toHaveBeenCalledTimes(3)
+  })
+
+  it('prefers experiment.xenium when a folder has both experiment files', async () => {
+    const fetcher = fetcherForOkPaths([
+      '/both/experiment.xenium',
+      '/both/experiment.spatial',
+    ])
+
+    await expect(
+      detectSpatialDataset('https://example.test/both/', { fetcher }),
+    ).resolves.toMatchObject({ platform: 'xenium' })
   })
 
   it('detects Visium HD binned outputs and segmented output sidecars', async () => {
@@ -352,6 +382,48 @@ describe('spatial dataset detection', () => {
     )
 
     expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
+  })
+
+  it('creates an Atera dataset with manifest file locations', async () => {
+    const fetcher = fetcherForJsonPaths({
+      '/atera-manifest/explorer.json': {
+        version: 1,
+        platform: 'atera',
+        files: { cells: 'segmentation/cells.zarr.zip' },
+      },
+    })
+    const dataset = await createSpatialDataset('https://example.test/atera-manifest/', {
+      fetcher,
+    })
+
+    expect(dataset).toBeInstanceOf(AteraDataset)
+    await expect((dataset as AteraDataset).fileUrl('cells')).resolves.toBe(
+      'https://example.test/atera-manifest/segmentation/cells.zarr.zip',
+    )
+  })
+
+  it('resolves Atera files against the root of a manifest entered by URL', async () => {
+    const fetcher = fetcherForJsonPaths({
+      '/manifests/atera.json': {
+        version: 1,
+        platform: 'atera',
+        root: '../runs/atera-1',
+      },
+    })
+    const dataset = await createSpatialDataset(
+      'https://example.test/manifests/atera.json',
+      {
+        fetcher,
+      },
+    )
+
+    expect(dataset).toBeInstanceOf(AteraDataset)
+    await expect((dataset as AteraDataset).fileUrl('experiment')).resolves.toBe(
+      'https://example.test/runs/atera-1/experiment.spatial',
+    )
+    await expect((dataset as AteraDataset).fileUrl('cells')).resolves.toBe(
+      'https://example.test/runs/atera-1/cells.zarr.zip',
+    )
   })
 
   it('creates an image-only dataset for direct image URLs', async () => {

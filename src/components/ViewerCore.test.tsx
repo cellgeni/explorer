@@ -890,6 +890,22 @@ describe('ViewerCore', () => {
     expect(screen.getByText('Unassigned')).toBeInTheDocument()
   })
 
+  it('omits the transcript hover FOV for transcripts without one', () => {
+    const transcript: TranscriptPointDatum = {
+      ...transcriptDatum({ id: '4,2:48822259', cellId: null }),
+      fovName: null,
+    }
+
+    render(<ViewerCore cells={[overviewCellDatum()]} transcriptPoints={[transcript]} />)
+
+    act(() => {
+      deckGlMock.onHover?.({ object: transcript, x: 12, y: 20 })
+    })
+
+    expect(screen.getByText('4,2:48822259')).toBeInTheDocument()
+    expect(screen.queryByText('FOV')).not.toBeInTheDocument()
+  })
+
   it('shows overview cell hover metadata', () => {
     const cellId = asCellId('aaaaaaaa-1')
     const cell: OverviewCellDatum = {

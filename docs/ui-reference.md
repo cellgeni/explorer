@@ -37,16 +37,16 @@ Platform names used below: **Xenium**, **Visium HD**, **H5AD**,
 small screens, see `src/styles/responsive.css`). `Hide Controls` collapses it.
 A tab with a running task shows a loading dot.
 
-| Tab         | Panel component                                                                                               | Hidden for     |
-| ----------- | ------------------------------------------------------------------------------------------------------------- | -------------- |
-| Dataset     | `AppDatasetHudPanel` → `src/features/control-hud/DatasetHudPanel.tsx`                                         | —              |
-| Layers      | `AppLayerHudPanel` → `src/features/control-hud/LayerHudPanel.tsx`                                             | —              |
-| Genes       | `AppGeneHudPanel` → `src/features/genes/GeneHudPanel.tsx`                                                     | Image          |
-| Transcripts | `AppTranscriptHudPanel` → `src/features/transcripts/TranscriptHudPanel.tsx`                                   | All but Xenium |
-| Magic Lens  | `src/features/roi/MagicLensHudPanel.tsx`                                                                      | Image          |
-| Annotations | `src/features/annotations/AnnotationHudPanel.tsx`                                                             | —              |
-| ROI         | `RoiHudPanel`, `VisiumHdRoiHudPanel`, or `GeometricRoiHudPanel` in `src/features/control-hud/RoiHudPanel.tsx` | —              |
-| Cell        | `src/features/control-hud/CellHudPanel.tsx`                                                                   | Image          |
+| Tab         | Panel component                                                                                               | Hidden for               |
+| ----------- | ------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| Dataset     | `AppDatasetHudPanel` → `src/features/control-hud/DatasetHudPanel.tsx`                                         | —                        |
+| Layers      | `AppLayerHudPanel` → `src/features/control-hud/LayerHudPanel.tsx`                                             | —                        |
+| Genes       | `AppGeneHudPanel` → `src/features/genes/GeneHudPanel.tsx`                                                     | Image                    |
+| Transcripts | `AppTranscriptHudPanel` → `src/features/transcripts/TranscriptHudPanel.tsx`                                   | All but Xenium and Atera |
+| Magic Lens  | `src/features/roi/MagicLensHudPanel.tsx`                                                                      | Image                    |
+| Annotations | `src/features/annotations/AnnotationHudPanel.tsx`                                                             | —                        |
+| ROI         | `RoiHudPanel`, `VisiumHdRoiHudPanel`, or `GeometricRoiHudPanel` in `src/features/control-hud/RoiHudPanel.tsx` | —                        |
+| Cell        | `src/features/control-hud/CellHudPanel.tsx`                                                                   | Image                    |
 
 Tab order and labels come from `CONTROL_HUD_TABS`
 (`src/features/app-shell/appShellModel.ts`). Before a dataset is ready the
@@ -157,8 +157,19 @@ For Visium HD, gene overlays colour bins (see
 
 ## Transcripts Tab
 
-Xenium only. Header chip shows the state (Off, Checking, "{n} points",
+Xenium and Atera. Header chip shows the state (Off, Checking, "{n} points",
 "{n} squares", Native LOD + exact, Unavailable, …).
+
+Atera stores transcripts per gene (see
+[Atera](./modalities/atera.md#transcripts)), so on Atera:
+
+- With Selected genes, density squares sum the selected genes, and Auto
+  switches to exact points when the selected genes' count in view fits the
+  budget. The Estimate is that count, not the all-transcript cell estimate.
+- With All features, or no genes selected, the layer is cell-summary squares
+  from cell transcript counts, and Exact waits for genes.
+- `Gene-only calls` is disabled, and transcripts have no FOV.
+- Density always counts QV ≥ 20; `Min QV` applies to exact points.
 
 | Control              | Type             | Range / default                            | Notes                                                                           |
 | -------------------- | ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------- |
@@ -177,8 +188,9 @@ Xenium only. Header chip shows the state (Off, Checking, "{n} points",
 
 `TranscriptStatusPanel` (`src/features/transcripts/TranscriptStatusPanel.tsx`)
 below the controls shows source, estimate, budget, rendered count, and query
-time; `Load exact viewport` when waiting; top groups (gene, FOV, count); and
-hovered and pinned transcript or density-bin cards with `Pin` / `Clear`.
+time; `Load exact viewport` when waiting; top groups (gene, FOV, count; gene
+and count on Atera); and hovered and pinned transcript or density-bin cards
+with `Pin` / `Clear`.
 
 ## Magic Lens Tab
 
@@ -304,22 +316,24 @@ selection.
 From `src/features/app-shell/platformAdapter.ts` and the tab rules in
 `src/App.tsx`:
 
-| Feature                   | Xenium                  | Visium HD         | H5AD             | SpatialData      | Image            |
-| ------------------------- | ----------------------- | ----------------- | ---------------- | ---------------- | ---------------- |
-| Genes tab                 | ✓                       | ✓                 | ✓                | ✓                | —                |
-| Transcripts tab           | ✓                       | —                 | —                | —                | —                |
-| Magic Lens                | ✓                       | ✓                 | Unavailable      | Unavailable      | —                |
-| Magic Lens Min QV         | ✓                       | —                 | —                | —                | —                |
-| Cell tab                  | Cell Info + Z histogram | Bin Info          | Observations     | Observations     | —                |
-| Cell-id annotations       | ✓                       | —                 | ✓                | ✓                | —                |
-| GeoJSON shapes            | ✓                       | ✓                 | ✓                | ✓                | ✓                |
-| Cell boundaries           | ✓                       | Segmented outputs | —                | ✓ (shapes)       | —                |
-| Nucleus boundaries        | —                       | ✓                 | —                | —                | —                |
-| ROI panel                 | Cells                   | Bins              | Cells            | Cells            | Geometry         |
-| Bin size control          | —                       | ✓                 | —                | —                | —                |
-| SpatialData view controls | —                       | —                 | —                | ✓                | —                |
-| Boundary limit            | ✓                       | Disabled          | ✓                | ✓                | ✓                |
-| Morphology checkbox label | Morphology image        | Tissue image      | Morphology image | Morphology image | Morphology image |
+| Feature                   | Xenium                  | Atera            | Visium HD         | H5AD             | SpatialData      | Image            |
+| ------------------------- | ----------------------- | ---------------- | ----------------- | ---------------- | ---------------- | ---------------- |
+| Genes tab                 | ✓                       | ✓                | ✓                 | ✓                | ✓                | —                |
+| Transcripts tab           | ✓                       | Selected genes   | —                 | —                | —                | —                |
+| All-feature transcripts   | Native density + exact  | Cell summary     | —                 | —                | —                | —                |
+| ROI transcript export     | ✓                       | —                | —                 | —                | —                | —                |
+| Magic Lens                | ✓                       | Unavailable      | ✓                 | Unavailable      | Unavailable      | —                |
+| Magic Lens Min QV         | ✓                       | —                | —                 | —                | —                | —                |
+| Cell tab                  | Cell Info + Z histogram | Observations     | Bin Info          | Observations     | Observations     | —                |
+| Cell-id annotations       | ✓                       | ✓                | —                 | ✓                | ✓                | —                |
+| GeoJSON shapes            | ✓                       | ✓                | ✓                 | ✓                | ✓                | ✓                |
+| Cell boundaries           | ✓                       | ✓                | Segmented outputs | —                | ✓ (shapes)       | —                |
+| Nucleus boundaries        | —                       | ✓                | ✓                 | —                | —                | —                |
+| ROI panel                 | Cells                   | Cells            | Bins              | Cells            | Cells            | Geometry         |
+| Bin size control          | —                       | —                | ✓                 | —                | —                | —                |
+| SpatialData view controls | —                       | —                | —                 | —                | ✓                | —                |
+| Boundary limit            | ✓                       | ✓                | Disabled          | ✓                | ✓                | ✓                |
+| Morphology checkbox label | Morphology image        | Morphology image | Tissue image      | Morphology image | Morphology image | Morphology image |
 
 ## Viewer Interactions
 
@@ -357,7 +371,7 @@ on or when `Hover tooltips` is off (except transcripts).
 | Visium HD bin    | Barcode, bin, array row/col, image px, tissue, expression                            |
 | Cell point       | ID, source, count, X/Y µm, transcripts, area, expression, genes, annotations         |
 | Cell boundary    | ID, segmentation, annotation(s), X/Y, transcripts, area, vertices, expression, genes |
-| Transcript point | Feature, ID, FOV, cell, QV, X/Y µm, Z, nucleus overlap, distance                     |
+| Transcript point | Feature, ID, FOV (when present), cell, QV, X/Y µm, Z, nucleus overlap, distance      |
 | Density bin      | Feature or "Transcript density bin", count, total, level, X/Y, hidden                |
 
 ### Distance Measurement

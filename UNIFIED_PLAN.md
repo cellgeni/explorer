@@ -74,6 +74,7 @@ request:
 | H5AD                 | `https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad`                                                                        | 32,080,465 bytes; Range and CORS enabled                                                                                      |
 | SpatialData (shapes) | `https://webatlasdataprod.cog.sanger.ac.uk/public/visium_associated_xenium_io/a5652917-ebb4-4d4c-ba90-6e8845c6f370.sdata.zarr` | Visium CytAssist, Zarr v2; 4,992 circle spots; H&E images; consolidated metadata at `zmetadata`                               |
 | SpatialData (labels) | `https://cellgeni.cog.sanger.ac.uk/vento/reproductivecellatlas/ovaries/spatialdata_xenium/AU14_S14_final.zarr`                 | spatialdata-io Xenium; table annotates `labels/xenium_segmentations`; 73,579 cells × 480 genes; true scale 0.2125 µm per unit |
+| Atera                | `https://mp33.cog.sanger.ac.uk/public/test/50170325_WSI_KID_04_region1/50170325_WSI_KID_04_region1`                            | Human WTA kidney; 93,864 cells × 24,674 features (18,050 genes); 4 morphology channels; 667 M transcripts                     |
 
 The SpatialData stores are for manual testing; there is no E2E coverage for them
 yet.
@@ -236,6 +237,7 @@ writing UI code.
 | Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                       |
 | Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                       |
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                       |
+| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)       |
 | Visium spots                    | Original Phase 6 `VisiumDataset`                         | Not started                                             |
 
 ---
@@ -587,7 +589,7 @@ matrices.
   annotation tracks. Numeric columns are parsed as continuous tracks and shown
   as Cell Info values (not yet as colour tracks; see Phase 7). Category sidecars
   such as `/obs/__categories/leiden` are supported. Boolean columns load as 0/1
-  with h5wasm but are expected to fail on the reference backend.
+  on every backend.
 - `/var`: gene names.
 - `/X`: expression, `n_obs × n_vars`. Dense, CSR, or CSC.
 - `/obsm`: coordinates. The first present key of `X_spatial`, `spatial`,
@@ -1364,8 +1366,9 @@ continuous.
   - [x] **Reopened (2026-11-08), fixed (2026-11-09):** numeric columns
         reach Cell Info ("Observations") and, via `metadataTracks()` at load,
         the `Cell color` → `Metadata` tracks.
-  - [ ] **Reopened (2026-11-08):** boolean columns are expected to fail on the
-        reference backend and in SpatialData tables.
+  - [x] **Reopened (2026-11-08), fixed (2026-11-09):** boolean columns
+        failed on the reference backend and in SpatialData tables; Zarr
+        `BoolArray` values now read as 0/1, as on h5wasm.
 - [x] `/X` first; `/layers/*` and `/raw/X` later.
 - [ ] Read remote files through a worker-backed, Range-capable h5wasm reader,
       avoiding full-file fetches except for tiny fixtures or budgeted paths.
@@ -1434,7 +1437,7 @@ continuous.
       reference.
 - [ ] Offer numeric `obs` columns as `Metadata` colour tracks.
 - [ ] Accept obs names in imported CSV/JSON annotation files.
-- [ ] Read boolean `obs` columns on the reference backend.
+- [x] Read boolean `obs` columns on the reference backend (2026-11-09).
 
 ### Phase 8 — Image-Only Viewer And GeoJSON Annotations
 
@@ -1582,9 +1585,9 @@ planned in advance.
 - [ ] `points` (transcripts), extra images, and extra tables are not shown.
 - [ ] Shapes are read whole, not by viewport.
 - [ ] `meta()` waits for the image, so a broken image also blocks boundaries.
-- [ ] Boolean `obs` columns are expected to fail, and imported CSV/JSON
-      annotations must use Xenium cell IDs (shared with
-      [Phase 7](#phase-7--anndata-h5ad)).
+- [ ] Imported CSV/JSON annotations must use Xenium cell IDs (shared with
+      [Phase 7](#phase-7--anndata-h5ad)). Boolean `obs` columns were fixed on
+      2026-11-09.
 - [ ] Diagnostics check only one image chunk.
 - [ ] No E2E coverage; the reference stores in
       [1](#reference-datasets) are used for manual testing.
@@ -1646,6 +1649,107 @@ no longer breaks loading, and so a dataset can say how it should be shown.
 - [ ] Not configurable yet: H5AD coordinate key, annotation set to select,
       channel colours and contrast, initial camera.
 - [ ] No E2E test; the hosted fixtures are folders without manifests.
+
+### Phase 12 — 10x Atera Output
+
+Shipped 2026-11-09; selected-gene transcripts followed the same day (see
+[Transcripts](#transcripts) below). Requested to support 10x Atera, the
+Xenium successor, using the reference run in [1](#reference-datasets).
+
+#### Product Decisions
+
+- **DECISION:** A separate `atera` platform rather than a Xenium variant. The
+  bundle has no Parquet files, so none of the Xenium DuckDB readers apply; the
+  matrices are AnnData Zarr, so the AnnData readers do.
+- **DECISION:** `AteraDataset` wraps `AnnDataH5adDataset` over the zipped
+  CSR matrix, like `SpatialDataDataset` wraps a table. Cells, genes,
+  annotations, tracks, embeddings, ROI cells, and cell profiles come from it.
+- **DECISION:** Selected-gene overlays read whole columns from
+  `csc_cell_feature_matrix.zarr.zip`, not CSR rows: a whole-slide CSR read
+  would touch the full 236 M-value matrix.
+- **DECISION:** The matrix zip has no consolidated metadata. Only the needed
+  nodes' metadata is fetched, in parallel, and served from memory; opening
+  every node in turn would mean about 600 sequential range requests.
+- **DECISION:** Boundaries come from `cells.zarr.zip`
+  `gridded_polygon_sets`, read by viewport tile and level, not the
+  full-precision `polygon_sets` or the label masks.
+- **DECISION:** `morphology_2d` opens through the Xenium morphology loader,
+  since it is the same multi-file OME-TIFF layout as `morphology_focus`.
+
+#### Delivered
+
+- [x] Detection from `experiment.spatial`, probed alongside `explorer.json`
+      and `experiment.xenium`; manifest platform `atera` with its own file
+      roles; files located by manifest, then `experiment.spatial`, then
+      standard name.
+- [x] Overview with transcript counts, areas, nucleus counts, and
+      segmentation methods; gene list limited to `Gene Expression` features.
+- [x] Cell and nucleus boundaries (`<barcode>#nucleus-N` for extra nuclei).
+- [x] Four-channel morphology; Leiden and Azimuth annotations; UMAP and PCA;
+      metadata tracks; ROI with means; cell profile.
+- [x] Diagnostics for the experiment file, both matrices, cells, and the
+      image.
+- [x] `docs/modalities/atera.md`; unit tests with an in-memory AnnData
+      fixture; an `@live` E2E test against the reference run.
+- [x] Checked in the browser against the reference run: ready in about 4 s;
+      UMOD overlay about 0.85 s; 5,805 cell and 5,703 nucleus polygons in
+      view in under 2 s.
+
+#### Transcripts
+
+Atera stores transcripts per gene, so the Transcripts tab shows selected
+genes only.
+
+- **DECISION:** Transcripts route by platform like selected-gene expression:
+  `loadPlatformTranscriptCapabilities`, `…Aggregates`, and `…Viewport` in
+  `platformAdapter.ts` send Atera to `AteraDataset` and leave every other
+  platform on the Xenium loaders. A `geneRanges` capability marks per-gene
+  outputs for the workflow; Xenium capabilities are unchanged.
+- **DECISION:** Selected-gene density comes from
+  `binned_transcripts.zarr.zip`: one nested `gene/<index>.zip` (about
+  50–190 KB) per gene, read once and opened in memory. Its 5 µm counts are
+  summed into squares that double in size until the view has at most 1,500.
+- **DECISION:** The same pass counts the selected genes' transcripts in the
+  view, and that count, not the all-transcript cell estimate, decides between
+  density and exact points. On the reference run the count matched the exact
+  QV ≥ 20 points (1,031 of 1,031 in a 600 × 400 µm box).
+- **DECISION:** Exact points read each selected gene's `gene_offset` row
+  range in the visible 2,000 µm tiles of `transcripts.zarr.zip`. Rows within a
+  gene are not spatially sorted, so the whole range is read (at most about
+  175,000 rows per gene per tile on the reference run); cell ids and nucleus
+  overlap are read only for rows inside the box and above the minimum QV.
+  `quality_score` is float16 and is read as uint16 bits, since zarrita needs
+  `Float16Array`.
+- **DECISION:** With no gene filter (no genes, or Feature filter set to All
+  features), the layer is cell-summary squares from `obs/transcript_counts`
+  with a message asking for a gene filter; Exact with no genes waits with the
+  same request. All-gene native density or points would mean reading every
+  gene.
+
+Delivered:
+
+- [x] Transcripts tab and overlay for Atera: per-gene density squares,
+      selected-gene estimate, exact points with cell ids, QV, z, and nucleus
+      overlap; gene-only filter disabled; no FOV column or hover row.
+- [x] Diagnostics range-check both transcript zips, warning when missing.
+- [x] Unit tests with in-memory stores, including a stored nested zip, delta
+      and Fortran-order arrays, and float16 quality scores; workflow tests for
+      the per-gene branch; the `@live` E2E test covers density, cell-summary,
+      and exact points.
+- [x] Checked in the browser against the reference run: UMOD whole-slide
+      density 165 squares (640 µm) summing to the stored 1,914,072; at 4 px/µm
+      7,645 exact points against an estimate of 7,689, about 5 s cold and
+      1.4 s with the range cache warm.
+
+#### Known Gaps
+
+- [ ] Transcripts: no ROI transcript export or cell z histogram; density
+      always counts QV ≥ 20 (the binned store's threshold), whatever `Min QV`
+      says.
+- [ ] Magic Lens is unavailable.
+- [ ] Azimuth category colours (`obs/<column>/color`, packed RGBA) are not
+      used.
+- [ ] The 3D DAPI stack (`morphology_3d/`) is not shown.
 
 ---
 
@@ -1871,7 +1975,8 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 - [x] H5AD and SpatialData: offer numeric `obs` columns as `Metadata` colour
       tracks (`metadataTracks()` is called at load, 2026-11-09).
 - [ ] H5AD: read HDF5 in a worker (h5wasm runs on the main thread).
-- [ ] H5AD and SpatialData: read boolean `obs` columns on the reference backend.
+- [x] H5AD and SpatialData: read boolean `obs` columns on the reference backend
+      (0/1 tracks, 2026-11-09).
 - [ ] Visium HD: low-res tissue image fallback.
 - [ ] Magic Lens: make `Min QV` change results, or hide it.
 - [ ] Xenium diagnostics: check the image chosen from `experiment.xenium`
@@ -1912,6 +2017,8 @@ Features:
       schema diagnostics.
 - [ ] SpatialData: `points` (transcripts), extra images and tables, and
       viewport-scoped shape reads.
+- [ ] Atera: ROI transcript export, the cell z histogram, Magic Lens, and
+      Azimuth colours (see [Phase 12](#phase-12--10x-atera-output)).
 - [ ] Standard Visium (spots) `VisiumDataset` from the original Phase 6.
 - [ ] Visium HD dataset annotations from `analysis/` (original Phase 6).
 - [ ] Transcript estimate from native Zarr counts instead of `cells.parquet`.

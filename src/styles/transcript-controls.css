@@ -73,6 +73,11 @@
   align-items: baseline;
 }
 
+.transcript-group-panel-no-fov .transcript-group-heading,
+.transcript-group-panel-no-fov .transcript-group-list li {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .transcript-group-heading {
   color: #2f2b22;
   font-size: 0.58rem;

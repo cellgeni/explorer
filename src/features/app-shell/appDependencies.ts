@@ -75,7 +75,12 @@ export type DatasetOverviewLoader = (
 
 export type MorphologyImageLoader = (
   baseUrl: string,
-  options?: { readonly onFallback?: FallbackNotifier; readonly signal?: AbortSignal },
+  options?: {
+    // Image paths to try instead of the ones listed in experiment.xenium.
+    readonly candidates?: readonly string[]
+    readonly onFallback?: FallbackNotifier
+    readonly signal?: AbortSignal
+  },
 ) => Promise<MorphologyImage>
 
 export type CustomMorphologyLayerLoader = (

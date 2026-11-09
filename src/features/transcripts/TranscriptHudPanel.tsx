@@ -50,6 +50,8 @@ interface TranscriptHudPanelProps {
   readonly transcriptPointColorMode: TranscriptPointColorMode
   readonly transcriptMinQv: number
   readonly transcriptGeneOnly: boolean
+  // Off for outputs that hold only gene transcripts (Atera).
+  readonly geneOnlyFilterEnabled?: boolean
   readonly transcriptOpacity: number
   readonly transcriptPointSize: number
   readonly transcriptCapabilityState: TranscriptCapabilityState
@@ -106,6 +108,7 @@ export function TranscriptHudPanel({
   transcriptPointColorMode,
   transcriptMinQv,
   transcriptGeneOnly,
+  geneOnlyFilterEnabled = true,
   transcriptOpacity,
   transcriptPointSize,
   transcriptCapabilityState,
@@ -354,6 +357,7 @@ export function TranscriptHudPanel({
             id="transcript-gene-only"
             type="checkbox"
             checked={transcriptGeneOnly}
+            disabled={!geneOnlyFilterEnabled}
             title="Gene-only transcript calls"
             onChange={(event) => {
               onTranscriptGeneOnlyChange(event.currentTarget.checked)

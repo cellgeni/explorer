@@ -7,6 +7,9 @@ import type {
   BoundaryElementsLoader,
   GeneExpressionLoader,
   SpatialDatasetLoader,
+  TranscriptAggregateLoader,
+  TranscriptCapabilitiesLoader,
+  TranscriptViewportLoader,
 } from './appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
@@ -20,6 +23,9 @@ import {
   loadPlatformBoundaryElements,
   loadPlatformGeneExpression,
   loadPlatformNucleusBoundaryElements,
+  loadPlatformTranscriptAggregates,
+  loadPlatformTranscriptCapabilities,
+  loadPlatformTranscriptViewport,
   platformActiveBoundaryCell,
   platformAnalysisEmbeddingOptions,
   platformBoundarySurfaceReserved,
@@ -198,6 +204,8 @@ describe('platformAdapter', () => {
       magicLensMinQv: true,
       nucleusBoundaries: false,
       transcripts: true,
+      cellTranscriptDistribution: true,
+      transcriptGeneOnlyFilter: true,
     })
     expect(adapter.featureLoadEnabled(readyLoadState)).toBe(true)
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(true)
@@ -477,6 +485,200 @@ describe('platformAdapter', () => {
     ).resolves.toEqual({ elements })
     expect(dataset.elements).toHaveBeenCalledWith(selection.bbox)
     expect(loadBoundaryElements).not.toHaveBeenCalled()
+  })
+
+  it('reads Atera through AnnData workflows with cell and nucleus boundaries', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'atera')
+    const cellElements = [
+      {
+        id: 'aaaaaaaa-1',
+        geometry: {
+          kind: 'polygon' as const,
+          rings: [[{ x: micrometers(0), y: micrometers(0) }]],
+        },
+      },
+    ]
+    const nucleusElements = [{ ...cellElements[0], id: 'aaaaaaaa-1' }]
+    const dataset = {
+      meta: vi.fn(async () => ({
+        capabilities: { cellBoundaries: true },
+        segmentations: [{ kind: 'cell' }, { kind: 'nucleus' }],
+      })),
+      elements: vi.fn(async () => ({ elements: cellElements })),
+      segmentationElements: vi.fn(async () => nucleusElements),
+    }
+    const getSpatialDataset = vi.fn(
+      async () => dataset,
+    ) as unknown as SpatialDatasetLoader
+    const loadBoundaryElements = vi.fn()
+
+    expect(adapter.kind).toBe('atera')
+    expect(isAnnDataPlatform(adapter)).toBe(true)
+    expect(adapter.capabilities).toMatchObject({
+      annotations: true,
+      nucleusBoundaries: true,
+      transcripts: true,
+      cellTranscriptDistribution: false,
+      transcriptGeneOnlyFilter: false,
+    })
+    expect(adapter.effectiveTranscriptOverlay(true)).toBe(true)
+    expect(adapter.boundaryLoadingEnabled(false, true)).toBe(true)
+    expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('enabled:nucleus')
+    expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
+      loadEnabled: false,
+      unavailableReason: 'Unavailable for Atera',
+    })
+    await expect(
+      loadPlatformBoundaryElements(
+        adapter,
+        {
+          getSpatialDataset,
+          loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+      ),
+    ).resolves.toEqual({ elements: cellElements })
+    await expect(
+      loadPlatformNucleusBoundaryElements(
+        adapter,
+        { getSpatialDataset },
+        readyLoadState.url,
+        selection.bbox,
+      ),
+    ).resolves.toEqual({ elements: nucleusElements })
+    expect(dataset.segmentationElements).toHaveBeenCalledWith('nucleus', selection.bbox)
+    expect(loadBoundaryElements).not.toHaveBeenCalled()
+  })
+
+  it('routes Atera transcripts to the dataset and keeps Xenium on its loaders', async () => {
+    const capabilities = { rawParquet: false, nativeZarr: true, geneRanges: true }
+    const aggregate = {
+      bins: [],
+      level: { level: 0, gridSizeMicrometers: 5, gridKeys: [], transcriptCounts: [] },
+      source: 'native-zarr' as const,
+      selectedFeatureNames: ['UMOD'],
+      visibleTranscriptCount: 12,
+    }
+    const viewport = { points: [], groups: [], hitPointLimit: false }
+    const dataset = {
+      transcriptCapabilities: vi.fn(async () => capabilities),
+      transcriptAggregates: vi.fn(async () => aggregate),
+      transcriptViewport: vi.fn(async () => viewport),
+    }
+    const getSpatialDataset = vi.fn(
+      async () => dataset,
+    ) as unknown as SpatialDatasetLoader
+    const loadTranscriptCapabilities = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: true,
+    })) as TranscriptCapabilitiesLoader
+    const loadTranscriptAggregates = vi.fn(
+      async () => aggregate,
+    ) as TranscriptAggregateLoader
+    const loadTranscriptViewport = vi.fn(async () => viewport) as TranscriptViewportLoader
+    const atera = appPlatformAdapterFor(readyLoadState, 'atera')
+    const xenium = appPlatformAdapterFor(readyLoadState, 'xenium')
+    const signal = new AbortController().signal
+
+    await expect(
+      loadPlatformTranscriptCapabilities(
+        atera,
+        { getSpatialDataset, loadTranscriptCapabilities },
+        readyLoadState.url,
+        { signal },
+      ),
+    ).resolves.toEqual(capabilities)
+    await expect(
+      loadPlatformTranscriptAggregates(
+        atera,
+        { getSpatialDataset, loadTranscriptAggregates },
+        readyLoadState.url,
+        selection.bbox,
+        { signal, mode: 'density', featureNames: ['UMOD'], maxBins: 1_500 },
+      ),
+    ).resolves.toBe(aggregate)
+    await expect(
+      loadPlatformTranscriptViewport(
+        atera,
+        { getSpatialDataset, loadTranscriptViewport },
+        readyLoadState.url,
+        selection.bbox,
+        {
+          signal,
+          pointLimit: 100,
+          groupLimit: 4,
+          minQv: 30,
+          geneOnly: true,
+          featureNames: ['UMOD'],
+        },
+      ),
+    ).resolves.toBe(viewport)
+
+    expect(getSpatialDataset).toHaveBeenCalledWith(readyLoadState.url)
+    expect(dataset.transcriptAggregates).toHaveBeenCalledWith(selection.bbox, {
+      featureNames: ['UMOD'],
+      maxBins: 1_500,
+      signal,
+    })
+    expect(dataset.transcriptViewport).toHaveBeenCalledWith(selection.bbox, {
+      featureNames: ['UMOD'],
+      pointLimit: 100,
+      groupLimit: 4,
+      minQv: 30,
+      signal,
+    })
+    expect(loadTranscriptCapabilities).not.toHaveBeenCalled()
+    expect(loadTranscriptAggregates).not.toHaveBeenCalled()
+    expect(loadTranscriptViewport).not.toHaveBeenCalled()
+
+    await loadPlatformTranscriptCapabilities(
+      xenium,
+      { getSpatialDataset, loadTranscriptCapabilities },
+      readyLoadState.url,
+      { signal },
+    )
+    await loadPlatformTranscriptAggregates(
+      xenium,
+      { getSpatialDataset, loadTranscriptAggregates },
+      readyLoadState.url,
+      selection.bbox,
+      { signal, featureNames: [] },
+    )
+    await loadPlatformTranscriptViewport(
+      xenium,
+      { getSpatialDataset, loadTranscriptViewport },
+      readyLoadState.url,
+      selection.bbox,
+      { signal, geneOnly: true },
+    )
+
+    expect(loadTranscriptCapabilities).toHaveBeenCalledWith(readyLoadState.url, {
+      signal,
+    })
+    expect(loadTranscriptAggregates).toHaveBeenCalledWith(
+      readyLoadState.url,
+      selection.bbox,
+      { signal, featureNames: [] },
+    )
+    expect(loadTranscriptViewport).toHaveBeenCalledWith(
+      readyLoadState.url,
+      selection.bbox,
+      { signal, geneOnly: true },
+    )
+    expect(getSpatialDataset).toHaveBeenCalledTimes(3)
+  })
+
+  it('rejects Atera transcript requests when the dataset has no transcript readers', async () => {
+    const getSpatialDataset = vi.fn(async () => ({})) as unknown as SpatialDatasetLoader
+
+    await expect(
+      loadPlatformTranscriptCapabilities(
+        appPlatformAdapterFor(readyLoadState, 'atera'),
+        { getSpatialDataset, loadTranscriptCapabilities: vi.fn() },
+        readyLoadState.url,
+      ),
+    ).rejects.toThrow('Loaded dataset does not expose per-gene transcripts.')
   })
 
   it('loads Visium HD boundary, nucleus, and expression data through dataset capabilities', async () => {

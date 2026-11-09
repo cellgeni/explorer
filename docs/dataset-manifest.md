@@ -76,7 +76,7 @@ its standard name in the manifest's folder.
 | Field         | Required | Value                                                                                                 |
 | ------------- | -------- | ----------------------------------------------------------------------------------------------------- |
 | `version`     | Yes      | `1`                                                                                                   |
-| `platform`    | Yes      | `xenium`, `visium-hd`, `h5ad`, `spatialdata`, or `image`                                              |
+| `platform`    | Yes      | `xenium`, `atera`, `visium-hd`, `h5ad`, `spatialdata`, or `image`                                     |
 | `name`        | No       | Display name, shown in the log and in diagnostics                                                     |
 | `description` | No       | Free text; not shown                                                                                  |
 | `root`        | No       | Base for relative paths instead of the manifest's folder. Relative to the manifest, or an http(s) URL |
@@ -114,6 +114,22 @@ All entries are optional. Leave one out to use the standard name.
 | `genePanel`           | `gene_panel.json`                   |                                                                                                                 |
 | `morphology`          | Image listed in `experiment.xenium` | Image paths inside `experiment.xenium` resolve against the dataset folder (or `root`)                           |
 | `umap`, `tsne`        | Searched under `analysis/`          | A projection CSV. Replaces the search for that embedding                                                        |
+
+### Atera
+
+All entries are optional. Leave one out to use the path in
+`experiment.spatial`, or the standard name when that lists none. Atera
+`options` must be empty.
+
+| Key                    | Standard name                                     | Notes                                                    |
+| ---------------------- | ------------------------------------------------- | -------------------------------------------------------- |
+| `experiment`           | `experiment.spatial`                              | Supplies the pixel size and the paths of the other files |
+| `cells`                | `cells.zarr.zip`                                  | Cell and nucleus boundaries                              |
+| `cellFeatureMatrix`    | `cell_feature_matrix.zarr.zip`                    | Required to load                                         |
+| `cscCellFeatureMatrix` | `csc_cell_feature_matrix.zarr.zip`                | Selected-gene overlays                                   |
+| `transcripts`          | `transcripts.zarr.zip`                            | Exact transcript points for selected genes               |
+| `binnedTranscripts`    | `binned_transcripts.zarr.zip`                     | Selected-gene transcript density                         |
+| `morphology`           | `images.morphology_2d_filepath` in the experiment | Any OME-TIFF or OME-Zarr image                           |
 
 ### Visium HD
 
@@ -171,7 +187,7 @@ Display settings applied each time the dataset loads.
 | `imageOpacity`        | `Dataset image opacity` | 0–1                                                                        |
 | `cellFillOpacity`     | `Cell fill opacity`     | 0–1                                                                        |
 | `cellBoundaryOpacity` | `Cell boundary opacity` | 0–1                                                                        |
-| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium)                                                  |
+| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium, Atera)                                           |
 
 How defaults combine with other settings:
 

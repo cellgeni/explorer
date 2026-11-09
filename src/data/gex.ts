@@ -1,11 +1,7 @@
 import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
 import { asCellId, cellIdToInt, intToCellId } from './cellid'
-import {
-  defaultPersistentByteRangeCache,
-  fetchByteRangeWithCache,
-  ZARR_ZIP_CACHE_NAMESPACE,
-} from './persistentByteRangeCache'
+import { cachedZipFileStoreFromUrl } from '../zarr/cachedZipStore'
 import { geneExpressionStageTiming } from './geneExpressionTiming'
 import { createGeneFeatureIndex } from './geneFeatures'
 import { selectionToSql } from './gexSelection'
@@ -16,7 +12,6 @@ import type {
 } from '../workers/featureBarcodeMatrixMessages'
 import type { CellId } from './cellid'
 import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
-import type { PersistentByteRangeCache } from './persistentByteRangeCache'
 import type {
   Selection,
   SqlFragment,
@@ -1243,77 +1238,6 @@ function loadZarrMatrixCellIdData(url: string): Promise<Uint32Array> {
 
   zarrMatrixCellIdDataCache.set(url, promise)
   return promise
-}
-
-function cachedZipFileStoreFromUrl(url: string): ZipFileStore {
-  return new ZipFileStore(
-    new CachedHttpRangeReader(url, defaultPersistentByteRangeCache()),
-  )
-}
-
-class CachedHttpRangeReader {
-  private byteLength: number | undefined
-
-  constructor(
-    readonly url: string,
-    private readonly cache: PersistentByteRangeCache | null,
-  ) {}
-
-  async getLength(): Promise<number> {
-    if (this.byteLength !== undefined) {
-      return this.byteLength
-    }
-
-    const response = await fetch(this.url, { method: 'HEAD' })
-
-    if (!response.ok) {
-      throw new Error(
-        `failed http request ${this.url}, status: ${response.status}: ${response.statusText}`,
-      )
-    }
-
-    const byteLength = Number(response.headers.get('content-length'))
-
-    if (!Number.isFinite(byteLength)) {
-      throw new Error('could not get length')
-    }
-
-    this.byteLength = byteLength
-    return byteLength
-  }
-
-  async read(offset: number, size: number): Promise<Uint8Array<ArrayBuffer>> {
-    if (size === 0) {
-      return new Uint8Array(0)
-    }
-
-    const bytes = await fetchByteRangeWithCache({
-      cache: this.cache,
-      namespace: ZARR_ZIP_CACHE_NAMESPACE,
-      url: this.url,
-      start: offset,
-      end: offset + size,
-      fetchRange: async () => {
-        const response = await fetch(this.url, {
-          headers: {
-            Range: `bytes=${offset}-${offset + size - 1}`,
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error(
-            `failed http request ${this.url}, status: ${response.status} offset: ${offset} size: ${size}: ${response.statusText}`,
-          )
-        }
-
-        return new Uint8Array(await response.arrayBuffer())
-      },
-    })
-
-    const copy = new Uint8Array(bytes.byteLength)
-    copy.set(bytes)
-    return copy
-  }
 }
 
 async function gexFromFeatureMajorCellFeatureMatrix(
