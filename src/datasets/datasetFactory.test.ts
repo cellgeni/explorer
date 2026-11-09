@@ -402,6 +402,30 @@ describe('spatial dataset detection', () => {
     )
   })
 
+  it('resolves Atera files against the root of a manifest entered by URL', async () => {
+    const fetcher = fetcherForJsonPaths({
+      '/manifests/atera.json': {
+        version: 1,
+        platform: 'atera',
+        root: '../runs/atera-1',
+      },
+    })
+    const dataset = await createSpatialDataset(
+      'https://example.test/manifests/atera.json',
+      {
+        fetcher,
+      },
+    )
+
+    expect(dataset).toBeInstanceOf(AteraDataset)
+    await expect((dataset as AteraDataset).fileUrl('experiment')).resolves.toBe(
+      'https://example.test/runs/atera-1/experiment.spatial',
+    )
+    await expect((dataset as AteraDataset).fileUrl('cells')).resolves.toBe(
+      'https://example.test/runs/atera-1/cells.zarr.zip',
+    )
+  })
+
   it('creates an image-only dataset for direct image URLs', async () => {
     const dataset = await createSpatialDataset(
       'https://example.test/images/sample.ome.tif',

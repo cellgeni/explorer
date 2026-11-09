@@ -73,6 +73,8 @@ import type {
 import { normalizeSampleStride } from './xeniumDatasetRows'
 
 export interface AteraDatasetOptions {
+  // Folder that relative file paths resolve against: the dataset folder, or a
+  // dataset manifest's root.
   readonly baseUrl: string
   // Absolute URLs from a dataset manifest; they win over experiment.spatial.
   readonly files?: Readonly<Partial<Record<AteraFileRole | 'morphology', string>>>
@@ -165,6 +167,10 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     signal?: AbortSignal,
   ) => Promise<ImagePyramidLoader>
   private experimentPromise: Promise<AteraExperiment> | null = null
+  // experiment.spatial is optional with a manifest, so its file paths are read
+  // once and a missing file means standard names, without refetching it on
+  // every lookup.
+  private experimentFilesPromise: Promise<AteraExperiment['files'] | null> | null = null
   private tablePromise: Promise<AteraTable> | null = null
   private overviewPromise: Promise<AteraOverview> | null = null
   private genesPromise: Promise<AteraGenes> | null = null
@@ -473,8 +479,12 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       return this.resolve(ATERA_FILE_DEFAULTS.experiment)
     }
 
-    const experiment = await this.experiment().catch(() => null)
-    return this.resolve(experiment?.files[role] ?? ATERA_FILE_DEFAULTS[role])
+    this.experimentFilesPromise ??= this.experiment().then(
+      (experiment) => experiment.files,
+      () => null,
+    )
+    const files = await this.experimentFilesPromise
+    return this.resolve(files?.[role] ?? ATERA_FILE_DEFAULTS[role])
   }
 
   private async fileLabel(role: AteraFileRole): Promise<string> {

@@ -202,7 +202,8 @@ export class AteraTranscripts {
   // Exact points for the selected genes. Rows within a gene are not sorted
   // spatially, so each gene's whole row range in each visible tile is read,
   // then filtered by box and QV. Cell ids and nucleus overlap are read only
-  // for the rows that remain. Over the point limit, no points are returned.
+  // for the rows that remain. Over the point limit, the first `pointLimit`
+  // points are returned, as the Xenium reader does.
   async viewport(
     bbox: BBox,
     options: AteraTranscriptViewportOptions,
@@ -278,13 +279,10 @@ export class AteraTranscripts {
     )
     throwIfAborted(options.signal)
     const pointCount = qualified.reduce((total, entry) => total + entry.rows.length, 0)
-
-    if (pointCount > pointLimit) {
-      return { points: [], groups: [], hitPointLimit: true }
-    }
+    const kept = keepFirstRows(qualified, pointLimit)
 
     const pointBatches = await mapWithConcurrency(
-      qualified.filter((entry) => entry.rows.length > 0),
+      kept,
       READ_CONCURRENCY,
       async ({ range, location, rows, qvs }) => {
         throwIfAborted(options.signal)
@@ -336,7 +334,7 @@ export class AteraTranscripts {
         points,
         options.groupLimit ?? DEFAULT_GROUP_LIMIT,
       ),
-      hitPointLimit: false,
+      hitPointLimit: pointCount > pointLimit,
     }
   }
 
@@ -608,6 +606,35 @@ export class AteraTranscripts {
       throw error
     }
   }
+}
+
+// The first `limit` rows across entries, in entry order, dropping empty ones.
+function keepFirstRows<Entry extends { readonly rows: number[]; readonly qvs: number[] }>(
+  entries: readonly Entry[],
+  limit: number,
+): Entry[] {
+  const kept: Entry[] = []
+  let remaining = limit
+
+  for (const entry of entries) {
+    if (remaining <= 0) {
+      break
+    }
+
+    if (entry.rows.length === 0) {
+      continue
+    }
+
+    const count = Math.min(entry.rows.length, remaining)
+    kept.push(
+      count === entry.rows.length
+        ? entry
+        : { ...entry, rows: entry.rows.slice(0, count), qvs: entry.qvs.slice(0, count) },
+    )
+    remaining -= count
+  }
+
+  return kept
 }
 
 function densityBinToAggregateBin(

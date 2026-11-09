@@ -157,6 +157,7 @@ function cellsStore(): Map<string, Uint8Array> {
 
 function createDataset(
   options: {
+    // `null` serves no experiment.spatial.
     readonly experiment?: unknown
     readonly files?: ConstructorParameters<typeof AteraDataset>[0]['files']
   } = {},
@@ -185,7 +186,7 @@ function createDataset(
     }
   })
   const fetcher = vi.fn(async (input: RequestInfo | URL) =>
-    String(input) === `${BASE_URL}/experiment.spatial`
+    String(input) === `${BASE_URL}/experiment.spatial` && options.experiment !== null
       ? Response.json(
           options.experiment ?? {
             pixel_size: 0.2125,
@@ -204,7 +205,7 @@ function createDataset(
     ...(options.files === undefined ? {} : { files: options.files }),
   })
 
-  return { dataset, openZipStore, requestedKeys }
+  return { dataset, fetcher, openZipStore, requestedKeys }
 }
 
 describe('AteraDataset', () => {
@@ -386,6 +387,19 @@ describe('AteraDataset', () => {
       'https://images.example.test/he.ome.tif',
     )
     await expect(dataset.fileUrl('cells')).resolves.toBe(`${BASE_URL}/cells.zarr.zip`)
+  })
+
+  it('uses standard names without refetching a missing experiment.spatial', async () => {
+    const { dataset, fetcher } = createDataset({ experiment: null })
+
+    await expect(dataset.fileUrl('cells')).resolves.toBe(`${BASE_URL}/cells.zarr.zip`)
+    await expect(dataset.fileUrl('cscCellFeatureMatrix')).resolves.toBe(
+      `${BASE_URL}/csc_cell_feature_matrix.zarr.zip`,
+    )
+    await dataset.fileUrl('transcripts')
+
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    await expect(dataset.morphologyUrl()).rejects.toThrow('experiment.spatial')
   })
 
   it('rejects a CSC matrix whose feature count differs from the matrix', async () => {

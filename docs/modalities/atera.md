@@ -179,7 +179,8 @@ most about 175,000 rows per gene per tile on the reference run, two or three
 2. `quality_score` (`[N, 1]` float16) is read for the span of rows still in
    the view and filtered by `Min QV`. It is opened as uint16 and decoded by
    `halfFloatToNumber`, since zarrita needs `Float16Array` for float16.
-3. Over the `Exact budget`, the request stops here with no points.
+3. Over the `Exact budget`, only the first `Exact budget` points are kept, as
+   on Xenium, and the layer reports that the limit was hit.
 4. `cell_id` (`[N, 2]` uint32, Fortran order: prefix and dataset suffix) and
    `overlaps_nucleus` are read for the remaining span. Prefix and suffix
    become the matrix barcode (`intToCellId`); both `0xFFFFFFFF` means

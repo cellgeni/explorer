@@ -718,8 +718,10 @@ export async function createSpatialDataset(
       Object.entries(manifest?.files ?? {}).map(([role, file]) => [role, file.url]),
     )
 
+    // Relative paths, including those in experiment.spatial, resolve against
+    // the manifest root, as datasetFileUrl does for the other platforms.
     return new AteraDataset({
-      baseUrl: detection.baseUrl,
+      baseUrl: manifest?.rootUrl ?? detection.baseUrl,
       files,
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       ...(options.onH5adLoadProgress === undefined

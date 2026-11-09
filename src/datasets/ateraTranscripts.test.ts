@@ -363,16 +363,21 @@ describe('AteraTranscripts', () => {
     ])
   })
 
-  it('stops before reading cell ids when the points exceed the limit', async () => {
-    const { reader, requestedKeys } = createReader()
+  it('returns the first points up to the limit and flags the rest', async () => {
+    const { reader } = createReader()
+    const all = await reader.viewport(bbox(0, 0, 15, 15), {
+      featureNames: ['GENEA', 'GENEB'],
+    })
     const result = await reader.viewport(bbox(0, 0, 15, 15), {
       featureNames: ['GENEA', 'GENEB'],
       pointLimit: 2,
     })
 
-    expect(result).toEqual({ points: [], groups: [], hitPointLimit: true })
-    expect(requestedKeys.some((key) => key.includes('/location/'))).toBe(true)
-    expect(requestedKeys.some((key) => key.includes('/cell_id/'))).toBe(false)
+    expect(all.points.length).toBeGreaterThan(2)
+    expect(result.hitPointLimit).toBe(true)
+    expect(result.points.map((point) => point.id)).toEqual(
+      all.points.slice(0, 2).map((point) => point.id),
+    )
   })
 
   it('reads only the tiles the box touches and caches gene offsets', async () => {
