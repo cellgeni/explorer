@@ -24,6 +24,8 @@ export type AteraFileRole = keyof typeof ATERA_FILE_DEFAULTS
 // and its `.zchunkstore` sidecar is looked for next to it.
 export const ATERA_OPTIONAL_FILES = ['morphology', 'morphologyZchunkstore'] as const
 
+export type AteraManifestFileKey = AteraFileRole | (typeof ATERA_OPTIONAL_FILES)[number]
+
 const ATERA_EXPLORER_FILE_KEYS: Readonly<Record<string, AteraFileRole>> = {
   cells_zarr_filepath: 'cells',
   cell_feature_zarr_filepath: 'cellFeatureMatrix',

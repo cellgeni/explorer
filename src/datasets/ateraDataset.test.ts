@@ -15,6 +15,7 @@ import {
   zarrNodesFromMetadataKeys,
   type AteraZipStore,
 } from './ateraDataset'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 
 const BASE_URL = 'https://example.test/atera'
 const WHOLE_SLIDE: BBox = {
@@ -160,6 +161,7 @@ function createDataset(
     // `null` serves no experiment.spatial.
     readonly experiment?: unknown
     readonly files?: ConstructorParameters<typeof AteraDataset>[0]['files']
+    readonly openImage?: ConstructorParameters<typeof AteraDataset>[0]['openImage']
   } = {},
 ) {
   const stores = new Map<string, Map<string, Uint8Array>>([
@@ -203,6 +205,7 @@ function createDataset(
     fetcher,
     openZipStore,
     ...(options.files === undefined ? {} : { files: options.files }),
+    ...(options.openImage === undefined ? {} : { openImage: options.openImage }),
   })
 
   return { dataset, fetcher, openZipStore, requestedKeys }
@@ -387,6 +390,50 @@ describe('AteraDataset', () => {
       'https://images.example.test/he.ome.tif',
     )
     await expect(dataset.fileUrl('cells')).resolves.toBe(`${BASE_URL}/cells.zarr.zip`)
+  })
+
+  it('opens every morphology channel file with the manifest sidecar', async () => {
+    const zchunkStoreUrl = 'https://sidecars.example.test/morphology_2d.zchunkstore'
+    const loader = { url: 'image' } as unknown as ImagePyramidLoader
+    const openImage = vi.fn(async () => loader)
+    const { dataset } = createDataset({
+      files: { morphologyZchunkstore: zchunkStoreUrl },
+      openImage,
+    })
+    const signal = new AbortController().signal
+
+    const image = await dataset.image()
+    if (image?.kind !== 'pyramid' || image.openChannelLoader === undefined) {
+      throw new Error('Expected a pyramid image with a channel opener.')
+    }
+    await image.openChannelLoader(`${BASE_URL}/morphology_2d/ch0001_18s.ome.tif`, signal)
+
+    expect(openImage.mock.calls).toEqual([
+      [
+        `${BASE_URL}/morphology_2d/ch0000_dapi.ome.tif`,
+        undefined,
+        undefined,
+        { zchunkStoreUrl },
+      ],
+      [
+        `${BASE_URL}/morphology_2d/ch0001_18s.ome.tif`,
+        signal,
+        undefined,
+        { zchunkStoreUrl },
+      ],
+    ])
+  })
+
+  it('opens the morphology image without a sidecar when the manifest names none', async () => {
+    const loader = { url: 'image' } as unknown as ImagePyramidLoader
+    const openImage = vi.fn(async () => loader)
+    const { dataset } = createDataset({ openImage })
+
+    await dataset.image()
+
+    expect(openImage.mock.calls).toEqual([
+      [`${BASE_URL}/morphology_2d/ch0000_dapi.ome.tif`],
+    ])
   })
 
   it('uses standard names without refetching a missing experiment.spatial', async () => {
