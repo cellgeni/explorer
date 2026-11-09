@@ -153,7 +153,7 @@ async function createTinyH5adFixture(): Promise<Uint8Array> {
   return bytes
 }
 
-test('shows the scaffolded viewer shell', async ({ page }) => {
+test('shows the scaffolded viewer shell @smoke', async ({ page }) => {
   await page.goto('/')
 
   await expect(page.getByRole('button', { name: 'Hide Controls' })).toBeVisible()
@@ -165,7 +165,9 @@ test('shows the scaffolded viewer shell', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Load Dataset' })).toBeVisible()
 })
 
-test('shows transcript overlay controls in the browser shell', async ({ page }) => {
+test('shows transcript overlay controls in the browser shell @smoke', async ({
+  page,
+}) => {
   await page.goto('/')
 
   await page.getByRole('tab', { name: 'Transcripts' }).click()
@@ -230,7 +232,7 @@ test('loads a local H5AD fixture with obs tracks and gene expression', async ({
   ).toBeVisible()
 })
 
-test('loads the hosted PBMC3K H5AD fixture', async ({ page }) => {
+test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
   test.setTimeout(180_000)
 
   await page.goto('/')
@@ -265,7 +267,7 @@ test('loads the hosted PBMC3K H5AD fixture', async ({ page }) => {
   await expect(genesPanel.getByLabel('Metadata track')).toContainText('n_genes')
 })
 
-test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell panels', async ({
+test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell panels @live', async ({
   page,
 }) => {
   test.setTimeout(300_000)
@@ -355,7 +357,7 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
   await expect(cellPanel).toContainText('No cell selected')
 })
 
-test('loads the Visium HD reference dataset with tissue image and 16 um bins', async ({
+test('loads the Visium HD reference dataset with tissue image and 16 um bins @live', async ({
   page,
 }) => {
   test.setTimeout(120_000)
@@ -364,7 +366,7 @@ test('loads the Visium HD reference dataset with tissue image and 16 um bins', a
   await expectVisiumHdBoundaryLayersOffByDefault(page)
 })
 
-test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced controls', async ({
+test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced controls @live', async ({
   page,
 }) => {
   test.setTimeout(600_000)

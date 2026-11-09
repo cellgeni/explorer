@@ -58,7 +58,9 @@ export function MorphologyChannelControls({
                 value={rgbToHex(color)}
                 title={`${channel.info.name} color`}
                 onChange={(event) => {
-                  onUpdate(channel.info.id, { color: hexToRgb(event.currentTarget.value) })
+                  onUpdate(channel.info.id, {
+                    color: hexToRgb(event.currentTarget.value),
+                  })
                 }}
               />
             )}

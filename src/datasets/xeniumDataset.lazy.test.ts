@@ -150,9 +150,7 @@ describe('XeniumDataset lazy defaults', () => {
 
     lazyMocks.createDuckDbClient.mockResolvedValue(duckClient)
     lazyMocks.gexFromCellFeatureMatrixZarr.mockResolvedValue(gexResultFor(cellId, 1))
-    lazyMocks.gexFromCellFeatureMatrixZarrRows.mockResolvedValue(
-      gexResultFor(cellId, 2),
-    )
+    lazyMocks.gexFromCellFeatureMatrixZarrRows.mockResolvedValue(gexResultFor(cellId, 2))
     lazyMocks.gexFromCellFeatureMatrixZarrSelectedGenes.mockResolvedValue(
       gexResultFor(cellId, 3),
     )
