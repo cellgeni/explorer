@@ -1,4 +1,4 @@
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import {
@@ -186,14 +186,14 @@ export async function loadDatasetTranscriptCapabilities(
 ): Promise<TranscriptCapabilities> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
   const rawParquet = await probeTranscriptFile(
-    datasetFileUrl(baseUrl, 'transcripts.parquet'),
-    'transcripts.parquet',
+    datasetFileUrlFor(baseUrl, 'transcripts'),
+    datasetFileLabelFor(baseUrl, 'transcripts'),
     validateRangeSupport,
     options.signal,
   )
   const nativeZarr = await probeTranscriptFile(
-    datasetFileUrl(baseUrl, 'transcripts.zarr.zip'),
-    'transcripts.zarr.zip',
+    datasetFileUrlFor(baseUrl, 'transcriptsZarr'),
+    datasetFileLabelFor(baseUrl, 'transcriptsZarr'),
     validateRangeSupport,
     options.signal,
   )
@@ -214,12 +214,12 @@ export async function loadDatasetTranscriptViewport(
 ): Promise<TranscriptViewportResult> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
   const pointLimit = normalizeTranscriptExactPointLimit(options.pointLimit)
-  const zarrUrl = datasetFileUrl(baseUrl, 'transcripts.zarr.zip')
+  const zarrUrl = datasetFileUrlFor(baseUrl, 'transcriptsZarr')
   let hasNativeZarr = false
 
   try {
     await validateRangeSupport(zarrUrl, {
-      label: 'transcripts.zarr.zip',
+      label: datasetFileLabelFor(baseUrl, 'transcriptsZarr'),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
     hasNativeZarr = true
@@ -266,8 +266,8 @@ export async function loadDatasetTranscriptViewport(
     )
   }
 
-  await validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {
-    label: 'transcripts.parquet',
+  await validateRangeSupport(datasetFileUrlFor(baseUrl, 'transcripts'), {
+    label: datasetFileLabelFor(baseUrl, 'transcripts'),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
   throwIfAborted(options.signal)
@@ -339,8 +339,8 @@ async function enrichNativeTranscriptViewportFromParquet(
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
 
   try {
-    await validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {
-      label: 'transcripts.parquet',
+    await validateRangeSupport(datasetFileUrlFor(baseUrl, 'transcripts'), {
+      label: datasetFileLabelFor(baseUrl, 'transcripts'),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
     throwIfAborted(options.signal)
@@ -388,10 +388,10 @@ export async function loadDatasetTranscriptAggregates(
   options: TranscriptAggregateOptions = {},
 ): Promise<TranscriptAggregateResult> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
-  const zarrUrl = datasetFileUrl(baseUrl, 'transcripts.zarr.zip')
+  const zarrUrl = datasetFileUrlFor(baseUrl, 'transcriptsZarr')
 
   await validateRangeSupport(zarrUrl, {
-    label: 'transcripts.zarr.zip',
+    label: datasetFileLabelFor(baseUrl, 'transcriptsZarr'),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
   throwIfAborted(options.signal)

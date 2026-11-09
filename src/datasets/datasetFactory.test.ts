@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  datasetFileLabelFor,
+  datasetFileUrl,
+  datasetFileUrlFor,
+  datasetManifestFor,
+  setDatasetManifest,
+} from '../data/datasetFiles'
+import {
   cachedSpatialDataset,
   createSpatialDataset,
   detectSpatialDataset,
@@ -7,6 +14,7 @@ import {
   setSpatialDataSelection,
   spatialDataSelectionFor,
 } from './datasetFactory'
+import { DatasetManifestError } from './datasetManifest'
 import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
 import { SpatialDataDataset } from './spatialDataDataset'
@@ -23,7 +31,12 @@ describe('spatial dataset detection', () => {
       baseUrl: 'https://example.test/xenium',
     })
 
-    expect(fetcher).toHaveBeenCalledTimes(1)
+    // The dataset manifest probe runs alongside the experiment.xenium probe.
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/xenium/explorer.json',
+      expect.objectContaining({ cache: 'no-cache' }),
+    )
   })
 
   it('prefers Xenium manifests over generic Zarr metadata probes', async () => {
@@ -36,7 +49,7 @@ describe('spatial dataset detection', () => {
       baseUrl: 'https://example.test/xenium',
     })
 
-    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
   it('detects Visium HD binned outputs and segmented output sidecars', async () => {
@@ -382,6 +395,294 @@ describe('spatial dataset detection', () => {
     })
   })
 })
+
+describe('dataset manifests', () => {
+  it('detects a folder manifest and resolves relocated files through it', async () => {
+    const baseUrl = 'https://example.test/manifest-xenium'
+    const fetcher = fetcherForResponses({
+      '/manifest-xenium/explorer.json': () =>
+        Response.json({
+          version: 1,
+          platform: 'xenium',
+          name: 'Renamed run',
+          files: {
+            cells: 'tables/cells_v2.parquet',
+            cellFeatureMatrix: 'https://cdn.example.test/matrix.zarr.zip',
+          },
+        }),
+    })
+
+    try {
+      const detection = await detectSpatialDataset(`${baseUrl}/`, { fetcher })
+
+      expect(detection).toMatchObject({
+        platform: 'xenium',
+        baseUrl,
+        manifest: { name: 'Renamed run', rootUrl: baseUrl },
+      })
+      expect(datasetFileUrlFor(baseUrl, 'cells')).toBe(
+        `${baseUrl}/tables/cells_v2.parquet`,
+      )
+      expect(datasetFileLabelFor(baseUrl, 'cells')).toBe('tables/cells_v2.parquet')
+      expect(datasetFileUrlFor(baseUrl, 'cellFeatureMatrix')).toBe(
+        'https://cdn.example.test/matrix.zarr.zip',
+      )
+      // Files the manifest leaves out keep their standard names.
+      expect(datasetFileUrlFor(baseUrl, 'transcripts')).toBe(
+        `${baseUrl}/transcripts.parquet`,
+      )
+      expect(datasetFileLabelFor(baseUrl, 'transcripts')).toBe('transcripts.parquet')
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
+  })
+
+  it('loads a manifest URL and resolves paths against its folder or root', async () => {
+    const manifestUrl = 'https://example.test/manifests/run-7.json'
+    const fetcher = fetcherForResponses({
+      '/manifests/run-7.json': () =>
+        Response.json({
+          version: 1,
+          platform: 'xenium',
+          root: '../outputs/run-7',
+        }),
+    })
+
+    try {
+      await expect(detectSpatialDataset(manifestUrl, { fetcher })).resolves.toMatchObject(
+        {
+          platform: 'xenium',
+          baseUrl: manifestUrl,
+        },
+      )
+      expect(datasetFileUrlFor(manifestUrl, 'cells')).toBe(
+        'https://example.test/outputs/run-7/cells.parquet',
+      )
+      expect(datasetFileUrl(manifestUrl, 'morphology_focus/ch0000.ome.tif')).toBe(
+        'https://example.test/outputs/run-7/morphology_focus/ch0000.ome.tif',
+      )
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    } finally {
+      setDatasetManifest(manifestUrl, undefined)
+    }
+  })
+
+  it('points H5AD, image, and SpatialData sources at the manifest file', async () => {
+    const fetcher = fetcherForResponses({
+      '/m/h5ad.json': () =>
+        Response.json({ version: 1, platform: 'h5ad', files: { h5ad: 'data/x.h5ad' } }),
+      '/m/data/x.h5ad': () => new Response(null, { status: 200 }),
+      '/m/image.json': () =>
+        Response.json({ version: 1, platform: 'image', files: { image: 'he.ome.zarr' } }),
+      '/m/sdata.json': () =>
+        Response.json({
+          version: 1,
+          platform: 'spatialdata',
+          files: { store: 'stores/sample.zarr/' },
+          options: { coordinateSystem: 'aligned', micrometersPerUnit: 0.5 },
+        }),
+    })
+    const urls = [
+      'https://example.test/m/h5ad.json',
+      'https://example.test/m/image.json',
+      'https://example.test/m/sdata.json',
+    ]
+
+    try {
+      await expect(
+        detectSpatialDataset(urls[0] ?? '', { fetcher }),
+      ).resolves.toMatchObject({
+        platform: 'h5ad',
+        h5adUrl: 'https://example.test/m/data/x.h5ad',
+      })
+      await expect(
+        detectSpatialDataset(urls[1] ?? '', { fetcher }),
+      ).resolves.toMatchObject({
+        platform: 'image',
+        imageUrl: 'https://example.test/m/he.ome.zarr',
+        imageKind: 'ome-zarr',
+      })
+      await expect(
+        detectSpatialDataset(urls[2] ?? '', { fetcher }),
+      ).resolves.toMatchObject({
+        platform: 'spatialdata',
+        spatialDataUrl: 'https://example.test/m/stores/sample.zarr',
+      })
+      // The manifest's options are the starting selection until the viewer
+      // sets one, which replaces them.
+      expect(spatialDataSelectionFor(urls[2] ?? '')).toEqual({
+        coordinateSystem: 'aligned',
+        micrometersPerUnit: 0.5,
+      })
+      setSpatialDataSelection(urls[2] ?? '', { coordinateSystem: 'global' })
+      expect(spatialDataSelectionFor(urls[2] ?? '')).toEqual({
+        coordinateSystem: 'global',
+      })
+    } finally {
+      setSpatialDataSelection(urls[2] ?? '', undefined)
+
+      for (const url of urls) {
+        setDatasetManifest(url, undefined)
+      }
+    }
+  })
+
+  it('reports an unreadable H5AD file named by the manifest', async () => {
+    const url = 'https://example.test/m/missing-h5ad.json'
+    const fetcher = fetcherForResponses({
+      '/m/missing-h5ad.json': () =>
+        Response.json({ version: 1, platform: 'h5ad', files: { h5ad: 'gone.h5ad' } }),
+    })
+
+    await expect(detectSpatialDataset(url, { fetcher })).rejects.toThrow(
+      'missing-h5ad.json: "files.h5ad" (https://example.test/m/gone.h5ad) is not readable (HTTP 404).',
+    )
+  })
+
+  it('rejects an entered manifest URL that is missing or invalid', async () => {
+    const fetcher = fetcherForResponses({
+      '/m/broken.json': () => new Response('{ "version": 1, ', { status: 200 }),
+      '/m/typo.json': () =>
+        Response.json({ version: 1, platform: 'xenium', files: { cell: 'c.parquet' } }),
+    })
+
+    await expect(
+      detectSpatialDataset('https://example.test/m/absent.json', { fetcher }),
+    ).rejects.toThrow('absent.json: could not be read (HTTP 404).')
+    await expect(
+      detectSpatialDataset('https://example.test/m/broken.json', { fetcher }),
+    ).rejects.toThrow('broken.json: is not valid JSON.')
+    await expect(
+      detectSpatialDataset('https://example.test/m/typo.json', { fetcher }),
+    ).rejects.toBeInstanceOf(DatasetManifestError)
+  })
+
+  it('ignores probed documents that are not manifests', async () => {
+    const fetcher = fetcherForResponses({
+      '/spa/explorer.json': () =>
+        new Response('<!doctype html><title>App</title>', { status: 200 }),
+      '/spa/experiment.xenium': () => new Response(null, { status: 200 }),
+      '/empty/explorer.json': () => Response.json({}),
+      '/empty/experiment.xenium': () => new Response(null, { status: 200 }),
+    })
+
+    await expect(
+      detectSpatialDataset('https://example.test/spa', { fetcher }),
+    ).resolves.toMatchObject({ platform: 'xenium' })
+    await expect(
+      detectSpatialDataset('https://example.test/empty', { fetcher }),
+    ).resolves.toMatchObject({ platform: 'xenium' })
+  })
+
+  it('reports an invalid probed manifest instead of ignoring it', async () => {
+    const baseUrl = 'https://example.test/invalid-folder'
+    setDatasetManifest(baseUrl, {
+      platform: 'xenium',
+      url: `${baseUrl}/explorer.json`,
+      rootUrl: 'https://example.test/stale',
+      files: {},
+    })
+    const fetcher = fetcherForResponses({
+      '/invalid-folder/explorer.json': () =>
+        Response.json({ version: 1, platform: 'xenium', defaults: { opacity: 1 } }),
+      '/invalid-folder/experiment.xenium': () => new Response(null, { status: 200 }),
+    })
+
+    await expect(detectSpatialDataset(baseUrl, { fetcher })).rejects.toThrow(
+      'unknown field "defaults.opacity"',
+    )
+    expect(datasetManifestFor(baseUrl)).toBeUndefined()
+  })
+
+  it('drops a manifest registered by an earlier detection once it is gone', async () => {
+    const baseUrl = 'https://example.test/removed-manifest'
+    setDatasetManifest(baseUrl, {
+      platform: 'xenium',
+      url: `${baseUrl}/explorer.json`,
+      rootUrl: 'https://example.test/elsewhere',
+      files: {},
+    })
+
+    await expect(
+      detectSpatialDataset(baseUrl, {
+        fetcher: fetcherForOkPaths(['/removed-manifest/experiment.xenium']),
+      }),
+    ).resolves.toMatchObject({ platform: 'xenium' })
+    expect(datasetManifestFor(baseUrl)).toBeUndefined()
+    expect(datasetFileUrlFor(baseUrl, 'cells')).toBe(`${baseUrl}/cells.parquet`)
+  })
+
+  it('builds Visium HD bins from the manifest and checks their files', async () => {
+    const baseUrl = 'https://example.test/vhd'
+    const okPaths = [
+      '/vhd/bins/008/spatial/tissue_positions.parquet',
+      '/vhd/bins/008/spatial/scalefactors_json.json',
+      '/vhd/matrices/008.h5',
+    ]
+    const manifest = {
+      version: 1,
+      platform: 'visium-hd',
+      files: {
+        bins: [{ size: 8, path: 'bins/008', filteredMatrix: 'matrices/008.h5' }],
+        featureSlice: 'slices/feature_slice.h5',
+        segmentedOutputs: { cellSegmentations: 'seg/cells.geojson' },
+      },
+      options: { binSize: 8 },
+    }
+    const fetcher = fetcherForResponses({
+      '/vhd/explorer.json': () => Response.json(manifest),
+      ...Object.fromEntries(
+        okPaths.map((path) => [path, () => new Response(null, { status: 200 })]),
+      ),
+    })
+
+    try {
+      const detection = await detectSpatialDataset(baseUrl, { fetcher })
+
+      expect(detection).toMatchObject({
+        platform: 'visium-hd',
+        bins: [
+          {
+            binSizeMicrometers: 8,
+            outputPath: 'bins/008',
+            tissuePositionsPath: 'bins/008/spatial/tissue_positions.parquet',
+            filteredMatrixH5Path: 'matrices/008.h5',
+          },
+        ],
+        segmentedOutputs: { cellSegmentationsGeojsonPath: 'seg/cells.geojson' },
+      })
+
+      const dataset = await createSpatialDataset(baseUrl, { fetcher })
+      expect(dataset).toBeInstanceOf(VisiumHdDataset)
+      expect(dataset).toMatchObject({
+        readers: {
+          defaultBinSizeMicrometers: 8,
+          featureSliceH5Path: 'slices/feature_slice.h5',
+        },
+      })
+
+      const incomplete = fetcherForResponses({
+        '/vhd/explorer.json': () => Response.json(manifest),
+      })
+      await expect(
+        detectSpatialDataset(baseUrl, { fetcher: incomplete }),
+      ).rejects.toThrow(
+        'the 8 µm bin is missing bins/008/spatial/tissue_positions.parquet (HTTP 404).',
+      )
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
+  })
+})
+
+function fetcherForResponses(
+  responses: Readonly<Record<string, () => Response>>,
+): typeof fetch {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const respond = responses[new URL(String(input)).pathname]
+    return respond === undefined ? new Response(null, { status: 404 }) : respond()
+  }) as unknown as typeof fetch
+}
 
 function fetcherForOkPaths(paths: readonly string[]): typeof fetch {
   const okPaths = new Set(paths)

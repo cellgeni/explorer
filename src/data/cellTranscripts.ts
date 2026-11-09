@@ -1,4 +1,4 @@
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { loadTranscriptZarrViewport } from './transcriptZarr'
 import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
@@ -63,10 +63,10 @@ export async function loadDatasetCellTranscriptDistribution(
   if (options.boundaryPolygon !== undefined) {
     const boundaryPolygon = options.boundaryPolygon
     const bbox = options.bbox ?? polygonBbox(boundaryPolygon)
-    const url = datasetFileUrl(baseUrl, 'transcripts.zarr.zip')
+    const url = datasetFileUrlFor(baseUrl, 'transcriptsZarr')
 
     await validateRangeSupport(url, {
-      label: 'transcripts.zarr.zip',
+      label: datasetFileLabelFor(baseUrl, 'transcriptsZarr'),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
     throwIfAborted(options.signal)
@@ -100,8 +100,8 @@ export async function loadDatasetCellTranscriptDistribution(
     )
   }
 
-  await validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {
-    label: 'transcripts.parquet',
+  await validateRangeSupport(datasetFileUrlFor(baseUrl, 'transcripts'), {
+    label: datasetFileLabelFor(baseUrl, 'transcripts'),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
   throwIfAborted(options.signal)

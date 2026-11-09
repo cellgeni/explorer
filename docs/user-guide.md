@@ -13,6 +13,12 @@ Supported sources are:
 - Direct AnnData `.h5ad` file URLs.
 - SpatialData Zarr store URLs, such as `sample.sdata.zarr`.
 - Direct OME-TIFF, TIFF, OME-Zarr, or validated NDPI image URLs.
+- A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
+
+When a dataset folder contains an `explorer.json` manifest, the viewer reads
+files from the locations it lists and applies its display defaults (genes,
+cell colour, layer toggles, opacities, image channels). The Log shows
+`Using dataset manifest …` when one is used.
 
 `Morphology image` is enabled by default so the OME-TIFF layer loads with the
 dataset when a source provides one. Visium HD relabels this control as
@@ -206,7 +212,9 @@ molecules to query.
 ## Diagnostics
 
 `Diagnose Dataset` checks the detected source and required byte-range reads,
-then summarizes optional assets for that platform. The download button next to
+then summarizes optional assets for that platform. With a dataset manifest, it
+also reports whether the manifest is valid and checks files at the locations
+the manifest gives. The download button next to
 it writes a local JSON dump (`xenium-diagnostics.json`, for every platform)
 with current controls, active errors, diagnostics, performance budget, and
 local telemetry events. Transcript diagnostics include detected

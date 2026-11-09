@@ -1,0 +1,242 @@
+# Dataset Manifest
+
+A dataset manifest is an optional JSON file, `explorer.json`, hosted with a
+dataset. It tells the viewer:
+
+- which platform the dataset is, so detection does not depend on file names;
+- where each file is, so files can be renamed, moved into subfolders, or served
+  from another host;
+- how to show the dataset on first load: selected genes, cell colouring, layer
+  toggles, opacities, image channels, and platform choices such as the
+  SpatialData image or the Visium HD bin size.
+
+Without a manifest, the viewer reads the standard file names described in
+[Host your own data](./host-your-own-data.md). A manifest only needs the
+fields that differ from those names.
+
+The format is defined by
+[`public/schemas/explorer-manifest.v1.json`](../public/schemas/explorer-manifest.v1.json)
+(JSON Schema 2020-12) and enforced by `parseDatasetManifest`
+(`src/datasets/datasetManifest.ts`).
+
+## Where The Viewer Looks
+
+There are two ways to use a manifest:
+
+| Entered URL                                        | What happens                                                                                                                                                                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A dataset folder, such as `https://host/run-7`     | The viewer reads `https://host/run-7/explorer.json` alongside the `experiment.xenium` probe. If it is a manifest, it describes the dataset. If it is missing, the viewer detects the platform from the file names. |
+| A manifest file, such as `https://host/run-7.json` | The viewer reads that file. Any URL ending in `.json` is treated as a manifest, except Zarr `zarr.json` metadata. Use this to keep several manifests for one folder, or to keep manifests apart from the data.     |
+
+When the viewer probes a folder:
+
+- An `HTTP 403` or `404`, a network error, or a timeout means there is no
+  manifest. Buckets that deny listing return `403` for missing keys.
+- A response that is not a JSON object with a `platform` or `version` field is
+  ignored, so hosts that answer every path with an HTML page or `{}` still
+  work.
+- A manifest that fails validation stops the load with an error. It is not
+  silently ignored.
+
+The manifest is fetched with `cache: no-cache`, so edits show on the next
+load. It needs CORS like every other file but not byte-range support.
+
+## Example
+
+A Xenium run whose cell table and image were renamed, with the matrix on
+another host:
+
+```json
+{
+  "$schema": "https://viewer.example.org/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "xenium",
+  "name": "Ovary AU14 S14",
+  "files": {
+    "cells": "tables/cells_resegmented.parquet",
+    "cellBoundaries": "tables/cell_boundaries_resegmented.parquet",
+    "cellFeatureMatrix": "https://cdn.example.org/au14/cell_feature_matrix.zarr.zip",
+    "morphology": "images/morphology_focus_0000.ome.tif"
+  },
+  "defaults": {
+    "genes": ["EPCAM", "PTPRC"],
+    "colorCellsBy": "cell-area",
+    "cellBoundaries": false,
+    "channels": ["DAPI"],
+    "imageOpacity": 0.8
+  }
+}
+```
+
+Every other file (`transcripts.parquet`, `gene_panel.json`, …) is read from
+its standard name in the manifest's folder.
+
+## Fields
+
+| Field         | Required | Value                                                                                                 |
+| ------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `version`     | Yes      | `1`                                                                                                   |
+| `platform`    | Yes      | `xenium`, `visium-hd`, `h5ad`, `spatialdata`, or `image`                                              |
+| `name`        | No       | Display name, shown in the log and in diagnostics                                                     |
+| `description` | No       | Free text; not shown                                                                                  |
+| `root`        | No       | Base for relative paths instead of the manifest's folder. Relative to the manifest, or an http(s) URL |
+| `files`       | Varies   | Where the platform's files are. See [Files](#files)                                                   |
+| `options`     | No       | Platform choices. See [Options](#options)                                                             |
+| `defaults`    | No       | First-load display settings. See [Defaults](#defaults)                                                |
+| `$schema`     | No       | Schema URL for editor completion and checking; the viewer ignores it                                  |
+
+Unknown fields are errors, so a typo such as `"cell"` for `"cells"` is
+reported instead of falling back to the standard name.
+
+### Paths
+
+Each path is either relative or an `http://` / `https://` URL. Relative paths
+resolve against `root` when it is set, otherwise against the folder the
+manifest is in. A leading `./` and trailing `/` are dropped; `../` is allowed.
+Other schemes such as `s3://` are rejected: the browser can only read HTTP(S).
+
+## Files
+
+### Xenium
+
+All entries are optional. Leave one out to use the standard name.
+
+| Key                   | Standard name                       | Notes                                                                                                           |
+| --------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `experiment`          | `experiment.xenium`                 | Optional with a manifest. Supplies the pixel size and, when `morphology` is not set, the morphology image paths |
+| `cells`               | `cells.parquet`                     | Required to load, at whatever path                                                                              |
+| `cellBoundaries`      | `cell_boundaries.parquet`           |                                                                                                                 |
+| `transcripts`         | `transcripts.parquet`               |                                                                                                                 |
+| `transcriptsZarr`     | `transcripts.zarr.zip`              |                                                                                                                 |
+| `cellFeatureMatrix`   | `cell_feature_matrix.zarr.zip`      |                                                                                                                 |
+| `cellFeatureMatrixH5` | `cell_feature_matrix.h5`            |                                                                                                                 |
+| `analysis`            | `analysis.zarr.zip`                 |                                                                                                                 |
+| `genePanel`           | `gene_panel.json`                   |                                                                                                                 |
+| `morphology`          | Image listed in `experiment.xenium` | Image paths inside `experiment.xenium` resolve against the dataset folder (or `root`)                           |
+| `umap`, `tsne`        | Searched under `analysis/`          | A projection CSV. Replaces the search for that embedding                                                        |
+
+### Visium HD
+
+| Key                | Standard name                                          | Notes                                                                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bins`             | The `binned_outputs/square_{002,008,016}um` that exist | A list of `{ "size": 2 \| 8 \| 16, "path": "<bin folder>" }`. Each bin may also set `tissuePositions`, `scalefactors`, `filteredMatrix`                                                                                            |
+| `featureSlice`     | `feature_slice.h5`                                     |                                                                                                                                                                                                                                    |
+| `barcodeMappings`  | `barcode_mappings.parquet`                             |                                                                                                                                                                                                                                    |
+| `segmentedOutputs` | The `segmented_outputs/` files that exist              | Keys: `scalefactors`, `filteredMatrix`, `rawMatrix`, `cellSegmentations`, `nucleusSegmentations`, `nucleusInstanceMask`, `graphclustCellSegmentations`, `graphclustNucleusSegmentations`. When set, only the listed files are used |
+
+Within a bin, files default to `<path>/spatial/tissue_positions.parquet`,
+`<path>/spatial/scalefactors_json.json`, and
+`<path>/filtered_feature_bc_matrix.h5`. The tissue images, barcode and feature
+lists, and UMAP projection are always read from under `<path>`. The viewer
+checks the three bin files with `HEAD` and stops with an error naming the
+missing file. Without `bins`, the standard tiers under the manifest root are
+probed as usual.
+
+### H5AD, SpatialData, And Image
+
+| Platform      | Key     | Value                                                                          |
+| ------------- | ------- | ------------------------------------------------------------------------------ |
+| `h5ad`        | `h5ad`  | Required. The `.h5ad` file; checked with `HEAD`                                |
+| `spatialdata` | `store` | Required. The Zarr store root                                                  |
+| `image`       | `image` | Required. OME-TIFF, TIFF, NDPI, or OME-Zarr; the type is taken from the suffix |
+
+## Options
+
+| Platform      | Key                  | Value                                                                                 |
+| ------------- | -------------------- | ------------------------------------------------------------------------------------- |
+| `visium-hd`   | `binSize`            | `2`, `8`, or `16`: the bin size shown first. Must be one of `bins` when `bins` is set |
+| `spatialdata` | `coordinateSystem`   | Coordinate system to show                                                             |
+| `spatialdata` | `image`              | Image element name, without `images/`                                                 |
+| `spatialdata` | `micrometersPerUnit` | Scale for stores that do not declare one; shown as the `µm per unit` value            |
+
+The SpatialData options are the starting view; the Dataset tab's controls
+start from them. Changing the coordinate system clears the image and units,
+because both belong to one coordinate system. Changing the image keeps the
+units, and `Auto` returns to the declared or estimated scale. Other platforms
+take no options.
+
+## Defaults
+
+Display settings applied each time the dataset loads.
+
+| Key                   | Control                 | Value                                                                      |
+| --------------------- | ----------------------- | -------------------------------------------------------------------------- |
+| `genes`               | Gene selection          | Gene names; must match the gene panel exactly, including case              |
+| `colorCellsBy`        | `Cell color`            | `transcript-count`, `cell-area`, `annotations`, `metadata`                 |
+| `geneColorScale`      | `Gene scale`            | `gold`, `magma`, `viridis`, `plasma`, `cividis`, `teal`, `rose`, `glasbey` |
+| `geneScoreMode`       | `Signature score`       | `sum`, `mean`, `z-score`                                                   |
+| `cellBoundaries`      | `Cell boundaries`       | `true` / `false`                                                           |
+| `nucleusBoundaries`   | `Nucleus boundaries`    | `true` / `false`                                                           |
+| `channels`            | Image channel toggles   | Channel names (case-insensitive) or IDs to turn on                         |
+| `imageOpacity`        | `Dataset image opacity` | 0–1                                                                        |
+| `cellFillOpacity`     | `Cell fill opacity`     | 0–1                                                                        |
+| `cellBoundaryOpacity` | `Cell boundary opacity` | 0–1                                                                        |
+| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium)                                                  |
+
+How defaults combine with other settings:
+
+- A [shareable URL](./ui-reference.md#shareable-url) for the same dataset wins
+  field by field: a link that sets `genes` keeps its genes, and the manifest
+  fills in what the link leaves out. The link applies only to the first load.
+- A value that is not one of the listed options, such as `"colorCellsBy":
+"cluster"`, leaves the control at its default and adds a notice under
+  Fallbacks in the Dataset tab. Type errors, such as a string opacity, stop the
+  load.
+- `channels` entries that match no channel leave the platform's default
+  channels on. An empty list turns every channel off.
+- Opacities and `transcripts` are app-wide controls: they keep their value when
+  another dataset without these defaults is loaded next.
+- `colorCellsBy: "annotations"` takes effect once annotations are loaded.
+
+## Errors And Diagnostics
+
+- A manifest that cannot be read (when entered directly) or does not validate
+  appears in the Dataset tab's Issues list as "Dataset manifest is invalid",
+  with the field at fault.
+- A file named in the manifest that is missing fails where it is read, and the
+  message shows the manifest path and the full URL.
+- `Diagnose Dataset` adds a `Dataset manifest` check and checks the files at
+  their manifest locations. With a manifest, a missing `experiment.xenium` is a
+  warning instead of a failure.
+
+## Editor Support
+
+The schema is deployed with the viewer at `/schemas/explorer-manifest.v1.json`.
+Set `$schema` to that URL on your viewer's host (or a local copy) and editors
+such as VS Code will complete field names and flag errors as you type.
+
+## How It Works
+
+1. `detectSpatialDataset` (`src/datasets/datasetFactory.ts`) reads the manifest
+   (`readDatasetManifest`), validates it with `parseDatasetManifest`, and builds
+   the detection from it (`detectFromManifest`). The detection result carries
+   the manifest as `manifest`.
+2. Detection registers the manifest for the entered URL with
+   `setDatasetManifest` (`src/data/datasetFiles.ts`), and clears it when a
+   later detection of the same URL finds none.
+3. Readers receive the entered URL, as before, and ask for files by role:
+   `datasetFileUrlFor(baseUrl, 'cells')` returns the manifest URL or the
+   standard one, and `datasetFileLabelFor` gives the name used in messages.
+   `datasetFileUrl(baseUrl, path)` resolves other relative paths, such as
+   Visium HD bin files, against the manifest root and passes URLs through.
+4. `useDatasetLifecycle` maps `defaults` onto share-URL fields
+   (`manifestDefaultsToShareableState`,
+   `src/features/dataset/datasetManifestModel.ts`) and applies them beneath any
+   shared link.
+5. `spatialDataSelectionFor` returns the viewer's SpatialData selection, or the
+   manifest's `options` when there is none.
+
+`src/datasets/datasetManifestSchema.test.ts` checks that the JSON Schema and
+the parser accept the same fields and values.
+
+## Known Limitations
+
+- There is no way to declare a file absent. Optional files the manifest does
+  not name are still probed at their standard names.
+- The H5AD coordinate key, the annotation set to select, channel colours and
+  contrast windows, and the initial camera cannot be set yet.
+- Image type comes from the path suffix; a renamed OME-Zarr store needs to keep
+  `.zarr` in its name.
+- A missing file named in the manifest is reported where it is read, which for
+  byte-range files is titled "Byte-range requests blocked" even when the host
+  returned `404`.

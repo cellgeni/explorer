@@ -66,17 +66,25 @@ useViewerLayerData → ViewerCore (deck.gl) + MorphologyCanvas (2D canvas)
 `detectSpatialDataset` tries platforms in this order and returns the first
 match:
 
-| Order | Test                                                                                           | Platform                                                           |
-| ----- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 1     | URL ends in `.h5ad`, and `HEAD` succeeds                                                       | `h5ad`                                                             |
-| 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`; root metadata `HEAD` succeeds | `spatialdata` if root attrs have `spatialdata_attrs`, else `image` |
-| 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.ndpi`, and `HEAD` succeeds                       | `image`                                                            |
-| 4     | `HEAD <url>/experiment.xenium` succeeds                                                        | `xenium`                                                           |
-| 5     | `HEAD <url>/zarr.json` or `<url>/.zattrs` succeeds                                             | `spatialdata` or `image`                                           |
-| 6     | At least one complete `binned_outputs/square_*um` tier                                         | `visium-hd`                                                        |
-| —     | Nothing matched                                                                                | `unknown` → "Unsupported spatial dataset layout."                  |
+| Order | Test                                                                                                                 | Platform                                                           |
+| ----- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 0     | URL path ends in `.json` (not `zarr.json`): read it as a [dataset manifest](./dataset-manifest.md); errors stop here | The manifest's `platform`                                          |
+| 1     | URL ends in `.h5ad`, and `HEAD` succeeds                                                                             | `h5ad`                                                             |
+| 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`; root metadata `HEAD` succeeds                       | `spatialdata` if root attrs have `spatialdata_attrs`, else `image` |
+| 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.ndpi`, and `HEAD` succeeds                                             | `image`                                                            |
+| 4a    | `GET <url>/explorer.json` returns a manifest (run alongside 4b)                                                      | The manifest's `platform`                                          |
+| 4b    | `HEAD <url>/experiment.xenium` succeeds                                                                              | `xenium`                                                           |
+| 5     | `HEAD <url>/zarr.json` or `<url>/.zattrs` succeeds                                                                   | `spatialdata` or `image`                                           |
+| 6     | At least one complete `binned_outputs/square_*um` tier                                                               | `visium-hd`                                                        |
+| —     | Nothing matched                                                                                                      | `unknown` → "Unsupported spatial dataset layout."                  |
 
 Every probe has a 15 s timeout. A host that rejects `HEAD` breaks detection.
+
+Detection registers the manifest it found (or clears an earlier one) for the
+entered URL in `src/data/datasetFiles.ts`. Readers keep receiving the entered
+URL and ask for files by role with `datasetFileUrlFor(baseUrl, role)`, which
+returns the manifest's location or the standard name. See
+[Dataset manifest](./dataset-manifest.md#how-it-works).
 
 ### 2. Dataset Construction
 
@@ -204,6 +212,7 @@ See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------- |
 | IndexedDB byte-range cache `cellgeni-byte-range-cache` | Parquet footers (`parquet-footer`), Xenium matrix zip ranges (`zarr-zip`), TIFF tiles (`tiff-tile`); persists across reloads | 256 MiB, 20,000 entries, 8 MiB per entry, LRU | `src/data/persistentByteRangeCache.ts`       |
 | Dataset instances                                      | Per URL                                                                                                                      | Dropped on failure                            | `datasetFactory.ts`, `xeniumDatasetCache.ts` |
+| Dataset manifests                                      | Per entered URL                                                                                                              | Replaced by each detection of that URL        | `src/data/datasetFiles.ts`                   |
 | Range-probe results                                    | Per URL + label                                                                                                              | Dropped on failure                            | `rangeSupport.ts`                            |
 | Matrix metadata and indices                            | Per matrix URL                                                                                                               | Cleared when a new Xenium dataset warms up    | `src/data/gex.ts`                            |
 | SpatialData chunk cache                                | Per store                                                                                                                    | 256 MiB LRU                                   | `src/zarr/zarrStores.ts`                     |

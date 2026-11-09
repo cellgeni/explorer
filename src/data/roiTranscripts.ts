@@ -1,4 +1,4 @@
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { normalizeRoiSelection } from './roiSelection'
 import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
@@ -24,8 +24,8 @@ export async function loadDatasetRoiTranscripts(
 ): Promise<readonly DatasetTranscript[]> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
 
-  await validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {
-    label: 'transcripts.parquet',
+  await validateRangeSupport(datasetFileUrlFor(baseUrl, 'transcripts'), {
+    label: datasetFileLabelFor(baseUrl, 'transcripts'),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
   throwIfAborted(options.signal)

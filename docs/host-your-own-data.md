@@ -10,6 +10,9 @@ modality docs: [Xenium](./modalities/xenium.md),
 [SpatialData](./modalities/spatialdata.md), and
 [Image sources](./modalities/image.md).
 
+Files can be renamed or moved: add a [dataset manifest](./dataset-manifest.md)
+(`explorer.json`) that says where they are.
+
 ## HTTP Requirements
 
 Large assets must support byte-range `GET` requests and CORS for the app origin.
@@ -31,7 +34,8 @@ Important rules:
 
 At minimum, host a Xenium output folder with:
 
-- `experiment.xenium`
+- `experiment.xenium`, or an `explorer.json` dataset manifest with
+  `"platform": "xenium"`
 - `cells.parquet`
 - `cell_feature_matrix.zarr.zip` or `cell_feature_matrix.h5` for gene expression
 

@@ -12,6 +12,9 @@
 
 - [Host your own data](./host-your-own-data.md): which files to host for each
   source type.
+- [Dataset manifest](./dataset-manifest.md): an optional `explorer.json` that
+  declares the platform, points to renamed or moved files, and sets what the
+  viewer shows on first load.
 - [S3/CORS hosting playbook](./s3-cors-playbook.md): CORS, byte-range, and
   caching rules for dataset buckets.
 - [Image-only and GeoJSON](./image-only-and-geojson.md): direct image URLs and
@@ -32,6 +35,10 @@
   | H5AD        | `.h5ad` file URL                      | URL suffix                           | [h5ad.md](./modalities/h5ad.md)               |
   | SpatialData | Zarr store root                       | `spatialdata_attrs` in root metadata | [spatialdata.md](./modalities/spatialdata.md) |
   | Image       | OME-TIFF, TIFF, NDPI, or OME-Zarr URL | URL suffix or Zarr metadata          | [image.md](./modalities/image.md)             |
+
+  Any of these can instead be described by a
+  [dataset manifest](./dataset-manifest.md), which names the platform and
+  files.
 
 ## Design Decisions
 

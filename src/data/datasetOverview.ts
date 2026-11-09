@@ -1,5 +1,5 @@
 import { isCellsParquetDecodeError, readCellsOverview } from './hyparquetCells'
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import type { CellOverviewPoint, ReadCellsOverviewOptions } from './hyparquetCells'
@@ -38,7 +38,7 @@ export async function loadDatasetOverview(
     options.limit === null ? undefined : (options.limit ?? DEFAULT_OVERVIEW_CELL_LIMIT)
 
   await validateRangeSupport(url, {
-    label: 'cells.parquet',
+    label: datasetFileLabelFor(baseUrl, 'cells'),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
 
@@ -75,7 +75,7 @@ export async function loadDatasetOverview(
 }
 
 export function cellsParquetUrl(baseUrl: string): string {
-  return datasetFileUrl(baseUrl, 'cells.parquet')
+  return datasetFileUrlFor(baseUrl, 'cells')
 }
 
 async function readCellsOverviewWithDuckDb(

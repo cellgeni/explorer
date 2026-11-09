@@ -1,5 +1,17 @@
-import { datasetFileUrl } from '../data/datasetFiles'
+import { datasetManifestFor, setDatasetManifest } from '../data/datasetFiles'
 import { isOmeZarrImageUrl, omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
+import {
+  DATASET_MANIFEST_FILE,
+  DatasetManifestError,
+  VISIUM_HD_MANIFEST_SEGMENTED_OUTPUTS,
+  isDatasetManifestUrl,
+  looksLikeDatasetManifest,
+  parseDatasetManifest,
+  resolveManifestPath,
+  type DatasetManifest,
+  type VisiumHdDatasetManifest,
+  type VisiumHdManifestSegmentedOutput,
+} from './datasetManifest'
 import { isSpatialDataRootMetadata } from './spatialDataCatalog'
 import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
@@ -14,18 +26,21 @@ export type SpatialDatasetDetection =
   | {
       readonly platform: 'xenium'
       readonly baseUrl: string
+      readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
       readonly platform: 'h5ad'
       readonly baseUrl: string
       readonly h5adUrl: string
+      readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
       readonly platform: 'spatialdata'
       readonly baseUrl: string
       readonly spatialDataUrl: string
+      readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
@@ -33,6 +48,7 @@ export type SpatialDatasetDetection =
       readonly baseUrl: string
       readonly imageUrl: string
       readonly imageKind?: 'tiff' | 'ndpi' | 'ome-zarr'
+      readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
@@ -41,6 +57,7 @@ export type SpatialDatasetDetection =
       readonly bins: readonly VisiumHdBinDescriptor[]
       readonly segmentedScalefactorsPath?: string
       readonly segmentedOutputs?: VisiumHdSegmentedOutputPaths
+      readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
@@ -145,8 +162,17 @@ export function setSpatialDataSelection(
   }
 }
 
+// The viewer's selection, else the dataset manifest's `options`. A manifest
+// only sets the starting view: any selection made since replaces it whole,
+// because images and units belong to one coordinate system.
 export function spatialDataSelectionFor(baseUrl: string): SpatialDataSelection {
-  return spatialDataSelections.get(normalizeBaseUrl(baseUrl)) ?? {}
+  const key = normalizeBaseUrl(baseUrl)
+  const manifest = datasetManifestFor(key)
+
+  return (
+    spatialDataSelections.get(key) ??
+    (manifest?.platform === 'spatialdata' ? manifest.options : {})
+  )
 }
 const DATASET_PROBE_TIMEOUT_MS = 15_000
 
@@ -155,7 +181,39 @@ export async function detectSpatialDataset(
   options: DetectSpatialDatasetOptions = {},
 ): Promise<SpatialDatasetDetection> {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+
+  try {
+    const detection = await detectSpatialDatasetLayout(normalizedBaseUrl, options)
+    setDatasetManifest(
+      normalizedBaseUrl,
+      detection.platform === 'unknown' ? undefined : detection.manifest,
+    )
+    return detection
+  } catch (error) {
+    if (error instanceof DatasetManifestError) {
+      setDatasetManifest(normalizedBaseUrl, undefined)
+    }
+
+    throw error
+  }
+}
+
+async function detectSpatialDatasetLayout(
+  normalizedBaseUrl: string,
+  options: DetectSpatialDatasetOptions,
+): Promise<SpatialDatasetDetection> {
   const checked: DatasetProbeResult[] = []
+
+  if (isDatasetManifestUrl(normalizedBaseUrl)) {
+    const manifest = await readDatasetManifest(
+      normalizedBaseUrl,
+      'required',
+      options,
+      checked,
+    )
+
+    return detectFromManifest(normalizedBaseUrl, manifest, options, checked)
+  }
 
   if (isH5adUrl(normalizedBaseUrl)) {
     const h5adProbe = await probeDirectDatasetUrl(
@@ -238,11 +296,20 @@ export async function detectSpatialDataset(
         }
   }
 
-  const xeniumManifest = await probeDatasetPath(
-    normalizedBaseUrl,
-    'experiment.xenium',
-    options,
-  )
+  const [manifest, xeniumManifest] = await Promise.all([
+    readDatasetManifest(
+      joinUrl(normalizedBaseUrl, DATASET_MANIFEST_FILE),
+      'optional',
+      options,
+      checked,
+    ),
+    probeDatasetPath(normalizedBaseUrl, 'experiment.xenium', options),
+  ])
+
+  if (manifest !== undefined) {
+    return detectFromManifest(normalizedBaseUrl, manifest, options, checked)
+  }
+
   checked.push(xeniumManifest)
 
   if (xeniumManifest.ok) {
@@ -276,55 +343,27 @@ export async function detectSpatialDataset(
     return {
       platform: 'image',
       baseUrl: normalizedBaseUrl,
-      imageUrl: datasetFileUrl(normalizedBaseUrl, zarrMetadataProbe.path),
+      imageUrl: joinUrl(normalizedBaseUrl, zarrMetadataProbe.path),
       imageKind: 'ome-zarr',
       checked,
     }
   }
 
-  const bins: VisiumHdBinDescriptor[] = []
-
-  for (const bin of VISIUM_HD_BINS) {
-    const tissuePositionsPath = `${bin.outputPath}/spatial/tissue_positions.parquet`
-    const scalefactorsPath = `${bin.outputPath}/spatial/scalefactors_json.json`
-    const matrixPath = `${bin.outputPath}/filtered_feature_bc_matrix.h5`
-    const [positions, scalefactors, matrix] = await Promise.all([
-      probeDatasetPath(normalizedBaseUrl, tissuePositionsPath, options),
-      probeDatasetPath(normalizedBaseUrl, scalefactorsPath, options),
-      probeDatasetPath(normalizedBaseUrl, matrixPath, options),
-    ])
-    checked.push(positions, scalefactors, matrix)
-
-    if (positions.ok && scalefactors.ok && matrix.ok) {
-      bins.push({
-        binSizeMicrometers: bin.size,
-        outputPath: bin.outputPath,
-        tissuePositionsPath,
-        scalefactorsPath,
-        filteredMatrixH5Path: matrixPath,
-      })
-    }
-  }
-
-  const segmentedOutputProbes = await Promise.all(
-    VISIUM_HD_SEGMENTED_OUTPUT_PROBES.map((probe) =>
-      probeDatasetPath(normalizedBaseUrl, probe.path, options),
-    ),
+  const bins = await probeVisiumHdBins(normalizedBaseUrl, options, checked)
+  const segmentedOutputs = await probeVisiumHdSegmentedOutputs(
+    normalizedBaseUrl,
+    options,
+    checked,
   )
-  checked.push(...segmentedOutputProbes)
-  const segmentedOutputs = segmentedOutputPathsFromProbes(segmentedOutputProbes)
 
   if (bins.length > 0) {
-    return {
-      platform: 'visium-hd',
-      baseUrl: normalizedBaseUrl,
+    return visiumHdDetection(
+      normalizedBaseUrl,
       bins,
-      ...(segmentedOutputs.scalefactorsPath === undefined
-        ? {}
-        : { segmentedScalefactorsPath: segmentedOutputs.scalefactorsPath }),
-      ...(hasSegmentedOutputPaths(segmentedOutputs) ? { segmentedOutputs } : {}),
+      segmentedOutputs,
+      undefined,
       checked,
-    }
+    )
   }
 
   return {
@@ -332,6 +371,310 @@ export async function detectSpatialDataset(
     baseUrl: normalizedBaseUrl,
     checked,
   }
+}
+
+// Reads a dataset manifest. 'required' (a manifest URL was entered) throws on
+// any failure; 'optional' (probing a folder) treats a missing, unreadable, or
+// non-manifest document as no manifest, but still reports an invalid one.
+async function readDatasetManifest(
+  url: string,
+  mode: 'required',
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<DatasetManifest>
+async function readDatasetManifest(
+  url: string,
+  mode: 'optional',
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<DatasetManifest | undefined>
+async function readDatasetManifest(
+  url: string,
+  mode: 'required' | 'optional',
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<DatasetManifest | undefined> {
+  const path = new URL(url).pathname.split('/').filter(Boolean).at(-1) ?? url
+  let response: Response
+
+  try {
+    response = await fetchWithTimeout(
+      options.fetcher ?? fetch,
+      url,
+      { cache: 'no-cache' },
+      options.signal,
+      DATASET_PROBE_TIMEOUT_MS,
+    )
+  } catch (cause) {
+    const error = cause instanceof Error ? cause.message : String(cause)
+
+    if (options.signal?.aborted === true) {
+      throw cause
+    }
+
+    checked.push({ path, url, ok: false, error })
+
+    if (mode === 'required') {
+      throw new DatasetManifestError(url, `could not be fetched (${error}).`, { cause })
+    }
+
+    return undefined
+  }
+
+  checked.push({ path, url, ok: response.ok, status: response.status })
+
+  if (!response.ok) {
+    if (mode === 'required') {
+      throw new DatasetManifestError(url, `could not be read (HTTP ${response.status}).`)
+    }
+
+    return undefined
+  }
+
+  let json: unknown
+
+  try {
+    json = JSON.parse(await response.text())
+  } catch (cause) {
+    if (mode === 'required') {
+      throw new DatasetManifestError(url, 'is not valid JSON.', { cause })
+    }
+
+    return undefined
+  }
+
+  if (mode === 'optional' && !looksLikeDatasetManifest(json)) {
+    return undefined
+  }
+
+  return parseDatasetManifest(json, url)
+}
+
+async function detectFromManifest(
+  baseUrl: string,
+  manifest: DatasetManifest,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<SpatialDatasetDetection> {
+  if (manifest.platform === 'xenium') {
+    return { platform: 'xenium', baseUrl, manifest, checked }
+  }
+
+  if (manifest.platform === 'h5ad') {
+    const { path, url } = manifest.files.h5ad
+    const probe = await probeDirectDatasetUrl(url, path, options)
+    checked.push(probe)
+
+    if (!probe.ok) {
+      throw new DatasetManifestError(
+        manifest.url,
+        `"files.h5ad" (${url}) is not readable (${probeFailure(probe)}).`,
+      )
+    }
+
+    return { platform: 'h5ad', baseUrl, h5adUrl: url, manifest, checked }
+  }
+
+  if (manifest.platform === 'spatialdata') {
+    return {
+      platform: 'spatialdata',
+      baseUrl,
+      spatialDataUrl: normalizeBaseUrl(omeZarrImageRootUrl(manifest.files.store.url)),
+      manifest,
+      checked,
+    }
+  }
+
+  if (manifest.platform === 'image') {
+    const imageUrl = manifest.files.image.url
+
+    return {
+      platform: 'image',
+      baseUrl,
+      imageUrl,
+      imageKind: isOmeZarrImageUrl(imageUrl)
+        ? 'ome-zarr'
+        : isNdpiUrl(imageUrl)
+          ? 'ndpi'
+          : 'tiff',
+      manifest,
+      checked,
+    }
+  }
+
+  return detectVisiumHdFromManifest(baseUrl, manifest, options, checked)
+}
+
+// Bin and segmented-output paths stay relative to the manifest root (or
+// absolute), so labels match the manifest; readers resolve them through
+// datasetFileUrl.
+async function detectVisiumHdFromManifest(
+  baseUrl: string,
+  manifest: VisiumHdDatasetManifest,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<SpatialDatasetDetection> {
+  const { rootUrl } = manifest
+  let bins: VisiumHdBinDescriptor[]
+
+  if (manifest.bins === undefined) {
+    bins = await probeVisiumHdBins(rootUrl, options, checked)
+
+    if (bins.length === 0) {
+      throw new DatasetManifestError(
+        manifest.url,
+        `no complete binned_outputs/square_*um tier was found under ${rootUrl}. List the bins in "files.bins".`,
+      )
+    }
+  } else {
+    bins = await Promise.all(
+      manifest.bins.map(async (bin) => {
+        const descriptor = visiumHdBinDescriptor(bin.size, bin.path, {
+          ...(bin.tissuePositions === undefined
+            ? {}
+            : { tissuePositionsPath: bin.tissuePositions }),
+          ...(bin.scalefactors === undefined
+            ? {}
+            : { scalefactorsPath: bin.scalefactors }),
+          ...(bin.filteredMatrix === undefined
+            ? {}
+            : { filteredMatrixH5Path: bin.filteredMatrix }),
+        })
+        const probes = await Promise.all(
+          [
+            descriptor.tissuePositionsPath,
+            descriptor.scalefactorsPath,
+            descriptor.filteredMatrixH5Path,
+          ].map((path) =>
+            probeDirectDatasetUrl(resolveManifestPath(rootUrl, path), path, options),
+          ),
+        )
+        checked.push(...probes)
+        const missing = probes.find((probe) => !probe.ok)
+
+        if (missing !== undefined) {
+          throw new DatasetManifestError(
+            manifest.url,
+            `the ${bin.size} µm bin is missing ${missing.path} (${probeFailure(missing)}).`,
+          )
+        }
+
+        return descriptor
+      }),
+    )
+    bins.sort((left, right) => left.binSizeMicrometers - right.binSizeMicrometers)
+  }
+
+  const segmentedOutputs =
+    manifest.segmentedOutputs === undefined
+      ? await probeVisiumHdSegmentedOutputs(rootUrl, options, checked)
+      : segmentedOutputPathsFromManifest(manifest.segmentedOutputs)
+
+  return visiumHdDetection(baseUrl, bins, segmentedOutputs, manifest, checked)
+}
+
+function visiumHdDetection(
+  baseUrl: string,
+  bins: readonly VisiumHdBinDescriptor[],
+  segmentedOutputs: VisiumHdSegmentedOutputPaths,
+  manifest: DatasetManifest | undefined,
+  checked: readonly DatasetProbeResult[],
+): SpatialDatasetDetection {
+  return {
+    platform: 'visium-hd',
+    baseUrl,
+    bins,
+    ...(segmentedOutputs.scalefactorsPath === undefined
+      ? {}
+      : { segmentedScalefactorsPath: segmentedOutputs.scalefactorsPath }),
+    ...(hasSegmentedOutputPaths(segmentedOutputs) ? { segmentedOutputs } : {}),
+    ...(manifest === undefined ? {} : { manifest }),
+    checked,
+  }
+}
+
+// Standard Space Ranger tiers under `rootUrl` that have positions,
+// scalefactors, and a filtered matrix.
+async function probeVisiumHdBins(
+  rootUrl: string,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<VisiumHdBinDescriptor[]> {
+  const bins: VisiumHdBinDescriptor[] = []
+
+  for (const bin of VISIUM_HD_BINS) {
+    const descriptor = visiumHdBinDescriptor(bin.size, bin.outputPath)
+    const [positions, scalefactors, matrix] = await Promise.all([
+      probeDatasetPath(rootUrl, descriptor.tissuePositionsPath, options),
+      probeDatasetPath(rootUrl, descriptor.scalefactorsPath, options),
+      probeDatasetPath(rootUrl, descriptor.filteredMatrixH5Path, options),
+    ])
+    checked.push(positions, scalefactors, matrix)
+
+    if (positions.ok && scalefactors.ok && matrix.ok) {
+      bins.push(descriptor)
+    }
+  }
+
+  return bins
+}
+
+function visiumHdBinDescriptor(
+  binSizeMicrometers: VisiumHdBinSizeMicrometers,
+  outputPath: string,
+  overrides: Partial<
+    Pick<
+      VisiumHdBinDescriptor,
+      'tissuePositionsPath' | 'scalefactorsPath' | 'filteredMatrixH5Path'
+    >
+  > = {},
+): VisiumHdBinDescriptor {
+  return {
+    binSizeMicrometers,
+    outputPath,
+    tissuePositionsPath:
+      overrides.tissuePositionsPath ?? `${outputPath}/spatial/tissue_positions.parquet`,
+    scalefactorsPath:
+      overrides.scalefactorsPath ?? `${outputPath}/spatial/scalefactors_json.json`,
+    filteredMatrixH5Path:
+      overrides.filteredMatrixH5Path ?? `${outputPath}/filtered_feature_bc_matrix.h5`,
+  }
+}
+
+async function probeVisiumHdSegmentedOutputs(
+  rootUrl: string,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<VisiumHdSegmentedOutputPaths> {
+  const probes = await Promise.all(
+    VISIUM_HD_SEGMENTED_OUTPUT_PROBES.map((probe) =>
+      probeDatasetPath(rootUrl, probe.path, options),
+    ),
+  )
+  checked.push(...probes)
+  return segmentedOutputPathsFromProbes(probes)
+}
+
+function segmentedOutputPathsFromManifest(
+  outputs: Readonly<Partial<Record<VisiumHdManifestSegmentedOutput, string>>>,
+): VisiumHdSegmentedOutputPaths {
+  const paths: Partial<Record<keyof VisiumHdSegmentedOutputPaths, string>> = {}
+
+  for (const [key, path] of Object.entries(outputs)) {
+    if (path !== undefined && key in VISIUM_HD_MANIFEST_SEGMENTED_OUTPUTS) {
+      paths[
+        VISIUM_HD_MANIFEST_SEGMENTED_OUTPUTS[key as VisiumHdManifestSegmentedOutput]
+      ] = path
+    }
+  }
+
+  return paths
+}
+
+function probeFailure(probe: DatasetProbeResult): string {
+  return probe.status === undefined
+    ? (probe.error ?? 'request failed')
+    : `HTTP ${probe.status}`
 }
 
 export async function createSpatialDataset(
@@ -375,9 +718,18 @@ export async function createSpatialDataset(
 
   if (detection.platform === 'visium-hd') {
     const { VisiumHdDataset } = await import('./visiumHdDataset')
+    const manifest =
+      detection.manifest?.platform === 'visium-hd' ? detection.manifest : undefined
+    const featureSlice = manifest?.files.featureSlice
+    const defaultBinSize = manifest?.options.binSize
+
     return new VisiumHdDataset({
       baseUrl: detection.baseUrl,
       bins: detection.bins,
+      ...(featureSlice === undefined ? {} : { featureSliceH5Path: featureSlice.path }),
+      ...(defaultBinSize === undefined
+        ? {}
+        : { defaultBinSizeMicrometers: defaultBinSize }),
       ...(detection.segmentedOutputs === undefined
         ? {}
         : { segmentedOutputs: detection.segmentedOutputs }),
@@ -403,7 +755,7 @@ export function cachedSpatialDataset(
   const cacheKey = spatialDatasetCacheKey(
     normalizedBaseUrl,
     maxTwoMicrometerFilteredBarcodes,
-    spatialDataSelections.get(normalizedBaseUrl),
+    spatialDataSelectionFor(normalizedBaseUrl),
   )
   const existing = spatialDatasetCache.get(cacheKey)
 
@@ -436,7 +788,7 @@ async function probeDatasetPath(
   path: string,
   options: DetectSpatialDatasetOptions,
 ): Promise<DatasetProbeResult> {
-  const url = datasetFileUrl(baseUrl, path)
+  const url = joinUrl(baseUrl, path)
   return probeDirectDatasetUrl(url, path, options)
 }
 
@@ -482,7 +834,7 @@ async function probeSpatialDataRoot(
       continue
     }
 
-    const url = datasetFileUrl(rootUrl, probe.path)
+    const url = joinUrl(rootUrl, probe.path)
 
     try {
       const response = await fetchWithTimeout(
@@ -554,6 +906,12 @@ async function fetchWithTimeout(
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
+}
+
+// Detection probes the folder as given, not through a manifest registered by
+// an earlier detection of the same URL.
+function joinUrl(baseUrl: string, path: string): string {
+  return `${normalizeBaseUrl(baseUrl)}/${path.replace(/^\/+/, '')}`
 }
 
 function isH5adUrl(url: string): boolean {

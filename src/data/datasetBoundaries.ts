@@ -1,5 +1,5 @@
 import type { BBox } from './coords'
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { cachedSpatialDataset } from '../datasets/datasetFactory'
 import type { ElementBatch, SpatialDataset } from '../datasets/spatialDataset'
@@ -27,8 +27,8 @@ export async function loadDatasetBoundaryElements(
   }
 
   if (meta.platform === 'xenium') {
-    await validateRangeSupport(datasetFileUrl(baseUrl, 'cell_boundaries.parquet'), {
-      label: 'cell_boundaries.parquet',
+    await validateRangeSupport(datasetFileUrlFor(baseUrl, 'cellBoundaries'), {
+      label: datasetFileLabelFor(baseUrl, 'cellBoundaries'),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
     throwIfAborted(options.signal)

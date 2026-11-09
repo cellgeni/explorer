@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { runDatasetDiagnostics, summarizeDatasetDiagnostics } from './datasetDiagnostics'
 import type { SpatialDatasetDetection } from '../datasets/datasetFactory'
+import { setDatasetManifest } from './datasetFiles'
 
 describe('runDatasetDiagnostics', () => {
   it('checks required manifest and byte-range files', async () => {
@@ -21,6 +22,63 @@ describe('runDatasetDiagnostics', () => {
       expect.objectContaining({ label: 'Overview cells' }),
     )
     expect(summarizeDatasetDiagnostics(report)).toBe('All checks passed')
+  })
+
+  it('checks the files a dataset manifest names', async () => {
+    const baseUrl = 'https://example.test/renamed'
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url.endsWith('/explorer.json')) {
+        return Response.json({
+          version: 1,
+          platform: 'xenium',
+          name: 'Renamed run',
+          files: { cells: 'tables/cells.parquet', morphology: 'images/he.ome.tif' },
+        })
+      }
+
+      return new Response(null, { status: url.endsWith('experiment.xenium') ? 404 : 200 })
+    })
+    const rangeValidator = vi.fn(async () => undefined)
+
+    try {
+      const report = await runDatasetDiagnostics(baseUrl, { fetcher, rangeValidator })
+      const check = (id: string) => report.checks.find((entry) => entry.id === id)
+
+      expect(check('dataset-manifest')).toMatchObject({
+        status: 'pass',
+        url: `${baseUrl}/explorer.json`,
+        message: 'Valid xenium manifest: Renamed run',
+      })
+      expect(check('cells-parquet')?.url).toBe(`${baseUrl}/tables/cells.parquet`)
+      expect(check('morphology')?.url).toBe(`${baseUrl}/images/he.ome.tif`)
+      // experiment.xenium is optional once a manifest describes the dataset.
+      expect(check('experiment-manifest')).toMatchObject({
+        required: false,
+        status: 'warning',
+      })
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
+  })
+
+  it('reports an invalid dataset manifest as a failed check', async () => {
+    const report = await runDatasetDiagnostics('https://example.test/bad.json', {
+      fetcher: vi.fn(async () =>
+        Response.json({ version: 1, platform: 'xenium', files: { cell: 'x.parquet' } }),
+      ),
+      rangeValidator: vi.fn(async () => undefined),
+    })
+
+    expect(report.platform).toBe('unknown')
+    expect(report.checks).toEqual([
+      expect.objectContaining({
+        id: 'dataset-manifest',
+        status: 'fail',
+        message: expect.stringContaining('unknown field "files.cell"'),
+      }),
+    ])
   })
 
   it('treats optional file misses as warnings', async () => {

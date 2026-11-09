@@ -1,4 +1,5 @@
 import { micrometers } from '../data/coords'
+import { datasetFileUrlFor } from '../data/datasetFiles'
 import {
   readXeniumBoundaryElements,
   readXeniumCellIdsForSelection,
@@ -15,6 +16,7 @@ import {
   type XeniumSelectedGeneRowsReader,
 } from './xeniumDatasetReaders'
 import type { CellId } from '../data/cellid'
+import type { DatasetFileRole } from './datasetManifest'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
@@ -309,21 +311,21 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     return readXeniumBoundaryElements(
       conn,
       {
-        cells: this.urlFor('cells.parquet'),
-        cellBoundaries: this.urlFor('cell_boundaries.parquet'),
+        cells: this.urlFor('cells'),
+        cellBoundaries: this.urlFor('cellBoundaries'),
       },
       bbox,
     )
   }
 
   matrix(ids: readonly CellId[]): Promise<GexResult> {
-    return this.matrixReader(this.urlFor('cell_feature_matrix.zarr.zip'), ids)
+    return this.matrixReader(this.urlFor('cellFeatureMatrix'), ids)
   }
 
   async matrixForCells(cells: readonly DatasetCell[]): Promise<GexResult> {
     return readXeniumMatrixForCells(
       cells,
-      this.urlFor('cell_feature_matrix.zarr.zip'),
+      this.urlFor('cellFeatureMatrix'),
       this.matrixReader,
     )
   }
@@ -336,7 +338,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
 
     return this.transcriptReader(
       conn,
-      this.urlFor('transcripts.parquet'),
+      this.urlFor('transcripts'),
       {
         kind: 'circle',
         cx: micrometers(0),
@@ -356,7 +358,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     const conn = await this.conn()
     return readXeniumTranscriptsForCellId(
       conn,
-      this.urlFor('transcripts.parquet'),
+      this.urlFor('transcripts'),
       cellId,
       options,
     )
@@ -369,14 +371,14 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     const conn = await this.conn()
     return readXeniumCellTranscriptZDistributionForCellId(
       conn,
-      this.urlFor('transcripts.parquet'),
+      this.urlFor('transcripts'),
       cellId,
       options,
     )
   }
 
   overviewCells(limit?: number): Promise<readonly CellOverviewPoint[]> {
-    return this.overviewReader(this.urlFor('cells.parquet'), limit)
+    return this.overviewReader(this.urlFor('cells'), limit)
   }
 
   cells(
@@ -384,12 +386,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     options: { readonly limit?: number } = {},
   ): Promise<readonly DatasetCell[]> {
     return this.conn().then((conn) =>
-      readXeniumCellsForSelection(
-        conn,
-        this.urlFor('cells.parquet'),
-        selectionInput,
-        options,
-      ),
+      readXeniumCellsForSelection(conn, this.urlFor('cells'), selectionInput, options),
     )
   }
 
@@ -398,12 +395,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     options: TranscriptQueryOptions = {},
   ): Promise<readonly DatasetTranscript[]> {
     const conn = await this.conn()
-    return readXeniumTranscriptsInBbox(
-      conn,
-      this.urlFor('transcripts.parquet'),
-      bbox,
-      options,
-    )
+    return readXeniumTranscriptsInBbox(conn, this.urlFor('transcripts'), bbox, options)
   }
 
   async transcriptsForSelection(
@@ -413,7 +405,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     const conn = await this.conn()
     return readXeniumTranscriptsForSelection(
       conn,
-      this.urlFor('transcripts.parquet'),
+      this.urlFor('transcripts'),
       selectionInput,
       options,
     )
@@ -426,7 +418,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     const conn = await this.conn()
     return readXeniumTranscriptsForViewport(
       conn,
-      this.urlFor('transcripts.parquet'),
+      this.urlFor('transcripts'),
       bbox,
       options,
     )
@@ -440,8 +432,8 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     const conn = await this.conn()
     return readXeniumGeneExpression({
       conn,
-      cellsUrl: this.urlFor('cells.parquet'),
-      matrixUrl: this.urlFor('cell_feature_matrix.zarr.zip'),
+      cellsUrl: this.urlFor('cells'),
+      matrixUrl: this.urlFor('cellFeatureMatrix'),
       bbox,
       genes,
       matrixReader: this.geneExpressionMatrixReader,
@@ -456,8 +448,8 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     options: AnalysisAnnotationQueryOptions = {},
   ): Promise<readonly Annotation[]> {
     return this.analysisAnnotationReader(
-      this.urlFor('analysis.zarr.zip'),
-      this.urlFor('cell_feature_matrix.zarr.zip'),
+      this.urlFor('analysis'),
+      this.urlFor('cellFeatureMatrix'),
       options,
     )
   }
@@ -483,16 +475,12 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     const conn = await this.conn()
     const cellIds =
       scope === 'cells-only'
-        ? await readXeniumCellIdsForSelection(
-            conn,
-            this.urlFor('cells.parquet'),
-            selection,
-          )
+        ? await readXeniumCellIdsForSelection(conn, this.urlFor('cells'), selection)
         : []
 
     return this.transcriptReader(
       conn,
-      this.urlFor('transcripts.parquet'),
+      this.urlFor('transcripts'),
       selection,
       scope,
       cellIds,
@@ -503,8 +491,8 @@ export class XeniumDataset implements SpatialDataset<CellId> {
   private async loadMeta(): Promise<DatasetMeta> {
     const conn = await this.conn()
     const [experiment, extent] = await Promise.all([
-      readXeniumExperimentMetadata(this.fetcher, this.urlFor('experiment.xenium')),
-      readXeniumExtent(conn, this.urlFor('cells.parquet')),
+      readXeniumExperimentMetadata(this.fetcher, this.urlFor('experiment')),
+      readXeniumExtent(conn, this.urlFor('cells')),
     ])
 
     return {
@@ -530,8 +518,8 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     return (await this.duckClientPromise).conn
   }
 
-  private urlFor(path: string): string {
-    return `${this.baseUrl}/${path}`
+  private urlFor(role: DatasetFileRole): string {
+    return datasetFileUrlFor(this.baseUrl, role)
   }
 }
 

@@ -1,5 +1,5 @@
 import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet'
-import { datasetFileUrl } from '../data/datasetFiles'
+import { datasetFileUrlFor } from '../data/datasetFiles'
 import {
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
@@ -11,7 +11,6 @@ import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type { SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from './visiumHdDataset'
 
-export const VISIUM_HD_BARCODE_MAPPINGS_PATH = 'barcode_mappings.parquet'
 export const VISIUM_HD_BARCODE_MAPPING_COLUMNS = [
   'square_002um',
   'square_008um',
@@ -84,7 +83,7 @@ export async function readVisiumHdBarcodeMappings(
     options.maxRows === undefined
       ? undefined
       : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
-  const url = datasetFileUrl(baseUrl, VISIUM_HD_BARCODE_MAPPINGS_PATH)
+  const url = datasetFileUrlFor(baseUrl, 'barcodeMappings')
   const file = options.file ?? (await barcodeMappingsFileFromUrl(url, options))
   const compressors =
     options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())

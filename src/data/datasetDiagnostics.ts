@@ -1,10 +1,16 @@
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileUrl, datasetFileUrlFor, xeniumManifestFileFor } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import {
   detectSpatialDataset,
   type SpatialDatasetDetection,
 } from '../datasets/datasetFactory'
 import type { Platform } from '../datasets/spatialDataset'
+import {
+  DatasetManifestError,
+  type DatasetFileRole,
+  type DatasetManifest,
+} from '../datasets/datasetManifest'
+import type { VisiumHdSegmentedOutputPaths } from '../datasets/visiumHdSegmentationModel'
 import {
   openSpatialDataStore,
   readSpatialDataCatalog,
@@ -62,76 +68,94 @@ export interface DatasetDiagnosticsOptions {
   ) => Promise<SpatialDatasetDetection>
 }
 
-const XENIUM_REQUIRED_RANGE_FILES = [
-  { id: 'cells-parquet', label: 'Overview cells', path: 'cells.parquet' },
-] as const
+interface DatasetRoleFile {
+  readonly id: string
+  readonly label: string
+  readonly role: DatasetFileRole
+}
 
-const XENIUM_OPTIONAL_RANGE_FILES = [
-  { id: 'cell-boundaries', label: 'Cell boundaries', path: 'cell_boundaries.parquet' },
-  { id: 'transcripts', label: 'Transcripts', path: 'transcripts.parquet' },
-  {
-    id: 'transcripts-zarr',
-    label: 'Transcript native LOD',
-    path: 'transcripts.zarr.zip',
-  },
-  { id: 'feature-matrix', label: 'Feature matrix', path: 'cell_feature_matrix.zarr.zip' },
-  { id: 'morphology', label: 'Morphology image', path: 'morphology.ome.tif' },
-] as const
+const XENIUM_REQUIRED_RANGE_FILES: readonly DatasetRoleFile[] = [
+  { id: 'cells-parquet', label: 'Overview cells', role: 'cells' },
+]
 
-const VISIUM_HD_ROOT_RANGE_FILES = [
-  { id: 'visium-hd-feature-slice', label: 'Feature Slice H5', path: 'feature_slice.h5' },
+const XENIUM_OPTIONAL_RANGE_FILES: readonly DatasetRoleFile[] = [
+  { id: 'cell-boundaries', label: 'Cell boundaries', role: 'cellBoundaries' },
+  { id: 'transcripts', label: 'Transcripts', role: 'transcripts' },
+  { id: 'transcripts-zarr', label: 'Transcript native LOD', role: 'transcriptsZarr' },
+  { id: 'feature-matrix', label: 'Feature matrix', role: 'cellFeatureMatrix' },
+]
+
+const XENIUM_DEFAULT_MORPHOLOGY_PATH = 'morphology.ome.tif'
+
+const VISIUM_HD_ROOT_RANGE_FILES: readonly DatasetRoleFile[] = [
+  { id: 'visium-hd-feature-slice', label: 'Feature Slice H5', role: 'featureSlice' },
   {
     id: 'visium-hd-barcode-mappings',
     label: 'Barcode mappings',
-    path: 'barcode_mappings.parquet',
+    role: 'barcodeMappings',
   },
-] as const
+]
 
 const VISIUM_HD_SEGMENTED_READABLE_FILES = [
   {
     id: 'visium-hd-segmented-scalefactors',
     label: 'Visium HD segmented scalefactors',
     path: 'segmented_outputs/spatial/scalefactors_json.json',
+    output: 'scalefactorsPath',
   },
   {
     id: 'visium-hd-cell-segmentations',
     label: 'Visium HD cell segmentations GeoJSON',
     path: 'segmented_outputs/cell_segmentations.geojson',
+    output: 'cellSegmentationsGeojsonPath',
   },
   {
     id: 'visium-hd-nucleus-segmentations',
     label: 'Visium HD nucleus segmentations GeoJSON',
     path: 'segmented_outputs/nucleus_segmentations.geojson',
+    output: 'nucleusSegmentationsGeojsonPath',
   },
   {
     id: 'visium-hd-graphclust-cell-segmentations',
     label: 'Visium HD graphclust cell segmentations GeoJSON',
     path: 'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
+    output: 'graphclustAnnotatedCellSegmentationsGeojsonPath',
   },
   {
     id: 'visium-hd-graphclust-nucleus-segmentations',
     label: 'Visium HD graphclust nucleus segmentations GeoJSON',
     path: 'segmented_outputs/graphclust_annotated_nucleus_segmentations.geojson',
+    output: 'graphclustAnnotatedNucleusSegmentationsGeojsonPath',
   },
-] as const
+] as const satisfies readonly VisiumHdSegmentedFile[]
 
 const VISIUM_HD_SEGMENTED_RANGE_FILES = [
   {
     id: 'visium-hd-filtered-feature-cell-matrix',
     label: 'Visium HD filtered feature-cell matrix',
     path: 'segmented_outputs/filtered_feature_cell_matrix.h5',
+    output: 'filteredFeatureCellMatrixH5Path',
   },
   {
     id: 'visium-hd-raw-feature-cell-matrix',
     label: 'Visium HD raw feature-cell matrix',
     path: 'segmented_outputs/raw_feature_cell_matrix.h5',
+    output: 'rawFeatureCellMatrixH5Path',
   },
   {
     id: 'visium-hd-nucleus-instance-mask',
     label: 'Visium HD nucleus instance mask',
     path: 'segmented_outputs/nucleus_instance_mask.tiff',
+    output: 'nucleusInstanceMaskTiffPath',
   },
-] as const
+] as const satisfies readonly VisiumHdSegmentedFile[]
+
+interface VisiumHdSegmentedFile {
+  readonly id: string
+  readonly label: string
+  readonly path: string
+  readonly output: keyof VisiumHdSegmentedOutputPaths
+}
 
 export async function runDatasetDiagnostics(
   baseUrl: string,
@@ -140,11 +164,44 @@ export async function runDatasetDiagnostics(
   const startedAt = new Date()
   const checks: DatasetDiagnosticCheck[] = []
   const detectionStartedAt = Date.now()
-  const detection = await (options.detectDataset ?? detectSpatialDataset)(baseUrl, {
-    ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-  })
+  let detection: SpatialDatasetDetection
+
+  try {
+    detection = await (options.detectDataset ?? detectSpatialDataset)(baseUrl, {
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+  } catch (error) {
+    if (!(error instanceof DatasetManifestError)) {
+      throw error
+    }
+
+    checks.push(
+      diagnosticCheck({
+        id: 'dataset-manifest',
+        label: 'Dataset manifest',
+        url: error.manifestUrl,
+        required: true,
+        status: 'fail',
+        message: error.message,
+        startedAt: detectionStartedAt,
+      }),
+    )
+
+    return {
+      baseUrl,
+      platform: 'unknown',
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      checks,
+    }
+  }
+
   checks.push(detectionDiagnosticCheck(detection, detectionStartedAt))
+
+  if (detection.platform !== 'unknown' && detection.manifest !== undefined) {
+    checks.push(manifestDiagnosticCheck(detection.manifest, detectionStartedAt))
+  }
 
   if (detection.platform === 'visium-hd') {
     checks.push(...(await runVisiumHdDiagnostics(detection, options)))
@@ -200,15 +257,32 @@ export async function runDatasetDiagnostics(
     }
   }
 
-  checks.push(await checkManifest(baseUrl, options))
+  // With a dataset manifest, experiment.xenium only supplies the pixel size
+  // and, when the manifest names no image, the morphology image paths.
+  checks.push(await checkManifest(baseUrl, detection.manifest === undefined, options))
 
   for (const file of XENIUM_REQUIRED_RANGE_FILES) {
-    checks.push(await checkRangeFile(baseUrl, file, true, options))
+    checks.push(await checkRangeFile(baseUrl, roleFile(baseUrl, file), true, options))
   }
 
   for (const file of XENIUM_OPTIONAL_RANGE_FILES) {
-    checks.push(await checkRangeFile(baseUrl, file, false, options))
+    checks.push(await checkRangeFile(baseUrl, roleFile(baseUrl, file), false, options))
   }
+
+  checks.push(
+    await checkRangeFile(
+      baseUrl,
+      {
+        id: 'morphology',
+        label: 'Morphology image',
+        path:
+          xeniumManifestFileFor(baseUrl, 'morphology')?.url ??
+          XENIUM_DEFAULT_MORPHOLOGY_PATH,
+      },
+      false,
+      options,
+    ),
+  )
 
   return {
     baseUrl,
@@ -234,11 +308,37 @@ export function summarizeDatasetDiagnostics(report: DatasetDiagnosticsReport): s
   return 'All checks passed'
 }
 
+function roleFile(
+  baseUrl: string,
+  file: DatasetRoleFile,
+): { readonly id: string; readonly label: string; readonly path: string } {
+  return { id: file.id, label: file.label, path: datasetFileUrlFor(baseUrl, file.role) }
+}
+
+function manifestDiagnosticCheck(
+  manifest: DatasetManifest,
+  startedAt: number,
+): DatasetDiagnosticCheck {
+  return diagnosticCheck({
+    id: 'dataset-manifest',
+    label: 'Dataset manifest',
+    url: manifest.url,
+    required: true,
+    status: 'pass',
+    message:
+      manifest.name === undefined
+        ? `Valid ${manifest.platform} manifest`
+        : `Valid ${manifest.platform} manifest: ${manifest.name}`,
+    startedAt,
+  })
+}
+
 async function checkManifest(
   baseUrl: string,
+  required: boolean,
   options: DatasetDiagnosticsOptions,
 ): Promise<DatasetDiagnosticCheck> {
-  const url = datasetFileUrl(baseUrl, 'experiment.xenium')
+  const url = datasetFileUrlFor(baseUrl, 'experiment')
   const startedAt = Date.now()
 
   try {
@@ -252,8 +352,8 @@ async function checkManifest(
         id: 'experiment-manifest',
         label: 'Experiment manifest',
         url,
-        required: true,
-        status: 'fail',
+        required,
+        status: required ? 'fail' : 'warning',
         message: `HTTP ${response.status}`,
         startedAt,
       })
@@ -263,7 +363,7 @@ async function checkManifest(
       id: 'experiment-manifest',
       label: 'Experiment manifest',
       url,
-      required: true,
+      required,
       status: 'pass',
       message: 'Readable',
       startedAt,
@@ -273,8 +373,8 @@ async function checkManifest(
       id: 'experiment-manifest',
       label: 'Experiment manifest',
       url,
-      required: true,
-      status: 'fail',
+      required,
+      status: required ? 'fail' : 'warning',
       message: errorMessage(cause),
       startedAt,
     })
@@ -672,20 +772,53 @@ async function runVisiumHdDiagnostics(
   }
 
   for (const file of VISIUM_HD_ROOT_RANGE_FILES) {
-    checks.push(await checkRangeFile(detection.baseUrl, file, false, options))
+    checks.push(
+      await checkRangeFile(
+        detection.baseUrl,
+        roleFile(detection.baseUrl, file),
+        false,
+        options,
+      ),
+    )
   }
 
   if (hasSegmentedOutputSignal(detection)) {
     for (const file of VISIUM_HD_SEGMENTED_READABLE_FILES) {
-      checks.push(await checkReadableFile(detection.baseUrl, file, false, options))
+      checks.push(
+        await checkReadableFile(
+          detection.baseUrl,
+          segmentedFile(detection, file),
+          false,
+          options,
+        ),
+      )
     }
 
     for (const file of VISIUM_HD_SEGMENTED_RANGE_FILES) {
-      checks.push(await checkRangeFile(detection.baseUrl, file, false, options))
+      checks.push(
+        await checkRangeFile(
+          detection.baseUrl,
+          segmentedFile(detection, file),
+          false,
+          options,
+        ),
+      )
     }
   }
 
   return checks
+}
+
+// The detected path (from the manifest or the probe), else the standard one.
+function segmentedFile(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'visium-hd' }>,
+  file: VisiumHdSegmentedFile,
+): { readonly id: string; readonly label: string; readonly path: string } {
+  return {
+    id: file.id,
+    label: file.label,
+    path: detection.segmentedOutputs?.[file.output] ?? file.path,
+  }
 }
 
 function hasSegmentedOutputSignal(

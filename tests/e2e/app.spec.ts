@@ -17,7 +17,7 @@ const HOSTED_FIXTURE_PREFLIGHT_TIMEOUT_MS = 10_000
 async function loadDefaultXeniumDataset(page: Page) {
   await page.goto('/')
 
-  await expect(page.getByLabel('Dataset URL')).toHaveValue(/\/public\/xenium\//)
+  await expect(page.getByLabel('Dataset or image URL')).toHaveValue(/\/public\/xenium\//)
   await expect(page.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
 
   await page.getByRole('button', { name: 'Load Dataset' }).click()
@@ -32,7 +32,7 @@ async function loadDefaultXeniumDataset(page: Page) {
 async function loadVisiumHdReferenceDataset(page: Page) {
   await page.goto('/')
 
-  await page.getByLabel('Dataset URL').fill(VISIUM_HD_REFERENCE_URL)
+  await page.getByLabel('Dataset or image URL').fill(VISIUM_HD_REFERENCE_URL)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
   const visiumPanel = page.getByRole('region', { name: 'Visium HD dataset' })
@@ -161,7 +161,7 @@ test('shows the scaffolded viewer shell', async ({ page }) => {
     'aria-selected',
     'true',
   )
-  await expect(page.getByLabel('Dataset URL')).toHaveValue(/\/public\/xenium\//)
+  await expect(page.getByLabel('Dataset or image URL')).toHaveValue(/\/public\/xenium\//)
   await expect(page.getByRole('button', { name: 'Load Dataset' })).toBeVisible()
 })
 
@@ -190,7 +190,7 @@ test('loads a local H5AD fixture with obs tracks and gene expression', async ({
   await page.goto('/')
 
   const fixtureUrl = new URL('/h5ad-smoke.h5ad', page.url()).toString()
-  await page.getByLabel('Dataset URL').fill(fixtureUrl)
+  await page.getByLabel('Dataset or image URL').fill(fixtureUrl)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
   await expect(page.getByText(/H5AD ready: 4 cells, 3 genes/)).toBeVisible({
@@ -240,7 +240,7 @@ test('loads the hosted PBMC3K H5AD fixture', async ({ page }) => {
     'Hosted PBMC3K H5AD fixture is unavailable.',
   )
 
-  await page.getByLabel('Dataset URL').fill(H5AD_PBMC3K_REFERENCE_URL)
+  await page.getByLabel('Dataset or image URL').fill(H5AD_PBMC3K_REFERENCE_URL)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
   await expect(page.getByText(/H5AD ready: 2,638 cells, 1,838 genes/)).toBeVisible({

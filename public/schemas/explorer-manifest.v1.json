@@ -1,0 +1,304 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "explorer-manifest.v1.json",
+  "title": "Spatial Omics Explorer dataset manifest",
+  "description": "Optional explorer.json for a hosted dataset: which platform it is, where its files are, and how the viewer shows it on first load. Relative paths resolve against the manifest's folder, or against `root` when set.",
+  "type": "object",
+  "required": ["version", "platform"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": {
+      "const": 1,
+      "description": "Manifest format version."
+    },
+    "platform": {
+      "enum": ["xenium", "visium-hd", "h5ad", "spatialdata", "image"],
+      "description": "How to read the dataset."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Display name, shown in the log and diagnostics."
+    },
+    "description": { "type": "string", "minLength": 1 },
+    "root": {
+      "$ref": "#/$defs/path",
+      "description": "Base for relative paths instead of the manifest's folder. Relative to the manifest, or an http(s) URL."
+    },
+    "files": { "type": "object" },
+    "options": { "type": "object" },
+    "defaults": { "$ref": "#/$defs/defaults" }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": { "properties": { "platform": { "const": "xenium" } } },
+      "then": {
+        "properties": {
+          "files": { "$ref": "#/$defs/xeniumFiles" },
+          "options": { "type": "object", "maxProperties": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "visium-hd" } } },
+      "then": {
+        "properties": {
+          "files": { "$ref": "#/$defs/visiumHdFiles" },
+          "options": { "$ref": "#/$defs/visiumHdOptions" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "h5ad" } } },
+      "then": {
+        "required": ["files"],
+        "properties": {
+          "files": {
+            "type": "object",
+            "required": ["h5ad"],
+            "properties": {
+              "h5ad": { "$ref": "#/$defs/path", "description": "The .h5ad file." }
+            },
+            "additionalProperties": false
+          },
+          "options": { "type": "object", "maxProperties": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "spatialdata" } } },
+      "then": {
+        "required": ["files"],
+        "properties": {
+          "files": {
+            "type": "object",
+            "required": ["store"],
+            "properties": {
+              "store": {
+                "$ref": "#/$defs/path",
+                "description": "The SpatialData Zarr store root."
+              }
+            },
+            "additionalProperties": false
+          },
+          "options": { "$ref": "#/$defs/spatialDataOptions" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "image" } } },
+      "then": {
+        "required": ["files"],
+        "properties": {
+          "files": {
+            "type": "object",
+            "required": ["image"],
+            "properties": {
+              "image": {
+                "$ref": "#/$defs/path",
+                "description": "OME-TIFF, TIFF, NDPI, or OME-Zarr image."
+              }
+            },
+            "additionalProperties": false
+          },
+          "options": { "type": "object", "maxProperties": 0 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)|^[Hh][Tt][Tt][Pp][Ss]?://",
+      "description": "A path relative to the manifest folder (or `root`), or an http(s) URL."
+    },
+    "xeniumFiles": {
+      "type": "object",
+      "description": "Xenium files that are not at their standard XOA names. Omitted files use the standard name.",
+      "properties": {
+        "experiment": {
+          "$ref": "#/$defs/path",
+          "description": "Default experiment.xenium. Optional with a manifest: it supplies the pixel size and, when `morphology` is not set, the morphology image paths."
+        },
+        "cells": { "$ref": "#/$defs/path", "description": "Default cells.parquet." },
+        "cellBoundaries": {
+          "$ref": "#/$defs/path",
+          "description": "Default cell_boundaries.parquet."
+        },
+        "transcripts": {
+          "$ref": "#/$defs/path",
+          "description": "Default transcripts.parquet."
+        },
+        "transcriptsZarr": {
+          "$ref": "#/$defs/path",
+          "description": "Default transcripts.zarr.zip."
+        },
+        "cellFeatureMatrix": {
+          "$ref": "#/$defs/path",
+          "description": "Default cell_feature_matrix.zarr.zip."
+        },
+        "cellFeatureMatrixH5": {
+          "$ref": "#/$defs/path",
+          "description": "Default cell_feature_matrix.h5."
+        },
+        "analysis": {
+          "$ref": "#/$defs/path",
+          "description": "Default analysis.zarr.zip."
+        },
+        "genePanel": {
+          "$ref": "#/$defs/path",
+          "description": "Default gene_panel.json."
+        },
+        "morphology": {
+          "$ref": "#/$defs/path",
+          "description": "Morphology image. Default: the image listed in experiment.xenium."
+        },
+        "umap": {
+          "$ref": "#/$defs/path",
+          "description": "UMAP projection CSV. Default: searched under analysis/umap/."
+        },
+        "tsne": {
+          "$ref": "#/$defs/path",
+          "description": "t-SNE projection CSV. Default: searched under analysis/tsne/."
+        }
+      },
+      "additionalProperties": false
+    },
+    "visiumHdFiles": {
+      "type": "object",
+      "properties": {
+        "bins": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Binned outputs. Default: the binned_outputs/square_002um, _008um, and _016um tiers that exist.",
+          "items": {
+            "type": "object",
+            "required": ["size", "path"],
+            "properties": {
+              "size": { "enum": [2, 8, 16], "description": "Bin size in µm." },
+              "path": {
+                "$ref": "#/$defs/path",
+                "description": "The bin's output folder, such as binned_outputs/square_008um."
+              },
+              "tissuePositions": {
+                "$ref": "#/$defs/path",
+                "description": "Default <path>/spatial/tissue_positions.parquet."
+              },
+              "scalefactors": {
+                "$ref": "#/$defs/path",
+                "description": "Default <path>/spatial/scalefactors_json.json."
+              },
+              "filteredMatrix": {
+                "$ref": "#/$defs/path",
+                "description": "Default <path>/filtered_feature_bc_matrix.h5."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "featureSlice": {
+          "$ref": "#/$defs/path",
+          "description": "Default feature_slice.h5."
+        },
+        "barcodeMappings": {
+          "$ref": "#/$defs/path",
+          "description": "Default barcode_mappings.parquet."
+        },
+        "segmentedOutputs": {
+          "type": "object",
+          "description": "Segmented outputs. When set, only the files listed here are used. Default: the standard segmented_outputs/ files that exist.",
+          "properties": {
+            "scalefactors": { "$ref": "#/$defs/path" },
+            "filteredMatrix": { "$ref": "#/$defs/path" },
+            "rawMatrix": { "$ref": "#/$defs/path" },
+            "cellSegmentations": { "$ref": "#/$defs/path" },
+            "nucleusSegmentations": { "$ref": "#/$defs/path" },
+            "nucleusInstanceMask": { "$ref": "#/$defs/path" },
+            "graphclustCellSegmentations": { "$ref": "#/$defs/path" },
+            "graphclustNucleusSegmentations": { "$ref": "#/$defs/path" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "visiumHdOptions": {
+      "type": "object",
+      "properties": {
+        "binSize": {
+          "enum": [2, 8, 16],
+          "description": "Bin size shown first. Default 16 µm when present, else 8 µm."
+        }
+      },
+      "additionalProperties": false
+    },
+    "spatialDataOptions": {
+      "type": "object",
+      "description": "Starting view for the Dataset tab. Changing the coordinate system there clears the image and units.",
+      "properties": {
+        "coordinateSystem": { "type": "string", "minLength": 1 },
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Image element name, without the images/ prefix."
+        },
+        "micrometersPerUnit": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Micrometres per coordinate-system unit, when the store does not declare it."
+        }
+      },
+      "additionalProperties": false
+    },
+    "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+    "defaults": {
+      "type": "object",
+      "description": "Display settings on first load. A shared link's own values take precedence.",
+      "properties": {
+        "genes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Genes to select. Names must match the gene panel exactly."
+        },
+        "colorCellsBy": {
+          "enum": ["transcript-count", "cell-area", "annotations", "metadata"],
+          "description": "The Cell color control."
+        },
+        "geneColorScale": {
+          "enum": [
+            "gold",
+            "magma",
+            "viridis",
+            "plasma",
+            "cividis",
+            "teal",
+            "rose",
+            "glasbey"
+          ],
+          "description": "The Gene scale control."
+        },
+        "geneScoreMode": {
+          "enum": ["sum", "mean", "z-score"],
+          "description": "The Signature score control."
+        },
+        "cellBoundaries": { "type": "boolean" },
+        "nucleusBoundaries": { "type": "boolean" },
+        "channels": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Image channels to turn on, by name (case-insensitive) or ID."
+        },
+        "imageOpacity": { "$ref": "#/$defs/opacity" },
+        "cellFillOpacity": { "$ref": "#/$defs/opacity" },
+        "cellBoundaryOpacity": { "$ref": "#/$defs/opacity" },
+        "transcripts": {
+          "type": "boolean",
+          "description": "Show the transcript overlay (Xenium)."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

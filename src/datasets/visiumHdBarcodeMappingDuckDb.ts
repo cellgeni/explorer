@@ -1,8 +1,7 @@
-import { datasetFileUrl } from '../data/datasetFiles'
+import { datasetFileUrlFor } from '../data/datasetFiles'
 import { createDuckDbClient } from '../data/duckdb'
 import {
   parseVisiumHdBarcodeMappingRows,
-  VISIUM_HD_BARCODE_MAPPINGS_PATH,
   type VisiumHdBarcodeMapping,
 } from './visiumHdBarcodeMappings'
 import type {
@@ -70,10 +69,7 @@ async function queryBarcodeMappingsForCell(
   baseUrl: string,
   cellId: SpatialElementId,
 ): Promise<ArrowTableLike> {
-  const params: SqlParameter[] = [
-    datasetFileUrl(baseUrl, VISIUM_HD_BARCODE_MAPPINGS_PATH),
-    cellId,
-  ]
+  const params: SqlParameter[] = [datasetFileUrlFor(baseUrl, 'barcodeMappings'), cellId]
 
   return statement.query(...params)
 }

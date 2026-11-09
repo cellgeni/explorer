@@ -8,6 +8,19 @@ import {
 } from './loadErrorModel'
 
 describe('loadErrorModel', () => {
+  it('classifies dataset manifest errors before the HTTP status they mention', () => {
+    const error = Object.assign(
+      new Error('explorer.json: could not be read (HTTP 500).'),
+      { name: 'DatasetManifestError' },
+    )
+
+    expect(createStructuredLoadError('Dataset overview', error)).toMatchObject({
+      code: 'manifest',
+      title: 'Dataset manifest is invalid',
+      message: 'explorer.json: could not be read (HTTP 500).',
+    })
+  })
+
   it('explains incomplete Zarr stores instead of the downstream decode error', () => {
     const chunkError = Object.assign(
       new Error(

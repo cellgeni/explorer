@@ -26,6 +26,11 @@ import {
 } from '../../data/morphologyImage'
 import { type RoiSelection } from '../../data/roiSelection'
 import type { ShareableState } from '../../data/shareableState'
+import {
+  manifestDefaultsNotShared,
+  manifestDefaultsToShareableState,
+  resolveMorphologyChannelSelection,
+} from '../dataset/datasetManifestModel'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
@@ -295,6 +300,11 @@ interface UseDatasetLifecycleSetters {
   readonly setHiddenAnnotationSetIds: Setter<readonly string[]>
   readonly setCellMetadataTracks: Setter<readonly ContinuousCellMetadataTrack[]>
   readonly setSelectedCellMetadataTrackId: Setter<string | null>
+  // Applied only from dataset manifest defaults.
+  readonly setCellBoundaryOpacity?: Setter<number>
+  readonly setCellFillOpacity?: Setter<number>
+  readonly setImageLayerOpacity?: Setter<number>
+  readonly setShowTranscriptOverlay?: Setter<boolean>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
   readonly setNucleusBoundaryElements?: Setter<readonly SpatialElement[]>
@@ -454,6 +464,10 @@ export function useDatasetLifecycle({
     setHiddenAnnotationSetIds,
     setCellMetadataTracks,
     setSelectedCellMetadataTrackId,
+    setCellBoundaryOpacity,
+    setCellFillOpacity,
+    setImageLayerOpacity,
+    setShowTranscriptOverlay,
     setAutoContrastChannelIds,
     setBoundaryElements,
     setNucleusBoundaryElements,
@@ -648,6 +662,51 @@ export function useDatasetLifecycle({
       })
   }
 
+  // Dataset manifest defaults that are not set per platform during the load.
+  // Boundary toggles and image channels are applied with the platform's own
+  // defaults instead.
+  function applyManifestDefaults(defaults: ShareableState) {
+    const observationColorMode = parseObservationColorMode(defaults.observationColorMode)
+    const geneExpressionColorScale = parseGeneExpressionColorScale(
+      defaults.geneExpressionColorScale,
+    )
+    const geneExpressionScoreMode = parseGeneExpressionScoreMode(
+      defaults.geneExpressionScoreMode,
+    )
+
+    if (defaults.selectedGenes !== undefined) {
+      setSelectedGenes(defaults.selectedGenes)
+    }
+
+    if (observationColorMode !== undefined) {
+      setObservationColorMode(observationColorMode)
+    }
+
+    if (geneExpressionColorScale !== undefined) {
+      setGeneExpressionColorScale(geneExpressionColorScale)
+    }
+
+    if (geneExpressionScoreMode !== undefined) {
+      setGeneExpressionScoreMode(geneExpressionScoreMode)
+    }
+
+    if (defaults.imageOpacity !== undefined) {
+      setImageLayerOpacity?.(defaults.imageOpacity)
+    }
+
+    if (defaults.cellFillOpacity !== undefined) {
+      setCellFillOpacity?.(defaults.cellFillOpacity)
+    }
+
+    if (defaults.cellBoundaryOpacity !== undefined) {
+      setCellBoundaryOpacity?.(defaults.cellBoundaryOpacity)
+    }
+
+    if (defaults.transcriptOverlay !== undefined) {
+      setShowTranscriptOverlay?.(defaults.transcriptOverlay)
+    }
+  }
+
   async function startDatasetLoad(datasetUrl: string, loadImage: boolean) {
     const requestedUrl = datasetUrl.trim()
 
@@ -680,6 +739,7 @@ export function useDatasetLifecycle({
       const loadMorphologyInBackground = (
         load: () => Promise<MorphologyImage | null>,
         options: {
+          readonly channelSelection?: readonly string[]
           readonly enableAllChannelsByDefault?: boolean
           readonly skipNativeRgbAutoContrast?: boolean
         } = {},
@@ -699,9 +759,14 @@ export function useDatasetLifecycle({
               options.enableAllChannelsByDefault === true
                 ? image.channelLoaders.map((channel) => channel.info.id)
                 : undefined
-            const enabledChannelIds = shouldRestoreSharedState
-              ? (sharedState?.morphologyEnabledChannelIds ?? defaultEnabledChannelIds)
-              : defaultEnabledChannelIds
+            const enabledChannelIds =
+              options.channelSelection === undefined
+                ? defaultEnabledChannelIds
+                : resolveMorphologyChannelSelection(
+                    image.channelLoaders,
+                    options.channelSelection,
+                    defaultEnabledChannelIds,
+                  )
 
             setMorphologyImage(image)
             setMorphologyChannelSettings((current) =>
@@ -928,6 +993,38 @@ export function useDatasetLifecycle({
           return
         }
 
+        // Dataset manifest defaults sit under a shared link for this dataset:
+        // fields the link sets win, the rest come from the manifest.
+        const manifest = detection.platform === 'unknown' ? undefined : detection.manifest
+        const manifestDefaults = manifestDefaultsToShareableState(manifest?.defaults)
+        const restoreState: ShareableState = {
+          ...manifestDefaults.state,
+          ...(shouldRestoreSharedState ? sharedState : {}),
+        }
+
+        if (manifest !== undefined) {
+          appendDebugEvent(
+            `Using dataset manifest ${shortDatasetLabel(manifest.url)}${
+              manifest.name === undefined ? '' : ` (${manifest.name})`
+            }`,
+          )
+          applyManifestDefaults(
+            manifestDefaultsNotShared(
+              manifestDefaults.state,
+              shouldRestoreSharedState ? sharedState : null,
+            ),
+          )
+        }
+
+        for (const ignored of manifestDefaults.ignored) {
+          appendFallbackNotice({
+            source: 'Dataset overview',
+            message: `The dataset manifest's ${ignored}, so the viewer default is used.`,
+            action: 'Use one of the values listed in the dataset manifest documentation.',
+            coalesceKey: `manifest-default:${requestedUrl}:${ignored}`,
+          })
+        }
+
         const loadAnnDataOverview = async (
           dataset: unknown,
           label: 'H5AD' | 'SpatialData',
@@ -1001,9 +1098,7 @@ export function useDatasetLifecycle({
 
         if (detection.platform === 'spatialdata') {
           setDatasetPlatform('spatialdata')
-          setShowCellBoundaries(
-            shouldRestoreSharedState ? (sharedState?.showCellBoundaries ?? true) : true,
-          )
+          setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
           setShowNucleusBoundaries(false)
           setGenePanelState(genePanelLoadStarted(requestedUrl))
           const dataset = await getSpatialDataset(detection.baseUrl, {
@@ -1058,7 +1153,13 @@ export function useDatasetLifecycle({
                 },
               )
             },
-            { enableAllChannelsByDefault: true, skipNativeRgbAutoContrast: true },
+            {
+              ...(restoreState.morphologyEnabledChannelIds === undefined
+                ? {}
+                : { channelSelection: restoreState.morphologyEnabledChannelIds }),
+              enableAllChannelsByDefault: true,
+              skipNativeRgbAutoContrast: true,
+            },
           )
           return
         }
@@ -1092,9 +1193,18 @@ export function useDatasetLifecycle({
             return
           }
 
-          const enabledChannelIds = shouldRestoreSharedState
-            ? sharedState?.morphologyEnabledChannelIds
-            : image.channelLoaders.map((channel) => channel.info.id)
+          const allChannelIds = image.channelLoaders.map((channel) => channel.info.id)
+          const channelSelection = restoreState.morphologyEnabledChannelIds
+          const enabledChannelIds =
+            channelSelection !== undefined
+              ? resolveMorphologyChannelSelection(
+                  image.channelLoaders,
+                  channelSelection,
+                  allChannelIds,
+                )
+              : shouldRestoreSharedState
+                ? undefined
+                : allChannelIds
 
           setMorphologyImage(image)
           setMorphologyChannelSettings((current) =>
@@ -1132,14 +1242,8 @@ export function useDatasetLifecycle({
 
         if (detection.platform === 'visium-hd') {
           setDatasetPlatform('visium-hd')
-          setShowCellBoundaries(
-            shouldRestoreSharedState ? (sharedState?.showCellBoundaries ?? false) : false,
-          )
-          setShowNucleusBoundaries(
-            shouldRestoreSharedState
-              ? (sharedState?.showNucleusBoundaries ?? false)
-              : false,
-          )
+          setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
+          setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
           const dataset = await getSpatialDataset(detection.baseUrl)
 
           if (!isVisiumHdOverviewDataset(dataset)) {
@@ -1256,14 +1360,8 @@ export function useDatasetLifecycle({
         }
 
         setDatasetPlatform('xenium')
-        setShowCellBoundaries(
-          shouldRestoreSharedState ? (sharedState?.showCellBoundaries ?? true) : true,
-        )
-        setShowNucleusBoundaries(
-          shouldRestoreSharedState
-            ? (sharedState?.showNucleusBoundaries ?? false)
-            : false,
-        )
+        setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
+        setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
         setAnnotationGroupState(annotationGroupLoadStarted(requestedUrl))
         setGenePanelState(genePanelLoadStarted(requestedUrl))
         startDatasetWarmup(requestedUrl, requestId)
@@ -1357,11 +1455,15 @@ export function useDatasetLifecycle({
           return
         }
 
-        loadMorphologyInBackground(() =>
-          loadMorphologyImage(requestedUrl, {
-            signal: request.signal,
-            onFallback: appendFallbackNotice,
-          }),
+        loadMorphologyInBackground(
+          () =>
+            loadMorphologyImage(requestedUrl, {
+              signal: request.signal,
+              onFallback: appendFallbackNotice,
+            }),
+          restoreState.morphologyEnabledChannelIds === undefined
+            ? {}
+            : { channelSelection: restoreState.morphologyEnabledChannelIds },
         )
       } catch (error) {
         if (isAbortError(error)) {

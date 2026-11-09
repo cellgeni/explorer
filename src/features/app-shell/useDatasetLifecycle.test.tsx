@@ -52,6 +52,8 @@ type LifecycleOptions = Parameters<typeof useDatasetLifecycle>[0]
 
 function Probe({
   refs,
+  appendFallbackNotice = vi.fn(),
+  extraSetters = {},
   detectSpatialDataset = vi.fn(async () => ({
     platform: 'xenium' as const,
     baseUrl: 'https://example.test/output',
@@ -78,6 +80,8 @@ function Probe({
   warmDatasetForRoi = vi.fn(async () => undefined),
 }: {
   readonly refs: ReturnType<typeof createLifecycleRefs>
+  readonly appendFallbackNotice?: LifecycleOptions['callbacks']['appendFallbackNotice']
+  readonly extraSetters?: Partial<LifecycleOptions['setters']>
   readonly detectSpatialDataset?: LifecycleOptions['loaders']['detectSpatialDataset']
   readonly getSpatialDataset?: LifecycleOptions['loaders']['getSpatialDataset']
   readonly loadAnnotationGroups?: LifecycleOptions['loaders']['loadAnnotationGroups']
@@ -102,7 +106,7 @@ function Probe({
   useDatasetLifecycle({
     callbacks: {
       appendDebugEvent: vi.fn(),
-      appendFallbackNotice: vi.fn(),
+      appendFallbackNotice,
       queueAutoContrast: vi.fn(),
       recordTelemetry: vi.fn(),
     },
@@ -237,6 +241,7 @@ function Probe({
       setVisiumHdControlState,
       setSpatialDataControlState: noopSetter,
       setViewportCellCount: noopSetter,
+      ...extraSetters,
     },
   })
 
@@ -385,6 +390,83 @@ describe('useDatasetLifecycle', () => {
       url: datasetUrl,
       cellCount: 0,
     })
+  })
+
+  it('applies dataset manifest defaults beneath a shared link', async () => {
+    const refs = createLifecycleRefs()
+    const datasetUrl = 'https://example.test/xenium'
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'xenium' as const,
+      baseUrl: datasetUrl,
+      manifest: {
+        platform: 'xenium' as const,
+        url: `${datasetUrl}/explorer.json`,
+        rootUrl: datasetUrl,
+        files: {},
+        defaults: {
+          genes: ['EPCAM'],
+          cellBoundaries: false,
+          nucleusBoundaries: true,
+          imageOpacity: 0.4,
+          colorCellsBy: 'cell-area',
+          geneColorScale: 'rainbow',
+        },
+      },
+      checked: [],
+    }))
+    const appendFallbackNotice = vi.fn()
+    const setImageLayerOpacity = vi.fn()
+    const setObservationColorMode = vi.fn()
+    const setSelectedGenes = vi.fn()
+    const setGeneExpressionColorScale = vi.fn()
+    const setShowCellBoundaries = vi.fn()
+    const setShowNucleusBoundaries = vi.fn()
+    const setLoadState = vi.fn()
+
+    // The shared link names the dataset, so the lifecycle loads it on mount.
+    render(
+      <Probe
+        refs={refs}
+        appendFallbackNotice={appendFallbackNotice}
+        detectSpatialDataset={detectSpatialDataset}
+        extraSetters={{
+          setGeneExpressionColorScale,
+          setImageLayerOpacity,
+          setObservationColorMode,
+          setSelectedGenes,
+        }}
+        initialShareableState={{
+          datasetUrl,
+          selectedGenes: ['ACTB'],
+          showCellBoundaries: true,
+        }}
+        setLoadState={setLoadState}
+        setShowCellBoundaries={setShowCellBoundaries}
+        setShowNucleusBoundaries={setShowNucleusBoundaries}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(setLoadState).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'ready', url: datasetUrl }),
+      )
+    })
+    expect(detectSpatialDataset).toHaveBeenCalledTimes(1)
+
+    // The shared link sets genes and cell boundaries, so those win.
+    expect(setSelectedGenes).toHaveBeenLastCalledWith(['ACTB'])
+    expect(setShowCellBoundaries).toHaveBeenLastCalledWith(true)
+    // The rest come from the manifest.
+    expect(setShowNucleusBoundaries).toHaveBeenLastCalledWith(true)
+    expect(setImageLayerOpacity).toHaveBeenCalledWith(0.4)
+    expect(setObservationColorMode).toHaveBeenLastCalledWith('cell-area')
+    // Unknown values are reported and leave the control alone.
+    expect(setGeneExpressionColorScale).not.toHaveBeenCalledWith('rainbow')
+    expect(appendFallbackNotice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('defaults.geneColorScale "rainbow"'),
+      }),
+    )
   })
 
   it('loads SpatialData tables through AnnData readers and shows boundaries', async () => {

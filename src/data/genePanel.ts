@@ -1,4 +1,4 @@
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import { isGeneFeature } from './geneFeatures'
 import { loadTranscriptZarrGenePanel as loadTranscriptZarrGenePanelFromZip } from './transcriptZarr'
@@ -22,7 +22,7 @@ export async function loadGenePanel(
   options: LoadGenePanelOptions = {},
 ): Promise<readonly string[]> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
-  const url = datasetFileUrl(baseUrl, 'gene_panel.json')
+  const url = datasetFileUrlFor(baseUrl, 'genePanel')
 
   try {
     const response =
@@ -31,7 +31,9 @@ export async function loadGenePanel(
         : await fetcher(url, { signal: options.signal })
 
     if (!response.ok) {
-      throw new Error(`Unable to load gene_panel.json: HTTP ${response.status}.`)
+      throw new Error(
+        `Unable to load ${datasetFileLabelFor(baseUrl, 'genePanel')}: HTTP ${response.status}.`,
+      )
     }
 
     return parseGenePanel(await response.json())
@@ -175,7 +177,7 @@ async function loadGenePanelFromTranscriptZarr(
   options: LoadGenePanelOptions,
 ): Promise<readonly string[]> {
   const loader = options.loadTranscriptZarrGenePanel ?? loadTranscriptZarrGenePanelFromZip
-  const url = datasetFileUrl(baseUrl, 'transcripts.zarr.zip')
+  const url = datasetFileUrlFor(baseUrl, 'transcriptsZarr')
   const loaderOptions =
     options.signal === undefined && options.onFallback === undefined
       ? undefined
@@ -192,9 +194,9 @@ async function loadGenePanelFromTranscriptZarr(
     }
 
     throw new Error(
-      `Unable to load gene panel from gene_panel.json (${errorMessage(
+      `Unable to load gene panel from ${datasetFileLabelFor(baseUrl, 'genePanel')} (${errorMessage(
         genePanelError,
-      )}) or transcripts.zarr.zip (${errorMessage(transcriptZarrError)}).`,
+      )}) or ${datasetFileLabelFor(baseUrl, 'transcriptsZarr')} (${errorMessage(transcriptZarrError)}).`,
       { cause: transcriptZarrError },
     )
   }

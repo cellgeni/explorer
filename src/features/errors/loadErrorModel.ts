@@ -67,6 +67,22 @@ export function createStructuredLoadError(
   const normalizedMessage = message.toLowerCase()
   const detail = readErrorDetail(error)
 
+  // Thrown by detection for a dataset manifest (explorer.json) that cannot be
+  // read or does not validate. Matched by name to keep this module import-free.
+  if (error instanceof Error && error.name === 'DatasetManifestError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'manifest',
+        title: 'Dataset manifest is invalid',
+        message,
+        action:
+          'Fix the field named in the message, or remove the manifest to load the dataset by its standard file names.',
+      },
+      detail,
+    )
+  }
+
   if (
     normalizedMessage.includes('cannot be range-read') ||
     normalizedMessage.includes('expected http 206')
