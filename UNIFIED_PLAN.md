@@ -235,6 +235,7 @@ writing UI code.
 | Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                       |
 | Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                       |
 | Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                       |
+| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                       |
 | Visium spots                    | Original Phase 6 `VisiumDataset`                         | Not started                                             |
 
 ---
@@ -650,6 +651,26 @@ matrices.
 - Labels: rows are placed from `obsm` through the labels transform, and cell
   outlines are traced from the label raster on demand.
 - Not read: `points` (transcripts), extra images, and extra tables.
+
+### 5.7 Dataset Manifest (Phase 11)
+
+- Optional `explorer.json` in the dataset folder, or any `.json` URL entered
+  directly (except Zarr `zarr.json`). Full reference:
+  [`docs/dataset-manifest.md`](./docs/dataset-manifest.md); schema:
+  [`public/schemas/explorer-manifest.v1.json`](./public/schemas/explorer-manifest.v1.json).
+- Required: `version: 1` and `platform`. Optional: `name`, `description`,
+  `root`, `files`, `options`, `defaults`.
+- `files` maps each standard file to another relative path or http(s) URL;
+  files left out keep their standard names. H5AD, SpatialData, and image
+  manifests must name their one source file.
+- `options`: Visium HD `binSize`; SpatialData `coordinateSystem`, `image`,
+  `micrometersPerUnit`.
+- `defaults`: genes, cell colour, gene scale and score, boundary toggles, image
+  channels, three opacities, and the transcript overlay. A shared link's own
+  fields take precedence.
+- Validation is strict: unknown fields and wrong types are errors. A probed
+  file that is missing, not JSON, or has neither `platform` nor `version` means
+  no manifest.
 
 ---
 
@@ -1568,6 +1589,64 @@ planned in advance.
 - [ ] No E2E coverage; the reference stores in
       [1](#reference-datasets) are used for manual testing.
 
+### Phase 11 — Dataset Manifest
+
+Shipped 2026-11-09. Requested so that renaming a file such as `cells.parquet`
+no longer breaks loading, and so a dataset can say how it should be shown.
+
+#### Product Decisions
+
+- **DECISION:** One manifest file, `explorer.json`, read from the entered
+  folder alongside the `experiment.xenium` probe; any other `.json` URL can be
+  entered directly. Without one, detection is unchanged.
+- **DECISION:** Readers keep receiving the entered URL. Detection registers the
+  manifest for that URL (`setDatasetManifest`, `src/data/datasetFiles.ts`) and
+  readers ask for files by role (`datasetFileUrlFor`), instead of threading a
+  file map through every reader and workflow.
+- **DECISION:** `defaults` reuse the share-URL fields, so they follow the
+  shared-link restore path and a shared link wins field by field.
+- **DECISION:** Strict validation with field-level messages; a typo must not
+  silently fall back to a standard name. A JSON Schema ships with the app for
+  editors, and a test keeps it in step with the parser.
+
+#### Delivered
+
+- [x] `parseDatasetManifest` (`src/datasets/datasetManifest.ts`): version,
+      platform, `root`, per-platform `files`, `options`, `defaults`; relative
+      paths resolve against the manifest folder or `root`.
+- [x] Detection from a manifest for all five platforms; Visium HD bins listed
+      in the manifest are checked with `HEAD`.
+- [x] Every hard-coded Xenium and Visium HD root file name goes through
+      `datasetFileUrlFor`; messages name the manifest path
+      (`datasetFileLabelFor`).
+- [x] Xenium without `experiment.xenium` when the manifest names the image;
+      manifest UMAP/t-SNE paths; Visium HD bin paths for projections.
+- [x] Display defaults applied by `useDatasetLifecycle`
+      (`src/features/dataset/datasetManifestModel.ts`); image channels by name
+      or ID; unknown values reported under Fallbacks.
+- [x] SpatialData `options` as the starting selection; Visium HD `binSize` as
+      the default tier.
+- [x] `DatasetManifestError` classified as "Dataset manifest is invalid";
+      Diagnose Dataset adds a `Dataset manifest` check and checks manifest
+      locations; `experiment.xenium` becomes a warning.
+- [x] `public/schemas/explorer-manifest.v1.json` and
+      `docs/dataset-manifest.md`.
+- [x] Checked in the browser against the hosted Xenium demo (folder manifest
+      with `root`, relocated `experiment.xenium`, defaults), a SpatialData
+      manifest with `options`, and invalid and missing-file manifests.
+- [x] A `404`, or a `403` from a bucket that denies listing, on a byte-range
+      file is titled "File not found or not readable", and a `5xx` "Host server
+      error", instead of "Byte-range requests blocked" (`assertHttpRangeSupport`,
+      `createStructuredLoadError`).
+
+#### Known Gaps
+
+- [ ] Files cannot be declared absent, so optional standard names are still
+      probed.
+- [ ] Not configurable yet: H5AD coordinate key, annotation set to select,
+      channel colours and contrast, initial camera.
+- [ ] No E2E test; the hosted fixtures are folders without manifests.
+
 ---
 
 ## 7. Application Structure And Refactor Record
@@ -1777,7 +1856,7 @@ Counted from the repository, not from a test run:
 
 ## 12. Open Items
 
-Every unchecked item in this plan, updated 2026-11-08.
+Every unchecked item in this plan, updated 2026-11-09.
 
 Sequencing:
 
@@ -1795,13 +1874,14 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 - [ ] H5AD and SpatialData: read boolean `obs` columns on the reference backend.
 - [ ] Visium HD: low-res tissue image fallback.
 - [ ] Magic Lens: make `Min QV` change results, or hide it.
-- [ ] Xenium diagnostics: check the manifest's image instead of a hard-coded
-      `morphology.ome.tif`, plus `analysis.zarr.zip`, `gene_panel.json`, the H5
-      matrix, and embedding CSVs.
+- [ ] Xenium diagnostics: check the image chosen from `experiment.xenium`
+      instead of `morphology.ome.tif` (a dataset manifest's image is already
+      checked), plus `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, and
+      embedding CSVs.
 - [ ] Visium HD diagnostics: treat the high-res PNG as optional, avoid fetching
       whole GeoJSON files, and check `barcodes.tsv.gz` and `features.tsv.gz`.
-- [ ] Xenium image choice: fall back to the next manifest path when the first
-      fails.
+- [ ] Xenium image choice: fall back to the next `experiment.xenium` path when
+      the first fails.
 
 Other gaps found in the review:
 
@@ -1820,6 +1900,9 @@ Other gaps found in the review:
 - [ ] Visium HD: with only a 2 µm tier the default load fails, and 2 µm
       detection needs a positions file that is never read.
 - [ ] Remove `'visium'` from the `Platform` union or implement it.
+- [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,
+      annotation set, channel colours and contrast, and initial camera (see
+      [Phase 11](#phase-11--dataset-manifest)).
 
 Features:
 

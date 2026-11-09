@@ -60,7 +60,10 @@ assets, including overview cells, boundaries, transcript Parquet, transcript
 Zarr, cell-feature matrices, ROI transcript exports, selected-cell transcript
 summaries, diagnostics checks, and image TIFFs. If the probe returns HTTP `200`,
 lacks an exposed `Content-Range`, or fails due to CORS, that workflow stops with
-an actionable error in the viewer.
+an actionable error in the viewer. A `404`, or a `403` from a bucket that denies
+listing, is reported as a missing or unreadable file instead: check the path and
+object permissions rather than the Range configuration. A `5xx` is reported as a
+server error on the host.
 
 For S3-compatible stores, run the same check against the public HTTPS URL that
 the browser will use, not only against the private gateway endpoint. This catches

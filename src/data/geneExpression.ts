@@ -1,4 +1,4 @@
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import {
   formatGeneExpressionStageTiming,
   geneExpressionStageTiming,
@@ -40,8 +40,8 @@ export async function loadDatasetGeneExpression(
   }
 
   const rangeStartedAt = Date.now()
-  await validateRangeSupport(datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip'), {
-    label: 'cell_feature_matrix.zarr.zip',
+  await validateRangeSupport(datasetFileUrlFor(baseUrl, 'cellFeatureMatrix'), {
+    label: datasetFileLabelFor(baseUrl, 'cellFeatureMatrix'),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
   onStageTiming(
@@ -49,7 +49,7 @@ export async function loadDatasetGeneExpression(
       'range-check',
       'Feature matrix Range check',
       rangeStartedAt,
-      'cell_feature_matrix.zarr.zip',
+      datasetFileLabelFor(baseUrl, 'cellFeatureMatrix'),
     ),
   )
   throwIfAborted(options.signal)

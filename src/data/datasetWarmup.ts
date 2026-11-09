@@ -1,5 +1,5 @@
 import { asyncBufferFromUrl } from 'hyparquet'
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import {
   clearCellFeatureMatrixZarrCache,
   warmCellFeatureMatrixZarr,
@@ -40,9 +40,9 @@ export async function warmDatasetForRoi(
 ): Promise<WarmDatasetForRoiResult> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
   const warmMatrix = options.warmMatrix ?? warmCellFeatureMatrixZarr
-  const cellsUrl = datasetFileUrl(baseUrl, 'cells.parquet')
-  const boundariesUrl = datasetFileUrl(baseUrl, 'cell_boundaries.parquet')
-  const matrixUrl = datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip')
+  const cellsUrl = datasetFileUrlFor(baseUrl, 'cells')
+  const boundariesUrl = datasetFileUrlFor(baseUrl, 'cellBoundaries')
+  const matrixUrl = datasetFileUrlFor(baseUrl, 'cellFeatureMatrix')
   const datasetPromise =
     options.getDataset === undefined
       ? cachedXeniumDataset(baseUrl)
@@ -61,17 +61,22 @@ export async function warmDatasetForRoi(
 
   const [, , , cellFeatureMatrix] = await Promise.all([
     datasetPromise.then((dataset) => dataset.warm()),
-    warmRangeReadableFile(cellsUrl, 'cells.parquet', validateRangeSupport, options),
+    warmRangeReadableFile(
+      cellsUrl,
+      datasetFileLabelFor(baseUrl, 'cells'),
+      validateRangeSupport,
+      options,
+    ),
     warmRangeReadableDatasetFile(
       matrixUrl,
-      'cell_feature_matrix.zarr.zip',
+      datasetFileLabelFor(baseUrl, 'cellFeatureMatrix'),
       validateRangeSupport,
       options,
     ),
     matrixWarmup,
     warmRangeReadableFile(
       boundariesUrl,
-      'cell_boundaries.parquet',
+      datasetFileLabelFor(baseUrl, 'cellBoundaries'),
       validateRangeSupport,
       options,
     ).catch(noop),

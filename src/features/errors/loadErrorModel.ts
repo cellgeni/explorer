@@ -59,6 +59,9 @@ export function formatStructuredError(error: StructuredLoadError): string {
   return `${error.title}: ${error.message}`
 }
 
+const SERVER_ERROR_ACTION =
+  'The host failed to serve the file. Retry; if it keeps failing, check the server, gateway, or object store hosting the dataset.'
+
 export function createStructuredLoadError(
   source: LoadErrorSource,
   error: unknown,
@@ -66,6 +69,52 @@ export function createStructuredLoadError(
   const message = readErrorMessage(error)
   const normalizedMessage = message.toLowerCase()
   const detail = readErrorDetail(error)
+  const rangeReadStatus = readRangeReadFailureStatus(normalizedMessage)
+
+  if (rangeReadStatus === 403 || rangeReadStatus === 404) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'http',
+        title: 'File not found or not readable',
+        message,
+        action:
+          rangeReadStatus === 403
+            ? 'Check the file path and that the object is publicly readable. Buckets that deny listing return HTTP 403 for missing files.'
+            : 'Check the file path, then reload.',
+      },
+      detail,
+    )
+  }
+
+  if (rangeReadStatus !== undefined && isServerErrorStatus(rangeReadStatus)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'http',
+        title: 'Host server error',
+        message,
+        action: SERVER_ERROR_ACTION,
+      },
+      detail,
+    )
+  }
+
+  // Thrown by detection for a dataset manifest (explorer.json) that cannot be
+  // read or does not validate. Matched by name to keep this module import-free.
+  if (error instanceof Error && error.name === 'DatasetManifestError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'manifest',
+        title: 'Dataset manifest is invalid',
+        message,
+        action:
+          'Fix the field named in the message, or remove the manifest to load the dataset by its standard file names.',
+      },
+      detail,
+    )
+  }
 
   if (
     normalizedMessage.includes('cannot be range-read') ||
@@ -106,7 +155,9 @@ export function createStructuredLoadError(
         code: 'http',
         title: `HTTP ${httpStatus} response`,
         message,
-        action: 'Check the dataset URL and object permissions.',
+        action: isServerErrorStatus(Number(httpStatus))
+          ? SERVER_ERROR_ACTION
+          : 'Check the dataset URL and object permissions.',
       },
       detail,
     )
@@ -321,6 +372,22 @@ export function readErrorMessage(error: unknown): string {
   }
 
   return 'Unknown dataset error'
+}
+
+// The status a Range probe (src/data/rangeSupport.ts) or TIFF Range read
+// received. A 404, a 403 from buckets that deny listing, or a 5xx means the file
+// was never served, so the host's Range support was not tested.
+function readRangeReadFailureStatus(normalizedMessage: string): number | undefined {
+  const status =
+    /\b(?:range probe|expected http 206)\b.*\breceived (?:http )?(\d{3})\b/.exec(
+      normalizedMessage,
+    )?.[1]
+
+  return status === undefined ? undefined : Number(status)
+}
+
+function isServerErrorStatus(status: number): boolean {
+  return status >= 500 && status <= 599
 }
 
 function isUnsupportedRoiGeneStatsError(

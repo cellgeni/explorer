@@ -37,6 +37,36 @@ describe('HTTP Range support diagnostics', () => {
     )
   })
 
+  it('reports a 404 or 403 as a missing or unreadable file, not a Range problem', async () => {
+    await expect(
+      assertHttpRangeSupport('https://example.test/xenium/cells-renamed.parquet', {
+        fetcher: vi.fn(async () => rangeResponse(404, null)),
+        label: 'cells-renamed.parquet',
+      }),
+    ).rejects.toThrow(
+      'cells-renamed.parquet was not found. The Range probe received HTTP 404 for https://example.test/xenium/cells-renamed.parquet. Check that the file exists at this path.',
+    )
+    await expect(
+      assertHttpRangeSupport('https://example.test/xenium/cells-renamed.parquet', {
+        fetcher: vi.fn(async () => rangeResponse(403, null)),
+        label: 'cells-renamed.parquet',
+      }),
+    ).rejects.toThrow(
+      'cells-renamed.parquet could not be read. The Range probe received HTTP 403 for https://example.test/xenium/cells-renamed.parquet. The file is missing (buckets that deny listing return 403 for missing keys) or not publicly readable.',
+    )
+  })
+
+  it('reports a 5xx as a server error, not a Range problem', async () => {
+    await expect(
+      assertHttpRangeSupport('https://example.test/xenium/cells.parquet', {
+        fetcher: vi.fn(async () => rangeResponse(503, null)),
+        label: 'cells.parquet',
+      }),
+    ).rejects.toThrow(
+      'cells.parquet could not be read. The Range probe received HTTP 503 for https://example.test/xenium/cells.parquet. The host returned a server error, so Range support was not tested.',
+    )
+  })
+
   it('fails loudly when Content-Range is not exposed through CORS', async () => {
     const fetcher = vi.fn(async () => rangeResponse(206, null))
 

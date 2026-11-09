@@ -1,4 +1,4 @@
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileUrl, datasetManifestFor, xeniumManifestFileFor } from './datasetFiles'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 
 export type AnalysisEmbeddingKind = string
@@ -80,7 +80,10 @@ export async function loadDatasetAnalysisEmbeddings(
   options: LoadDatasetAnalysisEmbeddingsOptions = {},
 ): Promise<readonly AnalysisEmbedding[]> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
-  const candidates = analysisEmbeddingCandidates(options.visiumHdBinSizeMicrometers)
+  const candidates = analysisEmbeddingCandidates(
+    baseUrl,
+    options.visiumHdBinSizeMicrometers,
+  )
   const embeddings: AnalysisEmbedding[] = []
   const loadedKinds = new Set<AnalysisEmbeddingKind>()
   const skippedPathsByKind = new Map<AnalysisEmbeddingKind, string[]>()
@@ -222,15 +225,21 @@ export function parseAnalysisEmbeddingCsv(
 }
 
 function analysisEmbeddingCandidates(
+  baseUrl: string,
   visiumHdBinSizeMicrometers: AnalysisEmbeddingVisiumHdBinSize | undefined,
 ): readonly EmbeddingCandidate[] {
   if (visiumHdBinSizeMicrometers === undefined) {
-    return EMBEDDING_CANDIDATES
+    return xeniumEmbeddingCandidates(baseUrl)
   }
 
-  const binDirectory = `binned_outputs/square_${String(
-    visiumHdBinSizeMicrometers,
-  ).padStart(3, '0')}um`
+  const manifest = datasetManifestFor(baseUrl)
+  const manifestBin =
+    manifest?.platform === 'visium-hd'
+      ? manifest.bins?.find((bin) => bin.size === visiumHdBinSizeMicrometers)
+      : undefined
+  const binDirectory =
+    manifestBin?.path ??
+    `binned_outputs/square_${String(visiumHdBinSizeMicrometers).padStart(3, '0')}um`
 
   return [
     ...EMBEDDING_CANDIDATES.map((candidate) => ({
@@ -238,6 +247,28 @@ function analysisEmbeddingCandidates(
       path: `${binDirectory}/${candidate.path}`,
     })),
     ...EMBEDDING_CANDIDATES,
+  ]
+}
+
+// A projection named in the dataset manifest replaces the searched paths for
+// that kind.
+function xeniumEmbeddingCandidates(baseUrl: string): readonly EmbeddingCandidate[] {
+  const overrides = (['umap', 'tsne'] as const).flatMap((kind) => {
+    const file = xeniumManifestFileFor(baseUrl, kind)
+    return file === undefined
+      ? []
+      : [{ kind, label: analysisEmbeddingLabel(kind), path: file.path }]
+  })
+
+  if (overrides.length === 0) {
+    return EMBEDDING_CANDIDATES
+  }
+
+  return [
+    ...overrides,
+    ...EMBEDDING_CANDIDATES.filter(
+      (candidate) => !overrides.some((override) => override.kind === candidate.kind),
+    ),
   ]
 }
 

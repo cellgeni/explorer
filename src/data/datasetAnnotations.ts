@@ -1,5 +1,5 @@
 import { cachedXeniumDataset } from './xeniumDatasetCache'
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileUrlFor } from './datasetFiles'
 import {
   readAnalysisZarrAnnotationGroupOptions,
   type AnalysisAnnotationGroupOption,
@@ -26,7 +26,7 @@ export async function loadDatasetAnnotationGroups(
 ): Promise<readonly AnnotationGroupOption[]> {
   throwIfAborted(options.signal)
   const groups = await readAnalysisZarrAnnotationGroupOptions(
-    datasetFileUrl(baseUrl, 'analysis.zarr.zip'),
+    datasetFileUrlFor(baseUrl, 'analysis'),
   )
   throwIfAborted(options.signal)
 

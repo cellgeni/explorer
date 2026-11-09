@@ -70,6 +70,16 @@ async function assertHttpRangeSupportUncached(
 
   const contentRange = response.headers.get('Content-Range')
 
+  const failedResponse = failedResponseMessage(
+    readTargetLabel(options.label),
+    url,
+    response.status,
+  )
+
+  if (failedResponse !== undefined) {
+    throw new Error(failedResponse)
+  }
+
   if (response.status !== 206) {
     throw new Error(
       `${readTargetLabel(options.label)} cannot be range-read. Expected HTTP 206 for Range: ${RANGE_PROBE_HEADER}, received HTTP ${response.status}. Configure the host to honor byte-range GET requests for ${url}.`,
@@ -81,6 +91,32 @@ async function assertHttpRangeSupportUncached(
       `${readTargetLabel(options.label)} cannot be range-read. The Range probe returned HTTP 206 but Content-Range was not exposed to the browser. Add Content-Range to Access-Control-Expose-Headers for ${url}.`,
     )
   }
+}
+
+// A 404, a 403 from buckets that deny listing, or a 5xx means the file could not
+// be fetched at all, so the host's Range support was never tested. The wording
+// keeps "Range probe received HTTP <status>" so createStructuredLoadError can
+// classify it.
+function failedResponseMessage(
+  label: string,
+  url: string,
+  status: number,
+): string | undefined {
+  const received = `The Range probe received HTTP ${status} for ${url}.`
+
+  if (status === 404) {
+    return `${label} was not found. ${received} Check that the file exists at this path.`
+  }
+
+  if (status === 403) {
+    return `${label} could not be read. ${received} The file is missing (buckets that deny listing return 403 for missing keys) or not publicly readable.`
+  }
+
+  if (status >= 500 && status <= 599) {
+    return `${label} could not be read. ${received} The host returned a server error, so Range support was not tested.`
+  }
+
+  return undefined
 }
 
 function rangeSupportCacheKey(url: string, label: string | undefined): string {

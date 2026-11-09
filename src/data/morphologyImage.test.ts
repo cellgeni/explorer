@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileUrl, setDatasetManifest } from './datasetFiles'
 import {
   loadCustomMorphologyLayer,
   loadMorphologyImage,
@@ -44,6 +44,35 @@ describe('morphology image loader', () => {
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
     )
+  })
+
+  it('opens the image a dataset manifest names without reading experiment.xenium', async () => {
+    const baseUrl = 'https://example.test/manifest-images/explorer.json'
+    const loader = {} as TiffPyramidLoader
+    const fetcher = vi.fn()
+    const openImage = vi.fn(async () => loader)
+    setDatasetManifest(baseUrl, {
+      platform: 'xenium',
+      url: baseUrl,
+      rootUrl: 'https://example.test/manifest-images',
+      files: {
+        morphology: {
+          path: 'images/he.ome.tif',
+          url: 'https://example.test/manifest-images/images/he.ome.tif',
+        },
+      },
+    })
+
+    try {
+      await expect(
+        loadMorphologyImage(baseUrl, { fetcher, openImage }),
+      ).resolves.toMatchObject({
+        url: 'https://example.test/manifest-images/images/he.ome.tif',
+      })
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
   })
 
   it('uses explicit candidates without probing image URLs', async () => {

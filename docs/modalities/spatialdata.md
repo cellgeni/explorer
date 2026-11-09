@@ -30,6 +30,12 @@ store is SpatialData when:
 A Zarr store without `spatialdata_attrs` falls through to the
 [OME-Zarr image](./image.md) path.
 
+A [dataset manifest](../dataset-manifest.md) with `"platform": "spatialdata"`
+names the store in `files.store` and skips the metadata check. Its
+`options` (`coordinateSystem`, `image`, `micrometersPerUnit`) are the starting
+selection: `spatialDataSelectionFor` returns them until a choice in the Dataset
+tab replaces them.
+
 ## Store Access
 
 `openSpatialDataStore` (`src/datasets/spatialDataCatalog.ts`) wraps the root in

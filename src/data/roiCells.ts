@@ -1,4 +1,4 @@
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import type { RoiSelectionInput } from './roiSelection'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
@@ -21,8 +21,8 @@ export async function loadDatasetRoiCells(
 ): Promise<readonly DatasetCell[]> {
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
 
-  await validateRangeSupport(datasetFileUrl(baseUrl, 'cells.parquet'), {
-    label: 'cells.parquet',
+  await validateRangeSupport(datasetFileUrlFor(baseUrl, 'cells'), {
+    label: datasetFileLabelFor(baseUrl, 'cells'),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
   throwIfAborted(options.signal)

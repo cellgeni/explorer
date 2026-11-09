@@ -26,6 +26,13 @@ URL checks, the `experiment.xenium` probe, and the root Zarr metadata probes.
   (`VISIUM_HD_SEGMENTED_OUTPUT_PROBES`) record which segmentation files exist.
 - The platform is `visium-hd` when at least one tier is present.
 
+A [dataset manifest](../dataset-manifest.md) with `"platform": "visium-hd"`
+skips the earlier probes. Its `files.bins` list replaces the tier probe (each
+listed bin's three files are checked with `HEAD`, and a missing one is an
+error), `files.segmentedOutputs` replaces the segmented-output probes, and
+`options.binSize` sets the first tier shown. `featureSlice` and
+`barcodeMappings` can also be relocated.
+
 `createSpatialDataset` lazy-imports `VisiumHdDataset`
 (`src/datasets/visiumHdDataset.ts`), a thin wrapper around
 `VisiumHdDatasetReaderController` (`src/datasets/visiumHdDatasetReaders.ts`).

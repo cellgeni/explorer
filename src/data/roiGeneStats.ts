@@ -1,5 +1,5 @@
 import { aggregateGex, gexFromCellFeatureMatrixH5 } from './gex'
-import { datasetFileUrl } from './datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
@@ -177,8 +177,8 @@ async function loadRoiGeneStatsMatrix(
         ? dataset.matrix(cellIds)
         : dataset.matrixForCells(cells),
       options
-        .validateRangeSupport(datasetFileUrl(baseUrl, 'cell_feature_matrix.zarr.zip'), {
-          label: 'cell_feature_matrix.zarr.zip',
+        .validateRangeSupport(datasetFileUrlFor(baseUrl, 'cellFeatureMatrix'), {
+          label: datasetFileLabelFor(baseUrl, 'cellFeatureMatrix'),
           ...(options.signal === undefined ? {} : { signal: options.signal }),
         })
         .then(() => {
@@ -206,7 +206,7 @@ async function loadRoiGeneStatsMatrix(
 
   try {
     return await options.readH5Matrix(
-      datasetFileUrl(baseUrl, 'cell_feature_matrix.h5'),
+      datasetFileUrlFor(baseUrl, 'cellFeatureMatrixH5'),
       cellIds,
       options.signal === undefined ? {} : { signal: options.signal },
     )
@@ -230,8 +230,8 @@ async function loadRoiGeneStatsMatrix(
     })
   }
 
-  await options.validateRangeSupport(datasetFileUrl(baseUrl, 'transcripts.parquet'), {
-    label: 'transcripts.parquet',
+  await options.validateRangeSupport(datasetFileUrlFor(baseUrl, 'transcripts'), {
+    label: datasetFileLabelFor(baseUrl, 'transcripts'),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
   throwIfAborted(options.signal)

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { assertHttpRangeSupport } from '../../data/rangeSupport'
 import {
   collectStructuredLoadErrors,
   createStructuredLoadError,
@@ -8,6 +9,19 @@ import {
 } from './loadErrorModel'
 
 describe('loadErrorModel', () => {
+  it('classifies dataset manifest errors before the HTTP status they mention', () => {
+    const error = Object.assign(
+      new Error('explorer.json: could not be read (HTTP 500).'),
+      { name: 'DatasetManifestError' },
+    )
+
+    expect(createStructuredLoadError('Dataset overview', error)).toMatchObject({
+      code: 'manifest',
+      title: 'Dataset manifest is invalid',
+      message: 'explorer.json: could not be read (HTTP 500).',
+    })
+  })
+
   it('explains incomplete Zarr stores instead of the downstream decode error', () => {
     const chunkError = Object.assign(
       new Error(
@@ -72,6 +86,77 @@ describe('loadErrorModel', () => {
       title: 'cells.parquet decode failed',
       detail: 'RangeError',
     })
+  })
+
+  it('classifies a range-probed 404 or 403 as a missing file, not blocked Range', async () => {
+    const notFound = await rangeProbeError(404)
+    const forbidden = await rangeProbeError(403)
+
+    expect(createStructuredLoadError('Dataset overview', notFound)).toMatchObject({
+      code: 'http',
+      title: 'File not found or not readable',
+      message: readErrorMessage(notFound),
+      action: 'Check the file path, then reload.',
+    })
+    expect(createStructuredLoadError('Dataset overview', forbidden)).toMatchObject({
+      code: 'http',
+      title: 'File not found or not readable',
+      message: readErrorMessage(forbidden),
+      action:
+        'Check the file path and that the object is publicly readable. Buckets that deny listing return HTTP 403 for missing files.',
+    })
+
+    // Earlier probe wording and the TIFF tile reader still say "Expected HTTP 206".
+    for (const message of [
+      'cells-renamed.parquet cannot be range-read. Expected HTTP 206 for Range: bytes=0-0, received HTTP 404. Configure the host to honor byte-range GET requests for https://example.test/xenium/cells-renamed.parquet.',
+      'Expected HTTP 206 for TIFF Range request, received 404.',
+    ]) {
+      expect(
+        createStructuredLoadError('Morphology image', new Error(message)),
+      ).toMatchObject({ code: 'http', title: 'File not found or not readable' })
+    }
+  })
+
+  it('classifies a range-probed 5xx as a host server error, not blocked Range', async () => {
+    const serverErrorAction =
+      'The host failed to serve the file. Retry; if it keeps failing, check the server, gateway, or object store hosting the dataset.'
+
+    for (const error of [
+      await rangeProbeError(500),
+      await rangeProbeError(503),
+      new Error('Expected HTTP 206 for TIFF Range request, received 502.'),
+    ]) {
+      expect(createStructuredLoadError('Dataset overview', error)).toMatchObject({
+        code: 'http',
+        title: 'Host server error',
+        message: readErrorMessage(error),
+        action: serverErrorAction,
+      })
+    }
+    expect(createStructuredLoadError('Annotations', new Error('HTTP 503'))).toMatchObject(
+      {
+        code: 'http',
+        title: 'HTTP 503 response',
+        action: serverErrorAction,
+      },
+    )
+  })
+
+  it('keeps range-not-supported for hosts that ignore or hide Range responses', async () => {
+    const ignoredRange = await rangeProbeError(200)
+    const hiddenContentRange = await rangeProbeError(206)
+
+    for (const error of [ignoredRange, hiddenContentRange]) {
+      expect(createStructuredLoadError('Dataset overview', error)).toMatchObject({
+        code: 'range-not-supported',
+        title: 'Byte-range requests blocked',
+        message: readErrorMessage(error),
+      })
+    }
+    expect(readErrorMessage(ignoredRange)).toContain('received HTTP 200')
+    expect(readErrorMessage(hiddenContentRange)).toContain(
+      'Content-Range was not exposed',
+    )
   })
 
   it('classifies specialized manifest, decode, and unsupported matrix errors', () => {
@@ -193,3 +278,15 @@ describe('loadErrorModel', () => {
     expect(readErrorMessage({})).toBe('Unknown dataset error')
   })
 })
+
+// Runs the real Range probe against a stub response without Content-Range, so
+// these tests break if its wording drifts from the classifier.
+async function rangeProbeError(status: number): Promise<unknown> {
+  return assertHttpRangeSupport('https://example.test/xenium/cells-renamed.parquet', {
+    fetcher: async () => new Response(null, { status }),
+    label: 'cells-renamed.parquet',
+  }).then(
+    () => new Error(`Range probe unexpectedly passed for HTTP ${status}`),
+    (error: unknown) => error,
+  )
+}

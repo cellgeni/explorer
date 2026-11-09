@@ -4,7 +4,12 @@ import {
   omeZarrImageRootUrl,
   openOmeZarrImage,
 } from '../zarr/omeZarrLoader'
-import { datasetFileUrl } from './datasetFiles'
+import {
+  datasetFileLabelFor,
+  datasetFileUrl,
+  datasetFileUrlFor,
+  xeniumManifestFileFor,
+} from './datasetFiles'
 import type { FallbackNotifier } from './fallbackNotice'
 import type { ImagePyramidChannelInfo, ImagePyramidLoader } from './imagePyramid'
 
@@ -42,8 +47,6 @@ export interface LoadCustomMorphologyLayerOptions {
   readonly signal?: AbortSignal
 }
 
-const EXPERIMENT_MANIFEST_FILE = 'experiment.xenium'
-
 const MORPHOLOGY_IMAGE_PATH_KEY_GROUPS = [
   ['morphology_mip_filepath', 'morphology_mip_filepaths'],
   ['morphology_focus_filepath', 'morphology_focus_filepaths'],
@@ -56,9 +59,12 @@ export async function loadMorphologyImage(
 ): Promise<MorphologyImage> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
   const openImage = options.openImage ?? openImagePyramid
+  const manifestImage = xeniumManifestFileFor(baseUrl, 'morphology')
   const candidates =
     options.candidates ??
-    (await loadMorphologyImageCandidatesFromManifest(baseUrl, fetcher, options.signal))
+    (manifestImage === undefined
+      ? await loadMorphologyImageCandidatesFromManifest(baseUrl, fetcher, options.signal)
+      : [manifestImage.url])
 
   const candidate = candidates[0]
 
@@ -321,13 +327,13 @@ export async function loadMorphologyImageCandidatesFromManifest(
   fetcher: typeof fetch,
   signal: AbortSignal | undefined,
 ): Promise<readonly string[]> {
-  const url = datasetFileUrl(baseUrl, EXPERIMENT_MANIFEST_FILE)
+  const url = datasetFileUrlFor(baseUrl, 'experiment')
   const response =
     signal === undefined ? await fetcher(url) : await fetcher(url, { signal })
 
   if (!response.ok) {
     throw new Error(
-      `Unable to load ${EXPERIMENT_MANIFEST_FILE}: HTTP ${response.status}.`,
+      `Unable to load ${datasetFileLabelFor(baseUrl, 'experiment')}: HTTP ${response.status}.`,
     )
   }
 

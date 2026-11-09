@@ -80,6 +80,11 @@ Enter a source in the `Dataset or image URL` field:
   table annotating a shapes or labels element, and optionally image elements.
 - Image-only: direct OME-TIFF, TIFF, OME-Zarr, or validated NDPI URL.
 
+Files do not have to keep these names. A dataset manifest, `explorer.json` in
+the dataset folder (or any `.json` URL entered directly), can name the
+platform, point to renamed or moved files, and set the genes, layers, and image
+channels shown on first load. See [Dataset manifest](docs/dataset-manifest.md).
+
 Because data is read directly by the browser, hosted datasets must support CORS
 and HTTP byte-range requests for large binary assets. The in-app
 `Diagnose Dataset` action checks the detected platform and the key assets for
@@ -108,6 +113,9 @@ The full index is in [docs/README.md](docs/README.md).
   for Xenium, Visium HD, H5AD, SpatialData, and image-only sources, plus HTTP
   requirements
   and quick validation commands.
+- [Dataset manifest](docs/dataset-manifest.md): the optional `explorer.json`
+  that maps renamed files and sets first-load display defaults, with a JSON
+  Schema in `public/schemas/`.
 - [Image-only and GeoJSON annotations](docs/image-only-and-geojson.md): direct
   image URL support, platform gating, and GeoJSON shape import/export rules.
 - [S3/CORS hosting playbook](docs/s3-cors-playbook.md): exact CORS headers,
