@@ -336,7 +336,7 @@
         "cellBoundaryOpacity": { "$ref": "#/$defs/opacity" },
         "transcripts": {
           "type": "boolean",
-          "description": "Show the transcript overlay (Xenium)."
+          "description": "Show the transcript overlay (Xenium, Atera)."
         }
       },
       "additionalProperties": false

@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
 import {
+  array,
+  categorical,
+  group,
+  json,
+  strings,
+  typed,
+  v2Array,
+} from '../test/ateraFixtures'
+import {
   AteraDataset,
   isAteraTableMetadataKey,
   zarrNodesFromMetadataKeys,
@@ -427,113 +436,3 @@ describe('Atera matrix metadata selection', () => {
     ])
   })
 })
-
-type Dtype = '<i8' | '<i4' | '<u4' | '<f4' | '<f8' | '|u1' | '|i1' | '|b1'
-
-function v2Array(dtype: string, shape: readonly number[], chunks: readonly number[]) {
-  return {
-    zarr_format: 2,
-    shape,
-    chunks,
-    dtype,
-    compressor: null,
-    fill_value: 0,
-    order: 'C',
-    filters: null,
-  }
-}
-
-function group(
-  entries: Map<string, Uint8Array>,
-  path: string,
-  attrs: Readonly<Record<string, unknown>>,
-): void {
-  const prefix = path === '' ? '' : `${path}/`
-  entries.set(`${prefix}.zgroup`, json({ zarr_format: 2 }))
-  entries.set(`${prefix}.zattrs`, json(attrs))
-}
-
-function array(
-  entries: Map<string, Uint8Array>,
-  path: string,
-  dtype: Dtype,
-  values: readonly number[],
-  shape: readonly number[] = [values.length],
-): void {
-  entries.set(`${path}/.zarray`, json(v2Array(dtype, shape, shape)))
-  entries.set(`${path}/${shape.map(() => '0').join('.')}`, typed(dtype, values))
-}
-
-function strings(
-  entries: Map<string, Uint8Array>,
-  path: string,
-  values: readonly string[],
-): void {
-  entries.set(
-    `${path}/.zarray`,
-    json({
-      ...v2Array('|O', [values.length], [values.length]),
-      filters: [{ id: 'vlen-utf8' }],
-    }),
-  )
-  entries.set(`${path}/0`, vlenUtf8(values))
-}
-
-function categorical(
-  entries: Map<string, Uint8Array>,
-  path: string,
-  codes: readonly number[],
-  categories: readonly string[],
-): void {
-  group(entries, path, { 'encoding-type': 'categorical', ordered: false })
-  array(entries, `${path}/codes`, '|i1', codes)
-  strings(entries, `${path}/categories`, categories)
-}
-
-function typed(dtype: Dtype, values: readonly number[]): Uint8Array {
-  switch (dtype) {
-    case '<i8':
-      return bytes(BigInt64Array.from(values, (value) => BigInt(value)))
-    case '<i4':
-      return bytes(Int32Array.from(values))
-    case '<u4':
-      return bytes(Uint32Array.from(values))
-    case '<f4':
-      return bytes(Float32Array.from(values))
-    case '<f8':
-      return bytes(Float64Array.from(values))
-    case '|i1':
-      return bytes(Int8Array.from(values))
-    case '|u1':
-    case '|b1':
-      return Uint8Array.from(values)
-  }
-}
-
-// numcodecs VLenUTF8: item count, then each item's byte length and bytes.
-function vlenUtf8(values: readonly string[]): Uint8Array {
-  const encoded = values.map((value) => new TextEncoder().encode(value))
-  const output = new Uint8Array(
-    4 + encoded.reduce((sum, item) => sum + 4 + item.length, 0),
-  )
-  const view = new DataView(output.buffer)
-  let offset = 0
-  view.setUint32(offset, values.length, true)
-  offset += 4
-
-  for (const item of encoded) {
-    view.setUint32(offset, item.length, true)
-    output.set(item, offset + 4)
-    offset += 4 + item.length
-  }
-
-  return output
-}
-
-function bytes(view: ArrayBufferView): Uint8Array {
-  return new Uint8Array(view.buffer, view.byteOffset, view.byteLength)
-}
-
-function json(value: unknown): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(value))
-}

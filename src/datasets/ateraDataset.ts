@@ -23,6 +23,12 @@ import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 import { openImagePyramid } from '../data/morphologyImage'
 import type { RoiSelectionInput } from '../data/roiSelection'
+import type {
+  TranscriptAggregateResult,
+  TranscriptCapabilities,
+  TranscriptViewportResult,
+} from '../data/transcriptOverlay'
+import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { cachedZipFileStoreWithEntries } from '../zarr/cachedZipStore'
 import { consolidatedZarrStore } from '../zarr/zarrStores'
 import {
@@ -40,6 +46,11 @@ import {
   type AteraPolygonGrid,
   type AteraPolygonGridTile,
 } from './ateraFormat'
+import {
+  AteraTranscripts,
+  type AteraTranscriptAggregateOptions,
+  type AteraTranscriptViewportOptions,
+} from './ateraTranscripts'
 import {
   AnnDataH5adDataset,
   type AnnDataObsAccess,
@@ -160,6 +171,7 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   private cscPromise: Promise<AteraCscMatrix> | null = null
   private cellsPromise: Promise<AteraCellsStore> | null = null
   private imagePromise: Promise<ImagePyramidLoader | null> | null = null
+  private transcriptReader: AteraTranscripts | null = null
   private readonly geneColumns = new Map<string, Promise<AteraGeneColumn>>()
   private readonly polygonTiles = new Map<string, Promise<readonly AteraTileElement[]>>()
 
@@ -181,7 +193,7 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       units: ateraUnits(experiment),
       extent: tableMeta.extent,
       capabilities: {
-        transcripts: false,
+        transcripts: true,
         cellBoundaries: true,
         pyramidImage: (await this.morphologyUrl()) !== null,
         multiChannel: true,
@@ -406,6 +418,25 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
             ...(row === undefined ? {} : { cellFeatureMatrixRow: row }),
           }
     })
+  }
+
+  // Transcripts are read per selected gene; see AteraTranscripts.
+  async transcriptCapabilities(): Promise<TranscriptCapabilities> {
+    return this.transcriptsReader().capabilities()
+  }
+
+  async transcriptAggregates(
+    bbox: BBox,
+    options: AteraTranscriptAggregateOptions,
+  ): Promise<TranscriptAggregateResult> {
+    return this.transcriptsReader().aggregates(bbox, options)
+  }
+
+  async transcriptViewport(
+    bbox: BBox,
+    options: AteraTranscriptViewportOptions,
+  ): Promise<TranscriptViewportResult> {
+    return this.transcriptsReader().viewport(bbox, options)
   }
 
   async image(): Promise<ImageSource | null> {
@@ -869,6 +900,22 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     return elements
   }
 
+  private transcriptsReader(): AteraTranscripts {
+    this.transcriptReader ??= new AteraTranscripts({
+      binned: async () => ({
+        url: await this.fileUrl('binnedTranscripts'),
+        label: await this.fileLabel('binnedTranscripts'),
+      }),
+      transcripts: async () => ({
+        url: await this.fileUrl('transcripts'),
+        label: await this.fileLabel('transcripts'),
+      }),
+      openZipStore: this.openZipStore,
+    })
+
+    return this.transcriptReader
+  }
+
   private imageLoader(): Promise<ImagePyramidLoader | null> {
     if (this.imagePromise === null) {
       this.imagePromise = this.morphologyUrl()
@@ -1028,28 +1075,6 @@ function evictOldest<Key, Value>(cache: Map<Key, Value>, limit: number): void {
 
     cache.delete(oldest.value)
   }
-}
-
-async function mapWithConcurrency<Item, Result>(
-  items: readonly Item[],
-  concurrency: number,
-  task: (item: Item) => Promise<Result>,
-): Promise<Result[]> {
-  const results: Result[] = new Array(items.length)
-  let next = 0
-
-  async function worker(): Promise<void> {
-    while (next < items.length) {
-      const index = next
-      next += 1
-      results[index] = await task(items[index] as Item)
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
-  )
-  return results
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

@@ -243,6 +243,271 @@ export function ateraMaxPolygonExtent(bboxes: ArrayLike<number>): number {
   return extent
 }
 
+// binned_transcripts.zarr.zip and transcripts.zarr.zip both split the slide
+// into `grid_size` µm square tiles keyed `<x>,<y>` (keys can be negative), at
+// `origin` when the store gives one.
+export interface AteraTranscriptGrid {
+  readonly tileSize: number
+  readonly originX: number
+  readonly originY: number
+  readonly tiles: readonly AteraTranscriptGridTile[]
+}
+
+export interface AteraTranscriptGridTile {
+  readonly key: string
+  readonly x: number
+  readonly y: number
+}
+
+export function parseAteraTranscriptGrid(
+  attrs: unknown,
+  label: string,
+): AteraTranscriptGrid {
+  const record = isRecord(attrs) ? attrs : {}
+  const tileSize = positiveNumber(
+    Array.isArray(record.grid_size) ? record.grid_size[0] : record.grid_size,
+  )
+  const keys = Array.isArray(record.grid_keys) ? record.grid_keys : null
+
+  if (tileSize === undefined || keys === null) {
+    throw new Error(`${label} is missing grid_size or grid_keys.`)
+  }
+
+  const origin = isRecord(record.origin) ? record.origin : {}
+  const tiles: AteraTranscriptGridTile[] = []
+
+  for (const key of keys) {
+    const tile = parseTileKey(key)
+
+    if (tile !== null) {
+      tiles.push(tile)
+    }
+  }
+
+  return {
+    tileSize,
+    originX: finiteNumber(origin.x) ?? 0,
+    originY: finiteNumber(origin.y) ?? 0,
+    tiles,
+  }
+}
+
+export function ateraTranscriptGridTilesForBbox(
+  grid: AteraTranscriptGrid,
+  bbox: BBox,
+): readonly AteraTranscriptGridTile[] {
+  return grid.tiles.filter((tile) => {
+    const minX = grid.originX + tile.x * grid.tileSize
+    const minY = grid.originY + tile.y * grid.tileSize
+
+    return (
+      minX <= bbox.maxX &&
+      minX + grid.tileSize >= bbox.minX &&
+      minY <= bbox.maxY &&
+      minY + grid.tileSize >= bbox.minY
+    )
+  })
+}
+
+// Store gene indexes of the requested genes, matched exactly and then ignoring
+// case. Both transcript stores list `gene_names` in matrix feature order.
+export function ateraGeneIndexes(
+  geneNames: readonly string[],
+  featureNames: readonly string[],
+): readonly { readonly index: number; readonly name: string }[] {
+  const indexByName = new Map<string, number>()
+  const indexByUpperName = new Map<string, number>()
+
+  geneNames.forEach((name, index) => {
+    indexByName.set(name, index)
+
+    if (!indexByUpperName.has(name.toUpperCase())) {
+      indexByUpperName.set(name.toUpperCase(), index)
+    }
+  })
+
+  const genes: { index: number; name: string }[] = []
+  const seen = new Set<number>()
+
+  for (const featureName of featureNames) {
+    const index =
+      indexByName.get(featureName) ?? indexByUpperName.get(featureName.toUpperCase())
+    const name = index === undefined ? undefined : geneNames[index]
+
+    if (index !== undefined && name !== undefined && !seen.has(index)) {
+      seen.add(index)
+      genes.push({ index, name })
+    }
+  }
+
+  return genes
+}
+
+const ATERA_DENSITY_MAX_LEVEL = 16
+
+// The finest density bins that fit: the native bin size doubles until the box
+// spans at most `maxBins` bins. Bins are aligned to the coordinate origin, so
+// panning keeps bin edges in place.
+export function ateraDensityBinSize(
+  bbox: BBox,
+  nativeBinSize: number,
+  maxBins: number,
+): { readonly level: number; readonly binSize: number } {
+  const limit = Math.max(1, Math.floor(maxBins))
+  const base = Math.max(Number.EPSILON, nativeBinSize)
+  let level = 0
+
+  while (level < ATERA_DENSITY_MAX_LEVEL) {
+    const binSize = base * 2 ** level
+
+    if (ateraDensityBinCount(bbox, binSize) <= limit) {
+      return { level, binSize }
+    }
+
+    level += 1
+  }
+
+  return { level, binSize: base * 2 ** level }
+}
+
+function ateraDensityBinCount(bbox: BBox, binSize: number): number {
+  const columns = Math.floor(bbox.maxX / binSize) - Math.floor(bbox.minX / binSize) + 1
+  const rows = Math.floor(bbox.maxY / binSize) - Math.floor(bbox.minY / binSize) + 1
+  return columns * rows
+}
+
+// One gene's 5 µm counts in one binned_transcripts tile: a CSR matrix whose
+// rows are y bins and columns x bins, starting at the tile corner.
+export interface AteraBinnedTile {
+  readonly x: number
+  readonly y: number
+  readonly rows: number
+  readonly cols: number
+  readonly indptr: ArrayLike<number>
+  readonly indices: ArrayLike<number>
+  readonly data: ArrayLike<number>
+}
+
+export interface AteraDensityBin {
+  readonly binX: number
+  readonly binY: number
+  count: number
+  readonly featureCounts: Map<string, number>
+}
+
+// Sums native bins into `binSize` squares covering the box, so edge squares
+// are whole. `visibleCount` counts native bins whose centre is in the box.
+export function aggregateAteraBinnedTiles(input: {
+  readonly genes: readonly {
+    readonly name: string
+    readonly tiles: readonly AteraBinnedTile[]
+  }[]
+  readonly grid: Pick<AteraTranscriptGrid, 'tileSize' | 'originX' | 'originY'>
+  readonly bbox: BBox
+  readonly binSize: number
+}): {
+  readonly bins: ReadonlyMap<string, AteraDensityBin>
+  readonly visibleCount: number
+} {
+  const { bbox, binSize, grid } = input
+  const minBinX = Math.floor(bbox.minX / binSize)
+  const maxBinX = Math.floor(bbox.maxX / binSize)
+  const minBinY = Math.floor(bbox.minY / binSize)
+  const maxBinY = Math.floor(bbox.maxY / binSize)
+  const coveredMinY = minBinY * binSize
+  const coveredMaxY = (maxBinY + 1) * binSize
+  const bins = new Map<string, AteraDensityBin>()
+  let visibleCount = 0
+
+  for (const gene of input.genes) {
+    for (const tile of gene.tiles) {
+      const tileMinX = grid.originX + tile.x * grid.tileSize
+      const tileMinY = grid.originY + tile.y * grid.tileSize
+      const binWidth = grid.tileSize / Math.max(1, tile.cols)
+      const binHeight = grid.tileSize / Math.max(1, tile.rows)
+      const firstRow = Math.max(0, Math.floor((coveredMinY - tileMinY) / binHeight))
+      const lastRow = Math.min(
+        tile.rows - 1,
+        Math.floor((coveredMaxY - tileMinY) / binHeight),
+      )
+
+      for (let row = firstRow; row <= lastRow; row += 1) {
+        const y = tileMinY + (row + 0.5) * binHeight
+        const binY = Math.floor(y / binSize)
+
+        if (binY < minBinY || binY > maxBinY) {
+          continue
+        }
+
+        const start = tile.indptr[row] ?? 0
+        const end = tile.indptr[row + 1] ?? start
+        const rowInBox = y >= bbox.minY && y <= bbox.maxY
+
+        for (let pointer = start; pointer < end; pointer += 1) {
+          const count = tile.data[pointer] ?? 0
+
+          if (count <= 0) {
+            continue
+          }
+
+          const x = tileMinX + ((tile.indices[pointer] ?? 0) + 0.5) * binWidth
+          const binX = Math.floor(x / binSize)
+
+          if (binX < minBinX || binX > maxBinX) {
+            continue
+          }
+
+          if (rowInBox && x >= bbox.minX && x <= bbox.maxX) {
+            visibleCount += count
+          }
+
+          const key = `${binX},${binY}`
+          let bin = bins.get(key)
+
+          if (bin === undefined) {
+            bin = { binX, binY, count: 0, featureCounts: new Map() }
+            bins.set(key, bin)
+          }
+
+          bin.count += count
+          bin.featureCounts.set(
+            gene.name,
+            (bin.featureCounts.get(gene.name) ?? 0) + count,
+          )
+        }
+      }
+    }
+  }
+
+  return { bins, visibleCount }
+}
+
+// transcripts.zarr.zip `cell_id` holds (prefix, dataset suffix) pairs; both
+// are UINT32_MAX for transcripts outside cells.
+const ATERA_UNASSIGNED_CELL_PART = 0xffff_ffff
+
+export function isAteraUnassignedCell(prefix: number, suffix: number): boolean {
+  return prefix === ATERA_UNASSIGNED_CELL_PART || suffix === ATERA_UNASSIGNED_CELL_PART
+}
+
+// IEEE 754 half-precision bits to a number. `quality_score` is float16, which
+// is read as raw uint16 so browsers without Float16Array can decode it.
+export function halfFloatToNumber(bits: number): number {
+  const sign = bits & 0x8000 ? -1 : 1
+  const exponent = (bits >> 10) & 0x1f
+  const fraction = bits & 0x3ff
+
+  if (exponent === 0) {
+    return sign * 2 ** -14 * (fraction / 1024)
+  }
+
+  if (exponent === 0x1f) {
+    return fraction === 0 ? sign * Number.POSITIVE_INFINITY : Number.NaN
+  }
+
+  return sign * 2 ** (exponent - 15) * (1 + fraction / 1024)
+}
+
 export function bboxesIntersect(left: BBox, right: BBox): boolean {
   return (
     left.minX <= right.maxX &&
@@ -271,6 +536,10 @@ function positiveNumber(value: unknown): number | undefined {
   return typeof number === 'number' && Number.isFinite(number) && number > 0
     ? number
     : undefined
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 function nonEmptyString(value: unknown): string | undefined {

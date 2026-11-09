@@ -331,7 +331,7 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
   await expect(genesPanel.getByLabel('Metadata track')).toContainText('n_genes')
 })
 
-test('loads the hosted Atera kidney run with boundaries, genes, and cell types @live', async ({
+test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and cell types @live', async ({
   page,
 }) => {
   test.setTimeout(240_000)
@@ -349,7 +349,7 @@ test('loads the hosted Atera kidney run with boundaries, genes, and cell types @
   await expect(page.getByText(/Atera ready: 93,864 cells, 18,050 genes/)).toBeVisible({
     timeout: ATERA_LOAD_TIMEOUT_MS,
   })
-  await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Transcripts' })).toBeVisible()
   await expect(page.getByText('Morphology image ready')).toBeVisible({
     timeout: ATERA_LOAD_TIMEOUT_MS,
   })
@@ -382,6 +382,39 @@ test('loads the hosted Atera kidney run with boundaries, genes, and cell types @
     'azimuth_broad: Epithelial cell',
     { timeout: ATERA_LOAD_TIMEOUT_MS },
   )
+
+  // With UMOD selected, Atera transcripts are its density from
+  // binned_transcripts.zarr.zip; for all features they are cell-summary squares.
+  await page.getByRole('tab', { name: 'Transcripts' }).click()
+  const transcriptsPanel = page.locator('#hud-panel-transcripts')
+  const transcriptSummary = transcriptsPanel.getByLabel('Transcript overlay summary')
+  await page.getByRole('checkbox', { name: 'Show transcripts' }).check()
+  await expect(transcriptsPanel).toContainText(
+    /Showing native 1 selected-feature density squares from binned_transcripts\.zarr\.zip/,
+    { timeout: ATERA_LOAD_TIMEOUT_MS },
+  )
+  await expect(transcriptSummary).toContainText('Per-gene LOD + exact')
+  await expect(transcriptSummary).toContainText(/Rendered[1-9][0-9,]* squares/)
+  await expect(page.getByRole('checkbox', { name: 'Gene-only calls' })).toBeDisabled()
+
+  await transcriptsPanel.getByLabel('Feature filter').selectOption('all')
+  await expect(transcriptsPanel).toContainText('Set Feature filter to Selected genes', {
+    timeout: ATERA_LOAD_TIMEOUT_MS,
+  })
+  await expect(transcriptSummary).toContainText('Cell summary')
+
+  // Zoomed in on UMOD-rich tubules, the selected-gene estimate fits the
+  // exact budget and points come from transcripts.zarr.zip.
+  await page.goto(
+    `/#xv=1&dataset=${encodeURIComponent(ATERA_REFERENCE_URL)}&genes=UMOD&view=8716%2C-5133%2C0%2C2&tab=transcripts&tx=1&txFilter=selected`,
+  )
+  await page.reload()
+  await expect(transcriptsPanel.locator('.status-chip')).toHaveText(
+    /^[1-9][0-9,]* points$/,
+    { timeout: ATERA_LOAD_TIMEOUT_MS },
+  )
+  await expect(transcriptSummary).toContainText(/Rendered[1-9][0-9,]*/)
+  await expect(transcriptsPanel.getByLabel('Top transcript groups')).toContainText('UMOD')
 })
 
 test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell panels @live', async ({

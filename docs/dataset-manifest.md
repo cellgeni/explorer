@@ -127,8 +127,8 @@ All entries are optional. Leave one out to use the path in
 | `cells`                | `cells.zarr.zip`                                  | Cell and nucleus boundaries                              |
 | `cellFeatureMatrix`    | `cell_feature_matrix.zarr.zip`                    | Required to load                                         |
 | `cscCellFeatureMatrix` | `csc_cell_feature_matrix.zarr.zip`                | Selected-gene overlays                                   |
-| `transcripts`          | `transcripts.zarr.zip`                            | Accepted for completeness; not read yet                  |
-| `binnedTranscripts`    | `binned_transcripts.zarr.zip`                     | Accepted for completeness; not read yet                  |
+| `transcripts`          | `transcripts.zarr.zip`                            | Exact transcript points for selected genes               |
+| `binnedTranscripts`    | `binned_transcripts.zarr.zip`                     | Selected-gene transcript density                         |
 | `morphology`           | `images.morphology_2d_filepath` in the experiment | Any OME-TIFF or OME-Zarr image                           |
 
 ### Visium HD
@@ -187,7 +187,7 @@ Display settings applied each time the dataset loads.
 | `imageOpacity`        | `Dataset image opacity` | 0–1                                                                        |
 | `cellFillOpacity`     | `Cell fill opacity`     | 0–1                                                                        |
 | `cellBoundaryOpacity` | `Cell boundary opacity` | 0–1                                                                        |
-| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium)                                                  |
+| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium, Atera)                                           |
 
 How defaults combine with other settings:
 

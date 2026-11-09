@@ -26,6 +26,10 @@ export interface TranscriptCapabilities {
   readonly nativeZarr: boolean
   readonly rawParquetError?: string
   readonly nativeZarrError?: string
+  // Set for outputs read per selected gene (Atera): `nativeZarr` is per-gene
+  // density, and `geneRanges` is exact points from each gene's rows.
+  readonly geneRanges?: boolean
+  readonly geneRangesError?: string
 }
 
 export interface TranscriptPoint {
@@ -112,6 +116,10 @@ export interface TranscriptAggregateResult {
   readonly source: 'native-zarr'
   readonly selectedFeatureNames: readonly string[]
   readonly scaleMax?: number
+  // Selected-gene transcripts inside the box, for per-gene outputs.
+  readonly visibleTranscriptCount?: number
+  // File the bins came from, when it is not transcripts.zarr.zip.
+  readonly sourceFile?: string
 }
 
 export interface TranscriptViewportOptions {
@@ -178,6 +186,8 @@ export interface TranscriptLodPlanningOptions {
   readonly hasRawParquet: boolean
   readonly hasNativeZarr: boolean
   readonly hasSelectedFeatureFilter?: boolean
+  // Defaults to either source; per-gene outputs read exact points elsewhere.
+  readonly hasExactSource?: boolean
 }
 
 export async function loadDatasetTranscriptCapabilities(
@@ -441,7 +451,8 @@ export function planTranscriptLod(
         }
   }
 
-  const hasExactSource = options.hasRawParquet || options.hasNativeZarr
+  const hasExactSource =
+    options.hasExactSource ?? (options.hasRawParquet || options.hasNativeZarr)
   const hasSelectedFeatureFilter = options.hasSelectedFeatureFilter !== false
 
   if (

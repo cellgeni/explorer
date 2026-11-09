@@ -20,4 +20,19 @@ describe('transcriptLabels', () => {
       'No transcripts',
     )
   })
+
+  it('labels per-gene transcript outputs', () => {
+    const perGene = { rawParquet: false, nativeZarr: true, geneRanges: true }
+
+    expect(transcriptCapabilityLabel(perGene)).toBe('Per-gene LOD + exact')
+    expect(transcriptCapabilityLabel({ ...perGene, geneRanges: false })).toBe(
+      'Per-gene LOD',
+    )
+    expect(transcriptCapabilityLabel({ ...perGene, nativeZarr: false })).toBe(
+      'Per-gene exact',
+    )
+    expect(
+      transcriptCapabilityLabel({ ...perGene, nativeZarr: false, geneRanges: false }),
+    ).toBe('No transcripts')
+  })
 })

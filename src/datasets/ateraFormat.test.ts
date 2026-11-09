@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
 import {
+  aggregateAteraBinnedTiles,
+  ateraDensityBinSize,
+  ateraGeneIndexes,
   ateraMaxPolygonExtent,
   ateraPolygonGridLevelForBbox,
   ateraPolygonGridTilesForBbox,
+  ateraTranscriptGridTilesForBbox,
   decodeAteraGriddedPolygons,
+  halfFloatToNumber,
+  isAteraUnassignedCell,
   parseAteraExperiment,
   parseAteraPolygonGridAttrs,
+  parseAteraTranscriptGrid,
+  type AteraBinnedTile,
 } from './ateraFormat'
 
 function bbox(minX: number, minY: number, maxX: number, maxY: number): BBox {
@@ -171,5 +179,160 @@ describe('Atera gridded polygon sets', () => {
 
     expect(polygons).toHaveLength(1)
     expect(polygons[0]?.ring[1]).toEqual({ x: 255, y: 0 })
+  })
+})
+
+describe('Atera transcript grids', () => {
+  it('reads tile keys, including negative ones, and the origin', () => {
+    const grid = parseAteraTranscriptGrid(
+      { grid_size: 2000, grid_keys: ['-1,2', '0,0', 'bad'], origin: { x: 10, y: -5 } },
+      'binned',
+    )
+
+    expect(grid).toEqual({
+      tileSize: 2000,
+      originX: 10,
+      originY: -5,
+      tiles: [
+        { key: '-1,2', x: -1, y: 2 },
+        { key: '0,0', x: 0, y: 0 },
+      ],
+    })
+    expect(parseAteraTranscriptGrid({ grid_size: [500], grid_keys: [] }, 'g')).toEqual({
+      tileSize: 500,
+      originX: 0,
+      originY: 0,
+      tiles: [],
+    })
+    expect(() => parseAteraTranscriptGrid({ grid_keys: [] }, 'transcripts grid')).toThrow(
+      'transcripts grid is missing grid_size or grid_keys.',
+    )
+  })
+
+  it('selects the tiles a box touches', () => {
+    const grid = parseAteraTranscriptGrid(
+      { grid_size: 2000, grid_keys: ['-1,2', '0,2', '1,2', '0,0'] },
+      'grid',
+    )
+
+    expect(
+      ateraTranscriptGridTilesForBbox(grid, bbox(-100, 4100, 500, 4200)).map(
+        (tile) => tile.key,
+      ),
+    ).toEqual(['-1,2', '0,2'])
+  })
+
+  it('matches genes exactly, then ignoring case, once each', () => {
+    const genes = ['UMOD', 'NPHS1', 'umod-like', 'Malat1']
+
+    expect(
+      ateraGeneIndexes(genes, ['NPHS1', 'malat1', 'UMOD', 'umod', 'MISSING']),
+    ).toEqual([
+      { index: 1, name: 'NPHS1' },
+      { index: 3, name: 'Malat1' },
+      { index: 0, name: 'UMOD' },
+    ])
+  })
+})
+
+describe('Atera binned transcript density', () => {
+  it('doubles the bin size until the box spans at most the bin budget', () => {
+    expect(ateraDensityBinSize(bbox(0, 0, 100, 100), 5, 1_500)).toEqual({
+      level: 0,
+      binSize: 5,
+    })
+    // 16 × 8 mm: 320 µm bins span 51 × 26 = 1,326 squares; 160 µm would be 5,151.
+    expect(ateraDensityBinSize(bbox(0, 0, 16_000, 8_000), 5, 1_500)).toEqual({
+      level: 6,
+      binSize: 320,
+    })
+    expect(ateraDensityBinSize(bbox(0, 0, 16_000, 8_000), 5, 1).binSize).toBe(5 * 2 ** 12)
+  })
+
+  // Tiles are 20 µm with 4×4 native 5 µm bins; tile (1,0) sits right of (0,0).
+  //   GENEA tile (0,0): row 0 cols 0 and 3 → 2 and 1; row 2 col 1 → 4
+  //   GENEB tile (0,0): row 0 col 0 → 3
+  //   GENEA tile (1,0): row 0 col 0 → 5
+  const grid = { tileSize: 20, originX: 0, originY: 0 }
+  const geneATile: AteraBinnedTile = {
+    x: 0,
+    y: 0,
+    rows: 4,
+    cols: 4,
+    indptr: [0, 2, 2, 3, 3],
+    indices: [0, 3, 1],
+    data: [2, 1, 4],
+  }
+  const geneBTile: AteraBinnedTile = {
+    ...geneATile,
+    indptr: [0, 1, 1, 1, 1],
+    indices: [0],
+    data: [3],
+  }
+  const geneANeighbour: AteraBinnedTile = { ...geneBTile, x: 1, data: [5] }
+
+  it('sums native bins per gene into squares and counts those in the box', () => {
+    const { bins, visibleCount } = aggregateAteraBinnedTiles({
+      genes: [
+        { name: 'GENEA', tiles: [geneATile, geneANeighbour] },
+        { name: 'GENEB', tiles: [geneBTile] },
+      ],
+      grid,
+      bbox: bbox(0, 0, 39, 19),
+      binSize: 10,
+    })
+
+    expect(visibleCount).toBe(15)
+    expect(Object.fromEntries([...bins].map(([key, bin]) => [key, bin.count]))).toEqual({
+      '0,0': 5,
+      '1,0': 1,
+      '0,1': 4,
+      '2,0': 5,
+    })
+    expect(Object.fromEntries(bins.get('0,0')?.featureCounts ?? [])).toEqual({
+      GENEA: 2,
+      GENEB: 3,
+    })
+  })
+
+  it('keeps edge squares whole but counts only native bins centred in the box', () => {
+    const inside = aggregateAteraBinnedTiles({
+      genes: [{ name: 'GENEA', tiles: [geneATile] }],
+      grid,
+      bbox: bbox(1, 1, 8, 8),
+      binSize: 10,
+    })
+
+    expect([...inside.bins.keys()]).toEqual(['0,0'])
+    expect(inside.bins.get('0,0')?.count).toBe(2)
+    expect(inside.visibleCount).toBe(2)
+
+    const corner = aggregateAteraBinnedTiles({
+      genes: [{ name: 'GENEA', tiles: [geneATile] }],
+      grid,
+      bbox: bbox(5, 5, 8, 8),
+      binSize: 10,
+    })
+
+    expect(corner.bins.get('0,0')?.count).toBe(2)
+    expect(corner.visibleCount).toBe(0)
+  })
+})
+
+describe('Atera transcript values', () => {
+  it('decodes float16 quality scores from their bits', () => {
+    expect(halfFloatToNumber(0x5100)).toBe(40)
+    expect(halfFloatToNumber(0x5010)).toBe(32.5)
+    expect(halfFloatToNumber(0x4e60)).toBe(25.5)
+    expect(halfFloatToNumber(0)).toBe(0)
+    expect(halfFloatToNumber(0xc000)).toBe(-2)
+    expect(halfFloatToNumber(0x0001)).toBe(2 ** -24)
+    expect(halfFloatToNumber(0x7c00)).toBe(Number.POSITIVE_INFINITY)
+    expect(halfFloatToNumber(0x7e00)).toBeNaN()
+  })
+
+  it('treats UINT32_MAX cell id parts as unassigned', () => {
+    expect(isAteraUnassignedCell(0xffff_ffff, 0xffff_ffff)).toBe(true)
+    expect(isAteraUnassignedCell(3_043_040_529, 1)).toBe(false)
   })
 })

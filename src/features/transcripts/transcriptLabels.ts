@@ -10,6 +10,18 @@ export function transcriptAggregateRenderedLabel(
 }
 
 export function transcriptCapabilityLabel(capabilities: TranscriptCapabilities): string {
+  if (capabilities.geneRanges !== undefined) {
+    if (capabilities.nativeZarr && capabilities.geneRanges) {
+      return 'Per-gene LOD + exact'
+    }
+
+    if (capabilities.nativeZarr) {
+      return 'Per-gene LOD'
+    }
+
+    return capabilities.geneRanges ? 'Per-gene exact' : 'No transcripts'
+  }
+
   if (capabilities.nativeZarr && capabilities.rawParquet) {
     return 'Native LOD + exact'
   }

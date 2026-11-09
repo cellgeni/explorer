@@ -85,16 +85,18 @@ The viewer needs:
 - the `morphology_2d/` folder with every `ch000N_*.ome.tif`: each file's
   OME-XML names the others, and the viewer opens them as one multichannel
   image
+- for the Transcripts tab, `binned_transcripts.zarr.zip` (selected-gene
+  density) and `transcripts.zarr.zip` (exact points); without them the tab
+  reports transcripts as unavailable
 
 Paths listed in `experiment.spatial` (`explorer_files`,
 `images.morphology_2d_filepath`) are followed, so files can stay where the
 instrument put them. A dataset manifest can relocate any of them; see
 [Dataset manifest](./dataset-manifest.md#atera).
 
-Not read, so they can be left out of a hosted copy: `transcripts.zarr.zip`,
-`binned_transcripts.zarr.zip`, `morphology_3d/` (the 3D stack is the largest
-file in the bundle), `diffexp_genes/`, the HTML summaries, and
-`overview_scan.png`.
+Not read, so they can be left out of a hosted copy: `morphology_3d/` (the 3D
+stack is the largest file in the bundle), `diffexp_genes/`, the HTML
+summaries, and `overview_scan.png`.
 
 All the zips and OME-TIFFs need byte-range support. Keep the zips stored as
 written; do not recompress them.

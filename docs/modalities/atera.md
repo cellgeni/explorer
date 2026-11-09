@@ -5,7 +5,8 @@ Atera is the successor to Xenium; its bundle has no Parquet files. Cells,
 boundaries, the cell-feature matrix, and transcripts are all zipped Zarr v2
 stores, and the matrices are AnnData. The viewer therefore reads Atera
 through the same AnnData table readers as H5AD and SpatialData, plus
-Atera-specific readers for boundaries and selected-gene expression. For
+Atera-specific readers for boundaries, selected-gene expression, and
+selected-gene transcripts. For
 hosting requirements see
 [Host your own data](../host-your-own-data.md#host-your-own-atera-data).
 
@@ -29,7 +30,9 @@ Each file is located by, in order: the dataset manifest's `files` entry, the
 path in `experiment.spatial` `explorer_files` (or `images` for the morphology
 image), then the standard name. `AteraDataset.fileUrl(role)`
 (`src/datasets/ateraDataset.ts`) applies this order; diagnostics use the same
-order.
+order. Diagnostics range-check every role and the morphology image; a missing
+matrix or `cells.zarr.zip` fails, and a missing transcript zip or image only
+warns.
 
 | Role                   | `experiment.spatial` key                        | Standard name                      |
 | ---------------------- | ----------------------------------------------- | ---------------------------------- |
@@ -43,17 +46,20 @@ order.
 
 ## Files Read
 
-| File                               | Required       | Library                                     | What is read                                                                                                                                                                                      | Used for                                                                    |
-| ---------------------------------- | -------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `experiment.spatial`               | Yes            | fetch + JSON                                | `pixel_size`, `images.morphology_2d_filepath`, `explorer_files`, panel name, cell count                                                                                                           | Detection, file locations, units, diagnostics                               |
-| `cell_feature_matrix.zarr.zip`     | Yes            | `zarrita` + `ZipFileStore`, AnnData readers | `obs` (`barcode` index, `centroid_column`/`centroid_row` in µm, counts, areas, `filtered`, `leiden_res_*`, `azimuth_*`), `obsm/X_umap`, `X_pca`, `var/feature_name`, `feature_type`, CSR `X` rows | Overview, gene list, annotations, metadata tracks, embeddings, ROI and cell |
-| `csc_cell_feature_matrix.zarr.zip` | Yes            | `zarrita` + `ZipFileStore`                  | CSC `X/indptr`, then `X/indices` and `X/data` slices for each selected gene                                                                                                                       | Selected-gene overlay                                                       |
-| `cells.zarr.zip`                   | For boundaries | `zarrita` + `ZipFileStore`                  | `bboxes`, `gridded_polygon_sets/{0,1}` tiles, `cell_summary` `nucleus_count` column, `polygon_sets/1/method`, root `segmentation_methods`                                                         | Cell and nucleus boundaries, nucleus counts, segmentation method            |
-| `morphology_2d/ch000N_*.ome.tif`   | For the image  | `geotiff` + range tile reads                | Multi-file OME-TIFF: OME-XML channel list with `TiffData/UUID FileName`, SubIFD pyramid, JPEG 2000 tiles                                                                                          | Image layer with one channel per stain                                      |
+| File                               | Required        | Library                                     | What is read                                                                                                                                                                                      | Used for                                                                    |
+| ---------------------------------- | --------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `experiment.spatial`               | Yes             | fetch + JSON                                | `pixel_size`, `images.morphology_2d_filepath`, `explorer_files`, panel name, cell count                                                                                                           | Detection, file locations, units, diagnostics                               |
+| `cell_feature_matrix.zarr.zip`     | Yes             | `zarrita` + `ZipFileStore`, AnnData readers | `obs` (`barcode` index, `centroid_column`/`centroid_row` in µm, counts, areas, `filtered`, `leiden_res_*`, `azimuth_*`), `obsm/X_umap`, `X_pca`, `var/feature_name`, `feature_type`, CSR `X` rows | Overview, gene list, annotations, metadata tracks, embeddings, ROI and cell |
+| `csc_cell_feature_matrix.zarr.zip` | Yes             | `zarrita` + `ZipFileStore`                  | CSC `X/indptr`, then `X/indices` and `X/data` slices for each selected gene                                                                                                                       | Selected-gene overlay                                                       |
+| `cells.zarr.zip`                   | For boundaries  | `zarrita` + `ZipFileStore`                  | `bboxes`, `gridded_polygon_sets/{0,1}` tiles, `cell_summary` `nucleus_count` column, `polygon_sets/1/method`, root `segmentation_methods`                                                         | Cell and nucleus boundaries, nucleus counts, segmentation method            |
+| `morphology_2d/ch000N_*.ome.tif`   | For the image   | `geotiff` + range tile reads                | Multi-file OME-TIFF: OME-XML channel list with `TiffData/UUID FileName`, SubIFD pyramid, JPEG 2000 tiles                                                                                          | Image layer with one channel per stain                                      |
+| `binned_transcripts.zarr.zip`      | For transcripts | `zarrita` + `ZipFileStore`, nested zips     | Root `gene_names`, `grid_size`, `grid_keys`, `origin`; `gene/<index>.zip` for each selected gene: `grid/.zattrs`, then `grid/<x>,<y>/{indptr,indices,data}`                                       | Selected-gene density and the exact-point estimate                          |
+| `transcripts.zarr.zip`             | For transcripts | `zarrita` + `ZipFileStore`                  | Root `gene_names`, `grid/.zattrs`; per visible tile `gene_offset`, then each selected gene's rows of `location`, `quality_score`, `cell_id`, `overlaps_nucleus`                                   | Exact transcript points                                                     |
 
-Not read: `transcripts.zarr.zip`, `binned_transcripts.zarr.zip`,
-`morphology_3d/`, `diffexp_genes/`, the HTML summaries, `panel_config.json`,
-`metrics_summary_*.csv`, the FOV location files, and `overview_scan.png`.
+Not read: `morphology_3d/`, `diffexp_genes/`, the HTML summaries,
+`panel_config.json`, `metrics_summary_*.csv`, the FOV location files, and
+`overview_scan.png`. In `transcripts.zarr.zip`, `codeword_identity` and the
+`codeword_*` and `gene_category` metadata are not read.
 `cells.zarr.zip` `masks` and full-precision `polygon_sets` vertices are also
 not read.
 
@@ -121,6 +127,75 @@ columns of the last 64 genes are cached, so later viewports cost no reads.
 Counts are summed per cell, and cells in the box are returned; cells without
 expression are kept every `sampleStride`-th.
 
+### Transcripts
+
+Both transcript stores split the slide into 2,000 µm tiles keyed `<x>,<y>`
+(keys can be negative, such as `-1,2`) and list `gene_names` in matrix feature
+order. Transcripts are stored per gene, so the viewer shows them for selected
+genes only. `loadPlatformTranscriptCapabilities`, `…Aggregates`, and
+`…Viewport` (`src/features/app-shell/platformAdapter.ts`) route Atera to
+`AteraDataset`, which delegates to `AteraTranscripts`
+(`src/datasets/ateraTranscripts.ts`); other platforms keep the Xenium loaders.
+
+**Capabilities.** Opening the Transcripts tab or overlay opens both zips and
+reads their root attributes (and the zip directories, which later requests
+reuse). The result is `{ rawParquet: false, nativeZarr, geneRanges }`:
+`nativeZarr` for the binned store, `geneRanges` for `transcripts.zarr.zip`.
+`geneRanges` being present is what sends `useTranscriptWorkflow` down the
+per-gene branch; the source shows as "Per-gene LOD + exact".
+
+**Density.** Each gene in `binned_transcripts.zarr.zip` is a zip stored
+inside the outer zip, `gene/<gene_index>.zip` (about 50–190 KB; genes without
+transcripts have none). It is read in one request and opened in memory. Its
+`grid/.zattrs` lists the gene's tiles and the bin grid (400 × 400). Each tile
+is a CSR matrix of 5 µm bins counting QV ≥ 20 transcripts, rows = y bins,
+columns = x bins, from the tile corner; `indices` and `indptr` use the
+numcodecs `delta` filter. For a request:
+
+1. `ateraDensityBinSize` doubles the 5 µm bin until the view spans at most
+   1,500 squares, aligned to the coordinate origin.
+2. Tiles of each selected gene that touch the squares covering the view are
+   decoded (and cached).
+3. `aggregateAteraBinnedTiles` sums native bins into squares, whole at the
+   view's edges, and keeps per-gene counts for the hover card. It also counts
+   native bins whose centre lies in the view: the selected-gene estimate.
+
+The squares use the `Density color` scale. On the reference run a
+whole-slide UMOD request is 165 squares of 640 µm that sum to the stored
+1,914,072.
+
+**Choosing density or points.** The estimate, not the all-transcript cell
+estimate, goes to `planTranscriptLod`: Auto shows exact points when it fits
+the `Exact budget`, density otherwise; the manual-load prompt at 80% of the
+budget applies as for Xenium. The panel's Estimate shows this count.
+
+**Exact points.** For each visible tile, `gene_offset` (`[genes, 2]` uint32)
+gives each selected gene's `[start, end)` rows; tiles are sorted by gene. The
+rows within a gene are not spatially sorted, so the whole range is read: at
+most about 175,000 rows per gene per tile on the reference run, two or three
+`location` chunks. Then:
+
+1. `location` (`[N, 3]` float32, Fortran order) is filtered by the view.
+2. `quality_score` (`[N, 1]` float16) is read for the span of rows still in
+   the view and filtered by `Min QV`. It is opened as uint16 and decoded by
+   `halfFloatToNumber`, since zarrita needs `Float16Array` for float16.
+3. Over the `Exact budget`, the request stops here with no points.
+4. `cell_id` (`[N, 2]` uint32, Fortran order: prefix and dataset suffix) and
+   `overlaps_nucleus` are read for the remaining span. Prefix and suffix
+   become the matrix barcode (`intToCellId`); both `0xFFFFFFFF` means
+   unassigned.
+
+Points have id `<tile>:<row>`, no FOV, `isGene: true`, and z from
+`location`. On the reference run 1,031 exact QV ≥ 20 points of UMOD and NPHS1
+in a 600 × 400 µm box matched the binned estimate exactly; a 256 × 192 µm view
+of 7,645 points took about 5 s cold and 1.4 s with the range cache warm.
+
+**All features.** With no genes selected, or the Feature filter on All
+features, the layer is cell-summary squares built from the overview's
+`obs/transcript_counts`, with a message asking for a gene filter; Exact waits
+with the same request. All-gene native density or points would mean reading
+every gene's zip or rows.
+
 ### Gene List
 
 `var/feature_name` rows whose `var/feature_type` is `Gene Expression`. Control
@@ -156,29 +231,34 @@ These come from the AnnData readers (see [H5AD](./h5ad.md)):
   (`src/zarr/cachedZipStore.ts`).
 - In memory: the AnnData table, overview index, CSC `indptr`, gene columns,
   `cells.zarr.zip` `bboxes` and grid attributes, and decoded polygon tiles.
+- In memory, for transcripts: both stores' root attributes, the last 32
+  genes' binned zips and their decoded tiles, each tile's `gene_offset`, and
+  the last 48 gene-tile `location` ranges. Panning within loaded tiles reads
+  only `quality_score`, `cell_id`, and `overlaps_nucleus` again, from the
+  byte-range cache.
 
 ## Source Files
 
-| File                                            | Role                                                          |
-| ----------------------------------------------- | ------------------------------------------------------------- |
-| `src/datasets/ateraFormat.ts`                   | File roles, `experiment.spatial` parsing, polygon grid codecs |
-| `src/datasets/ateraDataset.ts`                  | `AteraDataset`: table, overview, CSC genes, boundaries, image |
-| `src/zarr/cachedZipStore.ts`                    | Range-cached zip stores and entry listing                     |
-| `src/datasets/h5adDataset.ts`                   | AnnData readers used for the matrix                           |
-| `src/datasets/datasetFactory.ts`                | `experiment.spatial` probe and construction                   |
-| `src/features/app-shell/platformAdapter.ts`     | `atera` adapter and boundary routing                          |
-| `src/features/app-shell/useDatasetLifecycle.ts` | Atera load branch                                             |
-| `src/data/datasetDiagnostics.ts`                | Atera diagnostics                                             |
+| File                                                | Role                                                                                             |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `src/datasets/ateraFormat.ts`                       | File roles, `experiment.spatial` parsing, polygon grid codecs, transcript grids, density binning |
+| `src/datasets/ateraDataset.ts`                      | `AteraDataset`: table, overview, CSC genes, boundaries, image                                    |
+| `src/datasets/ateraTranscripts.ts`                  | `AteraTranscripts`: capabilities, per-gene density, exact points                                 |
+| `src/features/transcripts/useTranscriptWorkflow.ts` | Per-gene branch: cell summary, density, estimate, exact                                          |
+| `src/zarr/cachedZipStore.ts`                        | Range-cached zip stores and entry listing                                                        |
+| `src/datasets/h5adDataset.ts`                       | AnnData readers used for the matrix                                                              |
+| `src/datasets/datasetFactory.ts`                    | `experiment.spatial` probe and construction                                                      |
+| `src/features/app-shell/platformAdapter.ts`         | `atera` adapter, boundary and transcript routing                                                 |
+| `src/features/app-shell/useDatasetLifecycle.ts`     | Atera load branch                                                                                |
+| `src/data/datasetDiagnostics.ts`                    | Atera diagnostics                                                                                |
 
 ## Known Limitations
 
-- Transcripts are not shown: the Transcripts tab, transcript overlay, ROI
-  transcript export, and the selected-cell z histogram are unavailable.
-  `transcripts.zarr.zip` tiles are 2,000 µm and sorted by gene (up to 52
-  million rows per tile, with a per-tile `gene_offset` index), so exact points
-  are practical per gene but not for all genes in a viewport.
-  `binned_transcripts.zarr.zip` holds per-gene 5 µm density, but the app's
-  density layer only requests all-gene density.
+- Transcripts are shown for selected genes only (see
+  [Transcripts](#transcripts)). ROI transcript export and the selected-cell z
+  histogram are unavailable.
+- Density always counts QV ≥ 20 transcripts, the binned store's threshold;
+  `Min QV` applies to exact points only.
 - Magic Lens is unavailable.
 - Azimuth category colours (`obs/<column>/color`) are not used; annotation
   colours come from the viewer palette.

@@ -11,10 +11,14 @@ import type { BoundaryLoadState, DatasetLoadState } from '../dataset/datasetLoad
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { RoiState } from '../roi/roiModel'
 import { IDLE_VISIUM_HD_ROI_STATE, type VisiumHdRoiState } from '../roi/visiumHdRoiModel'
+import type { AteraDataset } from '../../datasets/ateraDataset'
 import type {
   BoundaryElementsLoader,
   GeneExpressionLoader,
   SpatialDatasetLoader,
+  TranscriptAggregateLoader,
+  TranscriptCapabilitiesLoader,
+  TranscriptViewportLoader,
 } from './appDependencies'
 import {
   isSpatialGeneExpressionDataset,
@@ -39,6 +43,10 @@ export interface AppPlatformCapabilities {
   readonly magicLensMinQv: boolean
   readonly nucleusBoundaries: boolean
   readonly transcripts: boolean
+  // Selected-cell transcript z histogram, read from transcripts.parquet.
+  readonly cellTranscriptDistribution: boolean
+  // The Transcripts tab's gene-only filter; per-gene outputs only hold genes.
+  readonly transcriptGeneOnlyFilter: boolean
 }
 
 export interface PlatformMagicLensAvailability {
@@ -86,6 +94,8 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLensMinQv: true,
     nucleusBoundaries: false,
     transcripts: true,
+    cellTranscriptDistribution: true,
+    transcriptGeneOnlyFilter: true,
   },
   pointSizeFullViewScale: 1,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
@@ -103,7 +113,8 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
 }
 
 // Atera reads cells, genes, and annotations from the AnnData matrix like H5AD
-// and SpatialData, and draws boundaries from cells.zarr.zip.
+// and SpatialData, draws boundaries from cells.zarr.zip, and reads transcripts
+// per selected gene from binned_transcripts.zarr.zip and transcripts.zarr.zip.
 const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'atera',
   labels: { embeddingElementPlural: 'cells' },
@@ -112,11 +123,13 @@ const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     geometricAnnotations: true,
     magicLensMinQv: false,
     nucleusBoundaries: true,
-    transcripts: false,
+    transcripts: true,
+    cellTranscriptDistribution: false,
+    transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 1,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
-  effectiveTranscriptOverlay: () => false,
+  effectiveTranscriptOverlay: (showTranscriptOverlay) => showTranscriptOverlay,
   boundaryLoadingEnabled: (showCellBoundaries, showNucleusBoundaries) =>
     showCellBoundaries || showNucleusBoundaries,
   boundaryOverlayRequestKey: (showCellBoundaries, showNucleusBoundaries) => {
@@ -143,6 +156,8 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLensMinQv: false,
     nucleusBoundaries: true,
     transcripts: false,
+    cellTranscriptDistribution: false,
+    transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 1,
   featureLoadEnabled: () => false,
@@ -182,6 +197,8 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLensMinQv: false,
     nucleusBoundaries: false,
     transcripts: false,
+    cellTranscriptDistribution: false,
+    transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 0.5,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
@@ -206,6 +223,8 @@ const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLensMinQv: false,
     nucleusBoundaries: false,
     transcripts: false,
+    cellTranscriptDistribution: false,
+    transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 0.5,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
@@ -231,6 +250,8 @@ const IMAGE_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLensMinQv: false,
     nucleusBoundaries: false,
     transcripts: false,
+    cellTranscriptDistribution: false,
+    transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 1,
   featureLoadEnabled: () => false,
@@ -536,4 +557,104 @@ export async function loadPlatformGeneExpression(
       ? { binSizeMicrometers }
       : {}),
   })
+}
+
+type PerGeneTranscriptDataset = Pick<
+  AteraDataset,
+  'transcriptCapabilities' | 'transcriptAggregates' | 'transcriptViewport'
+>
+
+// Atera transcripts come from the dataset, per selected gene; every other
+// platform keeps the Xenium transcript loaders.
+export async function loadPlatformTranscriptCapabilities(
+  adapter: AppPlatformAdapter,
+  dependencies: {
+    readonly getSpatialDataset: SpatialDatasetLoader
+    readonly loadTranscriptCapabilities: TranscriptCapabilitiesLoader
+  },
+  ...args: Parameters<TranscriptCapabilitiesLoader>
+): ReturnType<TranscriptCapabilitiesLoader> {
+  const [baseUrl, options = {}] = args
+
+  if (adapter.kind !== 'atera') {
+    return dependencies.loadTranscriptCapabilities(baseUrl, options)
+  }
+
+  return (
+    await perGeneTranscriptDataset(dependencies.getSpatialDataset, baseUrl)
+  ).transcriptCapabilities()
+}
+
+export async function loadPlatformTranscriptAggregates(
+  adapter: AppPlatformAdapter,
+  dependencies: {
+    readonly getSpatialDataset: SpatialDatasetLoader
+    readonly loadTranscriptAggregates: TranscriptAggregateLoader
+  },
+  ...args: Parameters<TranscriptAggregateLoader>
+): ReturnType<TranscriptAggregateLoader> {
+  const [baseUrl, bbox, options = {}] = args
+
+  if (adapter.kind !== 'atera') {
+    return dependencies.loadTranscriptAggregates(baseUrl, bbox, options)
+  }
+
+  return (
+    await perGeneTranscriptDataset(dependencies.getSpatialDataset, baseUrl)
+  ).transcriptAggregates(bbox, {
+    featureNames: options.featureNames ?? [],
+    ...(options.maxBins === undefined ? {} : { maxBins: options.maxBins }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+}
+
+// Atera transcripts are all genes, so the gene-only filter does not apply.
+export async function loadPlatformTranscriptViewport(
+  adapter: AppPlatformAdapter,
+  dependencies: {
+    readonly getSpatialDataset: SpatialDatasetLoader
+    readonly loadTranscriptViewport: TranscriptViewportLoader
+  },
+  ...args: Parameters<TranscriptViewportLoader>
+): ReturnType<TranscriptViewportLoader> {
+  const [baseUrl, bbox, options = {}] = args
+
+  if (adapter.kind !== 'atera') {
+    return dependencies.loadTranscriptViewport(baseUrl, bbox, options)
+  }
+
+  return (
+    await perGeneTranscriptDataset(dependencies.getSpatialDataset, baseUrl)
+  ).transcriptViewport(bbox, {
+    featureNames: options.featureNames ?? [],
+    ...(options.pointLimit === undefined ? {} : { pointLimit: options.pointLimit }),
+    ...(options.groupLimit === undefined ? {} : { groupLimit: options.groupLimit }),
+    ...(options.minQv === undefined ? {} : { minQv: options.minQv }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+}
+
+async function perGeneTranscriptDataset(
+  getSpatialDataset: SpatialDatasetLoader,
+  baseUrl: string,
+): Promise<PerGeneTranscriptDataset> {
+  const dataset: unknown = await getSpatialDataset(baseUrl)
+
+  if (
+    !hasMethod(dataset, 'transcriptCapabilities') ||
+    !hasMethod(dataset, 'transcriptAggregates') ||
+    !hasMethod(dataset, 'transcriptViewport')
+  ) {
+    throw new Error('Loaded dataset does not expose per-gene transcripts.')
+  }
+
+  return dataset as PerGeneTranscriptDataset
+}
+
+function hasMethod(value: unknown, name: string): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Record<string, unknown>)[name] === 'function'
+  )
 }

@@ -170,12 +170,18 @@ describe('runDatasetDiagnostics', () => {
             num_cells: 93864,
             panel_wta: { panel_name: 'Atera Human WTA' },
             images: { morphology_2d_filepath: 'morphology_2d/ch0000_dapi.ome.tif' },
-            explorer_files: { cells_zarr_filepath: 'segmentation/cells.zarr.zip' },
+            explorer_files: {
+              cells_zarr_filepath: 'segmentation/cells.zarr.zip',
+              transcripts_viz_zarr_filepath: 'viz/binned_transcripts.zarr.zip',
+            },
           })
         : new Response(null, { status: 404 }),
     ) as unknown as typeof fetch
     const rangeValidator = vi.fn(async (url: string) => {
-      if (url.endsWith('csc_cell_feature_matrix.zarr.zip')) {
+      if (
+        url.endsWith('csc_cell_feature_matrix.zarr.zip') ||
+        url.endsWith('/transcripts.zarr.zip')
+      ) {
         throw new Error('HTTP 404')
       }
     })
@@ -199,6 +205,8 @@ describe('runDatasetDiagnostics', () => {
       ['cellFeatureMatrix', 'pass', '/cell_feature_matrix.zarr.zip'],
       ['cscCellFeatureMatrix', 'fail', '/csc_cell_feature_matrix.zarr.zip'],
       ['cells', 'pass', '/segmentation/cells.zarr.zip'],
+      ['binnedTranscripts', 'pass', '/viz/binned_transcripts.zarr.zip'],
+      ['transcripts', 'warning', '/transcripts.zarr.zip'],
       ['morphology', 'pass', '/morphology_2d/ch0000_dapi.ome.tif'],
     ])
     expect(report.checks[1]?.message).toBe('Atera Human WTA; 93,864 cells; 0.2125 µm/px')

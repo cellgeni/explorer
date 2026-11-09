@@ -142,11 +142,19 @@ are dropped (`isCurrentDatasetLoad`).
 an `AppPlatformAdapter` for the loaded platform. Until a dataset is ready it
 returns the Xenium adapter. The adapter decides:
 
-- `capabilities`: annotations, geometric annotations, transcripts, nucleus
+- `capabilities`: annotations, geometric annotations, transcripts, the cell
+  transcript z histogram, the transcript gene-only filter, nucleus
   boundaries, Magic Lens Min QV.
 - Whether features, boundaries, gene overlays, and Magic Lens can load.
 - Whether an ROI can be drawn.
 - Point size scaling and "cells" vs "bins" labels.
+
+The `loadPlatform*` functions in the same file route readers by platform:
+boundaries, nucleus boundaries, and selected-gene expression go to the dataset
+for every platform but Xenium, and transcript capabilities, aggregates, and
+viewports go to `AteraDataset` for Atera (see
+[Atera](./modalities/atera.md#transcripts)) and to the Xenium readers
+otherwise.
 
 `App.tsx` also hides HUD tabs per platform. The full matrix is in the
 [UI reference](./ui-reference.md#platform-availability).

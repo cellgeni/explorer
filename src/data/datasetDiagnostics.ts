@@ -407,6 +407,9 @@ const ATERA_RANGE_FILES: readonly {
   { role: 'cellFeatureMatrix', label: 'Cell-feature matrix', required: true },
   { role: 'cscCellFeatureMatrix', label: 'CSC cell-feature matrix', required: true },
   { role: 'cells', label: 'Cell segmentation', required: true },
+  // Only the Transcripts tab reads these.
+  { role: 'binnedTranscripts', label: 'Binned transcripts', required: false },
+  { role: 'transcripts', label: 'Transcripts', required: false },
 ]
 
 // File locations follow the viewer: the dataset manifest, then

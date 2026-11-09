@@ -99,4 +99,40 @@ describe('TranscriptStatusPanel', () => {
     expect(onPinTranscript).toHaveBeenCalledWith(hoveredTranscript)
     expect(onClearPinnedTranscript).toHaveBeenCalledTimes(1)
   })
+
+  it('shows the selected-gene estimate and no FOVs for per-gene outputs', () => {
+    render(
+      <TranscriptStatusPanel
+        capabilityState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          capabilities: { rawParquet: false, nativeZarr: true, geneRanges: true },
+        }}
+        layerState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          points: [],
+          groups: [{ featureName: 'UMOD', fovName: null, count: 3 }],
+          visibleTranscriptEstimate: 1_031,
+          hitPointLimit: false,
+          durationMs: 12,
+        }}
+        exactPointLimit={100_000}
+        visibleTranscriptEstimate={5_000_000}
+        hoveredTranscript={hoveredTranscript}
+        pinnedTranscript={null}
+        onPinTranscript={vi.fn()}
+        onClearPinnedTranscript={vi.fn()}
+        onLoadExactViewport={vi.fn()}
+      />,
+    )
+
+    const summary = screen.getByLabelText('Transcript overlay summary')
+
+    expect(summary).toHaveTextContent('Per-gene LOD + exact')
+    expect(summary).toHaveTextContent('Estimate1,031')
+    expect(screen.getByLabelText('Top transcript groups')).toHaveTextContent('UMOD3')
+    expect(screen.queryByText('FOV')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unassigned')).not.toBeInTheDocument()
+  })
 })

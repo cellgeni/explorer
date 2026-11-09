@@ -36,6 +36,13 @@ export function TranscriptStatusPanel({
     capabilityState.status === 'ready' ? capabilityState.capabilities : null
   const exactLoadRequestKey =
     layerState.status === 'waiting' ? layerState.exactLoadRequestKey : undefined
+  // Per-gene outputs (Atera) estimate the selected genes, not all
+  // transcripts, and have no FOVs.
+  const isPerGene = capabilities?.geneRanges !== undefined
+  const estimate =
+    isPerGene && 'visibleTranscriptEstimate' in layerState
+      ? layerState.visibleTranscriptEstimate
+      : visibleTranscriptEstimate
 
   return (
     <div className="transcript-status-panel">
@@ -50,7 +57,7 @@ export function TranscriptStatusPanel({
         </div>
         <div>
           <dt>Estimate</dt>
-          <dd>{visibleTranscriptEstimate.toLocaleString()}</dd>
+          <dd>{estimate.toLocaleString()}</dd>
         </div>
         <div>
           <dt>Exact budget</dt>
@@ -113,17 +120,23 @@ export function TranscriptStatusPanel({
       )}
 
       {layerState.status === 'ready' && layerState.groups.length > 0 ? (
-        <div className="transcript-group-panel">
+        <div
+          className={
+            isPerGene
+              ? 'transcript-group-panel transcript-group-panel-no-fov'
+              : 'transcript-group-panel'
+          }
+        >
           <div className="transcript-group-heading">
             <span>Gene</span>
-            <span>FOV</span>
+            {isPerGene ? null : <span>FOV</span>}
             <span>Count</span>
           </div>
           <ol className="transcript-group-list" aria-label="Top transcript groups">
             {layerState.groups.map((group) => (
               <li key={`${group.featureName}:${group.fovName ?? 'none'}`}>
                 <span>{group.featureName}</span>
-                <span>{group.fovName ?? 'Unassigned'}</span>
+                {isPerGene ? null : <span>{group.fovName ?? 'Unassigned'}</span>}
                 <strong>{group.count.toLocaleString()}</strong>
               </li>
             ))}
@@ -134,6 +147,7 @@ export function TranscriptStatusPanel({
       {pinnedTranscript === null ? null : (
         <TranscriptInspectionPanel
           detail={pinnedTranscript}
+          showFov={!isPerGene}
           title={transcriptInspectionTitle('Pinned', pinnedTranscript)}
           actionLabel="Clear"
           onAction={onClearPinnedTranscript}
@@ -142,6 +156,7 @@ export function TranscriptStatusPanel({
       {hoveredTranscript === null ? null : (
         <TranscriptInspectionPanel
           detail={hoveredTranscript}
+          showFov={!isPerGene}
           title={transcriptInspectionTitle('Hovered', hoveredTranscript)}
           actionLabel="Pin"
           onAction={() => {
@@ -155,11 +170,13 @@ export function TranscriptStatusPanel({
 
 function TranscriptInspectionPanel({
   detail,
+  showFov,
   title,
   actionLabel,
   onAction,
 }: {
   readonly detail: ViewerTranscriptHoverDetail
+  readonly showFov: boolean
   readonly title: string
   readonly actionLabel: string
   readonly onAction: () => void
@@ -182,10 +199,12 @@ function TranscriptInspectionPanel({
             <dt>ID</dt>
             <dd>{transcript.transcriptId ?? transcript.id}</dd>
           </div>
-          <div>
-            <dt>FOV</dt>
-            <dd>{transcript.fovName ?? 'Unassigned'}</dd>
-          </div>
+          {showFov ? (
+            <div>
+              <dt>FOV</dt>
+              <dd>{transcript.fovName ?? 'Unassigned'}</dd>
+            </div>
+          ) : null}
           {cellLabel === null ? null : (
             <div>
               <dt>Cell</dt>

@@ -297,10 +297,13 @@ export function TranscriptHoverTooltip({
           <dt>ID</dt>
           <dd>{transcript.transcriptId ?? transcript.id}</dd>
         </div>
-        <div>
-          <dt>FOV</dt>
-          <dd>{transcript.fovName ?? 'Unassigned'}</dd>
-        </div>
+        {/* Atera transcripts have no FOV. */}
+        {transcript.fovName === null ? null : (
+          <div>
+            <dt>FOV</dt>
+            <dd>{transcript.fovName}</dd>
+          </div>
+        )}
         {transcriptCellLabel === null ? null : (
           <div>
             <dt>Cell</dt>
