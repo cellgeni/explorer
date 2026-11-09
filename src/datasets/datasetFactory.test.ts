@@ -165,6 +165,7 @@ describe('spatial dataset detection', () => {
     ['TIFF', 'https://example.test/images/sample.tif'],
     ['TIFF long extension', 'https://example.test/images/sample.tiff#view'],
     ['NDPI', 'https://example.test/images/sample.ndpi'],
+    ['QPTIFF', 'https://example.test/images/Scan1.er.qptiff'],
   ])(
     'detects a direct %s image URL without directory-style probes',
     async (_name, url) => {
@@ -184,12 +185,23 @@ describe('spatial dataset detection', () => {
     },
   )
 
+  it('labels a QPTIFF URL with its image kind', async () => {
+    const url = 'https://example.test/images/Scan1.er.qptiff'
+    const fetcher = fetcherForOkPaths([new URL(url).pathname])
+
+    await expect(detectSpatialDataset(url, { fetcher })).resolves.toMatchObject({
+      platform: 'image',
+      imageKind: 'qptiff',
+    })
+  })
+
   it('classifies only direct image extensions as image-only URLs', () => {
     expect(isImageOnlyUrl('https://example.test/sample.ome.tif')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.ome.tiff?token=1')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.tif')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.tiff#view')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.ndpi')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.qptiff')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.ome.zarr')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.zarr?token=1')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample/zarr.json')).toBe(true)

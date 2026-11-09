@@ -1,3 +1,4 @@
+import { needsAutoContrastOnEnable } from './morphologyChannels'
 import type { ChannelHistogram } from '../../data/morphologyContrast'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { MorphologyChannelSetting } from './morphologyChannels'
@@ -45,7 +46,16 @@ export function MorphologyChannelControls({
                 checked={setting?.enabled ?? false}
                 title={`Toggle ${channel.info.name} channel`}
                 onChange={(event) => {
-                  onUpdate(channel.info.id, { enabled: event.currentTarget.checked })
+                  const enabled = event.currentTarget.checked
+                  onUpdate(channel.info.id, { enabled })
+
+                  if (
+                    enabled &&
+                    !isAutoContrastLoading &&
+                    needsAutoContrastOnEnable(channel, setting)
+                  ) {
+                    onAutoContrast(channel)
+                  }
                 }}
               />
               <span>{channel.info.name}</span>

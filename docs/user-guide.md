@@ -12,7 +12,7 @@ Supported sources are:
 - Visium HD Space Ranger output folders containing `binned_outputs/`.
 - Direct AnnData `.h5ad` file URLs.
 - SpatialData Zarr store URLs, such as `sample.sdata.zarr`.
-- Direct OME-TIFF, TIFF, OME-Zarr, or validated NDPI image URLs.
+- Direct OME-TIFF, TIFF, QPTIFF, OME-Zarr, or validated NDPI image URLs.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
 
 When a dataset folder contains an `explorer.json` manifest, the viewer reads
@@ -203,8 +203,8 @@ coordinate system, table, shapes, labels, and image are chosen.
 
 Image-only sources render the image pyramid without requiring transcriptomics
 files. Supported URL forms include `.ome.tif`, `.ome.tiff`, `.tif`, `.tiff`,
-`.ome.zarr`, `.zarr`, `zarr.json`, `.zattrs`, and `.ndpi`. TIFFs must be tiled
-with `SubIFD` pyramid levels; see
+`.qptiff`, `.ome.zarr`, `.zarr`, `zarr.json`, `.zattrs`, and `.ndpi`. TIFFs
+must be tiled with `SubIFD` pyramid levels (QPTIFF uses its own layout); see
 [Image-only and GeoJSON](./image-only-and-geojson.md#supported-image-urls).
 
 For image-only sources, use `Layers` for image channels and custom image layers,

@@ -71,6 +71,46 @@ describe('MorphologyChannelControls', () => {
     )
   })
 
+  it('auto-contrasts a channel turned on for the first time', () => {
+    const onAutoContrast = vi.fn()
+    const onUpdate = vi.fn()
+    const offSetting = {
+      id: 'dapi',
+      enabled: false,
+      color: [80, 120, 255] as const,
+      contrastMin: 10,
+      contrastMax: 200,
+    }
+    const { rerender } = render(
+      <MorphologyChannelControls
+        channels={[channel]}
+        settings={[offSetting]}
+        autoContrastChannelIds={[]}
+        onAutoContrast={onAutoContrast}
+        onUpdate={onUpdate}
+      />,
+    )
+
+    fireEvent.click(screen.getByLabelText('DAPI'))
+
+    expect(onUpdate).toHaveBeenCalledWith('dapi', { enabled: true })
+    expect(onAutoContrast).toHaveBeenCalledWith(channel)
+
+    onAutoContrast.mockClear()
+    rerender(
+      <MorphologyChannelControls
+        channels={[channel]}
+        settings={[{ ...offSetting, contrastMin: 40 }]}
+        autoContrastChannelIds={[]}
+        onAutoContrast={onAutoContrast}
+        onUpdate={onUpdate}
+      />,
+    )
+    fireEvent.click(screen.getByLabelText('DAPI'))
+
+    expect(onAutoContrast).not.toHaveBeenCalled()
+  })
+
   it('hides the color picker for true-color channels', () => {
     render(
       <MorphologyChannelControls

@@ -61,6 +61,7 @@ request:
 | Visium HD      | Space Ranger `outs/` folder                                    | Phase 6                      | MVP done; hardening open                    |
 | AnnData H5AD   | Direct `.h5ad` file URL                                        | Phase 7                      | MVP done; hardening open; one item reopened |
 | Image-only     | Direct OME-TIFF/TIFF/NDPI URL, plus GeoJSON annotations        | Phase 8                      | Done (2026-07-09)                           |
+| QPTIFF image   | Direct Akoya `.qptiff` URL; also custom layers and manifests   | Phase 13                     | Done (2026-11-09)                           |
 | OME-Zarr image | Direct OME-Zarr URL; also custom layers and SpatialData images | Phase 9 (recorded from git)  | Done (2026-07-10)                           |
 | SpatialData    | Zarr store root with `spatialdata_attrs`                       | Phase 10 (recorded from git) | Done (2026-10-13 to 2026-11-06)             |
 | Visium (spots) | Space Ranger output with `tissue_positions.csv` and PNGs       | Original Phase 6 (`PLAN.md`) | Not started                                 |
@@ -1462,7 +1463,9 @@ instead of extending cell-ID annotations. Shipped on 2026-07-09 (`f7ff9c5`,
       grid cells, or boundaries.
 - [x] Rename `Dataset URL` to `Dataset or image URL`, keeping the load action.
 - [x] Enable every channel on load and run auto-contrast on all of them;
-      multi-channel TIFFs get colour channels (`89e99cf`).
+      multi-channel TIFFs get colour channels (`89e99cf`). Since Phase 13,
+      only the first six channels start on, and images with more than six
+      auto-contrast only those.
 
 #### Geometric Annotations
 
@@ -1752,6 +1755,50 @@ Delivered:
       used.
 - [ ] The 3D DAPI stack (`morphology_3d/`) is not shown with the dataset; it
       opens as an image URL with a `Z plane` slider.
+
+### Phase 13 — QPTIFF Images
+
+Shipped 2026-11-09. Requested to view Akoya PhenoCycler scans, using the
+post-Xenium skin scan in BioImage Archive `S-BIAD3788`
+(`PostXeniumAkoya/MH_BCN_skin_X0072771_post-Xenium_Scan1.er.qptiff`: 81 GB,
+61 channels of 24,960 × 48,960 16-bit LZW, 0.505 µm/px).
+
+#### Product Decisions
+
+- **DECISION:** Read QPTIFF in the TIFF loader rather than a new platform.
+  It is an image-only source, a custom layer, or a manifest `image` like any
+  TIFF; only the IFD layout and metadata differ. See
+  [image.md](./docs/modalities/image.md#qptiff).
+- **DECISION:** Walk the IFD chain once per file through a geotiff block
+  cache (1 MiB blocks) and share it between channel loaders. Akoya writes all
+  369 IFDs in the first 7.5 MB, so opening takes 8 range requests instead of
+  370 sequential ones (about 63 s to EBI).
+- **DECISION:** Read a channel's tile offsets on its first tile fetch. All
+  channels' offsets as maps would cost about 35 MB here, and several hundred
+  MB for whole-slide scans with 100 channels.
+- **DECISION:** Images with more than six channels start with the first six
+  on and auto-contrast only those; other channels are auto-contrasted when
+  first turned on. Enabling and auto-contrasting all 61 would fetch about
+  1,500 coarse tiles at load.
+
+#### Delivered
+
+- [x] `.qptiff`/`.qptif` detection, plus QPI image descriptions in files
+      with a `.tif` name.
+- [x] Channels named by biomarker (fluorophore when blank) in scanner
+      colours; pyramid from reduced-resolution IFDs; pixel size from
+      `XResolution`.
+- [x] Unit tests with an in-memory QPTIFF served by range requests.
+- [x] Checked in the browser against the scan above: the IFD walk took about
+      4.5 s (8 sequential 1 MiB reads); nuclei and Keratin 14 line up at full
+      resolution with no tile seams.
+
+#### Known Gaps
+
+- [ ] The stripped smallest pyramid level is not shown.
+- [ ] Auto-contrast reads the coarsest level's tiles one at a time: about
+      15 s per channel against EBI.
+- [ ] QPTIFF placement over Xenium (registration) is not supported.
 
 ---
 

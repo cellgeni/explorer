@@ -156,7 +156,7 @@ probed as usual.
 | ------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `h5ad`        | `h5ad`        | Required. The `.h5ad` file; checked with `HEAD`                                                                                                                            |
 | `spatialdata` | `store`       | Required. The Zarr store root                                                                                                                                              |
-| `image`       | `image`       | Required. OME-TIFF, TIFF, NDPI, or OME-Zarr; the type is taken from the suffix                                                                                             |
+| `image`       | `image`       | Required. OME-TIFF, TIFF, QPTIFF, NDPI, or OME-Zarr; the type is taken from the suffix                                                                                     |
 | `image`       | `zchunkstore` | Optional. [`.zchunkstore` sidecar](./zchunkstore.md) for a TIFF `image`, and for its channel files. Replaces the lookup next to the TIFF. Rejected for an OME-Zarr `image` |
 
 ## Options

@@ -30,14 +30,14 @@
 - Modalities, one page each with detection, every file read, the libraries
   used, the read path for each feature, source files, and known limitations:
 
-  | Modality    | Input                                 | Detected by                          | Doc                                           |
-  | ----------- | ------------------------------------- | ------------------------------------ | --------------------------------------------- |
-  | Xenium      | XOA output folder                     | `experiment.xenium`                  | [xenium.md](./modalities/xenium.md)           |
-  | Atera       | Atera Onboard Analysis output folder  | `experiment.spatial`                 | [atera.md](./modalities/atera.md)             |
-  | Visium HD   | Space Ranger `outs/` folder           | `binned_outputs/square_*um` tiers    | [visium-hd.md](./modalities/visium-hd.md)     |
-  | H5AD        | `.h5ad` file URL                      | URL suffix                           | [h5ad.md](./modalities/h5ad.md)               |
-  | SpatialData | Zarr store root                       | `spatialdata_attrs` in root metadata | [spatialdata.md](./modalities/spatialdata.md) |
-  | Image       | OME-TIFF, TIFF, NDPI, or OME-Zarr URL | URL suffix or Zarr metadata          | [image.md](./modalities/image.md)             |
+  | Modality    | Input                                         | Detected by                          | Doc                                           |
+  | ----------- | --------------------------------------------- | ------------------------------------ | --------------------------------------------- |
+  | Xenium      | XOA output folder                             | `experiment.xenium`                  | [xenium.md](./modalities/xenium.md)           |
+  | Atera       | Atera Onboard Analysis output folder          | `experiment.spatial`                 | [atera.md](./modalities/atera.md)             |
+  | Visium HD   | Space Ranger `outs/` folder                   | `binned_outputs/square_*um` tiers    | [visium-hd.md](./modalities/visium-hd.md)     |
+  | H5AD        | `.h5ad` file URL                              | URL suffix                           | [h5ad.md](./modalities/h5ad.md)               |
+  | SpatialData | Zarr store root                               | `spatialdata_attrs` in root metadata | [spatialdata.md](./modalities/spatialdata.md) |
+  | Image       | OME-TIFF, TIFF, QPTIFF, NDPI, or OME-Zarr URL | URL suffix or Zarr metadata          | [image.md](./modalities/image.md)             |
 
   Any of these can instead be described by a
   [dataset manifest](./dataset-manifest.md), which names the platform and

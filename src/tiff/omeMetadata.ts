@@ -37,7 +37,7 @@ export interface OmeTiffMetadata {
   readonly zStack?: OmeTiffZStack
 }
 
-const DEFAULT_MICROMETERS_PER_PIXEL = 0.2125
+export const DEFAULT_MICROMETERS_PER_PIXEL = 0.2125
 const DEFAULT_CHANNEL_COLORS: readonly (readonly [number, number, number])[] = [
   [88, 144, 255],
   [32, 166, 122],
@@ -440,7 +440,7 @@ function parseOmeColor(color: string | null): readonly [number, number, number] 
   return [(unsigned >>> 24) & 0xff, (unsigned >>> 16) & 0xff, (unsigned >>> 8) & 0xff]
 }
 
-function defaultChannelColor(options: {
+export function defaultChannelColor(options: {
   readonly index: number
   readonly name: string
   readonly purpose?: string

@@ -71,7 +71,7 @@ match:
 | 0     | URL path ends in `.json` (not `zarr.json`): read it as a [dataset manifest](./dataset-manifest.md); errors stop here | The manifest's `platform`                                          |
 | 1     | URL ends in `.h5ad`, and `HEAD` succeeds                                                                             | `h5ad`                                                             |
 | 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`; root metadata `HEAD` succeeds                       | `spatialdata` if root attrs have `spatialdata_attrs`, else `image` |
-| 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.ndpi`, and `HEAD` succeeds                                             | `image`                                                            |
+| 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.qptif(f)`, `.ndpi`, and `HEAD` succeeds                                | `image`                                                            |
 | 4a    | `GET <url>/explorer.json` returns a manifest (run alongside 4b and 4c)                                               | The manifest's `platform`                                          |
 | 4b    | `HEAD <url>/experiment.xenium` succeeds                                                                              | `xenium`                                                           |
 | 4c    | `HEAD <url>/experiment.spatial` succeeds                                                                             | `atera`                                                            |

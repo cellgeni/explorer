@@ -1,5 +1,10 @@
 import { fromUrl } from 'geotiff'
-import type { GeoTIFF, GeoTIFFImage } from 'geotiff'
+import type {
+  BlockedSourceOptions,
+  GeoTIFF,
+  GeoTIFFImage,
+  RemoteSourceOptions,
+} from 'geotiff'
 import type { ImageFileDirectory } from 'geotiff'
 import {
   defaultPersistentByteRangeCache,
@@ -8,8 +13,17 @@ import {
 } from '../data/persistentByteRangeCache'
 import { imagePixels, micrometers } from '../data/coords'
 import { tiffChunkKey } from './chunkKeys'
-import { abortable, loadZchunkStorePyramidOptions } from './zchunkStore'
+import { loadZchunkStorePyramidOptions } from './zchunkStore'
 import { parseOmeTiffMetadata } from './omeMetadata'
+import {
+  isQptiffDescription,
+  isQptiffUrl,
+  parseQptiffDescription,
+  qptiffChannelInfos,
+  qptiffLayout,
+  qptiffMicrometersPerPixel,
+} from './qptiff'
+import { abortable } from '../utils/abortable'
 import { notifyFallback, type FallbackNotifier } from '../data/fallbackNotice'
 import type { BBox, ImagePixels, TileIndex, UnitsDescriptor } from '../data/coords'
 import type { TileSourceSize } from './tileCache'
@@ -17,6 +31,7 @@ import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type { OmeTiffZStack, TiffChannelInfo } from './omeMetadata'
 import type { OpenImagePyramidOptions } from '../data/imagePyramid'
+import type { QptiffIfdSummary } from './qptiff'
 
 export interface TiffChunk {
   readonly offset: number
@@ -36,10 +51,14 @@ export interface TiffLevelMeta {
   readonly scaleY?: number
 }
 
+export type TiffChunkIndex = ReadonlyMap<string, TiffChunkIndexEntry>
+
 export interface TiffPyramidLoaderOptions {
   readonly url: string
   readonly sourceUrl?: string
-  readonly chunkIndex: ReadonlyMap<string, TiffChunkIndexEntry>
+  // The tile index, or a function that reads it when the first tile is
+  // fetched.
+  readonly chunkIndex: TiffChunkIndex | (() => Promise<TiffChunkIndex>)
   readonly levelMeta: ReadonlyMap<number, TiffLevelMeta>
   readonly units: UnitsDescriptor
   readonly tileWidth: ImagePixels
@@ -115,6 +134,11 @@ export async function openTiff(
   options: OpenImagePyramidOptions = {},
 ): Promise<TiffPyramidLoader> {
   const selection = parseTiffImageSelection(url)
+
+  if (isQptiffUrl(selection.sourceUrl)) {
+    return openQptiff(url, selection, signal, onFallback, options)
+  }
+
   const file = openTiffFile(selection.sourceUrl)
 
   try {
@@ -142,9 +166,14 @@ async function openTiffImage(
 ): Promise<TiffPyramidLoader> {
   const metadataImage = await tiff.getImage(0)
   const metadataDirectory = metadataImage.getFileDirectory()
-  const omeMetadata = parseOmeTiffMetadata(
-    await readOptionalStringTag(metadataDirectory, 'ImageDescription'),
-  )
+  const description = await readOptionalStringTag(metadataDirectory, 'ImageDescription')
+
+  // A QPTIFF saved under a plain TIFF name.
+  if (isQptiffDescription(description)) {
+    return openQptiff(url, selection, signal, onFallback, options)
+  }
+
+  const omeMetadata = parseOmeTiffMetadata(description)
   const channelIndex =
     selection.ifdIndex ?? channelIndexForUrl(selection.sourceUrl, omeMetadata.channels)
 
@@ -285,6 +314,296 @@ async function openTiffImage(
   })
 }
 
+// QPTIFF keeps every channel and pyramid level in top-level IFDs, so each
+// channel's loader needs the whole IFD chain. The chain is walked once per
+// file and shared by the channel loaders of the most recently opened files.
+// Akoya scanners write the IFDs together near the start of the file, so the
+// walk reads that region in large blocks rather than one request per IFD.
+const QPTIFF_FILE_CACHE_SIZE = 2
+const QPTIFF_BLOCK_SIZE = 1024 * 1024
+const QPTIFF_BLOCK_CACHE_SIZE = 16
+const QPTIFF_MAX_IFDS = 10_000
+const qptiffFiles = new Map<string, Promise<QptiffFile>>()
+
+interface QptiffFile {
+  readonly tiff: GeoTIFF
+  readonly directories: ReadonlyMap<number, ImageFileDirectory>
+  // levels[level][channel] is an IFD index.
+  readonly levels: readonly (readonly number[])[]
+  readonly levelMeta: ReadonlyMap<number, TiffLevelMeta>
+  readonly channels: readonly TiffChannelInfo[]
+  readonly micrometersPerPixel: number
+  readonly imageWidth: ImagePixels
+  readonly imageHeight: ImagePixels
+  readonly tileWidth: ImagePixels
+  readonly tileHeight: ImagePixels
+}
+
+async function openQptiff(
+  url: string,
+  selection: TiffImageSelection,
+  signal: AbortSignal | undefined,
+  onFallback: FallbackNotifier | undefined,
+  options: OpenImagePyramidOptions,
+): Promise<TiffPyramidLoader> {
+  if (options.zchunkStoreUrl !== undefined) {
+    notifyFallback(onFallback, {
+      source: 'Morphology image',
+      message:
+        'The dataset manifest names a .zchunkstore sidecar, but the image is a QPTIFF, so the sidecar is not used.',
+      action: 'Remove the sidecar from the manifest; QPTIFF images do not need one.',
+      coalesceKey: `zchunkstore-qptiff:${options.zchunkStoreUrl}`,
+    })
+  }
+
+  const file = await abortable(qptiffFile(selection.sourceUrl), signal)
+  const baseline = file.levels[0] ?? []
+  const channel =
+    selection.ifdIndex === undefined ? 0 : baseline.indexOf(selection.ifdIndex)
+
+  if (channel < 0) {
+    throw new Error(
+      `IFD ${String(selection.ifdIndex)} is not a full-resolution channel of the QPTIFF.`,
+    )
+  }
+
+  const channelDirectories = file.levels.map((level) => {
+    const directory = file.directories.get(level[channel] ?? -1)
+
+    if (directory === undefined) {
+      throw new Error(`The QPTIFF has no IFD for channel ${channel} at every level.`)
+    }
+
+    return directory
+  })
+  const decodeMetadata = await readTileDecodeMetadata(
+    file.tiff,
+    channelDirectories[0] as ImageFileDirectory,
+  )
+
+  return new TiffPyramidLoader({
+    url,
+    sourceUrl: selection.sourceUrl,
+    ...decodeMetadata,
+    // Tile offsets are read when the channel is first drawn, so channels
+    // that stay hidden cost nothing.
+    chunkIndex: () => indexQptiffChannel(file, channelDirectories, decodeMetadata),
+    levelMeta: file.levelMeta,
+    units: {
+      dataUnit: 'micrometer',
+      imageUnit: 'pixel',
+      micrometersPerPixel: micrometers(file.micrometersPerPixel),
+      origin: 'top-left',
+      imageYAxis: 'down',
+    },
+    tileWidth: file.tileWidth,
+    tileHeight: file.tileHeight,
+    numLevels: file.levels.length,
+    imageWidth: file.imageWidth,
+    imageHeight: file.imageHeight,
+    channels: file.channels,
+  })
+}
+
+function qptiffFile(sourceUrl: string): Promise<QptiffFile> {
+  const cached = qptiffFiles.get(sourceUrl)
+
+  // Map order is insertion order; re-inserting marks the file most recent.
+  qptiffFiles.delete(sourceUrl)
+
+  const file = cached ?? readQptiffFile(sourceUrl)
+  qptiffFiles.set(sourceUrl, file)
+
+  if (cached === undefined) {
+    file.catch(() => {
+      if (qptiffFiles.get(sourceUrl) === file) {
+        qptiffFiles.delete(sourceUrl)
+      }
+    })
+  }
+
+  for (const oldestUrl of qptiffFiles.keys()) {
+    if (qptiffFiles.size <= QPTIFF_FILE_CACHE_SIZE) {
+      break
+    }
+
+    qptiffFiles.delete(oldestUrl)
+  }
+
+  return file
+}
+
+async function readQptiffFile(sourceUrl: string): Promise<QptiffFile> {
+  // fromUrl hands the block options to its BlockedSource, though its type
+  // leaves them out.
+  const sourceOptions: RemoteSourceOptions & BlockedSourceOptions = {
+    allowFullFile: false,
+    blockSize: QPTIFF_BLOCK_SIZE,
+    cacheSize: QPTIFF_BLOCK_CACHE_SIZE,
+  }
+  const tiff = await fromUrl(sourceUrl, sourceOptions)
+  const directories = await readIfdChain(tiff)
+  const summaries = await Promise.all(
+    directories.map((directory, index) => summarizeQptiffIfd(directory, index)),
+  )
+  const { levels } = qptiffLayout(summaries)
+  const baseline = levels[0] ?? []
+  const firstIndex = baseline[0]
+  const first = firstIndex === undefined ? undefined : summaries[firstIndex]
+  const firstDirectory = firstIndex === undefined ? undefined : directories[firstIndex]
+
+  if (first === undefined || firstDirectory === undefined) {
+    throw new Error('The QPTIFF has no full-resolution image.')
+  }
+
+  if (first.tileWidth === undefined || first.tileHeight === undefined) {
+    throw new Error('The QPTIFF is not tiled, so it cannot be read by tile.')
+  }
+
+  const imageWidth = imagePixels(first.width)
+  const imageHeight = imagePixels(first.height)
+  const tileWidth = imagePixels(first.tileWidth)
+  const tileHeight = imagePixels(first.tileHeight)
+  const levelMeta = new Map<number, TiffLevelMeta>()
+
+  levels.forEach((level, levelIndex) => {
+    const summary = summaries[level[0] ?? -1]
+
+    if (summary !== undefined) {
+      levelMeta.set(
+        levelIndex,
+        tiffLevelMeta({
+          width: imagePixels(summary.width),
+          height: imagePixels(summary.height),
+          tileWidth,
+          tileHeight,
+          fullWidth: imageWidth,
+          fullHeight: imageHeight,
+        }),
+      )
+    }
+  })
+
+  const usedIfds = new Set(levels.flat())
+  const bitsPerSample = await readNumberArrayTag(firstDirectory, 'BitsPerSample')
+
+  return {
+    tiff,
+    directories: new Map(
+      directories.flatMap((directory, index) =>
+        usedIfds.has(index) ? [[index, directory] as const] : [],
+      ),
+    ),
+    levels,
+    levelMeta,
+    channels: qptiffChannelInfos(
+      baseline.flatMap((index) => summaries[index] ?? []),
+      bitsPerSample[0],
+    ),
+    micrometersPerPixel: qptiffMicrometersPerPixel(
+      await readOptionalRationalTag(firstDirectory, 'XResolution'),
+      await readOptionalNumberTag(firstDirectory, 'ResolutionUnit'),
+    ),
+    imageWidth,
+    imageHeight,
+    tileWidth,
+    tileHeight,
+  }
+}
+
+async function readIfdChain(tiff: GeoTIFF): Promise<readonly ImageFileDirectory[]> {
+  const directories: ImageFileDirectory[] = []
+  const seenOffsets = new Set<number>()
+
+  for (let index = 0; index < QPTIFF_MAX_IFDS; index += 1) {
+    const directory = await tiff.requestIFD(index)
+    directories.push(directory)
+
+    const next = directory.nextIFDByteOffset
+
+    if (next === 0 || seenOffsets.has(next)) {
+      break
+    }
+
+    seenOffsets.add(next)
+  }
+
+  return directories
+}
+
+async function summarizeQptiffIfd(
+  directory: ImageFileDirectory,
+  index: number,
+): Promise<QptiffIfdSummary> {
+  const [
+    width,
+    height,
+    samplesPerPixel,
+    tileWidth,
+    tileHeight,
+    subfileType,
+    description,
+  ] = await Promise.all([
+    readRequiredNumberTag(directory, 'ImageWidth'),
+    readRequiredNumberTag(directory, 'ImageLength'),
+    readOptionalNumberTag(directory, 'SamplesPerPixel'),
+    readOptionalNumberTag(directory, 'TileWidth'),
+    readOptionalNumberTag(directory, 'TileLength'),
+    readOptionalNumberTag(directory, 'NewSubfileType'),
+    readOptionalStringTag(directory, 'ImageDescription'),
+  ])
+
+  return {
+    index,
+    width,
+    height,
+    samplesPerPixel: samplesPerPixel ?? 1,
+    ...(tileWidth === undefined || tileHeight === undefined
+      ? {}
+      : { tileWidth, tileHeight }),
+    reducedResolution: ((subfileType ?? 0) & 1) === 1,
+    description: parseQptiffDescription(description),
+  }
+}
+
+async function indexQptiffChannel(
+  file: QptiffFile,
+  directories: readonly ImageFileDirectory[],
+  decodeMetadata: TiffTileDecodeMetadata,
+): Promise<TiffChunkIndex> {
+  const chunkIndex = new Map<string, TiffChunkIndexEntry>()
+  const samplesPerPixel =
+    decodeMetadata.samplesPerPixel ?? decodeMetadata.bitsPerSample?.length
+
+  await Promise.all(
+    directories.map(async (directory, level) => {
+      const meta = file.levelMeta.get(level)
+
+      if (meta === undefined) {
+        throw new Error(`No QPTIFF metadata for level ${level}.`)
+      }
+
+      await indexLevel({
+        chunkIndex,
+        directory,
+        height: meta.height,
+        level,
+        ...(decodeMetadata.planarConfiguration === undefined
+          ? {}
+          : { planarConfiguration: decodeMetadata.planarConfiguration }),
+        ...(samplesPerPixel === undefined ? {} : { samplesPerPixel }),
+        tileHeight: file.tileHeight,
+        tileWidth: file.tileWidth,
+        width: meta.width,
+        fullWidth: file.imageWidth,
+        fullHeight: file.imageHeight,
+      })
+    }),
+  )
+
+  return chunkIndex
+}
+
 // A sidecar only stores byte ranges, so check it was built for this TIFF's
 // level 0 grid and lists every tile of this channel at every level. Separated
 // planar multi-sample tiles need one byte range per sample, which a sidecar
@@ -292,8 +611,8 @@ async function openTiffImage(
 function zchunkStoreMatchesImage(
   options: Pick<
     TiffPyramidLoaderOptions,
-    'imageWidth' | 'imageHeight' | 'tileWidth' | 'tileHeight' | 'chunkIndex' | 'levelMeta'
-  >,
+    'imageWidth' | 'imageHeight' | 'tileWidth' | 'tileHeight' | 'levelMeta'
+  > & { readonly chunkIndex: TiffChunkIndex },
   image: Pick<GeoTIFFImage, 'getWidth' | 'getHeight' | 'getTileWidth' | 'getTileHeight'>,
   decodeMetadata: TiffTileDecodeMetadata,
 ): boolean {
@@ -311,7 +630,7 @@ function zchunkStoreMatchesImage(
 }
 
 function hasEveryTile(
-  chunkIndex: ReadonlyMap<string, TiffChunkIndexEntry>,
+  chunkIndex: TiffChunkIndex,
   levelMeta: ReadonlyMap<number, TiffLevelMeta>,
 ): boolean {
   for (const [level, meta] of levelMeta) {
@@ -420,7 +739,9 @@ export class TiffPyramidLoader {
   private readonly planarConfiguration: number | undefined
   private readonly littleEndian: boolean | undefined
   private readonly jpegTables: Uint8Array | undefined
-  private readonly chunks: ReadonlyMap<string, TiffChunkIndexEntry>
+  private chunks: TiffChunkIndex | undefined
+  private chunksRequest: Promise<TiffChunkIndex> | undefined
+  private readonly loadChunks: (() => Promise<TiffChunkIndex>) | undefined
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly fetcher: typeof fetch
   private readonly sourceUrl: string
@@ -429,7 +750,11 @@ export class TiffPyramidLoader {
   constructor(options: TiffPyramidLoaderOptions) {
     this.url = options.url
     this.sourceUrl = options.sourceUrl ?? options.url
-    this.chunks = options.chunkIndex
+    if (typeof options.chunkIndex === 'function') {
+      this.loadChunks = options.chunkIndex
+    } else {
+      this.chunks = options.chunkIndex
+    }
     this.levels = options.levelMeta
     this.units = options.units
     this.tileWidth = options.tileWidth
@@ -578,7 +903,7 @@ export class TiffPyramidLoader {
     row: number,
     signal?: AbortSignal,
   ): Promise<Uint8Array> {
-    const chunk = this.chunks.get(tiffChunkKey(level, row, col))
+    const chunk = (await this.chunkIndex()).get(tiffChunkKey(level, row, col))
 
     if (chunk === undefined) {
       throw new Error(`No TIFF chunk for level=${level} row=${row} col=${col}.`)
@@ -612,6 +937,30 @@ export class TiffPyramidLoader {
     }
 
     return this.fetchChunkBytes(chunk, signal)
+  }
+
+  private chunkIndex(): Promise<TiffChunkIndex> {
+    if (this.chunks !== undefined) {
+      return Promise.resolve(this.chunks)
+    }
+
+    if (this.chunksRequest === undefined) {
+      const request = (this.loadChunks?.() ?? Promise.resolve(new Map())).then(
+        (chunks) => {
+          this.chunks = chunks
+          return chunks
+        },
+      )
+      this.chunksRequest = request
+      // A failed read is retried by the next tile fetch.
+      request.catch(() => {
+        if (this.chunksRequest === request) {
+          this.chunksRequest = undefined
+        }
+      })
+    }
+
+    return this.chunksRequest
   }
 
   private async fetchChunkBytes(
@@ -661,7 +1010,7 @@ export class TiffPyramidLoader {
       return undefined
     }
 
-    const chunk = this.chunks.get(tiffChunkKey(level, row, col))
+    const chunk = this.chunks?.get(tiffChunkKey(level, row, col))
 
     return hasSampleChunks(chunk)
       ? chunk.sampleChunks.map((sampleChunk) => sampleChunk.length)
@@ -698,7 +1047,7 @@ interface IndexLevelOptions {
   readonly directory: ImageFileDirectory
   readonly height: ImagePixels
   readonly level: number
-  readonly levelMeta: Map<number, TiffLevelMeta>
+  readonly levelMeta?: Map<number, TiffLevelMeta>
   readonly planarConfiguration?: number
   readonly samplesPerPixel?: number
   readonly tileHeight: ImagePixels
@@ -780,14 +1129,25 @@ async function indexLevel(options: IndexLevelOptions): Promise<void> {
     }
   }
 
-  options.levelMeta.set(options.level, {
+  options.levelMeta?.set(options.level, tiffLevelMeta(options))
+}
+
+function tiffLevelMeta(options: {
+  readonly width: ImagePixels
+  readonly height: ImagePixels
+  readonly tileWidth: ImagePixels
+  readonly tileHeight: ImagePixels
+  readonly fullWidth: ImagePixels
+  readonly fullHeight: ImagePixels
+}): TiffLevelMeta {
+  return {
     width: options.width,
     height: options.height,
-    nCols,
-    nRows,
+    nCols: Math.ceil(options.width / options.tileWidth),
+    nRows: Math.ceil(options.height / options.tileHeight),
     scaleX: options.fullWidth / options.width,
     scaleY: options.fullHeight / options.height,
-  })
+  }
 }
 
 function hasSampleChunks(
@@ -875,6 +1235,31 @@ export async function readNumberArrayTag(
   }
 
   throw new Error(`Expected TIFF tag ${key} to be a number array.`)
+}
+
+// RATIONAL tags load as [numerator, denominator].
+async function readOptionalRationalTag(
+  directory: TiffDirectoryValueLoader,
+  key: string,
+): Promise<number | undefined> {
+  const value = await directory.loadValue(key)
+
+  if (isNumberLike(value)) {
+    return Number(value)
+  }
+
+  const parts =
+    Array.isArray(value) || (ArrayBuffer.isView(value) && !(value instanceof DataView))
+      ? Array.from(value as unknown as ArrayLike<number | bigint>, Number)
+      : []
+  const [numerator, denominator] = parts
+
+  return parts.length === 2 &&
+    numerator !== undefined &&
+    denominator !== undefined &&
+    denominator !== 0
+    ? numerator / denominator
+    : undefined
 }
 
 async function readOptionalByteArrayTag(

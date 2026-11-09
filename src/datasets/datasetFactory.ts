@@ -7,6 +7,7 @@ import {
 import { noteReadableResponse } from '../data/hostResponses'
 import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
+import { isQptiffUrl } from '../tiff/qptiff'
 import {
   DATASET_MANIFEST_FILE,
   DatasetManifestError,
@@ -62,7 +63,7 @@ export type SpatialDatasetDetection =
       readonly platform: 'image'
       readonly baseUrl: string
       readonly imageUrl: string
-      readonly imageKind?: 'tiff' | 'ndpi' | 'ome-zarr'
+      readonly imageKind?: 'tiff' | 'qptiff' | 'ndpi' | 'ome-zarr'
       readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
@@ -306,7 +307,7 @@ async function detectSpatialDatasetLayout(
           platform: 'image',
           baseUrl: normalizedBaseUrl,
           imageUrl: normalizedBaseUrl,
-          imageKind: isNdpiUrl(normalizedBaseUrl) ? 'ndpi' : 'tiff',
+          imageKind: tiffImageKind(normalizedBaseUrl),
           checked,
         }
       : {
@@ -549,11 +550,7 @@ async function detectFromManifest(
       platform: 'image',
       baseUrl,
       imageUrl,
-      imageKind: isOmeZarrImageUrl(imageUrl)
-        ? 'ome-zarr'
-        : isNdpiUrl(imageUrl)
-          ? 'ndpi'
-          : 'tiff',
+      imageKind: isOmeZarrImageUrl(imageUrl) ? 'ome-zarr' : tiffImageKind(imageUrl),
       manifest,
       checked,
     }
@@ -1034,11 +1031,15 @@ export function isImageOnlyUrl(url: string): boolean {
 }
 
 function isTiffOrNdpiUrl(url: string): boolean {
-  return /\.(?:(?:ome\.)?tiff?|ndpi)(?:$|[?#])/i.test(url)
+  return /\.(?:(?:ome\.)?tiff?|qptiff?|ndpi)(?:$|[?#])/i.test(url)
 }
 
-function isNdpiUrl(url: string): boolean {
-  return /\.ndpi(?:$|[?#])/i.test(url)
+function tiffImageKind(url: string): 'tiff' | 'qptiff' | 'ndpi' {
+  if (isQptiffUrl(url)) {
+    return 'qptiff'
+  }
+
+  return /\.ndpi(?:$|[?#])/i.test(url) ? 'ndpi' : 'tiff'
 }
 
 function isZarrImageOnlyUrl(url: string): boolean {

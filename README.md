@@ -2,7 +2,7 @@
 
 Browser-based explorer for hosted spatial-omics and image data. The app loads
 10x Xenium and Atera output folders, Visium HD Space Ranger output folders, direct AnnData
-`.h5ad` files, SpatialData Zarr stores, and image-only OME-TIFF/TIFF/OME-Zarr
+`.h5ad` files, SpatialData Zarr stores, and image-only OME-TIFF/TIFF/QPTIFF/OME-Zarr
 URLs from object storage.
 It renders spatial cells, bins, image pyramids, morphology channels, expression
 overlays, transcript density/exact overlays, annotations, ROI queries,
@@ -81,7 +81,7 @@ Enter a source in the `Dataset or image URL` field:
   `obsm` coordinate matrix.
 - SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
   table annotating a shapes or labels element, and optionally image elements.
-- Image-only: direct OME-TIFF, TIFF, OME-Zarr, or validated NDPI URL.
+- Image-only: direct OME-TIFF, TIFF, QPTIFF, OME-Zarr, or validated NDPI URL.
 
 Files do not have to keep these names. A dataset manifest, `explorer.json` in
 the dataset folder (or any `.json` URL entered directly), can name the

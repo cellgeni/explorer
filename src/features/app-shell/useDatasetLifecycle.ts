@@ -90,7 +90,9 @@ import {
   parseGeneExpressionScoreMode,
 } from '../genes/geneControlsModel'
 import {
+  channelsToAutoContrastOnLoad,
   createMorphologyChannelSettings,
+  defaultEnabledChannelIds,
   type MorphologyChannelSetting,
 } from '../morphology/morphologyChannels'
 import type {
@@ -745,7 +747,9 @@ export function useDatasetLifecycle({
         load: () => Promise<MorphologyImage | null>,
         options: {
           readonly channelSelection?: readonly string[]
-          readonly enableAllChannelsByDefault?: boolean
+          // Start with up to MAX_DEFAULT_ENABLED_CHANNELS channels on rather
+          // than only the first.
+          readonly enableFirstChannelsByDefault?: boolean
           readonly skipNativeRgbAutoContrast?: boolean
         } = {},
       ) => {
@@ -760,28 +764,29 @@ export function useDatasetLifecycle({
               return
             }
 
-            const defaultEnabledChannelIds =
-              options.enableAllChannelsByDefault === true
-                ? image.channelLoaders.map((channel) => channel.info.id)
+            const defaultChannelIds =
+              options.enableFirstChannelsByDefault === true
+                ? defaultEnabledChannelIds(image.channelLoaders)
                 : undefined
             const enabledChannelIds =
               options.channelSelection === undefined
-                ? defaultEnabledChannelIds
+                ? defaultChannelIds
                 : resolveMorphologyChannelSelection(
                     image.channelLoaders,
                     options.channelSelection,
-                    defaultEnabledChannelIds,
+                    defaultChannelIds,
                   )
+            const channelSettings = createMorphologyChannelSettings(
+              image,
+              enabledChannelIds === undefined ? {} : { enabledChannelIds },
+            )
 
             setMorphologyImage(image)
             setMorphologyChannelSettings((current) =>
               mergeMorphologyChannelSettings({
                 baseChannelIds: image.channelLoaders.map((channel) => channel.info.id),
                 currentSettings: current,
-                nextBaseSettings: createMorphologyChannelSettings(
-                  image,
-                  enabledChannelIds === undefined ? {} : { enabledChannelIds },
-                ),
+                nextBaseSettings: channelSettings,
               }),
             )
             setMorphologyState(morphologyLoadReady(image.url))
@@ -796,10 +801,10 @@ export function useDatasetLifecycle({
               return
             }
 
-            queueAutoContrast(image.channelLoaders, {
-              requestId,
-              signal: request.signal,
-            })
+            queueAutoContrast(
+              channelsToAutoContrastOnLoad(image.channelLoaders, channelSettings),
+              { requestId, signal: request.signal },
+            )
           })
           .catch((error) => {
             if (isAbortError(error)) {
@@ -1176,7 +1181,7 @@ export function useDatasetLifecycle({
               ...(restoreState.morphologyEnabledChannelIds === undefined
                 ? {}
                 : { channelSelection: restoreState.morphologyEnabledChannelIds }),
-              enableAllChannelsByDefault: true,
+              enableFirstChannelsByDefault: true,
               skipNativeRgbAutoContrast: true,
             },
           )
@@ -1256,34 +1261,35 @@ export function useDatasetLifecycle({
             return
           }
 
-          const allChannelIds = image.channelLoaders.map((channel) => channel.info.id)
+          const defaultChannelIds = defaultEnabledChannelIds(image.channelLoaders)
           const channelSelection = restoreState.morphologyEnabledChannelIds
           const enabledChannelIds =
             channelSelection !== undefined
               ? resolveMorphologyChannelSelection(
                   image.channelLoaders,
                   channelSelection,
-                  allChannelIds,
+                  defaultChannelIds,
                 )
               : shouldRestoreSharedState
                 ? undefined
-                : allChannelIds
+                : defaultChannelIds
+          const channelSettings = createMorphologyChannelSettings(
+            image,
+            enabledChannelIds === undefined ? {} : { enabledChannelIds },
+          )
 
           setMorphologyImage(image)
           setMorphologyChannelSettings((current) =>
             mergeMorphologyChannelSettings({
               baseChannelIds: image.channelLoaders.map((channel) => channel.info.id),
               currentSettings: current,
-              nextBaseSettings: createMorphologyChannelSettings(
-                image,
-                enabledChannelIds === undefined ? {} : { enabledChannelIds },
-              ),
+              nextBaseSettings: channelSettings,
             }),
           )
-          queueAutoContrast(image.channelLoaders, {
-            requestId,
-            signal: request.signal,
-          })
+          queueAutoContrast(
+            channelsToAutoContrastOnLoad(image.channelLoaders, channelSettings),
+            { requestId, signal: request.signal },
+          )
           setMorphologyState(morphologyLoadReady(detection.imageUrl))
           initialShareableStateRef.current = null
           setLoadState(datasetLoadReady(requestedUrl, 0))
