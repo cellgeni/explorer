@@ -133,13 +133,13 @@ describe('loadErrorModel', () => {
         action: serverErrorAction,
       })
     }
-    expect(
-      createStructuredLoadError('Annotations', new Error('HTTP 503')),
-    ).toMatchObject({
-      code: 'http',
-      title: 'HTTP 503 response',
-      action: serverErrorAction,
-    })
+    expect(createStructuredLoadError('Annotations', new Error('HTTP 503'))).toMatchObject(
+      {
+        code: 'http',
+        title: 'HTTP 503 response',
+        action: serverErrorAction,
+      },
+    )
   })
 
   it('keeps range-not-supported for hosts that ignore or hide Range responses', async () => {
