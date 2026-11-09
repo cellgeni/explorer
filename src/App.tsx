@@ -2090,6 +2090,50 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedGridCell,
     ],
   )
+  // Stable viewer click handlers keep the deck props unchanged across App
+  // renders, so unrelated state changes do not redraw every cell.
+  const handleViewerCellClick = useCallback(
+    (cell: OverviewCellDatum) => {
+      clearVisiumHdExpressionProfileState()
+      setSelectedGridCell(null)
+      setSelectedBoundaryCell(null)
+      setSelectedCell(cell)
+    },
+    [
+      clearVisiumHdExpressionProfileState,
+      setSelectedBoundaryCell,
+      setSelectedCell,
+      setSelectedGridCell,
+    ],
+  )
+  const handleViewerCellBoundaryClick = useCallback(
+    (cell: CellBoundaryDatum) => {
+      clearVisiumHdExpressionProfileState()
+      setSelectedCell(null)
+      setSelectedGridCell(null)
+      setSelectedBoundaryCell(cell)
+    },
+    [
+      clearVisiumHdExpressionProfileState,
+      setSelectedBoundaryCell,
+      setSelectedCell,
+      setSelectedGridCell,
+    ],
+  )
+  const handleViewerGridCellClick = useCallback(
+    (cell: GridCellDatum) => {
+      clearVisiumHdExpressionProfileState()
+      setSelectedCell(null)
+      setSelectedBoundaryCell(null)
+      setSelectedGridCell(cell)
+    },
+    [
+      clearVisiumHdExpressionProfileState,
+      setSelectedBoundaryCell,
+      setSelectedCell,
+      setSelectedGridCell,
+    ],
+  )
 
   const {
     handleMagicLensCursorActiveChange,
@@ -2976,24 +3020,9 @@ export function App({ dependencies }: AppProps = {}) {
           onViewportChange={handleViewportChange}
           onTranscriptHover={setHoveredTranscript}
           onTranscriptClick={handlePinTranscript}
-          onCellClick={(cell) => {
-            clearVisiumHdExpressionProfileState()
-            setSelectedGridCell(null)
-            setSelectedBoundaryCell(null)
-            setSelectedCell(cell)
-          }}
-          onCellBoundaryClick={(cell) => {
-            clearVisiumHdExpressionProfileState()
-            setSelectedCell(null)
-            setSelectedGridCell(null)
-            setSelectedBoundaryCell(cell)
-          }}
-          onGridCellClick={(cell) => {
-            clearVisiumHdExpressionProfileState()
-            setSelectedCell(null)
-            setSelectedBoundaryCell(null)
-            setSelectedGridCell(cell)
-          }}
+          onCellClick={handleViewerCellClick}
+          onCellBoundaryClick={handleViewerCellBoundaryClick}
+          onGridCellClick={handleViewerGridCellClick}
           onRoiComplete={activeRoiCompleteHandler}
           onMagicLensMove={handleMagicLensMove}
           onMagicLensLeave={handleMagicLensLeave}

@@ -31,6 +31,7 @@ const deckGlMock = vi.hoisted(() => ({
   onViewStateChange: undefined as MockDeckViewStateChange | undefined,
   layers: [] as readonly unknown[],
   viewState: undefined as OverviewViewState | undefined,
+  renderCount: 0,
 }))
 
 vi.mock('@deck.gl/react', () => ({
@@ -47,6 +48,7 @@ vi.mock('@deck.gl/react', () => ({
     readonly onViewStateChange?: MockDeckViewStateChange
     readonly viewState?: OverviewViewState
   }) => {
+    deckGlMock.renderCount += 1
     deckGlMock.onHover = onHover
     deckGlMock.onClick = onClick
     deckGlMock.onViewStateChange = onViewStateChange
@@ -137,6 +139,7 @@ afterEach(() => {
   deckGlMock.onViewStateChange = undefined
   deckGlMock.layers = []
   deckGlMock.viewState = undefined
+  deckGlMock.renderCount = 0
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -1915,6 +1918,31 @@ describe('ViewerCore', () => {
         maxY: 256,
       },
     })
+  })
+
+  it('does not re-render deck layers while dragging a box ROI', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+
+    render(<ViewerCore cells={[overviewCellDatum()]} roiMode="box" />)
+
+    const roiLayer = document.querySelector('.roi-draw-layer')
+
+    if (!(roiLayer instanceof HTMLElement)) {
+      throw new Error('Expected ROI draw layer.')
+    }
+
+    const renderCountBeforeDrag = deckGlMock.renderCount
+
+    fireEvent.pointerDown(roiLayer, { clientX: 100, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(roiLayer, { clientX: 108, clientY: 58, pointerId: 1 })
+    fireEvent.pointerMove(roiLayer, { clientX: 116, clientY: 66, pointerId: 1 })
+
+    expect(document.querySelector('.roi-rectangle')).toHaveStyle({
+      width: '16px',
+      height: '16px',
+    })
+    expect(deckGlMock.renderCount).toBe(renderCountBeforeDrag)
   })
 
   it('emits a lasso ROI selection from a dragged polygon path', async () => {
