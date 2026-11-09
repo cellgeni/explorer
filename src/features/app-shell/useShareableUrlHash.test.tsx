@@ -26,6 +26,7 @@ function ShareableUrlHashProbe() {
       imageOpacity: 0.45,
       measurementUnit: 'um',
       morphologyEnabledChannelIds: ['Channel:1'],
+      morphologyZPlane: 6,
       observationColorMode: 'transcript-count',
       shouldLoadMorphology: true,
       showCellBoundaries: false,
@@ -104,6 +105,7 @@ describe('useShareableUrlHash', () => {
     expect(window.location.hash).toContain('hoverTips=0')
     expect(window.location.hash).toContain('cellBoundary=0.35')
     expect(window.location.hash).toContain('channels=Channel%3A1')
+    expect(window.location.hash).toMatch(/[#&]z=6(&|$)/)
     expect(window.location.hash).toContain('lens=1')
     expect(window.location.hash).toContain('lensRadius=120')
     expect(window.location.hash).toContain('txFilter=selected')

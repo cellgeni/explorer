@@ -150,7 +150,10 @@ async function requestSidecarJson(url: string, fetcher: typeof fetch): Promise<u
   return (await response.json()) as unknown
 }
 
-function abortable<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+export function abortable<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
   if (signal === undefined) {
     return promise
   }

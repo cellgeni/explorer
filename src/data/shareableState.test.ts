@@ -45,6 +45,7 @@ describe('shareableState', () => {
       showHoverTooltips: false,
       cellBoundaryOpacity: 0.35,
       morphologyEnabledChannelIds: ['Channel:1', 'Channel:3'],
+      morphologyZPlane: 7,
       transcriptOverlay: true,
       transcriptDetailMode: 'exact',
       transcriptMinQv: 25,
@@ -87,6 +88,7 @@ describe('shareableState', () => {
     expect(state.showHoverTooltips).toBe(false)
     expect(state.cellBoundaryOpacity).toBe(0.35)
     expect(state.morphologyEnabledChannelIds).toEqual(['Channel:1', 'Channel:3'])
+    expect(state.morphologyZPlane).toBe(7)
     expect(state.transcriptOverlay).toBe(true)
     expect(state.transcriptDetailMode).toBe('exact')
     expect(state.transcriptMinQv).toBe(25)
@@ -110,6 +112,14 @@ describe('shareableState', () => {
 
     expect(hash).toContain('channels=')
     expect(parseShareableState(hash).morphologyEnabledChannelIds).toEqual([])
+  })
+
+  it('round-trips the first z plane and ignores invalid ones', () => {
+    expect(parseShareableState(formatShareableState({ morphologyZPlane: 0 }))).toEqual({
+      morphologyZPlane: 0,
+    })
+    expect(parseShareableState('#z=-1').morphologyZPlane).toBeUndefined()
+    expect(parseShareableState('#z=1.5').morphologyZPlane).toBeUndefined()
   })
 
   it('keeps a compact key for rounded view state comparisons', () => {

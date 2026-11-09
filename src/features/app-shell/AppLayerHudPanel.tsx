@@ -5,7 +5,10 @@ import type {
   CustomMorphologyLayer,
   CustomMorphologyLayerLoadState,
 } from '../morphology/customMorphologyLayers'
-import type { MorphologyImageChannel } from '../../data/morphologyImage'
+import type {
+  MorphologyImageChannel,
+  MorphologyImageZStack,
+} from '../../data/morphologyImage'
 import type { PerformanceBudget } from '../../data/performanceBudget'
 import { bundledDeckVersion } from '../../rendering/deckLayers'
 import { percentToOpacity } from '../../rendering/layerOpacity'
@@ -49,6 +52,9 @@ export interface AppLayerHudPanelProps {
   readonly measurementUnit: ViewerCoordinateUnit
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
   readonly morphologyChannels: readonly MorphologyImageChannel[]
+  readonly morphologyZStack: MorphologyImageZStack | undefined
+  readonly requestedMorphologyZPlane: number | null
+  readonly selectMorphologyZPlane: (zPlane: number) => void
   readonly performanceBudget: PerformanceBudget
   readonly showCellBoundaries: boolean
   readonly showNucleusBoundaries: boolean
@@ -95,6 +101,9 @@ export function AppLayerHudPanel({
   measurementUnit,
   morphologyChannelSettings,
   morphologyChannels,
+  morphologyZStack,
+  requestedMorphologyZPlane,
+  selectMorphologyZPlane,
   performanceBudget,
   showCellBoundaries,
   showNucleusBoundaries,
@@ -147,6 +156,9 @@ export function AppLayerHudPanel({
       measurementUnit={measurementUnit}
       morphologyChannels={morphologyChannels}
       morphologyChannelSettings={morphologyChannelSettings}
+      morphologyZStack={morphologyZStack}
+      requestedMorphologyZPlane={requestedMorphologyZPlane}
+      onMorphologyZPlaneChange={selectMorphologyZPlane}
       autoContrastChannelIds={autoContrastChannelIds}
       onImageLayerOpacityPercentChange={(nextPercent) => {
         setImageLayerOpacity(percentToOpacity(nextPercent))

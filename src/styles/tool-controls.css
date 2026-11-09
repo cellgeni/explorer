@@ -61,6 +61,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Uppercase would turn "µm" into "ΜM". */
+.z-plane-control .layer-opacity-header span {
+  text-transform: none;
+}
+
 .layer-opacity-control input[type='range'] {
   width: 100%;
   accent-color: #d73f7c;

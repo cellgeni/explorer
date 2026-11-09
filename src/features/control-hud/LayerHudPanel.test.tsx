@@ -15,6 +15,7 @@ describe('LayerHudPanel', () => {
     const onMeasurementEnabledChange = vi.fn()
     const onMeasurementUnitChange = vi.fn()
     const onClearMeasurement = vi.fn()
+    const onMorphologyZPlaneChange = vi.fn()
 
     render(
       <LayerHudPanel
@@ -67,7 +68,15 @@ describe('LayerHudPanel', () => {
         measurementUnit="um"
         morphologyChannels={[]}
         morphologyChannelSettings={[]}
+        morphologyZStack={{
+          sizeZ: 15,
+          zPlane: 7,
+          micrometersPerPlane: 3,
+          openPlane: vi.fn(),
+        }}
+        requestedMorphologyZPlane={null}
         autoContrastChannelIds={[]}
+        onMorphologyZPlaneChange={onMorphologyZPlaneChange}
         onImageLayerOpacityPercentChange={onImageLayerOpacityPercentChange}
         onCustomLayerOpacityPercentChange={onCustomLayerOpacityPercentChange}
         onCellFillOpacityPercentChange={onCellFillOpacityPercentChange}
@@ -88,6 +97,10 @@ describe('LayerHudPanel', () => {
 
     fireEvent.change(screen.getByLabelText('Dataset image opacity'), {
       target: { value: '45' },
+    })
+    expect(screen.getByText('8 / 15 · 21 µm')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Z plane'), {
+      target: { value: '9' },
     })
     fireEvent.change(screen.getByLabelText('remote.ome.tif opacity'), {
       target: { value: '35' },
@@ -116,6 +129,7 @@ describe('LayerHudPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear Measurement' }))
 
     expect(onImageLayerOpacityPercentChange).toHaveBeenCalledWith(45)
+    expect(onMorphologyZPlaneChange).toHaveBeenCalledWith(9)
     expect(onCustomLayerOpacityPercentChange).toHaveBeenCalledWith(
       'https://example.test/remote.ome.tif',
       35,

@@ -216,4 +216,111 @@ describe('OME-TIFF metadata parsing', () => {
       ),
     ).toBeCloseTo(10_000 / 45_206)
   })
+
+  it('maps a Xenium z-stack with one TiffData to consecutive IFDs', () => {
+    const metadata =
+      parseOmeTiffMetadata(`<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
+  <Image ID="Image:0">
+    <Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint16" SizeX="51294" SizeY="88404" SizeZ="13" SizeC="1" SizeT="1" PhysicalSizeX="0.2125" PhysicalSizeXUnit="µm" PhysicalSizeZ="3.0" PhysicalSizeZUnit="µm">
+      <Channel ID="Channel:0" Name="DAPI" SamplesPerPixel="1"/>
+      <TiffData PlaneCount="13"/>
+    </Pixels>
+  </Image>
+</OME>`)
+
+    expect(metadata.zStack).toEqual({ sizeZ: 13, micrometersPerPlane: 3 })
+    expect(metadata.channels[0]?.ifdIndex).toBe(0)
+    expect(metadata.channels[0]?.zPlanes?.map((plane) => plane.ifdIndex)).toEqual(
+      Array.from({ length: 13 }, (_, z) => z),
+    )
+  })
+
+  it('maps per-plane TiffData of a multi-channel z-stack in dimension order', () => {
+    const tiffData = [0, 1]
+      .flatMap((c) =>
+        [0, 1, 2].map(
+          (z) =>
+            `<TiffData FirstC="${c.toString()}" FirstZ="${z.toString()}" FirstT="0" IFD="${(c + 2 * z).toString()}" PlaneCount="1"/>`,
+        ),
+      )
+      .reverse()
+      .join('')
+    const metadata =
+      parseOmeTiffMetadata(`<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYCZT" Type="uint8" SizeX="64" SizeY="64" SizeZ="3" SizeC="2" SizeT="2" PhysicalSizeZ="500" PhysicalSizeZUnit="nm">
+      <Channel ID="Channel:0:0" Name="A"/>
+      <Channel ID="Channel:0:1" Name="B"/>
+      ${tiffData}
+    </Pixels>
+  </Image>
+</OME>`)
+
+    expect(metadata.zStack).toEqual({ sizeZ: 3, micrometersPerPlane: 0.5 })
+    expect(metadata.channels.map((channel) => channel.ifdIndex)).toEqual([0, 1])
+    expect(
+      metadata.channels.map((channel) => channel.zPlanes?.map((plane) => plane.ifdIndex)),
+    ).toEqual([
+      [0, 2, 4],
+      [1, 3, 5],
+    ])
+  })
+
+  it('maps z-stack planes without TiffData, and across files by UUID', () => {
+    const withoutTiffData = parseOmeTiffMetadata(`<OME>
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZCT" Type="uint16" SizeX="64" SizeY="64" SizeZ="2" SizeC="2" SizeT="1">
+      <Channel ID="Channel:0:0"/>
+      <Channel ID="Channel:0:1"/>
+    </Pixels>
+  </Image>
+</OME>`)
+    const multiFile = parseOmeTiffMetadata(`<OME>
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZCT" Type="uint16" SizeX="64" SizeY="64" SizeZ="2" SizeC="2" SizeT="1">
+      <Channel ID="Channel:0:0"/>
+      <Channel ID="Channel:0:1"/>
+      <TiffData FirstC="0" IFD="0" PlaneCount="2"><UUID FileName="c0.ome.tif">urn:uuid:0</UUID></TiffData>
+      <TiffData FirstC="1" IFD="0" PlaneCount="2"><UUID FileName="c1.ome.tif">urn:uuid:1</UUID></TiffData>
+    </Pixels>
+  </Image>
+</OME>`)
+
+    expect(withoutTiffData.zStack).toEqual({ sizeZ: 2 })
+    expect(withoutTiffData.channels.map((channel) => channel.zPlanes)).toEqual([
+      [{ ifdIndex: 0 }, { ifdIndex: 1 }],
+      [{ ifdIndex: 2 }, { ifdIndex: 3 }],
+    ])
+    expect(multiFile.channels[1]).toMatchObject({
+      fileName: 'c1.ome.tif',
+      ifdIndex: 0,
+      zPlanes: [
+        { ifdIndex: 0, fileName: 'c1.ome.tif' },
+        { ifdIndex: 1, fileName: 'c1.ome.tif' },
+      ],
+    })
+  })
+
+  it('reports no z-stack for 2D images or unlocated planes', () => {
+    const flat = parseOmeTiffMetadata(`<OME>
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZCT" Type="uint16" SizeX="64" SizeY="64" SizeZ="1" SizeC="1" SizeT="1" PhysicalSizeZ="3">
+      <Channel ID="Channel:0"/>
+    </Pixels>
+  </Image>
+</OME>`)
+    const partial = parseOmeTiffMetadata(`<OME>
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZCT" Type="uint16" SizeX="64" SizeY="64" SizeZ="3" SizeC="1" SizeT="1">
+      <Channel ID="Channel:0"/>
+      <TiffData IFD="0" PlaneCount="2"/>
+    </Pixels>
+  </Image>
+</OME>`)
+
+    expect(flat.zStack).toBeUndefined()
+    expect(flat.channels[0]?.zPlanes).toBeUndefined()
+    expect(partial.zStack).toBeUndefined()
+    expect(partial.channels[0]?.zPlanes).toBeUndefined()
+  })
 })

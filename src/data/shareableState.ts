@@ -33,6 +33,8 @@ export interface ShareableState {
   readonly showHoverTooltips?: boolean
   readonly cellBoundaryOpacity?: number
   readonly morphologyEnabledChannelIds?: readonly string[]
+  // Zero-based z plane of a z-stack dataset image.
+  readonly morphologyZPlane?: number
   readonly transcriptOverlay?: boolean
   readonly transcriptDetailMode?: string
   readonly transcriptMinQv?: number
@@ -89,6 +91,7 @@ export function parseShareableState(hash: string): ShareableState {
   const showHoverTooltips = parseBoolean(params.get('hoverTips'))
   const cellBoundaryOpacity = parseUnitNumber(params.get('cellBoundary'))
   const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')
+  const morphologyZPlane = parseNonNegativeInteger(params.get('z'))
   const transcriptOverlay = parseBoolean(params.get('tx'))
   const transcriptDetailMode = readString(params, 'txDetail')
   const transcriptMinQv = parseNonNegativeInteger(params.get('txQv'))
@@ -201,6 +204,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (morphologyEnabledChannelIds !== undefined) {
     state.morphologyEnabledChannelIds = morphologyEnabledChannelIds
+  }
+
+  if (morphologyZPlane !== undefined) {
+    state.morphologyZPlane = morphologyZPlane
   }
 
   if (transcriptOverlay !== undefined) {
@@ -360,6 +367,10 @@ export function formatShareableState(state: ShareableState): string {
 
   if (state.morphologyEnabledChannelIds !== undefined) {
     params.set('channels', state.morphologyEnabledChannelIds.join(','))
+  }
+
+  if (state.morphologyZPlane !== undefined && Number.isFinite(state.morphologyZPlane)) {
+    params.set('z', Math.max(0, Math.floor(state.morphologyZPlane)).toString())
   }
 
   if (state.transcriptOverlay !== undefined) {

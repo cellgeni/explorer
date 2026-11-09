@@ -8,14 +8,14 @@ import {
 } from '../data/persistentByteRangeCache'
 import { imagePixels, micrometers } from '../data/coords'
 import { tiffChunkKey } from './chunkKeys'
-import { loadZchunkStorePyramidOptions } from './zchunkStore'
+import { abortable, loadZchunkStorePyramidOptions } from './zchunkStore'
 import { parseOmeTiffMetadata } from './omeMetadata'
 import { notifyFallback, type FallbackNotifier } from '../data/fallbackNotice'
 import type { BBox, ImagePixels, TileIndex, UnitsDescriptor } from '../data/coords'
 import type { TileSourceSize } from './tileCache'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
-import type { TiffChannelInfo } from './omeMetadata'
+import type { OmeTiffZStack, TiffChannelInfo } from './omeMetadata'
 import type { OpenImagePyramidOptions } from '../data/imagePyramid'
 
 export interface TiffChunk {
@@ -48,6 +48,7 @@ export interface TiffPyramidLoaderOptions {
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
   readonly channels?: readonly TiffChannelInfo[]
+  readonly zStack?: OmeTiffZStack
   readonly compression?: number
   readonly bitsPerSample?: readonly number[]
   readonly samplesPerPixel?: number
@@ -63,6 +64,50 @@ export { parsePhysicalSizeMicrometersPerPixel } from './omeMetadata'
 // A sidecar was found but could not be parsed.
 const UNREADABLE_ZCHUNK_STORE = 'unreadable' as const
 
+// Opened TIFF files, least recently used first. Loaders of one file (its
+// channel IFDs or z planes) share its header and parsed IFD chain, so opening
+// IFD N after IFD M reads only the IFDs between them.
+const OPEN_TIFF_FILE_LIMIT = 4
+const openTiffFiles = new Map<string, Promise<GeoTIFF>>()
+
+function openTiffFile(sourceUrl: string): Promise<GeoTIFF> {
+  let file = openTiffFiles.get(sourceUrl)
+
+  if (file === undefined) {
+    const opened = fromUrl(sourceUrl, { allowFullFile: false })
+    opened.catch(() => {
+      forgetTiffFile(sourceUrl, opened)
+    })
+    file = opened
+  }
+
+  openTiffFiles.delete(sourceUrl)
+  openTiffFiles.set(sourceUrl, file)
+
+  for (const openUrl of openTiffFiles.keys()) {
+    if (openTiffFiles.size <= OPEN_TIFF_FILE_LIMIT) {
+      break
+    }
+
+    openTiffFiles.delete(openUrl)
+  }
+
+  return file
+}
+
+// geotiff keeps a failed IFD read, so a file whose open failed is reopened
+// next time.
+function forgetTiffFile(sourceUrl: string, file: Promise<GeoTIFF>): void {
+  if (openTiffFiles.get(sourceUrl) === file) {
+    openTiffFiles.delete(sourceUrl)
+  }
+}
+
+// Tests open different fake files at one URL.
+export function clearOpenTiffFiles(): void {
+  openTiffFiles.clear()
+}
+
 export async function openTiff(
   url: string,
   signal?: AbortSignal,
@@ -70,7 +115,31 @@ export async function openTiff(
   options: OpenImagePyramidOptions = {},
 ): Promise<TiffPyramidLoader> {
   const selection = parseTiffImageSelection(url)
-  const tiff = await fromUrl(selection.sourceUrl, { allowFullFile: false }, signal)
+  const file = openTiffFile(selection.sourceUrl)
+
+  try {
+    // The shared open ignores this caller's signal, since other loaders may
+    // still need it; `abortable` stops this caller waiting instead.
+    const tiff = await abortable(file, signal)
+
+    return await openTiffImage(url, selection, tiff, signal, onFallback, options)
+  } catch (cause) {
+    if (!isAbortError(cause)) {
+      forgetTiffFile(selection.sourceUrl, file)
+    }
+
+    throw cause
+  }
+}
+
+async function openTiffImage(
+  url: string,
+  selection: TiffImageSelection,
+  tiff: GeoTIFF,
+  signal: AbortSignal | undefined,
+  onFallback: FallbackNotifier | undefined,
+  options: OpenImagePyramidOptions,
+): Promise<TiffPyramidLoader> {
   const metadataImage = await tiff.getImage(0)
   const metadataDirectory = metadataImage.getFileDirectory()
   const omeMetadata = parseOmeTiffMetadata(
@@ -122,6 +191,7 @@ export async function openTiff(
         micrometersPerPixel: micrometers(omeMetadata.micrometersPerPixel),
       },
       channels: omeMetadata.channels,
+      ...(omeMetadata.zStack === undefined ? {} : { zStack: omeMetadata.zStack }),
     })
   }
 
@@ -211,6 +281,7 @@ export async function openTiff(
     imageWidth,
     imageHeight,
     channels: omeMetadata.channels,
+    ...(omeMetadata.zStack === undefined ? {} : { zStack: omeMetadata.zStack }),
   })
 }
 
@@ -282,10 +353,12 @@ export function tiffImageSelectionUrl(url: string, ifdIndex: number): string {
   return parsedUrl.toString()
 }
 
-function parseTiffImageSelection(url: string): {
+interface TiffImageSelection {
   readonly sourceUrl: string
   readonly ifdIndex?: number
-} {
+}
+
+function parseTiffImageSelection(url: string): TiffImageSelection {
   const parsedUrl = new URL(url)
   const hash = parsedUrl.hash.startsWith('#') ? parsedUrl.hash.slice(1) : parsedUrl.hash
   const params = new URLSearchParams(hash)
@@ -339,6 +412,7 @@ export class TiffPyramidLoader {
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
   readonly channels: readonly TiffChannelInfo[]
+  readonly zStack?: OmeTiffZStack
   private readonly compression: number | undefined
   private readonly bitsPerSample: readonly number[] | undefined
   private readonly samplesPerPixel: number | undefined
@@ -364,6 +438,11 @@ export class TiffPyramidLoader {
     this.imageWidth = options.imageWidth
     this.imageHeight = options.imageHeight
     this.channels = options.channels ?? []
+
+    if (options.zStack !== undefined) {
+      this.zStack = options.zStack
+    }
+
     this.compression = options.compression
     this.bitsPerSample = options.bitsPerSample
     this.samplesPerPixel = options.samplesPerPixel

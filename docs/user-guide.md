@@ -47,7 +47,10 @@ ROI, and control state. Copy the browser URL to share the same view.
 ## Layers And Genes
 
 The `Layers` tab controls dataset image opacity, hover tooltips, coordinate
-units, distance measurement, image channels, and custom image layers. Xenium,
+units, distance measurement, image channels, and custom image layers. For an
+OME-TIFF z-stack (such as Xenium `morphology.ome.tif` or Atera
+`morphology_3d/`), `Z plane` picks the plane shown; it opens at the middle
+plane. Xenium,
 H5AD, and cell-like views expose cell fill and boundary opacity when cells are
 available. Visium HD exposes cell and nucleus segmentation toggles when
 segmented outputs are detected.

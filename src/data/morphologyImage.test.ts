@@ -456,6 +456,111 @@ describe('morphology image loader', () => {
     )
   })
 
+  it('opens a z-stack at its middle plane and reopens channels at another plane', async () => {
+    const imageUrl = 'https://example.test/images/stack.ome.tif'
+    // XYCZT, 2 channels x 3 planes: plane (c, z) is IFD c + 2z.
+    const channels = [0, 1].map((c) => ({
+      id: `Channel:0:${c.toString()}`,
+      index: c,
+      name: `Channel ${(c + 1).toString()}`,
+      color: [255, 255, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+      ifdIndex: c,
+      zPlanes: [0, 1, 2].map((z) => ({ ifdIndex: c + 2 * z })),
+    }))
+    const loaderFor = (url: string) =>
+      ({
+        url,
+        channels,
+        zStack: { sizeZ: 3, micrometersPerPlane: 1.5 },
+      }) as unknown as TiffPyramidLoader
+    const baseLoader = loaderFor(imageUrl)
+    const openImage = vi.fn(async (url: string) => loaderFor(url))
+
+    const image = await morphologyImageFromPyramidLoader(imageUrl, baseLoader, {
+      openImage,
+    })
+
+    expect(image.zStack).toMatchObject({ sizeZ: 3, zPlane: 1, micrometersPerPlane: 1.5 })
+    expect(image.channelLoaders.map((channel) => channel.loader.url)).toEqual([
+      `${imageUrl}#ifd=2`,
+      `${imageUrl}#ifd=3`,
+    ])
+
+    const firstPlane = await image.zStack?.openPlane(0)
+
+    expect(firstPlane?.zStack?.zPlane).toBe(0)
+    expect(firstPlane?.loader).toBe(baseLoader)
+    // Plane 0 of channel 0 is IFD 0, the image URL's own loader.
+    expect(firstPlane?.channelLoaders[0]?.loader).toBe(baseLoader)
+    expect(firstPlane?.channelLoaders[1]?.loader.url).toBe(`${imageUrl}#ifd=1`)
+
+    openImage.mockClear()
+    const middleAgain = await firstPlane?.zStack?.openPlane(1)
+
+    expect(openImage).not.toHaveBeenCalled()
+    expect(middleAgain?.channelLoaders).toBe(image.channelLoaders)
+    await expect(image.zStack?.openPlane(99)).resolves.toMatchObject({
+      zStack: { zPlane: 2 },
+    })
+  })
+
+  it('opens a shared z plane and multi-file plane IFDs', async () => {
+    const imageUrl = 'https://example.test/run/stack_c0.ome.tif'
+    const channels = [
+      {
+        id: 'Channel:0',
+        index: 0,
+        name: 'DAPI',
+        color: [88, 144, 255] as const,
+        contrast: { min: 0, max: 65_535 },
+        zPlanes: [0, 1].map((z) => ({ ifdIndex: z, fileName: 'stack_c0.ome.tif' })),
+      },
+      {
+        id: 'Channel:1',
+        index: 1,
+        name: 'Marker',
+        color: [215, 63, 124] as const,
+        contrast: { min: 0, max: 65_535 },
+        zPlanes: [0, 1].map((z) => ({ ifdIndex: z, fileName: 'stack_c1.ome.tif' })),
+      },
+    ]
+    const loaderFor = (url: string) =>
+      ({ url, channels, zStack: { sizeZ: 2 } }) as unknown as TiffPyramidLoader
+    const openImage = vi.fn(async (url: string) => loaderFor(url))
+
+    const image = await morphologyImageFromPyramidLoader(imageUrl, loaderFor(imageUrl), {
+      openImage,
+      zPlane: 1,
+    })
+
+    expect(image.zStack?.zPlane).toBe(1)
+    expect(image.channelLoaders.map((channel) => channel.loader.url)).toEqual([
+      `${imageUrl}#ifd=1`,
+      'https://example.test/run/stack_c1.ome.tif#ifd=1',
+    ])
+  })
+
+  it('leaves 2D images without a z-stack', async () => {
+    const channel = {
+      id: 'Channel:0',
+      index: 0,
+      name: 'DAPI',
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+    }
+    const loader = { channels: [channel] } as unknown as TiffPyramidLoader
+
+    const image = await morphologyImageFromPyramidLoader(
+      'https://example.test/images/flat.ome.tif',
+      loader,
+      { openImage: vi.fn(), zPlane: 4 },
+    )
+
+    expect(image.zStack).toBeUndefined()
+    expect(image.channelLoaders).toEqual([{ info: channel, loader }])
+  })
+
   it('opens a custom morphology layer directly from a remote URL', async () => {
     const channel0 = {
       id: 'Channel:0',

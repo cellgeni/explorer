@@ -15,6 +15,7 @@ import type {
   ImagePyramidChannelInfo,
   ImagePyramidLoader,
   ImagePyramidOpener,
+  ImagePyramidPlaneRef,
   OpenImagePyramidOptions,
 } from './imagePyramid'
 
@@ -23,6 +24,16 @@ export interface MorphologyImage {
   readonly loader: ImagePyramidLoader
   readonly channels: readonly ImagePyramidChannelInfo[]
   readonly channelLoaders: readonly MorphologyImageChannel[]
+  // Set for a z-stack: `channelLoaders` read plane `zPlane`.
+  readonly zStack?: MorphologyImageZStack
+}
+
+export interface MorphologyImageZStack {
+  readonly sizeZ: number
+  readonly zPlane: number
+  readonly micrometersPerPlane?: number
+  // The same image with its channels at another z plane.
+  readonly openPlane: (zPlane: number, signal?: AbortSignal) => Promise<MorphologyImage>
 }
 
 export interface MorphologyImageChannel {
@@ -36,13 +47,20 @@ export interface LoadMorphologyImageOptions {
   readonly candidates?: readonly string[]
   readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
+  // Z plane to open a z-stack at; the middle plane by default.
+  readonly zPlane?: number
 }
 
 export interface LoadCustomMorphologyLayerOptions {
   readonly openImage?: ImagePyramidOpener
   readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
+  readonly zPlane?: number
 }
+
+// Z planes whose channel loaders a z-stack keeps, so stepping back to a recent
+// plane does not reopen its TIFF directories.
+const CACHED_Z_PLANES = 8
 
 const MORPHOLOGY_IMAGE_PATH_KEY_GROUPS = [
   ['morphology_mip_filepath', 'morphology_mip_filepaths'],
@@ -74,19 +92,15 @@ export async function loadMorphologyImage(
       zchunkStoreUrl,
     })
 
-    return {
-      url,
+    return createMorphologyImage({
+      imageUrl: url,
       loader,
-      channels: loader.channels ?? [],
-      channelLoaders: await loadMorphologyChannelLoaders({
-        imageUrl: url,
-        loader,
-        openImage,
-        onFallback: options.onFallback,
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-        ...(zchunkStoreUrl === undefined ? {} : { zchunkStoreUrl }),
-      }),
-    }
+      openImage,
+      onFallback: options.onFallback,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(zchunkStoreUrl === undefined ? {} : { zchunkStoreUrl }),
+      ...(options.zPlane === undefined ? {} : { zPlane: options.zPlane }),
+    })
   }
 
   if (candidates.length > 0) {
@@ -140,6 +154,7 @@ export async function loadCustomMorphologyLayer(
     openImage,
     onFallback: options.onFallback,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.zPlane === undefined ? {} : { zPlane: options.zPlane }),
   }
 
   try {
@@ -164,20 +179,28 @@ export async function morphologyImageFromPyramidLoader(
   loader: ImagePyramidLoader,
   options: LoadCustomMorphologyLayerOptions = {},
 ): Promise<MorphologyImage> {
-  const openImage = options.openImage ?? openImagePyramid
-
-  return {
-    url,
+  return createMorphologyImage({
+    imageUrl: url,
     loader,
-    channels: loader.channels ?? [],
-    channelLoaders: await loadMorphologyChannelLoaders({
-      imageUrl: url,
-      loader,
-      openImage,
-      onFallback: options.onFallback,
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    }),
+    openImage: options.openImage ?? openImagePyramid,
+    onFallback: options.onFallback,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.zPlane === undefined ? {} : { zPlane: options.zPlane }),
+  })
+}
+
+// The plane a z-stack opens at when none is asked for: the middle one, since
+// the outer planes of a tissue stack are often nearly empty.
+export function defaultMorphologyZPlane(sizeZ: number): number {
+  return Math.max(0, Math.floor((sizeZ - 1) / 2))
+}
+
+export function clampMorphologyZPlane(zPlane: number, sizeZ: number): number {
+  if (!Number.isFinite(zPlane)) {
+    return defaultMorphologyZPlane(sizeZ)
   }
+
+  return Math.min(Math.max(0, Math.round(zPlane)), Math.max(0, sizeZ - 1))
 }
 
 export function normalizeCustomMorphologyLayerUrl(imageUrl: string): string {
@@ -226,6 +249,7 @@ interface LoadMorphologyImageFromUrlOptions {
   readonly openImage: ImagePyramidOpener
   readonly onFallback: FallbackNotifier | undefined
   readonly signal?: AbortSignal
+  readonly zPlane?: number
 }
 
 async function loadMorphologyImageFromUrl(
@@ -237,18 +261,14 @@ async function loadMorphologyImageFromUrl(
     signal: options.signal,
   })
 
-  return {
-    url,
+  return createMorphologyImage({
+    imageUrl: url,
     loader,
-    channels: loader.channels ?? [],
-    channelLoaders: await loadMorphologyChannelLoaders({
-      imageUrl: url,
-      loader,
-      openImage: options.openImage,
-      onFallback: options.onFallback,
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    }),
-  }
+    openImage: options.openImage,
+    onFallback: options.onFallback,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.zPlane === undefined ? {} : { zPlane: options.zPlane }),
+  })
 }
 
 interface LoadMorphologyChannelLoadersOptions {
@@ -258,6 +278,79 @@ interface LoadMorphologyChannelLoadersOptions {
   readonly onFallback: FallbackNotifier | undefined
   readonly signal?: AbortSignal
   readonly zchunkStoreUrl?: string
+  readonly zPlane?: number
+}
+
+async function createMorphologyImage(
+  options: LoadMorphologyChannelLoadersOptions,
+): Promise<MorphologyImage> {
+  const { imageUrl: url, loader } = options
+  const channels = loader.channels ?? []
+  const zStack = loader.zStack
+
+  if (zStack === undefined || zStack.sizeZ <= 1 || channels.length === 0) {
+    return {
+      url,
+      loader,
+      channels,
+      channelLoaders: await loadMorphologyChannelLoaders(options),
+    }
+  }
+
+  // Most recent last.
+  const planeChannelLoaders = new Map<number, readonly MorphologyImageChannel[]>()
+  const openPlane = async (
+    requestedZPlane: number,
+    signal?: AbortSignal,
+  ): Promise<MorphologyImage> => {
+    const zPlane = clampMorphologyZPlane(requestedZPlane, zStack.sizeZ)
+    let channelLoaders = planeChannelLoaders.get(zPlane)
+
+    if (channelLoaders === undefined) {
+      channelLoaders = await loadMorphologyChannelLoaders({
+        imageUrl: url,
+        loader,
+        openImage: options.openImage,
+        onFallback: options.onFallback,
+        ...(signal === undefined ? {} : { signal }),
+        ...(options.zchunkStoreUrl === undefined
+          ? {}
+          : { zchunkStoreUrl: options.zchunkStoreUrl }),
+        zPlane,
+      })
+    }
+
+    planeChannelLoaders.delete(zPlane)
+    planeChannelLoaders.set(zPlane, channelLoaders)
+
+    for (const cachedZPlane of planeChannelLoaders.keys()) {
+      if (planeChannelLoaders.size <= CACHED_Z_PLANES) {
+        break
+      }
+
+      planeChannelLoaders.delete(cachedZPlane)
+    }
+
+    return {
+      url,
+      loader,
+      channels,
+      channelLoaders,
+      zStack: {
+        sizeZ: zStack.sizeZ,
+        zPlane,
+        ...(zStack.micrometersPerPlane === undefined
+          ? {}
+          : { micrometersPerPlane: zStack.micrometersPerPlane }),
+        openPlane,
+      },
+    }
+  }
+
+  return openPlane(
+    options.zPlane ?? defaultMorphologyZPlane(zStack.sizeZ),
+    options.signal,
+  )
 }
 
 async function loadMorphologyChannelLoaders(
@@ -275,7 +368,11 @@ async function loadMorphologyChannelLoaders(
 
   return Promise.all(
     channels.map(async (channel) => {
-      const channelUrl = morphologyChannelImageUrl(options.imageUrl, channel)
+      const channelUrl = morphologyChannelImageUrl(
+        options.imageUrl,
+        channel,
+        options.zPlane,
+      )
       let loader = loaderByUrl.get(channelUrl)
 
       if (loader === undefined) {
@@ -355,9 +452,16 @@ export async function openImagePyramid(
 function morphologyChannelImageUrl(
   imageUrl: string,
   channel: ImagePyramidChannelInfo,
+  zPlane: number | undefined,
 ): string {
   if (channel.sourceUrl !== undefined) {
     return channel.sourceUrl
+  }
+
+  const plane = zPlane === undefined ? undefined : channel.zPlanes?.[zPlane]
+
+  if (plane !== undefined) {
+    return tiffPlaneImageUrl(imageUrl, plane)
   }
 
   if (channel.fileName !== undefined) {
@@ -379,6 +483,20 @@ function morphologyChannelImageUrl(
   }
 
   return imageUrl
+}
+
+function tiffPlaneImageUrl(imageUrl: string, plane: ImagePyramidPlaneRef): string {
+  const fileUrl =
+    plane.fileName === undefined ? imageUrl : new URL(plane.fileName, imageUrl).toString()
+
+  if (!urlsReferToSameImage(fileUrl, imageUrl)) {
+    return plane.ifdIndex > 0 ? tiffImageSelectionUrl(fileUrl, plane.ifdIndex) : fileUrl
+  }
+
+  // The image URL itself opens IFD 0 unless it selects another IFD.
+  return plane.ifdIndex === 0 && new URL(imageUrl).hash === ''
+    ? imageUrl
+    : tiffImageSelectionUrl(imageUrl, plane.ifdIndex)
 }
 
 function urlsReferToSameImage(left: string, right: string): boolean {

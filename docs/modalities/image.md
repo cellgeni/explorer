@@ -79,6 +79,36 @@ Zarr loaders add `loadTile`/`loadTilePixels`.
 4. Builds levels: level 0 is the selected IFD; levels 1…n are its `SubIFDs`.
    Tile offsets come from `TileOffsets`/`TileByteCounts`.
 
+The parsed file (header and IFD chain) is shared by loaders of the same file,
+for the 4 most recently opened files, so opening another channel IFD or z plane
+reads only the IFDs not yet walked. A file whose open fails is opened afresh
+next time.
+
+### Z-Stacks
+
+An OME-TIFF with `SizeZ > 1` is a z-stack when the OME-XML locates every
+channel's plane at each z for `t = 0` (`parseOmeTiffMetadata`):
+
+- Planes are numbered in `DimensionOrder`, first letter after `XY` fastest.
+- A `TiffData` stores `PlaneCount` planes from its `FirstC`/`FirstZ`/`FirstT`
+  position in consecutive IFDs from `IFD` (default 0), in its `UUID@FileName`
+  file or this one. `PlaneCount` defaults to 1 when `IFD` is given and to every
+  remaining plane otherwise, so Xenium and Atera's `<TiffData PlaneCount="13"/>`
+  maps z to IFD z.
+- Without any `TiffData`, plane N is IFD N.
+
+Each channel gets `zPlanes` (IFD and file per z) and the loader gets
+`zStack` (`sizeZ`, and `micrometersPerPlane` from `PhysicalSizeZ`).
+`createMorphologyImage` (`src/data/morphologyImage.ts`) opens the channels at
+the middle plane, or the shared link's `z`, as `#ifd=N` loaders (or
+`<file>#ifd=N` for multi-file stacks). `MorphologyImage.zStack.openPlane`
+opens another plane; it keeps the channel loaders of the 8 most recent planes.
+`useMorphologyZPlaneWorkflow` (`src/features/morphology/`) runs the `Z plane`
+slider: the latest request wins, and channel colours and contrast windows carry
+over (press `Auto` to fit the new plane). Each plane is read like a 2D image,
+so each needs its own `SubIFDs` pyramid; a `.zchunkstore` for a single-channel
+stack lists planes on its channel axis.
+
 ### Requirements
 
 - **Tiled, with SubIFD pyramids.** Pyramids stored as additional top-level
@@ -91,14 +121,16 @@ Zarr loaders add `loadTile`/`loadTilePixels`.
 
 ### OME-XML
 
-| Field                                         | Use                                                                                                                                 |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `Pixels@PhysicalSizeX` (+ unit)               | µm/px; `PhysicalSizeY` is ignored. Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored. |
-| `Pixels@Type`                                 | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                    |
-| `Channel@Name`, MapAnnotation `Purpose`       | Channel name                                                                                                                        |
-| `Channel@Color`                               | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette      |
-| `TiffData` `FirstC`/`IFD`/`UUID@FileName`     | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`)                                                 |
-| `SamplesPerPixel ≥ 3` or `Interleaved="true"` | Native RGB, drawn without colour or window                                                                                          |
+| Field                                          | Use                                                                                                                                 |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `Pixels@PhysicalSizeX` (+ unit)                | µm/px; `PhysicalSizeY` is ignored. Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored. |
+| `Pixels@Type`                                  | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                    |
+| `Channel@Name`, MapAnnotation `Purpose`        | Channel name                                                                                                                        |
+| `Channel@Color`                                | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette      |
+| `TiffData` `FirstC`/`IFD`/`UUID@FileName`      | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`)                                                 |
+| `SizeZ`, `DimensionOrder`, `TiffData` `FirstZ` | Z-stack planes per channel (see [Z-Stacks](#z-stacks))                                                                              |
+| `PhysicalSizeZ` (+ unit)                       | Depth shown beside the `Z plane` slider                                                                                             |
+| `SamplesPerPixel ≥ 3` or `Interleaved="true"`  | Native RGB, drawn without colour or window                                                                                          |
 
 ### Codecs
 
@@ -230,4 +262,9 @@ RGB images skip it.
   and tile size, and for a complete tile list. A stale sidecar with the same
   sizes, or a root sidecar for the focus images picked up by a same-sized
   `morphology.ome.tif`, fetches the wrong bytes.
-- Only `t = 0`, `z = 0` of OME-Zarr images is shown.
+- Only `t = 0`, `z = 0` of OME-Zarr images is shown, and only `t = 0` of
+  OME-TIFFs.
+- Custom image layers open a z-stack at its middle plane but have no `Z plane`
+  control.
+- Switching to a plane not opened recently reads its IFD, `SubIFDs`, and tile
+  offset arrays (a few sequential range requests) before its tiles load.
