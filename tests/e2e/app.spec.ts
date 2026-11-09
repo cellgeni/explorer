@@ -204,21 +204,34 @@ test('loads a local H5AD fixture with obs tracks and gene expression', async ({
 
   await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
 
+  // H5AD loads with the annotation set on None; categorical obs columns are
+  // listed as annotation sets and only load on request.
   await page.getByRole('tab', { name: 'Genes' }).click()
   const genesPanel = page.locator('#hud-panel-genes')
   await expect(
     genesPanel.getByRole('button', { name: 'Actb', exact: true }),
   ).toBeVisible()
-  await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
+  await expect(genesPanel.getByLabel('Cell color')).toHaveValue('transcript-count')
 
   await genesPanel.getByRole('button', { name: 'Actb', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression: [1-9][0-9,]* cells/,
+    'Expression all cells: 3 positive cells across 4 slide cells',
     { timeout: H5AD_LOAD_TIMEOUT_MS },
   )
 
-  await genesPanel.getByLabel('Cell color').selectOption('metadata')
-  await expect(genesPanel.getByLabel('Metadata track')).toContainText('score')
+  await page.getByRole('tab', { name: 'Annotations' }).click()
+  const annotationsPanel = page.locator('#hud-panel-annotations')
+  await expect(annotationsPanel.getByLabel('Annotation set')).toHaveValue('none')
+  await annotationsPanel.getByLabel('Annotation set').selectOption({ label: 'cluster' })
+  await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
+  const loadedAnnotations = annotationsPanel.getByLabel('Loaded annotations')
+  await expect(loadedAnnotations).toContainText('cluster: A', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(loadedAnnotations).toContainText('cluster: B')
+
+  await page.getByRole('tab', { name: 'Genes' }).click()
+  await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
 
   await page.getByRole('tab', { name: 'Cell' }).click()
   const cellPanel = page.locator('#hud-panel-cell')
@@ -255,16 +268,26 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
 
   await page.getByRole('tab', { name: 'Genes' }).click()
   const genesPanel = page.locator('#hud-panel-genes')
-  await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
+  await expect(genesPanel.getByLabel('Cell color')).toHaveValue('transcript-count')
   await genesPanel.getByLabel('Gene selection').fill('CD79A')
   await genesPanel.getByRole('button', { name: 'CD79A', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression: [1-9][0-9,]* cells/,
+    /Expression all cells: [1-9][0-9,]* positive cells across 2,638 slide cells/,
     { timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS },
   )
 
-  await genesPanel.getByLabel('Cell color').selectOption('metadata')
-  await expect(genesPanel.getByLabel('Metadata track')).toContainText('n_genes')
+  await page.getByRole('tab', { name: 'Annotations' }).click()
+  const annotationsPanel = page.locator('#hud-panel-annotations')
+  await expect(annotationsPanel.getByLabel('Annotation set')).toHaveValue('none')
+  await annotationsPanel.getByLabel('Annotation set').selectOption({ label: 'leiden' })
+  await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
+  await expect(annotationsPanel.getByLabel('Loaded annotations')).toContainText(
+    'leiden: ',
+    { timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS },
+  )
+
+  await page.getByRole('tab', { name: 'Genes' }).click()
+  await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
 })
 
 test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell panels @live', async ({
@@ -402,7 +425,7 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
   await genesPanel.getByRole('button', { name: 'A2M', exact: true }).click()
   await expect(genesPanel.getByTitle('Remove A2M')).toBeVisible()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression overview: [1-9][0-9,]* positive cells across 54,504 slide cells/,
+    /Expression all cells: [1-9][0-9,]* positive cells across 54,504 slide cells/,
     { timeout: 60_000 },
   )
 

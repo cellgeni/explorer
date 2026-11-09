@@ -1,6 +1,6 @@
 import { DeckGL } from '@deck.gl/react'
 import type { KeyboardEvent, PointerEvent } from 'react'
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
 import {
@@ -163,6 +163,10 @@ interface OverviewCellLookup {
   get(id: string): OverviewCellDatum | undefined
 }
 const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
+// @deck.gl/react redraws every layer after each render of <DeckGL>, even when
+// its props are unchanged. Skip those renders so ROI drags, the cursor readout,
+// and hover tooltips do not redraw every cell on each pointer move.
+const MemoDeckGL = memo(DeckGL) as typeof DeckGL
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
@@ -1683,7 +1687,7 @@ function ViewerSurface({
       />
       {hasSpatialData ? (
         <div className="deckgl-host" aria-hidden="true">
-          <DeckGL
+          <MemoDeckGL
             views={spatialOverviewView}
             viewState={viewState}
             onViewStateChange={handleViewStateChange}
