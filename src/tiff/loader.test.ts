@@ -318,6 +318,62 @@ describe('TiffPyramidLoader', () => {
     })
   })
 
+  it('decodes sidecar tiles with the TIFF compression tags', async () => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(zchunkStoreManifest({ width: 300, height: 200, tile: 100 }))
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/sample.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).not.toHaveBeenCalled()
+    expect(loader.tileDecodeOptions()).toMatchObject({
+      compression: 8,
+      bitsPerSample: [16],
+      samplesPerPixel: 1,
+      predictor: 2,
+      littleEndian: true,
+    })
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/sample.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=900-903' } }),
+    )
+  })
+
+  it.each([
+    ['level 0 width', { width: 400, height: 200, tile: 100 }],
+    ['level 0 height', { width: 300, height: 100, tile: 100 }],
+    ['tile size', { width: 300, height: 200, tile: 128 }],
+  ])('ignores a sidecar whose %s differs from the TIFF', async (_label, manifest) => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(zchunkStoreManifest(manifest))
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/sample.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).toHaveBeenCalledOnce()
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        coalesceKey: 'morphology-geotiff-metadata:https://example.test/sample.tif',
+      }),
+    )
+    expect(loader.tileWidth).toBe(100)
+    expect(loader.tileDecodeOptions()).toMatchObject({ compression: 8 })
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/sample.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=60-65' } }),
+    )
+  })
+
   it('enumerates all tiles for a pyramid level, including partial edges', () => {
     const levels = new Map<number, TiffLevelMeta>([
       [0, { width: imagePixels(260), height: imagePixels(180), nCols: 3, nRows: 2 }],
@@ -491,4 +547,71 @@ function tiffDirectory(values: Readonly<Record<string, unknown>>) {
       return values[String(tagIdentifier)]
     },
   }
+}
+
+function mockTiff(size: {
+  readonly width: number
+  readonly height: number
+  readonly tileWidth: number
+  readonly tileHeight: number
+}): void {
+  const directory = tiffDirectory({
+    BitsPerSample: new Uint16Array([16]),
+    Compression: 8,
+    Predictor: 2,
+    SamplesPerPixel: 1,
+    TileByteCounts: new Uint32Array([1, 2, 3, 4, 5, 6]),
+    TileOffsets: new BigUint64Array([10n, 20n, 30n, 40n, 50n, 60n]),
+  })
+  const image = {
+    getFileDirectory: () => directory,
+    getHeight: () => size.height,
+    getTileHeight: () => size.tileHeight,
+    getTileWidth: () => size.tileWidth,
+    getWidth: () => size.width,
+  }
+
+  mockedFromUrl.mockResolvedValue({
+    getImage: vi.fn(async () => image),
+    littleEndian: true,
+    parser: { parseFileDirectoryAt: vi.fn() },
+  } as unknown as Awaited<ReturnType<typeof fromUrl>>)
+}
+
+function zchunkStoreManifest(size: {
+  readonly width: number
+  readonly height: number
+  readonly tile: number
+}): unknown {
+  return {
+    'zarr.json': {
+      zarr_format: 3,
+      node_type: 'group',
+      attributes: { multiscales: [{ datasets: [{ path: '0' }] }] },
+    },
+    '0/zarr.json': {
+      zarr_format: 3,
+      node_type: 'array',
+      shape: [1, size.height, size.width],
+      chunk_grid: { configuration: { chunk_shape: [1, size.tile, size.tile] } },
+    },
+    '0/c/0/1/2': { offset: 900, size: 4 },
+  }
+}
+
+function stubZchunkStoreFetch(manifest: unknown): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === 'https://example.test/sample.tif.zchunkstore') {
+        return Response.json(manifest)
+      }
+
+      if (String(input) === 'https://example.test/sample.tif') {
+        return new Response(new Uint8Array(8), { status: 206 })
+      }
+
+      return new Response(null, { status: 404 })
+    }),
+  )
 }

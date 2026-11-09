@@ -1,5 +1,5 @@
 import { fromUrl } from 'geotiff'
-import type { GeoTIFF } from 'geotiff'
+import type { GeoTIFF, GeoTIFFImage } from 'geotiff'
 import type { ImageFileDirectory } from 'geotiff'
 import {
   defaultPersistentByteRangeCache,
@@ -74,6 +74,14 @@ export async function openTiff(
   const channelIndex =
     selection.ifdIndex ?? channelIndexForUrl(selection.sourceUrl, omeMetadata.channels)
 
+  const firstImage = await tiff.getImage(selection.ifdIndex ?? 0)
+  const firstDirectory = firstImage.getFileDirectory()
+  const imageWidth = imagePixels(firstImage.getWidth())
+  const imageHeight = imagePixels(firstImage.getHeight())
+  const tileWidth = imagePixels(firstImage.getTileWidth() || 256)
+  const tileHeight = imagePixels(firstImage.getTileHeight() || 256)
+  const decodeMetadata = await readTileDecodeMetadata(tiff, firstDirectory)
+
   const zchunkStoreOptions = await loadZchunkStorePyramidOptions(
     selection.sourceUrl,
     signal,
@@ -87,10 +95,14 @@ export async function openTiff(
     return null
   })
 
-  if (zchunkStoreOptions !== null) {
+  if (
+    zchunkStoreOptions !== null &&
+    zchunkStoreMatchesImage(zchunkStoreOptions, firstImage, decodeMetadata)
+  ) {
     return new TiffPyramidLoader({
       url,
       sourceUrl: selection.sourceUrl,
+      ...decodeMetadata,
       ...zchunkStoreOptions,
       units: {
         ...zchunkStoreOptions.units,
@@ -103,19 +115,12 @@ export async function openTiff(
   notifyFallback(onFallback, {
     source: 'Morphology image',
     message:
-      'Zarr chunk-store tile metadata was unavailable, so the app switched to GeoTIFF metadata parsing.',
+      'Zarr chunk-store tile metadata was unavailable or did not match the TIFF, so the app switched to GeoTIFF metadata parsing.',
     action:
       'The image can still load, but opening the TIFF may be slower than the chunk-store path.',
     coalesceKey: `morphology-geotiff-metadata:${selection.sourceUrl}`,
   })
 
-  const firstImage = await tiff.getImage(selection.ifdIndex ?? 0)
-  const firstDirectory = firstImage.getFileDirectory()
-  const imageWidth = imagePixels(firstImage.getWidth())
-  const imageHeight = imagePixels(firstImage.getHeight())
-  const tileWidth = imagePixels(firstImage.getTileWidth() || 256)
-  const tileHeight = imagePixels(firstImage.getTileHeight() || 256)
-  const decodeMetadata = await readTileDecodeMetadata(tiff, firstDirectory)
   const indexPlanarConfiguration = decodeMetadata.planarConfiguration
   const indexSamplesPerPixel =
     decodeMetadata.samplesPerPixel ?? decodeMetadata.bitsPerSample?.length
@@ -191,6 +196,29 @@ export async function openTiff(
     imageHeight,
     channels: omeMetadata.channels,
   })
+}
+
+// A sidecar only stores byte ranges, so check it was built for this TIFF's
+// level 0 grid. Separated planar multi-sample tiles need one byte range per
+// sample, which a sidecar does not record.
+function zchunkStoreMatchesImage(
+  options: Pick<
+    TiffPyramidLoaderOptions,
+    'imageWidth' | 'imageHeight' | 'tileWidth' | 'tileHeight'
+  >,
+  image: Pick<GeoTIFFImage, 'getWidth' | 'getHeight' | 'getTileWidth' | 'getTileHeight'>,
+  decodeMetadata: TiffTileDecodeMetadata,
+): boolean {
+  const samplesPerPixel =
+    decodeMetadata.samplesPerPixel ?? decodeMetadata.bitsPerSample?.length ?? 1
+
+  return (
+    options.imageWidth === image.getWidth() &&
+    options.imageHeight === image.getHeight() &&
+    options.tileWidth === image.getTileWidth() &&
+    options.tileHeight === image.getTileHeight() &&
+    !(samplesPerPixel > 1 && (decodeMetadata.planarConfiguration ?? 1) === 2)
+  )
 }
 
 function channelIndexForUrl(url: string, channels: readonly TiffChannelInfo[]): number {
