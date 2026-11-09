@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { zchunkStoreCandidateUrls, zchunkStoreToPyramidOptions } from './zchunkStore'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  loadZchunkStorePyramidOptions,
+  zchunkStoreCandidateUrls,
+  zchunkStoreToPyramidOptions,
+} from './zchunkStore'
 
 describe('Zarr chunk store TIFF adapter', () => {
   it('tries file, folder, then dataset-root chunk stores for morphology focus images', () => {
@@ -26,6 +30,25 @@ describe('Zarr chunk store TIFF adapter', () => {
   it('only tries the per-file chunk store for other TIFFs', () => {
     expect(zchunkStoreCandidateUrls('https://example.test/images/slide.ome.tif')).toEqual(
       ['https://example.test/images/slide.ome.tif.zchunkstore'],
+    )
+  })
+
+  it('fetches only the sidecar the manifest names', async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 }))
+
+    await expect(
+      loadZchunkStorePyramidOptions(
+        'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+        undefined,
+        fetcher,
+        0,
+        'https://sidecars.example.test/run-1.zchunkstore',
+      ),
+    ).resolves.toBeNull()
+    expect(fetcher).toHaveBeenCalledOnce()
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://sidecars.example.test/run-1.zchunkstore',
+      {},
     )
   })
 

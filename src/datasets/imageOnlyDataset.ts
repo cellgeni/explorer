@@ -1,7 +1,9 @@
 import { micrometers } from '../data/coords'
 import { openImagePyramid } from '../data/morphologyImage'
+import type { FallbackNotifier } from '../data/fallbackNotice'
 import type { GexResult } from '../data/gex'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
+import type { OpenTiffOptions } from '../tiff/loader'
 import type {
   Annotation,
   DatasetMeta,
@@ -11,20 +13,29 @@ import type {
   SpatialElementId,
 } from './spatialDataset'
 
-export type ImageOnlyImageLoader = (url: string) => Promise<ImagePyramidLoader>
+export type ImageOnlyImageLoader = (
+  url: string,
+  signal?: AbortSignal,
+  onFallback?: FallbackNotifier,
+  options?: OpenTiffOptions,
+) => Promise<ImagePyramidLoader>
 
 export interface ImageOnlyDatasetOptions {
   readonly imageUrl: string
+  // `.zchunkstore` sidecar named by the dataset manifest.
+  readonly zchunkStoreUrl?: string
   readonly openImage?: ImageOnlyImageLoader
 }
 
 export class ImageOnlyDataset implements SpatialDataset<SpatialElementId> {
   readonly imageUrl: string
+  private readonly zchunkStoreUrl: string | undefined
   private readonly openImage: ImageOnlyImageLoader
   private loaderPromise: Promise<ImagePyramidLoader> | null = null
 
   constructor(options: ImageOnlyDatasetOptions) {
     this.imageUrl = options.imageUrl
+    this.zchunkStoreUrl = options.zchunkStoreUrl
     this.openImage = options.openImage ?? openImagePyramid
   }
 
@@ -80,7 +91,12 @@ export class ImageOnlyDataset implements SpatialDataset<SpatialElementId> {
   }
 
   private loader(): Promise<ImagePyramidLoader> {
-    this.loaderPromise ??= this.openImage(this.imageUrl)
+    this.loaderPromise ??=
+      this.zchunkStoreUrl === undefined
+        ? this.openImage(this.imageUrl)
+        : this.openImage(this.imageUrl, undefined, undefined, {
+            zchunkStoreUrl: this.zchunkStoreUrl,
+          })
     return this.loaderPromise
   }
 }

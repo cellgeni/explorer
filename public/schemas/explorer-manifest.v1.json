@@ -107,6 +107,10 @@
               "image": {
                 "$ref": "#/$defs/path",
                 "description": "OME-TIFF, TIFF, NDPI, or OME-Zarr image."
+              },
+              "zchunkstore": {
+                "$ref": "#/$defs/path",
+                "description": "`.zchunkstore` tile-offset sidecar for a TIFF `image`. Replaces the default lookup next to the TIFF (`<image>.zchunkstore`)."
               }
             },
             "additionalProperties": false
@@ -164,6 +168,10 @@
           "$ref": "#/$defs/path",
           "description": "Morphology image. Default: the image listed in experiment.xenium."
         },
+        "morphologyZchunkstore": {
+          "$ref": "#/$defs/path",
+          "description": "`.zchunkstore` tile-offset sidecar for the morphology image. Replaces the default lookup next to the TIFF (`<file>.zchunkstore`, then the folder and dataset root)."
+        },
         "umap": {
           "$ref": "#/$defs/path",
           "description": "UMAP projection CSV. Default: searched under analysis/umap/."
@@ -203,6 +211,10 @@
         "morphology": {
           "$ref": "#/$defs/path",
           "description": "Morphology image. Default: the morphology_2d image listed in experiment.spatial."
+        },
+        "morphologyZchunkstore": {
+          "$ref": "#/$defs/path",
+          "description": "`.zchunkstore` tile-offset sidecar covering every morphology_2d channel file. Replaces the default lookup next to each TIFF (`<file>.zchunkstore`)."
         }
       },
       "additionalProperties": false

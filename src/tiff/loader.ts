@@ -59,10 +59,17 @@ export interface TiffPyramidLoaderOptions {
 }
 export { parsePhysicalSizeMicrometersPerPixel } from './omeMetadata'
 
+export interface OpenTiffOptions {
+  // `.zchunkstore` sidecar from the dataset manifest, tried instead of the
+  // locations derived from the TIFF URL.
+  readonly zchunkStoreUrl?: string
+}
+
 export async function openTiff(
   url: string,
   signal?: AbortSignal,
   onFallback?: FallbackNotifier,
+  options: OpenTiffOptions = {},
 ): Promise<TiffPyramidLoader> {
   const selection = parseTiffImageSelection(url)
   const tiff = await fromUrl(selection.sourceUrl, { allowFullFile: false }, signal)
@@ -87,6 +94,7 @@ export async function openTiff(
     signal,
     globalThis.fetch.bind(globalThis),
     channelIndex,
+    options.zchunkStoreUrl,
   ).catch((cause: unknown) => {
     if (isAbortError(cause)) {
       throw cause

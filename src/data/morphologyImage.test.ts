@@ -121,6 +121,49 @@ describe('morphology image loader', () => {
     )
   })
 
+  it('opens the image and its channel files with the manifest sidecar', async () => {
+    const baseUrl = 'https://example.test/manifest-sidecar/explorer.json'
+    const zchunkStoreUrl = 'https://sidecars.example.test/focus.zchunkstore'
+    const channels = [
+      { id: 'Channel:0', index: 0, fileName: 'morphology_focus_0000.ome.tif' },
+      { id: 'Channel:1', index: 1, fileName: 'morphology_focus_0001.ome.tif' },
+    ]
+    const loader = { channels } as unknown as TiffPyramidLoader
+    const openImage = vi.fn(async () => loader)
+    setDatasetManifest(baseUrl, {
+      platform: 'xenium',
+      url: baseUrl,
+      rootUrl: 'https://example.test/manifest-sidecar',
+      files: {
+        morphology: {
+          path: 'morphology_focus/morphology_focus_0000.ome.tif',
+          url: 'https://example.test/manifest-sidecar/morphology_focus/morphology_focus_0000.ome.tif',
+        },
+        morphologyZchunkstore: { path: zchunkStoreUrl, url: zchunkStoreUrl },
+      },
+    })
+
+    try {
+      await loadMorphologyImage(baseUrl, { fetcher: vi.fn(), openImage })
+      expect(openImage.mock.calls).toEqual([
+        [
+          'https://example.test/manifest-sidecar/morphology_focus/morphology_focus_0000.ome.tif',
+          undefined,
+          undefined,
+          { zchunkStoreUrl },
+        ],
+        [
+          'https://example.test/manifest-sidecar/morphology_focus/morphology_focus_0001.ome.tif',
+          undefined,
+          undefined,
+          { zchunkStoreUrl },
+        ],
+      ])
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
+  })
+
   it('opens channel loaders from OME-declared sibling focus files', async () => {
     const channel0 = {
       id: 'Channel:0',

@@ -102,6 +102,14 @@ skipped, so buckets that answer `403` for missing keys work.
 | `<dir>/morphology*.tif` (`morphology.ome.tif`, `morphology_mip.ome.tif`, …) | `<dir>/morphology*.tif.zchunkstore`, `<dir>/.zchunkstore`                                                                          |
 | Any other TIFF                                                              | `<file>.zchunkstore`                                                                                                               |
 
+A dataset manifest can name the sidecar instead (`files.morphologyZchunkstore`
+for Xenium and Atera, `files.zchunkstore` for `image`; see
+[Dataset manifest](./dataset-manifest.md#files)). The viewer then fetches only
+that URL and skips the locations above, so the sidecar can live in another
+folder or bucket, under any name. Paths resolve like other manifest paths. One
+sidecar for a multi-file OME-TIFF covers every channel file, as at
+`morphology_focus/.zchunkstore`.
+
 Recommended placement:
 
 - **Xenium focus images (XOA 2 and later):** `morphology_focus/.zchunkstore`.

@@ -25,8 +25,13 @@ export async function loadZchunkStorePyramidOptions(
   signal?: AbortSignal,
   fetcher: typeof fetch = globalThis.fetch.bind(globalThis),
   channelIndex = 0,
+  zchunkStoreUrl?: string,
 ): Promise<ZchunkStorePyramidOptions | null> {
-  for (const manifestUrl of zchunkStoreCandidateUrls(tiffUrl)) {
+  // A sidecar named by the dataset manifest replaces the derived locations.
+  const candidates =
+    zchunkStoreUrl === undefined ? zchunkStoreCandidateUrls(tiffUrl) : [zchunkStoreUrl]
+
+  for (const manifestUrl of candidates) {
     const requestInit: RequestInit = {}
 
     if (signal !== undefined) {

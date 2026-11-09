@@ -344,6 +344,34 @@ describe('TiffPyramidLoader', () => {
     )
   })
 
+  it('reads the sidecar the manifest names instead of the derived ones', async () => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(zchunkStoreManifest({ width: 300, height: 200, tile: 100 }), {
+      sidecarUrl: 'https://sidecars.example.test/sample.zchunkstore',
+    })
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/sample.tif',
+      undefined,
+      onFallback,
+      {
+        zchunkStoreUrl: 'https://sidecars.example.test/sample.zchunkstore',
+      },
+    )
+
+    expect(onFallback).not.toHaveBeenCalled()
+    expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(
+      'https://example.test/sample.tif.zchunkstore',
+      expect.anything(),
+    )
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/sample.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=900-903' } }),
+    )
+  })
+
   it.each([
     ['level 0 width', { width: 400, height: 200, tile: 100 }],
     ['level 0 height', { width: 300, height: 100, tile: 100 }],
@@ -599,11 +627,14 @@ function zchunkStoreManifest(size: {
   }
 }
 
-function stubZchunkStoreFetch(manifest: unknown): void {
+function stubZchunkStoreFetch(
+  manifest: unknown,
+  { sidecarUrl = 'https://example.test/sample.tif.zchunkstore' } = {},
+): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
-      if (String(input) === 'https://example.test/sample.tif.zchunkstore') {
+      if (String(input) === sidecarUrl) {
         return Response.json(manifest)
       }
 

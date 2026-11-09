@@ -4,6 +4,30 @@ import { ImageOnlyDataset } from './imageOnlyDataset'
 import type { TiffPyramidLoader } from '../tiff/loader'
 
 describe('ImageOnlyDataset', () => {
+  it('opens the image with the manifest sidecar', async () => {
+    const loader = tiffLoaderFixture({
+      imageWidth: imagePixels(400),
+      imageHeight: imagePixels(200),
+      micrometersPerPixel: 0.5,
+      channelCount: 1,
+    })
+    const openImage = vi.fn(async () => loader)
+    const dataset = new ImageOnlyDataset({
+      imageUrl: 'https://example.test/sample.ome.tif',
+      zchunkStoreUrl: 'https://sidecars.example.test/sample.zchunkstore',
+      openImage,
+    })
+
+    await dataset.image()
+
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/sample.ome.tif',
+      undefined,
+      undefined,
+      { zchunkStoreUrl: 'https://sidecars.example.test/sample.zchunkstore' },
+    )
+  })
+
   it('derives metadata extent and capabilities from the TIFF loader', async () => {
     const loader = tiffLoaderFixture({
       imageWidth: imagePixels(400),
