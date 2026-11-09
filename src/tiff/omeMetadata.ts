@@ -346,7 +346,10 @@ function micrometersPerPixelFromPhysicalSize(
 }
 
 function normalizePhysicalSizeUnit(unit: string | undefined): string | undefined {
-  const normalized = unit?.trim().toLowerCase().replace(/[\u03bc\u00b5]/g, 'u')
+  const normalized = unit
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\u03bc\u00b5]/g, 'u')
 
   if (normalized === undefined || normalized.length === 0) {
     return undefined
