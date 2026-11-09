@@ -4,7 +4,7 @@ import { ImageOnlyDataset } from './imageOnlyDataset'
 import type { TiffPyramidLoader } from '../tiff/loader'
 
 describe('ImageOnlyDataset', () => {
-  it('opens the image with the manifest sidecar', async () => {
+  it('opens the image and its channel files with the manifest sidecar', async () => {
     const loader = tiffLoaderFixture({
       imageWidth: imagePixels(400),
       imageHeight: imagePixels(200),
@@ -18,14 +18,32 @@ describe('ImageOnlyDataset', () => {
       openImage,
     })
 
-    await dataset.image()
-
-    expect(openImage).toHaveBeenCalledWith(
-      'https://example.test/sample.ome.tif',
-      undefined,
-      undefined,
-      { zchunkStoreUrl: 'https://sidecars.example.test/sample.zchunkstore' },
+    const image = await dataset.image()
+    const onFallback = vi.fn()
+    const signal = new AbortController().signal
+    if (image.kind !== 'pyramid') {
+      throw new Error('Expected a pyramid image.')
+    }
+    await image.openChannelLoader?.(
+      'https://example.test/sample.ome.tif#ifd=1',
+      signal,
+      onFallback,
     )
+
+    expect(openImage.mock.calls).toEqual([
+      [
+        'https://example.test/sample.ome.tif',
+        undefined,
+        undefined,
+        { zchunkStoreUrl: 'https://sidecars.example.test/sample.zchunkstore' },
+      ],
+      [
+        'https://example.test/sample.ome.tif#ifd=1',
+        signal,
+        onFallback,
+        { zchunkStoreUrl: 'https://sidecars.example.test/sample.zchunkstore' },
+      ],
+    ])
   })
 
   it('derives metadata extent and capabilities from the TIFF loader', async () => {
@@ -72,7 +90,12 @@ describe('ImageOnlyDataset', () => {
         },
       ],
     })
-    expect(openImage).toHaveBeenCalledWith('https://example.test/sample.ome.tif')
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/sample.ome.tif',
+      undefined,
+      undefined,
+      undefined,
+    )
   })
 
   it('returns empty spatial data while exposing the pyramid image', async () => {
@@ -91,7 +114,11 @@ describe('ImageOnlyDataset', () => {
     expect(matrix.cells.get('shape-a')).toEqual({ geneNames: [], counts: [] })
     expect(matrix.cells.get('shape-b')).toEqual({ geneNames: [], counts: [] })
 
-    await expect(dataset.image()).resolves.toEqual({ kind: 'pyramid', loader })
+    await expect(dataset.image()).resolves.toEqual({
+      kind: 'pyramid',
+      loader,
+      openChannelLoader: expect.any(Function),
+    })
     await dataset.meta()
     expect(openImage).toHaveBeenCalledTimes(1)
   })

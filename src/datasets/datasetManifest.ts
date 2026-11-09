@@ -4,6 +4,7 @@
 // standard file names (see datasetFactory.ts). The format is described in
 // docs/dataset-manifest.md and public/schemas/explorer-manifest.v1.json.
 
+import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import {
   ATERA_FILE_DEFAULTS,
   ATERA_OPTIONAL_FILES,
@@ -364,13 +365,20 @@ export function parseDatasetManifest(
   if (platform === 'image') {
     rejectOptions(options, platform, fail)
     checkKeys(files, IMAGE_MANIFEST_FILES, 'files.', fail)
+    const image = requiredFile('image')
     const zchunkstore = file('zchunkstore')
+
+    if (zchunkstore !== undefined && isOmeZarrImageUrl(image.url)) {
+      fail(
+        '"files.zchunkstore" is only for TIFF images; remove it for an OME-Zarr image.',
+      )
+    }
 
     return {
       ...base,
       platform,
       files: {
-        image: requiredFile('image'),
+        image,
         ...(zchunkstore === undefined ? {} : { zchunkstore }),
       },
     }

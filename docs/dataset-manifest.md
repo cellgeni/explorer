@@ -152,12 +152,12 @@ probed as usual.
 
 ### H5AD, SpatialData, And Image
 
-| Platform      | Key           | Value                                                                                                                  |
-| ------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `h5ad`        | `h5ad`        | Required. The `.h5ad` file; checked with `HEAD`                                                                        |
-| `spatialdata` | `store`       | Required. The Zarr store root                                                                                          |
-| `image`       | `image`       | Required. OME-TIFF, TIFF, NDPI, or OME-Zarr; the type is taken from the suffix                                         |
-| `image`       | `zchunkstore` | Optional. [`.zchunkstore` sidecar](./zchunkstore.md) for a TIFF `image`. Replaces the lookup for `<image>.zchunkstore` |
+| Platform      | Key           | Value                                                                                                                                                                      |
+| ------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `h5ad`        | `h5ad`        | Required. The `.h5ad` file; checked with `HEAD`                                                                                                                            |
+| `spatialdata` | `store`       | Required. The Zarr store root                                                                                                                                              |
+| `image`       | `image`       | Required. OME-TIFF, TIFF, NDPI, or OME-Zarr; the type is taken from the suffix                                                                                             |
+| `image`       | `zchunkstore` | Optional. [`.zchunkstore` sidecar](./zchunkstore.md) for a TIFF `image`, and for its channel files. Replaces the lookup next to the TIFF. Rejected for an OME-Zarr `image` |
 
 ## Options
 
@@ -249,10 +249,13 @@ such as VS Code will complete field names and flag errors as you type.
    manifest's `options` when there is none.
 
 A sidecar named by `morphologyZchunkstore` or `zchunkstore` reaches `openTiff`
-as `zchunkStoreUrl` (`zchunkStoreUrlFor` in `src/data/datasetFiles.ts`, then
-`loadMorphologyImage` or `ImageOnlyDataset`). It is the only sidecar URL tried:
-if it is missing or does not match the TIFF, the image loads without one, with
-the fallback notice.
+as `zchunkStoreUrl`: `loadMorphologyImage` looks it up with `zchunkStoreUrlFor`
+(`src/data/datasetFiles.ts`), and `AteraDataset` and `ImageOnlyDataset` pass it
+for the image and, through `openChannelLoader`, for each channel file. It is
+the only sidecar URL tried: if it is missing or does not match the TIFF, the
+image loads without one, with the fallback notice. If the morphology image
+turns out to be OME-Zarr, the sidecar is not used and a fallback notice says
+so.
 
 `src/datasets/datasetManifestSchema.test.ts` checks that the JSON Schema and
 the parser accept the same fields and values.

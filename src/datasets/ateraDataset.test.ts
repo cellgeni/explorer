@@ -432,7 +432,7 @@ describe('AteraDataset', () => {
     await dataset.image()
 
     expect(openImage.mock.calls).toEqual([
-      [`${BASE_URL}/morphology_2d/ch0000_dapi.ome.tif`],
+      [`${BASE_URL}/morphology_2d/ch0000_dapi.ome.tif`, undefined, undefined, undefined],
     ])
   })
 

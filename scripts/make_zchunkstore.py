@@ -161,7 +161,8 @@ def build_chunk_store(tiff_path):
 
 def default_output(tiff_path, nfiles):
     # A multi-file series covers every file in its folder, so it gets a
-    # folder-level sidecar; a single file gets `<file>.zchunkstore`.
+    # folder-level sidecar, which the viewer looks for next to any file of a
+    # multi-file OME-TIFF; a single file gets `<file>.zchunkstore`.
     if nfiles > 1:
         return tiff_path.parent / ".zchunkstore"
     return tiff_path.with_name(tiff_path.name + ".zchunkstore")

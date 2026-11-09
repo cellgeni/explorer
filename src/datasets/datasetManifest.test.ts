@@ -138,6 +138,13 @@ describe('parseDatasetManifest', () => {
     expect(
       parseError({
         version: 1,
+        platform: 'image',
+        files: { image: 'he.ome.zarr', zchunkstore: 'he.zchunkstore' },
+      }),
+    ).toContain('"files.zchunkstore" is only for TIFF images')
+    expect(
+      parseError({
+        version: 1,
         platform: 'h5ad',
         files: { h5ad: 'a.h5ad', zchunkstore: 'a.zchunkstore' },
       }),

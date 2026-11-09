@@ -21,8 +21,8 @@ import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 import type { CellTranscriptZDistribution } from '../data/cellTranscripts'
-import type { OpenTiffOptions, TiffPyramidLoader } from '../tiff/loader'
-import type { FallbackNotifier } from '../data/fallbackNotice'
+import type { TiffPyramidLoader } from '../tiff/loader'
+import type { ImagePyramidOpener } from '../data/imagePyramid'
 import type {
   CellFeatureMatrixReadOptions,
   DuckDbPreparedStatementLike,
@@ -60,19 +60,12 @@ type TranscriptReader = (
   minQv?: number,
 ) => Promise<GexResult>
 
-export type XeniumTiffOpener = (
-  url: string,
-  signal?: AbortSignal,
-  onFallback?: FallbackNotifier,
-  options?: OpenTiffOptions,
-) => Promise<TiffPyramidLoader>
-
 export interface XeniumDatasetOptions {
   readonly baseUrl: string
   readonly fetcher?: typeof fetch
   readonly duckDbClient?: DuckDbClientLike | Promise<DuckDbClientLike>
   readonly createDuckDbClient?: () => Promise<DuckDbClientLike>
-  readonly openTiff?: XeniumTiffOpener
+  readonly openTiff?: ImagePyramidOpener<TiffPyramidLoader>
   readonly matrixReader?: MatrixReader
   readonly geneExpressionMatrixReader?: GeneExpressionMatrixReader
   // Lists the cells expressing the selected genes; null keeps reading the
@@ -187,7 +180,12 @@ const DEFAULT_XENIUM_UNITS: UnitsDescriptor = {
   imageYAxis: 'down',
 }
 
-const openTiffLazy: XeniumTiffOpener = async (url, signal, onFallback, options) => {
+const openTiffLazy: ImagePyramidOpener<TiffPyramidLoader> = async (
+  url,
+  signal,
+  onFallback,
+  options,
+) => {
   const { openTiff } = await import('../tiff/loader')
   return openTiff(url, signal, onFallback, options)
 }
@@ -229,7 +227,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
   private readonly baseUrl: string
   private readonly fetcher: typeof fetch
   private readonly duckFactory: () => Promise<DuckDbClientLike>
-  private readonly tiffOpener: XeniumTiffOpener
+  private readonly tiffOpener: ImagePyramidOpener<TiffPyramidLoader>
   private readonly matrixReader: MatrixReader
   private readonly geneExpressionMatrixReader: GeneExpressionMatrixReader
   private readonly selectedGeneRowsReader: XeniumSelectedGeneRowsReader | null

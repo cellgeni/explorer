@@ -63,13 +63,17 @@ Zarr loaders add `loadTile`/`loadTilePixels`.
 2. Reads OME-XML from IFD 0's `ImageDescription` (`parseOmeTiffMetadata`,
    `src/tiff/omeMetadata.ts`).
 3. Tries a `.zchunkstore` sidecar (`src/tiff/zchunkStore.ts`) for precomputed
-   tile offsets: `<file>.zchunkstore`, then `<parent>/.zchunkstore` for
-   `morphology*` files, then `<root>/.zchunkstore` for `morphology_focus/`
-   paths.
+   tile offsets. A sidecar named by the dataset manifest
+   (`files.morphologyZchunkstore`, or `files.zchunkstore` for `image`) is the
+   only one tried. Otherwise it requests `<file>.zchunkstore`,
+   `<parent>/.zchunkstore` for `morphology*` files and for files of a
+   multi-file OME-TIFF, and `<root>/.zchunkstore` for `morphology_focus/`
+   paths, and uses the first found in that order.
    A sidecar is used only if its level 0 width, height, and tile size match
-   the selected IFD. If none is found or it does not match, it logs a fallback
-   notice and indexes the TIFF itself. Either way, tiles are decoded with the
-   selected IFD's `Compression`, `Predictor`, and related tags.
+   the selected IFD and it lists every tile of the channel. If none is found
+   or it does not match, it logs a fallback notice and indexes the TIFF
+   itself. Either way, tiles are decoded with the selected IFD's
+   `Compression`, `Predictor`, and related tags.
    See [TIFF tile-offset sidecars](../zchunkstore.md) for the format and how
    to generate one.
 4. Builds levels: level 0 is the selected IFD; levels 1…n are its `SubIFDs`.
@@ -223,7 +227,7 @@ RGB images skip it.
 - Generic TIFFs (no `.zchunkstore`) always add one fallback notice and an
   extra request for the sidecar.
 - A `.zchunkstore` is checked only against the TIFF's level 0 width, height,
-  and tile size. A stale sidecar with the same sizes, or a root sidecar for
-  the focus images picked up by a same-sized `morphology.ome.tif`, fetches the
-  wrong bytes.
+  and tile size, and for a complete tile list. A stale sidecar with the same
+  sizes, or a root sidecar for the focus images picked up by a same-sized
+  `morphology.ome.tif`, fetches the wrong bytes.
 - Only `t = 0`, `z = 0` of OME-Zarr images is shown.

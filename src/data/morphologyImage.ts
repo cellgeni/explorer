@@ -1,9 +1,6 @@
-import { openTiff, tiffImageSelectionUrl, type OpenTiffOptions } from '../tiff/loader'
-import {
-  isOmeZarrImageUrl,
-  omeZarrImageRootUrl,
-  openOmeZarrImage,
-} from '../zarr/omeZarrLoader'
+import { openTiff, tiffImageSelectionUrl } from '../tiff/loader'
+import { omeZarrImageRootUrl, openOmeZarrImage } from '../zarr/omeZarrLoader'
+import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import {
   datasetFileLabelFor,
   datasetFileUrl,
@@ -11,8 +8,13 @@ import {
   xeniumManifestFileFor,
   zchunkStoreUrlFor,
 } from './datasetFiles'
-import type { FallbackNotifier } from './fallbackNotice'
-import type { ImagePyramidChannelInfo, ImagePyramidLoader } from './imagePyramid'
+import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
+import type {
+  ImagePyramidChannelInfo,
+  ImagePyramidLoader,
+  ImagePyramidOpener,
+  OpenImagePyramidOptions,
+} from './imagePyramid'
 
 export interface MorphologyImage {
   readonly url: string
@@ -28,31 +30,16 @@ export interface MorphologyImageChannel {
 
 export interface LoadMorphologyImageOptions {
   readonly fetcher?: typeof fetch
-  readonly openImage?: (
-    url: string,
-    signal?: AbortSignal,
-    onFallback?: FallbackNotifier,
-    options?: OpenTiffOptions,
-  ) => Promise<ImagePyramidLoader>
+  readonly openImage?: ImagePyramidOpener
   readonly candidates?: readonly string[]
   readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
 }
 
 export interface LoadCustomMorphologyLayerOptions {
-  readonly openImage?: (
-    url: string,
-    signal?: AbortSignal,
-    onFallback?: FallbackNotifier,
-    options?: OpenTiffOptions,
-  ) => Promise<ImagePyramidLoader>
+  readonly openImage?: ImagePyramidOpener
   readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
-}
-
-export interface MorphologyImageFromPyramidLoaderOptions extends LoadCustomMorphologyLayerOptions {
-  // Manifest `.zchunkstore` sidecar for the image's channel files.
-  readonly zchunkStoreUrl?: string
 }
 
 const MORPHOLOGY_IMAGE_PATH_KEY_GROUPS = [
@@ -136,7 +123,7 @@ export async function loadCustomMorphologyLayer(
 export async function morphologyImageFromPyramidLoader(
   url: string,
   loader: ImagePyramidLoader,
-  options: MorphologyImageFromPyramidLoaderOptions = {},
+  options: LoadCustomMorphologyLayerOptions = {},
 ): Promise<MorphologyImage> {
   const openImage = options.openImage ?? openImagePyramid
 
@@ -150,9 +137,6 @@ export async function morphologyImageFromPyramidLoader(
       openImage,
       onFallback: options.onFallback,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
-      ...(options.zchunkStoreUrl === undefined
-        ? {}
-        : { zchunkStoreUrl: options.zchunkStoreUrl }),
     }),
   }
 }
@@ -200,7 +184,7 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 interface LoadMorphologyImageFromUrlOptions {
-  readonly openImage: NonNullable<LoadMorphologyImageOptions['openImage']>
+  readonly openImage: ImagePyramidOpener
   readonly onFallback: FallbackNotifier | undefined
   readonly signal?: AbortSignal
 }
@@ -231,7 +215,7 @@ async function loadMorphologyImageFromUrl(
 interface LoadMorphologyChannelLoadersOptions {
   readonly imageUrl: string
   readonly loader: ImagePyramidLoader
-  readonly openImage: NonNullable<LoadMorphologyImageOptions['openImage']>
+  readonly openImage: ImagePyramidOpener
   readonly onFallback: FallbackNotifier | undefined
   readonly signal?: AbortSignal
   readonly zchunkStoreUrl?: string
@@ -273,7 +257,7 @@ async function loadMorphologyChannelLoaders(
 }
 
 async function openMorphologyImageLoader(
-  openImage: NonNullable<LoadMorphologyImageOptions['openImage']>,
+  openImage: ImagePyramidOpener,
   url: string,
   options: {
     readonly onFallback: FallbackNotifier | undefined
@@ -281,28 +265,40 @@ async function openMorphologyImageLoader(
     readonly zchunkStoreUrl?: string | undefined
   },
 ): Promise<ImagePyramidLoader> {
-  if (options.zchunkStoreUrl !== undefined) {
-    return openImage(url, options.signal, options.onFallback, {
-      zchunkStoreUrl: options.zchunkStoreUrl,
-    })
-  }
+  return openImage(
+    url,
+    options.signal,
+    options.onFallback,
+    openImagePyramidOptions(options.zchunkStoreUrl),
+  )
+}
 
-  if (options.signal === undefined && options.onFallback === undefined) {
-    return openImage(url)
-  }
-
-  return openImage(url, options.signal, options.onFallback)
+// Options carrying a manifest sidecar, or none when there is no sidecar.
+export function openImagePyramidOptions(
+  zchunkStoreUrl: string | undefined,
+): OpenImagePyramidOptions | undefined {
+  return zchunkStoreUrl === undefined ? undefined : { zchunkStoreUrl }
 }
 
 export async function openImagePyramid(
   url: string,
   signal?: AbortSignal,
   onFallback?: FallbackNotifier,
-  options?: OpenTiffOptions,
+  options?: OpenImagePyramidOptions,
 ): Promise<ImagePyramidLoader> {
   const rootUrl = omeZarrImageRootUrl(url)
 
   if (isOmeZarrImageUrl(url) || isOmeZarrImageUrl(rootUrl)) {
+    if (options?.zchunkStoreUrl !== undefined) {
+      notifyFallback(onFallback, {
+        source: 'Morphology image',
+        message:
+          'The dataset manifest names a .zchunkstore sidecar, but the image is OME-Zarr, so the sidecar is not used.',
+        action: 'Remove the sidecar from the manifest; OME-Zarr images do not need one.',
+        coalesceKey: `zchunkstore-ome-zarr:${options.zchunkStoreUrl}`,
+      })
+    }
+
     return openOmeZarrImage(url, signal)
   }
 

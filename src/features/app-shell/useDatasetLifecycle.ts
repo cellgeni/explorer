@@ -35,7 +35,6 @@ import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
-import { manifestZchunkStoreUrl } from '../../datasets/datasetManifest'
 import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
 import type { SpatialDataSummary } from '../../datasets/spatialDataDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
@@ -1234,14 +1233,15 @@ export function useDatasetLifecycle({
             throw new Error('Image-only sources must expose a tiled TIFF pyramid.')
           }
 
-          const zchunkStoreUrl = manifestZchunkStoreUrl(detection.manifest)
           const image = await morphologyImageFromPyramidLoader(
             detection.imageUrl,
             imageSource.loader,
             {
               onFallback: appendFallbackNotice,
               signal: request.signal,
-              ...(zchunkStoreUrl === undefined ? {} : { zchunkStoreUrl }),
+              ...(imageSource.openChannelLoader === undefined
+                ? {}
+                : { openImage: imageSource.openChannelLoader }),
             },
           )
 

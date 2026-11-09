@@ -86,21 +86,29 @@ compression (`imagecodecs_jpeg2k`, `imagecodecs_zlib`, `imagecodecs_lzw`, …)
 for other Zarr readers. It also accepts the Zarr v2 layout (`.zattrs`,
 `<level>/.zarray`, keys `<level>/<channel>.<row>.<col>`).
 
-Before using a sidecar, `openTiff` compares its level 0 width, height, and
-chunk width and height with the selected IFD. If any differ, it ignores the
-sidecar and reads the TIFF instead, with the fallback notice above.
+Before using a sidecar, `openTiff` checks it against the TIFF: its level 0
+width, height, and chunk width and height must match the selected IFD, and it
+must list every tile of every level for the channel being opened. Otherwise it
+ignores the sidecar and reads the TIFF instead, with the fallback notice above.
 
 ## Where The Viewer Looks
 
-For each TIFF it opens, the viewer tries these URLs in order, most specific
-first, and uses the first that returns `200` (`zchunkStoreCandidateUrls`). `404` and `403` responses are
-skipped, so buckets that answer `403` for missing keys work.
+For each TIFF it opens, the viewer requests these URLs at once and uses the
+first in this order, most specific first, that returns `200`
+(`zchunkStoreCandidateUrls`). `404` and `403` responses are skipped, so buckets
+that answer `403` for missing keys work.
 
-| TIFF URL                                                                    | Candidates, in order                                                                                                               |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `<root>/morphology_focus/morphology_focus_000N.ome.tif`                     | `<root>/morphology_focus/morphology_focus_000N.ome.tif.zchunkstore`, `<root>/morphology_focus/.zchunkstore`, `<root>/.zchunkstore` |
-| `<dir>/morphology*.tif` (`morphology.ome.tif`, `morphology_mip.ome.tif`, …) | `<dir>/morphology*.tif.zchunkstore`, `<dir>/.zchunkstore`                                                                          |
-| Any other TIFF                                                              | `<file>.zchunkstore`                                                                                                               |
+| TIFF URL                                                                                                                        | Candidates, in order                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `<root>/morphology_focus/morphology_focus_000N.ome.tif`                                                                         | `<root>/morphology_focus/morphology_focus_000N.ome.tif.zchunkstore`, `<root>/morphology_focus/.zchunkstore`, `<root>/.zchunkstore` |
+| `<dir>/morphology*.tif` (`morphology.ome.tif`, `morphology_mip.ome.tif`, …)                                                     | `<dir>/morphology*.tif.zchunkstore`, `<dir>/.zchunkstore`                                                                          |
+| `<dir>/<file>` of a multi-file OME-TIFF (OME-XML lists channels in other files, such as Atera `morphology_2d/ch000N_*.ome.tif`) | `<dir>/<file>.zchunkstore`, `<dir>/.zchunkstore`                                                                                   |
+| Any other TIFF                                                                                                                  | `<file>.zchunkstore`                                                                                                               |
+
+Each sidecar URL, found or missing, is requested once a minute at most and
+shared by every channel file that looks it up, so a 4-channel focus image
+downloads and parses its folder sidecar once. Network errors are not
+remembered, so the next image open retries.
 
 A dataset manifest can name the sidecar instead (`files.morphologyZchunkstore`
 for Xenium and Atera, `files.zchunkstore` for `image`; see
@@ -123,7 +131,9 @@ Recommended placement:
   `morphology_mip.ome.tif`:** `<file>.zchunkstore`, next to the TIFF. It is
   tried first, so it wins over any folder or root sidecar.
 
-The script picks these names by default.
+The script picks these names by default: `<folder>/.zchunkstore` for a
+multi-file OME-TIFF and `<file>.zchunkstore` otherwise. The viewer finds both
+without a manifest.
 
 ## Generating One
 
@@ -197,10 +207,14 @@ for a `200` response for the `.zchunkstore` URL in the browser's network tab.
 ## Pitfalls
 
 - **Regenerate when the TIFF changes.** The viewer compares only the level 0
-  width, height, and tile size with the TIFF, and ignores a sidecar that
-  differs. A stale sidecar with the same sizes, for example after the TIFF is
+  width, height, and tile size with the TIFF, and that the sidecar lists every
+  tile of the channel, and ignores a sidecar that fails either check. A stale
+  sidecar with the same sizes and tiles, for example after the TIFF is
   re-encoded or rewritten, loads without errors but fetches the wrong bytes, so
   tiles fail to decode or show the wrong image.
+- **A new or fixed sidecar can take a minute to be used.** The viewer
+  remembers each sidecar URL, found or missing, for a minute; reload the page
+  to pick up a change sooner.
 - **A sidecar that cannot be parsed is ignored.** The viewer falls back to
   reading the TIFF, with the fallback notice above.
 - **Pixel size is not stored.** It still comes from the TIFF's OME-XML

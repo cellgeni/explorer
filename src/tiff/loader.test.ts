@@ -372,6 +372,61 @@ describe('TiffPyramidLoader', () => {
     )
   })
 
+  it("ignores a sidecar that has no tiles for the TIFF's channel", async () => {
+    mockTiff({
+      width: 300,
+      height: 200,
+      tileWidth: 100,
+      tileHeight: 100,
+      imageDescription: twoFileOmeXml,
+    })
+    stubZchunkStoreFetch(zchunkStoreManifest({ width: 300, height: 200, tile: 100 }), {
+      sidecarUrl: 'https://example.test/run/images/.zchunkstore',
+    })
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/run/images/stain_0001.ome.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).toHaveBeenCalledOnce()
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/run/images/stain_0001.ome.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=60-65' } }),
+    )
+  })
+
+  it('finds the folder sidecar of a multi-file OME-TIFF', async () => {
+    mockTiff({
+      width: 300,
+      height: 200,
+      tileWidth: 100,
+      tileHeight: 100,
+      imageDescription: twoFileOmeXml,
+    })
+    stubZchunkStoreFetch(
+      zchunkStoreManifest({ width: 300, height: 200, tile: 100, channels: [0, 1] }),
+      { sidecarUrl: 'https://example.test/run/images/.zchunkstore' },
+    )
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/run/images/stain_0001.ome.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).not.toHaveBeenCalled()
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/run/images/stain_0001.ome.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=1105-1105' } }),
+    )
+  })
+
   it.each([
     ['level 0 width', { width: 400, height: 200, tile: 100 }],
     ['level 0 height', { width: 300, height: 100, tile: 100 }],
@@ -582,8 +637,10 @@ function mockTiff(size: {
   readonly height: number
   readonly tileWidth: number
   readonly tileHeight: number
+  readonly imageDescription?: string
 }): void {
   const directory = tiffDirectory({
+    ImageDescription: size.imageDescription,
     BitsPerSample: new Uint16Array([16]),
     Compression: 8,
     Predictor: 2,
@@ -606,11 +663,29 @@ function mockTiff(size: {
   } as unknown as Awaited<ReturnType<typeof fromUrl>>)
 }
 
+// A one-level sidecar listing every tile of the given channels. Tile (row 1,
+// col 2) of channel 0 is at bytes 900-903.
 function zchunkStoreManifest(size: {
   readonly width: number
   readonly height: number
   readonly tile: number
+  readonly channels?: readonly number[]
 }): unknown {
+  const chunks: Record<string, unknown> = {}
+  const rows = Math.ceil(size.height / size.tile)
+  const cols = Math.ceil(size.width / size.tile)
+
+  for (const channel of size.channels ?? [0]) {
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        chunks[`0/c/${channel.toString()}/${row.toString()}/${col.toString()}`] = {
+          offset: 1000 + channel * 100 + row * cols + col,
+          size: 1,
+        }
+      }
+    }
+  }
+
   return {
     'zarr.json': {
       zarr_format: 3,
@@ -620,9 +695,10 @@ function zchunkStoreManifest(size: {
     '0/zarr.json': {
       zarr_format: 3,
       node_type: 'array',
-      shape: [1, size.height, size.width],
+      shape: [Math.max(...(size.channels ?? [0])) + 1, size.height, size.width],
       chunk_grid: { configuration: { chunk_shape: [1, size.tile, size.tile] } },
     },
+    ...chunks,
     '0/c/0/1/2': { offset: 900, size: 4 },
   }
 }
@@ -638,7 +714,7 @@ function stubZchunkStoreFetch(
         return Response.json(manifest)
       }
 
-      if (String(input) === 'https://example.test/sample.tif') {
+      if (!String(input).endsWith('.zchunkstore')) {
         return new Response(new Uint8Array(8), { status: 206 })
       }
 
@@ -646,3 +722,14 @@ function stubZchunkStoreFetch(
     }),
   )
 }
+
+const twoFileOmeXml = `<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZCT" Type="uint16" SizeX="300" SizeY="200" SizeZ="1" SizeC="2" SizeT="1">
+      <Channel ID="Channel:0" Name="DAPI" SamplesPerPixel="1"/>
+      <Channel ID="Channel:1" Name="18S" SamplesPerPixel="1"/>
+      <TiffData FirstC="0" PlaneCount="1"><UUID FileName="stain_0000.ome.tif">urn:uuid:0</UUID></TiffData>
+      <TiffData FirstC="1" PlaneCount="1"><UUID FileName="stain_0001.ome.tif">urn:uuid:1</UUID></TiffData>
+    </Pixels>
+  </Image>
+</OME>`

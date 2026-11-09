@@ -1,5 +1,6 @@
 import { datasetManifestFor, setDatasetManifest } from '../data/datasetFiles'
-import { isOmeZarrImageUrl, omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
+import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
+import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import {
   DATASET_MANIFEST_FILE,
   DatasetManifestError,

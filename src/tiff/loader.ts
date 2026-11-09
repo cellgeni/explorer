@@ -16,6 +16,7 @@ import type { TileSourceSize } from './tileCache'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type { TiffChannelInfo } from './omeMetadata'
+import type { OpenImagePyramidOptions } from '../data/imagePyramid'
 
 export interface TiffChunk {
   readonly offset: number
@@ -59,17 +60,11 @@ export interface TiffPyramidLoaderOptions {
 }
 export { parsePhysicalSizeMicrometersPerPixel } from './omeMetadata'
 
-export interface OpenTiffOptions {
-  // `.zchunkstore` sidecar from the dataset manifest, tried instead of the
-  // locations derived from the TIFF URL.
-  readonly zchunkStoreUrl?: string
-}
-
 export async function openTiff(
   url: string,
   signal?: AbortSignal,
   onFallback?: FallbackNotifier,
-  options: OpenTiffOptions = {},
+  options: OpenImagePyramidOptions = {},
 ): Promise<TiffPyramidLoader> {
   const selection = parseTiffImageSelection(url)
   const tiff = await fromUrl(selection.sourceUrl, { allowFullFile: false }, signal)
@@ -81,27 +76,33 @@ export async function openTiff(
   const channelIndex =
     selection.ifdIndex ?? channelIndexForUrl(selection.sourceUrl, omeMetadata.channels)
 
-  const firstImage = await tiff.getImage(selection.ifdIndex ?? 0)
+  // The sidecar request runs while the selected IFD's tags load.
+  const [{ firstImage, decodeMetadata }, zchunkStoreOptions] = await Promise.all([
+    (async () => {
+      const image = await tiff.getImage(selection.ifdIndex ?? 0)
+      return {
+        firstImage: image,
+        decodeMetadata: await readTileDecodeMetadata(tiff, image.getFileDirectory()),
+      }
+    })(),
+    loadZchunkStorePyramidOptions(selection.sourceUrl, {
+      ...(signal === undefined ? {} : { signal }),
+      channelIndex,
+      zchunkStoreUrl: options.zchunkStoreUrl,
+      multiFile: isMultiFileOmeTiff(selection.sourceUrl, omeMetadata.channels),
+    }).catch((cause: unknown) => {
+      if (isAbortError(cause)) {
+        throw cause
+      }
+
+      return null
+    }),
+  ])
   const firstDirectory = firstImage.getFileDirectory()
   const imageWidth = imagePixels(firstImage.getWidth())
   const imageHeight = imagePixels(firstImage.getHeight())
   const tileWidth = imagePixels(firstImage.getTileWidth() || 256)
   const tileHeight = imagePixels(firstImage.getTileHeight() || 256)
-  const decodeMetadata = await readTileDecodeMetadata(tiff, firstDirectory)
-
-  const zchunkStoreOptions = await loadZchunkStorePyramidOptions(
-    selection.sourceUrl,
-    signal,
-    globalThis.fetch.bind(globalThis),
-    channelIndex,
-    options.zchunkStoreUrl,
-  ).catch((cause: unknown) => {
-    if (isAbortError(cause)) {
-      throw cause
-    }
-
-    return null
-  })
 
   if (
     zchunkStoreOptions !== null &&
@@ -207,12 +208,13 @@ export async function openTiff(
 }
 
 // A sidecar only stores byte ranges, so check it was built for this TIFF's
-// level 0 grid. Separated planar multi-sample tiles need one byte range per
-// sample, which a sidecar does not record.
+// level 0 grid and lists every tile of this channel at every level. Separated
+// planar multi-sample tiles need one byte range per sample, which a sidecar
+// does not record.
 function zchunkStoreMatchesImage(
   options: Pick<
     TiffPyramidLoaderOptions,
-    'imageWidth' | 'imageHeight' | 'tileWidth' | 'tileHeight'
+    'imageWidth' | 'imageHeight' | 'tileWidth' | 'tileHeight' | 'chunkIndex' | 'levelMeta'
   >,
   image: Pick<GeoTIFFImage, 'getWidth' | 'getHeight' | 'getTileWidth' | 'getTileHeight'>,
   decodeMetadata: TiffTileDecodeMetadata,
@@ -225,7 +227,35 @@ function zchunkStoreMatchesImage(
     options.imageHeight === image.getHeight() &&
     options.tileWidth === image.getTileWidth() &&
     options.tileHeight === image.getTileHeight() &&
-    !(samplesPerPixel > 1 && (decodeMetadata.planarConfiguration ?? 1) === 2)
+    !(samplesPerPixel > 1 && (decodeMetadata.planarConfiguration ?? 1) === 2) &&
+    hasEveryTile(options.chunkIndex, options.levelMeta)
+  )
+}
+
+function hasEveryTile(
+  chunkIndex: ReadonlyMap<string, TiffChunkIndexEntry>,
+  levelMeta: ReadonlyMap<number, TiffLevelMeta>,
+): boolean {
+  for (const [level, meta] of levelMeta) {
+    for (let row = 0; row < meta.nRows; row += 1) {
+      for (let col = 0; col < meta.nCols; col += 1) {
+        if (!chunkIndex.has(tiffChunkKey(level, row, col))) {
+          return false
+        }
+      }
+    }
+  }
+
+  return true
+}
+
+// One file of a multi-file OME-TIFF: its OME-XML lists channels stored in
+// other files.
+function isMultiFileOmeTiff(url: string, channels: readonly TiffChannelInfo[]): boolean {
+  const fileName = new URL(url).pathname.split('/').at(-1)
+
+  return channels.some(
+    (channel) => channel.fileName !== undefined && channel.fileName !== fileName,
   )
 }
 

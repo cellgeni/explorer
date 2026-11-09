@@ -21,9 +21,8 @@ import type {
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { FallbackNotifier } from '../data/fallbackNotice'
-import type { ImagePyramidLoader } from '../data/imagePyramid'
-import { openImagePyramid } from '../data/morphologyImage'
-import type { OpenTiffOptions } from '../tiff/loader'
+import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
+import { openImagePyramid, openImagePyramidOptions } from '../data/morphologyImage'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import type {
   TranscriptAggregateResult,
@@ -85,15 +84,8 @@ export interface AteraDatasetOptions {
   readonly onProgress?: H5adLoadProgressReporter
   // Opens a zipped Zarr store and lists its entries; replaced in tests.
   readonly openZipStore?: (url: string) => Promise<AteraZipStore>
-  readonly openImage?: AteraImageOpener
+  readonly openImage?: ImagePyramidOpener
 }
-
-export type AteraImageOpener = (
-  url: string,
-  signal?: AbortSignal,
-  onFallback?: FallbackNotifier,
-  options?: OpenTiffOptions,
-) => Promise<ImagePyramidLoader>
 
 export interface AteraZipStore {
   readonly store: zarr.AsyncReadable
@@ -172,7 +164,7 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   private readonly fetcher: typeof fetch
   private readonly onProgress: H5adLoadProgressReporter | undefined
   private readonly openZipStore: (url: string) => Promise<AteraZipStore>
-  private readonly openImage: AteraImageOpener
+  private readonly openImage: ImagePyramidOpener
   private experimentPromise: Promise<AteraExperiment> | null = null
   // experiment.spatial is optional with a manifest, so its file paths are read
   // once and a missing file means standard names, without refetching it on
@@ -460,7 +452,8 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       : {
           kind: 'pyramid',
           loader,
-          openChannelLoader: (url, signal) => this.openMorphologyImage(url, signal),
+          openChannelLoader: (url, signal, onFallback) =>
+            this.openMorphologyImage(url, signal, onFallback),
         }
   }
 
@@ -951,14 +944,14 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   private openMorphologyImage(
     url: string,
     signal?: AbortSignal,
+    onFallback?: FallbackNotifier,
   ): Promise<ImagePyramidLoader> {
-    const zchunkStoreUrl = this.files.morphologyZchunkstore
-
-    if (zchunkStoreUrl !== undefined) {
-      return this.openImage(url, signal, undefined, { zchunkStoreUrl })
-    }
-
-    return signal === undefined ? this.openImage(url) : this.openImage(url, signal)
+    return this.openImage(
+      url,
+      signal,
+      onFallback,
+      openImagePyramidOptions(this.files.morphologyZchunkstore),
+    )
   }
 }
 

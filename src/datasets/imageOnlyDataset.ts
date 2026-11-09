@@ -1,9 +1,8 @@
 import { micrometers } from '../data/coords'
-import { openImagePyramid } from '../data/morphologyImage'
+import { openImagePyramid, openImagePyramidOptions } from '../data/morphologyImage'
 import type { FallbackNotifier } from '../data/fallbackNotice'
 import type { GexResult } from '../data/gex'
-import type { ImagePyramidLoader } from '../data/imagePyramid'
-import type { OpenTiffOptions } from '../tiff/loader'
+import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
 import type {
   Annotation,
   DatasetMeta,
@@ -13,24 +12,17 @@ import type {
   SpatialElementId,
 } from './spatialDataset'
 
-export type ImageOnlyImageLoader = (
-  url: string,
-  signal?: AbortSignal,
-  onFallback?: FallbackNotifier,
-  options?: OpenTiffOptions,
-) => Promise<ImagePyramidLoader>
-
 export interface ImageOnlyDatasetOptions {
   readonly imageUrl: string
   // `.zchunkstore` sidecar named by the dataset manifest.
   readonly zchunkStoreUrl?: string
-  readonly openImage?: ImageOnlyImageLoader
+  readonly openImage?: ImagePyramidOpener
 }
 
 export class ImageOnlyDataset implements SpatialDataset<SpatialElementId> {
   readonly imageUrl: string
   private readonly zchunkStoreUrl: string | undefined
-  private readonly openImage: ImageOnlyImageLoader
+  private readonly openImage: ImagePyramidOpener
   private loaderPromise: Promise<ImagePyramidLoader> | null = null
 
   constructor(options: ImageOnlyDatasetOptions) {
@@ -87,16 +79,31 @@ export class ImageOnlyDataset implements SpatialDataset<SpatialElementId> {
   }
 
   async image(): Promise<ImageSource> {
-    return { kind: 'pyramid', loader: await this.loader() }
+    return {
+      kind: 'pyramid',
+      loader: await this.loader(),
+      openChannelLoader: (url, signal, onFallback) =>
+        this.openSourceImage(url, signal, onFallback),
+    }
   }
 
   private loader(): Promise<ImagePyramidLoader> {
-    this.loaderPromise ??=
-      this.zchunkStoreUrl === undefined
-        ? this.openImage(this.imageUrl)
-        : this.openImage(this.imageUrl, undefined, undefined, {
-            zchunkStoreUrl: this.zchunkStoreUrl,
-          })
+    this.loaderPromise ??= this.openSourceImage(this.imageUrl)
     return this.loaderPromise
+  }
+
+  // The image and its channel files (`#ifd=N` or sibling files) open with the
+  // manifest's sidecar.
+  private openSourceImage(
+    url: string,
+    signal?: AbortSignal,
+    onFallback?: FallbackNotifier,
+  ): Promise<ImagePyramidLoader> {
+    return this.openImage(
+      url,
+      signal,
+      onFallback,
+      openImagePyramidOptions(this.zchunkStoreUrl),
+    )
   }
 }

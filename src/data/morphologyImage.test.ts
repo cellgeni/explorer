@@ -43,6 +43,9 @@ describe('morphology image loader', () => {
     expect(fetcher).toHaveBeenCalledWith('https://example.test/xenium/experiment.xenium')
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -95,6 +98,9 @@ describe('morphology image loader', () => {
     expect(fetcher).not.toHaveBeenCalled()
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -118,6 +124,7 @@ describe('morphology image loader', () => {
       'https://example.test/xenium/morphology.ome.tif',
       undefined,
       onFallback,
+      undefined,
     )
   })
 
@@ -210,9 +217,15 @@ describe('morphology image loader', () => {
     })
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology_focus/morphology_focus_0001.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -279,12 +292,23 @@ describe('morphology image loader', () => {
         { info: channel2, loader: loader2 },
       ],
     })
-    expect(openImage).toHaveBeenCalledWith('https://example.test/layers/rgb.ome.tif')
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/layers/rgb.ome.tif',
+      undefined,
+      undefined,
+      undefined,
+    )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/layers/rgb.ome.tif#ifd=1',
+      undefined,
+      undefined,
+      undefined,
     )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/layers/rgb.ome.tif#ifd=2',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -335,6 +359,9 @@ describe('morphology image loader', () => {
     expect(openImage).toHaveBeenCalledTimes(1)
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/images/image.ome.tif#ifd=1',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -376,9 +403,15 @@ describe('morphology image loader', () => {
     })
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/layers/custom_0000.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/layers/custom_0001.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -400,8 +433,18 @@ describe('morphology image loader', () => {
       url: 'https://example.test/layers/custom.ome.tif',
       loader,
     })
-    expect(openImage).toHaveBeenCalledWith('http://example.test/layers/custom.ome.tif')
-    expect(openImage).toHaveBeenCalledWith('https://example.test/layers/custom.ome.tif')
+    expect(openImage).toHaveBeenCalledWith(
+      'http://example.test/layers/custom.ome.tif',
+      undefined,
+      undefined,
+      undefined,
+    )
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/layers/custom.ome.tif',
+      undefined,
+      undefined,
+      undefined,
+    )
   })
 
   it('does not rewrite localhost custom morphology layer URLs', async () => {
@@ -416,7 +459,12 @@ describe('morphology image loader', () => {
       }),
     ).rejects.toBe(error)
     expect(openImage).toHaveBeenCalledTimes(1)
-    expect(openImage).toHaveBeenCalledWith('http://localhost:3100/custom.ome.tif')
+    expect(openImage).toHaveBeenCalledWith(
+      'http://localhost:3100/custom.ome.tif',
+      undefined,
+      undefined,
+      undefined,
+    )
   })
 
   it('normalizes custom morphology layer URLs', () => {

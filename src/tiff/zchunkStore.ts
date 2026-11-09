@@ -20,48 +20,63 @@ interface ZchunkArrayMeta {
 
 const DEFAULT_MICROMETERS_PER_PIXEL = 0.2125
 
+// Sidecars fetched in the last minute, per fetch function and URL. Every
+// channel file of a multi-file OME-TIFF looks up the same folder, root, or
+// manifest sidecar, so each is requested and parsed once. The entry holds the
+// parsed JSON, or null when the sidecar is absent.
+const SIDECAR_CACHE_TTL_MS = 60_000
+
+interface CachedSidecar {
+  readonly json: Promise<unknown>
+  readonly expiresAt: number
+}
+
+const sidecarCache = new WeakMap<object, Map<string, CachedSidecar>>()
+
+export interface LoadZchunkStoreOptions {
+  readonly signal?: AbortSignal
+  readonly fetcher?: typeof fetch
+  readonly channelIndex?: number
+  // Sidecar named by the dataset manifest; replaces the derived locations.
+  readonly zchunkStoreUrl?: string | undefined
+  // The TIFF is one file of a multi-file OME-TIFF, so a folder sidecar may
+  // cover it.
+  readonly multiFile?: boolean
+}
+
 export async function loadZchunkStorePyramidOptions(
   tiffUrl: string,
-  signal?: AbortSignal,
-  fetcher: typeof fetch = globalThis.fetch.bind(globalThis),
-  channelIndex = 0,
-  zchunkStoreUrl?: string,
+  options: LoadZchunkStoreOptions = {},
 ): Promise<ZchunkStorePyramidOptions | null> {
-  // A sidecar named by the dataset manifest replaces the derived locations.
   const candidates =
-    zchunkStoreUrl === undefined ? zchunkStoreCandidateUrls(tiffUrl) : [zchunkStoreUrl]
+    options.zchunkStoreUrl === undefined
+      ? zchunkStoreCandidateUrls(tiffUrl, { multiFile: options.multiFile === true })
+      : [options.zchunkStoreUrl]
+  // All candidates are requested at once; the first in order that exists wins.
+  const lookups = candidates.map((url) => cachedSidecarJson(url, options.fetcher))
 
-  for (const manifestUrl of candidates) {
-    const requestInit: RequestInit = {}
+  for (const lookup of lookups) {
+    const json = await abortable(lookup, options.signal)
 
-    if (signal !== undefined) {
-      requestInit.signal = signal
+    if (json !== null) {
+      return zchunkStoreToPyramidOptions(json, options.channelIndex ?? 0)
     }
-
-    const response = await fetcher(manifestUrl, requestInit)
-
-    if (response.status === 404 || response.status === 403) {
-      continue
-    }
-
-    if (!response.ok) {
-      continue
-    }
-
-    return zchunkStoreToPyramidOptions(await response.json(), channelIndex)
   }
 
   return null
 }
 
-export function zchunkStoreCandidateUrls(tiffUrl: string): readonly string[] {
+export function zchunkStoreCandidateUrls(
+  tiffUrl: string,
+  options: { readonly multiFile?: boolean } = {},
+): readonly string[] {
   const url = new URL(tiffUrl)
   // Most specific first: a `<file>.zchunkstore` can only describe this TIFF,
   // while folder and dataset-root sidecars may describe a sibling image.
   const candidates = [urlWithPath(url, `${url.pathname}.zchunkstore`)]
   const focusSegmentIndex = url.pathname.indexOf('/morphology_focus/')
 
-  if (isXeniumMorphologyPath(url.pathname)) {
+  if (options.multiFile === true || isXeniumMorphologyPath(url.pathname)) {
     candidates.push(urlWithPath(url, `${parentPath(url.pathname)}/.zchunkstore`))
   }
 
@@ -72,6 +87,89 @@ export function zchunkStoreCandidateUrls(tiffUrl: string): readonly string[] {
   }
 
   return Array.from(new Set(candidates))
+}
+
+// The shared request ignores callers' abort signals, since another channel
+// may still need it; `abortable` stops each caller waiting instead.
+function cachedSidecarJson(
+  url: string,
+  fetcher: typeof fetch | undefined,
+): Promise<unknown> {
+  const cacheKey = fetcher ?? globalThis.fetch
+  const now = Date.now()
+  let entries = sidecarCache.get(cacheKey)
+
+  if (entries === undefined) {
+    entries = new Map()
+    sidecarCache.set(cacheKey, entries)
+  }
+
+  for (const [cachedUrl, entry] of entries) {
+    if (entry.expiresAt <= now) {
+      entries.delete(cachedUrl)
+    }
+  }
+
+  const cached = entries.get(url)
+
+  if (cached !== undefined) {
+    return cached.json
+  }
+
+  const cacheEntries = entries
+  const json = requestSidecarJson(
+    url,
+    fetcher ?? globalThis.fetch.bind(globalThis),
+  ).catch(() => {
+    // Network and parse errors are not cached, so a later open retries.
+    cacheEntries.delete(url)
+    return null
+  })
+
+  entries.set(url, { json, expiresAt: now + SIDECAR_CACHE_TTL_MS })
+  return json
+}
+
+async function requestSidecarJson(url: string, fetcher: typeof fetch): Promise<unknown> {
+  const response = await fetcher(url)
+
+  // Buckets answer 403 rather than 404 for missing keys.
+  if (response.status === 404 || response.status === 403) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status.toString()} for ${url}.`)
+  }
+
+  return (await response.json()) as unknown
+}
+
+function abortable<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) {
+    return promise
+  }
+
+  if (signal.aborted) {
+    return Promise.reject(abortReason(signal))
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(abortReason(signal))
+    }
+
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort)
+    })
+  })
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('The operation was aborted.', 'AbortError')
 }
 
 export function zchunkStoreToPyramidOptions(
