@@ -1634,6 +1634,10 @@ no longer breaks loading, and so a dataset can say how it should be shown.
 - [x] Checked in the browser against the hosted Xenium demo (folder manifest
       with `root`, relocated `experiment.xenium`, defaults), a SpatialData
       manifest with `options`, and invalid and missing-file manifests.
+- [x] A `404`, or a `403` from a bucket that denies listing, on a byte-range
+      file is titled "File not found or not readable", and a `5xx` "Host server
+      error", instead of "Byte-range requests blocked" (`assertHttpRangeSupport`,
+      `createStructuredLoadError`).
 
 #### Known Gaps
 
@@ -1641,7 +1645,6 @@ no longer breaks loading, and so a dataset can say how it should be shown.
       probed.
 - [ ] Not configurable yet: H5AD coordinate key, annotation set to select,
       channel colours and contrast, initial camera.
-- [ ] A `404` for a byte-range file is titled "Byte-range requests blocked".
 - [ ] No E2E test; the hosted fixtures are folders without manifests.
 
 ---
@@ -1898,8 +1901,7 @@ Other gaps found in the review:
       detection needs a positions file that is never read.
 - [ ] Remove `'visium'` from the `Platform` union or implement it.
 - [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,
-      annotation set, channel colours and contrast, and initial camera; title
-      `404`s on byte-range files as missing files (see
+      annotation set, channel colours and contrast, and initial camera (see
       [Phase 11](#phase-11--dataset-manifest)).
 
 Features:

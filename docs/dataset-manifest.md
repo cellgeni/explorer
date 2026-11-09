@@ -194,7 +194,10 @@ How defaults combine with other settings:
   appears in the Dataset tab's Issues list as "Dataset manifest is invalid",
   with the field at fault.
 - A file named in the manifest that is missing fails where it is read, and the
-  message shows the manifest path and the full URL.
+  message shows the manifest path and the full URL. For files read by byte
+  range, a `404`, or a `403` from a bucket that denies listing, is titled "File
+  not found or not readable", so check the path rather than the host's Range
+  support.
 - `Diagnose Dataset` adds a `Dataset manifest` check and checks the files at
   their manifest locations. With a manifest, a missing `experiment.xenium` is a
   warning instead of a failure.
@@ -237,6 +240,3 @@ the parser accept the same fields and values.
   contrast windows, and the initial camera cannot be set yet.
 - Image type comes from the path suffix; a renamed OME-Zarr store needs to keep
   `.zarr` in its name.
-- A missing file named in the manifest is reported where it is read, which for
-  byte-range files is titled "Byte-range requests blocked" even when the host
-  returned `404`.
