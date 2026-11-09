@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  clearFolderListings,
+  parseFolderListing,
+  setFolderListing,
+} from './folderListing'
+import {
   analysisEmbeddingLabel,
   loadDatasetAnalysisEmbeddings,
   parseAnalysisEmbeddingCsv,
@@ -51,6 +56,27 @@ describe('analysis embeddings', () => {
         coalesceKey: 'analysis-embedding-columns:umap:analysis/umap/projection.csv',
       }),
     )
+  })
+
+  it('skips projection CSVs the dataset folder index page does not list', async () => {
+    const baseUrl = 'https://example.test/bia-run'
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 }))
+    setFolderListing(
+      baseUrl,
+      parseFolderListing(
+        '<title>Index of /bia-run</title><a href="cells.parquet">c</a>',
+        baseUrl,
+      ),
+    )
+
+    try {
+      await expect(loadDatasetAnalysisEmbeddings(baseUrl, { fetcher })).resolves.toEqual(
+        [],
+      )
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      clearFolderListings()
+    }
   })
 
   it('loads the first available projection for each embedding kind', async () => {

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { FileNotListedError } from '../../data/folderListing'
+import { LikelyMissingFileError } from '../../data/hostResponses'
 import { assertHttpRangeSupport } from '../../data/rangeSupport'
 import {
   collectStructuredLoadErrors,
@@ -142,21 +144,37 @@ describe('loadErrorModel', () => {
     )
   })
 
-  it('keeps range-not-supported for hosts that ignore or hide Range responses', async () => {
+  it('keeps range-not-supported for hosts that ignore Range requests', async () => {
     const ignoredRange = await rangeProbeError(200)
-    const hiddenContentRange = await rangeProbeError(206)
 
-    for (const error of [ignoredRange, hiddenContentRange]) {
-      expect(createStructuredLoadError('Dataset overview', error)).toMatchObject({
-        code: 'range-not-supported',
-        title: 'Byte-range requests blocked',
-        message: readErrorMessage(error),
-      })
-    }
+    expect(createStructuredLoadError('Dataset overview', ignoredRange)).toMatchObject({
+      code: 'range-not-supported',
+      title: 'Byte-range requests blocked',
+      message: readErrorMessage(ignoredRange),
+    })
     expect(readErrorMessage(ignoredRange)).toContain('received HTTP 200')
-    expect(readErrorMessage(hiddenContentRange)).toContain(
-      'Content-Range was not exposed',
+  })
+
+  it('reports unlisted and likely missing files as missing, not as Range problems', () => {
+    const notListed = new FileNotListedError(
+      'transcripts.parquet was not found. https://host.test/run/transcripts.parquet is not in the folder listing of https://host.test/run/.',
     )
+    const likelyMissing = new LikelyMissingFileError(
+      'cells.parquet could not be read. The request for https://host.test/run/cells.parquet failed without a readable response.',
+    )
+
+    expect(createStructuredLoadError('Transcripts', notListed)).toMatchObject({
+      code: 'http',
+      title: 'File not found',
+      message: readErrorMessage(notListed),
+      detail: 'FileNotListedError',
+    })
+    expect(createStructuredLoadError('Dataset overview', likelyMissing)).toMatchObject({
+      code: 'http',
+      title: 'File most likely missing',
+      message: readErrorMessage(likelyMissing),
+      detail: 'LikelyMissingFileError',
+    })
   })
 
   it('classifies specialized manifest, decode, and unsupported matrix errors', () => {

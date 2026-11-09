@@ -9,6 +9,8 @@ import {
   zchunkStoreUrlFor,
 } from './datasetFiles'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
+import { isListedAsMissing } from './folderListing'
+import { likelyMissingFileError } from './hostResponses'
 import type {
   ImagePyramidChannelInfo,
   ImagePyramidLoader,
@@ -62,7 +64,7 @@ export async function loadMorphologyImage(
       ? await loadMorphologyImageCandidatesFromManifest(baseUrl, fetcher, options.signal)
       : [manifestImage.url])
 
-  const candidate = candidates[0]
+  const candidate = firstListedCandidate(baseUrl, candidates, options.onFallback)
 
   if (candidate !== undefined) {
     const url = datasetFileUrl(baseUrl, candidate)
@@ -87,7 +89,44 @@ export async function loadMorphologyImage(
     }
   }
 
+  if (candidates.length > 0) {
+    const namedIn =
+      options.candidates === undefined && manifestImage === undefined
+        ? ' named in experiment.xenium'
+        : ''
+
+    throw new Error(
+      `No morphology image${namedIn} is in the dataset folder listing: ${candidates.join(', ')}.`,
+    )
+  }
+
   throw new Error('No supported Xenium OME-TIFF image was found.')
+}
+
+// The first image path that the dataset folder's listing does not rule out.
+// Without a listing that is the first path, as before.
+function firstListedCandidate(
+  baseUrl: string,
+  candidates: readonly string[],
+  onFallback: FallbackNotifier | undefined,
+): string | undefined {
+  const index = candidates.findIndex(
+    (path) => !isListedAsMissing(datasetFileUrl(baseUrl, path)),
+  )
+  const candidate = candidates[index]
+
+  if (candidate !== undefined && index > 0) {
+    const skipped = candidates.slice(0, index)
+
+    notifyFallback(onFallback, {
+      source: 'Morphology image',
+      message: `${skipped.join(', ')} ${skipped.length === 1 ? 'is' : 'are'} not in the dataset folder listing, so the app opened ${candidate}, the next image named in experiment.xenium.`,
+      action: 'Add the missing image to the dataset folder to show it instead.',
+      coalesceKey: `morphology-image-candidate:${baseUrl}`,
+    })
+  }
+
+  return candidate
 }
 
 export async function loadCustomMorphologyLayer(
@@ -265,12 +304,20 @@ async function openMorphologyImageLoader(
     readonly zchunkStoreUrl?: string | undefined
   },
 ): Promise<ImagePyramidLoader> {
-  return openImage(
-    url,
-    options.signal,
-    options.onFallback,
-    openImagePyramidOptions(options.zchunkStoreUrl),
-  )
+  try {
+    return await openImage(
+      url,
+      options.signal,
+      options.onFallback,
+      openImagePyramidOptions(options.zchunkStoreUrl),
+    )
+  } catch (error) {
+    throw likelyMissingFileError(imageFileLabel(url), url, error) ?? error
+  }
+}
+
+function imageFileLabel(url: string): string {
+  return new URL(url).pathname.split('/').filter(Boolean).at(-1) ?? url
 }
 
 // Options carrying a manifest sidecar, or none when there is no sidecar.

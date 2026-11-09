@@ -1,4 +1,10 @@
 import { datasetManifestFor, setDatasetManifest } from '../data/datasetFiles'
+import {
+  folderListingMissing,
+  readFolderListing,
+  setFolderListing,
+} from '../data/folderListing'
+import { noteReadableResponse } from '../data/hostResponses'
 import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import {
@@ -184,6 +190,10 @@ export function spatialDataSelectionFor(baseUrl: string): SpatialDataSelection {
   )
 }
 const DATASET_PROBE_TIMEOUT_MS = 15_000
+// The folder index only saves requests, so a slow one is not waited for long.
+const FOLDER_LISTING_TIMEOUT_MS = 5_000
+// Probe error for a file the folder's index page does not list.
+const NOT_LISTED = 'not in the folder listing'
 
 export async function detectSpatialDataset(
   baseUrl: string,
@@ -220,6 +230,7 @@ async function detectSpatialDatasetLayout(
       options,
       checked,
     )
+    await registerFolderListing(manifest.rootUrl, options)
 
     return detectFromManifest(normalizedBaseUrl, manifest, options, checked)
   }
@@ -305,6 +316,8 @@ async function detectSpatialDatasetLayout(
         }
   }
 
+  await registerFolderListing(normalizedBaseUrl, options)
+
   const [manifest, xeniumManifest, ateraManifest] = await Promise.all([
     readDatasetManifest(
       joinUrl(normalizedBaseUrl, DATASET_MANIFEST_FILE),
@@ -317,6 +330,10 @@ async function detectSpatialDatasetLayout(
   ])
 
   if (manifest !== undefined) {
+    if (normalizeBaseUrl(manifest.rootUrl) !== normalizedBaseUrl) {
+      await registerFolderListing(manifest.rootUrl, options)
+    }
+
     return detectFromManifest(normalizedBaseUrl, manifest, options, checked)
   }
 
@@ -415,6 +432,21 @@ async function readDatasetManifest(
   checked: DatasetProbeResult[],
 ): Promise<DatasetManifest | undefined> {
   const path = new URL(url).pathname.split('/').filter(Boolean).at(-1) ?? url
+  const notListedIn = folderListingMissing(url)
+
+  if (notListedIn !== undefined) {
+    checked.push({ path, url, ok: false, error: NOT_LISTED })
+
+    if (mode === 'required') {
+      throw new DatasetManifestError(
+        url,
+        `is not in the folder listing of ${notListedIn.folderUrl}.`,
+      )
+    }
+
+    return undefined
+  }
+
   let response: Response
 
   try {
@@ -441,6 +473,7 @@ async function readDatasetManifest(
     return undefined
   }
 
+  noteReadableResponse(url, response.status)
   checked.push({ path, url, ok: response.ok, status: response.status })
 
   if (!response.ok) {
@@ -846,6 +879,10 @@ async function probeDirectDatasetUrl(
   path: string,
   options: DetectSpatialDatasetOptions,
 ): Promise<DatasetProbeResult> {
+  if (folderListingMissing(url) !== undefined) {
+    return { path, url, ok: false, error: NOT_LISTED }
+  }
+
   try {
     const response = await fetchWithTimeout(
       options.fetcher ?? fetch,
@@ -854,6 +891,7 @@ async function probeDirectDatasetUrl(
       options.signal,
       DATASET_PROBE_TIMEOUT_MS,
     )
+    noteReadableResponse(url, response.status)
 
     return {
       path,
@@ -893,6 +931,8 @@ async function probeSpatialDataRoot(
         options.signal,
         DATASET_PROBE_TIMEOUT_MS,
       )
+
+      noteReadableResponse(url, response.status)
 
       if (response.ok && isSpatialDataRootMetadata(await response.json())) {
         return {
@@ -951,6 +991,28 @@ async function fetchWithTimeout(
     globalThis.clearTimeout(timeout)
     signal?.removeEventListener('abort', abortFromParent)
   }
+}
+
+// Reads and registers the folder's index page, so detection and the readers
+// skip the files it does not list. Clears the folder's listing when the host
+// serves none.
+async function registerFolderListing(
+  folderUrl: string,
+  options: DetectSpatialDatasetOptions,
+): Promise<void> {
+  const fetcher = options.fetcher ?? fetch
+  const listing = await readFolderListing(folderUrl, {
+    fetcher: (input, init) =>
+      fetchWithTimeout(
+        fetcher,
+        input,
+        init ?? {},
+        options.signal,
+        FOLDER_LISTING_TIMEOUT_MS,
+      ),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+  setFolderListing(folderUrl, listing)
 }
 
 function normalizeBaseUrl(baseUrl: string): string {

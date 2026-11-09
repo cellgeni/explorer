@@ -81,6 +81,18 @@ match:
 
 Every probe has a 15 s timeout. A host that rejects `HEAD` breaks detection.
 
+Before step 4, detection reads the folder's index page (`GET <url>/`, 5 s
+timeout); for a dataset manifest it also reads the index page of the manifest's
+root folder. When the host serves an Apache, nginx, or Python `http.server` index page
+(`readFolderListing`, `src/data/folderListing.ts`), the listing is registered
+for that folder, and detection probes and readers skip files it does not list.
+Dotfiles (`.zattrs`, `.zchunkstore`) are still requested unless the page lists
+some dotfile, because index pages usually hide them. Hosts with no index page
+are probed as before. This matters on hosts such as `ftp.ebi.ac.uk` (the
+BioImage Archive) that send CORS headers only on successful responses: there a
+missing file fails as a network error, so the listing is the only way to know
+it is missing.
+
 Detection registers the manifest it found (or clears an earlier one) for the
 entered URL in `src/data/datasetFiles.ts`. Readers keep receiving the entered
 URL and ask for files by role with `datasetFileUrlFor(baseUrl, role)`, which
@@ -207,11 +219,21 @@ All screen↔data conversions go through `coords.ts`.
 ## HTTP Requirements In Code
 
 - **Range probe.** `assertHttpRangeSupport` (`src/data/rangeSupport.ts`) sends
-  `GET` with `Range: bytes=0-0` before large reads and requires `206` plus an
-  exposed `Content-Range`. Results are cached per URL. Failures produce
+  `GET` with `Range: bytes=0-0` before large reads and requires `206`.
+  `Content-Range` is not required, because hosts that leave it out of
+  `Access-Control-Expose-Headers` hide it from the browser; readers take file
+  sizes from `Content-Length`. Results are cached per URL. Failures produce
   "cannot be range-read" errors with the URL. A `404` or `403` is reported as
   a missing or unreadable file ("File not found or not readable") and a `5xx`
   as a server error ("Host server error"), not as blocked Range requests.
+- **Missing files on hosts that hide errors.** A file the registered folder
+  listing does not include fails the Range probe without a request
+  (`FileNotListedError`, "File not found"). Without a listing, a request that
+  fails with no response on an origin that has answered other requests, but
+  never with a readable error status, is reported as `LikelyMissingFileError`
+  ("File most likely missing", `src/data/hostResponses.ts`) by the Range probe
+  and the morphology image loader, instead of as blocked Range requests or a
+  network failure.
 - **403 as missing.** Object stores that return `403` for missing keys are
   handled for Zarr metadata keys (`createZarrFetchStore`,
   `src/zarr/zarrStores.ts`) and `.zchunkstore` sidecars. Other `403`s are
@@ -227,6 +249,7 @@ See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 | Dataset instances                                      | Per URL                                                                                                                      | Dropped on failure                            | `datasetFactory.ts`, `xeniumDatasetCache.ts` |
 | Dataset manifests                                      | Per entered URL                                                                                                              | Replaced by each detection of that URL        | `src/data/datasetFiles.ts`                   |
 | Range-probe results                                    | Per URL + label                                                                                                              | Dropped on failure                            | `rangeSupport.ts`                            |
+| Folder listings                                        | Per folder URL                                                                                                               | Replaced by each detection of that folder     | `src/data/folderListing.ts`                  |
 | Matrix metadata and indices                            | Per matrix URL                                                                                                               | Cleared when a new Xenium dataset warms up    | `src/data/gex.ts`                            |
 | SpatialData chunk cache                                | Per store                                                                                                                    | 256 MiB LRU                                   | `src/zarr/zarrStores.ts`                     |
 | Decoded tile bitmaps                                   | Per image channel                                                                                                            | Performance budget                            | `src/tiff/tileCache.ts`                      |

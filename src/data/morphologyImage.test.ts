@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { datasetFileUrl, setDatasetManifest } from './datasetFiles'
 import {
+  clearFolderListings,
+  parseFolderListing,
+  setFolderListing,
+} from './folderListing'
+import { clearHostResponses, noteReadableResponse } from './hostResponses'
+import {
   loadCustomMorphologyLayer,
   loadMorphologyImage,
   morphologyImageFromPyramidLoader,
@@ -47,6 +53,91 @@ describe('morphology image loader', () => {
       undefined,
       undefined,
     )
+  })
+
+  it('opens the next image experiment.xenium names when the folder index page lacks the first', async () => {
+    const baseUrl = 'https://example.test/bia-run'
+    const loader = {} as TiffPyramidLoader
+    const fetcher = vi.fn(async () =>
+      Response.json({
+        images: {
+          morphology_filepath: 'morphology.ome.tif',
+          morphology_focus_filepath: 'morphology_focus/morphology_focus_0000.ome.tif',
+        },
+      }),
+    )
+    const openImage = vi.fn(async () => loader)
+    const onFallback = vi.fn()
+    setFolderListing(
+      baseUrl,
+      parseFolderListing(
+        '<title>Index of /bia-run</title><a href="experiment.xenium">e</a><a href="morphology.ome.tif">m</a>',
+        baseUrl,
+      ),
+    )
+
+    try {
+      await expect(
+        loadMorphologyImage(baseUrl, { fetcher, openImage, onFallback }),
+      ).resolves.toMatchObject({ url: `${baseUrl}/morphology.ome.tif` })
+      expect(openImage).toHaveBeenCalledOnce()
+      expect(onFallback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: 'Morphology image',
+          message:
+            'morphology_focus/morphology_focus_0000.ome.tif is not in the dataset folder listing, so the app opened morphology.ome.tif, the next image named in experiment.xenium.',
+        }),
+      )
+    } finally {
+      clearFolderListings()
+    }
+  })
+
+  it('reports when no image experiment.xenium names is in the folder listing', async () => {
+    const baseUrl = 'https://example.test/bia-run'
+    const fetcher = vi.fn(async () =>
+      Response.json({ images: { morphology_filepath: 'morphology.ome.tif' } }),
+    )
+    const openImage = vi.fn()
+    setFolderListing(
+      baseUrl,
+      parseFolderListing(
+        '<title>Index of /bia-run</title><a href="experiment.xenium">e</a>',
+        baseUrl,
+      ),
+    )
+
+    try {
+      await expect(loadMorphologyImage(baseUrl, { fetcher, openImage })).rejects.toThrow(
+        'No morphology image named in experiment.xenium is in the dataset folder listing: morphology.ome.tif.',
+      )
+      expect(openImage).not.toHaveBeenCalled()
+    } finally {
+      clearFolderListings()
+    }
+  })
+
+  it('reports a failed image request as a likely missing file on hosts that hide error responses', async () => {
+    const openImage = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    noteReadableResponse('https://example.test/xenium/experiment.xenium', 200)
+
+    try {
+      await expect(
+        loadMorphologyImage('https://example.test/xenium/', {
+          candidates: ['morphology_focus/morphology_focus_0000.ome.tif'],
+          openImage,
+        }),
+      ).rejects.toMatchObject({
+        name: 'LikelyMissingFileError',
+        message: expect.stringContaining(
+          'morphology_focus_0000.ome.tif could not be read. The request for https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif failed without a readable response',
+        ),
+      })
+    } finally {
+      clearHostResponses()
+    }
   })
 
   it('opens the image a dataset manifest names without reading experiment.xenium', async () => {
