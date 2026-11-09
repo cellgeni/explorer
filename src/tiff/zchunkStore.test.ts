@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  clearFolderListings,
+  parseFolderListing,
+  setFolderListing,
+} from '../data/folderListing'
+import {
   loadZchunkStorePyramidOptions,
   zchunkStoreCandidateUrls,
   zchunkStoreToPyramidOptions,
@@ -61,6 +66,33 @@ describe('Zarr chunk store TIFF adapter', () => {
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
       'https://sidecars.example.test/run-1.zchunkstore',
     ])
+  })
+
+  it('skips derived sidecars the dataset folder index page does not list', async () => {
+    const fetcher = vi
+      .fn<(input: RequestInfo | URL) => Promise<Response>>()
+      .mockImplementation(async () => new Response(null, { status: 404 }))
+    setFolderListing(
+      'https://example.test/bia-run/',
+      parseFolderListing(
+        '<title>Index of /bia-run</title><a href="morphology.ome.tif">morphology.ome.tif</a>',
+        'https://example.test/bia-run/',
+      ),
+    )
+
+    try {
+      await expect(
+        loadZchunkStorePyramidOptions('https://example.test/bia-run/morphology.ome.tif', {
+          fetcher,
+        }),
+      ).resolves.toBeNull()
+      // The folder sidecar is a dotfile, which index pages usually hide.
+      expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+        'https://example.test/bia-run/.zchunkstore',
+      ])
+    } finally {
+      clearFolderListings()
+    }
   })
 
   it('requests a sidecar shared by several channel files once', async () => {

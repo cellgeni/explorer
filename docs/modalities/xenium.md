@@ -9,9 +9,11 @@ the cell-feature matrix decision see
 ## Detection
 
 `detectSpatialDataset` (`src/datasets/datasetFactory.ts`) first rules out
-`.h5ad`, Zarr, and TIFF/NDPI URLs by their shape. For any other URL, the
-first network probes are `GET <base>/explorer.json` and
-`HEAD <base>/experiment.xenium`, run together (15 s timeout). A
+`.h5ad`, Zarr, and TIFF/NDPI URLs by their shape. For any other URL, it first
+reads the folder's index page (`GET <base>/`), which only some hosts serve; then
+`GET <base>/explorer.json` and `HEAD <base>/experiment.xenium` run together
+(15 s timeout), skipping any file the index page does not list (see
+[Architecture](../architecture.md#1-detection)). A
 [dataset manifest](../dataset-manifest.md) in `explorer.json` decides the
 platform and can relocate every file below. Otherwise a `2xx` for
 `experiment.xenium` means Xenium; its body is not read at detection time. Any
@@ -217,7 +219,13 @@ not passed to the readers, so it does not change the result.
 ## Known Limitations
 
 - The Magic Lens `Min QV` control has no effect on results.
-- Only the first morphology image path in `experiment.xenium` is tried.
+- Only one morphology image path from `experiment.xenium` is opened: the first
+  one the folder's index page lists, or the first path when the host serves no
+  index page. A path that fails to open is not retried with the next one.
+- The XOA 2.0+ z-stack `morphology.ome.tif` does not render correctly (one
+  tile at the wrong scale, or a JPEG-2000 decode error); the
+  `morphology_focus/` images do. A dataset without `morphology_focus/`, such
+  as some BioImage Archive deposits, falls back to it.
 - Diagnostics check `morphology.ome.tif` unless a dataset manifest names the
   image, rather than the image chosen from `experiment.xenium`, and do not
   check `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, or embedding

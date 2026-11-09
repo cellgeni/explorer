@@ -87,6 +87,36 @@ export function createStructuredLoadError(
     )
   }
 
+  // Thrown when the dataset folder's index page does not list the file
+  // (src/data/folderListing.ts), and when a request failed without a response
+  // on a host that hides its error responses (src/data/hostResponses.ts).
+  if (error instanceof Error && error.name === 'FileNotListedError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'http',
+        title: 'File not found',
+        message,
+        action: 'Check the file path, then reload.',
+      },
+      detail,
+    )
+  }
+
+  if (error instanceof Error && error.name === 'LikelyMissingFileError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'http',
+        title: 'File most likely missing',
+        message,
+        action:
+          'Check that the file exists at this path. If it does, check the network connection and the CORS rules for this file on the host.',
+      },
+      detail,
+    )
+  }
+
   if (rangeReadStatus !== undefined && isServerErrorStatus(rangeReadStatus)) {
     return withOptionalDetail(
       {

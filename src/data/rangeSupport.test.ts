@@ -1,8 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  clearFolderListings,
+  parseFolderListing,
+  setFolderListing,
+} from './folderListing'
+import { clearHostResponses, noteReadableResponse } from './hostResponses'
 import { assertHttpRangeSupport } from './rangeSupport'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  clearFolderListings()
+  clearHostResponses()
 })
 
 describe('HTTP Range support diagnostics', () => {
@@ -67,7 +75,7 @@ describe('HTTP Range support diagnostics', () => {
     )
   })
 
-  it('fails loudly when Content-Range is not exposed through CORS', async () => {
+  it('accepts HTTP 206 when CORS does not expose Content-Range', async () => {
     const fetcher = vi.fn(async () => rangeResponse(206, null))
 
     await expect(
@@ -75,9 +83,49 @@ describe('HTTP Range support diagnostics', () => {
         fetcher,
         label: 'cells.parquet',
       }),
-    ).rejects.toThrow(
-      'cells.parquet cannot be range-read. The Range probe returned HTTP 206 but Content-Range was not exposed to the browser.',
+    ).resolves.toBeUndefined()
+  })
+
+  it('reports a file the folder index page does not list without requesting it', async () => {
+    const fetcher = vi.fn(async () => rangeResponse(206, null))
+    setFolderListing(
+      'https://example.test/xenium/',
+      parseFolderListing(
+        '<title>Index of /xenium</title><a href="cells.parquet">cells.parquet</a>',
+        'https://example.test/xenium/',
+      ),
     )
+
+    await expect(
+      assertHttpRangeSupport('https://example.test/xenium/transcripts.parquet', {
+        fetcher,
+        label: 'transcripts.parquet',
+      }),
+    ).rejects.toMatchObject({
+      name: 'FileNotListedError',
+      message:
+        'transcripts.parquet was not found. https://example.test/xenium/transcripts.parquet is not in the folder listing of https://example.test/xenium/. Check that the file exists at this path.',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed probe as a likely missing file on hosts that hide error responses', async () => {
+    noteReadableResponse('https://example.test/xenium/experiment.xenium', 200)
+    const fetcher = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+
+    await expect(
+      assertHttpRangeSupport('https://example.test/xenium/cells.parquet', {
+        fetcher,
+        label: 'cells.parquet',
+      }),
+    ).rejects.toMatchObject({
+      name: 'LikelyMissingFileError',
+      message: expect.stringContaining(
+        'cells.parquet could not be read. The request for https://example.test/xenium/cells.parquet failed without a readable response',
+      ),
+    })
   })
 
   it('surfaces CORS and network failures with an actionable message', async () => {

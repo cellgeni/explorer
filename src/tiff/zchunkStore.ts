@@ -1,4 +1,5 @@
 import { imagePixels, micrometers } from '../data/coords'
+import { isListedAsMissing } from '../data/folderListing'
 import { tiffChunkKey } from './chunkKeys'
 import type { ImagePixels, UnitsDescriptor } from '../data/coords'
 import type { TiffChunk, TiffLevelMeta, TiffPyramidLoaderOptions } from './loader'
@@ -48,9 +49,13 @@ export async function loadZchunkStorePyramidOptions(
   tiffUrl: string,
   options: LoadZchunkStoreOptions = {},
 ): Promise<ZchunkStorePyramidOptions | null> {
+  // Derived locations the dataset folder's listing rules out are not
+  // requested; a sidecar the manifest names always is.
   const candidates =
     options.zchunkStoreUrl === undefined
-      ? zchunkStoreCandidateUrls(tiffUrl, { multiFile: options.multiFile === true })
+      ? zchunkStoreCandidateUrls(tiffUrl, {
+          multiFile: options.multiFile === true,
+        }).filter((url) => !isListedAsMissing(url))
       : [options.zchunkStoreUrl]
   // All candidates are requested at once; the first in order that exists wins.
   const lookups = candidates.map((url) => cachedSidecarJson(url, options.fetcher))

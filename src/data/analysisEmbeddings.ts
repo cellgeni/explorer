@@ -1,5 +1,6 @@
 import { datasetFileUrl, datasetManifestFor, xeniumManifestFileFor } from './datasetFiles'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
+import { isListedAsMissing } from './folderListing'
 
 export type AnalysisEmbeddingKind = string
 export type AnalysisEmbeddingElementLabel = 'cells' | 'bins'
@@ -307,6 +308,10 @@ async function fetchEmbeddingCsv(
   fetcher: typeof fetch,
   signal: AbortSignal | undefined,
 ): Promise<string | null> {
+  if (isListedAsMissing(url)) {
+    return null
+  }
+
   const response = await fetcher(url, signal === undefined ? undefined : { signal })
 
   if (response.status === 404) {

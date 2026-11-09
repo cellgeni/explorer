@@ -1,3 +1,6 @@
+import { fileNotListedError } from './folderListing'
+import { likelyMissingFileError, noteReadableResponse } from './hostResponses'
+
 export type RangeSupportFetcher = typeof fetch
 
 export interface AssertHttpRangeSupportOptions {
@@ -47,6 +50,12 @@ async function assertHttpRangeSupportUncached(
   options: AssertHttpRangeSupportOptions,
 ): Promise<void> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+  const notListed = fileNotListedError(readTargetLabel(options.label), url)
+
+  if (notListed !== undefined) {
+    throw notListed
+  }
+
   let response: Response
 
   try {
@@ -62,13 +71,16 @@ async function assertHttpRangeSupportUncached(
       throw cause
     }
 
-    throw new Error(
-      `${readTargetLabel(options.label)} cannot be range-read. The Range probe failed before an HTTP response was available. Confirm CORS allows GET and the Range request header for ${url}.`,
-      { cause },
+    throw (
+      likelyMissingFileError(readTargetLabel(options.label), url, cause) ??
+      new Error(
+        `${readTargetLabel(options.label)} cannot be range-read. The Range probe failed before an HTTP response was available. Confirm CORS allows GET and the Range request header for ${url}.`,
+        { cause },
+      )
     )
   }
 
-  const contentRange = response.headers.get('Content-Range')
+  noteReadableResponse(url, response.status)
 
   const failedResponse = failedResponseMessage(
     readTargetLabel(options.label),
@@ -80,15 +92,13 @@ async function assertHttpRangeSupportUncached(
     throw new Error(failedResponse)
   }
 
+  // HTTP 206 shows the host honored the Range header. Content-Range is not
+  // required: hosts that do not list it in Access-Control-Expose-Headers
+  // (such as ftp.ebi.ac.uk) hide it from the browser, and the app's readers
+  // take file sizes from Content-Length, which CORS always exposes.
   if (response.status !== 206) {
     throw new Error(
       `${readTargetLabel(options.label)} cannot be range-read. Expected HTTP 206 for Range: ${RANGE_PROBE_HEADER}, received HTTP ${response.status}. Configure the host to honor byte-range GET requests for ${url}.`,
-    )
-  }
-
-  if (contentRange === null || contentRange.trim().length === 0) {
-    throw new Error(
-      `${readTargetLabel(options.label)} cannot be range-read. The Range probe returned HTTP 206 but Content-Range was not exposed to the browser. Add Content-Range to Access-Control-Expose-Headers for ${url}.`,
     )
   }
 }

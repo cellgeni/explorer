@@ -6,6 +6,7 @@ import {
   datasetManifestFor,
   setDatasetManifest,
 } from '../data/datasetFiles'
+import { clearFolderListings, isListedAsMissing } from '../data/folderListing'
 import {
   cachedSpatialDataset,
   createSpatialDataset,
@@ -32,9 +33,13 @@ describe('spatial dataset detection', () => {
       baseUrl: 'https://example.test/xenium',
     })
 
-    // The dataset manifest and experiment.spatial probes run alongside the
-    // experiment.xenium probe.
-    expect(fetcher).toHaveBeenCalledTimes(3)
+    // The folder index page is read first; the dataset manifest and
+    // experiment.spatial probes then run alongside the experiment.xenium probe.
+    expect(fetcher).toHaveBeenCalledTimes(4)
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/xenium/',
+      expect.objectContaining({ cache: 'no-cache' }),
+    )
     expect(fetcher).toHaveBeenCalledWith(
       'https://example.test/xenium/explorer.json',
       expect.objectContaining({ cache: 'no-cache' }),
@@ -51,7 +56,7 @@ describe('spatial dataset detection', () => {
       baseUrl: 'https://example.test/xenium',
     })
 
-    expect(fetcher).toHaveBeenCalledTimes(3)
+    expect(fetcher).toHaveBeenCalledTimes(4)
   })
 
   it('detects Atera from experiment.spatial without further probes', async () => {
@@ -68,7 +73,7 @@ describe('spatial dataset detection', () => {
         expect.objectContaining({ path: 'experiment.spatial', ok: true }),
       ],
     })
-    expect(fetcher).toHaveBeenCalledTimes(3)
+    expect(fetcher).toHaveBeenCalledTimes(4)
   })
 
   it('prefers experiment.xenium when a folder has both experiment files', async () => {
@@ -533,7 +538,12 @@ describe('dataset manifests', () => {
       expect(datasetFileUrl(manifestUrl, 'morphology_focus/ch0000.ome.tif')).toBe(
         'https://example.test/outputs/run-7/morphology_focus/ch0000.ome.tif',
       )
-      expect(fetcher).toHaveBeenCalledTimes(1)
+      // The manifest, then the root folder's index page.
+      expect(fetcher).toHaveBeenCalledTimes(2)
+      expect(fetcher).toHaveBeenLastCalledWith(
+        'https://example.test/outputs/run-7/',
+        expect.objectContaining({ cache: 'no-cache' }),
+      )
     } finally {
       setDatasetManifest(manifestUrl, undefined)
     }
@@ -743,6 +753,61 @@ describe('dataset manifests', () => {
       )
     } finally {
       setDatasetManifest(baseUrl, undefined)
+    }
+  })
+})
+
+describe('folder index pages', () => {
+  const index =
+    (...names: readonly string[]) =>
+    () =>
+      new Response(
+        `<html><head><title>Index of /bia</title></head><body>${names
+          .map((name) => `<a href="${name}">${name}</a>`)
+          .join('')}</body></html>`,
+        { status: 200 },
+      )
+
+  it('skips probes for files the folder index page does not list', async () => {
+    const fetcher = fetcherForResponses({
+      '/bia/': index('experiment.xenium', 'cells.parquet'),
+      '/bia/experiment.xenium': () => new Response(null, { status: 200 }),
+    })
+
+    try {
+      await expect(
+        detectSpatialDataset('https://example.test/bia/', { fetcher }),
+      ).resolves.toMatchObject({
+        platform: 'xenium',
+        checked: [
+          { path: 'explorer.json', ok: false, error: 'not in the folder listing' },
+          expect.objectContaining({ path: 'experiment.xenium', ok: true }),
+        ],
+      })
+      expect(vi.mocked(fetcher).mock.calls.map(([url]) => String(url))).toEqual([
+        'https://example.test/bia/',
+        'https://example.test/bia/experiment.xenium',
+      ])
+      // Readers see the listing too.
+      expect(isListedAsMissing('https://example.test/bia/transcripts.parquet')).toBe(true)
+    } finally {
+      clearFolderListings()
+    }
+  })
+
+  it('still probes dotfiles, which index pages usually hide', async () => {
+    const fetcher = fetcherForResponses({ '/bia/': index('notes.txt') })
+
+    try {
+      await expect(
+        detectSpatialDataset('https://example.test/bia/', { fetcher }),
+      ).resolves.toMatchObject({ platform: 'unknown' })
+      expect(vi.mocked(fetcher).mock.calls.map(([url]) => String(url))).toEqual([
+        'https://example.test/bia/',
+        'https://example.test/bia/.zattrs',
+      ])
+    } finally {
+      clearFolderListings()
     }
   })
 })
