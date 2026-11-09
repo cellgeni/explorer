@@ -190,7 +190,9 @@ All screen↔data conversions go through `coords.ts`.
 - **Range probe.** `assertHttpRangeSupport` (`src/data/rangeSupport.ts`) sends
   `GET` with `Range: bytes=0-0` before large reads and requires `206` plus an
   exposed `Content-Range`. Results are cached per URL. Failures produce
-  "cannot be range-read" errors with the URL.
+  "cannot be range-read" errors with the URL. A `404` or `403` is reported as
+  a missing or unreadable file ("File not found or not readable") and a `5xx`
+  as a server error ("Host server error"), not as blocked Range requests.
 - **403 as missing.** Object stores that return `403` for missing keys are
   handled for Zarr metadata keys (`createZarrFetchStore`,
   `src/zarr/zarrStores.ts`) and `.zchunkstore` sidecars. Other `403`s are
