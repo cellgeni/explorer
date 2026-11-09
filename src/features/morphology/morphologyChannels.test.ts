@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { MorphologyImage } from '../../data/morphologyImage'
+import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 import {
+  channelsToAutoContrastOnLoad,
   createMorphologyChannelSettings,
+  defaultEnabledChannelIds,
+  MAX_DEFAULT_ENABLED_CHANNELS,
   morphologyPatchLabel,
+  needsAutoContrastOnEnable,
   normalizeChannelContrast,
 } from './morphologyChannels'
 
@@ -79,6 +83,64 @@ describe('morphologyChannels', () => {
     ])
   })
 
+  it('turns on at most the first few channels of a multiplexed image', () => {
+    expect(defaultEnabledChannelIds(testChannels(3))).toEqual(['c0', 'c1', 'c2'])
+    expect(defaultEnabledChannelIds(testChannels(61))).toHaveLength(
+      MAX_DEFAULT_ENABLED_CHANNELS,
+    )
+  })
+
+  it('auto-contrasts every channel of a small image but only the shown channels of a large one', () => {
+    const small = testChannels(MAX_DEFAULT_ENABLED_CHANNELS)
+    const large = testChannels(20)
+    const largeSettings = createMorphologyChannelSettings(
+      { channelLoaders: large } as unknown as MorphologyImage,
+      { enabledChannelIds: ['c0', 'c7'] },
+    )
+
+    expect(
+      channelsToAutoContrastOnLoad(
+        small,
+        createMorphologyChannelSettings({
+          channelLoaders: small,
+        } as unknown as MorphologyImage),
+      ),
+    ).toBe(small)
+    expect(
+      channelsToAutoContrastOnLoad(large, largeSettings).map(
+        (channel) => channel.info.id,
+      ),
+    ).toEqual(['c0', 'c7'])
+  })
+
+  it('auto-contrasts a channel turned on with its default window', () => {
+    const [channel] = testChannels(1) as [MorphologyImageChannel]
+    const setting = {
+      id: 'c0',
+      enabled: false,
+      color: [255, 255, 255] as const,
+      contrastMin: 0,
+      contrastMax: 65_535,
+    }
+
+    expect(needsAutoContrastOnEnable(channel, setting)).toBe(true)
+    expect(needsAutoContrastOnEnable(channel, { ...setting, contrastMax: 4_000 })).toBe(
+      false,
+    )
+    expect(
+      needsAutoContrastOnEnable(channel, {
+        ...setting,
+        histogram: { bins: [1], maxCount: 1, min: 0, max: 65_535, sampleCount: 1 },
+      }),
+    ).toBe(false)
+    expect(
+      needsAutoContrastOnEnable(
+        { ...channel, info: { ...channel.info, alphaFromIntensity: false } },
+        setting,
+      ),
+    ).toBe(false)
+  })
+
   it('normalizes contrast ranges', () => {
     expect(normalizeChannelContrast({ min: 5, max: 3 })).toEqual({ lo: 5, hi: 6 })
     expect(normalizeChannelContrast({ min: Number.NaN, max: Number.NaN })).toEqual({
@@ -87,3 +149,16 @@ describe('morphologyChannels', () => {
     })
   })
 })
+
+function testChannels(count: number): readonly MorphologyImageChannel[] {
+  return Array.from({ length: count }, (_, index) => ({
+    info: {
+      id: `c${index}`,
+      index,
+      name: `Channel ${index}`,
+      color: [255, 255, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+    },
+    loader: {} as MorphologyImageChannel['loader'],
+  }))
+}

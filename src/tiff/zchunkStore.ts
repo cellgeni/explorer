@@ -1,10 +1,19 @@
 import { imagePixels, micrometers } from '../data/coords'
 import { isListedAsMissing } from '../data/folderListing'
+import { abortable } from '../utils/abortable'
 import { tiffChunkKey } from './chunkKeys'
 import type { ImagePixels, UnitsDescriptor } from '../data/coords'
-import type { TiffChunk, TiffLevelMeta, TiffPyramidLoaderOptions } from './loader'
+import type {
+  TiffChunk,
+  TiffChunkIndex,
+  TiffLevelMeta,
+  TiffPyramidLoaderOptions,
+} from './loader'
 
-type ZchunkStorePyramidOptions = Omit<TiffPyramidLoaderOptions, 'url' | 'fetcher'>
+type ZchunkStorePyramidOptions = Omit<
+  TiffPyramidLoaderOptions,
+  'url' | 'fetcher' | 'chunkIndex'
+> & { readonly chunkIndex: TiffChunkIndex }
 
 interface ZchunkStoreEntry {
   readonly offset: number
@@ -148,36 +157,6 @@ async function requestSidecarJson(url: string, fetcher: typeof fetch): Promise<u
   }
 
   return (await response.json()) as unknown
-}
-
-export function abortable<T>(
-  promise: Promise<T>,
-  signal: AbortSignal | undefined,
-): Promise<T> {
-  if (signal === undefined) {
-    return promise
-  }
-
-  if (signal.aborted) {
-    return Promise.reject(abortReason(signal))
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => {
-      reject(abortReason(signal))
-    }
-
-    signal.addEventListener('abort', onAbort, { once: true })
-    promise.then(resolve, reject).finally(() => {
-      signal.removeEventListener('abort', onAbort)
-    })
-  })
-}
-
-function abortReason(signal: AbortSignal): Error {
-  return signal.reason instanceof Error
-    ? signal.reason
-    : new DOMException('The operation was aborted.', 'AbortError')
 }
 
 export function zchunkStoreToPyramidOptions(

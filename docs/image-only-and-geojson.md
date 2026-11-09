@@ -10,6 +10,8 @@ importing geometric annotations. For how images are read and rendered, see
 Use `Dataset or image URL` with one of these direct URL forms:
 
 - `.ome.tif`, `.ome.tiff`, `.tif`, or `.tiff`
+- `.qptiff` or `.qptif` (Akoya PhenoCycler, PhenoImager, and Vectra), see
+  below
 - `.ome.zarr`, `.zarr`, `zarr.json`, or `.zattrs`
 - `.ndpi`, read with the same TIFF loader (see the requirements below)
 - A folder URL whose `zarr.json` or `.zattrs` holds OME multiscales metadata
@@ -33,6 +35,16 @@ TIFF requirements:
 Most NDPI files do not meet these requirements; convert them to pyramidal
 OME-TIFF (for example with `bfconvert` or `bioformats2raw` + `raw2ometiff`)
 and host that output instead.
+
+QPTIFF files are read as they come from the scanner: the pyramid levels stored
+as top-level IFDs are used, each channel is named by its biomarker and drawn in
+its scanner colour, and the pixel size comes from the TIFF resolution tags.
+A QPTIFF saved under a `.tif` name is recognized from its image description.
+See [QPTIFF](./modalities/image.md#qptiff).
+
+An image with more than six channels, such as a multiplexed QPTIFF, opens with
+the first six channels on; turn others on in `Layers`. Each is auto-contrasted
+the first time it is turned on.
 
 OME-Zarr sources must expose OME multiscales metadata with `x` and `y` axes.
 Only the first time point and z plane of an OME-Zarr image are shown.

@@ -2,8 +2,8 @@
 
 This page covers two things:
 
-- The **image-only** modality: a direct OME-TIFF, TIFF, NDPI, or OME-Zarr URL
-  loaded without any omics tables.
+- The **image-only** modality: a direct OME-TIFF, TIFF, QPTIFF, NDPI, or
+  OME-Zarr URL loaded without any omics tables.
 - The shared **image pyramid pipeline** used by every platform for morphology
   images (Xenium), SpatialData images, and custom image layers.
 
@@ -15,11 +15,11 @@ For usage of image-only sources and GeoJSON shapes see
 `detectSpatialDataset` (`src/datasets/datasetFactory.ts`) recognizes images by
 URL shape before any Xenium probe:
 
-| URL pattern                                                                          | Check                                                                        | Result                                                                                |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, or `/.zattrs` (`isOmeZarrImageUrl`) | `HEAD` on the root's `zarr.json` and/or `.zattrs`                            | SpatialData if the root has `spatialdata_attrs`, else image (`imageKind: 'ome-zarr'`) |
-| Ends in `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, or `.ndpi` (query/hash allowed)    | One `HEAD` on the URL                                                        | Image (`imageKind: 'tiff'` or `'ndpi'`)                                               |
-| Any other folder URL                                                                 | After the `experiment.xenium` probe fails, `HEAD` on `zarr.json` / `.zattrs` | SpatialData, or image pointing at that metadata file                                  |
+| URL pattern                                                                                            | Check                                                                        | Result                                                                                |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, or `/.zattrs` (`isOmeZarrImageUrl`)                   | `HEAD` on the root's `zarr.json` and/or `.zattrs`                            | SpatialData if the root has `spatialdata_attrs`, else image (`imageKind: 'ome-zarr'`) |
+| Ends in `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, `.qptiff`, `.qptif`, or `.ndpi` (query/hash allowed) | One `HEAD` on the URL                                                        | Image (`imageKind: 'tiff'`, `'qptiff'`, or `'ndpi'`)                                  |
+| Any other folder URL                                                                                   | After the `experiment.xenium` probe fails, `HEAD` on `zarr.json` / `.zattrs` | SpatialData, or image pointing at that metadata file                                  |
 
 `omeZarrImageRootUrl` strips a trailing `/zarr.json` or `/.zattrs` to find the
 store root. `createSpatialDataset` builds an `ImageOnlyDataset`
@@ -35,8 +35,10 @@ files go through the TIFF loader.
 - `elements()`, `matrix()`, and `annotations()` return nothing.
 
 The lifecycle opens per-channel loaders with
-`morphologyImageFromPyramidLoader`, enables every channel (unless a shared URL
-restores a channel list), and queues auto-contrast for all channels.
+`morphologyImageFromPyramidLoader` and, unless a shared URL restores a channel
+list, turns on the first six channels (`MAX_DEFAULT_ENABLED_CHANNELS` in
+`src/features/morphology/morphologyChannels.ts`), which is every channel of
+most images. It then queues auto-contrast (see [Auto-Contrast](#auto-contrast)).
 
 `IMAGE_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`) hides
 Genes, Transcripts, Magic Lens, and Cell, disables cell-id annotations, and
@@ -59,9 +61,11 @@ Zarr loaders add `loadTile`/`loadTilePixels`.
 `openTiff` (`src/tiff/loader.ts`):
 
 1. Opens the file with `geotiff` `fromUrl(url, { allowFullFile: false })`. A
-   `#ifd=N` hash selects the base IFD.
+   `#ifd=N` hash selects the base IFD. `.qptiff` and `.qptif` URLs go to the
+   [QPTIFF](#qptiff) reader instead.
 2. Reads OME-XML from IFD 0's `ImageDescription` (`parseOmeTiffMetadata`,
-   `src/tiff/omeMetadata.ts`).
+   `src/tiff/omeMetadata.ts`). A `PerkinElmer-QPI-ImageDescription` there
+   sends the file to the QPTIFF reader.
 3. Tries a `.zchunkstore` sidecar (`src/tiff/zchunkStore.ts`) for precomputed
    tile offsets. A sidecar named by the dataset manifest
    (`files.morphologyZchunkstore`, or `files.zchunkstore` for `image`) is the
@@ -112,10 +116,10 @@ stack lists planes on its channel axis.
 ### Requirements
 
 - **Tiled, with SubIFD pyramids.** Pyramids stored as additional top-level
-  IFDs are not read, so such files render at full resolution only. Stripped
-  TIFFs (`StripOffsets`) are not indexed: the file opens but no tiles load.
-  Most NDPI files fall in one of these cases; convert them to pyramidal
-  OME-TIFF.
+  IFDs are not read (QPTIFF excepted), so such files render at full resolution
+  only. Stripped TIFFs (`StripOffsets`) are not indexed: the file opens but no
+  tiles load. Most NDPI files fall in one of these cases; convert them to
+  pyramidal OME-TIFF.
 - **8- or 16-bit samples**, 1, 3, or 4 samples per pixel. Float images fail.
 - **Byte ranges.** Each tile is a `Range` `GET` that must return `206`.
 
@@ -131,6 +135,43 @@ stack lists planes on its channel axis.
 | `SizeZ`, `DimensionOrder`, `TiffData` `FirstZ` | Z-stack planes per channel (see [Z-Stacks](#z-stacks))                                                                              |
 | `PhysicalSizeZ` (+ unit)                       | Depth shown beside the `Z plane` slider                                                                                             |
 | `SamplesPerPixel ≥ 3` or `Interleaved="true"`  | Native RGB, drawn without colour or window                                                                                          |
+
+### QPTIFF
+
+Akoya PhenoCycler, PhenoImager, and Vectra scanners write QPTIFF, a BigTIFF in
+which every image is a top-level IFD: one full-resolution IFD per channel, a
+thumbnail, each pyramid level as one reduced-resolution IFD per channel, then
+the slide overview and label. `openQptiff` (`src/tiff/loader.ts`) reads it
+using the layout rules in `src/tiff/qptiff.ts`:
+
+- **IFD walk.** Each loader needs IFDs from the whole chain, so the chain is
+  read once per file and shared by every channel loader of the two most
+  recently opened QPTIFFs. Akoya writes the IFDs together at the start of the
+  file, so the walk reads through a geotiff block cache (1 MiB blocks, at most
+  16 kept) instead of one request per IFD: the 61-channel, 81 GB PhenoCycler
+  scan below opens with 8 range requests (8.4 MB) instead of 370.
+- **Layout.** Channels are the leading IFDs the size of the first, with
+  `ImageType` `FullResolution`. Each pyramid level is a later run of
+  `ReducedResolution` IFDs with one IFD per channel; without QPI descriptions,
+  `NewSubfileType` bit 0 marks reduced IFDs. A level that is stripped, has
+  another tile size, or has the wrong IFD count is skipped. Akoya's smallest
+  level is stripped, so the coarsest level shown is the one above it.
+  Thumbnail, overview, and label images are not shown.
+- **Channels.** Each channel's `ImageDescription` gives its name (`Biomarker`,
+  or the fluorophore `Name` when the biomarker is empty or `--`) and colour
+  (`Color` as `R,G,B`). Repeated names get ` (2)`, ` (3)`, and so on. A
+  three-sample image is native RGB. Channel N opens as `#ifd=<its IFD>`.
+- **Pixel size.** The first IFD's `XResolution` in `ResolutionUnit`
+  (centimetre or inch). Without them, 0.2125 µm/px.
+- **Tile offsets.** A channel's `TileOffsets` and `TileByteCounts` are read
+  when its first tile is fetched, so channels that stay off use no memory.
+- `.zchunkstore` sidecars are not used. A sidecar named by the dataset
+  manifest for a QPTIFF adds a fallback notice.
+
+Checked against
+`https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/788/S-BIAD3788/Files/PostXeniumAkoya/MH_BCN_skin_X0072771_post-Xenium_Scan1.er.qptiff`
+(PhenoCycler-Fusion 2.3.1; 61 channels of 24,960 × 48,960 16-bit LZW, 512 px
+tiles, five levels shown, 0.505 µm/px).
 
 ### Codecs
 
@@ -212,6 +253,11 @@ JPEG-XR is not supported.
 image loads and when a channel's `Auto` button is pressed. SpatialData native
 RGB images skip it.
 
+An image with more than six channels auto-contrasts only the channels that are
+on when it loads. Any other channel is auto-contrasted when it is first turned
+on, if it still has its pixel type's default window and no histogram; native
+RGB channels are left alone.
+
 ## Custom Image Layers
 
 `Custom image URL` → `Load Layer` in the Layers tab
@@ -244,7 +290,7 @@ RGB images skip it.
 | `src/data/imagePyramid.ts`                                                                                | `ImagePyramidLoader` interface                                         |
 | `src/data/morphologyImage.ts`                                                                             | Image opening, per-channel loaders, custom layers, Xenium image choice |
 | `src/data/morphologyContrast.ts`                                                                          | Auto-contrast                                                          |
-| `src/tiff/loader.ts`, `omeMetadata.ts`, `zchunkStore.ts`, `tileCache.ts`, `chunkKeys.ts`                  | TIFF loading                                                           |
+| `src/tiff/loader.ts`, `omeMetadata.ts`, `qptiff.ts`, `zchunkStore.ts`, `tileCache.ts`, `chunkKeys.ts`     | TIFF and QPTIFF loading                                                |
 | `src/codecs/tiffTile.ts`, `jpeg2000.ts`                                                                   | Tile decoding                                                          |
 | `src/workers/tileDecode.worker.ts`, `tileDecodePool.ts`, `tileDecodeMessages.ts`                          | Decode workers                                                         |
 | `src/zarr/omeZarrLoader.ts`, `zarrStores.ts`                                                              | OME-Zarr loading                                                       |
@@ -268,3 +314,7 @@ RGB images skip it.
   control.
 - Switching to a plane not opened recently reads its IFD, `SubIFDs`, and tile
   offset arrays (a few sequential range requests) before its tiles load.
+- QPTIFF: the stripped smallest pyramid level is not shown. A QPTIFF whose
+  IFDs are spread through the file, rather than together at the start, costs
+  one 1 MiB block per IFD to open. Float (unmixed component) QPTIFFs fail like
+  other float images.

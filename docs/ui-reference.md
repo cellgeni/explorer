@@ -113,13 +113,13 @@ The header "Layer Stack" shows the deck.gl layer count and the
 `src/features/morphology/MorphologyChannelControls.tsx`, one row per channel
 (custom layer channels are named "Layer / Channel"):
 
-| Control                            | Notes                                                                  |
-| ---------------------------------- | ---------------------------------------------------------------------- |
-| Visibility checkbox (channel name) | First channel on for Xenium; all channels on for Image and SpatialData |
-| Colour picker                      | Hidden for native RGB images                                           |
-| `Auto`                             | Recomputes the contrast window from the coarsest level                 |
-| Min / Max                          | Contrast window                                                        |
-| Histogram                          | 32 bins from the last auto-contrast                                    |
+| Control                            | Notes                                                                                                                                                 |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Visibility checkbox (channel name) | First channel on for Xenium; first six on for Image and SpatialData. Turning on a channel that still has its default window auto-contrasts it         |
+| Colour picker                      | Hidden for native RGB images                                                                                                                          |
+| `Auto`                             | Recomputes the contrast window from the coarsest level. Runs on load for every channel, or only the channels that are on when there are more than six |
+| Min / Max                          | Contrast window                                                                                                                                       |
+| Histogram                          | 32 bins from the last auto-contrast                                                                                                                   |
 
 ## Genes Tab
 

@@ -170,7 +170,8 @@ open as `#c=N` loaders through `openChannelLoader`.
 
 Native RGB images (exactly three channels with no omero metadata, or channels
 labelled/coloured red, green, blue) keep their 0–255 window: the lifecycle
-passes `skipNativeRgbAutoContrast` and enables all channels.
+passes `skipNativeRgbAutoContrast` and enables all channels. Other images
+start with their first six channels on.
 
 ## Units And Extent
 

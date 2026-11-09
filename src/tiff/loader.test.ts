@@ -133,6 +133,35 @@ describe('TiffPyramidLoader', () => {
     expect(mutableRequests[0]?.headers).toEqual({ Range: 'bytes=10-13' })
   })
 
+  it('reads a lazy tile index on the first tile fetch and retries a failed read', async () => {
+    const chunks = new Map<string, TiffChunk>([['0/0/0', { offset: 10, length: 2 }]])
+    const readChunks = vi
+      .fn<() => Promise<ReadonlyMap<string, TiffChunk>>>()
+      .mockRejectedValueOnce(new Error('offsets unavailable'))
+      .mockResolvedValue(chunks)
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/scan.qptiff',
+      chunkIndex: readChunks,
+      levelMeta: new Map([
+        [0, { width: imagePixels(100), height: imagePixels(100), nCols: 1, nRows: 1 }],
+      ]),
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 1,
+      imageWidth: imagePixels(100),
+      imageHeight: imagePixels(100),
+      fetcher: async () => new Response(new Uint8Array([7, 8]), { status: 206 }),
+      byteRangeCache: null,
+    })
+
+    expect(readChunks).not.toHaveBeenCalled()
+    await expect(loader.fetchTileBytes(0, 0, 0)).rejects.toThrow('offsets unavailable')
+    await expect(loader.fetchTileBytes(0, 0, 0)).resolves.toEqual(new Uint8Array([7, 8]))
+    await expect(loader.fetchTileBytes(0, 0, 0)).resolves.toEqual(new Uint8Array([7, 8]))
+    expect(readChunks).toHaveBeenCalledTimes(2)
+  })
+
   it('uses the source TIFF URL for range fetches from selected IFD loaders', async () => {
     const chunks = new Map<string, TiffChunk>([['0/0/0', { offset: 20, length: 3 }]])
     const levels = new Map<number, TiffLevelMeta>([

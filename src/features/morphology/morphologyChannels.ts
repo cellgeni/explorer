@@ -52,6 +52,48 @@ export function createMorphologyChannelSettingsFromChannels(
   }))
 }
 
+// Multiplexed images (QPTIFF, CODEX OME-TIFF) can have dozens of channels.
+// Blending them all is unreadable and fetches tiles for every one, so an image
+// with more channels than this opens with only the first few on, and only the
+// channels that are on are auto-contrasted when it loads.
+export const MAX_DEFAULT_ENABLED_CHANNELS = 6
+
+export function defaultEnabledChannelIds(
+  channels: readonly MorphologyImageChannel[],
+): readonly string[] {
+  return channels.slice(0, MAX_DEFAULT_ENABLED_CHANNELS).map((channel) => channel.info.id)
+}
+
+export function channelsToAutoContrastOnLoad(
+  channels: readonly MorphologyImageChannel[],
+  settings: readonly MorphologyChannelSetting[],
+): readonly MorphologyImageChannel[] {
+  if (channels.length <= MAX_DEFAULT_ENABLED_CHANNELS) {
+    return channels
+  }
+
+  const enabledIds = new Set(
+    settings.filter((setting) => setting.enabled).map((setting) => setting.id),
+  )
+
+  return channels.filter((channel) => enabledIds.has(channel.info.id))
+}
+
+// A channel that was off when the image loaded still has the default window
+// of its pixel type, which usually shows it nearly black. Native RGB keeps
+// its full window.
+export function needsAutoContrastOnEnable(
+  channel: MorphologyImageChannel,
+  setting: MorphologyChannelSetting | undefined,
+): boolean {
+  return (
+    channel.info.alphaFromIntensity !== false &&
+    setting?.histogram === undefined &&
+    (setting?.contrastMin ?? channel.info.contrast.min) === channel.info.contrast.min &&
+    (setting?.contrastMax ?? channel.info.contrast.max) === channel.info.contrast.max
+  )
+}
+
 export function normalizeChannelContrast(options: {
   readonly min: number
   readonly max: number

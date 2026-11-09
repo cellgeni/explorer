@@ -292,11 +292,12 @@ image chunk.
 Enter a direct image URL in `Dataset or image URL`. Supported URL forms are:
 
 - `.ome.tif`, `.ome.tiff`, `.tif`, and `.tiff`
+- `.qptiff` and `.qptif`, as written by Akoya scanners
 - `.ome.zarr`, `.zarr`, `zarr.json`, and `.zattrs`
 - `.ndpi`, read with the same TIFF loader
 
 OME-TIFF and TIFF assets must be tiled (not stripped), with pyramid levels
-stored as `SubIFDs`. OME-Zarr sources must expose OME multiscales metadata.
+stored as `SubIFDs`. QPTIFF files can be hosted unchanged. OME-Zarr sources must expose OME multiscales metadata.
 Most NDPI files are stripped or use top-level IFD pyramids; convert them to
 pyramidal OME-TIFF before hosting. See
 [Image-only and GeoJSON](./image-only-and-geojson.md#supported-image-urls).
