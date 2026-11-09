@@ -20,8 +20,9 @@ import type {
 } from '../data/datasetAnnotations'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
-import type { ImagePyramidLoader } from '../data/imagePyramid'
-import { openImagePyramid } from '../data/morphologyImage'
+import type { FallbackNotifier } from '../data/fallbackNotice'
+import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
+import { openImagePyramid, openImagePyramidOptions } from '../data/morphologyImage'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import type {
   TranscriptAggregateResult,
@@ -43,6 +44,7 @@ import {
   parseAteraPolygonGridAttrs,
   type AteraExperiment,
   type AteraFileRole,
+  type AteraManifestFileKey,
   type AteraPolygonGrid,
   type AteraPolygonGridTile,
 } from './ateraFormat'
@@ -77,12 +79,12 @@ export interface AteraDatasetOptions {
   // dataset manifest's root.
   readonly baseUrl: string
   // Absolute URLs from a dataset manifest; they win over experiment.spatial.
-  readonly files?: Readonly<Partial<Record<AteraFileRole | 'morphology', string>>>
+  readonly files?: Readonly<Partial<Record<AteraManifestFileKey, string>>>
   readonly fetcher?: typeof fetch
   readonly onProgress?: H5adLoadProgressReporter
   // Opens a zipped Zarr store and lists its entries; replaced in tests.
   readonly openZipStore?: (url: string) => Promise<AteraZipStore>
-  readonly openImage?: (url: string, signal?: AbortSignal) => Promise<ImagePyramidLoader>
+  readonly openImage?: ImagePyramidOpener
 }
 
 export interface AteraZipStore {
@@ -158,14 +160,11 @@ const POLYGON_SET_INDEX: Readonly<Record<AteraSegmentationKind, number>> = {
 
 export class AteraDataset implements SpatialDataset<SpatialElementId> {
   readonly baseUrl: string
-  private readonly files: Readonly<Partial<Record<AteraFileRole | 'morphology', string>>>
+  private readonly files: Readonly<Partial<Record<AteraManifestFileKey, string>>>
   private readonly fetcher: typeof fetch
   private readonly onProgress: H5adLoadProgressReporter | undefined
   private readonly openZipStore: (url: string) => Promise<AteraZipStore>
-  private readonly openImage: (
-    url: string,
-    signal?: AbortSignal,
-  ) => Promise<ImagePyramidLoader>
+  private readonly openImage: ImagePyramidOpener
   private experimentPromise: Promise<AteraExperiment> | null = null
   // experiment.spatial is optional with a manifest, so its file paths are read
   // once and a missing file means standard names, without refetching it on
@@ -187,7 +186,7 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.onProgress = options.onProgress
     this.openZipStore = options.openZipStore ?? cachedZipFileStoreWithEntries
-    this.openImage = options.openImage ?? ((url, signal) => openImagePyramid(url, signal))
+    this.openImage = options.openImage ?? openImagePyramid
   }
 
   async meta(): Promise<DatasetMeta> {
@@ -453,7 +452,8 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       : {
           kind: 'pyramid',
           loader,
-          openChannelLoader: (url, signal) => this.openImage(url, signal),
+          openChannelLoader: (url, signal, onFallback) =>
+            this.openMorphologyImage(url, signal, onFallback),
         }
   }
 
@@ -929,7 +929,7 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   private imageLoader(): Promise<ImagePyramidLoader | null> {
     if (this.imagePromise === null) {
       this.imagePromise = this.morphologyUrl()
-        .then((url) => (url === null ? null : this.openImage(url)))
+        .then((url) => (url === null ? null : this.openMorphologyImage(url)))
         .catch((error: unknown) => {
           this.imagePromise = null
           throw error
@@ -937,6 +937,21 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     }
 
     return this.imagePromise
+  }
+
+  // Every morphology_2d channel file opens with the manifest's sidecar, which
+  // covers all of them.
+  private openMorphologyImage(
+    url: string,
+    signal?: AbortSignal,
+    onFallback?: FallbackNotifier,
+  ): Promise<ImagePyramidLoader> {
+    return this.openImage(
+      url,
+      signal,
+      onFallback,
+      openImagePyramidOptions(this.files.morphologyZchunkstore),
+    )
   }
 }
 

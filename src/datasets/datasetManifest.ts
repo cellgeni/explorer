@@ -4,6 +4,7 @@
 // standard file names (see datasetFactory.ts). The format is described in
 // docs/dataset-manifest.md and public/schemas/explorer-manifest.v1.json.
 
+import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import {
   ATERA_FILE_DEFAULTS,
   ATERA_OPTIONAL_FILES,
@@ -39,8 +40,16 @@ export const XENIUM_MANIFEST_FILE_DEFAULTS = {
 } as const
 
 // Xenium files without a single standard name: the morphology image comes from
-// experiment.xenium, and projections are searched under analysis/.
-export const XENIUM_MANIFEST_OPTIONAL_FILES = ['morphology', 'umap', 'tsne'] as const
+// experiment.xenium, its `.zchunkstore` sidecar is looked for next to it, and
+// projections are searched under analysis/.
+export const XENIUM_MANIFEST_OPTIONAL_FILES = [
+  'morphology',
+  'morphologyZchunkstore',
+  'umap',
+  'tsne',
+] as const
+
+export const IMAGE_MANIFEST_FILES = ['image', 'zchunkstore'] as const
 
 export const VISIUM_HD_MANIFEST_FILE_DEFAULTS = {
   featureSlice: 'feature_slice.h5',
@@ -166,7 +175,10 @@ export interface SpatialDataDatasetManifest extends DatasetManifestBase {
 
 export interface ImageDatasetManifest extends DatasetManifestBase {
   readonly platform: 'image'
-  readonly files: { readonly image: DatasetManifestFile }
+  readonly files: {
+    readonly image: DatasetManifestFile
+    readonly zchunkstore?: DatasetManifestFile
+  }
 }
 
 export type DatasetManifest =
@@ -352,8 +364,24 @@ export function parseDatasetManifest(
 
   if (platform === 'image') {
     rejectOptions(options, platform, fail)
-    checkKeys(files, ['image'], 'files.', fail)
-    return { ...base, platform, files: { image: requiredFile('image') } }
+    checkKeys(files, IMAGE_MANIFEST_FILES, 'files.', fail)
+    const image = requiredFile('image')
+    const zchunkstore = file('zchunkstore')
+
+    if (zchunkstore !== undefined && isOmeZarrImageUrl(image.url)) {
+      fail(
+        '"files.zchunkstore" is only for TIFF images; remove it for an OME-Zarr image.',
+      )
+    }
+
+    return {
+      ...base,
+      platform,
+      files: {
+        image,
+        ...(zchunkstore === undefined ? {} : { zchunkstore }),
+      },
+    }
   }
 
   checkKeys(files, ['store'], 'files.', fail)
@@ -396,6 +424,21 @@ export function parseDatasetManifest(
     files: { store: requiredFile('store') },
     options: parsedOptions,
   }
+}
+
+// The `.zchunkstore` sidecar a manifest names for the dataset's TIFF image.
+export function manifestZchunkStoreUrl(
+  manifest: DatasetManifest | undefined,
+): string | undefined {
+  if (manifest?.platform === 'xenium' || manifest?.platform === 'atera') {
+    return manifest.files.morphologyZchunkstore?.url
+  }
+
+  if (manifest?.platform === 'image') {
+    return manifest.files.zchunkstore?.url
+  }
+
+  return undefined
 }
 
 // Resolve a manifest path against a base URL. Absolute URLs pass through.

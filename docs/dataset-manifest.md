@@ -101,19 +101,20 @@ Other schemes such as `s3://` are rejected: the browser can only read HTTP(S).
 
 All entries are optional. Leave one out to use the standard name.
 
-| Key                   | Standard name                       | Notes                                                                                                           |
-| --------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `experiment`          | `experiment.xenium`                 | Optional with a manifest. Supplies the pixel size and, when `morphology` is not set, the morphology image paths |
-| `cells`               | `cells.parquet`                     | Required to load, at whatever path                                                                              |
-| `cellBoundaries`      | `cell_boundaries.parquet`           |                                                                                                                 |
-| `transcripts`         | `transcripts.parquet`               |                                                                                                                 |
-| `transcriptsZarr`     | `transcripts.zarr.zip`              |                                                                                                                 |
-| `cellFeatureMatrix`   | `cell_feature_matrix.zarr.zip`      |                                                                                                                 |
-| `cellFeatureMatrixH5` | `cell_feature_matrix.h5`            |                                                                                                                 |
-| `analysis`            | `analysis.zarr.zip`                 |                                                                                                                 |
-| `genePanel`           | `gene_panel.json`                   |                                                                                                                 |
-| `morphology`          | Image listed in `experiment.xenium` | Image paths inside `experiment.xenium` resolve against the dataset folder (or `root`)                           |
-| `umap`, `tsne`        | Searched under `analysis/`          | A projection CSV. Replaces the search for that embedding                                                        |
+| Key                     | Standard name                       | Notes                                                                                                           |
+| ----------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `experiment`            | `experiment.xenium`                 | Optional with a manifest. Supplies the pixel size and, when `morphology` is not set, the morphology image paths |
+| `cells`                 | `cells.parquet`                     | Required to load, at whatever path                                                                              |
+| `cellBoundaries`        | `cell_boundaries.parquet`           |                                                                                                                 |
+| `transcripts`           | `transcripts.parquet`               |                                                                                                                 |
+| `transcriptsZarr`       | `transcripts.zarr.zip`              |                                                                                                                 |
+| `cellFeatureMatrix`     | `cell_feature_matrix.zarr.zip`      |                                                                                                                 |
+| `cellFeatureMatrixH5`   | `cell_feature_matrix.h5`            |                                                                                                                 |
+| `analysis`              | `analysis.zarr.zip`                 |                                                                                                                 |
+| `genePanel`             | `gene_panel.json`                   |                                                                                                                 |
+| `morphology`            | Image listed in `experiment.xenium` | Image paths inside `experiment.xenium` resolve against the dataset folder (or `root`)                           |
+| `morphologyZchunkstore` | Next to the TIFF                    | [`.zchunkstore` sidecar](./zchunkstore.md) for the morphology image. Replaces the lookup next to the TIFF       |
+| `umap`, `tsne`          | Searched under `analysis/`          | A projection CSV. Replaces the search for that embedding                                                        |
 
 ### Atera
 
@@ -121,15 +122,16 @@ All entries are optional. Leave one out to use the path in
 `experiment.spatial`, or the standard name when that lists none. Atera
 `options` must be empty.
 
-| Key                    | Standard name                                     | Notes                                                    |
-| ---------------------- | ------------------------------------------------- | -------------------------------------------------------- |
-| `experiment`           | `experiment.spatial`                              | Supplies the pixel size and the paths of the other files |
-| `cells`                | `cells.zarr.zip`                                  | Cell and nucleus boundaries                              |
-| `cellFeatureMatrix`    | `cell_feature_matrix.zarr.zip`                    | Required to load                                         |
-| `cscCellFeatureMatrix` | `csc_cell_feature_matrix.zarr.zip`                | Selected-gene overlays                                   |
-| `transcripts`          | `transcripts.zarr.zip`                            | Exact transcript points for selected genes               |
-| `binnedTranscripts`    | `binned_transcripts.zarr.zip`                     | Selected-gene transcript density                         |
-| `morphology`           | `images.morphology_2d_filepath` in the experiment | Any OME-TIFF or OME-Zarr image                           |
+| Key                     | Standard name                                     | Notes                                                                                                                         |
+| ----------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `experiment`            | `experiment.spatial`                              | Supplies the pixel size and the paths of the other files                                                                      |
+| `cells`                 | `cells.zarr.zip`                                  | Cell and nucleus boundaries                                                                                                   |
+| `cellFeatureMatrix`     | `cell_feature_matrix.zarr.zip`                    | Required to load                                                                                                              |
+| `cscCellFeatureMatrix`  | `csc_cell_feature_matrix.zarr.zip`                | Selected-gene overlays                                                                                                        |
+| `transcripts`           | `transcripts.zarr.zip`                            | Exact transcript points for selected genes                                                                                    |
+| `binnedTranscripts`     | `binned_transcripts.zarr.zip`                     | Selected-gene transcript density                                                                                              |
+| `morphology`            | `images.morphology_2d_filepath` in the experiment | Any OME-TIFF or OME-Zarr image                                                                                                |
+| `morphologyZchunkstore` | Next to each TIFF                                 | [`.zchunkstore` sidecar](./zchunkstore.md) covering every `morphology_2d` channel file. Replaces the lookup next to the TIFFs |
 
 ### Visium HD
 
@@ -150,11 +152,12 @@ probed as usual.
 
 ### H5AD, SpatialData, And Image
 
-| Platform      | Key     | Value                                                                          |
-| ------------- | ------- | ------------------------------------------------------------------------------ |
-| `h5ad`        | `h5ad`  | Required. The `.h5ad` file; checked with `HEAD`                                |
-| `spatialdata` | `store` | Required. The Zarr store root                                                  |
-| `image`       | `image` | Required. OME-TIFF, TIFF, NDPI, or OME-Zarr; the type is taken from the suffix |
+| Platform      | Key           | Value                                                                                                                                                                      |
+| ------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `h5ad`        | `h5ad`        | Required. The `.h5ad` file; checked with `HEAD`                                                                                                                            |
+| `spatialdata` | `store`       | Required. The Zarr store root                                                                                                                                              |
+| `image`       | `image`       | Required. OME-TIFF, TIFF, NDPI, or OME-Zarr; the type is taken from the suffix                                                                                             |
+| `image`       | `zchunkstore` | Optional. [`.zchunkstore` sidecar](./zchunkstore.md) for a TIFF `image`, and for its channel files. Replaces the lookup next to the TIFF. Rejected for an OME-Zarr `image` |
 
 ## Options
 
@@ -244,6 +247,15 @@ such as VS Code will complete field names and flag errors as you type.
    shared link.
 5. `spatialDataSelectionFor` returns the viewer's SpatialData selection, or the
    manifest's `options` when there is none.
+
+A sidecar named by `morphologyZchunkstore` or `zchunkstore` reaches `openTiff`
+as `zchunkStoreUrl`: `loadMorphologyImage` looks it up with `zchunkStoreUrlFor`
+(`src/data/datasetFiles.ts`), and `AteraDataset` and `ImageOnlyDataset` pass it
+for the image and, through `openChannelLoader`, for each channel file. It is
+the only sidecar URL tried: if it is missing or does not match the TIFF, the
+image loads without one, with the fallback notice. If the morphology image
+turns out to be OME-Zarr, the sidecar is not used and a fallback notice says
+so.
 
 `src/datasets/datasetManifestSchema.test.ts` checks that the JSON Schema and
 the parser accept the same fields and values.

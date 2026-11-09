@@ -43,6 +43,9 @@ describe('morphology image loader', () => {
     expect(fetcher).toHaveBeenCalledWith('https://example.test/xenium/experiment.xenium')
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -95,6 +98,9 @@ describe('morphology image loader', () => {
     expect(fetcher).not.toHaveBeenCalled()
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -118,7 +124,51 @@ describe('morphology image loader', () => {
       'https://example.test/xenium/morphology.ome.tif',
       undefined,
       onFallback,
+      undefined,
     )
+  })
+
+  it('opens the image and its channel files with the manifest sidecar', async () => {
+    const baseUrl = 'https://example.test/manifest-sidecar/explorer.json'
+    const zchunkStoreUrl = 'https://sidecars.example.test/focus.zchunkstore'
+    const channels = [
+      { id: 'Channel:0', index: 0, fileName: 'morphology_focus_0000.ome.tif' },
+      { id: 'Channel:1', index: 1, fileName: 'morphology_focus_0001.ome.tif' },
+    ]
+    const loader = { channels } as unknown as TiffPyramidLoader
+    const openImage = vi.fn(async () => loader)
+    setDatasetManifest(baseUrl, {
+      platform: 'xenium',
+      url: baseUrl,
+      rootUrl: 'https://example.test/manifest-sidecar',
+      files: {
+        morphology: {
+          path: 'morphology_focus/morphology_focus_0000.ome.tif',
+          url: 'https://example.test/manifest-sidecar/morphology_focus/morphology_focus_0000.ome.tif',
+        },
+        morphologyZchunkstore: { path: zchunkStoreUrl, url: zchunkStoreUrl },
+      },
+    })
+
+    try {
+      await loadMorphologyImage(baseUrl, { fetcher: vi.fn(), openImage })
+      expect(openImage.mock.calls).toEqual([
+        [
+          'https://example.test/manifest-sidecar/morphology_focus/morphology_focus_0000.ome.tif',
+          undefined,
+          undefined,
+          { zchunkStoreUrl },
+        ],
+        [
+          'https://example.test/manifest-sidecar/morphology_focus/morphology_focus_0001.ome.tif',
+          undefined,
+          undefined,
+          { zchunkStoreUrl },
+        ],
+      ])
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
   })
 
   it('opens channel loaders from OME-declared sibling focus files', async () => {
@@ -167,9 +217,15 @@ describe('morphology image loader', () => {
     })
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology_focus/morphology_focus_0001.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -236,12 +292,23 @@ describe('morphology image loader', () => {
         { info: channel2, loader: loader2 },
       ],
     })
-    expect(openImage).toHaveBeenCalledWith('https://example.test/layers/rgb.ome.tif')
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/layers/rgb.ome.tif',
+      undefined,
+      undefined,
+      undefined,
+    )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/layers/rgb.ome.tif#ifd=1',
+      undefined,
+      undefined,
+      undefined,
     )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/layers/rgb.ome.tif#ifd=2',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -292,6 +359,9 @@ describe('morphology image loader', () => {
     expect(openImage).toHaveBeenCalledTimes(1)
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/images/image.ome.tif#ifd=1',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -333,9 +403,15 @@ describe('morphology image loader', () => {
     })
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/layers/custom_0000.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
     expect(openImage).toHaveBeenCalledWith(
       'https://example.test/layers/custom_0001.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 
@@ -357,8 +433,18 @@ describe('morphology image loader', () => {
       url: 'https://example.test/layers/custom.ome.tif',
       loader,
     })
-    expect(openImage).toHaveBeenCalledWith('http://example.test/layers/custom.ome.tif')
-    expect(openImage).toHaveBeenCalledWith('https://example.test/layers/custom.ome.tif')
+    expect(openImage).toHaveBeenCalledWith(
+      'http://example.test/layers/custom.ome.tif',
+      undefined,
+      undefined,
+      undefined,
+    )
+    expect(openImage).toHaveBeenCalledWith(
+      'https://example.test/layers/custom.ome.tif',
+      undefined,
+      undefined,
+      undefined,
+    )
   })
 
   it('does not rewrite localhost custom morphology layer URLs', async () => {
@@ -373,7 +459,12 @@ describe('morphology image loader', () => {
       }),
     ).rejects.toBe(error)
     expect(openImage).toHaveBeenCalledTimes(1)
-    expect(openImage).toHaveBeenCalledWith('http://localhost:3100/custom.ome.tif')
+    expect(openImage).toHaveBeenCalledWith(
+      'http://localhost:3100/custom.ome.tif',
+      undefined,
+      undefined,
+      undefined,
+    )
   })
 
   it('normalizes custom morphology layer URLs', () => {

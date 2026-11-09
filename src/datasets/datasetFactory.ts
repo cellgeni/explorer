@@ -1,11 +1,13 @@
 import { datasetManifestFor, setDatasetManifest } from '../data/datasetFiles'
-import { isOmeZarrImageUrl, omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
+import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
+import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import {
   DATASET_MANIFEST_FILE,
   DatasetManifestError,
   VISIUM_HD_MANIFEST_SEGMENTED_OUTPUTS,
   isDatasetManifestUrl,
   looksLikeDatasetManifest,
+  manifestZchunkStoreUrl,
   parseDatasetManifest,
   resolveManifestPath,
   type DatasetManifest,
@@ -755,7 +757,12 @@ export async function createSpatialDataset(
 
   if (detection.platform === 'image') {
     const { ImageOnlyDataset } = await import('./imageOnlyDataset')
-    return new ImageOnlyDataset({ imageUrl: detection.imageUrl })
+    const zchunkStoreUrl = manifestZchunkStoreUrl(detection.manifest)
+
+    return new ImageOnlyDataset({
+      imageUrl: detection.imageUrl,
+      ...(zchunkStoreUrl === undefined ? {} : { zchunkStoreUrl }),
+    })
   }
 
   if (detection.platform === 'visium-hd') {

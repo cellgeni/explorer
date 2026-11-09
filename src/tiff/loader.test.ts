@@ -318,6 +318,176 @@ describe('TiffPyramidLoader', () => {
     })
   })
 
+  it('decodes sidecar tiles with the TIFF compression tags', async () => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(zchunkStoreManifest({ width: 300, height: 200, tile: 100 }))
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/sample.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).not.toHaveBeenCalled()
+    expect(loader.tileDecodeOptions()).toMatchObject({
+      compression: 8,
+      bitsPerSample: [16],
+      samplesPerPixel: 1,
+      predictor: 2,
+      littleEndian: true,
+    })
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/sample.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=900-903' } }),
+    )
+  })
+
+  it('reads the sidecar the manifest names instead of the derived ones', async () => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(zchunkStoreManifest({ width: 300, height: 200, tile: 100 }), {
+      sidecarUrl: 'https://sidecars.example.test/sample.zchunkstore',
+    })
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/sample.tif',
+      undefined,
+      onFallback,
+      {
+        zchunkStoreUrl: 'https://sidecars.example.test/sample.zchunkstore',
+      },
+    )
+
+    expect(onFallback).not.toHaveBeenCalled()
+    expect(vi.mocked(fetch)).not.toHaveBeenCalledWith(
+      'https://example.test/sample.tif.zchunkstore',
+      expect.anything(),
+    )
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/sample.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=900-903' } }),
+    )
+  })
+
+  it('reads tile offsets from the TIFF without a notice when there is no sidecar', async () => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(null, { sidecarUrl: 'https://example.test/unused.zchunkstore' })
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/sample.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).not.toHaveBeenCalled()
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/sample.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=60-65' } }),
+    )
+  })
+
+  it('reports a sidecar the manifest names but the host does not serve', async () => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(null, { sidecarUrl: 'https://example.test/unused.zchunkstore' })
+    const onFallback = vi.fn()
+
+    await openTiff('https://example.test/sample.tif', undefined, onFallback, {
+      zchunkStoreUrl: 'https://sidecars.example.test/missing.zchunkstore',
+    })
+
+    expect(onFallback).toHaveBeenCalledOnce()
+  })
+
+  it("ignores a sidecar that has no tiles for the TIFF's channel", async () => {
+    mockTiff({
+      width: 300,
+      height: 200,
+      tileWidth: 100,
+      tileHeight: 100,
+      imageDescription: twoFileOmeXml,
+    })
+    stubZchunkStoreFetch(zchunkStoreManifest({ width: 300, height: 200, tile: 100 }), {
+      sidecarUrl: 'https://example.test/run/images/.zchunkstore',
+    })
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/run/images/stain_0001.ome.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).toHaveBeenCalledOnce()
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/run/images/stain_0001.ome.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=60-65' } }),
+    )
+  })
+
+  it('finds the folder sidecar of a multi-file OME-TIFF', async () => {
+    mockTiff({
+      width: 300,
+      height: 200,
+      tileWidth: 100,
+      tileHeight: 100,
+      imageDescription: twoFileOmeXml,
+    })
+    stubZchunkStoreFetch(
+      zchunkStoreManifest({ width: 300, height: 200, tile: 100, channels: [0, 1] }),
+      { sidecarUrl: 'https://example.test/run/images/.zchunkstore' },
+    )
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/run/images/stain_0001.ome.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).not.toHaveBeenCalled()
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/run/images/stain_0001.ome.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=1105-1105' } }),
+    )
+  })
+
+  it.each([
+    ['level 0 width', { width: 400, height: 200, tile: 100 }],
+    ['level 0 height', { width: 300, height: 100, tile: 100 }],
+    ['tile size', { width: 300, height: 200, tile: 128 }],
+  ])('ignores a sidecar whose %s differs from the TIFF', async (_label, manifest) => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(zchunkStoreManifest(manifest))
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/sample.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).toHaveBeenCalledOnce()
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        coalesceKey: 'morphology-zchunkstore-unused:https://example.test/sample.tif',
+      }),
+    )
+    expect(loader.tileWidth).toBe(100)
+    expect(loader.tileDecodeOptions()).toMatchObject({ compression: 8 })
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/sample.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=60-65' } }),
+    )
+  })
+
   it('enumerates all tiles for a pyramid level, including partial edges', () => {
     const levels = new Map<number, TiffLevelMeta>([
       [0, { width: imagePixels(260), height: imagePixels(180), nCols: 3, nRows: 2 }],
@@ -492,3 +662,105 @@ function tiffDirectory(values: Readonly<Record<string, unknown>>) {
     },
   }
 }
+
+function mockTiff(size: {
+  readonly width: number
+  readonly height: number
+  readonly tileWidth: number
+  readonly tileHeight: number
+  readonly imageDescription?: string
+}): void {
+  const directory = tiffDirectory({
+    ImageDescription: size.imageDescription,
+    BitsPerSample: new Uint16Array([16]),
+    Compression: 8,
+    Predictor: 2,
+    SamplesPerPixel: 1,
+    TileByteCounts: new Uint32Array([1, 2, 3, 4, 5, 6]),
+    TileOffsets: new BigUint64Array([10n, 20n, 30n, 40n, 50n, 60n]),
+  })
+  const image = {
+    getFileDirectory: () => directory,
+    getHeight: () => size.height,
+    getTileHeight: () => size.tileHeight,
+    getTileWidth: () => size.tileWidth,
+    getWidth: () => size.width,
+  }
+
+  mockedFromUrl.mockResolvedValue({
+    getImage: vi.fn(async () => image),
+    littleEndian: true,
+    parser: { parseFileDirectoryAt: vi.fn() },
+  } as unknown as Awaited<ReturnType<typeof fromUrl>>)
+}
+
+// A one-level sidecar listing every tile of the given channels. Tile (row 1,
+// col 2) of channel 0 is at bytes 900-903.
+function zchunkStoreManifest(size: {
+  readonly width: number
+  readonly height: number
+  readonly tile: number
+  readonly channels?: readonly number[]
+}): unknown {
+  const chunks: Record<string, unknown> = {}
+  const rows = Math.ceil(size.height / size.tile)
+  const cols = Math.ceil(size.width / size.tile)
+
+  for (const channel of size.channels ?? [0]) {
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        chunks[`0/c/${channel.toString()}/${row.toString()}/${col.toString()}`] = {
+          offset: 1000 + channel * 100 + row * cols + col,
+          size: 1,
+        }
+      }
+    }
+  }
+
+  return {
+    'zarr.json': {
+      zarr_format: 3,
+      node_type: 'group',
+      attributes: { multiscales: [{ datasets: [{ path: '0' }] }] },
+    },
+    '0/zarr.json': {
+      zarr_format: 3,
+      node_type: 'array',
+      shape: [Math.max(...(size.channels ?? [0])) + 1, size.height, size.width],
+      chunk_grid: { configuration: { chunk_shape: [1, size.tile, size.tile] } },
+    },
+    ...chunks,
+    '0/c/0/1/2': { offset: 900, size: 4 },
+  }
+}
+
+function stubZchunkStoreFetch(
+  manifest: unknown,
+  { sidecarUrl = 'https://example.test/sample.tif.zchunkstore' } = {},
+): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === sidecarUrl) {
+        return Response.json(manifest)
+      }
+
+      if (!String(input).endsWith('.zchunkstore')) {
+        return new Response(new Uint8Array(8), { status: 206 })
+      }
+
+      return new Response(null, { status: 404 })
+    }),
+  )
+}
+
+const twoFileOmeXml = `<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZCT" Type="uint16" SizeX="300" SizeY="200" SizeZ="1" SizeC="2" SizeT="1">
+      <Channel ID="Channel:0" Name="DAPI" SamplesPerPixel="1"/>
+      <Channel ID="Channel:1" Name="18S" SamplesPerPixel="1"/>
+      <TiffData FirstC="0" PlaneCount="1"><UUID FileName="stain_0000.ome.tif">urn:uuid:0</UUID></TiffData>
+      <TiffData FirstC="1" PlaneCount="1"><UUID FileName="stain_0001.ome.tif">urn:uuid:1</UUID></TiffData>
+    </Pixels>
+  </Image>
+</OME>`

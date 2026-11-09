@@ -6,6 +6,7 @@ import {
   DATASET_MANIFEST_DEFAULT_KEYS,
   DATASET_MANIFEST_PLATFORMS,
   DATASET_MANIFEST_TOP_LEVEL_KEYS,
+  IMAGE_MANIFEST_FILES,
   VISIUM_HD_MANIFEST_BIN_SIZES,
   VISIUM_HD_MANIFEST_FILE_DEFAULTS,
   VISIUM_HD_MANIFEST_SEGMENTED_OUTPUTS,
@@ -25,6 +26,10 @@ interface SchemaNode {
   readonly items?: SchemaNode
   readonly enum?: readonly unknown[]
   readonly $defs?: Readonly<Record<string, SchemaNode>>
+  readonly allOf?: readonly SchemaNode[]
+  readonly if?: SchemaNode
+  readonly then?: SchemaNode
+  readonly const?: unknown
 }
 
 function keys(node: SchemaNode | undefined): readonly string[] {
@@ -50,6 +55,12 @@ describe('dataset manifest JSON Schema', () => {
     )
     expect(keys(definition('ateraFiles'))).toEqual(
       [...Object.keys(ATERA_FILE_DEFAULTS), ...ATERA_OPTIONAL_FILES].sort(),
+    )
+    const imagePlatform = schema.allOf?.find(
+      (node) => node.if?.properties?.platform?.const === 'image',
+    )
+    expect(keys(imagePlatform?.then?.properties?.files)).toEqual(
+      [...IMAGE_MANIFEST_FILES].sort(),
     )
     expect(keys(definition('visiumHdFiles'))).toEqual(
       [

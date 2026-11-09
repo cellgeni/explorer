@@ -214,6 +214,9 @@ describe('XeniumDataset', () => {
     )
     expect(openTiff).toHaveBeenCalledWith(
       'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+      undefined,
+      undefined,
+      undefined,
     )
   })
 

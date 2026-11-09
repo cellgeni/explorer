@@ -1,6 +1,7 @@
 import type { DisplayWindow, RgbaRenderOptions } from '../codecs/jpeg2000'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { BBox, ImagePixels, TileIndex, UnitsDescriptor } from './coords'
+import type { FallbackNotifier } from './fallbackNotice'
 
 export interface ImagePyramidChannelContrast {
   readonly min: number
@@ -94,3 +95,18 @@ export interface ImagePyramidLoader {
     signal?: AbortSignal,
   ): Promise<ImagePyramidTilePixels>
 }
+
+export interface OpenImagePyramidOptions {
+  // `.zchunkstore` sidecar named by the dataset manifest, tried instead of the
+  // locations derived from the TIFF URL. Only TIFF images use it.
+  readonly zchunkStoreUrl?: string
+}
+
+// Opens an image pyramid: the generic opener (`openImagePyramid`), a TIFF-only
+// one, or a dataset's opener for its channel files.
+export type ImagePyramidOpener<Loader extends ImagePyramidLoader = ImagePyramidLoader> = (
+  url: string,
+  signal?: AbortSignal,
+  onFallback?: FallbackNotifier,
+  options?: OpenImagePyramidOptions,
+) => Promise<Loader>

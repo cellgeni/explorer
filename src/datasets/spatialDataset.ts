@@ -8,7 +8,7 @@ import type {
 import type { CellId } from '../data/cellid'
 import type { GexResult, Selection, TranscriptScope } from '../data/gex'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
-import type { ImagePyramidLoader } from '../data/imagePyramid'
+import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
 
 export type Platform =
   | 'xenium'
@@ -129,12 +129,10 @@ export type ImageSource =
   | {
       readonly kind: 'pyramid'
       readonly loader: ImagePyramidLoader
-      // Re-opens per-channel loaders (`#c=N` selection URLs) with the same
-      // placement as `loader`; defaults to the generic image opener.
-      readonly openChannelLoader?: (
-        url: string,
-        signal?: AbortSignal,
-      ) => Promise<ImagePyramidLoader>
+      // Re-opens per-channel loaders (`#c=N` selection URLs or channel files)
+      // with the same placement and sidecar as `loader`; defaults to the
+      // generic image opener.
+      readonly openChannelLoader?: ImagePyramidOpener
     }
   | {
       readonly kind: 'flat'

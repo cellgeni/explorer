@@ -1,6 +1,7 @@
 import {
   DATASET_FILE_DEFAULTS,
   isAbsoluteUrl,
+  manifestZchunkStoreUrl,
   type DatasetFileRole,
   type DatasetManifest,
   type DatasetManifestFile,
@@ -60,6 +61,12 @@ export function xeniumManifestFileFor(
 ): DatasetManifestFile | undefined {
   const manifest = datasetManifestFor(baseUrl)
   return manifest?.platform === 'xenium' ? manifest.files[key] : undefined
+}
+
+// `.zchunkstore` sidecar for the dataset's TIFF image, when the manifest
+// names one.
+export function zchunkStoreUrlFor(baseUrl: string): string | undefined {
+  return manifestZchunkStoreUrl(datasetManifestFor(baseUrl))
 }
 
 function manifestFileFor(

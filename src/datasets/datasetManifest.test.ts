@@ -3,6 +3,7 @@ import {
   DatasetManifestError,
   isDatasetManifestUrl,
   looksLikeDatasetManifest,
+  manifestZchunkStoreUrl,
   parseDatasetManifest,
 } from './datasetManifest'
 
@@ -100,6 +101,54 @@ describe('parseDatasetManifest', () => {
     expect(
       parseError({ version: 1, platform: 'atera', options: { binSize: 8 } }),
     ).toContain('options')
+  })
+
+  it('resolves a .zchunkstore sidecar for the TIFF image', () => {
+    const xenium = parse({
+      version: 1,
+      platform: 'xenium',
+      files: { morphologyZchunkstore: 'sidecars/morphology_focus.zchunkstore' },
+    })
+    const atera = parse({
+      version: 1,
+      platform: 'atera',
+      files: { morphologyZchunkstore: 'https://cdn.example.test/atera.zchunkstore' },
+    })
+    const image = parse({
+      version: 1,
+      platform: 'image',
+      files: { image: 'he.ome.tif', zchunkstore: 'he.zchunkstore' },
+    })
+
+    expect(manifestZchunkStoreUrl(xenium)).toBe(
+      'https://example.test/runs/sample-1/sidecars/morphology_focus.zchunkstore',
+    )
+    expect(manifestZchunkStoreUrl(atera)).toBe(
+      'https://cdn.example.test/atera.zchunkstore',
+    )
+    expect(manifestZchunkStoreUrl(image)).toBe(
+      'https://example.test/runs/sample-1/he.zchunkstore',
+    )
+    expect(
+      manifestZchunkStoreUrl(
+        parse({ version: 1, platform: 'image', files: { image: 'he.ome.tif' } }),
+      ),
+    ).toBeUndefined()
+    expect(manifestZchunkStoreUrl(undefined)).toBeUndefined()
+    expect(
+      parseError({
+        version: 1,
+        platform: 'image',
+        files: { image: 'he.ome.zarr', zchunkstore: 'he.zchunkstore' },
+      }),
+    ).toContain('"files.zchunkstore" is only for TIFF images')
+    expect(
+      parseError({
+        version: 1,
+        platform: 'h5ad',
+        files: { h5ad: 'a.h5ad', zchunkstore: 'a.zchunkstore' },
+      }),
+    ).toContain('files.zchunkstore')
   })
 
   it('accepts a manifest without files for platforms with standard names', () => {

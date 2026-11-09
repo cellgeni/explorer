@@ -264,5 +264,3 @@ These come from the AnnData readers (see [H5AD](./h5ad.md)):
 - Azimuth category colours (`obs/<column>/color`) are not used; annotation
   colours come from the viewer palette.
 - Only the 2D morphology image is shown; the 3D DAPI stack is not read.
-- The morphology image opens with GeoTIFF metadata parsing (one fallback
-  notice per channel file), since the bundle has no `.zchunkstore` sidecars.

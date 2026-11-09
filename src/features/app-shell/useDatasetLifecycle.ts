@@ -1239,6 +1239,9 @@ export function useDatasetLifecycle({
             {
               onFallback: appendFallbackNotice,
               signal: request.signal,
+              ...(imageSource.openChannelLoader === undefined
+                ? {}
+                : { openImage: imageSource.openChannelLoader }),
             },
           )
 
