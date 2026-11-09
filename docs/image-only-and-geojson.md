@@ -25,13 +25,17 @@ TIFF requirements:
 - 8- or 16-bit samples with 1, 3, or 4 samples per pixel.
 - Pixel size from OME-XML `PhysicalSizeX`. Without OME-XML the viewer assumes
   0.2125 µm per pixel.
+- Z-stacks open at the middle z plane; `Layers` → `Z plane` shows another.
+  The OME-XML must locate each plane (`TiffData`, or none for planes stored in
+  IFD order), and each plane needs its own `SubIFDs` pyramid. Only the first
+  time point is shown.
 
 Most NDPI files do not meet these requirements; convert them to pyramidal
 OME-TIFF (for example with `bfconvert` or `bioformats2raw` + `raw2ometiff`)
 and host that output instead.
 
 OME-Zarr sources must expose OME multiscales metadata with `x` and `y` axes.
-Only the first time point and z plane are shown.
+Only the first time point and z plane of an OME-Zarr image are shown.
 
 ## Platform Behavior
 

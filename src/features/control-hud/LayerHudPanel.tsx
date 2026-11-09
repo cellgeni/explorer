@@ -4,9 +4,13 @@ import type {
   CustomMorphologyLayer,
   CustomMorphologyLayerLoadState,
 } from '../morphology/customMorphologyLayers'
-import type { MorphologyImageChannel } from '../../data/morphologyImage'
+import type {
+  MorphologyImageChannel,
+  MorphologyImageZStack,
+} from '../../data/morphologyImage'
 import type { PerformanceBudget } from '../../data/performanceBudget'
 import { MorphologyChannelControls } from '../morphology/MorphologyChannelControls'
+import { MorphologyZPlaneControl } from '../morphology/MorphologyZPlaneControl'
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
 import { opacityToPercent } from '../../rendering/layerOpacity'
 
@@ -41,7 +45,10 @@ interface LayerHudPanelProps {
   readonly measurementUnit: ViewerCoordinateUnit
   readonly morphologyChannels: readonly MorphologyImageChannel[]
   readonly morphologyChannelSettings: readonly MorphologyChannelSetting[]
+  readonly morphologyZStack: MorphologyImageZStack | undefined
+  readonly requestedMorphologyZPlane: number | null
   readonly autoContrastChannelIds: readonly string[]
+  readonly onMorphologyZPlaneChange: (zPlane: number) => void
   readonly onImageLayerOpacityPercentChange: (percent: number) => void
   readonly onCustomLayerOpacityPercentChange: (imageUrl: string, percent: number) => void
   readonly onCellFillOpacityPercentChange: (percent: number) => void
@@ -93,7 +100,10 @@ export function LayerHudPanel({
   measurementUnit,
   morphologyChannels,
   morphologyChannelSettings,
+  morphologyZStack,
+  requestedMorphologyZPlane,
   autoContrastChannelIds,
+  onMorphologyZPlaneChange,
   onImageLayerOpacityPercentChange,
   onCustomLayerOpacityPercentChange,
   onCellFillOpacityPercentChange,
@@ -212,6 +222,13 @@ export function LayerHudPanel({
               }}
             />
           </div>
+          {morphologyZStack === undefined ? null : (
+            <MorphologyZPlaneControl
+              zStack={morphologyZStack}
+              requestedZPlane={requestedMorphologyZPlane}
+              onZPlaneChange={onMorphologyZPlaneChange}
+            />
+          )}
           {cellLayerControlsVisible ? (
             <div className="layer-opacity-control">
               <div className="layer-opacity-header">

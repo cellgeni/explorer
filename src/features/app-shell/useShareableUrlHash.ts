@@ -30,6 +30,7 @@ interface ShareableLayerHashOptions {
   readonly showHoverTooltips: boolean
   readonly cellBoundaryOpacity: number
   readonly morphologyEnabledChannelIds: readonly string[] | undefined
+  readonly morphologyZPlane: number | undefined
   readonly measurementUnit: string
   readonly observationColorMode: string
   readonly cellMetadataTrackId: string | null
@@ -96,6 +97,7 @@ export function useShareableUrlHash({
     imageOpacity,
     measurementUnit,
     morphologyEnabledChannelIds,
+    morphologyZPlane,
     observationColorMode,
     shouldLoadMorphology,
     showCellBoundaries,
@@ -155,6 +157,7 @@ export function useShareableUrlHash({
         ...(morphologyEnabledChannelIds === undefined
           ? {}
           : { morphologyEnabledChannelIds }),
+        ...(morphologyZPlane === undefined ? {} : { morphologyZPlane }),
         transcriptOverlay: showTranscriptOverlay,
         transcriptDetailMode,
         transcriptDensityColorScale,
@@ -210,6 +213,7 @@ export function useShareableUrlHash({
     showHoverTooltips,
     cellBoundaryOpacity,
     morphologyEnabledChannelIds,
+    morphologyZPlane,
     magicLensActive,
     magicLensMinQv,
     magicLensRadiusMicrometers,

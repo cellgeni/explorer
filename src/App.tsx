@@ -97,6 +97,7 @@ import { useGridCellAssignmentWorkflow } from './features/cells/useGridCellAssig
 import { analysisEmbeddingStatusCopy } from './features/analysis/analysisEmbeddingModel'
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
+import { useMorphologyZPlaneWorkflow } from './features/morphology/useMorphologyZPlaneWorkflow'
 import { customMorphologyLayerChannels } from './features/morphology/customMorphologyLayers'
 import { useCustomMorphologyLayerWorkflow } from './features/morphology/useCustomMorphologyLayerWorkflow'
 import { magicLensScopeLabel, magicLensStatusCopy } from './features/roi/magicLensModel'
@@ -1192,6 +1193,12 @@ export function App({ dependencies }: AppProps = {}) {
     morphologyChannelSettings,
     morphologyState.status,
   ])
+  // While the image opens, a shared plane stays in the link.
+  const shareableMorphologyZPlane =
+    morphologyImage?.zStack?.zPlane ??
+    (morphologyImage === null && morphologyState.status === 'loading'
+      ? initialShareableState.morphologyZPlane
+      : undefined)
   const magicLensIsCursorActive =
     magicLensScope === 'cursor' && magicLensActive && magicLensLoadEnabled
   const magicLensCanScan =
@@ -2267,6 +2274,13 @@ export function App({ dependencies }: AppProps = {}) {
         setMorphologyState,
       },
     })
+  const { requestedZPlane: requestedMorphologyZPlane, selectMorphologyZPlane } =
+    useMorphologyZPlaneWorkflow({
+      callbacks: { appendDebugEvent },
+      data: { morphologyImage },
+      refs: { loadRequestIdRef: loadRequestId },
+      setters: { setMorphologyImage, setMorphologyState },
+    })
   const { handleLoadCustomLayer, handleRemoveCustomLayer } =
     useCustomMorphologyLayerWorkflow({
       callbacks: {
@@ -2606,6 +2620,7 @@ export function App({ dependencies }: AppProps = {}) {
       imageOpacity: imageLayerOpacity,
       measurementUnit,
       morphologyEnabledChannelIds: shareableMorphologyEnabledChannelIds,
+      morphologyZPlane: shareableMorphologyZPlane,
       observationColorMode,
       shouldLoadMorphology,
       showCellBoundaries,
@@ -2707,6 +2722,9 @@ export function App({ dependencies }: AppProps = {}) {
           measurementUnit={measurementUnit}
           morphologyChannelSettings={morphologyChannelSettings}
           morphologyChannels={morphologyChannels}
+          morphologyZStack={morphologyImage?.zStack}
+          requestedMorphologyZPlane={requestedMorphologyZPlane}
+          selectMorphologyZPlane={selectMorphologyZPlane}
           performanceBudget={performanceBudget}
           showCellBoundaries={showCellBoundaries}
           showNucleusBoundaries={showNucleusBoundaries}

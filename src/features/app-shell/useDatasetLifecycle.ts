@@ -1008,6 +1008,10 @@ export function useDatasetLifecycle({
           ...manifestDefaults.state,
           ...(shouldRestoreSharedState ? sharedState : {}),
         }
+        const restoredZPlane =
+          restoreState.morphologyZPlane === undefined
+            ? {}
+            : { zPlane: restoreState.morphologyZPlane }
 
         if (manifest !== undefined) {
           appendDebugEvent(
@@ -1164,6 +1168,7 @@ export function useDatasetLifecycle({
                   ...(imageSource.openChannelLoader === undefined
                     ? {}
                     : { openImage: imageSource.openChannelLoader }),
+                  ...restoredZPlane,
                 },
               )
             },
@@ -1208,6 +1213,7 @@ export function useDatasetLifecycle({
                     candidates: [morphologyUrl],
                     signal: request.signal,
                     onFallback: appendFallbackNotice,
+                    ...restoredZPlane,
                   })
             },
             restoreState.morphologyEnabledChannelIds === undefined
@@ -1242,6 +1248,7 @@ export function useDatasetLifecycle({
               ...(imageSource.openChannelLoader === undefined
                 ? {}
                 : { openImage: imageSource.openChannelLoader }),
+              ...restoredZPlane,
             },
           )
 
@@ -1516,6 +1523,7 @@ export function useDatasetLifecycle({
             loadMorphologyImage(requestedUrl, {
               signal: request.signal,
               onFallback: appendFallbackNotice,
+              ...restoredZPlane,
             }),
           restoreState.morphologyEnabledChannelIds === undefined
             ? {}

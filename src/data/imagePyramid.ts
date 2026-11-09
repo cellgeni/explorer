@@ -8,6 +8,13 @@ export interface ImagePyramidChannelContrast {
   readonly max: number
 }
 
+// Where one plane of a TIFF image is stored: an IFD of the image file, or of
+// `fileName` beside it.
+export interface ImagePyramidPlaneRef {
+  readonly ifdIndex: number
+  readonly fileName?: string
+}
+
 export interface ImagePyramidChannelInfo {
   readonly id: string
   readonly index: number
@@ -17,9 +24,16 @@ export interface ImagePyramidChannelInfo {
   readonly samplesPerPixel?: number
   readonly fileName?: string
   readonly ifdIndex?: number
+  // The channel's plane at each z, indexed by z. Only set for z-stacks.
+  readonly zPlanes?: readonly ImagePyramidPlaneRef[]
   readonly sourceUrl?: string
   readonly alphaFromIntensity?: boolean
   readonly purpose?: string
+}
+
+export interface ImagePyramidZStack {
+  readonly sizeZ: number
+  readonly micrometersPerPlane?: number
 }
 
 export type ImagePyramidPixelArray =
@@ -60,6 +74,9 @@ export interface ImagePyramidLoader {
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
   readonly channels: readonly ImagePyramidChannelInfo[]
+  // Set for a z-stack whose channels list their `zPlanes`. The loader itself
+  // reads one plane; other planes open as other loaders.
+  readonly zStack?: ImagePyramidZStack
 
   bestLevel(deckScale: number): number
   tilesForBbox(level: number, bbox: BBox): readonly TileIndex[]

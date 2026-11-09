@@ -223,7 +223,7 @@ writing UI code.
 | ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------- |
 | Phase 1                         | Foundation and migration                                 | Done                                                    |
 | Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                  |
-| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack **Deferred**         |
+| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09      |
 | Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                    |
 | Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November             |
 | Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened** |
@@ -506,7 +506,7 @@ Reference: 10x "Understanding Xenium Outputs".
 | `analysis/{umap,tsne}/…/projection.csv`          | fetch CSV          | UMAP / t-SNE                                                                                         |
 | `gene_panel.json`                                | fetch JSON         | Full gene list, so genes can be picked before any selection                                          |
 | `morphology_focus/morphology_focus_000N.ome.tif` | geotiff + OpenJPEG | Multi-channel focus images                                                                           |
-| `morphology_mip.ome.tif` / `morphology.ome.tif`  | geotiff + OpenJPEG | DAPI MIP / Z-stack (Z-stack selector deferred)                                                       |
+| `morphology_mip.ome.tif` / `morphology.ome.tif`  | geotiff + OpenJPEG | DAPI MIP / Z-stack (`Z plane` selector)                                                              |
 | `.zchunkstore`                                   | fetch JSON         | Precomputed TIFF tile byte ranges                                                                    |
 | `metrics_summary.csv`                            | papaparse          | QC display (no implementation recorded)                                                              |
 
@@ -775,7 +775,8 @@ never fully downloaded.
 - [x] Multi-channel compositing with per-channel colour, min/max, and on/off
       (Canvas2D; see [4.4](#44-image-layer--decision-custom-jpeg-2000-path-canvas2d-compositing)).
 - [x] **Dropped** by the user: JPEG XR decoder (WASM).
-- [ ] **Deferred** by the user: Z-stack plane selector for `morphology.ome.tif`.
+- [x] Z-stack plane selector for OME-TIFF z-stacks such as `morphology.ome.tif`
+      (`Layers` → `Z plane`, share link `z`; deferred, then done 2026-11-09).
 - [x] Per-channel histogram and auto-contrast.
 
 Notes:
@@ -1749,7 +1750,8 @@ Delivered:
 - [ ] Magic Lens is unavailable.
 - [ ] Azimuth category colours (`obs/<column>/color`, packed RGBA) are not
       used.
-- [ ] The 3D DAPI stack (`morphology_3d/`) is not shown.
+- [ ] The 3D DAPI stack (`morphology_3d/`) is not shown with the dataset; it
+      opens as an image URL with a `Z plane` slider.
 
 ---
 
@@ -2011,8 +2013,8 @@ Other gaps found in the review:
 
 Features:
 
-- [ ] Z-stack plane selector for `morphology.ome.tif` (**Deferred**), and
-      `t`/`z` selection for OME-Zarr.
+- [ ] `t`/`z` selection for OME-Zarr, and a `Z plane` control for custom image
+      layers (OME-TIFF dataset images have one).
 - [ ] H5AD: worker-backed lazy Range reads, `/layers/*` and `/raw/X`, and richer
       schema diagnostics.
 - [ ] SpatialData: `points` (transcripts), extra images and tables, and

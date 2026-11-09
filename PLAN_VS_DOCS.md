@@ -38,7 +38,7 @@ This review is now a record. Its findings were acted on the same day:
    boundary limits all work differently now than the plan describes.
 4. **Some plan items never shipped and the docs do not mention them.**
    Standard Visium spots, Xenium nucleus boundaries, `metrics_summary.csv` QC,
-   Z-stack, CI, and the golden fixture bundle.
+   CI, and the golden fixture bundle.
 5. **The docs disagreed with themselves in six places**, including two stale
    statements about where OME-Zarr decoding runs. All are fixed. See
    [section 5](#5-inconsistencies-inside-docs).
@@ -122,7 +122,7 @@ read" or say nothing.
 | Visium HD annotations from `analysis/`            | Not recorded          | "`annotations()` rejects"; the adapter turns annotations off                                                         |
 | Xenium `nucleus_boundaries.parquet` overlay       | No outcome            | "Not read"; nucleus boundaries are Visium HD only                                                                    |
 | `metrics_summary.csv` QC display (papaparse)      | No outcome            | "Not read". **Code:** papaparse is not a dependency                                                                  |
-| Z-stack plane selector                            | Deferred              | Only the first manifest image; OME-Zarr shows `z = 0` only                                                           |
+| Z-stack plane selector                            | Done 2026-11-09       | `Layers` → `Z plane` for OME-TIFF z-stacks; OME-Zarr shows `z = 0` only                                              |
 | H5AD `/layers/*`, `/raw/X`                        | Open                  | "`/uns`, `/layers`, `/raw`, `/varm`, and `/obsp` are not read" (consistent)                                          |
 | Transcript estimate from native Zarr counts       | Open                  | Still the sum of overview `transcript_counts` (consistent)                                                           |
 | CI (GitHub Actions), deploy previews              | No outcome            | Not mentioned. **Code:** no `.github/` directory                                                                     |

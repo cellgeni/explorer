@@ -263,4 +263,6 @@ These come from the AnnData readers (see [H5AD](./h5ad.md)):
 - Magic Lens is unavailable.
 - Azimuth category colours (`obs/<column>/color`) are not used; annotation
   colours come from the viewer palette.
-- Only the 2D morphology image is shown; the 3D DAPI stack is not read.
+- Only the 2D morphology image is shown; the 3D DAPI stack is not read. Enter
+  `morphology_3d/ch0000_dapi_3d.ome.tif` as an image URL to step through its
+  z planes.

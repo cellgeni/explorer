@@ -6,6 +6,7 @@ import {
   TIFF_TILE_CACHE_NAMESPACE,
 } from '../data/persistentByteRangeCache'
 import {
+  clearOpenTiffFiles,
   openTiff,
   parsePhysicalSizeMicrometersPerPixel,
   readNumberArrayTag,
@@ -38,6 +39,7 @@ const units: UnitsDescriptor = {
 
 afterEach(() => {
   mockedFromUrl.mockReset()
+  clearOpenTiffFiles()
   vi.unstubAllGlobals()
 })
 
@@ -488,6 +490,53 @@ describe('TiffPyramidLoader', () => {
     )
   })
 
+  it('opens the z planes of an OME-TIFF stack from one shared file', async () => {
+    mockTiff({
+      width: 300,
+      height: 200,
+      tileWidth: 100,
+      tileHeight: 100,
+      imageDescription: zStackOmeXml,
+    })
+    stubZchunkStoreFetch(null, { sidecarUrl: 'https://example.test/unused.zchunkstore' })
+
+    const firstPlane = await openTiff('https://example.test/stack.ome.tif')
+    const lastPlane = await openTiff('https://example.test/stack.ome.tif#ifd=2')
+    const file = await mockedFromUrl.mock.results[0]?.value
+
+    expect(mockedFromUrl).toHaveBeenCalledTimes(1)
+    expect(file.getImage).toHaveBeenCalledWith(2)
+    expect(firstPlane.zStack).toEqual({ sizeZ: 3, micrometersPerPlane: 3 })
+    expect(lastPlane.zStack).toEqual({ sizeZ: 3, micrometersPerPlane: 3 })
+    expect(lastPlane.channels[0]?.zPlanes).toEqual([
+      { ifdIndex: 0 },
+      { ifdIndex: 1 },
+      { ifdIndex: 2 },
+    ])
+  })
+
+  it('reopens a TIFF file whose open or directory read failed', async () => {
+    stubZchunkStoreFetch(null, { sidecarUrl: 'https://example.test/unused.zchunkstore' })
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    mockedFromUrl.mockRejectedValueOnce(new Error('HTTP 503'))
+    mockedFromUrl.mockResolvedValueOnce({
+      getImage: vi.fn(async () => {
+        throw new Error('IFD read failed')
+      }),
+      littleEndian: true,
+      parser: { parseFileDirectoryAt: vi.fn() },
+    } as unknown as Awaited<ReturnType<typeof fromUrl>>)
+
+    await expect(openTiff('https://example.test/sample.tif')).rejects.toThrow('HTTP 503')
+    await expect(openTiff('https://example.test/sample.tif')).rejects.toThrow(
+      'IFD read failed',
+    )
+    await expect(openTiff('https://example.test/sample.tif')).resolves.toBeInstanceOf(
+      TiffPyramidLoader,
+    )
+    expect(mockedFromUrl).toHaveBeenCalledTimes(3)
+  })
+
   it('enumerates all tiles for a pyramid level, including partial edges', () => {
     const levels = new Map<number, TiffLevelMeta>([
       [0, { width: imagePixels(260), height: imagePixels(180), nCols: 3, nRows: 2 }],
@@ -761,6 +810,15 @@ const twoFileOmeXml = `<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/201
       <Channel ID="Channel:1" Name="18S" SamplesPerPixel="1"/>
       <TiffData FirstC="0" PlaneCount="1"><UUID FileName="stain_0000.ome.tif">urn:uuid:0</UUID></TiffData>
       <TiffData FirstC="1" PlaneCount="1"><UUID FileName="stain_0001.ome.tif">urn:uuid:1</UUID></TiffData>
+    </Pixels>
+  </Image>
+</OME>`
+
+const zStackOmeXml = `<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZCT" Type="uint16" SizeX="300" SizeY="200" SizeZ="3" SizeC="1" SizeT="1" PhysicalSizeZ="3.0" PhysicalSizeZUnit="µm">
+      <Channel ID="Channel:0" Name="DAPI" SamplesPerPixel="1"/>
+      <TiffData PlaneCount="3"/>
     </Pixels>
   </Image>
 </OME>`

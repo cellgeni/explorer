@@ -97,6 +97,7 @@ The header "Layer Stack" shows the deck.gl layer count and the
 | `Nucleus boundaries`              | Checkbox                                               | Off                                              | Visium HD                                                          |
 | `Hover tooltips`                  | Checkbox                                               | On                                               | All. Transcript tooltips ignore it                                 |
 | `Dataset image opacity`           | Slider 0–100%, step 5                                  | 100%                                             | All. With channel controls present, opacity is applied per channel |
+| `Z plane`                         | Slider over the planes; shows "plane / count · depth"  | Middle plane                                     | When the dataset image is an OME-TIFF z-stack                      |
 | `Cell fill opacity`               | Slider 0–100%, step 5                                  | 50%                                              | All but Image                                                      |
 | `Cell boundary opacity`           | Slider 0–100%, step 5                                  | 100%                                             | All but Image                                                      |
 | `Mouse coordinates`               | Segmented μm / px                                      | μm                                               | All. Also sets the scale-bar unit                                  |
@@ -417,12 +418,13 @@ values win. Numbers are rounded to three decimals.
 | `boundaryLimit`                                                                                           | Boundary limit                                                       |
 | `imgOpacity`, `cellFill`, `cellBoundary`                                                                  | Opacities (0–1)                                                      |
 | `channels`                                                                                                | Enabled image channel IDs                                            |
+| `z`                                                                                                       | Zero-based z plane of an OME-TIFF z-stack dataset image              |
 | `tx`, `txDetail`, `txFilter`, `txGene`, `txBudget`, `txQv`, `txSize`, `txOpacity`, `txDensity`, `txColor` | Transcript controls                                                  |
 | `lens`, `lensScope`, `lensRadius`, `lensQv`                                                               | Magic Lens controls                                                  |
 | `sdCs`, `sdImage`, `sdUm`                                                                                 | SpatialData coordinate system, image, and µm-per-unit override       |
 
-Dataset-specific values (genes, ROI, channels, boundaries, colour modes, lens,
-SpatialData view)
+Dataset-specific values (genes, ROI, channels, z plane, boundaries, colour
+modes, lens, SpatialData view)
 are restored only when the loaded URL matches the shared `dataset`. A restored
 ROI is re-run as "Shared ROI".
 
