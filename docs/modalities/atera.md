@@ -264,9 +264,3 @@ These come from the AnnData readers (see [H5AD](./h5ad.md)):
 - Azimuth category colours (`obs/<column>/color`) are not used; annotation
   colours come from the viewer palette.
 - Only the 2D morphology image is shown; the 3D DAPI stack is not read.
-- The bundle has no `.zchunkstore` sidecars, so the morphology image opens
-  with GeoTIFF metadata parsing (one fallback notice per channel file). Run
-  `scripts/make_zchunkstore.py` on `morphology_2d/ch0000_*.ome.tif` and host
-  the output as `morphology_2d/.zchunkstore`, or name it in the manifest as
-  `files.morphologyZchunkstore`; see
-  [TIFF tile-offset sidecars](../zchunkstore.md).

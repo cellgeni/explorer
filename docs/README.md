@@ -19,8 +19,8 @@
   caching rules for dataset buckets.
 - [Image-only and GeoJSON](./image-only-and-geojson.md): direct image URLs and
   GeoJSON shape import/export.
-- [TIFF tile-offset sidecars](./zchunkstore.md): what a `.zchunkstore` is, why
-  to add one, and how to generate it with `scripts/make_zchunkstore.py`.
+- [TIFF tile-offset sidecars](./zchunkstore.md): the optional `.zchunkstore`,
+  when it helps, and how to generate one with `scripts/make_zchunkstore.py`.
 - [Deploy to S3](./deploy-to-s3.md): building and hosting the app itself.
 
 ## How It Works

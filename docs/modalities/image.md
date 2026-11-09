@@ -70,10 +70,10 @@ Zarr loaders add `loadTile`/`loadTilePixels`.
    multi-file OME-TIFF, and `<root>/.zchunkstore` for `morphology_focus/`
    paths, and uses the first found in that order.
    A sidecar is used only if its level 0 width, height, and tile size match
-   the selected IFD and it lists every tile of the channel. If none is found
-   or it does not match, it logs a fallback notice and indexes the TIFF
-   itself. Either way, tiles are decoded with the selected IFD's
-   `Compression`, `Predictor`, and related tags.
+   the selected IFD and it lists every tile of the channel. Otherwise it
+   indexes the TIFF itself, the usual path; a sidecar that was named or found
+   but cannot be used adds a fallback notice. Either way, tiles are decoded
+   with the selected IFD's `Compression`, `Predictor`, and related tags.
    See [TIFF tile-offset sidecars](../zchunkstore.md) for the format and how
    to generate one.
 4. Builds levels: level 0 is the selected IFD; levels 1…n are its `SubIFDs`.
@@ -224,8 +224,8 @@ RGB images skip it.
 ## Known Limitations
 
 - Top-level-IFD pyramids and stripped TIFFs are not supported.
-- Generic TIFFs (no `.zchunkstore`) always add one fallback notice and an
-  extra request for the sidecar.
+- TIFFs without a `.zchunkstore` make one extra request per candidate sidecar
+  URL before reading the TIFF's own offsets.
 - A `.zchunkstore` is checked only against the TIFF's level 0 width, height,
   and tile size, and for a complete tile list. A stale sidecar with the same
   sizes, or a root sidecar for the focus images picked up by a same-sized

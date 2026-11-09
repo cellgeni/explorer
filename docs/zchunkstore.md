@@ -5,29 +5,23 @@ It lists the byte offset and size of every tile at every pyramid level, so the
 viewer can open the image without walking the TIFF's directory structure.
 [`scripts/make_zchunkstore.py`](../scripts/make_zchunkstore.py) generates one.
 
-Xenium Onboard Analysis output does not include this file, so add it yourself when
-hosting a dataset.
+Xenium Onboard Analysis output does not include this file, and no dataset
+needs one: without it the viewer reads the same offsets from the TIFF.
 
-## Why Add One
+## Do You Need One?
 
-To fetch a tile, the viewer needs its byte range. In a TIFF those ranges live
-in each pyramid level's `TileOffsets` and `TileByteCounts` tags. Without a
-sidecar, `openTiff` (`src/tiff/loader.ts`) reads them with Range requests, one
-SubIFD and its two offset arrays per level. A Xenium focus image with 9
-levels needs many round trips before the first tile can load, and the base
-level alone holds thousands of tiles per channel.
+Usually not. To fetch a tile, the viewer needs its byte range, which a TIFF
+keeps in each pyramid level's `TileOffsets` and `TileByteCounts` tags.
+`openTiff` (`src/tiff/loader.ts`) reads them with Range requests. For a Xenium
+focus channel file (88,404 × 51,294 px, 9 levels, 5,978 tiles) that took
+16 requests, 105 KiB, and 190–450 ms against the Sanger S3 endpoint, and
+channel files open in parallel.
 
-With a sidecar, `openTiff` still reads IFD 0 for the OME-XML (pixel size,
-channel names and colours) and the selected IFD's tags, then gets the offsets
-for every level and channel in one `GET`. Without one, or with one that does
-not match the TIFF, the image still loads, but more slowly, and the Dataset
-tab's Fallbacks panel shows "Zarr chunk-store tile metadata was unavailable or
-did not match the TIFF".
-
-The sidecar is recommended for large tiled pyramidal OME-TIFFs, such as
-Xenium's JPEG 2000 focus images. It works with any compression the viewer can
-decode (see [Codecs](./modalities/image.md#codecs)). It is not required for any
-modality.
+A sidecar replaces the offset reads with one `GET`, shared by every channel
+file; the viewer still reads the TIFF's first directory for the OME-XML and
+compression tags. It helps most on high-latency connections, where the
+sequential round trips of walking the TIFF's levels add up. It works with any
+compression the viewer can decode (see [Codecs](./modalities/image.md#codecs)).
 
 ## Format
 
@@ -89,7 +83,8 @@ for other Zarr readers. It also accepts the Zarr v2 layout (`.zattrs`,
 Before using a sidecar, `openTiff` checks it against the TIFF: its level 0
 width, height, and chunk width and height must match the selected IFD, and it
 must list every tile of every level for the channel being opened. Otherwise it
-ignores the sidecar and reads the TIFF instead, with the fallback notice above.
+ignores the sidecar, reads the TIFF instead, and adds a notice to the Dataset
+tab's Fallbacks panel. A TIFF with no sidecar at all gets no notice.
 
 ## Where The Viewer Looks
 
@@ -199,10 +194,10 @@ The sidecar is fetched whole, so the `Range` rules do not apply to it, and
 transfer compression is fine: a 1.3 MB sidecar for a 4-channel 88k × 51k focus
 image gzips to about 280 KB.
 
-To check it is used, open the dataset and confirm the Dataset tab's Fallbacks
-panel has no "Zarr chunk-store tile metadata was unavailable or did not match
-the TIFF" notice, or look
-for a `200` response for the `.zchunkstore` URL in the browser's network tab.
+To check it is used, look for a `200` response for the `.zchunkstore` URL in
+the browser's network tab, and no ".zchunkstore tile-offset sidecar was
+missing, unreadable, or did not match the TIFF" notice in the Dataset tab's
+Fallbacks panel.
 
 ## Pitfalls
 
@@ -216,6 +211,6 @@ for a `200` response for the `.zchunkstore` URL in the browser's network tab.
   remembers each sidecar URL, found or missing, for a minute; reload the page
   to pick up a change sooner.
 - **A sidecar that cannot be parsed is ignored.** The viewer falls back to
-  reading the TIFF, with the fallback notice above.
+  reading the TIFF, with the notice above.
 - **Pixel size is not stored.** It still comes from the TIFF's OME-XML
   `PhysicalSizeX`.

@@ -60,6 +60,9 @@ export interface TiffPyramidLoaderOptions {
 }
 export { parsePhysicalSizeMicrometersPerPixel } from './omeMetadata'
 
+// A sidecar was found but could not be parsed.
+const UNREADABLE_ZCHUNK_STORE = 'unreadable' as const
+
 export async function openTiff(
   url: string,
   signal?: AbortSignal,
@@ -95,7 +98,7 @@ export async function openTiff(
         throw cause
       }
 
-      return null
+      return UNREADABLE_ZCHUNK_STORE
     }),
   ])
   const firstDirectory = firstImage.getFileDirectory()
@@ -106,6 +109,7 @@ export async function openTiff(
 
   if (
     zchunkStoreOptions !== null &&
+    zchunkStoreOptions !== UNREADABLE_ZCHUNK_STORE &&
     zchunkStoreMatchesImage(zchunkStoreOptions, firstImage, decodeMetadata)
   ) {
     return new TiffPyramidLoader({
@@ -121,14 +125,17 @@ export async function openTiff(
     })
   }
 
-  notifyFallback(onFallback, {
-    source: 'Morphology image',
-    message:
-      'Zarr chunk-store tile metadata was unavailable or did not match the TIFF, so the app switched to GeoTIFF metadata parsing.',
-    action:
-      'The image can still load, but opening the TIFF may be slower than the chunk-store path.',
-    coalesceKey: `morphology-geotiff-metadata:${selection.sourceUrl}`,
-  })
+  // Reading tile offsets from the TIFF is the normal path; only a sidecar
+  // that was named or found but cannot be used is worth a notice.
+  if (zchunkStoreOptions !== null || options.zchunkStoreUrl !== undefined) {
+    notifyFallback(onFallback, {
+      source: 'Morphology image',
+      message:
+        'The .zchunkstore tile-offset sidecar was missing, unreadable, or did not match the TIFF, so the app read the tile offsets from the TIFF.',
+      action: 'The image loads normally. Regenerate or remove the sidecar.',
+      coalesceKey: `morphology-zchunkstore-unused:${selection.sourceUrl}`,
+    })
+  }
 
   const indexPlanarConfiguration = decodeMetadata.planarConfiguration
   const indexSamplesPerPixel =

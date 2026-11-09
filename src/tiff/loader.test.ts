@@ -372,6 +372,37 @@ describe('TiffPyramidLoader', () => {
     )
   })
 
+  it('reads tile offsets from the TIFF without a notice when there is no sidecar', async () => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(null, { sidecarUrl: 'https://example.test/unused.zchunkstore' })
+    const onFallback = vi.fn()
+
+    const loader = await openTiff(
+      'https://example.test/sample.tif',
+      undefined,
+      onFallback,
+    )
+
+    expect(onFallback).not.toHaveBeenCalled()
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/sample.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=60-65' } }),
+    )
+  })
+
+  it('reports a sidecar the manifest names but the host does not serve', async () => {
+    mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
+    stubZchunkStoreFetch(null, { sidecarUrl: 'https://example.test/unused.zchunkstore' })
+    const onFallback = vi.fn()
+
+    await openTiff('https://example.test/sample.tif', undefined, onFallback, {
+      zchunkStoreUrl: 'https://sidecars.example.test/missing.zchunkstore',
+    })
+
+    expect(onFallback).toHaveBeenCalledOnce()
+  })
+
   it("ignores a sidecar that has no tiles for the TIFF's channel", async () => {
     mockTiff({
       width: 300,
@@ -445,7 +476,7 @@ describe('TiffPyramidLoader', () => {
     expect(onFallback).toHaveBeenCalledOnce()
     expect(onFallback).toHaveBeenCalledWith(
       expect.objectContaining({
-        coalesceKey: 'morphology-geotiff-metadata:https://example.test/sample.tif',
+        coalesceKey: 'morphology-zchunkstore-unused:https://example.test/sample.tif',
       }),
     )
     expect(loader.tileWidth).toBe(100)
