@@ -2,16 +2,31 @@ import { describe, expect, it } from 'vitest'
 import { zchunkStoreCandidateUrls, zchunkStoreToPyramidOptions } from './zchunkStore'
 
 describe('Zarr chunk store TIFF adapter', () => {
-  it('prefers Xenium dataset-root chunk stores for morphology focus images', () => {
+  it('tries file, folder, then dataset-root chunk stores for morphology focus images', () => {
     expect(
       zchunkStoreCandidateUrls(
         'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
       ),
     ).toEqual([
-      'https://example.test/xenium/.zchunkstore',
-      'https://example.test/xenium/morphology_focus/.zchunkstore',
       'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif.zchunkstore',
+      'https://example.test/xenium/morphology_focus/.zchunkstore',
+      'https://example.test/xenium/.zchunkstore',
     ])
+  })
+
+  it('prefers a per-file chunk store over the folder store for root morphology images', () => {
+    expect(
+      zchunkStoreCandidateUrls('https://example.test/xenium/morphology.ome.tif'),
+    ).toEqual([
+      'https://example.test/xenium/morphology.ome.tif.zchunkstore',
+      'https://example.test/xenium/.zchunkstore',
+    ])
+  })
+
+  it('only tries the per-file chunk store for other TIFFs', () => {
+    expect(zchunkStoreCandidateUrls('https://example.test/images/slide.ome.tif')).toEqual(
+      ['https://example.test/images/slide.ome.tif.zchunkstore'],
+    )
   })
 
   it('maps Zarr v3 chunk metadata to TIFF pyramid options', () => {

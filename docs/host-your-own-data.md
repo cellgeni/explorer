@@ -61,7 +61,8 @@ Optional but supported Xenium files include:
   as listed in `experiment.xenium` (the first listed path is used, preferring
   MIP, then focus, then morphology)
 - `.zchunkstore` tile-offset sidecars next to the morphology TIFFs, which skip
-  TIFF directory parsing
+  TIFF directory parsing. XOA does not write them; see
+  [TIFF tile-offset sidecars](./zchunkstore.md) to generate one
 
 Not read: `nucleus_boundaries.parquet`, `analysis/clustering/*` CSVs,
 `metrics_summary.csv`, and `cells.zarr.zip`.

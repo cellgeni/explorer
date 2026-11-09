@@ -63,9 +63,15 @@ Zarr loaders add `loadTile`/`loadTilePixels`.
 2. Reads OME-XML from IFD 0's `ImageDescription` (`parseOmeTiffMetadata`,
    `src/tiff/omeMetadata.ts`).
 3. Tries a `.zchunkstore` sidecar (`src/tiff/zchunkStore.ts`) for precomputed
-   tile offsets: `<root>/.zchunkstore` for `morphology_focus/` paths,
-   `<parent>/.zchunkstore` for `morphology*` files, then `<file>.zchunkstore`.
-   If none is found, it logs a fallback notice and indexes the TIFF itself.
+   tile offsets: `<file>.zchunkstore`, then `<parent>/.zchunkstore` for
+   `morphology*` files, then `<root>/.zchunkstore` for `morphology_focus/`
+   paths.
+   A sidecar is used only if its level 0 width, height, and tile size match
+   the selected IFD. If none is found or it does not match, it logs a fallback
+   notice and indexes the TIFF itself. Either way, tiles are decoded with the
+   selected IFD's `Compression`, `Predictor`, and related tags.
+   See [TIFF tile-offset sidecars](../zchunkstore.md) for the format and how
+   to generate one.
 4. Builds levels: level 0 is the selected IFD; levels 1…n are its `SubIFDs`.
    Tile offsets come from `TileOffsets`/`TileByteCounts`.
 
@@ -216,4 +222,8 @@ RGB images skip it.
 - Top-level-IFD pyramids and stripped TIFFs are not supported.
 - Generic TIFFs (no `.zchunkstore`) always add one fallback notice and an
   extra request for the sidecar.
+- A `.zchunkstore` is checked only against the TIFF's level 0 width, height,
+  and tile size. A stale sidecar with the same sizes, or a root sidecar for
+  the focus images picked up by a same-sized `morphology.ome.tif`, fetches the
+  wrong bytes.
 - Only `t = 0`, `z = 0` of OME-Zarr images is shown.

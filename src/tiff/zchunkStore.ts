@@ -51,20 +51,20 @@ export async function loadZchunkStorePyramidOptions(
 
 export function zchunkStoreCandidateUrls(tiffUrl: string): readonly string[] {
   const url = new URL(tiffUrl)
-  const candidates: string[] = []
+  // Most specific first: a `<file>.zchunkstore` can only describe this TIFF,
+  // while folder and dataset-root sidecars may describe a sibling image.
+  const candidates = [urlWithPath(url, `${url.pathname}.zchunkstore`)]
   const focusSegmentIndex = url.pathname.indexOf('/morphology_focus/')
+
+  if (isXeniumMorphologyPath(url.pathname)) {
+    candidates.push(urlWithPath(url, `${parentPath(url.pathname)}/.zchunkstore`))
+  }
 
   if (focusSegmentIndex >= 0) {
     candidates.push(
       urlWithPath(url, `${url.pathname.slice(0, focusSegmentIndex)}/.zchunkstore`),
     )
   }
-
-  if (isXeniumMorphologyPath(url.pathname)) {
-    candidates.push(urlWithPath(url, `${parentPath(url.pathname)}/.zchunkstore`))
-  }
-
-  candidates.push(urlWithPath(url, `${url.pathname}.zchunkstore`))
 
   return Array.from(new Set(candidates))
 }

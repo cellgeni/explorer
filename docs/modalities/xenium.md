@@ -50,6 +50,10 @@ instance. Those functions share `XeniumDataset` instances from
 Not read: `nucleus_boundaries.parquet`, `analysis/clustering/*` CSVs,
 `metrics_summary.csv`, `cells.zarr.zip`, and `aux_outputs/`.
 
+XOA does not write `.zchunkstore` sidecars. Generate one for the focus images
+with `scripts/make_zchunkstore.py` and host it as `morphology_focus/.zchunkstore`;
+see [TIFF tile-offset sidecars](../zchunkstore.md).
+
 ## Coordinates And Units
 
 - Data coordinates are the micrometre centroids and vertices from the Parquet
