@@ -148,8 +148,8 @@ Supported H5AD views:
 - Embedding view options from numeric 2D `/obsm/*` matrices such as
   `/obsm/X_umap`, `/obsm/X_tsne`, and `/obsm/X_pca`.
 - Categorical and string `obs` columns as annotation labels.
-- Numeric `obs` columns as per-cell values in the Cell tab. They are not yet
-  offered as `Metadata` colour tracks.
+- Numeric `obs` columns as per-cell values in the Cell tab and as `Metadata`
+  colour tracks.
 - Selected-gene expression coloring, selected-cell gene profile, and ROI gene
   summaries from `/X`.
 

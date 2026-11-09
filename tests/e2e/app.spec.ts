@@ -111,11 +111,12 @@ async function createTinyH5adFixture(): Promise<Uint8Array> {
   const file = new h5wasm.File(fileName, 'w')
   const obs = file.create_group('obs')
   obs.create_attribute('_index', 'cell_id')
-  obs.create_attribute('column-order', ['cluster', 'score'])
+  obs.create_attribute('column-order', ['cluster', 'n_genes', 'score'])
   obs.create_dataset({
     name: 'cell_id',
     data: ['cell-a', 'cell-b', 'cell-c', 'cell-d'],
   })
+  obs.create_dataset({ name: 'n_genes', data: new Int32Array([120, 340, 560, 780]) })
   obs.create_dataset({
     name: 'score',
     data: new Float32Array([0.1, 0.5, 0.9, 0.2]),
@@ -183,7 +184,7 @@ test('shows transcript overlay controls in the browser shell @smoke', async ({
   await expect(page.getByRole('combobox', { name: 'Point color' })).toHaveValue('feature')
 })
 
-test('loads a local H5AD fixture with obs tracks and gene expression', async ({
+test('loads a local H5AD fixture with obs tracks and gene expression @smoke', async ({
   page,
 }) => {
   test.setTimeout(120_000)
@@ -233,6 +234,11 @@ test('loads a local H5AD fixture with obs tracks and gene expression', async ({
   await page.getByRole('tab', { name: 'Genes' }).click()
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
 
+  // Numeric obs columns are listed as Metadata tracks; values load on selection.
+  await genesPanel.getByLabel('Cell color').selectOption('metadata')
+  await expect(genesPanel.getByLabel('Metadata track')).toHaveValue('h5ad:n-genes')
+  await expect(genesPanel.getByLabel('Metadata track')).toContainText('score')
+
   await page.getByRole('tab', { name: 'Cell' }).click()
   const cellPanel = page.locator('#hud-panel-cell')
   await cellPanel.getByRole('button', { name: 'Load Embeddings' }).click()
@@ -243,6 +249,35 @@ test('loads a local H5AD fixture with obs tracks and gene expression', async ({
   await expect(
     cellPanel.getByRole('img', { name: 'UMAP embedding, 4 cells' }),
   ).toBeVisible()
+})
+
+test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
+  baseURL,
+  page,
+}) => {
+  test.setTimeout(120_000)
+
+  await routeTinyH5adFixture(page)
+  const sharedState = new URLSearchParams({
+    dataset: new URL('/h5ad-smoke.h5ad', baseURL).toString(),
+    cellColor: 'metadata',
+    cellTrack: 'h5ad:score',
+  })
+  await page.goto(`/#${sharedState.toString()}`)
+
+  await expect(page.getByText(/H5AD ready: 4 cells, 3 genes/)).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(page.getByText(/Metadata track ready: score/)).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(page.getByText(/Loading metadata track n_genes/)).toHaveCount(0)
+
+  await page.getByRole('tab', { name: 'Genes' }).click()
+  const genesPanel = page.locator('#hud-panel-genes')
+  await expect(genesPanel.getByLabel('Cell color')).toHaveValue('metadata')
+  await expect(genesPanel.getByLabel('Metadata track')).toHaveValue('h5ad:score')
+  await expect(page).toHaveURL(/cellTrack=h5ad%3Ascore/)
 })
 
 test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
@@ -288,6 +323,9 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
 
   await page.getByRole('tab', { name: 'Genes' }).click()
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
+
+  await genesPanel.getByLabel('Cell color').selectOption('metadata')
+  await expect(genesPanel.getByLabel('Metadata track')).toContainText('n_genes')
 })
 
 test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell panels @live', async ({

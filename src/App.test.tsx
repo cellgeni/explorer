@@ -2096,7 +2096,17 @@ describe('App', () => {
           cellIds: ['cell-a'],
         },
       ]),
-      metadataTracks: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => [
+        {
+          id: 'h5ad:n-genes',
+          label: 'n_genes',
+          values: null,
+          cellCount: 3_005,
+          min: 1,
+          max: 9,
+        },
+      ]),
+      metadataTrackValues: vi.fn(async () => [{ cellId: 'cell-a', value: 4 }]),
       embeddingOptions: vi.fn(async () => [
         { kind: 'X_umap', label: 'UMAP', sourcePath: '/obsm/X_umap' },
         { kind: 'X_pca', label: 'PCA', sourcePath: '/obsm/X_pca' },
@@ -2156,7 +2166,7 @@ describe('App', () => {
       ).toHaveValue('analysis:cell-type')
       expect(loadAnnotationsButton).toBeDisabled()
       expect(h5adDataset.annotations).not.toHaveBeenCalled()
-      expect(h5adDataset.metadataTracks).not.toHaveBeenCalled()
+      expect(h5adDataset.metadataTracks).toHaveBeenCalledTimes(1)
 
       fireEvent.change(annotationSet, { target: { value: 'analysis:cell-type' } })
       expect(loadAnnotationsButton).toBeEnabled()
@@ -2165,6 +2175,18 @@ describe('App', () => {
       await screen.findByText('Annotations loaded: 1 labels')
       expect(h5adDataset.annotations).toHaveBeenCalledWith(
         expect.objectContaining({ groupId: 'analysis:cell-type' }),
+      )
+
+      expect(h5adDataset.metadataTrackValues).not.toHaveBeenCalled()
+      openHudTab('Genes')
+      fireEvent.change(screen.getByLabelText('Cell color'), {
+        target: { value: 'metadata' },
+      })
+      await screen.findByText('Metadata track ready: n_genes')
+      expect(h5adDataset.metadataTrackValues).toHaveBeenCalledTimes(1)
+      expect(h5adDataset.metadataTrackValues).toHaveBeenCalledWith(
+        'h5ad:n-genes',
+        expect.anything(),
       )
 
       openHudTab('Cell')
@@ -2226,6 +2248,7 @@ describe('App', () => {
       ]),
       genePanel: vi.fn(async () => ['Actb', 'Gad1']),
       annotationGroups: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => []),
       embeddingOptions: vi.fn(async () => []),
       matrix: vi.fn(async () => ({
         geneNames: ['Actb', 'Gad1'],

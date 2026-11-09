@@ -228,8 +228,7 @@ off.
 - Shapes are read whole, not by viewport.
 - Boolean `obs` columns in the table are expected to fail the load (see
   [H5AD known limitations](./h5ad.md#known-limitations)).
-- Numeric `obs` columns are not offered as `Metadata` colour tracks, and
-  imported CSV/JSON annotations must use Xenium-format cell IDs, so they do
+- Imported CSV/JSON annotations must use Xenium-format cell IDs, so they do
   not match SpatialData obs names.
 - Diagnostics send a `HEAD` for every table chunk but check only the first
   chunk of the image's coarsest level, not every image chunk.

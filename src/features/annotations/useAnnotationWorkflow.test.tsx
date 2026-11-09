@@ -406,6 +406,7 @@ describe('useAnnotationWorkflow', () => {
         id: 'metadata:scores-csv:confidence',
         label: 'confidence',
         values: [{ cellId, value: 0.82 }],
+        cellCount: 1,
         min: 0.82,
         max: 0.82,
       },

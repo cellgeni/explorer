@@ -231,7 +231,7 @@ writing UI code.
 | Phase 5.1                       | Transcript visualization with LOD                        | Done                                                    |
 | Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened** |
 | Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                |
-| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open; metadata tracks **Reopened**  |
+| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                |
 | Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                       |
 | Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                       |
 | Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                       |
@@ -1361,11 +1361,11 @@ continuous.
       back to row order.
 - [x] Categorical `obs` columns become annotations; numeric and boolean columns
       become continuous tracks and Cell Info fields.
-  - [ ] **Reopened (2026-11-08):** numeric columns reach Cell Info
-        ("Observations") but not the `Cell color` → `Metadata` tracks;
-        `metadataTracks()` exists but nothing in the app calls it. Boolean
-        columns are expected to fail on the reference backend and in
-        SpatialData tables.
+  - [x] **Reopened (2026-11-08), fixed (2026-11-09):** numeric columns
+        reach Cell Info ("Observations") and, via `metadataTracks()` at load,
+        the `Cell color` → `Metadata` tracks.
+  - [ ] **Reopened (2026-11-08):** boolean columns are expected to fail on the
+        reference backend and in SpatialData tables.
 - [x] `/X` first; `/layers/*` and `/raw/X` later.
 - [ ] Read remote files through a worker-backed, Range-capable h5wasm reader,
       avoiding full-file fetches except for tiny fixtures or budgeted paths.
@@ -1582,9 +1582,9 @@ planned in advance.
 - [ ] `points` (transcripts), extra images, and extra tables are not shown.
 - [ ] Shapes are read whole, not by viewport.
 - [ ] `meta()` waits for the image, so a broken image also blocks boundaries.
-- [ ] Numeric `obs` columns are not offered as `Metadata` colour tracks, boolean
-      columns are expected to fail, and imported CSV/JSON annotations must use
-      Xenium cell IDs (shared with [Phase 7](#phase-7--anndata-h5ad)).
+- [ ] Boolean `obs` columns are expected to fail, and imported CSV/JSON
+      annotations must use Xenium cell IDs (shared with
+      [Phase 7](#phase-7--anndata-h5ad)).
 - [ ] Diagnostics check only one image chunk.
 - [ ] No E2E coverage; the reference stores in
       [1](#reference-datasets) are used for manual testing.
@@ -1868,8 +1868,8 @@ Sequencing:
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
-- [ ] H5AD and SpatialData: offer numeric `obs` columns as `Metadata` colour
-      tracks (`metadataTracks()` has no caller).
+- [x] H5AD and SpatialData: offer numeric `obs` columns as `Metadata` colour
+      tracks (`metadataTracks()` is called at load, 2026-11-09).
 - [ ] H5AD: read HDF5 in a worker (h5wasm runs on the main thread).
 - [ ] H5AD and SpatialData: read boolean `obs` columns on the reference backend.
 - [ ] Visium HD: low-res tissue image fallback.

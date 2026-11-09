@@ -208,6 +208,7 @@ interface H5adLifecycleDataset {
   genePanel(): Promise<readonly string[]>
   annotationGroups(): Promise<readonly AnnotationGroupOption[]>
   embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]>
+  metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]>
 }
 
 interface SpatialDataSummaryDataset {
@@ -896,7 +897,9 @@ export function useDatasetLifecycle({
       setHiddenAnnotationIds([])
       setHiddenAnnotationSetIds([])
       setCellMetadataTracks([])
-      setSelectedCellMetadataTrackId(null)
+      setSelectedCellMetadataTrackId(
+        shouldRestoreSharedState ? (sharedState?.cellMetadataTrackId ?? null) : null,
+      )
       setAnnotationGroupState(IDLE_ANNOTATION_GROUP_STATE)
       setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
       setAnalysisEmbeddingState(IDLE_ANALYSIS_EMBEDDING_STATE)
@@ -1034,12 +1037,14 @@ export function useDatasetLifecycle({
           }
 
           const annDataset: H5adLifecycleDataset = dataset
-          const [cells, genes, annotationGroups, embeddingOptions] = await Promise.all([
-            annDataset.overview(),
-            annDataset.genePanel(),
-            annDataset.annotationGroups(),
-            annDataset.embeddingOptions(),
-          ])
+          const [cells, genes, annotationGroups, embeddingOptions, metadataTracks] =
+            await Promise.all([
+              annDataset.overview(),
+              annDataset.genePanel(),
+              annDataset.annotationGroups(),
+              annDataset.embeddingOptions(),
+              annDataset.metadataTracks(),
+            ])
 
           if (!isCurrentDatasetLoad()) {
             return false
@@ -1052,6 +1057,7 @@ export function useDatasetLifecycle({
             annotationGroupLoadReady(requestedUrl, annotationGroups),
           )
           setSelectedAnnotationGroupId(NO_ANNOTATION_GROUP_ID)
+          setCellMetadataTracks(metadataTracks)
           if (embeddingOptions.length > 0) {
             setAnalysisEmbeddingState(
               analysisEmbeddingOptionsReady(requestedUrl, embeddingOptions),
@@ -1072,6 +1078,10 @@ export function useDatasetLifecycle({
           appendDebugEvent(
             `${label} embeddings ready: ${embeddingOptions.length.toLocaleString()} obsm views`,
             { coalesceKey: `${coalescePrefix}-embedding-options` },
+          )
+          appendDebugEvent(
+            `${label} metadata tracks ready: ${metadataTracks.length.toLocaleString()} numeric obs columns`,
+            { coalesceKey: `${coalescePrefix}-metadata-tracks` },
           )
           recordTelemetry(
             telemetryEvent('dataset.load', 'success', {
@@ -1569,7 +1579,8 @@ function isH5adLifecycleDataset(dataset: unknown): dataset is H5adLifecycleDatas
     hasFunction(dataset, 'overview') &&
     hasFunction(dataset, 'genePanel') &&
     hasFunction(dataset, 'annotationGroups') &&
-    hasFunction(dataset, 'embeddingOptions')
+    hasFunction(dataset, 'embeddingOptions') &&
+    hasFunction(dataset, 'metadataTracks')
   )
 }
 

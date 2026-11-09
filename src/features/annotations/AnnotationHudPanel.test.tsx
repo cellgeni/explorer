@@ -77,6 +77,7 @@ describe('AnnotationHudPanel', () => {
               { cellId: asCellId('aaaaaaaa-1'), value: 0.5 },
               { cellId: asCellId('bbbbbbbb-2'), value: 0.7 },
             ],
+            cellCount: 2,
             min: 0.5,
             max: 0.7,
           },

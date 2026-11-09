@@ -21,6 +21,7 @@ export interface ShareableState {
   readonly geneExpressionScoreMode?: string
   readonly geneExpressionDetailMode?: string
   readonly observationColorMode?: string
+  readonly cellMetadataTrackId?: string
   readonly coordinateUnit?: string
   readonly measurementUnit?: string
   readonly shouldLoadMorphology?: boolean
@@ -76,6 +77,7 @@ export function parseShareableState(hash: string): ShareableState {
   const geneExpressionScoreMode = readString(params, 'score')
   const geneExpressionDetailMode = readString(params, 'detail')
   const observationColorMode = readString(params, 'cellColor')
+  const cellMetadataTrackId = readString(params, 'cellTrack')
   const coordinateUnit = readString(params, 'coord')
   const measurementUnit = readString(params, 'measureUnit')
   const shouldLoadMorphology = parseBoolean(params.get('morphology'))
@@ -151,6 +153,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (observationColorMode !== undefined) {
     state.observationColorMode = observationColorMode
+  }
+
+  if (cellMetadataTrackId !== undefined) {
+    state.cellMetadataTrackId = cellMetadataTrackId
   }
 
   if (coordinateUnit !== undefined) {
@@ -310,6 +316,7 @@ export function formatShareableState(state: ShareableState): string {
   setOptionalString(params, 'score', state.geneExpressionScoreMode)
   setOptionalString(params, 'detail', state.geneExpressionDetailMode)
   setOptionalString(params, 'cellColor', state.observationColorMode)
+  setOptionalString(params, 'cellTrack', state.cellMetadataTrackId)
   setOptionalString(params, 'coord', state.coordinateUnit)
   setOptionalString(params, 'measureUnit', state.measurementUnit)
 
