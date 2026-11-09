@@ -102,9 +102,7 @@ export function normaliseToRgba(
       rgba[rgbaOffset + 1] = scaleSampleToByte(pixels[sampleOffset + 1] ?? 0, max)
       rgba[rgbaOffset + 2] = scaleSampleToByte(pixels[sampleOffset + 2] ?? 0, max)
       rgba[rgbaOffset + 3] =
-        samplesPerPixel >= 4
-          ? scaleSampleToByte(pixels[sampleOffset + 3] ?? 0, max)
-          : 255
+        samplesPerPixel >= 4 ? scaleSampleToByte(pixels[sampleOffset + 3] ?? 0, max) : 255
     }
 
     return {

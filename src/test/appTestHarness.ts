@@ -104,11 +104,13 @@ export function appTestDependencies({
 
   if (loadDatasetOverview !== undefined) dataset.loadDatasetOverview = loadDatasetOverview
   if (loadGenePanel !== undefined) dataset.loadGenePanel = loadGenePanel
-  if (detectSpatialDataset !== undefined) dataset.detectSpatialDataset = detectSpatialDataset
+  if (detectSpatialDataset !== undefined)
+    dataset.detectSpatialDataset = detectSpatialDataset
   if (getSpatialDataset !== undefined) dataset.getSpatialDataset = getSpatialDataset
   if (warmDatasetForRoi !== undefined) dataset.warmDatasetForRoi = warmDatasetForRoi
 
-  if (loadMorphologyImage !== undefined) morphology.loadMorphologyImage = loadMorphologyImage
+  if (loadMorphologyImage !== undefined)
+    morphology.loadMorphologyImage = loadMorphologyImage
   if (loadCustomMorphologyLayer !== undefined) {
     morphology.loadCustomMorphologyLayer = loadCustomMorphologyLayer
   }
@@ -351,7 +353,5 @@ export function createVisiumHdDetectorMock(
 export function createSpatialDatasetLoaderMock(
   dataset: unknown,
 ): ReturnType<typeof vi.fn<SpatialDatasetLoader>> {
-  return vi.fn(
-    async () => dataset as Awaited<ReturnType<SpatialDatasetLoader>>,
-  )
+  return vi.fn(async () => dataset as Awaited<ReturnType<SpatialDatasetLoader>>)
 }

@@ -83,9 +83,7 @@ describe('JPEG-2000 decoding', () => {
       width: 2,
     })
     expect(decoded.pixels).toBeInstanceOf(Uint16Array)
-    expect([...decoded.pixels]).toEqual([
-      0x0102, 0x0304, 0x0506, 0x0708, 0x090a, 0x0b0c,
-    ])
+    expect([...decoded.pixels]).toEqual([0x0102, 0x0304, 0x0506, 0x0708, 0x090a, 0x0b0c])
   })
 })
 

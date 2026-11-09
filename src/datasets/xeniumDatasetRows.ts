@@ -2,7 +2,10 @@ import { asCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
 import type { CellId } from '../data/cellid'
 import type { BBox, DataPoint } from '../data/coords'
-import type { CellTranscriptZBin, CellTranscriptZDistribution } from '../data/cellTranscripts'
+import type {
+  CellTranscriptZBin,
+  CellTranscriptZDistribution,
+} from '../data/cellTranscripts'
 import type { GexCell, GexResult, SqlFragment, SqlParameter } from '../data/gex'
 import type { TranscriptGroupSummary, TranscriptPoint } from '../data/transcriptOverlay'
 import type {
@@ -22,7 +25,10 @@ export function normalizeSampleStride(sampleStride: number | undefined): number 
   return Math.max(1, Math.floor(sampleStride))
 }
 
-export function normalizePositiveInteger(value: number | undefined, fallback: number): number {
+export function normalizePositiveInteger(
+  value: number | undefined,
+  fallback: number,
+): number {
   if (value === undefined || !Number.isFinite(value) || value < 1) {
     return fallback
   }
@@ -114,7 +120,9 @@ function readOptionalDatasetCellStringProperty(
   throw new Error(`Expected row.${rowKey} to be a string.`)
 }
 
-export function parseTranscriptExportRow(row: Record<string, unknown>): DatasetTranscript {
+export function parseTranscriptExportRow(
+  row: Record<string, unknown>,
+): DatasetTranscript {
   const cellId = row.cell_id
   const featureName = row.feature_name
 
@@ -306,7 +314,9 @@ export function parseTranscriptPointRow(row: Record<string, unknown>): Transcrip
   }
 }
 
-export function parseTranscriptGroupRow(row: Record<string, unknown>): TranscriptGroupSummary {
+export function parseTranscriptGroupRow(
+  row: Record<string, unknown>,
+): TranscriptGroupSummary {
   const featureName = row.feature_name
   const fovName = row.fov_name
 
@@ -380,7 +390,10 @@ function optionalTranscriptGroupNumber(
   return value === undefined ? {} : { [key]: value }
 }
 
-export function selectedGeneCount(cell: GexCell, selectedGeneSet: ReadonlySet<string>): number {
+export function selectedGeneCount(
+  cell: GexCell,
+  selectedGeneSet: ReadonlySet<string>,
+): number {
   let count = 0
 
   for (let index = 0; index < cell.geneNames.length; index += 1) {
