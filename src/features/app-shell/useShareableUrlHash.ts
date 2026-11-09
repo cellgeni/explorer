@@ -32,6 +32,7 @@ interface ShareableLayerHashOptions {
   readonly morphologyEnabledChannelIds: readonly string[] | undefined
   readonly measurementUnit: string
   readonly observationColorMode: string
+  readonly cellMetadataTrackId: string | null
   readonly shouldLoadMorphology: boolean
 }
 
@@ -88,6 +89,7 @@ export function useShareableUrlHash({
   const { activeControlHudTab, activeRoiSelection, shareableViewState } = view
   const {
     boundaryCellLimit,
+    cellMetadataTrackId,
     cellBoundaryOpacity,
     cellFillOpacity,
     coordinateUnit,
@@ -139,6 +141,7 @@ export function useShareableUrlHash({
         geneExpressionScoreMode,
         geneExpressionDetailMode,
         observationColorMode,
+        ...(cellMetadataTrackId === null ? {} : { cellMetadataTrackId }),
         coordinateUnit,
         measurementUnit,
         shouldLoadMorphology,
@@ -192,6 +195,7 @@ export function useShareableUrlHash({
     activeRoiSelection,
     annotationUrl,
     boundaryCellLimit,
+    cellMetadataTrackId,
     coordinateUnit,
     customImageOpacities,
     customImageUrls,

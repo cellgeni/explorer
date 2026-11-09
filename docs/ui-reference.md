@@ -125,21 +125,21 @@ The header "Layer Stack" shows the deck.gl layer count and the
 Header "Analysis" with a status chip ("{n} genes", "Loading", the expression
 mode, …). Hidden for Image.
 
-| Control                 | Type                                       | Values / default                                               | Notes                                                                                       |
-| ----------------------- | ------------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `Gene selection`        | Search                                     |                                                                | Case-insensitive substring; excludes selected genes                                         |
-| Gene list               | Virtualized buttons (`GeneOptionList.tsx`) |                                                                | Click toggles a gene                                                                        |
-| Selected-gene chips     | Buttons                                    |                                                                | Click removes                                                                               |
-| `Gene set symbols`      | Textarea                                   | e.g. `Actb, Gad1, Slc17a7`                                     | Split on whitespace, comma, semicolon                                                       |
-| `Apply Symbols`         | Button                                     |                                                                | Replaces the selection with matching genes                                                  |
-| `Save Set` / `Set name` | Button + text                              |                                                                | Saves the selection and score mode for this session                                         |
-| Saved sets              | Apply / `x` buttons                        |                                                                | Apply restores genes and score mode                                                         |
-| `Signature score`       | Select                                     | **Sum**, Mean, Z-score                                         | How multi-gene selections combine                                                           |
-| `Gene scale`            | Select + gradient preview                  | Gold, Magma, Viridis, **Plasma**, Cividis, Teal, Rose, Glasbey | The gene colour bar                                                                         |
-| `Expression detail`     | Select                                     | **Auto LOD**, Exact region, All cells                          | See below                                                                                   |
-| `Cell color`            | Select                                     | **Transcript count**, Cell area, Annotations, Metadata         | Annotations appears once annotations are loaded; Metadata once a metadata track is imported |
-| `Metadata track`        | Select                                     | "{label} ({min}-{max})"                                        | When `Cell color` is Metadata                                                               |
-| Status line             | Text                                       | e.g. "Expression exact region: N cells"                        |                                                                                             |
+| Control                 | Type                                       | Values / default                                               | Notes                                                                                                                                 |
+| ----------------------- | ------------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `Gene selection`        | Search                                     |                                                                | Case-insensitive substring; excludes selected genes                                                                                   |
+| Gene list               | Virtualized buttons (`GeneOptionList.tsx`) |                                                                | Click toggles a gene                                                                                                                  |
+| Selected-gene chips     | Buttons                                    |                                                                | Click removes                                                                                                                         |
+| `Gene set symbols`      | Textarea                                   | e.g. `Actb, Gad1, Slc17a7`                                     | Split on whitespace, comma, semicolon                                                                                                 |
+| `Apply Symbols`         | Button                                     |                                                                | Replaces the selection with matching genes                                                                                            |
+| `Save Set` / `Set name` | Button + text                              |                                                                | Saves the selection and score mode for this session                                                                                   |
+| Saved sets              | Apply / `x` buttons                        |                                                                | Apply restores genes and score mode                                                                                                   |
+| `Signature score`       | Select                                     | **Sum**, Mean, Z-score                                         | How multi-gene selections combine                                                                                                     |
+| `Gene scale`            | Select + gradient preview                  | Gold, Magma, Viridis, **Plasma**, Cividis, Teal, Rose, Glasbey | The gene colour bar                                                                                                                   |
+| `Expression detail`     | Select                                     | **Auto LOD**, Exact region, All cells                          | See below                                                                                                                             |
+| `Cell color`            | Select                                     | **Transcript count**, Cell area, Annotations, Metadata         | Annotations appears once annotations are loaded; Metadata once a metadata track is loaded (H5AD/SpatialData numeric obs, or imported) |
+| `Metadata track`        | Select                                     | "{label} ({min}-{max})"                                        | When `Cell color` is Metadata. H5AD/SpatialData tracks read their values on first selection                                           |
+| Status line             | Text                                       | e.g. "Expression exact region: N cells"                        |                                                                                                                                       |
 
 `Expression detail` (`src/data/geneExpressionLod.ts`):
 
@@ -387,24 +387,25 @@ Transcripts (`Density color`) tabs.
 160 ms, with `xv=1`); query-string values are also read on startup, and hash
 values win. Numbers are rounded to three decimals.
 
-| Parameter                                                                                                 | Meaning                                                          |
-| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `dataset`                                                                                                 | Dataset URL (loaded automatically)                               |
-| `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                   |
-| `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                       |
-| `genes`                                                                                                   | Selected genes (comma-separated)                                 |
-| `view`                                                                                                    | Target x, y, z, zoom                                             |
-| `roi`                                                                                                     | `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`                   |
-| `tab`                                                                                                     | Active HUD tab                                                   |
-| `scale`, `score`, `detail`, `cellColor`                                                                   | Gene scale, signature score, expression detail, cell colour mode |
-| `coord`, `measureUnit`                                                                                    | `um` or `px`                                                     |
-| `morphology`, `cellBounds`, `nucleusBounds`, `hoverTips`                                                  | Booleans                                                         |
-| `boundaryLimit`                                                                                           | Boundary limit                                                   |
-| `imgOpacity`, `cellFill`, `cellBoundary`                                                                  | Opacities (0–1)                                                  |
-| `channels`                                                                                                | Enabled image channel IDs                                        |
-| `tx`, `txDetail`, `txFilter`, `txGene`, `txBudget`, `txQv`, `txSize`, `txOpacity`, `txDensity`, `txColor` | Transcript controls                                              |
-| `lens`, `lensScope`, `lensRadius`, `lensQv`                                                               | Magic Lens controls                                              |
-| `sdCs`, `sdImage`, `sdUm`                                                                                 | SpatialData coordinate system, image, and µm-per-unit override   |
+| Parameter                                                                                                 | Meaning                                                              |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `dataset`                                                                                                 | Dataset URL (loaded automatically)                                   |
+| `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                       |
+| `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                           |
+| `genes`                                                                                                   | Selected genes (comma-separated)                                     |
+| `view`                                                                                                    | Target x, y, z, zoom                                                 |
+| `roi`                                                                                                     | `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`                       |
+| `tab`                                                                                                     | Active HUD tab                                                       |
+| `scale`, `score`, `detail`, `cellColor`                                                                   | Gene scale, signature score, expression detail, cell colour mode     |
+| `cellTrack`                                                                                               | Selected `Metadata` track id; written only when `cellColor=metadata` |
+| `coord`, `measureUnit`                                                                                    | `um` or `px`                                                         |
+| `morphology`, `cellBounds`, `nucleusBounds`, `hoverTips`                                                  | Booleans                                                             |
+| `boundaryLimit`                                                                                           | Boundary limit                                                       |
+| `imgOpacity`, `cellFill`, `cellBoundary`                                                                  | Opacities (0–1)                                                      |
+| `channels`                                                                                                | Enabled image channel IDs                                            |
+| `tx`, `txDetail`, `txFilter`, `txGene`, `txBudget`, `txQv`, `txSize`, `txOpacity`, `txDensity`, `txColor` | Transcript controls                                                  |
+| `lens`, `lensScope`, `lensRadius`, `lensQv`                                                               | Magic Lens controls                                                  |
+| `sdCs`, `sdImage`, `sdUm`                                                                                 | SpatialData coordinate system, image, and µm-per-unit override       |
 
 Dataset-specific values (genes, ROI, channels, boundaries, colour modes, lens,
 SpatialData view)

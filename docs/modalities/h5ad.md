@@ -87,8 +87,9 @@ except the index and `__*` entries:
 - Other groups (nullable integer/boolean, masked arrays) are skipped.
 
 Continuous `obs` values appear as per-cell "Observations" rows in the Cell
-tab. They are **not** offered as `Metadata` colour tracks; see
-[Known Limitations](#known-limitations).
+tab and as `Cell color` → `Metadata` tracks. The track list (label, range, cell
+count) loads with the dataset; a track's per-cell values are built only when it
+is shown (see [Feature Read Paths](#feature-read-paths)).
 
 ### Coordinates (`/obsm`)
 
@@ -127,6 +128,7 @@ values with gaps up to 262,144 values (`csrZarrRowBatches`).
 | `genePanel()`        | Gene names from `/var`                                                                   |
 | `annotationGroups()` | One `analysis:<column>` option per categorical obs column                                |
 | `embeddingOptions()` | obsm keys usable as embeddings; the first one is selected                                |
+| `metadataTracks()`   | One `h5ad:<column>` `Metadata` track per continuous obs column, without per-cell values  |
 
 H5AD has no morphology image and no boundary polygons, so cell boundaries are
 switched off and `meta()` reports all capabilities as `false`. `elements()`
@@ -134,15 +136,16 @@ returns `[]` and `image()` returns `null`.
 
 ## Feature Read Paths
 
-| Feature                 | Path                                                                                                                                                       |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cell rendering          | Points from `overview()`, radius 2 px, scaled with `pointSizeFullViewScale: 0.5`; no overview cap or viewport clipping                                     |
-| Selected-gene colouring | `geneExpression(bbox, genes)` scans cells in the bbox in obs order, reads per-cell counts for the requested genes, and sums them for multi-gene signatures |
-| Annotations             | `annotations({ groupId })` on demand when an annotation set is loaded                                                                                      |
-| Embeddings              | `embeddings({ kind })` re-reads the selected obsm matrix                                                                                                   |
-| Selected-cell profile   | `matrix([cellId])` over all genes, summarized by `summarizeRoiGeneExpression`                                                                              |
-| ROI cells               | `cells(bbox)` bbox scan plus point-in-polygon for lassos                                                                                                   |
-| ROI gene stats          | 32-cell preview, then a refinement over every ROI cell                                                                                                     |
+| Feature                 | Path                                                                                                                                                            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cell rendering          | Points from `overview()`, radius 2 px, scaled with `pointSizeFullViewScale: 0.5`; no overview cap or viewport clipping                                          |
+| Selected-gene colouring | `geneExpression(bbox, genes)` scans cells in the bbox in obs order, reads per-cell counts for the requested genes, and sums them for multi-gene signatures      |
+| Annotations             | `annotations({ groupId })` on demand when an annotation set is loaded                                                                                           |
+| Embeddings              | `embeddings({ kind })` re-reads the selected obsm matrix                                                                                                        |
+| Metadata colouring      | `metadataTrackValues(trackId)` for the selected track when `Cell color` is Metadata (`useCellMetadataTrackValues`), including a shared link that opens that way |
+| Selected-cell profile   | `matrix([cellId])` over all genes, summarized by `summarizeRoiGeneExpression`                                                                                   |
+| ROI cells               | `cells(bbox)` bbox scan plus point-in-polygon for lassos                                                                                                        |
+| ROI gene stats          | 32-cell preview, then a refinement over every ROI cell                                                                                                          |
 
 Transcripts, Magic Lens, nucleus boundaries, and ROI transcript export are
 disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`).
@@ -170,9 +173,8 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
 
 ## Known Limitations
 
-- Numeric `obs` columns are parsed by `metadataTracks()` but the app never
-  calls it, so they cannot be used as `Cell color: Metadata` tracks. Metadata
-  tracks currently come only from imported CSV/JSON annotation files.
+- `Clear Annotations`, or a metadata track's `x`, also drops the tracks read
+  from `obs`; reload the dataset to get them back.
 - Imported CSV/JSON annotation and metadata files are parsed with `asCellId`
   (`src/data/cellid.ts`), which only accepts Xenium-format IDs
   (`/^[a-p]{8}-\d+$/`). Files keyed by H5AD obs names are rejected.

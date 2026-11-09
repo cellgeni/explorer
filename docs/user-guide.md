@@ -67,8 +67,9 @@ scale is Plasma.
 
 For H5AD and SpatialData, categorical and string `obs` columns load as
 annotation sets, and numeric `obs` values appear in the `Cell` tab for the
-selected cell. Numeric `obs` columns are not yet available as `Cell color` →
-`Metadata` tracks.
+selected cell. Numeric `obs` columns are also listed as `Cell color` →
+`Metadata` tracks as soon as the dataset loads; a track's values are read when
+you first colour by it.
 
 Imported CSV/JSON annotations and metadata tracks (Annotations tab) currently
 require Xenium-format cell IDs such as `aaabbbcc-1`, so files keyed by H5AD or

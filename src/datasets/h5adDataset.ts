@@ -6,7 +6,10 @@ import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import { normalizeRoiSelection } from '../data/roiSelection'
 import { slug } from '../utils/slug'
-import type { ContinuousCellMetadataTrack } from '../data/customAnnotations'
+import type {
+  ContinuousCellMetadataTrack,
+  ContinuousCellMetadataValue,
+} from '../data/customAnnotations'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import {
   analysisEmbeddingLabel,
@@ -451,18 +454,39 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return annotations
   }
 
+  // Values stay `null` here: one object per cell per column is too much to build
+  // for every column at load. `metadataTrackValues` builds one column on demand.
   async metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]> {
     const cache = await this.cache()
 
     return cache.continuousTracks.map((track) => ({
-      id: `h5ad:${slug(track.id)}`,
+      id: h5adMetadataTrackId(track),
       label: track.label,
-      values: track.values.map((value, index) => ({
-        cellId: cache.cellIds[index] as never,
-        value,
-      })),
+      values: null,
+      cellCount: track.values.length,
       min: track.min,
       max: track.max,
+    }))
+  }
+
+  async metadataTrackValues(
+    trackId: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly ContinuousCellMetadataValue[]> {
+    throwIfAborted(options.signal)
+    const cache = await this.cache()
+    throwIfAborted(options.signal)
+    const track = cache.continuousTracks.find(
+      (candidate) => h5adMetadataTrackId(candidate) === trackId,
+    )
+
+    if (track === undefined) {
+      throw new Error(`H5AD metadata track ${trackId} does not exist.`)
+    }
+
+    return track.values.map((value, index) => ({
+      cellId: cache.cellIds[index] as never,
+      value,
     }))
   }
 
@@ -2184,6 +2208,10 @@ function h5adCellMetadata(
 
 function h5adAnnotationGroupId(track: H5adCategoricalTrack): string {
   return `analysis:${slug(track.label)}`
+}
+
+function h5adMetadataTrackId(track: H5adContinuousTrack): string {
+  return `h5ad:${slug(track.id)}`
 }
 
 function countUniqueLabels(labels: readonly string[]): number {

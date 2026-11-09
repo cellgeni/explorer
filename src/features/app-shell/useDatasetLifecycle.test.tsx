@@ -65,6 +65,8 @@ function Probe({
   loadAnnotationGroups = vi.fn(async () => []),
   loadDatasetOverview = vi.fn(async () => []),
   loadGenePanel = vi.fn(async () => []),
+  setCellMetadataTracks = vi.fn(),
+  setSelectedCellMetadataTrackId = vi.fn(),
   setDatasetPlatform = vi.fn(),
   setFlatMorphologyImage = vi.fn(),
   setGenePanelState = vi.fn(),
@@ -87,6 +89,8 @@ function Probe({
   readonly loadAnnotationGroups?: LifecycleOptions['loaders']['loadAnnotationGroups']
   readonly loadDatasetOverview?: LifecycleOptions['loaders']['loadDatasetOverview']
   readonly loadGenePanel?: LifecycleOptions['loaders']['loadGenePanel']
+  readonly setCellMetadataTracks?: LifecycleOptions['setters']['setCellMetadataTracks']
+  readonly setSelectedCellMetadataTrackId?: LifecycleOptions['setters']['setSelectedCellMetadataTrackId']
   readonly setDatasetPlatform?: LifecycleOptions['setters']['setDatasetPlatform']
   readonly setFlatMorphologyImage?: LifecycleOptions['setters']['setFlatMorphologyImage']
   readonly setGenePanelState?: LifecycleOptions['setters']['setGenePanelState']
@@ -182,8 +186,8 @@ function Probe({
       setAnnotationState: noopSetter,
       setHiddenAnnotationIds: noopSetter,
       setHiddenAnnotationSetIds: noopSetter,
-      setCellMetadataTracks: noopSetter,
-      setSelectedCellMetadataTrackId: noopSetter,
+      setCellMetadataTracks,
+      setSelectedCellMetadataTrackId,
       setAutoContrastChannelIds: noopSetter,
       setBoundaryElements: noopSetter,
       setBoundaryState: noopSetter,
@@ -475,6 +479,14 @@ describe('useDatasetLifecycle', () => {
       current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
     }
     const datasetUrl = 'https://example.test/sample.sdata.zarr'
+    const metadataTrack = {
+      id: 'h5ad:score',
+      label: 'score',
+      values: null,
+      cellCount: 1,
+      min: 0.5,
+      max: 0.5,
+    }
     const dataset = {
       overview: vi.fn(async () => [
         {
@@ -486,6 +498,7 @@ describe('useDatasetLifecycle', () => {
       genePanel: vi.fn(async () => ['Actb']),
       annotationGroups: vi.fn(async () => []),
       embeddingOptions: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => [metadataTrack]),
       image: vi.fn(async () => null),
       summary: vi.fn(async () => ({
         coordinateSystem: 'global',
@@ -495,6 +508,8 @@ describe('useDatasetLifecycle', () => {
       })),
     }
     const loadDatasetOverview = vi.fn(async () => [])
+    const setCellMetadataTracks = vi.fn()
+    const setSelectedCellMetadataTrackId = vi.fn()
     const setDatasetPlatform = vi.fn()
     const setGenePanelState = vi.fn()
     const setLoadState = vi.fn()
@@ -516,6 +531,9 @@ describe('useDatasetLifecycle', () => {
           ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
         }
         loadDatasetOverview={loadDatasetOverview}
+        initialShareableState={{ datasetUrl, cellMetadataTrackId: 'h5ad:score' }}
+        setCellMetadataTracks={setCellMetadataTracks}
+        setSelectedCellMetadataTrackId={setSelectedCellMetadataTrackId}
         setDatasetPlatform={setDatasetPlatform}
         setGenePanelState={setGenePanelState}
         setLoadState={setLoadState}
@@ -541,6 +559,8 @@ describe('useDatasetLifecycle', () => {
       url: datasetUrl,
       cellCount: 1,
     })
+    expect(setCellMetadataTracks).toHaveBeenLastCalledWith([metadataTrack])
+    expect(setSelectedCellMetadataTrackId).toHaveBeenCalledWith('h5ad:score')
     await waitFor(() => {
       expect(setMorphologyState).toHaveBeenLastCalledWith({ status: 'idle' })
     })

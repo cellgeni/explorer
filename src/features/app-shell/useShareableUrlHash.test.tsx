@@ -21,6 +21,7 @@ function ShareableUrlHashProbe() {
       boundaryCellLimit: 2500,
       cellBoundaryOpacity: 0.35,
       cellFillOpacity: 0.7,
+      cellMetadataTrackId: null,
       coordinateUnit: 'px',
       imageOpacity: 0.45,
       measurementUnit: 'um',
@@ -106,5 +107,6 @@ describe('useShareableUrlHash', () => {
     expect(window.location.hash).toContain('lens=1')
     expect(window.location.hash).toContain('lensRadius=120')
     expect(window.location.hash).toContain('txFilter=selected')
+    expect(window.location.hash).not.toContain('cellTrack')
   })
 })

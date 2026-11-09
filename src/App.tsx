@@ -129,6 +129,10 @@ import {
 } from './features/annotations/geometricAnnotationModel'
 import { useAnnotationWorkflow } from './features/annotations/useAnnotationWorkflow'
 import {
+  useCellMetadataTrackValues,
+  type CellMetadataTrackValuesLoader,
+} from './features/annotations/useCellMetadataTrackValues'
+import {
   IDLE_GENE_EXPRESSION_STATE,
   type GeneExpressionState,
   geneExpressionModeLabel,
@@ -175,6 +179,7 @@ import type {
 } from './datasets/spatialDataset'
 import type { GexResult } from './data/gex'
 import type { AnalysisEmbedding } from './data/analysisEmbeddings'
+import type { ContinuousCellMetadataValue } from './data/customAnnotations'
 import type { GeneExpressionScoreMode } from './rendering/deckLayers'
 import type {
   CellBoundaryDatum,
@@ -555,6 +560,13 @@ export function App({ dependencies }: AppProps = {}) {
       null,
     [cellMetadataTracks, selectedCellMetadataTrackId],
   )
+  const selectedCellMetadataColorStyle = useMemo(() => {
+    const values = selectedCellMetadataTrack?.values ?? null
+
+    return selectedCellMetadataTrack === null || values === null
+      ? null
+      : { ...selectedCellMetadataTrack, values }
+  }, [selectedCellMetadataTrack])
   const diagnosticsVisiumHdBinSize =
     visiumHdControlState.status === 'idle'
       ? undefined
@@ -698,7 +710,7 @@ export function App({ dependencies }: AppProps = {}) {
       nucleusBoundaryElements,
     },
     cells: {
-      cellMetadataTrack: selectedCellMetadataTrack,
+      cellMetadataTrack: selectedCellMetadataColorStyle,
       currentViewportBbox: currentViewportDetail?.bbox ?? null,
       gridCells: spatialGridCells,
       observationColorMode,
@@ -1425,6 +1437,19 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [getSpatialDataset, loadAnnotations, platformAdapter],
   )
+  // Only AnnData tracks arrive without values; imported CSV/JSON tracks carry them.
+  const loadActiveCellMetadataTrackValues = useCallback<CellMetadataTrackValuesLoader>(
+    async (baseUrl, trackId, options = {}) => {
+      const dataset = await getSpatialDataset(baseUrl)
+
+      if (!isH5adMetadataTrackDataset(dataset)) {
+        throw new Error('Loaded dataset does not expose metadata track values.')
+      }
+
+      return dataset.metadataTrackValues(trackId, options)
+    },
+    [getSpatialDataset],
+  )
   const loadActiveAnalysisEmbeddings = useCallback<AnalysisEmbeddingsLoader>(
     async (...args) => {
       const [baseUrl, options = {}] = args
@@ -1897,6 +1922,13 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedAnnotationGroupId,
       setSelectedCellMetadataTrackId,
     },
+  })
+  useCellMetadataTrackValues({
+    callbacks: { appendDebugEvent },
+    data: { loadState, observationColorMode, selectedCellMetadataTrack },
+    loaders: { loadCellMetadataTrackValues: loadActiveCellMetadataTrackValues },
+    refs: { datasetAbortRef, loadRequestIdRef: loadRequestId },
+    setters: { setCellMetadataTracks },
   })
   const handleImportGeometricAnnotations = useCallback(
     async (file: File | null) => {
@@ -2530,6 +2562,10 @@ export function App({ dependencies }: AppProps = {}) {
       boundaryCellLimit,
       cellBoundaryOpacity,
       cellFillOpacity,
+      cellMetadataTrackId:
+        observationColorMode === 'metadata'
+          ? (selectedCellMetadataTrack?.id ?? null)
+          : null,
       coordinateUnit,
       imageOpacity: imageLayerOpacity,
       measurementUnit,
@@ -3174,6 +3210,13 @@ interface H5adEmbeddingDataset {
   }): Promise<readonly AnalysisEmbedding[]>
 }
 
+interface H5adMetadataTrackDataset {
+  metadataTrackValues(
+    trackId: string,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<readonly ContinuousCellMetadataValue[]>
+}
+
 function isH5adRoiDataset(dataset: unknown): dataset is H5adRoiDataset {
   return hasFunction(dataset, 'cells')
 }
@@ -3188,6 +3231,12 @@ function isH5adAnnotationDataset(dataset: unknown): dataset is H5adAnnotationDat
 
 function isH5adEmbeddingDataset(dataset: unknown): dataset is H5adEmbeddingDataset {
   return hasFunction(dataset, 'embeddings')
+}
+
+function isH5adMetadataTrackDataset(
+  dataset: unknown,
+): dataset is H5adMetadataTrackDataset {
+  return hasFunction(dataset, 'metadataTrackValues')
 }
 
 function hasFunction<T extends string>(

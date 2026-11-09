@@ -586,7 +586,7 @@ function MetadataTrackList({
           <li key={track.id} aria-setsize={tracks.length} aria-posinset={trackIndex + 1}>
             <span>{track.label}</span>
             <small>
-              {track.values.length.toLocaleString()} cells |{' '}
+              {track.cellCount.toLocaleString()} cells |{' '}
               {formatMetadataTrackDomain(track)}
             </small>
             <button

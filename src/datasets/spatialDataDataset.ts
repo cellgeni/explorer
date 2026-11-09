@@ -7,7 +7,10 @@ import {
 } from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { RoiSelectionInput } from '../data/roiSelection'
-import type { ContinuousCellMetadataTrack } from '../data/customAnnotations'
+import type {
+  ContinuousCellMetadataTrack,
+  ContinuousCellMetadataValue,
+} from '../data/customAnnotations'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { AnalysisEmbedding, AnalysisEmbeddingKind } from '../data/analysisEmbeddings'
 import type { AnalysisEmbeddingOption } from '../data/analysisEmbeddings'
@@ -362,6 +365,19 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
   async metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]> {
     return (await this.tableOrNull())?.metadataTracks() ?? []
+  }
+
+  async metadataTrackValues(
+    trackId: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly ContinuousCellMetadataValue[]> {
+    const table = await this.tableOrNull()
+
+    if (table === null) {
+      throw new Error(`SpatialData metadata track ${trackId} has no table.`)
+    }
+
+    return table.metadataTrackValues(trackId, options)
   }
 
   async embeddings(

@@ -115,14 +115,27 @@ describe('AnnDataH5adDataset', () => {
       },
     ])
 
-    await expect(dataset.metadataTracks()).resolves.toMatchObject([
+    await expect(dataset.metadataTracks()).resolves.toEqual([
       {
         id: 'h5ad:score',
         label: 'score',
+        values: null,
+        cellCount: 4,
         min: 0.10000000149011612,
         max: 0.8999999761581421,
       },
     ])
+    const scoreValues = await dataset.metadataTrackValues('h5ad:score')
+    expect(scoreValues.map(({ cellId }) => cellId)).toEqual([
+      'cell-a',
+      'cell-b',
+      'cell-c',
+      'cell-d',
+    ])
+    expect(scoreValues[2]?.value).toBeCloseTo(0.9)
+    await expect(dataset.metadataTrackValues('h5ad:missing')).rejects.toThrow(
+      'H5AD metadata track h5ad:missing does not exist.',
+    )
 
     const matrix = await dataset.matrix(['cell-b'])
     expect(matrix.cells.get('cell-b')).toEqual({

@@ -10,7 +10,9 @@ export interface ContinuousCellMetadataValue {
 export interface ContinuousCellMetadataTrack {
   readonly id: string
   readonly label: string
-  readonly values: readonly ContinuousCellMetadataValue[]
+  /** `null` for a dataset track whose values have not been read yet. */
+  readonly values: readonly ContinuousCellMetadataValue[] | null
+  readonly cellCount: number
   readonly min: number
   readonly max: number
 }
@@ -309,6 +311,7 @@ function createContinuousMetadataTrack(
     id: `${customCellMetadataFilePrefix(fileName)}${slug(label)}`,
     label,
     values,
+    cellCount: values.length,
     min,
     max,
   }
