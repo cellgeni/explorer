@@ -4,11 +4,18 @@
 // standard file names (see datasetFactory.ts). The format is described in
 // docs/dataset-manifest.md and public/schemas/explorer-manifest.v1.json.
 
+import {
+  ATERA_FILE_DEFAULTS,
+  ATERA_OPTIONAL_FILES,
+  type AteraFileRole,
+} from './ateraFormat'
+
 export const DATASET_MANIFEST_FILE = 'explorer.json'
 export const DATASET_MANIFEST_VERSION = 1
 
 export const DATASET_MANIFEST_PLATFORMS = [
   'xenium',
+  'atera',
   'visium-hd',
   'h5ad',
   'spatialdata',
@@ -118,6 +125,17 @@ export interface XeniumDatasetManifest extends DatasetManifestBase {
   >
 }
 
+// Atera files use their own roles: the bundle shares few names with Xenium
+// output, and the ones it shares (experiment, cells) are different files.
+export interface AteraDatasetManifest extends DatasetManifestBase {
+  readonly platform: 'atera'
+  readonly files: Readonly<
+    Partial<
+      Record<AteraFileRole | (typeof ATERA_OPTIONAL_FILES)[number], DatasetManifestFile>
+    >
+  >
+}
+
 export interface VisiumHdDatasetManifest extends DatasetManifestBase {
   readonly platform: 'visium-hd'
   readonly files: Readonly<Partial<Record<VisiumHdManifestFileRole, DatasetManifestFile>>>
@@ -153,6 +171,7 @@ export interface ImageDatasetManifest extends DatasetManifestBase {
 
 export type DatasetManifest =
   | XeniumDatasetManifest
+  | AteraDatasetManifest
   | VisiumHdDatasetManifest
   | H5adDatasetManifest
   | SpatialDataDatasetManifest
@@ -249,6 +268,23 @@ export function parseDatasetManifest(
     checkKeys(
       files,
       [...Object.keys(XENIUM_MANIFEST_FILE_DEFAULTS), ...XENIUM_MANIFEST_OPTIONAL_FILES],
+      'files.',
+      fail,
+    )
+    const entries: Partial<Record<string, DatasetManifestFile>> = {}
+
+    for (const key of Object.keys(files)) {
+      entries[key] = file(key)
+    }
+
+    return { ...base, platform, files: entries }
+  }
+
+  if (platform === 'atera') {
+    rejectOptions(options, platform, fail)
+    checkKeys(
+      files,
+      [...Object.keys(ATERA_FILE_DEFAULTS), ...ATERA_OPTIONAL_FILES],
       'files.',
       fail,
     )

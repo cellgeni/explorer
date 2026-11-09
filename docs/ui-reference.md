@@ -304,22 +304,22 @@ selection.
 From `src/features/app-shell/platformAdapter.ts` and the tab rules in
 `src/App.tsx`:
 
-| Feature                   | Xenium                  | Visium HD         | H5AD             | SpatialData      | Image            |
-| ------------------------- | ----------------------- | ----------------- | ---------------- | ---------------- | ---------------- |
-| Genes tab                 | ✓                       | ✓                 | ✓                | ✓                | —                |
-| Transcripts tab           | ✓                       | —                 | —                | —                | —                |
-| Magic Lens                | ✓                       | ✓                 | Unavailable      | Unavailable      | —                |
-| Magic Lens Min QV         | ✓                       | —                 | —                | —                | —                |
-| Cell tab                  | Cell Info + Z histogram | Bin Info          | Observations     | Observations     | —                |
-| Cell-id annotations       | ✓                       | —                 | ✓                | ✓                | —                |
-| GeoJSON shapes            | ✓                       | ✓                 | ✓                | ✓                | ✓                |
-| Cell boundaries           | ✓                       | Segmented outputs | —                | ✓ (shapes)       | —                |
-| Nucleus boundaries        | —                       | ✓                 | —                | —                | —                |
-| ROI panel                 | Cells                   | Bins              | Cells            | Cells            | Geometry         |
-| Bin size control          | —                       | ✓                 | —                | —                | —                |
-| SpatialData view controls | —                       | —                 | —                | ✓                | —                |
-| Boundary limit            | ✓                       | Disabled          | ✓                | ✓                | ✓                |
-| Morphology checkbox label | Morphology image        | Tissue image      | Morphology image | Morphology image | Morphology image |
+| Feature                   | Xenium                  | Atera            | Visium HD         | H5AD             | SpatialData      | Image            |
+| ------------------------- | ----------------------- | ---------------- | ----------------- | ---------------- | ---------------- | ---------------- |
+| Genes tab                 | ✓                       | ✓                | ✓                 | ✓                | ✓                | —                |
+| Transcripts tab           | ✓                       | —                | —                 | —                | —                | —                |
+| Magic Lens                | ✓                       | Unavailable      | ✓                 | Unavailable      | Unavailable      | —                |
+| Magic Lens Min QV         | ✓                       | —                | —                 | —                | —                | —                |
+| Cell tab                  | Cell Info + Z histogram | Observations     | Bin Info          | Observations     | Observations     | —                |
+| Cell-id annotations       | ✓                       | ✓                | —                 | ✓                | ✓                | —                |
+| GeoJSON shapes            | ✓                       | ✓                | ✓                 | ✓                | ✓                | ✓                |
+| Cell boundaries           | ✓                       | ✓                | Segmented outputs | —                | ✓ (shapes)       | —                |
+| Nucleus boundaries        | —                       | ✓                | ✓                 | —                | —                | —                |
+| ROI panel                 | Cells                   | Cells            | Bins              | Cells            | Cells            | Geometry         |
+| Bin size control          | —                       | —                | ✓                 | —                | —                | —                |
+| SpatialData view controls | —                       | —                | —                 | —                | ✓                | —                |
+| Boundary limit            | ✓                       | ✓                | Disabled          | ✓                | ✓                | ✓                |
+| Morphology checkbox label | Morphology image        | Morphology image | Tissue image      | Morphology image | Morphology image | Morphology image |
 
 ## Viewer Interactions
 

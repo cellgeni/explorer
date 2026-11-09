@@ -156,6 +156,54 @@ describe('runDatasetDiagnostics', () => {
     )
   })
 
+  it('checks Atera files at the paths experiment.spatial lists', async () => {
+    const baseUrl = 'https://example.test/atera'
+    const detection: SpatialDatasetDetection = {
+      platform: 'atera',
+      baseUrl,
+      checked: [],
+    }
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      String(input) === `${baseUrl}/experiment.spatial`
+        ? Response.json({
+            pixel_size: 0.2125,
+            num_cells: 93864,
+            panel_wta: { panel_name: 'Atera Human WTA' },
+            images: { morphology_2d_filepath: 'morphology_2d/ch0000_dapi.ome.tif' },
+            explorer_files: { cells_zarr_filepath: 'segmentation/cells.zarr.zip' },
+          })
+        : new Response(null, { status: 404 }),
+    ) as unknown as typeof fetch
+    const rangeValidator = vi.fn(async (url: string) => {
+      if (url.endsWith('csc_cell_feature_matrix.zarr.zip')) {
+        throw new Error('HTTP 404')
+      }
+    })
+
+    const report = await runDatasetDiagnostics(baseUrl, {
+      detectDataset: vi.fn(async () => detection),
+      fetcher,
+      rangeValidator,
+    })
+
+    expect(report.platform).toBe('atera')
+    expect(
+      report.checks.map((check) => [
+        check.id,
+        check.status,
+        check.url.replace(baseUrl, ''),
+      ]),
+    ).toEqual([
+      ['dataset-layout', 'pass', ''],
+      ['experiment-manifest', 'pass', '/experiment.spatial'],
+      ['cellFeatureMatrix', 'pass', '/cell_feature_matrix.zarr.zip'],
+      ['cscCellFeatureMatrix', 'fail', '/csc_cell_feature_matrix.zarr.zip'],
+      ['cells', 'pass', '/segmentation/cells.zarr.zip'],
+      ['morphology', 'pass', '/morphology_2d/ch0000_dapi.ome.tif'],
+    ])
+    expect(report.checks[1]?.message).toBe('Atera Human WTA; 93,864 cells; 0.2125 µm/px')
+  })
+
   it('reports SpatialData table chunks that are missing or unreadable', async () => {
     const storeUrl = 'https://example.test/upload.sdata.zarr'
     const array = (dtype: string, extra: Record<string, unknown> = {}) => ({

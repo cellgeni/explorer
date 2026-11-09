@@ -215,6 +215,10 @@ interface SpatialDataSummaryDataset {
   summary(): Promise<SpatialDataSummary>
 }
 
+interface AteraMorphologyDataset {
+  morphologyUrl(): Promise<string | null>
+}
+
 interface UseDatasetLifecycleCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
@@ -1030,7 +1034,7 @@ export function useDatasetLifecycle({
 
         const loadAnnDataOverview = async (
           dataset: unknown,
-          label: 'H5AD' | 'SpatialData',
+          label: 'H5AD' | 'SpatialData' | 'Atera',
         ): Promise<boolean> => {
           if (!isH5adLifecycleDataset(dataset)) {
             throw new Error(`Detected ${label} dataset does not expose AnnData readers.`)
@@ -1050,7 +1054,7 @@ export function useDatasetLifecycle({
             return false
           }
 
-          const coalescePrefix = label === 'H5AD' ? 'h5ad' : 'spatialdata'
+          const coalescePrefix = label.toLowerCase()
           setOverviewCells(overviewCellsToLayerData(cells))
           setGenePanelState(genePanelLoadReady(requestedUrl, genes))
           setAnnotationGroupState(
@@ -1170,6 +1174,45 @@ export function useDatasetLifecycle({
               enableAllChannelsByDefault: true,
               skipNativeRgbAutoContrast: true,
             },
+          )
+          return
+        }
+
+        if (detection.platform === 'atera') {
+          setDatasetPlatform('atera')
+          setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
+          setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
+          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          const dataset = await getSpatialDataset(detection.baseUrl, {
+            onH5adLoadProgress: appendDebugEvent,
+          })
+
+          if (!(await loadAnnDataOverview(dataset, 'Atera'))) {
+            return
+          }
+
+          if (!loadImage || !isAteraMorphologyDataset(dataset)) {
+            setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+            return
+          }
+
+          // morphology_2d is a multi-file OME-TIFF like Xenium's
+          // morphology_focus, so it opens through the same loader.
+          loadMorphologyInBackground(
+            async () => {
+              const morphologyUrl = await dataset.morphologyUrl()
+
+              return morphologyUrl === null
+                ? null
+                : loadMorphologyImage(requestedUrl, {
+                    candidates: [morphologyUrl],
+                    signal: request.signal,
+                    onFallback: appendFallbackNotice,
+                  })
+            },
+            restoreState.morphologyEnabledChannelIds === undefined
+              ? {}
+              : { channelSelection: restoreState.morphologyEnabledChannelIds },
           )
           return
         }
@@ -1589,6 +1632,10 @@ function isNativeRgbMorphologyImage(image: MorphologyImage): boolean {
     image.channelLoaders.length === 3 &&
     image.channelLoaders.every((channel) => channel.info.alphaFromIntensity === false)
   )
+}
+
+function isAteraMorphologyDataset(dataset: unknown): dataset is AteraMorphologyDataset {
+  return hasFunction(dataset, 'morphologyUrl')
 }
 
 function isSpatialDataSummaryDataset(

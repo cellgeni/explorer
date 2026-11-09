@@ -479,6 +479,67 @@ describe('platformAdapter', () => {
     expect(loadBoundaryElements).not.toHaveBeenCalled()
   })
 
+  it('reads Atera through AnnData workflows with cell and nucleus boundaries', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'atera')
+    const cellElements = [
+      {
+        id: 'aaaaaaaa-1',
+        geometry: {
+          kind: 'polygon' as const,
+          rings: [[{ x: micrometers(0), y: micrometers(0) }]],
+        },
+      },
+    ]
+    const nucleusElements = [{ ...cellElements[0], id: 'aaaaaaaa-1' }]
+    const dataset = {
+      meta: vi.fn(async () => ({
+        capabilities: { cellBoundaries: true },
+        segmentations: [{ kind: 'cell' }, { kind: 'nucleus' }],
+      })),
+      elements: vi.fn(async () => ({ elements: cellElements })),
+      segmentationElements: vi.fn(async () => nucleusElements),
+    }
+    const getSpatialDataset = vi.fn(
+      async () => dataset,
+    ) as unknown as SpatialDatasetLoader
+    const loadBoundaryElements = vi.fn()
+
+    expect(adapter.kind).toBe('atera')
+    expect(isAnnDataPlatform(adapter)).toBe(true)
+    expect(adapter.capabilities).toMatchObject({
+      annotations: true,
+      nucleusBoundaries: true,
+      transcripts: false,
+    })
+    expect(adapter.boundaryLoadingEnabled(false, true)).toBe(true)
+    expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('enabled:nucleus')
+    expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
+      loadEnabled: false,
+      unavailableReason: 'Unavailable for Atera',
+    })
+    await expect(
+      loadPlatformBoundaryElements(
+        adapter,
+        {
+          getSpatialDataset,
+          loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+      ),
+    ).resolves.toEqual({ elements: cellElements })
+    await expect(
+      loadPlatformNucleusBoundaryElements(
+        adapter,
+        { getSpatialDataset },
+        readyLoadState.url,
+        selection.bbox,
+      ),
+    ).resolves.toEqual({ elements: nucleusElements })
+    expect(dataset.segmentationElements).toHaveBeenCalledWith('nucleus', selection.bbox)
+    expect(loadBoundaryElements).not.toHaveBeenCalled()
+  })
+
   it('loads Visium HD boundary, nucleus, and expression data through dataset capabilities', async () => {
     const adapter = appPlatformAdapterFor(readyLoadState, 'visium-hd')
     const elements = [{ id: 'cell-1', geometry: { kind: 'polygon' as const, rings: [] } }]

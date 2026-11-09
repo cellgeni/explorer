@@ -83,6 +83,7 @@ except the index and `__*` entries:
 - Legacy `/obs/__categories/<key>` sidecars with integer codes are also
   treated as categorical.
 - Numeric datasets become continuous tracks (skipped if no value is finite).
+  Boolean datasets count as numeric (0/1) on every backend.
 - String datasets become categorical tracks; empty strings are missing.
 - Other groups (nullable integer/boolean, masked arrays) are skipped.
 
@@ -178,9 +179,5 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
 - Imported CSV/JSON annotation and metadata files are parsed with `asCellId`
   (`src/data/cellid.ts`), which only accepts Xenium-format IDs
   (`/^[a-p]{8}-\d+$/`). Files keyed by H5AD obs names are rejected.
-- Boolean `obs` columns load as 0/1 numbers on the `h5wasm` backend. On the
-  reference backend (and SpatialData tables), zarrita returns a `BoolArray`
-  that neither the numeric nor the string reader accepts, so a boolean column
-  is expected to fail the load (found by reading the code; not reproduced).
 - Diagnostics do not check the `.h5ad.json` reference.
 - The in-memory backend downloads the whole file before anything renders.

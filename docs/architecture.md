@@ -72,8 +72,9 @@ match:
 | 1     | URL ends in `.h5ad`, and `HEAD` succeeds                                                                             | `h5ad`                                                             |
 | 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`; root metadata `HEAD` succeeds                       | `spatialdata` if root attrs have `spatialdata_attrs`, else `image` |
 | 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.ndpi`, and `HEAD` succeeds                                             | `image`                                                            |
-| 4a    | `GET <url>/explorer.json` returns a manifest (run alongside 4b)                                                      | The manifest's `platform`                                          |
+| 4a    | `GET <url>/explorer.json` returns a manifest (run alongside 4b and 4c)                                               | The manifest's `platform`                                          |
 | 4b    | `HEAD <url>/experiment.xenium` succeeds                                                                              | `xenium`                                                           |
+| 4c    | `HEAD <url>/experiment.spatial` succeeds                                                                             | `atera`                                                            |
 | 5     | `HEAD <url>/zarr.json` or `<url>/.zattrs` succeeds                                                                   | `spatialdata` or `image`                                           |
 | 6     | At least one complete `binned_outputs/square_*um` tier                                                               | `visium-hd`                                                        |
 | —     | Nothing matched                                                                                                      | `unknown` → "Unsupported spatial dataset layout."                  |
@@ -94,6 +95,7 @@ platform's code is a separate chunk:
 | Platform      | Class                                                       | Doc                                        |
 | ------------- | ----------------------------------------------------------- | ------------------------------------------ |
 | `xenium`      | `XeniumDataset` (`src/datasets/xeniumDataset.ts`)           | [Xenium](./modalities/xenium.md)           |
+| `atera`       | `AteraDataset` (`src/datasets/ateraDataset.ts`)             | [Atera](./modalities/atera.md)             |
 | `visium-hd`   | `VisiumHdDataset` (`src/datasets/visiumHdDataset.ts`)       | [Visium HD](./modalities/visium-hd.md)     |
 | `h5ad`        | `AnnDataH5adDataset` (`src/datasets/h5adDataset.ts`)        | [H5AD](./modalities/h5ad.md)               |
 | `spatialdata` | `SpatialDataDataset` (`src/datasets/spatialDataDataset.ts`) | [SpatialData](./modalities/spatialdata.md) |
@@ -128,6 +130,7 @@ state, runs detection, and then branches per platform:
 | Visium HD   | `readBinnedOverview()` + `meta()`                                       | Gene panel, tissue image                                |
 | H5AD        | `overview()`, `genePanel()`, `annotationGroups()`, `embeddingOptions()` | —                                                       |
 | SpatialData | Same as H5AD, plus `summary()` for the log                              | Image                                                   |
+| Atera       | Same as H5AD                                                            | Morphology image                                        |
 | Image       | `meta()`, `image()`, per-channel loaders                                | Auto-contrast                                           |
 
 Each load gets a request ID and `AbortSignal`; results from a superseded load

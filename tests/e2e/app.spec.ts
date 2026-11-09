@@ -6,6 +6,9 @@ import type { Page } from '@playwright/test'
 const VISIUM_HD_REFERENCE_URL =
   'https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f'
 const H5AD_PBMC3K_REFERENCE_URL = 'https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad'
+const ATERA_REFERENCE_URL =
+  'https://mp33.cog.sanger.ac.uk/public/test/50170325_WSI_KID_04_region1/50170325_WSI_KID_04_region1'
+const ATERA_LOAD_TIMEOUT_MS = 120_000
 const XENIUM_LOAD_TIMEOUT_MS = 120_000
 const XENIUM_TRANSCRIPT_TIMEOUT_MS = 120_000
 const XENIUM_ROI_TIMEOUT_MS = 120_000
@@ -326,6 +329,59 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
 
   await genesPanel.getByLabel('Cell color').selectOption('metadata')
   await expect(genesPanel.getByLabel('Metadata track')).toContainText('n_genes')
+})
+
+test('loads the hosted Atera kidney run with boundaries, genes, and cell types @live', async ({
+  page,
+}) => {
+  test.setTimeout(240_000)
+
+  await page.goto('/')
+
+  test.skip(
+    !(await hostedFixtureAvailable(page, `${ATERA_REFERENCE_URL}/experiment.spatial`)),
+    'Hosted Atera reference run is unavailable.',
+  )
+
+  await page.getByLabel('Dataset or image URL').fill(ATERA_REFERENCE_URL)
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+
+  await expect(page.getByText(/Atera ready: 93,864 cells, 18,050 genes/)).toBeVisible({
+    timeout: ATERA_LOAD_TIMEOUT_MS,
+  })
+  await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
+  await expect(page.getByText('Morphology image ready')).toBeVisible({
+    timeout: ATERA_LOAD_TIMEOUT_MS,
+  })
+
+  await page.getByRole('tab', { name: 'Layers' }).click()
+  const layersPanel = page.locator('#hud-panel-layers')
+  const imageChannels = layersPanel.getByLabel('Image channels')
+  await expect(imageChannels).toContainText('DAPI')
+  await expect(imageChannels).toContainText('ATP1A1/CD45/E-Cadherin')
+  await expect(imageChannels).toContainText('alphaSMA/Vimentin')
+  await expect(layersPanel.getByLabel('Cell boundaries')).toBeChecked()
+  await expect(layersPanel.getByLabel('Nucleus boundaries')).toBeEnabled()
+
+  await page.getByRole('tab', { name: 'Genes' }).click()
+  const genesPanel = page.locator('#hud-panel-genes')
+  await genesPanel.getByLabel('Gene selection').fill('UMOD')
+  await genesPanel.getByRole('button', { name: 'UMOD', exact: true }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText(
+    /Expression all cells: [1-9][0-9,]* positive cells across 93,864 slide cells/,
+    { timeout: ATERA_LOAD_TIMEOUT_MS },
+  )
+
+  await page.getByRole('tab', { name: 'Annotations' }).click()
+  const annotationsPanel = page.locator('#hud-panel-annotations')
+  await annotationsPanel
+    .getByLabel('Annotation set')
+    .selectOption({ label: 'azimuth_broad' })
+  await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
+  await expect(annotationsPanel.getByLabel('Loaded annotations')).toContainText(
+    'azimuth_broad: Epithelial cell',
+    { timeout: ATERA_LOAD_TIMEOUT_MS },
+  )
 })
 
 test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell panels @live', async ({

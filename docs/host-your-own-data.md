@@ -1,11 +1,11 @@
 # Host Your Own Data
 
 The viewer reads data directly from browser-accessible URLs. It supports Xenium
-output folders, Visium HD Space Ranger output folders, direct H5AD files,
+and Atera output folders, Visium HD Space Ranger output folders, direct H5AD files,
 SpatialData Zarr stores, and direct image URLs.
 
 This page lists what to host. For exactly how each file is read, see the
-modality docs: [Xenium](./modalities/xenium.md),
+modality docs: [Xenium](./modalities/xenium.md), [Atera](./modalities/atera.md),
 [Visium HD](./modalities/visium-hd.md), [H5AD](./modalities/h5ad.md),
 [SpatialData](./modalities/spatialdata.md), and
 [Image sources](./modalities/image.md).
@@ -70,6 +70,34 @@ Expect Range validation for optional workflows too, including
 `transcripts.parquet`, `transcripts.zarr.zip`, `cell_feature_matrix.zarr.zip`,
 `cell_feature_matrix.h5`, OME-TIFFs, and analysis files when those workflows are
 used.
+
+## Host Your Own Atera Data
+
+Host the Atera Onboard Analysis output folder as written by the instrument.
+The viewer needs:
+
+- `experiment.spatial`, or an `explorer.json` dataset manifest with
+  `"platform": "atera"`
+- `cell_feature_matrix.zarr.zip` (cells, clusters, cell types, UMAP, and cell
+  and ROI expression profiles)
+- `csc_cell_feature_matrix.zarr.zip` (selected-gene overlays)
+- `cells.zarr.zip` (cell and nucleus boundaries)
+- the `morphology_2d/` folder with every `ch000N_*.ome.tif`: each file's
+  OME-XML names the others, and the viewer opens them as one multichannel
+  image
+
+Paths listed in `experiment.spatial` (`explorer_files`,
+`images.morphology_2d_filepath`) are followed, so files can stay where the
+instrument put them. A dataset manifest can relocate any of them; see
+[Dataset manifest](./dataset-manifest.md#atera).
+
+Not read, so they can be left out of a hosted copy: `transcripts.zarr.zip`,
+`binned_transcripts.zarr.zip`, `morphology_3d/` (the 3D stack is the largest
+file in the bundle), `diffexp_genes/`, the HTML summaries, and
+`overview_scan.png`.
+
+All the zips and OME-TIFFs need byte-range support. Keep the zips stored as
+written; do not recompress them.
 
 ## Host Your Own Visium HD Data
 

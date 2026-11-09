@@ -72,6 +72,36 @@ describe('parseDatasetManifest', () => {
     )
   })
 
+  it('resolves Atera files under their own roles', () => {
+    const manifest = parse({
+      version: 1,
+      platform: 'atera',
+      files: {
+        cscCellFeatureMatrix: 'matrices/csc.zarr.zip',
+        morphology: 'morphology_2d/ch0002_18s.ome.tif',
+      },
+    })
+
+    expect(manifest).toMatchObject({
+      platform: 'atera',
+      files: {
+        cscCellFeatureMatrix: {
+          path: 'matrices/csc.zarr.zip',
+          url: 'https://example.test/runs/sample-1/matrices/csc.zarr.zip',
+        },
+        morphology: {
+          url: 'https://example.test/runs/sample-1/morphology_2d/ch0002_18s.ome.tif',
+        },
+      },
+    })
+    expect(
+      parseError({ version: 1, platform: 'atera', files: { analysis: 'a' } }),
+    ).toContain('files.analysis')
+    expect(
+      parseError({ version: 1, platform: 'atera', options: { binSize: 8 } }),
+    ).toContain('options')
+  })
+
   it('accepts a manifest without files for platforms with standard names', () => {
     expect(parse({ version: 1, platform: 'xenium' })).toMatchObject({
       platform: 'xenium',
@@ -87,7 +117,7 @@ describe('parseDatasetManifest', () => {
       '"version" 2 is not supported',
     )
     expect(parseError({ version: 1, platform: 'merfish' })).toContain(
-      '"platform" must be one of "xenium", "visium-hd", "h5ad", "spatialdata", "image"',
+      '"platform" must be one of "xenium", "atera", "visium-hd", "h5ad", "spatialdata", "image"',
     )
     expect(parseError([])).toBe('explorer.json: expected a JSON object.')
   })

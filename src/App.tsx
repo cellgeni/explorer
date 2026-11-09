@@ -1559,7 +1559,9 @@ export function App({ dependencies }: AppProps = {}) {
       }
 
       return Promise.reject(
-        new Error('H5AD files do not expose Xenium-style transcript records.'),
+        new Error(
+          `${platformAdapter.kind === 'atera' ? 'Atera' : 'H5AD and SpatialData'} datasets do not support ROI transcript export.`,
+        ),
       )
     },
     [loadRoiTranscripts, platformAdapter],
@@ -3014,7 +3016,9 @@ export function App({ dependencies }: AppProps = {}) {
               ? 'H5AD'
               : platformAdapter.kind === 'spatialdata'
                 ? 'SpatialData'
-                : 'Xenium'
+                : platformAdapter.kind === 'atera'
+                  ? 'Atera'
+                  : 'Xenium'
           }
           gridCells={viewerGridCells}
           fitGridCells={spatialGridCells}

@@ -31,6 +31,7 @@
   | Modality    | Input                                 | Detected by                          | Doc                                           |
   | ----------- | ------------------------------------- | ------------------------------------ | --------------------------------------------- |
   | Xenium      | XOA output folder                     | `experiment.xenium`                  | [xenium.md](./modalities/xenium.md)           |
+  | Atera       | Atera Onboard Analysis output folder  | `experiment.spatial`                 | [atera.md](./modalities/atera.md)             |
   | Visium HD   | Space Ranger `outs/` folder           | `binned_outputs/square_*um` tiers    | [visium-hd.md](./modalities/visium-hd.md)     |
   | H5AD        | `.h5ad` file URL                      | URL suffix                           | [h5ad.md](./modalities/h5ad.md)               |
   | SpatialData | Zarr store root                       | `spatialdata_attrs` in root metadata | [spatialdata.md](./modalities/spatialdata.md) |

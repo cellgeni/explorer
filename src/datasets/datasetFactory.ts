@@ -13,6 +13,7 @@ import {
   type VisiumHdManifestSegmentedOutput,
 } from './datasetManifest'
 import { isSpatialDataRootMetadata } from './spatialDataCatalog'
+import { ATERA_EXPERIMENT_FILE } from './ateraFormat'
 import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
@@ -25,6 +26,12 @@ export type AnySpatialDataset = SpatialDataset<CellId> | SpatialDataset<SpatialE
 export type SpatialDatasetDetection =
   | {
       readonly platform: 'xenium'
+      readonly baseUrl: string
+      readonly manifest?: DatasetManifest
+      readonly checked: readonly DatasetProbeResult[]
+    }
+  | {
+      readonly platform: 'atera'
       readonly baseUrl: string
       readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
@@ -296,7 +303,7 @@ async function detectSpatialDatasetLayout(
         }
   }
 
-  const [manifest, xeniumManifest] = await Promise.all([
+  const [manifest, xeniumManifest, ateraManifest] = await Promise.all([
     readDatasetManifest(
       joinUrl(normalizedBaseUrl, DATASET_MANIFEST_FILE),
       'optional',
@@ -304,6 +311,7 @@ async function detectSpatialDatasetLayout(
       checked,
     ),
     probeDatasetPath(normalizedBaseUrl, 'experiment.xenium', options),
+    probeDatasetPath(normalizedBaseUrl, ATERA_EXPERIMENT_FILE, options),
   ])
 
   if (manifest !== undefined) {
@@ -315,6 +323,16 @@ async function detectSpatialDatasetLayout(
   if (xeniumManifest.ok) {
     return {
       platform: 'xenium',
+      baseUrl: normalizedBaseUrl,
+      checked,
+    }
+  }
+
+  checked.push(ateraManifest)
+
+  if (ateraManifest.ok) {
+    return {
+      platform: 'atera',
       baseUrl: normalizedBaseUrl,
       checked,
     }
@@ -458,6 +476,10 @@ async function detectFromManifest(
 ): Promise<SpatialDatasetDetection> {
   if (manifest.platform === 'xenium') {
     return { platform: 'xenium', baseUrl, manifest, checked }
+  }
+
+  if (manifest.platform === 'atera') {
+    return { platform: 'atera', baseUrl, manifest, checked }
   }
 
   if (manifest.platform === 'h5ad') {
@@ -686,6 +708,24 @@ export async function createSpatialDataset(
   if (detection.platform === 'xenium') {
     const { XeniumDataset } = await import('./xeniumDataset')
     return new XeniumDataset({ baseUrl: detection.baseUrl })
+  }
+
+  if (detection.platform === 'atera') {
+    const { AteraDataset } = await import('./ateraDataset')
+    const manifest =
+      detection.manifest?.platform === 'atera' ? detection.manifest : undefined
+    const files = Object.fromEntries(
+      Object.entries(manifest?.files ?? {}).map(([role, file]) => [role, file.url]),
+    )
+
+    return new AteraDataset({
+      baseUrl: detection.baseUrl,
+      files,
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.onH5adLoadProgress === undefined
+        ? {}
+        : { onProgress: options.onH5adLoadProgress }),
+    })
   }
 
   if (detection.platform === 'h5ad') {

@@ -21,7 +21,13 @@ import {
   isSpatialSegmentationDataset,
 } from './visiumHdAppController'
 
-export type AppPlatformKind = 'xenium' | 'visium-hd' | 'h5ad' | 'spatialdata' | 'image'
+export type AppPlatformKind =
+  | 'xenium'
+  | 'atera'
+  | 'visium-hd'
+  | 'h5ad'
+  | 'spatialdata'
+  | 'image'
 
 export interface AppPlatformLabels {
   readonly embeddingElementPlural: 'cells' | 'bins'
@@ -94,6 +100,38 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
   }),
   canDrawRoi: ({ isDatasetPreparationPending, loadState }) =>
     loadState.status === 'ready' && !isDatasetPreparationPending,
+}
+
+// Atera reads cells, genes, and annotations from the AnnData matrix like H5AD
+// and SpatialData, and draws boundaries from cells.zarr.zip.
+const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
+  kind: 'atera',
+  labels: { embeddingElementPlural: 'cells' },
+  capabilities: {
+    annotations: true,
+    geometricAnnotations: true,
+    magicLensMinQv: false,
+    nucleusBoundaries: true,
+    transcripts: false,
+  },
+  pointSizeFullViewScale: 1,
+  featureLoadEnabled: (loadState) => loadState.status === 'ready',
+  effectiveTranscriptOverlay: () => false,
+  boundaryLoadingEnabled: (showCellBoundaries, showNucleusBoundaries) =>
+    showCellBoundaries || showNucleusBoundaries,
+  boundaryOverlayRequestKey: (showCellBoundaries, showNucleusBoundaries) => {
+    const enabled = showCellBoundaries || showNucleusBoundaries
+    const nucleus = showNucleusBoundaries ? 'nucleus' : 'no-nucleus'
+
+    return `${enabled ? 'enabled' : 'disabled'}:${nucleus}`
+  },
+  geneExpressionOverlayEnabled: () => true,
+  cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,
+  magicLensAvailability: () => ({
+    loadEnabled: false,
+    unavailableReason: 'Unavailable for Atera',
+  }),
+  canDrawRoi: ({ loadState }) => loadState.status === 'ready',
 }
 
 const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
@@ -228,6 +266,10 @@ export function appPlatformAdapterFor(
     return SPATIALDATA_PLATFORM_ADAPTER
   }
 
+  if (loadState.status === 'ready' && datasetPlatform === 'atera') {
+    return ATERA_PLATFORM_ADAPTER
+  }
+
   return XENIUM_PLATFORM_ADAPTER
 }
 
@@ -239,10 +281,12 @@ export function isH5adPlatform(adapter: AppPlatformAdapter): boolean {
   return adapter.kind === 'h5ad'
 }
 
-// H5AD and SpatialData both read cells, genes, annotations, embeddings, and
-// ROI queries from an AnnData table exposed by the spatial dataset.
+// H5AD, SpatialData, and Atera read cells, genes, annotations, embeddings,
+// and ROI queries from an AnnData table exposed by the spatial dataset.
 export function isAnnDataPlatform(adapter: AppPlatformAdapter): boolean {
-  return adapter.kind === 'h5ad' || adapter.kind === 'spatialdata'
+  return (
+    adapter.kind === 'h5ad' || adapter.kind === 'spatialdata' || adapter.kind === 'atera'
+  )
 }
 
 export function activeVisiumHdRoiStateForPlatform(options: {
@@ -409,7 +453,11 @@ export async function loadPlatformBoundaryElements(
     return { elements: [] }
   }
 
-  if (adapter.kind !== 'visium-hd' && adapter.kind !== 'spatialdata') {
+  if (
+    adapter.kind !== 'visium-hd' &&
+    adapter.kind !== 'spatialdata' &&
+    adapter.kind !== 'atera'
+  ) {
     return dependencies.loadBoundaryElements(baseUrl, bbox, options)
   }
 
@@ -432,7 +480,7 @@ export async function loadPlatformNucleusBoundaryElements(
 ): ReturnType<BoundaryElementsLoader> {
   const [baseUrl, bbox] = args
 
-  if (adapter.kind !== 'visium-hd') {
+  if (adapter.kind !== 'visium-hd' && adapter.kind !== 'atera') {
     return { elements: [] }
   }
 

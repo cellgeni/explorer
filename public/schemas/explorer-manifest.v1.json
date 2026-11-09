@@ -12,7 +12,7 @@
       "description": "Manifest format version."
     },
     "platform": {
-      "enum": ["xenium", "visium-hd", "h5ad", "spatialdata", "image"],
+      "enum": ["xenium", "atera", "visium-hd", "h5ad", "spatialdata", "image"],
       "description": "How to read the dataset."
     },
     "name": {
@@ -36,6 +36,15 @@
       "then": {
         "properties": {
           "files": { "$ref": "#/$defs/xeniumFiles" },
+          "options": { "type": "object", "maxProperties": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "atera" } } },
+      "then": {
+        "properties": {
+          "files": { "$ref": "#/$defs/ateraFiles" },
           "options": { "type": "object", "maxProperties": 0 }
         }
       }
@@ -162,6 +171,38 @@
         "tsne": {
           "$ref": "#/$defs/path",
           "description": "t-SNE projection CSV. Default: searched under analysis/tsne/."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ateraFiles": {
+      "type": "object",
+      "description": "Atera files that are not at their standard names. Omitted files use the path in experiment.spatial, then the standard name.",
+      "properties": {
+        "experiment": {
+          "$ref": "#/$defs/path",
+          "description": "Default experiment.spatial. Supplies the pixel size, the morphology image path, and the other file paths."
+        },
+        "cells": { "$ref": "#/$defs/path", "description": "Default cells.zarr.zip." },
+        "cellFeatureMatrix": {
+          "$ref": "#/$defs/path",
+          "description": "Default cell_feature_matrix.zarr.zip (AnnData Zarr, CSR)."
+        },
+        "cscCellFeatureMatrix": {
+          "$ref": "#/$defs/path",
+          "description": "Default csc_cell_feature_matrix.zarr.zip (AnnData Zarr, CSC)."
+        },
+        "transcripts": {
+          "$ref": "#/$defs/path",
+          "description": "Default transcripts.zarr.zip."
+        },
+        "binnedTranscripts": {
+          "$ref": "#/$defs/path",
+          "description": "Default binned_transcripts.zarr.zip."
+        },
+        "morphology": {
+          "$ref": "#/$defs/path",
+          "description": "Morphology image. Default: the morphology_2d image listed in experiment.spatial."
         }
       },
       "additionalProperties": false

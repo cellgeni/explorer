@@ -1,7 +1,7 @@
 # Spatial Omics Explorer
 
 Browser-based explorer for hosted spatial-omics and image data. The app loads
-10x Xenium output folders, Visium HD Space Ranger output folders, direct AnnData
+10x Xenium and Atera output folders, Visium HD Space Ranger output folders, direct AnnData
 `.h5ad` files, SpatialData Zarr stores, and image-only OME-TIFF/TIFF/OME-Zarr
 URLs from object storage.
 It renders spatial cells, bins, image pyramids, morphology channels, expression
@@ -51,8 +51,8 @@ headers needed by the browser-side WASM and decoding paths.
   outputs, annotations, ROI queries, diagnostics, range checks, telemetry, and
   shareable state.
 - `src/datasets/` defines the spatial dataset interface and platform
-  implementations for Xenium, Visium HD, H5AD, SpatialData, and image-only
-  sources.
+  implementations for Xenium, Atera, Visium HD, H5AD, SpatialData, and
+  image-only sources.
 - `src/features/` contains domain UI and workflow modules for the app shell,
   genes, transcripts, annotations, ROI, morphology, cells, diagnostics, and
   platform-specific behavior.
@@ -70,6 +70,9 @@ Enter a source in the `Dataset or image URL` field:
 
 - Xenium: output folder with `experiment.xenium`, `cells.parquet`, and a
   readable `cell_feature_matrix.zarr.zip` or `cell_feature_matrix.h5`.
+- Atera: Atera Onboard Analysis output folder with `experiment.spatial`,
+  `cell_feature_matrix.zarr.zip`, `csc_cell_feature_matrix.zarr.zip`, and
+  `cells.zarr.zip`, plus the `morphology_2d/` OME-TIFFs for the image.
 - Visium HD: Space Ranger `outs/` folder with at least one
   `binned_outputs/square_*um` tier containing positions, scalefactors, and a
   filtered feature-barcode matrix, plus root `feature_slice.h5` for gene
@@ -102,7 +105,7 @@ The full index is in [docs/README.md](docs/README.md).
 - [Architecture](docs/architecture.md): detection order, load pipeline,
   platform gating, coordinates, caching, workers, and error handling.
 - Modality read paths: [Xenium](docs/modalities/xenium.md),
-  [Visium HD](docs/modalities/visium-hd.md), [H5AD](docs/modalities/h5ad.md),
+  [Atera](docs/modalities/atera.md), [Visium HD](docs/modalities/visium-hd.md), [H5AD](docs/modalities/h5ad.md),
   [SpatialData](docs/modalities/spatialdata.md), and
   [image sources](docs/modalities/image.md). Each lists the files read, the
   libraries used, the source modules involved, and known limitations.
@@ -110,7 +113,7 @@ The full index is in [docs/README.md](docs/README.md).
   build the Vite app, upload `dist/` to AWS S3 or Ceph RGW-style storage,
   configure edge headers, and validate production.
 - [Host your own data](docs/host-your-own-data.md): required and optional files
-  for Xenium, Visium HD, H5AD, SpatialData, and image-only sources, plus HTTP
+  for Xenium, Atera, Visium HD, H5AD, SpatialData, and image-only sources, plus HTTP
   requirements
   and quick validation commands.
 - [Dataset manifest](docs/dataset-manifest.md): the optional `explorer.json`
