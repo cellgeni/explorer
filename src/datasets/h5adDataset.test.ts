@@ -264,6 +264,125 @@ describe('AnnDataH5adDataset', () => {
     ])
   })
 
+  it.each<CategoricalEncoding>(['group', 'dataframe-categories'])(
+    'lists genes by a categorical feature_name (%s) and keeps the index as an alias',
+    async (categoricalEncoding) => {
+      const bytes = await createTinyH5ad('dense', {
+        categoricalEncoding,
+        featureNames: TINY_FEATURE_NAMES,
+      })
+      const dataset = new AnnDataH5adDataset({
+        url: 'https://example.test/cellxgene.h5ad',
+        fetcher: h5adFetcher(bytes),
+      })
+
+      await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh'])
+      await expect(dataset.geneAliases()).resolves.toEqual(
+        new Map([
+          ['Actb', 'ENSMUSG00000029580'],
+          ['Gad1', 'ENSMUSG00000070880'],
+          ['Gapdh', 'ENSMUSG00000057666'],
+        ]),
+      )
+
+      const expression = await dataset.geneExpression(
+        {
+          minX: micrometers(0),
+          maxX: micrometers(20),
+          minY: micrometers(0),
+          maxY: micrometers(20),
+        },
+        ['Gapdh'],
+      )
+
+      expect(expression.elements.map((element) => [element.id, element.count])).toEqual([
+        ['cell-a', 5],
+        ['cell-b', 0],
+        ['cell-c', 6],
+        ['cell-d', 8],
+      ])
+    },
+  )
+
+  it('applies the gene-name rules to categorical codes', async () => {
+    // A missing code is an empty name, and a shared category is a duplicate.
+    const partial = new AnnDataH5adDataset({
+      url: 'https://example.test/partial.h5ad',
+      fetcher: h5adFetcher(
+        await createTinyH5ad('dense', {
+          featureNames: { categories: ['Actb'], codes: [0, -1, 0] },
+        }),
+      ),
+    })
+
+    await expect(partial.genePanel()).resolves.toEqual(['Actb', 'var-1', 'Actb-2'])
+    await expect(partial.geneAliases()).resolves.toEqual(
+      new Map([
+        ['Actb', 'ENSMUSG00000029580'],
+        ['var-1', 'ENSMUSG00000070880'],
+        ['Actb-2', 'ENSMUSG00000057666'],
+      ]),
+    )
+
+    // With every code missing the column is skipped and the index is kept.
+    const empty = new AnnDataH5adDataset({
+      url: 'https://example.test/empty.h5ad',
+      fetcher: h5adFetcher(
+        await createTinyH5ad('dense', {
+          featureNames: { categories: ['Actb'], codes: [-1, -1, -1] },
+        }),
+      ),
+    })
+
+    await expect(empty.genePanel()).resolves.toEqual(TINY_GENE_IDS)
+    await expect(empty.geneAliases()).resolves.toEqual(new Map())
+  })
+
+  it('keeps the var index as gene names without an alias', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/index.h5ad',
+      fetcher: h5adFetcher(await createTinyH5ad('dense')),
+    })
+
+    await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh'])
+    await expect(dataset.geneAliases()).resolves.toEqual(new Map())
+  })
+
+  it('reads a categorical feature_name through a kerchunk reference', async () => {
+    const chunks = new RemoteH5adReferenceChunks()
+    const referenceSpec = createTinyH5adReferenceSpec(
+      (value) => chunks.ref(value),
+      'csr',
+      TINY_FEATURE_NAMES,
+    )
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/reference-cellxgene.h5ad',
+      fetcher: h5adRemoteReferenceFetcher(
+        350 * 1024 * 1024,
+        referenceSpec,
+        chunks.bytes(),
+        () => {
+          throw new Error('body should not be read')
+        },
+      ),
+    })
+
+    await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh'])
+    await expect(dataset.geneAliases()).resolves.toEqual(
+      new Map([
+        ['Actb', 'ENSMUSG00000029580'],
+        ['Gad1', 'ENSMUSG00000070880'],
+        ['Gapdh', 'ENSMUSG00000057666'],
+      ]),
+    )
+
+    const matrix = await dataset.matrix(['cell-c'])
+    expect(matrix.cells.get('cell-c')).toEqual({
+      geneNames: ['Gad1', 'Gapdh'],
+      counts: [4, 6],
+    })
+  })
+
   it('loads oversized H5AD files through a companion kerchunk reference', async () => {
     const readBody = vi.fn(() => {
       throw new Error('body should not be read')
@@ -448,6 +567,21 @@ type CategoricalEncoding = 'group' | 'dataframe-categories'
 interface TinyH5adOptions {
   readonly categoricalEncoding?: CategoricalEncoding
   readonly coordinateKey?: string
+  // Writes the var index as Ensembl IDs and gene symbols as a categorical
+  // `feature_name`, the CELLxGENE layout.
+  readonly featureNames?: CategoricalFeatureNames
+}
+
+interface CategoricalFeatureNames {
+  readonly categories: readonly string[]
+  readonly codes: readonly number[]
+}
+
+const TINY_GENE_IDS = ['ENSMUSG00000029580', 'ENSMUSG00000070880', 'ENSMUSG00000057666']
+// Unsorted, so the fixture's codes are not the identity.
+const TINY_FEATURE_NAMES: CategoricalFeatureNames = {
+  categories: ['Gapdh', 'Actb', 'Gad1'],
+  codes: [1, 2, 0],
 }
 
 async function createTinyH5ad(
@@ -487,8 +621,29 @@ async function createTinyH5ad(
   }
 
   const varGroup = file.create_group('var')
-  varGroup.create_attribute('_index', 'gene_ids')
-  varGroup.create_dataset({ name: 'gene_ids', data: ['Actb', 'Gad1', 'Gapdh'] })
+
+  if (options.featureNames === undefined) {
+    varGroup.create_attribute('_index', 'gene_ids')
+    varGroup.create_dataset({ name: 'gene_ids', data: ['Actb', 'Gad1', 'Gapdh'] })
+  } else {
+    varGroup.create_attribute('_index', '_index')
+    varGroup.create_attribute('column-order', ['feature_name'])
+    varGroup.create_dataset({ name: '_index', data: [...TINY_GENE_IDS] })
+    const codes = new Int16Array(options.featureNames.codes)
+    const categories = [...options.featureNames.categories]
+
+    if (categoricalEncoding === 'group') {
+      const featureName = varGroup.create_group('feature_name')
+      featureName.create_attribute('encoding-type', 'categorical')
+      featureName.create_attribute('encoding-version', '0.2.0')
+      featureName.create_dataset({ name: 'categories', data: categories })
+      featureName.create_dataset({ name: 'codes', data: codes })
+    } else {
+      varGroup.create_dataset({ name: 'feature_name', data: codes })
+      const varCategories = varGroup.create_group('__categories')
+      varCategories.create_dataset({ name: 'feature_name', data: categories })
+    }
+  }
 
   const obsm = file.create_group('obsm')
   obsm.create_dataset({
@@ -629,6 +784,7 @@ type ChunkRefFactory = (value: ArrayBufferView) => string | [string, number, num
 function createTinyH5adReferenceSpec(
   chunkRef: ChunkRefFactory = bytesRef,
   matrixKind: MatrixKind = 'csr',
+  featureNames?: CategoricalFeatureNames,
 ): Record<string, unknown> {
   return {
     version: 1,
@@ -651,9 +807,13 @@ function createTinyH5adReferenceSpec(
       'obs/__categories/cluster/.zarray': zarrArrayRef([2], [2], '|S1'),
       'obs/__categories/cluster/0': chunkRef(fixedStringBytes(['A', 'B'], 1)),
       'var/.zgroup': jsonRef({ zarr_format: 2 }),
-      'var/.zattrs': jsonRef({ _index: 'gene_ids' }),
-      'var/gene_ids/.zarray': zarrArrayRef([3], [3], '|S5'),
-      'var/gene_ids/0': chunkRef(fixedStringBytes(['Actb', 'Gad1', 'Gapdh'], 5)),
+      ...(featureNames === undefined
+        ? {
+            'var/.zattrs': jsonRef({ _index: 'gene_ids' }),
+            'var/gene_ids/.zarray': zarrArrayRef([3], [3], '|S5'),
+            'var/gene_ids/0': chunkRef(fixedStringBytes(['Actb', 'Gad1', 'Gapdh'], 5)),
+          }
+        : tinyCategoricalVarRefs(chunkRef, featureNames)),
       'obsm/.zgroup': jsonRef({ zarr_format: 2 }),
       'obsm/X_umap/.zarray': zarrArrayRef([4, 2], [4, 2], '<f4'),
       'obsm/X_umap/0.0': chunkRef(new Float32Array([0, 0, 10, 0, 0, 10, 10, 10])),
@@ -661,6 +821,35 @@ function createTinyH5adReferenceSpec(
         ? tinyDenseMatrixRefs(chunkRef)
         : tinySparseMatrixRefs(chunkRef, matrixKind)),
     },
+  }
+}
+
+function tinyCategoricalVarRefs(
+  chunkRef: ChunkRefFactory,
+  featureNames: CategoricalFeatureNames,
+): Record<string, unknown> {
+  const categoryCount = featureNames.categories.length
+
+  return {
+    'var/.zattrs': jsonRef({ _index: '_index', 'column-order': ['feature_name'] }),
+    'var/_index/.zarray': zarrArrayRef([3], [3], '|S18'),
+    'var/_index/0': chunkRef(fixedStringBytes(TINY_GENE_IDS, 18)),
+    'var/feature_name/.zgroup': jsonRef({ zarr_format: 2 }),
+    'var/feature_name/.zattrs': jsonRef({
+      'encoding-type': 'categorical',
+      'encoding-version': '0.2.0',
+      ordered: false,
+    }),
+    'var/feature_name/codes/.zarray': zarrArrayRef([3], [3], '<i2'),
+    'var/feature_name/codes/0': chunkRef(new Int16Array(featureNames.codes)),
+    'var/feature_name/categories/.zarray': zarrArrayRef(
+      [categoryCount],
+      [categoryCount],
+      '|S5',
+    ),
+    'var/feature_name/categories/0': chunkRef(
+      fixedStringBytes(featureNames.categories, 5),
+    ),
   }
 }
 

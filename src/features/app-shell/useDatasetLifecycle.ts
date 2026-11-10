@@ -208,6 +208,7 @@ type QueueAutoContrast = (
 interface H5adLifecycleDataset {
   overview(): Promise<readonly CellOverviewPoint[]>
   genePanel(): Promise<readonly string[]>
+  geneAliases?(): Promise<ReadonlyMap<string, string>>
   annotationGroups(): Promise<readonly AnnotationGroupOption[]>
   embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]>
   metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]>
@@ -1050,14 +1051,21 @@ export function useDatasetLifecycle({
           }
 
           const annDataset: H5adLifecycleDataset = dataset
-          const [cells, genes, annotationGroups, embeddingOptions, metadataTracks] =
-            await Promise.all([
-              annDataset.overview(),
-              annDataset.genePanel(),
-              annDataset.annotationGroups(),
-              annDataset.embeddingOptions(),
-              annDataset.metadataTracks(),
-            ])
+          const [
+            cells,
+            genes,
+            geneAliases,
+            annotationGroups,
+            embeddingOptions,
+            metadataTracks,
+          ] = await Promise.all([
+            annDataset.overview(),
+            annDataset.genePanel(),
+            annDataset.geneAliases?.(),
+            annDataset.annotationGroups(),
+            annDataset.embeddingOptions(),
+            annDataset.metadataTracks(),
+          ])
 
           if (!isCurrentDatasetLoad()) {
             return false
@@ -1065,7 +1073,7 @@ export function useDatasetLifecycle({
 
           const coalescePrefix = label.toLowerCase()
           setOverviewCells(overviewCellsToLayerData(cells))
-          setGenePanelState(genePanelLoadReady(requestedUrl, genes))
+          setGenePanelState(genePanelLoadReady(requestedUrl, genes, geneAliases))
           setAnnotationGroupState(
             annotationGroupLoadReady(requestedUrl, annotationGroups),
           )

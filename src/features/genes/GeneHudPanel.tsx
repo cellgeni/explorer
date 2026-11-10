@@ -106,6 +106,7 @@ export function GeneHudPanel({
   onCellMetadataTrackChange,
 }: GeneHudPanelProps) {
   const isGenePanelReady = genePanelState.status === 'ready'
+  const geneAliases = isGenePanelReady ? genePanelState.aliases : undefined
   const isGeneWorkLoading =
     genePanelState.status === 'loading' || geneExpressionState.status === 'loading'
   const activeCellMetadataTrackId =
@@ -166,6 +167,7 @@ export function GeneHudPanel({
         <GeneOptionList
           genes={filteredGenes}
           selectedGenes={selectedGenes}
+          aliases={geneAliases}
           onToggleGene={onToggleGene}
         />
 
