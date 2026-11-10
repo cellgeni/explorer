@@ -1,0 +1,16 @@
+diff --git a/node_modules/hyparquet/src/encoding.js b/node_modules/hyparquet/src/encoding.js
+index 3ffd6b3..c2d6dc3 100644
+--- a/node_modules/hyparquet/src/encoding.js
++++ b/node_modules/hyparquet/src/encoding.js
+@@ -84,8 +84,9 @@ function readBitPacked(reader, header, bitWidth, output, seen) {
+   let left = 8
+   let right = 0
+ 
+-  // read values
+-  while (count) {
++  // read values, stopping once output is full: polars truncates the last
++  // bit-packed group to the bytes its real values need instead of padding it
++  while (count && seen < output.length) {
+     // if we have crossed a byte boundary, shift the data
+     if (right > 8) {
+       right -= 8
