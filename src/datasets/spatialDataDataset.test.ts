@@ -310,6 +310,21 @@ describe('SpatialDataDataset incomplete stores', () => {
     )
   })
 
+  it('reads anndata 0.13 nullable string indexes and instance keys', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(withNullableTableStrings(storeFixture())),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+    })
+
+    const overview = await dataset.overview()
+    // cell-c's masked instance id is not matched to a shape.
+    expect(overview.map((cell) => cell.cellId)).toEqual(['cell-a', 'cell-b'])
+    expect(overview[1]?.metadata).toEqual({ region: 'cells', cell_id: '11' })
+    await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'var-1'])
+  })
+
   it('reports forbidden chunks directly', async () => {
     const dataset = new SpatialDataDataset({
       url: STORE_URL,
@@ -626,6 +641,46 @@ function withoutFiles(
   ...paths: readonly string[]
 ): ReadonlyMap<string, Uint8Array> {
   return new Map(Array.from(files).filter(([path]) => !paths.includes(path)))
+}
+
+// The table as anndata 0.13 writes it under pandas 3: the obs and var indexes
+// and the string instance key are nullable-string-array groups. cell-c's
+// instance id is masked; unmasked, it would match shape 11.
+function withNullableTableStrings(
+  files: ReadonlyMap<string, Uint8Array>,
+): ReadonlyMap<string, Uint8Array> {
+  const consolidated = JSON.parse(new TextDecoder().decode(files.get('/zmetadata'))) as {
+    metadata: Record<string, unknown>
+  }
+  const output = new Map(files)
+  const arrays = {
+    'tables/table/obs/_index': {
+      values: ['cell-a', 'cell-b', 'cell-c'],
+      mask: [0, 0, 0],
+    },
+    'tables/table/obs/cell_id': { values: ['10', '11', '11'], mask: [0, 0, 1] },
+    'tables/table/var/_index': { values: ['Actb', 'Gad1'], mask: [0, 1] },
+  }
+
+  for (const [path, { values, mask }] of Object.entries(arrays)) {
+    delete consolidated.metadata[`${path}/.zarray`]
+    output.delete(`/${path}/0`)
+    Object.assign(consolidated.metadata, {
+      [`${path}/.zgroup`]: { zarr_format: 2 },
+      [`${path}/.zattrs`]: {
+        'encoding-type': 'nullable-string-array',
+        'encoding-version': '0.1.0',
+        'na-value': 'NaN',
+      },
+      [`${path}/values/.zarray`]: arrayMeta([values.length], '|S6'),
+      [`${path}/mask/.zarray`]: arrayMeta([mask.length], '|b1'),
+    })
+    output.set(`/${path}/values/0`, fixedStrings(values, 6))
+    output.set(`/${path}/mask/0`, Uint8Array.from(mask))
+  }
+
+  output.set('/zmetadata', new TextEncoder().encode(JSON.stringify(consolidated)))
+  return output
 }
 
 function arrayMeta(shape: readonly number[], dtype: string): Record<string, unknown> {
