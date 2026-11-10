@@ -1,0 +1,17 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "h5ad",
+  "name": "Adult human heart (Visium)",
+  "description": "Visium section of adult human heart, 4,992 spots with per-spot cell-type abundances (colour cells by Metadata), from a spatial atlas of cardiac niches.",
+  "source": {
+    "repository": "CELLxGENE",
+    "accession": "fe5b3268-ddd8-415a-9432-f1f95bfdb500",
+    "url": "https://cellxgene.cziscience.com/collections/3116d060-0a8e-4767-99bb-e866badea1ed",
+    "license": "CC BY 4.0",
+    "citation": "Kanemaru K et al. (2023) Spatially resolved multiomics of human cardiac niches. Nature. doi:10.1038/s41586-023-06311-1"
+  },
+  "files": {
+    "h5ad": "https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/fe5b3268-ddd8-415a-9432-f1f95bfdb500.h5ad"
+  }
+}

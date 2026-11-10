@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
+import type { DatasetManifest } from '../../datasets/datasetManifest'
 import {
+  datasetManifestAbout,
   manifestDefaultsNotShared,
   manifestDefaultsToShareableState,
   resolveMorphologyChannelSelection,
@@ -100,3 +102,34 @@ function channel(id: string, name: string): MorphologyImageChannel {
     loader: {} as MorphologyImageChannel['loader'],
   }
 }
+
+describe('datasetManifestAbout', () => {
+  const manifest = {
+    url: 'https://example.test/run/explorer.json',
+    rootUrl: 'https://example.test/run',
+    platform: 'xenium',
+    files: {},
+  } satisfies DatasetManifest
+
+  it('returns nothing without a manifest or anything to show', () => {
+    expect(datasetManifestAbout(undefined)).toBeNull()
+    expect(datasetManifestAbout(manifest)).toBeNull()
+    expect(datasetManifestAbout({ ...manifest, source: {} })).toBeNull()
+  })
+
+  it('keeps the name, description, and source', () => {
+    expect(
+      datasetManifestAbout({
+        ...manifest,
+        name: 'Run 1',
+        source: { repository: 'BioImage Archive', license: 'CC0' },
+      }),
+    ).toEqual({
+      name: 'Run 1',
+      source: { repository: 'BioImage Archive', license: 'CC0' },
+    })
+    expect(datasetManifestAbout({ ...manifest, description: 'Skin' })).toEqual({
+      description: 'Skin',
+    })
+  })
+})

@@ -27,9 +27,11 @@ import {
 import { type RoiSelection } from '../../data/roiSelection'
 import type { ShareableState } from '../../data/shareableState'
 import {
+  datasetManifestAbout,
   manifestDefaultsNotShared,
   manifestDefaultsToShareableState,
   resolveMorphologyChannelSelection,
+  type DatasetManifestAbout,
 } from '../dataset/datasetManifestModel'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay'
@@ -312,6 +314,8 @@ interface UseDatasetLifecycleSetters {
   readonly setCellFillOpacity?: Setter<number>
   readonly setImageLayerOpacity?: Setter<number>
   readonly setShowTranscriptOverlay?: Setter<boolean>
+  // What the Dataset tab shows about a dataset with a manifest.
+  readonly setDatasetAbout?: Setter<DatasetManifestAbout | null>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
   readonly setNucleusBoundaryElements?: Setter<readonly SpatialElement[]>
@@ -475,6 +479,7 @@ export function useDatasetLifecycle({
     setCellFillOpacity,
     setImageLayerOpacity,
     setShowTranscriptOverlay,
+    setDatasetAbout,
     setAutoContrastChannelIds,
     setBoundaryElements,
     setNucleusBoundaryElements,
@@ -880,6 +885,7 @@ export function useDatasetLifecycle({
 
       setDatasetUrl(requestedUrl)
       setDatasetPlatform(null)
+      setDatasetAbout?.(null)
       setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
       setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
       setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
@@ -1009,6 +1015,7 @@ export function useDatasetLifecycle({
         // fields the link sets win, the rest come from the manifest.
         const manifest = detection.platform === 'unknown' ? undefined : detection.manifest
         const manifestDefaults = manifestDefaultsToShareableState(manifest?.defaults)
+        setDatasetAbout?.(datasetManifestAbout(manifest))
         const restoreState: ShareableState = {
           ...manifestDefaults.state,
           ...(shouldRestoreSharedState ? sharedState : {}),

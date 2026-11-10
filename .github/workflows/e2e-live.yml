@@ -1,7 +1,8 @@
 name: E2E full (live data)
 
 # Runs every Playwright test, including the ones that load hosted Xenium, Visium HD,
-# and H5AD datasets from Sanger object storage. Too slow and network-dependent to gate PRs.
+# and H5AD datasets from Sanger object storage and every example in examples/ from its
+# repository. Too slow and network-dependent to gate PRs.
 on:
   schedule:
     - cron: '0 3 * * 1-5'

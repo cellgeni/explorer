@@ -80,6 +80,7 @@ import {
   type DatasetWarmupState,
   type MorphologyLoadState,
 } from '../dataset/datasetLoadModel'
+import type { DatasetManifestAbout } from '../dataset/datasetManifestModel'
 import {
   type VisiumHdControlState,
   IDLE_VISIUM_HD_CONTROL_STATE,
@@ -407,6 +408,7 @@ export function useAppDomainState({
     useState<ViewerViewportDetail | null>(null)
   const [, setViewportCellCount] = useState<number | null>(null)
   const [datasetPlatform, setDatasetPlatform] = useState<Platform | null>(null)
+  const [datasetAbout, setDatasetAbout] = useState<DatasetManifestAbout | null>(null)
   const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>(
     IDLE_VISIUM_HD_CONTROL_STATE,
   )
@@ -457,6 +459,7 @@ export function useAppDomainState({
     dataset: {
       boundaryState,
       cellFeatureMatrixCapabilityState,
+      datasetAbout,
       datasetPlatform,
       datasetWarmupState,
       diagnosticsState,
@@ -464,6 +467,7 @@ export function useAppDomainState({
       morphologyState,
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
+      setDatasetAbout,
       setDatasetPlatform,
       setDatasetWarmupState,
       setDiagnosticsState,

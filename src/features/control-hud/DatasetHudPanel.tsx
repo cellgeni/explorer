@@ -10,6 +10,7 @@ import {
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import { visiumHdBinSizeLabel, type VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { SpatialDataControlState } from '../dataset/spatialDataModel'
+import type { DatasetManifestAbout } from '../dataset/datasetManifestModel'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { useState } from 'react'
 
@@ -27,6 +28,7 @@ interface DatasetHudPanelProps {
   readonly morphologyInputId: string
   readonly boundaryLimitInputId: string
   readonly visiumHdBinSizeInputId: string
+  readonly datasetAbout: DatasetManifestAbout | null
   readonly datasetUrl: string
   readonly shouldLoadMorphology: boolean
   readonly morphologyLabel: string
@@ -58,6 +60,7 @@ export function DatasetHudPanel({
   morphologyInputId,
   boundaryLimitInputId,
   visiumHdBinSizeInputId,
+  datasetAbout,
   datasetUrl,
   shouldLoadMorphology,
   morphologyLabel,
@@ -140,6 +143,7 @@ export function DatasetHudPanel({
           {isLoading ? 'Loading…' : 'Load Dataset'}
         </button>
       </form>
+      {datasetAbout === null ? null : <DatasetAbout about={datasetAbout} />}
       <VisiumHdDatasetControls
         inputId={visiumHdBinSizeInputId}
         state={visiumHdControlState}
@@ -180,6 +184,52 @@ export function DatasetHudPanel({
       <ErrorSummary errors={activeErrors} />
       <ActivityLog entries={debugLog} onClear={onClearDebugLog} />
     </div>
+  )
+}
+
+// Name, description, and source from the dataset manifest, so viewers know
+// where the data comes from and how to cite it.
+function DatasetAbout({ about }: { readonly about: DatasetManifestAbout }) {
+  const { name, description, source } = about
+  const sourceLabel = [source?.repository, source?.accession]
+    .filter((part) => part !== undefined)
+    .join(' ')
+
+  return (
+    <section className="dataset-about" aria-label="About this dataset">
+      {name === undefined ? null : <strong className="dataset-about-name">{name}</strong>}
+      {description === undefined ? null : <p>{description}</p>}
+      {source === undefined ? null : (
+        <dl>
+          {sourceLabel === '' && source.url === undefined ? null : (
+            <>
+              <dt>Source</dt>
+              <dd>
+                {source.url === undefined ? (
+                  sourceLabel
+                ) : (
+                  <a href={source.url} target="_blank" rel="noreferrer">
+                    {sourceLabel === '' ? source.url : sourceLabel}
+                  </a>
+                )}
+              </dd>
+            </>
+          )}
+          {source.license === undefined ? null : (
+            <>
+              <dt>Licence</dt>
+              <dd>{source.license}</dd>
+            </>
+          )}
+          {source.citation === undefined ? null : (
+            <>
+              <dt>Cite</dt>
+              <dd>{source.citation}</dd>
+            </>
+          )}
+        </dl>
+      )}
+    </section>
   )
 }
 

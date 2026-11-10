@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "examples": [
+    {
+      "id": "bia/S-BIAD2214",
+      "path": "bia/S-BIAD2214.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD2214.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD2214.json",
+      "platform": "xenium",
+      "name": "Human skin, inflamed eczema (Xenium 5K)",
+      "description": "Fresh-frozen adult skin from an inflamed eczema lesion on the Xenium Human 5K panel: 22,242 cells with transcripts and cell boundaries, from an atlas of skin fibroblasts.",
+      "source": {
+        "repository": "BioImage Archive",
+        "accession": "S-BIAD2214",
+        "url": "https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2214",
+        "license": "CC0 1.0",
+        "citation": "Steele L et al. (2025) A single-cell and spatial genomics atlas of human skin fibroblasts reveals shared disease-related fibroblast subtypes across tissues. Nature Immunology 26:1807-1820. doi:10.1038/s41590-025-02267-8"
+      }
+    },
+    {
+      "id": "bia/S-BIAD3788",
+      "path": "bia/S-BIAD3788.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD3788.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD3788.json",
+      "platform": "image",
+      "name": "Inflammatory skin, PhenoCycler 61-plex",
+      "description": "Akoya PhenoCycler-Fusion whole-slide scan of eight skin sections taken after Xenium, with 61 protein markers, read directly from an 81 GB QPTIFF.",
+      "source": {
+        "repository": "BioImage Archive",
+        "accession": "S-BIAD3788",
+        "url": "https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD3788",
+        "license": "CC0 1.0",
+        "citation": "Steele L et al. (2026) Hidden immune memory niches in inflammatory skin diseases. bioRxiv. doi:10.64898/2026.03.20.713219"
+      }
+    },
+    {
+      "id": "cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f",
+      "path": "cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json",
+      "platform": "h5ad",
+      "name": "Fetal lung T, NK and ILC cells (UMAP)",
+      "description": "Single-cell RNA-seq of 4,778 T, NK and innate lymphoid cells from human fetal lung, shown on their UMAP with 14 annotated cell types.",
+      "source": {
+        "repository": "CELLxGENE",
+        "accession": "62315937-e268-4fa5-a032-8f7d776f3a3f",
+        "url": "https://cellxgene.cziscience.com/collections/2d2e2acd-dade-489f-a2da-6c11aa654028",
+        "license": "CC BY 4.0",
+        "citation": "He P et al. (2022) A human fetal lung cell atlas uncovers proximal-distal gradients of differentiation and key regulators of epithelial fates. Cell. doi:10.1016/j.cell.2022.11.005"
+      }
+    },
+    {
+      "id": "cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500",
+      "path": "cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json",
+      "platform": "h5ad",
+      "name": "Adult human heart (Visium)",
+      "description": "Visium section of adult human heart, 4,992 spots with per-spot cell-type abundances (colour cells by Metadata), from a spatial atlas of cardiac niches.",
+      "source": {
+        "repository": "CELLxGENE",
+        "accession": "fe5b3268-ddd8-415a-9432-f1f95bfdb500",
+        "url": "https://cellxgene.cziscience.com/collections/3116d060-0a8e-4767-99bb-e866badea1ed",
+        "license": "CC BY 4.0",
+        "citation": "Kanemaru K et al. (2023) Spatially resolved multiomics of human cardiac niches. Nature. doi:10.1038/s41586-023-06311-1"
+      }
+    },
+    {
+      "id": "cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978",
+      "path": "cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json",
+      "platform": "h5ad",
+      "name": "Mouse embryo E9.0 (Slide-seqV2)",
+      "description": "Slide-seqV2 puck of a whole E9.0 mouse embryo, 3,374 beads with cell-type annotations, from spatial maps of neural tube patterning.",
+      "source": {
+        "repository": "CELLxGENE",
+        "accession": "fe70db78-88b8-4bf7-8449-7aa177d51978",
+        "url": "https://cellxgene.cziscience.com/collections/d74b6979-efba-47cd-990a-9d80ccf29055",
+        "license": "CC BY 4.0",
+        "citation": "Sampath Kumar A et al. (2023) Spatial transcriptomic maps of whole mouse embryos reveal principles of neural tube patterning. Nature Genetics. doi:10.1038/s41588-023-01435-6"
+      }
+    },
+    {
+      "id": "idr/idr0054-tonsil",
+      "path": "idr/idr0054-tonsil.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0054-tonsil.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0054-tonsil.json",
+      "platform": "image",
+      "name": "Human tonsil, imaging mass cytometry",
+      "description": "Hyperion imaging mass cytometry of a human tonsil section with 27 metal-tagged antibodies, as OME-Zarr; opens on CD3 (T cells), CD19 (B cells), and CD68 (macrophages).",
+      "source": {
+        "repository": "Image Data Resource",
+        "accession": "idr0054",
+        "url": "https://idr.openmicroscopy.org/webclient/?show=project-701",
+        "license": "CC BY 4.0",
+        "citation": "Durand M et al. (2019) Human lymphoid organ cDC2 and macrophages play complementary roles in T follicular helper responses. J Exp Med 216(7):1561-1581. doi:10.1084/jem.20181994"
+      }
+    }
+  ]
+}

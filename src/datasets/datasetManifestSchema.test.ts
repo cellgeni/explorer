@@ -5,6 +5,7 @@ import { manifestDefaultsToShareableState } from '../features/dataset/datasetMan
 import {
   DATASET_MANIFEST_DEFAULT_KEYS,
   DATASET_MANIFEST_PLATFORMS,
+  DATASET_MANIFEST_SOURCE_KEYS,
   DATASET_MANIFEST_TOP_LEVEL_KEYS,
   IMAGE_MANIFEST_FILES,
   VISIUM_HD_MANIFEST_BIN_SIZES,
@@ -44,6 +45,7 @@ describe('dataset manifest JSON Schema', () => {
   it('lists the top-level fields and platforms the parser accepts', () => {
     expect(keys(schema)).toEqual([...DATASET_MANIFEST_TOP_LEVEL_KEYS].sort())
     expect(schema.properties?.platform?.enum).toEqual([...DATASET_MANIFEST_PLATFORMS])
+    expect(keys(definition('source'))).toEqual([...DATASET_MANIFEST_SOURCE_KEYS].sort())
   })
 
   it('lists the platform files the parser accepts', () => {

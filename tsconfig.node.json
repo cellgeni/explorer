@@ -24,6 +24,7 @@
     "eslint.config.js",
     "playwright.config.ts",
     "prettier.config.js",
+    "scripts/**/*.ts",
     "tests/config/**/*.ts",
     "vite.config.ts",
     "vitest.config.ts"

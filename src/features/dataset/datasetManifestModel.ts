@@ -1,11 +1,41 @@
 import type { ShareableState } from '../../data/shareableState'
-import type { DatasetManifestDefaults } from '../../datasets/datasetManifest'
+import type {
+  DatasetManifest,
+  DatasetManifestDefaults,
+} from '../../datasets/datasetManifest'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import { parseObservationColorMode } from '../app-shell/appShellModel'
 import {
   parseGeneExpressionColorScale,
   parseGeneExpressionScoreMode,
 } from '../genes/geneControlsModel'
+
+// What the Dataset tab shows about a dataset described by a manifest.
+export type DatasetManifestAbout = Pick<
+  DatasetManifest,
+  'name' | 'description' | 'source'
+>
+
+export function datasetManifestAbout(
+  manifest: DatasetManifest | undefined,
+): DatasetManifestAbout | null {
+  if (manifest === undefined) {
+    return null
+  }
+
+  const { name, description, source } = manifest
+  const hasSource = source !== undefined && Object.keys(source).length > 0
+
+  if (name === undefined && description === undefined && !hasSource) {
+    return null
+  }
+
+  return {
+    ...(name === undefined ? {} : { name }),
+    ...(description === undefined ? {} : { description }),
+    ...(hasSource ? { source } : {}),
+  }
+}
 
 export interface ManifestDefaultsState {
   // The manifest defaults as the share-URL fields the lifecycle restores.

@@ -2,6 +2,9 @@
 
 ## Using The Viewer
 
+- [Examples](../examples/README.md): public datasets from BioImage Archive,
+  CELLxGENE, IDR, and other repositories, each a manifest that opens in the
+  viewer.
 - [User guide](./user-guide.md): loading data, navigation, genes, transcripts,
   annotations, ROI, embeddings, diagnostics, and shareable URLs.
 - [UI reference](./ui-reference.md): every tab, control, default, interaction,

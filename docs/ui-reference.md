@@ -76,6 +76,12 @@ the defaults are chosen and
 [Units and extent](./modalities/spatialdata.md#units-and-extent) for the scale
 sources.
 
+A dataset loaded through a [dataset manifest](./dataset-manifest.md) with a
+`name`, `description`, or [`source`](./dataset-manifest.md#source) shows them
+under the form in an "About this dataset" panel (`DatasetAbout` in
+`DatasetHudPanel.tsx`): the source repository and accession link to the
+deposit, followed by the licence and citation.
+
 Status panels in the same tab (`src/components/AppStatusPanels.tsx`):
 
 | Panel          | Shows                                                                                                |

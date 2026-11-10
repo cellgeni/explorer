@@ -303,6 +303,7 @@ export function App({ dependencies }: AppProps = {}) {
     dataset: {
       boundaryState,
       cellFeatureMatrixCapabilityState,
+      datasetAbout,
       datasetPlatform,
       datasetWarmupState,
       diagnosticsState,
@@ -310,6 +311,7 @@ export function App({ dependencies }: AppProps = {}) {
       morphologyState,
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
+      setDatasetAbout,
       setDatasetPlatform,
       setDatasetWarmupState,
       setDiagnosticsState,
@@ -2458,6 +2460,7 @@ export function App({ dependencies }: AppProps = {}) {
       setCellFillOpacity,
       setImageLayerOpacity,
       setShowTranscriptOverlay,
+      setDatasetAbout,
       setAutoContrastChannelIds,
       setBoundaryElements,
       setBoundaryState,
@@ -2680,6 +2683,7 @@ export function App({ dependencies }: AppProps = {}) {
           boundaryCellLimit={boundaryCellLimit}
           cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
           controlIds={controlIds}
+          datasetAbout={datasetAbout}
           datasetUrl={datasetUrl}
           debugLog={debugLog}
           fallbackNotices={fallbackNotices}

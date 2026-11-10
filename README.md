@@ -108,6 +108,13 @@ and HTTP byte-range requests for large binary assets. The in-app
 `Diagnose Dataset` action checks the detected platform and the key assets for
 the active source.
 
+## Examples
+
+[`examples/`](examples/README.md) lists public datasets from data repositories
+(BioImage Archive, CELLxGENE, IDR, and others) with links that open them in
+the hosted viewer. Each is a dataset manifest pointing at the repository's own
+files; add one with `npm run examples` to refresh the list.
+
 ## Additional Docs And Decisions
 
 The full index is in [docs/README.md](docs/README.md).

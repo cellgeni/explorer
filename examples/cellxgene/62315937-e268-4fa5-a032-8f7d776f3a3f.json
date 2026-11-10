@@ -1,0 +1,20 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "h5ad",
+  "name": "Fetal lung T, NK and ILC cells (UMAP)",
+  "description": "Single-cell RNA-seq of 4,778 T, NK and innate lymphoid cells from human fetal lung, shown on their UMAP with 14 annotated cell types.",
+  "source": {
+    "repository": "CELLxGENE",
+    "accession": "62315937-e268-4fa5-a032-8f7d776f3a3f",
+    "url": "https://cellxgene.cziscience.com/collections/2d2e2acd-dade-489f-a2da-6c11aa654028",
+    "license": "CC BY 4.0",
+    "citation": "He P et al. (2022) A human fetal lung cell atlas uncovers proximal-distal gradients of differentiation and key regulators of epithelial fates. Cell. doi:10.1016/j.cell.2022.11.005"
+  },
+  "files": {
+    "h5ad": "https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/62315937-e268-4fa5-a032-8f7d776f3a3f.h5ad"
+  },
+  "defaults": {
+    "genes": ["CD3E"]
+  }
+}
