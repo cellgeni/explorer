@@ -1,0 +1,65 @@
+name: Release
+
+# Attaches the built app to a published GitHub release as explorer-<tag>.zip.
+# The build uses relative asset paths, so the unzipped folder can be served from
+# a domain root or any subpath. Run it manually with a tag to retry, or to attach
+# the zip to a release published before this workflow existed.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of an existing release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  dist:
+    name: Build and attach the app zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Fail before building if a manual run names a tag without a release.
+      - run: gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx vite build --base ./
+      - run: npx playwright install --with-deps chromium
+      # Smoke-tests the same dist/ that gets zipped.
+      - run: npx playwright test --grep @smoke
+      - name: Package
+        run: |
+          name="explorer-$TAG"
+          cp -R dist "$name"
+          jq -n --arg tag "$TAG" --arg commit "$(git rev-parse HEAD)" \
+            '{tag: $tag, commit: $commit}' > "$name/version.json"
+          zip -qr "$name.zip" "$name"
+      - name: Attach to the release
+        run: gh release upload "$TAG" "explorer-$TAG.zip" --clobber
+      - uses: actions/upload-artifact@v7
+        if: ${{ failure() }}
+        with:
+          name: playwright-report-release
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

@@ -21,7 +21,8 @@
   GeoJSON shape import/export.
 - [TIFF tile-offset sidecars](./zchunkstore.md): the optional `.zchunkstore`,
   when it helps, and how to generate one with `scripts/make_zchunkstore.py`.
-- [Deploy to S3](./deploy-to-s3.md): building and hosting the app itself.
+- [Deploy to S3](./deploy-to-s3.md): getting the app from a release zip or a
+  local build, and hosting it.
 
 ## How It Works
 
