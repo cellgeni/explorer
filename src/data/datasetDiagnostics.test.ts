@@ -2,8 +2,70 @@ import { describe, expect, it, vi } from 'vitest'
 import { runDatasetDiagnostics, summarizeDatasetDiagnostics } from './datasetDiagnostics'
 import type { SpatialDatasetDetection } from '../datasets/datasetFactory'
 import { setDatasetManifest } from './datasetFiles'
+import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 
 describe('runDatasetDiagnostics', () => {
+  it('reads the first expression chunk of AnnData in an Icechunk repository', async () => {
+    const report = await runDatasetDiagnostics(
+      `${ICECHUNK_FIXTURE_ORIGIN}/moved.h5ad.icechunk`,
+      {
+        fetcher: icechunkFixtureFetcher({
+          aliases: {
+            '/moved.h5ad.icechunk': '/tiny.h5ad.icechunk',
+            '/moved.h5ad': '/tiny.h5ad',
+          },
+        }),
+      },
+    )
+
+    expect(report.platform).toBe('h5ad')
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        id: 'icechunk-repository',
+        status: 'pass',
+        message: expect.stringMatching(
+          /^\d+ groups and arrays; read the first chunk of \/X\/data$/,
+        ),
+      }),
+    )
+    expect(summarizeDatasetDiagnostics(report)).toBe('All checks passed')
+  })
+
+  it('fails the Icechunk check when the referenced file is unreadable', async () => {
+    const report = await runDatasetDiagnostics(
+      `${ICECHUNK_FIXTURE_ORIGIN}/moved.h5ad.icechunk`,
+      {
+        fetcher: icechunkFixtureFetcher({
+          aliases: { '/moved.h5ad.icechunk': '/tiny.h5ad.icechunk' },
+        }),
+      },
+    )
+
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        id: 'icechunk-repository',
+        status: 'fail',
+        message: expect.stringContaining('/moved.h5ad'),
+      }),
+    )
+  })
+
+  it('reports an Icechunk URL with no repository as a failed check', async () => {
+    const report = await runDatasetDiagnostics(
+      `${ICECHUNK_FIXTURE_ORIGIN}/missing.icechunk`,
+      { fetcher: icechunkFixtureFetcher() },
+    )
+
+    expect(report.platform).toBe('unknown')
+    expect(report.checks).toEqual([
+      expect.objectContaining({
+        id: 'icechunk-repository',
+        status: 'fail',
+        url: `${ICECHUNK_FIXTURE_ORIGIN}/missing.icechunk`,
+      }),
+    ])
+  })
+
   it('checks required manifest and byte-range files', async () => {
     const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
     const rangeValidator = vi.fn(async () => undefined)

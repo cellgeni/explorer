@@ -201,8 +201,10 @@ CSC layouts.
 
 Files up to 300 MiB are downloaded whole and opened with the browser HDF5
 reader. Larger hosted H5AD files need a sibling kerchunk reference JSON named
-`DATASET.h5ad.json`; [Large H5AD files](./h5ad-reference.md) explains how to
-generate one. See [H5AD](./modalities/h5ad.md) for the exact layout the reader
+`DATASET.h5ad.json`, or an Icechunk repository named `DATASET.h5ad.icechunk`;
+[Large H5AD files](./h5ad-reference.md) explains how to generate one. An
+Icechunk repository holding AnnData, SpatialData, or an OME-Zarr image opens
+from its `.icechunk` URL. See [H5AD](./modalities/h5ad.md) for the exact layout the reader
 expects.
 
 ## SpatialData

@@ -33,6 +33,7 @@
     "h5wasm": "^0.10.2",
     "hyparquet": "1.26.0",
     "hyparquet-compressors": "1.1.1",
+    "icechunk-js": "0.6.1",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "zarrita": "0.7.3",

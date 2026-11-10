@@ -1,10 +1,27 @@
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
+import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 import { omeZarrImageRootUrl, openOmeZarrImageWithOptions } from './omeZarrLoader'
 
 const encoder = new TextEncoder()
 
 describe('OME-Zarr image loader', () => {
+  it('opens an OME-Zarr 0.5 image from an Icechunk repository', async () => {
+    const loader = await openOmeZarrImageWithOptions(
+      `${ICECHUNK_FIXTURE_ORIGIN}/image.icechunk`,
+      { fetcher: icechunkFixtureFetcher() },
+    )
+
+    expect([loader.imageWidth, loader.imageHeight]).toEqual([8, 8])
+    expect([loader.tileWidth, loader.tileHeight]).toEqual([4, 4])
+    expect(loader.units.micrometersPerPixel).toBe(0.5)
+
+    const tile = await loader.loadTilePixels(0, 1, 1)
+
+    // Pixel (x=4, y=4) of the image, whose value is 4 × its index.
+    expect(tile.pixels[0]).toBe((4 * 8 + 4) * 4)
+  })
+
   it('opens legacy multiscales metadata and exposes RGB channel loaders', async () => {
     const rootUrl = 'https://example.test/images/sample.ome.zarr'
     const loader = await openOmeZarrImageWithOptions(rootUrl, {

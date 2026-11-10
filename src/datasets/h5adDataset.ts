@@ -1,10 +1,17 @@
 import { ReferenceStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
+import {
+  IcechunkRepositoryUnavailableError,
+  openIcechunkRepository,
+  type IcechunkRepository,
+} from '../zarr/icechunkStore'
+import { icechunkCompanionFileUrl } from '../zarr/icechunkUrl'
 import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import { normalizeRoiSelection } from '../data/roiSelection'
+import { createAsyncLimiter } from '../utils/asyncLimiter'
 import { slug } from '../utils/slug'
 import type {
   ContinuousCellMetadataTrack,
@@ -60,6 +67,9 @@ export interface AnnDataH5adDatasetOptions {
   // Builds AnnData in memory (for example from Space Ranger output) instead of
   // fetching an .h5ad file.
   readonly memorySource?: AnnDataMemorySource
+  // `url` is an Icechunk repository holding AnnData, such as one written with
+  // `adata.write_zarr(session.store)`, instead of an .h5ad file.
+  readonly icechunk?: boolean
   // Visium tissue images hosted as files next to the table. They replace
   // `uns/spatial/<library>/images`.
   readonly visiumImageUrls?: Readonly<Partial<Record<VisiumImageKind, string>>>
@@ -372,12 +382,14 @@ export class H5adFileSizeLimitExceededError extends Error {
 export class H5adReferenceFileUnavailableError extends Error {
   readonly url: string
   readonly referenceUrl: string
+  readonly repositoryUrl: string
   readonly byteLength: number
   readonly maxBytes: number
 
   constructor(
     url: string,
     referenceUrl: string,
+    repositoryUrl: string,
     byteLength: number,
     maxBytes = H5AD_MAX_FILE_BYTES,
   ) {
@@ -386,11 +398,12 @@ export class H5adReferenceFileUnavailableError extends Error {
         byteLength,
       )}, exceeding the browser load limit of ${formatByteCount(
         maxBytes,
-      )}, and no readable kerchunk reference file was found at ${referenceUrl}.`,
+      )}, and no readable kerchunk reference file was found at ${referenceUrl}, nor an Icechunk repository at ${repositoryUrl}.`,
     )
     this.name = 'H5adReferenceFileUnavailableError'
     this.url = url
     this.referenceUrl = referenceUrl
+    this.repositoryUrl = repositoryUrl
     this.byteLength = byteLength
     this.maxBytes = maxBytes
   }
@@ -416,6 +429,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private readonly onProgress: H5adLoadProgressReporter | undefined
   private readonly zarrSource: AnnDataZarrSource | undefined
   private readonly memorySource: AnnDataMemorySource | undefined
+  // The fetcher passed in, which detection opened the repository with too;
+  // undefined for the global fetch.
+  private readonly icechunkFetcher: typeof fetch | undefined
+  private readonly icechunk: boolean
   private readonly visiumImageUrls: Readonly<Partial<Record<VisiumImageKind, string>>>
   private baseCachePromise: Promise<H5adCache> | null = null
   // The base cache placed for `visiumView`.
@@ -431,6 +448,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     this.onProgress = options.onProgress
     this.zarrSource = options.zarrSource
     this.memorySource = options.memorySource
+    this.icechunk = options.icechunk === true
+    this.icechunkFetcher = options.fetcher
     this.visiumImageUrls = options.visiumImageUrls ?? {}
   }
 
@@ -900,12 +919,16 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       this.baseCachePromise = (
         this.memorySource !== undefined
           ? readAnnDataMemory(this.url, this.memorySource, this.onProgress)
-          : this.zarrSource === undefined
-            ? readH5ad(this.url, {
-                fetcher: this.fetcher,
-                ...(this.onProgress === undefined ? {} : { onProgress: this.onProgress }),
-              })
-            : readAnnDataZarr(this.url, this.zarrSource, this.onProgress)
+          : this.icechunk
+            ? readAnnDataIcechunk(this.url, this.icechunkFetcher, this.onProgress)
+            : this.zarrSource === undefined
+              ? readH5ad(this.url, {
+                  fetcher: this.fetcher,
+                  ...(this.onProgress === undefined
+                    ? {}
+                    : { onProgress: this.onProgress }),
+                })
+              : readAnnDataZarr(this.url, this.zarrSource, this.onProgress)
       ).catch((error: unknown) => {
         this.baseCachePromise = null
         throw error
@@ -1066,12 +1089,10 @@ async function readH5adReferenceOrThrow(
 ): Promise<H5adCache> {
   const referenceUrl = h5adReferenceUrl(url)
   reportH5adProgress(onProgress, `Looking for H5AD reference ${referenceUrl}`)
-  const response = await fetchH5adReferenceFile(referenceUrl, fetcher).catch(() => {
-    throw new H5adReferenceFileUnavailableError(url, referenceUrl, byteLength)
-  })
+  const response = await fetchH5adReferenceFile(referenceUrl, fetcher).catch(() => null)
 
-  if (!response.ok) {
-    throw new H5adReferenceFileUnavailableError(url, referenceUrl, byteLength)
+  if (response?.ok !== true) {
+    return readH5adIcechunkOrThrow(url, fetcher, referenceUrl, byteLength, onProgress)
   }
 
   reportH5adProgress(onProgress, `Loading H5AD reference ${referenceUrl}`)
@@ -1094,6 +1115,101 @@ async function readH5adReferenceOrThrow(
     `H5AD reference ready: ${cache.cellIds.length.toLocaleString()} cells, ${cache.geneNames.length.toLocaleString()} genes`,
   )
   return cache
+}
+
+// The H5AD's companion Icechunk repository: virtual references to the H5AD's
+// chunks, as VirtualiZarr writes them. Like the JSON reference, chunks are read
+// from the H5AD URL whatever location the repository stores.
+async function readH5adIcechunkOrThrow(
+  url: string,
+  fetcher: typeof fetch,
+  referenceUrl: string,
+  byteLength: number,
+  onProgress: H5adLoadProgressReporter | undefined,
+): Promise<H5adCache> {
+  const repositoryUrl = h5adIcechunkUrl(url)
+  reportH5adProgress(onProgress, `Looking for H5AD Icechunk repository ${repositoryUrl}`)
+  let repository: IcechunkRepository
+
+  try {
+    repository = await openIcechunkRepository(repositoryUrl, {
+      fetcher,
+      virtualChunkUrl: url,
+    })
+  } catch (error) {
+    if (error instanceof IcechunkRepositoryUnavailableError && !error.found) {
+      throw new H5adReferenceFileUnavailableError(
+        url,
+        referenceUrl,
+        repositoryUrl,
+        byteLength,
+      )
+    }
+
+    throw error
+  }
+
+  return readH5adCacheFromIcechunk(
+    url,
+    repository,
+    'H5AD Icechunk repository',
+    onProgress,
+  )
+}
+
+async function readAnnDataIcechunk(
+  url: string,
+  fetcher: typeof fetch | undefined,
+  onProgress: H5adLoadProgressReporter | undefined,
+): Promise<H5adCache> {
+  reportH5adProgress(onProgress, `Opening Icechunk repository ${url}`)
+  const repository = await openIcechunkRepository(url, {
+    ...(fetcher === undefined ? {} : { fetcher }),
+    virtualChunkUrl: icechunkCompanionFileUrl(url),
+  })
+  return readH5adCacheFromIcechunk(url, repository, 'Icechunk AnnData', onProgress)
+}
+
+async function readH5adCacheFromIcechunk(
+  url: string,
+  repository: IcechunkRepository,
+  label: string,
+  onProgress: H5adLoadProgressReporter | undefined,
+): Promise<H5adCache> {
+  reportH5adProgress(
+    onProgress,
+    `${label} opened: ${repository.nodes.length.toLocaleString()} groups and arrays`,
+  )
+  repository.prefetchManifests(
+    repository.nodes
+      .filter((node) => node.kind === 'array' && isReadAtAnnDataLoad(node.path))
+      .map((node) => node.path),
+  )
+  const root = await hydrateZarrAnnDataGroup(
+    { store: repository.store, zarrFormat: 3, rootPath: '' },
+    annDataIndexFromNodes(repository.nodes, ''),
+    '',
+  )
+  const cache = await readH5adCacheFromGroup(url, root)
+  reportH5adProgress(
+    onProgress,
+    `${label} ready: ${cache.cellIds.length.toLocaleString()} cells, ${cache.geneNames.length.toLocaleString()} genes`,
+  )
+  return cache
+}
+
+// Arrays read before the dataset is ready: obs, var, obsm, uns (scale factors
+// and tissue images), and a sparse /X's indptr. The rest of /X, layers, raw,
+// and the pairwise matrices are read later or never.
+function isReadAtAnnDataLoad(path: string): boolean {
+  const [group] = path.split('/')
+  return (
+    path === 'X/indptr' ||
+    group === 'obs' ||
+    group === 'var' ||
+    group === 'obsm' ||
+    group === 'uns'
+  )
 }
 
 async function readAnnDataZarr(
@@ -1809,12 +1925,21 @@ function joinZarrPath(parent: string, child: string): string {
 }
 
 function h5adReferenceUrl(url: string): string {
+  return h5adSiblingUrl(url, '.json')
+}
+
+function h5adIcechunkUrl(url: string): string {
+  return h5adSiblingUrl(url, '.icechunk')
+}
+
+// The H5AD URL's path plus `suffix`, keeping its query string.
+function h5adSiblingUrl(url: string, suffix: string): string {
   try {
     const parsed = new URL(url)
-    parsed.pathname = `${parsed.pathname}.json`
+    parsed.pathname = `${parsed.pathname}${suffix}`
     return parsed.toString()
   } catch {
-    return `${url}.json`
+    return `${url}${suffix}`
   }
 }
 
@@ -1830,30 +1955,6 @@ function referenceStoreFetch(
         resolvedUrl === request.url ? request : new Request(resolvedUrl, request)
       return fetcher(resolvedRequest)
     })
-}
-
-function createAsyncLimiter(
-  maxConcurrent: number,
-): <T>(task: () => Promise<T>) => Promise<T> {
-  const queue: Array<() => void> = []
-  let active = 0
-
-  return async function runLimited<T>(task: () => Promise<T>): Promise<T> {
-    if (active >= maxConcurrent) {
-      await new Promise<void>((resolve) => {
-        queue.push(resolve)
-      })
-    }
-
-    active += 1
-
-    try {
-      return await task()
-    } finally {
-      active -= 1
-      queue.shift()?.()
-    }
-  }
 }
 
 function objectRecord(value: unknown, label: string): Record<string, unknown> {

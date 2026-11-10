@@ -408,6 +408,67 @@ test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
   await expect(page).toHaveURL(/cellTrack=h5ad%3Ascore/)
 })
 
+// Serves src/test/fixtures/icechunk/<repository> (see make_fixtures.py there)
+// at the same path, with Range support.
+async function routeIcechunkFixture(page: Page, repository: string) {
+  await page.route(`**/${repository}/**`, async (route) => {
+    const path = new URL(route.request().url()).pathname
+    let bytes: Buffer
+
+    try {
+      bytes = await readFile(
+        new URL(`../../src/test/fixtures/icechunk${path}`, import.meta.url),
+      )
+    } catch {
+      await route.fulfill({
+        status: 404,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      })
+      return
+    }
+
+    const match = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()['range'] ?? '')
+    const start = match === null ? 0 : Number(match[1])
+    const end = match === null ? bytes.byteLength - 1 : Number(match[2])
+    await route.fulfill({
+      status: match === null ? 200 : 206,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/octet-stream',
+        ...(match === null
+          ? {}
+          : { 'Content-Range': `bytes ${start}-${end}/${bytes.byteLength}` }),
+      },
+      body: bytes.subarray(start, end + 1),
+    })
+  })
+}
+
+test('loads AnnData from an Icechunk repository with gene expression @smoke', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+
+  await routeIcechunkFixture(page, 'anndata.icechunk')
+  await page.goto('/')
+
+  const repositoryUrl = new URL('/anndata.icechunk', page.url()).toString()
+  await page.getByLabel('Dataset or image URL').fill(repositoryUrl)
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+
+  await expect(page.getByText(/Icechunk AnnData ready: 6 cells, 4 genes/)).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+
+  await page.getByRole('tab', { name: 'Genes' }).click()
+  const genesPanel = page.locator('#hud-panel-genes')
+  await genesPanel.getByRole('button', { name: 'Gapdh', exact: true }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText(
+    'Expression all cells: 3 positive cells across 6 slide cells',
+    { timeout: H5AD_LOAD_TIMEOUT_MS },
+  )
+})
+
 // Two Visium sections in one AnnData file (scanpy concat layout): obs
 // `library_id`, `in_tissue` with 3 of 10 spots per row off the tissue, and a
 // hires image per library. GeneB is expressed only in section-B.

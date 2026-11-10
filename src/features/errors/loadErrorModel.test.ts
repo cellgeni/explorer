@@ -237,7 +237,7 @@ describe('loadErrorModel', () => {
         'The file was not loaded. Use an H5AD file of 300 MB or smaller, or add a lazy H5AD reader before opening larger files.',
     })
     const h5adReferenceUnavailable = new Error(
-      'H5AD file is 350.0 MB, exceeding the browser load limit of 300.0 MB, and no readable kerchunk reference file was found at https://example.test/data.h5ad.json.',
+      'H5AD file is 350.0 MB, exceeding the browser load limit of 300.0 MB, and no readable kerchunk reference file was found at https://example.test/data.h5ad.json, nor an Icechunk repository at https://example.test/data.h5ad.icechunk.',
     )
     h5adReferenceUnavailable.name = 'H5adReferenceFileUnavailableError'
 
@@ -248,7 +248,7 @@ describe('loadErrorModel', () => {
       title: 'H5AD reference file unavailable',
       detail: 'H5adReferenceFileUnavailableError',
       action:
-        'Generate and host a companion DATASET.h5ad.json kerchunk reference next to the oversized H5AD file.',
+        'Host a DATASET.h5ad.json reference or a DATASET.h5ad.icechunk repository next to the oversized H5AD file; scripts/make_h5ad_reference.py writes either.',
     })
     const h5adCscCellProfileUnavailable = new Error(
       'H5AD reference-backed CSC matrices cannot load all genes for selected cells without scanning the whole expression matrix (1,000 cells x 20,000 genes).',

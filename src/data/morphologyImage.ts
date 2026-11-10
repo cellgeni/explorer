@@ -1,5 +1,6 @@
 import { openTiff, tiffImageSelectionUrl } from '../tiff/loader'
 import { omeZarrImageRootUrl, openOmeZarrImage } from '../zarr/omeZarrLoader'
+import { isIcechunkUrl } from '../zarr/icechunkUrl'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import {
   datasetFileLabelFor,
@@ -432,7 +433,8 @@ export async function openImagePyramid(
 ): Promise<ImagePyramidLoader> {
   const rootUrl = omeZarrImageRootUrl(url)
 
-  if (isOmeZarrImageUrl(url) || isOmeZarrImageUrl(rootUrl)) {
+  // An image in an Icechunk repository is OME-Zarr.
+  if (isOmeZarrImageUrl(url) || isOmeZarrImageUrl(rootUrl) || isIcechunkUrl(url)) {
     if (options?.zchunkStoreUrl !== undefined) {
       notifyFallback(onFallback, {
         source: 'Morphology image',

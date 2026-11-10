@@ -100,10 +100,13 @@ Enter a source in the `Dataset or image URL` field:
   filtered feature-barcode matrix, plus root `feature_slice.h5` for gene
   overlays.
 - H5AD: direct `.h5ad` file URL with `obs`, `var`, `/X`, and a supported 2D
-  `obsm` coordinate matrix.
+  `obsm` coordinate matrix. Files over 300 MiB need a `.h5ad.json` reference
+  or `.h5ad.icechunk` repository next to them.
 - SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
   table annotating a shapes or labels element, and optionally image elements.
 - Image-only: direct OME-TIFF, TIFF, QPTIFF, OME-Zarr, or validated NDPI URL.
+- Icechunk: a `.icechunk` repository URL holding AnnData, SpatialData (images,
+  labels, and tables), or an OME-Zarr image.
 
 Files do not have to keep these names. A dataset manifest, `explorer.json` in
 the dataset folder (or any `.json` URL entered directly), can name the

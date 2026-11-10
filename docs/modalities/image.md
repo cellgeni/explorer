@@ -20,6 +20,7 @@ URL shape before any Xenium probe:
 | Path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, or `/.zattrs` (`isOmeZarrImageUrl`)                   | `HEAD` on the root's `zarr.json` and/or `.zattrs`                            | SpatialData if the root has `spatialdata_attrs`, else image (`imageKind: 'ome-zarr'`) |
 | Ends in `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, `.qptiff`, `.qptif`, or `.ndpi` (query/hash allowed) | One `HEAD` on the URL                                                        | Image (`imageKind: 'tiff'`, `'qptiff'`, or `'ndpi'`)                                  |
 | Any other folder URL                                                                                   | After the `experiment.xenium` probe fails, `HEAD` on `zarr.json` / `.zattrs` | SpatialData, or image pointing at that metadata file                                  |
+| Path ends in `.icechunk` (an [Icechunk](https://icechunk.io/) repository)                              | Opens the repository's `repo` file and snapshot                              | AnnData, SpatialData, or, with root `multiscales`, image (`imageKind: 'ome-zarr'`)    |
 
 `omeZarrImageRootUrl` strips a trailing `/zarr.json` or `/.zattrs` to find the
 store root. `createSpatialDataset` builds an `ImageOnlyDataset`
@@ -204,7 +205,10 @@ JPEG-XR is not supported.
 `openOmeZarrImage` (`src/zarr/omeZarrLoader.ts`):
 
 - Opens Zarr v2 or v3 with `zarrita`, using consolidated metadata when present
-  (`src/zarr/zarrStores.ts`). Metadata-key `403`s are treated as missing.
+  (`src/zarr/zarrStores.ts`). Metadata-key `403`s are treated as missing. An
+  Icechunk repository is read with `icechunk-js`, its snapshot serving as the
+  consolidated metadata (see
+  [AnnData in Icechunk](./h5ad.md#anndata-in-icechunk)).
 - Reads `multiscales[0]` from `attrs.ome` (OME-Zarr 0.5) or `attrs`. Each
   `datasets[].path` is a level.
 - Axes come from `axes`, else array dimension names, else positional

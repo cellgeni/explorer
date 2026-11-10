@@ -168,6 +168,9 @@ const LABEL_COLUMN_PATTERN = /label/i
 export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   readonly url: string
   private readonly fetcher: typeof fetch
+  // The fetcher passed in, so an Icechunk repository that detection opened
+  // with it is reused; undefined for the global fetch.
+  private readonly storeFetcher: typeof fetch | undefined
   private readonly onProgress: H5adLoadProgressReporter | undefined
   private readonly selection: SpatialDataSelection
   private readonly readShapes: SpatialDataShapesReader
@@ -189,6 +192,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   constructor(options: SpatialDataDatasetOptions) {
     this.url = options.url.replace(/\/+$/, '')
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+    this.storeFetcher = options.fetcher
     this.onProgress = options.onProgress
     this.selection = {
       ...(options.coordinateSystem === undefined
@@ -457,9 +461,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
   private async readState(): Promise<SpatialDataState> {
     this.onProgress?.('SpatialData metadata loading')
-    const { store, zarrFormat } = await openSpatialDataStore(this.url, {
-      fetcher: this.fetcher,
-    })
+    const { store, zarrFormat } = await openSpatialDataStore(
+      this.url,
+      this.storeFetcher === undefined ? {} : { fetcher: this.storeFetcher },
+    )
     const catalog = await readSpatialDataCatalog(store, zarrFormat)
     const view = selectSpatialDataView(catalog, {
       ...(this.selection.coordinateSystem === undefined

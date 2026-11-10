@@ -9,6 +9,7 @@ import {
   setFolderListing,
 } from '../data/folderListing'
 import { noteReadableResponse } from '../data/hostResponses'
+import { icechunkCompanionFileUrl, isIcechunkUrl } from '../zarr/icechunkUrl'
 import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import { isQptiffUrl } from '../tiff/qptiff'
@@ -60,7 +61,10 @@ export type SpatialDatasetDetection =
   | {
       readonly platform: 'h5ad'
       readonly baseUrl: string
+      // An .h5ad file, or with `source: 'icechunk'` an Icechunk repository
+      // holding AnnData.
       readonly h5adUrl: string
+      readonly source?: 'icechunk'
       readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
@@ -289,6 +293,10 @@ async function detectSpatialDatasetLayout(
         }
   }
 
+  if (isIcechunkUrl(normalizedBaseUrl)) {
+    return detectIcechunkRepository(normalizedBaseUrl, options, checked)
+  }
+
   if (isZarrImageOnlyUrl(normalizedBaseUrl)) {
     const zarrRootUrl = omeZarrImageRootUrl(normalizedBaseUrl)
     const probes = await Promise.all(
@@ -453,6 +461,79 @@ async function detectSpatialDatasetLayout(
   }
 }
 
+// Routes an Icechunk repository by what its root group holds. Throws when the
+// repository cannot be read or holds none of them, since an Icechunk URL names
+// nothing else to fall back to. The dataset reuses the opened repository.
+async function detectIcechunkRepository(
+  url: string,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<SpatialDatasetDetection> {
+  const { openIcechunkRepository } = await import('../zarr/icechunkStore')
+  const repository = await openIcechunkRepository(url, {
+    ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    virtualChunkUrl: icechunkCompanionFileUrl(url),
+  })
+  const content = icechunkRepositoryContent(repository)
+
+  if (content === null) {
+    throw new Error(
+      `The Icechunk repository at ${url} holds no AnnData, SpatialData, or OME-Zarr image at its root.`,
+    )
+  }
+
+  checked.push({ path: `Icechunk repository (${content})`, url, ok: true })
+
+  if (content === 'AnnData') {
+    return { platform: 'h5ad', baseUrl: url, h5adUrl: url, source: 'icechunk', checked }
+  }
+
+  if (content === 'SpatialData') {
+    return { platform: 'spatialdata', baseUrl: url, spatialDataUrl: url, checked }
+  }
+
+  return {
+    platform: 'image',
+    baseUrl: url,
+    imageUrl: url,
+    imageKind: 'ome-zarr',
+    checked,
+  }
+}
+
+function icechunkRepositoryContent(repository: {
+  readonly nodes: readonly { readonly path: string; readonly kind: string }[]
+  readonly rootAttributes: Readonly<Record<string, unknown>>
+}): 'AnnData' | 'SpatialData' | 'OME-Zarr image' | null {
+  const attrs = repository.rootAttributes
+  const isRootGroup = (name: string) =>
+    repository.nodes.some((node) => node.path === name && node.kind === 'group')
+
+  if (isSpatialDataRootMetadata({ attributes: attrs })) {
+    return 'SpatialData'
+  }
+
+  // Older AnnData files have no root `encoding-type`.
+  if (
+    attrs['encoding-type'] === 'anndata' ||
+    (isRootGroup('obs') && isRootGroup('var'))
+  ) {
+    return 'AnnData'
+  }
+
+  const ome = attrs.ome
+
+  if (
+    Array.isArray(attrs.multiscales) ||
+    (typeof ome === 'object' && ome !== null && 'multiscales' in ome)
+  ) {
+    return 'OME-Zarr image'
+  }
+
+  return null
+}
+
 // Reads a dataset manifest. 'required' (a manifest URL was entered) throws on
 // any failure; 'optional' (probing a folder) treats a missing, unreadable, or
 // non-manifest document as no manifest, but still reports an invalid one.
@@ -592,7 +673,10 @@ async function detectFromManifest(
       platform: 'image',
       baseUrl,
       imageUrl,
-      imageKind: isOmeZarrImageUrl(imageUrl) ? 'ome-zarr' : tiffImageKind(imageUrl),
+      imageKind:
+        isOmeZarrImageUrl(imageUrl) || isIcechunkUrl(imageUrl)
+          ? 'ome-zarr'
+          : tiffImageKind(imageUrl),
       manifest,
       checked,
     }
@@ -954,6 +1038,7 @@ export async function createSpatialDataset(
     const { AnnDataH5adDataset } = await import('./h5adDataset')
     return new AnnDataH5adDataset({
       url: detection.h5adUrl,
+      ...(detection.source === 'icechunk' ? { icechunk: true } : {}),
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       ...(options.onH5adLoadProgress === undefined
         ? {}

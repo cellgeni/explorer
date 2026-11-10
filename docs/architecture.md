@@ -17,6 +17,7 @@ files. Parsing happens in the browser:
 | `hyparquet` + `hyparquet-compressors` | Parquet reads on the main thread (Xenium overview, Visium HD positions and barcode mappings, SpatialData shapes)     |
 | `@duckdb/duckdb-wasm`                 | SQL over remote Parquet (Xenium cells, boundaries, transcripts; Visium HD per-cell mappings)                         |
 | `zarrita` + `@zarrita/storage`        | Zarr v2/v3, zipped Zarr, kerchunk references (Xenium matrix and transcripts, H5AD references, SpatialData, OME-Zarr) |
+| `icechunk-js`                         | Icechunk repositories as zarrita stores (H5AD companion repositories; AnnData, SpatialData, OME-Zarr in Icechunk)    |
 | `h5wasm`                              | HDF5 (H5AD, Xenium H5 matrix, standard Visium matrix, Visium HD matrices and Feature Slice)                          |
 | `geotiff`                             | TIFF/OME-TIFF structure and non-JPEG 2000 codecs                                                                     |
 | `@cornerstonejs/codec-openjpeg`       | JPEG 2000 tiles                                                                                                      |
@@ -240,7 +241,8 @@ All screen↔data conversions go through `coords.ts`.
   network failure.
 - **403 as missing.** Object stores that return `403` for missing keys are
   handled for Zarr metadata keys (`createZarrFetchStore`,
-  `src/zarr/zarrStores.ts`) and `.zchunkstore` sidecars. Other `403`s are
+  `src/zarr/zarrStores.ts`), Icechunk repository files
+  (`src/zarr/icechunkStore.ts`), and `.zchunkstore` sidecars. Other `403`s are
   errors.
 
 See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.

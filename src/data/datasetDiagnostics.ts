@@ -182,20 +182,36 @@ export async function runDatasetDiagnostics(
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
   } catch (error) {
-    if (!(error instanceof DatasetManifestError)) {
+    // Checked by name, so diagnostics do not load the Icechunk reader.
+    const icechunkError =
+      error instanceof Error && error.name === 'IcechunkRepositoryUnavailableError'
+        ? (error as Error & { readonly url: string })
+        : null
+
+    if (!(error instanceof DatasetManifestError) && icechunkError === null) {
       throw error
     }
 
     checks.push(
-      diagnosticCheck({
-        id: 'dataset-manifest',
-        label: 'Dataset manifest',
-        url: error.manifestUrl,
-        required: true,
-        status: 'fail',
-        message: error.message,
-        startedAt: detectionStartedAt,
-      }),
+      error instanceof DatasetManifestError
+        ? diagnosticCheck({
+            id: 'dataset-manifest',
+            label: 'Dataset manifest',
+            url: error.manifestUrl,
+            required: true,
+            status: 'fail',
+            message: error.message,
+            startedAt: detectionStartedAt,
+          })
+        : diagnosticCheck({
+            id: 'icechunk-repository',
+            label: 'Icechunk repository',
+            url: icechunkError?.url ?? baseUrl,
+            required: true,
+            status: 'fail',
+            message: icechunkError?.message ?? '',
+            startedAt: detectionStartedAt,
+          }),
     )
 
     return {
@@ -239,13 +255,15 @@ export async function runDatasetDiagnostics(
 
   if (detection.platform === 'h5ad') {
     checks.push(
-      await checkDirectRangeFile(
-        detection.h5adUrl,
-        'h5ad-file',
-        'H5AD file',
-        true,
-        options,
-      ),
+      detection.source === 'icechunk'
+        ? await checkIcechunkAnnData(detection.h5adUrl, options)
+        : await checkDirectRangeFile(
+            detection.h5adUrl,
+            'h5ad-file',
+            'H5AD file',
+            true,
+            options,
+          ),
     )
 
     return {
@@ -1268,6 +1286,63 @@ async function checkReadableFile(
       url,
       required,
       status: required ? 'fail' : 'warning',
+      message: errorMessage(cause),
+      startedAt,
+    })
+  }
+}
+
+// Reads the first chunk of `/X`, which for virtual references is a Range
+// request to the referenced file, so a host without CORS or Range shows here.
+async function checkIcechunkAnnData(
+  url: string,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const startedAt = Date.now()
+  const id = 'icechunk-repository'
+  const label = 'Icechunk repository'
+
+  try {
+    const [{ openIcechunkRepository }, { icechunkCompanionFileUrl }, zarr] =
+      await Promise.all([
+        import('../zarr/icechunkStore'),
+        import('../zarr/icechunkUrl'),
+        import('zarrita'),
+      ])
+    const repository = await openIcechunkRepository(url, {
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      virtualChunkUrl: icechunkCompanionFileUrl(url),
+    })
+    const matrixPath = repository.nodes.some(
+      (node) => node.path === 'X/data' && node.kind === 'array',
+    )
+      ? 'X/data'
+      : 'X'
+    const matrix = await zarr.open.v3(zarr.root(repository.store).resolve(matrixPath), {
+      kind: 'array',
+    })
+    await matrix.getChunk(
+      matrix.shape.map(() => 0),
+      options.signal === undefined ? undefined : { signal: options.signal },
+    )
+
+    return diagnosticCheck({
+      id,
+      label,
+      url,
+      required: true,
+      status: 'pass',
+      message: `${repository.nodes.length.toLocaleString()} groups and arrays; read the first chunk of /${matrixPath}`,
+      startedAt,
+    })
+  } catch (cause) {
+    return diagnosticCheck({
+      id,
+      label,
+      url,
+      required: true,
+      status: 'fail',
       message: errorMessage(cause),
       startedAt,
     })
