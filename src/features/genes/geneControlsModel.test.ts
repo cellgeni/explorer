@@ -39,6 +39,23 @@ describe('geneControlsModel', () => {
       url: 'https://example.test/output',
       genes: ['Actb', 'Gad1', 'Gapdh'],
     })
+    expect(
+      genePanelLoadReady(
+        'https://example.test/output',
+        ['MYH7'],
+        new Map([['MYH7', 'ENSG00000092054']]),
+      ),
+    ).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      genes: ['MYH7'],
+      aliases: new Map([['MYH7', 'ENSG00000092054']]),
+    })
+    expect(genePanelLoadReady('https://example.test/output', ['A'], new Map())).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      genes: ['A'],
+    })
     expect(genePanelLoadFailed('https://example.test/output', error)).toEqual({
       status: 'error',
       url: 'https://example.test/output',
@@ -178,6 +195,27 @@ describe('geneControlsModel', () => {
       'Gad1',
     ])
     expect(defaultGeneSetName([])).toBe('Selected genes')
+  })
+
+  it('matches gene aliases in search and gene-set symbols', () => {
+    const genes = ['MYH6', 'MYH7', 'NPPA']
+    const aliases = new Map([
+      ['MYH6', 'ENSG00000197616'],
+      ['MYH7', 'ENSG00000092054'],
+      ['NPPA', 'NPPB'],
+    ])
+
+    expect(filterGeneOptions(genes, 'ensg0000009', [], { aliases })).toEqual(['MYH7'])
+    expect(filterGeneOptions(genes, 'ENSG', ['MYH6'], { aliases })).toEqual(['MYH7'])
+    expect(filterGeneOptions(genes, 'ensg', [])).toEqual([])
+    // A gene name wins over another gene's alias spelled the same way.
+    expect(
+      parseGeneSetSymbols(
+        'ENSG00000092054 ensg00000197616 MYH7 nppb',
+        [...genes, 'NPPB'],
+        aliases,
+      ),
+    ).toEqual(['MYH6', 'MYH7', 'NPPB'])
     expect(defaultGeneSetName(['A', 'B', 'C', 'D'])).toBe('A, B, C +1')
   })
 })

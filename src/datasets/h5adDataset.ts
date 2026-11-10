@@ -82,6 +82,7 @@ interface H5adCache {
   readonly url: string
   readonly cellIds: readonly string[]
   readonly geneNames: readonly string[]
+  readonly geneAliases: ReadonlyMap<string, string>
   readonly coordinates: readonly DataPoint[]
   readonly root: H5GroupLike
   readonly embeddingOptions: readonly AnalysisEmbeddingOption[]
@@ -526,6 +527,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return cache.geneNames
   }
 
+  // Gene name to var index name, for genes listed by a symbol column.
+  async geneAliases(): Promise<ReadonlyMap<string, string>> {
+    const cache = await this.cache()
+    return cache.geneAliases
+  }
+
   // Every obs row's id in matrix row order, including rows without
   // coordinates (which `overview` leaves out).
   async cellIds(): Promise<readonly string[]> {
@@ -761,7 +768,8 @@ async function readH5adCacheFromGroup(
     ),
     'obs',
   )
-  const geneNames = uniqueNames(await readGeneNames(varGroup), 'var')
+  const varNames = await readGeneNames(varGroup)
+  const geneNames = uniqueNames(varNames.names, 'var')
   const embeddingOptions = readObsmEmbeddingOptions(file, cellIds.length)
   const resolvedCoordinates =
     resolveCoordinates === undefined
@@ -797,6 +805,10 @@ async function readH5adCacheFromGroup(
     url,
     cellIds,
     geneNames,
+    geneAliases:
+      varNames.indexNames === null
+        ? new Map()
+        : geneAliasesByName(geneNames, varNames.indexNames),
     coordinates,
     root: file,
     embeddingOptions,
@@ -1149,24 +1161,80 @@ async function readDataframeIndex(
   throw new Error(`H5AD /${label} dataframe does not expose a readable index column.`)
 }
 
-async function readGeneNames(varGroup: H5GroupLike): Promise<readonly string[]> {
+// The first gene-name column with one value per gene and at least one
+// non-empty value replaces the var index; `indexNames` is then the index,
+// otherwise null. Categorical columns (CELLxGENE stores `feature_name` that
+// way) are decoded, and missing codes become empty names, which `uniqueNames`
+// replaces with `var-N`.
+async function readGeneNames(varGroup: H5GroupLike): Promise<{
+  readonly names: readonly string[]
+  readonly indexNames: readonly string[] | null
+}> {
   const indexNames = await readDataframeIndex(varGroup, 'var')
 
   for (const key of ['gene_symbols', 'gene_symbol', 'feature_name', 'name']) {
-    const dataset = varGroup.get(key)
+    const values = await readGeneNameColumn(varGroup, key)
 
-    if (!isDataset(dataset)) {
-      continue
-    }
-
-    const values = readStringArray(await readDatasetValue(dataset), `/var/${key}`)
-
-    if (values.length === indexNames.length && values.some((value) => value !== '')) {
-      return values
+    if (
+      values !== null &&
+      values.length === indexNames.length &&
+      values.some((value) => value !== '')
+    ) {
+      return { names: values, indexNames }
     }
   }
 
-  return indexNames
+  return { names: indexNames, indexNames: null }
+}
+
+async function readGeneNameColumn(
+  varGroup: H5GroupLike,
+  key: string,
+): Promise<readonly string[] | null> {
+  const entity = varGroup.get(key)
+
+  if (isCategoricalGroup(entity)) {
+    const { codes, categories } = await readCategoricalGroup(entity, `/var/${key}`)
+    return Array.from(
+      { length: codes.length },
+      (_value, index) => categoricalLabel(codes, categories, index) ?? '',
+    )
+  }
+
+  if (!isDataset(entity)) {
+    return null
+  }
+
+  const value = await readDatasetValue(entity)
+  const categories = await readDataframeCategories(varGroup, key, 'var')
+
+  if (categories !== null && isNumericArray(value)) {
+    return Array.from(
+      { length: value.length },
+      (_item, index) => categoricalLabel(value, categories, index) ?? '',
+    )
+  }
+
+  return readStringArray(value, `/var/${key}`)
+}
+
+// Var index names for the genes whose display name differs, so a gene listed
+// by symbol can still be found by its Ensembl ID.
+function geneAliasesByName(
+  geneNames: readonly string[],
+  indexNames: readonly string[],
+): ReadonlyMap<string, string> {
+  const aliases = new Map<string, string>()
+
+  geneNames.forEach((name, index) => {
+    const alias = indexNames[index]?.trim() ?? ''
+
+    if (alias !== '' && alias !== name) {
+      aliases.set(name, alias)
+    }
+  })
+
+  return aliases
 }
 
 function readObsmEmbeddingOptions(
@@ -1343,16 +1411,7 @@ async function readObservationTracks(
       }
 
       if (isCategoricalGroup(entity)) {
-        const codes = readNumericArray(
-          await readDatasetValue(expectDataset(entity.get('codes'), `/obs/${key}/codes`)),
-          `/obs/${key}/codes`,
-        )
-        const categories = readCategoryLabels(
-          await readDatasetValue(
-            expectDataset(entity.get('categories'), `/obs/${key}/categories`),
-          ),
-          `/obs/${key}/categories`,
-        )
+        const { codes, categories } = await readCategoricalGroup(entity, `/obs/${key}`)
 
         if (codes.length !== rowCount) {
           continue
@@ -1362,10 +1421,9 @@ async function readObservationTracks(
           id: key,
           label: key,
           categoryCount: categories.length,
-          values: Array.from({ length: rowCount }, (_value, index) => {
-            const code = Math.trunc(numericValue(codes, index))
-            return code < 0 ? null : (categories[code] ?? null)
-          }),
+          values: Array.from({ length: rowCount }, (_value, index) =>
+            categoricalLabel(codes, categories, index),
+          ),
         })
         continue
       }
@@ -1390,10 +1448,9 @@ async function readObservationTracks(
           id: key,
           label: key,
           categoryCount: categories.length,
-          values: Array.from({ length: rowCount }, (_value, index) => {
-            const code = Math.trunc(numericValue(codes, index))
-            return code < 0 ? null : (categories[code] ?? null)
-          }),
+          values: Array.from({ length: rowCount }, (_value, index) =>
+            categoricalLabel(codes, categories, index),
+          ),
         })
         continue
       }
@@ -1574,10 +1631,11 @@ function formatByteCount(byteLength: number): string {
 }
 
 async function readDataframeCategories(
-  obs: H5GroupLike,
+  dataframe: H5GroupLike,
   key: string,
+  label: 'obs' | 'var' = 'obs',
 ): Promise<readonly string[] | null> {
-  const categoryGroup = obs.get('__categories')
+  const categoryGroup = dataframe.get('__categories')
 
   if (!isGroup(categoryGroup)) {
     return null
@@ -1591,9 +1649,40 @@ async function readDataframeCategories(
 
   const categories = readCategoryLabels(
     await readDatasetValue(categoryDataset),
-    `/obs/__categories/${key}`,
+    `/${label}/__categories/${key}`,
   )
   return categories.length === 0 ? null : categories
+}
+
+// An AnnData categorical column: a group with integer `codes` and its
+// `categories`.
+async function readCategoricalGroup(
+  group: H5GroupLike,
+  path: string,
+): Promise<{
+  readonly codes: NumericArrayLike
+  readonly categories: readonly string[]
+}> {
+  const codes = readNumericArray(
+    await readDatasetValue(expectDataset(group.get('codes'), `${path}/codes`)),
+    `${path}/codes`,
+  )
+  const categories = readCategoryLabels(
+    await readDatasetValue(expectDataset(group.get('categories'), `${path}/categories`)),
+    `${path}/categories`,
+  )
+
+  return { codes, categories }
+}
+
+// Negative codes mark missing values.
+function categoricalLabel(
+  codes: NumericArrayLike,
+  categories: readonly string[],
+  index: number,
+): string | null {
+  const code = Math.trunc(numericValue(codes, index))
+  return code < 0 ? null : (categories[code] ?? null)
 }
 
 async function readObsColumnValues(
@@ -1604,22 +1693,12 @@ async function readObsColumnValues(
   const entity = obs.get(key)
 
   if (isCategoricalGroup(entity)) {
-    const codes = readNumericArray(
-      await readDatasetValue(expectDataset(entity.get('codes'), `/obs/${key}/codes`)),
-      `/obs/${key}/codes`,
-    )
-    const categories = readCategoryLabels(
-      await readDatasetValue(
-        expectDataset(entity.get('categories'), `/obs/${key}/categories`),
-      ),
-      `/obs/${key}/categories`,
-    )
+    const { codes, categories } = await readCategoricalGroup(entity, `/obs/${key}`)
 
     return codes.length === rowCount
-      ? Array.from({ length: rowCount }, (_value, index) => {
-          const code = Math.trunc(numericValue(codes, index))
-          return code < 0 ? null : (categories[code] ?? null)
-        })
+      ? Array.from({ length: rowCount }, (_value, index) =>
+          categoricalLabel(codes, categories, index),
+        )
       : null
   }
 

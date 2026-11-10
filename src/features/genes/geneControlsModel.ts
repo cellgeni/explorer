@@ -15,7 +15,14 @@ const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 export type GenePanelState<ErrorType = unknown> =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
-  | { readonly status: 'ready'; readonly url: string; readonly genes: readonly string[] }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly genes: readonly string[]
+      // Another name each gene can be searched by, such as an H5AD gene's
+      // Ensembl ID when it is listed by symbol.
+      readonly aliases?: ReadonlyMap<string, string>
+    }
   | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
 
 export const IDLE_GENE_PANEL_STATE: GenePanelState<never> = { status: 'idle' }
@@ -73,11 +80,13 @@ export function genePanelLoadStarted(url: string): GenePanelState<never> {
 export function genePanelLoadReady(
   url: string,
   genes: readonly string[],
+  aliases?: ReadonlyMap<string, string>,
 ): GenePanelState<never> {
   return {
     status: 'ready',
     url,
     genes: [...genes].sort((left, right) => left.localeCompare(right)),
+    ...(aliases === undefined || aliases.size === 0 ? {} : { aliases }),
   }
 }
 
@@ -260,7 +269,10 @@ export function filterGeneOptions(
   genes: readonly string[],
   search: string,
   selectedGenes: readonly string[],
-  options: { readonly limit?: number } = {},
+  options: {
+    readonly limit?: number
+    readonly aliases?: ReadonlyMap<string, string> | undefined
+  } = {},
 ): readonly string[] {
   const normalizedSearch = search.trim().toLowerCase()
   const selected = new Set(selectedGenes)
@@ -271,7 +283,11 @@ export function filterGeneOptions(
       continue
     }
 
-    if (normalizedSearch.length === 0 || gene.toLowerCase().includes(normalizedSearch)) {
+    if (
+      normalizedSearch.length === 0 ||
+      gene.toLowerCase().includes(normalizedSearch) ||
+      options.aliases?.get(gene)?.toLowerCase().includes(normalizedSearch) === true
+    ) {
       matches.push(gene)
     }
 
@@ -286,6 +302,7 @@ export function filterGeneOptions(
 export function parseGeneSetSymbols(
   value: string,
   availableGenes: readonly string[],
+  aliases?: ReadonlyMap<string, string>,
 ): readonly string[] {
   if (value.trim().length === 0 || availableGenes.length === 0) {
     return []
@@ -295,6 +312,15 @@ export function parseGeneSetSymbols(
 
   for (const gene of availableGenes) {
     availableGenesByNormalizedName.set(gene.toLowerCase(), gene)
+  }
+
+  // Gene names win over an alias spelled the same way.
+  for (const [gene, alias] of aliases ?? []) {
+    const normalizedAlias = alias.toLowerCase()
+
+    if (!availableGenesByNormalizedName.has(normalizedAlias)) {
+      availableGenesByNormalizedName.set(normalizedAlias, gene)
+    }
   }
 
   const selectedGenes = new Set<string>()

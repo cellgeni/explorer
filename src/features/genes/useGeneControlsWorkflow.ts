@@ -34,6 +34,7 @@ interface GeneControlsDataOptions {
   readonly geneExpressionBatch: GeneExpressionBatch | null
   readonly geneExpressionScaleDatasetUrl: string
   readonly geneOptions: readonly string[]
+  readonly geneAliases?: ReadonlyMap<string, string> | undefined
   readonly savedGeneSets: readonly SavedGeneSet[]
   readonly selectedGenes: readonly string[]
 }
@@ -102,6 +103,7 @@ export function useGeneControlsWorkflow({
     geneExpressionBatch,
     geneExpressionScaleDatasetUrl,
     geneOptions,
+    geneAliases,
     savedGeneSets,
     selectedGenes,
   },
@@ -120,7 +122,7 @@ export function useGeneControlsWorkflow({
   },
 }: UseGeneControlsWorkflowOptions): UseGeneControlsWorkflowResult {
   const applyGeneSetSymbols = useCallback(() => {
-    const genes = parseGeneSetSymbols(geneSetSymbols, geneOptions)
+    const genes = parseGeneSetSymbols(geneSetSymbols, geneOptions, geneAliases)
 
     if (genes.length === 0) {
       return
@@ -134,6 +136,7 @@ export function useGeneControlsWorkflow({
     setGeneSearch('')
   }, [
     appendDebugEvent,
+    geneAliases,
     geneOptions,
     geneSetSymbols,
     resetGeneExpressionSelectionState,

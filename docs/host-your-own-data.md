@@ -163,9 +163,9 @@ https://bucket.example/path/to/sample.h5ad
 The H5AD reader requires:
 
 - `/obs` with a readable dataframe index for cell IDs.
-- `/var` with a readable dataframe index. A plain (non-categorical)
-  `gene_symbols`, `gene_symbol`, `feature_name`, or `name` column replaces the
-  index as the gene name.
+- `/var` with a readable dataframe index. A `gene_symbols`, `gene_symbol`,
+  `feature_name`, or `name` column, plain or categorical, replaces the index as
+  the gene name, and the index stays searchable as an alias.
 - `/obsm` with an `n_obs x 2+` coordinate matrix. The first of `X_spatial`,
   `spatial`, `X_umap`, `umap`, `X_tsne`, `X_tSNE`, `tsne`, `X_pca` is used for
   positions, and every value must be finite.

@@ -43,6 +43,7 @@ describe('SpatialDataDataset', () => {
     expect(overview[0]?.position).toEqual({ x: 1, y: 1 })
     expect(overview[1]?.metadata).toEqual({ region: 'cells', cell_id: 11 })
     await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1'])
+    await expect(dataset.geneAliases()).resolves.toEqual(new Map())
 
     const matrix = await dataset.matrix(['cell-b', 'cell-c'])
     expect(matrix.cells.get('cell-b')).toEqual({ geneNames: ['Gad1'], counts: [2] })

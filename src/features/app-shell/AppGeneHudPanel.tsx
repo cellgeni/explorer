@@ -135,9 +135,12 @@ export function AppGeneHudPanel({
     setSavedGeneSets([])
   }, [genePanelState])
 
+  const geneAliases =
+    genePanelState.status === 'ready' ? genePanelState.aliases : undefined
   const filteredGenes = useMemo(
-    () => filterGeneOptions(geneOptions, geneSearch, selectedGenes),
-    [geneOptions, geneSearch, selectedGenes],
+    () =>
+      filterGeneOptions(geneOptions, geneSearch, selectedGenes, { aliases: geneAliases }),
+    [geneAliases, geneOptions, geneSearch, selectedGenes],
   )
 
   const {
@@ -165,6 +168,7 @@ export function AppGeneHudPanel({
       geneExpressionBatch,
       geneExpressionScaleDatasetUrl,
       geneOptions,
+      geneAliases,
       savedGeneSets,
       selectedGenes,
     },

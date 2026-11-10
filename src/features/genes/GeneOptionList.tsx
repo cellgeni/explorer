@@ -7,6 +7,7 @@ const GENE_OPTION_OVERSCAN_ROWS = 4
 interface GeneOptionListProps {
   readonly genes: readonly string[]
   readonly selectedGenes: readonly string[]
+  readonly aliases?: ReadonlyMap<string, string> | undefined
   readonly ariaLabel?: string
   readonly emptyMessage?: string
   readonly onToggleGene: (gene: string) => void
@@ -15,6 +16,7 @@ interface GeneOptionListProps {
 export function GeneOptionList({
   genes,
   selectedGenes,
+  aliases,
   ariaLabel = 'Gene options',
   emptyMessage = 'No matching genes',
   onToggleGene,
@@ -62,13 +64,14 @@ export function GeneOptionList({
       <div className="gene-option-list-spacer" style={{ height: `${totalHeight}px` }}>
         {visibleGenes.map((gene, visibleIndex) => {
           const geneIndex = startIndex + visibleIndex
+          const alias = aliases?.get(gene)
 
           return (
             <button
               key={gene}
               type="button"
               className={selectedGeneSet.has(gene) ? 'selected' : undefined}
-              title={gene}
+              title={alias === undefined ? gene : `${gene} (${alias})`}
               aria-setsize={genes.length}
               aria-posinset={geneIndex + 1}
               onClick={() => {

@@ -27,6 +27,23 @@ describe('GeneOptionList', () => {
     expect(onToggleGene).toHaveBeenCalledWith('Gene199')
   })
 
+  it('names a gene alias in the option tooltip', () => {
+    render(
+      <GeneOptionList
+        genes={['ACTB', 'MYH7']}
+        selectedGenes={[]}
+        aliases={new Map([['MYH7', 'ENSG00000092054']])}
+        onToggleGene={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'MYH7' })).toHaveAttribute(
+      'title',
+      'MYH7 (ENSG00000092054)',
+    )
+    expect(screen.getByRole('button', { name: 'ACTB' })).toHaveAttribute('title', 'ACTB')
+  })
+
   it('shows an empty state when no genes match', () => {
     render(<GeneOptionList genes={[]} selectedGenes={[]} onToggleGene={vi.fn()} />)
 

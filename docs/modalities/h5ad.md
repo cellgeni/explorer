@@ -67,11 +67,18 @@ dataset instance (`cachePromise`, reset on error).
   datasets named `_index`, `index`, `obs_names`/`var_names`, then `cell_id`
   (obs) or `gene_ids` (var). Names are trimmed; empty names become `obs-N` or
   `var-N`; duplicates get `-2`, `-3`, … suffixes.
-- **Gene names** (`readGeneNames`): the first plain (non-categorical) dataset
-  among `gene_symbols`, `gene_symbol`, `feature_name`, `name` that has one
-  non-empty value per gene replaces the var index. A categorical
-  `feature_name` (common in CELLxGENE files) is skipped, so those files show
-  the index (often Ensembl IDs).
+- **Gene names** (`readGeneNames`): the first column among `gene_symbols`,
+  `gene_symbol`, `feature_name`, `name` with one value per gene and at least
+  one non-empty value replaces the var index. A column can be a string
+  dataset, a categorical group (`codes` + `categories`, as CELLxGENE stores
+  `feature_name`), or integer codes with a legacy `/var/__categories/<key>`
+  sidecar. Negative codes become empty names. The index's rules then apply:
+  empty names become `var-N` and duplicates get `-2`, `-3`, … suffixes.
+- **Gene aliases** (`geneAliases`): when a column replaces the index, each
+  gene's index name (often its Ensembl ID) is kept as an alias. The
+  `Gene selection` search and `Gene set symbols` match aliases too, and the
+  gene list tooltip shows it (`MYH7 (ENSG00000092054)`). Selected genes,
+  shared links, and manifest `defaults.genes` use the listed names only.
 
 ### `obs` Columns
 

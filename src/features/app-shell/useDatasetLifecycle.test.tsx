@@ -498,6 +498,7 @@ describe('useDatasetLifecycle', () => {
         },
       ]),
       genePanel: vi.fn(async () => ['Actb']),
+      geneAliases: vi.fn(async () => new Map([['Actb', 'ENSMUSG00000029580']])),
       annotationGroups: vi.fn(async () => []),
       embeddingOptions: vi.fn(async () => []),
       metadataTracks: vi.fn(async () => [metadataTrack]),
@@ -555,6 +556,7 @@ describe('useDatasetLifecycle', () => {
       status: 'ready',
       url: datasetUrl,
       genes: ['Actb'],
+      aliases: new Map([['Actb', 'ENSMUSG00000029580']]),
     })
     expect(setLoadState).toHaveBeenLastCalledWith({
       status: 'ready',

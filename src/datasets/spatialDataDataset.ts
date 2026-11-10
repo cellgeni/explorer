@@ -397,6 +397,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return (await this.tableOrNull())?.genePanel() ?? []
   }
 
+  async geneAliases(): Promise<ReadonlyMap<string, string>> {
+    return (await this.tableOrNull())?.geneAliases() ?? new Map()
+  }
+
   async cells(
     selection: RoiSelectionInput,
     options: { readonly limit?: number } = {},
