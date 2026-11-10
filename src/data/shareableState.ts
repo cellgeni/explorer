@@ -52,6 +52,11 @@ export interface ShareableState {
   readonly spatialDataCoordinateSystem?: string
   readonly spatialDataImage?: string
   readonly spatialDataMicrometersPerUnit?: number
+  // Standard Visium: tissue image (`hires`, `lowres`, or `none`), library,
+  // and whether spots off the tissue are shown.
+  readonly visiumImage?: string
+  readonly visiumLibrary?: string
+  readonly visiumOffTissue?: boolean
 }
 
 type MutableShareableState = {
@@ -109,6 +114,9 @@ export function parseShareableState(hash: string): ShareableState {
   const spatialDataCoordinateSystem = readString(params, 'sdCs')
   const spatialDataImage = readString(params, 'sdImage')
   const spatialDataMicrometersPerUnit = parsePositiveNumber(params.get('sdUm'))
+  const visiumImage = readString(params, 'vimg')
+  const visiumLibrary = readString(params, 'vlib')
+  const visiumOffTissue = parseBoolean(params.get('voff'))
 
   if (datasetUrl !== undefined) {
     state.datasetUrl = datasetUrl
@@ -278,6 +286,18 @@ export function parseShareableState(hash: string): ShareableState {
     state.spatialDataMicrometersPerUnit = spatialDataMicrometersPerUnit
   }
 
+  if (visiumImage !== undefined) {
+    state.visiumImage = visiumImage
+  }
+
+  if (visiumLibrary !== undefined) {
+    state.visiumLibrary = visiumLibrary
+  }
+
+  if (visiumOffTissue !== undefined) {
+    state.visiumOffTissue = visiumOffTissue
+  }
+
   return state
 }
 
@@ -444,6 +464,13 @@ export function formatShareableState(state: ShareableState): string {
       'sdUm',
       Number(state.spatialDataMicrometersPerUnit.toPrecision(6)).toString(),
     )
+  }
+
+  setOptionalString(params, 'vimg', state.visiumImage)
+  setOptionalString(params, 'vlib', state.visiumLibrary)
+
+  if (state.visiumOffTissue !== undefined) {
+    params.set('voff', state.visiumOffTissue ? '1' : '0')
   }
 
   const text = params.toString()

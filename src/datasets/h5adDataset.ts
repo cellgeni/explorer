@@ -116,8 +116,10 @@ export interface AnnDataVisiumSummary {
   readonly libraryIds: readonly string[]
   // Spots shown: the library's rows under tissue.
   readonly spotCount: number
-  // Rows with obs `in_tissue` 0 (CELLxGENE keeps every array spot); hidden.
+  // The library's rows with obs `in_tissue` 0 (CELLxGENE keeps every array
+  // spot); hidden unless `showOffTissue`.
   readonly offTissueSpotCount: number
+  readonly showOffTissue: boolean
   readonly spotDiameterMicrometers: number
   readonly units: VisiumUnits
   readonly scalefactors: VisiumScalefactors
@@ -126,6 +128,12 @@ export interface AnnDataVisiumSummary {
   // Space Ranger matrix.
   readonly chemistry?: string
   readonly softwareVersion?: string
+}
+
+// Which library to show and whether to show spots off the tissue.
+export interface AnnDataVisiumView {
+  readonly libraryId?: string
+  readonly showOffTissue?: boolean
 }
 
 export interface AnnDataZarrSource {
@@ -171,7 +179,30 @@ interface H5adCache {
   readonly continuousTracks: readonly H5adContinuousTrack[]
   readonly matrix: H5adMatrix
   readonly extent: BBox
+  // The Visium placement for the current view; `visiumSource` holds what any
+  // view needs.
   readonly visium: H5adVisiumLayout | null
+  readonly visiumSource: H5adVisiumSource | null
+}
+
+interface H5adVisiumSource {
+  readonly libraries: readonly H5adVisiumLibrary[]
+  readonly defaultLibraryId: string
+  // obsm `spatial`, in full-resolution pixels.
+  readonly pixels: readonly { readonly x: number; readonly y: number }[]
+  // Each row's library from an obs library column; null without one.
+  readonly rowLibraries: readonly (string | null)[] | null
+  readonly inTissue: readonly number[] | null
+  readonly arrayRows: readonly number[] | null
+  readonly arrayCols: readonly number[] | null
+}
+
+interface H5adVisiumLibrary {
+  readonly id: string
+  readonly scalefactors: VisiumScalefactors
+  readonly imagePaths: Readonly<Partial<Record<VisiumImageKind, string>>>
+  readonly chemistry?: string
+  readonly softwareVersion?: string
 }
 
 interface H5adVisiumLayout {
@@ -386,9 +417,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private readonly zarrSource: AnnDataZarrSource | undefined
   private readonly memorySource: AnnDataMemorySource | undefined
   private readonly visiumImageUrls: Readonly<Partial<Record<VisiumImageKind, string>>>
+  private baseCachePromise: Promise<H5adCache> | null = null
+  // The base cache placed for `visiumView`.
   private cachePromise: Promise<H5adCache> | null = null
+  private visiumView: AnnDataVisiumView = {}
   private spotElementsPromise: Promise<readonly VisiumSpotEntry[]> | null = null
-  private readonly tissueImageUrls = new Map<VisiumImageKind, Promise<string>>()
+  // Per library and image kind.
+  private readonly tissueImageUrls = new Map<string, Promise<string>>()
 
   constructor(options: AnnDataH5adDatasetOptions) {
     this.url = options.url
@@ -447,6 +482,21 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
               )
               .map((spot) => spot.element),
     }
+  }
+
+  // Chooses the Visium library and whether off-tissue spots are placed. The
+  // file is not read again; later calls see the new placement.
+  setVisiumView(view: AnnDataVisiumView): this {
+    if (
+      view.libraryId !== this.visiumView.libraryId ||
+      (view.showOffTissue === true) !== (this.visiumView.showOffTissue === true)
+    ) {
+      this.visiumView = view
+      this.cachePromise = null
+      this.spotElementsPromise = null
+    }
+
+    return this
   }
 
   // Standard Visium layout read from `uns/spatial`, or null for other AnnData.
@@ -730,7 +780,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     if (hostedUrl !== undefined && isGzipUrl(hostedUrl)) {
       return {
         kind: 'flat',
-        url: await this.cachedImageUrl(kind, () =>
+        url: await this.cachedImageUrl(visium.summary.libraryId, kind, () =>
           readGunzippedImageUrl(hostedUrl, this.fetcher),
         ),
         scaleFactor,
@@ -749,7 +799,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
     const dataset = expectDataset(cache.root.get(path), path)
     const shape = dataset.shape ?? []
-    const url = await this.cachedImageUrl(kind, async () => {
+    const url = await this.cachedImageUrl(visium.summary.libraryId, kind, async () => {
       const value = await readDatasetValue(dataset)
       this.onProgress?.(`Visium ${kind} image: encoding ${shape.join(' x ')} array`)
       const bytes = encodeImageArrayAsBmp(readNumericArray(value, path), shape)
@@ -767,19 +817,21 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   // Object URLs are made once per image and kept for the dataset's lifetime.
   private cachedImageUrl(
+    libraryId: string,
     kind: VisiumImageKind,
     create: () => Promise<string>,
   ): Promise<string> {
-    const existing = this.tissueImageUrls.get(kind)
+    const key = `${libraryId}/${kind}`
+    const existing = this.tissueImageUrls.get(key)
 
     if (existing !== undefined) {
       return existing
     }
 
     const urlPromise = create()
-    this.tissueImageUrls.set(kind, urlPromise)
+    this.tissueImageUrls.set(key, urlPromise)
     urlPromise.catch(() => {
-      this.tissueImageUrls.delete(kind)
+      this.tissueImageUrls.delete(key)
     })
     return urlPromise
   }
@@ -830,7 +882,22 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   private cache(): Promise<H5adCache> {
     if (this.cachePromise === null) {
-      this.cachePromise = (
+      const view = this.visiumView
+      const promise = this.baseCache().then((base) => withVisiumView(base, view))
+      this.cachePromise = promise
+      promise.catch(() => {
+        if (this.cachePromise === promise) {
+          this.cachePromise = null
+        }
+      })
+    }
+
+    return this.cachePromise
+  }
+
+  private baseCache(): Promise<H5adCache> {
+    if (this.baseCachePromise === null) {
+      this.baseCachePromise = (
         this.memorySource !== undefined
           ? readAnnDataMemory(this.url, this.memorySource, this.onProgress)
           : this.zarrSource === undefined
@@ -840,13 +907,22 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
               })
             : readAnnDataZarr(this.url, this.zarrSource, this.onProgress)
       ).catch((error: unknown) => {
-        this.cachePromise = null
+        this.baseCachePromise = null
         throw error
       })
     }
 
-    return this.cachePromise
+    return this.baseCachePromise
   }
+}
+
+function withVisiumView(base: H5adCache, view: AnnDataVisiumView): H5adCache {
+  if (base.visiumSource === null) {
+    return base
+  }
+
+  const { layout, coordinates } = placeVisiumView(base.visiumSource, view)
+  return { ...base, coordinates, extent: bboxForPoints(coordinates), visium: layout }
 }
 
 interface VisiumSpotEntry {
@@ -1157,20 +1233,16 @@ function memoryUnsGroup(uns: AnnDataMemoryUns): HydratedH5adGroup {
 
 // Finds the standard Visium layout scanpy and squidpy write: obsm `spatial`
 // in full-resolution pixels, and `uns/spatial/<library>` with `scalefactors`
-// and `images`. With several libraries, rows are placed only for the first
-// one an obs library column names, because each library has its own image
-// and pixel space.
-async function readVisiumPlacement(
+// and `images`. Everything a placement needs is read once, so the library
+// and off-tissue choice can change without reading the file again.
+async function readVisiumSource(
   file: H5GroupLike,
   embedding: AnalysisEmbedding,
   tracks: {
     readonly categoricalTracks: readonly H5adCategoricalTrack[]
     readonly continuousTracks: readonly H5adContinuousTrack[]
   },
-): Promise<{
-  readonly layout: H5adVisiumLayout
-  readonly coordinates: readonly DataPoint[]
-} | null> {
+): Promise<H5adVisiumSource | null> {
   if (embedding.kind !== 'spatial' && embedding.kind !== 'X_spatial') {
     return null
   }
@@ -1188,6 +1260,15 @@ async function readVisiumPlacement(
       (isGroup(library.get('scalefactors')) || isGroup(library.get('images')))
     )
   })
+
+  if (libraryIds.length === 0) {
+    return null
+  }
+
+  const libraries = await Promise.all(
+    libraryIds.map((id) => readVisiumLibrary(spatial, id)),
+  )
+  // With several libraries, an obs column says which rows belong to each.
   const libraryTrack =
     libraryIds.length > 1
       ? tracks.categoricalTracks.find(
@@ -1196,20 +1277,31 @@ async function readVisiumPlacement(
             track.values.some((value) => value !== null && libraryIds.includes(value)),
         )
       : undefined
-  const libraryId =
-    libraryIds.find(
-      (id) => libraryTrack === undefined || libraryTrack.values.includes(id),
-    ) ?? libraryIds[0]
+  const continuous = (id: string) =>
+    tracks.continuousTracks.find((track) => track.id === id)?.values ?? null
+  const inTissue = continuous('in_tissue')
 
-  if (libraryId === undefined) {
-    return null
+  return {
+    libraries,
+    defaultLibraryId:
+      libraryIds.find(
+        (id) => libraryTrack === undefined || libraryTrack.values.includes(id),
+      ) ?? libraryIds[0]!,
+    pixels: embedding.points,
+    rowLibraries: libraryTrack?.values ?? null,
+    // Unless no row is under tissue, in which case the column is ignored.
+    inTissue: inTissue?.some((value) => value !== 0) === true ? inTissue : null,
+    arrayRows: continuous('array_row'),
+    arrayCols: continuous('array_col'),
   }
+}
 
-  const library = expectGroup(spatial.get(libraryId), `/uns/spatial/${libraryId}`)
+async function readVisiumLibrary(
+  spatial: H5GroupLike,
+  id: string,
+): Promise<H5adVisiumLibrary> {
+  const library = expectGroup(spatial.get(id), `/uns/spatial/${id}`)
   const scalefactorGroup = library.get('scalefactors')
-  const scalefactors = isGroup(scalefactorGroup)
-    ? parseVisiumScalefactors(await readScalarRecord(scalefactorGroup))
-    : {}
   const metadataGroup = library.get('metadata')
   const metadata = isGroup(metadataGroup) ? await readScalarRecord(metadataGroup) : {}
   const imageGroup = library.get('images')
@@ -1221,46 +1313,66 @@ async function readVisiumPlacement(
       const dimensions = isDataset(image) ? (image.shape?.length ?? 0) : 0
 
       if (dimensions === 2 || dimensions === 3) {
-        imagePaths[kind] = `/uns/spatial/${libraryId}/images/${kind}`
+        imagePaths[kind] = `/uns/spatial/${id}/images/${kind}`
       }
     }
   }
 
-  const inLibrary = (row: number) =>
-    libraryTrack === undefined || libraryTrack.values[row] === libraryId
-  // Spots off the tissue are hidden, as in Space Ranger's filtered output,
-  // unless no row is marked as under tissue.
-  const inTissueTrack = tracks.continuousTracks.find((track) => track.id === 'in_tissue')
-  const tissueTrack = inTissueTrack?.values.some((value) => value !== 0)
-    ? inTissueTrack
-    : undefined
-  const isPlaced = (row: number) =>
-    inLibrary(row) && (tissueTrack === undefined || tissueTrack.values[row] !== 0)
-  const arrayRows = tracks.continuousTracks.find((track) => track.id === 'array_row')
-  const arrayCols = tracks.continuousTracks.find((track) => track.id === 'array_col')
-  const lattice: VisiumLatticeSample[] | null =
-    arrayRows === undefined || arrayCols === undefined ? null : []
-  const centers: { x: number; y: number }[] = []
+  return {
+    id,
+    scalefactors: isGroup(scalefactorGroup)
+      ? parseVisiumScalefactors(await readScalarRecord(scalefactorGroup))
+      : {},
+    imagePaths,
+    ...stringEntry('chemistry', metadata.chemistry_description),
+    ...stringEntry('softwareVersion', metadata.software_version),
+  }
+}
 
-  embedding.points.forEach((point, row) => {
+// Places one library's spots in micrometres. Rows of other libraries, and
+// spots off the tissue unless `showOffTissue`, are left unplaced. The scale is
+// fitted on the whole library, off-tissue spots included.
+function placeVisiumView(
+  source: H5adVisiumSource,
+  view: AnnDataVisiumView,
+): { readonly layout: H5adVisiumLayout; readonly coordinates: readonly DataPoint[] } {
+  const library =
+    source.libraries.find((candidate) => candidate.id === view.libraryId) ??
+    source.libraries.find((candidate) => candidate.id === source.defaultLibraryId) ??
+    source.libraries[0]!
+  const { rowLibraries, inTissue, arrayRows, arrayCols } = source
+  const inLibrary = (row: number) =>
+    rowLibraries === null || rowLibraries[row] === library.id
+  const lattice: VisiumLatticeSample[] | null =
+    arrayRows === null || arrayCols === null ? null : []
+  const centers: { x: number; y: number }[] = []
+  let offTissueSpotCount = 0
+
+  source.pixels.forEach((point, row) => {
     if (!inLibrary(row)) {
       return
     }
 
     centers.push(point)
+    offTissueSpotCount += inTissue?.[row] === 0 ? 1 : 0
     lattice?.push({
-      row: arrayRows?.values[row] ?? Number.NaN,
-      col: arrayCols?.values[row] ?? Number.NaN,
+      row: arrayRows?.[row] ?? Number.NaN,
+      col: arrayCols?.[row] ?? Number.NaN,
       x: point.x,
       y: point.y,
     })
   })
 
-  const units = resolveVisiumUnits({ scalefactors, lattice, centers })
+  const showOffTissue = view.showOffTissue === true && offTissueSpotCount > 0
+  const units = resolveVisiumUnits({
+    scalefactors: library.scalefactors,
+    lattice,
+    centers,
+  })
   const scale = units.micrometersPerPixel
   let spotCount = 0
-  const coordinates = embedding.points.map((point, row) => {
-    if (!isPlaced(row)) {
+  const coordinates = source.pixels.map((point, row) => {
+    if (!inLibrary(row) || (!showOffTissue && inTissue?.[row] === 0)) {
       return UNPLACED_H5AD_POINT
     }
 
@@ -1271,17 +1383,20 @@ async function readVisiumPlacement(
   return {
     layout: {
       summary: {
-        libraryId,
-        libraryIds,
+        libraryId: library.id,
+        libraryIds: source.libraries.map((candidate) => candidate.id),
         spotCount,
-        offTissueSpotCount: centers.length - spotCount,
+        offTissueSpotCount,
+        showOffTissue,
         spotDiameterMicrometers: VISIUM_SPOT_DIAMETER_MICROMETERS,
         units,
-        scalefactors,
-        ...stringEntry('chemistry', metadata.chemistry_description),
-        ...stringEntry('softwareVersion', metadata.software_version),
+        scalefactors: library.scalefactors,
+        ...(library.chemistry === undefined ? {} : { chemistry: library.chemistry }),
+        ...(library.softwareVersion === undefined
+          ? {}
+          : { softwareVersion: library.softwareVersion }),
       },
-      imagePaths,
+      imagePaths: library.imagePaths,
     },
     coordinates,
   }
@@ -1382,10 +1497,11 @@ async function readH5adCacheFromGroup(
     cellIds.length,
     onUnreadableColumn,
   )
-  const visiumPlacement =
+  const visiumSource =
     coordinateEmbedding === null || options.visiumLayout === false
       ? null
-      : await readVisiumPlacement(file, coordinateEmbedding, observationTracks)
+      : await readVisiumSource(file, coordinateEmbedding, observationTracks)
+  const visiumPlacement = visiumSource === null ? null : placeVisiumView(visiumSource, {})
   const coordinates =
     resolvedCoordinates ??
     visiumPlacement?.coordinates ??
@@ -1408,6 +1524,7 @@ async function readH5adCacheFromGroup(
     matrix,
     extent: bboxForPoints(coordinates),
     visium: visiumPlacement?.layout ?? null,
+    visiumSource,
   }
 }
 

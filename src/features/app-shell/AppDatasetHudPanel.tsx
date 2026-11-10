@@ -15,6 +15,7 @@ import type { SpatialDataControlState } from '../dataset/spatialDataModel'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import type { VisiumControlState } from '../dataset/visiumModel'
 import type { VisiumImageKind } from '../../datasets/visiumFormat'
+import type { AnnDataVisiumView } from '../../datasets/h5adDataset'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { DebugLogAppendOptions, DebugLogEntry } from './appRuntimeModel'
 import type { FallbackNoticeEntry } from './appRuntimeModel'
@@ -58,6 +59,7 @@ export interface AppDatasetHudPanelProps {
   readonly handleSpatialDataSelectionChange: (selection: SpatialDataSelection) => void
   readonly visiumControlState: VisiumControlState
   readonly handleVisiumImageChange: (image: VisiumImageKind | null) => void
+  readonly handleVisiumViewChange: (view: AnnDataVisiumView) => void
 }
 
 export function AppDatasetHudPanel({
@@ -88,6 +90,7 @@ export function AppDatasetHudPanel({
   handleSpatialDataSelectionChange,
   visiumControlState,
   handleVisiumImageChange,
+  handleVisiumViewChange,
 }: AppDatasetHudPanelProps) {
   return (
     <DatasetHudPanel
@@ -115,6 +118,7 @@ export function AppDatasetHudPanel({
       onSpatialDataSelectionChange={handleSpatialDataSelectionChange}
       visiumControlState={visiumControlState}
       onVisiumImageChange={handleVisiumImageChange}
+      onVisiumViewChange={handleVisiumViewChange}
       activeErrors={activeErrors}
       fallbackNotices={fallbackNotices}
       debugLog={debugLog}

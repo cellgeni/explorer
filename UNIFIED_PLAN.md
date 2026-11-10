@@ -1861,10 +1861,22 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 #### Known Gaps
 
 - [ ] `spaceranger aggr` output (per-library `spatial/<library>/`) is not
-      detected; a multi-library `.h5ad` shows one library with no selector.
+      detected.
 - [ ] The full-resolution microscope image is not shown.
 - [ ] k-means clusterings and `spatial_enrichment.csv` are not read.
-- [ ] The tissue image choice is not in the shareable URL.
+
+#### Follow-Up (2026-11-10)
+
+- [x] `Show off-tissue spots` and a `Library` select for multi-library
+      `.h5ad` files. Both re-place spots from data read once
+      (`setVisiumView`) and reload through the normal load path, keeping
+      genes and colours; a library change clears the ROI.
+- [x] Share link: `vimg`, `vlib`, and `voff`, restored on open.
+- [x] Categorical `var/feature_name` gene symbols landed separately on `main`
+      (`05c4092`, with Ensembl IDs kept as search aliases); nothing more was
+      needed for CELLxGENE Visium files.
+- [x] The CELLxGENE heart example now opens as Visium; its description says
+      2,913 spots under tissue of 4,992.
 
 ---
 

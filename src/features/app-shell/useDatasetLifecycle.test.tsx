@@ -663,6 +663,7 @@ describe('useDatasetLifecycle', () => {
             multiChannel: false,
           },
         })),
+        setVisiumView: vi.fn(() => dataset),
         visiumSummary: vi.fn(async () => summary),
         tissueImage: vi.fn(async () => ({
           kind: 'flat' as const,
@@ -728,12 +729,91 @@ describe('useDatasetLifecycle', () => {
         })
       })
       expect(dataset.tissueImage).toHaveBeenCalledWith('hires')
+      expect(dataset.setVisiumView).toHaveBeenCalledWith({})
       expect(setMorphologyState).toHaveBeenLastCalledWith({
         status: 'ready',
         url: 'https://example.test/hires.png',
       })
     },
   )
+
+  it('restores the shared Visium library, off-tissue spots, and image', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const datasetUrl = 'https://example.test/two-sections.h5ad'
+    const summary = {
+      libraryId: 'lib-B',
+      libraryIds: ['lib-A', 'lib-B'],
+      spotCount: 12,
+      offTissueSpotCount: 2,
+      showOffTissue: true,
+      spotDiameterMicrometers: 55,
+      units: {
+        micrometersPerPixel: 0.5,
+        source: 'spot-grid' as const,
+        detail: 'fit',
+      },
+      scalefactors: { tissueHiresScalef: 0.2, tissueLowresScalef: 0.05 },
+      images: ['hires' as const, 'lowres' as const],
+    }
+    const dataset = {
+      overview: vi.fn(async () => []),
+      genePanel: vi.fn(async () => []),
+      annotationGroups: vi.fn(async () => []),
+      embeddingOptions: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => []),
+      meta: vi.fn(),
+      setVisiumView: vi.fn(() => dataset),
+      visiumSummary: vi.fn(async () => summary),
+      tissueImage: vi.fn(async () => null),
+    }
+    const setVisiumControlState = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'h5ad' as const,
+          baseUrl: datasetUrl,
+          h5adUrl: datasetUrl,
+          checked: [],
+        }))}
+        getSpatialDataset={
+          vi.fn(
+            async () => dataset,
+          ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+        }
+        extraSetters={{ setVisiumControlState }}
+        initialShareableState={{
+          datasetUrl,
+          visiumLibrary: 'lib-B',
+          visiumOffTissue: true,
+          visiumImage: 'lowres',
+        }}
+        startDatasetLoadRef={startDatasetLoadRef}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(datasetUrl, true)
+    })
+
+    expect(dataset.setVisiumView).toHaveBeenCalledWith({
+      libraryId: 'lib-B',
+      showOffTissue: true,
+    })
+    expect(setVisiumControlState).toHaveBeenCalledWith({
+      status: 'ready',
+      source: 'h5ad',
+      summary,
+      image: 'lowres',
+    })
+    await waitFor(() => {
+      expect(dataset.tissueImage).toHaveBeenCalledWith('lowres')
+    })
+  })
 
   it('keeps an .h5ad without uns/spatial on the H5AD platform', async () => {
     const refs = createLifecycleRefs()
@@ -748,6 +828,7 @@ describe('useDatasetLifecycle', () => {
       embeddingOptions: vi.fn(async () => []),
       metadataTracks: vi.fn(async () => []),
       meta: vi.fn(),
+      setVisiumView: vi.fn(() => dataset),
       visiumSummary: vi.fn(async () => null),
       tissueImage: vi.fn(),
     }

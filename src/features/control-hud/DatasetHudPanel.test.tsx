@@ -36,6 +36,7 @@ describe('DatasetHudPanel', () => {
         onSpatialDataSelectionChange={vi.fn()}
         visiumControlState={{ status: 'idle' }}
         onVisiumImageChange={vi.fn()}
+        onVisiumViewChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[]}
         debugLog={[{ id: 1, timestamp: 1_700_000_000_000, message: 'Loaded' }]}
@@ -113,6 +114,7 @@ describe('DatasetHudPanel', () => {
         onSpatialDataSelectionChange={vi.fn()}
         visiumControlState={{ status: 'idle' }}
         onVisiumImageChange={vi.fn()}
+        onVisiumViewChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[]}
         debugLog={[]}
@@ -176,6 +178,7 @@ describe('DatasetHudPanel', () => {
         onSpatialDataSelectionChange={vi.fn()}
         visiumControlState={{ status: 'idle' }}
         onVisiumImageChange={vi.fn()}
+        onVisiumViewChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[]}
         debugLog={[]}
@@ -235,6 +238,7 @@ describe('DatasetHudPanel', () => {
         onSpatialDataSelectionChange={onSpatialDataSelectionChange}
         visiumControlState={{ status: 'idle' }}
         onVisiumImageChange={vi.fn()}
+        onVisiumViewChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[]}
         debugLog={[]}
@@ -280,6 +284,7 @@ describe('DatasetHudPanel', () => {
 
   it('shows the Visium library, scale, and tissue image choice', () => {
     const onVisiumImageChange = vi.fn()
+    const onVisiumViewChange = vi.fn()
 
     render(
       <DatasetHudPanel
@@ -310,6 +315,7 @@ describe('DatasetHudPanel', () => {
             libraryIds: ['V1_Mouse_Brain', 'V1_Mouse_Kidney'],
             spotCount: 2698,
             offTissueSpotCount: 2294,
+            showOffTissue: false,
             spotDiameterMicrometers: 55,
             units: {
               micrometersPerPixel: 0.5404,
@@ -322,6 +328,7 @@ describe('DatasetHudPanel', () => {
           },
         }}
         onVisiumImageChange={onVisiumImageChange}
+        onVisiumViewChange={onVisiumViewChange}
         activeErrors={[]}
         fallbackNotices={[]}
         debugLog={[]}
@@ -339,7 +346,7 @@ describe('DatasetHudPanel', () => {
     const section = screen.getByRole('region', { name: 'Visium dataset' })
     expect(section).toHaveTextContent('Visium (H5AD)')
     expect(section).toHaveTextContent('2,698 × 55 µm (2,294 off tissue hidden)')
-    expect(section).toHaveTextContent('V1_Mouse_Brain (1 of 2)')
+    expect(screen.getByTitle('Visium library to show')).toHaveValue('V1_Mouse_Brain')
     expect(section).toHaveTextContent("Spatial 3' v1")
     expect(section).toHaveTextContent('0.5404 µm per pixel (array row/column fit')
 
@@ -349,6 +356,16 @@ describe('DatasetHudPanel', () => {
     expect(onVisiumImageChange).toHaveBeenLastCalledWith('lowres')
     fireEvent.change(select, { target: { value: '' } })
     expect(onVisiumImageChange).toHaveBeenLastCalledWith(null)
+
+    fireEvent.change(screen.getByTitle('Visium library to show'), {
+      target: { value: 'V1_Mouse_Kidney' },
+    })
+    expect(onVisiumViewChange).toHaveBeenLastCalledWith({ libraryId: 'V1_Mouse_Kidney' })
+
+    const offTissue = screen.getByLabelText('Show off-tissue spots')
+    expect(offTissue).not.toBeChecked()
+    fireEvent.click(offTissue)
+    expect(onVisiumViewChange).toHaveBeenLastCalledWith({ showOffTissue: true })
   })
 
   it('renders fallback notices in the dataset HUD', () => {
@@ -374,6 +391,7 @@ describe('DatasetHudPanel', () => {
         onSpatialDataSelectionChange={vi.fn()}
         visiumControlState={{ status: 'idle' }}
         onVisiumImageChange={vi.fn()}
+        onVisiumViewChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[
           {
@@ -439,6 +457,7 @@ describe('DatasetHudPanel', () => {
         onSpatialDataSelectionChange={vi.fn()}
         visiumControlState={{ status: 'idle' }}
         onVisiumImageChange={vi.fn()}
+        onVisiumViewChange={vi.fn()}
         activeErrors={[]}
         fallbackNotices={[]}
         debugLog={[]}

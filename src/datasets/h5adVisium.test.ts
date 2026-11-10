@@ -110,7 +110,10 @@ async function createVisiumH5ad(options: VisiumH5adOptions = {}): Promise<Uint8A
     : ['lib-A']) {
     const library = spatial.create_group(libraryId)
     const scalefactors = library.create_group('scalefactors')
-    scalefactors.create_dataset({ name: 'tissue_hires_scalef', data: 0.25 })
+    scalefactors.create_dataset({
+      name: 'tissue_hires_scalef',
+      data: libraryId === 'lib-B' ? 0.5 : 0.25,
+    })
     scalefactors.create_dataset({ name: 'tissue_lowres_scalef', data: 0.075 })
     scalefactors.create_dataset({ name: 'spot_diameter_fullres', data: 81.25 })
     const images = library.create_group('images')
@@ -194,6 +197,50 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
     expect(await dataset.tissueImage('lowres')).toBeNull()
   })
 
+  it('switches library without reading the file again', async () => {
+    const createObjectUrl = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockImplementation(() => `blob:${createObjectUrl.mock.calls.length.toString()}`)
+    const bytes = await createVisiumH5ad({ secondLibrary: true })
+    const requests: string[] = []
+    const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(init?.method ?? 'GET')
+      return new Response(bytes.slice())
+    }) as typeof fetch
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/visium.h5ad',
+      fetcher,
+    })
+    const first = await dataset.image()
+
+    const summary = await dataset.setVisiumView({ libraryId: 'lib-B' }).visiumSummary()
+    const cells = await dataset.overview()
+    const image = await dataset.image()
+
+    expect(summary).toMatchObject({
+      libraryId: 'lib-B',
+      spotCount: 12,
+      scalefactors: { tissueHiresScalef: 0.5 },
+    })
+    expect(cells.map((cell) => cell.cellId)).toEqual(
+      Array.from({ length: 12 }, (_value, index) => `spot-${(index + 24).toString()}`),
+    )
+    expect((await dataset.elements((await dataset.meta()).extent)).elements).toHaveLength(
+      12,
+    )
+    // Each library's image is encoded once.
+    expect(image).toMatchObject({ scaleFactor: 0.5 })
+    expect(
+      image?.kind === 'flat' && first?.kind === 'flat' && image.url !== first.url,
+    ).toBe(true)
+    expect(requests.filter((method) => method !== 'HEAD')).toHaveLength(1)
+
+    // An unknown library falls back to the default one.
+    expect(
+      (await dataset.setVisiumView({ libraryId: 'missing' }).visiumSummary())?.libraryId,
+    ).toBe('lib-A')
+  })
+
   it('places only the first library when obs names each row’s library', async () => {
     const dataset = datasetFor(await createVisiumH5ad({ secondLibrary: true }))
     const [summary, cells] = await Promise.all([
@@ -221,6 +268,21 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
     expect(summary?.units.micrometersPerPixel).toBeCloseTo(MICROMETERS_PER_PIXEL, 2)
     expect(cells).toHaveLength(30)
     expect(cells[0]?.cellId).toBe('spot-6')
+  })
+
+  it('shows spots off the tissue when the view asks for them', async () => {
+    const dataset = datasetFor(await createVisiumH5ad({ inTissue: true }))
+    const hidden = await dataset.visiumSummary()
+    const shown = await dataset.setVisiumView({ showOffTissue: true }).visiumSummary()
+
+    expect(shown).toMatchObject({
+      spotCount: 36,
+      offTissueSpotCount: 6,
+      showOffTissue: true,
+    })
+    expect(shown?.units.micrometersPerPixel).toBe(hidden?.units.micrometersPerPixel)
+    expect(await dataset.overview()).toHaveLength(36)
+    expect(await dataset.setVisiumView({}).overview()).toHaveLength(30)
   })
 
   it('falls back to the spot pitch without array coordinates', async () => {

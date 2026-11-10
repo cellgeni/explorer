@@ -164,12 +164,16 @@ columns such as `total_counts` (`Cell color` → `Metadata`). Turn on
 `Cell boundaries` in the Layers tab to draw spot outlines.
 
 The Dataset tab's `Visium dataset` panel shows the library, how many spots are
-shown and how many off-tissue spots were hidden, and the scale. The scale is
+shown, and the scale. Spots off the tissue are hidden at first (CELLxGENE files
+keep every array spot); tick `Show off-tissue spots` to include them. A file
+with several sections has a `Library` select. Both reload the spots without
+downloading the file again, and keep your genes and colouring. The scale is
 fitted from the spot grid (spots are 100 µm apart), so distances and the scale
 bar are in micrometres even though Space Ranger only records pixels. When it
 can only be estimated from the nominal spot diameter, a notice under Fallbacks
 says so. Use `Tissue image` to switch between the high-res and low-res images
-or hide the image.
+or hide the image. The share link remembers the image, the library, and the
+off-tissue choice.
 
 To load a GEO sample, whose Space Ranger files are renamed and gzipped, write a
 [dataset manifest](./dataset-manifest.md#standard-visium) that names them and

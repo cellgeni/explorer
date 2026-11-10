@@ -3,7 +3,7 @@
   "version": 1,
   "platform": "h5ad",
   "name": "Adult human heart (Visium)",
-  "description": "Visium section of adult human heart, 4,992 spots with per-spot cell-type abundances (colour cells by Metadata), from a spatial atlas of cardiac niches.",
+  "description": "Visium section of adult human heart over its H&E: 2,913 spots under tissue (4,992 on the array) with per-spot cell-type abundances (colour spots by Metadata), from a spatial atlas of cardiac niches.",
   "source": {
     "repository": "CELLxGENE",
     "accession": "fe5b3268-ddd8-415a-9432-f1f95bfdb500",

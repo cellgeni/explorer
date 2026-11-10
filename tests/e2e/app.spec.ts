@@ -66,7 +66,10 @@ async function expectVisiumHdBoundaryLayersOffByDefault(page: Page) {
 }
 
 async function routeTinyH5adFixture(page: Page, path = '/h5ad-smoke.h5ad') {
-  const bytes = await createTinyH5adFixture()
+  await routeH5adBytes(page, path, await createTinyH5adFixture())
+}
+
+async function routeH5adBytes(page: Page, path: string, bytes: Uint8Array) {
   await page.route(`**${path}`, async (route) => {
     const headers = {
       'Access-Control-Allow-Origin': '*',
@@ -403,6 +406,146 @@ test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('metadata')
   await expect(genesPanel.getByLabel('Metadata track')).toHaveValue('h5ad:score')
   await expect(page).toHaveURL(/cellTrack=h5ad%3Ascore/)
+})
+
+// Two Visium sections in one AnnData file (scanpy concat layout): obs
+// `library_id`, `in_tissue` with 3 of 10 spots per row off the tissue, and a
+// hires image per library. GeneB is expressed only in section-B.
+async function createTwoLibraryVisiumH5ad(): Promise<Uint8Array> {
+  const h5wasm = (await import('h5wasm')).default
+  const { FS } = await h5wasm.ready
+  const fileName = `/playwright-${randomUUID()}.h5ad`
+  const libraries = ['section-A', 'section-B']
+  const rows = libraries.flatMap((_library, library) =>
+    Array.from({ length: 100 }, (_spot, spot) => {
+      const row = Math.floor(spot / 10)
+      const col = (row % 2) + (spot % 10) * 2
+      return {
+        library,
+        row,
+        col,
+        x: 200 + col * 100,
+        y: 200 + row * 100 * Math.sqrt(3),
+        inTissue: spot % 10 < 7 ? 1 : 0,
+      }
+    }),
+  )
+  const file = new h5wasm.File(fileName, 'w')
+  const obs = file.create_group('obs')
+  obs.create_attribute('_index', '_index')
+  obs.create_attribute('column-order', [
+    'in_tissue',
+    'array_row',
+    'array_col',
+    'library_id',
+  ])
+  obs.create_dataset({ name: '_index', data: rows.map((_row, index) => `spot-${index}`) })
+  obs.create_dataset({
+    name: 'in_tissue',
+    data: new Int32Array(rows.map((row) => row.inTissue)),
+  })
+  obs.create_dataset({
+    name: 'array_row',
+    data: new Int32Array(rows.map((row) => row.row)),
+  })
+  obs.create_dataset({
+    name: 'array_col',
+    data: new Int32Array(rows.map((row) => row.col)),
+  })
+  const library = obs.create_group('library_id')
+  library.create_attribute('encoding-type', 'categorical')
+  library.create_dataset({ name: 'categories', data: libraries })
+  library.create_dataset({
+    name: 'codes',
+    data: new Int8Array(rows.map((row) => row.library)),
+  })
+  const varGroup = file.create_group('var')
+  varGroup.create_attribute('_index', '_index')
+  varGroup.create_dataset({ name: '_index', data: ['GeneA', 'GeneB'] })
+  file.create_dataset({
+    name: 'X',
+    data: new Float32Array(
+      rows.flatMap((row) => [row.library === 0 ? 2 : 0, row.library]),
+    ),
+    shape: [rows.length, 2],
+  })
+  file.create_group('obsm').create_dataset({
+    name: 'spatial',
+    data: new Float64Array(rows.flatMap((row) => [row.x, row.y])),
+    shape: [rows.length, 2],
+  })
+  const spatial = file.create_group('uns').create_group('spatial')
+
+  for (const id of libraries) {
+    const group = spatial.create_group(id)
+    const scalefactors = group.create_group('scalefactors')
+    scalefactors.create_dataset({ name: 'tissue_hires_scalef', data: 0.1 })
+    scalefactors.create_dataset({ name: 'spot_diameter_fullres', data: 130 })
+    group.create_group('images').create_dataset({
+      name: 'hires',
+      data: new Uint8Array(40 * 30 * 3).fill(id === 'section-A' ? 200 : 120),
+      shape: [30, 40, 3],
+    })
+  }
+
+  file.close()
+  const bytes = FS.readFile(fileName)
+  FS.unlink(fileName)
+  return bytes
+}
+
+test('switches Visium libraries and off-tissue spots and keeps them in the link @smoke', async ({
+  page,
+}) => {
+  await routeH5adBytes(page, '/two-sections.h5ad', await createTwoLibraryVisiumH5ad())
+  await page.goto('/')
+
+  const datasetUrl = new URL('/two-sections.h5ad', page.url()).toString()
+  await page.getByLabel('Dataset or image URL').fill(datasetUrl)
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+
+  const visiumPanel = page.getByRole('region', { name: 'Visium dataset' })
+  await expect(visiumPanel).toContainText('70 × 55 µm (30 off tissue hidden)', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  const library = visiumPanel.getByTitle('Visium library to show')
+  await expect(library).toHaveValue('section-A')
+  await expect(page).toHaveURL(/vimg=hires/)
+  await expect(page).toHaveURL(/vlib=section-A/)
+
+  await page.getByRole('tab', { name: 'Genes' }).click()
+  const genesPanel = page.locator('#hud-panel-genes')
+  await genesPanel.getByLabel('Gene selection').fill('GeneB')
+  await genesPanel.getByRole('button', { name: 'GeneB', exact: true }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText(
+    /Expression all cells: 0 positive cells across 70 slide cells/,
+  )
+
+  await page.getByRole('tab', { name: 'Dataset' }).click()
+  await library.selectOption('section-B')
+  await expect(page.getByText(/Visium library section-B: 70 spots/)).toBeVisible()
+  await expect(page).toHaveURL(/vlib=section-B/)
+  // The gene selection survives the reload.
+  await page.getByRole('tab', { name: 'Genes' }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText(
+    /Expression all cells: 70 positive cells across 70 slide cells/,
+  )
+
+  await page.getByRole('tab', { name: 'Dataset' }).click()
+  await visiumPanel.getByLabel('Show off-tissue spots').check()
+  await expect(visiumPanel).toContainText('100 × 55 µm (incl. 30 off tissue)')
+  await expect(page).toHaveURL(/voff=1/)
+  await visiumPanel.getByTitle('Visium tissue image to show').selectOption('')
+  await expect(page).toHaveURL(/vimg=none/)
+
+  // A fresh page opened from the link restores all three choices.
+  await page.reload()
+  await expect(visiumPanel).toContainText('100 × 55 µm (incl. 30 off tissue)', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(library).toHaveValue('section-B')
+  await expect(visiumPanel.getByLabel('Show off-tissue spots')).toBeChecked()
+  await expect(visiumPanel.getByTitle('Visium tissue image to show')).toHaveValue('')
 })
 
 test('loads a Space Ranger Visium folder as 55 um spots with its tissue image @smoke', async ({

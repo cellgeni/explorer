@@ -114,6 +114,24 @@ describe('shareableState', () => {
     expect(parseShareableState(hash).morphologyEnabledChannelIds).toEqual([])
   })
 
+  it('round-trips the Visium image, library, and off-tissue choice', () => {
+    const hash = formatShareableState({
+      visiumImage: 'lowres',
+      visiumLibrary: 'V1_Mouse Brain',
+      visiumOffTissue: true,
+    })
+
+    expect(hash).toContain('vimg=lowres')
+    expect(hash).toContain('vlib=V1_Mouse+Brain')
+    expect(hash).toContain('voff=1')
+    expect(parseShareableState(hash)).toEqual({
+      visiumImage: 'lowres',
+      visiumLibrary: 'V1_Mouse Brain',
+      visiumOffTissue: true,
+    })
+    expect(parseShareableState('#voff=0').visiumOffTissue).toBe(false)
+  })
+
   it('round-trips the first z plane and ignores invalid ones', () => {
     expect(parseShareableState(formatShareableState({ morphologyZPlane: 0 }))).toEqual({
       morphologyZPlane: 0,

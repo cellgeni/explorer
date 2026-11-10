@@ -136,13 +136,35 @@ of:
 5. Otherwise 1 pixel is shown as 1 µm, with the same notice.
 
 The lattice fit uses every spot of the library, including spots off the
-tissue. Spots with `in_tissue` 0 are then hidden (CELLxGENE files keep all
-4,992 or 14,336 array spots), unless no spot is marked as under tissue. The
-Dataset tab shows how many were hidden.
+tissue, so the scale does not change with the off-tissue choice.
 
-With several libraries in `uns/spatial` (concatenated samples), the first
-library that an obs library column names is shown, and other rows are hidden.
-Without such a column the first library is used for every row.
+## Library And Off-Tissue Spots
+
+`readVisiumSource` reads everything a placement needs once (every library's
+scale factors, images, and metadata; the pixels; the obs library, `in_tissue`,
+and array columns). `setVisiumView({ libraryId, showOffTissue })` then picks
+what `placeVisiumView` places, without reading the file again:
+
+- **Off-tissue spots.** Spots with `in_tissue` 0 are hidden by default
+  (CELLxGENE files keep all 4,992 or 14,336 array spots; Space Ranger's
+  filtered matrix already drops them), unless no spot is marked as under
+  tissue. The Dataset tab's `Show off-tissue spots` checkbox places them.
+- **Library.** With several libraries in `uns/spatial` (concatenated
+  samples), the default is the first library that an obs library column
+  (`library_id`, `library`, or `sample`) names; the Dataset tab's `Library`
+  select picks another. Rows of other libraries are hidden, and the library's
+  own scale factors, units, and images are used. Without such a column every
+  row is placed with the chosen library's scale factors.
+
+Either change goes through the normal load (`handleVisiumViewChange` in
+`useVisiumControlsWorkflow`), which re-places spots, refits the view, and
+re-runs expression and ROI queries. The dataset instance is cached per URL, so
+the file is not downloaded again. Genes, colouring, and layer settings are
+carried over from the shareable state; a library change clears the ROI,
+because it belongs to another section.
+
+The share link keeps `vimg` (`hires`, `lowres`, or `none`), `vlib` (only with
+several libraries), and `voff=1`; a link opened later restores them.
 
 ## Spots
 
@@ -175,21 +197,24 @@ per pixel`.
 - An image needs its `tissue_<kind>_scalef`; without it the image is not
   offered.
 - The Dataset tab's `Tissue image` select switches between `High-res`,
-  `Low-res`, and `None` (`useVisiumImageWorkflow`).
+  `Low-res`, and `None` in place (`useVisiumControlsWorkflow`). Each library's
+  images are encoded once.
 
 ## Load Sequence
 
 `useDatasetLifecycle` (`src/features/app-shell/useDatasetLifecycle.ts`):
 
-1. Space Ranger: sets the platform to `visium`. H5AD: sets `h5ad`, reads the
-   file, and switches to `visium` when `visiumSummary()` is not null.
+1. Applies the library and off-tissue choice from a shared link
+   (`setVisiumView`). Space Ranger: sets the platform to `visium`. H5AD: sets
+   `h5ad`, reads the file, and switches to `visium` when `visiumSummary()` is
+   not null.
 2. Logs the library, spot count, and units, and raises the units notice when
    the scale is approximate.
 3. Fills the Dataset tab's Visium section (`visiumControlReady`).
 4. Runs the shared AnnData overview (spots, genes, annotation sets, embedding
    options, metadata tracks). `Cell boundaries` defaults to off.
-5. If `Tissue image` is enabled, loads the high-res image (else low-res) in the
-   background.
+5. If `Tissue image` is enabled, loads the shared image choice, else high-res,
+   else low-res, in the background.
 
 Gating is in `VISIUM_PLATFORM_ADAPTER`
 (`src/features/app-shell/platformAdapter.ts`): AnnData workflows, spot
@@ -212,7 +237,7 @@ read whole. A Visium `.h5ad` gets the H5AD diagnostics.
 | `src/datasets/visiumDataset.ts`                                                       | Space Ranger reader, 10x HDF5 matrix, in-memory AnnData table              |
 | `src/datasets/h5adDataset.ts`                                                         | `uns/spatial` placement, spots, tissue images, in-memory AnnData source    |
 | `src/datasets/datasetFactory.ts`                                                      | Folder and manifest detection, construction                                |
-| `src/features/app-shell/useDatasetLifecycle.ts`, `useVisiumImageWorkflow.ts`          | Load sequence, image switching                                             |
+| `src/features/app-shell/useDatasetLifecycle.ts`, `useVisiumControlsWorkflow.ts`       | Load sequence; image, library, and off-tissue changes                      |
 | `src/features/app-shell/platformAdapter.ts`                                           | `VISIUM_PLATFORM_ADAPTER`                                                  |
 | `src/features/dataset/visiumModel.ts`, `src/features/control-hud/DatasetHudPanel.tsx` | Dataset tab section                                                        |
 | `src/data/datasetDiagnostics.ts`                                                      | `runVisiumDiagnostics`                                                     |
@@ -222,12 +247,11 @@ read whole. A Visium `.h5ad` gets the H5AD diagnostics.
 - `spaceranger aggr` output (one `spatial/<library>/` folder per sample and
   `aggr_tissue_positions.csv`) is not detected; use one sample's `count`
   output, or a manifest per sample.
-- A multi-library `.h5ad` shows one library; there is no library selector.
+- A multi-library `.h5ad` shows one library at a time.
 - The filtered matrix and `.h5ad` files are read whole, up to 300 MB (larger
   `.h5ad` files need a kerchunk reference, as for any H5AD).
 - The full-resolution microscope image is not shown, only the hires and
   lowres images.
-- The tissue image choice is not kept in the shareable URL.
 - Only the graph-based clustering is read from `analysis/`; k-means
   clusterings and differential expression are not.
 - Antibody Capture features are listed with genes; a name shared with a gene

@@ -8,6 +8,7 @@ import {
   spatialDataControlLoading,
   spatialDataSelectionToShareable,
 } from './features/dataset/spatialDataModel'
+import { visiumSelectionToShareable } from './features/dataset/visiumModel'
 import { AppGeneHudPanel } from './features/app-shell/AppGeneHudPanel'
 import { AppLayerHudPanel } from './features/app-shell/AppLayerHudPanel'
 import { AppTranscriptHudPanel } from './features/app-shell/AppTranscriptHudPanel'
@@ -66,7 +67,7 @@ import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
 import { useAppDomainState } from './features/app-shell/useAppDomainState'
-import { useVisiumImageWorkflow } from './features/app-shell/useVisiumImageWorkflow'
+import { useVisiumControlsWorkflow } from './features/app-shell/useVisiumControlsWorkflow'
 import { useVisiumHdBinWorkflow } from './features/app-shell/useVisiumHdBinWorkflow'
 import { useVisiumHdGridLodWorkflow } from './features/app-shell/useVisiumHdGridLodWorkflow'
 import { useVisiumHdExpressionProfileWorkflow } from './features/app-shell/useVisiumHdExpressionProfileWorkflow'
@@ -2552,13 +2553,17 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [appendDebugEvent, datasetUrl, setSpatialDataControlState, shouldLoadMorphology],
   )
-  const { handleVisiumImageChange } = useVisiumImageWorkflow({
+  const { handleVisiumImageChange, handleVisiumViewChange } = useVisiumControlsWorkflow({
     appendDebugEvent,
     datasetUrl: loadState.status === 'idle' ? null : loadState.url,
     getSpatialDataset,
+    initialShareableStateRef,
     setFlatMorphologyImage,
     setMorphologyState,
     setVisiumControlState,
+    shouldLoadMorphology,
+    startDatasetLoadRef,
+    visiumControlState,
   })
   const { handleVisiumHdBinSizeChange } = useVisiumHdBinWorkflow({
     callbacks: {
@@ -2621,6 +2626,7 @@ export function App({ dependencies }: AppProps = {}) {
       customImageUrls,
       datasetUrl,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
+      visiumSelection: visiumSelectionToShareable(visiumControlState),
     },
     genes: {
       geneExpressionColorScale,
@@ -2721,6 +2727,7 @@ export function App({ dependencies }: AppProps = {}) {
           handleSpatialDataSelectionChange={handleSpatialDataSelectionChange}
           visiumControlState={visiumControlState}
           handleVisiumImageChange={handleVisiumImageChange}
+          handleVisiumViewChange={handleVisiumViewChange}
         />
 
         <AppLayerHudPanel

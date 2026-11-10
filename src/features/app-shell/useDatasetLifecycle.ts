@@ -184,7 +184,9 @@ import {
 import {
   IDLE_VISIUM_CONTROL_STATE,
   visiumControlReady,
+  visiumImageForLoad,
   visiumUnitsNeedNotice,
+  visiumViewFromShareable,
   type VisiumControlState,
   type VisiumSource,
 } from '../dataset/visiumModel'
@@ -192,7 +194,7 @@ import {
   setSpatialDataSelection,
   spatialDataSelectionFor,
 } from '../../datasets/datasetFactory'
-import type { AnnDataVisiumSummary } from '../../datasets/h5adDataset'
+import type { AnnDataVisiumSummary, AnnDataVisiumView } from '../../datasets/h5adDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import {
   createStructuredLoadError,
@@ -236,6 +238,7 @@ interface SpatialDataSummaryDataset {
 
 export interface VisiumLifecycleDataset extends H5adLifecycleDataset {
   meta(): Promise<DatasetMeta>
+  setVisiumView(view: AnnDataVisiumView): VisiumLifecycleDataset
   visiumSummary(): Promise<AnnDataVisiumSummary | null>
   tissueImage(kind: VisiumImageKind): Promise<ImageSource | null>
 }
@@ -1151,11 +1154,15 @@ export function useDatasetLifecycle({
           source: VisiumSource,
           summary: AnnDataVisiumSummary,
         ): Promise<void> => {
-          const image = loadImage ? (summary.images[0] ?? null) : null
+          const image = loadImage
+            ? visiumImageForLoad(summary.images, restoreState.visiumImage)
+            : null
           appendDebugEvent(
             `Visium library ${summary.libraryId}: ${summary.spotCount.toLocaleString()} spots${
               summary.offTissueSpotCount > 0
-                ? ` (${summary.offTissueSpotCount.toLocaleString()} off tissue hidden)`
+                ? ` (${summary.offTissueSpotCount.toLocaleString()} off tissue ${
+                    summary.showOffTissue ? 'included' : 'hidden'
+                  })`
                 : ''
             }; ${formatVisiumUnits(summary.units)}${
               summary.libraryIds.length > 1
@@ -1230,7 +1237,9 @@ export function useDatasetLifecycle({
           // An .h5ad with `uns/spatial` is standard Visium; the file has to be
           // read to know.
           const visium = isVisiumLifecycleDataset(dataset)
-            ? await dataset.visiumSummary()
+            ? await dataset
+                .setVisiumView(visiumViewFromShareable(restoreState))
+                .visiumSummary()
             : null
 
           if (!isCurrentDatasetLoad()) {
@@ -1261,7 +1270,9 @@ export function useDatasetLifecycle({
             throw new Error('Detected Visium dataset does not expose spots.')
           }
 
-          const visium = await dataset.visiumSummary()
+          const visium = await dataset
+            .setVisiumView(visiumViewFromShareable(restoreState))
+            .visiumSummary()
 
           if (!isCurrentDatasetLoad()) {
             return
@@ -1818,6 +1829,7 @@ export function isVisiumLifecycleDataset(
   return (
     isH5adLifecycleDataset(dataset) &&
     hasFunction(dataset, 'meta') &&
+    hasFunction(dataset, 'setVisiumView') &&
     hasFunction(dataset, 'visiumSummary') &&
     hasFunction(dataset, 'tissueImage')
   )

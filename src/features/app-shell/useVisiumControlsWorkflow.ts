@@ -1,5 +1,7 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
+import { parseShareableState, type ShareableState } from '../../data/shareableState'
+import type { AnnDataVisiumView } from '../../datasets/h5adDataset'
 import type { VisiumImageKind } from '../../datasets/visiumFormat'
 import {
   IDLE_MORPHOLOGY_LOAD_STATE,
@@ -8,7 +10,11 @@ import {
   morphologyLoadStarted,
   type MorphologyLoadState,
 } from '../dataset/datasetLoadModel'
-import { visiumControlImage, type VisiumControlState } from '../dataset/visiumModel'
+import {
+  visiumControlImage,
+  visiumControlLoading,
+  type VisiumControlState,
+} from '../dataset/visiumModel'
 import {
   createStructuredLoadError,
   type StructuredLoadError,
@@ -20,26 +26,45 @@ import { flatMorphologyImageFromSource } from './useVisiumHdBinWorkflow'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
 
-export interface UseVisiumImageWorkflowOptions {
+interface MutableRef<T> {
+  current: T
+}
+
+export interface UseVisiumControlsWorkflowOptions {
   readonly appendDebugEvent: (message: string) => void
   readonly datasetUrl: string | null
   readonly getSpatialDataset: SpatialDatasetLoader
+  readonly initialShareableStateRef: MutableRef<ShareableState | null>
+  // The shareable state the view is in now; defaults to the URL hash.
+  readonly readShareableState?: () => ShareableState
   readonly setFlatMorphologyImage: Setter<FlatMorphologyCanvasImage | null>
   readonly setMorphologyState: Setter<MorphologyLoadState<StructuredLoadError>>
   readonly setVisiumControlState: Setter<VisiumControlState>
+  readonly shouldLoadMorphology: boolean
+  readonly startDatasetLoadRef: MutableRef<
+    ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
+  >
+  readonly visiumControlState: VisiumControlState
 }
 
-// Switches the Visium tissue image between high-res, low-res, and none.
-// Only the latest choice is applied.
-export function useVisiumImageWorkflow({
+// The Dataset tab's Visium controls. The tissue image switches in place; a
+// library or off-tissue change reloads the dataset (the file is not read
+// again) and restores genes, colours, and layers from the shareable state.
+export function useVisiumControlsWorkflow({
   appendDebugEvent,
   datasetUrl,
   getSpatialDataset,
+  initialShareableStateRef,
+  readShareableState = readHashShareableState,
   setFlatMorphologyImage,
   setMorphologyState,
   setVisiumControlState,
-}: UseVisiumImageWorkflowOptions): {
+  shouldLoadMorphology,
+  startDatasetLoadRef,
+  visiumControlState,
+}: UseVisiumControlsWorkflowOptions): {
   readonly handleVisiumImageChange: (kind: VisiumImageKind | null) => void
+  readonly handleVisiumViewChange: (view: AnnDataVisiumView) => void
 } {
   const requestIdRef = useRef(0)
   const handleVisiumImageChange = useCallback(
@@ -114,5 +139,55 @@ export function useVisiumImageWorkflow({
     ],
   )
 
-  return { handleVisiumImageChange }
+  const handleVisiumViewChange = useCallback(
+    (view: AnnDataVisiumView) => {
+      if (datasetUrl === null || visiumControlState.status === 'idle') {
+        return
+      }
+
+      const { summary, image } = visiumControlState
+      const libraryId = view.libraryId ?? summary.libraryId
+      const showOffTissue = view.showOffTissue ?? summary.showOffTissue
+      const libraryChanged = libraryId !== summary.libraryId
+      const shared = readShareableState()
+      const { roiSelection: _roiSelection, ...withoutRoi } = shared
+      void _roiSelection
+      // Another library is another section, so its ROI does not carry over.
+      // Toggling off-tissue spots keeps the ROI and re-queries it. The view
+      // refits to the new spots either way.
+      const current = libraryChanged ? withoutRoi : shared
+
+      requestIdRef.current += 1
+      initialShareableStateRef.current = {
+        ...current,
+        datasetUrl,
+        visiumImage: image ?? 'none',
+        visiumOffTissue: showOffTissue,
+        ...(summary.libraryIds.length > 1 ? { visiumLibrary: libraryId } : {}),
+      }
+      setVisiumControlState(visiumControlLoading)
+      appendDebugEvent(
+        `Visium view change: library ${libraryId}; off-tissue spots ${
+          showOffTissue ? 'shown' : 'hidden'
+        }`,
+      )
+      void startDatasetLoadRef.current?.(datasetUrl, shouldLoadMorphology)
+    },
+    [
+      appendDebugEvent,
+      datasetUrl,
+      initialShareableStateRef,
+      readShareableState,
+      setVisiumControlState,
+      shouldLoadMorphology,
+      startDatasetLoadRef,
+      visiumControlState,
+    ],
+  )
+
+  return { handleVisiumImageChange, handleVisiumViewChange }
+}
+
+function readHashShareableState(): ShareableState {
+  return typeof window === 'undefined' ? {} : parseShareableState(window.location.hash)
 }
