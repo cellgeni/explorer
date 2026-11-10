@@ -173,7 +173,13 @@ export function EmbeddingPanel({
       </div>
       <dl className="embedding-summary" aria-label="Embedding link summary">
         <div>
-          <dt>{elementLabel === 'bins' ? 'Bins' : 'Cells'}</dt>
+          <dt>
+            {elementLabel === 'bins'
+              ? 'Bins'
+              : elementLabel === 'spots'
+                ? 'Spots'
+                : 'Cells'}
+          </dt>
           <dd>{embedding.points.length.toLocaleString()}</dd>
         </div>
         <div>

@@ -103,6 +103,40 @@ describe('parseDatasetManifest', () => {
     ).toContain('options')
   })
 
+  it('resolves renamed standard Visium files, such as GEO supplementary files', () => {
+    const manifest = parse({
+      version: 1,
+      platform: 'visium',
+      root: 'https://ftp.example.test/geo/GSM1/suppl/',
+      files: {
+        tissuePositions: 'GSM1_tissue_positions_list.csv.gz',
+        scalefactors: 'GSM1_scalefactors_json.json.gz',
+        filteredMatrix: 'GSM1_filtered_feature_bc_matrix.h5',
+        hiresImage: 'https://images.example.test/GSM1_hires.png',
+        clusters: 'GSM1_clusters.csv',
+      },
+    })
+
+    expect(manifest).toMatchObject({
+      platform: 'visium',
+      rootUrl: 'https://ftp.example.test/geo/GSM1/suppl',
+      files: {
+        tissuePositions: {
+          path: 'GSM1_tissue_positions_list.csv.gz',
+          url: 'https://ftp.example.test/geo/GSM1/suppl/GSM1_tissue_positions_list.csv.gz',
+        },
+        hiresImage: { url: 'https://images.example.test/GSM1_hires.png' },
+        clusters: { url: 'https://ftp.example.test/geo/GSM1/suppl/GSM1_clusters.csv' },
+      },
+    })
+    expect(parseError({ version: 1, platform: 'visium', files: { bins: [] } })).toContain(
+      'files.bins',
+    )
+    expect(
+      parseError({ version: 1, platform: 'visium', options: { image: 'hires' } }),
+    ).toContain('options')
+  })
+
   it('resolves a .zchunkstore sidecar for the TIFF image', () => {
     const xenium = parse({
       version: 1,
@@ -166,7 +200,7 @@ describe('parseDatasetManifest', () => {
       '"version" 2 is not supported',
     )
     expect(parseError({ version: 1, platform: 'merfish' })).toContain(
-      '"platform" must be one of "xenium", "atera", "visium-hd", "h5ad", "spatialdata", "image"',
+      '"platform" must be one of "xenium", "atera", "visium", "visium-hd", "h5ad", "spatialdata", "image"',
     )
     expect(parseError([])).toBe('explorer.json: expected a JSON object.')
   })

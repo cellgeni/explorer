@@ -12,6 +12,12 @@ import { visiumHdBinSizeLabel, type VisiumHdControlState } from '../dataset/visi
 import type { SpatialDataControlState } from '../dataset/spatialDataModel'
 import type { DatasetManifestAbout } from '../dataset/datasetManifestModel'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
+import {
+  visiumImageLabel,
+  visiumSourceLabel,
+  type VisiumControlState,
+} from '../dataset/visiumModel'
+import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import { useState } from 'react'
 
 type DatasetDiagnosticsState = ComponentProps<typeof DatasetDiagnosticsPanel>['state']
@@ -41,6 +47,8 @@ interface DatasetHudPanelProps {
   readonly visiumHdControlState: VisiumHdControlState
   readonly spatialDataControlState: SpatialDataControlState
   readonly onSpatialDataSelectionChange: (selection: SpatialDataSelection) => void
+  readonly visiumControlState: VisiumControlState
+  readonly onVisiumImageChange: (image: VisiumImageKind | null) => void
   readonly activeErrors: ErrorSummaryItems
   readonly fallbackNotices: FallbackNoticeItems
   readonly debugLog: ActivityLogEntries
@@ -73,6 +81,8 @@ export function DatasetHudPanel({
   visiumHdControlState,
   spatialDataControlState,
   onSpatialDataSelectionChange,
+  visiumControlState,
+  onVisiumImageChange,
   activeErrors,
   fallbackNotices,
   debugLog,
@@ -149,6 +159,13 @@ export function DatasetHudPanel({
         state={visiumHdControlState}
         onBinSizeChange={onVisiumHdBinSizeChange}
       />
+      {visiumControlState.status === 'idle' ? null : (
+        <VisiumDatasetControls
+          state={visiumControlState}
+          disabled={isLoading || visiumControlState.status === 'loading'}
+          onImageChange={onVisiumImageChange}
+        />
+      )}
       {spatialDataControlState.status === 'idle' ? null : (
         <SpatialDataDatasetControls
           key={`${spatialDataControlState.coordinateSystem}:${spatialDataControlState.units.micrometersPerUnit.toString()}`}
@@ -301,6 +318,84 @@ function VisiumHdDatasetControls({
       {disabledReason === undefined ? null : (
         <p className="visium-hd-note">{disabledReason}</p>
       )}
+    </section>
+  )
+}
+
+function VisiumDatasetControls({
+  state,
+  disabled,
+  onImageChange,
+}: {
+  readonly state: Exclude<VisiumControlState, { readonly status: 'idle' }>
+  readonly disabled: boolean
+  readonly onImageChange: (image: VisiumImageKind | null) => void
+}) {
+  const { summary } = state
+
+  return (
+    <section className="visium-hd-controls visium-controls" aria-label="Visium dataset">
+      <div className="dataset-platform-row">
+        <span>Dataset type</span>
+        <strong>{visiumSourceLabel(state.source)}</strong>
+      </div>
+      <div className="dataset-platform-row">
+        <span>Spots</span>
+        <strong
+          title={
+            summary.offTissueSpotCount > 0
+              ? `${summary.offTissueSpotCount.toLocaleString()} spots off the tissue are hidden`
+              : undefined
+          }
+        >
+          {summary.spotCount.toLocaleString()} × {summary.spotDiameterMicrometers} µm
+          {summary.offTissueSpotCount > 0
+            ? ` (${summary.offTissueSpotCount.toLocaleString()} off tissue hidden)`
+            : ''}
+        </strong>
+      </div>
+      <div className="dataset-platform-row">
+        <span>Library</span>
+        <strong>
+          {summary.libraryId}
+          {summary.libraryIds.length > 1
+            ? ` (1 of ${summary.libraryIds.length.toLocaleString()})`
+            : ''}
+        </strong>
+      </div>
+      {summary.chemistry === undefined ? null : (
+        <div className="dataset-platform-row">
+          <span>Chemistry</span>
+          <strong>{summary.chemistry}</strong>
+        </div>
+      )}
+      <div className="dataset-platform-row">
+        <span>Scale</span>
+        <strong title={`Source: ${summary.units.source}`}>
+          {formatVisiumUnits(summary.units)}
+        </strong>
+      </div>
+      <label className="visium-bin-control">
+        <span>Tissue image</span>
+        <select
+          title="Visium tissue image to show"
+          value={state.image ?? ''}
+          disabled={disabled || summary.images.length === 0}
+          onChange={(event) => {
+            const value = event.currentTarget.value
+            onImageChange(value === 'hires' || value === 'lowres' ? value : null)
+          }}
+        >
+          <option value="">
+            {summary.images.length === 0 ? 'None available' : 'None'}
+          </option>
+          {summary.images.map((image) => (
+            <option key={image} value={image}>
+              {visiumImageLabel(image)}
+            </option>
+          ))}
+        </select>
+      </label>
     </section>
   )
 }

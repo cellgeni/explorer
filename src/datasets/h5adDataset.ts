@@ -27,6 +27,7 @@ import type {
   ElementBatch,
   ImageSource,
   SpatialDataset,
+  SpatialElement,
   SpatialElementId,
 } from './spatialDataset'
 import type {
@@ -35,6 +36,19 @@ import type {
   GeneExpressionElement,
 } from './xeniumDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
+import {
+  encodeImageArrayAsBmp,
+  parseVisiumScalefactors,
+  resolveVisiumUnits,
+  visiumImageScalefactor,
+  visiumSpotRing,
+  VISIUM_SPOT_AREA_SQUARE_MICROMETERS,
+  VISIUM_SPOT_DIAMETER_MICROMETERS,
+  type VisiumImageKind,
+  type VisiumLatticeSample,
+  type VisiumScalefactors,
+  type VisiumUnits,
+} from './visiumFormat'
 
 export interface AnnDataH5adDatasetOptions {
   readonly url: string
@@ -43,9 +57,76 @@ export interface AnnDataH5adDatasetOptions {
   // Reads AnnData from a group inside an already-open Zarr store (for example
   // a SpatialData table) instead of fetching an .h5ad file.
   readonly zarrSource?: AnnDataZarrSource
+  // Builds AnnData in memory (for example from Space Ranger output) instead of
+  // fetching an .h5ad file.
+  readonly memorySource?: AnnDataMemorySource
+  // Visium tissue images hosted as files next to the table. They replace
+  // `uns/spatial/<library>/images`.
+  readonly visiumImageUrls?: Readonly<Partial<Record<VisiumImageKind, string>>>
 }
 
 export type H5adLoadProgressReporter = (message: string) => void
+
+export interface AnnDataMemorySource {
+  readonly label: string
+  load(onProgress?: H5adLoadProgressReporter): Promise<AnnDataMemoryTable>
+}
+
+// An AnnData object held as plain arrays. `uns` values become scalar datasets
+// (numbers, strings), arrays, or nested groups (records).
+export interface AnnDataMemoryTable {
+  readonly obsNames: readonly string[]
+  readonly obs: readonly AnnDataMemoryColumn[]
+  readonly varNames: readonly string[]
+  readonly var?: readonly AnnDataMemoryColumn[]
+  readonly X: {
+    readonly kind: 'csr'
+    readonly data: NumericArrayLike
+    readonly indices: NumericArrayLike
+    readonly indptr: NumericArrayLike
+  }
+  readonly obsm: Readonly<
+    Record<string, { readonly values: NumericArrayLike; readonly columns: number }>
+  >
+  readonly uns?: AnnDataMemoryUns
+}
+
+export type AnnDataMemoryColumn =
+  | {
+      readonly name: string
+      readonly kind: 'numeric'
+      readonly values: NumericArrayLike
+    }
+  | {
+      readonly name: string
+      readonly kind: 'categorical'
+      readonly codes: NumericArrayLike
+      readonly categories: readonly string[]
+    }
+  | { readonly name: string; readonly kind: 'string'; readonly values: readonly string[] }
+
+export interface AnnDataMemoryUns {
+  readonly [key: string]: AnnDataMemoryUns | number | string | NumericArrayLike
+}
+
+// Standard Visium layout found in `uns/spatial/<library>`. Coordinates are
+// converted from full-resolution pixels to micrometres with `units`.
+export interface AnnDataVisiumSummary {
+  readonly libraryId: string
+  readonly libraryIds: readonly string[]
+  // Spots shown: the library's rows under tissue.
+  readonly spotCount: number
+  // Rows with obs `in_tissue` 0 (CELLxGENE keeps every array spot); hidden.
+  readonly offTissueSpotCount: number
+  readonly spotDiameterMicrometers: number
+  readonly units: VisiumUnits
+  readonly scalefactors: VisiumScalefactors
+  readonly images: readonly VisiumImageKind[]
+  // From `uns/spatial/<library>/metadata`, as scanpy copies them from the
+  // Space Ranger matrix.
+  readonly chemistry?: string
+  readonly softwareVersion?: string
+}
 
 export interface AnnDataZarrSource {
   readonly store: zarr.Readable
@@ -90,6 +171,13 @@ interface H5adCache {
   readonly continuousTracks: readonly H5adContinuousTrack[]
   readonly matrix: H5adMatrix
   readonly extent: BBox
+  readonly visium: H5adVisiumLayout | null
+}
+
+interface H5adVisiumLayout {
+  readonly summary: Omit<AnnDataVisiumSummary, 'images'>
+  // `uns/spatial/<library>/images/<kind>` datasets.
+  readonly imagePaths: Readonly<Partial<Record<VisiumImageKind, string>>>
 }
 
 interface H5adCategoricalTrack {
@@ -153,7 +241,7 @@ type H5adMatrix =
       readonly cols: number
     }
 
-type NumericArrayLike =
+export type NumericArrayLike =
   | readonly number[]
   | Int8Array
   | Uint8Array
@@ -221,6 +309,10 @@ const H5AD_EMBEDDING_DISPLAY_KEYS = [
   'X_spatial',
   'spatial',
 ] as const
+
+const VISIUM_IMAGE_KINDS: readonly VisiumImageKind[] = ['hires', 'lowres']
+// Obs columns that name each row's library in multi-sample Visium AnnData.
+const VISIUM_LIBRARY_COLUMNS = ['library_id', 'library', 'sample']
 
 const H5AD_FETCH_TIMEOUT_MS = 60_000
 const H5AD_MAX_FILE_BYTES = 300 * 1024 * 1024
@@ -292,37 +384,83 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private readonly fetcher: typeof fetch
   private readonly onProgress: H5adLoadProgressReporter | undefined
   private readonly zarrSource: AnnDataZarrSource | undefined
+  private readonly memorySource: AnnDataMemorySource | undefined
+  private readonly visiumImageUrls: Readonly<Partial<Record<VisiumImageKind, string>>>
   private cachePromise: Promise<H5adCache> | null = null
+  private spotElementsPromise: Promise<readonly VisiumSpotEntry[]> | null = null
+  private readonly tissueImageUrls = new Map<VisiumImageKind, Promise<string>>()
 
   constructor(options: AnnDataH5adDatasetOptions) {
     this.url = options.url
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.onProgress = options.onProgress
     this.zarrSource = options.zarrSource
+    this.memorySource = options.memorySource
+    this.visiumImageUrls = options.visiumImageUrls ?? {}
   }
 
   async meta(): Promise<DatasetMeta> {
     const cache = await this.cache()
+    const visium = cache.visium?.summary
 
     return {
-      platform: 'h5ad',
-      units: DEFAULT_H5AD_UNITS,
+      platform: visium === undefined ? 'h5ad' : 'visium',
+      units:
+        visium === undefined
+          ? DEFAULT_H5AD_UNITS
+          : {
+              ...DEFAULT_H5AD_UNITS,
+              micrometersPerPixel: micrometers(visium.units.micrometersPerPixel),
+            },
       extent: cache.extent,
       capabilities: {
         transcripts: false,
-        cellBoundaries: false,
+        cellBoundaries: visium !== undefined,
         pyramidImage: false,
         multiChannel: false,
       },
     }
   }
 
-  elements(): Promise<ElementBatch<SpatialElementId>> {
-    return Promise.resolve({ elements: [] })
+  // Visium spot outlines; other AnnData has no element geometry.
+  async elements(bbox?: BBox): Promise<ElementBatch<SpatialElementId>> {
+    const cache = await this.cache()
+
+    if (cache.visium === null) {
+      return { elements: [] }
+    }
+
+    const spots = await this.spotElements()
+    const radius = cache.visium.summary.spotDiameterMicrometers / 2
+
+    return {
+      elements:
+        bbox === undefined
+          ? spots.map((spot) => spot.element)
+          : spots
+              .filter(
+                (spot) =>
+                  spot.center.x + radius >= bbox.minX &&
+                  spot.center.x - radius <= bbox.maxX &&
+                  spot.center.y + radius >= bbox.minY &&
+                  spot.center.y - radius <= bbox.maxY,
+              )
+              .map((spot) => spot.element),
+    }
+  }
+
+  // Standard Visium layout read from `uns/spatial`, or null for other AnnData.
+  async visiumSummary(): Promise<AnnDataVisiumSummary | null> {
+    const visium = (await this.cache()).visium
+
+    return visium === null
+      ? null
+      : { ...visium.summary, images: this.visiumImageKinds(visium) }
   }
 
   async overview(): Promise<readonly CellOverviewPoint[]> {
     const cache = await this.cache()
+    const spotArea = visiumSpotArea(cache)
 
     const points: CellOverviewPoint[] = []
 
@@ -337,6 +475,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
         cellId: cellId as never,
         position,
         transcriptCount: 0,
+        ...(spotArea === undefined ? {} : { cellArea: spotArea }),
         metadata: h5adCellMetadata(cache, index),
       })
     })
@@ -367,6 +506,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     )
     // A sample keeps every cell with expression and every Nth cell without.
     const sampleStride = normalizeSampleStride(options.sampleStride)
+    const spotArea = visiumSpotArea(cache)
     const elements: GeneExpressionElement[] = []
     let zeroCellIndex = 0
 
@@ -386,6 +526,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
         id: cell.id,
         position: cell.position,
         count,
+        ...(spotArea === undefined ? {} : { cellArea: spotArea }),
       })
     }
 
@@ -560,19 +701,144 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }))
   }
 
-  image(): Promise<ImageSource | null> {
-    return Promise.resolve(null)
+  // The Visium tissue image: high-res when present, else low-res.
+  async image(): Promise<ImageSource | null> {
+    const visium = (await this.cache()).visium
+    const kind = visium === null ? undefined : this.visiumImageKinds(visium)[0]
+    return kind === undefined ? null : this.tissueImage(kind)
+  }
+
+  // A Visium tissue image placed with its `tissue_<kind>_scalef`. Images held
+  // in `uns` are encoded once into an object URL.
+  async tissueImage(kind: VisiumImageKind): Promise<ImageSource | null> {
+    const cache = await this.cache()
+    const visium = cache.visium
+
+    const scaleFactor =
+      visium === null || !this.visiumImageKinds(visium).includes(kind)
+        ? undefined
+        : visiumImageScalefactor(visium.summary.scalefactors, kind)
+
+    if (visium === null || scaleFactor === undefined) {
+      return null
+    }
+
+    const hostedUrl = this.visiumImageUrls[kind]
+
+    // GEO publishes Space Ranger images gzipped (`*.png.gz`); the browser
+    // only draws them once decompressed.
+    if (hostedUrl !== undefined && isGzipUrl(hostedUrl)) {
+      return {
+        kind: 'flat',
+        url: await this.cachedImageUrl(kind, () =>
+          readGunzippedImageUrl(hostedUrl, this.fetcher),
+        ),
+        scaleFactor,
+      }
+    }
+
+    if (hostedUrl !== undefined) {
+      return { kind: 'flat', url: hostedUrl, scaleFactor }
+    }
+
+    const path = visium.imagePaths[kind]
+
+    if (path === undefined) {
+      return null
+    }
+
+    const dataset = expectDataset(cache.root.get(path), path)
+    const shape = dataset.shape ?? []
+    const url = await this.cachedImageUrl(kind, async () => {
+      const value = await readDatasetValue(dataset)
+      this.onProgress?.(`Visium ${kind} image: encoding ${shape.join(' x ')} array`)
+      const bytes = encodeImageArrayAsBmp(readNumericArray(value, path), shape)
+      return URL.createObjectURL(new Blob([bytes], { type: 'image/bmp' }))
+    })
+    const [height, width] = shape
+
+    return {
+      kind: 'flat',
+      url,
+      scaleFactor,
+      ...(height === undefined || width === undefined ? {} : { size: [width, height] }),
+    }
+  }
+
+  // Object URLs are made once per image and kept for the dataset's lifetime.
+  private cachedImageUrl(
+    kind: VisiumImageKind,
+    create: () => Promise<string>,
+  ): Promise<string> {
+    const existing = this.tissueImageUrls.get(kind)
+
+    if (existing !== undefined) {
+      return existing
+    }
+
+    const urlPromise = create()
+    this.tissueImageUrls.set(kind, urlPromise)
+    urlPromise.catch(() => {
+      this.tissueImageUrls.delete(kind)
+    })
+    return urlPromise
+  }
+
+  // Images that can be placed: hosted or in `uns`, with a scale factor.
+  private visiumImageKinds(visium: H5adVisiumLayout): readonly VisiumImageKind[] {
+    return VISIUM_IMAGE_KINDS.filter(
+      (kind) =>
+        visiumImageScalefactor(visium.summary.scalefactors, kind) !== undefined &&
+        (this.visiumImageUrls[kind] !== undefined ||
+          visium.imagePaths[kind] !== undefined),
+    )
+  }
+
+  private spotElements(): Promise<readonly VisiumSpotEntry[]> {
+    if (this.spotElementsPromise === null) {
+      this.spotElementsPromise = this.cache().then((cache) => {
+        const diameter =
+          cache.visium?.summary.spotDiameterMicrometers ??
+          VISIUM_SPOT_DIAMETER_MICROMETERS
+        const spots: VisiumSpotEntry[] = []
+
+        cache.cellIds.forEach((id, index) => {
+          const center = cache.coordinates[index]
+
+          if (center === undefined || !isFinitePoint(center)) {
+            return
+          }
+
+          spots.push({
+            center,
+            element: {
+              id,
+              geometry: { kind: 'polygon', rings: [visiumSpotRing(center, diameter)] },
+            },
+          })
+        })
+
+        return spots
+      })
+      this.spotElementsPromise.catch(() => {
+        this.spotElementsPromise = null
+      })
+    }
+
+    return this.spotElementsPromise
   }
 
   private cache(): Promise<H5adCache> {
     if (this.cachePromise === null) {
       this.cachePromise = (
-        this.zarrSource === undefined
-          ? readH5ad(this.url, {
-              fetcher: this.fetcher,
-              ...(this.onProgress === undefined ? {} : { onProgress: this.onProgress }),
-            })
-          : readAnnDataZarr(this.url, this.zarrSource, this.onProgress)
+        this.memorySource !== undefined
+          ? readAnnDataMemory(this.url, this.memorySource, this.onProgress)
+          : this.zarrSource === undefined
+            ? readH5ad(this.url, {
+                fetcher: this.fetcher,
+                ...(this.onProgress === undefined ? {} : { onProgress: this.onProgress }),
+              })
+            : readAnnDataZarr(this.url, this.zarrSource, this.onProgress)
       ).catch((error: unknown) => {
         this.cachePromise = null
         throw error
@@ -581,6 +847,50 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
     return this.cachePromise
   }
+}
+
+interface VisiumSpotEntry {
+  readonly center: DataPoint
+  readonly element: SpatialElement<SpatialElementId>
+}
+
+function isGzipUrl(url: string): boolean {
+  try {
+    return /\.gz$/i.test(new URL(url).pathname)
+  } catch {
+    return false
+  }
+}
+
+async function readGunzippedImageUrl(
+  url: string,
+  fetcher: typeof fetch,
+): Promise<string> {
+  const response = await fetcher(url)
+
+  if (!response.ok || response.body === null) {
+    throw new Error(`Visium tissue image ${url} returned HTTP ${response.status}.`)
+  }
+
+  if (typeof DecompressionStream !== 'function') {
+    throw new Error('This browser does not support gzip decompression.')
+  }
+
+  const blob = await new Response(
+    response.body.pipeThrough(new DecompressionStream('gzip')),
+  ).blob()
+  const type = /\.jpe?g\.gz$/i.test(new URL(url).pathname) ? 'image/jpeg' : 'image/png'
+  return URL.createObjectURL(new Blob([blob], { type }))
+}
+
+function visiumSpotArea(cache: H5adCache): number | undefined {
+  const diameter = cache.visium?.summary.spotDiameterMicrometers
+
+  return diameter === undefined
+    ? undefined
+    : diameter === VISIUM_SPOT_DIAMETER_MICROMETERS
+      ? VISIUM_SPOT_AREA_SQUARE_MICROMETERS
+      : Math.PI * (diameter / 2) ** 2
 }
 
 async function readH5ad(
@@ -735,6 +1045,7 @@ async function readAnnDataZarr(
           `${label}: skipped obs column ${key}. ${error.message}`,
         )
       },
+      { visiumLayout: false },
     )
     reportH5adProgress(
       onProgress,
@@ -747,6 +1058,276 @@ async function readAnnDataZarr(
   }
 }
 
+async function readAnnDataMemory(
+  url: string,
+  source: AnnDataMemorySource,
+  onProgress: H5adLoadProgressReporter | undefined,
+): Promise<H5adCache> {
+  const table = await source.load(onProgress)
+  const cache = await readH5adCacheFromGroup(url, annDataGroupFromMemory(table))
+  reportH5adProgress(
+    onProgress,
+    `${source.label} ready: ${cache.cellIds.length.toLocaleString()} observations, ${cache.geneNames.length.toLocaleString()} genes`,
+  )
+  return cache
+}
+
+// The same group tree an .h5ad file opens to, built from plain arrays.
+function annDataGroupFromMemory(table: AnnDataMemoryTable): H5GroupLike {
+  const rows = table.obsNames.length
+  const obsm: Record<string, H5DatasetLike> = {}
+
+  for (const [key, matrix] of Object.entries(table.obsm)) {
+    obsm[key] = memoryDataset(matrix.values, [rows, matrix.columns])
+  }
+
+  return memoryGroup(
+    {},
+    {
+      obs: memoryDataframe(table.obsNames, table.obs),
+      var: memoryDataframe(table.varNames, table.var ?? []),
+      X: memoryGroup(
+        { 'encoding-type': 'csr_matrix', shape: [rows, table.varNames.length] },
+        {
+          data: memoryDataset(table.X.data),
+          indices: memoryDataset(table.X.indices),
+          indptr: memoryDataset(table.X.indptr),
+        },
+      ),
+      obsm: memoryGroup({}, obsm),
+      uns: memoryUnsGroup(table.uns ?? {}),
+    },
+  )
+}
+
+function memoryGroup(
+  attrs: Readonly<Record<string, unknown>>,
+  children: Readonly<Record<string, unknown>>,
+): HydratedH5adGroup {
+  return new HydratedH5adGroup(
+    h5AttrsFromRecord(attrs),
+    new Map(Object.entries(children)),
+  )
+}
+
+function memoryDataset(
+  value: NumericArrayLike | readonly string[] | number | string,
+  shape: readonly number[] = typeof value === 'object' ? [value.length] : [],
+): H5DatasetLike {
+  return { shape, value }
+}
+
+function memoryDataframe(
+  index: readonly string[],
+  columns: readonly AnnDataMemoryColumn[],
+): HydratedH5adGroup {
+  const children: Record<string, unknown> = { _index: memoryDataset(index) }
+
+  for (const column of columns) {
+    children[column.name] =
+      column.kind === 'categorical'
+        ? memoryGroup(
+            { 'encoding-type': 'categorical' },
+            {
+              codes: memoryDataset(column.codes),
+              categories: memoryDataset(column.categories),
+            },
+          )
+        : memoryDataset(column.values)
+  }
+
+  return memoryGroup(
+    { _index: '_index', 'column-order': columns.map((column) => column.name) },
+    children,
+  )
+}
+
+function memoryUnsGroup(uns: AnnDataMemoryUns): HydratedH5adGroup {
+  const children: Record<string, unknown> = {}
+
+  for (const [key, value] of Object.entries(uns)) {
+    children[key] =
+      typeof value === 'number' || typeof value === 'string' || isNumericArray(value)
+        ? memoryDataset(value)
+        : memoryUnsGroup(value)
+  }
+
+  return memoryGroup({}, children)
+}
+
+// Finds the standard Visium layout scanpy and squidpy write: obsm `spatial`
+// in full-resolution pixels, and `uns/spatial/<library>` with `scalefactors`
+// and `images`. With several libraries, rows are placed only for the first
+// one an obs library column names, because each library has its own image
+// and pixel space.
+async function readVisiumPlacement(
+  file: H5GroupLike,
+  embedding: AnalysisEmbedding,
+  tracks: {
+    readonly categoricalTracks: readonly H5adCategoricalTrack[]
+    readonly continuousTracks: readonly H5adContinuousTrack[]
+  },
+): Promise<{
+  readonly layout: H5adVisiumLayout
+  readonly coordinates: readonly DataPoint[]
+} | null> {
+  if (embedding.kind !== 'spatial' && embedding.kind !== 'X_spatial') {
+    return null
+  }
+
+  const spatial = file.get('/uns/spatial')
+
+  if (!isGroup(spatial)) {
+    return null
+  }
+
+  const libraryIds = spatial.keys().filter((key) => {
+    const library = spatial.get(key)
+    return (
+      isGroup(library) &&
+      (isGroup(library.get('scalefactors')) || isGroup(library.get('images')))
+    )
+  })
+  const libraryTrack =
+    libraryIds.length > 1
+      ? tracks.categoricalTracks.find(
+          (track) =>
+            VISIUM_LIBRARY_COLUMNS.includes(track.id) &&
+            track.values.some((value) => value !== null && libraryIds.includes(value)),
+        )
+      : undefined
+  const libraryId =
+    libraryIds.find(
+      (id) => libraryTrack === undefined || libraryTrack.values.includes(id),
+    ) ?? libraryIds[0]
+
+  if (libraryId === undefined) {
+    return null
+  }
+
+  const library = expectGroup(spatial.get(libraryId), `/uns/spatial/${libraryId}`)
+  const scalefactorGroup = library.get('scalefactors')
+  const scalefactors = isGroup(scalefactorGroup)
+    ? parseVisiumScalefactors(await readScalarRecord(scalefactorGroup))
+    : {}
+  const metadataGroup = library.get('metadata')
+  const metadata = isGroup(metadataGroup) ? await readScalarRecord(metadataGroup) : {}
+  const imageGroup = library.get('images')
+  const imagePaths: Partial<Record<VisiumImageKind, string>> = {}
+
+  if (isGroup(imageGroup)) {
+    for (const kind of VISIUM_IMAGE_KINDS) {
+      const image = imageGroup.get(kind)
+      const dimensions = isDataset(image) ? (image.shape?.length ?? 0) : 0
+
+      if (dimensions === 2 || dimensions === 3) {
+        imagePaths[kind] = `/uns/spatial/${libraryId}/images/${kind}`
+      }
+    }
+  }
+
+  const inLibrary = (row: number) =>
+    libraryTrack === undefined || libraryTrack.values[row] === libraryId
+  // Spots off the tissue are hidden, as in Space Ranger's filtered output,
+  // unless no row is marked as under tissue.
+  const inTissueTrack = tracks.continuousTracks.find((track) => track.id === 'in_tissue')
+  const tissueTrack = inTissueTrack?.values.some((value) => value !== 0)
+    ? inTissueTrack
+    : undefined
+  const isPlaced = (row: number) =>
+    inLibrary(row) && (tissueTrack === undefined || tissueTrack.values[row] !== 0)
+  const arrayRows = tracks.continuousTracks.find((track) => track.id === 'array_row')
+  const arrayCols = tracks.continuousTracks.find((track) => track.id === 'array_col')
+  const lattice: VisiumLatticeSample[] | null =
+    arrayRows === undefined || arrayCols === undefined ? null : []
+  const centers: { x: number; y: number }[] = []
+
+  embedding.points.forEach((point, row) => {
+    if (!inLibrary(row)) {
+      return
+    }
+
+    centers.push(point)
+    lattice?.push({
+      row: arrayRows?.values[row] ?? Number.NaN,
+      col: arrayCols?.values[row] ?? Number.NaN,
+      x: point.x,
+      y: point.y,
+    })
+  })
+
+  const units = resolveVisiumUnits({ scalefactors, lattice, centers })
+  const scale = units.micrometersPerPixel
+  let spotCount = 0
+  const coordinates = embedding.points.map((point, row) => {
+    if (!isPlaced(row)) {
+      return UNPLACED_H5AD_POINT
+    }
+
+    spotCount += 1
+    return { x: micrometers(point.x * scale), y: micrometers(point.y * scale) }
+  })
+
+  return {
+    layout: {
+      summary: {
+        libraryId,
+        libraryIds,
+        spotCount,
+        offTissueSpotCount: centers.length - spotCount,
+        spotDiameterMicrometers: VISIUM_SPOT_DIAMETER_MICROMETERS,
+        units,
+        scalefactors,
+        ...stringEntry('chemistry', metadata.chemistry_description),
+        ...stringEntry('softwareVersion', metadata.software_version),
+      },
+      imagePaths,
+    },
+    coordinates,
+  }
+}
+
+function stringEntry<Key extends string>(
+  key: Key,
+  value: unknown,
+): Partial<Record<Key, string>> {
+  return typeof value === 'string' && value.trim().length > 0
+    ? ({ [key]: value.trim() } as Partial<Record<Key, string>>)
+    : {}
+}
+
+// Scalar datasets in a group, such as `uns/spatial/<library>/scalefactors`.
+async function readScalarRecord(
+  group: H5GroupLike,
+): Promise<Readonly<Record<string, number | string>>> {
+  const record: Record<string, number | string> = {}
+
+  for (const key of group.keys()) {
+    const dataset = group.get(key)
+
+    if (!isDataset(dataset)) {
+      continue
+    }
+
+    const value = await readDatasetValue(dataset)
+
+    if (typeof value === 'number' || typeof value === 'string') {
+      record[key] = value
+    } else if (typeof value === 'bigint') {
+      record[key] = Number(value)
+    } else if (isNumericArray(value) && value.length > 0) {
+      record[key] = numericValue(value, 0)
+    }
+  }
+
+  return record
+}
+
+const UNPLACED_H5AD_POINT: DataPoint = {
+  x: Number.NaN as DataPoint['x'],
+  y: Number.NaN as DataPoint['y'],
+}
+
 function reportH5adProgress(
   onProgress: H5adLoadProgressReporter | undefined,
   message: string,
@@ -754,11 +1335,14 @@ function reportH5adProgress(
   onProgress?.(message)
 }
 
+// Tables inside a SpatialData or Atera store are placed by their store, so
+// only .h5ad files and in-memory tables look for the Visium layout.
 async function readH5adCacheFromGroup(
   url: string,
   file: H5GroupLike,
   resolveCoordinates?: AnnDataCoordinateResolver,
   onUnreadableColumn?: (key: string, error: ZarrChunkUnavailableError) => void,
+  options: { readonly visiumLayout?: boolean } = {},
 ): Promise<H5adCache> {
   const obs = expectGroup(file.get('/obs'), '/obs')
   const varGroup = expectGroup(file.get('/var'), '/var')
@@ -789,16 +1373,23 @@ async function readH5adCacheFromGroup(
             return embedding?.points ?? null
           },
         })
-  const coordinates =
-    resolvedCoordinates ??
-    embeddingToCoordinates(
-      await readOverviewCoordinateEmbedding(file, embeddingOptions, cellIds),
-    )
+  const coordinateEmbedding =
+    resolvedCoordinates === null
+      ? await readOverviewCoordinateEmbedding(file, embeddingOptions, cellIds)
+      : null
   const observationTracks = await readObservationTracks(
     obs,
     cellIds.length,
     onUnreadableColumn,
   )
+  const visiumPlacement =
+    coordinateEmbedding === null || options.visiumLayout === false
+      ? null
+      : await readVisiumPlacement(file, coordinateEmbedding, observationTracks)
+  const coordinates =
+    resolvedCoordinates ??
+    visiumPlacement?.coordinates ??
+    (coordinateEmbedding === null ? [] : embeddingToCoordinates(coordinateEmbedding))
   const matrix = await readMatrix(file, cellIds.length, geneNames.length)
 
   return {
@@ -816,6 +1407,7 @@ async function readH5adCacheFromGroup(
     continuousTracks: observationTracks.continuousTracks,
     matrix,
     extent: bboxForPoints(coordinates),
+    visium: visiumPlacement?.layout ?? null,
   }
 }
 

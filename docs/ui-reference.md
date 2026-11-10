@@ -56,18 +56,26 @@ Transcripts tab.
 
 ## Dataset Tab
 
-| Control                                           | Type                         | Values / default                                 | Notes                                                                                                                               |
-| ------------------------------------------------- | ---------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `Dataset or image URL`                            | URL input                    | Demo Xenium URL, or `dataset` from the share URL | Any supported source or [dataset manifest](./dataset-manifest.md); see [Architecture](./architecture.md#1-detection)                |
-| `Morphology image` (`Tissue image` for Visium HD) | Checkbox                     | On                                               | Read when `Load Dataset` is pressed; off skips the image                                                                            |
-| `Boundary limit`                                  | Number                       | 1–100,000; default 2,500 (compact) or 50,000     | Max visible cells before boundary polygons are deferred. Disabled for Visium HD                                                     |
-| `Load Dataset`                                    | Submit                       |                                                  | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results                                                      |
-| `Bin size`                                        | Segmented: 16 µm, 8 µm, 2 µm | 16 µm if present, else 8 µm                      | Visium HD only. Undetected tiers are disabled. Shown with "Dataset type" and "Active bins" rows                                     |
-| `Coordinate system`                               | Select                       | Chosen automatically                             | SpatialData only. Disabled with one coordinate system. Changing it reloads the store, and the image and units follow the new system |
-| `Image`                                           | Select                       | Highest-resolution image in the system, or None  | SpatialData only. Disabled with fewer than two images. Changing it reloads the store                                                |
-| `µm per unit` + `Set` / `Auto`                    | Number + buttons             | Declared, estimated, or unknown                  | SpatialData only. `Set` overrides the scale; `Auto` returns to declared or estimated units. A note shows where the scale came from  |
-| `Diagnose Dataset`                                | Button                       |                                                  | Runs `runDatasetDiagnostics` for the URL                                                                                            |
-| Download diagnostics                              | Icon button                  |                                                  | Saves `xenium-diagnostics.json` (for every platform)                                                                                |
+| Control                                                      | Type                            | Values / default                                                            | Notes                                                                                                                               |
+| ------------------------------------------------------------ | ------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `Dataset or image URL`                                       | URL input                       | Demo Xenium URL, or `dataset` from the share URL                            | Any supported source or [dataset manifest](./dataset-manifest.md); see [Architecture](./architecture.md#1-detection)                |
+| `Morphology image` (`Tissue image` for Visium and Visium HD) | Checkbox                        | On                                                                          | Read when `Load Dataset` is pressed; off skips the image                                                                            |
+| `Boundary limit`                                             | Number                          | 1–100,000; default 2,500 (compact) or 50,000                                | Max visible cells before boundary polygons are deferred. Disabled for Visium HD                                                     |
+| `Load Dataset`                                               | Submit                          |                                                                             | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results                                                      |
+| `Bin size`                                                   | Segmented: 16 µm, 8 µm, 2 µm    | 16 µm if present, else 8 µm                                                 | Visium HD only. Undetected tiers are disabled. Shown with "Dataset type" and "Active bins" rows                                     |
+| `Coordinate system`                                          | Select                          | Chosen automatically                                                        | SpatialData only. Disabled with one coordinate system. Changing it reloads the store, and the image and units follow the new system |
+| `Image`                                                      | Select                          | Highest-resolution image in the system, or None                             | SpatialData only. Disabled with fewer than two images. Changing it reloads the store                                                |
+| `µm per unit` + `Set` / `Auto`                               | Number + buttons                | Declared, estimated, or unknown                                             | SpatialData only. `Set` overrides the scale; `Auto` returns to declared or estimated units. A note shows where the scale came from  |
+| `Tissue image`                                               | Select: High-res, Low-res, None | High-res if present, else Low-res; None when `Tissue image` was off at load | Visium only. Lists the images the dataset can place. Not kept in the share URL                                                      |
+| `Diagnose Dataset`                                           | Button                          |                                                                             | Runs `runDatasetDiagnostics` for the URL                                                                                            |
+| Download diagnostics                                         | Icon button                     |                                                                             | Saves `xenium-diagnostics.json` (for every platform)                                                                                |
+
+The Visium controls sit in a "Visium dataset" panel
+(`VisiumDatasetControls` in `DatasetHudPanel.tsx`) with read-only rows:
+"Dataset type" (`Visium (Space Ranger)` or `Visium (H5AD)`), "Spots" (spots
+shown × 55 µm, and how many off-tissue spots were hidden), "Library" (and how
+many libraries the file has), "Chemistry" when known, and "Scale" (µm per pixel
+and its source). See [Standard Visium](./modalities/visium.md#units-and-coordinates).
 
 The SpatialData controls sit in a "SpatialData view" panel with a "Dataset type"
 row (`SpatialDataDatasetControls` in `DatasetHudPanel.tsx`). See
@@ -258,7 +266,7 @@ Import rules are in [Image-only and GeoJSON](./image-only-and-geojson.md).
 
 The panel depends on the platform.
 
-### Cells (Xenium, H5AD, SpatialData)
+### Cells (Xenium, Visium, H5AD, SpatialData)
 
 | Control                   | Notes                                                                                                           |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -296,14 +304,15 @@ Hidden for Image. The detail heading reads "Bin Info" for Visium HD bins and
 | `Load Embeddings`                                         | Loads the projection                                                                                                                                             |
 | Scatter plot (`src/features/analysis/EmbeddingPanel.tsx`) | Up to 120,000 points; coloured by annotation when active; ROI members yellow; selection pink. Click selects the nearest cell or bin and centres the spatial view |
 
-### Cell Info (Xenium, H5AD, SpatialData)
+### Cell Info (Xenium, Visium, H5AD, SpatialData)
 
 `src/features/cells/CellInfoPanel.tsx`:
 
 - Xenium: ID, position, transcripts, nuclei, segmentation, annotations, shape
   metrics (area, diameter, eccentricity, axes, perimeter, circularity), and a
   "Z-axis transcripts" histogram.
-- H5AD/SpatialData: ID, annotations, and `obs` values ("Observations").
+- Visium/H5AD/SpatialData: ID, annotations, and `obs` values
+  ("Observations"). A Visium spot's barcode is its ID.
 - "Gene expression" list for the selected cell with a search filter
   (`CellGeneExpressionList.tsx`).
 - `Clear Cell`.
@@ -323,24 +332,25 @@ selection.
 From `src/features/app-shell/platformAdapter.ts` and the tab rules in
 `src/App.tsx`:
 
-| Feature                   | Xenium                  | Atera            | Visium HD         | H5AD             | SpatialData      | Image            |
-| ------------------------- | ----------------------- | ---------------- | ----------------- | ---------------- | ---------------- | ---------------- |
-| Genes tab                 | ✓                       | ✓                | ✓                 | ✓                | ✓                | —                |
-| Transcripts tab           | ✓                       | Selected genes   | —                 | —                | —                | —                |
-| All-feature transcripts   | Native density + exact  | Cell summary     | —                 | —                | —                | —                |
-| ROI transcript export     | ✓                       | —                | —                 | —                | —                | —                |
-| Magic Lens                | ✓                       | Unavailable      | ✓                 | Unavailable      | Unavailable      | —                |
-| Magic Lens Min QV         | ✓                       | —                | —                 | —                | —                | —                |
-| Cell tab                  | Cell Info + Z histogram | Observations     | Bin Info          | Observations     | Observations     | —                |
-| Cell-id annotations       | ✓                       | ✓                | —                 | ✓                | ✓                | —                |
-| GeoJSON shapes            | ✓                       | ✓                | ✓                 | ✓                | ✓                | ✓                |
-| Cell boundaries           | ✓                       | ✓                | Segmented outputs | —                | ✓ (shapes)       | —                |
-| Nucleus boundaries        | —                       | ✓                | ✓                 | —                | —                | —                |
-| ROI panel                 | Cells                   | Cells            | Bins              | Cells            | Cells            | Geometry         |
-| Bin size control          | —                       | —                | ✓                 | —                | —                | —                |
-| SpatialData view controls | —                       | —                | —                 | —                | ✓                | —                |
-| Boundary limit            | ✓                       | ✓                | Disabled          | ✓                | ✓                | ✓                |
-| Morphology checkbox label | Morphology image        | Morphology image | Tissue image      | Morphology image | Morphology image | Morphology image |
+| Feature                    | Xenium                  | Atera            | Visium        | Visium HD         | H5AD             | SpatialData      | Image            |
+| -------------------------- | ----------------------- | ---------------- | ------------- | ----------------- | ---------------- | ---------------- | ---------------- |
+| Genes tab                  | ✓                       | ✓                | ✓             | ✓                 | ✓                | ✓                | —                |
+| Transcripts tab            | ✓                       | Selected genes   | —             | —                 | —                | —                | —                |
+| All-feature transcripts    | Native density + exact  | Cell summary     | —             | —                 | —                | —                | —                |
+| ROI transcript export      | ✓                       | —                | —             | —                 | —                | —                | —                |
+| Magic Lens                 | ✓                       | Unavailable      | Unavailable   | ✓                 | Unavailable      | Unavailable      | —                |
+| Magic Lens Min QV          | ✓                       | —                | —             | —                 | —                | —                | —                |
+| Cell tab                   | Cell Info + Z histogram | Observations     | Observations  | Bin Info          | Observations     | Observations     | —                |
+| Cell-id annotations        | ✓                       | ✓                | ✓             | —                 | ✓                | ✓                | —                |
+| GeoJSON shapes             | ✓                       | ✓                | ✓             | ✓                 | ✓                | ✓                | ✓                |
+| Cell boundaries            | ✓                       | ✓                | Spot outlines | Segmented outputs | —                | ✓ (shapes)       | —                |
+| Nucleus boundaries         | —                       | ✓                | —             | ✓                 | —                | —                | —                |
+| ROI panel                  | Cells                   | Cells            | Cells (spots) | Bins              | Cells            | Cells            | Geometry         |
+| Bin size control           | —                       | —                | —             | ✓                 | —                | —                | —                |
+| SpatialData view controls  | —                       | —                | —             | —                 | —                | ✓                | —                |
+| Visium tissue image select | —                       | —                | ✓             | —                 | —                | —                | —                |
+| Boundary limit             | ✓                       | ✓                | ✓             | Disabled          | ✓                | ✓                | ✓                |
+| Morphology checkbox label  | Morphology image        | Morphology image | Tissue image  | Tissue image      | Morphology image | Morphology image | Morphology image |
 
 ## Viewer Interactions
 

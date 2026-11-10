@@ -35,7 +35,7 @@ for (const example of examples) {
     await page.goto(`/?dataset=${encodeURIComponent(example.manifestUrl)}`)
 
     await expect(
-      page.getByText(/(?:Dataset|Atera|H5AD|SpatialData|Image|Visium HD) ready: /),
+      page.getByText(/(?:Dataset|Atera|H5AD|SpatialData|Image|Visium HD|Visium) ready: /),
     ).toBeVisible({ timeout: EXAMPLE_LOAD_TIMEOUT_MS })
     await expect(page.getByRole('region', { name: 'About this dataset' })).toContainText(
       example.name,

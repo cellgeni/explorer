@@ -13,6 +13,8 @@ import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { SpatialDataControlState } from '../dataset/spatialDataModel'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
+import type { VisiumControlState } from '../dataset/visiumModel'
+import type { VisiumImageKind } from '../../datasets/visiumFormat'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { DebugLogAppendOptions, DebugLogEntry } from './appRuntimeModel'
 import type { FallbackNoticeEntry } from './appRuntimeModel'
@@ -54,6 +56,8 @@ export interface AppDatasetHudPanelProps {
   readonly visiumHdControlState: VisiumHdControlState
   readonly spatialDataControlState: SpatialDataControlState
   readonly handleSpatialDataSelectionChange: (selection: SpatialDataSelection) => void
+  readonly visiumControlState: VisiumControlState
+  readonly handleVisiumImageChange: (image: VisiumImageKind | null) => void
 }
 
 export function AppDatasetHudPanel({
@@ -82,6 +86,8 @@ export function AppDatasetHudPanel({
   visiumHdControlState,
   spatialDataControlState,
   handleSpatialDataSelectionChange,
+  visiumControlState,
+  handleVisiumImageChange,
 }: AppDatasetHudPanelProps) {
   return (
     <DatasetHudPanel
@@ -93,7 +99,11 @@ export function AppDatasetHudPanel({
       datasetAbout={datasetAbout}
       datasetUrl={datasetUrl}
       shouldLoadMorphology={shouldLoadMorphology}
-      morphologyLabel={isVisiumHdDataset ? 'Tissue image' : 'Morphology image'}
+      morphologyLabel={
+        isVisiumHdDataset || visiumControlState.status !== 'idle'
+          ? 'Tissue image'
+          : 'Morphology image'
+      }
       boundaryCellLimit={boundaryCellLimit}
       maxBoundaryCellLimit={MAX_BOUNDARY_VIEWPORT_CELL_LIMIT}
       boundaryControlsDisabled={isVisiumHdDataset}
@@ -103,6 +113,8 @@ export function AppDatasetHudPanel({
       visiumHdControlState={visiumHdControlState}
       spatialDataControlState={spatialDataControlState}
       onSpatialDataSelectionChange={handleSpatialDataSelectionChange}
+      visiumControlState={visiumControlState}
+      onVisiumImageChange={handleVisiumImageChange}
       activeErrors={activeErrors}
       fallbackNotices={fallbackNotices}
       debugLog={debugLog}

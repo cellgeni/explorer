@@ -17,7 +17,7 @@ files. Parsing happens in the browser:
 | `hyparquet` + `hyparquet-compressors` | Parquet reads on the main thread (Xenium overview, Visium HD positions and barcode mappings, SpatialData shapes)     |
 | `@duckdb/duckdb-wasm`                 | SQL over remote Parquet (Xenium cells, boundaries, transcripts; Visium HD per-cell mappings)                         |
 | `zarrita` + `@zarrita/storage`        | Zarr v2/v3, zipped Zarr, kerchunk references (Xenium matrix and transcripts, H5AD references, SpatialData, OME-Zarr) |
-| `h5wasm`                              | HDF5 (H5AD, Xenium H5 matrix, Visium HD matrices and Feature Slice)                                                  |
+| `h5wasm`                              | HDF5 (H5AD, Xenium H5 matrix, standard Visium matrix, Visium HD matrices and Feature Slice)                          |
 | `geotiff`                             | TIFF/OME-TIFF structure and non-JPEG 2000 codecs                                                                     |
 | `@cornerstonejs/codec-openjpeg`       | JPEG 2000 tiles                                                                                                      |
 | `deck.gl`                             | Cells, bins, boundaries, transcripts, ROI geometry                                                                   |
@@ -76,7 +76,8 @@ match:
 | 4b    | `HEAD <url>/experiment.xenium` succeeds                                                                              | `xenium`                                                           |
 | 4c    | `HEAD <url>/experiment.spatial` succeeds                                                                             | `atera`                                                            |
 | 5     | `HEAD <url>/zarr.json` or `<url>/.zattrs` succeeds                                                                   | `spatialdata` or `image`                                           |
-| 6     | At least one complete `binned_outputs/square_*um` tier                                                               | `visium-hd`                                                        |
+| 6     | `spatial/tissue_positions.csv` (or `…_list.csv`), `spatial/scalefactors_json.json`, `filtered_feature_bc_matrix.h5`  | `visium`                                                           |
+| 7     | At least one complete `binned_outputs/square_*um` tier                                                               | `visium-hd`                                                        |
 | —     | Nothing matched                                                                                                      | `unknown` → "Unsupported spatial dataset layout."                  |
 
 Every probe has a 15 s timeout. A host that rejects `HEAD` breaks detection.
@@ -104,14 +105,15 @@ returns the manifest's location or the standard name. See
 `createSpatialDataset` lazy-imports one implementation per platform so each
 platform's code is a separate chunk:
 
-| Platform      | Class                                                       | Doc                                        |
-| ------------- | ----------------------------------------------------------- | ------------------------------------------ |
-| `xenium`      | `XeniumDataset` (`src/datasets/xeniumDataset.ts`)           | [Xenium](./modalities/xenium.md)           |
-| `atera`       | `AteraDataset` (`src/datasets/ateraDataset.ts`)             | [Atera](./modalities/atera.md)             |
-| `visium-hd`   | `VisiumHdDataset` (`src/datasets/visiumHdDataset.ts`)       | [Visium HD](./modalities/visium-hd.md)     |
-| `h5ad`        | `AnnDataH5adDataset` (`src/datasets/h5adDataset.ts`)        | [H5AD](./modalities/h5ad.md)               |
-| `spatialdata` | `SpatialDataDataset` (`src/datasets/spatialDataDataset.ts`) | [SpatialData](./modalities/spatialdata.md) |
-| `image`       | `ImageOnlyDataset` (`src/datasets/imageOnlyDataset.ts`)     | [Image sources](./modalities/image.md)     |
+| Platform      | Class                                                                             | Doc                                        |
+| ------------- | --------------------------------------------------------------------------------- | ------------------------------------------ |
+| `xenium`      | `XeniumDataset` (`src/datasets/xeniumDataset.ts`)                                 | [Xenium](./modalities/xenium.md)           |
+| `atera`       | `AteraDataset` (`src/datasets/ateraDataset.ts`)                                   | [Atera](./modalities/atera.md)             |
+| `visium`      | `AnnDataH5adDataset` from `createVisiumDataset` (`src/datasets/visiumDataset.ts`) | [Standard Visium](./modalities/visium.md)  |
+| `visium-hd`   | `VisiumHdDataset` (`src/datasets/visiumHdDataset.ts`)                             | [Visium HD](./modalities/visium-hd.md)     |
+| `h5ad`        | `AnnDataH5adDataset` (`src/datasets/h5adDataset.ts`)                              | [H5AD](./modalities/h5ad.md)               |
+| `spatialdata` | `SpatialDataDataset` (`src/datasets/spatialDataDataset.ts`)                       | [SpatialData](./modalities/spatialdata.md) |
+| `image`       | `ImageOnlyDataset` (`src/datasets/imageOnlyDataset.ts`)                           | [Image sources](./modalities/image.md)     |
 
 `cachedSpatialDataset` memoizes the instance per URL and drops failed
 instances so a retry starts fresh.
@@ -141,6 +143,7 @@ state, runs detection, and then branches per platform:
 | Xenium      | `loadDatasetOverview` (`cells.parquet`)                                 | Warmup, gene panel, annotation groups, morphology image |
 | Visium HD   | `readBinnedOverview()` + `meta()`                                       | Gene panel, tissue image                                |
 | H5AD        | `overview()`, `genePanel()`, `annotationGroups()`, `embeddingOptions()` | —                                                       |
+| Visium      | `visiumSummary()`, then the same as H5AD                                | Tissue image                                            |
 | SpatialData | Same as H5AD, plus `summary()` for the log                              | Image                                                   |
 | Atera       | Same as H5AD                                                            | Morphology image                                        |
 | Image       | `meta()`, `image()`, per-channel loaders                                | Auto-contrast                                           |
@@ -206,13 +209,14 @@ lets tests replace them.
 Every platform converts into micrometre data coordinates with a top-left
 origin:
 
-| Platform    | Data coordinates                        | µm/px source                                           |
-| ----------- | --------------------------------------- | ------------------------------------------------------ |
-| Xenium      | Parquet centroids/vertices (already µm) | Morphology OME-XML `PhysicalSizeX`                     |
-| Visium HD   | Full-res pixels × `microns_per_pixel`   | `scalefactors_json.json`                               |
-| H5AD        | `obsm` values used as µm                | 1                                                      |
-| SpatialData | Coordinate-system units used as µm      | Image affine × level-0 scale, else 1                   |
-| Image       | Pixels × µm/px                          | OME-XML / OME-Zarr scale (default 0.2125 TIFF, 1 Zarr) |
+| Platform    | Data coordinates                        | µm/px source                                                               |
+| ----------- | --------------------------------------- | -------------------------------------------------------------------------- |
+| Xenium      | Parquet centroids/vertices (already µm) | Morphology OME-XML `PhysicalSizeX`                                         |
+| Visium      | Full-res pixels × µm/px                 | Spot-grid fit (100 µm pitch), else spot spacing or `spot_diameter_fullres` |
+| Visium HD   | Full-res pixels × `microns_per_pixel`   | `scalefactors_json.json`                                                   |
+| H5AD        | `obsm` values used as µm                | 1 (Visium `.h5ad` files: as Visium)                                        |
+| SpatialData | Coordinate-system units used as µm      | Image affine × level-0 scale, else 1                                       |
+| Image       | Pixels × µm/px                          | OME-XML / OME-Zarr scale (default 0.2125 TIFF, 1 Zarr)                     |
 
 All screen↔data conversions go through `coords.ts`.
 

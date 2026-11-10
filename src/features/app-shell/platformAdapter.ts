@@ -28,13 +28,14 @@ import {
 export type AppPlatformKind =
   | 'xenium'
   | 'atera'
+  | 'visium'
   | 'visium-hd'
   | 'h5ad'
   | 'spatialdata'
   | 'image'
 
 export interface AppPlatformLabels {
-  readonly embeddingElementPlural: 'cells' | 'bins'
+  readonly embeddingElementPlural: 'cells' | 'bins' | 'spots'
 }
 
 export interface AppPlatformCapabilities {
@@ -59,6 +60,9 @@ export interface AppPlatformAdapter {
   readonly labels: AppPlatformLabels
   readonly capabilities: AppPlatformCapabilities
   readonly pointSizeFullViewScale: number
+  // Points with a physical size (Visium spots) keep it at every zoom instead
+  // of being capped to a few screen pixels.
+  readonly trueSizePoints: boolean
   featureLoadEnabled(loadState: DatasetLoadState): boolean
   effectiveTranscriptOverlay(showTranscriptOverlay: boolean): boolean
   boundaryLoadingEnabled(
@@ -98,6 +102,7 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcriptGeneOnlyFilter: true,
   },
   pointSizeFullViewScale: 1,
+  trueSizePoints: false,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: (showTranscriptOverlay) => showTranscriptOverlay,
   boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
@@ -128,6 +133,7 @@ const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 1,
+  trueSizePoints: false,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: (showTranscriptOverlay) => showTranscriptOverlay,
   boundaryLoadingEnabled: (showCellBoundaries, showNucleusBoundaries) =>
@@ -160,6 +166,7 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 1,
+  trueSizePoints: false,
   featureLoadEnabled: () => false,
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: (showCellBoundaries, showNucleusBoundaries) =>
@@ -201,6 +208,7 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 0.5,
+  trueSizePoints: false,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: () => false,
@@ -210,6 +218,37 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   magicLensAvailability: () => ({
     loadEnabled: false,
     unavailableReason: 'Unavailable for H5AD',
+  }),
+  canDrawRoi: ({ loadState }) => loadState.status === 'ready',
+}
+
+// Standard Visium spots come from an AnnData table, either an .h5ad with
+// `uns/spatial` or Space Ranger output read into one. Spots are drawn at
+// their 55 µm size; outlines come from `dataset.elements(bbox)`.
+const VISIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
+  kind: 'visium',
+  labels: { embeddingElementPlural: 'spots' },
+  capabilities: {
+    annotations: true,
+    geometricAnnotations: true,
+    magicLensMinQv: false,
+    nucleusBoundaries: false,
+    transcripts: false,
+    cellTranscriptDistribution: false,
+    transcriptGeneOnlyFilter: false,
+  },
+  pointSizeFullViewScale: 1,
+  trueSizePoints: true,
+  featureLoadEnabled: (loadState) => loadState.status === 'ready',
+  effectiveTranscriptOverlay: () => false,
+  boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
+  boundaryOverlayRequestKey: (showCellBoundaries) =>
+    `${showCellBoundaries ? 'enabled' : 'disabled'}:no-nucleus`,
+  geneExpressionOverlayEnabled: () => true,
+  cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,
+  magicLensAvailability: () => ({
+    loadEnabled: false,
+    unavailableReason: 'Unavailable for Visium',
   }),
   canDrawRoi: ({ loadState }) => loadState.status === 'ready',
 }
@@ -227,6 +266,7 @@ const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 0.5,
+  trueSizePoints: false,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
@@ -254,6 +294,7 @@ const IMAGE_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 1,
+  trueSizePoints: false,
   featureLoadEnabled: () => false,
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: () => false,
@@ -287,6 +328,10 @@ export function appPlatformAdapterFor(
     return SPATIALDATA_PLATFORM_ADAPTER
   }
 
+  if (loadState.status === 'ready' && datasetPlatform === 'visium') {
+    return VISIUM_PLATFORM_ADAPTER
+  }
+
   if (loadState.status === 'ready' && datasetPlatform === 'atera') {
     return ATERA_PLATFORM_ADAPTER
   }
@@ -302,11 +347,15 @@ export function isH5adPlatform(adapter: AppPlatformAdapter): boolean {
   return adapter.kind === 'h5ad'
 }
 
-// H5AD, SpatialData, and Atera read cells, genes, annotations, embeddings,
-// and ROI queries from an AnnData table exposed by the spatial dataset.
+// H5AD, Visium, SpatialData, and Atera read cells, genes, annotations,
+// embeddings, and ROI queries from an AnnData table exposed by the spatial
+// dataset.
 export function isAnnDataPlatform(adapter: AppPlatformAdapter): boolean {
   return (
-    adapter.kind === 'h5ad' || adapter.kind === 'spatialdata' || adapter.kind === 'atera'
+    adapter.kind === 'h5ad' ||
+    adapter.kind === 'visium' ||
+    adapter.kind === 'spatialdata' ||
+    adapter.kind === 'atera'
   )
 }
 
@@ -476,6 +525,7 @@ export async function loadPlatformBoundaryElements(
 
   if (
     adapter.kind !== 'visium-hd' &&
+    adapter.kind !== 'visium' &&
     adapter.kind !== 'spatialdata' &&
     adapter.kind !== 'atera'
   ) {

@@ -1,4 +1,8 @@
-import { datasetManifestFor, setDatasetManifest } from '../data/datasetFiles'
+import {
+  datasetFileUrl,
+  datasetManifestFor,
+  setDatasetManifest,
+} from '../data/datasetFiles'
 import {
   folderListingMissing,
   readFolderListing,
@@ -18,9 +22,17 @@ import {
   parseDatasetManifest,
   resolveManifestPath,
   type DatasetManifest,
+  type VisiumDatasetManifest,
   type VisiumHdDatasetManifest,
   type VisiumHdManifestSegmentedOutput,
 } from './datasetManifest'
+import {
+  VISIUM_ANALYSIS_FILE_CANDIDATES,
+  VISIUM_FILE_DEFAULTS,
+  VISIUM_LEGACY_TISSUE_POSITIONS,
+  VISIUM_OPTIONAL_FILES,
+  type VisiumAnalysisFileKey,
+} from './visiumFormat'
 import { isSpatialDataRootMetadata } from './spatialDataCatalog'
 import { ATERA_EXPERIMENT_FILE } from './ateraFormat'
 import type { CellId } from '../data/cellid'
@@ -68,6 +80,13 @@ export type SpatialDatasetDetection =
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
+      readonly platform: 'visium'
+      readonly baseUrl: string
+      readonly files: VisiumDetectedFiles
+      readonly manifest?: DatasetManifest
+      readonly checked: readonly DatasetProbeResult[]
+    }
+  | {
       readonly platform: 'visium-hd'
       readonly baseUrl: string
       readonly bins: readonly VisiumHdBinDescriptor[]
@@ -81,6 +100,18 @@ export type SpatialDatasetDetection =
       readonly baseUrl: string
       readonly checked: readonly DatasetProbeResult[]
     }
+
+// Standard Visium files, as paths relative to the dataset (or manifest) root
+// or absolute URLs.
+export interface VisiumDetectedFiles {
+  readonly tissuePositions: string
+  readonly scalefactors: string
+  readonly filteredMatrix: string
+  readonly hiresImage?: string
+  readonly lowresImage?: string
+  // Analysis files a manifest names; others are searched for.
+  readonly analysis?: Readonly<Partial<Record<VisiumAnalysisFileKey, string>>>
+}
 
 export interface DatasetProbeResult {
   readonly path: string
@@ -387,6 +418,17 @@ async function detectSpatialDatasetLayout(
     }
   }
 
+  const visiumFiles = await probeVisiumOutputs(normalizedBaseUrl, options, checked)
+
+  if (visiumFiles !== null) {
+    return {
+      platform: 'visium',
+      baseUrl: normalizedBaseUrl,
+      files: visiumFiles,
+      checked,
+    }
+  }
+
   const bins = await probeVisiumHdBins(normalizedBaseUrl, options, checked)
   const segmentedOutputs = await probeVisiumHdSegmentedOutputs(
     normalizedBaseUrl,
@@ -556,7 +598,153 @@ async function detectFromManifest(
     }
   }
 
+  if (manifest.platform === 'visium') {
+    return detectVisiumFromManifest(baseUrl, manifest, options, checked)
+  }
+
   return detectVisiumHdFromManifest(baseUrl, manifest, options, checked)
+}
+
+// Standard Visium output: positions (Space Ranger 2.0+ or 1.x name), scale
+// factors, and the filtered matrix are required; tissue images are optional.
+async function probeVisiumOutputs(
+  rootUrl: string,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<VisiumDetectedFiles | null> {
+  const paths = [
+    VISIUM_FILE_DEFAULTS.tissuePositions,
+    VISIUM_LEGACY_TISSUE_POSITIONS,
+    VISIUM_FILE_DEFAULTS.scalefactors,
+    VISIUM_FILE_DEFAULTS.filteredMatrix,
+    VISIUM_FILE_DEFAULTS.hiresImage,
+    VISIUM_FILE_DEFAULTS.lowresImage,
+  ]
+  const probes = await Promise.all(
+    paths.map((path) => probeDatasetPath(rootUrl, path, options)),
+  )
+  checked.push(...probes)
+  const found = (path: string) => probes.some((probe) => probe.path === path && probe.ok)
+  const tissuePositions = [
+    VISIUM_FILE_DEFAULTS.tissuePositions,
+    VISIUM_LEGACY_TISSUE_POSITIONS,
+  ].find(found)
+
+  if (
+    tissuePositions === undefined ||
+    !found(VISIUM_FILE_DEFAULTS.scalefactors) ||
+    !found(VISIUM_FILE_DEFAULTS.filteredMatrix)
+  ) {
+    return null
+  }
+
+  return {
+    tissuePositions,
+    scalefactors: VISIUM_FILE_DEFAULTS.scalefactors,
+    filteredMatrix: VISIUM_FILE_DEFAULTS.filteredMatrix,
+    ...(found(VISIUM_FILE_DEFAULTS.hiresImage)
+      ? { hiresImage: VISIUM_FILE_DEFAULTS.hiresImage }
+      : {}),
+    ...(found(VISIUM_FILE_DEFAULTS.lowresImage)
+      ? { lowresImage: VISIUM_FILE_DEFAULTS.lowresImage }
+      : {}),
+  }
+}
+
+// Files the manifest names must exist; the others fall back to the Space
+// Ranger names, and a missing tissue image is left out.
+async function detectVisiumFromManifest(
+  baseUrl: string,
+  manifest: VisiumDatasetManifest,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<SpatialDatasetDetection> {
+  const { files, rootUrl } = manifest
+  const probe = async (path: string) => {
+    const result = await probeDirectDatasetUrl(
+      resolveManifestPath(rootUrl, path),
+      path,
+      options,
+    )
+    checked.push(result)
+    return result
+  }
+  const requireFile = async (
+    role: 'tissuePositions' | 'scalefactors' | 'filteredMatrix',
+    fallbacks: readonly string[],
+  ): Promise<string> => {
+    const named = files[role]?.path
+
+    for (const path of named === undefined ? fallbacks : [named]) {
+      const result = await probe(path)
+
+      if (result.ok) {
+        return path
+      }
+
+      if (named !== undefined) {
+        throw new DatasetManifestError(
+          manifest.url,
+          `"files.${role}" (${result.url}) is not readable (${probeFailure(result)}).`,
+        )
+      }
+    }
+
+    throw new DatasetManifestError(
+      manifest.url,
+      `no ${fallbacks.join(' or ')} under ${rootUrl}. Name the file in "files.${role}".`,
+    )
+  }
+  const optionalImage = async (
+    role: 'hiresImage' | 'lowresImage',
+  ): Promise<string | undefined> => {
+    const named = files[role]?.path
+    const result = await probe(named ?? VISIUM_FILE_DEFAULTS[role])
+
+    if (!result.ok && named !== undefined) {
+      throw new DatasetManifestError(
+        manifest.url,
+        `"files.${role}" (${result.url}) is not readable (${probeFailure(result)}).`,
+      )
+    }
+
+    return result.ok ? (named ?? VISIUM_FILE_DEFAULTS[role]) : undefined
+  }
+  const [tissuePositions, scalefactors, filteredMatrix, hiresImage, lowresImage] =
+    await Promise.all([
+      requireFile('tissuePositions', [
+        VISIUM_FILE_DEFAULTS.tissuePositions,
+        VISIUM_LEGACY_TISSUE_POSITIONS,
+      ]),
+      requireFile('scalefactors', [VISIUM_FILE_DEFAULTS.scalefactors]),
+      requireFile('filteredMatrix', [VISIUM_FILE_DEFAULTS.filteredMatrix]),
+      optionalImage('hiresImage'),
+      optionalImage('lowresImage'),
+    ])
+  const analysis: Partial<Record<VisiumAnalysisFileKey, string>> = {}
+
+  for (const key of VISIUM_OPTIONAL_FILES) {
+    const path = files[key]?.path
+
+    if (path !== undefined) {
+      analysis[key] = path
+    }
+  }
+
+  return {
+    platform: 'visium',
+    baseUrl,
+    files: {
+      tissuePositions,
+      scalefactors,
+      filteredMatrix,
+      ...(hiresImage === undefined ? {} : { hiresImage }),
+      ...(lowresImage === undefined ? {} : { lowresImage }),
+      ...(Object.keys(analysis).length === 0 ? {} : { analysis }),
+    },
+    manifest,
+    checked,
+  }
 }
 
 // Bin and segmented-output paths stay relative to the manifest root (or
@@ -792,6 +980,40 @@ export async function createSpatialDataset(
     return new ImageOnlyDataset({
       imageUrl: detection.imageUrl,
       ...(zchunkStoreUrl === undefined ? {} : { zchunkStoreUrl }),
+    })
+  }
+
+  if (detection.platform === 'visium') {
+    const { createVisiumDataset } = await import('./visiumDataset')
+    const { files } = detection
+    const fileUrl = (path: string) => datasetFileUrl(detection.baseUrl, path)
+    const analysis: Partial<Record<VisiumAnalysisFileKey, readonly string[]>> = {}
+
+    for (const key of VISIUM_OPTIONAL_FILES) {
+      const named = files.analysis?.[key]
+      analysis[key] = (
+        named === undefined ? VISIUM_ANALYSIS_FILE_CANDIDATES[key] : [named]
+      ).map(fileUrl)
+    }
+
+    return createVisiumDataset({
+      baseUrl: detection.baseUrl,
+      files: {
+        tissuePositions: [fileUrl(files.tissuePositions)],
+        scalefactors: fileUrl(files.scalefactors),
+        filteredMatrix: fileUrl(files.filteredMatrix),
+        images: {
+          ...(files.hiresImage === undefined ? {} : { hires: fileUrl(files.hiresImage) }),
+          ...(files.lowresImage === undefined
+            ? {}
+            : { lowres: fileUrl(files.lowresImage) }),
+        },
+        analysis,
+      },
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.onH5adLoadProgress === undefined
+        ? {}
+        : { onProgress: options.onH5adLoadProgress }),
     })
   }
 

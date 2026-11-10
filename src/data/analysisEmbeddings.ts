@@ -3,7 +3,7 @@ import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import { isListedAsMissing } from './folderListing'
 
 export type AnalysisEmbeddingKind = string
-export type AnalysisEmbeddingElementLabel = 'cells' | 'bins'
+export type AnalysisEmbeddingElementLabel = 'cells' | 'bins' | 'spots'
 export type AnalysisEmbeddingVisiumHdBinSize = 2 | 8 | 16
 
 export interface AnalysisEmbeddingPoint {

@@ -246,6 +246,7 @@ function Probe({
       setTranscriptPointColorMode: noopSetter,
       setVisiumHdControlState,
       setSpatialDataControlState: noopSetter,
+      setVisiumControlState: noopSetter,
       setViewportCellCount: noopSetter,
       ...extraSetters,
     },
@@ -578,6 +579,210 @@ describe('useDatasetLifecycle', () => {
     })
     expect(dataset.image).toHaveBeenCalled()
     expect(loadDatasetOverview).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      source: 'space-ranger' as const,
+      detection: {
+        platform: 'visium' as const,
+        baseUrl: 'https://example.test/visium/outs',
+        files: {
+          tissuePositions: 'spatial/tissue_positions.csv',
+          scalefactors: 'spatial/scalefactors_json.json',
+          filteredMatrix: 'filtered_feature_bc_matrix.h5',
+        },
+        checked: [],
+      },
+    },
+    {
+      source: 'h5ad' as const,
+      detection: {
+        platform: 'h5ad' as const,
+        baseUrl: 'https://example.test/visium.h5ad',
+        h5adUrl: 'https://example.test/visium.h5ad',
+        checked: [],
+      },
+    },
+  ])(
+    'loads Visium spots and the tissue image from $source',
+    async ({ source, detection }) => {
+      const refs = createLifecycleRefs()
+      const startDatasetLoadRef = {
+        current: null as
+          | ((datasetUrl: string, loadImage: boolean) => Promise<void>)
+          | null,
+      }
+      const datasetUrl = detection.baseUrl
+      const summary = {
+        libraryId: 'sample-A',
+        libraryIds: ['sample-A'],
+        spotCount: 1,
+        offTissueSpotCount: 0,
+        spotDiameterMicrometers: 55,
+        units: {
+          micrometersPerPixel: 0.65,
+          source: 'spot-diameter' as const,
+          detail: 'spot_diameter_fullres as 65 µm',
+        },
+        scalefactors: { tissueHiresScalef: 0.2 },
+        images: ['hires' as const],
+      }
+      const dataset = {
+        overview: vi.fn(async () => [
+          {
+            cellId: 'AAACAAGTATCTCCCA-1',
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 0,
+            cellArea: 2375.8,
+          },
+        ]),
+        genePanel: vi.fn(async () => ['Actb']),
+        annotationGroups: vi.fn(async () => []),
+        embeddingOptions: vi.fn(async () => []),
+        metadataTracks: vi.fn(async () => []),
+        meta: vi.fn(async () => ({
+          platform: 'visium',
+          units: {
+            dataUnit: 'micrometer',
+            imageUnit: 'pixel',
+            micrometersPerPixel: micrometers(0.65),
+            origin: 'top-left',
+            imageYAxis: 'down',
+          },
+          extent: {
+            minX: micrometers(0),
+            maxX: micrometers(1),
+            minY: micrometers(0),
+            maxY: micrometers(1),
+          },
+          capabilities: {
+            transcripts: false,
+            cellBoundaries: true,
+            pyramidImage: false,
+            multiChannel: false,
+          },
+        })),
+        visiumSummary: vi.fn(async () => summary),
+        tissueImage: vi.fn(async () => ({
+          kind: 'flat' as const,
+          url: 'https://example.test/hires.png',
+          scaleFactor: 0.2,
+        })),
+      }
+      const appendFallbackNotice = vi.fn()
+      const setDatasetPlatform = vi.fn()
+      const setFlatMorphologyImage = vi.fn()
+      const setLoadState = vi.fn()
+      const setMorphologyState = vi.fn()
+      const setShowCellBoundaries = vi.fn()
+      const setVisiumControlState = vi.fn()
+
+      render(
+        <Probe
+          refs={refs}
+          appendFallbackNotice={appendFallbackNotice}
+          detectSpatialDataset={vi.fn(async () => detection)}
+          getSpatialDataset={
+            vi.fn(
+              async () => dataset,
+            ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+          }
+          extraSetters={{ setVisiumControlState }}
+          setDatasetPlatform={setDatasetPlatform}
+          setFlatMorphologyImage={setFlatMorphologyImage}
+          setLoadState={setLoadState}
+          setMorphologyState={setMorphologyState}
+          setShowCellBoundaries={setShowCellBoundaries}
+          startDatasetLoadRef={startDatasetLoadRef}
+        />,
+      )
+
+      await act(async () => {
+        await startDatasetLoadRef.current?.(datasetUrl, true)
+      })
+
+      expect(setDatasetPlatform).toHaveBeenLastCalledWith('visium')
+      expect(setShowCellBoundaries).toHaveBeenLastCalledWith(false)
+      expect(setVisiumControlState).toHaveBeenCalledWith({
+        status: 'ready',
+        source,
+        summary,
+        image: 'hires',
+      })
+      expect(setLoadState).toHaveBeenLastCalledWith({
+        status: 'ready',
+        url: datasetUrl,
+        cellCount: 1,
+      })
+      expect(appendFallbackNotice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('spot_diameter_fullres as 65 µm') as string,
+        }),
+      )
+      await waitFor(() => {
+        expect(setFlatMorphologyImage).toHaveBeenCalledWith({
+          url: 'https://example.test/hires.png',
+          scaleFactor: 0.2,
+          micrometersPerPixel: 0.65,
+        })
+      })
+      expect(dataset.tissueImage).toHaveBeenCalledWith('hires')
+      expect(setMorphologyState).toHaveBeenLastCalledWith({
+        status: 'ready',
+        url: 'https://example.test/hires.png',
+      })
+    },
+  )
+
+  it('keeps an .h5ad without uns/spatial on the H5AD platform', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const datasetUrl = 'https://example.test/cells.h5ad'
+    const dataset = {
+      overview: vi.fn(async () => []),
+      genePanel: vi.fn(async () => []),
+      annotationGroups: vi.fn(async () => []),
+      embeddingOptions: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => []),
+      meta: vi.fn(),
+      visiumSummary: vi.fn(async () => null),
+      tissueImage: vi.fn(),
+    }
+    const setDatasetPlatform = vi.fn()
+    const setVisiumControlState = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'h5ad' as const,
+          baseUrl: datasetUrl,
+          h5adUrl: datasetUrl,
+          checked: [],
+        }))}
+        getSpatialDataset={
+          vi.fn(
+            async () => dataset,
+          ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+        }
+        extraSetters={{ setVisiumControlState }}
+        setDatasetPlatform={setDatasetPlatform}
+        startDatasetLoadRef={startDatasetLoadRef}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(datasetUrl, true)
+    })
+
+    expect(setDatasetPlatform).toHaveBeenLastCalledWith('h5ad')
+    expect(setVisiumControlState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'ready' }),
+    )
+    expect(dataset.tissueImage).not.toHaveBeenCalled()
   })
 
   it('loads Atera through AnnData readers and opens its 2D morphology image', async () => {

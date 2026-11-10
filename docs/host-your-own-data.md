@@ -1,11 +1,13 @@
 # Host Your Own Data
 
 The viewer reads data directly from browser-accessible URLs. It supports Xenium
-and Atera output folders, Visium HD Space Ranger output folders, direct H5AD files,
+and Atera output folders, standard Visium and Visium HD Space Ranger output
+folders, direct H5AD files (including Visium AnnData with `uns/spatial`),
 SpatialData Zarr stores, and direct image URLs.
 
 This page lists what to host. For exactly how each file is read, see the
 modality docs: [Xenium](./modalities/xenium.md), [Atera](./modalities/atera.md),
+[Standard Visium](./modalities/visium.md),
 [Visium HD](./modalities/visium-hd.md), [H5AD](./modalities/h5ad.md),
 [SpatialData](./modalities/spatialdata.md), and
 [Image sources](./modalities/image.md).
@@ -105,6 +107,42 @@ summaries, and `overview_scan.png`.
 All the zips and OME-TIFFs need byte-range support. Keep the zips stored as
 written; do not recompress them.
 
+## Host Your Own Standard Visium Data
+
+Standard Visium means Visium v1 or v2 (CytAssist) with 55 µm spots, processed
+by `spaceranger count`. Host the `outs/` folder with:
+
+- `spatial/tissue_positions.csv` (Space Ranger 2.0+), or
+  `spatial/tissue_positions_list.csv` (1.x, no header row)
+- `spatial/scalefactors_json.json`
+- `filtered_feature_bc_matrix.h5` (up to 300 MB; it is read whole)
+
+Detection needs all three to answer `HEAD`. Recommended:
+
+- `spatial/tissue_hires_image.png` and `spatial/tissue_lowres_image.png` for the
+  tissue image. Each needs its `tissue_*_scalef` in the scale factors.
+- `analysis/clustering/gene_expression_graphclust/clusters.csv` (or the 1.x
+  `analysis/clustering/graphclust/clusters.csv`) for the `graphclust`
+  annotation set.
+- `analysis/umap/…/projection.csv`, `analysis/tsne/…/projection.csv`, and
+  `analysis/pca/…/projection.csv` for embedding views.
+
+Nothing else in `outs/` is read: leave out the BAM files, `molecule_info.h5`,
+the raw matrices, the MEX folders, and the `.cloupe` file. Every file is read
+with a plain `GET`, so byte-range support is not required, and `.gz` copies of
+any file work when a [dataset manifest](./dataset-manifest.md#standard-visium)
+names them. That is how a GEO sample's supplementary files load in place.
+
+An AnnData `.h5ad` with `uns/spatial/<library>`, as written by scanpy
+`read_visium`, squidpy, or CELLxGENE, loads as standard Visium too; host it as
+described in [Host your own H5AD data](#host-your-own-h5ad-data). Keep
+`obsm/spatial` in full-resolution pixels, `uns/spatial/<library>/scalefactors`,
+and the `hires` or `lowres` image under `uns/spatial/<library>/images`. Include
+`obs/array_row` and `obs/array_col` so the scale can be fitted from the spot
+grid; without them it is estimated from spot spacing.
+
+See [Standard Visium](./modalities/visium.md) for how each file is read.
+
 ## Host Your Own Visium HD Data
 
 Host the Space Ranger output directory, usually the `outs/` folder. The app
@@ -173,8 +211,10 @@ The H5AD reader requires:
   `data`, `indices`, `indptr`, and a `shape` attribute. Groups with
   `encoding-type = csc_matrix` are read as CSC; all others as CSR.
 
-`/uns`, `/layers`, `/raw`, `/varm`, and `/obsp` are not read. See
-[H5AD](./modalities/h5ad.md) for details.
+`/layers`, `/raw`, `/varm`, and `/obsp` are not read, and `/uns` only for the
+Visium layout in `uns/spatial` (see
+[Host your own standard Visium data](#host-your-own-standard-visium-data)).
+See [H5AD](./modalities/h5ad.md) for details.
 
 Supported H5AD views:
 
@@ -189,7 +229,8 @@ Supported H5AD views:
 
 H5AD files do not provide Xenium transcript records, morphology images, or cell
 boundary polygons by default, so those controls are disabled or unavailable for
-H5AD datasets.
+H5AD datasets. A Visium H5AD is the exception: it shows its tissue image and
+spot outlines.
 
 For hosted H5AD files, use the same CORS and byte-range rules listed above.
 Files up to 300 MiB are downloaded whole (no byte ranges) and opened

@@ -10,6 +10,9 @@ dataset. It tells the viewer:
   toggles, opacities, image channels, and platform choices such as the
   SpatialData image or the Visium HD bin size.
 
+A manifest also makes public data loadable where it is published: for example
+a [GEO Visium sample](#standard-visium), whose files have GEO names.
+
 Without a manifest, the viewer reads the standard file names described in
 [Host your own data](./host-your-own-data.md). A manifest only needs the
 fields that differ from those names.
@@ -76,7 +79,7 @@ its standard name in the manifest's folder.
 | Field         | Required | Value                                                                                                 |
 | ------------- | -------- | ----------------------------------------------------------------------------------------------------- |
 | `version`     | Yes      | `1`                                                                                                   |
-| `platform`    | Yes      | `xenium`, `atera`, `visium-hd`, `h5ad`, `spatialdata`, or `image`                                     |
+| `platform`    | Yes      | `xenium`, `atera`, `visium`, `visium-hd`, `h5ad`, `spatialdata`, or `image`                           |
 | `name`        | No       | Display name, shown in the Dataset tab, the log, and diagnostics                                      |
 | `description` | No       | What the dataset shows, shown in the Dataset tab                                                      |
 | `source`      | No       | Where the data comes from. See [Source](#source)                                                      |
@@ -149,6 +152,47 @@ All entries are optional. Leave one out to use the path in
 | `binnedTranscripts`     | `binned_transcripts.zarr.zip`                     | Selected-gene transcript density                                                                                              |
 | `morphology`            | `images.morphology_2d_filepath` in the experiment | Any OME-TIFF or OME-Zarr image                                                                                                |
 | `morphologyZchunkstore` | Next to each TIFF                                 | [`.zchunkstore` sidecar](./zchunkstore.md) covering every `morphology_2d` channel file. Replaces the lookup next to the TIFFs |
+
+### Standard Visium
+
+Standard Visium (v1/v2, 55 µm spots) Space Ranger `count` output. All entries
+are optional; `options` must be empty. Files the manifest names must answer
+`HEAD`, or detection stops with an error naming the field. Files it leaves out
+are probed at their Space Ranger names; a missing tissue image is skipped.
+Every file is read whole, so no byte-range support is needed, and gzipped
+copies (`.gz`) work.
+
+| Key               | Standard name                                                                                          | Notes                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `tissuePositions` | `spatial/tissue_positions.csv`, then `spatial/tissue_positions_list.csv`                               | With or without a header row                                          |
+| `scalefactors`    | `spatial/scalefactors_json.json`                                                                       |                                                                       |
+| `filteredMatrix`  | `filtered_feature_bc_matrix.h5`                                                                        | Up to 300 MB                                                          |
+| `hiresImage`      | `spatial/tissue_hires_image.png`                                                                       | Any image the browser draws; `.png.gz` and `.jpg.gz` are decompressed |
+| `lowresImage`     | `spatial/tissue_lowres_image.png`                                                                      | As above                                                              |
+| `clusters`        | `analysis/clustering/gene_expression_graphclust/clusters.csv`, then `analysis/clustering/graphclust/…` | `Barcode,Cluster` CSV, shown as the `graphclust` annotation set       |
+| `umap`, `tsne`    | `analysis/<kind>/gene_expression_2_components/projection.csv`, then `analysis/<kind>/2_components/…`   | Projection CSV                                                        |
+| `pca`             | `analysis/pca/gene_expression_10_components/projection.csv`, then `analysis/pca/10_components/…`       | The first two components are shown                                    |
+
+GEO publishes each Visium sample's Space Ranger files flat, with the sample
+name as a prefix, and gzipped. A manifest hosted anywhere loads them from GEO,
+which allows browser reads:
+
+```json
+{
+  "version": 1,
+  "platform": "visium",
+  "name": "GSM6592057 (M10)",
+  "root": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6592nnn/GSM6592057/suppl/",
+  "files": {
+    "tissuePositions": "GSM6592057_M10_tissue_positions_list.csv.gz",
+    "scalefactors": "GSM6592057_M10_scalefactors_json.json.gz",
+    "filteredMatrix": "GSM6592057_M10_filtered_feature_bc_matrix.h5",
+    "hiresImage": "GSM6592057_M10_tissue_hires_image.png.gz"
+  }
+}
+```
+
+See [Standard Visium](./modalities/visium.md).
 
 ### Visium HD
 
@@ -264,6 +308,8 @@ such as VS Code will complete field names and flag errors as you type.
    shared link.
 5. `spatialDataSelectionFor` returns the viewer's SpatialData selection, or the
    manifest's `options` when there is none.
+6. A `visium` manifest's file paths are resolved the same way and passed to
+   `createVisiumDataset` (`src/datasets/visiumDataset.ts`).
 
 A sidecar named by `morphologyZchunkstore` or `zchunkstore` reaches `openTiff`
 as `zchunkStoreUrl`: `loadMorphologyImage` looks it up with `zchunkStoreUrlFor`

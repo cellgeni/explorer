@@ -64,18 +64,20 @@ request:
 | QPTIFF image   | Direct Akoya `.qptiff` URL; also custom layers and manifests   | Phase 13                     | Done (2026-11-09)                           |
 | OME-Zarr image | Direct OME-Zarr URL; also custom layers and SpatialData images | Phase 9 (recorded from git)  | Done (2026-07-10)                           |
 | SpatialData    | Zarr store root with `spatialdata_attrs`                       | Phase 10 (recorded from git) | Done (2026-10-13 to 2026-11-06)             |
-| Visium (spots) | Space Ranger output with `tissue_positions.csv` and PNGs       | Original Phase 6 (`PLAN.md`) | Not started                                 |
+| Visium (spots) | Space Ranger `outs/` folder, or `.h5ad` with `uns/spatial`     | Phase 14 (original Phase 6)  | Done (2026-11-10)                           |
 
 ### Reference Datasets
 
-| Platform             | URL                                                                                                                            | Notes                                                                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| Xenium               | `https://mp33.cog.sanger.ac.uk/public/xenium/output-XETG00155__0033412__Sob23-BRA-0-FFPE-2-s30__20240829__110328`              | Demo dataset; 1,414,155 cells                                                                                                 |
-| Visium HD            | `https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f`                    | Space Ranger 4.0.1; 54,504 bins at 16 µm                                                                                      |
-| H5AD                 | `https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad`                                                                        | 32,080,465 bytes; Range and CORS enabled                                                                                      |
-| SpatialData (shapes) | `https://webatlasdataprod.cog.sanger.ac.uk/public/visium_associated_xenium_io/a5652917-ebb4-4d4c-ba90-6e8845c6f370.sdata.zarr` | Visium CytAssist, Zarr v2; 4,992 circle spots; H&E images; consolidated metadata at `zmetadata`                               |
-| SpatialData (labels) | `https://cellgeni.cog.sanger.ac.uk/vento/reproductivecellatlas/ovaries/spatialdata_xenium/AU14_S14_final.zarr`                 | spatialdata-io Xenium; table annotates `labels/xenium_segmentations`; 73,579 cells × 480 genes; true scale 0.2125 µm per unit |
-| Atera                | `https://mp33.cog.sanger.ac.uk/public/test/50170325_WSI_KID_04_region1/50170325_WSI_KID_04_region1`                            | Human WTA kidney; 93,864 cells × 24,674 features (18,050 genes); 4 morphology channels; 667 M transcripts                     |
+| Platform              | URL                                                                                                                                                | Notes                                                                                                                         |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Xenium                | `https://mp33.cog.sanger.ac.uk/public/xenium/output-XETG00155__0033412__Sob23-BRA-0-FFPE-2-s30__20240829__110328`                                  | Demo dataset; 1,414,155 cells                                                                                                 |
+| Visium HD             | `https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f`                                        | Space Ranger 4.0.1; 54,504 bins at 16 µm                                                                                      |
+| H5AD                  | `https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad`                                                                                            | 32,080,465 bytes; Range and CORS enabled                                                                                      |
+| SpatialData (shapes)  | `https://webatlasdataprod.cog.sanger.ac.uk/public/visium_associated_xenium_io/a5652917-ebb4-4d4c-ba90-6e8845c6f370.sdata.zarr`                     | Visium CytAssist, Zarr v2; 4,992 circle spots; H&E images; consolidated metadata at `zmetadata`                               |
+| SpatialData (labels)  | `https://cellgeni.cog.sanger.ac.uk/vento/reproductivecellatlas/ovaries/spatialdata_xenium/AU14_S14_final.zarr`                                     | spatialdata-io Xenium; table annotates `labels/xenium_segmentations`; 73,579 cells × 480 genes; true scale 0.2125 µm per unit |
+| Atera                 | `https://mp33.cog.sanger.ac.uk/public/test/50170325_WSI_KID_04_region1/50170325_WSI_KID_04_region1`                                                | Human WTA kidney; 93,864 cells × 24,674 features (18,050 genes); 4 morphology channels; 667 M transcripts                     |
+| Visium (H5AD)         | `https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/60d5175f-f477-48b2-8396-ad76be2c3310.h5ad`      | CELLxGENE Census copy of GEO GSM6592057 (Visium v1); 8.9 MB; 370 spots under tissue of 4,992; 0.3236 µm/px from the spot grid |
+| Visium (Space Ranger) | `https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6592nnn/GSM6592057/suppl/` through a manifest ([example](./docs/dataset-manifest.md#standard-visium)) | The same sample's GEO files, gzipped; same spots and scale as the H5AD                                                        |
 
 The SpatialData stores are for manual testing; there is no E2E coverage for them
 yet.
@@ -239,7 +241,7 @@ writing UI code.
 | Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                       |
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                       |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)       |
-| Visium spots                    | Original Phase 6 `VisiumDataset`                         | Not started                                             |
+| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                       |
 
 ---
 
@@ -1126,7 +1128,7 @@ The original brief's Phase 6 covered both standard Visium and Visium HD.
 | Original Phase 6 task                                              | Outcome                                                     |
 | ------------------------------------------------------------------ | ----------------------------------------------------------- |
 | `VisiumHDDataset` implementing `SpatialDataset`                    | Done (`VisiumHdDataset`)                                    |
-| `VisiumDataset` (spots, `tissue_positions.csv`, `circle` geometry) | Not started                                                 |
+| `VisiumDataset` (spots, `tissue_positions.csv`, `circle` geometry) | Done in [Phase 14](#phase-14--standard-visium-spots)        |
 | `scalefactors_json.json` + tissue PNGs → `image()` as `flat`       | Done for Visium HD                                          |
 | `filtered_feature_bc_matrix.h5` → `matrix()` via h5wasm            | Done, through a lazy-range worker                           |
 | `analysis/` → `annotations()`                                      | Embeddings only; Visium HD cluster annotations not recorded |
@@ -1800,6 +1802,70 @@ post-Xenium skin scan in BioImage Archive `S-BIAD3788`
       15 s per channel against EBI.
 - [ ] QPTIFF placement over Xenium (registration) is not supported.
 
+### Phase 14 — Standard Visium Spots
+
+Shipped 2026-11-10. Standard Visium (v1/v2, 55 µm spots) is the most common
+public spatial assay. Requested: Space Ranger output with its H&E images, and
+AnnData with `uns/spatial/<library>/images` and the scale factors. Checked
+against GEO `GSM6592057` in both forms: the Space Ranger files on GEO (through
+a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
+[visium.md](./docs/modalities/visium.md).
+
+#### Product Decisions
+
+- **DECISION:** One `visium` platform for both sources, read through the
+  AnnData reader. A Space Ranger folder is turned into an in-memory AnnData
+  table with scanpy's `read_visium` layout (`memorySource`), so spots, genes,
+  clusters, embeddings, ROI, and expression use the H5AD paths unchanged. Not
+  a third Visium class beside `VisiumHdDataset`: standard Visium is a few
+  thousand spots, not a grid of millions of bins.
+- **DECISION:** An `.h5ad` stays detected by its suffix and becomes `visium`
+  after it is read, when `uns/spatial/<library>` exists and coordinates come
+  from `obsm/spatial`. Detection cannot see inside the file without reading
+  it.
+- **DECISION:** Micrometres per pixel come from an affine fit of spot pixels
+  against `array_row`/`array_col` (100 µm pitch), not from
+  `spot_diameter_fullres`, which 10x documents as a 60-70 µm visualization
+  estimate. Fallbacks: declared `microns_per_pixel`, nearest-neighbour spot
+  spacing, then the spot diameter as 65 µm with a notice.
+- **DECISION:** Draw spots at the 55 µm capture size, not the 65 µm
+  visualization diameter, and keep that size at every zoom (`trueSizePoints`
+  on the platform adapter) instead of the usual screen-pixel cap.
+- **DECISION:** Hide `in_tissue` 0 spots. CELLxGENE keeps all 4,992 array
+  spots; Space Ranger's filtered matrix already drops them.
+- **DECISION:** Tissue images stay `flat` images. `uns` arrays are written to
+  an uncompressed BMP object URL (no canvas needed, testable); GEO's
+  `.png.gz` images are decompressed into object URLs.
+- **DECISION:** Read the Space Ranger matrix whole (300 MB limit, as `.h5ad`),
+  not through the Visium HD lazy-range worker: selected-gene overlays scan
+  every spot, and standard Visium matrices are small (1-50 MB typically).
+
+#### Delivered
+
+- [x] Folder detection (Space Ranger 2.0+ and 1.x positions names) before
+      the Visium HD tiers; `visium` manifest platform with every file
+      relocatable and gzip allowed; JSON Schema updated.
+- [x] 10x HDF5 matrix reader (Cell Ranger 3+ `/matrix` and Cell Ranger 2
+      per-genome groups); `library_ids`, chemistry, and software version.
+- [x] `uns/spatial` placement: units, off-tissue spots, several libraries,
+      scale factors, `hires`/`lowres` arrays (uint8 or 0-1 float).
+- [x] Spot outlines from `elements(bbox)`; true-size points and expression
+      dots; Dataset tab panel with library, spots, chemistry, scale, and a
+      `Tissue image` select (High-res, Low-res, None).
+- [x] Diagnostics for Space Ranger folders (no Range support needed).
+- [x] Unit tests for parsing, units, BMP encoding, the Space Ranger reader,
+      `uns/spatial`, detection, manifests, the adapter, the lifecycle, and the
+      Dataset tab; Playwright smoke with a routed Space Ranger folder and a
+      live test against the Census `.h5ad`.
+
+#### Known Gaps
+
+- [ ] `spaceranger aggr` output (per-library `spatial/<library>/`) is not
+      detected; a multi-library `.h5ad` shows one library with no selector.
+- [ ] The full-resolution microscope image is not shown.
+- [ ] k-means clusterings and `spatial_enrichment.csv` are not read.
+- [ ] The tissue image choice is not in the shareable URL.
+
 ---
 
 ## 7. Application Structure And Refactor Record
@@ -2053,7 +2119,8 @@ Other gaps found in the review:
 - [ ] A failed GeoJSON import does not show the reason.
 - [ ] Visium HD: with only a 2 µm tier the default load fails, and 2 µm
       detection needs a positions file that is never read.
-- [ ] Remove `'visium'` from the `Platform` union or implement it.
+- [x] Remove `'visium'` from the `Platform` union or implement it
+      (implemented in Phase 14).
 - [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,
       annotation set, channel colours and contrast, and initial camera (see
       [Phase 11](#phase-11--dataset-manifest)).
@@ -2068,7 +2135,8 @@ Features:
       viewport-scoped shape reads.
 - [ ] Atera: ROI transcript export, the cell z histogram, Magic Lens, and
       Azimuth colours (see [Phase 12](#phase-12--10x-atera-output)).
-- [ ] Standard Visium (spots) `VisiumDataset` from the original Phase 6.
+- [x] Standard Visium (spots) from the original Phase 6
+      ([Phase 14](#phase-14--standard-visium-spots), 2026-11-10).
 - [ ] Visium HD dataset annotations from `analysis/` (original Phase 6).
 - [ ] Transcript estimate from native Zarr counts instead of `cells.parquet`.
 - [ ] Codeword-level density (needs a dataset with `/density/codeword`).
