@@ -41,6 +41,21 @@ npm run test:e2e
 The Vite dev and preview servers are configured with cross-origin isolation
 headers needed by the browser-side WASM and decoding paths.
 
+## Releases
+
+To cut a release, open Releases > Draft a new release, create a new `vX.Y.Z`
+tag on `main`, generate the release notes, and publish. The
+[Release workflow](.github/workflows/release.yml) then type-checks the tag,
+runs the unit and E2E smoke tests, builds the app, and attaches it to the
+release as `explorer-<tag>.zip`. Pre-releases get a zip too. To retry, or to
+attach a zip to an older release, run the workflow manually with the tag.
+
+The zip holds one `explorer-<tag>/` folder with `index.html`, `assets/`, and a
+`version.json` that records the tag and commit. Asset paths are relative, so
+the folder works when served from a domain root or any subpath. It has to be
+served over HTTP; opening `index.html` from disk does not work. See
+[Deploy to S3](docs/deploy-to-s3.md) for hosting it.
+
 ## Repository Layout
 
 - `src/App.tsx` coordinates dataset loading, controls, diagnostics, URL hash
@@ -110,8 +125,8 @@ The full index is in [docs/README.md](docs/README.md).
   [image sources](docs/modalities/image.md). Each lists the files read, the
   libraries used, the source modules involved, and known limitations.
 - [Deploy the React app to S3-compatible object storage](docs/deploy-to-s3.md):
-  build the Vite app, upload `dist/` to AWS S3 or Ceph RGW-style storage,
-  configure edge headers, and validate production.
+  download a release zip or build the Vite app, upload it to AWS S3 or Ceph
+  RGW-style storage, configure edge headers, and validate production.
 - [Host your own data](docs/host-your-own-data.md): required and optional files
   for Xenium, Atera, Visium HD, H5AD, SpatialData, and image-only sources, plus HTTP
   requirements

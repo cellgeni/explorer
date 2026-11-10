@@ -18,8 +18,8 @@ still need the byte-range and CORS rules in
   be an institutional CDN, nginx, HAProxy, or another edge service.
 - Keep spatial data and image sources in a separate bucket or prefix so deploys
   cannot delete large dataset objects by accident.
-- Serve the app at the distribution root unless you intentionally build with a
-  Vite `base` path.
+- A release zip works at the distribution root or any subpath. A local build
+  works at the distribution root unless you build it with a Vite `base` path.
 
 An edge layer is recommended because the production app should send the same
 cross-origin isolation headers used by the Vite dev and preview servers, so
@@ -36,6 +36,23 @@ the dev and preview servers and keeps the option open for threaded WASM later.
 AWS S3 static website hosting alone cannot attach those arbitrary response
 headers. Some S3-compatible gateways can add headers directly, but the edge
 layer is still the most portable place to manage them.
+
+## Use A Release Build
+
+Each [GitHub release](https://github.com/cellgeni/explorer/releases) has the
+built app attached as `explorer-<tag>.zip`. It was type-checked, unit-tested,
+and smoke-tested before upload, and its asset paths are relative, so it can be
+served from the distribution root or any subpath without rebuilding:
+
+```sh
+TAG=v0.1.0
+curl -LO "https://github.com/cellgeni/explorer/releases/download/$TAG/explorer-$TAG.zip"
+unzip "explorer-$TAG.zip"
+```
+
+`explorer-$TAG/version.json` records the tag and commit. Use the
+`explorer-$TAG/` folder wherever the steps below use `dist/`, and skip
+[Build Locally](#build-locally).
 
 ## Build Locally
 
@@ -61,7 +78,7 @@ The preview server is configured with the required cross-origin isolation
 headers. Load the app, run `Diagnose Dataset`, and load a known dataset before
 publishing.
 
-If the app will be served from a subpath such as
+If a local build will be served from a subpath such as
 `https://viewer.example.org/xenium/`, build with a matching Vite base:
 
 ```sh
@@ -131,7 +148,8 @@ aws --endpoint-url "$S3_ENDPOINT_URL" s3 sync dist "s3://$APP_BUCKET" \
 
 Do not run `aws s3 sync dist s3://bucket --delete` at the root of a bucket that
 also contains spatial datasets or image sources. Use a dedicated app bucket, or
-deploy the app to a scoped prefix and build with the matching Vite `base`.
+deploy the app to a scoped prefix. A release zip works there as is; a local
+build needs the matching Vite `base`.
 
 ## Configure The Edge Layer
 
