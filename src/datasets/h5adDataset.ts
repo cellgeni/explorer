@@ -1151,10 +1151,17 @@ async function readDataframeIndex(
   ].filter((key): key is string => key !== undefined)
 
   for (const key of candidateKeys) {
-    const dataset = group.get(key)
+    const entity = group.get(key)
 
-    if (isDataset(dataset)) {
-      return readStringArray(await readDatasetValue(dataset), `/${label}/${key}`)
+    if (isDataset(entity)) {
+      return readStringArray(await readDatasetValue(entity), `/${label}/${key}`)
+    }
+
+    if (isNullableArrayGroup(entity)) {
+      return readStringArray(
+        await readNullableArray(entity, `/${label}/${key}`),
+        `/${label}/${key}`,
+      )
     }
   }
 
@@ -1199,6 +1206,10 @@ async function readGeneNameColumn(
       { length: codes.length },
       (_value, index) => categoricalLabel(codes, categories, index) ?? '',
     )
+  }
+
+  if (isNullableArrayGroup(entity)) {
+    return readStringArray(await readNullableArray(entity, `/var/${key}`), `/var/${key}`)
   }
 
   if (!isDataset(entity)) {
@@ -1428,31 +1439,43 @@ async function readObservationTracks(
         continue
       }
 
-      if (!isDataset(entity)) {
-        continue
-      }
+      let entityValue: unknown
 
-      const shape = entity.shape
+      if (isNullableArrayGroup(entity)) {
+        const values = await readNullableArray(entity, `/obs/${key}`)
 
-      if (shape === null || readShapeDimension(shape, 0, `/obs/${key}`) !== rowCount) {
-        continue
-      }
+        if (values.length !== rowCount) {
+          continue
+        }
 
-      const categories = await readDataframeCategories(obs, key)
-      const entityValue = await readDatasetValue(entity)
+        entityValue = values
+      } else {
+        if (!isDataset(entity)) {
+          continue
+        }
 
-      if (categories !== null && isNumericArray(entityValue)) {
-        const codes = readNumericArray(entityValue, `/obs/${key}`)
+        const shape = entity.shape
 
-        categoricalTracks.push({
-          id: key,
-          label: key,
-          categoryCount: categories.length,
-          values: Array.from({ length: rowCount }, (_value, index) =>
-            categoricalLabel(codes, categories, index),
-          ),
-        })
-        continue
+        if (shape === null || readShapeDimension(shape, 0, `/obs/${key}`) !== rowCount) {
+          continue
+        }
+
+        const categories = await readDataframeCategories(obs, key)
+        entityValue = await readDatasetValue(entity)
+
+        if (categories !== null && isNumericArray(entityValue)) {
+          const codes = readNumericArray(entityValue, `/obs/${key}`)
+
+          categoricalTracks.push({
+            id: key,
+            label: key,
+            categoryCount: categories.length,
+            values: Array.from({ length: rowCount }, (_value, index) =>
+              categoricalLabel(codes, categories, index),
+            ),
+          })
+          continue
+        }
       }
 
       if (isNumericArray(entityValue)) {
@@ -1675,6 +1698,34 @@ async function readCategoricalGroup(
   return { codes, categories }
 }
 
+// An AnnData nullable array: a group with `values` and a boolean `mask` that is
+// true where a value is missing. anndata 0.13 with pandas 3 writes every string
+// index and non-categorical string column this way. Masked entries read as the
+// missing values of plain arrays, empty strings and NaN.
+async function readNullableArray(
+  group: H5GroupLike,
+  path: string,
+): Promise<readonly string[] | Float64Array> {
+  const values = await readDatasetValue(
+    expectDataset(group.get('values'), `${path}/values`),
+  )
+  const mask = readNumericArray(
+    await readDatasetValue(expectDataset(group.get('mask'), `${path}/mask`)),
+    `${path}/mask`,
+  )
+  const isMasked = (index: number) => numericValue(mask, index) !== 0
+
+  if (isNumericArray(values)) {
+    return Float64Array.from({ length: values.length }, (_value, index) =>
+      isMasked(index) ? Number.NaN : numericValue(values, index),
+    )
+  }
+
+  return readStringArray(values, `${path}/values`).map((value, index) =>
+    isMasked(index) ? '' : value,
+  )
+}
+
 // Negative codes mark missing values.
 function categoricalLabel(
   codes: NumericArrayLike,
@@ -1702,11 +1753,11 @@ async function readObsColumnValues(
       : null
   }
 
-  if (!isDataset(entity)) {
-    return null
-  }
-
-  const value = await readDatasetValue(entity)
+  const value = isNullableArrayGroup(entity)
+    ? await readNullableArray(entity, `/obs/${key}`)
+    : isDataset(entity)
+      ? await readDatasetValue(entity)
+      : null
 
   if (isNumericArray(value)) {
     return value.length === rowCount ? numericArrayToNumbers(value) : null
@@ -2598,6 +2649,19 @@ function isCategoricalGroup(value: unknown): value is H5GroupLike {
     value.get('codes') !== undefined &&
     value.get('categories') !== null &&
     value.get('categories') !== undefined
+  )
+}
+
+function isNullableArrayGroup(value: unknown): value is H5GroupLike {
+  if (!isGroup(value)) {
+    return false
+  }
+
+  const encodingType = readStringAttribute(value, 'encoding-type')
+  return (
+    encodingType === 'nullable-string-array' ||
+    encodingType === 'nullable-integer' ||
+    encodingType === 'nullable-boolean'
   )
 }
 

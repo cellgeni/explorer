@@ -1440,6 +1440,9 @@ continuous.
 - [ ] Offer numeric `obs` columns as `Metadata` colour tracks.
 - [ ] Accept obs names in imported CSV/JSON annotation files.
 - [x] Read boolean `obs` columns on the reference backend (2026-11-09).
+- [x] Read `nullable-string-array` obs and var indexes, which anndata 0.13
+      writes under pandas 3, plus nullable string, integer, and boolean `obs`
+      columns, on every backend including SpatialData tables (2026-11-10).
 
 ### Phase 8 — Image-Only Viewer And GeoJSON Annotations
 

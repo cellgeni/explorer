@@ -1,3 +1,4 @@
+import type { Group as H5wasmGroup } from 'h5wasm'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
 import { AnnDataH5adDataset } from './h5adDataset'
@@ -348,12 +349,104 @@ describe('AnnDataH5adDataset', () => {
     await expect(dataset.geneAliases()).resolves.toEqual(new Map())
   })
 
+  it.each<[string, () => Promise<typeof fetch>]>([
+    [
+      'in memory',
+      async () => h5adFetcher(await createTinyH5ad('csr', { nullableStrings: true })),
+    ],
+    [
+      'kerchunk reference',
+      async () => {
+        const chunks = new RemoteH5adReferenceChunks()
+        const referenceSpec = createTinyH5adReferenceSpec(
+          (value) => chunks.ref(value),
+          'csr',
+          { nullableStrings: true },
+        )
+        return h5adRemoteReferenceFetcher(
+          350 * 1024 * 1024,
+          referenceSpec,
+          chunks.bytes(),
+          () => {
+            throw new Error('body should not be read')
+          },
+        )
+      },
+    ],
+  ])(
+    'reads anndata 0.13 nullable indexes and obs columns (%s)',
+    async (_backend, createFetcher) => {
+      const dataset = new AnnDataH5adDataset({
+        url: 'https://example.test/nullable.h5ad',
+        fetcher: await createFetcher(),
+      })
+
+      // Masked index entries fall back to obs-N and var-N.
+      await expect(dataset.cellIds()).resolves.toEqual([
+        'cell-a',
+        'obs-1',
+        'cell-c',
+        'cell-d',
+      ])
+      await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'var-1', 'Gapdh'])
+
+      const overview = await dataset.overview()
+      expect(overview.map(({ cellId, metadata }) => ({ cellId, metadata }))).toEqual([
+        {
+          cellId: 'cell-a',
+          metadata: {
+            cluster: 'A',
+            batch: 'b1',
+            score: Math.fround(0.1),
+            count: 3,
+            flag: 1,
+          },
+        },
+        {
+          cellId: 'obs-1',
+          metadata: { cluster: 'B', batch: 'b2', score: 0.5, flag: 0 },
+        },
+        {
+          cellId: 'cell-c',
+          metadata: { cluster: 'A', score: Math.fround(0.9), count: 5, flag: 1 },
+        },
+        {
+          cellId: 'cell-d',
+          metadata: { cluster: 'B', batch: 'b1', score: Math.fround(0.2), count: 7 },
+        },
+      ])
+
+      await expect(dataset.annotationGroups()).resolves.toEqual([
+        {
+          id: 'analysis:cluster',
+          label: 'cluster',
+          groupingName: 'cluster',
+          groupCount: 2,
+        },
+        { id: 'analysis:batch', label: 'batch', groupingName: 'batch', groupCount: 2 },
+      ])
+      await expect(dataset.metadataTracks()).resolves.toMatchObject([
+        { id: 'h5ad:score' },
+        { id: 'h5ad:count', cellCount: 4, min: 3, max: 7 },
+        { id: 'h5ad:flag', cellCount: 4, min: 0, max: 1 },
+      ])
+      const countValues = await dataset.metadataTrackValues('h5ad:count')
+      expect(countValues.map(({ value }) => value)).toEqual([3, Number.NaN, 5, 7])
+
+      const matrix = await dataset.matrix(['obs-1'])
+      expect(matrix.cells.get('obs-1')).toEqual({
+        geneNames: ['Actb', 'var-1'],
+        counts: [2, 3],
+      })
+    },
+  )
+
   it('reads a categorical feature_name through a kerchunk reference', async () => {
     const chunks = new RemoteH5adReferenceChunks()
     const referenceSpec = createTinyH5adReferenceSpec(
       (value) => chunks.ref(value),
       'csr',
-      TINY_FEATURE_NAMES,
+      { featureNames: TINY_FEATURE_NAMES },
     )
     const dataset = new AnnDataH5adDataset({
       url: 'https://example.test/reference-cellxgene.h5ad',
@@ -570,11 +663,49 @@ interface TinyH5adOptions {
   // Writes the var index as Ensembl IDs and gene symbols as a categorical
   // `feature_name`, the CELLxGENE layout.
   readonly featureNames?: CategoricalFeatureNames
+  // Writes the obs and var indexes and extra obs columns as nullable arrays,
+  // the anndata 0.13 layout under pandas 3.
+  readonly nullableStrings?: boolean
 }
 
 interface CategoricalFeatureNames {
   readonly categories: readonly string[]
   readonly codes: readonly number[]
+}
+
+interface NullableArrayFixture {
+  readonly encoding: 'nullable-string-array' | 'nullable-integer' | 'nullable-boolean'
+  readonly values: readonly string[] | BigInt64Array | Uint8Array
+  readonly mask: readonly number[]
+}
+
+// One masked entry per array; masked slots hold values the reader must ignore.
+const NULLABLE_OBS_INDEX: NullableArrayFixture = {
+  encoding: 'nullable-string-array',
+  values: ['cell-a', 'cell-b', 'cell-c', 'cell-d'],
+  mask: [0, 1, 0, 0],
+}
+const NULLABLE_OBS_COLUMNS: Readonly<Record<string, NullableArrayFixture>> = {
+  batch: {
+    encoding: 'nullable-string-array',
+    values: ['b1', 'b2', 'zz', 'b1'],
+    mask: [0, 0, 1, 0],
+  },
+  count: {
+    encoding: 'nullable-integer',
+    values: new BigInt64Array([3n, 9n, 5n, 7n]),
+    mask: [0, 1, 0, 0],
+  },
+  flag: {
+    encoding: 'nullable-boolean',
+    values: new Uint8Array([1, 0, 1, 1]),
+    mask: [0, 0, 0, 1],
+  },
+}
+const NULLABLE_VAR_INDEX: NullableArrayFixture = {
+  encoding: 'nullable-string-array',
+  values: ['Actb', 'Gad1', 'Gapdh'],
+  mask: [0, 1, 0],
 }
 
 const TINY_GENE_IDS = ['ENSMUSG00000029580', 'ENSMUSG00000070880', 'ENSMUSG00000057666']
@@ -602,9 +733,28 @@ async function createTinyH5ad(
 
   const file = new h5wasm.File(fileName, 'w')
   const obs = file.create_group('obs')
-  obs.create_attribute('_index', 'cell_id')
-  obs.create_attribute('column-order', ['cluster', 'score'])
-  obs.create_dataset({ name: 'cell_id', data: ['cell-a', 'cell-b', 'cell-c', 'cell-d'] })
+
+  if (options.nullableStrings === true) {
+    obs.create_attribute('_index', '_index')
+    obs.create_attribute('column-order', [
+      'cluster',
+      'score',
+      ...Object.keys(NULLABLE_OBS_COLUMNS),
+    ])
+    writeNullableArray(obs, '_index', NULLABLE_OBS_INDEX)
+
+    for (const [key, column] of Object.entries(NULLABLE_OBS_COLUMNS)) {
+      writeNullableArray(obs, key, column)
+    }
+  } else {
+    obs.create_attribute('_index', 'cell_id')
+    obs.create_attribute('column-order', ['cluster', 'score'])
+    obs.create_dataset({
+      name: 'cell_id',
+      data: ['cell-a', 'cell-b', 'cell-c', 'cell-d'],
+    })
+  }
+
   obs.create_dataset({
     name: 'score',
     data: new Float32Array([0.1, 0.5, 0.9, 0.2]),
@@ -622,7 +772,10 @@ async function createTinyH5ad(
 
   const varGroup = file.create_group('var')
 
-  if (options.featureNames === undefined) {
+  if (options.nullableStrings === true) {
+    varGroup.create_attribute('_index', '_index')
+    writeNullableArray(varGroup, '_index', NULLABLE_VAR_INDEX)
+  } else if (options.featureNames === undefined) {
     varGroup.create_attribute('_index', 'gene_ids')
     varGroup.create_dataset({ name: 'gene_ids', data: ['Actb', 'Gad1', 'Gapdh'] })
   } else {
@@ -682,6 +835,35 @@ async function createTinyH5ad(
   FS.unlink(fileName)
 
   return bytes
+}
+
+function writeNullableArray(
+  parent: H5wasmGroup,
+  name: string,
+  array: NullableArrayFixture,
+): void {
+  const group = parent.create_group(name)
+
+  for (const [key, value] of Object.entries(nullableArrayAttrs(array))) {
+    group.create_attribute(key, value)
+  }
+
+  group.create_dataset({
+    name: 'values',
+    data:
+      array.values instanceof BigInt64Array || array.values instanceof Uint8Array
+        ? array.values
+        : [...array.values],
+  })
+  group.create_dataset({ name: 'mask', data: new Uint8Array(array.mask) })
+}
+
+function nullableArrayAttrs(array: NullableArrayFixture): Record<string, string> {
+  return {
+    'encoding-type': array.encoding,
+    'encoding-version': '0.1.0',
+    ...(array.encoding === 'nullable-string-array' ? { 'na-value': 'NaN' } : {}),
+  }
 }
 
 function h5adFetcher(bytes: Uint8Array): typeof fetch {
@@ -784,21 +966,27 @@ type ChunkRefFactory = (value: ArrayBufferView) => string | [string, number, num
 function createTinyH5adReferenceSpec(
   chunkRef: ChunkRefFactory = bytesRef,
   matrixKind: MatrixKind = 'csr',
-  featureNames?: CategoricalFeatureNames,
+  options: Pick<TinyH5adOptions, 'featureNames' | 'nullableStrings'> = {},
 ): Record<string, unknown> {
+  const { featureNames } = options
+
   return {
     version: 1,
     refs: {
       '.zgroup': jsonRef({ zarr_format: 2 }),
       'obs/.zgroup': jsonRef({ zarr_format: 2 }),
-      'obs/.zattrs': jsonRef({
-        _index: 'cell_id',
-        'column-order': ['cluster', 'score'],
-      }),
-      'obs/cell_id/.zarray': zarrArrayRef([4], [4], '|S6'),
-      'obs/cell_id/0': chunkRef(
-        fixedStringBytes(['cell-a', 'cell-b', 'cell-c', 'cell-d'], 6),
-      ),
+      ...(options.nullableStrings === true
+        ? tinyNullableObsRefs(chunkRef)
+        : {
+            'obs/.zattrs': jsonRef({
+              _index: 'cell_id',
+              'column-order': ['cluster', 'score'],
+            }),
+            'obs/cell_id/.zarray': zarrArrayRef([4], [4], '|S6'),
+            'obs/cell_id/0': chunkRef(
+              fixedStringBytes(['cell-a', 'cell-b', 'cell-c', 'cell-d'], 6),
+            ),
+          }),
       'obs/cluster/.zarray': zarrArrayRef([4], [4], '|i1'),
       'obs/cluster/0': chunkRef(new Int8Array([0, 1, 0, 1])),
       'obs/score/.zarray': zarrArrayRef([4], [4], '<f4'),
@@ -807,13 +995,18 @@ function createTinyH5adReferenceSpec(
       'obs/__categories/cluster/.zarray': zarrArrayRef([2], [2], '|S1'),
       'obs/__categories/cluster/0': chunkRef(fixedStringBytes(['A', 'B'], 1)),
       'var/.zgroup': jsonRef({ zarr_format: 2 }),
-      ...(featureNames === undefined
+      ...(options.nullableStrings === true
         ? {
-            'var/.zattrs': jsonRef({ _index: 'gene_ids' }),
-            'var/gene_ids/.zarray': zarrArrayRef([3], [3], '|S5'),
-            'var/gene_ids/0': chunkRef(fixedStringBytes(['Actb', 'Gad1', 'Gapdh'], 5)),
+            'var/.zattrs': jsonRef({ _index: '_index' }),
+            ...nullableArrayRefs('var/_index', NULLABLE_VAR_INDEX, chunkRef),
           }
-        : tinyCategoricalVarRefs(chunkRef, featureNames)),
+        : featureNames === undefined
+          ? {
+              'var/.zattrs': jsonRef({ _index: 'gene_ids' }),
+              'var/gene_ids/.zarray': zarrArrayRef([3], [3], '|S5'),
+              'var/gene_ids/0': chunkRef(fixedStringBytes(['Actb', 'Gad1', 'Gapdh'], 5)),
+            }
+          : tinyCategoricalVarRefs(chunkRef, featureNames)),
       'obsm/.zgroup': jsonRef({ zarr_format: 2 }),
       'obsm/X_umap/.zarray': zarrArrayRef([4, 2], [4, 2], '<f4'),
       'obsm/X_umap/0.0': chunkRef(new Float32Array([0, 0, 10, 0, 0, 10, 10, 10])),
@@ -821,6 +1014,47 @@ function createTinyH5adReferenceSpec(
         ? tinyDenseMatrixRefs(chunkRef)
         : tinySparseMatrixRefs(chunkRef, matrixKind)),
     },
+  }
+}
+
+function tinyNullableObsRefs(chunkRef: ChunkRefFactory): Record<string, unknown> {
+  return {
+    'obs/.zattrs': jsonRef({
+      _index: '_index',
+      'column-order': ['cluster', 'score', ...Object.keys(NULLABLE_OBS_COLUMNS)],
+    }),
+    ...nullableArrayRefs('obs/_index', NULLABLE_OBS_INDEX, chunkRef),
+    ...Object.fromEntries(
+      Object.entries(NULLABLE_OBS_COLUMNS).flatMap(([key, column]) =>
+        Object.entries(nullableArrayRefs(`obs/${key}`, column, chunkRef)),
+      ),
+    ),
+  }
+}
+
+// A nullable array as kerchunk translates it: a group with `values` and a
+// `|b1` mask.
+function nullableArrayRefs(
+  path: string,
+  array: NullableArrayFixture,
+  chunkRef: ChunkRefFactory,
+): Record<string, unknown> {
+  const length = array.mask.length
+  const { values } = array
+  const [dtype, valueBytes] =
+    values instanceof BigInt64Array
+      ? ['<i8', values]
+      : values instanceof Uint8Array
+        ? ['|b1', values]
+        : ['|S8', fixedStringBytes(values, 8)]
+
+  return {
+    [`${path}/.zgroup`]: jsonRef({ zarr_format: 2 }),
+    [`${path}/.zattrs`]: jsonRef(nullableArrayAttrs(array)),
+    [`${path}/values/.zarray`]: zarrArrayRef([length], [length], dtype),
+    [`${path}/values/0`]: chunkRef(valueBytes),
+    [`${path}/mask/.zarray`]: zarrArrayRef([length], [length], '|b1'),
+    [`${path}/mask/0`]: chunkRef(new Uint8Array(array.mask)),
   }
 }
 
