@@ -30,6 +30,10 @@ store is SpatialData when:
 A Zarr store without `spatialdata_attrs` falls through to the
 [OME-Zarr image](./image.md) path.
 
+A URL whose path ends in `.icechunk` is an [Icechunk](https://icechunk.io/)
+repository; it is SpatialData when its root group has `spatialdata_attrs` (see
+[AnnData in Icechunk](./h5ad.md#anndata-in-icechunk) for how it is opened).
+
 A [dataset manifest](../dataset-manifest.md) with `"platform": "spatialdata"`
 names the store in `files.store` and skips the metadata check. Its
 `options` (`coordinateSystem`, `image`, `micrometersPerUnit`) are the starting
@@ -45,7 +49,9 @@ stores from `src/zarr/zarrStores.ts`:
   `zarr.json` (v3, `consolidated_metadata`), `zmetadata`, and `.zmetadata` (v2,
   `zarr_consolidated_format: 1`) in parallel and uses the first valid one.
   Without it the load fails with `SpatialDataConsolidatedMetadataError`,
-  because the browser cannot list object-store prefixes.
+  because the browser cannot list object-store prefixes. An Icechunk
+  repository's snapshot lists every node's metadata, so it stands in for
+  consolidated metadata.
 - **403 for missing metadata.** `createZarrFetchStore` treats `403` as missing
   only for metadata keys (`.zarray`, `.zgroup`, `.zattrs`, `.zmetadata`,
   `zmetadata`, `zarr.json`). Chunk `403`s are still errors.
@@ -220,6 +226,11 @@ off.
 
 ## Known Limitations
 
+- An Icechunk repository holds only Zarr arrays and groups, so a SpatialData
+  store copied into one keeps its images, labels, and tables but not its
+  shapes and points, which are Parquet files. Copy every Zarr key
+  (`zarr.json` and chunk keys) into the repository's store; tested with
+  spatialdata's `blobs` example (labels, image, table).
 - `points` (transcripts), additional images, and additional tables are not
   shown. Labels elements are shown only as traced cell outlines, not as a
   raster layer.

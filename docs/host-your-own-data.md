@@ -235,20 +235,24 @@ spot outlines.
 For hosted H5AD files, use the same CORS and byte-range rules listed above.
 Files up to 300 MiB are downloaded whole (no byte ranges) and opened
 client-side with `h5wasm`. Files larger than 300 MiB require a sibling kerchunk
-reference JSON at the H5AD URL plus `.json`; for example:
+reference JSON at the H5AD URL plus `.json`, or an Icechunk repository at the
+H5AD URL plus `.icechunk`; for example:
 
 ```text
 https://bucket.example/path/to/sample.h5ad
 https://bucket.example/path/to/sample.h5ad.json
+https://bucket.example/path/to/sample.h5ad.icechunk/   (instead of the .json)
 ```
 
-Generate the reference with `scripts/make_h5ad_reference.py` (VirtualiZarr;
-see [Large H5AD files](./h5ad-reference.md)), then host both files with CORS
-and byte-range support.
+Generate either with `scripts/make_h5ad_reference.py` (VirtualiZarr; see
+[Large H5AD files](./h5ad-reference.md)), then host them with CORS and
+byte-range support.
 The app probes the H5AD size first; when the file exceeds 300 MiB it opens the
-JSON with Zarrita `ReferenceStore` and lazily reads the referenced HDF5 chunks.
-Chunk references are always redirected to the H5AD URL, so the URL stored
-inside the JSON does not matter. With the reference backend, all-gene reads
+JSON with Zarrita `ReferenceStore`, or the repository with `icechunk-js`, and
+lazily reads the referenced HDF5 chunks. Chunk references are always
+redirected to the H5AD URL, so the URL stored inside the reference does not
+matter. AnnData written straight into an Icechunk repository opens from its
+`.icechunk` URL; see [AnnData in Icechunk](./modalities/h5ad.md#anndata-in-icechunk). With the reference backend, all-gene reads
 (selected-cell profile, ROI gene stats) are not supported for CSC matrices.
 
 Reference hosted fixture:

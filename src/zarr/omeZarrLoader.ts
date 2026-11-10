@@ -24,6 +24,7 @@ import {
   zarrChunkKey,
 } from './zarrStores'
 import { sharedZarrDecodePool, type ZarrDecodePool } from '../workers/zarrDecodePool'
+import { isIcechunkUrl } from './icechunkUrl'
 import {
   isSupportedPixelArray,
   newPixelArray,
@@ -251,11 +252,18 @@ export async function openOmeZarrImageWithOptions(
 }
 
 // Uses consolidated metadata when the image root has it, so opening each
-// pyramid level needs no per-array metadata requests.
+// pyramid level needs no per-array metadata requests. An Icechunk repository's
+// snapshot holds every node's metadata.
 async function openImageStore(
   url: string,
   options: Pick<OpenOmeZarrImageOptions, 'fetcher' | 'signal'>,
 ): Promise<zarr.AsyncReadable> {
+  if (isIcechunkUrl(url)) {
+    const { openIcechunkRepository } = await import('./icechunkStore')
+    const repository = await openIcechunkRepository(url, options)
+    return consolidatedZarrStore(repository.store, repository.metadata)
+  }
+
   const base = createZarrFetchStore(
     url,
     options.fetcher === undefined ? {} : { fetcher: options.fetcher },

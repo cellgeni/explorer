@@ -12,10 +12,24 @@ import {
   morphologyImageFromPyramidLoader,
   morphologyImagePathsFromExperiment,
   normalizeCustomMorphologyLayerUrl,
+  openImagePyramid,
 } from './morphologyImage'
 import type { TiffPyramidLoader } from '../tiff/loader'
+import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 
 describe('morphology image loader', () => {
+  it('opens an image in an Icechunk repository as OME-Zarr', async () => {
+    vi.stubGlobal('fetch', icechunkFixtureFetcher())
+
+    try {
+      const loader = await openImagePyramid(`${ICECHUNK_FIXTURE_ORIGIN}/image.icechunk`)
+
+      expect([loader.imageWidth, loader.imageHeight]).toEqual([8, 8])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('normalises dataset file URLs', () => {
     expect(datasetFileUrl('https://example.test/xenium/', '/morphology.ome.tif')).toBe(
       'https://example.test/xenium/morphology.ome.tif',

@@ -1,6 +1,11 @@
 import type { Group as H5wasmGroup } from 'h5wasm'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
+import {
+  ICECHUNK_FIXTURE_ORIGIN,
+  icechunkFixtureFetcher,
+  type IcechunkFixtureRequest,
+} from '../test/icechunkFixtures'
 import { AnnDataH5adDataset } from './h5adDataset'
 
 describe('AnnDataH5adDataset', () => {
@@ -673,9 +678,132 @@ describe('AnnDataH5adDataset', () => {
       byteLength,
       maxBytes: 300 * 1024 * 1024,
       message:
-        'H5AD file is 350.0 MB, exceeding the browser load limit of 300.0 MB, and no readable kerchunk reference file was found at https://example.test/oversized.h5ad.json.',
+        'H5AD file is 350.0 MB, exceeding the browser load limit of 300.0 MB, and no readable kerchunk reference file was found at https://example.test/oversized.h5ad.json, nor an Icechunk repository at https://example.test/oversized.h5ad.icechunk.',
     })
     expect(readBody).not.toHaveBeenCalled()
+  })
+
+  it('loads oversized H5AD files through a companion Icechunk repository', async () => {
+    const requests: IcechunkFixtureRequest[] = []
+    const progress: string[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: `${ICECHUNK_FIXTURE_ORIGIN}/tiny.h5ad`,
+      fetcher: icechunkFixtureFetcher({
+        headLengths: { '/tiny.h5ad': 350 * 1024 * 1024 },
+        requests,
+      }),
+      onProgress: (message) => {
+        progress.push(message)
+      },
+    })
+
+    await expect(dataset.meta()).resolves.toMatchObject({
+      platform: 'h5ad',
+      extent: {
+        minX: micrometers(0),
+        maxX: micrometers(20),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+    })
+    await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh', 'Sst'])
+    await expect(dataset.overview()).resolves.toContainEqual(
+      expect.objectContaining({
+        cellId: 'cell-b',
+        position: { x: micrometers(10), y: micrometers(0) },
+        metadata: { cluster: 'B', score: 0.5 },
+      }),
+    )
+    const matrix = await dataset.matrix(['cell-c'])
+    expect(matrix.cells.get('cell-c')).toEqual({
+      geneNames: ['Gad1', 'Gapdh', 'Sst'],
+      counts: [4, 6, 1],
+    })
+
+    // The H5AD itself is only read by range, never downloaded.
+    expect(
+      requests.filter(
+        (request) =>
+          request.path === '/tiny.h5ad' &&
+          request.method === 'GET' &&
+          request.range === null,
+      ),
+    ).toEqual([])
+    expect(progress.slice(0, 5)).toEqual([
+      'H5AD size check started',
+      'H5AD file is 350.0 MB, above the 300.0 MB browser limit',
+      `Looking for H5AD reference ${ICECHUNK_FIXTURE_ORIGIN}/tiny.h5ad.json`,
+      `Looking for H5AD Icechunk repository ${ICECHUNK_FIXTURE_ORIGIN}/tiny.h5ad.icechunk`,
+      expect.stringMatching(/^H5AD Icechunk repository opened: \d+ groups and arrays$/),
+    ])
+    expect(progress.at(-1)).toBe('H5AD Icechunk repository ready: 6 cells, 4 genes')
+  })
+
+  it('reads a companion Icechunk repository from the H5AD next to it', async () => {
+    const requests: IcechunkFixtureRequest[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: `${ICECHUNK_FIXTURE_ORIGIN}/renamed.h5ad`,
+      fetcher: icechunkFixtureFetcher({
+        aliases: {
+          '/renamed.h5ad.icechunk': '/tiny.h5ad.icechunk',
+          '/renamed.h5ad': '/tiny.h5ad',
+        },
+        headLengths: { '/renamed.h5ad': 350 * 1024 * 1024 },
+        requests,
+      }),
+    })
+
+    const matrix = await dataset.matrix(['cell-d'])
+
+    expect(matrix.cells.get('cell-d')).toEqual({
+      geneNames: ['Actb', 'Gapdh'],
+      counts: [7, 8],
+    })
+    // The repository stores https://example.test/tiny.h5ad.
+    expect(requests.some((request) => request.path === '/tiny.h5ad')).toBe(false)
+    expect(requests).toContainEqual(
+      expect.objectContaining({ path: '/renamed.h5ad', range: expect.any(String) }),
+    )
+  })
+
+  it('loads AnnData written into an Icechunk repository', async () => {
+    const progress: string[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: `${ICECHUNK_FIXTURE_ORIGIN}/anndata.icechunk`,
+      icechunk: true,
+      fetcher: icechunkFixtureFetcher(),
+      onProgress: (message) => {
+        progress.push(message)
+      },
+    })
+
+    await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh', 'Sst'])
+    await expect(dataset.annotationGroups()).resolves.toEqual([
+      {
+        id: 'analysis:cluster',
+        label: 'cluster',
+        groupingName: 'cluster',
+        groupCount: 2,
+      },
+    ])
+    const expression = await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(20),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+      ['Gapdh'],
+    )
+    expect(expression.elements.map((element) => [element.id, element.count])).toEqual([
+      ['cell-a', 5],
+      ['cell-b', 0],
+      ['cell-c', 6],
+      ['cell-d', 8],
+      ['cell-e', 0],
+      ['cell-f', 0],
+    ])
+    expect(progress.at(-1)).toBe('Icechunk AnnData ready: 6 cells, 4 genes')
   })
 })
 
@@ -908,6 +1036,10 @@ function h5adReferenceFetcher(
       return referenceSpec === null
         ? new Response(null, { status: 404 })
         : Response.json(referenceSpec)
+    }
+
+    if (url.pathname.includes('.h5ad.icechunk/')) {
+      return new Response(null, { status: 404 })
     }
 
     if (request.method === 'HEAD') {

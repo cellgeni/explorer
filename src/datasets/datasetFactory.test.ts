@@ -21,6 +21,7 @@ import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
 import { SpatialDataDataset } from './spatialDataDataset'
 import { VisiumHdDataset } from './visiumHdDataset'
+import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 
 describe('spatial dataset detection', () => {
   it('detects Xenium from experiment.xenium', async () => {
@@ -974,3 +975,123 @@ function fetcherForJsonPaths(bodies: Readonly<Record<string, unknown>>): typeof 
       : Response.json(body, { status: 200 })
   }) as unknown as typeof fetch
 }
+
+describe('Icechunk repositories', () => {
+  it('detects AnnData in an Icechunk repository and creates an AnnData dataset', async () => {
+    const fetcher = icechunkFixtureFetcher()
+    const url = `${ICECHUNK_FIXTURE_ORIGIN}/anndata.icechunk/`
+
+    await expect(detectSpatialDataset(url, { fetcher })).resolves.toEqual({
+      platform: 'h5ad',
+      baseUrl: `${ICECHUNK_FIXTURE_ORIGIN}/anndata.icechunk`,
+      h5adUrl: `${ICECHUNK_FIXTURE_ORIGIN}/anndata.icechunk`,
+      source: 'icechunk',
+      checked: [
+        {
+          path: 'Icechunk repository (AnnData)',
+          url: `${ICECHUNK_FIXTURE_ORIGIN}/anndata.icechunk`,
+          ok: true,
+        },
+      ],
+    })
+
+    const dataset = await createSpatialDataset(url, { fetcher })
+
+    expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
+    await expect((dataset as AnnDataH5adDataset).genePanel()).resolves.toEqual([
+      'Actb',
+      'Gad1',
+      'Gapdh',
+      'Sst',
+    ])
+  })
+
+  it('opens an H5AD companion repository entered directly against the H5AD next to it', async () => {
+    const dataset = await createSpatialDataset(
+      `${ICECHUNK_FIXTURE_ORIGIN}/moved.h5ad.icechunk`,
+      {
+        fetcher: icechunkFixtureFetcher({
+          aliases: {
+            '/moved.h5ad.icechunk': '/tiny.h5ad.icechunk',
+            '/moved.h5ad': '/tiny.h5ad',
+          },
+        }),
+      },
+    )
+
+    expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
+    await expect((dataset as AnnDataH5adDataset).overview()).resolves.toHaveLength(6)
+  })
+
+  it('detects SpatialData and OME-Zarr images in Icechunk repositories', async () => {
+    const fetcher = icechunkFixtureFetcher()
+
+    await expect(
+      detectSpatialDataset(`${ICECHUNK_FIXTURE_ORIGIN}/spatialdata.icechunk`, {
+        fetcher,
+      }),
+    ).resolves.toMatchObject({
+      platform: 'spatialdata',
+      spatialDataUrl: `${ICECHUNK_FIXTURE_ORIGIN}/spatialdata.icechunk`,
+    })
+    await expect(
+      detectSpatialDataset(`${ICECHUNK_FIXTURE_ORIGIN}/image.icechunk`, { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'image',
+      imageUrl: `${ICECHUNK_FIXTURE_ORIGIN}/image.icechunk`,
+      imageKind: 'ome-zarr',
+    })
+  })
+
+  it('reads Icechunk images and SpatialData stores named by a manifest', async () => {
+    const fixtures = icechunkFixtureFetcher()
+    const manifests: Record<string, unknown> = {
+      '/image-manifest.json': {
+        version: 1,
+        platform: 'image',
+        files: { image: 'image.icechunk' },
+      },
+      '/sdata-manifest.json': {
+        version: 1,
+        platform: 'spatialdata',
+        files: { store: 'spatialdata.icechunk/' },
+      },
+    }
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const manifest = manifests[new URL(String(input)).pathname]
+      return manifest === undefined ? fixtures(input, init) : Response.json(manifest)
+    }) as typeof fetch
+    const urls = Object.keys(manifests).map((path) => `${ICECHUNK_FIXTURE_ORIGIN}${path}`)
+
+    try {
+      await expect(
+        detectSpatialDataset(urls[0] ?? '', { fetcher }),
+      ).resolves.toMatchObject({
+        platform: 'image',
+        imageUrl: `${ICECHUNK_FIXTURE_ORIGIN}/image.icechunk`,
+        imageKind: 'ome-zarr',
+      })
+      await expect(
+        detectSpatialDataset(urls[1] ?? '', { fetcher }),
+      ).resolves.toMatchObject({
+        platform: 'spatialdata',
+        spatialDataUrl: `${ICECHUNK_FIXTURE_ORIGIN}/spatialdata.icechunk`,
+      })
+    } finally {
+      for (const url of urls) {
+        setDatasetManifest(url, undefined)
+      }
+    }
+  })
+
+  it('reports an Icechunk URL with no repository', async () => {
+    await expect(
+      detectSpatialDataset(`${ICECHUNK_FIXTURE_ORIGIN}/missing.icechunk`, {
+        fetcher: icechunkFixtureFetcher(),
+      }),
+    ).rejects.toMatchObject({
+      name: 'IcechunkRepositoryUnavailableError',
+      message: expect.stringContaining('Not a valid icechunk repository'),
+    })
+  })
+})

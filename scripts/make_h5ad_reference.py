@@ -1,4 +1,4 @@
-"""Write a `.h5ad.json` reference for an H5AD file over 300 MiB.
+"""Write a `.h5ad.json` reference or `.h5ad.icechunk` repository for an H5AD file over 300 MiB.
 
 The reference is a JSON object in kerchunk's reference format. It describes
 the H5AD as a Zarr v2 store: group and array metadata sit under `.zgroup`,
@@ -6,18 +6,25 @@ the H5AD as a Zarr v2 store: group and array metadata sit under `.zgroup`,
 that chunk in the H5AD: `[url, offset, size]`. Variable-length strings (obs
 and var names, category labels) cannot be referenced and are stored in the
 JSON itself. The viewer loads the JSON in one request and then reads only the
-chunks it needs from the H5AD with Range requests. The HDF5 file is parsed with
-VirtualiZarr. See docs/h5ad-reference.md.
+chunks it needs from the H5AD with Range requests.
+
+With --icechunk, the same references are written to an Icechunk repository
+instead: a Zarr v3 store whose chunks are virtual references to byte ranges of
+the H5AD, and whose strings are stored in the repository. The HDF5 file is
+parsed with VirtualiZarr. See docs/h5ad-reference.md.
 
 Usage:
     python scripts/make_h5ad_reference.py sample.h5ad
+    python scripts/make_h5ad_reference.py --icechunk sample.h5ad
 
-Requires: pip install "virtualizarr[hdf]>=2.8"
+Requires: pip install "virtualizarr[hdf]>=2.8", or "virtualizarr[hdf,icechunk]>=2.8"
+for --icechunk.
 """
 
 import argparse
 import base64
 import json
+import os
 import sys
 import zlib
 from pathlib import Path
@@ -32,6 +39,11 @@ from virtualizarr.writers.kerchunk import NumpyEncoder, variable_to_kerchunk_arr
 # uns other than uns/spatial) is left out unless --all is given.
 VIEWER_GROUPS = ("obs", "var", "obsm", "X")
 INLINE_PREFIX = "base64:"
+# Icechunk stores chunks up to this size inside the array's manifest, which the
+# viewer reads anyway, instead of as separate objects; 65,535 bytes is the most
+# it allows. The chunks written to the repository are the strings; the H5AD's
+# chunks stay virtual.
+ICECHUNK_INLINE_CHUNK_BYTES = 65_535
 
 
 def used_by_viewer(name):
@@ -133,23 +145,103 @@ def add_group(refs, group, path, file_name, keep_all):
             add_group(refs, subgroup, group_path, file_name, keep_all)
 
 
-def build_reference(h5ad_path, keep_all):
-    path = h5ad_path.resolve()
+def parse_h5ad(path):
+    """The H5AD's group tree, with each array's chunk manifest."""
     registry = ObjectStoreRegistry({"file://": LocalStore()})
     # links_and_references stores HDF5 object references as paths. Older
     # AnnData files keep categories in one (an obs column's `categories`
     # attribute), which cannot be written as JSON otherwise.
     store = HDFParser(links_and_references=True)(f"file://{path}", registry)
-    refs = {}
     # The parsed group tree; ManifestStore has no public accessor for it.
-    add_group(refs, store._group, "", path.name, keep_all)
+    return store._group
+
+
+def build_reference(h5ad_path, keep_all):
+    path = h5ad_path.resolve()
+    refs = {}
+    add_group(refs, parse_h5ad(path), "", path.name, keep_all)
     return {"version": 1, "refs": refs}
+
+
+def add_icechunk_group(store, zarr_group, group, path, keep_all, location):
+    from virtualizarr.manifests.manifest import INLINED_CHUNK_PATH
+    from virtualizarr.writers.icechunk import write_virtual_variable_to_icechunk
+
+    zarr_group.attrs.update(group.metadata.attributes)
+
+    for name, array in group.arrays.items():
+        array_path = f"{path}/{name}" if path else name
+        if not (keep_all or used_by_viewer(array_path)):
+            continue
+        # One array at a time, for the same reason as add_group. Strings read
+        # from the H5AD are written to the repository as ordinary chunks.
+        variable = array.to_virtual_variable()
+        if location is not None:
+            # Only the H5AD's chunks: a string passed to rename_paths would
+            # also replace the markers of missing and inlined chunks.
+            renamed = variable.data.rename_paths(lambda old: old if old in ("", INLINED_CHUNK_PATH) else location)
+            variable = variable.copy(data=renamed)
+        write_virtual_variable_to_icechunk(store, zarr_group, name, variable)
+
+    for name, subgroup in group.groups.items():
+        group_path = f"{path}/{name}" if path else name
+        if keep_all or used_by_viewer(group_path):
+            add_icechunk_group(store, zarr_group.require_group(name), subgroup, group_path, keep_all, location)
+
+
+def write_icechunk(h5ad_path, output, keep_all, url):
+    """Write the references to a new Icechunk repository at `output`, on its main branch."""
+    # Icechunk warns that local repositories are unsafe for concurrent commits;
+    # this script is the only writer.
+    os.environ.setdefault("ICECHUNK_LOG", "error")
+    import icechunk
+    import zarr
+
+    if output.exists():
+        raise ValueError(f"{output} already exists; remove it or choose another path with -o")
+
+    path = h5ad_path.resolve()
+    # Icechunk needs an absolute URL for each virtual chunk. The viewer reads
+    # the chunks from the H5AD next to the repository whatever is stored; other
+    # tools use the stored URL, so --url gives the hosted one.
+    location = url or f"file://{path}"
+
+    if location.startswith(("http://", "https://")):
+        container_store = icechunk.http_store()
+    elif url is None:
+        container_store = icechunk.local_filesystem_store(str(path.parent))
+    else:
+        raise ValueError(f"--url must be an http:// or https:// URL, not {url}")
+
+    config = icechunk.RepositoryConfig.default()
+    config.inline_chunk_threshold_bytes = ICECHUNK_INLINE_CHUNK_BYTES
+    config.set_virtual_chunk_container(icechunk.VirtualChunkContainer(location.rsplit("/", 1)[0] + "/", container_store))
+    group = parse_h5ad(path)
+    repo = icechunk.Repository.create(icechunk.local_filesystem_storage(str(output)), config)
+    session = repo.writable_session("main")
+    root = zarr.open_group(session.store, mode="w", zarr_format=3)
+    add_icechunk_group(session.store, root, group, "", keep_all, None if url is None else location)
+    session.commit(f"Virtual references to {path.name}")
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("h5ad", type=Path, help="H5AD file on local disk")
-    parser.add_argument("-o", "--output", type=Path, help="Output path (default: <h5ad>.json)")
+    parser.add_argument(
+        "-o", "--output", type=Path, help="Output path (default: <h5ad>.json, or <h5ad>.icechunk with --icechunk)"
+    )
+    parser.add_argument(
+        "--icechunk",
+        action="store_true",
+        help='Write an Icechunk repository instead of JSON (needs "virtualizarr[hdf,icechunk]>=2.8")',
+    )
+    parser.add_argument(
+        "--url",
+        help=(
+            "With --icechunk, the H5AD's hosted http(s) URL, stored in each virtual chunk for tools other "
+            "than the viewer (default: the local file:// path)"
+        ),
+    )
     parser.add_argument(
         "--all",
         action="store_true",
@@ -160,21 +252,33 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
+    if args.url is not None and not args.icechunk:
+        parser.error("--url needs --icechunk; the viewer ignores the URL stored in a JSON reference")
+
+    suffix = ".icechunk" if args.icechunk else ".json"
+    outfile = args.output or args.h5ad.with_name(args.h5ad.name + suffix)
+
     try:
         encoding = check_h5ad(args.h5ad, args.all)
-        reference = build_reference(args.h5ad, args.all)
+        if args.icechunk:
+            write_icechunk(args.h5ad, outfile, args.all, args.url)
+        else:
+            reference = build_reference(args.h5ad, args.all)
     except (OSError, ValueError, NotImplementedError) as error:
         sys.exit(f"{args.h5ad}: {error}")
 
-    outfile = args.output or args.h5ad.with_name(args.h5ad.name + ".json")
+    if args.icechunk:
+        files = [file for file in outfile.rglob("*") if file.is_file()]
+        size = sum(file.stat().st_size for file in files)
+        print(f"Wrote {outfile} ({size / 1e6:.2f} MB in {len(files)} files)")
+    else:
+        with open(outfile, "w") as f:
+            json.dump(reference, f, separators=(",", ":"))
 
-    with open(outfile, "w") as f:
-        json.dump(reference, f, separators=(",", ":"))
-
-    refs = reference["refs"]
-    narrays = sum(1 for key in refs if key.endswith(".zarray"))
-    nchunks = sum(1 for value in refs.values() if isinstance(value, list))
-    print(f"Wrote {outfile} ({outfile.stat().st_size / 1e6:.2f} MB, {narrays} arrays, {nchunks} chunk ranges)")
+        refs = reference["refs"]
+        narrays = sum(1 for key in refs if key.endswith(".zarray"))
+        nchunks = sum(1 for value in refs.values() if isinstance(value, list))
+        print(f"Wrote {outfile} ({outfile.stat().st_size / 1e6:.2f} MB, {narrays} arrays, {nchunks} chunk ranges)")
 
     if encoding == "csr_matrix":
         print(

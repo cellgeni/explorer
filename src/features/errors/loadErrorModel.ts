@@ -317,7 +317,7 @@ export function createStructuredLoadError(
         title: 'H5AD reference file unavailable',
         message,
         action:
-          'Generate and host a companion DATASET.h5ad.json kerchunk reference next to the oversized H5AD file.',
+          'Host a DATASET.h5ad.json reference or a DATASET.h5ad.icechunk repository next to the oversized H5AD file; scripts/make_h5ad_reference.py writes either.',
       },
       detail,
     )

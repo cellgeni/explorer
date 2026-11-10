@@ -8,8 +8,32 @@ import {
   type SpatialDataCatalog,
   type SpatialDataElement,
 } from './spatialDataCatalog'
+import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 
 describe('SpatialData catalog', () => {
+  it('reads a SpatialData store in an Icechunk repository', async () => {
+    const { store, zarrFormat } = await openSpatialDataStore(
+      `${ICECHUNK_FIXTURE_ORIGIN}/spatialdata.icechunk`,
+      { fetcher: icechunkFixtureFetcher() },
+    )
+    const catalog = await readSpatialDataCatalog(store, zarrFormat)
+
+    expect(zarrFormat).toBe(3)
+    expect(catalog.elements.map((element) => `${element.kind}/${element.name}`)).toEqual([
+      'images/image',
+      'tables/table',
+    ])
+    expect(catalog.tables).toEqual([
+      {
+        name: 'table',
+        path: 'tables/table',
+        regions: ['image'],
+        regionKey: 'region',
+        instanceKey: 'cell_id',
+      },
+    ])
+  })
+
   it('recognizes root attributes but not element attributes', () => {
     expect(isSpatialDataRootMetadata({ spatialdata_attrs: { version: '0.1' } })).toBe(
       true,

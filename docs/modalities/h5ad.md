@@ -1,8 +1,9 @@
 # H5AD (AnnData) Modality
 
-How the viewer detects and reads a direct AnnData `.h5ad` file URL. For
-hosting requirements see [Host your own data](../host-your-own-data.md#host-your-own-h5ad-data);
-for the shared load pipeline see [Architecture](../architecture.md).
+How the viewer detects and reads a direct AnnData `.h5ad` file URL, and AnnData
+in an [Icechunk repository](#anndata-in-icechunk). For hosting requirements see
+[Host your own data](../host-your-own-data.md#host-your-own-h5ad-data); for the
+shared load pipeline see [Architecture](../architecture.md).
 
 ## Detection
 
@@ -24,10 +25,11 @@ the Visium platform once it is read; see
 
 ## Files Read
 
-| File               | Required                         | Read by                    | Library                                             | Notes                                                |
-| ------------------ | -------------------------------- | -------------------------- | --------------------------------------------------- | ---------------------------------------------------- |
-| `sample.h5ad`      | Yes                              | `readH5ad`                 | `h5wasm` (whole file) or `zarrita` over a reference | `HEAD` first to read `Content-Length`                |
-| `sample.h5ad.json` | Only if the file exceeds 300 MiB | `readH5adReferenceOrThrow` | `@zarrita/storage` `ReferenceStore`                 | Kerchunk reference; URL is the H5AD URL plus `.json` |
+| File                    | Required                                    | Read by                    | Library                                             | Notes                                                                           |
+| ----------------------- | ------------------------------------------- | -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `sample.h5ad`           | Yes                                         | `readH5ad`                 | `h5wasm` (whole file) or `zarrita` over a reference | `HEAD` first to read `Content-Length`                                           |
+| `sample.h5ad.json`      | Over 300 MiB, this or the repository        | `readH5adReferenceOrThrow` | `@zarrita/storage` `ReferenceStore`                 | Kerchunk reference; URL is the H5AD URL plus `.json`                            |
+| `sample.h5ad.icechunk/` | Over 300 MiB with no JSON, this or the JSON | `readH5adIcechunkOrThrow`  | `icechunk-js` and `zarrita`                         | Icechunk repository of virtual references; URL is the H5AD URL plus `.icechunk` |
 
 ## Two Backends
 
@@ -47,13 +49,64 @@ the Visium platform once it is read; see
   URL is carried into the `.json` URL, so presigned URLs need a matching
   presigned reference URL.
 
-Generate the reference with `scripts/make_h5ad_reference.py` and host it next
-to the H5AD file. [Large H5AD files](../h5ad-reference.md) covers what it
-holds, generating it, what each feature reads through it, and timings.
+  If there is no `.json`, the app opens `<h5ad URL>.icechunk` instead, an
+  Icechunk repository of the same references, as a Zarr v3 store with
+  `icechunk-js`. Its chunks are also read from the H5AD URL.
+
+Generate either reference with `scripts/make_h5ad_reference.py` and host it
+next to the H5AD file. [Large H5AD files](../h5ad-reference.md) covers what
+they hold, generating them, what each feature reads through them, and timings.
 
 Both backends hydrate a group tree and pass it to `readH5adCacheFromGroup`, so
 everything below applies to either. The parsed result is cached once per
 dataset instance (`cachePromise`, reset on error).
+
+## AnnData In Icechunk
+
+A URL whose path ends in `.icechunk` is opened as an
+[Icechunk](https://icechunk.io/) repository (`detectIcechunkRepository`,
+`src/datasets/datasetFactory.ts`). The viewer reads its `repo` file and one
+snapshot, which lists every group and array with its Zarr v3 metadata, and
+routes it by what the root holds:
+
+- **AnnData** (root `encoding-type: anndata`, or `obs` and `var` groups):
+  `AnnDataH5adDataset` with `icechunk: true`, read like an H5AD, including the
+  [Visium](./visium.md#h5ad-with-unsspatial) layout. It is never downloaded
+  whole.
+- **SpatialData** and **OME-Zarr images**: see [SpatialData](./spatialdata.md)
+  and [Image sources](./image.md).
+- Anything else, or no repository at the URL, stops the load with an error.
+
+Write AnnData into a repository with anndata:
+
+```python
+import anndata as ad
+import icechunk
+
+repo = icechunk.Repository.create(icechunk.local_filesystem_storage("sample.icechunk"))
+session = repo.writable_session("main")
+adata.write_zarr(session.store, consolidate_metadata=False)
+session.commit("Add sample")
+```
+
+`consolidate_metadata=False` is needed: Icechunk stores have no consolidated
+metadata, and the snapshot serves the same purpose.
+
+- Only the `main` branch is read.
+- Chunks can be stored in the repository or be virtual references to other
+  files. Virtual chunks are read over HTTP(S) from the location the repository
+  stores, so it must be a hosted URL with CORS and Range support. icechunk-js
+  translates `s3://` and `gs://` locations to their HTTPS endpoints; `az://`
+  needs an Azure account name, which the viewer does not pass. A `file://`
+  location fails with "Virtual chunk location … is not an HTTP(S) URL".
+- A repository named `<file>.h5ad.icechunk` is an H5AD's companion: its
+  virtual chunks are read from `<file>.h5ad` next to it, whatever it stores
+  (see [Large H5AD files](../h5ad-reference.md#upload-and-check)).
+- All repository objects and virtual chunks share one limit of 6 requests in
+  flight. Missing objects may answer `403` (buckets that deny listing) or
+  `404`. The repository needs no listing.
+- Diagnose dataset opens the repository and reads the first chunk of `/X`
+  (`/X/data` when sparse), which shows a referenced file without CORS or Range.
 
 ## HDF5 Layout Read
 

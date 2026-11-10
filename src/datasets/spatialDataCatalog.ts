@@ -5,6 +5,7 @@ import {
   type Affine2D,
   type SpatialDataCoordinateTransform,
 } from './spatialDataTransforms'
+import { isIcechunkUrl } from '../zarr/icechunkUrl'
 import {
   consolidatedZarrStore,
   createZarrFetchStore,
@@ -138,10 +139,22 @@ export function isSpatialDataRootMetadata(value: unknown): boolean {
   return !SPATIALDATA_ELEMENT_ATTRIBUTE_KEYS.some((key) => key in attrs)
 }
 
+// An Icechunk repository's snapshot lists every node's metadata, so it serves
+// as consolidated metadata.
 export async function openSpatialDataStore(
   url: string,
   options: { readonly fetcher?: typeof fetch } = {},
 ): Promise<{ readonly store: SpatialDataStore; readonly zarrFormat: 2 | 3 }> {
+  if (isIcechunkUrl(url)) {
+    const { openIcechunkRepository } = await import('../zarr/icechunkStore')
+    const repository = await openIcechunkRepository(url, options)
+
+    return {
+      store: spatialDataStore(repository.store, repository.metadata),
+      zarrFormat: 3,
+    }
+  }
+
   const base = createZarrFetchStore(url, options)
   const consolidated = await readConsolidatedZarrMetadata(base)
 
@@ -150,13 +163,20 @@ export async function openSpatialDataStore(
   }
 
   return {
-    store: consolidatedZarrStore(base, consolidated.knownMetadata, {
-      chunkCacheMaxBytes: CHUNK_CACHE_MAX_BYTES,
-      // Image tiles and label traces keep their own decoded caches.
-      cacheChunk: (key) => key.startsWith('/tables/'),
-    }),
+    store: spatialDataStore(base, consolidated.knownMetadata),
     zarrFormat: consolidated.zarrFormat,
   }
+}
+
+function spatialDataStore(
+  base: zarr.AsyncReadable,
+  knownMetadata: ReadonlyMap<string, unknown>,
+): SpatialDataStore {
+  return consolidatedZarrStore(base, knownMetadata, {
+    chunkCacheMaxBytes: CHUNK_CACHE_MAX_BYTES,
+    // Image tiles and label traces keep their own decoded caches.
+    cacheChunk: (key) => key.startsWith('/tables/'),
+  })
 }
 
 export async function readSpatialDataCatalog(
