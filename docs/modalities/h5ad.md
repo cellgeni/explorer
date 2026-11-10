@@ -70,16 +70,27 @@ dataset instance (`cachePromise`, reset on error).
 ### Index And Gene Names
 
 - **Index** (`readDataframeIndex`): the `_index` attribute value, then
-  datasets named `_index`, `index`, `obs_names`/`var_names`, then `cell_id`
-  (obs) or `gene_ids` (var). Names are trimmed; empty names become `obs-N` or
-  `var-N`; duplicates get `-2`, `-3`, … suffixes.
+  entries named `_index`, `index`, `obs_names`/`var_names`, then `cell_id`
+  (obs) or `gene_ids` (var). The entry is a string dataset or a
+  `nullable-string-array` group (see below). Names are trimmed; empty and
+  masked names become `obs-N` or `var-N`; duplicates get `-2`, `-3`, …
+  suffixes.
 - **Gene names** (`readGeneNames`): the first column among `gene_symbols`,
   `gene_symbol`, `feature_name`, `name` with one value per gene and at least
   one non-empty value replaces the var index. A column can be a string
-  dataset, a categorical group (`codes` + `categories`, as CELLxGENE stores
-  `feature_name`), or integer codes with a legacy `/var/__categories/<key>`
-  sidecar. Negative codes become empty names. The index's rules then apply:
-  empty names become `var-N` and duplicates get `-2`, `-3`, … suffixes.
+  dataset, a `nullable-string-array` group, a categorical group (`codes` +
+  `categories`, as CELLxGENE stores `feature_name`), or integer codes with a
+  legacy `/var/__categories/<key>` sidecar. Negative codes and masked values
+  become empty names. The index's rules then apply: empty names become
+  `var-N` and duplicates get `-2`, `-3`, … suffixes.
+- **Nullable arrays** (`readNullableArray`): anndata 0.13 with pandas 3 writes
+  every string index and non-categorical string column as a
+  `nullable-string-array` group: `values` plus a boolean `mask` that is true
+  where a value is missing. `nullable-integer` and `nullable-boolean` groups
+  (pandas `Int64`/`boolean` columns, any anndata version) have the same
+  layout. Masked strings read as empty strings and masked numbers as NaN,
+  the missing values of plain arrays. Every backend reads them: h5wasm,
+  kerchunk references, and SpatialData tables.
 - **Gene aliases** (`geneAliases`): when a column replaces the index, each
   gene's index name (often its Ensembl ID) is kept as an alias. The
   `Gene selection` search and `Gene set symbols` match aliases too, and the
@@ -98,7 +109,10 @@ except the index and `__*` entries:
 - Numeric datasets become continuous tracks (skipped if no value is finite).
   Boolean datasets count as numeric (0/1) on every backend.
 - String datasets become categorical tracks; empty strings are missing.
-- Other groups (nullable integer/boolean, masked arrays) are skipped.
+- `nullable-string-array` groups become categorical tracks and
+  `nullable-integer`/`nullable-boolean` groups continuous ones (booleans as
+  0/1); masked values are missing.
+- Other groups are skipped.
 
 Continuous `obs` values appear as per-cell "Observations" rows in the Cell
 tab and as `Cell color` → `Metadata` tracks. The track list (label, range, cell
@@ -198,7 +212,3 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
   (`/^[a-p]{8}-\d+$/`). Files keyed by H5AD obs names are rejected.
 - Diagnostics do not check the `.h5ad.json` reference.
 - The in-memory backend downloads the whole file before anything renders.
-- Files written by anndata 0.13 with pandas 3 store obs and var names as
-  `nullable-string-array` groups, which are not read; the load fails with
-  "H5AD /obs dataframe does not expose a readable index column." Write with
-  `anndata.settings.allow_write_nullable_strings = False`.

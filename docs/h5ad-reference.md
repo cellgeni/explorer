@@ -264,11 +264,6 @@ user. A reference turns that into a one-off step.
   read whole on the first gene.
 - **Drop `obs` columns you do not need.** The viewer reads every one at load,
   one round trip per chunk.
-- **Write plain string indexes.** anndata 0.13 with pandas 3 writes obs and
-  var names as `nullable-string-array` groups, which the viewer cannot read
-  yet on either backend ("H5AD /obs dataframe does not expose a readable index
-  column."). Set `anndata.settings.allow_write_nullable_strings = False`
-  before writing.
 
 ### Choosing CSR Or CSC
 
