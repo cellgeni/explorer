@@ -24,6 +24,10 @@
   GeoJSON shape import/export.
 - [TIFF tile-offset sidecars](./zchunkstore.md): the optional `.zchunkstore`,
   when it helps, and how to generate one with `scripts/make_zchunkstore.py`.
+- [Large H5AD files](./h5ad-reference.md): the `.h5ad.json` kerchunk
+  reference that H5AD files over 300 MiB need, what it holds, how the viewer
+  reads through it, and how to generate one with
+  `scripts/make_h5ad_reference.py`.
 - [Deploy to S3](./deploy-to-s3.md): getting the app from a release zip or a
   local build, and hosting it.
 

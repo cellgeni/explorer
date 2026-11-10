@@ -1442,6 +1442,18 @@ continuous.
 - [ ] Offer numeric `obs` columns as `Metadata` colour tracks.
 - [ ] Accept obs names in imported CSV/JSON annotation files.
 - [x] Read boolean `obs` columns on the reference backend (2026-11-09).
+- [x] Find reference keys with spaces, such as an obs column named
+      `Cancer Epithelial`; `ReferenceStore` looks keys up percent-encoded
+      (2026-11-10).
+- [x] Document generating the `.h5ad.json` reference and add
+      `scripts/make_h5ad_reference.py`, built on VirtualiZarr 2.8: kerchunk
+      is in maintenance mode (fsspec/kerchunk#589, 2026-09-15), and its zarr 3
+      releases fail on AnnData strings (2026-11-10).
+- [ ] Read Icechunk repositories as well as kerchunk JSON, the format
+      VirtualiZarr and kerchunk now recommend (`icechunk-js` reads them in the
+      browser).
+- [ ] Read `nullable-string-array` obs and var indexes, which anndata 0.13
+      writes under pandas 3; such files fail to load today.
 
 ### Phase 8 — Image-Only Viewer And GeoJSON Annotations
 

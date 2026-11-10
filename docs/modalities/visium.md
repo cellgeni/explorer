@@ -249,7 +249,10 @@ read whole. A Visium `.h5ad` gets the H5AD diagnostics.
   output, or a manifest per sample.
 - A multi-library `.h5ad` shows one library at a time.
 - The filtered matrix and `.h5ad` files are read whole, up to 300 MB (larger
-  `.h5ad` files need a kerchunk reference, as for any H5AD).
+  `.h5ad` files need a kerchunk reference, as for any H5AD; see
+  [Large H5AD files](../h5ad-reference.md)). CELLxGENE Visium files are often
+  over the limit only because of a full-resolution image in `uns`, which the
+  reference skips.
 - The full-resolution microscope image is not shown, only the hires and
   lowres images.
 - Only the graph-based clustering is read from `analysis/`; k-means

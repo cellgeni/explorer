@@ -47,8 +47,9 @@ the Visium platform once it is read; see
   URL is carried into the `.json` URL, so presigned URLs need a matching
   presigned reference URL.
 
-Generate the reference with `kerchunk.hdf.SingleHdf5ToZarr` (for example with
-`inline_threshold=0`) and host it next to the H5AD file.
+Generate the reference with `scripts/make_h5ad_reference.py` and host it next
+to the H5AD file. [Large H5AD files](../h5ad-reference.md) covers what it
+holds, generating it, what each feature reads through it, and timings.
 
 Both backends hydrate a group tree and pass it to `readH5adCacheFromGroup`, so
 everything below applies to either. The parsed result is cached once per
@@ -197,3 +198,7 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
   (`/^[a-p]{8}-\d+$/`). Files keyed by H5AD obs names are rejected.
 - Diagnostics do not check the `.h5ad.json` reference.
 - The in-memory backend downloads the whole file before anything renders.
+- Files written by anndata 0.13 with pandas 3 store obs and var names as
+  `nullable-string-array` groups, which are not read; the load fails with
+  "H5AD /obs dataframe does not expose a readable index column." Write with
+  `anndata.settings.allow_write_nullable_strings = False`.

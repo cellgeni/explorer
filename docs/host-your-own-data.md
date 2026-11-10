@@ -242,8 +242,9 @@ https://bucket.example/path/to/sample.h5ad
 https://bucket.example/path/to/sample.h5ad.json
 ```
 
-Generate the reference with `kerchunk.hdf.SingleHdf5ToZarr` (for example with
-`inline_threshold=0`), then host both files with CORS and byte-range support.
+Generate the reference with `scripts/make_h5ad_reference.py` (VirtualiZarr;
+see [Large H5AD files](./h5ad-reference.md)), then host both files with CORS
+and byte-range support.
 The app probes the H5AD size first; when the file exceeds 300 MiB it opens the
 JSON with Zarrita `ReferenceStore` and lazily reads the referenced HDF5 chunks.
 Chunk references are always redirected to the H5AD URL, so the URL stored
