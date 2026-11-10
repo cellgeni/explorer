@@ -1080,7 +1080,7 @@ async function readH5adReferenceOrThrow(
     url,
   )
   reportH5adProgress(onProgress, 'H5AD reference loaded; opening referenced arrays')
-  const store = ReferenceStore.fromSpec(spec, {
+  const store = ReferenceStore.fromSpec(h5adReferenceStoreSpec(spec), {
     fetch: referenceStoreFetch(fetcher),
   })
   const root = await hydrateZarrAnnDataGroup(
@@ -1747,6 +1747,24 @@ function h5adReferenceSpecWithTarget(
   }
 
   return { ...spec, refs: targetedRefs }
+}
+
+// ReferenceStore looks a key up by its request URL's pathname, which is
+// percent-encoded, so a key with a space (an obs column such as
+// "Cancer Epithelial") would never be found. Store each key in that form.
+function h5adReferenceStoreSpec(spec: Record<string, unknown>): Record<string, unknown> {
+  const refs = objectRecord(spec.refs, 'refs')
+  const storeRefs: Record<string, unknown> = {}
+
+  for (const [key, value] of Object.entries(refs)) {
+    storeRefs[referenceStoreKey(key)] = value
+  }
+
+  return { ...spec, refs: storeRefs }
+}
+
+function referenceStoreKey(key: string): string {
+  return new URL(key.replace(/^\/+/, ''), 'https://ref.invalid/').pathname.slice(1)
 }
 
 function h5adReferenceEntryWithTarget(value: unknown, targetUrl: string): unknown {
