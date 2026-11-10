@@ -329,7 +329,8 @@ h2 {
     #fffdf7;
 }
 
-.dataset-form .dataset-toggle {
+.dataset-form .dataset-toggle,
+.visium-controls .dataset-toggle {
   display: flex;
   align-items: center;
   gap: 6px;

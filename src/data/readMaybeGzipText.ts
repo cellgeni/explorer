@@ -9,8 +9,13 @@ export async function readMaybeGzipText(response: Response): Promise<string> {
     throw new Error('This browser does not support gzip decompression.')
   }
 
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
-  return new Response(stream).text()
+  const body = new Response(bytes).body
+
+  if (body === null) {
+    return ''
+  }
+
+  return new Response(body.pipeThrough(new DecompressionStream('gzip'))).text()
 }
 
 function hasGzipHeader(bytes: Uint8Array): boolean {

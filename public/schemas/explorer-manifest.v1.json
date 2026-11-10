@@ -12,7 +12,7 @@
       "description": "Manifest format version."
     },
     "platform": {
-      "enum": ["xenium", "atera", "visium-hd", "h5ad", "spatialdata", "image"],
+      "enum": ["xenium", "atera", "visium", "visium-hd", "h5ad", "spatialdata", "image"],
       "description": "How to read the dataset."
     },
     "name": {
@@ -50,6 +50,15 @@
       "then": {
         "properties": {
           "files": { "$ref": "#/$defs/ateraFiles" },
+          "options": { "type": "object", "maxProperties": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "visium" } } },
+      "then": {
+        "properties": {
+          "files": { "$ref": "#/$defs/visiumFiles" },
           "options": { "type": "object", "maxProperties": 0 }
         }
       }
@@ -252,6 +261,49 @@
         "morphologyZchunkstore": {
           "$ref": "#/$defs/path",
           "description": "`.zchunkstore` tile-offset sidecar covering every morphology_2d channel file. Replaces the default lookup next to each TIFF (`<file>.zchunkstore`)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "visiumFiles": {
+      "type": "object",
+      "description": "Standard Visium (v1/v2, 55 µm spots) Space Ranger files that are not at their standard names. Files named here must exist; omitted files use the Space Ranger name.",
+      "properties": {
+        "tissuePositions": {
+          "$ref": "#/$defs/path",
+          "description": "Spot positions CSV, gzip allowed. Default spatial/tissue_positions.csv, then the Space Ranger 1.x spatial/tissue_positions_list.csv (no header)."
+        },
+        "scalefactors": {
+          "$ref": "#/$defs/path",
+          "description": "Default spatial/scalefactors_json.json (gzip allowed)."
+        },
+        "filteredMatrix": {
+          "$ref": "#/$defs/path",
+          "description": "Default filtered_feature_bc_matrix.h5. Read whole, up to 300 MB."
+        },
+        "hiresImage": {
+          "$ref": "#/$defs/path",
+          "description": "Default spatial/tissue_hires_image.png. Any image format the browser can show."
+        },
+        "lowresImage": {
+          "$ref": "#/$defs/path",
+          "description": "Default spatial/tissue_lowres_image.png."
+        },
+        "clusters": {
+          "$ref": "#/$defs/path",
+          "description": "Barcode,Cluster CSV. Default: analysis/clustering/gene_expression_graphclust/clusters.csv, then analysis/clustering/graphclust/clusters.csv."
+        },
+        "umap": {
+          "$ref": "#/$defs/path",
+          "description": "UMAP projection CSV. Default: searched under analysis/umap/."
+        },
+        "tsne": {
+          "$ref": "#/$defs/path",
+          "description": "t-SNE projection CSV. Default: searched under analysis/tsne/."
+        },
+        "pca": {
+          "$ref": "#/$defs/path",
+          "description": "PCA projection CSV; the first two components are shown. Default: searched under analysis/pca/."
         }
       },
       "additionalProperties": false

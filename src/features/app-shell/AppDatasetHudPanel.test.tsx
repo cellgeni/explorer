@@ -39,6 +39,9 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     visiumHdControlState: { status: 'idle' },
     spatialDataControlState: { status: 'idle' },
     handleSpatialDataSelectionChange: vi.fn(),
+    visiumControlState: { status: 'idle' },
+    handleVisiumImageChange: vi.fn(),
+    handleVisiumViewChange: vi.fn(),
     ...overrides,
   }
 }

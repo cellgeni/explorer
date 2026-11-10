@@ -185,6 +185,9 @@ function cachedCellPointLayerColors(
   return layerColors
 }
 
+// deck.gl's own default: no cap.
+const UNCAPPED_RADIUS_PIXELS = Number.MAX_SAFE_INTEGER
+
 export function createOverviewLayers(
   cells: readonly OverviewCellDatum[],
   boundaries: readonly CellBoundaryDatum[] = [],
@@ -263,10 +266,13 @@ export function createOverviewLayers(
       cellBoundaryOpacity,
       filled: cellPointFilled,
       pickable: options.cellPointPickable ?? true,
-      radiusMaxPixels: overviewCellRadiusMaxPixels(
-        options.pointSizeZoomDelta,
-        pointSizeFullViewScale,
-      ),
+      radiusMaxPixels:
+        options.trueSizePoints === true
+          ? UNCAPPED_RADIUS_PIXELS
+          : overviewCellRadiusMaxPixels(
+              options.pointSizeZoomDelta,
+              pointSizeFullViewScale,
+            ),
       ...(cellPointPacking === undefined
         ? {}
         : {
@@ -293,10 +299,13 @@ export function createOverviewLayers(
       ),
       cellBoundaryOpacity,
       filled: true,
-      radiusMaxPixels: geneExpressionRadiusMaxPixels(
-        options.pointSizeZoomDelta,
-        pointSizeFullViewScale,
-      ),
+      radiusMaxPixels:
+        options.trueSizePoints === true
+          ? UNCAPPED_RADIUS_PIXELS
+          : geneExpressionRadiusMaxPixels(
+              options.pointSizeZoomDelta,
+              pointSizeFullViewScale,
+            ),
     },
   )
 

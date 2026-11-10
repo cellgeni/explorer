@@ -8,6 +8,7 @@ import {
   spatialDataControlLoading,
   spatialDataSelectionToShareable,
 } from './features/dataset/spatialDataModel'
+import { visiumSelectionToShareable } from './features/dataset/visiumModel'
 import { AppGeneHudPanel } from './features/app-shell/AppGeneHudPanel'
 import { AppLayerHudPanel } from './features/app-shell/AppLayerHudPanel'
 import { AppTranscriptHudPanel } from './features/app-shell/AppTranscriptHudPanel'
@@ -66,6 +67,7 @@ import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
 import { useAppDomainState } from './features/app-shell/useAppDomainState'
+import { useVisiumControlsWorkflow } from './features/app-shell/useVisiumControlsWorkflow'
 import { useVisiumHdBinWorkflow } from './features/app-shell/useVisiumHdBinWorkflow'
 import { useVisiumHdGridLodWorkflow } from './features/app-shell/useVisiumHdGridLodWorkflow'
 import { useVisiumHdExpressionProfileWorkflow } from './features/app-shell/useVisiumHdExpressionProfileWorkflow'
@@ -472,6 +474,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptPointSize,
     },
     spatialData: { setSpatialDataControlState, spatialDataControlState },
+    visium: { setVisiumControlState, visiumControlState },
     visiumHd: {
       gridCellAssignmentState,
       overviewCells,
@@ -1602,7 +1605,13 @@ export function App({ dependencies }: AppProps = {}) {
 
       return Promise.reject(
         new Error(
-          `${platformAdapter.kind === 'atera' ? 'Atera' : 'H5AD and SpatialData'} datasets do not support ROI transcript export.`,
+          `${
+            platformAdapter.kind === 'atera'
+              ? 'Atera'
+              : platformAdapter.kind === 'visium'
+                ? 'Visium'
+                : 'H5AD and SpatialData'
+          } datasets do not support ROI transcript export.`,
         ),
       )
     },
@@ -2518,6 +2527,7 @@ export function App({ dependencies }: AppProps = {}) {
       setTranscriptPointColorMode,
       setVisiumHdControlState,
       setSpatialDataControlState,
+      setVisiumControlState,
       setViewportCellCount,
     },
   })
@@ -2543,6 +2553,18 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [appendDebugEvent, datasetUrl, setSpatialDataControlState, shouldLoadMorphology],
   )
+  const { handleVisiumImageChange, handleVisiumViewChange } = useVisiumControlsWorkflow({
+    appendDebugEvent,
+    datasetUrl: loadState.status === 'idle' ? null : loadState.url,
+    getSpatialDataset,
+    initialShareableStateRef,
+    setFlatMorphologyImage,
+    setMorphologyState,
+    setVisiumControlState,
+    shouldLoadMorphology,
+    startDatasetLoadRef,
+    visiumControlState,
+  })
   const { handleVisiumHdBinSizeChange } = useVisiumHdBinWorkflow({
     callbacks: {
       appendDebugEvent,
@@ -2604,6 +2626,7 @@ export function App({ dependencies }: AppProps = {}) {
       customImageUrls,
       datasetUrl,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
+      visiumSelection: visiumSelectionToShareable(visiumControlState),
     },
     genes: {
       geneExpressionColorScale,
@@ -2702,6 +2725,9 @@ export function App({ dependencies }: AppProps = {}) {
           visiumHdControlState={visiumHdControlState}
           spatialDataControlState={spatialDataControlState}
           handleSpatialDataSelectionChange={handleSpatialDataSelectionChange}
+          visiumControlState={visiumControlState}
+          handleVisiumImageChange={handleVisiumImageChange}
+          handleVisiumViewChange={handleVisiumViewChange}
         />
 
         <AppLayerHudPanel
@@ -3073,11 +3099,13 @@ export function App({ dependencies }: AppProps = {}) {
           overviewCellSourceLabel={
             platformAdapter.kind === 'h5ad'
               ? 'H5AD'
-              : platformAdapter.kind === 'spatialdata'
-                ? 'SpatialData'
-                : platformAdapter.kind === 'atera'
-                  ? 'Atera'
-                  : 'Xenium'
+              : platformAdapter.kind === 'visium'
+                ? 'Visium'
+                : platformAdapter.kind === 'spatialdata'
+                  ? 'SpatialData'
+                  : platformAdapter.kind === 'atera'
+                    ? 'Atera'
+                    : 'Xenium'
           }
           gridCells={viewerGridCells}
           fitGridCells={spatialGridCells}
@@ -3092,6 +3120,7 @@ export function App({ dependencies }: AppProps = {}) {
           cellFillOpacity={cellFillOpacity}
           cellBoundaryOpacity={platformAdapter.kind === 'h5ad' ? 0 : cellBoundaryOpacity}
           pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
+          trueSizePoints={platformAdapter.trueSizePoints}
           transcriptOpacity={transcriptOpacity}
           transcriptPointSize={transcriptPointSize}
           observationColorMode={viewerObservationColorMode}

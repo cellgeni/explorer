@@ -142,6 +142,10 @@ import {
   IDLE_SPATIALDATA_CONTROL_STATE,
   type SpatialDataControlState,
 } from '../dataset/spatialDataModel'
+import {
+  IDLE_VISIUM_CONTROL_STATE,
+  type VisiumControlState,
+} from '../dataset/visiumModel'
 
 export interface UseAppDomainStateOptions {
   readonly initialShareableState: ShareableState
@@ -414,6 +418,9 @@ export function useAppDomainState({
   )
   const [spatialDataControlState, setSpatialDataControlState] =
     useState<SpatialDataControlState>(IDLE_SPATIALDATA_CONTROL_STATE)
+  const [visiumControlState, setVisiumControlState] = useState<VisiumControlState>(
+    IDLE_VISIUM_CONTROL_STATE,
+  )
   const [gridCellAssignmentState, setGridCellAssignmentState] = useState<
     GridCellAssignmentState<StructuredLoadError>
   >(IDLE_GRID_CELL_ASSIGNMENT_STATE)
@@ -630,6 +637,10 @@ export function useAppDomainState({
     spatialData: {
       setSpatialDataControlState,
       spatialDataControlState,
+    },
+    visium: {
+      setVisiumControlState,
+      visiumControlState,
     },
     visiumHd: {
       gridCellAssignmentState,

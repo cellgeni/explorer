@@ -9,8 +9,10 @@ Paste a source URL in `Dataset or image URL`, then choose `Load Dataset`.
 Supported sources are:
 
 - Xenium output folders containing `experiment.xenium`.
+- Standard Visium (55 µm spots) Space Ranger `outs/` folders.
 - Visium HD Space Ranger output folders containing `binned_outputs/`.
-- Direct AnnData `.h5ad` file URLs.
+- Direct AnnData `.h5ad` file URLs, including Visium files from scanpy,
+  squidpy, or CELLxGENE.
 - SpatialData Zarr store URLs, such as `sample.sdata.zarr`.
 - Direct OME-TIFF, TIFF, QPTIFF, OME-Zarr, or validated NDPI image URLs.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
@@ -21,15 +23,15 @@ cell colour, layer toggles, opacities, image channels). The Log shows
 `Using dataset manifest …` when one is used.
 
 `Morphology image` is enabled by default so the OME-TIFF layer loads with the
-dataset when a source provides one. Visium HD relabels this control as
-`Tissue image`. Disable it before loading when you only want cells, bins, or
+dataset when a source provides one. Visium and Visium HD relabel this control
+as `Tissue image`. Disable it before loading when you only want cells, bins, or
 overlays. Use `Boundary limit` to control when true Xenium cell polygons are
 requested for the current viewport.
 
 The app detects the source platform before loading. Platform-specific controls
 appear only when the active source supports them. For example, image-only
-sources hide Genes, Transcripts, Magic Lens, and Cell tabs, while Visium HD,
-H5AD, and SpatialData hide Xenium transcript controls.
+sources hide Genes, Transcripts, Magic Lens, and Cell tabs, while Visium,
+Visium HD, H5AD, and SpatialData hide Xenium transcript controls.
 
 ## Spatial Navigation
 
@@ -152,6 +154,31 @@ Visium HD bin. Selecting a spatial or embedding cell also loads metadata,
 expression, shape metrics when boundary geometry is available, and, for Xenium,
 a compact z-axis distribution of molecules/transcripts assigned to that cell.
 
+## Standard Visium
+
+Standard Visium datasets load from a Space Ranger `outs/` folder or from an
+`.h5ad` with `uns/spatial`. Spots are drawn as 55 µm circles over the tissue
+image and keep that size as you zoom. Colour them by genes, by `obs` columns
+or the Space Ranger graph-based clusters (Annotations tab), or by numeric
+columns such as `total_counts` (`Cell color` → `Metadata`). Turn on
+`Cell boundaries` in the Layers tab to draw spot outlines.
+
+The Dataset tab's `Visium dataset` panel shows the library, how many spots are
+shown, and the scale. Spots off the tissue are hidden at first (CELLxGENE files
+keep every array spot); tick `Show off-tissue spots` to include them. A file
+with several sections has a `Library` select. Both reload the spots without
+downloading the file again, and keep your genes and colouring. The scale is
+fitted from the spot grid (spots are 100 µm apart), so distances and the scale
+bar are in micrometres even though Space Ranger only records pixels. When it
+can only be estimated from the nominal spot diameter, a notice under Fallbacks
+says so. Use `Tissue image` to switch between the high-res and low-res images
+or hide the image. The share link remembers the image, the library, and the
+off-tissue choice.
+
+To load a GEO sample, whose Space Ranger files are renamed and gzipped, write a
+[dataset manifest](./dataset-manifest.md#standard-visium) that names them and
+enter the manifest's URL.
+
 ## Visium HD
 
 Visium HD datasets show a `Visium HD dataset` panel in the Dataset tab. Use the
@@ -174,8 +201,9 @@ CSC layouts.
 
 Files up to 300 MiB are downloaded whole and opened with the browser HDF5
 reader. Larger hosted H5AD files need a sibling kerchunk reference JSON named
-`DATASET.h5ad.json`. See [H5AD](./modalities/h5ad.md) for the exact layout
-the reader expects.
+`DATASET.h5ad.json`; [Large H5AD files](./h5ad-reference.md) explains how to
+generate one. See [H5AD](./modalities/h5ad.md) for the exact layout the reader
+expects.
 
 ## SpatialData
 

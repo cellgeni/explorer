@@ -476,6 +476,31 @@ describe('AnnDataH5adDataset', () => {
     })
   })
 
+  it('reads reference keys with spaces in their names', async () => {
+    const chunks = new RemoteH5adReferenceChunks()
+    const spec = createTinyH5adReferenceSpec((value) => chunks.ref(value))
+    const refs = spec.refs as Record<string, unknown>
+    refs['obs/.zattrs'] = jsonRef({
+      _index: 'cell_id',
+      'column-order': ['cluster', 'score', 'Cancer Epithelial'],
+    })
+    refs['obs/Cancer Epithelial/.zarray'] = zarrArrayRef([4], [4], '<f4')
+    refs['obs/Cancer Epithelial/0'] = chunks.ref(new Float32Array([0, 0.25, 0.5, 1]))
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/reference-spaces.h5ad',
+      fetcher: h5adRemoteReferenceFetcher(350 * 1024 * 1024, spec, chunks.bytes(), () => {
+        throw new Error('body should not be read')
+      }),
+    })
+
+    await expect(dataset.overview()).resolves.toContainEqual(
+      expect.objectContaining({
+        cellId: 'cell-b',
+        metadata: { cluster: 'B', score: 0.5, 'Cancer Epithelial': 0.25 },
+      }),
+    )
+  })
+
   it('loads oversized H5AD files through a companion kerchunk reference', async () => {
     const readBody = vi.fn(() => {
       throw new Error('body should not be read')

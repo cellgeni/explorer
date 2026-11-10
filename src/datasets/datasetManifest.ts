@@ -10,6 +10,12 @@ import {
   ATERA_OPTIONAL_FILES,
   type AteraFileRole,
 } from './ateraFormat'
+import {
+  VISIUM_FILE_DEFAULTS,
+  VISIUM_OPTIONAL_FILES,
+  type VisiumAnalysisFileKey,
+  type VisiumFileRole,
+} from './visiumFormat'
 
 export const DATASET_MANIFEST_FILE = 'explorer.json'
 export const DATASET_MANIFEST_VERSION = 1
@@ -17,6 +23,7 @@ export const DATASET_MANIFEST_VERSION = 1
 export const DATASET_MANIFEST_PLATFORMS = [
   'xenium',
   'atera',
+  'visium',
   'visium-hd',
   'h5ad',
   'spatialdata',
@@ -156,6 +163,16 @@ export interface AteraDatasetManifest extends DatasetManifestBase {
   >
 }
 
+// Standard Visium (v1/v2) Space Ranger output. Analysis files have no single
+// standard name; without an entry the Space Ranger 1.x and 2.0+ paths are
+// tried.
+export interface VisiumDatasetManifest extends DatasetManifestBase {
+  readonly platform: 'visium'
+  readonly files: Readonly<
+    Partial<Record<VisiumFileRole | VisiumAnalysisFileKey, DatasetManifestFile>>
+  >
+}
+
 export interface VisiumHdDatasetManifest extends DatasetManifestBase {
   readonly platform: 'visium-hd'
   readonly files: Readonly<Partial<Record<VisiumHdManifestFileRole, DatasetManifestFile>>>
@@ -195,6 +212,7 @@ export interface ImageDatasetManifest extends DatasetManifestBase {
 export type DatasetManifest =
   | XeniumDatasetManifest
   | AteraDatasetManifest
+  | VisiumDatasetManifest
   | VisiumHdDatasetManifest
   | H5adDatasetManifest
   | SpatialDataDatasetManifest
@@ -310,6 +328,23 @@ export function parseDatasetManifest(
     checkKeys(
       files,
       [...Object.keys(ATERA_FILE_DEFAULTS), ...ATERA_OPTIONAL_FILES],
+      'files.',
+      fail,
+    )
+    const entries: Partial<Record<string, DatasetManifestFile>> = {}
+
+    for (const key of Object.keys(files)) {
+      entries[key] = file(key)
+    }
+
+    return { ...base, platform, files: entries }
+  }
+
+  if (platform === 'visium') {
+    rejectOptions(options, platform, fail)
+    checkKeys(
+      files,
+      [...Object.keys(VISIUM_FILE_DEFAULTS), ...VISIUM_OPTIONAL_FILES],
       'files.',
       fail,
     )

@@ -15,6 +15,7 @@ import {
   XENIUM_MANIFEST_OPTIONAL_FILES,
 } from './datasetManifest'
 import { ATERA_FILE_DEFAULTS, ATERA_OPTIONAL_FILES } from './ateraFormat'
+import { VISIUM_FILE_DEFAULTS, VISIUM_OPTIONAL_FILES } from './visiumFormat'
 
 // The JSON Schema in public/ is for editors; the parser is what the viewer
 // enforces. These checks keep their field lists and values in step.
@@ -63,6 +64,9 @@ describe('dataset manifest JSON Schema', () => {
     )
     expect(keys(imagePlatform?.then?.properties?.files)).toEqual(
       [...IMAGE_MANIFEST_FILES].sort(),
+    )
+    expect(keys(definition('visiumFiles'))).toEqual(
+      [...Object.keys(VISIUM_FILE_DEFAULTS), ...VISIUM_OPTIONAL_FILES].sort(),
     )
     expect(keys(definition('visiumHdFiles'))).toEqual(
       [

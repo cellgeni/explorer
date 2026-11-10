@@ -18,6 +18,10 @@ before any other platform:
 (`src/datasets/h5adDataset.ts`). Instances are memoized per URL by
 `cachedSpatialDataset`.
 
+A file with the standard Visium layout in `uns/spatial/<library>` is switched to
+the Visium platform once it is read; see
+[Standard Visium](./visium.md#h5ad-with-unsspatial).
+
 ## Files Read
 
 | File               | Required                         | Read by                    | Library                                             | Notes                                                |
@@ -43,8 +47,9 @@ before any other platform:
   URL is carried into the `.json` URL, so presigned URLs need a matching
   presigned reference URL.
 
-Generate the reference with `kerchunk.hdf.SingleHdf5ToZarr` (for example with
-`inline_threshold=0`) and host it next to the H5AD file.
+Generate the reference with `scripts/make_h5ad_reference.py` and host it next
+to the H5AD file. [Large H5AD files](../h5ad-reference.md) covers what it
+holds, generating it, what each feature reads through it, and timings.
 
 Both backends hydrate a group tree and pass it to `readH5adCacheFromGroup`, so
 everything below applies to either. The parsed result is cached once per
@@ -59,7 +64,8 @@ dataset instance (`cachePromise`, reset on error).
 | `/obsm` | Yes      | 2D matrices with `n_obs` rows and at least 2 columns |
 | `/X`    | Yes      | Dense dataset, or a CSR/CSC sparse group             |
 
-`/uns`, `/layers`, `/raw`, `/varm`, and `/obsp` are not read.
+`/layers`, `/raw`, `/varm`, and `/obsp` are not read. `/uns` is read only for
+`uns/spatial` ([Standard Visium](./visium.md#h5ad-layout-read)).
 
 ### Index And Gene Names
 
@@ -119,7 +125,9 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
   `H5AD_COORDINATE_KEYS`: `X_spatial`, `spatial`, `X_umap`, `umap`, `X_tsne`,
   `X_tSNE`, `tsne`, `X_pca`. If none exists, the load fails.
 - Only columns 0 and 1 are used. Any non-finite value fails the load.
-- Values are used directly as micrometres (1 µm per unit).
+- Values are used directly as micrometres (1 µm per unit), except for Visium
+  files, whose `obsm/spatial` pixels are scaled to micrometres
+  ([Units And Coordinates](./visium.md#units-and-coordinates)).
 - Embedding options (`readObsmEmbeddingOptions`) are every dense 2D obsm
   matrix with `n_obs` rows and 2+ columns, ordered `X_umap`, `umap`, `X_tsne`,
   `X_tSNE`, `tsne`, `X_pca`, `X_spatial`, `spatial`, then alphabetically.
@@ -154,7 +162,9 @@ values with gaps up to 262,144 values (`csrZarrRowBatches`).
 
 H5AD has no morphology image and no boundary polygons, so cell boundaries are
 switched off and `meta()` reports all capabilities as `false`. `elements()`
-returns `[]` and `image()` returns `null`.
+returns `[]` and `image()` returns `null`. Before this, the lifecycle calls
+`visiumSummary()`; when it finds a Visium layout, the load continues as
+[Standard Visium](./visium.md#load-sequence) instead.
 
 ## Feature Read Paths
 

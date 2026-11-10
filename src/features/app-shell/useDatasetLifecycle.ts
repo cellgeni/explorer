@@ -37,7 +37,12 @@ import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import { normalizeTranscriptExactPointLimit } from '../../data/transcriptOverlay'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
-import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
+import type {
+  DatasetMeta,
+  ImageSource,
+  Platform,
+  SpatialElement,
+} from '../../datasets/spatialDataset'
 import type { SpatialDataSummary } from '../../datasets/spatialDataDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type {
@@ -177,9 +182,20 @@ import {
   type SpatialDataControlState,
 } from '../dataset/spatialDataModel'
 import {
+  IDLE_VISIUM_CONTROL_STATE,
+  visiumControlReady,
+  visiumImageForLoad,
+  visiumUnitsNeedNotice,
+  visiumViewFromShareable,
+  type VisiumControlState,
+  type VisiumSource,
+} from '../dataset/visiumModel'
+import {
   setSpatialDataSelection,
   spatialDataSelectionFor,
 } from '../../datasets/datasetFactory'
+import type { AnnDataVisiumSummary, AnnDataVisiumView } from '../../datasets/h5adDataset'
+import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import {
   createStructuredLoadError,
   readErrorMessage,
@@ -218,6 +234,13 @@ interface H5adLifecycleDataset {
 
 interface SpatialDataSummaryDataset {
   summary(): Promise<SpatialDataSummary>
+}
+
+export interface VisiumLifecycleDataset extends H5adLifecycleDataset {
+  meta(): Promise<DatasetMeta>
+  setVisiumView(view: AnnDataVisiumView): VisiumLifecycleDataset
+  visiumSummary(): Promise<AnnDataVisiumSummary | null>
+  tissueImage(kind: VisiumImageKind): Promise<ImageSource | null>
 }
 
 interface AteraMorphologyDataset {
@@ -382,6 +405,7 @@ interface UseDatasetLifecycleSetters {
   readonly setTranscriptPointColorMode: Setter<TranscriptPointColorMode>
   readonly setVisiumHdControlState: Setter<VisiumHdControlState>
   readonly setSpatialDataControlState: Setter<SpatialDataControlState>
+  readonly setVisiumControlState: Setter<VisiumControlState>
   readonly setViewportCellCount: Setter<number | null>
 }
 
@@ -538,6 +562,7 @@ export function useDatasetLifecycle({
     setTranscriptPointColorMode,
     setVisiumHdControlState,
     setSpatialDataControlState,
+    setVisiumControlState,
     setViewportCellCount,
   },
 }: UseDatasetLifecycleOptions): UseDatasetLifecycleResult {
@@ -889,6 +914,7 @@ export function useDatasetLifecycle({
       setDatasetAbout?.(null)
       setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
       setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
+      setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
       setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
       setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
       cellFeatureMatrixCapabilityKeyRef.current = null
@@ -1051,7 +1077,7 @@ export function useDatasetLifecycle({
 
         const loadAnnDataOverview = async (
           dataset: unknown,
-          label: 'H5AD' | 'SpatialData' | 'Atera',
+          label: 'H5AD' | 'Visium' | 'SpatialData' | 'Atera',
         ): Promise<boolean> => {
           if (!isH5adLifecycleDataset(dataset)) {
             throw new Error(`Detected ${label} dataset does not expose AnnData readers.`)
@@ -1079,6 +1105,7 @@ export function useDatasetLifecycle({
           }
 
           const coalescePrefix = label.toLowerCase()
+          const elementNoun = label === 'Visium' ? 'spots' : 'cells'
           setOverviewCells(overviewCellsToLayerData(cells))
           setGenePanelState(genePanelLoadReady(requestedUrl, genes, geneAliases))
           setAnnotationGroupState(
@@ -1095,7 +1122,7 @@ export function useDatasetLifecycle({
           initialShareableStateRef.current = null
           setLoadState(datasetLoadReady(requestedUrl, cells.length))
           appendDebugEvent(
-            `${label} ready: ${cells.length.toLocaleString()} cells, ${genes.length.toLocaleString()} genes in ${formatElapsed(
+            `${label} ready: ${cells.length.toLocaleString()} ${elementNoun}, ${genes.length.toLocaleString()} genes in ${formatElapsed(
               loadStartedAt,
             )}`,
           )
@@ -1114,10 +1141,88 @@ export function useDatasetLifecycle({
           recordTelemetry(
             telemetryEvent('dataset.load', 'success', {
               startedAt: loadStartedAt,
-              detail: `${cells.length.toLocaleString()} ${label} cells`,
+              detail: `${cells.length.toLocaleString()} ${label} ${elementNoun}`,
             }),
           )
           return true
+        }
+
+        // Standard Visium spots from an AnnData table, with the tissue image
+        // loaded in the background once the spots are drawn.
+        const loadVisiumOverview = async (
+          dataset: VisiumLifecycleDataset,
+          source: VisiumSource,
+          summary: AnnDataVisiumSummary,
+        ): Promise<void> => {
+          const image = loadImage
+            ? visiumImageForLoad(summary.images, restoreState.visiumImage)
+            : null
+          appendDebugEvent(
+            `Visium library ${summary.libraryId}: ${summary.spotCount.toLocaleString()} spots${
+              summary.offTissueSpotCount > 0
+                ? ` (${summary.offTissueSpotCount.toLocaleString()} off tissue ${
+                    summary.showOffTissue ? 'included' : 'hidden'
+                  })`
+                : ''
+            }; ${formatVisiumUnits(summary.units)}${
+              summary.libraryIds.length > 1
+                ? `; ${(summary.libraryIds.length - 1).toLocaleString()} other libraries not shown`
+                : ''
+            }`,
+          )
+
+          if (visiumUnitsNeedNotice(summary.units)) {
+            appendFallbackNotice({
+              source: 'Dataset overview',
+              message: `Visium micrometres per pixel is ${formatVisiumUnits(summary.units)}.`,
+              action:
+                'Distances and the scale bar are approximate. Include array_row and array_col in obs, or microns_per_pixel in the scale factors.',
+              coalesceKey: `visium-units:${requestedUrl}`,
+            })
+          }
+
+          setVisiumControlState(visiumControlReady(source, summary, image))
+
+          if (!(await loadAnnDataOverview(dataset, 'Visium'))) {
+            return
+          }
+
+          if (image === null) {
+            setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+            return
+          }
+
+          setMorphologyState(morphologyLoadStarted(requestedUrl))
+          void Promise.all([dataset.tissueImage(image), dataset.meta()])
+            .then(([imageSource, meta]) => {
+              if (!isCurrentDatasetLoad()) {
+                return
+              }
+
+              const flatImage = flatMorphologyImageFromSource(imageSource, meta)
+
+              if (flatImage === null) {
+                setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+                return
+              }
+
+              setFlatMorphologyImage(flatImage)
+              setMorphologyState(morphologyLoadReady(flatImage.url))
+              appendDebugEvent(`Visium ${image} tissue image ready`)
+            })
+            .catch((error: unknown) => {
+              if (isAbortError(error) || !isCurrentDatasetLoad()) {
+                return
+              }
+
+              setMorphologyState(
+                morphologyLoadFailed(
+                  requestedUrl,
+                  createStructuredLoadError('Morphology image', error),
+                ),
+              )
+              appendDebugEvent('Visium tissue image failed')
+            })
         }
 
         if (detection.platform === 'h5ad') {
@@ -1129,8 +1234,55 @@ export function useDatasetLifecycle({
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
           })
+          // An .h5ad with `uns/spatial` is standard Visium; the file has to be
+          // read to know.
+          const visium = isVisiumLifecycleDataset(dataset)
+            ? await dataset
+                .setVisiumView(visiumViewFromShareable(restoreState))
+                .visiumSummary()
+            : null
+
+          if (!isCurrentDatasetLoad()) {
+            return
+          }
+
+          if (visium !== null && isVisiumLifecycleDataset(dataset)) {
+            setDatasetPlatform('visium')
+            setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
+            await loadVisiumOverview(dataset, 'h5ad', visium)
+            return
+          }
 
           await loadAnnDataOverview(dataset, 'H5AD')
+          return
+        }
+
+        if (detection.platform === 'visium') {
+          setDatasetPlatform('visium')
+          setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
+          setShowNucleusBoundaries(false)
+          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          const dataset = await getSpatialDataset(detection.baseUrl, {
+            onH5adLoadProgress: appendDebugEvent,
+          })
+
+          if (!isVisiumLifecycleDataset(dataset)) {
+            throw new Error('Detected Visium dataset does not expose spots.')
+          }
+
+          const visium = await dataset
+            .setVisiumView(visiumViewFromShareable(restoreState))
+            .visiumSummary()
+
+          if (!isCurrentDatasetLoad()) {
+            return
+          }
+
+          if (visium === null) {
+            throw new Error('Visium output has no spot layout.')
+          }
+
+          await loadVisiumOverview(dataset, 'space-ranger', visium)
           return
         }
 
@@ -1568,6 +1720,7 @@ export function useDatasetLifecycle({
         setDatasetPlatform(null)
         setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
         setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
+        setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
         setSpatialGridCells([])
         setFlatMorphologyImage(null)
         initialShareableStateRef.current = null
@@ -1668,6 +1821,18 @@ function isNativeRgbMorphologyImage(image: MorphologyImage): boolean {
 
 function isAteraMorphologyDataset(dataset: unknown): dataset is AteraMorphologyDataset {
   return hasFunction(dataset, 'morphologyUrl')
+}
+
+export function isVisiumLifecycleDataset(
+  dataset: unknown,
+): dataset is VisiumLifecycleDataset {
+  return (
+    isH5adLifecycleDataset(dataset) &&
+    hasFunction(dataset, 'meta') &&
+    hasFunction(dataset, 'setVisiumView') &&
+    hasFunction(dataset, 'visiumSummary') &&
+    hasFunction(dataset, 'tissueImage')
+  )
 }
 
 function isSpatialDataSummaryDataset(

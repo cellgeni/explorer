@@ -49,6 +49,8 @@ export interface ViewerCoreProps {
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
   readonly pointSizeFullViewScale?: number
+  // Draw points at their physical radius at every zoom (Visium spots).
+  readonly trueSizePoints?: boolean
   readonly cellPointPickable?: boolean
   readonly transcriptOpacity?: number
   readonly transcriptPointSize?: number

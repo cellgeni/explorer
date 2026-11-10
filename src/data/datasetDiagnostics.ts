@@ -12,6 +12,10 @@ import {
 } from '../datasets/datasetManifest'
 import type { VisiumHdSegmentedOutputPaths } from '../datasets/visiumHdSegmentationModel'
 import {
+  VISIUM_ANALYSIS_FILE_CANDIDATES,
+  VISIUM_MATRIX_MAX_BYTES,
+} from '../datasets/visiumFormat'
+import {
   openSpatialDataStore,
   readSpatialDataCatalog,
   selectSpatialDataView,
@@ -211,6 +215,18 @@ export async function runDatasetDiagnostics(
 
   if (detection.platform === 'visium-hd') {
     checks.push(...(await runVisiumHdDiagnostics(detection, options)))
+
+    return {
+      baseUrl,
+      platform: detection.platform,
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      checks,
+    }
+  }
+
+  if (detection.platform === 'visium') {
+    checks.push(...(await runVisiumDiagnostics(detection, options)))
 
     return {
       baseUrl,
@@ -802,6 +818,168 @@ function recordValue(value: unknown): Record<string, unknown> | null {
     : null
 }
 
+// Standard Visium files are read whole, so no Range support is needed. The
+// matrix and images are checked with HEAD to avoid downloading them.
+async function runVisiumDiagnostics(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'visium' }>,
+  options: DatasetDiagnosticsOptions,
+): Promise<readonly DatasetDiagnosticCheck[]> {
+  const { baseUrl, files } = detection
+  const checks: DatasetDiagnosticCheck[] = [
+    await checkReadableFile(
+      baseUrl,
+      {
+        id: 'visium-positions',
+        label: 'Visium tissue positions',
+        path: files.tissuePositions,
+      },
+      true,
+      options,
+    ),
+    await checkReadableFile(
+      baseUrl,
+      {
+        id: 'visium-scalefactors',
+        label: 'Visium scale factors',
+        path: files.scalefactors,
+      },
+      true,
+      options,
+    ),
+    await checkHeadFile(
+      baseUrl,
+      {
+        id: 'visium-matrix',
+        label: 'Visium filtered matrix',
+        path: files.filteredMatrix,
+      },
+      true,
+      options,
+      VISIUM_MATRIX_MAX_BYTES,
+    ),
+  ]
+  const images = [
+    {
+      id: 'visium-tissue-hires',
+      label: 'Visium high-res tissue image',
+      path: files.hiresImage,
+    },
+    {
+      id: 'visium-tissue-lowres',
+      label: 'Visium low-res tissue image',
+      path: files.lowresImage,
+    },
+  ]
+
+  for (const image of images) {
+    checks.push(
+      image.path === undefined
+        ? diagnosticCheck({
+            id: image.id,
+            label: image.label,
+            url: baseUrl,
+            required: false,
+            status: 'warning',
+            message: 'Not found',
+            startedAt: Date.now(),
+          })
+        : await checkHeadFile(baseUrl, { ...image, path: image.path }, false, options),
+    )
+  }
+
+  for (const key of ['clusters', 'umap'] as const) {
+    const named = files.analysis?.[key]
+    const candidates =
+      named === undefined ? VISIUM_ANALYSIS_FILE_CANDIDATES[key] : [named]
+    let check: DatasetDiagnosticCheck | null = null
+
+    for (const path of candidates) {
+      check = await checkReadableFile(
+        baseUrl,
+        {
+          id: `visium-${key}`,
+          label:
+            key === 'clusters' ? 'Visium graph-based clusters' : 'Visium UMAP projection',
+          path,
+        },
+        false,
+        options,
+      )
+
+      if (check.status === 'pass') {
+        break
+      }
+    }
+
+    if (check !== null) {
+      checks.push(check)
+    }
+  }
+
+  return checks
+}
+
+// HEAD, reporting the size; fails a file over `maxBytes`.
+async function checkHeadFile(
+  baseUrl: string,
+  file: { readonly id: string; readonly label: string; readonly path: string },
+  required: boolean,
+  options: DatasetDiagnosticsOptions,
+  maxBytes?: number,
+): Promise<DatasetDiagnosticCheck> {
+  const url = datasetFileUrl(baseUrl, file.path)
+  const startedAt = Date.now()
+
+  try {
+    const response = await (options.fetcher ?? fetch)(url, {
+      method: 'HEAD',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const length = Number(response.headers.get('Content-Length'))
+    const size =
+      Number.isFinite(length) && length > 0
+        ? `${(length / (1024 * 1024)).toFixed(1)} MB`
+        : null
+
+    if (maxBytes !== undefined && Number.isFinite(length) && length > maxBytes) {
+      return diagnosticCheck({
+        id: file.id,
+        label: file.label,
+        url,
+        required,
+        status: required ? 'fail' : 'warning',
+        message: `${size ?? ''} is above the ${(maxBytes / (1024 * 1024)).toFixed(0)} MB browser load limit`,
+        startedAt,
+      })
+    }
+
+    return diagnosticCheck({
+      id: file.id,
+      label: file.label,
+      url,
+      required,
+      status: 'pass',
+      message: size === null ? 'Readable' : `Readable (${size})`,
+      startedAt,
+    })
+  } catch (cause) {
+    return diagnosticCheck({
+      id: file.id,
+      label: file.label,
+      url,
+      required,
+      status: required ? 'fail' : 'warning',
+      message: errorMessage(cause),
+      startedAt,
+    })
+  }
+}
+
 async function runVisiumHdDiagnostics(
   detection: Extract<SpatialDatasetDetection, { readonly platform: 'visium-hd' }>,
   options: DatasetDiagnosticsOptions,
@@ -1145,13 +1323,15 @@ function detectionDiagnosticCheck(
         ? `Detected Visium HD (${detection.bins
             .map((bin) => `${bin.binSizeMicrometers} µm`)
             .join(', ')})`
-        : detection.platform === 'h5ad'
-          ? 'Detected H5AD'
-          : detection.platform === 'spatialdata'
-            ? 'Detected SpatialData'
-            : detection.platform === 'atera'
-              ? 'Detected Atera'
-              : 'Detected Xenium',
+        : detection.platform === 'visium'
+          ? 'Detected Visium (Space Ranger)'
+          : detection.platform === 'h5ad'
+            ? 'Detected H5AD'
+            : detection.platform === 'spatialdata'
+              ? 'Detected SpatialData'
+              : detection.platform === 'atera'
+                ? 'Detected Atera'
+                : 'Detected Xenium',
     startedAt,
   })
 }

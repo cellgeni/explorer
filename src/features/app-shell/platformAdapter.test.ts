@@ -487,6 +487,57 @@ describe('platformAdapter', () => {
     expect(loadBoundaryElements).not.toHaveBeenCalled()
   })
 
+  it('reads Visium through AnnData workflows with true-size spots and outlines', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'visium')
+    const elements = [
+      {
+        id: 'AAACAAGTATCTCCCA-1',
+        geometry: {
+          kind: 'polygon' as const,
+          rings: [[{ x: micrometers(0), y: micrometers(0) }]],
+        },
+      },
+    ]
+    const dataset = {
+      meta: vi.fn(async () => ({ capabilities: { cellBoundaries: true } })),
+      elements: vi.fn(async () => ({ elements })),
+    }
+    const loadBoundaryElements = vi.fn()
+
+    expect(adapter.kind).toBe('visium')
+    expect(adapter.labels.embeddingElementPlural).toBe('spots')
+    expect(adapter.trueSizePoints).toBe(true)
+    expect(appPlatformAdapterFor(readyLoadState, 'h5ad').trueSizePoints).toBe(false)
+    expect(isAnnDataPlatform(adapter)).toBe(true)
+    expect(adapter.capabilities).toMatchObject({
+      annotations: true,
+      transcripts: false,
+      nucleusBoundaries: false,
+    })
+    expect(adapter.boundaryLoadingEnabled(true, false)).toBe(true)
+    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
+    expect(adapter.geneExpressionOverlayEnabled(0)).toBe(true)
+    expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
+      loadEnabled: false,
+      unavailableReason: 'Unavailable for Visium',
+    })
+    await expect(
+      loadPlatformBoundaryElements(
+        adapter,
+        {
+          getSpatialDataset: vi.fn(
+            async () => dataset,
+          ) as unknown as SpatialDatasetLoader,
+          loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+      ),
+    ).resolves.toEqual({ elements })
+    expect(dataset.elements).toHaveBeenCalledWith(selection.bbox)
+    expect(loadBoundaryElements).not.toHaveBeenCalled()
+  })
+
   it('reads Atera through AnnData workflows with cell and nucleus boundaries', async () => {
     const adapter = appPlatformAdapterFor(readyLoadState, 'atera')
     const cellElements = [

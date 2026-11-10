@@ -132,6 +132,66 @@ describe('spatial dataset detection', () => {
     })
   })
 
+  it('detects standard Visium Space Ranger output before Visium HD tiers', async () => {
+    const fetcher = fetcherForOkPaths([
+      '/visium/spatial/tissue_positions.csv',
+      '/visium/spatial/scalefactors_json.json',
+      '/visium/filtered_feature_bc_matrix.h5',
+      '/visium/spatial/tissue_hires_image.png',
+    ])
+
+    await expect(
+      detectSpatialDataset('https://example.test/visium/', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'visium',
+      baseUrl: 'https://example.test/visium',
+      files: {
+        tissuePositions: 'spatial/tissue_positions.csv',
+        scalefactors: 'spatial/scalefactors_json.json',
+        filteredMatrix: 'filtered_feature_bc_matrix.h5',
+        hiresImage: 'spatial/tissue_hires_image.png',
+      },
+    })
+    expect(
+      vi
+        .mocked(fetcher)
+        .mock.calls.some(([url]) => String(url).includes('binned_outputs')),
+    ).toBe(false)
+  })
+
+  it('detects Space Ranger 1.x output from tissue_positions_list.csv', async () => {
+    const detection = await detectSpatialDataset('https://example.test/sr1', {
+      fetcher: fetcherForOkPaths([
+        '/sr1/spatial/tissue_positions_list.csv',
+        '/sr1/spatial/scalefactors_json.json',
+        '/sr1/filtered_feature_bc_matrix.h5',
+        '/sr1/spatial/tissue_lowres_image.png',
+      ]),
+    })
+
+    expect(detection).toMatchObject({
+      platform: 'visium',
+      files: {
+        tissuePositions: 'spatial/tissue_positions_list.csv',
+        lowresImage: 'spatial/tissue_lowres_image.png',
+      },
+    })
+    expect(detection.platform === 'visium' ? detection.files.hiresImage : null).toBe(
+      undefined,
+    )
+  })
+
+  it('does not detect standard Visium without the filtered matrix', async () => {
+    await expect(
+      detectSpatialDataset('https://example.test/partial', {
+        fetcher: fetcherForOkPaths([
+          '/partial/spatial/tissue_positions.csv',
+          '/partial/spatial/scalefactors_json.json',
+        ]),
+      }),
+    ).resolves.toMatchObject({ platform: 'unknown' })
+  })
+
   it('returns unknown when neither Xenium nor Visium HD probes match', async () => {
     const detection = await detectSpatialDataset('https://example.test/other/', {
       fetcher: fetcherForOkPaths([]),
@@ -762,6 +822,68 @@ describe('dataset manifests', () => {
         detectSpatialDataset(baseUrl, { fetcher: incomplete }),
       ).rejects.toThrow(
         'the 8 µm bin is missing bins/008/spatial/tissue_positions.parquet (HTTP 404).',
+      )
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
+  })
+})
+
+describe('standard Visium manifests', () => {
+  it('uses manifest file names, falls back to Space Ranger names, and checks both', async () => {
+    const baseUrl = 'https://example.test/geo/explorer.json'
+    const manifest = {
+      version: 1,
+      platform: 'visium',
+      root: 'suppl/',
+      files: {
+        tissuePositions: 'GSM1_tissue_positions_list.csv.gz',
+        filteredMatrix: 'GSM1_filtered_feature_bc_matrix.h5',
+        hiresImage: 'GSM1_tissue_hires_image.png',
+        clusters: 'GSM1_clusters.csv',
+      },
+    }
+    const fetcher = fetcherForResponses({
+      '/geo/explorer.json': () => Response.json(manifest),
+      '/geo/suppl/GSM1_tissue_positions_list.csv.gz': () => new Response(null),
+      '/geo/suppl/GSM1_filtered_feature_bc_matrix.h5': () => new Response(null),
+      '/geo/suppl/GSM1_tissue_hires_image.png': () => new Response(null),
+      '/geo/suppl/spatial/scalefactors_json.json': () => new Response(null),
+    })
+
+    try {
+      await expect(detectSpatialDataset(baseUrl, { fetcher })).resolves.toMatchObject({
+        platform: 'visium',
+        files: {
+          tissuePositions: 'GSM1_tissue_positions_list.csv.gz',
+          scalefactors: 'spatial/scalefactors_json.json',
+          filteredMatrix: 'GSM1_filtered_feature_bc_matrix.h5',
+          hiresImage: 'GSM1_tissue_hires_image.png',
+          analysis: { clusters: 'GSM1_clusters.csv' },
+        },
+      })
+      expect(datasetFileUrl(baseUrl, 'GSM1_clusters.csv')).toBe(
+        'https://example.test/geo/suppl/GSM1_clusters.csv',
+      )
+
+      const dataset = await createSpatialDataset(baseUrl, { fetcher })
+      expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
+      expect(dataset).toMatchObject({
+        visiumImageUrls: {
+          hires: 'https://example.test/geo/suppl/GSM1_tissue_hires_image.png',
+        },
+      })
+
+      const missingImage = fetcherForResponses({
+        '/geo/explorer.json': () => Response.json(manifest),
+        '/geo/suppl/GSM1_tissue_positions_list.csv.gz': () => new Response(null),
+        '/geo/suppl/GSM1_filtered_feature_bc_matrix.h5': () => new Response(null),
+        '/geo/suppl/spatial/scalefactors_json.json': () => new Response(null),
+      })
+      await expect(
+        detectSpatialDataset(baseUrl, { fetcher: missingImage }),
+      ).rejects.toThrow(
+        /"files.hiresImage" \(.*GSM1_tissue_hires_image.png\) is not readable \(HTTP 404\)/,
       )
     } finally {
       setDatasetManifest(baseUrl, undefined)

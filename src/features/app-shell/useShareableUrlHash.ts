@@ -12,6 +12,11 @@ interface ShareableDatasetHashOptions {
     readonly spatialDataImage?: string
     readonly spatialDataMicrometersPerUnit?: number
   }
+  readonly visiumSelection?: {
+    readonly visiumImage?: string
+    readonly visiumLibrary?: string
+    readonly visiumOffTissue?: boolean
+  }
 }
 
 interface ShareableViewHashOptions {
@@ -87,6 +92,9 @@ export function useShareableUrlHash({
   const spatialDataImage = dataset.spatialDataSelection?.spatialDataImage
   const spatialDataMicrometersPerUnit =
     dataset.spatialDataSelection?.spatialDataMicrometersPerUnit
+  const visiumImage = dataset.visiumSelection?.visiumImage
+  const visiumLibrary = dataset.visiumSelection?.visiumLibrary
+  const visiumOffTissue = dataset.visiumSelection?.visiumOffTissue
   const { activeControlHudTab, activeRoiSelection, shareableViewState } = view
   const {
     boundaryCellLimit,
@@ -179,6 +187,9 @@ export function useShareableUrlHash({
         ...(spatialDataMicrometersPerUnit === undefined
           ? {}
           : { spatialDataMicrometersPerUnit }),
+        ...(visiumImage === undefined ? {} : { visiumImage }),
+        ...(visiumLibrary === undefined ? {} : { visiumLibrary }),
+        ...(visiumOffTissue === undefined ? {} : { visiumOffTissue }),
       })
 
       if (window.location.hash !== hash) {
@@ -227,6 +238,9 @@ export function useShareableUrlHash({
     spatialDataCoordinateSystem,
     spatialDataImage,
     spatialDataMicrometersPerUnit,
+    visiumImage,
+    visiumLibrary,
+    visiumOffTissue,
     transcriptDensityColorScale,
     transcriptDetailMode,
     transcriptExactPointLimit,
