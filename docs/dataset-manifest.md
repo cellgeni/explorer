@@ -77,8 +77,9 @@ its standard name in the manifest's folder.
 | ------------- | -------- | ----------------------------------------------------------------------------------------------------- |
 | `version`     | Yes      | `1`                                                                                                   |
 | `platform`    | Yes      | `xenium`, `atera`, `visium-hd`, `h5ad`, `spatialdata`, or `image`                                     |
-| `name`        | No       | Display name, shown in the log and in diagnostics                                                     |
-| `description` | No       | Free text; not shown                                                                                  |
+| `name`        | No       | Display name, shown in the Dataset tab, the log, and diagnostics                                      |
+| `description` | No       | What the dataset shows, shown in the Dataset tab                                                      |
+| `source`      | No       | Where the data comes from. See [Source](#source)                                                      |
 | `root`        | No       | Base for relative paths instead of the manifest's folder. Relative to the manifest, or an http(s) URL |
 | `files`       | Varies   | Where the platform's files are. See [Files](#files)                                                   |
 | `options`     | No       | Platform choices. See [Options](#options)                                                             |
@@ -94,6 +95,22 @@ Each path is either relative or an `http://` / `https://` URL. Relative paths
 resolve against `root` when it is set, otherwise against the folder the
 manifest is in. A leading `./` and trailing `/` are dropped; `../` is allowed.
 Other schemes such as `s3://` are rejected: the browser can only read HTTP(S).
+
+## Source
+
+Where the data comes from, for viewers who want to find the original
+deposit, check its licence, or cite it. Every field is an optional string;
+the Dataset tab shows the ones that are set, under the name and description.
+
+| Key          | Value                                                        |
+| ------------ | ------------------------------------------------------------ |
+| `repository` | Repository or host, such as `BioImage Archive`               |
+| `accession`  | Accession or identifier there, such as `S-BIAD2214`          |
+| `url`        | Landing page for the deposit; must be an `http(s)` URL       |
+| `license`    | Data licence, such as `CC BY 4.0`                            |
+| `citation`   | How to cite the data, such as the publication it accompanies |
+
+The [examples](../examples/README.md) use `source` for every dataset.
 
 ## Files
 

@@ -21,6 +21,7 @@ describe('DatasetHudPanel', () => {
         morphologyInputId="morphology"
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
+        datasetAbout={null}
         datasetUrl="https://example.test/output"
         shouldLoadMorphology={false}
         morphologyLabel="Morphology image"
@@ -80,6 +81,7 @@ describe('DatasetHudPanel', () => {
         morphologyInputId="morphology"
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
+        datasetAbout={null}
         datasetUrl="https://example.test/visium"
         shouldLoadMorphology
         morphologyLabel="Tissue image"
@@ -145,6 +147,7 @@ describe('DatasetHudPanel', () => {
         morphologyInputId="morphology"
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
+        datasetAbout={null}
         datasetUrl="https://example.test/visium"
         shouldLoadMorphology
         morphologyLabel="Tissue image"
@@ -199,6 +202,7 @@ describe('DatasetHudPanel', () => {
         morphologyInputId="morphology"
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
+        datasetAbout={null}
         datasetUrl="https://example.test/sample.zarr"
         shouldLoadMorphology
         morphologyLabel="Morphology image"
@@ -274,6 +278,7 @@ describe('DatasetHudPanel', () => {
         morphologyInputId="morphology"
         boundaryLimitInputId="boundary-limit"
         visiumHdBinSizeInputId="visium-bin-size"
+        datasetAbout={null}
         datasetUrl="https://example.test/output"
         shouldLoadMorphology={false}
         morphologyLabel="Morphology image"
@@ -316,5 +321,63 @@ describe('DatasetHudPanel', () => {
     expect(screen.getByText(/DuckDB-WASM overview reader/)).toBeInTheDocument()
     expect(screen.getByText('The first overview read may be slower.')).toBeInTheDocument()
     expect(screen.getByText('Out of bounds access')).toBeInTheDocument()
+  })
+
+  it('shows the manifest name, description, and source', () => {
+    render(
+      <DatasetHudPanel
+        active
+        datasetInputId="dataset-url"
+        morphologyInputId="morphology"
+        boundaryLimitInputId="boundary-limit"
+        visiumHdBinSizeInputId="visium-bin-size"
+        datasetAbout={{
+          name: 'Skin Xenium run',
+          description: 'Human skin, 5K panel.',
+          source: {
+            repository: 'BioImage Archive',
+            accession: 'S-BIAD2214',
+            url: 'https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2214',
+            license: 'CC0',
+            citation: 'Example et al. (2025)',
+          },
+        }}
+        datasetUrl="https://example.test/output"
+        shouldLoadMorphology={false}
+        morphologyLabel="Morphology image"
+        boundaryCellLimit={50000}
+        maxBoundaryCellLimit={100000}
+        boundaryControlsDisabled={false}
+        isLoading={false}
+        diagnosticsState={{ status: 'idle' }}
+        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
+        visiumHdControlState={{ status: 'idle' }}
+        spatialDataControlState={{ status: 'idle' }}
+        onSpatialDataSelectionChange={vi.fn()}
+        activeErrors={[]}
+        fallbackNotices={[]}
+        debugLog={[]}
+        onSubmit={vi.fn()}
+        onDatasetUrlChange={vi.fn()}
+        onShouldLoadMorphologyChange={vi.fn()}
+        onBoundaryCellLimitChange={vi.fn()}
+        onVisiumHdBinSizeChange={vi.fn()}
+        onRunDatasetDiagnostics={vi.fn()}
+        onDownloadDiagnostics={vi.fn()}
+        onClearDebugLog={vi.fn()}
+      />,
+    )
+
+    const about = screen.getByRole('region', { name: 'About this dataset' })
+    expect(about).toHaveTextContent('Skin Xenium run')
+    expect(about).toHaveTextContent('Human skin, 5K panel.')
+    expect(
+      screen.getByRole('link', { name: 'BioImage Archive S-BIAD2214' }),
+    ).toHaveAttribute(
+      'href',
+      'https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2214',
+    )
+    expect(about).toHaveTextContent('CC0')
+    expect(about).toHaveTextContent('Example et al. (2025)')
   })
 })

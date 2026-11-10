@@ -357,6 +357,49 @@ h2 {
   border-bottom: 1px solid rgba(23, 21, 17, 0.12);
 }
 
+.dataset-about {
+  display: grid;
+  gap: 4px;
+  padding: 7px 0;
+  border-top: 1px solid rgba(23, 21, 17, 0.12);
+  color: #2f2b22;
+  font-size: 0.66rem;
+  line-height: 1.3;
+}
+
+.dataset-about-name {
+  color: #171511;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.dataset-about p {
+  margin: 0;
+}
+
+.dataset-about dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  margin: 0;
+}
+
+.dataset-about dt {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dataset-about dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.dataset-about a {
+  color: #171511;
+  font-weight: 700;
+}
+
 .dataset-platform-row,
 .visium-bin-control {
   display: grid;

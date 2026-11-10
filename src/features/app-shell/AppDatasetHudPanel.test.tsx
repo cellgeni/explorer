@@ -18,6 +18,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       morphologyInputId: 'morphology',
       visiumHdBinSizeInputId: 'visium-bin-size',
     },
+    datasetAbout: null,
     datasetUrl: 'https://example.test/output',
     debugLog: [],
     fallbackNotices: [],

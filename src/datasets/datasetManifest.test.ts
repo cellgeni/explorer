@@ -327,6 +327,43 @@ describe('parseDatasetManifest', () => {
     )
     expect(defaults({ zoom: 2 })).toContain('unknown field "defaults.zoom"')
   })
+
+  it('reads where the data comes from and checks the source fields', () => {
+    expect(
+      parse({
+        version: 1,
+        platform: 'h5ad',
+        description: ' Mouse embryo at E9.0 ',
+        source: {
+          repository: 'CELLxGENE',
+          accession: ' fe70db78 ',
+          url: 'https://cellxgene.cziscience.com/collections/d74b6979',
+          license: 'CC BY 4.0',
+        },
+        files: { h5ad: 'embryo.h5ad' },
+      }),
+    ).toMatchObject({
+      description: 'Mouse embryo at E9.0',
+      source: {
+        repository: 'CELLxGENE',
+        accession: 'fe70db78',
+        url: 'https://cellxgene.cziscience.com/collections/d74b6979',
+        license: 'CC BY 4.0',
+      },
+    })
+
+    const source = (value: unknown) =>
+      parseError({ version: 1, platform: 'xenium', source: value })
+
+    expect(source('BioImage Archive')).toContain('"source" must be an object')
+    expect(source({ repo: 'BIA' })).toContain('unknown field "source.repo"')
+    expect(source({ citation: '' })).toContain(
+      '"source.citation" must be a non-empty string',
+    )
+    expect(source({ url: 'ftp://ftp.ebi.ac.uk/biostudies' })).toContain(
+      '"source.url" must be an http(s) URL',
+    )
+  })
 })
 
 describe('dataset manifest URLs', () => {

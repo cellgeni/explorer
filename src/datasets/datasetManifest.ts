@@ -99,6 +99,16 @@ export interface DatasetManifestDefaults {
   readonly transcripts?: boolean
 }
 
+// Where the data comes from, shown in the Dataset tab so viewers can find,
+// cite, and check the licence of the original deposit.
+export interface DatasetManifestSource {
+  readonly repository?: string
+  readonly accession?: string
+  readonly url?: string
+  readonly license?: string
+  readonly citation?: string
+}
+
 // A manifest file entry: the path as written, and the URL it resolves to.
 export interface DatasetManifestFile {
   readonly path: string
@@ -119,6 +129,7 @@ interface DatasetManifestBase {
   readonly rootUrl: string
   readonly name?: string
   readonly description?: string
+  readonly source?: DatasetManifestSource
   readonly defaults?: DatasetManifestDefaults
 }
 
@@ -258,12 +269,14 @@ export function parseDatasetManifest(
       : trimTrailingSlashes(resolve(manifestFolderUrl, root))
   const name = optionalString(json, 'name', '', fail)
   const description = optionalString(json, 'description', '', fail)
+  const source = parseSource(json.source, fail)
   const defaults = parseDefaults(json.defaults, fail)
   const base: DatasetManifestBase = {
     url: manifestUrl,
     rootUrl,
     ...(name === undefined ? {} : { name }),
     ...(description === undefined ? {} : { description }),
+    ...(source === undefined ? {} : { source }),
     ...(defaults === undefined ? {} : { defaults }),
   }
   const files = optionalRecord(json, 'files', '', fail) ?? {}
@@ -456,10 +469,19 @@ export const DATASET_MANIFEST_TOP_LEVEL_KEYS = [
   'platform',
   'name',
   'description',
+  'source',
   'root',
   'files',
   'options',
   'defaults',
+] as const
+
+export const DATASET_MANIFEST_SOURCE_KEYS = [
+  'repository',
+  'accession',
+  'url',
+  'license',
+  'citation',
 ] as const
 
 const DEFAULT_STRING_LIST_KEYS = ['genes', 'channels'] as const
@@ -483,6 +505,34 @@ export const DATASET_MANIFEST_DEFAULT_KEYS = [
 ] as const
 
 type Fail = (message: string) => never
+
+function parseSource(value: unknown, fail: Fail): DatasetManifestSource | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!isRecord(value)) {
+    return fail('"source" must be an object.')
+  }
+
+  checkKeys(value, DATASET_MANIFEST_SOURCE_KEYS, 'source.', fail)
+  const source: Partial<Record<(typeof DATASET_MANIFEST_SOURCE_KEYS)[number], string>> =
+    {}
+
+  for (const key of DATASET_MANIFEST_SOURCE_KEYS) {
+    const entry = optionalString(value, key, 'source.', fail)
+
+    if (entry !== undefined) {
+      source[key] = entry
+    }
+  }
+
+  if (source.url !== undefined && !/^https?:\/\/[^/]/i.test(source.url)) {
+    fail('"source.url" must be an http(s) URL.')
+  }
+
+  return source
+}
 
 function parseDefaults(value: unknown, fail: Fail): DatasetManifestDefaults | undefined {
   if (value === undefined) {

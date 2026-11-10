@@ -8,6 +8,7 @@ import type {
   CellFeatureMatrixCapabilityState,
   DatasetDiagnosticsState,
 } from '../dataset/datasetLoadModel'
+import type { DatasetManifestAbout } from '../dataset/datasetManifestModel'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { SpatialDataControlState } from '../dataset/spatialDataModel'
@@ -32,6 +33,7 @@ export interface AppDatasetHudPanelProps {
   readonly boundaryCellLimit: number
   readonly cellFeatureMatrixCapabilityState: CellFeatureMatrixCapabilityState
   readonly controlIds: AppDatasetControlIds
+  readonly datasetAbout: DatasetManifestAbout | null
   readonly datasetUrl: string
   readonly debugLog: readonly DebugLogEntry[]
   readonly fallbackNotices: readonly FallbackNoticeEntry[]
@@ -61,6 +63,7 @@ export function AppDatasetHudPanel({
   boundaryCellLimit,
   cellFeatureMatrixCapabilityState,
   controlIds,
+  datasetAbout,
   datasetUrl,
   debugLog,
   fallbackNotices,
@@ -87,6 +90,7 @@ export function AppDatasetHudPanel({
       morphologyInputId={controlIds.morphologyInputId}
       boundaryLimitInputId={controlIds.boundaryLimitInputId}
       visiumHdBinSizeInputId={controlIds.visiumHdBinSizeInputId}
+      datasetAbout={datasetAbout}
       datasetUrl={datasetUrl}
       shouldLoadMorphology={shouldLoadMorphology}
       morphologyLabel={isVisiumHdDataset ? 'Tissue image' : 'Morphology image'}

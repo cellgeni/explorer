@@ -20,7 +20,12 @@
       "minLength": 1,
       "description": "Display name, shown in the log and diagnostics."
     },
-    "description": { "type": "string", "minLength": 1 },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What the dataset shows, shown in the Dataset tab."
+    },
+    "source": { "$ref": "#/$defs/source" },
     "root": {
       "$ref": "#/$defs/path",
       "description": "Base for relative paths instead of the manifest's folder. Relative to the manifest, or an http(s) URL."
@@ -126,6 +131,38 @@
       "minLength": 1,
       "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)|^[Hh][Tt][Tt][Pp][Ss]?://",
       "description": "A path relative to the manifest folder (or `root`), or an http(s) URL."
+    },
+    "source": {
+      "type": "object",
+      "description": "Where the data comes from, shown in the Dataset tab.",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repository or host, such as BioImage Archive."
+        },
+        "accession": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Accession or identifier in that repository."
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^/]",
+          "description": "Landing page for the deposit."
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Data licence, such as CC BY 4.0."
+        },
+        "citation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "How to cite the data."
+        }
+      },
+      "additionalProperties": false
     },
     "xeniumFiles": {
       "type": "object",

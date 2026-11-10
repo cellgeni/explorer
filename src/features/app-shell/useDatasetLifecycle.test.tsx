@@ -408,6 +408,8 @@ describe('useDatasetLifecycle', () => {
         platform: 'xenium' as const,
         url: `${datasetUrl}/explorer.json`,
         rootUrl: datasetUrl,
+        name: 'Run 1',
+        source: { repository: 'BioImage Archive', accession: 'S-BIAD1' },
         files: {},
         defaults: {
           genes: ['EPCAM'],
@@ -428,6 +430,7 @@ describe('useDatasetLifecycle', () => {
     const setShowCellBoundaries = vi.fn()
     const setShowNucleusBoundaries = vi.fn()
     const setLoadState = vi.fn()
+    const setDatasetAbout = vi.fn()
 
     // The shared link names the dataset, so the lifecycle loads it on mount.
     render(
@@ -436,6 +439,7 @@ describe('useDatasetLifecycle', () => {
         appendFallbackNotice={appendFallbackNotice}
         detectSpatialDataset={detectSpatialDataset}
         extraSetters={{
+          setDatasetAbout,
           setGeneExpressionColorScale,
           setImageLayerOpacity,
           setObservationColorMode,
@@ -458,6 +462,10 @@ describe('useDatasetLifecycle', () => {
       )
     })
     expect(detectSpatialDataset).toHaveBeenCalledTimes(1)
+    expect(setDatasetAbout).toHaveBeenLastCalledWith({
+      name: 'Run 1',
+      source: { repository: 'BioImage Archive', accession: 'S-BIAD1' },
+    })
 
     // The shared link sets genes and cell boundaries, so those win.
     expect(setSelectedGenes).toHaveBeenLastCalledWith(['ACTB'])
