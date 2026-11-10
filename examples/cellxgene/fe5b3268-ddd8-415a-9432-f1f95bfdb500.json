@@ -13,5 +13,8 @@
   },
   "files": {
     "h5ad": "https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/fe5b3268-ddd8-415a-9432-f1f95bfdb500.h5ad"
+  },
+  "defaults": {
+    "genes": ["MYH7"]
   }
 }
