@@ -1,12 +1,8 @@
-import { withSquareMicrometers } from '../../data/units'
 import { EmbeddingPanel } from '../analysis/EmbeddingPanel'
-import { CellExpressionProfilePanel } from '../cells/CellExpressionProfilePanel'
+import { BoundaryCellInfoPanel } from '../cells/BoundaryCellInfoPanel'
 import { CellInfoPanel, type CellInfoPanelVariant } from '../cells/CellInfoPanel'
 import { GridCellInfoPanel } from '../cells/GridCellInfoPanel'
-import {
-  expressionStatusLabel,
-  type CellGeneExpressionStatus,
-} from '../cells/cellGeneExpressionStatus'
+import type { CellGeneExpressionStatus } from '../cells/cellGeneExpressionStatus'
 import {
   analysisEmbeddingOptionsForState,
   type AnalysisEmbeddingState,
@@ -59,6 +55,9 @@ interface CellHudPanelProps {
   readonly onClearSelectedBoundaryCell: () => void
   readonly onSelectEmbeddingCell: (cellId: string) => void
   readonly onLoadSelectedExpressionProfile?: (() => void) | undefined
+  // The new shell shows the selected cell in its Cell card (15.2-D), so the
+  // tab keeps only the embeddings until 15.2-G.
+  readonly embeddingOnly?: boolean
 }
 
 export function CellHudPanel({
@@ -92,6 +91,7 @@ export function CellHudPanel({
   onClearSelectedBoundaryCell,
   onSelectEmbeddingCell,
   onLoadSelectedExpressionProfile,
+  embeddingOnly = false,
 }: CellHudPanelProps) {
   const visiumSelectionKind =
     selectedBoundaryCell !== null ? 'cell' : selectedGridCell !== null ? 'bin' : null
@@ -179,196 +179,85 @@ export function CellHudPanel({
         />
       </section>
 
-      <section className="analysis-section" aria-labelledby="cell-info-heading">
-        <div className="section-heading-row">
-          <h2 id="cell-info-heading">{detailHeading}</h2>
-          <div className="section-heading-actions">
-            <span
-              className={
-                !isVisiumHdDataset && cellDetailState.status === 'loading'
-                  ? 'status-chip is-loading'
-                  : 'status-chip'
-              }
-              aria-live="polite"
-            >
-              {detailCopy}
-            </span>
-            {isVisiumHdDataset ? (
-              selectedBoundaryCell !== null ? (
+      {embeddingOnly ? null : (
+        <section className="analysis-section" aria-labelledby="cell-info-heading">
+          <div className="section-heading-row">
+            <h2 id="cell-info-heading">{detailHeading}</h2>
+            <div className="section-heading-actions">
+              <span
+                className={
+                  !isVisiumHdDataset && cellDetailState.status === 'loading'
+                    ? 'status-chip is-loading'
+                    : 'status-chip'
+                }
+                aria-live="polite"
+              >
+                {detailCopy}
+              </span>
+              {isVisiumHdDataset ? (
+                selectedBoundaryCell !== null ? (
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    title="Clear selected cell"
+                    onClick={onClearSelectedBoundaryCell}
+                  >
+                    Clear Cell
+                  </button>
+                ) : selectedGridCell === null ? null : (
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    title="Clear selected bin"
+                    onClick={onClearSelectedGridCell}
+                  >
+                    Clear Bin
+                  </button>
+                )
+              ) : selectedCell === null ? null : (
                 <button
                   type="button"
                   className="secondary-action"
                   title="Clear selected cell"
-                  onClick={onClearSelectedBoundaryCell}
+                  onClick={onClearSelectedCell}
                 >
                   Clear Cell
                 </button>
-              ) : selectedGridCell === null ? null : (
-                <button
-                  type="button"
-                  className="secondary-action"
-                  title="Clear selected bin"
-                  onClick={onClearSelectedGridCell}
-                >
-                  Clear Bin
-                </button>
-              )
-            ) : selectedCell === null ? null : (
-              <button
-                type="button"
-                className="secondary-action"
-                title="Clear selected cell"
-                onClick={onClearSelectedCell}
-              >
-                Clear Cell
-              </button>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-        {isVisiumHdDataset ? (
-          selectedBoundaryCell !== null ? (
-            <BoundaryCellInfoPanel
-              key={selectedBoundaryCell.id}
-              cell={selectedBoundaryCell}
-              expressionStatus={selectedBoundaryCellExpressionStatus}
-              expressionProfileState={selectedExpressionProfileState}
-              onLoadExpressionProfile={onLoadSelectedExpressionProfile}
-            />
+          {isVisiumHdDataset ? (
+            selectedBoundaryCell !== null ? (
+              <BoundaryCellInfoPanel
+                key={selectedBoundaryCell.id}
+                cell={selectedBoundaryCell}
+                expressionStatus={selectedBoundaryCellExpressionStatus}
+                expressionProfileState={selectedExpressionProfileState}
+                onLoadExpressionProfile={onLoadSelectedExpressionProfile}
+              />
+            ) : (
+              <GridCellInfoPanel
+                key={selectedGridCell?.id ?? 'none'}
+                cell={selectedGridCell}
+                assignmentState={selectedGridCellAssignmentState}
+                expressionStatus={selectedGridCellExpressionStatus}
+                expressionProfileState={selectedExpressionProfileState}
+                onLoadExpressionProfile={onLoadSelectedExpressionProfile}
+              />
+            )
           ) : (
-            <GridCellInfoPanel
-              key={selectedGridCell?.id ?? 'none'}
-              cell={selectedGridCell}
-              assignmentState={selectedGridCellAssignmentState}
-              expressionStatus={selectedGridCellExpressionStatus}
-              expressionProfileState={selectedExpressionProfileState}
-              onLoadExpressionProfile={onLoadSelectedExpressionProfile}
+            <CellInfoPanel
+              key={selectedCell?.id ?? 'none'}
+              cell={selectedCell}
+              annotationLabels={selectedCellAnnotationLabels}
+              state={cellDetailState}
+              transcriptDistributionState={cellTranscriptDistributionState}
+              transcriptDistributionVisible={cellTranscriptDistributionVisible}
+              variant={selectedCellInfoVariant}
             />
-          )
-        ) : (
-          <CellInfoPanel
-            key={selectedCell?.id ?? 'none'}
-            cell={selectedCell}
-            annotationLabels={selectedCellAnnotationLabels}
-            state={cellDetailState}
-            transcriptDistributionState={cellTranscriptDistributionState}
-            transcriptDistributionVisible={cellTranscriptDistributionVisible}
-            variant={selectedCellInfoVariant}
-          />
-        )}
-      </section>
+          )}
+        </section>
+      )}
     </div>
   )
-}
-
-function BoundaryCellInfoPanel({
-  cell,
-  expressionStatus,
-  expressionProfileState = IDLE_CELL_EXPRESSION_PROFILE_STATE,
-  onLoadExpressionProfile,
-}: {
-  readonly cell: CellBoundaryDatum
-  readonly expressionStatus?: CellGeneExpressionStatus | undefined
-  readonly expressionProfileState?: CellExpressionProfileState | undefined
-  readonly onLoadExpressionProfile?: (() => void) | undefined
-}) {
-  const hasExpression = cell.expressionCount !== undefined
-  const expressionGenes = cell.expressionGenes ?? []
-
-  return (
-    <div className="cell-detail-panel">
-      <dl className="cell-info-list">
-        <div>
-          <dt>Cell ID</dt>
-          <dd>{cell.id}</dd>
-        </div>
-        {cell.annotationLabel === undefined ? null : (
-          <div>
-            <dt>Annotation</dt>
-            <dd>{cell.annotationLabel}</dd>
-          </div>
-        )}
-        <div>
-          <dt>Segmentation</dt>
-          <dd>Cell boundary</dd>
-        </div>
-        <div>
-          <dt>Vertices</dt>
-          <dd>{cell.polygon.length.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Area</dt>
-          <dd>{withSquareMicrometers(formatBoundaryArea(cell))}</dd>
-        </div>
-      </dl>
-
-      <div className="cell-expression-panel">
-        <div className="cell-expression-heading">
-          <span>Selected-gene GEX</span>
-          <small>
-            {hasExpression ? 'Loaded' : expressionStatusLabel(expressionStatus)}
-          </small>
-        </div>
-        {hasExpression ? (
-          <dl className="cell-info-list">
-            <div>
-              <dt>Score</dt>
-              <dd>{formatMetricNumber(cell.expressionCount ?? 0)}</dd>
-            </div>
-            <div>
-              <dt>Genes</dt>
-              <dd>
-                {expressionGenes.length === 0
-                  ? 'Selected genes'
-                  : expressionGenes.join(', ')}
-              </dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="cell-expression-status">
-            {expressionStatus?.message ?? 'No expression loaded'}
-          </p>
-        )}
-      </div>
-
-      <CellExpressionProfilePanel
-        state={expressionProfileState}
-        selectionKind="cell"
-        disabled={onLoadExpressionProfile === undefined}
-        onLoad={onLoadExpressionProfile ?? noop}
-      />
-    </div>
-  )
-}
-
-const IDLE_CELL_EXPRESSION_PROFILE_STATE: CellExpressionProfileState = {
-  status: 'idle',
-}
-
-function noop(): void {}
-
-function formatBoundaryArea(cell: CellBoundaryDatum): string {
-  if (cell.polygon.length < 3) {
-    return '0'
-  }
-
-  let area = 0
-
-  for (let index = 0; index < cell.polygon.length; index += 1) {
-    const current = cell.polygon[index]!
-    const next = cell.polygon[(index + 1) % cell.polygon.length]!
-    const currentX = current[0] ?? 0
-    const currentY = current[1] ?? 0
-    const nextX = next[0] ?? 0
-    const nextY = next[1] ?? 0
-
-    area += currentX * nextY - nextX * currentY
-  }
-
-  return formatMetricNumber(Math.abs(area) / 2)
-}
-
-function formatMetricNumber(value: number): string {
-  return value.toLocaleString(undefined, {
-    maximumFractionDigits: Math.abs(value) < 10 ? 2 : 1,
-  })
 }

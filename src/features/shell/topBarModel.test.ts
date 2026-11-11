@@ -21,11 +21,15 @@ function input(overrides: Partial<TopBarModelInput> = {}): TopBarModelInput {
     geneCount: 5001,
     loadingDatasetName: null,
     magicLensAvailable: true,
+    magicLensCanSummariseView: true,
     magicLensEnabled: true,
+    magicLensRadiusMicrometers: 80,
     magicLensReason: undefined,
     magicLensScope: 'cursor',
     onMagicLensCursorActiveChange: vi.fn(),
+    onMagicLensRadiusChange: vi.fn(),
     onMagicLensScopeChange: vi.fn(),
+    onMagicLensSummariseView: vi.fn(),
     onMeasureEnabledChange: vi.fn(),
     onReturnToPan: vi.fn(),
     onRoiModeChange: vi.fn(),
@@ -157,6 +161,16 @@ describe('useTopBarModel', () => {
 
     expect(options.onMagicLensScopeChange).toHaveBeenCalledWith('cursor')
     expect(options.onMagicLensCursorActiveChange).toHaveBeenCalledWith(true)
+  })
+
+  it('offers Summarise View only where the lens can run', () => {
+    const lens = (overrides: Partial<TopBarModelInput>) =>
+      renderHook(() => useTopBarModel(input(overrides))).result.current.magicLens
+
+    expect(lens({})).toMatchObject({ radiusMicrometers: 80, canSummariseView: true })
+    expect(lens({ magicLensEnabled: false })?.canSummariseView).toBe(false)
+    expect(lens({ magicLensCanSummariseView: false })?.canSummariseView).toBe(false)
+    expect(lens({ magicLensAvailable: false })).toBeNull()
   })
 
   it('returns to Pan, and ignores the active tool and disabled tools', () => {

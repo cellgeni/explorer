@@ -1,6 +1,8 @@
 import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
 import { Drawer } from '../../components/ui'
 import { isTextEntryTarget } from '../app-shell/activeToolModel'
+import { CardStack } from '../cards/CardStack'
+import type { CardStackModel } from '../cards/cardModels'
 import type { AnnotationsSectionModel } from '../sections/annotationsSectionModel'
 import type { CellsSectionModel } from '../sections/cellsSectionModel'
 import {
@@ -27,14 +29,15 @@ interface ShellLayoutProps {
   readonly cells: CellsSectionModel
   readonly transcripts: TranscriptsSectionModel
   readonly annotations: AnnotationsSectionModel
+  readonly cards: CardStackModel
   // The canvas, and the panels that sit over it.
   readonly children: ReactNode
 }
 
 // The new shell (UNIFIED_PLAN.md, 15.2), shown with ?shell=2 until 15.2-J
 // makes it the default: the top bar, the canvas with ⓘ's dataset info drawer
-// over it, and the layer panel docked on the right. The drawer's sections and
-// issue badge come in 15.2-F.
+// and the cards over it, and the layer panel docked on the right. The
+// drawer's sections and issue badge come in 15.2-F.
 export function ShellLayout({
   topBar,
   info,
@@ -44,6 +47,7 @@ export function ShellLayout({
   cells,
   transcripts,
   annotations,
+  cards,
   children,
 }: ShellLayoutProps) {
   const [infoOpen, setInfoOpen] = useState(false)
@@ -95,6 +99,7 @@ export function ShellLayout({
             <DatasetDiagnostics diagnostics={info.diagnostics} />
           </Drawer>
           {children}
+          <CardStack cards={cards} />
         </div>
         <LayerPanel
           panel={layerPanel}

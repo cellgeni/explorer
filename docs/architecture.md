@@ -35,6 +35,7 @@ files. Parsing happens in the browser:
 | `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                                 |
 | `src/features/sections/`                | Section models (`*Model.ts`) and the blocks that render them (`*Blocks.tsx`); see [Section Models](#section-models)                                                                      |
 | `src/features/shell/`                   | The new shell behind `?shell=2` (15.2): top bar, tools, the shortcut table, the layer panel                                                                                              |
+| `src/features/cards/`                   | The new shell's cards (15.2-D): Selection, Cell, Transcript and Magic Lens, built by `useCardStackModel`                                                                                 |
 | `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
 | `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
 | `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                                    |
@@ -252,6 +253,12 @@ The control panels take section models instead of separate props
 - Blocks make their own label IDs with `useId`.
 - `src/test/sectionModels.ts` builds idle models with mock callbacks for block
   and panel tests.
+- The new shell's cards (15.2-D) follow the same pattern:
+  `useCardStackModel` (`src/features/cards/cardModels.ts`) builds a
+  `CardStackModel` from the ROI, cell, pinned transcript and Magic Lens state.
+  Each card is null while there is nothing to show, and its `onClose` clears
+  that state. The selection card has three variants: cells, Visium HD bins,
+  and image shapes.
 
 ## Coordinates
 

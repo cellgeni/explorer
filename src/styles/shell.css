@@ -25,12 +25,134 @@
   overflow: hidden;
 }
 
-/* Until the cards (15.2-D), the HUD with Magic Lens, ROI and Cell sits where
-   they will, at the top left of the canvas. */
+/* Until the embedding panel (15.2-G), the HUD keeps the embeddings at the
+   top right of the canvas, clear of the cards. */
 .shell-canvas .control-hud {
-  right: auto;
-  left: max(12px, env(safe-area-inset-left));
   max-height: calc(100% - 24px);
+}
+
+/* Cards (15.2-D): top left, above the legend, scrolling when they outgrow
+   the canvas. */
+.shell-card-stack {
+  position: absolute;
+  z-index: var(--z-cards);
+  top: var(--space-3);
+  left: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 360px;
+  max-width: calc(100% - 2 * var(--space-3));
+  max-height: calc(100% - 140px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.shell-card-slot {
+  flex: 0 0 auto;
+}
+
+.shell-card {
+  width: 100%;
+}
+
+.shell-card .ui-card-body {
+  gap: var(--space-2);
+}
+
+.shell-card-status.is-loading::after {
+  content: '…';
+}
+
+.shell-card-hint {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-control);
+}
+
+.shell-card-name-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: end;
+}
+
+.shell-card-name {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+.shell-card-name label {
+  color: var(--text-2);
+  font-size: var(--font-control);
+}
+
+.shell-card-name input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: var(--font-control);
+}
+
+.shell-card-tabs [role='tablist'] {
+  display: flex;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.shell-card-tabs [role='tab'] {
+  margin-bottom: -1px;
+  padding: var(--space-1) 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--font-control);
+  cursor: pointer;
+}
+
+.shell-card-tabs [role='tab'][aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--text-1);
+}
+
+.shell-card-tabs [role='tab']:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.shell-card-tab-panel {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.shell-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.shell-card-lens {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.shell-card-lens > section {
+  justify-self: stretch;
+}
+
+.shell-lens-options {
+  display: grid;
+  gap: var(--space-2);
+  width: 240px;
 }
 
 /* Top bar */

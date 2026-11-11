@@ -24,3 +24,25 @@ export function roiSelectionToSpatialSelection(
 export function isRoiSelection(input: RoiSelectionInput): input is RoiSelection {
   return 'kind' in input
 }
+
+// The selection's area in µm²: the box, or the lasso's polygon.
+export function roiSelectionArea(selection: RoiSelection): number {
+  if (selection.kind === 'box') {
+    const { minX, minY, maxX, maxY } = selection.bbox
+    return Math.abs((maxX - minX) * (maxY - minY))
+  }
+
+  let twiceArea = 0
+  const { points } = selection
+
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index]
+    const next = points[(index + 1) % points.length]
+
+    if (current === undefined || next === undefined) continue
+
+    twiceArea += current.x * next.y - next.x * current.y
+  }
+
+  return Math.abs(twiceArea) / 2
+}

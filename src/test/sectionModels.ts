@@ -340,6 +340,12 @@ export function testTopBarModel(
   return {
     datasetName: 'Sob23 brain',
     summary: { status: 'ready', text: 'Xenium · 1.41 M cells · 5,001 genes' },
+    magicLens: {
+      radiusMicrometers: 80,
+      onRadiusChange: vi.fn(),
+      canSummariseView: true,
+      onSummariseView: vi.fn(),
+    },
     debugMode: false,
     onDebugModeChange: vi.fn(),
     ...rest,

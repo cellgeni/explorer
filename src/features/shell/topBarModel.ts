@@ -12,6 +12,8 @@ export interface TopBarModel {
   readonly datasetName: string | null
   readonly summary: DatasetSummary
   readonly tools: ToolGroupModel
+  // The Magic Lens tool's popover; null where there is no Magic Lens.
+  readonly magicLens: MagicLensToolModel | null
   readonly debugMode: boolean
   readonly onDebugModeChange: (enabled: boolean) => void
 }
@@ -27,6 +29,14 @@ export interface ToolGroupModel {
   readonly active: ActiveTool
   readonly options: readonly ToolOption[]
   readonly onSelect: (tool: ActiveTool) => void
+}
+
+// The lens radius, and Summarise View, which scans the whole view (D14).
+export interface MagicLensToolModel {
+  readonly radiusMicrometers: number
+  readonly onRadiusChange: (radiusMicrometers: number) => void
+  readonly canSummariseView: boolean
+  readonly onSummariseView: () => void
 }
 
 export interface ToolOption {
@@ -149,11 +159,15 @@ export interface TopBarModelInput {
   // The dataset being opened, while one is.
   readonly loadingDatasetName: string | null
   readonly magicLensAvailable: boolean
+  readonly magicLensCanSummariseView: boolean
   readonly magicLensEnabled: boolean
+  readonly magicLensRadiusMicrometers: number
   readonly magicLensReason: string | undefined
   readonly magicLensScope: MagicLensScope
   readonly onMagicLensCursorActiveChange: (active: boolean) => void
+  readonly onMagicLensRadiusChange: (radiusMicrometers: number) => void
   readonly onMagicLensScopeChange: (scope: MagicLensScope) => void
+  readonly onMagicLensSummariseView: () => void
   readonly onMeasureEnabledChange: (enabled: boolean) => void
   readonly onReturnToPan: () => void
   readonly onRoiModeChange: (mode: RoiDrawMode) => void
@@ -173,11 +187,15 @@ export function useTopBarModel({
   geneCount,
   loadingDatasetName,
   magicLensAvailable,
+  magicLensCanSummariseView,
   magicLensEnabled,
+  magicLensRadiusMicrometers,
   magicLensReason,
   magicLensScope,
   onMagicLensCursorActiveChange,
+  onMagicLensRadiusChange,
   onMagicLensScopeChange,
+  onMagicLensSummariseView,
   onMeasureEnabledChange,
   onReturnToPan,
   onRoiModeChange,
@@ -238,6 +256,14 @@ export function useTopBarModel({
         }
       },
     },
+    magicLens: magicLensAvailable
+      ? {
+          radiusMicrometers: magicLensRadiusMicrometers,
+          onRadiusChange: onMagicLensRadiusChange,
+          canSummariseView: magicLensEnabled && magicLensCanSummariseView,
+          onSummariseView: onMagicLensSummariseView,
+        }
+      : null,
     debugMode,
     onDebugModeChange: (enabled) => {
       setDebugMode(enabled)

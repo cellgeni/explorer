@@ -361,9 +361,13 @@ export function TranscriptPointStyleControls({ transcripts }: TranscriptsProps) 
 
 // The layer status and the hovered or pinned transcript; the new shell's
 // Transcript card.
-export function TranscriptDetails({ transcripts }: TranscriptsProps) {
+export function TranscriptDetails({
+  transcripts,
+  showInspection = true,
+}: TranscriptsProps & { readonly showInspection?: boolean }) {
   return (
     <TranscriptStatusPanel
+      showInspection={showInspection}
       capabilityState={transcripts.capabilityState}
       layerState={transcripts.layerState}
       hoveredTranscript={transcripts.hoveredTranscript}
