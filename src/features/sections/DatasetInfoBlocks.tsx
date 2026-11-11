@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import {
   ActivityLog,
   DataAccessNotes,
@@ -25,6 +25,7 @@ import type {
   OpenDatasetModel,
   ShareLinkModel,
 } from './datasetInfoModel'
+import { useCopyLinkStatus } from './useCopyLinkStatus'
 
 export function OpenDatasetForm({ open }: { readonly open: OpenDatasetModel }) {
   const datasetInputId = useId()
@@ -82,6 +83,32 @@ export function OpenDatasetForm({ open }: { readonly open: OpenDatasetModel }) {
         {open.isLoading ? 'Loading…' : 'Load Dataset'}
       </button>
     </form>
+  )
+}
+
+// The boundary limit alone, for Settings in the new shell (15.2-B).
+export function BoundaryLimitField({ open }: { readonly open: OpenDatasetModel }) {
+  const inputId = useId()
+
+  return (
+    <div className="shell-setting-field">
+      <label htmlFor={inputId}>Boundary limit</label>
+      <input
+        id={inputId}
+        type="number"
+        inputMode="numeric"
+        min="1"
+        max={open.maxBoundaryCellLimit}
+        step="1"
+        autoComplete="off"
+        value={open.boundaryCellLimit}
+        title="Boundary cell limit"
+        disabled={open.boundaryLimitDisabled}
+        onChange={(event) => {
+          open.onBoundaryCellLimitChange(event.currentTarget.valueAsNumber)
+        }}
+      />
+    </div>
   )
 }
 
@@ -190,21 +217,9 @@ export function LayerStackLines({
   )
 }
 
-const COPY_STATUS_MS = 2500
-
 // Copies the address, which holds the view (15.1-L), and says so for a moment.
 export function CopyLinkButton({ share }: { readonly share: ShareLinkModel }) {
-  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
-
-  useEffect(() => {
-    if (status === 'idle') return
-    const timeout = window.setTimeout(() => {
-      setStatus('idle')
-    }, COPY_STATUS_MS)
-    return () => {
-      window.clearTimeout(timeout)
-    }
-  }, [status])
+  const { copy, message } = useCopyLinkStatus(share)
 
   return (
     <div className="dataset-share-row">
@@ -213,20 +228,12 @@ export function CopyLinkButton({ share }: { readonly share: ShareLinkModel }) {
         className="secondary-action"
         disabled={!share.canCopyLink}
         title="Copy a link that opens this dataset with the current view"
-        onClick={() => {
-          void share.onCopyLink().then((copied) => {
-            setStatus(copied ? 'copied' : 'failed')
-          })
-        }}
+        onClick={copy}
       >
         Copy Link
       </button>
       <span role="status" className="dataset-share-status">
-        {status === 'copied'
-          ? 'Link copied'
-          : status === 'failed'
-            ? 'Could not copy; copy the address bar instead'
-            : ''}
+        {message}
       </span>
     </div>
   )

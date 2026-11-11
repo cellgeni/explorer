@@ -84,6 +84,28 @@ export function manifestObservationColorMode(defaults: {
   )
 }
 
+function readLocationParam(name: string): string | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const { search, hash } = window.location
+
+  return (
+    new URLSearchParams(search).get(name) ??
+    new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash).get(name)
+  )
+}
+
+export type ShellVersion = 1 | 2
+
+// The new shell (UNIFIED_PLAN.md, 15.2) is built behind ?shell=2 until 15.2-J
+// makes it the default. Use the query string: the hash is rewritten as the
+// view changes.
+export function readShellVersionFromLocation(): ShellVersion {
+  return readLocationParam('shell') === '2' ? 2 : 1
+}
+
 // Debug mode shows developer details: the deck.gl layer and budget lines, the
 // zoom number and HUD tab switches in the log (UNIFIED_PLAN.md, D6). Turn it
 // on with ?debug=1 (or #debug=1) in the address.

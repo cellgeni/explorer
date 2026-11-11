@@ -85,6 +85,31 @@ Xenium adapter is used, so every tab is visible. If the active tab becomes
 hidden, the HUD returns to Dataset. Clicking a transcript switches to the
 Transcripts tab.
 
+### New Shell (`?shell=2`)
+
+The redesigned layout (UNIFIED_PLAN.md, 15.2) is built behind `?shell=2` in
+the query string, and becomes the default in 15.2-J. So far it adds a 48 px top
+bar (`src/features/shell/TopBar.tsx`) above the canvas; the Control HUD still
+holds the other controls until the layer panel (15.2-C) and cards (15.2-D)
+replace it.
+
+| Top bar item   | What it does                                                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `Explorer`     | The app name                                                                                                                      |
+| Dataset name ▾ | The loaded dataset's name (manifest name or folder), or "Open a dataset". Opens a menu with the open-dataset form                 |
+| Summary        | Platform and counts, e.g. "Xenium · 1.41 M cells · 5,001 genes"; "Opening {name}…" while one loads. A `status` region             |
+| `Dataset info` | ⓘ: opens a drawer with About, view options (Visium, SpatialData), diagnostics, data access notes, issues and the log              |
+| Tools          | Pan `P`, Box selection `R`, Lasso selection `L`, Measure `M`, Magic Lens `O`; one is pressed. A tool that cannot be used says why |
+| Measure ▾      | While measuring: the measure unit and `Clear Measurement`                                                                         |
+| `Share`        | Copies the link, as `Copy Link` does, and says "Link copied"                                                                      |
+| `Help`         | Lists the keyboard shortcuts                                                                                                      |
+| `Settings`     | Hover tooltips, mouse coordinate unit, boundary limit, and `Show debug info` (the same as `?debug=1`)                             |
+
+The tool letters work anywhere except in a text field, and leave keys with
+Ctrl, Alt or Cmd alone. The Magic Lens tool turns on the cursor lens. The
+shortcut list comes from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the
+table the key handler reads.
+
 ## Dataset Tab
 
 | Control                                                      | Type                            | Values / default                                                            | Notes                                                                                                                                                     |

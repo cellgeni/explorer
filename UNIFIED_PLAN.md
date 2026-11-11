@@ -225,27 +225,27 @@ writing UI code.
 
 ## 3. Status At A Glance
 
-| Track                           | Scope                                                    | Status                                                              |
-| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------- |
-| Phase 1                         | Foundation and migration                                 | Done                                                                |
-| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                              |
-| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09                  |
-| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                                |
-| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                         |
-| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**             |
-| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                                  |
-| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                   |
-| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                                |
-| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**             |
-| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                            |
-| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                            |
-| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                   |
-| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                                   |
-| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                                   |
-| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                   |
-| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                   |
-| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                   |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A done |
+| Track                           | Scope                                                    | Status                                                                    |
+| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Phase 1                         | Foundation and migration                                 | Done                                                                      |
+| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                                    |
+| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09                        |
+| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                                      |
+| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                               |
+| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**                   |
+| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                                        |
+| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                         |
+| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                                      |
+| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**                   |
+| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                                  |
+| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                                  |
+| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                         |
+| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                                         |
+| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                                         |
+| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                         |
+| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                         |
+| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                         |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A and B done |
 
 ---
 
@@ -1912,7 +1912,7 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2), started
-with A (section models) done. The
+with A (section models) and B (top bar) done. The
 user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
@@ -2690,10 +2690,29 @@ mapping in H.
     sets, where `docs/ui-reference.md` already listed it.
   - Blocks make their own label IDs; `useAppControlIds` keeps the five that
     Magic Lens, ROI and Cell use.
-- [ ] **B. Top bar.** (M)
+- [x] **B. Top bar.** (M)
   - The dataset name with its menu, the summary chip and ⓘ.
   - Tools are tied to `activeTool`, and their tooltips show the shortcut.
   - Share, Help and Settings sit on the right.
+  - Done 2026-11-11, behind `?shell=2` (`readShellVersionFromLocation`; the
+    query string, since the hash is rewritten). The HUD stays under the top
+    bar until C replaces it.
+    - The dataset name menu holds the open-dataset form; Examples and Recent
+      join it in 15.3-A.
+    - The summary chip ("Xenium · 1.41 M cells · 5,001 genes", or "Opening
+      {name}…") is a `status` region, the loaded signal 15.1-H wanted.
+    - ⓘ opens a plain drawer with About, view options and diagnostics; F
+      gives it sections and the issue badge.
+    - Tools: Pan `P`, Box `R`, Lasso `L`, Measure `M`, Magic Lens `O` (the
+      cursor lens, D14). A tool that cannot be used stays focusable and says
+      why. While measuring, a popover holds the unit and Clear.
+    - `SHORTCUTS` (`src/features/shell/shortcuts.ts`) feeds both the key
+      handler and Help, which lists them now; 15.3-B adds the guide links and
+      info tooltips.
+    - Settings: hover tooltips, coordinate units, boundary limit, and Show
+      debug info, which makes debug mode a setting as D6 asked.
+    - Pan and Esc share `returnToPan`, and the three ROI tabs and the tools
+      share `handleRoiModeChange`.
 - [ ] **C. Layer panel.** (L)
   - An accordion of Image, Cells/Spots/Bins, Transcripts and Annotations.
   - Each header holds a visibility checkbox and a one-line state.
@@ -3136,7 +3155,7 @@ Sequencing:
       Slice ranges, memory, and bundles.
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
-      M3, the new shell (15.2), has started: A is done, B and C are next.
+      M3, the new shell (15.2), has started: A and B are done, C is next.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 

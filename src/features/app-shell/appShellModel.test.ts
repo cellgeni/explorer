@@ -6,6 +6,7 @@ import {
   parseObservationColorMode,
   parseViewerCoordinateUnit,
   readDebugModeFromLocation,
+  readShellVersionFromLocation,
   readShareableStateFromLocation,
   sharedObservationColorMode,
 } from './appShellModel'
@@ -93,6 +94,23 @@ describe('appShellModel', () => {
       expect(readDebugModeFromLocation()).toBe(true)
       window.history.replaceState(null, '', '/?debug=0')
       expect(readDebugModeFromLocation()).toBe(false)
+    } finally {
+      window.history.replaceState(null, '', original)
+    }
+  })
+
+  it('shows the new shell only with shell=2', () => {
+    const original = window.location.href
+
+    try {
+      window.history.replaceState(null, '', '/?shell=2')
+      expect(readShellVersionFromLocation()).toBe(2)
+      window.history.replaceState(null, '', '/#dataset=x&shell=2')
+      expect(readShellVersionFromLocation()).toBe(2)
+      window.history.replaceState(null, '', '/?shell=3')
+      expect(readShellVersionFromLocation()).toBe(1)
+      window.history.replaceState(null, '', '/')
+      expect(readShellVersionFromLocation()).toBe(1)
     } finally {
       window.history.replaceState(null, '', original)
     }

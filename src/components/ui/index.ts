@@ -15,4 +15,17 @@ export { Sheet, type SheetProps } from './Sheet'
 export { Slider, type SliderProps } from './Slider'
 export { Switch, type SwitchProps } from './Switch'
 export { Tooltip, type TooltipProps } from './Tooltip'
-export { ChevronDownIcon, ChevronRightIcon, CloseIcon } from './icons'
+export {
+  BoxSelectIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  HelpIcon,
+  InfoIcon,
+  LassoIcon,
+  LensIcon,
+  LinkIcon,
+  PanIcon,
+  RulerIcon,
+  SettingsIcon,
+} from './icons'

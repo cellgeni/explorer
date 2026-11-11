@@ -62,7 +62,6 @@ export function CoordinateUnitControl({
 
 export function MeasureToolControls({ measure }: { readonly measure: MeasureToolModel }) {
   const modeLabelId = useId()
-  const unitLabelId = useId()
 
   return (
     <div className="measurement-control">
@@ -80,6 +79,18 @@ export function MeasureToolControls({ measure }: { readonly measure: MeasureTool
           {measure.enabled ? 'On' : 'Off'}
         </button>
       </div>
+      <MeasureToolOptions measure={measure} />
+    </div>
+  )
+}
+
+// The measure unit and Clear Measurement, without the on/off switch: the
+// Measure tool's popover in the new shell.
+export function MeasureToolOptions({ measure }: { readonly measure: MeasureToolModel }) {
+  const unitLabelId = useId()
+
+  return (
+    <>
       <div className="coordinate-unit-control">
         <span id={unitLabelId}>Measure unit</span>
         <div
@@ -117,6 +128,6 @@ export function MeasureToolControls({ measure }: { readonly measure: MeasureTool
       >
         Clear Measurement
       </button>
-    </div>
+    </>
   )
 }
