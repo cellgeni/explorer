@@ -7,6 +7,9 @@ export type ObservationColorMode =
   | 'cell-area'
   | 'annotations'
   | 'metadata'
+  // Colours come from the selected genes' expression, applied by the gene
+  // expression styling rather than here.
+  | 'gene-expression'
 
 export interface AnnotationColorStyle {
   readonly id: string
@@ -56,6 +59,10 @@ export function createObservationColorizer(
   mode: ObservationColorMode,
   options: ObservationStyleOptions = {},
 ): ((cell: OverviewCellDatum) => Color) | null {
+  if (mode === 'gene-expression') {
+    return null
+  }
+
   if (mode === 'annotations') {
     return annotationColorizer(options.annotations ?? [])
   }

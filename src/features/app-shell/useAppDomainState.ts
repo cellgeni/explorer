@@ -126,7 +126,7 @@ import {
 } from '../transcripts/transcriptLayerModel'
 import {
   parseControlHudTab,
-  parseObservationColorMode,
+  sharedObservationColorMode,
   parseViewerCoordinateUnit,
   type ControlHudTab,
 } from './appShellModel'
@@ -416,7 +416,7 @@ export function useAppDomainState({
   const [roiName, setRoiName] = useState('ROI 1')
   const [observationColorMode, setObservationColorMode] = useState<ObservationColorMode>(
     () =>
-      parseObservationColorMode(initialShareableState.observationColorMode) ??
+      sharedObservationColorMode(initialShareableState) ??
       DEFAULT_SHAREABLE_STATE.observationColorMode,
   )
   const [shareableViewState, setShareableViewState] = useState<

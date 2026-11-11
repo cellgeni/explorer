@@ -206,7 +206,7 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument()
     expect(screen.getByLabelText('Gene selection')).toBeDisabled()
     expect(screen.getByLabelText('Gene set symbols')).toBeDisabled()
-    expect(screen.getByRole('combobox', { name: 'Signature score' })).toHaveValue('sum')
+    expect(screen.queryByRole('combobox', { name: 'Combine genes' })).toBeNull()
     expect(screen.getByRole('combobox', { name: 'Gene scale' })).toHaveValue('plasma')
     expect(screen.getByRole('combobox', { name: 'Expression detail' })).toHaveValue(
       'auto',
@@ -3702,6 +3702,109 @@ describe('App', () => {
     expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Gad1')
   })
 
+  it('colours cells by one mode at a time, so clusters show while a gene is selected', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    const loadGeneExpression: ReturnType<typeof vi.fn<GeneExpressionLoader>> = vi.fn(
+      async () => ({
+        elements: [
+          {
+            id: cellId,
+            position: { x: micrometers(10), y: micrometers(20) },
+            count: 8,
+          },
+        ],
+        genes: ['Actb'],
+        maxCount: 8,
+      }),
+    )
+    const loadAnnotationGroups: ReturnType<typeof vi.fn<AnnotationGroupLoader>> = vi.fn(
+      async () => [
+        {
+          id: 'analysis:0',
+          label: 'graphclust',
+          groupingName: 'gene_expression_graphclust',
+          groupCount: 1,
+        },
+      ],
+    )
+    const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:0:0', label: 'graphclust: Cluster 1', cellIds: [cellId] },
+      ],
+    )
+
+    try {
+      render(
+        <TestApp
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadGeneExpression={loadGeneExpression}
+          loadAnnotationGroups={loadAnnotationGroups}
+          loadAnnotations={loadAnnotations}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openControls('genes')
+      fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
+      openControls('color-by')
+      expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+        'gene-expression',
+      )
+      expect(
+        await screen.findByTestId('deck-layer-gene-expression-scatter'),
+      ).toBeVisible()
+
+      openControls('clusters')
+      fireEvent.change(await screen.findByRole('combobox', { name: 'Annotation set' }), {
+        target: { value: 'analysis:0' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Load Annotations' }))
+      expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
+        'Cluster 1',
+      )
+
+      openControls('color-by')
+      expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+        'annotations',
+      )
+      expect(screen.queryByTestId('deck-layer-gene-expression-scatter')).toBeNull()
+      expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Actb')
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Cell color' }), {
+        target: { value: 'gene-expression' },
+      })
+      expect(
+        await screen.findByTestId('deck-layer-gene-expression-scatter'),
+      ).toBeVisible()
+
+      openControls('genes')
+      fireEvent.click(
+        within(screen.getByLabelText('Selected genes')).getByRole('button', {
+          name: 'Actb',
+        }),
+      )
+      openControls('color-by')
+      expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+        'annotations',
+      )
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('loads built-in analysis annotations on request', async () => {
     const cellId = intToCellId(1, 1)
     const loadDatasetOverview = vi.fn(async () => [
@@ -4557,7 +4660,7 @@ ${cd16Negative},CD16- NK cells`,
     expect(selectedGenes).toHaveTextContent('Gad1')
     expect(selectedGenes).not.toHaveTextContent('missing')
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Signature score' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Combine genes' }), {
       target: { value: 'mean' },
     })
     fireEvent.change(screen.getByLabelText('Set name'), {
@@ -4575,7 +4678,7 @@ ${cd16Negative},CD16- NK cells`,
     fireEvent.click(screen.getByRole('button', { name: 'Apply Interneuron set' }))
 
     expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Actb')
-    expect(screen.getByRole('combobox', { name: 'Signature score' })).toHaveValue('mean')
+    expect(screen.getByRole('combobox', { name: 'Combine genes' })).toHaveValue('mean')
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove Interneuron set' }))
 

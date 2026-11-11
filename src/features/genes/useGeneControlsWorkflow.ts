@@ -130,6 +130,7 @@ export function useGeneControlsWorkflow({
 
     appendDebugEvent(`Applied symbols: ${genes.length.toLocaleString()} genes`)
     setSelectedGenes(genes)
+    setObservationColorMode('gene-expression')
     resetGeneExpressionSelectionState()
     transcriptViewportKeyRef.current = null
     setManualTranscriptExactRequestKey(null)
@@ -142,6 +143,7 @@ export function useGeneControlsWorkflow({
     resetGeneExpressionSelectionState,
     setGeneSearch,
     setManualTranscriptExactRequestKey,
+    setObservationColorMode,
     setSelectedGenes,
     transcriptViewportKeyRef,
   ])
@@ -184,6 +186,7 @@ export function useGeneControlsWorkflow({
       transcriptViewportKeyRef.current = null
       setManualTranscriptExactRequestKey(null)
       setSelectedGenes(geneSet.genes)
+      setObservationColorMode('gene-expression')
       setGeneExpressionScoreMode(geneSet.scoreMode)
       setGeneSearch('')
     },
@@ -193,6 +196,7 @@ export function useGeneControlsWorkflow({
       setGeneExpressionScoreMode,
       setGeneSearch,
       setManualTranscriptExactRequestKey,
+      setObservationColorMode,
       setSelectedGenes,
       transcriptViewportKeyRef,
     ],

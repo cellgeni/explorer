@@ -220,25 +220,29 @@ export function GeneHudPanel({
           }}
         />
 
-        <label htmlFor={geneSetScoreInputId}>Signature score</label>
-        <select
-          id={geneSetScoreInputId}
-          value={geneExpressionScoreMode}
-          title="Signature score"
-          onChange={(event) => {
-            const nextScoreMode = event.currentTarget.value
+        {selectedGenes.length < 2 ? null : (
+          <>
+            <label htmlFor={geneSetScoreInputId}>Combine genes</label>
+            <select
+              id={geneSetScoreInputId}
+              value={geneExpressionScoreMode}
+              title="How to combine the selected genes into one score per cell"
+              onChange={(event) => {
+                const nextScoreMode = event.currentTarget.value
 
-            if (isGeneExpressionScoreMode(nextScoreMode)) {
-              onGeneExpressionScoreModeChange(nextScoreMode)
-            }
-          }}
-        >
-          {GENE_EXPRESSION_SCORE_MODE_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+                if (isGeneExpressionScoreMode(nextScoreMode)) {
+                  onGeneExpressionScoreModeChange(nextScoreMode)
+                }
+              }}
+            >
+              {GENE_EXPRESSION_SCORE_MODE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
 
         {savedGeneSets.length === 0 ? null : (
           <div className="gene-set-list" aria-label="Saved gene sets">
@@ -337,6 +341,7 @@ export function GeneHudPanel({
             }
           }}
         >
+          <option value="gene-expression">Gene expression</option>
           <option value="transcript-count">Transcript count</option>
           <option value="cell-area">Cell area</option>
           {hasAnnotationColors ? <option value="annotations">Annotations</option> : null}

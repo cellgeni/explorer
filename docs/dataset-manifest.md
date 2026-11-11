@@ -239,19 +239,19 @@ take no options.
 
 Display settings applied each time the dataset loads.
 
-| Key                   | Control                 | Value                                                                      |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------- |
-| `genes`               | Gene selection          | Gene names; must match the gene panel exactly, including case              |
-| `colorCellsBy`        | `Cell color`            | `transcript-count`, `cell-area`, `annotations`, `metadata`                 |
-| `geneColorScale`      | `Gene scale`            | `gold`, `magma`, `viridis`, `plasma`, `cividis`, `teal`, `rose`, `glasbey` |
-| `geneScoreMode`       | `Signature score`       | `sum`, `mean`, `z-score`                                                   |
-| `cellBoundaries`      | `Cell boundaries`       | `true` / `false`                                                           |
-| `nucleusBoundaries`   | `Nucleus boundaries`    | `true` / `false`                                                           |
-| `channels`            | Image channel toggles   | Channel names (case-insensitive) or IDs to turn on                         |
-| `imageOpacity`        | `Dataset image opacity` | 0–1                                                                        |
-| `cellFillOpacity`     | `Cell fill opacity`     | 0–1                                                                        |
-| `cellBoundaryOpacity` | `Cell boundary opacity` | 0–1                                                                        |
-| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium, Atera)                                           |
+| Key                   | Control                 | Value                                                                         |
+| --------------------- | ----------------------- | ----------------------------------------------------------------------------- |
+| `genes`               | Gene selection          | Gene names; must match the gene panel exactly, including case                 |
+| `colorCellsBy`        | `Cell color`            | `gene-expression`, `transcript-count`, `cell-area`, `annotations`, `metadata` |
+| `geneColorScale`      | `Gene scale`            | `gold`, `magma`, `viridis`, `plasma`, `cividis`, `teal`, `rose`, `glasbey`    |
+| `geneScoreMode`       | `Combine genes`         | `sum`, `mean`, `z-score`                                                      |
+| `cellBoundaries`      | `Cell boundaries`       | `true` / `false`                                                              |
+| `nucleusBoundaries`   | `Nucleus boundaries`    | `true` / `false`                                                              |
+| `channels`            | Image channel toggles   | Channel names (case-insensitive) or IDs to turn on                            |
+| `imageOpacity`        | `Dataset image opacity` | 0–1                                                                           |
+| `cellFillOpacity`     | `Cell fill opacity`     | 0–1                                                                           |
+| `cellBoundaryOpacity` | `Cell boundary opacity` | 0–1                                                                           |
+| `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium, Atera)                                              |
 
 How defaults combine with other settings:
 
@@ -267,6 +267,9 @@ How defaults combine with other settings:
 - Opacities and `transcripts` are app-wide controls: they keep their value when
   another dataset without these defaults is loaded next.
 - `colorCellsBy: "annotations"` takes effect once annotations are loaded.
+- `genes` without `colorCellsBy` colours cells by gene expression. With
+  `colorCellsBy` set to another mode, the genes are selected (for transcripts,
+  or to switch to later) but cells use that mode.
 
 ## Errors And Diagnostics
 

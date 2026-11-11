@@ -50,7 +50,7 @@ describe('GeneHudPanel', () => {
         geneSetName=""
         geneExpressionScoreMode="sum"
         savedGeneSets={[savedGeneSet]}
-        selectedGenes={['Actb']}
+        selectedGenes={['Actb', 'Slc17a7']}
         filteredGenes={['Gad1']}
         geneExpressionColorScale="plasma"
         geneExpressionScaleMax={12}
@@ -91,7 +91,7 @@ describe('GeneHudPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply Symbols' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save Set' }))
     fireEvent.change(screen.getByLabelText('Set name'), { target: { value: 'New set' } })
-    fireEvent.change(screen.getByLabelText('Signature score'), {
+    fireEvent.change(screen.getByLabelText('Combine genes'), {
       target: { value: 'mean' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Apply Marker set' }))

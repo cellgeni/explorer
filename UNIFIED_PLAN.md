@@ -2296,7 +2296,7 @@ These change almost nothing on screen, but every later step depends on them.
 These go into the existing tabs first, so users benefit before the re-layout.
 They are independent unless a note says otherwise.
 
-- [ ] **A. `Colour by` (F1, F9).** Add `'gene-expression'` to
+- [x] **A. `Colour by` (F1, F9).** Add `'gene-expression'` to
       `ObservationColorMode` (`rendering/cellStyling.ts:5`). (M)
   - These places should follow the mode instead of `geneExpressionActive`:
     - `cellPointStyle.ts:26–43`
@@ -2311,6 +2311,23 @@ They are independent unless a note says otherwise.
     old behaviour.
   - The score select appears only with 2 or more genes, labelled "Combine
     genes".
+  - Done 2026-11-11. App.tsx passes the gene expression elements and
+    `geneExpressionActive` to the viewer only in Gene expression mode, which
+    covers the points, boundaries, grid and the fill-opacity boost in one
+    place; `createObservationColorizer` returns null for the mode. With
+    SNAP25 selected on the demo, loading clusters now shows the clusters.
+  - `colorModeAfterGeneChange` (`genes/geneColorModeModel.ts`) holds the
+    rule. Adding a gene in the Genes tab, or applying symbols or a saved
+    set, switches to Gene expression; removing the last gene from either
+    tab goes back to the last other mode; adding a transcript feature keeps
+    the mode.
+  - Links and manifests differ. A link always carries `cellColor`, so a link
+    with genes opens in Gene expression (`sharedObservationColorMode`). A
+    manifest names `colorCellsBy` only on purpose, so it wins, and genes
+    without it mean Gene expression (`manifestObservationColorMode`). No
+    manifest in `examples/` sets both.
+  - Hover details for cells now carry gene counts only in Gene expression
+    mode; Cell info still shows them in every mode.
 - [ ] **B. Gene search (F10).** (S)
   - Rank matches exact, then prefix, then alias prefix, then substring, in
     `filterGeneOptions` (`genes/geneControlsModel.ts:268–300`).

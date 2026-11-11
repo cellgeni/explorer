@@ -27,9 +27,12 @@ import {
 } from './features/control-hud/RoiHudPanel'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
+  parseObservationColorMode,
   readShareableStateFromLocation,
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
+import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
+import type { ObservationColorMode } from './rendering/cellStyling'
 import {
   activeVisiumHdRoiStateForPlatform,
   appPlatformAdapterFor,
@@ -204,6 +207,7 @@ import type {
 const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
 const EMPTY_GRID_CELL_DATA: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
+const EMPTY_GENE_EXPRESSION_ELEMENTS: readonly OverviewCellDatum[] = []
 
 export type {
   AnalysisEmbeddingsLoader,
@@ -547,6 +551,12 @@ export function App({ dependencies }: AppProps = {}) {
   const initialSharedRoiSelectionRef = useRef<RoiSelection | null>(
     initialShareableState.roiSelection ?? null,
   )
+  // The colour mode to go back to when the last gene is removed.
+  const colorModeBeforeGenesRef = useRef<ObservationColorMode>(
+    nonGeneColorMode(
+      parseObservationColorMode(initialShareableState.observationColorMode),
+    ),
+  )
   const didApplyInitialDatasetUrlRef = useRef(false)
   const startDatasetLoadRef = useRef<
     ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
@@ -748,6 +758,14 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptPointColorMode,
     },
   })
+  // Gene expression colours cells only when it is the colour mode (D2), so
+  // loading clusters with genes selected shows the clusters.
+  const isGeneExpressionColorMode = observationColorMode === 'gene-expression'
+  const viewerGeneExpressionElements = isGeneExpressionColorMode
+    ? styledGeneExpressionElements
+    : EMPTY_GENE_EXPRESSION_ELEMENTS
+  const geneExpressionColorsReady =
+    isGeneExpressionColorMode && geneExpressionState.status === 'ready'
   const visibleBoundaryLayerData = showCellBoundaries
     ? boundaryLayerData
     : EMPTY_CELL_BOUNDARY_DATA
@@ -755,9 +773,9 @@ export function App({ dependencies }: AppProps = {}) {
     () =>
       styleCellBoundariesByGeneExpression(
         visibleBoundaryLayerData,
-        styledGeneExpressionElements,
+        viewerGeneExpressionElements,
       ),
-    [styledGeneExpressionElements, visibleBoundaryLayerData],
+    [viewerGeneExpressionElements, visibleBoundaryLayerData],
   )
   const visibleNucleusBoundaryLayerData = showNucleusBoundaries
     ? nucleusBoundaryLayerData
@@ -772,10 +790,10 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const expressionStyledSpatialGridCells = useMemo(
     () =>
-      styleGridCellsByGeneExpression(spatialGridCells, styledGeneExpressionElements, {
-        styleUnmatchedCells: geneExpressionState.status === 'ready',
+      styleGridCellsByGeneExpression(spatialGridCells, viewerGeneExpressionElements, {
+        styleUnmatchedCells: geneExpressionColorsReady,
       }),
-    [geneExpressionState.status, spatialGridCells, styledGeneExpressionElements],
+    [geneExpressionColorsReady, spatialGridCells, viewerGeneExpressionElements],
   )
   const viewerGridCells = isVisiumHdBoundarySurfaceReserved
     ? EMPTY_GRID_CELL_DATA
@@ -1633,17 +1651,27 @@ export function App({ dependencies }: AppProps = {}) {
       loadGeneExpression: loadActiveGeneExpression,
     },
   })
+  useEffect(() => {
+    if (observationColorMode !== 'gene-expression') {
+      colorModeBeforeGenesRef.current = observationColorMode
+    }
+  }, [observationColorMode])
   const toggleGene = useCallback(
     (gene: string) => {
       const isSelected = selectedGenes.includes(gene)
+      const nextGenes = isSelected
+        ? selectedGenes.filter((selectedGene) => selectedGene !== gene)
+        : [...selectedGenes, gene].sort((a, b) => a.localeCompare(b))
 
       appendDebugEvent(isSelected ? `Cleared gene ${gene}` : `Highlight gene ${gene}`)
       resetGeneExpressionSelectionState()
       setManualTranscriptExactRequestKey(null)
-      setSelectedGenes((current) =>
-        isSelected
-          ? current.filter((selectedGene) => selectedGene !== gene)
-          : [...current, gene].sort((a, b) => a.localeCompare(b)),
+      setSelectedGenes(nextGenes)
+      setObservationColorMode((mode) =>
+        colorModeAfterGeneChange(mode, colorModeBeforeGenesRef.current, {
+          added: !isSelected,
+          geneCount: nextGenes.length,
+        }),
       )
     },
     [
@@ -1651,6 +1679,7 @@ export function App({ dependencies }: AppProps = {}) {
       resetGeneExpressionSelectionState,
       selectedGenes,
       setManualTranscriptExactRequestKey,
+      setObservationColorMode,
       setSelectedGenes,
     ],
   )
@@ -3087,8 +3116,8 @@ export function App({ dependencies }: AppProps = {}) {
 
         <ViewerCore
           cells={styledOverviewCells}
-          expressionElements={styledGeneExpressionElements}
-          geneExpressionActive={geneExpressionState.status === 'ready'}
+          expressionElements={viewerGeneExpressionElements}
+          geneExpressionActive={geneExpressionColorsReady}
           geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
           boundaries={expressionStyledBoundaryLayerData}
           nucleusBoundaries={visibleNucleusBoundaryLayerData}
@@ -3369,4 +3398,8 @@ function imageFitExtentFromMorphologyImage(image: MorphologyImage | null): BBox 
     minY: micrometers(0),
     maxY: micrometers(loader.imageHeight * micrometersPerPixel),
   }
+}
+
+function nonGeneColorMode(mode: ObservationColorMode | undefined): ObservationColorMode {
+  return mode === undefined || mode === 'gene-expression' ? 'transcript-count' : mode
 }
