@@ -26,8 +26,9 @@ file cache), without a viewer release.
 
 <!-- examples:end -->
 
-The Dataset tab shows each example's description, source, licence, and how to
-cite it. Please cite the original data when you use it.
+The info drawer's About section (ⓘ `Dataset info` in the top bar) shows each
+example's description, source, licence, and how to cite it. Please cite the
+original data when you use it.
 
 ## Adding An Example
 

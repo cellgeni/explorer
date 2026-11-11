@@ -75,7 +75,7 @@ export function EmbeddingPanel({
   )
   const selectedPoint =
     selectedElementId === null ? undefined : pointByCellId.get(selectedElementId)
-  // The new shell's Embedding panel can be resized (15.2-G), so the plot
+  // The Embedding panel can be resized (15.2-G), so the plot
   // redraws at its new size.
   const [plotSize, setPlotSize] = useState<string | null>(null)
 

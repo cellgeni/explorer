@@ -393,9 +393,9 @@ aws s3 sync /data/sample.h5ad.icechunk s3://bucket/path/sample.h5ad.icechunk
   so they need no Range support, and transfer compression is fine. The
   repository needs no listing: the viewer reads `repo`, then files named in it.
 - The H5AD needs Range support and a `Content-Length` in `HEAD` responses.
-- To check: the Dataset tab's log shows "Looking for H5AD reference …" and
-  then "H5AD reference ready: N cells, M genes", or for a repository
-  "H5AD Icechunk repository opened: N groups and arrays" and
+- To check: the info drawer's activity log shows "Looking for H5AD
+  reference …" and then "H5AD reference ready: N cells, M genes", or for a
+  repository "H5AD Icechunk repository opened: N groups and arrays" and
   "H5AD Icechunk repository ready: N cells, M genes".
 
 The repository can also be entered as the dataset URL

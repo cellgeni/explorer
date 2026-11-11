@@ -48,7 +48,7 @@ describe('ViewerLegend', () => {
     render(<ViewerLegend sections={[categories]} onCategoryVisibilityChange={onChange} />)
 
     expect(screen.getAllByRole('checkbox')).toHaveLength(12)
-    expect(screen.getByText('+2 more in the Annotations tab')).toBeInTheDocument()
+    expect(screen.getByText('+2 more in Cells › Clusters')).toBeInTheDocument()
     expect(
       screen.getByRole('checkbox', { name: 'Cluster 2, 2,000 cells' }),
     ).not.toBeChecked()

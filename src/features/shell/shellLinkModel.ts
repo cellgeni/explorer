@@ -4,7 +4,7 @@ import type { LayerVisibility } from '../app-shell/useAppDomainState'
 import type { LayerSectionId } from './layerPanelModel'
 import { TOOL_ORDER } from './shortcuts'
 
-// The new shell's part of a share link (UNIFIED_PLAN.md, 15.2-H, D7):
+// The shell's part of a share link (UNIFIED_PLAN.md, 15.2-H, D7):
 // `panel=` lists the open layer sections, `info` (the info drawer) and
 // `embedding`; `tool=` the active tool; `card=` a card to restore; `hidden=`
 // the hidden layers. Each is left out at its default.
@@ -36,7 +36,7 @@ export const DEFAULT_SHELL_PANELS: ShellPanelState = {
   embeddingOpen: false,
 }
 
-// A current-shell tab, as the new shell reads it.
+// An old link's control tab, as the shell reads it.
 export function mapControlHudTab(tab: string | undefined): {
   readonly panels?: readonly ShellPanelId[]
   readonly tool?: ActiveTool
@@ -65,7 +65,7 @@ export function mapControlHudTab(tab: string | undefined): {
   }
 }
 
-// The link as the new shell reads it: an old `tab=` fills `panel=`, `tool=`
+// The link as the shell reads it: an old `tab=` fills `panel=`, `tool=`
 // and `card=` where the link does not set them. A version 1 link wrote
 // `tab=dataset` whatever was open, so that one opens nothing.
 export function withShellLink(state: ShareableState): ShareableState {

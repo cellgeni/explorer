@@ -270,7 +270,7 @@ function CellsSection({
       </div>
       <VisiumHdBinControls visiumHd={viewOptions.visiumHd} />
 
-      {/* The gene and annotation blocks take the HUD's field styles. */}
+      {/* The gene and annotation blocks take the shared field styles. */}
       <div className="analysis-section">
         <SubHeading>Colour by</SubHeading>
         <CellColorControls colour={cells.colour} />

@@ -27,8 +27,8 @@ import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
 
 // The dataset itself: opening one, sharing it, what it is, its view options
-// and diagnostics (UNIFIED_PLAN.md, 15.2-A). Today this is the Dataset tab;
-// the new shell spreads it over the info drawer, the start screen and Share.
+// and diagnostics (UNIFIED_PLAN.md, 15.2-A): the info drawer, the dataset
+// menu, Share and Settings.
 export interface DatasetInfoModel {
   // What is open, for the info drawer's Dataset section (15.2-F). Empty
   // before a dataset is ready.
@@ -127,7 +127,7 @@ export interface ShareLinkModel {
   readonly onCopyLink: () => Promise<boolean>
 }
 
-// Platform view choices. The new shell moves Visium HD bin size to the Bins
+// Platform view choices. Visium HD bin size is in the Bins
 // section and the Visium tissue image and off-tissue spots to the Image and
 // Spots sections; the Visium library and SpatialData choices stay here.
 export interface DatasetViewOptionsModel {

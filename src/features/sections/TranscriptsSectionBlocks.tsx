@@ -359,8 +359,8 @@ export function TranscriptPointStyleControls({ transcripts }: TranscriptsProps) 
   )
 }
 
-// The layer status and the hovered or pinned transcript; the new shell's
-// Transcript card.
+// The layer status, and the hovered and pinned transcript unless
+// showInspection is off (the Transcript card shows the pinned one).
 export function TranscriptDetails({
   transcripts,
   showInspection = true,

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-// Under 860 px the new shell folds the tools into a menu, turns the layer
+// Under 860 px the shell folds the tools into a menu, turns the layer
 // panel into a bottom sheet and docks the cards at the bottom
 // (UNIFIED_PLAN.md, 15.2-I).
 export const NARROW_SCREEN_QUERY = '(max-width: 859.98px)'

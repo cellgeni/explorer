@@ -1,4 +1,3 @@
-import type { ControlHudTab } from './appShellModel'
 import type { FallbackNotice } from '../../data/fallbackNotice'
 
 const DEBUG_LOG_LIMIT = 32
@@ -17,7 +16,7 @@ export interface DebugLogAppendOptions {
 
 export type AppendDebugEvent = (message: string, options?: DebugLogAppendOptions) => void
 
-// Where a task's result shows in the new shell (15.2-C): a layer panel
+// Where a task's result shows (15.2-C): a layer panel
 // section, the info drawer ('dataset'), or a card.
 export type LoadingTaskArea =
   | 'dataset'
@@ -30,7 +29,7 @@ export type LoadingTaskArea =
 
 export interface LoadingTask {
   readonly id: string
-  readonly tabId: ControlHudTab
+  // The layer section or card whose data is loading.
   readonly area: LoadingTaskArea
   readonly label: string
   readonly detail?: string
@@ -146,7 +145,6 @@ export function createLoadingTasks({
   if (isLoadingWithUrl(loadState)) {
     tasks.push({
       id: 'dataset',
-      tabId: 'dataset',
       area: 'dataset',
       label: 'Loading dataset',
       detail: shortDatasetLabel(loadState.url),
@@ -156,7 +154,6 @@ export function createLoadingTasks({
   if (isLoadingWithUrl(datasetWarmupState)) {
     tasks.push({
       id: 'dataset-warmup',
-      tabId: 'dataset',
       area: 'dataset',
       label: 'Preparing dataset',
       detail: shortDatasetLabel(datasetWarmupState.url),
@@ -166,7 +163,6 @@ export function createLoadingTasks({
   if (isLoadingWithUrl(diagnosticsState)) {
     tasks.push({
       id: 'dataset-diagnostics',
-      tabId: 'dataset',
       area: 'dataset',
       label: 'Diagnosing dataset',
       detail: shortDatasetLabel(diagnosticsState.url),
@@ -176,7 +172,6 @@ export function createLoadingTasks({
   if (genePanelState.status === 'loading') {
     tasks.push({
       id: 'gene-panel',
-      tabId: 'genes',
       area: 'cells',
       label: 'Loading gene panel',
     })
@@ -185,7 +180,6 @@ export function createLoadingTasks({
   if (morphologyState.status === 'loading') {
     tasks.push({
       id: 'morphology',
-      tabId: 'layers',
       area: 'image',
       label: 'Loading image',
     })
@@ -194,7 +188,6 @@ export function createLoadingTasks({
   if (customMorphologyLayerState.status === 'loading') {
     tasks.push({
       id: 'custom-morphology-layer',
-      tabId: 'layers',
       area: 'image',
       label: 'Loading custom layer',
     })
@@ -203,7 +196,6 @@ export function createLoadingTasks({
   if (annotationGroupState.status === 'loading') {
     tasks.push({
       id: 'annotation-sets',
-      tabId: 'annotations',
       area: 'cells',
       label: 'Loading annotation sets',
     })
@@ -212,7 +204,6 @@ export function createLoadingTasks({
   if (boundaryState.status === 'loading') {
     tasks.push({
       id: 'boundaries',
-      tabId: 'layers',
       area: 'cells',
       label: 'Loading boundaries',
     })
@@ -221,7 +212,6 @@ export function createLoadingTasks({
   if (geneExpressionState.status === 'loading') {
     tasks.push({
       id: 'gene-expression',
-      tabId: 'genes',
       area: 'cells',
       label: geneExpressionLoadingLabel,
       detail: geneExpressionState.genes?.join(', ') ?? '',
@@ -231,7 +221,6 @@ export function createLoadingTasks({
   if (visiumHdExpressionProjectionState?.status === 'loading') {
     tasks.push({
       id: 'visium-hd-expression-projection',
-      tabId: 'genes',
       area: 'cells',
       label: 'Mapping expression to cells',
     })
@@ -240,7 +229,6 @@ export function createLoadingTasks({
   if (transcriptCapabilityState.status === 'loading') {
     tasks.push({
       id: 'transcript-capabilities',
-      tabId: 'transcripts',
       area: 'transcripts',
       label: 'Checking transcripts',
     })
@@ -250,7 +238,6 @@ export function createLoadingTasks({
     const visibleTranscriptEstimate = transcriptLayerState.visibleTranscriptEstimate ?? 0
     tasks.push({
       id: 'transcript-overlay',
-      tabId: 'transcripts',
       area: 'transcripts',
       label: 'Loading transcripts',
       detail: `${visibleTranscriptEstimate.toLocaleString()} estimated`,
@@ -260,7 +247,6 @@ export function createLoadingTasks({
   if (magicLensState.status === 'loading') {
     tasks.push({
       id: 'magic-lens',
-      tabId: 'magic-lens',
       area: 'magic-lens',
       label: 'Scanning magic lens',
       detail: magicLensLoadingScopeLabel,
@@ -270,7 +256,6 @@ export function createLoadingTasks({
   if (annotationState.status === 'loading') {
     tasks.push({
       id: 'annotations',
-      tabId: 'annotations',
       area: 'cells',
       label: 'Loading annotations',
     })
@@ -279,7 +264,6 @@ export function createLoadingTasks({
   if (analysisEmbeddingState.status === 'loading') {
     tasks.push({
       id: 'embeddings',
-      tabId: 'cell',
       area: 'cells',
       label: 'Loading embeddings',
     })
@@ -288,7 +272,6 @@ export function createLoadingTasks({
   if (cellDetailState.status === 'loading') {
     tasks.push({
       id: 'cell-details',
-      tabId: 'cell',
       area: 'cell',
       label: 'Loading cell details',
       detail: shortIdentifier(cellDetailState.cellId ?? ''),
@@ -298,7 +281,6 @@ export function createLoadingTasks({
   if (cellTranscriptDistributionState.status === 'loading') {
     tasks.push({
       id: 'cell-transcripts',
-      tabId: 'cell',
       area: 'cell',
       label: 'Loading cell z distribution',
       detail: shortIdentifier(cellTranscriptDistributionState.cellId ?? ''),
@@ -308,7 +290,6 @@ export function createLoadingTasks({
   if (visiumHdExpressionProfileState?.status === 'loading') {
     tasks.push({
       id: 'visium-hd-expression-profile',
-      tabId: 'cell',
       area: 'cell',
       label: 'Loading expression profile',
       detail: shortIdentifier(visiumHdExpressionProfileState.selectionId ?? ''),
@@ -318,7 +299,6 @@ export function createLoadingTasks({
   if (roiState.status === 'loading') {
     tasks.push({
       id: 'roi-cells',
-      tabId: 'roi',
       area: 'selection',
       label: 'Querying ROI cells',
     })
@@ -327,7 +307,6 @@ export function createLoadingTasks({
   if (isRoiGeneViewportWarmupLoading) {
     tasks.push({
       id: 'roi-gene-warmup',
-      tabId: 'roi',
       area: 'selection',
       label: 'Preparing cell feature matrix',
     })
@@ -337,7 +316,6 @@ export function createLoadingTasks({
     const cellCount = roiGeneStatsState.cellCount ?? 0
     tasks.push({
       id: 'roi-genes',
-      tabId: 'roi',
       area: 'selection',
       label: 'Querying ROI genes',
       detail: `${cellCount.toLocaleString()} cells`,
@@ -347,7 +325,6 @@ export function createLoadingTasks({
   if (roiTranscriptExportState.status === 'loading') {
     tasks.push({
       id: 'roi-transcripts',
-      tabId: 'roi',
       area: 'selection',
       label: 'Exporting ROI transcripts',
     })
@@ -357,7 +334,6 @@ export function createLoadingTasks({
     const channelNoun = autoContrastChannelCount === 1 ? 'channel' : 'channels'
     tasks.push({
       id: 'auto-contrast',
-      tabId: 'layers',
       area: 'image',
       label: 'Auto contrast',
       detail: `${autoContrastChannelCount.toLocaleString()} ${channelNoun}`,

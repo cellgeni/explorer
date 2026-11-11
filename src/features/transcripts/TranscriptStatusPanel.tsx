@@ -18,7 +18,7 @@ interface TranscriptStatusPanelProps {
   readonly onPinTranscript: (detail: ViewerTranscriptHoverDetail) => void
   readonly onClearPinnedTranscript: () => void
   readonly onLoadExactViewport: (requestKey: string) => void
-  // The new shell shows the pinned transcript in its Transcript card
+  // The pinned transcript is in the Transcript card
   // (15.2-D), and the canvas tooltip covers hovering.
   readonly showInspection?: boolean
 }

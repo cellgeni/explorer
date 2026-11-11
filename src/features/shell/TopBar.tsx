@@ -56,7 +56,7 @@ interface TopBarProps {
   readonly narrow?: boolean | undefined
 }
 
-// The new shell's top bar (UNIFIED_PLAN.md, 15.2-B): the dataset, its
+// The top bar (UNIFIED_PLAN.md, 15.2-B): the dataset, its
 // summary and ⓘ on the left, the tools in the middle, and Share, Help and
 // Settings on the right.
 export function TopBar({

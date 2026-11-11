@@ -76,7 +76,8 @@ interface TranscriptDiagnosticInspection {
 }
 
 export interface DiagnosticsDumpOptions {
-  readonly activeControlHudTab: string
+  // The open layer sections and panels (15.2-H's panel= values).
+  readonly openPanels: readonly string[]
   readonly activeErrors: readonly unknown[]
   readonly boundaryCellLimit: number
   readonly coordinateUnit: string
@@ -124,7 +125,7 @@ export function createDiagnosticsDump(
     location: readCurrentLocation(),
     performanceBudget: options.performanceBudget,
     controls: {
-      activeControlHudTab: options.activeControlHudTab,
+      openPanels: options.openPanels,
       boundaryCellLimit: options.boundaryCellLimit,
       coordinateUnit: options.coordinateUnit,
       geneExpressionColorScale: options.geneExpressionColorScale,

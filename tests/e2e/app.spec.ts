@@ -33,9 +33,12 @@ const HOSTED_FIXTURE_PREFLIGHT_TIMEOUT_MS = 10_000
 async function loadDefaultXeniumDataset(page: Page) {
   await page.goto('/')
 
+  await openControls(page, 'open-dataset')
   await expect(page.getByLabel('Dataset or image URL')).toHaveValue(/\/public\/xenium\//)
+  await openControls(page, 'open-dataset')
   await expect(page.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
 
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
   await expectLogEntry(page, /Dataset ready: [1-9][0-9,]* cells/, {
     timeout: XENIUM_LOAD_TIMEOUT_MS,
@@ -48,7 +51,9 @@ async function loadDefaultXeniumDataset(page: Page) {
 async function loadVisiumHdReferenceDataset(page: Page) {
   await page.goto('/')
 
+  await openControls(page, 'open-dataset')
   await page.getByLabel('Dataset or image URL').fill(VISIUM_HD_REFERENCE_URL)
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
   const visiumPanel = page.getByRole('region', { name: 'Visium HD dataset' })
@@ -290,13 +295,11 @@ async function createTinyH5adFixture(): Promise<Uint8Array> {
 test('shows the scaffolded viewer shell @smoke', async ({ page }) => {
   await page.goto('/')
 
-  await expect(page.getByRole('button', { name: 'Hide Controls' })).toBeVisible()
-  await expect(page.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  )
-  await expect(page.getByLabel('Dataset or image URL')).toHaveValue(/\/public\/xenium\//)
-  await expect(page.getByRole('button', { name: 'Load Dataset' })).toBeVisible()
+  await expect(page.getByRole('toolbar', { name: 'Tools' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Layers' })).toBeVisible()
+  const menu = await openControls(page, 'open-dataset')
+  await expect(menu.getByLabel('Dataset or image URL')).toHaveValue(/\/public\/xenium\//)
+  await expect(menu.getByRole('button', { name: 'Load Dataset' })).toBeVisible()
 })
 
 test('has no accessibility violations beyond the axe baseline @smoke', async ({
@@ -305,22 +308,42 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
   test.setTimeout(120_000)
   const findings: AxeFindings = new Map()
 
-  // Every tab of the Control HUD, empty and with data. 15.2 replaces the tabs
-  // with sections and cards, and this walk with one over them.
-  async function checkEachTab(state: string) {
-    for (const name of await page.getByRole('tab').allTextContents()) {
-      await page.getByRole('tab', { name, exact: true }).click()
-      await collectAxeFindings(page, `${state}, ${name} tab`, findings)
+  // Every layer section, the info drawer, the dataset menu, Help, Settings
+  // and the Embedding panel, empty and with data.
+  async function checkEachPlace(state: string) {
+    const layers = page.getByRole('complementary', { name: 'Layers' })
+    const sections = layers.getByRole('heading', { level: 3 }).getByRole('button')
+
+    for (let index = 0; index < (await sections.count()); index += 1) {
+      const section = sections.nth(index)
+      if ((await section.getAttribute('aria-expanded')) !== 'true') await section.click()
     }
+    await collectAxeFindings(page, `${state}, layer sections`, findings)
+
+    await openControls(page, 'diagnostics')
+    await collectAxeFindings(page, `${state}, info drawer`, findings)
+    await page.getByRole('button', { name: 'Close Dataset info' }).click()
+
+    for (const title of ['Open dataset', 'Help', 'Settings']) {
+      await page.getByTitle(title, { exact: true }).click()
+      await collectAxeFindings(page, `${state}, ${title}`, findings)
+      await page.keyboard.press('Escape')
+    }
+
+    await openControls(page, 'embedding')
+    await collectAxeFindings(page, `${state}, embedding`, findings)
+    await page.getByRole('button', { name: 'Close embedding' }).click()
   }
 
   await routeTinyH5adFixture(page)
   await page.goto('/')
-  await checkEachTab('empty viewer')
+  await checkEachPlace('empty viewer')
 
   await openControls(page, 'open-dataset')
   const fixtureUrl = new URL('/h5ad-smoke.h5ad', page.url()).toString()
+  await openControls(page, 'open-dataset')
   await page.getByLabel('Dataset or image URL').fill(fixtureUrl)
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
   await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
@@ -330,7 +353,7 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
   await expect(genesPanel.locator('.analysis-status')).toContainText('Expression', {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
-  await checkEachTab('H5AD fixture with a gene selected')
+  await checkEachPlace('H5AD fixture with a gene selected')
 
   expectAxeFindingsMatchBaseline(findings)
 })
@@ -342,8 +365,10 @@ test('shows transcript overlay controls in the browser shell @smoke', async ({
 
   await openControls(page, 'transcripts')
 
-  await expect(page.getByRole('heading', { name: 'Transcripts' })).toBeVisible()
-  await expect(page.getByRole('checkbox', { name: 'Show transcripts' })).toBeDisabled()
+  await expect(page.getByRole('heading', { name: /^Transcripts/ })).toBeVisible()
+  await expect(
+    page.getByRole('checkbox', { name: 'Show transcripts', exact: true }),
+  ).toBeDisabled()
   await expect(page.getByRole('combobox', { name: 'Detail' })).toHaveValue('auto')
   await expect(page.getByRole('combobox', { name: 'Feature filter' })).toHaveValue('all')
   await expect(page.getByLabel('Feature search')).toBeDisabled()
@@ -362,7 +387,9 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
   await page.goto('/')
 
   const fixtureUrl = new URL('/h5ad-smoke.h5ad', page.url()).toString()
+  await openControls(page, 'open-dataset')
   await page.getByLabel('Dataset or image URL').fill(fixtureUrl)
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
   await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
@@ -372,7 +399,11 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
     page.getByRole('img', { name: 'Spatial viewer canvas area' }),
   ).toBeVisible()
 
-  await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Layers' })
+      .getByRole('button', { name: /^Transcripts/ }),
+  ).toHaveCount(0)
 
   // H5AD loads with the annotation set on None; categorical obs columns are
   // listed as annotation sets and only load on request.
@@ -406,8 +437,12 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
 
   // Numeric obs columns are listed as Metadata tracks; values load on selection.
   await genesPanel.getByLabel('Cell color').selectOption('metadata')
-  await expect(genesPanel.getByLabel('Metadata track')).toHaveValue('h5ad:n-genes')
-  await expect(genesPanel.getByLabel('Metadata track')).toContainText('score')
+  await expect(genesPanel.getByLabel('Metadata track', { exact: true })).toHaveValue(
+    'h5ad:n-genes',
+  )
+  await expect(genesPanel.getByLabel('Metadata track', { exact: true })).toContainText(
+    'score',
+  )
 
   const cellPanel = await openControls(page, 'embedding')
   await cellPanel.getByRole('button', { name: 'Load Embeddings' }).click()
@@ -444,7 +479,9 @@ test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
 
   const genesPanel = await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('metadata')
-  await expect(genesPanel.getByLabel('Metadata track')).toHaveValue('h5ad:score')
+  await expect(genesPanel.getByLabel('Metadata track', { exact: true })).toHaveValue(
+    'h5ad:score',
+  )
   await expect(page).toHaveURL(/cellTrack=h5ad%3Ascore/)
 })
 
@@ -493,7 +530,9 @@ test('loads AnnData from an Icechunk repository with gene expression @smoke', as
   await page.goto('/')
 
   const repositoryUrl = new URL('/anndata.icechunk', page.url()).toString()
+  await openControls(page, 'open-dataset')
   await page.getByLabel('Dataset or image URL').fill(repositoryUrl)
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
   await expectLogEntry(page, /Icechunk AnnData ready: 6 cells, 4 genes/, {
@@ -601,10 +640,15 @@ test('switches Visium libraries and off-tissue spots and keeps them in the link 
   await page.goto('/')
 
   const datasetUrl = new URL('/two-sections.h5ad', page.url()).toString()
+  await openControls(page, 'open-dataset')
   await page.getByLabel('Dataset or image URL').fill(datasetUrl)
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  const visiumPanel = page.getByRole('region', { name: 'Visium dataset' })
+  // The library is a view option in the info drawer; off-tissue spots and the
+  // tissue image are in the Spots and Image sections.
+  const info = await openControls(page, 'view-options')
+  const visiumPanel = info.getByRole('region', { name: 'Visium dataset' })
   await expect(visiumPanel).toContainText('70 × 55 µm (30 off tissue hidden)', {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
@@ -620,6 +664,8 @@ test('switches Visium libraries and off-tissue spots and keeps them in the link 
     /Expression all cells: 0 positive cells across 70 slide cells/,
   )
 
+  // The library switch reloads from the link, which follows within 160 ms.
+  await expect(page).toHaveURL(/genes=GeneB/)
   await openControls(page, 'view-options')
   await library.selectOption('section-B')
   await expectLogEntry(page, /Visium library section-B: 70 spots/)
@@ -630,22 +676,23 @@ test('switches Visium libraries and off-tissue spots and keeps them in the link 
     /Expression all cells: 70 positive cells across 70 slide cells/,
   )
 
-  await openControls(page, 'spot-options')
-  await visiumPanel.getByLabel('Show off-tissue spots').check()
+  const spots = await openControls(page, 'spot-options')
+  await spots.getByLabel('Show off-tissue spots', { exact: true }).check()
   await expect(visiumPanel).toContainText('100 × 55 µm (incl. 30 off tissue)')
   await expect(page).toHaveURL(/voff=1/)
-  await openControls(page, 'tissue-image')
-  await visiumPanel.getByTitle('Visium tissue image to show').selectOption('')
+  const image = await openControls(page, 'tissue-image')
+  await image.getByTitle('Visium tissue image to show').selectOption('')
   await expect(page).toHaveURL(/vimg=none/)
 
-  // A fresh page opened from the link restores all three choices.
+  // A fresh page opened from the link restores all three choices, and the
+  // open drawer and sections (panel=).
   await page.reload()
   await expect(visiumPanel).toContainText('100 × 55 µm (incl. 30 off tissue)', {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
   await expect(library).toHaveValue('section-B')
-  await expect(visiumPanel.getByLabel('Show off-tissue spots')).toBeChecked()
-  await expect(visiumPanel.getByTitle('Visium tissue image to show')).toHaveValue('')
+  await expect(spots.getByLabel('Show off-tissue spots', { exact: true })).toBeChecked()
+  await expect(image.getByTitle('Visium tissue image to show')).toHaveValue('')
 })
 
 test('loads a Space Ranger Visium folder as 55 um spots with its tissue image @smoke', async ({
@@ -655,21 +702,29 @@ test('loads a Space Ranger Visium folder as 55 um spots with its tissue image @s
   await page.goto('/')
 
   const datasetUrl = new URL('/visium-smoke/', page.url()).toString()
+  await openControls(page, 'open-dataset')
   await page.getByLabel('Dataset or image URL').fill(datasetUrl)
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  const visiumPanel = page.getByRole('region', { name: 'Visium dataset' })
+  const info = await openControls(page, 'view-options')
+  const visiumPanel = info.getByRole('region', { name: 'Visium dataset' })
   await expect(visiumPanel).toBeVisible({ timeout: H5AD_LOAD_TIMEOUT_MS })
   await expect(visiumPanel).toContainText('Visium (Space Ranger)')
   await expect(visiumPanel).toContainText('36 × 55 µm')
   await expect(visiumPanel).toContainText('smoke-library')
   await expect(visiumPanel).toContainText('0.5 µm per pixel (array row/column fit')
-  await expect(visiumPanel.getByTitle('Visium tissue image to show')).toHaveValue('hires')
+  const image = await openControls(page, 'tissue-image')
+  await expect(image.getByTitle('Visium tissue image to show')).toHaveValue('hires')
   await expectLogEntry(page, /Visium ready: 36 spots, 3 genes/)
   await expectLogEntry(page, /Visium hires tissue image ready/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
-  await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Layers' })
+      .getByRole('button', { name: /^Transcripts/ }),
+  ).toHaveCount(0)
 
   const genesPanel = await openControls(page, 'genes')
   await genesPanel.getByLabel('Gene selection').fill('Gad1')
@@ -692,10 +747,13 @@ test('loads a CELLxGENE Visium H5AD with uns/spatial as spots over its H&E @live
     'Census Visium H5AD is unavailable.',
   )
 
+  await openControls(page, 'open-dataset')
   await page.getByLabel('Dataset or image URL').fill(VISIUM_CENSUS_H5AD_URL)
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  const visiumPanel = page.getByRole('region', { name: 'Visium dataset' })
+  const info = await openControls(page, 'view-options')
+  const visiumPanel = info.getByRole('region', { name: 'Visium dataset' })
   await expect(visiumPanel).toBeVisible({ timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS })
   await expect(visiumPanel).toContainText('Visium (H5AD)')
   await expect(visiumPanel).toContainText('370 × 55 µm (4,622 off tissue hidden)')
@@ -725,7 +783,9 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
     'Hosted PBMC3K H5AD fixture is unavailable.',
   )
 
+  await openControls(page, 'open-dataset')
   await page.getByLabel('Dataset or image URL').fill(H5AD_PBMC3K_REFERENCE_URL)
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
   await expectLogEntry(page, /H5AD ready: 2,638 cells, 1,838 genes/, {
@@ -734,7 +794,11 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
   await expect(
     page.getByRole('img', { name: 'Spatial viewer canvas area' }),
   ).toBeVisible()
-  await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Layers' })
+      .getByRole('button', { name: /^Transcripts/ }),
+  ).toHaveCount(0)
 
   const genesPanel = await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('transcript-count')
@@ -758,7 +822,9 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
 
   await genesPanel.getByLabel('Cell color').selectOption('metadata')
-  await expect(genesPanel.getByLabel('Metadata track')).toContainText('n_genes')
+  await expect(genesPanel.getByLabel('Metadata track', { exact: true })).toContainText(
+    'n_genes',
+  )
 })
 
 test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and cell types @live', async ({
@@ -773,13 +839,19 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
     'Hosted Atera reference run is unavailable.',
   )
 
+  await openControls(page, 'open-dataset')
   await page.getByLabel('Dataset or image URL').fill(ATERA_REFERENCE_URL)
+  await openControls(page, 'open-dataset')
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
   await expectLogEntry(page, /Atera ready: 93,864 cells, 18,050 genes/, {
     timeout: ATERA_LOAD_TIMEOUT_MS,
   })
-  await expect(page.getByRole('tab', { name: 'Transcripts' })).toBeVisible()
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Layers' })
+      .getByRole('button', { name: /^Transcripts/ }),
+  ).toBeVisible()
   await expectLogEntry(page, /Morphology image ready/, {
     timeout: ATERA_LOAD_TIMEOUT_MS,
   })
@@ -789,8 +861,9 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   await expect(imageChannels).toContainText('DAPI')
   await expect(imageChannels).toContainText('ATP1A1/CD45/E-Cadherin')
   await expect(imageChannels).toContainText('alphaSMA/Vimentin')
-  await expect(layersPanel.getByLabel('Cell boundaries')).toBeChecked()
-  await expect(layersPanel.getByLabel('Nucleus boundaries')).toBeEnabled()
+  const cellsPanel = await openControls(page, 'cell-appearance')
+  await expect(cellsPanel.getByLabel('Cell boundaries', { exact: true })).toBeChecked()
+  await expect(cellsPanel.getByLabel('Nucleus boundaries', { exact: true })).toBeEnabled()
 
   const genesPanel = await openControls(page, 'genes')
   await genesPanel.getByLabel('Gene selection').fill('UMOD')
@@ -813,7 +886,7 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   // binned_transcripts.zarr.zip; for all features they are cell-summary squares.
   const transcriptsPanel = await openControls(page, 'transcripts')
   const transcriptSummary = transcriptsPanel.getByLabel('Transcript overlay summary')
-  await page.getByRole('checkbox', { name: 'Show transcripts' }).check()
+  await page.getByRole('checkbox', { name: 'Show transcripts', exact: true }).check()
   await expect(transcriptsPanel).toContainText(
     /Showing native 1 selected-feature density squares from binned_transcripts\.zarr\.zip/,
     { timeout: ATERA_LOAD_TIMEOUT_MS },
@@ -829,15 +902,18 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   await expect(transcriptSummary).toContainText('Cell summary')
 
   // Zoomed in on UMOD-rich tubules, the selected-gene estimate fits the
-  // exact budget and points come from transcripts.zarr.zip.
+  // exact budget and points come from transcripts.zarr.zip. Leaving the page
+  // first makes this a fresh load; a hash-only goto lets the app's pending
+  // link write replace the new hash before a reload reads it.
+  await page.goto('about:blank')
   await page.goto(
     `/#xv=1&dataset=${encodeURIComponent(ATERA_REFERENCE_URL)}&genes=UMOD&view=8716%2C-5133%2C0%2C2&tab=transcripts&tx=1&txFilter=selected`,
   )
-  await page.reload()
-  await expect(transcriptsPanel.locator('.status-chip')).toHaveText(
-    /^[1-9][0-9,]* points$/,
-    { timeout: ATERA_LOAD_TIMEOUT_MS },
-  )
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Layers' })
+      .getByRole('button', { name: /^Transcripts.*UMOD · points/ }),
+  ).toBeVisible({ timeout: ATERA_LOAD_TIMEOUT_MS })
   await expect(transcriptSummary).toContainText(/Rendered[1-9][0-9,]*/)
   await expect(transcriptsPanel.getByLabel('Top transcript groups')).toContainText('UMOD')
 })
@@ -859,9 +935,11 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
   await expect(imageChannels).toContainText('18S')
 
   const transcriptsPanel = await openControls(page, 'transcripts')
-  await expect(page.getByRole('checkbox', { name: 'Show transcripts' })).toBeEnabled()
+  await expect(
+    page.getByRole('checkbox', { name: 'Show transcripts', exact: true }),
+  ).toBeEnabled()
   await page.getByRole('combobox', { name: 'Detail' }).selectOption('density')
-  await page.getByRole('checkbox', { name: 'Show transcripts' }).check()
+  await page.getByRole('checkbox', { name: 'Show transcripts', exact: true }).check()
   await expect(transcriptsPanel).toContainText(
     /Showing native all-transcript density squares from transcripts\.zarr\.zip/,
     { timeout: XENIUM_TRANSCRIPT_TIMEOUT_MS },
@@ -870,15 +948,12 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
     /Rendered[1-9][0-9,]* squares/,
   )
 
-  const roiPanel = await openControls(page, 'selection')
-  await expect(roiPanel.getByRole('button', { name: 'Draw Box' })).toBeEnabled({
+  const boxTool = page.getByRole('button', { name: 'Box selection' })
+  await expect(boxTool).toHaveAttribute('aria-disabled', 'false', {
     timeout: XENIUM_ROI_TIMEOUT_MS,
   })
-  await roiPanel.getByRole('button', { name: 'Draw Box' }).click()
-  await expect(roiPanel.getByRole('button', { name: 'Drawing Box' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  await boxTool.click()
+  await expect(boxTool).toHaveAttribute('aria-pressed', 'true')
 
   const viewer = page.getByRole('img', { name: 'Spatial viewer canvas area' })
   const viewerBox = await viewer.boundingBox()
@@ -902,15 +977,19 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
   )
   await page.mouse.up()
 
-  const roiSummary = roiPanel.getByLabel('ROI summary')
-  await expect(roiSummary).toContainText(/Cells\s*[1-9]/, {
+  const selectionCard = page.getByRole('region', { name: 'ROI 1' })
+  await expect(selectionCard).toContainText(/[1-9][0-9,]* cells? · /, {
     timeout: XENIUM_ROI_TIMEOUT_MS,
   })
-  await expect(roiPanel.getByRole('button', { name: 'Export Cells' })).toBeEnabled()
-  await expect(roiPanel.getByRole('button', { name: 'Export Transcripts' })).toBeEnabled()
+  await selectionCard.getByRole('tab', { name: 'Cells' }).click()
+  await expect(selectionCard.getByLabel('ROI summary')).toContainText(/Cells\s*[1-9]/)
+  await expect(selectionCard.getByRole('button', { name: 'Export Cells' })).toBeEnabled()
+  await expect(
+    selectionCard.getByRole('button', { name: 'Export Transcripts' }),
+  ).toBeEnabled()
 
   const downloadPromise = page.waitForEvent('download')
-  await roiPanel.getByRole('button', { name: 'Export Cells' }).click()
+  await selectionCard.getByRole('button', { name: 'Export Cells' }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe('roi-1-cells.csv')
 
@@ -923,9 +1002,8 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
     )
   }
 
-  const cellPanel = await openControls(page, 'cell-card')
-  await expect(page.getByRole('heading', { name: 'Cell Info' })).toBeVisible()
-  await expect(cellPanel).toContainText('No cell selected')
+  // The Cell card shows only once a cell is clicked.
+  await expect(page.getByRole('region', { name: 'Cell', exact: true })).toHaveCount(0)
 })
 
 test('loads the Visium HD reference dataset with tissue image and 16 um bins @live', async ({
@@ -976,30 +1054,35 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
     { timeout: 60_000 },
   )
 
-  const magicLensPanel = await openControls(page, 'magic-lens')
-  await expect(magicLensPanel.getByRole('spinbutton', { name: 'Min QV' })).toHaveCount(0)
-  await magicLensPanel.getByRole('button', { name: 'Viewport' }).click()
-  await expect(magicLensPanel.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
-  await magicLensPanel.getByRole('button', { name: 'Scan Lens' }).click()
-  const magicLensResults = magicLensPanel.getByLabel('Magic lens results')
+  // Summarise View scans the whole view into the Magic Lens card (D14).
+  const magicLensPopover = await openControls(page, 'magic-lens')
+  await expect(magicLensPopover.getByRole('spinbutton', { name: 'Min QV' })).toHaveCount(
+    0,
+  )
+  await expect(
+    magicLensPopover.getByRole('button', { name: 'Summarise View' }),
+  ).toBeEnabled()
+  await magicLensPopover.getByRole('button', { name: 'Summarise View' }).click()
+  const magicLensCard = page.getByRole('region', { name: 'Magic Lens' })
+  const magicLensResults = magicLensCard.getByLabel('Magic lens results')
   await expect(magicLensResults).toContainText('UMIs', { timeout: 60_000 })
   await expect(magicLensResults).toContainText('Bins')
-  await expect(magicLensPanel.getByLabel('Magic lens gene distribution')).toContainText(
+  await expect(magicLensCard.getByLabel('Magic lens gene distribution')).toContainText(
     'A2M',
   )
+  await magicLensCard.getByRole('button', { name: 'Clear Magic Lens' }).click()
 
-  const cellPanel = await openControls(page, 'cell-card')
-  await expect(page.getByRole('heading', { name: 'Bin Info' })).toBeVisible()
-  await expect(cellPanel).toContainText('No bin selected')
+  // The Bin card shows only once a bin is clicked.
+  await expect(page.getByRole('region', { name: 'Bin', exact: true })).toHaveCount(0)
 
-  const roiPanel = await openControls(page, 'selection')
-  await expect(roiPanel.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
-  await expect(roiPanel.getByRole('button', { name: 'Draw Lasso' })).toBeEnabled()
-  await roiPanel.getByRole('button', { name: 'Draw Box' }).click()
-  await expect(roiPanel.getByRole('button', { name: 'Drawing Box' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
+  const boxTool = page.getByRole('button', { name: 'Box selection' })
+  await expect(boxTool).toHaveAttribute('aria-disabled', 'false')
+  await expect(page.getByRole('button', { name: 'Lasso selection' })).toHaveAttribute(
+    'aria-disabled',
+    'false',
   )
+  await boxTool.click()
+  await expect(boxTool).toHaveAttribute('aria-pressed', 'true')
 
   const viewer = page.getByRole('img', { name: 'Spatial viewer canvas area' })
   const viewerBox = await viewer.boundingBox()
@@ -1023,13 +1106,17 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
   )
   await page.mouse.up()
 
-  const roiSummary = roiPanel.getByLabel('ROI summary')
+  const selectionCard = page.getByRole('region', { name: 'ROI 1' })
+  await selectionCard.getByRole('tab', { name: 'Bins' }).click()
+  const roiSummary = selectionCard.getByLabel('ROI summary')
   await expect(roiSummary).toContainText('Bins')
   await expect(roiSummary).toContainText('0')
-  await expect(roiPanel.getByRole('button', { name: 'Export Barcodes' })).toBeEnabled()
+  await expect(
+    selectionCard.getByRole('button', { name: 'Export Barcodes' }),
+  ).toBeEnabled()
 
   const downloadPromise = page.waitForEvent('download')
-  await roiPanel.getByRole('button', { name: 'Export Barcodes' }).click()
+  await selectionCard.getByRole('button', { name: 'Export Barcodes' }).click()
   const download = await downloadPromise
   expect(download.suggestedFilename()).toBe('roi-1-barcodes.csv')
 

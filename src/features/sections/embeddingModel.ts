@@ -11,8 +11,8 @@ import {
 } from '../analysis/analysisEmbeddingModel'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 
-// UMAP or t-SNE beside the tissue (UNIFIED_PLAN.md, 15.2-G): the Cell tab's
-// Embeddings section, and the new shell's floating Embedding panel.
+// UMAP or t-SNE beside the tissue (UNIFIED_PLAN.md, 15.2-G): the floating
+// Embedding panel.
 export interface EmbeddingModel {
   // "Idle", "Loading", "2 embeddings".
   readonly copy: string

@@ -107,7 +107,7 @@ export interface DatasetManifestDefaults {
   readonly transcripts?: boolean
 }
 
-// Where the data comes from, shown in the Dataset tab so viewers can find,
+// Where the data comes from, shown in the info drawer so viewers can find,
 // cite, and check the licence of the original deposit.
 export interface DatasetManifestSource {
   readonly repository?: string

@@ -124,12 +124,7 @@ import {
   type TranscriptCapabilityState,
   type TranscriptLayerState,
 } from '../transcripts/transcriptLayerModel'
-import {
-  parseControlHudTab,
-  sharedObservationColorMode,
-  parseViewerCoordinateUnit,
-  type ControlHudTab,
-} from './appShellModel'
+import { sharedObservationColorMode, parseViewerCoordinateUnit } from './appShellModel'
 import type { DebugLogEntry, FallbackNoticeEntry } from './appRuntimeModel'
 import {
   resolveStateAction,
@@ -346,12 +341,6 @@ export function useAppDomainState({
     [],
   )
   const [telemetryEvents, setTelemetryEvents] = useState<readonly TelemetryEvent[]>([])
-  const [isControlHudCollapsed, setIsControlHudCollapsed] = useState(false)
-  const [activeControlHudTab, setActiveControlHudTab] = useState<ControlHudTab>(
-    () =>
-      parseControlHudTab(initialShareableState.activeTab) ??
-      DEFAULT_SHAREABLE_STATE.activeTab,
-  )
   const [geneExpressionState, setGeneExpressionState] = useState<
     GeneExpressionState<StructuredLoadError>
   >(IDLE_GENE_EXPRESSION_STATE)
@@ -648,14 +637,10 @@ export function useAppDomainState({
       setActiveTool,
     },
     runtime: {
-      activeControlHudTab,
       debugLog,
       fallbackNotices,
-      isControlHudCollapsed,
-      setActiveControlHudTab,
       setDebugLog,
       setFallbackNotices,
-      setIsControlHudCollapsed,
       setTelemetryEvents,
       telemetryEvents,
     },
