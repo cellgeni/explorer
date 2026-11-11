@@ -80,8 +80,8 @@ its standard name in the manifest's folder.
 | ------------- | -------- | ----------------------------------------------------------------------------------------------------- |
 | `version`     | Yes      | `1`                                                                                                   |
 | `platform`    | Yes      | `xenium`, `atera`, `visium`, `visium-hd`, `h5ad`, `spatialdata`, or `image`                           |
-| `name`        | No       | Display name, shown in the Dataset tab, the log, and diagnostics                                      |
-| `description` | No       | What the dataset shows, shown in the Dataset tab                                                      |
+| `name`        | No       | Display name, shown in the top bar, the info drawer, the log, and diagnostics                         |
+| `description` | No       | What the dataset shows, shown in the info drawer's About section                                      |
 | `source`      | No       | Where the data comes from. See [Source](#source)                                                      |
 | `root`        | No       | Base for relative paths instead of the manifest's folder. Relative to the manifest, or an http(s) URL |
 | `files`       | Varies   | Where the platform's files are. See [Files](#files)                                                   |
@@ -103,7 +103,8 @@ Other schemes such as `s3://` are rejected: the browser can only read HTTP(S).
 
 Where the data comes from, for viewers who want to find the original
 deposit, check its licence, or cite it. Every field is an optional string;
-the Dataset tab shows the ones that are set, under the name and description.
+the info drawer's About section shows the ones that are set, under the name
+and description.
 
 | Key          | Value                                                        |
 | ------------ | ------------------------------------------------------------ |
@@ -229,11 +230,11 @@ probed as usual.
 | `spatialdata` | `image`              | Image element name, without `images/`                                                 |
 | `spatialdata` | `micrometersPerUnit` | Scale for stores that do not declare one; shown as the `µm per unit` value            |
 
-The SpatialData options are the starting view; the Dataset tab's controls
-start from them. Changing the coordinate system clears the image and units,
-because both belong to one coordinate system. Changing the image keeps the
-units, and `Auto` returns to the declared or estimated scale. Other platforms
-take no options.
+The SpatialData options are the starting view; the View options controls in
+the info drawer start from them. Changing the coordinate system clears the
+image and units, because both belong to one coordinate system. Changing the
+image keeps the units, and `Auto` returns to the declared or estimated scale.
+Other platforms take no options.
 
 ## Defaults
 
@@ -260,8 +261,8 @@ How defaults combine with other settings:
   fills in what the link leaves out. The link applies only to the first load.
 - A value that is not one of the listed options, such as `"colorCellsBy":
 "cluster"`, leaves the control at its default and adds a notice under
-  Fallbacks in the Dataset tab. Type errors, such as a string opacity, stop the
-  load.
+  Fallbacks, in the info drawer's Data access notes. Type errors, such as a
+  string opacity, stop the load.
 - `channels` entries that match no channel leave the platform's default
   channels on. An empty list turns every channel off.
 - Opacities and `transcripts` are app-wide controls: they keep their value when
@@ -274,8 +275,8 @@ How defaults combine with other settings:
 ## Errors And Diagnostics
 
 - A manifest that cannot be read (when entered directly) or does not validate
-  appears in the Dataset tab's Issues list as "Dataset manifest is invalid",
-  with the field at fault.
+  appears in the Issues list, in the info drawer's Diagnostics section, as
+  "Dataset manifest is invalid", with the field at fault.
 - A file named in the manifest that is missing fails where it is read, and the
   message shows the manifest path and the full URL. For files read by byte
   range, a `404`, or a `403` from a bucket that denies listing, is titled "File

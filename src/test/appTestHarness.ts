@@ -1,7 +1,6 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { vi } from 'vitest'
 import { micrometers } from '../data/coords'
-import { CONTROL_HUD_TABS } from '../features/app-shell/appShellModel'
 import type {
   AppDependencies,
   AppDependencyOverrides,
@@ -23,7 +22,7 @@ import type {
   VisiumHdBinnedOverview,
 } from '../datasets/visiumHdDataset'
 import type { VisiumHdSegmentedOutputPaths } from '../datasets/visiumHdSegmentations'
-import { CONTROL_AREA_TABS, type ControlArea } from './controlAreas'
+import { CONTROL_AREAS, type ControlArea } from './controlAreas'
 
 type VisiumHdDetection = Extract<
   SpatialDatasetDetection,
@@ -170,13 +169,58 @@ export function appTestDependencies({
   return dependencies
 }
 
-// Shows the controls for an area (see controlAreas.ts). Today this selects the
-// Control HUD tab that holds them, unless it is already selected.
+// Shows the controls for an area (see controlAreas.ts): opens the dataset
+// menu, the info drawer, a layer section, a popover or the Embedding panel,
+// unless it is already open.
 export function openControls(area: ControlArea): void {
-  const tabId = CONTROL_AREA_TABS[area]
-  const label = CONTROL_HUD_TABS.find((tab) => tab.id === tabId)?.label ?? tabId
-  const tab = screen.getByRole('tab', { name: label })
-  if (tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab)
+  const place = CONTROL_AREAS[area]
+
+  switch (place.kind) {
+    case 'dataset-menu':
+      // The open info drawer has the same form; one copy keeps labels unique.
+      if (isExpanded(infoButton())) return
+      openButton(screen.getByTitle('Open dataset'))
+      return
+    case 'info-drawer':
+      closeButton(screen.getByTitle('Open dataset'))
+      openButton(infoButton())
+      return
+    case 'section':
+      openButton(
+        within(screen.getByRole('complementary', { name: 'Layers' })).getByRole(
+          'button',
+          { name: place.section },
+        ),
+      )
+      return
+    case 'popover':
+      openButton(screen.getByRole('button', { name: place.title }))
+      return
+    case 'embedding': {
+      openControls('genes')
+      const show = screen.queryByRole('button', { name: 'Show Embedding' })
+      if (show !== null) fireEvent.click(show)
+      return
+    }
+    case 'none':
+      return
+  }
+}
+
+function infoButton(): HTMLElement {
+  return screen.getByRole('button', { name: /^Dataset info/ })
+}
+
+function isExpanded(button: HTMLElement): boolean {
+  return button.getAttribute('aria-expanded') === 'true'
+}
+
+function openButton(button: HTMLElement): void {
+  if (!isExpanded(button)) fireEvent.click(button)
+}
+
+function closeButton(button: HTMLElement): void {
+  if (isExpanded(button)) fireEvent.click(button)
 }
 
 export function pendingPromise<T>(): Promise<T> {

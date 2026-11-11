@@ -91,9 +91,9 @@ The viewer needs:
 - the `morphology_2d/` folder with every `ch000N_*.ome.tif`: each file's
   OME-XML names the others, and the viewer opens them as one multichannel
   image
-- for the Transcripts tab, `binned_transcripts.zarr.zip` (selected-gene
-  density) and `transcripts.zarr.zip` (exact points); without them the tab
-  reports transcripts as unavailable
+- for the Transcripts section, `binned_transcripts.zarr.zip` (selected-gene
+  density) and `transcripts.zarr.zip` (exact points); without them the
+  section reports transcripts as unavailable
 
 Paths listed in `experiment.spatial` (`explorer_files`,
 `images.morphology_2d_filepath`) are followed, so files can stay where the
@@ -186,8 +186,8 @@ Optional but supported Visium HD files include:
   are used only when the plain GeoJSON is missing; the nucleus mask only when
   neither nucleus GeoJSON exists.
 
-Visium HD does not provide Xenium-style transcript records, so the transcript
-tab is hidden.
+Visium HD does not provide Xenium-style transcript records, so there is no
+Transcripts section.
 
 ## Host Your Own H5AD Data
 
@@ -222,7 +222,7 @@ Supported H5AD views:
 - Embedding view options from numeric 2D `/obsm/*` matrices such as
   `/obsm/X_umap`, `/obsm/X_tsne`, and `/obsm/X_pca`.
 - Categorical and string `obs` columns as annotation labels.
-- Numeric `obs` columns as per-cell values in the Cell tab and as `Metadata`
+- Numeric `obs` columns as per-cell values in the Cell card and as `Metadata`
   colour tracks.
 - Selected-gene expression coloring, selected-cell gene profile, and ROI gene
   summaries from `/X`.
@@ -284,7 +284,7 @@ What the app reads:
 - One coordinate system. Systems are ranked by how many of the table's
   annotated elements they hold, then whether they hold an image, then their
   total element count, then whether they are named `global`. The choice appears
-  in the Dataset tab log; pick another one in the `Dataset` tab.
+  in the activity log; pick another one in the info drawer's View options.
 - One AnnData table: the first annotating a shapes element through `region`,
   `region_key`, and `instance_key`, else one annotating labels, else the first
   table. `X`, `obs`, `var`, and `obsm` are read the same way as H5AD: dense,
@@ -301,7 +301,7 @@ What the app reads:
   `instance_key` column when it holds integers, otherwise from an integer `obs`
   column named like `cell_labels`.
 - One image element, as an OME-Zarr pyramid. The finest image is shown by
-  default; pick another one in the `Dataset` tab. Scale and translation
+  default; pick another one in View options. Scale and translation
   transforms are applied. Rotated, sheared, or flipped images are skipped.
   Native RGB (H&E) images, including three-channel 8-bit images with
   SpatialData's default channel labels `0`, `1`, `2`, keep their full 0-255
@@ -314,7 +314,7 @@ declares for the coordinate system. spatialdata-io stores usually declare none
 segmentation areas, from the Visium 100 µm spot pitch (tables with `array_row`
 and `array_col`), or from Visium HD `square_NNNum` bin names. When nothing
 applies, distances are labelled as units. The `µm per unit` field in the
-`Dataset` tab overrides the scale, for example `0.2125` for Xenium morphology
+View options overrides the scale, for example `0.2125` for Xenium morphology
 pixels. The coordinate system, image, and scale are kept in the shareable URL
 (`sdCs`, `sdImage`, `sdUm`).
 

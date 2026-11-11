@@ -22,8 +22,8 @@ export interface ShareableState {
   readonly selectedGenes?: readonly string[]
   readonly viewState?: ShareableViewState
   readonly roiSelection?: RoiSelection
-  // The current shell's HUD tab; the new shell writes panels, card and tool
-  // instead and maps an old tab onto them (UNIFIED_PLAN.md, 15.2-H).
+  // An old link's control tab, which the shell maps onto panels, card and
+  // tool (UNIFIED_PLAN.md, 15.2-H).
   readonly activeTab?: string
   // Open layer sections, the info drawer and the Embedding panel: `panel=`.
   readonly panels?: readonly string[]

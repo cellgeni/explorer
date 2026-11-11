@@ -40,10 +40,9 @@ interface ShellLayoutProps {
   readonly children: ReactNode
 }
 
-// The new shell (UNIFIED_PLAN.md, 15.2), shown with ?shell=2 until 15.2-J
-// makes it the default: the top bar, the canvas with ⓘ's dataset info drawer
-// and the cards over it, the Embedding panel at its top right, and the layer
-// panel docked on the right. Under 860 px the panel is a bottom sheet and the
+// The shell (UNIFIED_PLAN.md, 15.2): the top bar, the canvas with ⓘ's
+// dataset info drawer and the cards over it, the Embedding panel at its top
+// right, and the layer panel docked on the right. Under 860 px the panel is a bottom sheet and the
 // cards dock at the bottom (15.2-I).
 export function ShellLayout({
   topBar,
@@ -137,7 +136,7 @@ export function ShellLayout({
               : 'shell-body'
         }
       >
-        <div className="shell-canvas">
+        <div className={infoOpen ? 'shell-canvas has-info-drawer' : 'shell-canvas'}>
           <InfoDrawer
             info={info}
             open={infoOpen}

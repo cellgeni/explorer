@@ -27,7 +27,8 @@ TIFF requirements:
 - 8- or 16-bit samples with 1, 3, or 4 samples per pixel.
 - Pixel size from OME-XML `PhysicalSizeX`. Without OME-XML the viewer assumes
   0.2125 µm per pixel.
-- Z-stacks open at the middle z plane; `Layers` → `Z plane` shows another.
+- Z-stacks open at the middle z plane; `Z plane` in the Image section shows
+  another.
   The OME-XML must locate each plane (`TiffData`, or none for planes stored in
   IFD order), and each plane needs its own `SubIFDs` pyramid. Only the first
   time point is shown.
@@ -43,8 +44,8 @@ A QPTIFF saved under a `.tif` name is recognized from its image description.
 See [QPTIFF](./modalities/image.md#qptiff).
 
 An image with more than six channels, such as a multiplexed QPTIFF, opens with
-the first six channels on; turn others on in `Layers`. Each is auto-contrasted
-the first time it is turned on.
+the first six channels on; turn others on in the Image section. Each is
+auto-contrasted the first time it is turned on.
 
 OME-Zarr sources must expose OME multiscales metadata with `x` and `y` axes.
 Only the first time point and z plane of an OME-Zarr image are shown.
@@ -58,22 +59,22 @@ annotations.
 The app hides transcriptomics workflows because image-only sources have no cell
 IDs, bins, molecules, or expression matrix:
 
-- Genes
-- Transcripts
-- Magic Lens
-- Cell or Bin Info
+- The Cells section (genes, clusters, embedding)
+- The Transcripts section
+- The Magic Lens tool
+- Cell and Bin cards
 - Cell-id annotation loading
 - ROI cell, transcript, and gene export
 
 ## GeoJSON Shape Import
 
-Open the `Annotations` tab and use `Import GeoJSON`. The importer accepts a
-GeoJSON `Feature` or `FeatureCollection` with Polygon or MultiPolygon geometry.
-Each imported feature becomes a geometric annotation with label, color,
-visibility, and remove controls. Features with `null` geometry are skipped; any
-other geometry type (Point, LineString, …) rejects the whole file. A failed
-import only adds "GeoJSON annotation import failed" to the Dataset tab log; the
-reason is not shown.
+Open the layer panel's Annotations section and use `Import GeoJSON`. The
+importer accepts a GeoJSON `Feature` or `FeatureCollection` with Polygon or
+MultiPolygon geometry. Each imported feature becomes a geometric annotation
+with label, color, visibility, and remove controls. Features with `null`
+geometry are skipped; any other geometry type (Point, LineString, …) rejects
+the whole file. A failed import only adds "GeoJSON annotation import failed"
+to the info drawer's activity log; the reason is not shown.
 
 The importer reads these optional properties:
 
@@ -93,12 +94,12 @@ coordinates are already in viewer coordinates.
 
 ## ROI And Export
 
-On image-only sources the `ROI` tab shows the `Geometry` panel. Use
-`Draw Box` or `Draw Lasso`, optionally set `Shape name`, and draw on the image.
-Completing the drawing saves the geometry as a GeoJSON shape in the
-`Annotations` tab instead of querying cells or genes.
+On image-only sources, pick the Box selection (`R`) or Lasso selection (`L`)
+tool. A New shape card opens: optionally set `Shape name`, and draw on the
+image. Completing the drawing saves the geometry as a GeoJSON shape in the
+Annotations section instead of querying cells or genes.
 
-Use `Export GeoJSON` in the `Annotations` tab to download all loaded geometric
-annotations as `geometric-annotations.geojson`. Exported features use
+Use `Export GeoJSON` in the Annotations section to download all loaded
+geometric annotations as `geometric-annotations.geojson`. Exported features use
 `coordinate_unit = "micrometer"` (also for image-only sources) so they
 round-trip in viewer coordinates.

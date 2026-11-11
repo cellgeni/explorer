@@ -51,7 +51,6 @@ function ShareableUrlHashProbe() {
       transcriptPointSize: 3,
     },
     view: {
-      activeControlHudTab: 'genes',
       activeRoiSelection: {
         kind: 'box',
         bbox: {
@@ -100,7 +99,7 @@ describe('useShareableUrlHash', () => {
     )
     expect(window.location.hash).toContain('customImageOpacity=0.35')
     expect(window.location.hash).toContain('genes=Actb%2CGad1')
-    expect(window.location.hash).toContain('tab=genes')
+    expect(window.location.hash).not.toMatch(/[#&]tab=/)
     expect(window.location.hash).toContain('imgOpacity=0.45')
     expect(window.location.hash).toContain('cellFill=0.7')
     expect(window.location.hash).toContain('cellBounds=0')

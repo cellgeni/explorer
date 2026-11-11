@@ -79,7 +79,7 @@ export function useDatasetDiagnosticsWorkflow({
   const { diagnosticsAbortRef } = refs
   const { setDiagnosticsState } = setters
   const {
-    activeControlHudTab,
+    openPanels,
     activeErrors,
     boundaryCellLimit,
     coordinateUnit,
@@ -191,7 +191,7 @@ export function useDatasetDiagnosticsWorkflow({
       'xenium-diagnostics.json',
       JSON.stringify(
         createDiagnosticsDump({
-          activeControlHudTab,
+          openPanels,
           activeErrors,
           boundaryCellLimit,
           coordinateUnit,
@@ -236,7 +236,7 @@ export function useDatasetDiagnosticsWorkflow({
     )
     appendDebugEvent('Downloaded diagnostics')
   }, [
-    activeControlHudTab,
+    openPanels,
     activeErrors,
     appendDebugEvent,
     boundaryCellLimit,

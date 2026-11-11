@@ -28,14 +28,14 @@ files. Parsing happens in the browser:
 
 | Directory                               | Contents                                                                                                                                                                                 |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/App.tsx`                           | Orchestration root: wires state, workflows, HUD panels, and the viewer                                                                                                                   |
+| `src/App.tsx`                           | Orchestration root: wires state, workflows, the section and card models, and the shell around the viewer                                                                                 |
 | `src/datasets/`                         | Detection (`datasetFactory.ts`), the `SpatialDataset` interface, and one implementation per platform                                                                                     |
 | `src/data/`                             | Platform-neutral readers and models: Parquet, Zarr, HDF5 matrices, transcripts, annotations, embeddings, ROI queries, caches, range probes, diagnostics, shareable state                 |
-| `src/features/`                         | Feature modules: HUD panels (`*.tsx`), workflow hooks (`use*Workflow.ts`), and pure models (`*Model.ts`)                                                                                 |
+| `src/features/`                         | Feature modules: panels and blocks (`*.tsx`), workflow hooks (`use*Workflow.ts`), and pure models (`*Model.ts`)                                                                          |
 | `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                                 |
 | `src/features/sections/`                | Section models (`*Model.ts`) and the blocks that render them (`*Blocks.tsx`); see [Section Models](#section-models)                                                                      |
-| `src/features/shell/`                   | The new shell behind `?shell=2` (15.2): top bar, tools, the shortcut table, the layer panel                                                                                              |
-| `src/features/cards/`                   | The new shell's cards (15.2-D): Selection, Cell, Transcript and Magic Lens, built by `useCardStackModel`                                                                                 |
+| `src/features/shell/`                   | The shell (15.2): top bar, tools, the shortcut table, layer panel, info drawer, Embedding panel, link panel state, narrow layout                                                         |
+| `src/features/cards/`                   | The cards (15.2-D): Selection, Cell, Transcript and Magic Lens, built by `useCardStackModel`                                                                                             |
 | `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
 | `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
 | `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                                    |
@@ -194,11 +194,10 @@ viewports go to `AteraDataset` for Atera (see
 [Atera](./modalities/atera.md#transcripts)) and to the Xenium readers
 otherwise.
 
-`App.tsx` hides HUD tabs from these capabilities, and the new shell's layer
-panel (`useLayerPanelModel`) shows sections from them. Each loading task
-(`createLoadingTasks`) names both its HUD tab and its new-shell `area` (a
-layer panel section, the info drawer or a card), which puts the loading dot
-on the right tab or section. The full matrix is in the
+The layer panel (`useLayerPanelModel`) shows sections from these
+capabilities, and the top bar offers Magic Lens from them. Each loading task
+(`createLoadingTasks`) names its `area` (a layer panel section, the info
+drawer or a card), which puts the loading dot on the right section. The full matrix is in the
 [UI reference](./ui-reference.md#platform-availability).
 
 ### 5. Workflows
@@ -226,35 +225,34 @@ lets tests replace them.
 
 ## Section Models
 
-The control panels take section models instead of separate props
-(UNIFIED_PLAN.md, 15.2-A). `App.tsx` builds six, one hook each, in
-`src/features/sections/`:
+The layer panel, info drawer, top bar and Embedding panel take section
+models instead of separate props (UNIFIED_PLAN.md, 15.2-A). `App.tsx` builds
+seven, one hook each, in `src/features/sections/`:
 
-| Model                     | Hook                         | Holds                                                                                                             |
-| ------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `DatasetInfoModel`        | `useDatasetInfoModel`        | Open a dataset, Copy Link, About, platform view options (Visium HD, Visium, SpatialData), diagnostics and the log |
-| `ImageSectionModel`       | `useImageSectionModel`       | Image opacity, z plane, channels, custom image layers                                                             |
-| `CellsSectionModel`       | `useCellsSectionModel`       | Cell appearance (boundaries, opacities), the gene selection, and what colours cells                               |
-| `TranscriptsSectionModel` | `useTranscriptsSectionModel` | Transcript display, gene filter, colours, filters, point style, budget, hovered and pinned transcript             |
-| `AnnotationsSectionModel` | `useAnnotationsSectionModel` | Annotation sets and labels, metadata tracks, GeoJSON shapes                                                       |
-| `ViewSettingsModel`       | `useViewSettingsModel`       | Hover tooltips, mouse coordinate units, the measure tool                                                          |
-| `EmbeddingModel`          | `useEmbeddingModel`          | The embedding view, Load Embeddings, and the plot's selection links (15.2-G)                                      |
+| Model                     | Hook                         | Holds                                                                                                            |
+| ------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `DatasetInfoModel`        | `useDatasetInfoModel`        | Dataset facts, open a dataset, Share, About, platform view options (Visium HD, Visium, SpatialData), diagnostics |
+| `ImageSectionModel`       | `useImageSectionModel`       | Image opacity, z plane, channels, custom image layers                                                            |
+| `CellsSectionModel`       | `useCellsSectionModel`       | Cell appearance (boundaries, opacities), the gene selection, and what colours cells                              |
+| `TranscriptsSectionModel` | `useTranscriptsSectionModel` | Transcript display, gene filter, colours, filters, point style, budget, hovered and pinned transcript            |
+| `AnnotationsSectionModel` | `useAnnotationsSectionModel` | Annotation sets and labels, metadata tracks, GeoJSON shapes                                                      |
+| `ViewSettingsModel`       | `useViewSettingsModel`       | Hover tooltips, mouse coordinate units, the measure tool                                                         |
+| `EmbeddingModel`          | `useEmbeddingModel`          | The embedding view, Load Embeddings, and the plot's selection links (15.2-G)                                     |
 
 - A model holds values and intent callbacks such as `onOpacityPercentChange`.
   The hook does what the old panel wrappers did: converts percents, normalizes
   inputs, writes the debug log, and resets pending requests.
 - Blocks (`*Blocks.tsx`) are small components that each take one model or
   sub-model, such as `GenePicker` (`cells.genes`) or `CustomImageLayers`
-  (`image.customLayers`). The HUD tabs arrange them today; the new shell
-  (15.2-C onwards) arranges the same blocks into the layer panel, cards and
-  info drawer.
+  (`image.customLayers`). The layer panel, info drawer and top bar arrange
+  them.
 - Typing stays local: the gene search, gene set drafts, saved gene sets and the
   transcript feature search live in their blocks, so a keystroke does not
   re-render `App`.
 - Blocks make their own label IDs with `useId`.
 - `src/test/sectionModels.ts` builds idle models with mock callbacks for block
   and panel tests.
-- The new shell's cards (15.2-D) follow the same pattern:
+- The cards (15.2-D) follow the same pattern:
   `useCardStackModel` (`src/features/cards/cardModels.ts`) builds a
   `CardStackModel` from the ROI, cell, pinned transcript and Magic Lens state.
   Each card is null while there is nothing to show, and its `onClose` clears
@@ -353,17 +351,18 @@ from `navigator.hardwareConcurrency` and `navigator.deviceMemory`:
 | `balanced` | Otherwise             | 150,000        | 50,000         | 4             | 120        | 120              |
 | `expanded` | ≥ 8 cores and ≥ 12 GB | 250,000        | 50,000         | 6             | 180        | 160              |
 
-The Layers tab header shows the active profile.
+Diagnostics in the info drawer shows the active profile with debug info on.
 
 ## Errors, Notices, Diagnostics, Telemetry
 
 - **Structured errors.** `createStructuredLoadError`
   (`src/features/errors/loadErrorModel.ts`) classifies failures (range
-  blocked, CORS, HTTP status, unsupported layout, …) for the Dataset tab's
-  Issues list and viewport messages.
+  blocked, CORS, HTTP status, unsupported layout, …) for the info drawer's
+  load issues, ⓘ's issue badge and viewport messages.
 - **Fallback notices.** `notifyFallback` (`src/data/fallbackNotice.ts`) reports
   when a slower or partial path is used (for example the H5 matrix or
-  cell-summary transcript density). Shown under Fallbacks in the Dataset tab.
+  cell-summary transcript density). Shown under "Data access notes" in the
+  info drawer's Diagnostics.
 - **Diagnostics.** `runDatasetDiagnostics` (`src/data/datasetDiagnostics.ts`)
   checks the files each platform needs. `Download diagnostics` writes a JSON
   dump built by `src/features/diagnostics/diagnosticsDump.ts`.

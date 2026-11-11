@@ -2,9 +2,8 @@ import type { Dispatch, SetStateAction } from 'react'
 import type { ViewerCoordinateUnit } from '../../components/ViewerCore'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 
-// Viewer settings and the measure tool. They sit in the Layers tab today; the
-// new shell puts them in Settings and the Measure tool's popover
-// (UNIFIED_PLAN.md, 15.2-A).
+// Viewer settings and the measure tool: Settings and the Measure tool's
+// popover (UNIFIED_PLAN.md, 15.2-A).
 export interface ViewSettingsModel {
   readonly showHoverTooltips: boolean
   readonly onShowHoverTooltipsChange: (enabled: boolean) => void

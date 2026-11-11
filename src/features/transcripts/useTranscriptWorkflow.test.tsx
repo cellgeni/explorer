@@ -122,7 +122,7 @@ function Probe({
       appendFallbackNotice,
     },
     controls: {
-      activeControlHudTab: 'transcripts',
+      transcriptControlsOpen: true,
       effectiveTranscriptFeatureFilterMode:
         options.featureFilterMode ?? (selectedGenes.length > 0 ? 'selected' : 'all'),
       manualTranscriptExactRequestKey: null,

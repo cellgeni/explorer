@@ -9,8 +9,8 @@ import type {
 import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotationModel'
 
 // Annotation sets and their labels, metadata tracks, and GeoJSON shapes
-// (UNIFIED_PLAN.md, 15.2-A). The new shell moves the sets and tracks to the
-// Cells section's Colour by and keeps the shapes in the Annotations section.
+// (UNIFIED_PLAN.md, 15.2-A). The sets and tracks are in the Cells section's
+// Clusters (D4); the shapes are in the Annotations section.
 export interface AnnotationsSectionModel {
   // The header chip.
   readonly headerCopy: string

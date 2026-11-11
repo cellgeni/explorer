@@ -1,66 +1,5 @@
-.control-hud {
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  box-shadow: var(--shadow-2);
-}
-
-.control-hud {
-  position: absolute;
-  z-index: 12;
-  top: max(12px, env(safe-area-inset-top));
-  right: max(12px, env(safe-area-inset-right));
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  width: min(420px, calc(100vw - 24px));
-  max-height: calc(100dvh - 24px);
-  min-height: 0;
-  padding: 6px;
-  overflow: hidden;
-  border-radius: 8px;
-}
-
-.control-hud.is-collapsed {
-  width: auto;
-  max-height: none;
-  padding: 0;
-  overflow: visible;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-
-.hud-top-bar {
-  display: flex;
-  gap: 6px;
-  align-items: flex-start;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.hud-toggle {
-  justify-self: end;
-  flex: 0 0 auto;
-  min-height: 24px;
-  padding: 4px 7px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface-1);
-  color: var(--text-1);
-  cursor: pointer;
-  font-size: var(--font-caption);
-  font-weight: 700;
-}
-
-.hud-toggle:hover {
-  background: var(--accent);
-  color: var(--accent-contrast);
-}
-
-.control-hud.is-collapsed .hud-toggle {
-  background: var(--surface-2);
-  color: var(--text-1);
-  box-shadow: var(--shadow-1);
-}
+/* Shared control styles: the forms, sections and buttons inside the layer
+   panel, cards and info drawer. */
 
 .loading-indicator {
   min-width: 0;
@@ -125,7 +64,6 @@
 }
 
 .loading-spinner,
-.tab-loading-dot,
 .status-chip.is-loading::before,
 .channel-auto-button:disabled::before {
   width: 8px;
@@ -144,102 +82,6 @@
   justify-self: center;
   border-color: var(--border);
   border-top-color: var(--warning);
-}
-
-.control-hud-content {
-  display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
-  gap: 6px;
-  align-content: start;
-  min-height: 0;
-  padding-top: 6px;
-  overflow: hidden;
-}
-
-.control-hud-content[hidden] {
-  display: none;
-}
-
-.hud-tab-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-}
-
-.hud-tab-list button {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 24px;
-  padding: 4px 5px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--surface-2);
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: var(--font-caption);
-  font-weight: 700;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.hud-tab-list button > span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hud-tab-list button:hover {
-  background: var(--accent-soft);
-}
-
-.hud-tab-list button.active,
-.hud-tab-list button[aria-selected='true'] {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.hud-tab-list button.is-loading {
-  border-color: var(--accent-border);
-  color: var(--accent);
-}
-
-.tab-loading-dot {
-  flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  border-width: 1.5px;
-}
-
-.hud-tab-panels {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.hud-tab-panel {
-  display: grid;
-  gap: 7px;
-  align-content: start;
-  min-width: 0;
-  min-height: 0;
-  align-self: start;
-}
-
-.hud-tab-panel[hidden] {
-  display: none;
-}
-
-.hud-tab-panel .dataset-form,
-.hud-tab-panel .analysis-section,
-.hud-tab-panel .layer-section {
-  align-content: start;
 }
 
 .eyebrow {
@@ -658,16 +500,4 @@ h2 {
 .section-heading-row .status-chip.is-loading::before {
   border-color: var(--border);
   border-top-color: var(--warning);
-}
-
-.dataset-share-row {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  min-width: 0;
-}
-
-.dataset-share-status {
-  color: var(--text-2);
-  font-size: var(--font-caption);
 }

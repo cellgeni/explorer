@@ -114,7 +114,7 @@ On top of the [H5AD layout](./h5ad.md#hdf5-layout-read):
 | `obs/library_id` (or `library`, `sample`)                                 | Which library each row belongs to (only with several libraries) |
 | `uns/spatial/<library>/scalefactors/*`                                    | Scalar datasets with the Space Ranger scale factor names        |
 | `uns/spatial/<library>/images/{hires,lowres}`                             | `(height, width)` or `(height, width, 3 or 4)` arrays           |
-| `uns/spatial/<library>/metadata/{chemistry_description,software_version}` | Shown in the Dataset tab                                        |
+| `uns/spatial/<library>/metadata/{chemistry_description,software_version}` | Shown in the info drawer's View options                         |
 
 ## Units And Coordinates
 
@@ -148,13 +148,15 @@ what `placeVisiumView` places, without reading the file again:
 - **Off-tissue spots.** Spots with `in_tissue` 0 are hidden by default
   (CELLxGENE files keep all 4,992 or 14,336 array spots; Space Ranger's
   filtered matrix already drops them), unless no spot is marked as under
-  tissue. The Dataset tab's `Show off-tissue spots` checkbox places them.
+  tissue. The `Show off-tissue spots` checkbox in Spots › Appearance places
+  them.
 - **Library.** With several libraries in `uns/spatial` (concatenated
   samples), the default is the first library that an obs library column
-  (`library_id`, `library`, or `sample`) names; the Dataset tab's `Library`
-  select picks another. Rows of other libraries are hidden, and the library's
-  own scale factors, units, and images are used. Without such a column every
-  row is placed with the chosen library's scale factors.
+  (`library_id`, `library`, or `sample`) names; the `Library` select in the
+  info drawer's View options picks another. Rows of other libraries are
+  hidden, and the library's own scale factors, units, and images are used.
+  Without such a column every row is placed with the chosen library's scale
+  factors.
 
 Either change goes through the normal load (`handleVisiumViewChange` in
 `useVisiumControlsWorkflow`), which re-places spots, refits the view, and
@@ -196,7 +198,7 @@ per pixel`.
   into RGB.
 - An image needs its `tissue_<kind>_scalef`; without it the image is not
   offered.
-- The Dataset tab's `Tissue image` select switches between `High-res`,
+- The Image section's `Tissue image` select switches between `High-res`,
   `Low-res`, and `None` in place (`useVisiumControlsWorkflow`). Each library's
   images are encoded once.
 
@@ -210,7 +212,8 @@ per pixel`.
    not null.
 2. Logs the library, spot count, and units, and raises the units notice when
    the scale is approximate.
-3. Fills the Dataset tab's Visium section (`visiumControlReady`).
+3. Fills the Visium controls in the info drawer and layer panel
+   (`visiumControlReady`).
 4. Runs the shared AnnData overview (spots, genes, annotation sets, embedding
    options, metadata tracks). `Cell boundaries` defaults to off.
 5. If `Tissue image` is enabled, loads the shared image choice, else high-res,
@@ -231,16 +234,16 @@ read whole. A Visium `.h5ad` gets the H5AD diagnostics.
 
 ## Source Files
 
-| File                                                                                  | Role                                                                       |
-| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `src/datasets/visiumFormat.ts`                                                        | File names, scale factors, positions, units, spot rings, clusters CSV, BMP |
-| `src/datasets/visiumDataset.ts`                                                       | Space Ranger reader, 10x HDF5 matrix, in-memory AnnData table              |
-| `src/datasets/h5adDataset.ts`                                                         | `uns/spatial` placement, spots, tissue images, in-memory AnnData source    |
-| `src/datasets/datasetFactory.ts`                                                      | Folder and manifest detection, construction                                |
-| `src/features/app-shell/useDatasetLifecycle.ts`, `useVisiumControlsWorkflow.ts`       | Load sequence; image, library, and off-tissue changes                      |
-| `src/features/app-shell/platformAdapter.ts`                                           | `VISIUM_PLATFORM_ADAPTER`                                                  |
-| `src/features/dataset/visiumModel.ts`, `src/features/control-hud/DatasetHudPanel.tsx` | Dataset tab section                                                        |
-| `src/data/datasetDiagnostics.ts`                                                      | `runVisiumDiagnostics`                                                     |
+| File                                                                                 | Role                                                                       |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `src/datasets/visiumFormat.ts`                                                       | File names, scale factors, positions, units, spot rings, clusters CSV, BMP |
+| `src/datasets/visiumDataset.ts`                                                      | Space Ranger reader, 10x HDF5 matrix, in-memory AnnData table              |
+| `src/datasets/h5adDataset.ts`                                                        | `uns/spatial` placement, spots, tissue images, in-memory AnnData source    |
+| `src/datasets/datasetFactory.ts`                                                     | Folder and manifest detection, construction                                |
+| `src/features/app-shell/useDatasetLifecycle.ts`, `useVisiumControlsWorkflow.ts`      | Load sequence; image, library, and off-tissue changes                      |
+| `src/features/app-shell/platformAdapter.ts`                                          | `VISIUM_PLATFORM_ADAPTER`                                                  |
+| `src/features/dataset/visiumModel.ts`, `src/features/sections/DatasetInfoBlocks.tsx` | `Visium dataset` panel, tissue image and off-tissue controls               |
+| `src/data/datasetDiagnostics.ts`                                                     | `runVisiumDiagnostics`                                                     |
 
 ## Known Limitations
 

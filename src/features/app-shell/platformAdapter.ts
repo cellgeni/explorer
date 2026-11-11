@@ -51,7 +51,7 @@ export interface AppPlatformLabels {
 
 export interface AppPlatformCapabilities {
   // Cells, spots or bins to draw and colour; a plain image has none, so it
-  // has no Cells section, Genes or Cell tab (15.2-C).
+  // has no Cells section or Cell card (15.2-C).
   readonly cells: boolean
   // The Magic Lens tool and tab.
   readonly magicLens: boolean
@@ -62,7 +62,7 @@ export interface AppPlatformCapabilities {
   readonly transcripts: boolean
   // Selected-cell transcript z histogram, read from transcripts.parquet.
   readonly cellTranscriptDistribution: boolean
-  // The Transcripts tab's gene-only filter; per-gene outputs only hold genes.
+  // The Transcripts section's gene-only filter; per-gene outputs only hold genes.
   readonly transcriptGeneOnlyFilter: boolean
 }
 

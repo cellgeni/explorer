@@ -1,6 +1,5 @@
 {
   "aria-allowed-attr": ["button[title=\"Gad1\"]", "button[title=\"Gapdh\"]"],
   "aria-prohibited-attr": [".transcript-density-scale-preview-wrap"],
-  "label-content-name-mismatch": ["button[aria-labelledby=\"react-id\"]"],
   "scrollable-region-focusable": ["ol"]
 }

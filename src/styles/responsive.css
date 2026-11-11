@@ -6,34 +6,6 @@
     overflow: hidden;
   }
 
-  .control-hud {
-    top: max(8px, env(safe-area-inset-top));
-    right: max(8px, env(safe-area-inset-right));
-    width: min(320px, calc(100vw - 16px));
-    max-height: 52vh;
-    padding: 6px;
-  }
-
-  .control-hud.is-collapsed {
-    width: auto;
-    padding: 0;
-  }
-
-  .control-hud-content {
-    grid-template-columns: 1fr;
-  }
-
-  .hud-tab-list {
-    flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .hud-tab-list button {
-    flex: 0 0 auto;
-    text-align: center;
-  }
-
   .viewport-notification-stack {
     left: max(8px, env(safe-area-inset-left));
     bottom: max(8px, env(safe-area-inset-bottom));
