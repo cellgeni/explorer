@@ -23,7 +23,7 @@
     "description": {
       "type": "string",
       "minLength": 1,
-      "description": "What the dataset shows, shown in the Dataset tab."
+      "description": "What the dataset shows, shown in the info drawer's About section."
     },
     "source": { "$ref": "#/$defs/source" },
     "root": {
@@ -143,7 +143,7 @@
     },
     "source": {
       "type": "object",
-      "description": "Where the data comes from, shown in the Dataset tab.",
+      "description": "Where the data comes from, shown in the info drawer's About section.",
       "properties": {
         "repository": {
           "type": "string",
@@ -378,7 +378,7 @@
     },
     "spatialDataOptions": {
       "type": "object",
-      "description": "Starting view for the Dataset tab. Changing the coordinate system there clears the image and units.",
+      "description": "Starting view for the info drawer's View options. Changing the coordinate system there clears the image and units.",
       "properties": {
         "coordinateSystem": { "type": "string", "minLength": 1 },
         "image": {

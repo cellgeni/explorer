@@ -22,8 +22,6 @@ interface ShareableDatasetHashOptions {
 }
 
 interface ShareableViewHashOptions {
-  // The current shell's tab; the new shell writes panels instead (15.2-H).
-  readonly activeControlHudTab: string | undefined
   readonly activeRoiSelection: RoiSelection | null
   readonly shareableViewState: ShareableViewState | undefined
   readonly panels: readonly string[] | undefined
@@ -107,15 +105,8 @@ export function useShareableUrlHash({
   const visiumImage = dataset.visiumSelection?.visiumImage
   const visiumLibrary = dataset.visiumSelection?.visiumLibrary
   const visiumOffTissue = dataset.visiumSelection?.visiumOffTissue
-  const {
-    activeControlHudTab,
-    activeRoiSelection,
-    card,
-    hiddenLayers,
-    panels,
-    shareableViewState,
-    tool,
-  } = view
+  const { activeRoiSelection, card, hiddenLayers, panels, shareableViewState, tool } =
+    view
   const {
     boundaryCellLimit,
     cellMetadataTrackId,
@@ -167,9 +158,6 @@ export function useShareableUrlHash({
           selectedGenes,
           ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
           ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
-          ...(activeControlHudTab === undefined
-            ? {}
-            : { activeTab: activeControlHudTab }),
           ...(panels === undefined ? {} : { panels }),
           ...(card === undefined ? {} : { card }),
           tool,
@@ -232,7 +220,6 @@ export function useShareableUrlHash({
       window.clearTimeout(timeout)
     }
   }, [
-    activeControlHudTab,
     activeRoiSelection,
     annotationGroupIds,
     card,

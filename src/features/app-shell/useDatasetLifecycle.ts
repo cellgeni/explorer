@@ -346,7 +346,7 @@ interface UseDatasetLifecycleSetters {
   readonly setCellFillOpacity?: Setter<number>
   readonly setImageLayerOpacity?: Setter<number>
   readonly setShowTranscriptOverlay?: Setter<boolean>
-  // What the Dataset tab shows about a dataset with a manifest.
+  // What the info drawer shows about a dataset with a manifest.
   readonly setDatasetAbout?: Setter<DatasetManifestAbout | null>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>

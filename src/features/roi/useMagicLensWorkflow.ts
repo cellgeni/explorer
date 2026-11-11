@@ -114,7 +114,7 @@ interface UseMagicLensWorkflowResult {
   readonly handleMagicLensMove: (detail: ViewerMagicLensDetail) => void
   readonly handleMagicLensRadiusChange: (value: number) => void
   readonly handleMagicLensScopeChange: (scope: MagicLensScope) => void
-  // The new shell's "Summarise View" and the Selection card's Transcripts tab
+  // The Magic Lens popover's "Summarise View" and the Selection card's Transcripts tab
   // (15.2-D): switch to the scope and scan it in one step.
   readonly handleMagicLensSummarise: (scope: 'viewport' | 'roi') => void
   readonly handleRunMagicLens: () => void

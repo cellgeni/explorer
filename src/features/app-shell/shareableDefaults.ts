@@ -14,7 +14,6 @@ import { DEFAULT_CELL_FILL_OPACITY } from '../../rendering/layerOpacity'
 // neither does the boundary limit, which comes from the device's performance
 // budget. A measure unit that is not set follows the mouse coordinate unit.
 export const DEFAULT_SHAREABLE_STATE = {
-  activeTab: 'dataset',
   tool: 'pan',
   hiddenLayers: [],
   selectedGenes: [],

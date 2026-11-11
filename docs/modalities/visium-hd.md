@@ -125,8 +125,8 @@ Without an 8 or 16 µm tier, 2 µm loading fails with
 | Feature                    | Path                                                                                                                                                                                                                                 |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Selected-gene overlay      | `geneExpression(bbox, genes)` reads `feature_slice.h5` in a worker, sums counts into the active bin size (`floor(row / (binSize / spot_pitch))`), and colours bins. There is no fallback to the filtered matrix.                     |
-| Bin Info: assignment       | `useGridCellAssignmentWorkflow` reads `barcode_mappings.parquet` and finds the segmented cell for the bin                                                                                                                            |
-| Bin Info: all-gene profile | `useVisiumHdExpressionProfileWorkflow` calls `matrix([barcode], binSize)` on the tier's filtered matrix                                                                                                                              |
+| Bin card: assignment       | `useGridCellAssignmentWorkflow` reads `barcode_mappings.parquet` and finds the segmented cell for the bin                                                                                                                            |
+| Bin card: all-gene profile | `useVisiumHdExpressionProfileWorkflow` calls `matrix([barcode], binSize)` on the tier's filtered matrix                                                                                                                              |
 | Segmented-cell profile     | DuckDB-WASM query on `barcode_mappings.parquet` for one `cell_id`, then `matrix()` over those bins at the active size. The segmented `filtered_feature_cell_matrix.h5` is not used.                                                  |
 | Cell/nucleus boundaries    | `elements(bbox)` / `segmentationElements('nucleus', bbox)`. The GeoJSON is streamed in full for each new viewport and filtered; loading is gated by the boundary viewport rule (see [Xenium](./xenium.md#viewport-cell-boundaries)). |
 | Expression projection      | `useVisiumHdExpressionProjectionWorkflow` splits each bin's count across its mapped cells; the result feeds status text                                                                                                              |
@@ -146,7 +146,7 @@ Visium HD has no transcript records.
 1. Sets the platform to `visium-hd`; cell and nucleus boundaries default to off.
 2. Starts the gene panel (`features.tsv.gz`) without blocking.
 3. Awaits `readBinnedOverview()` and `meta()`, renders the grid, and fills the
-   Dataset tab bin-size control.
+   bin-size control in Bins › Appearance.
 4. If `Tissue image` is enabled, loads the hires PNG in the background.
 
 Changing the bin size runs `useVisiumHdBinWorkflow`.
@@ -182,7 +182,7 @@ Changing the bin size runs `useVisiumHdBinWorkflow`.
 | `src/features/app-shell/visiumHdAppController.ts`, `useVisiumHdBinWorkflow.ts`, `useVisiumHdGridLodWorkflow.ts`, `useVisiumHdExpressionProfileWorkflow.ts`, `visiumHdGridLayerData.ts` | App wiring                                                                      |
 | `src/features/genes/useVisiumHdExpressionProjectionWorkflow.ts`, `visiumHdExpressionProjection.ts`                                                                                     | Bin→cell expression projection                                                  |
 | `src/features/roi/useVisiumHdRoiWorkflow.ts`, `visiumHdRoiModel.ts`, `useVisiumHdMagicLensSummary.ts`                                                                                  | ROI and Magic Lens                                                              |
-| `src/features/cells/GridCellInfoPanel.tsx`, `gridCellAssignmentModel.ts`                                                                                                               | Bin Info panel                                                                  |
+| `src/features/cells/GridCellInfoPanel.tsx`, `gridCellAssignmentModel.ts`                                                                                                               | Bin card details                                                                |
 | `src/components/viewerGridCellIndex.ts`, `src/rendering/gridCellRenderer.ts`                                                                                                           | Grid picking index and rendering                                                |
 | `src/data/datasetDiagnostics.ts`                                                                                                                                                       | `runVisiumHdDiagnostics`                                                        |
 

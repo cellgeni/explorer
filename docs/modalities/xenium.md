@@ -128,10 +128,11 @@ vertices, then rings with fewer than 3 vertices are dropped.
 
 ### Transcripts
 
-Capabilities are checked lazily, when the overlay is on or the Transcripts tab
-is open (`loadDatasetTranscriptCapabilities`, `src/data/transcriptOverlay.ts`).
-The visible transcript estimate is the sum of overview `transcript_counts` in
-the viewport. `planTranscriptLod` then chooses density or exact points.
+Capabilities are checked lazily, when the overlay is on or the Transcripts
+section is open (`loadDatasetTranscriptCapabilities`,
+`src/data/transcriptOverlay.ts`). The visible transcript estimate is the sum of
+overview `transcript_counts` in the viewport. `planTranscriptLod` then chooses
+density or exact points.
 
 - **Density, all transcripts.** With the All features filter, or no genes
   selected, `loadTranscriptZarrAggregates` picks the finest Zarr grid level
@@ -238,12 +239,13 @@ not passed to the readers, so it does not change the result.
 | `src/data/datasetWarmup.ts`                                                         | Warmup and CSC capability check                                |
 | `src/data/duckdb.ts`                                                                | DuckDB-WASM client                                             |
 | `src/data/cellid.ts`                                                                | Cell ID parsing                                                |
-| `src/features/transcripts/*`                                                        | Transcript workflow and HUD                                    |
+| `src/features/transcripts/*`                                                        | Transcript workflow and status panel                           |
 | `src/data/datasetDiagnostics.ts`                                                    | Xenium diagnostics                                             |
 
 ## Known Limitations
 
-- The Magic Lens `Min QV` control has no effect on results.
+- The Magic Lens `Min QV` setting has no effect on results, so its control is
+  hidden.
 - Only one morphology image path from `experiment.xenium` is opened: the first
   one the folder's index page lists, or the first path when the host serves no
   index page. A path that fails to open is not retried with the next one.

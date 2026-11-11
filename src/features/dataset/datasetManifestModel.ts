@@ -10,7 +10,7 @@ import {
   parseGeneExpressionScoreMode,
 } from '../genes/geneControlsModel'
 
-// What the Dataset tab shows about a dataset described by a manifest.
+// What the info drawer shows about a dataset described by a manifest.
 export type DatasetManifestAbout = Pick<
   DatasetManifest,
   'name' | 'description' | 'source'

@@ -83,8 +83,8 @@ for other Zarr readers. It also accepts the Zarr v2 layout (`.zattrs`,
 Before using a sidecar, `openTiff` checks it against the TIFF: its level 0
 width, height, and chunk width and height must match the selected IFD, and it
 must list every tile of every level for the channel being opened. Otherwise it
-ignores the sidecar, reads the TIFF instead, and adds a notice to the Dataset
-tab's Fallbacks panel. A TIFF with no sidecar at all gets no notice.
+ignores the sidecar, reads the TIFF instead, and adds a fallback notice to the
+info drawer's Data access notes. A TIFF with no sidecar at all gets no notice.
 
 ## Where The Viewer Looks
 
@@ -196,8 +196,8 @@ image gzips to about 280 KB.
 
 To check it is used, look for a `200` response for the `.zchunkstore` URL in
 the browser's network tab, and no ".zchunkstore tile-offset sidecar was
-missing, unreadable, or did not match the TIFF" notice in the Dataset tab's
-Fallbacks panel.
+missing, unreadable, or did not match the TIFF" notice in the info drawer's
+Data access notes.
 
 ## Pitfalls
 

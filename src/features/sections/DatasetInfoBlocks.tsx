@@ -22,11 +22,9 @@ import type {
   DatasetDiagnosticsModel,
   DatasetViewOptionsModel,
   OpenDatasetModel,
-  ShareLinkModel,
 } from './datasetInfoModel'
-import { useCopyLinkStatus } from './useCopyLinkStatus'
 
-// The new shell puts the boundary limit under Advanced (15.2-F), since it
+// The dataset menu and info drawer put the boundary limit under Advanced (15.2-F), since it
 // rarely changes and Settings has it too.
 export function OpenDatasetForm({
   open,
@@ -108,7 +106,7 @@ export function OpenDatasetForm({
   )
 }
 
-// The boundary limit alone, for Settings in the new shell (15.2-B).
+// The boundary limit alone, for Settings (15.2-B).
 export function BoundaryLimitField({ open }: { readonly open: OpenDatasetModel }) {
   const inputId = useId()
 
@@ -134,27 +132,18 @@ export function BoundaryLimitField({ open }: { readonly open: OpenDatasetModel }
   )
 }
 
-// Visium HD bins, Visium spots and the SpatialData view, whichever the
-// dataset has.
-// In the new shell's info drawer ('drawer'), Visium HD bin size, the Visium
-// tissue image and off-tissue spots live in their layer panel sections
-// instead (15.2-C).
+// The Visium summary and library, and the SpatialData view, whichever the
+// dataset has: the info drawer's View options (15.2-F). Visium HD bin size,
+// the Visium tissue image and off-tissue spots are in their layer sections.
 export function DatasetViewOptions({
-  viewOptions: { spatialData, visium, visiumHd },
-  placement = 'hud',
+  viewOptions: { spatialData, visium },
 }: {
   readonly viewOptions: DatasetViewOptionsModel
-  readonly placement?: 'hud' | 'drawer' | undefined
 }) {
   return (
     <>
-      {placement === 'hud' ? <VisiumHdBinControls visiumHd={visiumHd} /> : null}
       {visium.state.status === 'idle' ? null : (
-        <VisiumDatasetControls
-          visium={visium}
-          state={visium.state}
-          withSectionControls={placement === 'hud'}
-        />
+        <VisiumDatasetControls visium={visium} state={visium.state} />
       )}
       {spatialData.state.status === 'idle' ? null : (
         <SpatialDataDatasetControls
@@ -234,28 +223,6 @@ export function LayerStackLines({
         {performanceBudget.maxConcurrentTileRequests} tile requests
       </p>
     </>
-  )
-}
-
-// Copies the address, which holds the view (15.1-L), and says so for a moment.
-export function CopyLinkButton({ share }: { readonly share: ShareLinkModel }) {
-  const { copy, message } = useCopyLinkStatus(share)
-
-  return (
-    <div className="dataset-share-row">
-      <button
-        type="button"
-        className="secondary-action"
-        disabled={!share.canCopyLink}
-        title="Copy a link that opens this dataset with the current view"
-        onClick={copy}
-      >
-        Copy Link
-      </button>
-      <span role="status" className="dataset-share-status">
-        {message}
-      </span>
-    </div>
   )
 }
 
@@ -397,13 +364,9 @@ function VisiumHdDatasetControls({
 function VisiumDatasetControls({
   visium,
   state,
-  withSectionControls,
 }: {
   readonly visium: VisiumViewModel
   readonly state: LoadedVisiumState
-  // The tissue image and off-tissue spots, which the new shell puts in the
-  // Image and Spots sections.
-  readonly withSectionControls: boolean
 }) {
   const { disabled, onViewChange } = visium
   const { summary } = state
@@ -462,12 +425,6 @@ function VisiumDatasetControls({
           {formatVisiumUnits(summary.units)}
         </strong>
       </div>
-      {withSectionControls ? (
-        <>
-          <VisiumTissueImageSelect visium={visium} />
-          <VisiumOffTissueToggle visium={visium} />
-        </>
-      ) : null}
     </section>
   )
 }
@@ -475,7 +432,7 @@ function VisiumDatasetControls({
 type VisiumViewModel = DatasetViewOptionsModel['visium']
 type LoadedVisiumState = Exclude<VisiumControlState, { readonly status: 'idle' }>
 
-// The Visium tissue image: the Image section in the new shell.
+// The Visium tissue image, for the Image section.
 export function VisiumTissueImageSelect({
   visium,
 }: {
@@ -510,7 +467,7 @@ export function VisiumTissueImageSelect({
   )
 }
 
-// Show off-tissue spots: the Spots section in the new shell.
+// Show off-tissue spots, for the Spots section.
 export function VisiumOffTissueToggle({ visium }: { readonly visium: VisiumViewModel }) {
   const { disabled, onViewChange, state } = visium
 

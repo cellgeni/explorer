@@ -1,9 +1,5 @@
-/* The new shell (UNIFIED_PLAN.md, 15.2), shown with ?shell=2 until 15.2-J. */
-
-.app-shell--v2 {
-  display: grid;
-  grid-template-rows: 48px minmax(0, 1fr);
-}
+/* The shell (UNIFIED_PLAN.md, 15.2): the top bar over the canvas and layer
+   panel. */
 
 .shell-body {
   position: relative;
@@ -124,6 +120,13 @@
   max-height: calc(100% - 140px);
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* The info drawer opens over the left of the canvas, so the cards move to
+   its right rather than hide under it. */
+.shell-canvas.has-info-drawer .shell-card-stack {
+  left: calc(380px + var(--space-3));
+  max-width: calc(100% - 380px - 2 * var(--space-3));
 }
 
 .shell-card-slot {
@@ -683,4 +686,131 @@
   height: 6px;
   border-radius: var(--radius-pill);
   background: var(--accent);
+}
+
+/* Narrow screens (15.2-I): under 860 px (useNarrowScreen) the layer panel is
+   a bottom sheet that peeks 56 px, the cards dock at the bottom of the canvas
+   as sheets, and the tools fold into a menu. */
+
+.shell-body.is-narrow {
+  grid-template-rows: minmax(0, 1fr) 56px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell-layer-sheet .ui-sheet-body {
+  max-height: 65dvh;
+  padding: 0;
+}
+
+.shell-body.is-narrow .shell-card-stack,
+.shell-body.is-narrow .has-info-drawer .shell-card-stack {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  max-width: none;
+  max-height: 55%;
+  gap: 0;
+}
+
+.shell-body.is-narrow .shell-card {
+  width: 100%;
+  border-bottom: 0;
+  border-radius: var(--radius-3) var(--radius-3) 0 0;
+}
+
+.shell-embedding.is-full-width {
+  top: var(--space-2);
+  right: var(--space-2);
+  left: var(--space-2);
+  max-width: none;
+}
+
+.shell-tool-menu-trigger {
+  gap: 2px;
+}
+
+.shell-tool-menu {
+  width: min(240px, calc(100vw - 2 * var(--space-2)));
+}
+
+.shell-tool-menu-list {
+  display: grid;
+  gap: 2px;
+}
+
+.shell-tool-menu-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 2px var(--space-2);
+  align-items: center;
+  min-height: 36px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-2);
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--font-control);
+  cursor: pointer;
+  text-align: left;
+}
+
+.shell-tool-menu-item:hover {
+  background: var(--surface-2);
+}
+
+.shell-tool-menu-item[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.shell-tool-menu-item[aria-disabled='true'] {
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+
+.shell-tool-menu-reason {
+  grid-column: 2;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+}
+
+.shell-tool-menu-item .ui-kbd {
+  grid-row: 1;
+  grid-column: 3;
+}
+
+@media (max-width: 859.98px) {
+  .shell-top-bar {
+    gap: var(--space-1);
+    padding: 0 var(--space-2);
+  }
+
+  .shell-brand {
+    display: none;
+  }
+
+  /* Still the status region screen readers and tests wait on. */
+  .shell-summary {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .shell-top-bar .shell-dataset-name {
+    max-width: 40vw;
+  }
+
+  .shell-top-bar-start,
+  .shell-top-bar-end {
+    flex: 0 1 auto;
+  }
+
+  .shell-top-bar-start {
+    flex: 1 1 auto;
+  }
 }

@@ -39,8 +39,9 @@ npm run build
 npm run test:e2e
 ```
 
-One smoke test runs the axe accessibility rules (WCAG 2.2 A and AA) on every
-Control HUD tab, before and after loading a fixture. Known violations are
+One smoke test runs the axe accessibility rules (WCAG 2.2 A and AA) on the
+layer sections, the info drawer, the dataset menu, Help, Settings and the
+Embedding panel, empty and with a fixture loaded. Known violations are
 listed in `tests/e2e/axe-baseline.json`, and any other violation fails the
 test. When you fix one, the test fails until you remove it from the list; to
 rewrite the list, run:
@@ -142,7 +143,7 @@ The full index is in [docs/README.md](docs/README.md).
 - [User guide](docs/user-guide.md): loading supported sources, navigation,
   layers, genes, transcript overlays, annotations, ROI tools, embeddings,
   diagnostics, and shareable URLs.
-- [UI reference](docs/ui-reference.md): every tab, control, default, viewer
+- [UI reference](docs/ui-reference.md): every panel, control, default, viewer
   interaction, and shareable URL parameter, with platform availability.
 - [Architecture](docs/architecture.md): detection order, load pipeline,
   platform gating, coordinates, caching, workers, and error handling.

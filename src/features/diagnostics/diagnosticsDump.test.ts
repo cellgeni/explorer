@@ -26,7 +26,7 @@ describe('createDiagnosticsDump', () => {
 
     expect(
       createDiagnosticsDump({
-        activeControlHudTab: 'transcripts',
+        openPanels: ['transcripts'],
         activeErrors: [{ title: 'Error' }],
         boundaryCellLimit: 50000,
         coordinateUnit: 'um',
@@ -122,7 +122,7 @@ describe('createDiagnosticsDump', () => {
       datasetUrl: 'https://example.test/output',
       location: expect.stringContaining('/viewer?dataset=test'),
       controls: {
-        activeControlHudTab: 'transcripts',
+        openPanels: ['transcripts'],
         selectedGenes: ['Actb'],
         transcriptGeneOnly: true,
       },

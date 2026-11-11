@@ -77,7 +77,7 @@ function DiagnosticsProbe({
       ...(visiumHdBinSizeMicrometers === undefined ? {} : { visiumHdBinSizeMicrometers }),
     },
     dump: {
-      activeControlHudTab: 'dataset',
+      openPanels: ['info'],
       activeErrors: [],
       boundaryCellLimit: 2500,
       coordinateUnit: 'um',

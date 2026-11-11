@@ -137,8 +137,8 @@ genes only. `loadPlatformTranscriptCapabilities`, `…Aggregates`, and
 `AteraDataset`, which delegates to `AteraTranscripts`
 (`src/datasets/ateraTranscripts.ts`); other platforms keep the Xenium loaders.
 
-**Capabilities.** Opening the Transcripts tab or overlay opens both zips and
-reads their root attributes (and the zip directories, which later requests
+**Capabilities.** Opening the Transcripts section or overlay opens both zips
+and reads their root attributes (and the zip directories, which later requests
 reuse). The result is `{ rawParquet: false, nativeZarr, geneRanges }`:
 `nativeZarr` for the binned store, `geneRanges` for `transcripts.zarr.zip`.
 `geneRanges` being present is what sends `useTranscriptWorkflow` down the

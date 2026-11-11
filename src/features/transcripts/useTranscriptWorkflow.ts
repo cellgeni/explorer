@@ -17,7 +17,6 @@ import type {
   TranscriptCapabilitiesLoader,
   TranscriptViewportLoader,
 } from '../app-shell/appDependencies'
-import type { ControlHudTab } from '../app-shell/appShellModel'
 import {
   formatElapsed,
   invalidateLatestRequest,
@@ -80,7 +79,9 @@ interface UseTranscriptWorkflowCallbacks {
 }
 
 interface UseTranscriptWorkflowControls {
-  readonly activeControlHudTab: ControlHudTab
+  // The Transcripts section is open, so its status should say what the
+  // dataset has even before the overlay is on.
+  readonly transcriptControlsOpen: boolean
   readonly effectiveTranscriptFeatureFilterMode: TranscriptFeatureFilterMode
   readonly manualTranscriptExactRequestKey: string | null
   readonly showTranscriptOverlay: boolean
@@ -135,7 +136,7 @@ interface UseTranscriptWorkflowOptions {
 export function useTranscriptWorkflow({
   callbacks: { appendDebugEvent, appendFallbackNotice },
   controls: {
-    activeControlHudTab,
+    transcriptControlsOpen,
     effectiveTranscriptFeatureFilterMode,
     manualTranscriptExactRequestKey,
     showTranscriptOverlay,
@@ -173,7 +174,7 @@ export function useTranscriptWorkflow({
     if (
       loadState.status !== 'ready' ||
       transcriptCapabilityState.status !== 'idle' ||
-      (!showTranscriptOverlay && activeControlHudTab !== 'transcripts')
+      (!showTranscriptOverlay && !transcriptControlsOpen)
     ) {
       return
     }
@@ -238,7 +239,7 @@ export function useTranscriptWorkflow({
         request.complete()
       })
   }, [
-    activeControlHudTab,
+    transcriptControlsOpen,
     appendDebugEvent,
     loadRequestIdRef,
     loadState,

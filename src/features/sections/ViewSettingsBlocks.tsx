@@ -60,32 +60,7 @@ export function CoordinateUnitControl({
   )
 }
 
-export function MeasureToolControls({ measure }: { readonly measure: MeasureToolModel }) {
-  const modeLabelId = useId()
-
-  return (
-    <div className="measurement-control">
-      <div className="measurement-control-header">
-        <span id={modeLabelId}>Distance measure</span>
-        <button
-          type="button"
-          aria-pressed={measure.enabled}
-          aria-labelledby={modeLabelId}
-          title={measure.enabled ? 'Disable distance measure' : 'Enable distance measure'}
-          onClick={() => {
-            measure.onEnabledChange(!measure.enabled)
-          }}
-        >
-          {measure.enabled ? 'On' : 'Off'}
-        </button>
-      </div>
-      <MeasureToolOptions measure={measure} />
-    </div>
-  )
-}
-
-// The measure unit and Clear Measurement, without the on/off switch: the
-// Measure tool's popover in the new shell.
+// The measure unit and Clear Measurement: the Measure tool's popover.
 export function MeasureToolOptions({ measure }: { readonly measure: MeasureToolModel }) {
   const unitLabelId = useId()
 

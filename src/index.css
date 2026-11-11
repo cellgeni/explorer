@@ -1,7 +1,7 @@
 @import './styles/tokens.css';
 @import './styles/base.css';
 @import './styles/app-shell.css';
-@import './styles/control-hud.css';
+@import './styles/controls.css';
 @import './styles/gene-controls.css';
 @import './styles/annotation-controls.css';
 @import './styles/roi-magic-lens.css';

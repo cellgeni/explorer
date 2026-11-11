@@ -51,9 +51,12 @@ interface TopBarProps {
   readonly settings: ViewSettingsModel
   readonly infoOpen: boolean
   readonly onInfoOpenChange: (open: boolean) => void
+  // Under 860 px the tools fold into a menu and Share drops its label
+  // (15.2-I).
+  readonly narrow?: boolean | undefined
 }
 
-// The new shell's top bar (UNIFIED_PLAN.md, 15.2-B): the dataset, its
+// The top bar (UNIFIED_PLAN.md, 15.2-B): the dataset, its
 // summary and ⓘ on the left, the tools in the middle, and Share, Help and
 // Settings on the right.
 export function TopBar({
@@ -62,6 +65,7 @@ export function TopBar({
   settings,
   infoOpen,
   onInfoOpenChange,
+  narrow = false,
 }: TopBarProps) {
   return (
     <header className="shell-top-bar">
@@ -76,7 +80,7 @@ export function TopBar({
         />
       </div>
       <div className="shell-top-bar-tools">
-        <ToolGroup tools={model.tools} />
+        {narrow ? <ToolMenu tools={model.tools} /> : <ToolGroup tools={model.tools} />}
         {model.tools.active === 'measure' ? (
           <Popover
             title="Measure options"
@@ -87,7 +91,8 @@ export function TopBar({
             <MeasureToolOptions measure={settings.measure} />
           </Popover>
         ) : null}
-        {model.magicLens === null ? null : (
+        {model.magicLens === null ||
+        (narrow && model.tools.active !== 'magic-lens') ? null : (
           <Popover
             title="Magic Lens options"
             align="start"
@@ -100,7 +105,7 @@ export function TopBar({
         )}
       </div>
       <div className="shell-top-bar-end">
-        <ShareButton info={info} />
+        <ShareButton info={info} iconOnly={narrow} />
         <Popover
           title="Help"
           align="end"
@@ -278,20 +283,91 @@ function MagicLensOptions({ lens }: { readonly lens: MagicLensToolModel }) {
   )
 }
 
-function ShareButton({ info }: { readonly info: DatasetInfoModel }) {
+// The tools as a menu, for narrow screens: the trigger shows the active
+// tool, and picking one closes the menu.
+export function ToolMenu({ tools }: { readonly tools: ToolGroupModel }) {
+  const [open, setOpen] = useState(false)
+  const active = tools.options.find((option) => option.tool === tools.active)
+
+  return (
+    <Popover
+      title="Tools"
+      align="end"
+      open={open}
+      onOpenChange={setOpen}
+      triggerClassName="shell-tool-menu-trigger"
+      className="shell-tool-menu"
+      trigger={
+        <>
+          {TOOL_ICONS[tools.active]}
+          <span className="visually-hidden">Tools: {active?.label ?? 'Pan'}</span>
+          <ChevronDownIcon />
+        </>
+      }
+    >
+      <div role="group" aria-label="Tools" className="shell-tool-menu-list">
+        {tools.options.map((option) => (
+          <button
+            key={option.tool}
+            type="button"
+            className="shell-tool-menu-item"
+            title={
+              option.reason === undefined
+                ? option.label
+                : `${option.label}: ${option.reason}`
+            }
+            aria-pressed={tools.active === option.tool}
+            aria-disabled={option.disabled}
+            aria-keyshortcuts={option.shortcut}
+            onClick={() => {
+              tools.onSelect(option.tool)
+              if (!option.disabled) setOpen(false)
+            }}
+          >
+            {TOOL_ICONS[option.tool]}
+            <span>{option.label}</span>
+            {option.reason === undefined ? null : (
+              <small className="shell-tool-menu-reason">{option.reason}</small>
+            )}
+            <Kbd title={`${option.label} shortcut`}>{option.shortcut}</Kbd>
+          </button>
+        ))}
+      </div>
+    </Popover>
+  )
+}
+
+function ShareButton({
+  info,
+  iconOnly,
+}: {
+  readonly info: DatasetInfoModel
+  readonly iconOnly: boolean
+}) {
   const { copy, message } = useCopyLinkStatus(info.share)
+  const title = 'Copy a link that opens this dataset with the current view'
 
   return (
     <span className="shell-share">
-      <Button
-        title="Copy a link that opens this dataset with the current view"
-        variant="ghost"
-        disabled={!info.share.canCopyLink}
-        onClick={copy}
-      >
-        <LinkIcon />
-        Share
-      </Button>
+      {iconOnly ? (
+        <IconButton
+          title={title}
+          aria-label="Share"
+          icon={<LinkIcon />}
+          disabled={!info.share.canCopyLink}
+          onClick={copy}
+        />
+      ) : (
+        <Button
+          title={title}
+          variant="ghost"
+          disabled={!info.share.canCopyLink}
+          onClick={copy}
+        >
+          <LinkIcon />
+          Share
+        </Button>
+      )}
       <span role="status" className="shell-share-status">
         {message}
       </span>

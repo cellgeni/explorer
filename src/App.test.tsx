@@ -127,47 +127,49 @@ describe('App', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders the Xenium viewer shell', () => {
+  it('renders the shell with each control in its place', () => {
     render(<TestApp />)
 
-    const datasetInput = screen.getByLabelText('Dataset or image URL')
-
     expect(screen.queryByText('Xenium Explorer')).not.toBeInTheDocument()
-    expect(datasetInput).toBeInstanceOf(HTMLInputElement)
+    expect(screen.getByRole('toolbar', { name: 'Tools' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: 'Layers' })).toBeInTheDocument()
 
+    openControls('open-dataset')
+    const datasetInput = screen.getByLabelText('Dataset or image URL')
+    expect(datasetInput).toBeInstanceOf(HTMLInputElement)
     if (datasetInput instanceof HTMLInputElement) {
       expect(datasetInput.value).toContain('/public/xenium/')
     }
-
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
+
+    openControls('diagnostics')
+    const drawer = screen.getByRole('dialog', { name: 'Dataset info' })
     expect(
-      screen.getByRole('button', { name: 'Download diagnostics' }),
+      within(drawer).getByRole('button', { name: 'Download diagnostics' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('Download Diagnostics')).not.toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
-    const boundaryLimitInput = screen.getByRole('spinbutton', {
+    const boundaryLimitInput = within(drawer).getByRole('spinbutton', {
       name: 'Boundary limit',
     })
     expect(boundaryLimitInput).toHaveValue(50_000)
     expect(boundaryLimitInput).toHaveAttribute('max', '100000')
-    expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
-    expect(screen.getByRole('tab', { name: 'Layers' })).toHaveAttribute(
-      'aria-selected',
-      'false',
-    )
+    // The deck.gl layer and budget lines appear only with ?debug=1.
+    expect(within(drawer).queryByText(/deck\.gl/)).not.toBeInTheDocument()
+    expect(within(drawer).queryByText(/^Budget/)).not.toBeInTheDocument()
 
     openControls('image')
     expect(screen.getByRole('slider', { name: 'Dataset image opacity' })).toHaveValue(
       '100',
     )
+    expect(screen.getByLabelText('Custom image URL')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Load Layer' })).toBeDisabled()
     openControls('cell-appearance')
     expect(screen.getByRole('slider', { name: 'Cell fill opacity' })).toHaveValue('50')
     expect(screen.getByRole('slider', { name: 'Cell boundary opacity' })).toHaveValue(
       '100',
     )
+
     openControls('settings')
     const coordinateUnitGroup = screen.getByRole('group', {
       name: 'Mouse coordinates',
@@ -178,35 +180,14 @@ describe('App', () => {
     expect(
       within(coordinateUnitGroup).getByRole('button', { name: 'px' }),
     ).toHaveAttribute('aria-pressed', 'false')
-    openControls('measure')
-    expect(screen.getByRole('button', { name: 'Distance measure' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
+
+    expect(screen.queryByRole('button', { name: 'Measure options' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Measure' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
     )
-    const measurementUnitGroup = screen.getByRole('group', {
-      name: 'Measure unit',
-    })
-    expect(
-      within(measurementUnitGroup).getByRole('button', { name: 'µm' }),
-    ).toHaveAttribute('aria-pressed', 'true')
-    expect(
-      within(measurementUnitGroup).getByRole('button', { name: 'px' }),
-    ).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('button', { name: 'Clear Measurement' })).toBeInTheDocument()
-    openControls('image')
-    expect(screen.getByLabelText('Custom image URL')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Load Layer' })).toBeDisabled()
-    openControls('layer-stack')
-    const layerStack = screen.getByRole('region', { name: 'Layer Stack' })
-    // The deck.gl layer and budget lines appear only with ?debug=1.
-    expect(within(layerStack).queryByText(/deck\.gl/)).not.toBeInTheDocument()
-    expect(within(layerStack).queryByText(/^Budget/)).not.toBeInTheDocument()
-    expect(within(layerStack).queryByText('cells')).not.toBeInTheDocument()
-    expect(within(layerStack).queryByText('boundaries')).not.toBeInTheDocument()
-    expect(within(layerStack).queryByText('image')).not.toBeInTheDocument()
 
     openControls('genes')
-    expect(screen.getByRole('heading', { name: 'Analysis' })).toBeInTheDocument()
     expect(screen.getByLabelText('Gene selection')).toBeDisabled()
     expect(screen.getByLabelText('Gene set symbols')).toBeDisabled()
     expect(screen.queryByRole('combobox', { name: 'Combine genes' })).toBeNull()
@@ -220,7 +201,6 @@ describe('App', () => {
     )
 
     openControls('transcripts')
-    expect(screen.getByRole('heading', { name: 'Transcripts' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Show transcripts' })).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'Detail' })).toHaveValue('auto')
     expect(screen.getByRole('meter', { name: 'Exact points' })).toHaveAttribute(
@@ -242,38 +222,37 @@ describe('App', () => {
     expect(screen.getByRole('slider', { name: 'Transcript opacity' })).toHaveValue('85')
     expect(screen.getByRole('slider', { name: 'Point size' })).toHaveValue('2')
 
+    // Magic Lens: the tool, and its popover without Min QV (F21).
+    expect(screen.getByRole('button', { name: 'Magic Lens' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     openControls('magic-lens')
-    expect(screen.getByRole('heading', { name: 'Magic Lens' })).toBeInTheDocument()
-    expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(20)
-    expect(screen.getByRole('slider', { name: 'Radius' })).toHaveValue('80')
-    expect(screen.getByRole('button', { name: 'Enable Lens' })).toBeDisabled()
-    const magicLensScopeGroup = screen.getByRole('group', { name: 'Scope' })
-    expect(
-      within(magicLensScopeGroup).getByRole('button', { name: 'Cursor' }),
-    ).toHaveAttribute('aria-pressed', 'true')
-    expect(
-      within(magicLensScopeGroup).getByRole('button', { name: 'Viewport' }),
-    ).toHaveAttribute('aria-pressed', 'false')
-    expect(
-      within(magicLensScopeGroup).getByRole('button', { name: 'ROI' }),
-    ).toBeDisabled()
+    const lens = screen.getByRole('dialog', { name: 'Magic Lens options' })
+    expect(within(lens).getByRole('slider', { name: 'Radius' })).toHaveValue('80')
+    expect(within(lens).getByRole('button', { name: 'Summarise View' })).toBeDisabled()
+    expect(within(lens).queryByRole('spinbutton', { name: 'Min QV' })).toBeNull()
 
     openControls('clusters')
-    expect(screen.getByRole('heading', { name: 'Annotations' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Annotation set' })).toHaveValue('all')
     expect(screen.getByRole('combobox', { name: 'Annotation set' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Load Annotations' })).toBeDisabled()
 
     openControls('embedding')
-    expect(screen.getByRole('heading', { name: 'Embeddings' })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Embedding view' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Load Embeddings' })).toBeDisabled()
-    openControls('cell-card')
-    expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
+    const embedding = screen.getByRole('region', { name: 'Embedding' })
+    expect(
+      within(embedding).getByRole('combobox', { name: 'Embedding view' }),
+    ).toBeDisabled()
+    expect(
+      within(embedding).getByRole('button', { name: 'Load Embeddings' }),
+    ).toBeDisabled()
 
-    openControls('selection')
-    expect(screen.getByRole('heading', { name: 'ROI' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
+    // Cards appear with what they show.
+    expect(screen.queryByRole('region', { name: 'Cell' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   })
 
   it('hides transcript controls for Visium HD datasets', async () => {
@@ -309,29 +288,29 @@ describe('App', () => {
         />,
       )
 
-      expect(screen.getByRole('tab', { name: 'Transcripts' })).toHaveAttribute(
-        'aria-selected',
+      // tab=transcripts opens the Transcripts section, until the dataset has
+      // none.
+      expect(screen.getByRole('button', { name: /^Transcripts/ })).toHaveAttribute(
+        'aria-expanded',
         'true',
       )
 
-      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset', hidden: true }))
+      openControls('open-dataset')
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       await waitFor(() => {
         expect(detectSpatialDataset).toHaveBeenCalled()
         expect(visiumDataset.readBinnedOverview).toHaveBeenCalled()
       })
+      openControls('diagnostics')
       await screen.findAllByText(/Visium HD ready/)
 
       await waitFor(() => {
-        expect(screen.queryByRole('tab', { name: 'Transcripts' })).not.toBeInTheDocument()
-        expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
-          'aria-selected',
-          'true',
-        )
+        expect(
+          screen.queryByRole('button', { name: /^Transcripts/ }),
+        ).not.toBeInTheDocument()
       })
-      expect(
-        screen.queryByRole('heading', { name: 'Transcripts' }),
-      ).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Bins/ })).toBeInTheDocument()
       expect(
         screen.queryByRole('checkbox', { name: 'Show transcripts' }),
       ).not.toBeInTheDocument()
@@ -408,6 +387,7 @@ describe('App', () => {
         />,
       )
 
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       await waitFor(() => {
@@ -416,25 +396,37 @@ describe('App', () => {
       expect(imageDataset.meta).toHaveBeenCalled()
       expect(loadDatasetOverview).not.toHaveBeenCalled()
       expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
-      expect(screen.queryByRole('tab', { name: 'Genes' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('tab', { name: 'Transcripts' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('tab', { name: 'Magic Lens' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('tab', { name: 'Cell' })).not.toBeInTheDocument()
+      // An image has no cells, transcripts or Magic Lens.
+      const layers = screen.getByRole('complementary', { name: 'Layers' })
+      expect(
+        within(layers)
+          .getAllByRole('heading', { level: 3 })
+          .map((heading) => heading.firstChild?.firstChild?.textContent),
+      ).toEqual(['Image', 'Annotations'])
+      expect(screen.queryByRole('button', { name: 'Magic Lens' })).toBeNull()
 
       openControls('image')
       expect(screen.getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
       expect(screen.getByRole('checkbox', { name: 'Marker' })).toBeChecked()
       expect(screen.getByLabelText('DAPI color')).toHaveValue('#5890ff')
-      openControls('cell-appearance')
       expect(screen.queryByRole('slider', { name: 'Cell fill opacity' })).toBeNull()
       expect(screen.queryByRole('slider', { name: 'Cell boundary opacity' })).toBeNull()
       expect(screen.queryByLabelText('Cell boundaries')).toBeNull()
 
-      openControls('selection')
-      expect(screen.getByRole('heading', { name: 'Geometry' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      // Box draws a GeoJSON shape, named in the New shape card.
+      expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+        'aria-disabled',
+        'false',
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
+      expect(screen.getByRole('region', { name: 'New shape' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Shape name')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Export Cells' })).toBeNull()
-      expect(screen.queryByRole('button', { name: 'Export Transcripts' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Stop drawing' }))
+      expect(screen.getByRole('button', { name: 'Pan' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
 
       openControls('shapes')
       expect(screen.getByRole('heading', { name: 'GeoJSON shapes' })).toBeInTheDocument()
@@ -551,19 +543,24 @@ describe('App', () => {
           loadRoiGeneStats={loadRoiGeneStats}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       await waitFor(() => {
         expect(detectSpatialDataset).toHaveBeenCalled()
         expect(visiumDataset.readBinnedOverview).toHaveBeenCalled()
       })
+      openControls('diagnostics')
       await screen.findAllByText(/Visium HD ready/)
 
       openControls('selection')
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+          'aria-disabled',
+          'false',
+        )
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
 
       const roiLayer = document.querySelector('.roi-draw-layer')
 
@@ -575,18 +572,22 @@ describe('App', () => {
       fireEvent.pointerMove(roiLayer, { clientX: 316, clientY: 186, pointerId: 1 })
       fireEvent.pointerUp(roiLayer, { clientX: 316, clientY: 186, pointerId: 1 })
 
-      const summary = await screen.findByLabelText('ROI summary')
+      const selectionCard = await screen.findByRole('region', { name: 'ROI 1' })
+      const roiGeneDistribution = await within(selectionCard).findByLabelText(
+        'ROI gene distribution',
+      )
+      expect(roiGeneDistribution).toHaveTextContent('ROI genes')
+      expect(roiGeneDistribution).toHaveTextContent('A2M')
+      expect(roiGeneDistribution).toHaveTextContent('GAD1')
+      expect(screen.queryByText('Top ROI genes')).toBeNull()
+      fireEvent.click(within(selectionCard).getByRole('tab', { name: 'Bins' }))
+      const summary = within(selectionCard).getByLabelText('ROI summary')
       expect(summary).toHaveTextContent('Bins')
       expect(summary).toHaveTextContent('2')
       expect(summary).toHaveTextContent('16 µm')
       expect(screen.getByRole('button', { name: 'Export Barcodes' })).toBeEnabled()
       expect(screen.queryByRole('button', { name: 'Export Cells' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Export Transcripts' })).toBeNull()
-      const roiGeneDistribution = await screen.findByLabelText('ROI gene distribution')
-      expect(roiGeneDistribution).toHaveTextContent('ROI genes')
-      expect(roiGeneDistribution).toHaveTextContent('A2M')
-      expect(roiGeneDistribution).toHaveTextContent('GAD1')
-      expect(screen.queryByText('Top ROI genes')).toBeNull()
       expect(loadRoiCells).not.toHaveBeenCalled()
       expect(loadRoiGeneStats).not.toHaveBeenCalled()
       expect(matrix).toHaveBeenCalledWith(
@@ -695,23 +696,30 @@ describe('App', () => {
           loadRoiCells={loadRoiCells}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+      openControls('diagnostics')
       await screen.findAllByText(/Visium HD ready/)
 
+      // The Magic Lens tool is the cursor lens; Summarise View in its
+      // popover scans the whole view (D14).
+      const lensTool = screen.getByRole('button', { name: 'Magic Lens' })
+      await waitFor(() => {
+        expect(lensTool).toHaveAttribute('aria-disabled', 'false')
+      })
+      fireEvent.click(lensTool)
+      expect(lensTool).toHaveAttribute('aria-pressed', 'true')
       openControls('magic-lens')
       expect(screen.queryByRole('spinbutton', { name: 'Min QV' })).toBeNull()
-      const enableLensButton = screen.getByRole('button', { name: 'Enable Lens' })
-      await waitFor(() => {
-        expect(enableLensButton).toBeEnabled()
-      })
-      fireEvent.click(enableLensButton)
-      expect(screen.getByRole('button', { name: 'Disable Lens' })).toBeEnabled()
-      fireEvent.click(screen.getByRole('button', { name: 'Viewport' }))
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
-      })
-      fireEvent.click(screen.getByRole('button', { name: 'Scan Lens' }))
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: 'Summarise View' })).toBeEnabled()
+        },
+        { timeout: 3_000 },
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Summarise View' }))
+      expect(lensTool).toHaveAttribute('aria-pressed', 'false')
 
       await waitFor(() => {
         expect(visiumDataset.matrix).toHaveBeenCalledWith(
@@ -736,15 +744,20 @@ describe('App', () => {
       )
 
       openControls('genes')
-      expect(await screen.findByText('2 genes')).toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: 'A2M' }))
+      fireEvent.click(
+        await within(screen.getByRole('region', { name: /^Bins/ })).findByRole('button', {
+          name: 'A2M',
+        }),
+      )
 
       openControls('magic-lens')
-      fireEvent.click(screen.getByRole('button', { name: 'Viewport' }))
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
-      })
-      fireEvent.click(screen.getByRole('button', { name: 'Scan Lens' }))
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: 'Summarise View' })).toBeEnabled()
+        },
+        { timeout: 3_000 },
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Summarise View' }))
 
       await waitFor(() => {
         expect(visiumDataset.geneExpression).toHaveBeenCalledWith(
@@ -823,6 +836,7 @@ describe('App', () => {
           getSpatialDataset={getSpatialDataset}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       await waitFor(() => {
@@ -838,7 +852,7 @@ describe('App', () => {
       openControls('cell-card')
       fireEvent.click(screen.getByTestId('deck-layer-spatial-grid-cells'))
 
-      const initialBinInfo = screen.getByRole('region', { name: 'Bin Info' })
+      const initialBinInfo = screen.getByRole('region', { name: 'Bin' })
       expect(within(initialBinInfo).getByText('BC-1')).toBeInTheDocument()
       expect(
         within(initialBinInfo).getByText('Select a gene or gene set to load expression.'),
@@ -866,7 +880,7 @@ describe('App', () => {
       expect(within(initialBinInfo).getByText('Gad1')).toBeInTheDocument()
 
       openControls('genes')
-      expect(await screen.findByText('1 genes')).toBeInTheDocument()
+      expect(await screen.findByText(/ · 1 gene$/)).toBeInTheDocument()
       fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
 
       await waitFor(() => {
@@ -874,7 +888,7 @@ describe('App', () => {
       })
 
       openControls('cell-card')
-      const updatedBinInfo = screen.getByRole('region', { name: 'Bin Info' })
+      const updatedBinInfo = screen.getByRole('region', { name: 'Bin' })
       await waitFor(() => {
         expect(within(updatedBinInfo).getByText('Loaded')).toBeInTheDocument()
       })
@@ -999,8 +1013,10 @@ describe('App', () => {
           loadBoundaryElements={loadBoundaryElements}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+      openControls('diagnostics')
       await screen.findAllByText(/Visium HD ready/)
       expect(visiumDataset.elements).not.toHaveBeenCalled()
       expect(visiumDataset.segmentationElements).not.toHaveBeenCalled()
@@ -1089,10 +1105,10 @@ describe('App', () => {
       fireEvent.click(screen.getByTestId('deck-layer-cell-boundary-hit-areas'))
       openControls('cell-card')
 
-      expect(screen.getByRole('heading', { name: 'Cell Info' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Cell' })).toBeInTheDocument()
       expect(screen.getByText('Selected cell')).toBeInTheDocument()
       expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
-      const selectedCellInfo = screen.getByRole('region', { name: 'Cell Info' })
+      const selectedCellInfo = screen.getByRole('region', { name: 'Cell' })
 
       fireEvent.click(
         within(selectedCellInfo).getByRole('button', { name: 'Load Cell GEX' }),
@@ -1193,6 +1209,7 @@ describe('App', () => {
       />,
     )
 
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
     openControls('image')
 
@@ -1238,6 +1255,7 @@ describe('App', () => {
   it('records compact debug activity entries', () => {
     render(<TestApp />)
 
+    openControls('diagnostics')
     const activityLog = screen.getByLabelText('Activity log')
 
     expect(within(activityLog).getByText('Idle')).toBeInTheDocument()
@@ -1251,44 +1269,36 @@ describe('App', () => {
       name: 'Mouse coordinates',
     })
     fireEvent.click(within(coordinateUnitGroup).getByRole('button', { name: 'px' }))
-    openControls('measure')
-    fireEvent.click(screen.getByRole('button', { name: 'Distance measure' }))
-    const measurementUnitGroup = screen.getByRole('group', { name: 'Measure unit' })
-    fireEvent.click(within(measurementUnitGroup).getByRole('button', { name: 'px' }))
 
     openControls('diagnostics')
     expect(
       within(activityLog).getByText('Dataset image opacity: 45%'),
     ).toBeInTheDocument()
     expect(within(activityLog).getByText('Mouse coordinates: px')).toBeInTheDocument()
-    expect(within(activityLog).getByText('Distance measure enabled')).toBeInTheDocument()
-    expect(within(activityLog).getByText('Measure unit: px')).toBeInTheDocument()
 
     fireEvent.click(within(activityLog).getByRole('button', { name: 'Clear' }))
 
     expect(within(activityLog).getByText('Idle')).toBeInTheDocument()
   })
 
-  it('collapses and expands the control HUD', () => {
+  it('collapses and expands the layer panel', () => {
     render(<TestApp />)
 
-    const hideButton = screen.getByRole('button', { name: 'Hide Controls' })
+    const panel = screen.getByRole('complementary', { name: 'Layers' })
+    const hideButton = within(panel).getByRole('button', { name: 'Hide layers (\\)' })
     expect(hideButton).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: /^Cells/ })).toBeVisible()
 
     fireEvent.click(hideButton)
 
-    const showButton = screen.getByRole('button', { name: 'Show Controls' })
-    expect(showButton).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('button', { name: 'Load Dataset' })).not.toBeInTheDocument()
+    expect(
+      within(panel).getByRole('button', { name: 'Show layers (\\)' }),
+    ).toHaveAttribute('aria-expanded', 'false')
+    expect(within(panel).queryByRole('button', { name: /^Cells/ })).toBeNull()
 
-    fireEvent.click(showButton)
+    fireEvent.keyDown(document.body, { key: '\\' })
 
-    expect(screen.getByRole('button', { name: 'Hide Controls' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    )
-    expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: /^Cells/ })).toBeVisible()
   })
 
   it('shares the loaded dataset and annotation set, leaving defaults out', async () => {
@@ -1438,8 +1448,9 @@ describe('App', () => {
       />,
     )
 
-    expect(screen.getByRole('tab', { name: 'Genes' })).toHaveAttribute(
-      'aria-selected',
+    // tab=genes opens Cells, which holds the genes.
+    expect(screen.getByRole('button', { name: /^Cells/ })).toHaveAttribute(
+      'aria-expanded',
       'true',
     )
     expect(screen.getByRole('combobox', { name: 'Gene scale' })).toHaveValue('viridis')
@@ -1447,6 +1458,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Remove Gad1' })).toBeInTheDocument()
 
     await waitFor(() => {
+      openControls('open-dataset')
       expect(screen.getByLabelText('Dataset or image URL')).toHaveValue(
         'https://example.test/xenium',
       )
@@ -1481,10 +1493,13 @@ describe('App', () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
 
+    // lens=1 turns the Magic Lens tool on; Min QV is hidden (F21).
+    expect(screen.getByRole('button', { name: 'Magic Lens' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     openControls('magic-lens')
-    expect(screen.getByRole('spinbutton', { name: 'Min QV' })).toHaveValue(18)
     expect(screen.getByRole('slider', { name: 'Radius' })).toHaveValue('120')
-    expect(screen.getByRole('button', { name: 'Disable Lens' })).toBeEnabled()
 
     openControls('clusters')
     expect(screen.getByLabelText('Annotation URL')).toHaveValue(
@@ -1541,8 +1556,10 @@ describe('App', () => {
         }),
       )
     })
+    openControls('open-dataset')
     expect(screen.getByLabelText('Dataset or image URL')).toHaveValue(queryDatasetUrl)
 
+    openControls('open-dataset')
     fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
       target: { value: 'https://example.test/typed' },
     })
@@ -1588,6 +1605,7 @@ describe('App', () => {
       expect(loadDatasetOverview).toHaveBeenCalledTimes(1)
     })
     expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+    openControls('open-dataset')
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
   })
 
@@ -1613,6 +1631,7 @@ describe('App', () => {
 
     render(<TestApp runDatasetDiagnostics={runDatasetDiagnostics} />)
 
+    openControls('diagnostics')
     fireEvent.click(screen.getByRole('button', { name: 'Diagnose Dataset' }))
 
     expect(await screen.findByText('All checks passed')).toBeInTheDocument()
@@ -1651,8 +1670,10 @@ describe('App', () => {
         runDatasetDiagnostics={runDatasetDiagnostics}
       />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+    openControls('diagnostics')
     const issues = await screen.findByRole('alert', { name: 'Load issues' })
     expect(issues).toHaveTextContent('Dataset not found')
     expect(issues).toHaveTextContent('Checked experiment.xenium: HTTP 404')
@@ -1662,8 +1683,7 @@ describe('App', () => {
     expect(runDatasetDiagnostics).toHaveBeenCalledTimes(1)
   })
 
-  it('shows the new top bar with ?shell=2 and picks tools by key (15.2-B)', async () => {
-    window.history.replaceState(null, '', '/?shell=2')
+  it('shows the top bar and picks tools by key (15.2-B)', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -1682,7 +1702,7 @@ describe('App', () => {
       'true',
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
     expect(await screen.findByText('Xenium · 1 cell · 2 genes')).toHaveAttribute(
       'role',
@@ -1701,8 +1721,7 @@ describe('App', () => {
     )
   })
 
-  it('moves the layer controls to the layer panel with ?shell=2 (15.2-C)', async () => {
-    window.history.replaceState(null, '', '/?shell=2')
+  it('moves the layer controls to the layer panel (15.2-C)', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -1715,7 +1734,7 @@ describe('App', () => {
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
     await screen.findByText('Xenium · 1 cell · 2 genes')
 
@@ -1738,8 +1757,7 @@ describe('App', () => {
     ).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('shows a clicked cell in a card with ?shell=2 (15.2-D)', async () => {
-    window.history.replaceState(null, '', '/?shell=2')
+  it('shows a clicked cell in a card (15.2-D)', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
     )
@@ -1754,7 +1772,7 @@ describe('App', () => {
 
     try {
       render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
-      fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
       fireEvent.click(await screen.findByTestId('deck-layer-cells-overview-scatter'))
 
@@ -1770,8 +1788,7 @@ describe('App', () => {
     }
   })
 
-  it('describes the open dataset in the info drawer with ?shell=2 (15.2-F)', async () => {
-    window.history.replaceState(null, '', '/?shell=2')
+  it('describes the open dataset in the info drawer (15.2-F)', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
         cellId: intToCellId(1, 1),
@@ -1781,7 +1798,7 @@ describe('App', () => {
     ])
 
     render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
-    fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
     await screen.findByText(/^Xenium · 1 cell/)
 
@@ -1801,8 +1818,7 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the embedding in a panel from Cells with ?shell=2 (15.2-G)', async () => {
-    window.history.replaceState(null, '', '/?shell=2')
+  it('shows the embedding in a panel from Cells (15.2-G)', async () => {
     const cellId = intToCellId(1, 1)
     const loadDatasetOverview = vi.fn(async () => [
       {
@@ -1827,7 +1843,7 @@ describe('App', () => {
         loadAnalysisEmbeddings={loadAnalysisEmbeddings}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
     await screen.findByText(/^Xenium · 1 cell/)
 
@@ -1843,12 +1859,12 @@ describe('App', () => {
     expect(screen.queryByRole('region', { name: 'Embedding' })).not.toBeInTheDocument()
   })
 
-  it('opens the panels, tool, hidden layers and cell a link names with ?shell=2 (15.2-H)', async () => {
+  it('opens the panels, tool, hidden layers and cell a link names (15.2-H)', async () => {
     const cellId = intToCellId(1, 1)
     window.history.replaceState(
       null,
       '',
-      `/?shell=2#xv=2&dataset=${encodeURIComponent(DEMO_DATASET_URL)}&panel=image,info&tool=measure&hidden=cells&card=cell%3A${encodeURIComponent(cellId)}`,
+      `/#xv=2&dataset=${encodeURIComponent(DEMO_DATASET_URL)}&panel=image,info&tool=measure&hidden=cells&card=cell%3A${encodeURIComponent(cellId)}`,
     )
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
@@ -1896,37 +1912,14 @@ describe('App', () => {
     }
   })
 
-  it('maps an old tab= to the new shell (15.2-H)', async () => {
-    window.history.replaceState(null, '', '/?shell=2#xv=2&tab=roi')
+  it('maps an old tab= to panels and tools (15.2-H)', async () => {
+    window.history.replaceState(null, '', '/#xv=2&tab=roi')
 
     render(<TestApp />)
 
     expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
       'aria-pressed',
       'true',
-    )
-  })
-
-  it('keeps tool keys off in the current shell', async () => {
-    const loadDatasetOverview = vi.fn(async () => [
-      {
-        cellId: intToCellId(1, 1),
-        position: { x: micrometers(10), y: micrometers(20) },
-        transcriptCount: 8,
-      },
-    ])
-
-    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
-    expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
-
-    fireEvent.keyDown(document.body, { key: 'm' })
-    openControls('measure')
-
-    expect(screen.queryByRole('toolbar', { name: 'Tools' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Distance measure' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
     )
   })
 
@@ -1962,31 +1955,36 @@ describe('App', () => {
         loadDatasetOverview={loadDatasetOverview}
       />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
     expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Copy Link' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: /^Share/ })).toBeEnabled()
     })
     const openTitle = document.title
 
+    openControls('open-dataset')
     fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
       target: { value: missingUrl },
     })
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     const toast = await screen.findByText(/^missing could not be opened/)
     expect(toast.closest('[role="alert"]')).toHaveTextContent('Dataset not found')
     expect(toast).toHaveTextContent(/is still open\.$/)
+    openControls('diagnostics')
     expect(screen.getByRole('alert', { name: 'Load issues' })).toHaveTextContent(
       'Dataset not found',
     )
     expect(screen.getByTestId('deckgl')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Copy Link' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^Share/ })).toBeEnabled()
     expect(document.title).toBe(openTitle)
     expect(loadDatasetOverview).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByText(/could not be opened/)).not.toBeInTheDocument()
+    openControls('diagnostics')
     expect(screen.queryByRole('alert', { name: 'Load issues' })).not.toBeInTheDocument()
   })
 
@@ -2052,18 +2050,21 @@ describe('App', () => {
           loadRoiTranscripts={loadRoiTranscripts}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('genes')
-      expect(await screen.findByText('2 genes')).toBeInTheDocument()
+      expect(await screen.findByText(/ · 2 genes$/)).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'Actb' }))
 
       openControls('magic-lens')
-      fireEvent.click(screen.getByRole('button', { name: 'Viewport' }))
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
-      })
-      fireEvent.click(screen.getByRole('button', { name: 'Scan Lens' }))
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: 'Summarise View' })).toBeEnabled()
+        },
+        { timeout: 3_000 },
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Summarise View' }))
 
       await waitFor(() => {
         expect(loadRoiCells).toHaveBeenCalledWith(
@@ -2161,14 +2162,17 @@ describe('App', () => {
           loadRoiGeneStats={loadRoiGeneStats}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('magic-lens')
-      fireEvent.click(await screen.findByRole('button', { name: 'Viewport' }))
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
-      })
-      fireEvent.click(screen.getByRole('button', { name: 'Scan Lens' }))
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: 'Summarise View' })).toBeEnabled()
+        },
+        { timeout: 3_000 },
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Summarise View' }))
 
       await waitFor(() => {
         expect(loadRoiCells).toHaveBeenCalledTimes(1)
@@ -2178,9 +2182,12 @@ describe('App', () => {
 
       openControls('selection')
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+          'aria-disabled',
+          'false',
+        )
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
 
       const roiLayer = document.querySelector('.roi-draw-layer')
 
@@ -2196,10 +2203,7 @@ describe('App', () => {
         expect(loadRoiCells).toHaveBeenCalledTimes(2)
       })
       expect(magicLensSignal?.aborted).toBe(true)
-      expect(screen.getByRole('tab', { name: 'Magic Lens' })).not.toHaveAttribute(
-        'aria-busy',
-        'true',
-      )
+      expect(screen.queryByRole('region', { name: 'Magic Lens' })).not.toBeInTheDocument()
     } finally {
       viewport.restore()
     }
@@ -2266,14 +2270,17 @@ describe('App', () => {
           loadRoiTranscripts={loadRoiTranscripts}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
-      openControls('magic-lens')
-      const enableButton = await screen.findByRole('button', { name: 'Enable Lens' })
+      const lensTool = screen.getByRole('button', { name: 'Magic Lens' })
       await waitFor(() => {
-        expect(enableButton).toBeEnabled()
+        expect(lensTool).toHaveAttribute('aria-disabled', 'false')
       })
-      fireEvent.click(enableButton)
+      fireEvent.click(lensTool)
+      expect(screen.getByRole('region', { name: 'Magic Lens' })).toHaveTextContent(
+        'Move the cursor over the tissue',
+      )
       fireEvent.pointerMove(
         screen.getByRole('img', { name: 'Spatial viewer canvas area' }),
         {
@@ -2347,6 +2354,7 @@ describe('App', () => {
         loadAnnotationGroups={loadAnnotationGroups}
       />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     const loadingStatus = await screen.findByRole('status', {
@@ -2363,26 +2371,20 @@ describe('App', () => {
     expect(queuedTaskList.querySelectorAll('.loading-task-bullet')).toHaveLength(
       queuedTaskList.querySelectorAll('li').length,
     )
-    expect(loadingStatus.closest('.control-hud')).toBeNull()
     expect(loadingStatus.closest('.viewport-notification-stack')).not.toBeNull()
     expect(loadingStatus.closest('.viewer-region')).not.toBeNull()
-    expect(screen.getByRole('tab', { name: 'Dataset' })).toHaveAttribute(
-      'aria-busy',
-      'true',
-    )
-    expect(screen.getByRole('tab', { name: 'Genes' })).toHaveAttribute(
-      'aria-busy',
-      'true',
-    )
-    expect(screen.getByRole('tab', { name: 'Annotations' })).toHaveAttribute(
-      'aria-busy',
-      'true',
-    )
+    // The gene panel and annotation sets load for the Cells section.
+    expect(
+      screen
+        .getByRole('button', { name: /^Cells/ })
+        .querySelector('[aria-label="Loading"]'),
+    ).not.toBeNull()
   })
 
   it('lets the user configure the boundary polygon visible-cell limit', () => {
     render(<TestApp />)
 
+    openControls('settings')
     const boundaryLimitInput = screen.getByRole('spinbutton', {
       name: 'Boundary limit',
     })
@@ -2481,6 +2483,7 @@ describe('App', () => {
           loadRoiGeneStats={loadRoiGeneStats}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('embedding')
@@ -2499,7 +2502,7 @@ describe('App', () => {
       }
 
       openControls('selection')
-      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
       fireEvent.pointerDown(roiLayer, { clientX: 480, clientY: 480, pointerId: 1 })
       fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
       fireEvent.pointerUp(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
@@ -2593,11 +2596,14 @@ describe('App', () => {
           loadAnalysisEmbeddings={loadAnalysisEmbeddings}
         />,
       )
+      openControls('open-dataset')
       fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
         target: { value: h5adUrl },
       })
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+      openControls('diagnostics')
       await screen.findByText(/H5AD ready: 3,005 cells, 0 genes/)
       expect(screen.getByTestId('deck-layer-cells-overview-scatter')).toHaveAttribute(
         'data-count',
@@ -2632,6 +2638,7 @@ describe('App', () => {
       fireEvent.change(screen.getByLabelText('Cell color'), {
         target: { value: 'metadata' },
       })
+      openControls('diagnostics')
       await screen.findByText('Metadata track ready: n_genes')
       expect(h5adDataset.metadataTrackValues).toHaveBeenCalledTimes(1)
       expect(h5adDataset.metadataTrackValues).toHaveBeenCalledWith(
@@ -2714,16 +2721,19 @@ describe('App', () => {
           getSpatialDataset={getSpatialDataset}
         />,
       )
+      openControls('open-dataset')
       fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
         target: { value: h5adUrl },
       })
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+      openControls('diagnostics')
       await screen.findByText(/H5AD ready: 1 cells, 2 genes/)
       fireEvent.click(screen.getByTestId('deck-layer-cells-overview-scatter'))
       openControls('cell-card')
 
-      const cellInfoSection = screen.getByRole('region', { name: 'Cell Info' })
+      const cellInfoSection = screen.getByRole('region', { name: 'Cell' })
       await waitFor(() => {
         expect(h5adDataset.matrix).toHaveBeenCalledWith(['cell-a'])
       })
@@ -2855,6 +2865,7 @@ describe('App', () => {
           loadCellTranscriptDistribution={loadCellTranscriptDistribution}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('clusters')
@@ -2926,17 +2937,16 @@ describe('App', () => {
       expect(screen.getByText('5.3 µm')).toBeInTheDocument()
       expect(screen.getByText('Eccentricity')).toBeInTheDocument()
       expect(screen.getAllByText('0').length).toBeGreaterThan(0)
-      const cellInfoSection = screen.getByRole('region', { name: 'Cell Info' })
+      const cellInfoSection = screen.getByRole('region', { name: 'Cell' })
       const annotationsTerm = within(cellInfoSection).getByText('Annotations')
       expect(annotationsTerm.nextElementSibling).toHaveTextContent('T cells')
       expect(annotationsTerm.nextElementSibling).not.toHaveTextContent('Other cells')
 
-      fireEvent.click(within(cellInfoSection).getByRole('button', { name: 'Clear Cell' }))
+      fireEvent.click(
+        within(cellInfoSection).getByRole('button', { name: 'Clear selected cell' }),
+      )
 
-      expect(within(cellInfoSection).getByText('No cell selected')).toBeInTheDocument()
-      expect(
-        within(cellInfoSection).queryByRole('button', { name: 'Clear Cell' }),
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Cell' })).not.toBeInTheDocument()
     } finally {
       viewport.restore()
     }
@@ -2979,10 +2989,11 @@ describe('App', () => {
           loadGeneExpression={loadGeneExpression}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('genes')
-      expect(await screen.findByText('1 genes')).toBeInTheDocument()
+      expect(await screen.findByText(/ · 1 gene$/)).toBeInTheDocument()
       fireEvent.change(screen.getByRole('combobox', { name: 'Expression detail' }), {
         target: { value: 'exact-region' },
       })
@@ -3046,10 +3057,11 @@ describe('App', () => {
           loadGeneExpression={loadGeneExpression}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('genes')
-      expect(await screen.findByText('1 genes')).toBeInTheDocument()
+      expect(await screen.findByText(/ · 1 gene$/)).toBeInTheDocument()
       fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
 
       await waitFor(() => {
@@ -3112,10 +3124,11 @@ describe('App', () => {
           loadGeneExpression={loadGeneExpression}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('genes')
-      expect(await screen.findByText('1 genes')).toBeInTheDocument()
+      expect(await screen.findByText(/ · 1 gene$/)).toBeInTheDocument()
       fireEvent.change(screen.getByRole('combobox', { name: 'Expression detail' }), {
         target: { value: 'all-cells' },
       })
@@ -3173,6 +3186,7 @@ describe('App', () => {
         loadGenePanel={loadGenePanel}
       />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('checkbox', { name: 'Morphology image' }))
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
@@ -3227,6 +3241,7 @@ describe('App', () => {
         loadTranscriptCapabilities={loadTranscriptCapabilities}
       />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
@@ -3269,6 +3284,7 @@ describe('App', () => {
         loadTranscriptCapabilities={loadTranscriptCapabilities}
       />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
@@ -3279,7 +3295,10 @@ describe('App', () => {
       expect(featureSearchInput).toBeEnabled()
     })
     fireEvent.change(featureSearchInput, { target: { value: 'gad' } })
-    fireEvent.click(await screen.findByRole('button', { name: 'Gad1' }))
+    const transcriptSection = screen.getByRole('region', { name: /^Transcripts/ })
+    fireEvent.click(
+      await within(transcriptSection).findByRole('button', { name: 'Gad1' }),
+    )
 
     expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
       'selected',
@@ -3287,7 +3306,9 @@ describe('App', () => {
     expect(screen.getByLabelText('Transcript selected features')).toHaveTextContent(
       'Gad1',
     )
-    expect(screen.queryByRole('button', { name: 'Gad2' })).not.toBeInTheDocument()
+    expect(
+      within(transcriptSection).queryByRole('button', { name: 'Gad2' }),
+    ).not.toBeInTheDocument()
   })
 
   it('requires an explicit load action for near-budget exact transcript viewports', async () => {
@@ -3324,6 +3345,7 @@ describe('App', () => {
           loadTranscriptViewport={loadTranscriptViewport}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
@@ -3413,6 +3435,7 @@ describe('App', () => {
           loadTranscriptAggregates={loadTranscriptAggregates}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
@@ -3513,11 +3536,12 @@ describe('App', () => {
           loadTranscriptAggregates={loadTranscriptAggregates}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
       openControls('genes')
-      expect(await screen.findByText('2 genes')).toBeInTheDocument()
+      expect(await screen.findByText(/ · 2 genes$/)).toBeInTheDocument()
       fireEvent.change(screen.getByLabelText('Gene selection'), {
         target: { value: 'act' },
       })
@@ -3614,6 +3638,7 @@ describe('App', () => {
           loadTranscriptViewport={loadTranscriptViewport}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
@@ -3694,6 +3719,7 @@ describe('App', () => {
           loadTranscriptViewport={loadTranscriptViewport}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
@@ -3716,7 +3742,9 @@ describe('App', () => {
         )
       })
       expect(loadTranscriptAggregates).not.toHaveBeenCalled()
-      expect(await screen.findByText('1 points')).toBeInTheDocument()
+      expect(
+        await screen.findByRole('button', { name: /^Transcripts.* · points/ }),
+      ).toBeInTheDocument()
     } finally {
       viewport.restore()
     }
@@ -3752,6 +3780,7 @@ describe('App', () => {
           loadTranscriptViewport={loadTranscriptViewport}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
@@ -3847,6 +3876,7 @@ describe('App', () => {
           loadTranscriptViewport={loadTranscriptViewport}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
@@ -3873,7 +3903,9 @@ describe('App', () => {
       await act(async () => {
         await Promise.resolve()
       })
-      expect(screen.getByText('1 points')).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: /^Transcripts.* · points/ }),
+      ).toBeInTheDocument()
       expect(screen.getByTestId('deck-layer-transcript-exact-points')).toHaveAttribute(
         'data-count',
         '1',
@@ -3888,7 +3920,9 @@ describe('App', () => {
         await Promise.resolve()
       })
 
-      expect(screen.getByText('Loading')).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: /^Transcripts.* · loading/ }),
+      ).toBeInTheDocument()
       expect(screen.getByTestId('deck-layer-transcript-exact-points')).toHaveAttribute(
         'data-count',
         '1',
@@ -3955,6 +3989,7 @@ describe('App', () => {
         computeAutoChannelContrast={computeAutoChannelContrast}
       />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {
@@ -4015,8 +4050,10 @@ describe('App', () => {
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+    openControls('diagnostics')
     const alert = await screen.findByRole('alert', { name: 'Load issues' })
 
     expect(alert).toHaveTextContent('Dataset overview')
@@ -4033,8 +4070,10 @@ describe('App', () => {
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+    openControls('diagnostics')
     const alert = await screen.findByRole('alert', { name: 'Load issues' })
 
     expect(alert).toHaveTextContent('Dataset overview')
@@ -4056,8 +4095,10 @@ describe('App', () => {
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+    openControls('diagnostics')
     const alert = await screen.findByRole('alert', { name: 'Load issues' })
 
     expect(alert).toHaveTextContent('Dataset overview')
@@ -4085,8 +4126,10 @@ describe('App', () => {
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+    openControls('diagnostics')
     const alert = await screen.findByRole('alert', { name: 'Load issues' })
 
     expect(alert).toHaveTextContent('Gene panel')
@@ -4107,6 +4150,7 @@ describe('App', () => {
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     await waitFor(() => {
@@ -4135,10 +4179,11 @@ describe('App', () => {
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     openControls('genes')
-    expect(await screen.findByText('3 genes')).toBeInTheDocument()
+    expect(await screen.findByText(/ · 3 genes$/)).toBeInTheDocument()
     await waitFor(() => {
       expect(document.title).toMatch(/^[^·]+ · Spatial Omics Explorer$/)
     })
@@ -4211,6 +4256,7 @@ describe('App', () => {
           loadAnnotations={loadAnnotations}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('genes')
@@ -4282,20 +4328,19 @@ describe('App', () => {
 
     try {
       render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       fireEvent.click(await screen.findByTestId('deck-layer-cells-overview-scatter'))
 
-      expect(screen.getByRole('tab', { name: 'Cell' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      )
+      expect(screen.getByRole('region', { name: 'Cell' })).toBeInTheDocument()
       expect(document.querySelector('.viewer-selection-overlay circle')).not.toBeNull()
 
       fireEvent.keyDown(screen.getByRole('img', { name: 'Spatial viewer canvas area' }), {
         key: 'Escape',
       })
       expect(document.querySelector('.viewer-selection-overlay')).toBeNull()
+      expect(screen.queryByRole('region', { name: 'Cell' })).toBeNull()
     } finally {
       viewport.restore()
     }
@@ -4312,27 +4357,36 @@ describe('App', () => {
     ])
 
     render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     openControls('selection')
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+        'aria-disabled',
+        'false',
+      )
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
     expect(screen.getByText('Drag to draw a box. Esc cancels.')).toBeInTheDocument()
 
-    openControls('measure')
-    fireEvent.click(screen.getByRole('button', { name: 'Distance measure' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Measure' }))
     expect(screen.queryByText('Drag to draw a box. Esc cancels.')).toBeNull()
     expect(
       screen.getByText('Drag to measure a distance. Esc stops measuring.'),
     ).toBeInTheDocument()
+    openControls('measure')
+    expect(screen.getByRole('group', { name: 'Measure unit' })).toBeInTheDocument()
 
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(screen.queryByText(/Esc stops measuring/)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Distance measure' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Measure' })).toHaveAttribute(
       'aria-pressed',
       'false',
+    )
+    expect(screen.getByRole('button', { name: 'Pan' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
     )
   })
 
@@ -4381,6 +4435,7 @@ describe('App', () => {
         loadAnnotations={loadAnnotations}
       />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     openControls('clusters')
@@ -4464,6 +4519,7 @@ describe('App', () => {
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     openControls('clusters')
@@ -4524,6 +4580,7 @@ ${cd16Negative},CD16- NK cells`,
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     openControls('clusters')
@@ -4537,7 +4594,9 @@ ${cd16Negative},CD16- NK cells`,
     const annotationList = await screen.findByLabelText('Loaded annotations')
     expect(annotationList).toHaveTextContent('CD16+ NK cells')
     expect(annotationList).toHaveTextContent('CD16- NK cells')
-    expect(screen.getByText('2 labels')).toBeInTheDocument()
+    expect(
+      within(annotationList).getByRole('button', { name: 'Remove CD16- NK cells' }),
+    ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove CD16+ NK cells' }))
 
@@ -4545,7 +4604,9 @@ ${cd16Negative},CD16- NK cells`,
     expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent(
       'CD16- NK cells',
     )
-    expect(screen.getByText('1 label')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Remove CD16- NK cells' }),
+    ).toBeInTheDocument()
   })
 
   it('shows ROI query loading while drawn ROI cells are pending', async () => {
@@ -4572,13 +4633,17 @@ ${cd16Negative},CD16- NK cells`,
           loadRoiCells={loadRoiCells}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('selection')
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+          'aria-disabled',
+          'false',
+        )
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
 
       const roiLayer = document.querySelector('.roi-draw-layer')
 
@@ -4595,10 +4660,7 @@ ${cd16Negative},CD16- NK cells`,
       })
 
       expect(within(loadingStatus).getByText('Querying ROI cells')).toBeInTheDocument()
-      expect(screen.getByRole('tab', { name: 'ROI' })).toHaveAttribute(
-        'aria-busy',
-        'true',
-      )
+      expect(screen.getByRole('region', { name: 'ROI 1' })).toHaveTextContent('Loading')
     } finally {
       viewport.restore()
     }
@@ -4619,13 +4681,20 @@ ${cd16Negative},CD16- NK cells`,
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     openControls('selection')
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Draw Box' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
     })
-    expect(screen.getByText('Preparing')).toBeInTheDocument()
+    fireEvent.focus(screen.getByRole('button', { name: 'Box selection' }))
+    expect(screen.getByRole('tooltip')).toHaveTextContent(
+      'Box selection: The dataset is still preparing',
+    )
   })
 
   it('notifies when the cell-feature matrix is not CSC formatted', async () => {
@@ -4658,8 +4727,11 @@ ${cd16Negative},CD16- NK cells`,
         warmDatasetForRoi={warmDatasetForRoi}
       />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
+    expect(await screen.findByText(/^Xenium · 1 cell/)).toBeInTheDocument()
+    openControls('diagnostics')
     const notice = await screen.findByRole('status', {
       name: 'Cell-feature matrix warning',
     })
@@ -4719,13 +4791,17 @@ ${cd16Negative},CD16- NK cells`,
           loadRoiGeneStats={loadRoiGeneStats}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('selection')
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+          'aria-disabled',
+          'false',
+        )
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
 
       const roiLayer = document.querySelector('.roi-draw-layer')
 
@@ -4805,6 +4881,7 @@ ${cd16Negative},CD16- NK cells`,
           loadRoiGeneStats={loadRoiGeneStats}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('selection')
@@ -4815,9 +4892,10 @@ ${cd16Negative},CD16- NK cells`,
         { timeout: 2_000 },
       )
 
-      expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
-      expect(screen.getByText('Preparing genes')).toBeInTheDocument()
-
+      expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+        'aria-disabled',
+        'false',
+      )
       const loadingStatus = await screen.findByRole('status', {
         name: 'Active loading tasks',
       })
@@ -4872,11 +4950,15 @@ ${cd16Negative},CD16- NK cells`,
           loadRoiGeneStats={loadRoiGeneStats}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('selection')
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+          'aria-disabled',
+          'false',
+        )
       })
 
       await waitFor(
@@ -5000,13 +5082,17 @@ ${cd16Negative},CD16- NK cells`,
           loadRoiTranscripts={loadRoiTranscripts}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('selection')
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+          'aria-disabled',
+          'false',
+        )
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
 
       const roiLayer = document.querySelector('.roi-draw-layer')
 
@@ -5036,11 +5122,17 @@ ${cd16Negative},CD16- NK cells`,
         )
       })
 
-      const summary = await screen.findByLabelText('ROI summary')
+      const selectionCard = await screen.findByRole('region', { name: 'ROI 1' })
+      await waitFor(() => {
+        expect(selectionCard).toHaveTextContent('1 cell · ')
+      })
+      fireEvent.click(within(selectionCard).getByRole('tab', { name: 'Cells' }))
+      const summary = within(selectionCard).getByLabelText('ROI summary')
       expect(summary).toHaveTextContent('Cells')
       expect(summary).toHaveTextContent('1')
       expect(summary).toHaveTextContent('12')
       expect(summary).toHaveTextContent('30')
+      fireEvent.click(within(selectionCard).getByRole('tab', { name: 'Genes' }))
 
       await waitFor(() => {
         expect(loadRoiGeneStats).toHaveBeenCalledWith(
@@ -5124,13 +5216,17 @@ ${cd16Negative},CD16- NK cells`,
           loadRoiCells={loadRoiCells}
         />,
       )
+      openControls('open-dataset')
       fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
       openControls('selection')
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Draw Lasso' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Lasso selection' })).toHaveAttribute(
+          'aria-disabled',
+          'false',
+        )
       })
-      fireEvent.click(screen.getByRole('button', { name: 'Draw Lasso' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Lasso selection' }))
 
       const roiLayer = document.querySelector('.roi-draw-layer')
 
@@ -5161,7 +5257,7 @@ ${cd16Negative},CD16- NK cells`,
           }),
         )
       })
-      expect(await screen.findByText('0 cells')).toBeInTheDocument()
+      expect(await screen.findByText(/^0 cells · /)).toBeInTheDocument()
     } finally {
       viewport.restore()
     }
@@ -5181,10 +5277,11 @@ ${cd16Negative},CD16- NK cells`,
     render(
       <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
     )
+    openControls('open-dataset')
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
 
     openControls('genes')
-    expect(await screen.findByText('3 genes')).toBeInTheDocument()
+    expect(await screen.findByText(/ · 3 genes$/)).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Gene set symbols'), {
       target: { value: 'gad1, ACTB, missing' },

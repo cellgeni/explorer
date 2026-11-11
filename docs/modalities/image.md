@@ -42,9 +42,9 @@ list, turns on the first six channels (`MAX_DEFAULT_ENABLED_CHANNELS` in
 most images. It then queues auto-contrast (see [Auto-Contrast](#auto-contrast)).
 
 `IMAGE_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`) hides
-Genes, Transcripts, Magic Lens, and Cell, disables cell-id annotations, and
-switches the ROI tab to the `Geometry` panel, which saves drawn shapes as
-GeoJSON annotations.
+the Cells and Transcripts sections, Magic Lens, and the cell cards, disables
+cell-id annotations, and makes Box and Lasso selection open the New shape card,
+which saves drawn shapes as GeoJSON annotations.
 
 ## ImagePyramidLoader
 
@@ -253,9 +253,9 @@ JPEG-XR is not supported.
 
 `computeChannelAutoContrast` (`src/data/morphologyContrast.ts`) samples up to
 250,000 values from the coarsest level and sets the window to the 0.5 and
-99.8 percentiles, with a 32-bin histogram for the Layers tab. It runs after an
-image loads and when a channel's `Auto` button is pressed. SpatialData native
-RGB images skip it.
+99.8 percentiles, with a 32-bin histogram for the Image section. It runs after
+an image loads and when a channel's `Auto` button is pressed. SpatialData
+native RGB images skip it.
 
 An image with more than six channels auto-contrasts only the channels that are
 on when it loads. Any other channel is auto-contrasted when it is first turned
@@ -264,7 +264,7 @@ RGB channels are left alone.
 
 ## Custom Image Layers
 
-`Custom image URL` → `Load Layer` in the Layers tab
+`Custom image URL` → `Load Layer` in the Image section
 (`useCustomMorphologyLayerWorkflow`, `src/features/morphology/`):
 
 - Accepts `http`/`https` OME-TIFF, TIFF, or OME-Zarr URLs; http URLs that fail
