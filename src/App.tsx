@@ -32,6 +32,7 @@ import {
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
+import { viewerLegendSections } from './features/app-shell/viewerLegendModel'
 import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import {
@@ -861,6 +862,54 @@ export function App({ dependencies }: AppProps = {}) {
   const annotationCopy = annotationStatusCopy(annotationState)
   const annotationGroupOptions =
     annotationGroupState.status === 'ready' ? annotationGroupState.groups : []
+  const legendAnnotations = useMemo(() => {
+    if (annotationState.status !== 'ready') return null
+
+    const annotations = filterAnnotationsByVisibleSets(
+      annotationState.annotations,
+      hiddenAnnotationSetIdSet,
+    )
+    const groupLabel =
+      annotationGroupState.status === 'ready'
+        ? annotationGroupState.groups.find(
+            (group) => group.id === selectedAnnotationGroupId,
+          )?.label
+        : undefined
+    const setLabel =
+      groupLabel !== undefined &&
+      annotations.every((annotation) => annotation.label.startsWith(`${groupLabel}: `))
+        ? groupLabel
+        : null
+
+    return {
+      setLabel,
+      items: annotations.map((annotation, index) => ({
+        id: annotation.id,
+        label: annotation.label,
+        color: annotationColors[annotation.id] ?? annotationPaletteColor(index),
+        count: annotation.cellIds.length,
+      })),
+      hiddenIds: hiddenAnnotationIdSet,
+    }
+  }, [
+    annotationColors,
+    annotationGroupState,
+    annotationState,
+    hiddenAnnotationIdSet,
+    hiddenAnnotationSetIdSet,
+    selectedAnnotationGroupId,
+  ])
+  const legendCellAreaMax = useMemo(() => {
+    if (observationColorMode !== 'cell-area') return null
+
+    let max: number | null = null
+    for (const cell of overviewCells) {
+      if (cell.cellArea !== undefined && Number.isFinite(cell.cellArea)) {
+        max = Math.max(max ?? 0, cell.cellArea)
+      }
+    }
+    return max
+  }, [observationColorMode, overviewCells])
   const overviewCellById = useMemo(() => {
     const cellById = new Map<string, OverviewCellDatum>()
 
@@ -1197,6 +1246,61 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const effectiveShowTranscriptOverlay =
     platformAdapter.effectiveTranscriptOverlay(showTranscriptOverlay)
+  const legendSections = useMemo(
+    () =>
+      viewerLegendSections({
+        colorMode: observationColorMode,
+        genes: {
+          names: selectedGenes,
+          scoreMode: geneExpressionScoreMode,
+          colorScale: geneExpressionColorScale,
+          scaleMax: geneExpressionScaleMax,
+          loading: geneExpressionState.status !== 'ready',
+        },
+        annotations: legendAnnotations,
+        metadataTrack:
+          activeCellMetadataTrack === null || selectedCellMetadataTrack === null
+            ? null
+            : {
+                label: selectedCellMetadataTrack.label,
+                min: activeCellMetadataTrack.min,
+                max: activeCellMetadataTrack.max,
+              },
+        cellAreaMax: legendCellAreaMax,
+        transcripts: {
+          density:
+            effectiveShowTranscriptOverlay &&
+            transcriptLayerAggregateBins.some((bin) => bin.glyphType !== 'feature-circle')
+              ? {
+                  colorScale: transcriptDensityColorScale,
+                  labels: transcriptDensityScaleLabels,
+                }
+              : null,
+          pointColorMode:
+            effectiveShowTranscriptOverlay && transcriptLayerPoints.length > 0
+              ? transcriptPointColorMode
+              : null,
+        },
+      }),
+    [
+      activeCellMetadataTrack,
+      effectiveShowTranscriptOverlay,
+      geneExpressionColorScale,
+      geneExpressionScaleMax,
+      geneExpressionScoreMode,
+      geneExpressionState.status,
+      legendAnnotations,
+      legendCellAreaMax,
+      observationColorMode,
+      selectedCellMetadataTrack,
+      selectedGenes,
+      transcriptDensityColorScale,
+      transcriptDensityScaleLabels,
+      transcriptLayerAggregateBins,
+      transcriptLayerPoints,
+      transcriptPointColorMode,
+    ],
+  )
   const magicLensAvailability = platformAdapter.magicLensAvailability(
     loadState,
     spatialGridCells.length,
@@ -3162,6 +3266,8 @@ export function App({ dependencies }: AppProps = {}) {
           annotationStyleColors={annotationStyleColors}
           cellMetadataTrack={activeCellMetadataTrack}
           loadingTasks={loadingTasks}
+          legendSections={legendSections}
+          onLegendCategoryVisibilityChange={handleAnnotationVisibilityChange}
           coordinateUnit={coordinateUnit}
           measurementEnabled={measurementEnabled}
           measurementUnit={measurementUnit}

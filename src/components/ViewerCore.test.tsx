@@ -1961,6 +1961,38 @@ describe('ViewerCore', () => {
     expect(deckGlMock.renderCount).toBe(renderCountBeforeDrag)
   })
 
+  it('does not re-render deck layers when the legend collapses or a category is toggled', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onLegendCategoryVisibilityChange = vi.fn()
+
+    render(
+      <ViewerCore
+        cells={[overviewCellDatum()]}
+        legendSections={[
+          {
+            kind: 'categories',
+            id: 'cells',
+            title: 'graphclust',
+            items: [
+              { id: 'c1', label: 'Cluster 1', color: '#4cc39a', count: 1, visible: true },
+            ],
+          },
+        ]}
+        onLegendCategoryVisibilityChange={onLegendCategoryVisibilityChange}
+      />,
+    )
+
+    const renderCountBefore = deckGlMock.renderCount
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Cluster 1, 1 cell' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Legend' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Legend' }))
+
+    expect(onLegendCategoryVisibilityChange).toHaveBeenCalledWith('c1', false)
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
+  })
+
   it('emits a lasso ROI selection from a dragged polygon path', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

@@ -2348,7 +2348,7 @@ They are independent unless a note says otherwise.
     ("SNAP25 is already selected", up to three names and "and n more").
     Picking from the Genes list clears the search; the Transcripts search
     already did.
-- [ ] **C. Canvas legend (F2, F9; needs A).** `ViewerLegend` sits in the
+- [x] **C. Canvas legend (F2, F9; needs A).** `ViewerLegend` sits in the
       bottom-left stack as a sibling of `MemoDeckGL`, never inside it. (M)
   - Inputs: colour mode; gene names, score mode, scale and
     `geneExpressionScaleMax`; annotation colours, counts and visibility; the
@@ -2358,6 +2358,22 @@ They are independent unless a note says otherwise.
   - Categories show the first 12 with visibility toggles, then "+k more".
   - It can be collapsed.
   - Extend the no-redraw test (`ViewerCore.test.tsx:1939–1962`) to cover it.
+  - Done 2026-11-11. App builds the sections with `viewerLegendSections`
+    (`app-shell/viewerLegendModel.ts`); `ViewerLegend` (memoised) only draws
+    them, so collapsing it keeps its state local and the deck does not
+    redraw. The no-redraw test covers collapsing and a category toggle.
+  - Sections: gene expression, annotations (set prefix dropped from labels;
+    the checkboxes call the same handler as the Annotations tab), metadata,
+    cell area, transcript density, and transcript quality. Transcript count
+    is the plain default and has no legend. Feature colours wait for 15.4-C.
+  - The bottom-left stack now renders beside the viewport frame, not inside
+    it: the frame has `role="img"`, and the axe check flagged the legend's
+    checkboxes as nested interactive content.
+  - Category lists go after the scales. On the demo, graphclust's 24 labels
+    pushed the density scale out of the legend's scroll area.
+  - New gradients for the legend share `colorsGradient`
+    (`deckLayerColors.ts`): `cellAreaScaleGradient`, `metadataScaleGradient`
+    and `transcriptQualityGradient`.
 - [ ] **D. Selected-cell highlight (F3).** (S–M)
   - For points, spots and bins, draw an SVG ring positioned with
     `rawDataPointToScreen` (`viewerMeasurements.ts:38`), so the deck does not

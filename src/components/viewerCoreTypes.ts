@@ -1,5 +1,6 @@
 import type { BBox, DataPoint } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
+import type { ViewerLegendSection } from './viewerLegendTypes'
 import type {
   AnnotationColorStyle,
   CellMetadataColorStyle,
@@ -58,6 +59,9 @@ export interface ViewerCoreProps {
   readonly annotationStyleColors?: readonly AnnotationColorStyle[]
   readonly cellMetadataTrack?: CellMetadataColorStyle | null
   readonly loadingTasks?: readonly LoadingTaskSummary[]
+  // The canvas legend, bottom left above the loading indicator.
+  readonly legendSections?: readonly ViewerLegendSection[]
+  readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
   readonly coordinateUnit?: ViewerCoordinateUnit
   readonly measurementEnabled?: boolean
   readonly measurementUnit?: ViewerCoordinateUnit

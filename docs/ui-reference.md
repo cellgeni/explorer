@@ -24,7 +24,7 @@ Platform names used below: **Xenium**, **Visium HD**, **H5AD**,
         ├── ROI drawing, measurement, Magic Lens overlays
         ├── Hover tooltip
         ├── Zoom + mouse coordinate readout, scale bar
-        └── Loading indicator and viewport messages
+        └── Legend, loading indicator and viewport messages (bottom left)
 ```
 
 `src/main.tsx` wraps `App` in `AppErrorBoundary`
@@ -35,6 +35,26 @@ The browser tab reads "{dataset} · Spatial Omics Explorer" once a dataset has
 loaded. The name is the manifest's `name`, or else the last part of the URL
 that is not `outs`, `explorer.json` or `experiment.xenium`. The favicon is
 `public/favicon.svg`.
+
+### Canvas Legend
+
+`ViewerLegend` (`src/components/ViewerLegend.tsx`) sits at the bottom left,
+above the loading indicator, and explains what the canvas shows. The `Legend`
+header collapses it. It has a section for each of these, scales first and
+category lists last:
+
+- `Cell color` Gene expression: the genes (up to three names, then "+n"),
+  "Expression per cell" or "{Sum|Mean|Mean z-score} of n genes per cell", and
+  the gene scale from 0 to its maximum.
+- `Cell color` Annotations: the set name and the first 12 labels, each with a
+  visibility checkbox, swatch and cell count, then "+n more in the Annotations
+  tab". The checkboxes are the same as the Annotations tab's.
+- `Cell color` Metadata: the track name and its range.
+- `Cell color` Cell area: µm² on a square-root scale.
+- Transcripts drawn as density: "Transcript density" with the density scale;
+  or points coloured by quality: QV 0 to 40+.
+
+Transcript count, the default, has no legend.
 
 ### Control HUD
 

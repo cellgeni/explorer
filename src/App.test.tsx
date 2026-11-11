@@ -3776,6 +3776,9 @@ describe('App', () => {
       expect(
         await screen.findByTestId('deck-layer-gene-expression-scatter'),
       ).toBeVisible()
+      expect(
+        screen.getByRole('img', { name: /^Actb: from 0 to [0-9.]+$/ }),
+      ).toBeInTheDocument()
 
       openControls('clusters')
       fireEvent.change(await screen.findByRole('combobox', { name: 'Annotation set' }), {
@@ -3792,6 +3795,13 @@ describe('App', () => {
       )
       expect(screen.queryByTestId('deck-layer-gene-expression-scatter')).toBeNull()
       expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Actb')
+      // The legend now lists the clusters, and hides one from the map.
+      const legend = screen.getByRole('region', { name: 'Legend' })
+      expect(within(legend).queryByRole('img')).toBeNull()
+      fireEvent.click(within(legend).getByRole('checkbox', { name: 'Cluster 1, 1 cell' }))
+      expect(
+        within(legend).getByRole('checkbox', { name: 'Cluster 1, 1 cell' }),
+      ).not.toBeChecked()
 
       fireEvent.change(screen.getByRole('combobox', { name: 'Cell color' }), {
         target: { value: 'gene-expression' },
