@@ -2498,7 +2498,7 @@ They are independent unless a note says otherwise.
     max) instead of number fields.
   - Update `docs/modalities/xenium.md`, and resolve the **Reopened** marks on
     Appendix A row 10 and on the Phase 5.1 note.
-- [ ] **K. Type and contrast (F6, F7, F20).** (M)
+- [x] **K. Type and contrast (F6, F7, F20).** (M)
   - Remove the 48 `text-transform: uppercase` rules.
   - Use 12 px for control text and 11 px for captions.
   - Replace the native Visium select and the default slider with the
@@ -2509,6 +2509,25 @@ They are independent unless a note says otherwise.
     at least 4.5:1 for text and 3:1 for UI parts.
   - Keep the axe baseline free of colour-contrast entries (15.0-F found
     none after the dark theme).
+  - Done 2026-11-11. All 40 `text-transform: uppercase` rules are gone (and
+    the `none` overrides that undid them). Every font size uses the type
+    scale: 40 sizes from 8.3 to 9.6 px became 11 px captions, 73 from 9.9 to
+    12.2 px became 12 px controls, and three became 13 px body text. The HUD
+    still fits at 1440 px without overflow.
+  - The Visium tissue image select is the `Select` primitive, laid out
+    inline. Every slider takes the accent colour from one rule in `base.css`
+    instead of the browser's blue; the opacity sliders move from magenta to
+    the same accent. The other sliders keep their markup until 15.2 rebuilds
+    the panels.
+  - `data/units.ts` writes µm and µm² with the micro sign. It is used in the
+    hover tooltips, Cell info, Bin info, the ROI summary and the Magic Lens
+    radius, replacing "um", "um2" and "um^2". The 11 Greek-mu strings now use
+    the micro sign too.
+  - `styles/tokens.test.ts` reads `tokens.css` and checks 49 pairs: every
+    text and role colour on every surface (4.5:1), role text on its tint
+    (4.5:1), text on bright fills (4.5:1), and borders, accent and focus
+    against the panel (3:1). The axe baseline still has no contrast
+    entries.
 - [ ] **L. Sharing (F16; needs 15.0-E).** (M)
   - Add a Copy link button (in the Dataset tab now, the top bar later) and a
     "Link copied" toast.

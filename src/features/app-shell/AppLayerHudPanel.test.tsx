@@ -142,7 +142,7 @@ describe('AppLayerHudPanel', () => {
     render(<AppLayerHudPanel {...props} />)
 
     const coordinateGroup = screen.getByRole('group', { name: 'Mouse coordinates' })
-    fireEvent.click(within(coordinateGroup).getByRole('button', { name: 'μm' }))
+    fireEvent.click(within(coordinateGroup).getByRole('button', { name: 'µm' }))
     fireEvent.click(within(coordinateGroup).getByRole('button', { name: 'px' }))
 
     expect(props.setCoordinateUnit).toHaveBeenCalledTimes(1)

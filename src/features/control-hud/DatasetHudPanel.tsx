@@ -17,6 +17,7 @@ import {
   type VisiumControlState,
 } from '../dataset/visiumModel'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
+import { Select } from '../../components/ui'
 import type { AnnDataVisiumView } from '../../datasets/h5adDataset'
 import { useState } from 'react'
 
@@ -394,27 +395,23 @@ function VisiumDatasetControls({
           {formatVisiumUnits(summary.units)}
         </strong>
       </div>
-      <label className="visium-bin-control">
-        <span>Tissue image</span>
-        <select
-          title="Visium tissue image to show"
-          value={state.image ?? ''}
-          disabled={disabled || summary.images.length === 0}
-          onChange={(event) => {
-            const value = event.currentTarget.value
-            onImageChange(value === 'hires' || value === 'lowres' ? value : null)
-          }}
-        >
-          <option value="">
-            {summary.images.length === 0 ? 'None available' : 'None'}
-          </option>
-          {summary.images.map((image) => (
-            <option key={image} value={image}>
-              {visiumImageLabel(image)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <Select<VisiumImageKind | ''>
+        className="ui-field--inline"
+        label="Tissue image"
+        title="Visium tissue image to show"
+        value={state.image ?? ''}
+        disabled={disabled || summary.images.length === 0}
+        options={[
+          { value: '', label: summary.images.length === 0 ? 'None available' : 'None' },
+          ...summary.images.map((image) => ({
+            value: image,
+            label: visiumImageLabel(image),
+          })),
+        ]}
+        onChange={(value) => {
+          onImageChange(value === '' ? null : value)
+        }}
+      />
       {summary.offTissueSpotCount === 0 ? null : (
         <label className="dataset-toggle">
           <input

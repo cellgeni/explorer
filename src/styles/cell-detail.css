@@ -25,7 +25,7 @@
   min-width: 0;
   margin: 0;
   color: var(--text-2);
-  font-size: 0.68rem;
+  font-size: var(--font-control);
 }
 
 .cell-info-list dt {
@@ -33,7 +33,6 @@
   font-weight: 700;
   line-height: 1.18;
   overflow-wrap: anywhere;
-  text-transform: uppercase;
 }
 
 .cell-info-list dd {
@@ -63,7 +62,7 @@
   padding: 1px 5px;
   background: var(--accent-faint);
   color: var(--accent);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -110,7 +109,7 @@
   gap: 5px;
   align-items: center;
   color: var(--text-3);
-  font-size: 0.56rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -130,7 +129,7 @@
   min-width: 0;
   margin: 0;
   color: var(--text-3);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -146,14 +145,13 @@
 
 .cell-expression-heading span {
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .cell-expression-heading small {
   color: var(--text-3);
-  font-size: 0.6rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -165,7 +163,7 @@
   border-radius: 6px;
   background: var(--surface-2);
   color: var(--text-3);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -184,9 +182,8 @@
 
 .cell-expression-filter {
   color: var(--text-3);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .cell-expression-search {
@@ -215,7 +212,7 @@
 .cell-expression-row span {
   overflow: hidden;
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -223,7 +220,7 @@
 
 .cell-expression-row strong {
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-variant-numeric: tabular-nums;
 }
 
@@ -246,7 +243,7 @@
 
 .cell-expression-list small {
   color: var(--text-3);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }

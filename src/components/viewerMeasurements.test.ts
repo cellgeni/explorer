@@ -45,14 +45,14 @@ describe('viewerMeasurements', () => {
       0.5,
     )
 
-    expect(model.label).toBe('5 μm')
+    expect(model.label).toBe('5 µm')
     expect(model.isDraft).toBe(false)
     expect(model.labelStyle.left).toBeGreaterThanOrEqual(8)
   })
 
   it('models scale bars and measurement thresholds', () => {
     expect(scaleBarModel(viewState, viewport, 'um', 0.5)).toMatchObject({
-      label: '50 μm',
+      label: '50 µm',
       widthPixels: 50,
     })
     expect(

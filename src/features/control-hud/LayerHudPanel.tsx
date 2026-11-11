@@ -294,7 +294,7 @@ export function LayerHudPanel({
                 onCoordinateUnitChange('um')
               }}
             >
-              μm
+              µm
             </button>
             <button
               type="button"
@@ -342,7 +342,7 @@ export function LayerHudPanel({
                   onMeasurementUnitChange('um')
                 }}
               >
-                μm
+                µm
               </button>
               <button
                 type="button"

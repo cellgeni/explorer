@@ -229,7 +229,7 @@ export function ViewerCore({
   measurementUnit = 'um',
   measurementResetKey = 0,
   micrometersPerPixel = DEFAULT_MICROMETERS_PER_PIXEL,
-  physicalUnitLabel = 'μm',
+  physicalUnitLabel = 'µm',
   status = 'idle',
   imageStatus = 'idle',
   boundaryStatus = 'idle',

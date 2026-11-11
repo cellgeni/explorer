@@ -1,3 +1,4 @@
+import { withMicrometers } from '../../data/units'
 import type { RoiDrawMode } from '../../components/ViewerCore'
 import { RoiGeneStatsPanel } from '../roi/RoiPanels'
 import type {
@@ -394,7 +395,7 @@ export function VisiumHdRoiHudPanel({
               <dd>
                 {roiSummary.binSizeMicrometers === undefined
                   ? '0'
-                  : `${roiSummary.binSizeMicrometers} um`}
+                  : withMicrometers(String(roiSummary.binSizeMicrometers))}
               </dd>
             </div>
             {roiSummary.inTissueCount === undefined ? null : (

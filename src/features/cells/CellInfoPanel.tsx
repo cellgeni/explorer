@@ -1,3 +1,4 @@
+import { MICROMETERS, SQUARE_MICROMETERS, withMicrometers } from '../../data/units'
 import type { CSSProperties } from 'react'
 import {
   CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
@@ -114,11 +115,11 @@ export function CellInfoPanel({
             <MetadataRows entries={metadataEntries} />
             <div>
               <dt>Cell Area</dt>
-              <dd>{formatMetric(shape?.areaMicrometersSquared, 'um2')}</dd>
+              <dd>{formatMetric(shape?.areaMicrometersSquared, SQUARE_MICROMETERS)}</dd>
             </div>
             <div>
               <dt>Diameter</dt>
-              <dd>{formatMetric(shape?.equivalentDiameterMicrometers, 'um')}</dd>
+              <dd>{formatMetric(shape?.equivalentDiameterMicrometers, MICROMETERS)}</dd>
             </div>
             <div>
               <dt>Eccentricity</dt>
@@ -126,15 +127,15 @@ export function CellInfoPanel({
             </div>
             <div>
               <dt>Major Axis</dt>
-              <dd>{formatMetric(shape?.majorAxisMicrometers, 'um')}</dd>
+              <dd>{formatMetric(shape?.majorAxisMicrometers, MICROMETERS)}</dd>
             </div>
             <div>
               <dt>Minor Axis</dt>
-              <dd>{formatMetric(shape?.minorAxisMicrometers, 'um')}</dd>
+              <dd>{formatMetric(shape?.minorAxisMicrometers, MICROMETERS)}</dd>
             </div>
             <div>
               <dt>Perimeter</dt>
-              <dd>{formatMetric(shape?.perimeterMicrometers, 'um')}</dd>
+              <dd>{formatMetric(shape?.perimeterMicrometers, MICROMETERS)}</dd>
             </div>
             <div>
               <dt>Circularity</dt>
@@ -311,17 +312,19 @@ function cellTranscriptZDistributionAriaLabel(
   const zRange =
     distribution.minZ === undefined || distribution.maxZ === undefined
       ? 'unknown z range'
-      : `${formatZValue(distribution.minZ)} to ${formatZValue(distribution.maxZ)} um`
+      : withMicrometers(
+          `${formatZValue(distribution.minZ)} to ${formatZValue(distribution.maxZ)}`,
+        )
 
   return `${distribution.zCount.toLocaleString()} transcript z locations across ${distribution.bins.length.toLocaleString()} bins from ${zRange}.`
 }
 
 function formatZRange(bin: CellTranscriptZBin): string {
   if (bin.minZ === bin.maxZ) {
-    return `${formatZValue(bin.minZ)} um`
+    return withMicrometers(formatZValue(bin.minZ))
   }
 
-  return `${formatZValue(bin.minZ)}-${formatZValue(bin.maxZ)} um`
+  return withMicrometers(`${formatZValue(bin.minZ)}-${formatZValue(bin.maxZ)}`)
 }
 
 function formatZValue(value: number | undefined): string {

@@ -121,14 +121,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.66rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
 .annotation-list small,
 .metadata-track-list small {
   color: var(--text-3);
-  font-size: 0.6rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -142,7 +142,7 @@
   background: var(--danger-soft);
   color: var(--danger);
   cursor: pointer;
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
   line-height: 1;
 }
@@ -174,11 +174,10 @@
   margin: 0;
   overflow: hidden;
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 800;
   line-height: 1.12;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -188,7 +187,7 @@
 .annotation-size-row small,
 .annotation-size-row strong {
   color: var(--text-2);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -241,9 +240,8 @@
 
 .annotation-set-toggle span {
   color: var(--text-3);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 800;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -287,7 +285,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-2);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 800;
   line-height: 1.1;
   text-overflow: ellipsis;

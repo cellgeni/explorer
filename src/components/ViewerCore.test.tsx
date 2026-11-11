@@ -945,8 +945,8 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('aaaaaaaa-1')).toBeInTheDocument()
     expect(screen.getByText('Xenium')).toBeInTheDocument()
-    expect(screen.getByText('123.4, 56.7 um')).toBeInTheDocument()
-    expect(screen.getByText('40 um^2')).toBeInTheDocument()
+    expect(screen.getByText('123.4, 56.7 µm')).toBeInTheDocument()
+    expect(screen.getByText('40 µm²')).toBeInTheDocument()
     expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
     expect(screen.getByText('Annotations')).toBeInTheDocument()
     expect(screen.getByText('T cells, Portal macrophages')).toBeInTheDocument()
@@ -973,7 +973,7 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('AAACCCAAGAAACACT-1')).toBeInTheDocument()
     expect(screen.getByText('H5AD')).toBeInTheDocument()
-    expect(screen.getByText('12.3, 45.6 um')).toBeInTheDocument()
+    expect(screen.getByText('12.3, 45.6 µm')).toBeInTheDocument()
     expect(screen.getByText('27')).toBeInTheDocument()
   })
 
@@ -995,7 +995,7 @@ describe('ViewerCore', () => {
     expect(screen.getByText('cell-bin:0:0')).toBeInTheDocument()
     expect(screen.getByText('Overview')).toBeInTheDocument()
     expect(screen.getByText('14')).toBeInTheDocument()
-    expect(screen.getByText('50, 60 um')).toBeInTheDocument()
+    expect(screen.getByText('50, 60 µm')).toBeInTheDocument()
   })
 
   it('shows grid-cell hover metadata', () => {
@@ -1008,7 +1008,7 @@ describe('ViewerCore', () => {
     })
 
     expect(screen.getByText('BC-1')).toBeInTheDocument()
-    expect(screen.getByText('16 μm')).toBeInTheDocument()
+    expect(screen.getByText('16 µm')).toBeInTheDocument()
     expect(screen.getByText('4, 7')).toBeInTheDocument()
     expect(screen.getByText('128, 256 px')).toBeInTheDocument()
     expect(screen.getByText('In tissue')).toBeInTheDocument()
@@ -1052,7 +1052,7 @@ describe('ViewerCore', () => {
 
     expect(document.querySelector('.viewer-magic-lens-hud')).toHaveTextContent('C7')
     expect(screen.queryByText('BC-1')).not.toBeInTheDocument()
-    expect(screen.queryByText('16 μm')).not.toBeInTheDocument()
+    expect(screen.queryByText('16 µm')).not.toBeInTheDocument()
   })
 
   it('shows segmented cell boundary hover metadata when enabled', () => {
@@ -1096,7 +1096,7 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
     expect(screen.getByText('Segmented')).toBeInTheDocument()
-    expect(screen.getByText('100 um^2')).toBeInTheDocument()
+    expect(screen.getByText('100 µm²')).toBeInTheDocument()
     expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
   })
 
@@ -1150,14 +1150,14 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('aaaaaaab-1')).toBeInTheDocument()
     expect(screen.getByText('Xenium')).toBeInTheDocument()
-    expect(screen.getByText('123.4, 56.7 um')).toBeInTheDocument()
+    expect(screen.getByText('123.4, 56.7 µm')).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
-    expect(screen.getByText('40 um^2')).toBeInTheDocument()
+    expect(screen.getByText('40 µm²')).toBeInTheDocument()
     expect(screen.getByText('T cells, Portal macrophages')).toBeInTheDocument()
     expect(screen.getByText('T cells, Portal macrophages').closest('div')).toHaveClass(
       'hover-tooltip-annotation-row',
     )
-    expect(screen.getByText('100 um^2')).toBeInTheDocument()
+    expect(screen.getByText('100 µm²')).toBeInTheDocument()
   })
 
   it('suppresses bin and cell hover metadata when disabled without removing clicks', () => {
@@ -1765,14 +1765,14 @@ describe('ViewerCore', () => {
     const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
 
     expect(await screen.findByLabelText('Zoom level 4.00')).toHaveTextContent('Zoom 4.00')
-    expect(await screen.findByLabelText('Scale bar 5 μm')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Scale bar 5 µm')).toBeInTheDocument()
     expect(document.querySelector('.viewport-scale-bar-track')).toHaveStyle({
       width: '80px',
     })
 
     fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
 
-    expect(await screen.findByText('X 1234 μm | Y 5678 μm')).toBeInTheDocument()
+    expect(await screen.findByText('X 1234 µm | Y 5678 µm')).toBeInTheDocument()
 
     rerender(
       <ViewerCore
@@ -1823,7 +1823,7 @@ describe('ViewerCore', () => {
       pointerId: 1,
     })
 
-    expect(await screen.findByText('256 μm')).toBeInTheDocument()
+    expect(await screen.findByText('256 µm')).toBeInTheDocument()
 
     fireEvent.pointerUp(measurementLayer, {
       clientX: 116,
@@ -1831,7 +1831,7 @@ describe('ViewerCore', () => {
       pointerId: 1,
     })
 
-    expect(screen.getByText('256 μm')).toBeInTheDocument()
+    expect(screen.getByText('256 µm')).toBeInTheDocument()
 
     rerender(
       <ViewerCore

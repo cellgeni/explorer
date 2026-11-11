@@ -173,7 +173,7 @@ describe('App', () => {
       name: 'Mouse coordinates',
     })
     expect(
-      within(coordinateUnitGroup).getByRole('button', { name: 'μm' }),
+      within(coordinateUnitGroup).getByRole('button', { name: 'µm' }),
     ).toHaveAttribute('aria-pressed', 'true')
     expect(
       within(coordinateUnitGroup).getByRole('button', { name: 'px' }),
@@ -187,7 +187,7 @@ describe('App', () => {
       name: 'Measure unit',
     })
     expect(
-      within(measurementUnitGroup).getByRole('button', { name: 'μm' }),
+      within(measurementUnitGroup).getByRole('button', { name: 'µm' }),
     ).toHaveAttribute('aria-pressed', 'true')
     expect(
       within(measurementUnitGroup).getByRole('button', { name: 'px' }),
@@ -573,7 +573,7 @@ describe('App', () => {
       const summary = await screen.findByLabelText('ROI summary')
       expect(summary).toHaveTextContent('Bins')
       expect(summary).toHaveTextContent('2')
-      expect(summary).toHaveTextContent('16 um')
+      expect(summary).toHaveTextContent('16 µm')
       expect(screen.getByRole('button', { name: 'Export Barcodes' })).toBeEnabled()
       expect(screen.queryByRole('button', { name: 'Export Cells' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Export Transcripts' })).toBeNull()
@@ -2528,7 +2528,7 @@ describe('App', () => {
       expect(expressionList).toHaveTextContent('Actb')
       expect(expressionList).toHaveTextContent('Gad1')
       expect(screen.getByText('10 counts')).toBeInTheDocument()
-      expect(screen.getByText('5.3 um')).toBeInTheDocument()
+      expect(screen.getByText('5.3 µm')).toBeInTheDocument()
       expect(screen.getByText('Eccentricity')).toBeInTheDocument()
       expect(screen.getAllByText('0').length).toBeGreaterThan(0)
       const cellInfoSection = screen.getByRole('region', { name: 'Cell Info' })

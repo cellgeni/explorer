@@ -29,7 +29,7 @@
 .app-error-boundary p {
   margin: 0;
   color: var(--text-2);
-  font-size: 0.82rem;
+  font-size: var(--font-body);
   line-height: 1.35;
 }
 
@@ -41,6 +41,6 @@
   background: var(--surface-3);
   color: var(--text-1);
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }

@@ -222,7 +222,7 @@ export function AppLayerHudPanel({
         }
 
         setCoordinateUnit(nextUnit)
-        appendDebugEvent(`Mouse coordinates: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
+        appendDebugEvent(`Mouse coordinates: ${nextUnit === 'um' ? 'µm' : 'px'}`, {
           coalesceKey: 'coordinate-unit',
         })
       }}
@@ -251,7 +251,7 @@ export function AppLayerHudPanel({
         }
 
         setMeasurementUnit(nextUnit)
-        appendDebugEvent(`Measure unit: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
+        appendDebugEvent(`Measure unit: ${nextUnit === 'um' ? 'µm' : 'px'}`, {
           coalesceKey: 'measurement-unit',
         })
       }}

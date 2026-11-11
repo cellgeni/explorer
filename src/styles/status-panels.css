@@ -59,14 +59,13 @@
 
 .embedding-summary dt {
   color: var(--text-3);
-  font-size: 0.54rem;
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .embedding-summary dd {
   color: var(--accent);
-  font-size: 0.66rem;
+  font-size: var(--font-control);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
@@ -86,9 +85,8 @@
 .error-summary h2 {
   margin: 0;
   color: var(--danger);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .error-summary ul {
@@ -133,19 +131,19 @@
 
 .error-summary strong {
   color: var(--danger);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
 .error-summary span {
   color: var(--text-1);
-  font-size: 0.68rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
 .error-summary p {
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   line-height: 1.25;
 }
 
@@ -168,20 +166,19 @@
 
 .cell-feature-matrix-notice h2 {
   color: var(--warning);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .cell-feature-matrix-notice p {
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   line-height: 1.25;
 }
 
 .cell-feature-matrix-notice code {
   color: var(--text-2);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
 }
 
 .fallback-summary {
@@ -197,9 +194,8 @@
 .fallback-summary h2 {
   margin: 0;
   color: var(--accent);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .fallback-summary ol {
@@ -239,20 +235,20 @@
 
 .fallback-summary strong {
   color: var(--accent);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
 .fallback-summary time {
   color: var(--text-3);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .fallback-summary p {
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   line-height: 1.25;
 }
 
@@ -286,14 +282,13 @@
 .dataset-diagnostics-panel h2,
 .dataset-diagnostics-panel p {
   color: var(--text-3);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .dataset-diagnostics-heading span {
   color: var(--text-2);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
 }
 
@@ -312,7 +307,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
   align-items: baseline;
-  font-size: 0.6rem;
+  font-size: var(--font-caption);
   line-height: 1.15;
 }
 
@@ -325,8 +320,7 @@
 
 .dataset-diagnostics-panel li strong {
   color: var(--accent);
-  font-size: 0.54rem;
-  text-transform: uppercase;
+  font-size: var(--font-caption);
 }
 
 .dataset-diagnostics-panel .diagnostic-check-warning strong {
@@ -359,9 +353,8 @@
 .activity-log p {
   margin: 0;
   color: var(--accent);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .activity-log button {
@@ -372,9 +365,8 @@
   background: var(--surface-2);
   color: var(--accent);
   cursor: pointer;
-  font-size: 0.54rem;
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .activity-log button:hover {
@@ -405,7 +397,7 @@
   align-items: baseline;
   padding: 2px 0;
   color: var(--text-2);
-  font-size: 0.6rem;
+  font-size: var(--font-caption);
   line-height: 1.1;
 }
 

@@ -1,3 +1,4 @@
+import { withMicrometers } from '../../data/units'
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import type {
   ViewerMagicLensDetail,
@@ -382,7 +383,7 @@ export function useMagicLensWorkflow({
 
       setMagicLensRadiusMicrometers(nextRadius)
       magicLensLastQueryKeyRef.current = null
-      appendDebugEvent(`Magic lens radius: ${nextRadius} um`, {
+      appendDebugEvent(`Magic lens radius: ${withMicrometers(String(nextRadius))}`, {
         coalesceKey: 'magic-lens-radius',
       })
     },
