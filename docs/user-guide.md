@@ -99,6 +99,10 @@ segmentation toggles there when segmented outputs are detected.
 Custom image layers accept remote OME-TIFF or OME-Zarr URLs and render through
 the same channel controls as dataset morphology.
 
+The minimap at the bottom right of the canvas shows the whole dataset (its
+image, or its cells as dots) with the current view as a box; click or drag on
+it to move the view. Settings › `Show minimap` hides it.
+
 The Cells section's Genes picker supports individual gene selection and
 multi-gene signatures for Xenium, Visium HD, H5AD, and SpatialData. `Auto LOD`,
 the default `Expression detail` under Advanced, loads expression for every

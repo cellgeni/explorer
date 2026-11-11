@@ -426,9 +426,11 @@ export function App({ dependencies }: AppProps = {}) {
       setObservationColorMode,
       setShowCellBoundaries,
       setShowHoverTooltips,
+      setShowMinimap,
       setShowNucleusBoundaries,
       showCellBoundaries,
       showHoverTooltips,
+      showMinimap,
       showNucleusBoundaries,
     },
     magicLens: {
@@ -3521,7 +3523,9 @@ export function App({ dependencies }: AppProps = {}) {
     setMeasurementResetKey,
     setMeasurementUnit,
     setShowHoverTooltips,
+    setShowMinimap,
     showHoverTooltips,
+    showMinimap,
   })
   const loadingDatasetUrl =
     pendingDatasetLoadState.status === 'loading'
@@ -3790,6 +3794,7 @@ export function App({ dependencies }: AppProps = {}) {
         viewResetKey={viewerViewResetKey}
         focusRequest={spatialFocusRequest}
         navigationControls
+        minimap={showMinimap}
         fitRequestKey={fitRequestKey}
         onImageTileError={handleImageTileError}
         onTileCacheEviction={handleTileCacheEviction}

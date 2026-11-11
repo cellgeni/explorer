@@ -106,6 +106,8 @@ export interface ViewerCoreProps {
   readonly focusRequest?: ViewerFocusRequest | null
   // The zoom −, + and Fit buttons (UNIFIED_PLAN.md, 15.2-E).
   readonly navigationControls?: boolean
+  // The minimap at the bottom right (15.4-D).
+  readonly minimap?: boolean
   // Fits the data to the view whenever it changes (the F key).
   readonly fitRequestKey?: number
   readonly overviewRenderCellLimit?: number | null

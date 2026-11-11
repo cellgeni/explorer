@@ -24,6 +24,26 @@ export function HoverTooltipsToggle({
   )
 }
 
+// The minimap at the bottom right of the canvas (15.4-D).
+export function MinimapToggle({ settings }: { readonly settings: ViewSettingsModel }) {
+  const inputId = useId()
+
+  return (
+    <label htmlFor={inputId}>
+      <input
+        id={inputId}
+        type="checkbox"
+        checked={settings.showMinimap}
+        title="Show the minimap at the bottom right of the canvas"
+        onChange={(event) => {
+          settings.onShowMinimapChange(event.currentTarget.checked)
+        }}
+      />
+      <span>Show minimap</span>
+    </label>
+  )
+}
+
 export function CoordinateUnitControl({
   settings,
 }: {

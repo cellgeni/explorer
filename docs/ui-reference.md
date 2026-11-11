@@ -26,7 +26,7 @@ the canvas, and the layer panel docked on the right.
         │   │   ├── ROI drawing, measurement and Magic Lens overlays, hover tooltip
         │   │   ├── Bottom left: legend, loading indicator, viewport messages
         │   │   ├── Bottom centre: mouse coordinates
-        │   │   ├── Bottom right: Zoom out, Zoom in, Fit to view; scale bar
+        │   │   ├── Bottom right: minimap; Zoom out, Zoom in, Fit to view; scale bar
         │   │   └── StartScreen, before a dataset opens   src/features/start/StartScreen.tsx
         │   ├── InfoDrawer (ⓘ, 380 px, left)   src/features/shell/InfoDrawer.tsx
         │   ├── CardStack (360 px, top left)    src/features/cards/CardStack.tsx
@@ -141,6 +141,7 @@ does only that, and the tool stays.
 | Control             | Type              | Default                                    | Notes                                                                             |
 | ------------------- | ----------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
 | `Hover tooltips`    | Checkbox          | On                                         | Transcript tooltips ignore it                                                     |
+| `Show minimap`      | Checkbox          | On                                         | The [minimap](#minimap) at the bottom right; for the session, not in the link     |
 | `Mouse coordinates` | Segmented µm / px | µm                                         | Also sets the scale-bar unit                                                      |
 | `Boundary limit`    | Number            | 1–100,000; 2,500 (compact) or 50,000       | Most visible cells before boundary polygons are deferred. Disabled for Visium HD  |
 | `Show debug info`   | Switch            | Off, or on with `?debug=1` (or `#debug=1`) | Shows the zoom number, and the deck.gl layer and budget lines in Diagnostics (D6) |
@@ -601,11 +602,27 @@ apart, at least 3 points). ROIs smaller than 1 µm × 1 µm are ignored. Each
 ROI drawn on cells, spots or bins is added to Annotations › Selections as
 "ROI n" and shown in the Selection card.
 
+### Minimap
+
+The minimap (Phase 15.4-D, `src/components/ViewerMinimap.tsx`) shows the
+whole dataset at the bottom right, above the zoom buttons: up to 168 px on its
+longer side, in the shape of the dataset's extent. The view is a box in the
+accent colour (at least 6 px, so it stays visible when zoomed in). A click
+centres the view there, keeping the zoom, and dragging moves it along.
+
+- With an image, it draws the image's enabled channels at the coarsest
+  pyramid level with its own small tile cache (24 tiles, 2 requests at a
+  time), through `MorphologyCanvas`; Visium uses its tissue image.
+- Without one, or with every channel off, up to 6,000 cells (or Visium HD
+  bins) are dots.
+- It sits beside the deck.gl canvas, so showing it does not redraw the map.
+  It is hidden under 860 px and with Settings › `Show minimap` off.
+
 ### Readouts And Messages
 
 - Bottom centre: mouse X/Y in µm or px, and `Zoom N.NN` with debug info on.
-- Bottom right: zoom buttons, then the scale bar (1/2/5 steps) in the `Mouse
-coordinates` unit.
+- Bottom right: the [minimap](#minimap), zoom buttons, then the scale bar
+  (1/2/5 steps) in the `Mouse coordinates` unit.
 - Bottom left: the legend, the loading indicator (current task plus up to 3
   more) and viewport messages ("Loading overview cells…", "Reading OME-TIFF
   image…", errors).

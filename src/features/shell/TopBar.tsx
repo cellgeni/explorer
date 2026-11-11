@@ -26,6 +26,7 @@ import { useCopyLinkStatus } from '../sections/useCopyLinkStatus'
 import {
   CoordinateUnitControl,
   HoverTooltipsToggle,
+  MinimapToggle,
   MeasureToolOptions,
 } from '../sections/ViewSettingsBlocks'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
@@ -120,6 +121,7 @@ export function TopBar({
           className="shell-settings"
         >
           <HoverTooltipsToggle settings={settings} />
+          <MinimapToggle settings={settings} />
           <CoordinateUnitControl settings={settings} />
           <BoundaryLimitField open={info.open} />
           <Switch

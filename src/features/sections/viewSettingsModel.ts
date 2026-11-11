@@ -7,6 +7,9 @@ import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 export interface ViewSettingsModel {
   readonly showHoverTooltips: boolean
   readonly onShowHoverTooltipsChange: (enabled: boolean) => void
+  // The minimap (15.4-D).
+  readonly showMinimap: boolean
+  readonly onShowMinimapChange: (enabled: boolean) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly onCoordinateUnitChange: (unit: ViewerCoordinateUnit) => void
   readonly measure: MeasureToolModel
@@ -31,7 +34,9 @@ export interface ViewSettingsModelInput {
   readonly setMeasurementResetKey: Dispatch<SetStateAction<number>>
   readonly setMeasurementUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
   readonly setShowHoverTooltips: Dispatch<SetStateAction<boolean>>
+  readonly setShowMinimap: Dispatch<SetStateAction<boolean>>
   readonly showHoverTooltips: boolean
+  readonly showMinimap: boolean
 }
 
 export function useViewSettingsModel({
@@ -45,9 +50,20 @@ export function useViewSettingsModel({
   setMeasurementResetKey,
   setMeasurementUnit,
   setShowHoverTooltips,
+  setShowMinimap,
   showHoverTooltips,
+  showMinimap,
 }: ViewSettingsModelInput): ViewSettingsModel {
   return {
+    showMinimap,
+    onShowMinimapChange: (nextEnabled) => {
+      if (showMinimap === nextEnabled) return
+
+      setShowMinimap(nextEnabled)
+      appendDebugEvent(nextEnabled ? 'Minimap shown' : 'Minimap hidden', {
+        coalesceKey: 'minimap-visible',
+      })
+    },
     showHoverTooltips,
     onShowHoverTooltipsChange: (nextEnabled) => {
       if (showHoverTooltips === nextEnabled) {

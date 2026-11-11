@@ -3206,12 +3206,30 @@ Can be skipped after 15.3 ships if time is short.
     - The review before the PRs found that hidden genes stayed hidden under
       QV colours, where the list and Show All are not shown; hiding now
       applies only while points are coloured by gene.
-- [ ] **D. Minimap.** (M)
+- [x] **D. Minimap.** (M)
   - Draw the coarsest image pyramid level with a small `TileCache` and
     `drawMorphologyTileChannels` (`rendering/morphologyCanvas.ts:62`).
   - Use `flatImage` for Visium, and the cell extent when there is no image.
   - Draw the viewport rectangle from `viewportBbox`. Click or drag to move the
     view.
+  - Done 2026-11-11. `ViewerMinimap` (`src/components/`) with the pure
+    `viewerMinimapModel` (layout, view box, click to target, dot sample).
+    - It renders a second `MorphologyCanvas` with a view state that fits the
+      dataset's extent (`fitExtent`) into the minimap, so the image path is
+      the existing one: `bestLevel` picks the coarsest level, and the canvas
+      keeps its own `TileCache` (24 tiles, 2 requests), drawn by
+      `drawMorphologyTileChannels`; Visium's `flatImage` the same way.
+    - With no image it draws up to 6,000 cells (or bin corners) as dots
+      rather than an empty extent, so the tissue's shape shows.
+    - The view box comes from `viewportBbox`; a click centres the view there
+      at the same zoom, and a drag follows the pointer.
+    - It is outside `MemoDeckGL`, and the no-redraw test covers showing it.
+      Settings › `Show minimap` (on, for the session) and screens under 860
+      px hide it.
+    - Checked on the Xenium demo: the DAPI channel at its coarsest level,
+      98 × 168 px; after zooming in, a click moved the view to that place.
+    - The review before the PRs found the minimap blank with every channel
+      off; it now shows the dots then, by one rule for both places.
 - [ ] **E. µm axes.** An optional setting. (S)
 
 #### Review After M4 (2026-11-11)

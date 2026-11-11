@@ -14,7 +14,9 @@ function input(overrides: Partial<ViewSettingsModelInput> = {}): ViewSettingsMod
     setMeasurementResetKey: vi.fn(),
     setMeasurementUnit: vi.fn(),
     setShowHoverTooltips: vi.fn(),
+    setShowMinimap: vi.fn(),
     showHoverTooltips: true,
+    showMinimap: true,
     ...overrides,
   }
 }
@@ -78,6 +80,20 @@ describe('useViewSettingsModel', () => {
     })
     expect(options.appendDebugEvent).toHaveBeenCalledWith('Measure unit: px', {
       coalesceKey: 'measurement-unit',
+    })
+  })
+
+  it('shows and hides the minimap, logging only changes', () => {
+    const options = input()
+    const { result } = renderHook(() => useViewSettingsModel(options))
+
+    result.current.onShowMinimapChange(true)
+    result.current.onShowMinimapChange(false)
+
+    expect(options.setShowMinimap).toHaveBeenCalledTimes(1)
+    expect(options.setShowMinimap).toHaveBeenCalledWith(false)
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Minimap hidden', {
+      coalesceKey: 'minimap-visible',
     })
   })
 })
