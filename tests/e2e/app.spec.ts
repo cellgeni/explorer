@@ -392,11 +392,14 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
   await expect(annotationsPanel.getByLabel('Annotation set')).toHaveValue('none')
   await annotationsPanel.getByLabel('Annotation set').selectOption({ label: 'cluster' })
   await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
-  const loadedAnnotations = annotationsPanel.getByLabel('Loaded annotations')
-  await expect(loadedAnnotations).toContainText('cluster: A', {
+  // One list per set: the set is a heading and labels drop its prefix.
+  const loadedAnnotations = annotationsPanel.getByRole('region', {
+    name: 'cluster labels',
+  })
+  await expect(loadedAnnotations).toContainText('A', {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
-  await expect(loadedAnnotations).toContainText('cluster: B')
+  await expect(loadedAnnotations).toContainText('B')
 
   await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
@@ -747,10 +750,9 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
   await expect(annotationsPanel.getByLabel('Annotation set')).toHaveValue('none')
   await annotationsPanel.getByLabel('Annotation set').selectOption({ label: 'leiden' })
   await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
-  await expect(annotationsPanel.getByLabel('Loaded annotations')).toContainText(
-    'leiden: ',
-    { timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS },
-  )
+  await expect(
+    annotationsPanel.getByRole('region', { name: 'leiden labels' }),
+  ).toBeVisible({ timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS })
 
   await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
@@ -803,10 +805,9 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
     .getByLabel('Annotation set')
     .selectOption({ label: 'azimuth_broad' })
   await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
-  await expect(annotationsPanel.getByLabel('Loaded annotations')).toContainText(
-    'azimuth_broad: Epithelial cell',
-    { timeout: ATERA_LOAD_TIMEOUT_MS },
-  )
+  await expect(
+    annotationsPanel.getByRole('region', { name: 'azimuth_broad labels' }),
+  ).toContainText('Epithelial cell', { timeout: ATERA_LOAD_TIMEOUT_MS })
 
   // With UMOD selected, Atera transcripts are its density from
   // binned_transcripts.zarr.zip; for all features they are cell-summary squares.

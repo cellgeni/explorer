@@ -13,6 +13,8 @@ import {
   annotationLoadReady,
   annotationLoadStarted,
   annotationSizePlots,
+  defaultAnnotationGroupId,
+  isIdLikeAnnotationGroup,
   annotationStatusCopy,
   annotationsToCsv,
   colorsForAnnotations,
@@ -292,5 +294,53 @@ describe('annotationModel', () => {
         'custom:file:',
       ),
     ).toEqual(['manual'])
+  })
+
+  it('counts only placed cells when some are hidden', () => {
+    const annotations: Annotation[] = [
+      {
+        id: 'a',
+        label: 'set: A',
+        cellIds: [asCellId('aaaaaaaa-1'), asCellId('aaaaaaab-1'), asCellId('aaaaaaac-1')],
+      },
+    ]
+
+    expect(annotationSizePlots(annotations)[0]?.rows[0]?.cellCount).toBe(3)
+    expect(
+      annotationSizePlots(annotations, new Set(['aaaaaaaa-1', 'aaaaaaac-1']))[0]?.rows[0]
+        ?.cellCount,
+    ).toBe(2)
+  })
+
+  it('picks graphclust, or the first set, as the default', () => {
+    const group = (id: string, label: string): AnnotationGroupOption => ({
+      id,
+      label,
+      groupingName: label,
+      groupCount: 5,
+    })
+
+    expect(
+      defaultAnnotationGroupId([
+        group('analysis:1', 'kmeans 2'),
+        group('analysis:0', 'graphclust'),
+      ]),
+    ).toBe('analysis:0')
+    expect(defaultAnnotationGroupId([group('analysis:1', 'kmeans 2')])).toBe('analysis:1')
+    expect(defaultAnnotationGroupId([])).toBeUndefined()
+  })
+
+  it('treats ontology IDs, join IDs and very large columns as identifiers', () => {
+    const group = (label: string, groupCount = 10): AnnotationGroupOption => ({
+      id: `h5ad:${label}`,
+      label,
+      groupingName: label,
+      groupCount,
+    })
+
+    expect(isIdLikeAnnotationGroup(group('cell_type_ontology_term_id'))).toBe(true)
+    expect(isIdLikeAnnotationGroup(group('observation_joinid'))).toBe(true)
+    expect(isIdLikeAnnotationGroup(group('barcode', 501))).toBe(true)
+    expect(isIdLikeAnnotationGroup(group('cell_type', 40))).toBe(false)
   })
 })

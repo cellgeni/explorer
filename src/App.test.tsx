@@ -4043,6 +4043,10 @@ describe('App', () => {
 
     openControls('clusters')
     expect(await screen.findByRole('option', { name: 'kmeans 3' })).toBeInTheDocument()
+    // graphclust is chosen by default rather than All (15.1-I).
+    expect(screen.getByRole('combobox', { name: 'Annotation set' })).toHaveValue(
+      'analysis:0',
+    )
     fireEvent.change(screen.getByRole('combobox', { name: 'Annotation set' }), {
       target: { value: 'analysis:1' },
     })
@@ -4057,10 +4061,13 @@ describe('App', () => {
         }),
       )
     })
-    expect(await screen.findByLabelText('Loaded annotations')).toHaveTextContent(
-      'kmeans 3: Cluster 1',
-    )
-    expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('1')
+    // The set is a heading and its labels drop the "kmeans 3: " prefix.
+    const loadedAnnotations = await screen.findByLabelText('Loaded annotations')
+    expect(
+      within(loadedAnnotations).getByRole('heading', { name: 'kmeans 3' }),
+    ).toBeInTheDocument()
+    expect(loadedAnnotations).toHaveTextContent('Cluster 1')
+    expect(loadedAnnotations).toHaveTextContent('1')
 
     const colorInput = screen.getByLabelText('kmeans 3: Cluster 1 color')
     const colorPicker = colorInput.closest('.annotation-color-picker')
@@ -4076,9 +4083,7 @@ describe('App', () => {
     expect(visibilityInput).toBeChecked()
     fireEvent.click(visibilityInput)
     expect(visibilityInput).not.toBeChecked()
-    expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent(
-      'kmeans 3: Cluster 1',
-    )
+    expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('Cluster 1')
 
     fireEvent.change(colorInput, { target: { value: '#d62728' } })
     expect(colorInput).toHaveValue('#d62728')

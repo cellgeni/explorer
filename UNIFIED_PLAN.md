@@ -2469,7 +2469,7 @@ They are independent unless a note says otherwise.
     15 E2E checks waited for. They now use `expectLogEntry`
     (`tests/e2e/controls.ts`), which opens the log first. A clearer "loaded"
     signal comes with the top bar summary in 15.2-B.
-- [ ] **I. Annotation sets (F14).** (M)
+- [x] **I. Annotation sets (F14).** (M)
   - The Xenium default becomes `graphclust` (or the first group), not All.
   - Show one list per set, with the size bars merged into the rows: swatch,
     visibility, name without the set prefix, count and %.
@@ -2477,6 +2477,22 @@ They are independent unless a note says otherwise.
     (`*_ontology_term_id`, `observation_joinid`, or more than 500 categories)
     under "More columns".
   - Leave hidden off-tissue spots out of the counts.
+  - Done 2026-11-11. When a Xenium or Atera dataset's sets are listed,
+    `defaultAnnotationGroupId` selects graphclust, or the first set, instead
+    of All. A link's `groups=` still wins.
+  - The Annotations tab shows one list per set (`AnnotationSetLists`): the
+    set heading has its total and visibility, and each row has swatch,
+    visibility, the name without the set prefix, a size bar, count, % and
+    ×. The separate Set sizes plots are gone. Accessible names keep the full
+    label ("Remove kmeans 3: Cluster 1").
+  - `isIdLikeAnnotationGroup` moves `*_ontology_term_id`,
+    `observation_joinid` and sets with more than 500 categories under a
+    "More columns" group in the select.
+  - With Visium off-tissue spots hidden, `annotationSizePlots` counts only
+    placed spots (`placedCellIds`).
+  - The set heading is an `h4`, not a `<label>`: the default set for
+    imported labels is called "Loaded annotations", and a label would have
+    named its checkbox the same as the list.
 - [ ] **J. Selected-gene transcript density (F11).** This reopens
       [Appendix A](#appendix-a-reconciliation-notes) row 10, by user decision on 2026-11-11.
       (M–L)

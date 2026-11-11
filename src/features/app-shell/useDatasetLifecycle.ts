@@ -78,6 +78,7 @@ import {
   annotationGroupLoadFailed,
   annotationGroupLoadReady,
   annotationGroupLoadStarted,
+  defaultAnnotationGroupId,
   type AnnotationGroupState,
   type AnnotationState,
 } from '../annotations/annotationModel'
@@ -1643,6 +1644,9 @@ export function useDatasetLifecycle({
             }
 
             setAnnotationGroupState(annotationGroupLoadReady(requestedUrl, groups))
+            setSelectedAnnotationGroupId(
+              defaultAnnotationGroupId(groups) ?? ALL_ANNOTATION_GROUP_ID,
+            )
             appendDebugEvent(
               `Annotation sets ready: ${groups.length.toLocaleString()} groups`,
             )

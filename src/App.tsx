@@ -929,6 +929,14 @@ export function App({ dependencies }: AppProps = {}) {
 
     return cellById
   }, [overviewCells])
+  // Visium spots off the tissue are not placed while hidden, so annotation
+  // counts leave them out (15.1-I).
+  const annotationPlacedCellIds =
+    visiumControlState.status !== 'idle' &&
+    visiumControlState.summary.offTissueSpotCount > 0 &&
+    !visiumControlState.summary.showOffTissue
+      ? overviewCellById
+      : null
   const gridCellById = useMemo(() => {
     const cellById = new Map<string, GridCellDatum>()
 
@@ -3129,6 +3137,7 @@ export function App({ dependencies }: AppProps = {}) {
 
         <AnnotationHudPanel
           active={activeControlHudTab === 'annotations'}
+          placedCellIds={annotationPlacedCellIds}
           annotationGroupInputId={controlIds.annotationGroupInputId}
           annotationImportInputId={controlIds.annotationImportInputId}
           annotationImportUrlInputId={controlIds.annotationImportUrlInputId}

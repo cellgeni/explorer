@@ -313,3 +313,105 @@
 .annotation-size-row small {
   justify-self: end;
 }
+
+/* One list per annotation set, with each label's size bar (15.1-I). */
+.annotation-sets {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.annotation-set {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-2);
+}
+
+.annotation-set.is-hidden .annotation-set-rows {
+  opacity: 0.48;
+}
+
+.annotation-set-heading {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.annotation-set-heading input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.annotation-set-heading h4 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-size: var(--font-control);
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.annotation-set-heading small {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-size: var(--font-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.annotation-set-rows {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.annotation-set-row {
+  display: grid;
+  grid-template-columns: 22px 16px minmax(0, 1fr) 40px auto 34px 20px;
+  gap: 5px;
+  align-items: center;
+  height: 28px;
+  min-width: 0;
+  color: var(--text-1);
+  font-size: var(--font-caption);
+}
+
+.annotation-set-row.is-hidden .annotation-set-label,
+.annotation-set-row.is-hidden .annotation-size-track {
+  opacity: 0.45;
+}
+
+.annotation-set-label {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-control);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotation-set-row strong,
+.annotation-set-row small {
+  justify-self: end;
+  color: var(--text-2);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.annotation-set-row .annotation-remove {
+  width: 20px;
+  height: 20px;
+}
