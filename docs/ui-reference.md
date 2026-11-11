@@ -91,9 +91,9 @@ The redesigned layout (UNIFIED_PLAN.md, 15.2) is built behind `?shell=2` in
 the query string, and becomes the default in 15.2-J. It has a 48 px top bar
 (`src/features/shell/TopBar.tsx`) and a 360 px layer panel docked on the right
 (`src/features/shell/LayerPanel.tsx`). Cards stack at the top left of the
-canvas (`src/features/cards/CardStack.tsx`). The Control HUD keeps only the
-Cell tab's embeddings, at the top right of the canvas, until the embedding
-panel (15.2-G).
+canvas (`src/features/cards/CardStack.tsx`), and the Embedding panel opens at
+its top right (`src/features/shell/EmbeddingWindow.tsx`). The new shell has no
+Control HUD.
 
 | Top bar item   | What it does                                                                                                                          |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -119,16 +119,23 @@ section's data loads. Sections stay mounted while closed, so a gene search
 survives. `\` (or the arrow button) collapses the panel to a 40 px strip and
 gives the canvas the space.
 
-| Section             | Shown for      | Header state                                         | Controls                                                                                                                                                                                                                                                                                                                           |
-| ------------------- | -------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Image               | All            | "3 of 27 channels · z 8 of 15 · +1 layer", or "80%"  | Image opacity, Z plane, Visium `Tissue image`, channels, custom image layers. The checkbox hides the image and custom layers                                                                                                                                                                                                       |
-| Cells (Spots, Bins) | All but images | What colours them: "graphclust", "SNAP25", "4 genes" | Appearance (boundaries, opacities, Visium `Show off-tissue spots`, Visium HD bin size); `Cell color`; Genes (picker, sets, `Combine genes`, `Gene scale`, status line); Clusters (annotation sets, labels, metadata tracks); Advanced (`Expression detail`). The checkbox hides cells, boundaries and bins, and drops their legend |
-| Transcripts         | Xenium, Atera  | "SNAP25 · density", "All features · points", "Off"   | `Show transcripts` (the checkbox), Detail; Genes; Appearance; Filters; Advanced (the budget meter); the overlay status, `Load exact viewport` and top groups                                                                                                                                                                       |
-| Annotations         | All            | "2 shapes"                                           | GeoJSON shapes. The checkbox hides the shapes                                                                                                                                                                                                                                                                                      |
+| Section             | Shown for      | Header state                                         | Controls                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------- | -------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Image               | All            | "3 of 27 channels · z 8 of 15 · +1 layer", or "80%"  | Image opacity, Z plane, Visium `Tissue image`, channels, custom image layers. The checkbox hides the image and custom layers                                                                                                                                                                                                                                     |
+| Cells (Spots, Bins) | All but images | What colours them: "graphclust", "SNAP25", "4 genes" | Appearance (boundaries, opacities, Visium `Show off-tissue spots`, Visium HD bin size); `Cell color`; Genes (picker, sets, `Combine genes`, `Gene scale`, status line); Clusters (annotation sets, labels, metadata tracks); Embedding (`Show Embedding`); Advanced (`Expression detail`). The checkbox hides cells, boundaries and bins, and drops their legend |
+| Transcripts         | Xenium, Atera  | "SNAP25 · density", "All features · points", "Off"   | `Show transcripts` (the checkbox), Detail; Genes; Appearance; Filters; Advanced (the budget meter); the overlay status, `Load exact viewport` and top groups                                                                                                                                                                                                     |
+| Annotations         | All            | "2 shapes"                                           | GeoJSON shapes. The checkbox hides the shapes                                                                                                                                                                                                                                                                                                                    |
 
 Hidden layers leave the deck.gl layer list (`cellsVisible` in
 `createOverviewLayers`), so they cannot be hovered or picked. Visibility is
 not in the link yet (15.2-H).
+
+The Embedding panel (UMAP or t-SNE) opens from Cells › `Show Embedding` and
+closes with `Close embedding` or Esc. It holds `Embedding view`, `Load
+Embeddings` and the plot, linked to the selection both ways as the Cell tab's
+was. It is 360 × 400 px at first; the grip at its bottom left (`Resize the
+embedding panel`) resizes it by dragging or with the arrow keys, from 280 ×
+260 px up to the canvas, and the plot redraws at its new size.
 
 The info drawer (`src/features/shell/InfoDrawer.tsx`) is 380 px wide, on the
 left over the canvas, and not modal. Esc or `Close` closes it. Its sections:

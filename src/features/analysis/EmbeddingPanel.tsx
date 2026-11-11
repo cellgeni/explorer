@@ -1,5 +1,5 @@
 import type { PointerEvent } from 'react'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AnalysisEmbedding,
   AnalysisEmbeddingElementLabel,
@@ -75,6 +75,24 @@ export function EmbeddingPanel({
   )
   const selectedPoint =
     selectedElementId === null ? undefined : pointByCellId.get(selectedElementId)
+  // The new shell's Embedding panel can be resized (15.2-G), so the plot
+  // redraws at its new size.
+  const [plotSize, setPlotSize] = useState<string | null>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (canvas === null || typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry === undefined) return
+      const { width, height } = entry.contentRect
+      setPlotSize(`${Math.round(width)}x${Math.round(height)}`)
+    })
+    observer.observe(canvas)
+    return () => {
+      observer.disconnect()
+    }
+  }, [embedding])
 
   useEffect(() => {
     if (embedding === null || bounds === null) {
@@ -119,6 +137,7 @@ export function EmbeddingPanel({
     annotationStyles.length,
     bounds,
     embedding,
+    plotSize,
     roiPoints,
     sampledPoints,
     selectedPoint,

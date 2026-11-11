@@ -25,10 +25,88 @@
   overflow: hidden;
 }
 
-/* Until the embedding panel (15.2-G), the HUD keeps the embeddings at the
-   top right of the canvas, clear of the cards. */
-.shell-canvas .control-hud {
-  max-height: calc(100% - 24px);
+/* Embedding panel (15.2-G): top right of the canvas, resized from the grip
+   at its bottom left. */
+.shell-embedding {
+  position: absolute;
+  z-index: var(--z-cards);
+  top: var(--space-3);
+  right: var(--space-3);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-width: calc(100% - 2 * var(--space-3));
+  max-height: calc(100% - 2 * var(--space-3));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-3);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+  color: var(--text-1);
+}
+
+.shell-embedding[hidden] {
+  display: none;
+}
+
+.shell-embedding-body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-3);
+  font-size: var(--font-body);
+}
+
+.shell-embedding-body .embedding-controls select {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: var(--font-control);
+}
+
+.shell-embedding-body .embedding-panel {
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.shell-embedding-body .embedding-plot-shell {
+  min-height: 0;
+}
+
+.shell-embedding-body .embedding-plot {
+  height: 100%;
+}
+
+.shell-embedding-resize {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-3);
+  cursor: nesw-resize;
+  touch-action: none;
+}
+
+.shell-embedding-resize svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  transform: scaleX(-1);
+}
+
+.shell-embedding-resize:hover,
+.shell-embedding-resize:focus-visible {
+  color: var(--text-1);
 }
 
 /* Cards (15.2-D): top left, above the legend, scrolling when they outgrow

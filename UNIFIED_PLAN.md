@@ -245,7 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                        |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                        |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                        |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A to F done |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A to G done |
 
 ---
 
@@ -1913,7 +1913,7 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2), started
 with A (section models), B (top bar), C (layer panel), D (cards), E (fit
-and navigation) and F (info drawer) done. The
+and navigation), F (info drawer) and G (embedding panel) done. The
 user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
@@ -2809,9 +2809,19 @@ viewport`; the pinned transcript is in the Transcript card, and the
       name menu also keeps the boundary limit under Advanced.
     - Platform names moved to `PLATFORM_NAMES` in `platformAdapter.ts`, for
       the summary chip and the drawer.
-- [ ] **G. Embedding (F23).** A floating, resizable panel opened from Cells ›
+- [x] **G. Embedding (F23).** A floating, resizable panel opened from Cells ›
       Show embedding, using the existing `EmbeddingPanel`. Selection sync stays as
       it is. (M)
+  - Done 2026-11-11. `EmbeddingWindow` (`src/features/shell/`) sits at the top
+    right of the canvas, 360 × 400 px at first; a grip at its bottom left
+    resizes it by pointer or arrow keys, from 280 × 260 px up to the canvas.
+    It stays mounted while closed, so it keeps its size.
+    - `useEmbeddingModel` (a section model) and `EmbeddingBlocks` feed it;
+      the Cell tab keeps its own props until J.
+    - `EmbeddingPanel` redraws when its canvas is resized (a
+      `ResizeObserver`).
+    - The Cells section has Embedding › `Show Embedding`. With the embeddings
+      gone from the HUD, the new shell renders no HUD.
 - [ ] **H. URL panel state.** Add `panel=`, `card=` and `tool=`, and map
       version 1 `tab=` values. (S)
   - dataset → info drawer
@@ -3221,7 +3231,7 @@ Sequencing:
       Slice ranges, memory, and bundles.
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
-      M3, the new shell (15.2), has started: A to F are done, G is next.
+      M3, the new shell (15.2), has started: A to G are done, H is next.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 

@@ -5,9 +5,11 @@ import type { CardStackModel } from '../cards/cardModels'
 import type { AnnotationsSectionModel } from '../sections/annotationsSectionModel'
 import type { CellsSectionModel } from '../sections/cellsSectionModel'
 import type { DatasetInfoModel } from '../sections/datasetInfoModel'
+import type { EmbeddingModel } from '../sections/embeddingModel'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
 import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
+import { EmbeddingWindow } from './EmbeddingWindow'
 import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
 import type { LayerPanelModel } from './layerPanelModel'
@@ -25,13 +27,16 @@ interface ShellLayoutProps {
   readonly transcripts: TranscriptsSectionModel
   readonly annotations: AnnotationsSectionModel
   readonly cards: CardStackModel
+  // Null where the platform has no cells (images).
+  readonly embedding: EmbeddingModel | null
   // The canvas, and the panels that sit over it.
   readonly children: ReactNode
 }
 
 // The new shell (UNIFIED_PLAN.md, 15.2), shown with ?shell=2 until 15.2-J
 // makes it the default: the top bar, the canvas with ⓘ's dataset info drawer
-// and the cards over it, and the layer panel docked on the right.
+// and the cards over it, the Embedding panel at its top right, and the layer
+// panel docked on the right.
 export function ShellLayout({
   topBar,
   info,
@@ -42,9 +47,11 @@ export function ShellLayout({
   transcripts,
   annotations,
   cards,
+  embedding,
   children,
 }: ShellLayoutProps) {
   const [infoOpen, setInfoOpen] = useState(false)
+  const [embeddingOpen, setEmbeddingOpen] = useState(false)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const togglePanel = useEffectEvent(() => {
     setPanelCollapsed((current) => !current)
@@ -89,6 +96,15 @@ export function ShellLayout({
           />
           {children}
           <CardStack cards={cards} />
+          {embedding === null ? null : (
+            <EmbeddingWindow
+              embedding={embedding}
+              open={embeddingOpen}
+              onClose={() => {
+                setEmbeddingOpen(false)
+              }}
+            />
+          )}
         </div>
         <LayerPanel
           panel={layerPanel}
@@ -99,6 +115,8 @@ export function ShellLayout({
           transcripts={transcripts}
           annotations={annotations}
           viewOptions={info.viewOptions}
+          embeddingOpen={embeddingOpen}
+          onEmbeddingOpenChange={setEmbeddingOpen}
         />
       </div>
     </>

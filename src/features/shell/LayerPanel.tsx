@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from 'react'
-import { ChevronRightIcon, Disclosure, IconButton } from '../../components/ui'
+import { Button, ChevronRightIcon, Disclosure, IconButton } from '../../components/ui'
 import {
   AnnotationLabelLists,
   AnnotationSetControls,
@@ -55,6 +55,9 @@ interface LayerPanelProps {
   readonly annotations: AnnotationsSectionModel
   // Visium HD bin size, the Visium tissue image and off-tissue spots.
   readonly viewOptions: DatasetViewOptionsModel
+  // Cells › Show Embedding opens the Embedding panel (15.2-G).
+  readonly embeddingOpen: boolean
+  readonly onEmbeddingOpenChange: (open: boolean) => void
 }
 
 // The layer panel (UNIFIED_PLAN.md, 15.2-C): Image, Cells (Spots or Bins),
@@ -69,6 +72,8 @@ export function LayerPanel({
   transcripts,
   annotations,
   viewOptions,
+  embeddingOpen,
+  onEmbeddingOpenChange,
 }: LayerPanelProps) {
   // Until the user opens or closes a section, Cells is open, or the first
   // section where there are no cells (images).
@@ -83,7 +88,13 @@ export function LayerPanel({
   const bodies: Readonly<Record<LayerSectionId, ReactNode>> = {
     image: <ImageSection image={image} viewOptions={viewOptions} />,
     cells: (
-      <CellsSection cells={cells} annotations={annotations} viewOptions={viewOptions} />
+      <CellsSection
+        cells={cells}
+        annotations={annotations}
+        viewOptions={viewOptions}
+        embeddingOpen={embeddingOpen}
+        onEmbeddingOpenChange={onEmbeddingOpenChange}
+      />
     ),
     transcripts: <TranscriptsSection transcripts={transcripts} />,
     annotations: (
@@ -225,10 +236,14 @@ function CellsSection({
   cells,
   annotations,
   viewOptions,
+  embeddingOpen,
+  onEmbeddingOpenChange,
 }: {
   readonly cells: CellsSectionModel
   readonly annotations: AnnotationsSectionModel
   readonly viewOptions: DatasetViewOptionsModel
+  readonly embeddingOpen: boolean
+  readonly onEmbeddingOpenChange: (open: boolean) => void
 }) {
   return (
     <>
@@ -258,6 +273,19 @@ function CellsSection({
         <AnnotationSetControls sets={annotations.sets} />
         <AnnotationLabelLists sets={annotations.sets} />
         <MetadataTracksPanel metadataTracks={annotations.metadataTracks} />
+
+        <SubHeading>Embedding</SubHeading>
+        <Button
+          title={
+            embeddingOpen ? 'Hide the embedding panel' : 'Show the UMAP or t-SNE panel'
+          }
+          aria-pressed={embeddingOpen}
+          onClick={() => {
+            onEmbeddingOpenChange(!embeddingOpen)
+          }}
+        >
+          {embeddingOpen ? 'Hide Embedding' : 'Show Embedding'}
+        </Button>
 
         <Disclosure title="Advanced cell options" summary="Advanced">
           <ExpressionDetailControl colour={cells.colour} />
