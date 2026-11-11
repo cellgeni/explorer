@@ -1,5 +1,5 @@
 import { DeckGL } from '@deck.gl/react'
-import type { KeyboardEvent, PointerEvent } from 'react'
+import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
@@ -55,6 +55,7 @@ import {
   hasMinimumPointStep,
   roiBboxToScreenRect,
   roiSelectionFromBox,
+  roiSelectionToScreenPath,
   roiSelectionFromLasso,
   type RoiDraft,
 } from './viewerRoiInteraction'
@@ -150,6 +151,7 @@ import type {
   ViewerMagicLensStatus,
   ViewerMagicLensSummary,
   ViewerOverviewCellHoverDetail,
+  ViewerSelectionOutline,
   ViewerTranscriptHoverDetail,
   ViewerViewportDetail,
 } from './viewerCoreTypes'
@@ -167,6 +169,7 @@ export type {
   ViewerMagicLensStatus,
   ViewerMagicLensSummary,
   ViewerOverviewCellHoverDetail,
+  ViewerSelectionOutline,
   ViewerTranscriptHoverDetail,
   ViewerViewportDetail,
 } from './viewerCoreTypes'
@@ -198,6 +201,7 @@ function removeDeckFromTabOrder(): void {
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
+const EMPTY_SELECTION_OUTLINES: readonly ViewerSelectionOutline[] = []
 const EMPTY_LEGEND_SECTIONS: readonly ViewerLegendSection[] = []
 // Defaults for omitted props are constants, so a parent re-render that leaves
 // them out does not hand deck.gl new layers.
@@ -262,6 +266,7 @@ export function ViewerCore({
   roiMode = 'idle',
   roiBbox = null,
   roiSelection = null,
+  selectionOutlines = EMPTY_SELECTION_OUTLINES,
   magicLensActive = false,
   magicLensRadiusMicrometers = 80,
   magicLensStatus = 'idle',
@@ -373,6 +378,7 @@ export function ViewerCore({
       roiMode={roiMode}
       roiBbox={roiBbox}
       roiSelection={roiSelection}
+      selectionOutlines={selectionOutlines}
       magicLensActive={magicLensActive}
       magicLensRadiusMicrometers={magicLensRadiusMicrometers}
       magicLensStatus={magicLensStatus}
@@ -455,6 +461,7 @@ interface ViewerSurfaceProps {
   readonly roiMode: RoiDrawMode
   readonly roiBbox: BBox | null
   readonly roiSelection: RoiSelection | null
+  readonly selectionOutlines: readonly ViewerSelectionOutline[]
   readonly magicLensActive: boolean
   readonly magicLensRadiusMicrometers: number
   readonly magicLensStatus: ViewerMagicLensStatus
@@ -535,6 +542,7 @@ function ViewerSurface({
   roiMode,
   roiBbox,
   roiSelection,
+  selectionOutlines,
   magicLensActive,
   magicLensRadiusMicrometers,
   magicLensStatus,
@@ -1064,6 +1072,25 @@ function ViewerSurface({
 
     return null
   }, [displayedRoiSelection, roiDraft, viewState, viewport])
+  // Saved selections other than the card's, dashed in their colours
+  // (15.4-A). The card's own takes its colour from the active outline.
+  const savedSelectionPaths = useMemo(() => {
+    if (viewport.width <= 0 || viewport.height <= 0) return []
+
+    return selectionOutlines.flatMap((outline) => {
+      if (outline.active) return []
+      const d = roiSelectionToScreenPath(outline.selection, viewState, viewport)
+      return d === null ? [] : [{ id: outline.id, color: outline.color, d }]
+    })
+  }, [selectionOutlines, viewState, viewport])
+  const activeSelectionColor =
+    roiDraft === null
+      ? selectionOutlines.find((outline) => outline.active)?.color
+      : undefined
+  const activeSelectionStyle =
+    activeSelectionColor === undefined
+      ? undefined
+      : ({ '--selection-color': activeSelectionColor } as CSSProperties)
   const magicLensOverlay = useMemo(
     () =>
       magicLensActive && magicLensScreen !== null
@@ -1886,11 +1913,24 @@ function ViewerSurface({
           onPointerUp={handleRoiPointerUp}
           onPointerCancel={handleRoiPointerCancel}
         >
+          {savedSelectionPaths.length === 0 ? null : (
+            <svg className="roi-path-svg" focusable="false" aria-hidden="true">
+              {savedSelectionPaths.map((path) => (
+                <path
+                  key={path.id}
+                  className="roi-saved-path"
+                  d={path.d}
+                  style={{ '--selection-color': path.color } as CSSProperties}
+                />
+              ))}
+            </svg>
+          )}
           {roiPathOverlay === null ? null : (
             <svg className="roi-path-svg" focusable="false" aria-hidden="true">
               <path
                 className={`roi-lasso-path${roiPathOverlay.isDraft ? ' is-draft' : ''}`}
                 d={roiPathOverlay.d}
+                style={activeSelectionStyle}
               />
             </svg>
           )}
@@ -1898,6 +1938,7 @@ function ViewerSurface({
             <span
               className="roi-rectangle"
               style={{
+                ...activeSelectionStyle,
                 left: roiScreenRect.left,
                 top: roiScreenRect.top,
                 width: roiScreenRect.width,

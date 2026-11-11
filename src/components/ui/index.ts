@@ -29,7 +29,9 @@ export {
   LinkIcon,
   MinusIcon,
   PanIcon,
+  PencilIcon,
   PlusIcon,
   RulerIcon,
   SettingsIcon,
+  TargetIcon,
 } from './icons'

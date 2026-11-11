@@ -7,17 +7,37 @@ import type {
   PlacedCellIds,
 } from '../annotations/annotationModel'
 import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotationModel'
+import type { SavedSelection } from '../roi/selectionListModel'
+import type { SelectionList } from '../roi/useSelectionList'
 
-// Annotation sets and their labels, metadata tracks, and GeoJSON shapes
-// (UNIFIED_PLAN.md, 15.2-A). The sets and tracks are in the Cells section's
-// Clusters (D4); the shapes are in the Annotations section.
+// Annotation sets and their labels, metadata tracks, selections and GeoJSON
+// shapes (UNIFIED_PLAN.md, 15.2-A). The sets and tracks are in the Cells
+// section's Clusters (D4); selections (15.4-A) and shapes are in the
+// Annotations section.
 export interface AnnotationsSectionModel {
   // The header chip.
   readonly headerCopy: string
   readonly isLoading: boolean
   readonly sets: AnnotationSetsModel
   readonly metadataTracks: MetadataTracksModel
+  readonly selections: SelectionListModel
   readonly shapes: GeometricShapesModel
+}
+
+// Saved selections (15.4-A): one row each, with colour, visibility, name,
+// Go To, rename and delete. Choosing a name shows it in the Selection card.
+export interface SelectionListModel {
+  // False on an image, where drawing makes shapes.
+  readonly available: boolean
+  readonly selections: readonly SavedSelection[]
+  readonly activeId: string | null
+  readonly canActivate: boolean
+  readonly onActivate: (id: string) => void
+  readonly onRename: (id: string, name: string) => void
+  readonly onColorChange: (id: string, color: string) => void
+  readonly onVisibilityChange: (id: string, visible: boolean) => void
+  readonly onDelete: (id: string) => void
+  readonly onGoTo: (id: string) => void
 }
 
 export interface AnnotationSetsModel {
@@ -109,6 +129,8 @@ export interface AnnotationsSectionModelInput {
   readonly hiddenAnnotationSetIds: readonly string[]
   readonly loadEnabled: boolean
   readonly selectedAnnotationGroupId: string
+  readonly selectionList: SelectionList
+  readonly selectionsAvailable: boolean
   readonly setAnnotationImportUrl: Dispatch<SetStateAction<string>>
 }
 
@@ -144,6 +166,8 @@ export function useAnnotationsSectionModel({
   hiddenAnnotationSetIds,
   loadEnabled,
   selectedAnnotationGroupId,
+  selectionList,
+  selectionsAvailable,
   setAnnotationImportUrl,
 }: AnnotationsSectionModelInput): AnnotationsSectionModel {
   const [isImportingUrl, setIsImportingUrl] = useState(false)
@@ -199,6 +223,18 @@ export function useAnnotationsSectionModel({
     metadataTracks: {
       tracks: cellMetadataTracks,
       onRemove: handleRemoveCellMetadataTrack,
+    },
+    selections: {
+      available: selectionsAvailable,
+      selections: selectionList.selections,
+      activeId: selectionList.activeId,
+      canActivate: selectionList.canActivate,
+      onActivate: selectionList.onActivate,
+      onRename: selectionList.onRename,
+      onColorChange: selectionList.onColorChange,
+      onVisibilityChange: selectionList.onVisibilityChange,
+      onDelete: selectionList.onDelete,
+      onGoTo: selectionList.onGoTo,
     },
     shapes: {
       enabled: geometricAnnotationsEnabled,

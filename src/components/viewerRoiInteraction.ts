@@ -90,6 +90,26 @@ export function dataPointsToPathOverlay(
   }
 }
 
+// A saved selection's outline on screen, closed.
+export function roiSelectionToScreenPath(
+  selection: RoiSelection,
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+): string | null {
+  const { minX, minY, maxX, maxY } = selection.bbox
+  const points =
+    selection.kind === 'lasso'
+      ? selection.points
+      : [
+          { x: minX, y: minY },
+          { x: maxX, y: minY },
+          { x: maxX, y: maxY },
+          { x: minX, y: maxY },
+        ]
+
+  return dataPointsToPathOverlay(points, viewState, viewport, false)?.d ?? null
+}
+
 export function roiSelectionFromBox(
   first: DataPoint,
   second: DataPoint,

@@ -95,6 +95,9 @@ export interface RegionSelectionCardModel extends SelectionCardBase {
   readonly ready: boolean
   // Cells only: save the selection as an annotation.
   readonly onSave: (() => void) | null
+  // Removes the selection from the list (15.4-A); closing only hides the
+  // card.
+  readonly onDelete: () => void
   readonly exports: readonly SelectionExport[]
   readonly lens: SelectionLensModel | null
 }
@@ -209,6 +212,7 @@ export function cellsSelectionCard({
   name,
   nameDisabled,
   onClose,
+  onDelete,
   onExportCells,
   onExportGeoJson,
   onExportTranscripts,
@@ -225,6 +229,7 @@ export function cellsSelectionCard({
   readonly lens: SelectionLensInput
   readonly loading: boolean
   readonly onClose: () => void
+  readonly onDelete: () => void
   readonly onExportCells: () => void
   readonly onExportGeoJson: () => void
   readonly onExportTranscripts: () => void
@@ -254,7 +259,7 @@ export function cellsSelectionCard({
     nameDisabled,
     status,
     loading,
-    closeTitle: 'Clear selection',
+    closeTitle: 'Close selection',
     onClose,
     summary:
       summary === null
@@ -281,6 +286,7 @@ export function cellsSelectionCard({
     },
     ready,
     onSave,
+    onDelete,
     exports: [
       {
         label: 'Export GeoJSON',
@@ -312,6 +318,7 @@ export function binsSelectionCard({
   name,
   nameDisabled,
   onClose,
+  onDelete,
   onExportBarcodes,
   onExportGeoJson,
   onNameChange,
@@ -323,6 +330,7 @@ export function binsSelectionCard({
   readonly genes: { readonly copy: string; readonly state: RoiGeneStatsState }
   readonly lens: SelectionLensInput
   readonly onClose: () => void
+  readonly onDelete: () => void
   readonly onExportBarcodes: () => void
   readonly onExportGeoJson: () => void
   readonly roiState: VisiumHdRoiState
@@ -364,7 +372,7 @@ export function binsSelectionCard({
     nameDisabled,
     status,
     loading: genes.state.status === 'loading',
-    closeTitle: 'Clear selection',
+    closeTitle: 'Close selection',
     onClose,
     summary:
       summary === null
@@ -387,6 +395,7 @@ export function binsSelectionCard({
     },
     ready: true,
     onSave: null,
+    onDelete,
     exports: [
       {
         label: 'Export GeoJSON',

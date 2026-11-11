@@ -236,7 +236,7 @@ seven, one hook each, in `src/features/sections/`:
 | `ImageSectionModel`       | `useImageSectionModel`       | Image opacity, z plane, channels, custom image layers                                                            |
 | `CellsSectionModel`       | `useCellsSectionModel`       | Cell appearance (boundaries, opacities), the gene selection, and what colours cells                              |
 | `TranscriptsSectionModel` | `useTranscriptsSectionModel` | Transcript display, gene filter, colours, filters, point style, budget, hovered and pinned transcript            |
-| `AnnotationsSectionModel` | `useAnnotationsSectionModel` | Annotation sets and labels, metadata tracks, GeoJSON shapes                                                      |
+| `AnnotationsSectionModel` | `useAnnotationsSectionModel` | Annotation sets and labels, metadata tracks, saved selections (15.4-A), GeoJSON shapes                           |
 | `ViewSettingsModel`       | `useViewSettingsModel`       | Hover tooltips, mouse coordinate units, the measure tool                                                         |
 | `EmbeddingModel`          | `useEmbeddingModel`          | The embedding view, Load Embeddings, and the plot's selection links (15.2-G)                                     |
 
@@ -259,6 +259,13 @@ seven, one hook each, in `src/features/sections/`:
   Each card is null while there is nothing to show, and its `onClose` clears
   that state. The selection card has three variants: cells, Visium HD bins,
   and image shapes.
+- Saved selections (15.4-A): `useSelectionList`
+  (`src/features/roi/useSelectionList.ts`) keeps every drawn box or lasso,
+  with a name, colour and visibility, per dataset. It sits above the ROI
+  workflows, which still hold one ROI: the active selection's. Drawing adds a
+  selection and runs it; choosing one runs it again; closing the Selection
+  card clears the ROI but keeps the selection. The list also replays a link's
+  `roi=`.
 
 ## Coordinates
 

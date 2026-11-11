@@ -28,7 +28,7 @@ function selection(
     nameDisabled: false,
     status: '2 cells',
     loading: false,
-    closeTitle: 'Clear selection',
+    closeTitle: 'Close selection',
     onClose: vi.fn(),
     summary: '2 cells · 5,000 µm²',
     elementsLabel: 'Cells',
@@ -61,6 +61,7 @@ function selection(
     },
     ready: true,
     onSave: vi.fn(),
+    onDelete: vi.fn(),
     exports: [
       {
         label: 'Export GeoJSON',
@@ -121,7 +122,7 @@ describe('CardStack', () => {
     expect(card.lens?.onRun).toHaveBeenCalledTimes(1)
   })
 
-  it('renames, saves, exports, goes to and clears a selection', () => {
+  it('renames, saves, exports, goes to, deletes and closes a selection', () => {
     const card = selection()
     render(<CardStack cards={{ ...NO_CARDS, selection: card }} />)
 
@@ -129,9 +130,11 @@ describe('CardStack', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save ROI' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export GeoJSON' }))
     fireEvent.click(screen.getByRole('button', { name: 'Go To' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close selection' }))
 
     expect(card.onGoTo).toHaveBeenCalledTimes(1)
+    expect(card.onDelete).toHaveBeenCalledTimes(1)
     expect(card.onNameChange).toHaveBeenCalledWith('Cortex')
     expect(card.onSave).toHaveBeenCalledTimes(1)
     expect(card.exports[0]?.onExport).toHaveBeenCalledTimes(1)

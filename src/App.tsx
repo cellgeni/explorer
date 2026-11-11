@@ -140,6 +140,8 @@ import { magicLensScopeLabel, magicLensStatusCopy } from './features/roi/magicLe
 import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
 import { useVisiumHdMagicLensSummary } from './features/roi/useVisiumHdMagicLensSummary'
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
+import { useSelectionList } from './features/roi/useSelectionList'
+import { selectionDatasetKey, selectionOutlines } from './features/roi/selectionListModel'
 import { useVisiumHdRoiWorkflow } from './features/roi/useVisiumHdRoiWorkflow'
 import {
   roiGeneDatasetWarmupKey,
@@ -2091,7 +2093,6 @@ export function App({ dependencies }: AppProps = {}) {
       loadRoiTranscripts: loadActiveRoiTranscripts,
     },
     refs: {
-      initialSharedRoiSelectionRef,
       magicLensAbortRef,
       magicLensDebounceRef,
       magicLensLastDetailRef,
@@ -2141,7 +2142,6 @@ export function App({ dependencies }: AppProps = {}) {
       getSpatialDataset,
     },
     refs: {
-      initialSharedRoiSelectionRef,
       roiGeneAbortRef: roiAbortRef,
       roiGeneRequestIdRef: roiRequestId,
       roiIdRef,
@@ -2205,7 +2205,6 @@ export function App({ dependencies }: AppProps = {}) {
       setHiddenAnnotationIds,
       setHiddenAnnotationSetIds,
       setObservationColorMode,
-      setRoiName,
       setSelectedAnnotationGroupId,
       setSelectedCellMetadataTrackId,
     },
@@ -3099,12 +3098,6 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
-  const activeRoiCompleteHandler =
-    platformAdapter.kind === 'image'
-      ? handleImageRoiComplete
-      : platformAdapter.kind === 'visium-hd'
-        ? handleVisiumHdRoiComplete
-        : handleRoiComplete
   const restoreAnnotationSnapshot = useCallback(
     (snapshot: AnnotationSnapshot) => {
       setAnnotationState(snapshot.annotationState)
@@ -3125,13 +3118,55 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCellMetadataTrackId,
     ],
   )
-  const restoreRoiSelection = useCallback(
-    (selection: RoiSelection, name: string) => {
-      setRoiName(name)
-      activeRoiCompleteHandler(selection)
-    },
-    [activeRoiCompleteHandler, setRoiName],
+  // Saved selections (15.4-A): drawing adds one, and the Selection card
+  // shows the active one. They belong to the dataset and its frame: the
+  // Visium library, or the SpatialData coordinate system and scale.
+  const selectionList = useSelectionList({
+    datasetKey: selectionDatasetKey(loadedDatasetUrl, {
+      ...(visiumControlState.status === 'idle'
+        ? {}
+        : { visiumLibrary: visiumControlState.summary.libraryId }),
+      ...(spatialDataControlState.status === 'idle'
+        ? {}
+        : {
+            spatialDataFrame: `${spatialDataControlState.coordinateSystem}@${spatialDataControlState.units.micrometersPerUnit}`,
+          }),
+    }),
+    enabled: platformAdapter.kind !== 'image',
+    canRun: canDrawRoi,
+    activeSelection: activeRoiSelection,
+    initialSharedSelectionRef: initialSharedRoiSelectionRef,
+    runSelection: isVisiumHdDataset ? handleVisiumHdRoiComplete : handleRoiComplete,
+    clearActiveSelection: handleClearActiveRoi,
+    setRoiName,
+    offerUndo,
+    appendDebugEvent,
+    zoomToBbox,
+  })
+  const viewerSelectionOutlines = useMemo(
+    () =>
+      selectionOutlines(
+        selectionList.selections,
+        selectionList.activeId,
+        layerVisibility.annotations,
+      ),
+    [layerVisibility.annotations, selectionList.activeId, selectionList.selections],
   )
+  const {
+    activeId: activeSelectionId,
+    onDelete: deleteSelection,
+    onRename: renameSelection,
+  } = selectionList
+  const handleSelectionNameChange = useCallback(
+    (name: string) => {
+      if (activeSelectionId === null) setRoiName(name)
+      else renameSelection(activeSelectionId, name)
+    },
+    [activeSelectionId, renameSelection, setRoiName],
+  )
+  const deleteActiveSelection = useCallback(() => {
+    if (activeSelectionId !== null) deleteSelection(activeSelectionId)
+  }, [activeSelectionId, deleteSelection])
   // Removals that offer Undo (15.3-C).
   const undoable = useUndoableRemovals({
     offerUndo,
@@ -3154,12 +3189,6 @@ export function App({ dependencies }: AppProps = {}) {
       restore: setGeometricAnnotations,
       onRemove: handleRemoveGeometricAnnotation,
       onClear: handleClearGeometricAnnotations,
-    },
-    selection: {
-      selection: activeRoiSelection,
-      name: roiName,
-      onClear: handleClearActiveRoi,
-      restore: restoreRoiSelection,
     },
   })
 
@@ -3377,6 +3406,8 @@ export function App({ dependencies }: AppProps = {}) {
     hiddenAnnotationSetIds,
     loadEnabled: platformAdapter.capabilities.annotations && platformFeatureLoadEnabled,
     selectedAnnotationGroupId,
+    selectionList,
+    selectionsAvailable: platformAdapter.kind !== 'image',
     setAnnotationImportUrl,
   })
   const viewSettings = useViewSettingsModel({
@@ -3498,10 +3529,11 @@ export function App({ dependencies }: AppProps = {}) {
               lens: selectionLensInput,
               name: roiName,
               nameDisabled: loadState.status !== 'ready',
-              onClose: undoable.handleClearSelection,
+              onClose: selectionList.onCloseActive,
+              onDelete: deleteActiveSelection,
               onExportBarcodes: handleExportVisiumHdRoiBarcodes,
               onExportGeoJson: handleExportVisiumHdRoiGeoJson,
-              onNameChange: setRoiName,
+              onNameChange: handleSelectionNameChange,
               roiState: activeVisiumHdRoiState,
               status: visiumHdRoiCopy,
               summary: visiumHdRoiSummary,
@@ -3517,11 +3549,12 @@ export function App({ dependencies }: AppProps = {}) {
               loading: isRoiTabLoading,
               name: roiName,
               nameDisabled: !platformFeatureLoadEnabled,
-              onClose: undoable.handleClearSelection,
+              onClose: selectionList.onCloseActive,
+              onDelete: deleteActiveSelection,
               onExportCells: handleExportRoiCells,
               onExportGeoJson: handleExportRoiGeoJson,
               onExportTranscripts: handleExportRoiTranscripts,
-              onNameChange: setRoiName,
+              onNameChange: handleSelectionNameChange,
               onSave: handleSaveRoiAnnotation,
               roiState,
               status: roiHeaderCopy,
@@ -3642,6 +3675,7 @@ export function App({ dependencies }: AppProps = {}) {
         tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
         roiMode={roiMode}
         roiSelection={activeRoiSelection}
+        selectionOutlines={viewerSelectionOutlines}
         magicLensActive={magicLensIsCursorActive}
         magicLensRadiusMicrometers={magicLensRadiusMicrometers}
         magicLensStatus={magicLensViewerStatus}
@@ -3659,7 +3693,11 @@ export function App({ dependencies }: AppProps = {}) {
         onCellClick={handleViewerCellClick}
         onCellBoundaryClick={handleViewerCellBoundaryClick}
         onGridCellClick={handleViewerGridCellClick}
-        onRoiComplete={activeRoiCompleteHandler}
+        onRoiComplete={
+          platformAdapter.kind === 'image'
+            ? handleImageRoiComplete
+            : selectionList.onDrawn
+        }
         onMagicLensMove={handleMagicLensMove}
         onMagicLensLeave={handleMagicLensLeave}
         {...(initialShareableState.viewState === undefined

@@ -95,7 +95,6 @@ interface UseRoiWorkflowLoaders {
 }
 
 interface UseRoiWorkflowRefs {
-  readonly initialSharedRoiSelectionRef: MutableRef<RoiSelection | null>
   readonly magicLensAbortRef: MutableRef<AbortController | null>
   readonly magicLensDebounceRef: MutableRef<number | null>
   readonly magicLensLastDetailRef: MutableRef<ViewerMagicLensDetail | null>
@@ -161,7 +160,6 @@ export function useRoiWorkflow({
   data: { loadState, roiState },
   loaders: { loadRoiCells, loadRoiGeneStats, loadRoiTranscripts },
   refs: {
-    initialSharedRoiSelectionRef,
     magicLensAbortRef,
     magicLensDebounceRef,
     magicLensLastDetailRef,
@@ -551,30 +549,6 @@ export function useRoiWorkflow({
       setRoiTranscriptExportState,
     ],
   )
-
-  useEffect(() => {
-    const selection = initialSharedRoiSelectionRef.current
-
-    if (
-      selection === null ||
-      !enabled ||
-      loadState.status !== 'ready' ||
-      roiState.status !== 'idle'
-    ) {
-      return
-    }
-
-    initialSharedRoiSelectionRef.current = null
-    setRoiName('Shared ROI')
-    handleRoiComplete(selection)
-  }, [
-    handleRoiComplete,
-    enabled,
-    initialSharedRoiSelectionRef,
-    loadState.status,
-    roiState.status,
-    setRoiName,
-  ])
 
   const handleClearRoi = useCallback(() => {
     invalidateLatestRequest({

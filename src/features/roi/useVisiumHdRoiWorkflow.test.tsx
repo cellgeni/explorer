@@ -64,7 +64,6 @@ const readyVisiumHdRoiState: VisiumHdRoiState = {
 
 interface Snapshot {
   readonly debugMessages: readonly string[]
-  readonly initialSharedSelection: RoiSelection | null
   readonly roiGeneStatsState: RoiGeneStatsState<StructuredLoadError>
   readonly roiMode: RoiDrawMode
   readonly roiName: string
@@ -81,7 +80,6 @@ afterEach(() => {
 function Probe({
   clearRoi = vi.fn(),
   getSpatialDataset = defaultSpatialDatasetLoader(),
-  initialSharedSelection = null,
   initialVisiumHdRoiState = IDLE_VISIUM_HD_ROI_STATE,
   isVisiumHdDataset = true,
   loadState = readyLoadState,
@@ -90,7 +88,6 @@ function Probe({
 }: {
   readonly clearRoi?: () => void
   readonly getSpatialDataset?: SpatialDatasetLoader
-  readonly initialSharedSelection?: RoiSelection | null
   readonly initialVisiumHdRoiState?: VisiumHdRoiState
   readonly isVisiumHdDataset?: boolean
   readonly loadState?: DatasetLoadState<StructuredLoadError>
@@ -107,9 +104,6 @@ function Probe({
     RoiGeneStatsState<StructuredLoadError>
   >({ status: 'idle' })
   const debugMessagesRef = React.useRef<string[]>([])
-  const initialSharedRoiSelectionRef = React.useRef<RoiSelection | null>(
-    initialSharedSelection,
-  )
   const roiGeneAbortRef = React.useRef<AbortController | null>(null)
   const roiGeneRequestIdRef = React.useRef(0)
   const roiIdRef = React.useRef(0)
@@ -135,7 +129,6 @@ function Probe({
       getSpatialDataset,
     },
     refs: {
-      initialSharedRoiSelectionRef,
       roiGeneAbortRef,
       roiGeneRequestIdRef,
       roiIdRef,
@@ -151,7 +144,6 @@ function Probe({
   React.useEffect(() => {
     onReady(nextApi, {
       debugMessages: debugMessagesRef.current,
-      initialSharedSelection: initialSharedRoiSelectionRef.current,
       roiGeneStatsState,
       roiMode,
       roiName,
@@ -240,33 +232,6 @@ describe('useVisiumHdRoiWorkflow', () => {
         totalCount: 9,
       },
     })
-  })
-
-  it('replays an initial shared ROI selection once the Visium HD dataset is ready', async () => {
-    render(
-      <Probe
-        initialSharedSelection={selection}
-        onReady={(nextApi, nextSnapshot) => {
-          api = nextApi
-          snapshot = nextSnapshot
-        }}
-      />,
-    )
-
-    await waitFor(() => {
-      expect(snapshot.visiumHdRoiState.status).toBe('ready')
-    })
-
-    expect(snapshot.initialSharedSelection).toBeNull()
-    expect(snapshot.roiName).toBe('Shared ROI')
-    expect(snapshot.visiumHdRoiState).toMatchObject({
-      status: 'ready',
-      bins: [expect.objectContaining({ barcode: 's_008um_1_1' })],
-    })
-    await waitFor(() => {
-      expect(snapshot.roiGeneStatsState.status).toBe('ready')
-    })
-    void api
   })
 
   it('exports ready Visium HD ROI barcodes', async () => {

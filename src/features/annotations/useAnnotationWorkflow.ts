@@ -83,7 +83,6 @@ interface AnnotationWorkflowSetters {
     SetStateAction<AnnotationState<StructuredLoadError>>
   >
   readonly setObservationColorMode: Dispatch<SetStateAction<ObservationColorMode>>
-  readonly setRoiName: Dispatch<SetStateAction<string>>
   readonly setSelectedAnnotationGroupId: Dispatch<SetStateAction<string>>
   readonly setSelectedCellMetadataTrackId: Dispatch<SetStateAction<string | null>>
 }
@@ -142,7 +141,6 @@ export function useAnnotationWorkflow({
     setHiddenAnnotationIds,
     setHiddenAnnotationSetIds,
     setObservationColorMode,
-    setRoiName,
     setSelectedAnnotationGroupId,
     setSelectedCellMetadataTrackId,
   } = setters
@@ -544,7 +542,6 @@ export function useAnnotationWorkflow({
       [annotation.id]: annotationPaletteColor(Object.keys(current).length),
     }))
     setObservationColorMode('annotations')
-    setRoiName(defaultRoiName(roiIdRef.current + 1))
   }, [
     appendDebugEvent,
     loadState,
@@ -554,7 +551,6 @@ export function useAnnotationWorkflow({
     setAnnotationColors,
     setAnnotationState,
     setObservationColorMode,
-    setRoiName,
   ])
 
   return {

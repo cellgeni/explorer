@@ -251,8 +251,12 @@
 }
 
 .roi-lasso-path {
-  fill: var(--overlay-selection-fill);
-  stroke: var(--overlay-selection);
+  fill: color-mix(
+    in srgb,
+    var(--selection-color, var(--overlay-selection)) 15%,
+    transparent
+  );
+  stroke: var(--selection-color, var(--overlay-selection));
   stroke-width: 1.5;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -266,11 +270,26 @@
 
 .roi-rectangle {
   position: absolute;
-  border: 1px solid var(--overlay-selection);
-  background: var(--overlay-selection-fill);
+  border: 1px solid var(--selection-color, var(--overlay-selection));
+  background: color-mix(
+    in srgb,
+    var(--selection-color, var(--overlay-selection)) 15%,
+    transparent
+  );
   box-shadow:
     inset 0 0 0 1px var(--overlay-shade),
     0 0 0 1px var(--overlay-halo);
+}
+
+/* Saved selections other than the card's (15.4-A). */
+.roi-saved-path {
+  fill: none;
+  stroke: var(--selection-color);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 1px var(--overlay-halo));
 }
 
 .measurement-draw-layer {

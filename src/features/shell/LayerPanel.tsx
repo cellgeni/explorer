@@ -7,6 +7,7 @@ import {
   MetadataTracksPanel,
 } from '../sections/AnnotationsSectionBlocks'
 import type { AnnotationsSectionModel } from '../sections/annotationsSectionModel'
+import { SelectionListPanel } from '../sections/SelectionListBlock'
 import {
   CellBoundaryToggles,
   CellColorControls,
@@ -107,6 +108,7 @@ export function LayerPanel({
     transcripts: <TranscriptsSection transcripts={transcripts} />,
     annotations: (
       <div className="analysis-section">
+        <SelectionListPanel selections={annotations.selections} />
         <GeometricShapesPanel shapes={annotations.shapes} />
       </div>
     ),
