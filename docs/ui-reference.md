@@ -26,7 +26,8 @@ the canvas, and the layer panel docked on the right.
         │   │   ├── ROI drawing, measurement and Magic Lens overlays, hover tooltip
         │   │   ├── Bottom left: legend, loading indicator, viewport messages
         │   │   ├── Bottom centre: mouse coordinates
-        │   │   └── Bottom right: Zoom out, Zoom in, Fit to view; scale bar
+        │   │   ├── Bottom right: Zoom out, Zoom in, Fit to view; scale bar
+        │   │   └── StartScreen, before a dataset opens   src/features/start/StartScreen.tsx
         │   ├── InfoDrawer (ⓘ, 380 px, left)   src/features/shell/InfoDrawer.tsx
         │   ├── CardStack (360 px, top left)    src/features/cards/CardStack.tsx
         │   └── EmbeddingWindow (top right)     src/features/shell/EmbeddingWindow.tsx
@@ -46,20 +47,53 @@ loaded. The name is the manifest's `name`, or else the last part of the URL
 that is not `outs`, `explorer.json` or `experiment.xenium`. The favicon is
 `public/favicon.svg`.
 
+## Start Screen
+
+Until a dataset opens, the canvas shows the start screen
+(`src/features/start/StartScreen.tsx`, 15.3-A), "Open a dataset":
+
+- The `Dataset or image URL` field, `Morphology image` and `Load Dataset`.
+  The field starts empty. The boundary limit is in Settings.
+- "What can I open?", a link to [Loading data](user-guide.md#loading-data)
+  in the user guide.
+- **Recent**: the last eight datasets opened in this browser, newest first,
+  each with its name, platform and address, and a × button (`Remove {name}
+from recent datasets`). Kept in `localStorage` (`explorer.recentDatasets`);
+  without storage the list lasts until the page closes.
+- **Examples**: a card per entry of `examples/index.json` with name,
+  platform, description, and source and licence (the source links to the
+  repository). The index is read when the start screen or the dataset menu
+  first opens, from `EXAMPLES_INDEX_URL`
+  (`src/features/start/examplesIndex.ts`): GitHub's raw `main` unless the
+  build sets `VITE_EXAMPLES_INDEX_URL`. The request gives up after 5 s, and
+  the result is kept in `sessionStorage` for the session. Entries without an
+  id, a name or an http(s) manifest URL are skipped, and all text is shown as
+  text.
+- If the index cannot be read: "Examples couldn't be loaded from GitHub."
+  with `Retry`, and the Xenium demo dataset as a card. An empty index also
+  shows the demo.
+
+Each example and recent dataset is a link to `?dataset=<url>` on this
+deployment, never the index's `viewerUrl`. A plain click opens it in place,
+as `Load Dataset` would; a middle or modified click opens a new tab. A link
+that names a dataset skips the start screen. If a load fails with no other
+dataset open, the start screen comes back with the error above the form
+(`role="alert"`).
+
 ## Top Bar
 
-| Item           | What it does                                                                                                                                 |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Explorer`     | The app name                                                                                                                                 |
-| Dataset name ▾ | The loaded dataset's name (manifest name or folder), or "Open a dataset". Opens a menu with the [open-dataset form](#open-another-dataset)   |
-| Summary        | Platform and counts, e.g. "Xenium · 1.41 M cells · 5,001 genes"; "Opening {name}…" while one loads. A `status` region                        |
-| `Dataset info` | ⓘ: opens the [info drawer](#info-drawer). A badge counts load issues, and the name says so: "Dataset info (2 issues)"                        |
-| Tools          | Pan `P`, Box selection `R`, Lasso selection `L`, Measure `M`, Magic Lens `O`; the active one is pressed. A tool that cannot be used says why |
-| Measure ▾      | While measuring: `Measure unit` (µm or px, starting at the mouse coordinate unit) and `Clear Measurement`                                    |
-| Magic Lens ▾   | `Radius` (10–500 µm, step 10; 80 µm) and `Summarise View`, which scans the whole view into the Magic Lens card                               |
-| `Share`        | Copies the link (the address, which holds the view) and says "Link copied"                                                                   |
-| `Help`         | Lists the keyboard shortcuts, from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the table the key handlers read                          |
-| `Settings`     | See [Settings](#settings)                                                                                                                    |
+| Item           | What it does                                                                                                                                                                                    |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Explorer`     | The app name                                                                                                                                                                                    |
+| Dataset name ▾ | The loaded dataset's name (manifest name or folder), or "Open a dataset". Opens a menu with the [open-dataset form](#open-another-dataset), Recent and Examples ([start screen](#start-screen)) |
+| Summary        | Platform and counts, e.g. "Xenium · 1.41 M cells · 5,001 genes"; "Opening {name}…" while one loads. A `status` region                                                                           |
+| `Dataset info` | ⓘ: opens the [info drawer](#info-drawer). A badge counts load issues, and the name says so: "Dataset info (2 issues)"                                                                           |
+| Tools          | Pan `P`, Box selection `R`, Lasso selection `L`, Measure `M`, Magic Lens `O`; the active one is pressed. A tool that cannot be used says why                                                    |
+| Measure ▾      | While measuring: `Measure unit` (µm or px, starting at the mouse coordinate unit) and `Clear Measurement`                                                                                       |
+| Magic Lens ▾   | `Radius` (10–500 µm, step 10; 80 µm) and `Summarise View`, which scans the whole view into the Magic Lens card                                                                                  |
+| `Share`        | Copies the link (the address, which holds the view) and says "Link copied"                                                                                                                      |
+| `Help`         | Lists the keyboard shortcuts, from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the table the key handlers read                                                                             |
+| `Settings`     | See [Settings](#settings)                                                                                                                                                                       |
 
 The tool letters, `F` and `\` work anywhere except in a text field, and leave
 keys with Ctrl, Alt or Cmd alone (`useToolShortcuts`).
@@ -474,15 +508,16 @@ it. Its sections render only while it is open.
 
 ### Open Another Dataset
 
-The same form opens from the dataset name in the top bar
+The same form opens from the dataset name in the top bar, with Recent and
+Examples below it, and shows on the [start screen](#start-screen)
 (`OpenDatasetForm`, `src/features/sections/DatasetInfoBlocks.tsx`).
 
-| Control                                                      | Type      | Values / default                                 | Notes                                                                                                                                                     |
-| ------------------------------------------------------------ | --------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Dataset or image URL`                                       | URL input | Demo Xenium URL, or `dataset` from the share URL | Any supported source or [dataset manifest](./dataset-manifest.md); see [Architecture](./architecture.md#1-detection)                                      |
-| `Morphology image` (`Tissue image` for Visium and Visium HD) | Checkbox  | On                                               | Read when `Load Dataset` is pressed; off skips the image                                                                                                  |
-| `Boundary limit` (under Advanced)                            | Number    | As in [Settings](#settings)                      |                                                                                                                                                           |
-| `Load Dataset`                                               | Submit    |                                                  | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then |
+| Control                                                      | Type      | Values / default                       | Notes                                                                                                                                                     |
+| ------------------------------------------------------------ | --------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Dataset or image URL`                                       | URL input | Empty, or `dataset` from the share URL | Any supported source or [dataset manifest](./dataset-manifest.md); see [Architecture](./architecture.md#1-detection)                                      |
+| `Morphology image` (`Tissue image` for Visium and Visium HD) | Checkbox  | On                                     | Read when `Load Dataset` is pressed; off skips the image                                                                                                  |
+| `Boundary limit` (under Advanced)                            | Number    | As in [Settings](#settings)            | Not on the start screen                                                                                                                                   |
+| `Load Dataset`                                               | Submit    |                                        | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then |
 
 The open dataset stays on screen and usable while another loads (Phase
 15.1-F); the loading list shows "Loading dataset {name}". If the new one
@@ -613,6 +648,7 @@ copied".
 | `sdCs`, `sdImage`, `sdUm`                                                                                 | SpatialData coordinate system, image, and µm-per-unit override                                                                                                                                                                                                                                                                         |
 | `vimg`, `vlib`, `voff`                                                                                    | Visium tissue image (`hires`, `lowres`, `none`), library (only with several), and `1` when off-tissue spots are shown                                                                                                                                                                                                                  |
 
+A link with `dataset` skips the [start screen](#start-screen).
 Dataset-specific values (genes, ROI, channels, z plane, boundaries, colour
 modes, lens, SpatialData view)
 are restored only when the loaded URL matches the shared `dataset`. A restored
@@ -624,7 +660,10 @@ and visibility, and GeoJSON shapes.
 
 ## State
 
-- `src/store/viewerStore.ts` (Zustand) holds the dataset URL.
+- `src/store/viewerStore.ts` (Zustand) holds the address box, which starts
+  empty.
+- Recent datasets are in `localStorage` and the example index in
+  `sessionStorage` (see [Start screen](#start-screen)).
 - All other UI state is React state in
   `src/features/app-shell/useAppDomainState.ts`, grouped by area
   (annotations, analysis, cells, dataset, genes, layers, Magic Lens,

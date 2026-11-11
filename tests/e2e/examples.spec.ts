@@ -46,3 +46,16 @@ for (const example of examples) {
     await expect(page.getByRole('alert', { name: 'Load issues' })).toHaveCount(0)
   })
 }
+
+// The start screen reads the gallery from GitHub at runtime (UNIFIED_PLAN.md,
+// 15.3-A, D9); smoke tests answer that request locally, so this one checks
+// the real index.
+test('lists the examples from GitHub on the start screen @live', async ({ page }) => {
+  await page.goto('/')
+
+  const start = page.getByRole('region', { name: 'Open a dataset' })
+  await expect(
+    start.getByRole('list', { name: 'Examples' }).getByRole('link').first(),
+  ).toBeVisible({ timeout: 15_000 })
+  await expect(start).not.toContainText("Examples couldn't be loaded")
+})

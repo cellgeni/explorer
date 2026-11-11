@@ -31,7 +31,8 @@ export function OpenDatasetForm({
   boundaryLimit = 'inline',
 }: {
   readonly open: OpenDatasetModel
-  readonly boundaryLimit?: 'inline' | 'advanced' | undefined
+  // The start screen leaves it to Settings.
+  readonly boundaryLimit?: 'inline' | 'advanced' | 'none' | undefined
 }) {
   const datasetInputId = useId()
   const morphologyInputId = useId()
@@ -88,7 +89,7 @@ export function OpenDatasetForm({
         />
         <span>{open.morphologyLabel}</span>
       </label>
-      {boundaryLimit === 'inline' ? (
+      {boundaryLimit === 'none' ? null : boundaryLimit === 'inline' ? (
         boundaryLimitField
       ) : (
         <Disclosure

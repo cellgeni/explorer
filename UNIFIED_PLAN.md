@@ -245,7 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                               |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)               |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                               |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1, M2 and M3 done (2026-11-11); M4 (15.3) is next |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M3 done (2026-11-11); 15.3-A done; B, C, D next |
 
 ---
 
@@ -1912,8 +1912,8 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2 A–J),
-done 2026-11-11: it is the only shell. The
-user asked for a usability review of the
+done 2026-11-11: it is the only shell. In M4, the start screen (15.3-A)
+is done. The user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
 - The UI review of 2026-11-10. It walked through eight tasks on the hosted
@@ -2898,7 +2898,7 @@ viewport`; the pinned transcript is in the Transcript card, and the
 
 #### 15.3 Start Screen, Help, Recovery
 
-- [ ] **A. Start screen with examples fetched from GitHub (F15).** (M)
+- [x] **A. Start screen with examples fetched from GitHub (F15).** (M)
   - A URL field and an Open button.
   - **Example gallery.** Fetch the index when the start screen opens, from
     `EXAMPLES_INDEX_URL`.
@@ -2922,6 +2922,47 @@ viewport`; the pinned transcript is in the Transcript card, and the
   - A "What can I open?" link.
   - The demo is no longer prefilled in the URL box.
   - `?dataset=` links skip the start screen.
+  - Done 2026-11-11. `StartScreen` (`src/features/start/`) covers the canvas
+    until a load starts, and comes back with the error above the form when
+    a load fails with nothing else open. It has the open-dataset form
+    without the boundary limit (Settings has it), "What can I open?" (the
+    user guide's Loading data on GitHub), Recent and Examples.
+    - `EXAMPLES_INDEX_URL` reads `VITE_EXAMPLES_INDEX_URL`, declared in
+      `src/vite-env.d.ts`. `fetchExamplesIndex` gives up after 5 s;
+      `parseExamplesIndex` keeps id, name, an http(s) `manifestUrl`,
+      platform, description and source (repository, accession, licence, and
+      an http(s) link), skips entries without the first three and duplicate
+      ids, and stops at 48. The parsed list is kept in `sessionStorage` per
+      index URL; Retry clears it. Unit tests read the repository's own
+      `index.json` through the parser.
+    - The index is read through App's dependencies
+      (`dataset.loadExamplesIndex`), so unit tests never reach GitHub, and
+      only when the start screen or the dataset menu opens.
+    - Cards and recent entries are links to `?dataset=<url>` on this
+      deployment. A plain click opens the dataset in place, through the same
+      load as `Load Dataset`, so the 15.1-F rules apply and the page is not
+      reloaded; a modified or middle click opens a new tab.
+    - On failure: "Examples couldn't be loaded from GitHub." (or the
+      configured host) with Retry, and `DEMO_EXAMPLE`, the Xenium demo. An
+      empty index also shows the demo.
+    - Recent (`useRecentDatasets`) records each dataset when it is ready,
+      with the name the title uses and its platform, in `localStorage`;
+      when storage refuses, the list lasts for the page. Node 25 has a
+      `localStorage` global that jsdom does not replace, so tests pass a
+      `memoryStorage()`.
+    - The dataset name menu lists Recent and Examples under the form, as
+      15.2-B left for this step.
+    - The store's address starts empty. App tests still start from the
+      demo's address, set in `beforeEach`, as if it had been typed.
+      `openControls('open-dataset')` uses the start screen while it shows.
+    - E2E: every test in `app.spec.ts` answers the index from
+      `examples/index.json` (`tests/e2e/examples.ts`). New smoke tests open
+      the first example in place (its manifest answered locally and pointed
+      at the tiny H5AD), show the fallback with the request failing, and
+      skip the start screen for `?dataset=`. A nightly `@live` test in
+      `examples.spec.ts` reads the real index. The axe walk covers the start
+      screen and the menu; its menu links are 24 px tall for WCAG 2.2
+      target size.
 - [ ] **B. Help (F22).** (S)
   - A `?` popover listing the shortcuts and linking to the user guide and
     dataset docs.
@@ -3287,7 +3328,8 @@ Sequencing:
       Slice ranges, memory, and bundles.
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
-      M3, the new shell (15.2), is done; M4 (15.3) is next.
+      M3, the new shell (15.2), is done; M4 (15.3) is under way, with the
+      start screen (15.3-A) done.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 

@@ -2,14 +2,21 @@ import { expect, type Locator, type Page } from '@playwright/test'
 import { CONTROL_AREAS, type ControlArea } from '../../src/test/controlAreas'
 
 // Shows the controls for an area (see src/test/controlAreas.ts) and returns
-// the element that holds them: the dataset menu, the info drawer, a layer
-// section, a popover or the Embedding panel, opened unless it already is.
+// the element that holds them: the start screen or the dataset menu, the info
+// drawer, a layer section, a popover or the Embedding panel, opened unless it
+// already is.
 export async function openControls(page: Page, area: ControlArea): Promise<Locator> {
   const place = CONTROL_AREAS[area]
 
   switch (place.kind) {
     case 'dataset-menu': {
-      // The open info drawer has the same form; one copy keeps labels unique.
+      // The start screen and the open info drawer have the same form; one
+      // copy keeps labels unique.
+      const startScreen = page.getByRole('region', { name: 'Open a dataset' })
+      if (await startScreen.isVisible()) {
+        await closeButton(infoButton(page))
+        return startScreen
+      }
       if (await isExpanded(infoButton(page))) {
         return page.getByRole('region', { name: 'Open another dataset' })
       }

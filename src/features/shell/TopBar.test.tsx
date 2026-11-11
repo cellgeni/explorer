@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   testDatasetInfoModel,
+  testDatasetLibraryModel,
   testTopBarModel,
   testViewSettingsModel,
 } from '../../test/sectionModels'
@@ -15,6 +16,7 @@ function renderTopBar(
     <TopBar
       model={testTopBarModel()}
       info={testDatasetInfoModel()}
+      library={testDatasetLibraryModel()}
       settings={testViewSettingsModel()}
       infoOpen={false}
       onInfoOpenChange={vi.fn()}
@@ -164,6 +166,7 @@ describe('TopBar', () => {
       <TopBar
         model={testTopBarModel({ tools: { active: 'measure' } })}
         info={testDatasetInfoModel()}
+        library={testDatasetLibraryModel()}
         settings={settings}
         infoOpen={false}
         onInfoOpenChange={vi.fn()}

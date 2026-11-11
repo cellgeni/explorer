@@ -119,7 +119,11 @@ function TestApp(props: AppTestDependencyProps) {
 describe('App', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/')
-    useViewerStore.setState(initialViewerState)
+    // The start screen keeps the examples for the session (15.3-A).
+    window.sessionStorage.clear()
+    // The address box starts empty (15.3-A); most tests load the demo as if
+    // its address had been typed in.
+    useViewerStore.setState({ ...initialViewerState, datasetUrl: DEMO_DATASET_URL })
     vi.mocked(warmDatasetForRoi).mockClear()
   })
 
@@ -128,6 +132,7 @@ describe('App', () => {
   })
 
   it('renders the shell with each control in its place', () => {
+    useViewerStore.setState(initialViewerState)
     render(<TestApp />)
 
     expect(screen.queryByText('Xenium Explorer')).not.toBeInTheDocument()
@@ -138,7 +143,7 @@ describe('App', () => {
     const datasetInput = screen.getByLabelText('Dataset or image URL')
     expect(datasetInput).toBeInstanceOf(HTMLInputElement)
     if (datasetInput instanceof HTMLInputElement) {
-      expect(datasetInput.value).toContain('/public/xenium/')
+      expect(datasetInput.value).toBe('')
     }
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
@@ -1724,6 +1729,96 @@ describe('App', () => {
 
     fireEvent.click(within(issues).getByRole('button', { name: 'Run Diagnostics' }))
     expect(runDatasetDiagnostics).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens an example from the start screen and remembers it (15.3-A)', async () => {
+    useViewerStore.setState(initialViewerState)
+    const exampleUrl = 'https://example.test/examples/skin/explorer.json'
+    const loadExamplesIndex = vi.fn(async () => [
+      {
+        id: 'bia/skin',
+        name: 'Human skin',
+        manifestUrl: exampleUrl,
+        platform: 'xenium',
+        description: 'Skin on the 5K panel.',
+      },
+    ])
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+
+    render(
+      <TestApp
+        loadExamplesIndex={loadExamplesIndex}
+        loadDatasetOverview={loadDatasetOverview}
+      />,
+    )
+    const start = screen.getByRole('region', { name: 'Open a dataset' })
+    expect(within(start).getByLabelText('Dataset or image URL')).toHaveValue('')
+    fireEvent.click(await within(start).findByRole('link', { name: 'Human skin' }))
+
+    await waitFor(() => {
+      expect(loadDatasetOverview).toHaveBeenCalledWith(exampleUrl, expect.anything())
+    })
+    expect(await screen.findByText(/^Xenium · 1 cell/)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Open a dataset' }),
+    ).not.toBeInTheDocument()
+    expect(loadExamplesIndex).toHaveBeenCalledTimes(1)
+
+    // The dataset menu lists it under Recent, and has the examples too.
+    openControls('open-dataset')
+    const menu = screen.getByRole('dialog', { name: 'Open dataset' })
+    expect(
+      within(within(menu).getByRole('list', { name: 'Recent datasets' })).getByRole(
+        'link',
+        // The folder names it: explorer.json says nothing.
+        { name: 'skin' },
+      ),
+    ).toHaveAttribute('href', `/?dataset=${encodeURIComponent(exampleUrl)}`)
+    expect(
+      within(within(menu).getByRole('list', { name: 'Examples' })).getByRole('link', {
+        name: 'Human skin',
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('skips the start screen for a link that names a dataset (15.3-A)', () => {
+    useViewerStore.setState(initialViewerState)
+    window.history.replaceState(
+      null,
+      '',
+      `/?dataset=${encodeURIComponent(DEMO_DATASET_URL)}`,
+    )
+    const loadDatasetOverview = vi.fn(() =>
+      pendingPromise<Awaited<ReturnType<DatasetOverviewLoader>>>(),
+    )
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+
+    expect(
+      screen.queryByRole('region', { name: 'Open a dataset' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the start screen again, with the reason, when the first load fails (15.3-A)', async () => {
+    const loadDatasetOverview = vi.fn(async () => {
+      throw new Error('HTTP 500 for cells.parquet')
+    })
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const start = await screen.findByRole('region', { name: 'Open a dataset' })
+    expect(within(start).getByRole('alert')).toHaveTextContent('HTTP 500')
+    expect(within(start).getByLabelText('Dataset or image URL')).toHaveValue(
+      DEMO_DATASET_URL,
+    )
   })
 
   it('shows the top bar and picks tools by key (15.2-B)', async () => {

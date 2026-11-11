@@ -44,6 +44,11 @@ import {
   readShareableStateFromLocation,
 } from './features/app-shell/appShellModel'
 import { DatasetLoadToast } from './features/app-shell/DatasetLoadToast'
+import { StartScreen } from './features/start/StartScreen'
+import type { DatasetLibraryModel } from './features/start/datasetLibraryModel'
+import { EXAMPLES_INDEX_URL } from './features/start/examplesIndex'
+import { useRecentDatasets } from './features/start/recentDatasets'
+import { useExamplesIndex } from './features/start/useExamplesIndex'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { isTextEntryTarget } from './features/app-shell/activeToolModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
@@ -268,6 +273,7 @@ export function App({ dependencies }: AppProps = {}) {
       detectSpatialDataset,
       getSpatialDataset,
       loadDatasetOverview,
+      loadExamplesIndex,
       loadGenePanel,
       warmDatasetForRoi,
     },
@@ -612,12 +618,31 @@ export function App({ dependencies }: AppProps = {}) {
   const isLoading =
     loadState.status === 'loading' || pendingDatasetLoadState.status === 'loading'
   const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
+  const loadedDatasetName = datasetDisplayName(loadedDatasetUrl, datasetAbout?.name)
   useEffect(() => {
-    document.title = documentTitle(
-      datasetDisplayName(loadedDatasetUrl, datasetAbout?.name),
-    )
-  }, [datasetAbout, loadedDatasetUrl])
+    document.title = documentTitle(loadedDatasetName)
+  }, [loadedDatasetName])
   const platformAdapter = appPlatformAdapterFor(loadState, datasetPlatform)
+  // The start screen (UNIFIED_PLAN.md, 15.3-A) shows until a load starts,
+  // unless the link names a dataset, and again when a load fails with
+  // nothing else open.
+  const [datasetLoadStarted, setDatasetLoadStarted] = useState(false)
+  if (!datasetLoadStarted && loadState.status !== 'idle') setDatasetLoadStarted(true)
+  const linkOpensDataset = (initialShareableState.datasetUrl?.trim() ?? '') !== ''
+  const showStartScreen =
+    loadState.status === 'error' ||
+    (loadState.status === 'idle' && !(linkOpensDataset && !datasetLoadStarted))
+  const examplesIndex = useExamplesIndex({ loadIndex: loadExamplesIndex })
+  const recentDatasets = useRecentDatasets()
+  const { add: addRecentDataset } = recentDatasets
+  useEffect(() => {
+    if (loadedDatasetUrl === null || loadedDatasetName === null) return
+    addRecentDataset({
+      url: loadedDatasetUrl,
+      name: loadedDatasetName,
+      platform: platformAdapter.kind,
+    })
+  }, [addRecentDataset, loadedDatasetName, loadedDatasetUrl, platformAdapter.kind])
   const isVisiumHdDataset = isVisiumHdPlatform(platformAdapter)
   const platformFeatureLoadEnabled = platformAdapter.featureLoadEnabled(loadState)
   const geneExpressionScaleDatasetUrl =
@@ -3051,6 +3076,33 @@ export function App({ dependencies }: AppProps = {}) {
     visiumControlState,
     visiumHdControlState,
   })
+  // An example or recent dataset opens in place, like Load Dataset.
+  const handleOpenDataset = useCallback(
+    (url: string) => {
+      setDatasetUrl(url)
+      void startDatasetLoadRef.current?.(url, shouldLoadMorphology)
+    },
+    [setDatasetUrl, shouldLoadMorphology],
+  )
+  const datasetLibrary = useMemo(
+    (): DatasetLibraryModel => ({
+      examples: examplesIndex.state,
+      examplesIndexUrl: EXAMPLES_INDEX_URL,
+      onLoadExamples: examplesIndex.load,
+      onRetryExamples: examplesIndex.retry,
+      recent: recentDatasets.recent,
+      onRemoveRecent: recentDatasets.remove,
+      onOpen: handleOpenDataset,
+    }),
+    [
+      examplesIndex.load,
+      examplesIndex.retry,
+      examplesIndex.state,
+      handleOpenDataset,
+      recentDatasets.recent,
+      recentDatasets.remove,
+    ],
+  )
   const imageSection = useImageSectionModel({
     appendDebugEvent,
     autoContrastChannelIds,
@@ -3215,7 +3267,7 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
     canDrawRoi,
     channelCount: morphologyChannels.length,
-    datasetName: datasetDisplayName(loadedDatasetUrl, datasetAbout?.name),
+    datasetName: loadedDatasetName,
     debugMode,
     elementCount: loadState.status === 'ready' ? loadState.cellCount : 0,
     elementNoun: platformAdapter.labels.embeddingElementPlural,
@@ -3495,11 +3547,18 @@ export function App({ dependencies }: AppProps = {}) {
           ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
           : {})}
       />
+      {showStartScreen ? (
+        <StartScreen
+          open={datasetInfo.open}
+          library={datasetLibrary}
+          error={loadState.status === 'error' ? loadState.error : null}
+        />
+      ) : null}
       {pendingDatasetLoadState.status === 'error' ? (
         <DatasetLoadToast
           failedUrl={pendingDatasetLoadState.url}
           error={pendingDatasetLoadState.error}
-          openDatasetName={datasetDisplayName(loadedDatasetUrl, datasetAbout?.name)}
+          openDatasetName={loadedDatasetName}
           onDismiss={() => {
             setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
           }}
@@ -3519,6 +3578,7 @@ export function App({ dependencies }: AppProps = {}) {
       <ShellLayout
         topBar={topBar}
         info={datasetInfo}
+        library={datasetLibrary}
         settings={viewSettings}
         layerPanel={layerPanel}
         image={imageSection}

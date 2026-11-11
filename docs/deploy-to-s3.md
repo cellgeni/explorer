@@ -87,6 +87,20 @@ npm run build -- --base /xenium/
 
 For root hosting such as `https://viewer.example.org/`, use the default build.
 
+The start screen's example gallery is read at runtime from
+`https://raw.githubusercontent.com/cellgeni/explorer/main/examples/index.json`,
+so a deployment's users fetch it from GitHub. To serve your own list, or to
+keep a deployment off GitHub, build with another address in the same format:
+
+```sh
+VITE_EXAMPLES_INDEX_URL=https://viewer.example.org/examples/index.json npm run build
+```
+
+The host must send `Access-Control-Allow-Origin`. If the list cannot be
+read, the start screen says so and offers the demo dataset instead. Example
+links open on the deployment itself (`?dataset=<manifest>`), whatever host
+the list comes from.
+
 ## Prepare The App Bucket Or Prefix
 
 Create a dedicated bucket or prefix for the app build. For AWS S3:

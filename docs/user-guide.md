@@ -5,8 +5,11 @@ the [UI reference](./ui-reference.md).
 
 ## Loading Data
 
-Open the dataset name menu in the top bar, paste a source URL in
-`Dataset or image URL`, then choose `Load Dataset`. Supported sources are:
+With no dataset open, the canvas shows the start screen: paste a source URL
+in `Dataset or image URL` and choose `Load Dataset`, or pick an example or a
+recent dataset. Later, open another dataset from the dataset name menu in the
+top bar, which has the same form, recent datasets and examples. A link that
+names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 
 - Xenium output folders containing `experiment.xenium`.
 - Standard Visium (55 µm spots) Space Ranger `outs/` folders.
@@ -37,6 +40,19 @@ The app detects the source platform before loading. Platform-specific controls
 appear only when the active source supports them. For example, image-only
 sources have no Cells or Transcripts section, Magic Lens or cell cards, while
 Visium, Visium HD, H5AD, and SpatialData have no Transcripts section.
+
+### Examples And Recent Datasets
+
+The start screen's examples are public datasets listed in the repository's
+[`examples/`](../examples/README.md) folder, read from GitHub when the start
+screen opens. Each card names the dataset, its platform and where the data
+comes from. Clicking a card opens the example in place; Ctrl-click or
+Cmd-click opens it in a new tab. If GitHub cannot be reached, the start
+screen says so, offers `Retry`, and still offers the Xenium demo dataset.
+
+The last eight datasets you opened are listed under Recent, in this browser
+only. Remove one with its ×. If the first dataset cannot be opened, the start
+screen comes back with the reason above the form.
 
 ## Spatial Navigation
 

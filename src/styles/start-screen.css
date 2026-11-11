@@ -1,0 +1,235 @@
+/* Start screen (UNIFIED_PLAN.md, 15.3-A): over the canvas until a dataset
+   opens, with the address form, recent datasets and the example gallery. The
+   dataset menu reuses the recent and example lists. */
+
+.start-screen {
+  position: absolute;
+  z-index: var(--z-canvas-overlay);
+  inset: 0;
+  overflow-y: auto;
+  background: var(--surface-0);
+  color: var(--text-1);
+}
+
+.start-screen-content {
+  display: grid;
+  gap: var(--space-5);
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-6);
+}
+
+.start-screen-header {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.start-screen-header h2 {
+  margin: 0;
+  font-size: var(--font-heading);
+  font-weight: 650;
+}
+
+.start-screen-header p,
+.start-screen-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-body);
+}
+
+.start-screen .dataset-form {
+  max-width: 560px;
+}
+
+.start-screen a,
+.shell-dataset-menu a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+.start-screen a:focus-visible,
+.shell-dataset-menu a:focus-visible {
+  border-radius: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.start-screen-error {
+  display: grid;
+  gap: 2px;
+  max-width: 560px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-3);
+  background: var(--danger-soft);
+  font-size: var(--font-control);
+}
+
+.start-screen-error strong {
+  color: var(--danger);
+  font-size: var(--font-body);
+}
+
+.start-screen-error p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.start-screen-section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.start-screen-section h3,
+.shell-dataset-menu-section h3 {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-control);
+  font-weight: 700;
+}
+
+.start-examples-unavailable {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  color: var(--text-2);
+  font-size: var(--font-body);
+}
+
+.start-examples-unavailable p {
+  margin: 0;
+}
+
+/* Example cards. */
+
+.start-example-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.start-example {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-3);
+  background: var(--surface-1);
+  font-size: var(--font-control);
+}
+
+.start-example:hover,
+.start-example:focus-within {
+  border-color: var(--accent-border);
+}
+
+.start-example p {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+.start-example .start-example-name {
+  color: var(--text-1);
+  font-size: var(--font-body);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.start-example .start-example-name:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.start-example .start-example-platform {
+  color: var(--accent);
+  font-size: var(--font-caption);
+  font-weight: 700;
+}
+
+.start-example .start-example-source {
+  color: var(--text-3);
+  font-size: var(--font-caption);
+}
+
+/* Recent datasets, and the examples as a plain list in the dataset menu. */
+
+.start-recent-list,
+.start-example-menu {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-control);
+}
+
+.start-recent-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  align-items: center;
+  padding: 2px 0 2px var(--space-2);
+  border-radius: var(--radius-2);
+}
+
+.start-recent-list li:hover {
+  background: var(--surface-2);
+}
+
+/* 24 px tall, the WCAG 2.2 minimum target. */
+.start-recent-list a,
+.start-example-menu a {
+  min-height: 24px;
+  overflow: hidden;
+  padding: 4px 0;
+  font-weight: 700;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.start-recent-list small {
+  grid-column: 1;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.start-recent-list .ui-icon-button {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+
+.start-example-menu li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.start-example-menu small {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+}
+
+.shell-dataset-menu-section {
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.shell-dataset-menu {
+  max-height: min(640px, calc(100dvh - 80px));
+  overflow-y: auto;
+}
