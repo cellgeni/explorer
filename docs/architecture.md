@@ -136,8 +136,25 @@ Platforms add their own methods on top, such as `overview()`,
 ### 3. First Paint
 
 `startDatasetLoad` in `useDatasetLifecycle`
-(`src/features/app-shell/useDatasetLifecycle.ts`) resets all per-dataset
-state, runs detection, and then branches per platform:
+(`src/features/app-shell/useDatasetLifecycle.ts`) runs detection and then
+branches per platform. It resets all per-dataset state when the load
+commits:
+
+- With no dataset ready on screen, the load commits at once, before
+  detection.
+- With one on screen, the open dataset stays, with its requests, until the
+  new one is ready (Phase 15.1-F). State the load would set before then (the
+  platform, gene panel, annotation sets, manifest defaults, fallback notices)
+  is queued. At the "ready" point below it commits: the open dataset's
+  `datasetAbortRef` signal is aborted, `loadRequestIdRef` moves on (so other
+  workflows drop the old dataset's results), the cleared state is rendered
+  once with `flushSync` (so effects keyed on the dataset's status and URL
+  rerun even when the same URL reloads, as a Visium library switch does),
+  and then the queue and the new data are applied together.
+- If it fails first, nothing changes on screen: `pendingDatasetLoadState`
+  holds the error, which the Issues card and a toast (`DatasetLoadToast`)
+  show. While a load is pending it is `loading`, which the loading list
+  shows and which disables `Load Dataset`.
 
 | Platform    | Awaited before "ready"                                                  | Started in the background                               |
 | ----------- | ----------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -149,8 +166,9 @@ state, runs detection, and then branches per platform:
 | Atera       | Same as H5AD                                                            | Morphology image                                        |
 | Image       | `meta()`, `image()`, per-channel loaders                                | Auto-contrast                                           |
 
-Each load gets a request ID and `AbortSignal`; results from a superseded load
-are dropped (`isCurrentDatasetLoad`).
+Each load gets its own `AbortSignal`. A newer load aborts a pending one, and
+a committed load's results are dropped once another commits
+(`isCurrentDatasetLoad`).
 
 ### 4. Feature Gating
 

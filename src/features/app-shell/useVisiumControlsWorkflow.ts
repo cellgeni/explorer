@@ -165,7 +165,9 @@ export function useVisiumControlsWorkflow({
         visiumOffTissue: showOffTissue,
         ...(summary.libraryIds.length > 1 ? { visiumLibrary: libraryId } : {}),
       }
-      setVisiumControlState(visiumControlLoading)
+      setVisiumControlState((state) =>
+        visiumControlLoading(state, { libraryId, showOffTissue }),
+      )
       appendDebugEvent(
         `Visium view change: library ${libraryId}; off-tissue spots ${
           showOffTissue ? 'shown' : 'hidden'

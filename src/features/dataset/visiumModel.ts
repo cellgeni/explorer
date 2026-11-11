@@ -11,6 +11,13 @@ export type VisiumControlState =
       readonly summary: AnnDataVisiumSummary
       // The tissue image shown, or null when it is off or there is none.
       readonly image: VisiumImageKind | null
+      // While loading, the library and off-tissue choice asked for: the
+      // spots on screen stay until they load (15.1-F), but the controls show
+      // the choice at once.
+      readonly requestedView?: {
+        readonly libraryId: string
+        readonly showOffTissue: boolean
+      }
     }
 
 export const IDLE_VISIUM_CONTROL_STATE: VisiumControlState = { status: 'idle' }
@@ -45,8 +52,17 @@ export function visiumUnitsNeedNotice(units: VisiumUnits): boolean {
   return units.source === 'spot-diameter' || units.source === 'unknown'
 }
 
-export function visiumControlLoading(state: VisiumControlState): VisiumControlState {
-  return state.status === 'idle' ? state : { ...state, status: 'loading' }
+export function visiumControlLoading(
+  state: VisiumControlState,
+  requestedView?: { readonly libraryId: string; readonly showOffTissue: boolean },
+): VisiumControlState {
+  return state.status === 'idle'
+    ? state
+    : {
+        ...state,
+        status: 'loading',
+        ...(requestedView === undefined ? {} : { requestedView }),
+      }
 }
 
 // Share-link fields: the image always, the library only when there is a

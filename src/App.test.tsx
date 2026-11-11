@@ -1662,6 +1662,66 @@ describe('App', () => {
     expect(runDatasetDiagnostics).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the open dataset when another one fails to load (15.1-F)', async () => {
+    const missingUrl = 'https://example.test/missing'
+    const detectSpatialDataset = vi.fn(async (baseUrl: string) =>
+      baseUrl === missingUrl
+        ? {
+            platform: 'unknown' as const,
+            baseUrl,
+            checked: [
+              {
+                path: 'experiment.xenium',
+                url: `${baseUrl}/experiment.xenium`,
+                ok: false,
+                status: 404,
+              },
+            ],
+          }
+        : { platform: 'xenium' as const, baseUrl, checked: [] },
+    )
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+
+    render(
+      <TestApp
+        detectSpatialDataset={detectSpatialDataset}
+        loadDatasetOverview={loadDatasetOverview}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Copy Link' })).toBeEnabled()
+    })
+    const openTitle = document.title
+
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: missingUrl },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const toast = await screen.findByText(/^missing could not be opened/)
+    expect(toast.closest('[role="alert"]')).toHaveTextContent('Dataset not found')
+    expect(toast).toHaveTextContent(/is still open\.$/)
+    expect(screen.getByRole('alert', { name: 'Load issues' })).toHaveTextContent(
+      'Dataset not found',
+    )
+    expect(screen.getByTestId('deckgl')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy Link' })).toBeEnabled()
+    expect(document.title).toBe(openTitle)
+    expect(loadDatasetOverview).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByText(/could not be opened/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert', { name: 'Load issues' })).not.toBeInTheDocument()
+  })
+
   it('scans current viewport cells with the magic lens', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
