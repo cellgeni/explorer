@@ -72,7 +72,8 @@ point at it, tab to it or tap it.
 The URL hash updates with the current dataset URL, viewport, selected genes,
 ROI, open panels, tool, cell card, hidden layers, and control state. `Share` in
 the top bar copies the link to share the same view. Older links with `tab=`
-still work.
+still work. Each dataset you open is a step in the browser's history, so Back
+returns to the previous dataset, or to the start screen.
 
 ## Layers And Genes
 
@@ -183,6 +184,11 @@ lens at the cursor; its options set the `Radius`, and `Summarise View` scans
 the whole view. Results appear in the Magic Lens card. Xenium lens scans
 summarize cells, their transcript counts, and top genes from the cell-feature
 matrix. Visium HD lens scans summarize UMIs and bins.
+
+Removing something — clearing the selection, a class, a metadata track, all
+annotations, a GeoJSON shape or a saved gene set — shows a toast with `Undo`
+for 8 seconds (Ctrl+Z or Cmd+Z also works). Undo only puts things back while
+nothing they cover has changed since.
 
 The Embedding panel, opened from Cells › `Show Embedding`, loads UMAP/t-SNE or
 H5AD `obsm` embeddings when the dataset provides them. Clicking an embedding

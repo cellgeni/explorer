@@ -44,6 +44,12 @@ import {
   readShareableStateFromLocation,
 } from './features/app-shell/appShellModel'
 import { DatasetLoadToast } from './features/app-shell/DatasetLoadToast'
+import { UndoToast } from './features/app-shell/UndoToast'
+import {
+  useUndoableRemovals,
+  type AnnotationSnapshot,
+} from './features/app-shell/useUndoableRemovals'
+import { useUndoToast } from './features/app-shell/useUndoToast'
 import { StartScreen } from './features/start/StartScreen'
 import type { DatasetLibraryModel } from './features/start/datasetLibraryModel'
 import { EXAMPLES_INDEX_URL } from './features/start/examplesIndex'
@@ -633,6 +639,12 @@ export function App({ dependencies }: AppProps = {}) {
     loadState.status === 'error' ||
     (loadState.status === 'idle' && !(linkOpensDataset && !datasetLoadStarted))
   const examplesIndex = useExamplesIndex({ loadIndex: loadExamplesIndex })
+  // Undo after a removal (15.3-C); another dataset ends the offer.
+  const undoToast = useUndoToast()
+  const { dismiss: dismissUndo, offerUndo } = undoToast
+  useEffect(() => {
+    dismissUndo()
+  }, [dismissUndo, loadedDatasetUrl])
   const recentDatasets = useRecentDatasets()
   const { add: addRecentDataset } = recentDatasets
   useEffect(() => {
@@ -3027,6 +3039,63 @@ export function App({ dependencies }: AppProps = {}) {
       : platformAdapter.kind === 'visium-hd'
         ? handleVisiumHdRoiComplete
         : handleRoiComplete
+  const restoreAnnotationSnapshot = useCallback(
+    (snapshot: AnnotationSnapshot) => {
+      setAnnotationState(snapshot.annotationState)
+      setAnnotationColors(snapshot.annotationColors)
+      setHiddenAnnotationIds(snapshot.hiddenAnnotationIds)
+      setHiddenAnnotationSetIds(snapshot.hiddenAnnotationSetIds)
+      setCellMetadataTracks(snapshot.cellMetadataTracks)
+      setSelectedCellMetadataTrackId(snapshot.selectedCellMetadataTrackId)
+      setObservationColorMode(snapshot.observationColorMode)
+    },
+    [
+      setAnnotationColors,
+      setAnnotationState,
+      setCellMetadataTracks,
+      setHiddenAnnotationIds,
+      setHiddenAnnotationSetIds,
+      setObservationColorMode,
+      setSelectedCellMetadataTrackId,
+    ],
+  )
+  const restoreRoiSelection = useCallback(
+    (selection: RoiSelection, name: string) => {
+      setRoiName(name)
+      activeRoiCompleteHandler(selection)
+    },
+    [activeRoiCompleteHandler, setRoiName],
+  )
+  // Removals that offer Undo (15.3-C).
+  const undoable = useUndoableRemovals({
+    offerUndo,
+    appendDebugEvent,
+    annotations: {
+      annotationState,
+      annotationColors,
+      hiddenAnnotationIds,
+      hiddenAnnotationSetIds,
+      cellMetadataTracks,
+      selectedCellMetadataTrackId,
+      observationColorMode,
+      restore: restoreAnnotationSnapshot,
+      onRemove: handleRemoveAnnotation,
+      onRemoveTrack: handleRemoveCellMetadataTrack,
+      onClear: handleClearAnnotations,
+    },
+    shapes: {
+      shapes: geometricAnnotations,
+      restore: setGeometricAnnotations,
+      onRemove: handleRemoveGeometricAnnotation,
+      onClear: handleClearGeometricAnnotations,
+    },
+    selection: {
+      selection: activeRoiSelection,
+      name: roiName,
+      onClear: handleClearActiveRoi,
+      restore: restoreRoiSelection,
+    },
+  })
 
   // The section models (UNIFIED_PLAN.md, 15.2-A): the layer panel, info
   // drawer and top bar take these instead of separate props.
@@ -3126,6 +3195,7 @@ export function App({ dependencies }: AppProps = {}) {
   const cellsSection = useCellsSectionModel({
     analysisHeaderCopy,
     appendDebugEvent,
+    offerUndo,
     cellBoundaryOpacity,
     cellFillOpacity,
     cellLayerControlsVisible: platformAdapter.capabilities.cells,
@@ -3224,8 +3294,8 @@ export function App({ dependencies }: AppProps = {}) {
     handleAnnotationGroupChange,
     handleAnnotationSetVisibilityChange,
     handleAnnotationVisibilityChange,
-    handleClearAnnotations,
-    handleClearGeometricAnnotations,
+    handleClearAnnotations: undoable.handleClearAnnotations,
+    handleClearGeometricAnnotations: undoable.handleClearShapes,
     handleExportAnnotations,
     handleExportGeometricAnnotations,
     handleGeometricAnnotationColorChange,
@@ -3234,9 +3304,9 @@ export function App({ dependencies }: AppProps = {}) {
     handleImportAnnotations,
     handleImportGeometricAnnotations,
     handleLoadAnnotations,
-    handleRemoveAnnotation,
-    handleRemoveCellMetadataTrack,
-    handleRemoveGeometricAnnotation,
+    handleRemoveAnnotation: undoable.handleRemoveAnnotation,
+    handleRemoveCellMetadataTrack: undoable.handleRemoveCellMetadataTrack,
+    handleRemoveGeometricAnnotation: undoable.handleRemoveShape,
     hiddenAnnotationIds,
     hiddenAnnotationSetIds,
     loadEnabled: platformAdapter.capabilities.annotations && platformFeatureLoadEnabled,
@@ -3362,7 +3432,7 @@ export function App({ dependencies }: AppProps = {}) {
               lens: selectionLensInput,
               name: roiName,
               nameDisabled: loadState.status !== 'ready',
-              onClose: handleClearActiveRoi,
+              onClose: undoable.handleClearSelection,
               onExportBarcodes: handleExportVisiumHdRoiBarcodes,
               onExportGeoJson: handleExportVisiumHdRoiGeoJson,
               onNameChange: setRoiName,
@@ -3381,7 +3451,7 @@ export function App({ dependencies }: AppProps = {}) {
               loading: isRoiTabLoading,
               name: roiName,
               nameDisabled: !platformFeatureLoadEnabled,
-              onClose: handleClearActiveRoi,
+              onClose: undoable.handleClearSelection,
               onExportCells: handleExportRoiCells,
               onExportGeoJson: handleExportRoiGeoJson,
               onExportTranscripts: handleExportRoiTranscripts,
@@ -3554,16 +3624,19 @@ export function App({ dependencies }: AppProps = {}) {
           error={loadState.status === 'error' ? loadState.error : null}
         />
       ) : null}
-      {pendingDatasetLoadState.status === 'error' ? (
-        <DatasetLoadToast
-          failedUrl={pendingDatasetLoadState.url}
-          error={pendingDatasetLoadState.error}
-          openDatasetName={loadedDatasetName}
-          onDismiss={() => {
-            setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
-          }}
-        />
-      ) : null}
+      <div className="viewer-toasts">
+        {pendingDatasetLoadState.status === 'error' ? (
+          <DatasetLoadToast
+            failedUrl={pendingDatasetLoadState.url}
+            error={pendingDatasetLoadState.error}
+            openDatasetName={loadedDatasetName}
+            onDismiss={() => {
+              setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
+            }}
+          />
+        ) : null}
+        <UndoToast store={undoToast} />
+      </div>
     </section>
   )
   const skipLink = (

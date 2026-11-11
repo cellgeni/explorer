@@ -4637,6 +4637,15 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
+
+    // Undo (15.3-C) puts the class back with its colour and the colour mode.
+    expect(screen.getByText('Removed kmeans 3: Cluster 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+      'annotations',
+    )
+    openControls('clusters')
+    expect(screen.getByLabelText('kmeans 3: Cluster 1 color')).toHaveValue('#d62728')
   })
 
   it('imports custom CSV annotations from a local file', async () => {
@@ -5454,6 +5463,10 @@ ${cd16Negative},CD16- NK cells`,
     fireEvent.click(screen.getByRole('button', { name: 'Remove Interneuron set' }))
 
     expect(screen.queryByLabelText('Saved gene sets')).not.toBeInTheDocument()
+
+    // Undo (15.3-C) puts the set back.
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(screen.getByLabelText('Saved gene sets')).toHaveTextContent('Interneuron set')
   })
 })
 

@@ -4,6 +4,7 @@ import {
   defaultGeneSetName,
   filterGeneOptions,
   parseGeneSetSymbols,
+  withGeneSetAt,
   type SavedGeneSet,
 } from './geneControlsModel'
 
@@ -11,7 +12,16 @@ import {
 // and the saved sets. It stays in the picker, so typing does not re-render
 // the app, and it resets when a new gene panel starts loading.
 export function useGeneSetControls(genes: GeneSelectionModel) {
-  const { log, onApply, onToggle, options, panelState, scoreMode, selected } = genes
+  const {
+    log,
+    onApply,
+    onOfferUndo,
+    onToggle,
+    options,
+    panelState,
+    scoreMode,
+    selected,
+  } = genes
   const [geneSearch, setGeneSearch] = useState('')
   const [geneSetSymbols, setGeneSetSymbols] = useState('')
   const [geneSetName, setGeneSetName] = useState('')
@@ -94,14 +104,22 @@ export function useGeneSetControls(genes: GeneSelectionModel) {
       onApply(geneSet.genes, geneSet.scoreMode)
       setGeneSearch('')
     },
+    // Offers Undo, which puts the set back where it was (15.3-C).
     removeSavedGeneSet: (id: string) => {
-      const removedSet = savedGeneSets.find((geneSet) => geneSet.id === id)
-
-      if (removedSet !== undefined) {
-        log(`Removed gene set ${removedSet.name}`)
-      }
+      const index = savedGeneSets.findIndex((geneSet) => geneSet.id === id)
+      const removedSet = savedGeneSets[index]
 
       setSavedGeneSets((current) => current.filter((geneSet) => geneSet.id !== id))
+      if (removedSet === undefined) return
+
+      log(`Removed gene set ${removedSet.name}`)
+      onOfferUndo({
+        message: `Removed gene set ${removedSet.name}`,
+        undo: () => {
+          setSavedGeneSets((current) => withGeneSetAt(current, removedSet, index))
+          log(`Restored gene set ${removedSet.name}`)
+        },
+      })
     },
   }
 }

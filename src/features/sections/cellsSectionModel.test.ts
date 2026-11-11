@@ -6,6 +6,7 @@ function input(overrides: Partial<CellsSectionModelInput> = {}): CellsSectionMod
   return {
     analysisHeaderCopy: '2 genes',
     appendDebugEvent: vi.fn(),
+    offerUndo: vi.fn(),
     cellBoundaryOpacity: 1,
     cellFillOpacity: 1,
     cellLayerControlsVisible: true,

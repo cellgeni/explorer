@@ -671,16 +671,28 @@
   cursor: crosshair;
 }
 
-/* A failed load while the open dataset stays (15.1-F). */
-.dataset-load-toast {
+/* Toasts, bottom centre of the canvas: a failed load while the open dataset
+   stays (15.1-F), and Undo after a removal (15.3-C). */
+.viewer-toasts {
   position: absolute;
   z-index: var(--z-toast);
   bottom: max(16px, env(safe-area-inset-bottom));
   left: 50%;
+  display: grid;
+  gap: var(--space-2);
+  width: min(440px, calc(100% - 32px));
+  transform: translateX(-50%);
+}
+
+.viewer-toasts:empty {
+  display: none;
+}
+
+.dataset-load-toast,
+.undo-toast {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
-  width: min(440px, calc(100% - 32px));
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   border: 1px solid var(--danger-border);
   border-radius: var(--radius-3);
@@ -688,7 +700,18 @@
   box-shadow: var(--shadow-2);
   color: var(--text-1);
   font-size: var(--font-control);
-  transform: translateX(-50%);
+}
+
+.undo-toast {
+  align-items: center;
+  border-color: var(--border-strong);
+}
+
+.undo-toast p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .dataset-load-toast-text {

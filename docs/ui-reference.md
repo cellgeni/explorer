@@ -509,7 +509,30 @@ coordinates` unit.
 - Bottom left: the legend, the loading indicator (current task plus up to 3
   more) and viewport messages ("Loading overview cells…", "Reading OME-TIFF
   image…", errors).
-- Empty state: "Please load a dataset".
+- Bottom centre, above the readout: toasts (`.viewer-toasts`): a failed load
+  while another dataset stays open, and [Undo](#undo).
+- Before any dataset: the [start screen](#start-screen).
+
+### Undo
+
+After a removal, a toast at the bottom of the canvas says what was removed,
+such as "Removed kmeans 3: Cluster 1", with `Undo` and `Dismiss`
+(`UndoToast`, `src/features/app-shell/useUndoToast.ts`, 15.3-C). It goes after
+8 s, but not while the pointer or focus is on it; Ctrl+Z or Cmd+Z also undoes,
+except in a text field. A newer removal or another dataset replaces it.
+
+| Removal                             | Undo                                                                |
+| ----------------------------------- | ------------------------------------------------------------------- |
+| Selection card › `Clear selection`  | Draws the selection again under its name, which reruns its queries  |
+| A class (`Remove {set}: {label}`)   | Puts the class back with its colour, visibility and the colour mode |
+| A metadata track                    | Puts the track back                                                 |
+| `Clear Annotations`                 | Puts back every class and track, and the colour mode                |
+| A GeoJSON shape, or `Clear GeoJSON` | Puts the shapes back                                                |
+| A saved gene set (`Remove {set}`)   | Puts the set back in its place                                      |
+
+Undo puts back what the removal took only while nothing it covers has changed
+since (`useUndoableRemovals`): after, say, loading another annotation set, or
+drawing a new selection, it does nothing rather than undo that work.
 
 ## Info Drawer
 
@@ -639,6 +662,11 @@ every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a missing
 parameter means the default. Version 1 links, which wrote every value, still
 open as before. `Share` in the top bar copies the address and says "Link
 copied".
+
+Opening another dataset adds a browser history entry; every other change
+replaces the current one (15.3-C). Back returns to the previous dataset, or to
+the start screen: when Back or Forward reaches an entry for another dataset,
+the page reloads that entry's link, with its view and settings.
 
 | Parameter                                                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -245,7 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                               |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)               |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                               |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M3 done (2026-11-11); 15.3 A, B done; C, D next |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M3 done (2026-11-11); 15.3 A, B, C done; D next |
 
 ---
 
@@ -1912,8 +1912,8 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2 A–J),
-done 2026-11-11: it is the only shell. In M4, the start screen (15.3-A)
-and Help (15.3-B) are done. The user asked for a usability review of the
+done 2026-11-11: it is the only shell. In M4, the start screen (15.3-A),
+Help (15.3-B) and Undo (15.3-C) are done. The user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
 - The UI review of 2026-11-10. It walked through eight tasks on the hosted
@@ -2985,12 +2985,38 @@ viewport`; the pinned transcript is in the Transcript card, and the
 genes`; their texts are in `shell/helpText.ts` and follow
     `docs/ui-reference.md`. `helpText.test.tsx` renders each block and
     checks the description.
-- [ ] **C. Undo (F17).** (M)
+- [x] **C. Undo (F17).** (M)
   - Show an Undo toast for 8 s after: Clear selection; delete a selection,
     shape or class; remove an annotation set; Clear GeoJSON; remove a gene
     set.
   - Opening another dataset adds a browser history entry so that Back returns
     to the previous one. Today `useShareableUrlHash` only replaces the entry.
+  - Done 2026-11-11. `useUndoToast` (`app-shell/`) holds one offer
+    (message and undo); `UndoToast` shows it at the bottom of the canvas in
+    a `.viewer-toasts` stack with the 15.1-F load toast. It goes after 8 s,
+    except while hovered or focused, which give it the full time again;
+    Ctrl+Z or Cmd+Z undoes outside text fields; Undo runs once. A newer
+    offer replaces it, and another dataset dismisses it.
+  - `useUndoableRemovals` wraps the removals App hands the section models
+    and the Selection card: Clear selection (cells and Visium HD bins), a
+    class, a metadata track, Clear Annotations (with one selection until
+    15.4-A, "remove an annotation set" and "delete a selection" are these),
+    a shape and Clear (GeoJSON). Each takes a snapshot first; Undo restores
+    it only if the state it covers changed in exactly one commit since (the
+    removal's), so it never throws away later work. A cleared selection is
+    drawn again under its name, rerunning its queries, unless a newer one
+    exists.
+  - Saved gene sets live in the gene picker, so `removeSavedGeneSet` offers
+    its own Undo through `GeneSelectionModel.onOfferUndo`, which puts the
+    set back at its index (`withGeneSetAt`) unless one with that name was
+    saved since.
+  - History: `useShareableUrlHash` pushes an entry when the link's dataset
+    differs from the one the address names (the hash's, else the query
+    string's), and replaces it otherwise, so the start screen, a link's own
+    dataset and every other change keep one entry. On `popstate` to an
+    entry for another dataset it reloads the page, which restores that
+    entry's whole link (view, genes, panels), and writes nothing more.
+    Loading through history in place would have restored only the dataset.
 - [ ] **D. Cancel (F17).** (M)
   - Add a Cancel button to tasks that can be cancelled: ROI genes, exact
     transcripts, embeddings, Magic Lens, cell details, diagnostics.
@@ -3346,7 +3372,7 @@ Sequencing:
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
       M3, the new shell (15.2), is done; M4 (15.3) is under way, with the
-      start screen (15.3-A) and Help (15.3-B) done.
+      start screen (15.3-A), Help (15.3-B) and Undo (15.3-C) done.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 

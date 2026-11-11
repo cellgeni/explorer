@@ -3,19 +3,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import { useShareableUrlHash } from './useShareableUrlHash'
 
-function ShareableUrlHashProbe() {
+function ShareableUrlHashProbe({
+  datasetUrl = 'https://example.test/output',
+  selectedGenes = ['Actb', 'Gad1'],
+  onHistoryDatasetChange,
+}: {
+  readonly datasetUrl?: string
+  readonly selectedGenes?: readonly string[]
+  readonly onHistoryDatasetChange?: () => void
+}) {
   useShareableUrlHash({
+    ...(onHistoryDatasetChange === undefined ? {} : { onHistoryDatasetChange }),
     dataset: {
       annotationUrl: 'https://example.test/annotations/manual.csv',
       customImageOpacities: [0.35],
       customImageUrls: ['https://example.test/images/he.ome.tif'],
-      datasetUrl: 'https://example.test/output',
+      datasetUrl,
     },
     genes: {
       geneExpressionColorScale: 'plasma',
       geneExpressionDetailMode: 'auto',
       geneExpressionScoreMode: 'sum',
-      selectedGenes: ['Actb', 'Gad1'],
+      selectedGenes,
     },
     layers: {
       boundaryCellLimit: 2500,
@@ -119,5 +128,90 @@ describe('useShareableUrlHash', () => {
     // Selected genes is the default transcript filter.
     expect(window.location.hash).not.toContain('txFilter')
     expect(window.location.hash).not.toContain('cellTrack')
+  })
+
+  it('adds a history entry when another dataset opens (15.3-C)', () => {
+    const startLength = window.history.length
+    const { rerender } = render(<ShareableUrlHashProbe datasetUrl="" />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+    // The start screen: no dataset, so the entry is replaced.
+    expect(window.history.length).toBe(startLength)
+
+    rerender(<ShareableUrlHashProbe datasetUrl="https://example.test/a" />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+    expect(window.history.length).toBe(startLength + 1)
+    expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Fa')
+
+    // Other changes replace the entry.
+    rerender(
+      <ShareableUrlHashProbe
+        datasetUrl="https://example.test/a"
+        selectedGenes={['Sox2']}
+      />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+    expect(window.history.length).toBe(startLength + 1)
+    expect(window.location.hash).toContain('genes=Sox2')
+
+    rerender(<ShareableUrlHashProbe datasetUrl="https://example.test/b" />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+    expect(window.history.length).toBe(startLength + 2)
+  })
+
+  it('keeps the entry for the dataset a link opened', () => {
+    window.history.replaceState(null, '', '/?dataset=https%3A%2F%2Fexample.test%2Fa')
+    const startLength = window.history.length
+    render(<ShareableUrlHashProbe datasetUrl="https://example.test/a" />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.history.length).toBe(startLength)
+    expect(window.location.search).toBe('?dataset=https%3A%2F%2Fexample.test%2Fa')
+  })
+
+  it('reloads when Back reaches another dataset, and writes nothing more', () => {
+    const onHistoryDatasetChange = vi.fn()
+    const { rerender } = render(
+      <ShareableUrlHashProbe
+        datasetUrl="https://example.test/b"
+        onHistoryDatasetChange={onHistoryDatasetChange}
+      />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    // Back to the same dataset's entry: nothing to do.
+    act(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(onHistoryDatasetChange).not.toHaveBeenCalled()
+
+    window.history.replaceState(null, '', '/#xv=2&dataset=https%3A%2F%2Fexample.test%2Fa')
+    act(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(onHistoryDatasetChange).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <ShareableUrlHashProbe
+        datasetUrl="https://example.test/b"
+        selectedGenes={['Sox2']}
+        onHistoryDatasetChange={onHistoryDatasetChange}
+      />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+    expect(window.location.hash).toBe('#xv=2&dataset=https%3A%2F%2Fexample.test%2Fa')
   })
 })
