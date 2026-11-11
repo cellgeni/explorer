@@ -1816,6 +1816,37 @@ describe('App', () => {
     }
   })
 
+  it('describes the open dataset in the info drawer with ?shell=2 (15.2-F)', async () => {
+    window.history.replaceState(null, '', '/?shell=2')
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByText(/^Xenium · 1 cell/)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Dataset info/ }))
+    const drawer = screen.getByRole('dialog', { name: 'Dataset info' })
+    const dataset = within(drawer).getByRole('region', { name: 'Dataset' })
+
+    expect(within(dataset).getByText('Platform').nextElementSibling).toHaveTextContent(
+      'Xenium',
+    )
+    expect(within(dataset).getByText('Cells').nextElementSibling).toHaveTextContent('1')
+    expect(within(dataset).getByText('Address').nextElementSibling).toHaveTextContent(
+      DEMO_DATASET_URL,
+    )
+    expect(
+      within(drawer).getByRole('region', { name: 'Open another dataset' }),
+    ).toBeInTheDocument()
+  })
+
   it('keeps tool keys off in the current shell', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {

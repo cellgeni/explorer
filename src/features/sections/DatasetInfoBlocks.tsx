@@ -6,7 +6,7 @@ import {
   DownloadIcon,
   ErrorSummary,
 } from '../../components/AppStatusPanels'
-import { Select } from '../../components/ui'
+import { Disclosure, Select } from '../../components/ui'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
@@ -26,10 +26,39 @@ import type {
 } from './datasetInfoModel'
 import { useCopyLinkStatus } from './useCopyLinkStatus'
 
-export function OpenDatasetForm({ open }: { readonly open: OpenDatasetModel }) {
+// The new shell puts the boundary limit under Advanced (15.2-F), since it
+// rarely changes and Settings has it too.
+export function OpenDatasetForm({
+  open,
+  boundaryLimit = 'inline',
+}: {
+  readonly open: OpenDatasetModel
+  readonly boundaryLimit?: 'inline' | 'advanced' | undefined
+}) {
   const datasetInputId = useId()
   const morphologyInputId = useId()
   const boundaryLimitInputId = useId()
+  const boundaryLimitField = (
+    <>
+      <label htmlFor={boundaryLimitInputId}>Boundary limit</label>
+      <input
+        id={boundaryLimitInputId}
+        name="boundaryCellLimit"
+        type="number"
+        inputMode="numeric"
+        min="1"
+        max={open.maxBoundaryCellLimit}
+        step="1"
+        autoComplete="off"
+        value={open.boundaryCellLimit}
+        title="Boundary cell limit"
+        disabled={open.boundaryLimitDisabled}
+        onChange={(event) => {
+          open.onBoundaryCellLimitChange(event.currentTarget.valueAsNumber)
+        }}
+      />
+    </>
+  )
 
   return (
     <form className="dataset-form" onSubmit={open.onSubmit}>
@@ -61,23 +90,17 @@ export function OpenDatasetForm({ open }: { readonly open: OpenDatasetModel }) {
         />
         <span>{open.morphologyLabel}</span>
       </label>
-      <label htmlFor={boundaryLimitInputId}>Boundary limit</label>
-      <input
-        id={boundaryLimitInputId}
-        name="boundaryCellLimit"
-        type="number"
-        inputMode="numeric"
-        min="1"
-        max={open.maxBoundaryCellLimit}
-        step="1"
-        autoComplete="off"
-        value={open.boundaryCellLimit}
-        title="Boundary cell limit"
-        disabled={open.boundaryLimitDisabled}
-        onChange={(event) => {
-          open.onBoundaryCellLimitChange(event.currentTarget.valueAsNumber)
-        }}
-      />
+      {boundaryLimit === 'inline' ? (
+        boundaryLimitField
+      ) : (
+        <Disclosure
+          title="Advanced dataset options"
+          summary="Advanced"
+          className="dataset-form-advanced"
+        >
+          {boundaryLimitField}
+        </Disclosure>
+      )}
       <button type="submit" disabled={open.isLoading} title="Load dataset or image">
         {open.isLoading ? 'Loading…' : 'Load Dataset'}
       </button>

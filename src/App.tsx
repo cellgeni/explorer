@@ -3047,6 +3047,21 @@ export function App({ dependencies }: AppProps = {}) {
     boundaryCellLimit,
     cellFeatureMatrixCapabilityState,
     datasetAbout,
+    datasetFactsInput:
+      loadState.status === 'ready'
+        ? {
+            platform: platformAdapter.kind,
+            url: loadState.url,
+            elementNoun: platformAdapter.labels.embeddingElementPlural,
+            elementCount: loadState.cellCount,
+            geneCount:
+              genePanelState.status === 'ready' ? genePanelState.genes.length : null,
+            channelCount: morphologyChannels.length,
+            zPlaneCount: morphologyImage?.zStack?.sizeZ ?? 1,
+            hasFlatImage: flatMorphologyImage !== null,
+            micrometersPerPixel: viewerMicrometersPerPixel,
+          }
+        : null,
     datasetUrl,
     debugLog,
     debugMode,

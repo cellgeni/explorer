@@ -157,9 +157,11 @@ export function testDatasetInfoModel(
       >
     }
     readonly diagnostics?: Partial<DatasetDiagnosticsModel>
+    readonly facts?: DatasetInfoModel['facts']
   } = {},
 ): DatasetInfoModel {
   return {
+    facts: overrides.facts ?? [],
     open: {
       datasetUrl: '',
       onDatasetUrlChange: vi.fn(),
