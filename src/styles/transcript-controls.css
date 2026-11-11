@@ -274,3 +274,44 @@
 .transcript-density-scale-values span:last-child {
   text-align: right;
 }
+
+/* The exact point budget meter (15.1-J). */
+.transcript-budget {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.transcript-budget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: var(--font-control);
+  font-weight: 700;
+}
+
+.transcript-budget-meter {
+  height: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+}
+
+.transcript-budget-meter span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.transcript-budget-meter.is-over span {
+  background: var(--warning);
+}
+
+.transcript-budget-text {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-variant-numeric: tabular-nums;
+}

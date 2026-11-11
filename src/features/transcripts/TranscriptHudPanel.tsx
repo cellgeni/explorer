@@ -1,9 +1,7 @@
 import type { ViewerTranscriptHoverDetail } from '../../components/ViewerCore'
-import {
-  MAX_TRANSCRIPT_EXACT_RENDER_LIMIT,
-  MIN_TRANSCRIPT_EXACT_RENDER_LIMIT,
-  type TranscriptDetailMode,
-  type TranscriptFeatureFilterMode,
+import type {
+  TranscriptDetailMode,
+  TranscriptFeatureFilterMode,
 } from '../../data/transcriptOverlay'
 import {
   TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS,
@@ -17,10 +15,12 @@ import {
 import { Chip } from '../../components/ui'
 import { opacityToPercent } from '../../rendering/layerOpacity'
 import { geneSearchEmptyMessage } from '../genes/geneControlsModel'
+import { TranscriptPointBudget } from './TranscriptPointBudget'
 import { TranscriptStatusPanel } from './TranscriptStatusPanel'
 import {
   isTranscriptDetailMode,
   isTranscriptFeatureFilterMode,
+  transcriptBudgetEstimate,
   transcriptDensityScaleAriaLabel,
   type TranscriptCapabilityState,
   type TranscriptLayerState,
@@ -31,7 +31,6 @@ interface TranscriptHudPanelProps {
   readonly transcriptDetailInputId: string
   readonly transcriptDensityScaleInputId: string
   readonly transcriptPointColorInputId: string
-  readonly transcriptPointBudgetInputId: string
   readonly transcriptMinQvInputId: string
   readonly transcriptFeatureFilterInputId: string
   readonly transcriptFeatureSearchInputId: string
@@ -89,7 +88,6 @@ export function TranscriptHudPanel({
   transcriptDetailInputId,
   transcriptDensityScaleInputId,
   transcriptPointColorInputId,
-  transcriptPointBudgetInputId,
   transcriptMinQvInputId,
   transcriptFeatureFilterInputId,
   transcriptFeatureSearchInputId,
@@ -195,19 +193,14 @@ export function TranscriptHudPanel({
           <option value="exact">Exact</option>
         </select>
 
-        <label htmlFor={transcriptPointBudgetInputId}>Exact budget</label>
-        <input
-          id={transcriptPointBudgetInputId}
-          type="number"
-          inputMode="numeric"
-          min={MIN_TRANSCRIPT_EXACT_RENDER_LIMIT}
-          max={MAX_TRANSCRIPT_EXACT_RENDER_LIMIT}
-          step="1000"
-          value={transcriptExactPointLimit}
-          title="Transcript exact point budget"
-          onChange={(event) => {
-            onTranscriptExactPointLimitChange(event.currentTarget.valueAsNumber)
-          }}
+        <TranscriptPointBudget
+          estimate={transcriptBudgetEstimate(
+            transcriptCapabilityState,
+            transcriptLayerState,
+            visibleTranscriptEstimate,
+          )}
+          limit={transcriptExactPointLimit}
+          onLimitChange={onTranscriptExactPointLimitChange}
         />
 
         <label htmlFor={transcriptFeatureFilterInputId}>Feature filter</label>
@@ -421,8 +414,6 @@ export function TranscriptHudPanel({
         <TranscriptStatusPanel
           capabilityState={transcriptCapabilityState}
           layerState={transcriptLayerState}
-          exactPointLimit={transcriptExactPointLimit}
-          visibleTranscriptEstimate={visibleTranscriptEstimate}
           hoveredTranscript={hoveredTranscript}
           pinnedTranscript={pinnedTranscript}
           onPinTranscript={onPinTranscript}

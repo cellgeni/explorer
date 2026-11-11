@@ -33,7 +33,6 @@ function baseProps(overrides: Partial<Props> = {}): Props {
       transcriptFeatureSearchInputId: 'tx-search',
       transcriptMinQvInputId: 'tx-qv',
       transcriptOpacityInputId: 'tx-opacity',
-      transcriptPointBudgetInputId: 'tx-budget',
       transcriptPointColorInputId: 'tx-point-color',
       transcriptPointSizeInputId: 'tx-size',
     },

@@ -16,6 +16,7 @@ import {
 } from '../../rendering/deckLayers'
 import {
   transcriptAggregateRenderedLabel,
+  transcriptGenesLabel,
   transcriptCapabilityLabel,
 } from './transcriptLabels'
 
@@ -63,6 +64,8 @@ export type TranscriptLayerState<
       readonly source: 'cell-summary' | 'native-zarr'
       readonly mode: 'density'
       readonly bins: readonly TranscriptAggregateBin[]
+      // The genes the squares count; empty when they count all transcripts.
+      readonly featureNames: readonly string[]
       readonly visibleTranscriptEstimate: number
       readonly scaleMax?: number
       readonly durationMs?: number
@@ -168,6 +171,7 @@ interface TranscriptLayerAggregateOptions {
   readonly source: 'cell-summary' | 'native-zarr'
   readonly mode: 'density'
   readonly bins: readonly TranscriptAggregateBin[]
+  readonly featureNames: readonly string[]
   readonly message: string
   readonly visibleTranscriptEstimate: number
   readonly scaleMax?: number | undefined
@@ -177,6 +181,7 @@ interface TranscriptLayerAggregateOptions {
 export function transcriptLayerAggregate({
   bins,
   durationMs,
+  featureNames,
   message,
   mode,
   scaleMax,
@@ -188,6 +193,7 @@ export function transcriptLayerAggregate({
     source,
     mode,
     bins,
+    featureNames,
     message,
     visibleTranscriptEstimate,
     ...(scaleMax === undefined ? {} : { scaleMax }),
@@ -237,7 +243,9 @@ export type TranscriptRetainedLayerState =
     }
   | {
       readonly kind: 'aggregate'
+      readonly source: 'cell-summary' | 'native-zarr'
       readonly bins: readonly TranscriptAggregateBin[]
+      readonly featureNames: readonly string[]
       readonly scaleMax?: number
     }
 
@@ -323,6 +331,54 @@ export function transcriptAggregateScaleMaxForRendering<
   return undefined
 }
 
+// The transcripts an exact read would load in this view, for the point
+// budget meter. Per-gene outputs (Atera) read only the selected genes, so
+// their estimate is the selected-gene count from the density; other outputs
+// read every transcript in the view, estimated from the cells.
+export function transcriptBudgetEstimate<ErrorType extends TranscriptLoadErrorSummary>(
+  capabilityState: TranscriptCapabilityState<ErrorType>,
+  layerState: TranscriptLayerState<ErrorType>,
+  visibleTranscriptEstimate: number,
+): number {
+  const isPerGene =
+    capabilityState.status === 'ready' &&
+    capabilityState.capabilities.geneRanges !== undefined
+
+  return isPerGene && 'visibleTranscriptEstimate' in layerState
+    ? layerState.visibleTranscriptEstimate
+    : visibleTranscriptEstimate
+}
+
+// What the density squares on screen count, for the legend: the genes (none
+// for all transcripts), whether the counts come from cell totals, and the
+// square size.
+export interface TranscriptDensityContent {
+  readonly source: 'cell-summary' | 'native-zarr'
+  readonly featureNames: readonly string[]
+  readonly binSizeMicrometers: number | undefined
+}
+
+export function transcriptDensityContentForRendering<
+  ErrorType extends TranscriptLoadErrorSummary,
+>(layerState: TranscriptLayerState<ErrorType>): TranscriptDensityContent | null {
+  const layer =
+    layerState.status === 'aggregate'
+      ? layerState
+      : layerState.status === 'loading' && layerState.previousLayer?.kind === 'aggregate'
+        ? layerState.previousLayer
+        : null
+
+  if (layer === null || layer.bins.length === 0) {
+    return null
+  }
+
+  return {
+    source: layer.source,
+    featureNames: layer.featureNames,
+    binSizeMicrometers: layer.bins[0]?.binSizeMicrometers,
+  }
+}
+
 export function transcriptDensityScaleValueLabels(
   scaleMax: number | undefined,
 ): readonly [string, string, string] {
@@ -360,7 +416,9 @@ export function retainedTranscriptLayerState<
   if (layerState.status === 'aggregate') {
     return {
       kind: 'aggregate',
+      source: layerState.source,
       bins: layerState.bins,
+      featureNames: layerState.featureNames,
       ...(layerState.scaleMax === undefined ? {} : { scaleMax: layerState.scaleMax }),
     }
   }
@@ -559,6 +617,21 @@ export function transcriptNativeAggregateMessage({
       : 'all-transcript'
 
   return `Showing native ${featureLabel} density squares from ${sourceFile} (${binCount.toLocaleString()} squares).`
+}
+
+// The selected-gene density was not read because the new genes need more of
+// density/gene than one request reads (15.1-J). Each gene is read for the
+// whole slide, so zooming in does not help; fewer genes do. Exact points do
+// not use density/gene.
+export function transcriptGeneDensityOverBudgetMessage(
+  featureNames: readonly string[],
+  overBudget: { readonly chunkCount: number; readonly chunkLimit: number },
+): string {
+  return `Transcript density for ${transcriptGenesLabel(featureNames)} needs ${overBudget.chunkCount.toLocaleString()} density/gene data chunks, and the app reads up to ${overBudget.chunkLimit.toLocaleString()} at a time. Select fewer genes, or zoom in until exact points load.`
+}
+
+export function transcriptGeneDensityMissingMessage(binCount: number): string {
+  return `This output has no per-gene density (density/gene), so the ${binCount.toLocaleString()} squares count all transcripts. Exact points still show the selected genes.`
 }
 
 // Per-gene transcript outputs (Atera) have no all-gene density or points.

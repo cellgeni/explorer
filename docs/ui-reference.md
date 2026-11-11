@@ -208,7 +208,8 @@ Atera stores transcripts per gene (see
 
 - With Selected genes, density squares sum the selected genes, and Auto
   switches to exact points when the selected genes' count in view fits the
-  budget. The Estimate is that count, not the all-transcript cell estimate.
+  budget. The `Exact points` meter shows that count, not the all-transcript
+  cell estimate.
 - With All features, or no genes selected, the layer is cell-summary squares
   from cell transcript counts, and Exact waits for genes.
 - `Gene-only calls` is disabled, and transcripts have no FOV.
@@ -218,22 +219,38 @@ Atera stores transcripts per gene (see
 | -------------------- | ---------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `Show transcripts`   | Checkbox         | Off                                            | Enables the overlay                                                                    |
 | `Detail`             | Select           | **Auto**, Density, Exact                       | Auto shows exact points when the visible estimate fits the budget, else density        |
-| `Exact budget`       | Number           | 1–1,000,000, step 1,000; 100,000               | At ≥ 80% of the budget, `Load exact viewport` must be pressed                          |
-| `Feature filter`     | Select           | **Selected genes**, All features               | Selected genes needs at least one selected gene; applies to exact points               |
+| `Exact points`       | Meter            | "{estimate} of {budget} points"                | Fills with the view's transcripts; warning colour over the budget                      |
+| `Edit Max`           | Button           | Shows `Exact budget`                           | `Exact budget`: number, 1–1,000,000, step 1,000; 100,000; commits on Enter or blur     |
+| `Feature filter`     | Select           | **Selected genes**, All features               | Selected genes needs at least one selected gene; applies to density and exact points   |
 | Feature chips        | Chips with ×     |                                                | × (`Remove {gene} from transcript features`) removes it from the shared gene selection |
 | `Feature search`     | Search           | Up to 24 results, ranked like `Gene selection` | Adds the gene and switches the filter to Selected genes                                |
-| `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal     | Normalized to the dataset/level count domain                                           |
+| `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal     | Normalized to the largest square on the slide at the current square size               |
 | `Point color`        | Select           | **Feature**, QV                                | Exact points                                                                           |
 | `Min QV`             | Number           | 0–40; 20                                       | Exact points                                                                           |
 | `Gene-only calls`    | Checkbox         | On                                             | Excludes control probes                                                                |
 | `Transcript opacity` | Slider 0–100%    | 85%                                            |                                                                                        |
 | `Point size`         | Slider 1–6 px    | 2 px                                           |                                                                                        |
 
+At ≥ 80% of the budget, `Load exact viewport` must be pressed.
+
+On Xenium (Phase 15.1-J), density follows `Feature filter` too: with Selected
+genes the squares count only those genes (see
+[Xenium](./modalities/xenium.md#transcripts)). If the newly selected genes
+need more than 32 `density/gene` data chunks, nothing is drawn and the panel
+says to select fewer genes. Auto's switch to exact points still uses the
+all-transcript estimate, which is what an exact read scans.
+
+The canvas legend names what the squares count and their size: "SNAP25
+transcripts per 40 µm bin", "SNAP25 and AQP4 transcripts per …", "Transcripts
+of 8 selected genes per …", "All transcripts per …", or "Transcripts in cells
+per …" for cell-summary squares. The hover card's title says the same, and
+for several genes it lists each gene's count in the square (top 4).
+
 `TranscriptStatusPanel` (`src/features/transcripts/TranscriptStatusPanel.tsx`)
-below the controls shows source, estimate, budget, rendered count, and query
-time; `Load exact viewport` when waiting; top groups (gene, FOV, count; gene
-and count on Atera); and hovered and pinned transcript or density-bin cards
-with `Pin` / `Clear`.
+below the controls shows source, rendered count, and query time;
+`Load exact viewport` when waiting; top groups (gene, FOV, count; gene and
+count on Atera); and hovered and pinned transcript or density-bin cards with
+`Pin` / `Clear`.
 
 ## Magic Lens Tab
 

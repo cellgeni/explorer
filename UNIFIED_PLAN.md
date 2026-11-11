@@ -225,27 +225,27 @@ writing UI code.
 
 ## 3. Status At A Glance
 
-| Track                           | Scope                                                    | Status                                                                       |
-| ------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Phase 1                         | Foundation and migration                                 | Done                                                                         |
-| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                                       |
-| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09                           |
-| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                                         |
-| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                                  |
-| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**                      |
-| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                                           |
-| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                            |
-| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                                         |
-| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**                      |
-| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                                     |
-| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                                     |
-| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                            |
-| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                                            |
-| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                                            |
-| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                            |
-| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                            |
-| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                            |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 done, and 15.1 I and L of M2 (2026-11-11); 15.1 F and J next |
+| Track                           | Scope                                                    | Status                                                                    |
+| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Phase 1                         | Foundation and migration                                 | Done                                                                      |
+| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                                    |
+| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09                        |
+| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                                      |
+| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                               |
+| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**                   |
+| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                                        |
+| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                         |
+| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                                      |
+| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**                   |
+| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                                  |
+| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                                  |
+| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                         |
+| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                                         |
+| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                                         |
+| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                         |
+| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                         |
+| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                         |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 done, and 15.1 I, J and L of M2 (2026-11-11); 15.1 F next |
 
 ---
 
@@ -1038,9 +1038,9 @@ windowed level-of-detail system, not one point layer over
 - **Superseded:** selected-feature density from `/density/gene`, and 10x-style
   feature-circle glyphs (one per bin and gene, top 8 per bin). Both were removed
   from the user-facing modes on 2026-06-06.
-- **Reopened** (2026-11-11): selected-feature density from `/density/gene`
-  returns in [Phase 15](#phase-15--interface-redesign), task 15.1-J. The
-  feature-circle glyphs stay removed.
+- **Done** (2026-11-11): selected-feature density from `/density/gene`
+  returned in [Phase 15](#phase-15--interface-redesign), task 15.1-J, read
+  gene by gene. The feature-circle glyphs stay removed.
 
 #### Level-Of-Detail Options
 
@@ -1911,7 +1911,7 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 ### Phase 15 — Interface Redesign
 
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
-and 15.1 I and L done 2026-11-11; 15.1 F and J (the rest of M2) next. The
+and 15.1 I, J and L done 2026-11-11; 15.1 F (the rest of M2) next. The
 user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
@@ -2493,7 +2493,7 @@ They are independent unless a note says otherwise.
   - The set heading is an `h4`, not a `<label>`: the default set for
     imported labels is called "Loaded annotations", and a label would have
     named its checkbox the same as the list.
-- [ ] **J. Selected-gene transcript density (F11).** This reopens
+- [x] **J. Selected-gene transcript density (F11).** This reopens
       [Appendix A](#appendix-a-reconciliation-notes) row 10, by user decision on 2026-11-11.
       (M–L)
   - When the filter is Selected genes and at least one gene is chosen, request
@@ -2515,6 +2515,44 @@ They are independent unless a note says otherwise.
     max) instead of number fields.
   - Update `docs/modalities/xenium.md`, and resolve the **Reopened** marks on
     Appendix A row 10 and on the Phase 5.1 note.
+  - Done 2026-11-11. With Selected genes and genes chosen, Xenium density
+    counts those genes from `density/gene`; with All features, or no genes,
+    it stays the `/grids` density. The layer state carries the genes
+    (`featureNames`), so the legend reads "SNAP25 transcripts per 320 µm
+    bin" (or "All transcripts per …", "Transcripts in cells per …"), and the
+    hover card names the gene, or lists each gene's count.
+  - **`density/gene` is stored gene by gene**, `indptr[gene × rows + row]`,
+    not row by row as the June reader assumed. On the demo, row 1100's
+    pointer for SNAP25 sat at the end of the data. So the old selected-gene
+    squares counted the wrong cells, which may be why they were hidden in
+    June. A first timing run with the row-by-row reader (13 s and 363 MB for
+    the whole slide, whatever the gene count) was measuring that bug.
+  - Because each gene's whole-slide entries are contiguous, a gene is read
+    once, whole, and kept (8 million entries at most, least recently used
+    first out). Measured on the demo, whole slide, Node: 1 gene 0.2 s and
+    2.2 MB, 8 genes 0.5 s and 11 MB, 25 genes 1.9 s and 56 MB, plus a
+    one-off `indptr` read (10 MB compressed, 75 MB in memory). Later views
+    take 3–14 ms. In the browser, SNAP25 over the whole slide took 6.2 s
+    while the dataset was still loading, then 46 ms per view.
+  - The gene limit is `TRANSCRIPT_GENE_DENSITY_CHUNK_LIMIT`, 32 data chunks
+    of new genes per request (about 75 MB, about 30 genes), because gene
+    sizes vary. Over it nothing is read, and the panel says to select fewer
+    genes or zoom in until exact points load.
+  - Squares are the finest 10 µm × 2ⁿ size whose occupied squares fit 1,500
+    (320 µm for the whole demo slide, not 1,280 µm from the box alone).
+    Colours scale to the largest square on the slide at that size, so they
+    hold while panning.
+  - **Not done as written:** Auto still switches to points on the
+    all-transcript estimate. Xenium exact reads scan every transcript in
+    the view (level-0 tiles or Parquet) whatever the filter, so the
+    selected-gene count would let a whole-slide view try to read every
+    transcript. Atera reads exact points per gene and keeps its
+    selected-gene switch.
+  - The point budget is a meter, "Exact points: 28,724 of 100,000 points"
+    (`TranscriptPointBudget`); `Edit Max` shows the `Exact budget` field.
+    The status panel lost its Estimate and Exact budget rows.
+  - The reader no longer makes feature-circle glyphs; their renderer code
+    is now unused and is left for a cleanup.
 - [x] **K. Type and contrast (F6, F7, F20).** (M)
   - Remove the 48 `text-transform: uppercase` rules.
   - Use 12 px for control text and 11 px for captions.
@@ -2786,19 +2824,19 @@ Each PR updates the docs it affects. The full list:
 
 #### Risks
 
-| Risk                                                                 | Effect                                                                | Mitigation                                                                                                      |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| New overlay props make `DeckGL` redraw                               | About 9 s per interaction in headless tests, and stutter on real GPUs | Put overlays next to `MemoDeckGL`, not inside it; memoise `controller` and `layers`; extend the no-redraw test  |
-| Moving panels makes prop lists even longer                           | `App.tsx` gets harder to change                                       | Build the section models (15.2-A) before the new shell                                                          |
-| Test churn (about 96 assertions depend on tabs, 228 on button names) | Slow PRs                                                              | Add the `openControls` helper first; keep button names; change casing only in CSS                               |
-| Breaking share links or manifests                                    | Saved views stop working                                              | Keep the version 1 parser; add mapping tests; only add to the manifest enum                                     |
-| 15.1-F changes how datasets load                                     | Load regressions                                                      | Its own PR, with tests on each platform and a live E2E run                                                      |
-| Seven platforms with different controls                              | A platform's control gets missed                                      | Run the platform checklist on each PR; gate on capabilities                                                     |
-| 15.4 grows                                                           | The redesign is delayed                                               | 15.4 is optional after 15.3                                                                                     |
-| Wrapper components dodge `nativeTitleAudit`                          | Unlabelled controls get through                                       | Extend the audit to the primitives (15.0-B)                                                                     |
-| The examples fetch fails (GitHub down, offline, blocked network)     | The start screen has no examples                                      | 5 s timeout; offer the demo dataset and a Retry; keep the result for the session; CI routes the request locally |
-| GitHub's raw cache (about 5 min) or a bad `index.json` on `main`     | New examples appear late, or the gallery breaks                       | A tolerant parser that skips bad entries; `npm run examples -- --check` stays in CI                             |
-| Selected-gene density is slow with many genes                        | Slow panning with large gene sets                                     | Set a gene limit from the 15.1-J measurements; above it, keep showing points and say why                        |
+| Risk                                                                 | Effect                                                                | Mitigation                                                                                                       |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| New overlay props make `DeckGL` redraw                               | About 9 s per interaction in headless tests, and stutter on real GPUs | Put overlays next to `MemoDeckGL`, not inside it; memoise `controller` and `layers`; extend the no-redraw test   |
+| Moving panels makes prop lists even longer                           | `App.tsx` gets harder to change                                       | Build the section models (15.2-A) before the new shell                                                           |
+| Test churn (about 96 assertions depend on tabs, 228 on button names) | Slow PRs                                                              | Add the `openControls` helper first; keep button names; change casing only in CSS                                |
+| Breaking share links or manifests                                    | Saved views stop working                                              | Keep the version 1 parser; add mapping tests; only add to the manifest enum                                      |
+| 15.1-F changes how datasets load                                     | Load regressions                                                      | Its own PR, with tests on each platform and a live E2E run                                                       |
+| Seven platforms with different controls                              | A platform's control gets missed                                      | Run the platform checklist on each PR; gate on capabilities                                                      |
+| 15.4 grows                                                           | The redesign is delayed                                               | 15.4 is optional after 15.3                                                                                      |
+| Wrapper components dodge `nativeTitleAudit`                          | Unlabelled controls get through                                       | Extend the audit to the primitives (15.0-B)                                                                      |
+| The examples fetch fails (GitHub down, offline, blocked network)     | The start screen has no examples                                      | 5 s timeout; offer the demo dataset and a Retry; keep the result for the session; CI routes the request locally  |
+| GitHub's raw cache (about 5 min) or a bad `index.json` on `main`     | New examples appear late, or the gallery breaks                       | A tolerant parser that skips bad entries; `npm run examples -- --check` stays in CI                              |
+| Selected-gene density is slow with many genes                        | Slow panning with large gene sets                                     | Done in 15.1-J: each gene is read once and kept; over 32 new chunks (about 30 genes) nothing is read, with a why |
 
 #### Order And Size
 
@@ -3040,8 +3078,8 @@ Sequencing:
 - [ ] Hosted Visium HD optimization: profiling, segmentation streaming, Feature
       Slice ranges, memory, and bundles.
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
-      in five milestones. Milestone M1 is done (15 tasks), and 15.1 I and L of
-      M2; 15.1 F and J are next.
+      in five milestones. Milestone M1 is done (15 tasks), and 15.1 I, J and L
+      of M2; 15.1 F is next.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
@@ -3132,38 +3170,38 @@ until needed; cell-major matrix sidecars; papaparse.
 
 Where the sources conflicted, and what this document keeps.
 
-| #   | Topic                            | Earlier record                                                                             | Later record (kept)                                                                               |
-| --- | -------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| 1   | DuckDB `httpfs`                  | `PLAN.md`: `LOAD httpfs` is redundant; don't rely on it                                    | Phase 5.1: load `httpfs` at bootstrap, non-fatal on older bundles                                 |
-| 2   | `transcripts.zarr.zip`           | `PLAN.md`: drop it; `density/` is only an optional accelerator                             | Phase 5.1: it is the native LOD and exact-point source                                            |
-| 3   | Multi-channel compositing        | `PLAN.md`: Viv `XRLayer`                                                                   | Phase 3: Canvas2D additive compositing                                                            |
-| 4   | Zustand scope                    | `PLAN.md`: shared store for React and the deck.gl loop                                     | Refactor: viewer store only; React domain state                                                   |
-| 5   | Request orchestration location   | Refactor decisions: async orchestration stays in `App.tsx`                                 | `OPTIMIZATIONS.md`: workflow hooks own requests                                                   |
-| 6   | Phase order around 5.1           | "Begin Phase 5.1 only after" the feature-fix and optimization passes                       | Phase 5.1 began after the correctness pass; the optimization pass was deferred                    |
-| 7   | Overview points                  | Phase 1: bin points at low zoom                                                            | Phase 4: no CPU aggregation; all viewport-clipped centroids; Phase 5 budget caps                  |
-| 8   | Expression limits                | Analysis slice: 5,000 visible cells                                                        | Phase 4: `Auto LOD` exact below 5,000; `Exact region` up to 50,000                                |
-| 9   | Boundary limit default           | Phase 1: 5,000                                                                             | Phase 5: set by the performance budget (values not recorded)                                      |
-| 10  | Transcript selected-gene density | Option C: `/density/gene` for selected features; feature circles                           | 2026-06-06: only `/grids` density; filters apply in Exact. **Reopened** 2026-11-11 (Phase 15.1-J) |
-| 11  | Magic Lens data path             | Phase 5: exact-circle transcript scans                                                     | Feature-fix: ROI cell query plus matrix gene stats                                                |
-| 12  | ROI gene warmup                  | Per viewport                                                                               | Once per dataset                                                                                  |
-| 13  | ROI gene fallback                | Phase 4: `transcripts.parquet` aggregation                                                 | Feature-fix: CSC Zarr, then H5; nothing else by default                                           |
-| 14  | Visium HD expression             | Paused, then 64 MB H5 budget guard                                                         | Feature Slice lazy-range worker for overlays; lazy-range matrix worker for profiles               |
-| 15  | 2 µm tier                        | Disabled → env-var budget → runtime `2 µm budget` field                                    | Budget fields removed; all rows unless a caller caps                                              |
-| 16  | `Mapping rows` field             | `UPDATED_PLAN.md` says it was added, in an entry placed _after_ the one that removes it    | Removed. The file is not in date order; the removal is the final state                            |
-| 17  | Segmentation GeoJSON budget      | 64 MB full-file limit                                                                      | No default limit; streaming by bounding box                                                       |
-| 18  | Status header vs sequence        | "Phase 5.1 complete" (dated 2026-06-07) and "optimization pass remains a future follow-up" | Both kept: 5.1 done, optimization open                                                            |
-| 19  | "Keep `PLAN.md` unchanged"       | Phases 5.1 and 7 asked for new phases to go only in `UPDATED_PLAN.md`                      | Moot after this merge                                                                             |
-| 20  | `OPTIMIZATIONS.md` item numbers  | Progress notes mix the 4-step sequence numbers with the 14-item list numbers               | This document uses names and the 14-item numbering                                                |
-| 21  | Persistent cache medium          | `PLAN.md`: OPFS or IndexedDB                                                               | IndexedDB only                                                                                    |
-| 22  | H5AD remote reads                | Product decision: worker-backed Range reader                                               | Not done; 300 MiB whole-file gate plus kerchunk reference (still open)                            |
-| 23  | Expression LOD                   | Phase 4: `Auto LOD` exact below 5,000 visible cells; samples thin all cells                | November 2026: every cell up to 500,000 cells; samples keep every expressing cell                 |
-| 24  | `Exact region` above the limit   | Phase 4: wait instead of sampling                                                          | November 2026: sample, keeping every expressing cell                                              |
-| 25  | Low-zoom expression marks        | Phase 4: fixed data-space bins                                                             | `0ed880d`: every expressing cell drawn at every zoom                                              |
-| 26  | Overview points                  | Phase 4: all viewport-clipped centroids                                                    | `bf6ebc8`: GPU-resident cells with a fixed-rank sample capped by the budget                       |
-| 27  | Boundary limit values            | Phase 5: "set by the performance budget"                                                   | 2,500 (compact) or 50,000; range 1–100,000; also loads at zoom ≥ −0.25                            |
-| 28  | Phase 8 status                   | Merged plan: nothing checked                                                               | Shipped in `f7ff9c5` on 2026-07-09; closed                                                        |
-| 29  | COOP/COEP in production          | Docs disagreed (required vs only for threaded WASM)                                        | Recommended for parity; not required by the current build                                         |
-| 30  | Items marked done in the records | H5AD tracks and workers, Visium HD low-res, Magic Lens QV, diagnostics, image fallback     | **Reopened** after the 2026-11-08 review                                                          |
+| #   | Topic                            | Earlier record                                                                             | Later record (kept)                                                                         |
+| --- | -------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| 1   | DuckDB `httpfs`                  | `PLAN.md`: `LOAD httpfs` is redundant; don't rely on it                                    | Phase 5.1: load `httpfs` at bootstrap, non-fatal on older bundles                           |
+| 2   | `transcripts.zarr.zip`           | `PLAN.md`: drop it; `density/` is only an optional accelerator                             | Phase 5.1: it is the native LOD and exact-point source                                      |
+| 3   | Multi-channel compositing        | `PLAN.md`: Viv `XRLayer`                                                                   | Phase 3: Canvas2D additive compositing                                                      |
+| 4   | Zustand scope                    | `PLAN.md`: shared store for React and the deck.gl loop                                     | Refactor: viewer store only; React domain state                                             |
+| 5   | Request orchestration location   | Refactor decisions: async orchestration stays in `App.tsx`                                 | `OPTIMIZATIONS.md`: workflow hooks own requests                                             |
+| 6   | Phase order around 5.1           | "Begin Phase 5.1 only after" the feature-fix and optimization passes                       | Phase 5.1 began after the correctness pass; the optimization pass was deferred              |
+| 7   | Overview points                  | Phase 1: bin points at low zoom                                                            | Phase 4: no CPU aggregation; all viewport-clipped centroids; Phase 5 budget caps            |
+| 8   | Expression limits                | Analysis slice: 5,000 visible cells                                                        | Phase 4: `Auto LOD` exact below 5,000; `Exact region` up to 50,000                          |
+| 9   | Boundary limit default           | Phase 1: 5,000                                                                             | Phase 5: set by the performance budget (values not recorded)                                |
+| 10  | Transcript selected-gene density | Option C: `/density/gene` for selected features; feature circles                           | 2026-06-06: only `/grids` density. 2026-11-11 (15.1-J): `/density/gene` density, no circles |
+| 11  | Magic Lens data path             | Phase 5: exact-circle transcript scans                                                     | Feature-fix: ROI cell query plus matrix gene stats                                          |
+| 12  | ROI gene warmup                  | Per viewport                                                                               | Once per dataset                                                                            |
+| 13  | ROI gene fallback                | Phase 4: `transcripts.parquet` aggregation                                                 | Feature-fix: CSC Zarr, then H5; nothing else by default                                     |
+| 14  | Visium HD expression             | Paused, then 64 MB H5 budget guard                                                         | Feature Slice lazy-range worker for overlays; lazy-range matrix worker for profiles         |
+| 15  | 2 µm tier                        | Disabled → env-var budget → runtime `2 µm budget` field                                    | Budget fields removed; all rows unless a caller caps                                        |
+| 16  | `Mapping rows` field             | `UPDATED_PLAN.md` says it was added, in an entry placed _after_ the one that removes it    | Removed. The file is not in date order; the removal is the final state                      |
+| 17  | Segmentation GeoJSON budget      | 64 MB full-file limit                                                                      | No default limit; streaming by bounding box                                                 |
+| 18  | Status header vs sequence        | "Phase 5.1 complete" (dated 2026-06-07) and "optimization pass remains a future follow-up" | Both kept: 5.1 done, optimization open                                                      |
+| 19  | "Keep `PLAN.md` unchanged"       | Phases 5.1 and 7 asked for new phases to go only in `UPDATED_PLAN.md`                      | Moot after this merge                                                                       |
+| 20  | `OPTIMIZATIONS.md` item numbers  | Progress notes mix the 4-step sequence numbers with the 14-item list numbers               | This document uses names and the 14-item numbering                                          |
+| 21  | Persistent cache medium          | `PLAN.md`: OPFS or IndexedDB                                                               | IndexedDB only                                                                              |
+| 22  | H5AD remote reads                | Product decision: worker-backed Range reader                                               | Not done; 300 MiB whole-file gate plus kerchunk reference (still open)                      |
+| 23  | Expression LOD                   | Phase 4: `Auto LOD` exact below 5,000 visible cells; samples thin all cells                | November 2026: every cell up to 500,000 cells; samples keep every expressing cell           |
+| 24  | `Exact region` above the limit   | Phase 4: wait instead of sampling                                                          | November 2026: sample, keeping every expressing cell                                        |
+| 25  | Low-zoom expression marks        | Phase 4: fixed data-space bins                                                             | `0ed880d`: every expressing cell drawn at every zoom                                        |
+| 26  | Overview points                  | Phase 4: all viewport-clipped centroids                                                    | `bf6ebc8`: GPU-resident cells with a fixed-rank sample capped by the budget                 |
+| 27  | Boundary limit values            | Phase 5: "set by the performance budget"                                                   | 2,500 (compact) or 50,000; range 1–100,000; also loads at zoom ≥ −0.25                      |
+| 28  | Phase 8 status                   | Merged plan: nothing checked                                                               | Shipped in `f7ff9c5` on 2026-07-09; closed                                                  |
+| 29  | COOP/COEP in production          | Docs disagreed (required vs only for threaded WASM)                                        | Recommended for parity; not required by the current build                                   |
+| 30  | Items marked done in the records | H5AD tracks and workers, Visium HD low-res, Magic Lens QV, diagnostics, image fallback     | **Reopened** after the 2026-11-08 review                                                    |
 
 ## Appendix B: Source Map
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   geneListLabel,
+  transcriptDensityDetail,
   viewerLegendSections,
   type ViewerLegendInput,
 } from './viewerLegendModel'
@@ -84,7 +85,15 @@ describe('viewerLegendSections', () => {
         colorMode: 'metadata',
         metadataTrack: { label: 'pseudotime', min: 0.1, max: 0.9 },
         transcripts: {
-          density: { colorScale: 'thermal', labels: ['0', '12', '24'] },
+          density: {
+            colorScale: 'thermal',
+            labels: ['0', '12', '24'],
+            content: {
+              source: 'native-zarr',
+              featureNames: ['SNAP25'],
+              binSizeMicrometers: 40,
+            },
+          },
           pointColorMode: null,
         },
       }),
@@ -95,7 +104,11 @@ describe('viewerLegendSections', () => {
       'Transcript density',
     ])
     expect(sections[0]).toMatchObject({ min: '0.1', max: '0.9' })
-    expect(sections[1]).toMatchObject({ min: '0', max: '24' })
+    expect(sections[1]).toMatchObject({
+      min: '0',
+      max: '24',
+      detail: 'SNAP25 transcripts per 40 µm bin',
+    })
     expect(
       viewerLegendSections(input({ colorMode: 'cell-area', cellAreaMax: 412.5 }))[0],
     ).toMatchObject({ title: 'Cell area', max: '412.5' })
@@ -107,6 +120,34 @@ describe('viewerLegendSections', () => {
         input({ transcripts: { density: null, pointColorMode: 'quality' } }),
       ),
     ).toEqual([expect.objectContaining({ title: 'Transcript quality (QV)', max: '40+' })])
+  })
+
+  it('says what the transcript density counts and per what size of bin', () => {
+    const content = { source: 'native-zarr', binSizeMicrometers: 40 } as const
+
+    expect(transcriptDensityDetail({ ...content, featureNames: [] })).toBe(
+      'All transcripts per 40 µm bin',
+    )
+    expect(
+      transcriptDensityDetail({ ...content, featureNames: ['SNAP25', 'AQP4'] }),
+    ).toBe('SNAP25 and AQP4 transcripts per 40 µm bin')
+    expect(
+      transcriptDensityDetail({ ...content, featureNames: ['A', 'B', 'C', 'D'] }),
+    ).toBe('Transcripts of 4 selected genes per 40 µm bin')
+    expect(
+      transcriptDensityDetail({
+        source: 'cell-summary',
+        featureNames: [],
+        binSizeMicrometers: 412.3,
+      }),
+    ).toBe('Transcripts in cells per 412 µm bin')
+    expect(
+      transcriptDensityDetail({
+        source: 'native-zarr',
+        featureNames: [],
+        binSizeMicrometers: undefined,
+      }),
+    ).toBe('All transcripts per bin')
   })
 
   it('shortens long gene lists', () => {
@@ -125,7 +166,11 @@ describe('viewerLegendSections', () => {
           hiddenIds: new Set(),
         },
         transcripts: {
-          density: { colorScale: 'thermal', labels: ['0', '1', '2'] },
+          density: {
+            colorScale: 'thermal',
+            labels: ['0', '1', '2'],
+            content: { source: 'native-zarr', featureNames: [], binSizeMicrometers: 160 },
+          },
           pointColorMode: null,
         },
       }),

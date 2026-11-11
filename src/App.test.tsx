@@ -223,6 +223,11 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Transcripts' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Show transcripts' })).toBeDisabled()
     expect(screen.getByRole('combobox', { name: 'Detail' })).toHaveValue('auto')
+    expect(screen.getByRole('meter', { name: 'Exact points' })).toHaveAttribute(
+      'aria-valuemax',
+      '100000',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Max' }))
     const transcriptExactBudgetInput = screen.getByRole('spinbutton', {
       name: 'Exact budget',
     })
@@ -3120,7 +3125,7 @@ describe('App', () => {
     }
   })
 
-  it('keeps selected-gene transcript Density on all-transcript squares', async () => {
+  it('shows selected-gene transcript Density and names the genes in the legend', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
     )
@@ -3141,7 +3146,8 @@ describe('App', () => {
     const loadTranscriptAggregates: ReturnType<typeof vi.fn<TranscriptAggregateLoader>> =
       vi.fn(async () => ({
         source: 'native-zarr',
-        selectedFeatureNames: [],
+        selectedFeatureNames: ['Actb', 'CD74'],
+        visibleTranscriptCount: 13,
         level: {
           level: 0,
           gridSizeMicrometers: 40,
@@ -3161,6 +3167,11 @@ describe('App', () => {
             radiusMicrometers: 16,
             binSizeMicrometers: 40,
             count: 13,
+            selectedGeneCount: 13,
+            topFeatures: [
+              { featureName: 'Actb', count: 9 },
+              { featureName: 'CD74', count: 4 },
+            ],
           },
         ],
       }))
@@ -3198,7 +3209,10 @@ describe('App', () => {
       fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
 
       expect(
-        await screen.findByText(/Showing native all-transcript density squares/),
+        await screen.findByText(/Showing native 2 selected-feature density squares/),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText('Actb and CD74 transcripts per 40 µm bin'),
       ).toBeInTheDocument()
       expect(screen.getAllByText(/^[1-9][0-9]* squares$/).length).toBeGreaterThan(0)
       expect(loadTranscriptAggregates).toHaveBeenLastCalledWith(
@@ -3206,7 +3220,7 @@ describe('App', () => {
         expect.any(Object),
         expect.objectContaining({
           mode: 'density',
-          featureNames: [],
+          featureNames: ['Actb', 'CD74'],
           maxBins: 1_500,
           signal: expect.any(AbortSignal) as AbortSignal,
         }),
@@ -3416,14 +3430,16 @@ describe('App', () => {
       openControls('transcripts')
       expect(await screen.findByText('Exact only')).toBeInTheDocument()
       await waitFor(() => {
-        expect(
-          within(screen.getByLabelText('Transcript overlay summary')).getByText('8'),
-        ).toBeInTheDocument()
+        expect(screen.getByText('8 of 100,000 points')).toBeInTheDocument()
       })
 
       vi.useFakeTimers()
+      fireEvent.click(screen.getByRole('button', { name: 'Edit Max' }))
       fireEvent.change(screen.getByRole('spinbutton', { name: 'Exact budget' }), {
         target: { value: '75000' },
+      })
+      fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Exact budget' }), {
+        key: 'Enter',
       })
       fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
         target: { value: 'all' },
@@ -3509,9 +3525,7 @@ describe('App', () => {
       openControls('transcripts')
       expect(await screen.findByText('Exact only')).toBeInTheDocument()
       await waitFor(() => {
-        expect(
-          within(screen.getByLabelText('Transcript overlay summary')).getByText('8'),
-        ).toBeInTheDocument()
+        expect(screen.getByText('8 of 100,000 points')).toBeInTheDocument()
       })
 
       vi.useFakeTimers()

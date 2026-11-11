@@ -19,7 +19,10 @@ import {
   TRANSCRIPT_QUALITY_SCALE_MAX,
   transcriptQualityGradient,
 } from '../../rendering/transcriptColors'
+import { withMicrometers } from '../../data/units'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
+import { transcriptGenesLabel } from '../transcripts/transcriptLabels'
+import type { TranscriptDensityContent } from '../transcripts/transcriptLayerModel'
 
 const GENE_NAME_LIMIT = 3
 
@@ -55,6 +58,7 @@ export interface ViewerLegendInput {
     readonly density: {
       readonly colorScale: TranscriptDensityColorScale
       readonly labels: readonly [string, string, string]
+      readonly content: TranscriptDensityContent
     } | null
     readonly pointColorMode: TranscriptPointColorMode | null
   }
@@ -78,7 +82,7 @@ export function viewerLegendSections(input: ViewerLegendInput): ViewerLegendSect
       kind: 'continuous',
       id: 'transcript-density',
       title: 'Transcript density',
-      detail: 'All transcripts per square',
+      detail: transcriptDensityDetail(density.content),
       gradient: transcriptDensityScaleGradient(density.colorScale),
       min: density.labels[0],
       max: density.labels[2],
@@ -184,4 +188,24 @@ function formatLegendNumber(value: number): string {
   return value.toLocaleString(undefined, {
     maximumFractionDigits: Math.abs(value) < 10 ? 2 : Math.abs(value) < 1000 ? 1 : 0,
   })
+}
+
+// "SNAP25 transcripts per 40 µm bin", "Transcripts of 8 selected genes per
+// 40 µm bin" or "All transcripts per 160 µm bin" (15.1-J).
+export function transcriptDensityDetail(content: TranscriptDensityContent): string {
+  const bin =
+    content.binSizeMicrometers === undefined
+      ? 'per bin'
+      : `per ${withMicrometers(Math.round(content.binSizeMicrometers).toLocaleString())} bin`
+  const genes = transcriptGenesLabel(content.featureNames)
+
+  if (content.featureNames.length === 0) {
+    return content.source === 'cell-summary'
+      ? `Transcripts in cells ${bin}`
+      : `All transcripts ${bin}`
+  }
+
+  return content.featureNames.length > 3
+    ? `Transcripts of ${genes} ${bin}`
+    : `${genes} transcripts ${bin}`
 }

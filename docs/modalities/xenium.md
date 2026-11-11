@@ -133,12 +133,37 @@ is open (`loadDatasetTranscriptCapabilities`, `src/data/transcriptOverlay.ts`).
 The visible transcript estimate is the sum of overview `transcript_counts` in
 the viewport. `planTranscriptLod` then chooses density or exact points.
 
-- **Density.** `loadTranscriptZarrAggregates` picks the finest Zarr grid level
+- **Density, all transcripts.** With the All features filter, or no genes
+  selected, `loadTranscriptZarrAggregates` picks the finest Zarr grid level
   with at most 1,500 visible tiles and draws one square per tile, using
   `grid_number_objects` from metadata (no chunk reads). Without
   `transcripts.zarr.zip`, density falls back to cell-summary bins built from
-  overview counts. Density always shows all features; the selected-gene
-  density path in `transcriptZarr.ts` is not used by the UI.
+  overview counts.
+- **Density, selected genes.** With the Selected genes filter and genes
+  chosen, the squares count only those genes, from `density/gene`: a CSR
+  matrix over 10 µm cells (`rows`, `cols`, `grid_size`, `origin`,
+  `gene_names`) stored gene by gene, so `indptr[gene × rows + row]` starts a
+  gene's row. Each gene's entries for the whole slide are contiguous, so a
+  gene is read once, whole, and kept in memory (up to 8 million entries,
+  least recently used genes first out); later views of the same genes read
+  nothing. The first use also reads `indptr` (one chunk, 10 MB compressed and
+  75 MB in memory on the demo), which stays in memory.
+  - Squares are the finest power-of-two multiple of 10 µm whose occupied
+    squares number at most 1,500. Colours are scaled to the largest square
+    on the slide at that size, so they do not change while panning.
+  - A request whose new genes span more than 32 data chunks reads nothing and
+    says so (`TRANSCRIPT_GENE_DENSITY_CHUNK_LIMIT`). Measured on the demo
+    (whole slide, Node, Sanger bucket): 1 gene 0.2 s and 2.2 MB, 8 genes
+    0.5 s and 11 MB, 25 genes 1.9 s and 56 MB; views from memory take 3–14
+    ms. A chunk pair is about 2.3 MB, so the limit is about 75 MB, or about
+    30 genes.
+  - Outputs without `density/gene` show all-transcript squares and say so.
+  - Auto still switches to exact points on the all-transcript estimate,
+    because exact reads scan every transcript in the view whatever the
+    filter.
+  - Before Phase 15.1-J (2026-11) the reader indexed `density/gene` row by
+    row, so its selected-gene squares counted the wrong cells; that path was
+    hidden in June 2026.
 - **Exact.** `loadTranscriptZarrViewport` reads the level-0 tiles that
   intersect the viewport and filters by `valid`, `Min QV`, bbox,
   `Gene-only calls`, and the feature filter, stopping at the budget. Cell IDs

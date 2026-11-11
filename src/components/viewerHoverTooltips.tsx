@@ -3,6 +3,7 @@ import type { Position } from '@deck.gl/core'
 import type {
   GridCellDatum,
   OverviewCellDatum,
+  TranscriptAggregateDatum,
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
 import type {
@@ -11,6 +12,7 @@ import type {
   ViewerOverviewCellHoverDetail,
   ViewerTranscriptHoverDetail,
 } from './viewerCoreTypes'
+import { transcriptAggregateTitle } from './viewerHoverModel'
 import { formatCoordinateValue } from './viewerMeasurements'
 
 export function GridCellHoverTooltip({
@@ -214,6 +216,13 @@ function AnnotationLabelsRow({
   )
 }
 
+// Each selected gene's count in a square, when it counts more than one.
+function selectedGeneRows(aggregate: TranscriptAggregateDatum) {
+  const features = aggregate.topFeatures ?? []
+
+  return aggregate.selectedGeneCount === undefined || features.length < 2 ? [] : features
+}
+
 export function TranscriptHoverTooltip({
   detail,
 }: {
@@ -231,16 +240,18 @@ export function TranscriptHoverTooltip({
         }}
         aria-hidden="true"
       >
-        <p>
-          {aggregate.featureName === undefined
-            ? 'Transcript density bin'
-            : aggregate.featureName}
-        </p>
+        <p>{transcriptAggregateTitle(aggregate)}</p>
         <dl>
           <div>
             <dt>Count</dt>
             <dd>{aggregate.count.toLocaleString()}</dd>
           </div>
+          {selectedGeneRows(aggregate).map((feature) => (
+            <div key={feature.featureName}>
+              <dt>{feature.featureName}</dt>
+              <dd>{feature.count.toLocaleString()}</dd>
+            </div>
+          ))}
           {aggregate.binTotalCount === undefined ? null : (
             <div>
               <dt>Total</dt>

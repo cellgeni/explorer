@@ -90,18 +90,22 @@ all-gene bin profile.
 The `Transcripts` tab is Xenium-only and controls the molecule overlay
 separately from cell expression coloring. In `Auto`, low and medium zoom use
 native Xenium `transcripts.zarr.zip` aggregate levels as transcript-count
-density squares, colored by the number of transcripts in each grid cell. `Auto`
-switches from the density overview to exact transcript points when the visible
-transcript estimate is inside the exact point budget.
+density squares, colored by the number of transcripts in each square. With
+the `Selected genes` filter the squares count only the selected genes; with
+`All features`, or no genes selected, they count all transcripts. The legend
+on the canvas says which, and the square size. `Auto` switches from the
+density overview to exact transcript points when the view's transcripts fit
+the exact point budget.
 
 Use `Show transcripts` to enable the overlay. `Detail` selects `Auto`,
-`Density`, or `Exact`; `Exact budget` caps how many exact points the viewport
-may load; `Min QV` and `Gene-only calls` filter exact transcript records.
-`Opacity` and `Point size` affect only the transcript overlay.
+`Density`, or `Exact`. The `Exact points` meter shows the view's transcripts
+against the budget; `Edit Max` changes the budget. `Min QV` and
+`Gene-only calls` filter exact transcript records. `Opacity` and `Point size`
+affect only the transcript overlay.
 
-Density square colors are normalized against the native dataset/LOD count domain
-rather than only the currently visible viewport, so the color scale stays stable
-while panning and zooming.
+Density square colors are normalized against the largest square on the whole
+slide at the current square size, rather than only the visible viewport, so
+the color scale stays stable while panning.
 
 `Density` uses the native grid pyramid and renders up to 1,500 count squares in
 the current viewport. Feature filters are applied by `Exact`, where individual

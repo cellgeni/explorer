@@ -29,7 +29,6 @@ describe('TranscriptHudPanel', () => {
         transcriptDetailInputId="tx-detail"
         transcriptDensityScaleInputId="tx-density"
         transcriptPointColorInputId="tx-point-color"
-        transcriptPointBudgetInputId="tx-budget"
         transcriptMinQvInputId="tx-qv"
         transcriptFeatureFilterInputId="tx-filter"
         transcriptFeatureSearchInputId="tx-search"
@@ -68,9 +67,12 @@ describe('TranscriptHudPanel', () => {
 
     fireEvent.click(screen.getByLabelText('Show transcripts'))
     fireEvent.change(screen.getByLabelText('Detail'), { target: { value: 'density' } })
+    expect(screen.getByText('50 of 100,000 points')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Max' }))
     fireEvent.change(screen.getByLabelText('Exact budget'), {
       target: { value: '50000' },
     })
+    fireEvent.keyDown(screen.getByLabelText('Exact budget'), { key: 'Enter' })
     fireEvent.change(screen.getByLabelText('Feature filter'), {
       target: { value: 'all' },
     })

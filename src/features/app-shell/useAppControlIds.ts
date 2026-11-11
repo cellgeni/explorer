@@ -30,7 +30,6 @@ export interface AppControlIds {
   readonly transcriptDetailInputId: string
   readonly transcriptDensityScaleInputId: string
   readonly transcriptPointColorInputId: string
-  readonly transcriptPointBudgetInputId: string
   readonly transcriptMinQvInputId: string
   readonly transcriptFeatureFilterInputId: string
   readonly transcriptFeatureSearchInputId: string
@@ -72,7 +71,6 @@ export function useAppControlIds(): AppControlIds {
     transcriptDetailInputId: useId(),
     transcriptDensityScaleInputId: useId(),
     transcriptPointColorInputId: useId(),
-    transcriptPointBudgetInputId: useId(),
     transcriptMinQvInputId: useId(),
     transcriptFeatureFilterInputId: useId(),
     transcriptFeatureSearchInputId: useId(),

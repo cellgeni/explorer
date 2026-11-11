@@ -95,6 +95,7 @@ import {
 } from './features/app-shell/appRuntimeModel'
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
+  transcriptDensityContentForRendering,
   transcriptStatusCopy,
 } from './features/transcripts/transcriptLayerModel'
 import { cellDetailStatusCopy } from './features/cells/cellDetailModel'
@@ -1264,6 +1265,10 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const effectiveShowTranscriptOverlay =
     platformAdapter.effectiveTranscriptOverlay(showTranscriptOverlay)
+  const transcriptDensityContent = useMemo(
+    () => transcriptDensityContentForRendering(transcriptLayerState),
+    [transcriptLayerState],
+  )
   const legendSections = useMemo(
     () =>
       viewerLegendSections({
@@ -1287,11 +1292,11 @@ export function App({ dependencies }: AppProps = {}) {
         cellAreaMax: legendCellAreaMax,
         transcripts: {
           density:
-            effectiveShowTranscriptOverlay &&
-            transcriptLayerAggregateBins.some((bin) => bin.glyphType !== 'feature-circle')
+            effectiveShowTranscriptOverlay && transcriptDensityContent !== null
               ? {
                   colorScale: transcriptDensityColorScale,
                   labels: transcriptDensityScaleLabels,
+                  content: transcriptDensityContent,
                 }
               : null,
           pointColorMode:
@@ -1313,8 +1318,8 @@ export function App({ dependencies }: AppProps = {}) {
       selectedCellMetadataTrack,
       selectedGenes,
       transcriptDensityColorScale,
+      transcriptDensityContent,
       transcriptDensityScaleLabels,
-      transcriptLayerAggregateBins,
       transcriptLayerPoints,
       transcriptPointColorMode,
     ],

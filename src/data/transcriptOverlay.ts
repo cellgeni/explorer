@@ -114,12 +114,19 @@ export interface TranscriptAggregateResult {
   readonly bins: readonly TranscriptAggregateBin[]
   readonly level: TranscriptLodLevel
   readonly source: 'native-zarr'
+  // The genes the bins count; empty when they count all transcripts.
   readonly selectedFeatureNames: readonly string[]
   readonly scaleMax?: number
-  // Selected-gene transcripts inside the box, for per-gene outputs.
+  // Selected-gene transcripts inside the box.
   readonly visibleTranscriptCount?: number
   // File the bins came from, when it is not transcripts.zarr.zip.
   readonly sourceFile?: string
+  // Set, with no bins, when the view needs more density/gene data chunks
+  // than one view may read (15.1-J).
+  readonly overBudget?: {
+    readonly chunkCount: number
+    readonly chunkLimit: number
+  }
 }
 
 export interface TranscriptViewportOptions {
