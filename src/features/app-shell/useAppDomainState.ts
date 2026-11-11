@@ -337,6 +337,14 @@ export function useAppDomainState({
     initialShareableState.transcriptPointSize ??
       DEFAULT_SHAREABLE_STATE.transcriptPointSize,
   )
+  // The transcript gene legend (15.4-C): edited colours, and genes whose
+  // points are hidden.
+  const [transcriptGeneColors, setTranscriptGeneColors] = useState<
+    Readonly<Record<string, string>>
+  >({})
+  const [hiddenTranscriptGenes, setHiddenTranscriptGenes] = useState<readonly string[]>(
+    [],
+  )
   const [hoveredTranscript, setHoveredTranscript] =
     useState<ViewerTranscriptHoverDetail | null>(null)
   const [pinnedTranscript, setPinnedTranscript] =
@@ -670,9 +678,11 @@ export function useAppDomainState({
       spatialFocusRequest,
     },
     transcripts: {
+      hiddenTranscriptGenes,
       hoveredTranscript,
       manualTranscriptExactRequestKey,
       pinnedTranscript,
+      setHiddenTranscriptGenes,
       setHoveredTranscript,
       setManualTranscriptExactRequestKey,
       setPinnedTranscript,
@@ -682,6 +692,7 @@ export function useAppDomainState({
       setTranscriptDetailMode,
       setTranscriptExactPointLimit,
       setTranscriptFeatureFilterMode,
+      setTranscriptGeneColors,
       setTranscriptGeneOnly,
       setTranscriptLayerState,
       setTranscriptMinQv,
@@ -694,6 +705,7 @@ export function useAppDomainState({
       transcriptDetailMode,
       transcriptExactPointLimit,
       transcriptFeatureFilterMode,
+      transcriptGeneColors,
       transcriptGeneOnly,
       transcriptLayerState,
       transcriptMinQv,

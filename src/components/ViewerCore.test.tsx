@@ -2129,7 +2129,11 @@ describe('ViewerCore', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Legend' }))
     fireEvent.click(screen.getByRole('button', { name: 'Legend' }))
 
-    expect(onLegendCategoryVisibilityChange).toHaveBeenCalledWith('c1', false)
+    expect(onLegendCategoryVisibilityChange).toHaveBeenCalledWith(
+      'c1',
+      false,
+      expect.any(String),
+    )
     expect(deckGlMock.renderCount).toBe(renderCountBefore)
   })
 

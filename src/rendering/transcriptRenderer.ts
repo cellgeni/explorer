@@ -1,4 +1,4 @@
-import type { Position } from '@deck.gl/core'
+import type { Color, Position } from '@deck.gl/core'
 import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import type { TranscriptAggregateBin, TranscriptPoint } from '../data/transcriptOverlay'
 import {
@@ -118,11 +118,36 @@ export function createTranscriptPointLayer(
   })
 }
 
+export interface TranscriptPointLayerDataOptions {
+  // Colours by gene (15.4-C); the colour from the gene's name otherwise.
+  readonly featureColor?: (featureName: string) => Color
+  // Genes whose points are not drawn.
+  readonly hiddenFeatures?: ReadonlySet<string>
+}
+
 export function transcriptPointsToLayerData(
   transcripts: readonly TranscriptPoint[],
   colorMode: TranscriptPointColorMode = DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
+  {
+    featureColor = transcriptFeatureColor,
+    hiddenFeatures,
+  }: TranscriptPointLayerDataOptions = {},
 ): readonly TranscriptPointDatum[] {
-  return transcripts.map((transcript) => ({
+  const colors = new Map<string, Color>()
+  const colorFor = (featureName: string): Color => {
+    let color = colors.get(featureName)
+    if (color === undefined) {
+      color = featureColor(featureName)
+      colors.set(featureName, color)
+    }
+    return color
+  }
+  const shown =
+    hiddenFeatures === undefined || hiddenFeatures.size === 0
+      ? transcripts
+      : transcripts.filter((transcript) => !hiddenFeatures.has(transcript.featureName))
+
+  return shown.map((transcript) => ({
     id: transcript.id,
     ...(transcript.transcriptId === undefined
       ? {}
@@ -146,7 +171,7 @@ export function transcriptPointsToLayerData(
     fillColor:
       colorMode === 'quality'
         ? transcriptQualityColor(transcript.qv)
-        : transcriptFeatureColor(transcript.featureName),
+        : colorFor(transcript.featureName),
   }))
 }
 

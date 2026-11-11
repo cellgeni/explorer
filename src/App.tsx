@@ -58,7 +58,10 @@ import { useExamplesIndex } from './features/start/useExamplesIndex'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { isTextEntryTarget } from './features/app-shell/activeToolModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
-import { viewerLegendSections } from './features/app-shell/viewerLegendModel'
+import {
+  TRANSCRIPT_GENE_LEGEND_ID,
+  viewerLegendSections,
+} from './features/app-shell/viewerLegendModel'
 import { viewerSelectionHighlight } from './features/app-shell/viewerSelectionHighlight'
 import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
 import type { ObservationColorMode } from './rendering/cellStyling'
@@ -120,6 +123,7 @@ import {
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
   transcriptDensityContentForRendering,
+  transcriptPointsForRendering,
   transcriptStatusCopy,
 } from './features/transcripts/transcriptLayerModel'
 import { cellDetailStatusCopy } from './features/cells/cellDetailModel'
@@ -141,6 +145,7 @@ import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
 import { useVisiumHdMagicLensSummary } from './features/roi/useVisiumHdMagicLensSummary'
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import { useSelectionList } from './features/roi/useSelectionList'
+import { useTranscriptGeneLegend } from './features/transcripts/useTranscriptGeneLegend'
 import { selectionDatasetKey, selectionOutlines } from './features/roi/selectionListModel'
 import { referenceSampleIndices } from './features/roi/roiEnrichmentModel'
 import { useVisiumHdRoiWorkflow } from './features/roi/useVisiumHdRoiWorkflow'
@@ -502,9 +507,11 @@ export function App({ dependencies }: AppProps = {}) {
       spatialFocusRequest,
     },
     transcripts: {
+      hiddenTranscriptGenes,
       hoveredTranscript,
       manualTranscriptExactRequestKey,
       pinnedTranscript,
+      setHiddenTranscriptGenes,
       setHoveredTranscript,
       setManualTranscriptExactRequestKey,
       setPinnedTranscript,
@@ -514,6 +521,7 @@ export function App({ dependencies }: AppProps = {}) {
       setTranscriptDetailMode,
       setTranscriptExactPointLimit,
       setTranscriptFeatureFilterMode,
+      setTranscriptGeneColors,
       setTranscriptGeneOnly,
       setTranscriptLayerState,
       setTranscriptMinQv,
@@ -526,6 +534,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptDetailMode,
       transcriptExactPointLimit,
       transcriptFeatureFilterMode,
+      transcriptGeneColors,
       transcriptGeneOnly,
       transcriptLayerState,
       transcriptMinQv,
@@ -797,6 +806,23 @@ export function App({ dependencies }: AppProps = {}) {
     },
     loaders: { getSpatialDataset },
   })
+  // The transcript gene legend (15.4-C): each gene's colour and eye.
+  const transcriptGenes = useTranscriptGeneLegend({
+    appendDebugEvent,
+    colorMode: transcriptPointColorMode,
+    colors: transcriptGeneColors,
+    filterMode: effectiveTranscriptFeatureFilterMode,
+    hiddenGenes: hiddenTranscriptGenes,
+    layerState: transcriptLayerState,
+    overlayShown: platformAdapter.effectiveTranscriptOverlay(showTranscriptOverlay),
+    selectedGenes,
+    setColors: setTranscriptGeneColors,
+    setHiddenGenes: setHiddenTranscriptGenes,
+  })
+  // Hidden genes belong to the dataset; colours are kept.
+  useEffect(() => {
+    setHiddenTranscriptGenes([])
+  }, [loadedDatasetUrl, setHiddenTranscriptGenes])
   const {
     activeCellMetadataTrack,
     annotationStyleColors,
@@ -848,7 +874,9 @@ export function App({ dependencies }: AppProps = {}) {
       morphologyImage,
     },
     transcripts: {
+      hiddenTranscriptGenes: transcriptGenes.hiddenGenes,
       transcriptDensityColorScale,
+      transcriptGeneColor: transcriptGenes.featureColor,
       transcriptLayerState,
       transcriptPointColorMode,
     },
@@ -1175,6 +1203,15 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setHiddenAnnotationIds],
   )
+  // The legend's eyes: transcript genes, or annotation classes.
+  const { onVisibilityChange: setTranscriptGeneVisible } = transcriptGenes.model
+  const handleLegendCategoryVisibilityChange = useCallback(
+    (id: string, visible: boolean, sectionId: string) => {
+      if (sectionId === TRANSCRIPT_GENE_LEGEND_ID) setTranscriptGeneVisible(id, visible)
+      else handleAnnotationVisibilityChange(id, visible)
+    },
+    [handleAnnotationVisibilityChange, setTranscriptGeneVisible],
+  )
   const focusSpatialViewOnCell = useCallback(
     (cell: OverviewCellDatum) => {
       spatialFocusRequestIdRef.current += 1
@@ -1301,10 +1338,14 @@ export function App({ dependencies }: AppProps = {}) {
                   content: transcriptDensityContent,
                 }
               : null,
+          // Loaded points, not drawn ones: hiding every gene in view keeps
+          // the legend, so they can be shown again.
           pointColorMode:
-            effectiveShowTranscriptOverlay && transcriptLayerPoints.length > 0
+            effectiveShowTranscriptOverlay &&
+            transcriptPointsForRendering(transcriptLayerState).length > 0
               ? transcriptPointColorMode
               : null,
+          genes: transcriptGenes.legend,
         },
       }),
     [
@@ -1323,7 +1364,8 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptDensityColorScale,
       transcriptDensityContent,
       transcriptDensityScaleLabels,
-      transcriptLayerPoints,
+      transcriptGenes.legend,
+      transcriptLayerState,
       transcriptPointColorMode,
     ],
   )
@@ -3390,6 +3432,7 @@ export function App({ dependencies }: AppProps = {}) {
   const transcriptsSection = useTranscriptsSectionModel({
     appendDebugEvent,
     effectiveTranscriptFeatureFilterMode,
+    geneLegend: transcriptGenes.model,
     geneOnlyFilterEnabled: platformAdapter.capabilities.transcriptGeneOnlyFilter,
     geneOptions,
     genePanelState,
@@ -3725,7 +3768,7 @@ export function App({ dependencies }: AppProps = {}) {
         showZoomLevel={debugMode}
         selectionHighlight={selectionHighlight}
         onClearSelection={handleClearSelection}
-        onLegendCategoryVisibilityChange={handleAnnotationVisibilityChange}
+        onLegendCategoryVisibilityChange={handleLegendCategoryVisibilityChange}
         coordinateUnit={coordinateUnit}
         measurementEnabled={measurementEnabled}
         measurementUnit={measurementUnit}

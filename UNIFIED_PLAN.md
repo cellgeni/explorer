@@ -3171,9 +3171,41 @@ Can be skipped after 15.3 ships if time is short.
       bins returned before cancelling the previous selection's read, so its
       genes (and now its comparison) landed on the empty one; that read is
       now cancelled.
-- [ ] **C. Transcript gene legend.** Each gene gets a colour swatch, an eye
+- [x] **C. Transcript gene legend.** Each gene gets a colour swatch, an eye
       toggle and its count, in the Transcripts section and in the legend, as in 10x
       Explorer. Colours can be edited. (M)
+  - Done 2026-11-11. `useTranscriptGeneLegend` and the pure
+    `transcriptGeneLegendModel` (`src/features/transcripts/`) build one list
+    for the Transcripts section (`TranscriptGeneListBlock.tsx`, under Genes)
+    and the canvas legend ("Transcripts", the first 12, then "+n more in
+    Transcripts").
+    - It applies while exact points are coloured by Feature: the selected
+      genes in order under Selected genes, or the 24 genes with most points
+      in view under All features. Counts are the points loaded in view.
+      Density squares and QV colours have no per-gene colour, so the section
+      says so instead.
+    - Colours: a selected gene takes the first of 12 colours (the first 8
+      are the old feature palette) that no other selected gene has, and
+      keeps it: the gene list is sorted, so colours by position would move
+      when a gene is added. Other genes keep their colour from the name, as
+      before. An edited colour is kept per gene for the session
+      (`transcriptGeneColors`). Not in the link.
+    - The eye hides a gene's points on the client (`hiddenTranscriptGenes`,
+      reset per dataset), so nothing is read again. The legend's checkboxes
+      are the same eyes: `ViewerLegend` now passes the section id, and App
+      routes `transcript-genes` to the genes and the rest to annotation
+      classes.
+    - The point layer takes the colour and hidden set
+      (`transcriptPointsToLayerData` options), looking each gene's colour up
+      once. The legend follows the points loaded, not those drawn, so hiding
+      every gene in view keeps it (found on the demo: hiding SNAP25, the only
+      gene in view, removed the legend).
+    - Checked on the Xenium demo at 2 µm scale with GFAP and SNAP25 and
+      exact points: four SNAP25 points listed and drawn yellow, hidden and
+      shown again from the section and the legend.
+    - The review before the PRs found that hidden genes stayed hidden under
+      QV colours, where the list and Show All are not shown; hiding now
+      applies only while points are coloured by gene.
 - [ ] **D. Minimap.** (M)
   - Draw the coarsest image pyramid level with a small `TileCache` and
     `drawMorphologyTileChannels` (`rendering/morphologyCanvas.ts:62`).

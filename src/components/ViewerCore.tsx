@@ -435,7 +435,11 @@ interface ViewerSurfaceProps {
   readonly showZoomLevel: boolean
   readonly selectionHighlight: ViewerSelectionHighlight | null
   readonly onClearSelection?: () => void
-  readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
+  readonly onLegendCategoryVisibilityChange?: (
+    id: string,
+    visible: boolean,
+    sectionId: string,
+  ) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
   readonly measurementUnit: ViewerCoordinateUnit

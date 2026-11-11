@@ -73,7 +73,11 @@ export interface ViewerCoreProps {
   readonly onClearSelection?: () => void
   // The zoom number is for debugging (?debug=1).
   readonly showZoomLevel?: boolean
-  readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
+  readonly onLegendCategoryVisibilityChange?: (
+    id: string,
+    visible: boolean,
+    sectionId: string,
+  ) => void
   readonly coordinateUnit?: ViewerCoordinateUnit
   readonly measurementEnabled?: boolean
   readonly measurementUnit?: ViewerCoordinateUnit

@@ -1,3 +1,4 @@
+import type { Color } from '@deck.gl/core'
 import { useMemo } from 'react'
 import type { MorphologyCanvasChannel } from '../../components/MorphologyCanvas'
 import { micrometers, type BBox } from '../../data/coords'
@@ -77,6 +78,10 @@ interface ViewerLayerTranscriptOptions {
   readonly transcriptLayerState: TranscriptLayerState<StructuredLoadError>
   readonly transcriptPointColorMode: TranscriptPointColorMode
   readonly transcriptDensityColorScale: TranscriptDensityColorScale
+  // The transcript gene legend (15.4-C): each gene's colour, and genes whose
+  // points are hidden. Both must be stable between renders.
+  readonly transcriptGeneColor?: (featureName: string) => Color
+  readonly hiddenTranscriptGenes?: ReadonlySet<string>
 }
 
 interface ViewerLayerMorphologyOptions {
@@ -124,8 +129,13 @@ export function useViewerLayerData({
     geneExpressionScoreMode,
     selectedGenes,
   } = geneExpression
-  const { transcriptDensityColorScale, transcriptLayerState, transcriptPointColorMode } =
-    transcripts
+  const {
+    hiddenTranscriptGenes,
+    transcriptDensityColorScale,
+    transcriptGeneColor,
+    transcriptLayerState,
+    transcriptPointColorMode,
+  } = transcripts
   const {
     morphologyChannelOpacities = EMPTY_MORPHOLOGY_CHANNEL_OPACITIES,
     morphologyChannelSettings,
@@ -240,8 +250,21 @@ export function useViewerLayerData({
       transcriptPointsToLayerData(
         transcriptPointsForRendering(transcriptLayerState),
         transcriptPointColorMode,
+        {
+          ...(transcriptGeneColor === undefined
+            ? {}
+            : { featureColor: transcriptGeneColor }),
+          ...(hiddenTranscriptGenes === undefined
+            ? {}
+            : { hiddenFeatures: hiddenTranscriptGenes }),
+        },
       ),
-    [transcriptLayerState, transcriptPointColorMode],
+    [
+      hiddenTranscriptGenes,
+      transcriptGeneColor,
+      transcriptLayerState,
+      transcriptPointColorMode,
+    ],
   )
   const transcriptDensityScaleMax =
     transcriptAggregateScaleMaxForRendering(transcriptLayerState)

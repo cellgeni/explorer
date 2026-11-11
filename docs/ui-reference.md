@@ -291,12 +291,33 @@ Atera stores transcripts per gene (see
 | `Feature filter`     | Select           | **Selected genes**, All features               | Selected genes needs at least one selected gene; applies to density and exact points   |
 | Feature chips        | Chips with ×     |                                                | × (`Remove {gene} from transcript features`) removes it from the shared gene selection |
 | `Feature search`     | Search           | Up to 24 results, ranked like `Gene selection` | Adds the gene and switches the filter to Selected genes                                |
+| Gene list            | Rows             | See below                                      | With exact points coloured by Feature (Phase 15.4-C)                                   |
 | `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal     | Normalized to the largest square on the slide at the current square size               |
 | `Point color`        | Select           | **Feature**, QV                                | Exact points                                                                           |
 | `Min QV`             | Number           | 0–40; 20                                       | Exact points                                                                           |
 | `Gene-only calls`    | Checkbox         | On                                             | Excludes control probes                                                                |
 | `Transcript opacity` | Slider 0–100%    | 85%                                            |                                                                                        |
 | `Point size`         | Slider 1–6 px    | 2 px                                           |                                                                                        |
+
+The gene list (`src/features/sections/TranscriptGeneListBlock.tsx`,
+`src/features/transcripts/useTranscriptGeneLegend.ts`) shows, while exact
+points are coloured by Feature, the genes coloured on the canvas: the
+selected genes in order with Selected genes, or the 24 genes with most points
+in view with All features ("+n more genes in view"). Each row has:
+
+- a swatch (`{gene} transcript color`). A selected gene gets the first of
+  12 colours no other selected gene has, and keeps it while others are added
+  or removed; other genes keep the colour from their name. A colour chosen
+  here is kept for that gene, also in other datasets, for the session.
+- an eye (`{gene} transcripts visible`), which hides that gene's points.
+  `Show All` shows them again. Hidden genes reset when another dataset opens,
+  and QV colours show every point.
+- the number of its points loaded in view, hidden ones included.
+
+The canvas legend lists the same genes under "Transcripts" (the first 12,
+then "+n more in Transcripts"), and its checkboxes are the same eyes; it
+stays while every gene in view is hidden. With density squares or QV colours
+there is no list; the section says why.
 
 At ≥ 80% of the budget, `Load exact viewport` must be pressed.
 
@@ -513,8 +534,10 @@ category lists last:
 - `Cell color` Metadata: the track name and its range.
 - `Cell color` Cell area: µm² on a square-root scale.
 - Transcripts drawn as density: what the squares count ("SNAP25 transcripts per
-  40 µm bin") with the density scale; or points coloured by quality: QV 0 to
-  40+.
+  40 µm bin") with the density scale; points coloured by quality: QV 0 to
+  40+; or points coloured by Feature: "Transcripts", each gene with an eye,
+  its swatch and its points in view (15.4-C), as in the Transcripts section's
+  gene list.
 
 Transcript count, the default, has no legend. Hidden cells drop their legend.
 

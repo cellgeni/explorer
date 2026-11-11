@@ -27,6 +27,12 @@ export interface CategoryLegendSection {
   readonly title: string
   // Every category. The legend lists the first LEGEND_CATEGORY_LIMIT.
   readonly items: readonly CategoryLegendItem[]
+  // What the counts count; cells by default.
+  readonly noun?: { readonly singular: string; readonly plural: string } | undefined
+  // Categories not in items, added to "+n more".
+  readonly moreCount?: number | undefined
+  // Where the rest are listed; "Cells › Clusters" by default.
+  readonly moreWhere?: string | undefined
 }
 
 export type ViewerLegendSection = ContinuousLegendSection | CategoryLegendSection

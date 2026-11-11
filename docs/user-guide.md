@@ -154,7 +154,10 @@ transcript records can be loaded and inspected.
 Use `Feature filter` to switch between all features and the currently selected
 genes. `Feature search` can add genes directly from the Transcripts section.
 The `Point color` control colors exact transcript points either by feature
-identity or by QV.
+identity or by QV. Colored by feature, the Transcripts section and the canvas
+legend list the genes on screen, each with its color, an eye that hides its
+points, and its number of points in view; selected genes each get their own
+color, and clicking a swatch changes it.
 
 When exact mode is close to the configured point budget, the section shows
 `Load exact viewport` instead of starting the fetch automatically. Use it when
