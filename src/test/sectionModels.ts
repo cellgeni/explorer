@@ -30,6 +30,7 @@ import type {
   MeasureToolModel,
   ViewSettingsModel,
 } from '../features/sections/viewSettingsModel'
+import type { EmbeddingModel } from '../features/sections/embeddingModel'
 import type { ToolGroupModel, TopBarModel } from '../features/shell/topBarModel'
 import { toolOptions } from '../features/shell/topBarModel'
 
@@ -361,5 +362,26 @@ export function testTopBarModel(
       onSelect: vi.fn(),
       ...tools,
     },
+  }
+}
+
+export function testEmbeddingModel(
+  overrides: Partial<EmbeddingModel> = {},
+): EmbeddingModel {
+  return {
+    copy: 'Idle',
+    loading: false,
+    options: [],
+    selectedKind: 'umap',
+    onKindChange: vi.fn(),
+    canLoad: true,
+    onLoad: vi.fn(),
+    embedding: null,
+    annotationStyles: [],
+    roiElementIds: [],
+    selectedElementId: null,
+    elementLabel: 'cells',
+    onSelectElement: vi.fn(),
+    ...overrides,
   }
 }

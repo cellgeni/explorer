@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
@@ -59,6 +59,51 @@ describe('EmbeddingPanel', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('redraws at its new size when resized', () => {
+    let notify: ResizeObserverCallback = () => undefined
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          notify = callback
+        }
+        observe() {}
+        disconnect() {}
+      },
+    )
+    const { container } = render(
+      <EmbeddingPanel
+        embedding={embedding}
+        roiElementIds={[]}
+        selectedElementId={null}
+        onSelectElement={vi.fn()}
+      />,
+    )
+    const canvas = container.querySelector('canvas')
+    expect(canvas?.width).toBe(320)
+
+    vi.mocked(HTMLCanvasElement.prototype.getBoundingClientRect).mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 480,
+      bottom: 300,
+      width: 480,
+      height: 300,
+      toJSON: () => ({}),
+    })
+    act(() => {
+      notify(
+        [{ contentRect: { width: 480, height: 300 } } as ResizeObserverEntry],
+        {} as ResizeObserver,
+      )
+    })
+
+    expect([canvas?.width, canvas?.height]).toEqual([480, 300])
+    vi.unstubAllGlobals()
   })
 
   it('shows an empty state when no embedding is loaded', () => {

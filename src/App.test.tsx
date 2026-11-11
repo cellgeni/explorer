@@ -1719,12 +1719,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
     await screen.findByText('Xenium · 1 cell · 2 genes')
 
-    expect(
-      screen
-        .getAllByRole('tab')
-        .filter((tab) => !tab.hidden)
-        .map((tab) => tab.textContent),
-    ).toEqual(['Cell'])
+    // The cards and the Embedding panel replace the last HUD tabs (15.2-D, G).
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument()
 
     const panel = screen.getByRole('complementary', { name: 'Layers' })
     const cells = within(panel).getByRole('region', { name: /^Cells/ })
@@ -1803,6 +1799,48 @@ describe('App', () => {
     expect(
       within(drawer).getByRole('region', { name: 'Open another dataset' }),
     ).toBeInTheDocument()
+  })
+
+  it('shows the embedding in a panel from Cells with ?shell=2 (15.2-G)', async () => {
+    window.history.replaceState(null, '', '/?shell=2')
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
+      vi.fn(async () => [
+        {
+          kind: 'umap',
+          label: 'UMAP',
+          sourcePath: 'analysis/umap/gene_expression_2_components/projection.csv',
+          points: [{ id: cellId, x: 0, y: 0 }],
+        },
+      ])
+
+    render(
+      <TestApp
+        loadDatasetOverview={loadDatasetOverview}
+        loadAnalysisEmbeddings={loadAnalysisEmbeddings}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByText(/^Xenium · 1 cell/)
+
+    const panel = screen.getByRole('complementary', { name: 'Layers' })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Show Embedding' }))
+    const embedding = screen.getByRole('region', { name: 'Embedding' })
+    fireEvent.click(within(embedding).getByRole('button', { name: 'Load Embeddings' }))
+
+    expect(
+      await within(embedding).findByLabelText('UMAP embedding, 1 cells'),
+    ).toBeInTheDocument()
+    fireEvent.click(within(embedding).getByRole('button', { name: 'Close embedding' }))
+    expect(screen.queryByRole('region', { name: 'Embedding' })).not.toBeInTheDocument()
   })
 
   it('keeps tool keys off in the current shell', async () => {

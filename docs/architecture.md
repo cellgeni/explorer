@@ -238,6 +238,7 @@ The control panels take section models instead of separate props
 | `TranscriptsSectionModel` | `useTranscriptsSectionModel` | Transcript display, gene filter, colours, filters, point style, budget, hovered and pinned transcript             |
 | `AnnotationsSectionModel` | `useAnnotationsSectionModel` | Annotation sets and labels, metadata tracks, GeoJSON shapes                                                       |
 | `ViewSettingsModel`       | `useViewSettingsModel`       | Hover tooltips, mouse coordinate units, the measure tool                                                          |
+| `EmbeddingModel`          | `useEmbeddingModel`          | The embedding view, Load Embeddings, and the plot's selection links (15.2-G)                                      |
 
 - A model holds values and intent callbacks such as `onOpacityPercentChange`.
   The hook does what the old panel wrappers did: converts percents, normalizes

@@ -55,9 +55,6 @@ interface CellHudPanelProps {
   readonly onClearSelectedBoundaryCell: () => void
   readonly onSelectEmbeddingCell: (cellId: string) => void
   readonly onLoadSelectedExpressionProfile?: (() => void) | undefined
-  // The new shell shows the selected cell in its Cell card (15.2-D), so the
-  // tab keeps only the embeddings until 15.2-G.
-  readonly embeddingOnly?: boolean
 }
 
 export function CellHudPanel({
@@ -91,7 +88,6 @@ export function CellHudPanel({
   onClearSelectedBoundaryCell,
   onSelectEmbeddingCell,
   onLoadSelectedExpressionProfile,
-  embeddingOnly = false,
 }: CellHudPanelProps) {
   const visiumSelectionKind =
     selectedBoundaryCell !== null ? 'cell' : selectedGridCell !== null ? 'bin' : null
@@ -179,85 +175,83 @@ export function CellHudPanel({
         />
       </section>
 
-      {embeddingOnly ? null : (
-        <section className="analysis-section" aria-labelledby="cell-info-heading">
-          <div className="section-heading-row">
-            <h2 id="cell-info-heading">{detailHeading}</h2>
-            <div className="section-heading-actions">
-              <span
-                className={
-                  !isVisiumHdDataset && cellDetailState.status === 'loading'
-                    ? 'status-chip is-loading'
-                    : 'status-chip'
-                }
-                aria-live="polite"
-              >
-                {detailCopy}
-              </span>
-              {isVisiumHdDataset ? (
-                selectedBoundaryCell !== null ? (
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    title="Clear selected cell"
-                    onClick={onClearSelectedBoundaryCell}
-                  >
-                    Clear Cell
-                  </button>
-                ) : selectedGridCell === null ? null : (
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    title="Clear selected bin"
-                    onClick={onClearSelectedGridCell}
-                  >
-                    Clear Bin
-                  </button>
-                )
-              ) : selectedCell === null ? null : (
+      <section className="analysis-section" aria-labelledby="cell-info-heading">
+        <div className="section-heading-row">
+          <h2 id="cell-info-heading">{detailHeading}</h2>
+          <div className="section-heading-actions">
+            <span
+              className={
+                !isVisiumHdDataset && cellDetailState.status === 'loading'
+                  ? 'status-chip is-loading'
+                  : 'status-chip'
+              }
+              aria-live="polite"
+            >
+              {detailCopy}
+            </span>
+            {isVisiumHdDataset ? (
+              selectedBoundaryCell !== null ? (
                 <button
                   type="button"
                   className="secondary-action"
                   title="Clear selected cell"
-                  onClick={onClearSelectedCell}
+                  onClick={onClearSelectedBoundaryCell}
                 >
                   Clear Cell
                 </button>
-              )}
-            </div>
+              ) : selectedGridCell === null ? null : (
+                <button
+                  type="button"
+                  className="secondary-action"
+                  title="Clear selected bin"
+                  onClick={onClearSelectedGridCell}
+                >
+                  Clear Bin
+                </button>
+              )
+            ) : selectedCell === null ? null : (
+              <button
+                type="button"
+                className="secondary-action"
+                title="Clear selected cell"
+                onClick={onClearSelectedCell}
+              >
+                Clear Cell
+              </button>
+            )}
           </div>
-          {isVisiumHdDataset ? (
-            selectedBoundaryCell !== null ? (
-              <BoundaryCellInfoPanel
-                key={selectedBoundaryCell.id}
-                cell={selectedBoundaryCell}
-                expressionStatus={selectedBoundaryCellExpressionStatus}
-                expressionProfileState={selectedExpressionProfileState}
-                onLoadExpressionProfile={onLoadSelectedExpressionProfile}
-              />
-            ) : (
-              <GridCellInfoPanel
-                key={selectedGridCell?.id ?? 'none'}
-                cell={selectedGridCell}
-                assignmentState={selectedGridCellAssignmentState}
-                expressionStatus={selectedGridCellExpressionStatus}
-                expressionProfileState={selectedExpressionProfileState}
-                onLoadExpressionProfile={onLoadSelectedExpressionProfile}
-              />
-            )
-          ) : (
-            <CellInfoPanel
-              key={selectedCell?.id ?? 'none'}
-              cell={selectedCell}
-              annotationLabels={selectedCellAnnotationLabels}
-              state={cellDetailState}
-              transcriptDistributionState={cellTranscriptDistributionState}
-              transcriptDistributionVisible={cellTranscriptDistributionVisible}
-              variant={selectedCellInfoVariant}
+        </div>
+        {isVisiumHdDataset ? (
+          selectedBoundaryCell !== null ? (
+            <BoundaryCellInfoPanel
+              key={selectedBoundaryCell.id}
+              cell={selectedBoundaryCell}
+              expressionStatus={selectedBoundaryCellExpressionStatus}
+              expressionProfileState={selectedExpressionProfileState}
+              onLoadExpressionProfile={onLoadSelectedExpressionProfile}
             />
-          )}
-        </section>
-      )}
+          ) : (
+            <GridCellInfoPanel
+              key={selectedGridCell?.id ?? 'none'}
+              cell={selectedGridCell}
+              assignmentState={selectedGridCellAssignmentState}
+              expressionStatus={selectedGridCellExpressionStatus}
+              expressionProfileState={selectedExpressionProfileState}
+              onLoadExpressionProfile={onLoadSelectedExpressionProfile}
+            />
+          )
+        ) : (
+          <CellInfoPanel
+            key={selectedCell?.id ?? 'none'}
+            cell={selectedCell}
+            annotationLabels={selectedCellAnnotationLabels}
+            state={cellDetailState}
+            transcriptDistributionState={cellTranscriptDistributionState}
+            transcriptDistributionVisible={cellTranscriptDistributionVisible}
+            variant={selectedCellInfoVariant}
+          />
+        )}
+      </section>
     </div>
   )
 }

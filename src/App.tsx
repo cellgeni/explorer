@@ -41,9 +41,9 @@ import {
 } from './features/control-hud/RoiHudPanel'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import { useCardStackModel } from './features/cards/cardModels'
+import { useEmbeddingModel } from './features/sections/embeddingModel'
 import {
   CONTROL_HUD_TABS,
-  NEW_SHELL_HIDDEN_HUD_TABS,
   parseObservationColorMode,
   readDebugModeFromLocation,
   readShellVersionFromLocation,
@@ -1297,12 +1297,7 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const hiddenControlHudTabIds = useMemo<ReadonlySet<ControlHudTab>>(() => {
     const { cells, magicLens, transcripts } = platformAdapter.capabilities
-    // In the new shell the top bar, info drawer, layer panel and cards hold
-    // these tabs' controls (15.2-B to D); the HUD keeps the embeddings until
-    // 15.2-G.
-    const hiddenTabIds = new Set<ControlHudTab>(
-      shellVersion === 2 ? NEW_SHELL_HIDDEN_HUD_TABS : [],
-    )
+    const hiddenTabIds = new Set<ControlHudTab>()
 
     if (!cells) {
       hiddenTabIds.add('genes')
@@ -1313,7 +1308,7 @@ export function App({ dependencies }: AppProps = {}) {
     if (!transcripts) hiddenTabIds.add('transcripts')
 
     return hiddenTabIds
-  }, [platformAdapter.capabilities, shellVersion])
+  }, [platformAdapter.capabilities])
   const activeRoiSelection = platformRoiSelection(
     platformAdapter,
     roiState,
@@ -3294,6 +3289,24 @@ export function App({ dependencies }: AppProps = {}) {
     transcripts: transcriptsSection,
   })
 
+  const embedding = useEmbeddingModel({
+    activeEmbedding,
+    analysisEmbeddingState,
+    annotationStyles: annotationStyleColors,
+    appendDebugEvent,
+    copy: embeddingCopy,
+    datasetReady: loadState.status === 'ready',
+    elementLabel: isVisiumHdDataset ? 'bins' : 'cells',
+    onLoad: handleLoadAnalysisEmbeddings,
+    onSelectElement: handleEmbeddingElementSelect,
+    roiElementIds: roiCellIds,
+    selectedElementId: isVisiumHdDataset
+      ? (activeSelectedGridCell?.id ?? null)
+      : (selectedCell?.id ?? null),
+    selectedKind: selectedEmbeddingKind,
+    setSelectedKind: setSelectedEmbeddingKind,
+  })
+
   // The cards (UNIFIED_PLAN.md, 15.2-D) replace the Magic Lens, ROI and
   // Cell tabs in the new shell.
   const elementPlural = platformAdapter.labels.embeddingElementPlural
@@ -3516,7 +3529,6 @@ export function App({ dependencies }: AppProps = {}) {
         }}
         onSelectEmbeddingCell={handleEmbeddingElementSelect}
         onLoadSelectedExpressionProfile={handleLoadVisiumHdExpressionProfile}
-        embeddingOnly={shellVersion === 2}
       />
 
       {shellVersion === 2 ? null : platformAdapter.kind === 'image' ? (
@@ -3719,12 +3731,9 @@ export function App({ dependencies }: AppProps = {}) {
           transcripts={transcriptsSection}
           annotations={annotationsSection}
           cards={cards}
+          embedding={platformAdapter.capabilities.cells ? embedding : null}
         >
           {viewerRegion}
-          {/* Images have no embeddings, so no HUD tab is left (15.2-D). */}
-          {CONTROL_HUD_TABS.some((tab) => !hiddenControlHudTabIds.has(tab.id))
-            ? controlHud
-            : null}
         </ShellLayout>
       </main>
     )
