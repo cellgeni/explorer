@@ -101,7 +101,9 @@ the same channel controls as dataset morphology.
 
 The minimap at the bottom right of the canvas shows the whole dataset (its
 image, or its cells as dots) with the current view as a box; click or drag on
-it to move the view. Settings › `Show minimap` hides it.
+it to move the view. Settings › `Show minimap` hides it, and Settings ›
+`Show axes` adds rulers with the coordinates along the top and left edges of
+the canvas, in the scale bar's unit.
 
 The Cells section's Genes picker supports individual gene selection and
 multi-gene signatures for Xenium, Visium HD, H5AD, and SpatialData. `Auto LOD`,

@@ -44,6 +44,26 @@ export function MinimapToggle({ settings }: { readonly settings: ViewSettingsMod
   )
 }
 
+// Rulers along the top and left edges of the canvas (15.4-E).
+export function AxesToggle({ settings }: { readonly settings: ViewSettingsModel }) {
+  const inputId = useId()
+
+  return (
+    <label htmlFor={inputId}>
+      <input
+        id={inputId}
+        type="checkbox"
+        checked={settings.showAxes}
+        title="Show rulers with coordinates along the top and left edges of the canvas"
+        onChange={(event) => {
+          settings.onShowAxesChange(event.currentTarget.checked)
+        }}
+      />
+      <span>Show axes</span>
+    </label>
+  )
+}
+
 export function CoordinateUnitControl({
   settings,
 }: {

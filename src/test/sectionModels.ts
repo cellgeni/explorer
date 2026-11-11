@@ -139,6 +139,8 @@ export function testViewSettingsModel(
     onShowHoverTooltipsChange: vi.fn(),
     showMinimap: true,
     onShowMinimapChange: vi.fn(),
+    showAxes: false,
+    onShowAxesChange: vi.fn(),
     coordinateUnit: 'um',
     onCoordinateUnitChange: vi.fn(),
     ...rest,

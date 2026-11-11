@@ -425,9 +425,11 @@ export function App({ dependencies }: AppProps = {}) {
       setMeasurementUnit,
       setObservationColorMode,
       setShowCellBoundaries,
+      setShowAxes,
       setShowHoverTooltips,
       setShowMinimap,
       setShowNucleusBoundaries,
+      showAxes,
       showCellBoundaries,
       showHoverTooltips,
       showMinimap,
@@ -3522,8 +3524,10 @@ export function App({ dependencies }: AppProps = {}) {
     setMeasurementEnabled,
     setMeasurementResetKey,
     setMeasurementUnit,
+    setShowAxes,
     setShowHoverTooltips,
     setShowMinimap,
+    showAxes,
     showHoverTooltips,
     showMinimap,
   })
@@ -3795,6 +3799,7 @@ export function App({ dependencies }: AppProps = {}) {
         focusRequest={spatialFocusRequest}
         navigationControls
         minimap={showMinimap}
+        axes={showAxes}
         fitRequestKey={fitRequestKey}
         onImageTileError={handleImageTileError}
         onTileCacheEviction={handleTileCacheEviction}

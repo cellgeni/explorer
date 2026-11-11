@@ -418,8 +418,10 @@ export function useAppDomainState({
   const [showHoverTooltips, setShowHoverTooltips] = useState(
     initialShareableState.showHoverTooltips ?? DEFAULT_SHAREABLE_STATE.showHoverTooltips,
   )
-  // Settings › Show minimap (15.4-D), for the session.
+  // Settings › Show minimap (15.4-D) and Show axes (15.4-E), for the
+  // session.
   const [showMinimap, setShowMinimap] = useState(true)
+  const [showAxes, setShowAxes] = useState(false)
   // The layer panel's visibility checkboxes (15.2-C). Transcripts use
   // showTranscriptOverlay.
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(() =>
@@ -594,9 +596,11 @@ export function useAppDomainState({
       setMeasurementUnit,
       setObservationColorMode,
       setShowCellBoundaries,
+      setShowAxes,
       setShowHoverTooltips,
       setShowMinimap,
       setShowNucleusBoundaries,
+      showAxes,
       showCellBoundaries,
       showHoverTooltips,
       showMinimap,

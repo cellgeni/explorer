@@ -7,6 +7,8 @@ import { FitIcon, IconButton, MinusIcon, PlusIcon } from './ui'
 import { ViewerLegend } from './ViewerLegend'
 import { ViewerSelectionOverlay } from './ViewerSelectionOverlay'
 import { ViewerMinimap } from './ViewerMinimap'
+import { ViewerAxes } from './ViewerAxes'
+import { viewerAxesModel } from './viewerAxesModel'
 import { minimapDrawsImage, minimapLayout, minimapPoints } from './viewerMinimapModel'
 import {
   selectionOverlayModel,
@@ -279,6 +281,7 @@ export function ViewerCore({
   focusRequest = null,
   navigationControls = false,
   minimap = false,
+  axes = false,
   fitRequestKey = 0,
   overviewRenderCellLimit,
   clipOverviewCellsToViewport = true,
@@ -386,6 +389,7 @@ export function ViewerCore({
       focusRequest={focusRequest}
       navigationControls={navigationControls}
       minimap={minimap}
+      axes={axes}
       minimapPoints={minimapDots}
       fitRequestKey={fitRequestKey}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
@@ -475,6 +479,7 @@ interface ViewerSurfaceProps {
   readonly focusRequest: ViewerFocusRequest | null
   readonly navigationControls: boolean
   readonly minimap: boolean
+  readonly axes: boolean
   readonly minimapPoints: readonly (readonly [number, number])[]
   readonly fitRequestKey: number
   readonly overviewRenderCellLimit?: number | null
@@ -558,6 +563,7 @@ function ViewerSurface({
   focusRequest,
   navigationControls,
   minimap,
+  axes,
   minimapPoints: minimapDots,
   fitRequestKey,
   overviewRenderCellLimit,
@@ -1230,6 +1236,27 @@ function ViewerSurface({
           physicalUnitLabel,
         )
   const zoomLevelText = formatViewportZoom(viewState.zoom)
+  const axesModel = useMemo(
+    () =>
+      !axes || !canTrackMouseCoordinates
+        ? null
+        : viewerAxesModel(
+            viewState,
+            viewport,
+            coordinateUnit,
+            micrometersPerPixel,
+            physicalUnitLabel,
+          ),
+    [
+      axes,
+      canTrackMouseCoordinates,
+      coordinateUnit,
+      micrometersPerPixel,
+      physicalUnitLabel,
+      viewState,
+      viewport,
+    ],
+  )
   const scaleBar = useMemo(
     () =>
       !canTrackMouseCoordinates || viewport.width <= 0 || viewport.height <= 0
@@ -2051,6 +2078,7 @@ function ViewerSurface({
             )}
           </div>
         )}
+        {axesModel === null ? null : <ViewerAxes model={axesModel} />}
         {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
       </div>
       {/* Outside the frame, whose role is img: these have controls. */}

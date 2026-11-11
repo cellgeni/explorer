@@ -2143,6 +2143,31 @@ describe('ViewerCore', () => {
     expect(after.bbox.minX).toBeGreaterThan(before.bbox.minX)
   })
 
+  it('draws µm axes along the edges without redrawing deck layers (15.4-E)', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+
+    const { rerender } = render(<ViewerCore cells={cells} />)
+    expect(document.querySelector('.viewer-axes')).toBeNull()
+    const renderCountBefore = deckGlMock.renderCount
+
+    rerender(<ViewerCore cells={cells} axes />)
+
+    const axes = document.querySelector('.viewer-axes')
+    expect(axes).toHaveAttribute('aria-hidden', 'true')
+    expect(axes?.querySelector('.viewer-axis-unit')).toHaveTextContent('µm')
+    expect(
+      axes?.querySelectorAll('.viewer-axis-x .viewer-axis-tick').length,
+    ).toBeGreaterThan(0)
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
+
+    rerender(
+      <ViewerCore cells={cells} axes coordinateUnit="px" micrometersPerPixel={0.5} />,
+    )
+    expect(document.querySelector('.viewer-axis-unit')).toHaveTextContent('px')
+  })
+
   it('does not re-render deck layers when the legend collapses or a category is toggled', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

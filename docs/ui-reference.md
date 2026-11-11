@@ -27,6 +27,7 @@ the canvas, and the layer panel docked on the right.
         │   │   ├── Bottom left: legend, loading indicator, viewport messages
         │   │   ├── Bottom centre: mouse coordinates
         │   │   ├── Bottom right: minimap; Zoom out, Zoom in, Fit to view; scale bar
+        │   │   ├── Top and left edges: axes, when on in Settings
         │   │   └── StartScreen, before a dataset opens   src/features/start/StartScreen.tsx
         │   ├── InfoDrawer (ⓘ, 380 px, left)   src/features/shell/InfoDrawer.tsx
         │   ├── CardStack (360 px, top left)    src/features/cards/CardStack.tsx
@@ -142,6 +143,7 @@ does only that, and the tool stays.
 | ------------------- | ----------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
 | `Hover tooltips`    | Checkbox          | On                                         | Transcript tooltips ignore it                                                     |
 | `Show minimap`      | Checkbox          | On                                         | The [minimap](#minimap) at the bottom right; for the session, not in the link     |
+| `Show axes`         | Checkbox          | Off                                        | [Axes](#axes) along the top and left edges; for the session, not in the link      |
 | `Mouse coordinates` | Segmented µm / px | µm                                         | Also sets the scale-bar unit                                                      |
 | `Boundary limit`    | Number            | 1–100,000; 2,500 (compact) or 50,000       | Most visible cells before boundary polygons are deferred. Disabled for Visium HD  |
 | `Show debug info`   | Switch            | Off, or on with `?debug=1` (or `#debug=1`) | Shows the zoom number, and the deck.gl layer and budget lines in Diagnostics (D6) |
@@ -617,6 +619,16 @@ centres the view there, keeping the zoom, and dragging moves it along.
   bins) are dots.
 - It sits beside the deck.gl canvas, so showing it does not redraw the map.
   It is hidden under 860 px and with Settings › `Show minimap` off.
+
+### Axes
+
+With Settings › `Show axes` on (Phase 15.4-E, `src/components/ViewerAxes.tsx`),
+rulers run along the top and left edges of the canvas with the data
+coordinates: x along the top, y (increasing downwards, as in the data) down
+the left, read bottom to top. Ticks are at 1, 2 or 5 × 10ⁿ, at least 80 px
+apart, in the scale bar's unit (µm, px with `Mouse coordinates` px, or
+"units"), which closes the top ruler. They are hidden from screen readers;
+the coordinate readout says the same.
 
 ### Readouts And Messages
 

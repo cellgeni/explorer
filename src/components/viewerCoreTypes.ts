@@ -108,6 +108,8 @@ export interface ViewerCoreProps {
   readonly navigationControls?: boolean
   // The minimap at the bottom right (15.4-D).
   readonly minimap?: boolean
+  // Rulers along the top and left edges, in the scale bar's unit (15.4-E).
+  readonly axes?: boolean
   // Fits the data to the view whenever it changes (the F key).
   readonly fitRequestKey?: number
   readonly overviewRenderCellLimit?: number | null
