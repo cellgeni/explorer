@@ -1662,6 +1662,67 @@ describe('App', () => {
     expect(runDatasetDiagnostics).toHaveBeenCalledTimes(1)
   })
 
+  it('shows the new top bar with ?shell=2 and picks tools by key (15.2-B)', async () => {
+    window.history.replaceState(null, '', '/?shell=2')
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+
+    render(
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    const tools = screen.getByRole('toolbar', { name: 'Tools' })
+    expect(within(tools).getByRole('button', { name: 'Measure' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    expect(await screen.findByText('Xenium · 1 cell · 2 genes')).toHaveAttribute(
+      'role',
+      'status',
+    )
+
+    fireEvent.keyDown(document.body, { key: 'm' })
+    expect(within(tools).getByRole('button', { name: 'Measure' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(within(tools).getByRole('button', { name: 'Pan' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('keeps tool keys off in the current shell', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+
+    fireEvent.keyDown(document.body, { key: 'm' })
+    openControls('measure')
+
+    expect(screen.queryByRole('toolbar', { name: 'Tools' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Distance measure' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
   it('keeps the open dataset when another one fails to load (15.1-F)', async () => {
     const missingUrl = 'https://example.test/missing'
     const detectSpatialDataset = vi.fn(async (baseUrl: string) =>

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ViewerCore, type ViewerTranscriptHoverDetail } from './components/ViewerCore'
+import {
+  ViewerCore,
+  type RoiDrawMode,
+  type ViewerTranscriptHoverDetail,
+} from './components/ViewerCore'
 import { AppControlHud } from './features/app-shell/AppControlHud'
 import { setSpatialDataSelection } from './datasets/datasetFactory'
 import type { SpatialDataSelection } from './datasets/spatialDataDataset'
@@ -25,6 +29,9 @@ import { useDatasetInfoModel } from './features/sections/datasetInfoModel'
 import { useImageSectionModel } from './features/sections/imageSectionModel'
 import { useTranscriptsSectionModel } from './features/sections/transcriptsSectionModel'
 import { useViewSettingsModel } from './features/sections/viewSettingsModel'
+import { ShellLayout } from './features/shell/ShellLayout'
+import { useTopBarModel } from './features/shell/topBarModel'
+import { useToolShortcuts } from './features/shell/useToolShortcuts'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import {
   GeometricRoiHudPanel,
@@ -35,6 +42,7 @@ import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
   parseObservationColorMode,
   readDebugModeFromLocation,
+  readShellVersionFromLocation,
   readShareableStateFromLocation,
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
@@ -285,7 +293,8 @@ export function App({ dependencies }: AppProps = {}) {
     readShareableStateFromLocation(),
   )
   const [performanceBudget] = useState<PerformanceBudget>(() => detectPerformanceBudget())
-  const [debugMode] = useState(readDebugModeFromLocation)
+  const [debugMode, setDebugMode] = useState(readDebugModeFromLocation)
+  const [shellVersion] = useState(readShellVersionFromLocation)
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const appState = useAppDomainState({ initialShareableState, performanceBudget })
@@ -2515,22 +2524,49 @@ export function App({ dependencies }: AppProps = {}) {
       setMeasurementResetKey,
     },
   })
+  const returnToPan = useCallback(() => {
+    if (activeTool === 'magic-lens') handleMagicLensLeave()
+    setActiveTool('pan')
+    appendDebugEvent('Tool: Pan')
+  }, [activeTool, appendDebugEvent, handleMagicLensLeave, setActiveTool])
   // Esc anywhere but a text field leaves the active tool for Pan (D8).
   useEffect(() => {
     if (activeTool === 'pan') return
 
     function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key !== 'Escape' || isTextEntryTarget(event.target)) return
-      if (activeTool === 'magic-lens') handleMagicLensLeave()
-      setActiveTool('pan')
-      appendDebugEvent('Tool: Pan')
+      returnToPan()
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [activeTool, appendDebugEvent, handleMagicLensLeave, setActiveTool])
+  }, [activeTool, returnToPan])
+  const handleRoiModeChange = useCallback(
+    (nextMode: RoiDrawMode) => {
+      // Starting a shape clears the measurement line.
+      if (nextMode !== 'idle') {
+        setMeasurementResetKey((current) => current + 1)
+      }
+
+      setRoiMode(nextMode)
+      appendDebugEvent(
+        platformAdapter.kind === 'image'
+          ? nextMode === 'idle'
+            ? 'Geometry draw cancelled'
+            : nextMode === 'box'
+              ? 'Geometry box mode enabled'
+              : 'Geometry lasso mode enabled'
+          : nextMode === 'idle'
+            ? 'ROI draw cancelled'
+            : nextMode === 'box'
+              ? 'ROI draw mode enabled'
+              : 'ROI lasso mode enabled',
+      )
+    },
+    [appendDebugEvent, platformAdapter.kind, setMeasurementResetKey, setRoiMode],
+  )
 
   const { handleAutoContrast, queueAutoContrast, updateMorphologyChannel } =
     useMorphologyWorkflow({
@@ -3150,333 +3186,345 @@ export function App({ dependencies }: AppProps = {}) {
     setShowHoverTooltips,
     showHoverTooltips,
   })
+  const loadingDatasetUrl =
+    pendingDatasetLoadState.status === 'loading'
+      ? pendingDatasetLoadState.url
+      : loadState.status === 'loading'
+        ? loadState.url
+        : null
+  const topBar = useTopBarModel({
+    activeTool,
+    appendDebugEvent,
+    canDrawRoi,
+    channelCount: morphologyChannels.length,
+    datasetName: datasetDisplayName(loadedDatasetUrl, datasetAbout?.name),
+    debugMode,
+    elementCount: loadState.status === 'ready' ? loadState.cellCount : 0,
+    elementNoun: platformAdapter.labels.embeddingElementPlural,
+    geneCount: genePanelState.status === 'ready' ? genePanelState.genes.length : null,
+    loadingDatasetName:
+      loadingDatasetUrl === null
+        ? null
+        : (datasetDisplayName(loadingDatasetUrl, undefined) ?? loadingDatasetUrl),
+    magicLensAvailable: platformAdapter.kind !== 'image',
+    magicLensEnabled: magicLensLoadEnabled,
+    magicLensReason: magicLensAvailability.unavailableReason,
+    magicLensScope,
+    onMagicLensCursorActiveChange: handleMagicLensCursorActiveChange,
+    onMagicLensScopeChange: handleMagicLensScopeChange,
+    onMeasureEnabledChange: viewSettings.measure.onEnabledChange,
+    onReturnToPan: returnToPan,
+    onRoiModeChange: handleRoiModeChange,
+    platform: platformAdapter.kind,
+    setDebugMode,
+  })
+  useToolShortcuts(shellVersion === 2, topBar.tools.onSelect)
+
+  const controlHud = (
+    <AppControlHud
+      activeControlHudTab={activeControlHudTab}
+      appendDebugEvent={appendDebugEvent}
+      debugMode={debugMode}
+      hiddenTabIds={hiddenControlHudTabIds}
+      isControlHudCollapsed={isControlHudCollapsed}
+      loadingTabIds={loadingTabIds}
+      setActiveControlHudTab={setActiveControlHudTab}
+      setIsControlHudCollapsed={setIsControlHudCollapsed}
+    >
+      <DatasetHudPanel active={activeControlHudTab === 'dataset'} info={datasetInfo} />
+
+      <LayerHudPanel
+        active={activeControlHudTab === 'layers'}
+        image={imageSection}
+        cells={cellsSection}
+        settings={viewSettings}
+        info={datasetInfo}
+      />
+
+      <GeneHudPanel active={activeControlHudTab === 'genes'} cells={cellsSection} />
+
+      {platformAdapter.capabilities.transcripts ? (
+        <TranscriptHudPanel
+          active={activeControlHudTab === 'transcripts'}
+          transcripts={transcriptsSection}
+        />
+      ) : null}
+
+      <MagicLensHudPanel
+        active={activeControlHudTab === 'magic-lens'}
+        magicLensScopeInputId={controlIds.magicLensScopeInputId}
+        magicLensRadiusInputId={controlIds.magicLensRadiusInputId}
+        magicLensMinQvInputId={controlIds.magicLensMinQvInputId}
+        magicLensCopy={magicLensCopy}
+        loadEnabled={magicLensLoadEnabled}
+        roiAvailable={activeRoiSelection !== null}
+        magicLensScope={magicLensScope}
+        magicLensState={magicLensState}
+        magicLensRadiusMicrometers={magicLensRadiusMicrometers}
+        magicLensMinQv={magicLensMinQv}
+        minQvVisible={platformAdapter.capabilities.magicLensMinQv}
+        magicLensIsCursorActive={magicLensIsCursorActive}
+        magicLensCanScan={magicLensCanScan}
+        onScopeChange={handleMagicLensScopeChange}
+        onRadiusChange={handleMagicLensRadiusChange}
+        onMinQvChange={handleMagicLensMinQvChange}
+        onCursorActiveChange={handleMagicLensCursorActiveChange}
+        onRunMagicLens={handleRunMagicLens}
+      />
+
+      <AnnotationHudPanel
+        active={activeControlHudTab === 'annotations'}
+        annotations={annotationsSection}
+      />
+
+      <CellHudPanel
+        active={activeControlHudTab === 'cell'}
+        embeddingViewInputId={controlIds.embeddingViewInputId}
+        embeddingCopy={embeddingCopy}
+        analysisEmbeddingState={analysisEmbeddingState}
+        activeEmbedding={activeEmbedding}
+        annotationStyles={annotationStyleColors}
+        selectedEmbeddingKind={selectedEmbeddingKind}
+        roiCellIds={roiCellIds}
+        isVisiumHdDataset={isVisiumHdDataset}
+        selectedCell={selectedCell}
+        selectedGridCell={activeSelectedGridCell}
+        selectedGridCellAssignmentState={gridCellAssignmentState}
+        selectedGridCellExpressionStatus={selectedGridCellExpressionStatus}
+        selectedBoundaryCell={activeSelectedBoundaryCell}
+        selectedBoundaryCellExpressionStatus={selectedBoundaryCellExpressionStatus}
+        selectedExpressionProfileState={activeVisiumHdExpressionProfileState}
+        selectedCellAnnotationLabels={selectedCellAnnotationLabels}
+        selectedCellInfoVariant={
+          isAnnDataPlatform(platformAdapter) ? 'observations' : 'default'
+        }
+        cellDetailCopy={cellDetailCopy}
+        cellDetailState={cellDetailState}
+        cellTranscriptDistributionState={cellTranscriptDistributionState}
+        cellTranscriptDistributionVisible={
+          platformAdapter.capabilities.cellTranscriptDistribution
+        }
+        loadEnabled={loadState.status === 'ready'}
+        onEmbeddingKindChange={(nextEmbeddingKind) => {
+          setSelectedEmbeddingKind(nextEmbeddingKind)
+          appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
+        }}
+        onLoadAnalysisEmbeddings={handleLoadAnalysisEmbeddings}
+        onClearSelectedCell={() => {
+          clearVisiumHdExpressionProfileState()
+          setSelectedCell(null)
+          setSelectedBoundaryCell(null)
+        }}
+        onClearSelectedGridCell={() => {
+          clearVisiumHdExpressionProfileState()
+          setSelectedGridCell(null)
+        }}
+        onClearSelectedBoundaryCell={() => {
+          clearVisiumHdExpressionProfileState()
+          setSelectedBoundaryCell(null)
+        }}
+        onSelectEmbeddingCell={handleEmbeddingElementSelect}
+        onLoadSelectedExpressionProfile={handleLoadVisiumHdExpressionProfile}
+      />
+
+      {platformAdapter.kind === 'image' ? (
+        <GeometricRoiHudPanel
+          active={activeControlHudTab === 'roi'}
+          roiNameInputId={controlIds.roiNameInputId}
+          roiHeaderCopy={geometricRoiHeaderCopy}
+          canDrawRoi={canDrawRoi}
+          roiMode={roiMode}
+          roiName={roiName}
+          loadEnabled={loadState.status === 'ready'}
+          onRoiModeChange={handleRoiModeChange}
+          onRoiNameChange={setRoiName}
+        />
+      ) : isVisiumHdDataset ? (
+        <VisiumHdRoiHudPanel
+          active={activeControlHudTab === 'roi'}
+          roiNameInputId={controlIds.roiNameInputId}
+          roiHeaderCopy={visiumHdRoiCopy}
+          canDrawRoi={canDrawRoi}
+          roiMode={roiMode}
+          roiName={roiName}
+          loadEnabled={loadState.status === 'ready'}
+          roiState={activeVisiumHdRoiState}
+          roiSummary={visiumHdRoiSummary}
+          roiGeneStatsCopy={roiGeneStatsCopy}
+          roiGeneStatsState={roiGeneStatsState}
+          onRoiModeChange={handleRoiModeChange}
+          onClearRoi={handleClearActiveRoi}
+          onRoiNameChange={setRoiName}
+          onExportRoiBarcodes={handleExportVisiumHdRoiBarcodes}
+          onExportRoiGeoJson={handleExportVisiumHdRoiGeoJson}
+        />
+      ) : (
+        <RoiHudPanel
+          active={activeControlHudTab === 'roi'}
+          roiNameInputId={controlIds.roiNameInputId}
+          roiHeaderCopy={roiHeaderCopy}
+          isLoading={isRoiTabLoading}
+          canDrawRoi={canDrawRoi}
+          roiMode={roiMode}
+          roiName={roiName}
+          loadEnabled={platformFeatureLoadEnabled}
+          roiState={roiState}
+          roiSummary={roiSummary}
+          roiGeneStatsCopy={roiGeneStatsCopy}
+          roiGeneStatsState={roiGeneStatsState}
+          roiTranscriptExportState={roiTranscriptExportState}
+          onRoiModeChange={handleRoiModeChange}
+          onClearRoi={handleClearActiveRoi}
+          onRoiNameChange={setRoiName}
+          onSaveRoiAnnotation={handleSaveRoiAnnotation}
+          onExportRoiCells={handleExportRoiCells}
+          onExportRoiGeoJson={handleExportRoiGeoJson}
+          onExportRoiTranscripts={handleExportRoiTranscripts}
+        />
+      )}
+    </AppControlHud>
+  )
+  const viewerRegion = (
+    <section className="viewer-region" aria-labelledby="viewer-heading">
+      <h2 id="viewer-heading" className="visually-hidden">
+        Spatial View
+      </h2>
+
+      <ViewerCore
+        cells={styledOverviewCells}
+        expressionElements={viewerGeneExpressionElements}
+        geneExpressionActive={geneExpressionColorsReady}
+        geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
+        boundaries={expressionStyledBoundaryLayerData}
+        nucleusBoundaries={visibleNucleusBoundaryLayerData}
+        cellBoundaryHoverEnabled={platformAdapter.cellBoundaryHoverEnabled(
+          showCellBoundaries,
+        )}
+        hoverTooltipsEnabled={showHoverTooltips}
+        overviewCellSourceLabel={
+          platformAdapter.kind === 'h5ad'
+            ? 'H5AD'
+            : platformAdapter.kind === 'visium'
+              ? 'Visium'
+              : platformAdapter.kind === 'spatialdata'
+                ? 'SpatialData'
+                : platformAdapter.kind === 'atera'
+                  ? 'Atera'
+                  : 'Xenium'
+        }
+        gridCells={viewerGridCells}
+        fitGridCells={spatialGridCells}
+        fitImageExtent={imageFitExtent}
+        transcriptAggregateBins={transcriptLayerAggregateBins}
+        transcriptPoints={transcriptLayerPoints}
+        geometricAnnotations={geometricAnnotationLayerData}
+        imageLoader={morphologyImage?.loader ?? null}
+        imageChannels={morphologyCanvasChannels}
+        flatImage={flatMorphologyImage}
+        imageOpacity={morphologyCanvasChannels.length === 0 ? imageLayerOpacity : 1}
+        cellFillOpacity={cellFillOpacity}
+        cellBoundaryOpacity={platformAdapter.kind === 'h5ad' ? 0 : cellBoundaryOpacity}
+        pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
+        trueSizePoints={platformAdapter.trueSizePoints}
+        transcriptOpacity={transcriptOpacity}
+        transcriptPointSize={transcriptPointSize}
+        observationColorMode={viewerObservationColorMode}
+        annotationStyleColors={annotationStyleColors}
+        cellMetadataTrack={activeCellMetadataTrack}
+        loadingTasks={loadingTasks}
+        legendSections={legendSections}
+        showZoomLevel={debugMode}
+        selectionHighlight={selectionHighlight}
+        onClearSelection={handleClearSelection}
+        onLegendCategoryVisibilityChange={handleAnnotationVisibilityChange}
+        coordinateUnit={coordinateUnit}
+        measurementEnabled={measurementEnabled}
+        measurementUnit={measurementUnit}
+        measurementResetKey={measurementResetKey}
+        status={loadState.status}
+        imageStatus={viewerImageStatus}
+        boundaryStatus={boundaryState.status}
+        overviewRenderCellLimit={viewerOverviewRenderCellLimit}
+        clipOverviewCellsToViewport={!isAnnDataPlatform(platformAdapter)}
+        maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
+        tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
+        roiMode={roiMode}
+        roiSelection={activeRoiSelection}
+        magicLensActive={magicLensIsCursorActive}
+        magicLensRadiusMicrometers={magicLensRadiusMicrometers}
+        magicLensStatus={magicLensViewerStatus}
+        magicLensSummary={magicLensViewerSummary}
+        viewResetKey={viewerViewResetKey}
+        focusRequest={spatialFocusRequest}
+        onImageTileError={handleImageTileError}
+        onTileCacheEviction={handleTileCacheEviction}
+        onViewportCellCountChange={setViewportCellCount}
+        onViewportChange={handleViewportChange}
+        onTranscriptHover={setHoveredTranscript}
+        onTranscriptClick={handlePinTranscript}
+        onCellClick={handleViewerCellClick}
+        onCellBoundaryClick={handleViewerCellBoundaryClick}
+        onGridCellClick={handleViewerGridCellClick}
+        onRoiComplete={activeRoiCompleteHandler}
+        onMagicLensMove={handleMagicLensMove}
+        onMagicLensLeave={handleMagicLensLeave}
+        {...(initialShareableState.viewState === undefined
+          ? {}
+          : { initialViewStateOverride: initialShareableState.viewState })}
+        {...(loadState.status === 'error'
+          ? { errorMessage: formatStructuredError(loadState.error) }
+          : {})}
+        {...(viewerImageError === null
+          ? {}
+          : { imageErrorMessage: formatStructuredError(viewerImageError) })}
+        {...(viewerMicrometersPerPixel === undefined
+          ? {}
+          : {
+              micrometersPerPixel: viewerMicrometersPerPixel,
+            })}
+        {...(spatialDataControlState.status !== 'idle' &&
+        spatialDataControlState.units.source === 'unknown'
+          ? { physicalUnitLabel: 'units' }
+          : {})}
+        {...(boundaryState.status === 'error'
+          ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
+          : {})}
+      />
+      {pendingDatasetLoadState.status === 'error' ? (
+        <DatasetLoadToast
+          failedUrl={pendingDatasetLoadState.url}
+          error={pendingDatasetLoadState.error}
+          openDatasetName={datasetDisplayName(loadedDatasetUrl, datasetAbout?.name)}
+          onDismiss={() => {
+            setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
+          }}
+        />
+      ) : null}
+    </section>
+  )
+  const skipLink = (
+    <a className="skip-link" href="#viewer-heading">
+      Skip To Spatial View
+    </a>
+  )
+
+  if (shellVersion === 2) {
+    return (
+      <main className="app-shell app-shell--v2">
+        {skipLink}
+        <ShellLayout topBar={topBar} info={datasetInfo} settings={viewSettings}>
+          {viewerRegion}
+          {controlHud}
+        </ShellLayout>
+      </main>
+    )
+  }
 
   return (
     <main className="app-shell">
-      <a className="skip-link" href="#viewer-heading">
-        Skip To Spatial View
-      </a>
-      <AppControlHud
-        activeControlHudTab={activeControlHudTab}
-        appendDebugEvent={appendDebugEvent}
-        debugMode={debugMode}
-        hiddenTabIds={hiddenControlHudTabIds}
-        isControlHudCollapsed={isControlHudCollapsed}
-        loadingTabIds={loadingTabIds}
-        setActiveControlHudTab={setActiveControlHudTab}
-        setIsControlHudCollapsed={setIsControlHudCollapsed}
-      >
-        <DatasetHudPanel active={activeControlHudTab === 'dataset'} info={datasetInfo} />
-
-        <LayerHudPanel
-          active={activeControlHudTab === 'layers'}
-          image={imageSection}
-          cells={cellsSection}
-          settings={viewSettings}
-          info={datasetInfo}
-        />
-
-        <GeneHudPanel active={activeControlHudTab === 'genes'} cells={cellsSection} />
-
-        {platformAdapter.capabilities.transcripts ? (
-          <TranscriptHudPanel
-            active={activeControlHudTab === 'transcripts'}
-            transcripts={transcriptsSection}
-          />
-        ) : null}
-
-        <MagicLensHudPanel
-          active={activeControlHudTab === 'magic-lens'}
-          magicLensScopeInputId={controlIds.magicLensScopeInputId}
-          magicLensRadiusInputId={controlIds.magicLensRadiusInputId}
-          magicLensMinQvInputId={controlIds.magicLensMinQvInputId}
-          magicLensCopy={magicLensCopy}
-          loadEnabled={magicLensLoadEnabled}
-          roiAvailable={activeRoiSelection !== null}
-          magicLensScope={magicLensScope}
-          magicLensState={magicLensState}
-          magicLensRadiusMicrometers={magicLensRadiusMicrometers}
-          magicLensMinQv={magicLensMinQv}
-          minQvVisible={platformAdapter.capabilities.magicLensMinQv}
-          magicLensIsCursorActive={magicLensIsCursorActive}
-          magicLensCanScan={magicLensCanScan}
-          onScopeChange={handleMagicLensScopeChange}
-          onRadiusChange={handleMagicLensRadiusChange}
-          onMinQvChange={handleMagicLensMinQvChange}
-          onCursorActiveChange={handleMagicLensCursorActiveChange}
-          onRunMagicLens={handleRunMagicLens}
-        />
-
-        <AnnotationHudPanel
-          active={activeControlHudTab === 'annotations'}
-          annotations={annotationsSection}
-        />
-
-        <CellHudPanel
-          active={activeControlHudTab === 'cell'}
-          embeddingViewInputId={controlIds.embeddingViewInputId}
-          embeddingCopy={embeddingCopy}
-          analysisEmbeddingState={analysisEmbeddingState}
-          activeEmbedding={activeEmbedding}
-          annotationStyles={annotationStyleColors}
-          selectedEmbeddingKind={selectedEmbeddingKind}
-          roiCellIds={roiCellIds}
-          isVisiumHdDataset={isVisiumHdDataset}
-          selectedCell={selectedCell}
-          selectedGridCell={activeSelectedGridCell}
-          selectedGridCellAssignmentState={gridCellAssignmentState}
-          selectedGridCellExpressionStatus={selectedGridCellExpressionStatus}
-          selectedBoundaryCell={activeSelectedBoundaryCell}
-          selectedBoundaryCellExpressionStatus={selectedBoundaryCellExpressionStatus}
-          selectedExpressionProfileState={activeVisiumHdExpressionProfileState}
-          selectedCellAnnotationLabels={selectedCellAnnotationLabels}
-          selectedCellInfoVariant={
-            isAnnDataPlatform(platformAdapter) ? 'observations' : 'default'
-          }
-          cellDetailCopy={cellDetailCopy}
-          cellDetailState={cellDetailState}
-          cellTranscriptDistributionState={cellTranscriptDistributionState}
-          cellTranscriptDistributionVisible={
-            platformAdapter.capabilities.cellTranscriptDistribution
-          }
-          loadEnabled={loadState.status === 'ready'}
-          onEmbeddingKindChange={(nextEmbeddingKind) => {
-            setSelectedEmbeddingKind(nextEmbeddingKind)
-            appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
-          }}
-          onLoadAnalysisEmbeddings={handleLoadAnalysisEmbeddings}
-          onClearSelectedCell={() => {
-            clearVisiumHdExpressionProfileState()
-            setSelectedCell(null)
-            setSelectedBoundaryCell(null)
-          }}
-          onClearSelectedGridCell={() => {
-            clearVisiumHdExpressionProfileState()
-            setSelectedGridCell(null)
-          }}
-          onClearSelectedBoundaryCell={() => {
-            clearVisiumHdExpressionProfileState()
-            setSelectedBoundaryCell(null)
-          }}
-          onSelectEmbeddingCell={handleEmbeddingElementSelect}
-          onLoadSelectedExpressionProfile={handleLoadVisiumHdExpressionProfile}
-        />
-
-        {platformAdapter.kind === 'image' ? (
-          <GeometricRoiHudPanel
-            active={activeControlHudTab === 'roi'}
-            roiNameInputId={controlIds.roiNameInputId}
-            roiHeaderCopy={geometricRoiHeaderCopy}
-            canDrawRoi={canDrawRoi}
-            roiMode={roiMode}
-            roiName={roiName}
-            loadEnabled={loadState.status === 'ready'}
-            onRoiModeChange={(nextMode) => {
-              // Starting a shape clears the measurement line.
-              if (nextMode !== 'idle') {
-                setMeasurementResetKey((current) => current + 1)
-              }
-
-              setRoiMode(nextMode)
-              appendDebugEvent(
-                nextMode === 'idle'
-                  ? 'Geometry draw cancelled'
-                  : nextMode === 'box'
-                    ? 'Geometry box mode enabled'
-                    : 'Geometry lasso mode enabled',
-              )
-            }}
-            onRoiNameChange={setRoiName}
-          />
-        ) : isVisiumHdDataset ? (
-          <VisiumHdRoiHudPanel
-            active={activeControlHudTab === 'roi'}
-            roiNameInputId={controlIds.roiNameInputId}
-            roiHeaderCopy={visiumHdRoiCopy}
-            canDrawRoi={canDrawRoi}
-            roiMode={roiMode}
-            roiName={roiName}
-            loadEnabled={loadState.status === 'ready'}
-            roiState={activeVisiumHdRoiState}
-            roiSummary={visiumHdRoiSummary}
-            roiGeneStatsCopy={roiGeneStatsCopy}
-            roiGeneStatsState={roiGeneStatsState}
-            onRoiModeChange={(nextMode) => {
-              // Starting a shape clears the measurement line.
-              if (nextMode !== 'idle') {
-                setMeasurementResetKey((current) => current + 1)
-              }
-
-              setRoiMode(nextMode)
-              appendDebugEvent(
-                nextMode === 'idle'
-                  ? 'ROI draw cancelled'
-                  : nextMode === 'box'
-                    ? 'ROI draw mode enabled'
-                    : 'ROI lasso mode enabled',
-              )
-            }}
-            onClearRoi={handleClearActiveRoi}
-            onRoiNameChange={setRoiName}
-            onExportRoiBarcodes={handleExportVisiumHdRoiBarcodes}
-            onExportRoiGeoJson={handleExportVisiumHdRoiGeoJson}
-          />
-        ) : (
-          <RoiHudPanel
-            active={activeControlHudTab === 'roi'}
-            roiNameInputId={controlIds.roiNameInputId}
-            roiHeaderCopy={roiHeaderCopy}
-            isLoading={isRoiTabLoading}
-            canDrawRoi={canDrawRoi}
-            roiMode={roiMode}
-            roiName={roiName}
-            loadEnabled={platformFeatureLoadEnabled}
-            roiState={roiState}
-            roiSummary={roiSummary}
-            roiGeneStatsCopy={roiGeneStatsCopy}
-            roiGeneStatsState={roiGeneStatsState}
-            roiTranscriptExportState={roiTranscriptExportState}
-            onRoiModeChange={(nextMode) => {
-              // Starting a shape clears the measurement line.
-              if (nextMode !== 'idle') {
-                setMeasurementResetKey((current) => current + 1)
-              }
-
-              setRoiMode(nextMode)
-              appendDebugEvent(
-                nextMode === 'idle'
-                  ? 'ROI draw cancelled'
-                  : nextMode === 'box'
-                    ? 'ROI draw mode enabled'
-                    : 'ROI lasso mode enabled',
-              )
-            }}
-            onClearRoi={handleClearActiveRoi}
-            onRoiNameChange={setRoiName}
-            onSaveRoiAnnotation={handleSaveRoiAnnotation}
-            onExportRoiCells={handleExportRoiCells}
-            onExportRoiGeoJson={handleExportRoiGeoJson}
-            onExportRoiTranscripts={handleExportRoiTranscripts}
-          />
-        )}
-      </AppControlHud>
-
-      <section className="viewer-region" aria-labelledby="viewer-heading">
-        <h2 id="viewer-heading" className="visually-hidden">
-          Spatial View
-        </h2>
-
-        <ViewerCore
-          cells={styledOverviewCells}
-          expressionElements={viewerGeneExpressionElements}
-          geneExpressionActive={geneExpressionColorsReady}
-          geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
-          boundaries={expressionStyledBoundaryLayerData}
-          nucleusBoundaries={visibleNucleusBoundaryLayerData}
-          cellBoundaryHoverEnabled={platformAdapter.cellBoundaryHoverEnabled(
-            showCellBoundaries,
-          )}
-          hoverTooltipsEnabled={showHoverTooltips}
-          overviewCellSourceLabel={
-            platformAdapter.kind === 'h5ad'
-              ? 'H5AD'
-              : platformAdapter.kind === 'visium'
-                ? 'Visium'
-                : platformAdapter.kind === 'spatialdata'
-                  ? 'SpatialData'
-                  : platformAdapter.kind === 'atera'
-                    ? 'Atera'
-                    : 'Xenium'
-          }
-          gridCells={viewerGridCells}
-          fitGridCells={spatialGridCells}
-          fitImageExtent={imageFitExtent}
-          transcriptAggregateBins={transcriptLayerAggregateBins}
-          transcriptPoints={transcriptLayerPoints}
-          geometricAnnotations={geometricAnnotationLayerData}
-          imageLoader={morphologyImage?.loader ?? null}
-          imageChannels={morphologyCanvasChannels}
-          flatImage={flatMorphologyImage}
-          imageOpacity={morphologyCanvasChannels.length === 0 ? imageLayerOpacity : 1}
-          cellFillOpacity={cellFillOpacity}
-          cellBoundaryOpacity={platformAdapter.kind === 'h5ad' ? 0 : cellBoundaryOpacity}
-          pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
-          trueSizePoints={platformAdapter.trueSizePoints}
-          transcriptOpacity={transcriptOpacity}
-          transcriptPointSize={transcriptPointSize}
-          observationColorMode={viewerObservationColorMode}
-          annotationStyleColors={annotationStyleColors}
-          cellMetadataTrack={activeCellMetadataTrack}
-          loadingTasks={loadingTasks}
-          legendSections={legendSections}
-          showZoomLevel={debugMode}
-          selectionHighlight={selectionHighlight}
-          onClearSelection={handleClearSelection}
-          onLegendCategoryVisibilityChange={handleAnnotationVisibilityChange}
-          coordinateUnit={coordinateUnit}
-          measurementEnabled={measurementEnabled}
-          measurementUnit={measurementUnit}
-          measurementResetKey={measurementResetKey}
-          status={loadState.status}
-          imageStatus={viewerImageStatus}
-          boundaryStatus={boundaryState.status}
-          overviewRenderCellLimit={viewerOverviewRenderCellLimit}
-          clipOverviewCellsToViewport={!isAnnDataPlatform(platformAdapter)}
-          maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
-          tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
-          roiMode={roiMode}
-          roiSelection={activeRoiSelection}
-          magicLensActive={magicLensIsCursorActive}
-          magicLensRadiusMicrometers={magicLensRadiusMicrometers}
-          magicLensStatus={magicLensViewerStatus}
-          magicLensSummary={magicLensViewerSummary}
-          viewResetKey={viewerViewResetKey}
-          focusRequest={spatialFocusRequest}
-          onImageTileError={handleImageTileError}
-          onTileCacheEviction={handleTileCacheEviction}
-          onViewportCellCountChange={setViewportCellCount}
-          onViewportChange={handleViewportChange}
-          onTranscriptHover={setHoveredTranscript}
-          onTranscriptClick={handlePinTranscript}
-          onCellClick={handleViewerCellClick}
-          onCellBoundaryClick={handleViewerCellBoundaryClick}
-          onGridCellClick={handleViewerGridCellClick}
-          onRoiComplete={activeRoiCompleteHandler}
-          onMagicLensMove={handleMagicLensMove}
-          onMagicLensLeave={handleMagicLensLeave}
-          {...(initialShareableState.viewState === undefined
-            ? {}
-            : { initialViewStateOverride: initialShareableState.viewState })}
-          {...(loadState.status === 'error'
-            ? { errorMessage: formatStructuredError(loadState.error) }
-            : {})}
-          {...(viewerImageError === null
-            ? {}
-            : { imageErrorMessage: formatStructuredError(viewerImageError) })}
-          {...(viewerMicrometersPerPixel === undefined
-            ? {}
-            : {
-                micrometersPerPixel: viewerMicrometersPerPixel,
-              })}
-          {...(spatialDataControlState.status !== 'idle' &&
-          spatialDataControlState.units.source === 'unknown'
-            ? { physicalUnitLabel: 'units' }
-            : {})}
-          {...(boundaryState.status === 'error'
-            ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
-            : {})}
-        />
-        {pendingDatasetLoadState.status === 'error' ? (
-          <DatasetLoadToast
-            failedUrl={pendingDatasetLoadState.url}
-            error={pendingDatasetLoadState.error}
-            openDatasetName={datasetDisplayName(loadedDatasetUrl, datasetAbout?.name)}
-            onDismiss={() => {
-              setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
-            }}
-          />
-        ) : null}
-      </section>
+      {skipLink}
+      {controlHud}
+      {viewerRegion}
     </main>
   )
 }

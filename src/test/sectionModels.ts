@@ -30,6 +30,8 @@ import type {
   MeasureToolModel,
   ViewSettingsModel,
 } from '../features/sections/viewSettingsModel'
+import type { ToolGroupModel, TopBarModel } from '../features/shell/topBarModel'
+import { toolOptions } from '../features/shell/topBarModel'
 
 // Section models for block and HUD panel tests (UNIFIED_PLAN.md, 15.2-A):
 // an idle dataset with every callback a mock, plus the given overrides.
@@ -324,6 +326,32 @@ export function testAnnotationsSectionModel(
       onVisibilityChange: vi.fn(),
       onRemove: vi.fn(),
       ...overrides.shapes,
+    },
+  }
+}
+
+export function testTopBarModel(
+  overrides: Partial<Omit<TopBarModel, 'tools'>> & {
+    readonly tools?: Partial<ToolGroupModel>
+  } = {},
+): TopBarModel {
+  const { tools, ...rest } = overrides
+
+  return {
+    datasetName: 'Sob23 brain',
+    summary: { status: 'ready', text: 'Xenium · 1.41 M cells · 5,001 genes' },
+    debugMode: false,
+    onDebugModeChange: vi.fn(),
+    ...rest,
+    tools: {
+      active: 'pan',
+      options: toolOptions({
+        datasetReady: true,
+        canDrawRoi: true,
+        magicLens: { enabled: true },
+      }),
+      onSelect: vi.fn(),
+      ...tools,
     },
   }
 }

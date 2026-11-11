@@ -1,0 +1,245 @@
+/* The new shell (UNIFIED_PLAN.md, 15.2), shown with ?shell=2 until 15.2-J. */
+
+.app-shell--v2 {
+  display: grid;
+  grid-template-rows: 48px minmax(0, 1fr);
+}
+
+.shell-body {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Until the layer panel (15.2-C), the HUD sits under the top bar. */
+.shell-body .control-hud {
+  max-height: calc(100% - 24px);
+}
+
+/* Top bar */
+
+/* Above the panel and drawer, so its popovers open over them. */
+.shell-top-bar {
+  position: relative;
+  z-index: var(--z-popover);
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-1);
+  font-size: var(--font-control);
+}
+
+.shell-top-bar-start,
+.shell-top-bar-end {
+  display: flex;
+  flex: 1 1 0;
+  gap: var(--space-1);
+  align-items: center;
+  min-width: 0;
+}
+
+.shell-top-bar-end {
+  justify-content: flex-end;
+}
+
+.shell-top-bar-tools {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.shell-brand {
+  flex: 0 0 auto;
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--border);
+  color: var(--text-1);
+  font-size: var(--font-title);
+  font-weight: 700;
+}
+
+.shell-top-bar .shell-dataset-name {
+  max-width: 280px;
+  color: var(--text-1);
+  font-size: var(--font-body);
+  font-weight: 650;
+}
+
+.shell-dataset-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-dataset-menu {
+  width: min(360px, 90vw);
+}
+
+/* Tools */
+
+.shell-tools {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-0);
+}
+
+.shell-tool {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.shell-tool .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.shell-tool:hover:not([aria-disabled='true']) {
+  background: var(--surface-3);
+  color: var(--text-1);
+}
+
+.shell-tool[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.shell-tool[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.shell-tool:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* Share, Help, Settings */
+
+.shell-share {
+  position: relative;
+  display: inline-flex;
+}
+
+.shell-share-status {
+  position: absolute;
+  z-index: var(--z-popover);
+  top: calc(100% + 6px);
+  right: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+  background: var(--surface-3);
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+.shell-share-status:empty {
+  display: none;
+}
+
+.shell-shortcuts {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.shell-shortcuts h3 {
+  margin: 0 0 var(--space-1);
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-weight: 700;
+}
+
+.shell-shortcuts dl {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.shell-shortcuts dl > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.shell-shortcuts dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.shell-shortcuts dd {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.shell-settings {
+  min-width: 260px;
+}
+
+.shell-settings > label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--text-2);
+  font-size: var(--font-control);
+  font-weight: 700;
+}
+
+.shell-settings > label input {
+  accent-color: var(--accent);
+}
+
+.shell-setting-field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.shell-setting-field label {
+  color: var(--text-2);
+  font-size: var(--font-control);
+  font-weight: 700;
+}
+
+.shell-setting-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-2);
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: var(--font-control);
+}
+
+/* Dataset info drawer (15.2-F gives it sections). */
+
+.shell-info-drawer .ui-drawer-body {
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
