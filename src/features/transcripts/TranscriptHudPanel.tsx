@@ -10,6 +10,7 @@ import {
   TRANSCRIPT_POINT_COLOR_MODE_OPTIONS,
   isTranscriptDensityColorScale,
   isTranscriptPointColorMode,
+  transcriptDensityScaleGradient,
   type TranscriptDensityColorScale,
   type TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
@@ -306,7 +307,12 @@ export function TranscriptHudPanel({
             title={transcriptDensityScaleAriaLabel(transcriptDensityScaleMax)}
           >
             <span
-              className={`transcript-density-scale-preview transcript-density-scale-preview-${transcriptDensityColorScale}`}
+              className="transcript-density-scale-preview"
+              style={{
+                backgroundImage: transcriptDensityScaleGradient(
+                  transcriptDensityColorScale,
+                ),
+              }}
               aria-hidden="true"
             />
             <span className="transcript-density-scale-values" aria-hidden="true">

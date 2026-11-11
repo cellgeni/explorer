@@ -2197,9 +2197,17 @@ These change almost nothing on screen, but every later step depends on them.
   - Extend `nativeTitleAudit.test.ts` to check these components and
     `<summary>`; it currently checks only native elements.
   - No existing UI is migrated in this PR.
-- [ ] **C. One source for colour scales.** Generate gradient CSS from the
+- [x] **C. One source for colour scales.** Generate gradient CSS from the
       stops in `rendering/deckLayerColors.ts` with `colorScaleGradient(scale)`.
       Replace the hand-copied gradients in `transcript-controls.css:212–398`. (S)
+  - Done 2026-11-11 as two functions, because both families have scales
+    called magma, viridis, cividis and teal with different stops:
+    `geneExpressionScaleGradient(scale)` and
+    `transcriptDensityScaleGradient(scale)`. The 13 CSS rules are gone.
+  - The previews now show the map's own opacity (about 0.5 at the low end for
+    genes and 0.38 for density). The CSS copies used 0.82 and 0.62. A test
+    checks each scale against `geneExpressionColor` and
+    `transcriptDensityColor` at 0, 0.5 and 1.
 - [x] **D. Test indirection.** Replace `openHudTab`
       (`src/test/appTestHarness.ts:171`) with `openControls(area)`. Area names
       follow the new homes and map to today's tabs, and E2E gets the same helper.

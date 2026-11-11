@@ -2,6 +2,7 @@ import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import {
   GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
+  geneExpressionScaleGradient,
   GENE_EXPRESSION_SCORE_MODE_OPTIONS,
   isGeneExpressionColorScale,
   isGeneExpressionScoreMode,
@@ -292,7 +293,10 @@ export function GeneHudPanel({
             ))}
           </select>
           <span
-            className={`gene-scale-preview gene-scale-preview-${geneExpressionColorScale}`}
+            className="gene-scale-preview"
+            style={{
+              backgroundImage: geneExpressionScaleGradient(geneExpressionColorScale),
+            }}
             aria-hidden="true"
           />
           <div className="gene-scale-values" aria-label="Gene scale values">
