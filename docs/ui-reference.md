@@ -92,11 +92,30 @@ dataset open, the start screen comes back with the error above the form
 | Measure ▾      | While measuring: `Measure unit` (µm or px, starting at the mouse coordinate unit) and `Clear Measurement`                                                                                       |
 | Magic Lens ▾   | `Radius` (10–500 µm, step 10; 80 µm) and `Summarise View`, which scans the whole view into the Magic Lens card                                                                                  |
 | `Share`        | Copies the link (the address, which holds the view) and says "Link copied"                                                                                                                      |
-| `Help`         | Lists the keyboard shortcuts, from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the table the key handlers read                                                                             |
+| `Help`         | `?` opens and closes it. Lists the keyboard shortcuts, from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the table the key handlers read, and links to the guides on GitHub (`HELP_LINKS`)  |
 | `Settings`     | See [Settings](#settings)                                                                                                                                                                       |
 
-The tool letters, `F` and `\` work anywhere except in a text field, and leave
-keys with Ctrl, Alt or Cmd alone (`useToolShortcuts`).
+The tool letters, `F`, `\` and `?` work anywhere except in a text field, and
+leave keys with Ctrl, Alt or Cmd alone (`useToolShortcuts`; `\` in
+`ShellLayout`, `?` in `TopBar`).
+
+Help's guides are the [User guide](user-guide.md), "What can I open?"
+([Loading data](user-guide.md#loading-data)),
+[Host your own data](host-your-own-data.md) and this page, each opening in a
+new tab (`src/features/shell/docLinks.ts`).
+
+**Info tips** (`InfoTip`, `src/components/ui/InfoTip.tsx`, 15.3-B): a small ⓘ
+after some labels explains the term on hover, keyboard focus or a tap, and
+describes its button (`About {term}`) for screen readers. The texts are in
+`src/features/shell/helpText.ts`:
+
+| Beside                                   | Explains                                                                 |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| Cells › Advanced › `Expression detail`   | Level of detail (LOD): Auto LOD's samples, Exact region and All cells    |
+| Cells › `Combine genes`                  | Sum, Mean and Z-score                                                    |
+| Transcripts › `Detail`                   | Level of detail: when Auto shows points or density                       |
+| Transcripts › `Min QV`                   | The Phred-scaled quality value, and that density always counts QV ≥ 20   |
+| Settings and Advanced › `Boundary limit` | When outlines are drawn instead of points, and what a higher limit costs |
 
 One tool is on at a time (`activeTool`, `src/features/app-shell/activeToolModel.ts`,
 D8). Turning one on turns the others off. While a tool other than Pan is on,

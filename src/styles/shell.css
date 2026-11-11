@@ -416,6 +416,41 @@
   color: var(--text-2);
 }
 
+/* Help's guide links (15.3-B), each 24 px tall for WCAG 2.2 target size. */
+.shell-help-links {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.shell-help-links h3 {
+  margin: 0 0 var(--space-1);
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-weight: 700;
+}
+
+.shell-help-links ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shell-help-links a {
+  display: block;
+  padding: 4px 0;
+  color: var(--accent);
+  font-size: var(--font-control);
+  line-height: 16px;
+  text-underline-offset: 2px;
+}
+
+.shell-help-links a:focus-visible {
+  border-radius: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .shell-settings {
   min-width: 260px;
 }

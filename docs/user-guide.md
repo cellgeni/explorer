@@ -64,6 +64,11 @@ focusable:
 - `+` and `-` zoom in and out.
 - `Home` resets to the fitted dataset view.
 
+`?` (or the Help button in the top bar) lists every keyboard shortcut and links
+to these guides. A small ⓘ beside some controls, such as `Expression detail`,
+`Combine genes`, `Min QV` and `Boundary limit`, explains the term when you
+point at it, tab to it or tap it.
+
 The URL hash updates with the current dataset URL, viewport, selected genes,
 ROI, open panels, tool, cell card, hidden layers, and control state. `Share` in
 the top bar copies the link to share the same view. Older links with `tab=`

@@ -245,7 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                               |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)               |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                               |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M3 done (2026-11-11); 15.3-A done; B, C, D next |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M3 done (2026-11-11); 15.3 A, B done; C, D next |
 
 ---
 
@@ -1913,7 +1913,7 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2 A–J),
 done 2026-11-11: it is the only shell. In M4, the start screen (15.3-A)
-is done. The user asked for a usability review of the
+and Help (15.3-B) are done. The user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
 - The UI review of 2026-11-10. It walked through eight tasks on the hosted
@@ -2963,11 +2963,28 @@ viewport`; the pinned transcript is in the Transcript card, and the
       `examples.spec.ts` reads the real index. The axe walk covers the start
       screen and the menu; its menu links are 24 px tall for WCAG 2.2
       target size.
-- [ ] **B. Help (F22).** (S)
+- [x] **B. Help (F22).** (S)
   - A `?` popover listing the shortcuts and linking to the user guide and
     dataset docs.
   - The list comes from the same `SHORTCUTS` table the key handlers use.
   - Add info tooltips for LOD, QV, Boundary limit and Combine genes.
+  - Done 2026-11-11. Help (`HelpMenu` in `TopBar.tsx`) is controlled, and
+    `?` opens and closes it except while typing (`isHelpKey`, which allows
+    Shift); `?` is in `SHORTCUTS`. Under the shortcuts, Guides links to the
+    user guide, its Loading data section, Host your own data and the UI
+    reference on GitHub (`HELP_LINKS`, `shell/docLinks.ts`, which the start
+    screen's "What can I open?" also uses), in a new tab.
+  - The zoom keys are listed as `+` and `-`, the keys typed; the table said
+    `−` (U+2212), which no key types.
+  - `InfoTip` is a new primitive (with a required `title`, so the audit and
+    the `@ts-expect-error` list cover it): a 24 px ⓘ button named "About
+    {term}" with a wrapping Tooltip that describes it. Tooltip gained
+    `align="start"` and `wide`, so the text stays inside the layer panel.
+  - Tips sit beside `Expression detail` and the Transcripts `Detail` (both
+    LOD), `Min QV`, `Boundary limit` (Settings and Advanced) and `Combine
+genes`; their texts are in `shell/helpText.ts` and follow
+    `docs/ui-reference.md`. `helpText.test.tsx` renders each block and
+    checks the description.
 - [ ] **C. Undo (F17).** (M)
   - Show an Undo toast for 8 s after: Clear selection; delete a selection,
     shape or class; remove an annotation set; Clear GeoJSON; remove a gene
@@ -3329,7 +3346,7 @@ Sequencing:
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
       M3, the new shell (15.2), is done; M4 (15.3) is under way, with the
-      start screen (15.3-A) done.
+      start screen (15.3-A) and Help (15.3-B) done.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 

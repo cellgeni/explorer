@@ -9,6 +9,7 @@ import {
   Disclosure,
   Drawer,
   IconButton,
+  InfoTip,
   Kbd,
   NumberField,
   Popover,
@@ -68,9 +69,11 @@ describe('UI primitives', () => {
       <Sheet expanded onExpandedChange={noop}>
         Body
       </Sheet>,
+      // @ts-expect-error title is required
+      <InfoTip>Explanation</InfoTip>,
     ]
 
-    expect(elements).toHaveLength(16)
+    expect(elements).toHaveLength(17)
   })
 
   it('renders buttons with a native title, a type and an icon label', () => {
@@ -338,6 +341,19 @@ describe('UI primitives', () => {
     expect(tooltip).toBeVisible()
     fireEvent.pointerLeave(button)
     expect(tooltip).not.toBeVisible()
+  })
+
+  it('explains a term from a small button, on focus or hover', () => {
+    render(<InfoTip title="Min QV">Quality value, on the Phred scale.</InfoTip>)
+
+    const button = screen.getByRole('button', { name: 'About Min QV' })
+    expect(button).toHaveAccessibleDescription('Quality value, on the Phred scale.')
+    const tooltip = screen.getByRole('tooltip', { hidden: true })
+    expect(tooltip).toHaveClass('ui-tooltip--wide', 'ui-tooltip--start')
+    expect(tooltip).not.toBeVisible()
+
+    fireEvent.focus(button)
+    expect(tooltip).toBeVisible()
   })
 
   it('names a card by its title and closes it', () => {
