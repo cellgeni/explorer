@@ -2213,9 +2213,16 @@ These change almost nothing on screen, but every later step depends on them.
     for example `image` and then `cell-appearance` on today's Layers tab.
   - Not covered: tests that use the Dataset tab without clicking it, because
     it is open by default. 15.2-J must add `openControls` calls there.
-- [ ] **E. Defaults constant.** Add `DEFAULT_SHAREABLE_STATE`, taken from the
+- [x] **E. Defaults constant.** Add `DEFAULT_SHAREABLE_STATE`, taken from the
       same defaults that `useAppDomainState.ts` uses, plus a test that checks they
       agree. 15.1-L needs it. (S)
+  - Done 2026-11-11 in `features/app-shell/shareableDefaults.ts`.
+    `useAppDomainState` now reads its starting values from it, and
+    `shareableDefaults.test.tsx` checks that the hook starts with exactly these
+    values and keeps them when a link spells them all out.
+  - Settings that depend on the dataset have no default. Neither does the
+    boundary limit, which comes from the device's performance budget, so
+    15.1-L must keep writing it.
 - [ ] **F. Accessibility check.** Add `@axe-core/playwright` (pinned, dev
       only) and run axe in the E2E smoke tests on the main states: the empty
       viewer, a loaded fixture, and each tab open. (S)
