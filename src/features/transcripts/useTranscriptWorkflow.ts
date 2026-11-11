@@ -1,4 +1,11 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import {
   TRANSCRIPT_GROUP_LIMIT,
@@ -41,6 +48,7 @@ import {
   transcriptCapabilityReady,
   transcriptCapabilityStarted,
   transcriptLayerAggregate,
+  transcriptLayerCancelled,
   transcriptLayerFailed,
   transcriptLayerLoading,
   transcriptLayerReady,
@@ -116,6 +124,7 @@ interface UseTranscriptWorkflowRefs {
 }
 
 interface UseTranscriptWorkflowSetters {
+  readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
   readonly setTranscriptCapabilityState: Dispatch<
     SetStateAction<TranscriptCapabilityState<StructuredLoadError>>
   >
@@ -131,6 +140,20 @@ interface UseTranscriptWorkflowOptions {
   readonly loaders: UseTranscriptWorkflowLoaders
   readonly refs: UseTranscriptWorkflowRefs
   readonly setters: UseTranscriptWorkflowSetters
+}
+
+interface UseTranscriptWorkflowResult {
+  // Cancel in the loading list (15.3-D): stops the transcript read and goes
+  // back to what showed before it.
+  readonly cancelTranscriptLoad: () => void
+  // Exact tiles read, 0 to 1, while a native Zarr exact read runs.
+  readonly transcriptLoadProgress: number | undefined
+}
+
+// Progress of one exact read, so a finished read does not clear a newer one.
+interface ExactLoadProgress {
+  readonly requestId: number
+  readonly fraction: number
 }
 
 export function useTranscriptWorkflow({
@@ -166,9 +189,24 @@ export function useTranscriptWorkflow({
     transcriptRequestIdRef,
     transcriptViewportKeyRef,
   },
-  setters: { setTranscriptCapabilityState, setTranscriptLayerState },
-}: UseTranscriptWorkflowOptions): void {
+  setters: {
+    setManualTranscriptExactRequestKey,
+    setTranscriptCapabilityState,
+    setTranscriptLayerState,
+  },
+}: UseTranscriptWorkflowOptions): UseTranscriptWorkflowResult {
   const [geneAggregate, setGeneAggregate] = useState<GeneAggregate | null>(null)
+  const [exactLoadProgress, setExactLoadProgress] = useState<ExactLoadProgress | null>(
+    null,
+  )
+  // The per-gene density read in flight, and the one last cancelled. A
+  // cancelled read starts again only once the view or genes change. Exact
+  // and all-gene density reads use transcriptViewportKeyRef for the same.
+  const geneAggregateRequestRef = useRef<{
+    readonly requestId: number
+    readonly key: string
+  } | null>(null)
+  const cancelledGeneAggregateKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (
@@ -389,10 +427,19 @@ export function useTranscriptWorkflow({
       )
 
       if (geneAggregate?.key !== aggregateKey) {
+        if (cancelledGeneAggregateKeyRef.current === aggregateKey) {
+          return
+        }
+
+        cancelledGeneAggregateKeyRef.current = null
         const request = startLatestRequest({
           abortRef: transcriptAbortRef,
           requestIdRef: transcriptRequestIdRef,
         })
+        geneAggregateRequestRef.current = {
+          requestId: request.requestId,
+          key: aggregateKey,
+        }
         const transcriptStartedAt = readTimestamp()
         const previousEstimate = geneAggregate?.result.visibleTranscriptCount ?? 0
         // The layer turns to loading, so whatever the estimate picks loads again.
@@ -786,6 +833,7 @@ export function useTranscriptWorkflow({
 
     let didExactQueryTimeOut = false
     let exactQueryTimeout: number | null = null
+    let progressPercent = -1
     const startTimeout = window.setTimeout(() => {
       if (!request.isCurrent() || request.signal.aborted) {
         return
@@ -821,6 +869,22 @@ export function useTranscriptWorkflow({
         geneOnly: transcriptGeneOnly,
         featureNames,
         onFallback: appendFallbackNotice,
+        // Whole percents only, so a read of many tiles does not re-render
+        // the app for each one.
+        onProgress: (fraction) => {
+          const percent = Math.floor(fraction * 100)
+
+          if (
+            percent === progressPercent ||
+            !request.isCurrent() ||
+            request.signal.aborted
+          ) {
+            return
+          }
+
+          progressPercent = percent
+          setExactLoadProgress({ requestId: request.requestId, fraction })
+        },
       })
         .then((result) => {
           if (didExactQueryTimeOut || !request.isCurrent() || request.signal.aborted) {
@@ -896,6 +960,9 @@ export function useTranscriptWorkflow({
             exactQueryTimeout = null
           }
 
+          setExactLoadProgress((current) =>
+            current?.requestId === request.requestId ? null : current,
+          )
           request.complete()
         })
     }, 220)
@@ -933,4 +1000,35 @@ export function useTranscriptWorkflow({
     transcriptViewportKeyRef,
     visibleTranscriptEstimate,
   ])
+
+  // transcriptViewportKeyRef keeps the cancelled exact or density key, so the
+  // effect does not start it again for the same view. The manual-load key is
+  // cleared, so `Load exact viewport` can start it again.
+  const cancelTranscriptLoad = useCallback(() => {
+    const geneAggregateRequest = geneAggregateRequestRef.current
+
+    if (geneAggregateRequest?.requestId === transcriptRequestIdRef.current) {
+      cancelledGeneAggregateKeyRef.current = geneAggregateRequest.key
+    }
+
+    invalidateLatestRequest({
+      abortRef: transcriptAbortRef,
+      requestIdRef: transcriptRequestIdRef,
+    })
+    setExactLoadProgress(null)
+    setManualTranscriptExactRequestKey(null)
+    setTranscriptLayerState(transcriptLayerCancelled)
+    appendDebugEvent('Cancelled transcripts', { coalesceKey: 'transcript-query' })
+  }, [
+    appendDebugEvent,
+    setManualTranscriptExactRequestKey,
+    setTranscriptLayerState,
+    transcriptAbortRef,
+    transcriptRequestIdRef,
+  ])
+
+  return {
+    cancelTranscriptLoad,
+    transcriptLoadProgress: exactLoadProgress?.fraction,
+  }
 }

@@ -63,6 +63,20 @@ export function analysisEmbeddingLoadReady(
   }
 }
 
+// Cancel (15.3-D): back to the list of embeddings to load, or idle when the
+// dataset listed none.
+export function analysisEmbeddingLoadCancelled<ErrorType>(
+  state: AnalysisEmbeddingState<ErrorType>,
+): AnalysisEmbeddingState<ErrorType> {
+  if (state.status !== 'loading') {
+    return state
+  }
+
+  return state.options === undefined || state.options.length === 0
+    ? IDLE_ANALYSIS_EMBEDDING_STATE
+    : analysisEmbeddingOptionsReady(state.url, state.options)
+}
+
 export function analysisEmbeddingLoadFailed<ErrorType>(
   url: string,
   error: ErrorType,

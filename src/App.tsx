@@ -109,10 +109,12 @@ import {
   appendFallbackNoticeEntry,
   appendDebugLogEntry,
   createLoadingTasks,
+  isCancellableLoadingTaskId,
   createFallbackNoticeEntry,
   createDebugLogEntry,
   downloadTextFile,
   invalidateLatestRequest,
+  type CancellableLoadingTaskId,
   type DebugLogAppendOptions,
 } from './features/app-shell/appRuntimeModel'
 import {
@@ -1245,76 +1247,6 @@ export function App({ dependencies }: AppProps = {}) {
         : null,
     [activeVisiumHdRoiState],
   )
-  const loadingTasks = useMemo(
-    () =>
-      createLoadingTasks({
-        analysisEmbeddingState,
-        annotationGroupState,
-        annotationState,
-        autoContrastChannelCount: autoContrastChannelIds.length,
-        boundaryState,
-        cellDetailState,
-        cellTranscriptDistributionState,
-        visiumHdExpressionProfileState: activeVisiumHdExpressionProfileState,
-        datasetWarmupState,
-        diagnosticsState,
-        geneExpressionState,
-        geneExpressionLoadingLabel:
-          geneExpressionState.status === 'loading'
-            ? geneExpressionModeLabel(geneExpressionState.mode)
-            : undefined,
-        visiumHdExpressionProjectionState,
-        genePanelState,
-        isRoiGeneViewportWarmupLoading,
-        // The dataset load in progress, whether or not it replaces one.
-        loadState:
-          pendingDatasetLoadState.status === 'loading'
-            ? pendingDatasetLoadState
-            : loadState,
-        magicLensState,
-        magicLensLoadingScopeLabel:
-          magicLensState.status === 'loading'
-            ? magicLensScopeLabel(magicLensState.scope)
-            : undefined,
-        morphologyState,
-        customMorphologyLayerState,
-        roiGeneStatsState,
-        roiState,
-        roiTranscriptExportState,
-        transcriptCapabilityState,
-        transcriptLayerState,
-      }),
-    [
-      analysisEmbeddingState,
-      annotationGroupState,
-      annotationState,
-      autoContrastChannelIds.length,
-      boundaryState,
-      cellDetailState,
-      cellTranscriptDistributionState,
-      activeVisiumHdExpressionProfileState,
-      datasetWarmupState,
-      diagnosticsState,
-      geneExpressionState,
-      genePanelState,
-      visiumHdExpressionProjectionState,
-      isRoiGeneViewportWarmupLoading,
-      loadState,
-      magicLensState,
-      morphologyState,
-      customMorphologyLayerState,
-      pendingDatasetLoadState,
-      roiGeneStatsState,
-      roiState,
-      roiTranscriptExportState,
-      transcriptCapabilityState,
-      transcriptLayerState,
-    ],
-  )
-  const loadingAreas = useMemo(
-    () => new Set(loadingTasks.map((task) => task.area)),
-    [loadingTasks],
-  )
   const activeRoiSelection = platformRoiSelection(
     platformAdapter,
     roiState,
@@ -1547,60 +1479,63 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptLayerState,
     ],
   )
-  const { handleDownloadDiagnostics, handleRunDatasetDiagnostics } =
-    useDatasetDiagnosticsWorkflow({
-      callbacks: {
-        appendDebugEvent,
-        recordTelemetry,
-      },
-      controls: {
-        ...(diagnosticsVisiumHdBinSize === undefined
-          ? {}
-          : { visiumHdBinSizeMicrometers: diagnosticsVisiumHdBinSize }),
-      },
-      dump: {
-        openPanels: openPanelIds,
-        activeErrors,
-        boundaryCellLimit,
-        coordinateUnit,
-        datasetUrl,
-        debugLog,
-        diagnosticsState,
-        geneExpressionBatch,
-        geneExpressionColorScale,
-        geneExpressionDetailMode,
-        geneExpressionScoreMode,
-        geneExpressionState,
-        hoveredTranscript,
-        loadState,
-        manualTranscriptExactRequestKey,
-        measurementEnabled,
-        measurementUnit,
-        observationColorMode,
-        performanceBudget,
-        pinnedTranscript,
-        selectedGenes,
-        shareableViewState,
-        shouldLoadMorphology,
-        showTranscriptOverlay: effectiveShowTranscriptOverlay,
-        telemetryEvents,
-        transcriptCapabilityState,
-        transcriptDensityColorScale,
-        transcriptDetailMode,
-        transcriptExactManualLoadRatio: TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
-        transcriptExactPointLimit,
-        transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
-        transcriptGeneOnly,
-        transcriptLayerState,
-        transcriptMinQv,
-        transcriptOpacity,
-        transcriptPointColorMode,
-        transcriptPointSize,
-      },
-      loaders: { runDatasetDiagnostics },
-      refs: { diagnosticsAbortRef },
-      setters: { setDiagnosticsState },
-    })
+  const {
+    handleCancelDatasetDiagnostics,
+    handleDownloadDiagnostics,
+    handleRunDatasetDiagnostics,
+  } = useDatasetDiagnosticsWorkflow({
+    callbacks: {
+      appendDebugEvent,
+      recordTelemetry,
+    },
+    controls: {
+      ...(diagnosticsVisiumHdBinSize === undefined
+        ? {}
+        : { visiumHdBinSizeMicrometers: diagnosticsVisiumHdBinSize }),
+    },
+    dump: {
+      openPanels: openPanelIds,
+      activeErrors,
+      boundaryCellLimit,
+      coordinateUnit,
+      datasetUrl,
+      debugLog,
+      diagnosticsState,
+      geneExpressionBatch,
+      geneExpressionColorScale,
+      geneExpressionDetailMode,
+      geneExpressionScoreMode,
+      geneExpressionState,
+      hoveredTranscript,
+      loadState,
+      manualTranscriptExactRequestKey,
+      measurementEnabled,
+      measurementUnit,
+      observationColorMode,
+      performanceBudget,
+      pinnedTranscript,
+      selectedGenes,
+      shareableViewState,
+      shouldLoadMorphology,
+      showTranscriptOverlay: effectiveShowTranscriptOverlay,
+      telemetryEvents,
+      transcriptCapabilityState,
+      transcriptDensityColorScale,
+      transcriptDetailMode,
+      transcriptExactManualLoadRatio: TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
+      transcriptExactPointLimit,
+      transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
+      transcriptGeneOnly,
+      transcriptLayerState,
+      transcriptMinQv,
+      transcriptOpacity,
+      transcriptPointColorMode,
+      transcriptPointSize,
+    },
+    loaders: { runDatasetDiagnostics },
+    refs: { diagnosticsAbortRef },
+    setters: { setDiagnosticsState },
+  })
   const handleImageTileError = useCallback(
     (error: Error) => {
       setMorphologyState((current) => {
@@ -1957,7 +1892,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleViewportChange(detail)
   }, [boundaryOverlayRequestKey, handleViewportChange, loadState.status])
 
-  useTranscriptWorkflow({
+  const { cancelTranscriptLoad, transcriptLoadProgress } = useTranscriptWorkflow({
     callbacks: {
       appendDebugEvent,
       appendFallbackNotice,
@@ -1994,12 +1929,86 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptViewportKeyRef,
     },
     setters: {
+      setManualTranscriptExactRequestKey,
       setTranscriptCapabilityState,
       setTranscriptLayerState,
     },
   })
+  // Built after the transcript workflow, which reports exact-read progress.
+  const loadingTasks = useMemo(
+    () =>
+      createLoadingTasks({
+        analysisEmbeddingState,
+        annotationGroupState,
+        annotationState,
+        autoContrastChannelCount: autoContrastChannelIds.length,
+        boundaryState,
+        cellDetailState,
+        cellTranscriptDistributionState,
+        visiumHdExpressionProfileState: activeVisiumHdExpressionProfileState,
+        datasetWarmupState,
+        diagnosticsState,
+        geneExpressionState,
+        geneExpressionLoadingLabel:
+          geneExpressionState.status === 'loading'
+            ? geneExpressionModeLabel(geneExpressionState.mode)
+            : undefined,
+        visiumHdExpressionProjectionState,
+        genePanelState,
+        isRoiGeneViewportWarmupLoading,
+        // The dataset load in progress, whether or not it replaces one.
+        loadState:
+          pendingDatasetLoadState.status === 'loading'
+            ? pendingDatasetLoadState
+            : loadState,
+        magicLensState,
+        magicLensLoadingScopeLabel:
+          magicLensState.status === 'loading'
+            ? magicLensScopeLabel(magicLensState.scope)
+            : undefined,
+        morphologyState,
+        customMorphologyLayerState,
+        roiGeneStatsState,
+        roiState,
+        roiTranscriptExportState,
+        transcriptCapabilityState,
+        transcriptLayerState,
+        transcriptLoadProgress,
+      }),
+    [
+      analysisEmbeddingState,
+      annotationGroupState,
+      annotationState,
+      autoContrastChannelIds.length,
+      boundaryState,
+      cellDetailState,
+      cellTranscriptDistributionState,
+      activeVisiumHdExpressionProfileState,
+      datasetWarmupState,
+      diagnosticsState,
+      geneExpressionState,
+      genePanelState,
+      visiumHdExpressionProjectionState,
+      isRoiGeneViewportWarmupLoading,
+      loadState,
+      magicLensState,
+      morphologyState,
+      customMorphologyLayerState,
+      pendingDatasetLoadState,
+      roiGeneStatsState,
+      roiState,
+      roiTranscriptExportState,
+      transcriptCapabilityState,
+      transcriptLayerState,
+      transcriptLoadProgress,
+    ],
+  )
+  const loadingAreas = useMemo(
+    () => new Set(loadingTasks.map((task) => task.area)),
+    [loadingTasks],
+  )
 
-  useCellDetailWorkflow({
+  const { cancelCellDetails } = useCellDetailWorkflow({
     callbacks: {
       appendDebugEvent,
       appendFallbackNotice,
@@ -2047,6 +2056,8 @@ export function App({ dependencies }: AppProps = {}) {
   })
 
   const {
+    handleCancelRoiCells,
+    handleCancelRoiGenes,
     handleClearRoi,
     handleExportRoiCells,
     handleExportRoiGeoJson,
@@ -2363,32 +2374,35 @@ export function App({ dependencies }: AppProps = {}) {
     setSelectedAnnotationGroupId,
   ])
 
-  const { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings } =
-    useAnalysisEmbeddingWorkflow({
-      callbacks: {
-        appendDebugEvent,
-        appendFallbackNotice,
-        onSelectedCellFocus: focusSpatialViewOnCell,
-      },
-      data: {
-        analysisEmbeddingState,
-        loadState,
-        overviewCellById,
-        selectedEmbeddingKind,
-      },
-      loaders: {
-        loadAnalysisEmbeddings: loadActiveAnalysisEmbeddings,
-      },
-      refs: {
-        analysisEmbeddingAbortRef,
-        analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
-      },
-      setters: {
-        setAnalysisEmbeddingState,
-        setSelectedCell,
-        setSelectedEmbeddingKind,
-      },
-    })
+  const {
+    handleCancelAnalysisEmbeddings,
+    handleEmbeddingCellSelect,
+    handleLoadAnalysisEmbeddings,
+  } = useAnalysisEmbeddingWorkflow({
+    callbacks: {
+      appendDebugEvent,
+      appendFallbackNotice,
+      onSelectedCellFocus: focusSpatialViewOnCell,
+    },
+    data: {
+      analysisEmbeddingState,
+      loadState,
+      overviewCellById,
+      selectedEmbeddingKind,
+    },
+    loaders: {
+      loadAnalysisEmbeddings: loadActiveAnalysisEmbeddings,
+    },
+    refs: {
+      analysisEmbeddingAbortRef,
+      analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
+    },
+    setters: {
+      setAnalysisEmbeddingState,
+      setSelectedCell,
+      setSelectedEmbeddingKind,
+    },
+  })
   const handleEmbeddingElementSelect = useCallback(
     (elementId: string) => {
       if (!isVisiumHdDataset) {
@@ -2496,6 +2510,7 @@ export function App({ dependencies }: AppProps = {}) {
   )
 
   const {
+    handleCancelMagicLens,
     handleMagicLensClear,
     handleMagicLensCursorActiveChange,
     handleMagicLensLeave,
@@ -2701,7 +2716,7 @@ export function App({ dependencies }: AppProps = {}) {
     loadedDatasetUrl,
   ])
 
-  const { handleDatasetSubmit } = useDatasetLifecycle({
+  const { cancelDatasetLoad, handleDatasetSubmit } = useDatasetLifecycle({
     callbacks: {
       appendDebugEvent,
       appendFallbackNotice,
@@ -2711,6 +2726,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     controls: {
       isDatasetLoaded: loadState.status === 'ready',
+      isDatasetLoading: loadState.status === 'loading',
       geneExpressionColorScale,
       transcriptDensityColorScale,
       transcriptExactPointLimit,
@@ -2849,6 +2865,35 @@ export function App({ dependencies }: AppProps = {}) {
       setViewportCellCount,
     },
   })
+  // Cancel in the loading list (15.3-D). ViewerCore gets one stable
+  // callback, so deck.gl never sees a new prop; it calls the latest
+  // handlers, and only for a task still in the list.
+  const cancelLoadingTaskRef = useRef<(id: string) => void>(() => undefined)
+  useEffect(() => {
+    const cancelTask: Record<CancellableLoadingTaskId, () => void> = {
+      dataset: cancelDatasetLoad,
+      'dataset-diagnostics': handleCancelDatasetDiagnostics,
+      'transcript-overlay': cancelTranscriptLoad,
+      'magic-lens': handleCancelMagicLens,
+      embeddings: handleCancelAnalysisEmbeddings,
+      'cell-details': cancelCellDetails,
+      'cell-transcripts': cancelCellDetails,
+      'roi-cells': handleCancelRoiCells,
+      'roi-genes': handleCancelRoiGenes,
+    }
+
+    cancelLoadingTaskRef.current = (id) => {
+      if (
+        isCancellableLoadingTaskId(id) &&
+        loadingTasks.some((task) => task.id === id && task.cancellable === true)
+      ) {
+        cancelTask[id]()
+      }
+    }
+  })
+  const handleCancelLoadingTask = useCallback((id: string) => {
+    cancelLoadingTaskRef.current(id)
+  }, [])
 
   const handleSpatialDataSelectionChange = useCallback(
     (selection: SpatialDataSelection) => {
@@ -3557,6 +3602,7 @@ export function App({ dependencies }: AppProps = {}) {
         annotationStyleColors={annotationStyleColors}
         cellMetadataTrack={activeCellMetadataTrack}
         loadingTasks={loadingTasks}
+        onCancelLoadingTask={handleCancelLoadingTask}
         legendSections={legendSections}
         showZoomLevel={debugMode}
         selectionHighlight={selectionHighlight}

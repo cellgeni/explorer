@@ -2126,6 +2126,78 @@ describe('App', () => {
     expect(screen.queryByRole('alert', { name: 'Load issues' })).not.toBeInTheDocument()
   })
 
+  it('cancels diagnostics from the loading list without an error (15.3-D)', async () => {
+    let signal: AbortSignal | undefined
+    const runDatasetDiagnostics: ReturnType<typeof vi.fn<DatasetDiagnosticsRunner>> =
+      vi.fn((_url, options) => {
+        signal = options?.signal
+        return pendingPromise<Awaited<ReturnType<DatasetDiagnosticsRunner>>>()
+      })
+
+    render(<TestApp runDatasetDiagnostics={runDatasetDiagnostics} />)
+    openControls('diagnostics')
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnose Dataset' }))
+
+    const list = await screen.findByRole('status', { name: 'Active loading tasks' })
+    expect(list).toHaveTextContent('Diagnosing dataset')
+    fireEvent.click(
+      within(list).getByRole('button', { name: 'Cancel diagnosing dataset' }),
+    )
+
+    expect(signal?.aborted).toBe(true)
+    expect(
+      screen.queryByRole('status', { name: 'Active loading tasks' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByLabelText('Activity log')).getByText('Cancelled diagnostics'),
+    ).toBeInTheDocument()
+  })
+
+  it('cancels loading another dataset and keeps the open one (15.3-D)', async () => {
+    const nextUrl = 'https://example.test/next'
+    let nextSignal: AbortSignal | undefined
+    const loadDatasetOverview = vi.fn<DatasetOverviewLoader>(async (baseUrl, options) => {
+      if (baseUrl === nextUrl) {
+        nextSignal = options?.signal
+        return pendingPromise()
+      }
+
+      return [
+        {
+          cellId: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 8,
+        },
+      ]
+    })
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByText(/^Xenium · 1 cell/)
+
+    openControls('open-dataset')
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: nextUrl },
+    })
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const list = await screen.findByRole('status', { name: 'Active loading tasks' })
+    await waitFor(() => {
+      expect(list).toHaveTextContent('next')
+    })
+    fireEvent.click(within(list).getByRole('button', { name: 'Cancel loading dataset' }))
+
+    expect(nextSignal?.aborted).toBe(true)
+    expect(screen.getByText(/^Xenium · 1 cell/)).toBeInTheDocument()
+    expect(screen.getByTestId('deckgl')).toBeInTheDocument()
+    expect(screen.queryByText(/could not be opened/)).not.toBeInTheDocument()
+    openControls('open-dataset')
+    expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeEnabled()
+  })
+
   it('scans current viewport cells with the magic lens', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
