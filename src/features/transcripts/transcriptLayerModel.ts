@@ -80,6 +80,8 @@ export type TranscriptLayerState<
       readonly url: string
       readonly visibleTranscriptEstimate: number
       readonly previousLayer?: TranscriptRetainedLayerState
+      // What showed before the load, for Cancel (15.3-D).
+      readonly previousState?: SettledTranscriptLayerState<ErrorType>
     }
   | {
       readonly status: 'ready'
@@ -95,6 +97,10 @@ export type TranscriptLayerState<
       readonly url: string
       readonly error: ErrorType
     }
+
+export type SettledTranscriptLayerState<
+  ErrorType extends TranscriptLoadErrorSummary = TranscriptLoadErrorSummary,
+> = Exclude<TranscriptLayerState<ErrorType>, { readonly status: 'loading' }>
 
 export const IDLE_TRANSCRIPT_CAPABILITY_STATE: TranscriptCapabilityState<never> = {
   status: 'idle',
@@ -158,13 +164,33 @@ export function transcriptLayerLoading<ErrorType extends TranscriptLoadErrorSumm
   visibleTranscriptEstimate: number,
 ): TranscriptLayerState<ErrorType> {
   const previousLayer = retainedTranscriptLayerState(current)
+  const previousState = current.status === 'loading' ? current.previousState : current
 
   return {
     status: 'loading',
     url,
     visibleTranscriptEstimate,
     ...(previousLayer === undefined ? {} : { previousLayer }),
+    ...(previousState === undefined || previousState.status === 'idle'
+      ? {}
+      : { previousState }),
   }
+}
+
+// Cancel (15.3-D) goes back to what showed before the load. A cancel is not
+// an error, so an earlier error is not shown again.
+export function transcriptLayerCancelled<ErrorType extends TranscriptLoadErrorSummary>(
+  current: TranscriptLayerState<ErrorType>,
+): TranscriptLayerState<ErrorType> {
+  if (current.status !== 'loading') {
+    return current
+  }
+
+  const previousState = current.previousState
+
+  return previousState === undefined || previousState.status === 'error'
+    ? IDLE_TRANSCRIPT_LAYER_STATE
+    : previousState
 }
 
 interface TranscriptLayerAggregateOptions {

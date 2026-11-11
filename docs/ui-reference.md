@@ -121,7 +121,9 @@ One tool is on at a time (`activeTool`, `src/features/app-shell/activeToolModel.
 D8). Turning one on turns the others off. While a tool other than Pan is on,
 the top of the canvas says what to do, such as "Drag to draw a box. Esc
 cancels." Esc, anywhere except a text field, returns to Pan and drops a
-half-drawn shape; finishing a box or lasso also returns to Pan.
+half-drawn shape; finishing a box or lasso also returns to Pan. An Esc that
+closes a popover, the info drawer, the Embedding panel or a shown tooltip
+does only that, and the tool stays.
 
 - **Box selection** and **Lasso selection** draw a selection (see
   [ROI drawing](#roi-drawing)); its results open in the Selection card. On an
@@ -509,6 +511,29 @@ coordinates` unit.
 - Bottom left: the legend, the loading indicator (current task plus up to 3
   more) and viewport messages ("Loading overview cells…", "Reading OME-TIFF
   image…", errors).
+- Tasks that can be stopped have `Cancel` in the loading indicator (Phase
+  15.3-D), named after the task ("Cancel querying ROI genes"). They are never
+  folded into "+n more". Cancelling stops the requests and returns that part
+  to how it was before; it is not an error, and the activity log says
+  "Cancelled …".
+
+  | Task                                      | After Cancel                                                                |
+  | ----------------------------------------- | --------------------------------------------------------------------------- |
+  | Loading dataset                           | Replacing a dataset: the open one stays. With nothing open: no dataset      |
+  | Diagnosing dataset                        | No report                                                                   |
+  | Loading transcripts                       | What showed before: the earlier points or squares, or `Load exact viewport` |
+  | Scanning magic lens                       | No result; the lens stays on and scans again when it moves                  |
+  | Loading embeddings                        | `Load Embeddings` again                                                     |
+  | Loading cell details, cell z distribution | The Cell card's sections read "Waiting" until another cell is selected      |
+  | Querying ROI cells                        | No ROI                                                                      |
+  | Querying ROI genes                        | The ROI and its cells stay, without top genes                               |
+
+  A cancelled transcript read, Magic Lens scan or cell load does not start
+  again for the same view, cursor position or cell.
+
+- Exact transcript points from `transcripts.zarr.zip` show a percentage: the
+  share of the view's tiles read. Other tasks do not know how far they have
+  got and show none.
 - Bottom centre, above the readout: toasts (`.viewer-toasts`): a failed load
   while another dataset stays open, and [Undo](#undo).
 - Before any dataset: the [start screen](#start-screen).
@@ -554,15 +579,16 @@ The same form opens from the dataset name in the top bar, with Recent and
 Examples below it, and shows on the [start screen](#start-screen)
 (`OpenDatasetForm`, `src/features/sections/DatasetInfoBlocks.tsx`).
 
-| Control                                                      | Type      | Values / default                       | Notes                                                                                                                                                     |
-| ------------------------------------------------------------ | --------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Dataset or image URL`                                       | URL input | Empty, or `dataset` from the share URL | Any supported source or [dataset manifest](./dataset-manifest.md); see [Architecture](./architecture.md#1-detection)                                      |
-| `Morphology image` (`Tissue image` for Visium and Visium HD) | Checkbox  | On                                     | Read when `Load Dataset` is pressed; off skips the image                                                                                                  |
-| `Boundary limit` (under Advanced)                            | Number    | As in [Settings](#settings)            | Not on the start screen                                                                                                                                   |
-| `Load Dataset`                                               | Submit    |                                        | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then |
+| Control                                                      | Type      | Values / default                       | Notes                                                                                                                                                                                     |
+| ------------------------------------------------------------ | --------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Dataset or image URL`                                       | URL input | Empty, or `dataset` from the share URL | Any supported source or [dataset manifest](./dataset-manifest.md); see [Architecture](./architecture.md#1-detection)                                                                      |
+| `Morphology image` (`Tissue image` for Visium and Visium HD) | Checkbox  | On                                     | Read when `Load Dataset` is pressed; off skips the image                                                                                                                                  |
+| `Boundary limit` (under Advanced)                            | Number    | As in [Settings](#settings)            | Not on the start screen                                                                                                                                                                   |
+| `Load Dataset`                                               | Submit    |                                        | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then, or until the load is cancelled |
 
 The open dataset stays on screen and usable while another loads (Phase
-15.1-F); the loading list shows "Loading dataset {name}". If the new one
+15.1-F); the loading list shows "Loading dataset {name}", with `Cancel`,
+which drops the new load and keeps the open one (15.3-D). If the new one
 fails, the open one stays and a toast at the bottom of the view says so
 ("Dataset not found: missing could not be opened; {open dataset} is still
 open.", with the error's next step and `Dismiss`). Diagnostics lists the full
@@ -659,8 +685,9 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 160 ms, with `xv=2`); query-string values are also read on startup, and hash
 values win. Numbers are rounded to three decimals. Version 2 links leave out
 every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a missing
-parameter means the default. Version 1 links, which wrote every value, still
-open as before. `Share` in the top bar copies the address and says "Link
+parameter means the default. `cellBounds` and `nucleusBounds` are always
+written, because a load picks their default by platform when a link is
+silent. Version 1 links, which wrote every value, still open as before. `Share` in the top bar copies the address and says "Link
 copied".
 
 Opening another dataset adds a browser history entry; every other change

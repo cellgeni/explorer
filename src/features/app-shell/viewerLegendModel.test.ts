@@ -14,7 +14,7 @@ function input(overrides: Partial<ViewerLegendInput> = {}): ViewerLegendInput {
       scoreMode: 'sum',
       colorScale: 'plasma',
       scaleMax: 0,
-      loading: false,
+      status: 'ready',
     },
     annotations: null,
     metadataTrack: null,
@@ -51,6 +51,21 @@ describe('viewerLegendSections', () => {
       title: 'A, B, C +1',
       detail: 'Mean of 4 genes per cell',
     })
+  })
+
+  it('says when expression is loading, or cannot be shown', () => {
+    const genes = { ...input().genes, names: ['SNAP25'] }
+    const sections = (status: ViewerLegendInput['genes']['status']) =>
+      viewerLegendSections(
+        input({ colorMode: 'gene-expression', genes: { ...genes, status } }),
+      )
+
+    expect(sections('loading')).toEqual([
+      expect.objectContaining({ detail: 'Loading expression' }),
+    ])
+    expect(sections('unavailable')).toEqual([
+      expect.objectContaining({ detail: 'Expression unavailable' }),
+    ])
   })
 
   it('leaves out the cell colour while the cells are hidden', () => {

@@ -309,6 +309,48 @@ describe('useDatasetDiagnosticsWorkflow', () => {
       report: secondSuccessfulReport,
     })
   })
+
+  it('cancels a run without reporting an error (15.3-D)', async () => {
+    const run = createDeferred<DatasetDiagnosticsReport>()
+    const signals: AbortSignal[] = []
+    const runDatasetDiagnostics = vi.fn((_, options) => {
+      signals.push(options.signal)
+      return run.promise
+    })
+
+    render(
+      <DiagnosticsProbe
+        onReady={(nextApi, nextSnapshot) => {
+          diagnosticsApi = nextApi
+          diagnosticsSnapshot = nextSnapshot
+        }}
+        runDatasetDiagnostics={runDatasetDiagnostics}
+      />,
+    )
+
+    let request!: Promise<void>
+    await act(async () => {
+      request = diagnosticsApi.handleRunDatasetDiagnostics()
+      await Promise.resolve()
+    })
+    expect(diagnosticsSnapshot.diagnosticsState.status).toBe('loading')
+
+    act(() => {
+      diagnosticsApi.handleCancelDatasetDiagnostics()
+    })
+    await act(async () => {
+      const error = new Error('Aborted')
+      error.name = 'AbortError'
+      run.reject(error)
+      await request
+    })
+
+    expect(signals[0]?.aborted).toBe(true)
+    expect(diagnosticsSnapshot.diagnosticsState).toEqual({ status: 'idle' })
+    expect(diagnosticsSnapshot.debugMessages).toContain('Cancelled diagnostics')
+    expect(diagnosticsSnapshot.debugMessages).not.toContain('Diagnostics failed')
+    expect(diagnosticsSnapshot.telemetryEvents).toEqual([])
+  })
 })
 
 function createDeferred<T>() {

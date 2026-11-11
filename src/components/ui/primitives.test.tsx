@@ -343,6 +343,29 @@ describe('UI primitives', () => {
     expect(tooltip).not.toBeVisible()
   })
 
+  it('marks the Escape that closes a popover or a shown tooltip as handled', () => {
+    render(
+      <>
+        <Popover title="Help" trigger="?">
+          Body
+        </Popover>
+        <Tooltip title="Lasso selection">
+          <button type="button">Lasso</button>
+        </Tooltip>
+      </>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '?' }))
+    // fireEvent returns false when a handler called preventDefault.
+    expect(fireEvent.keyDown(document.body, { key: 'Escape' })).toBe(false)
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    const lasso = screen.getByRole('button', { name: 'Lasso' })
+    expect(fireEvent.keyDown(lasso, { key: 'Escape' })).toBe(true)
+    fireEvent.focus(lasso)
+    expect(fireEvent.keyDown(lasso, { key: 'Escape' })).toBe(false)
+  })
+
   it('explains a term from a small button, on focus or hover', () => {
     render(<InfoTip title="Min QV">Quality value, on the Phred scale.</InfoTip>)
 

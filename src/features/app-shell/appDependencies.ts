@@ -189,6 +189,8 @@ export type TranscriptViewportLoader = (
     readonly geneOnly?: boolean
     readonly featureNames?: readonly string[]
     readonly onFallback?: FallbackNotifier
+    // How far the read has got, 0 to 1, where the reader knows.
+    readonly onProgress?: (fraction: number) => void
   },
 ) => Promise<{
   readonly points: readonly TranscriptPoint[]

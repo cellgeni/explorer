@@ -253,6 +253,31 @@ describe('transcriptOverlay', () => {
     }
   })
 
+  it('passes tile progress through to the native exact read (15.3-D)', async () => {
+    const nativeResult = { points: [], groups: [], hitPointLimit: false }
+    const onProgress = vi.fn()
+    transcriptZarrMock.loadTranscriptZarrViewport.mockResolvedValue(nativeResult)
+
+    await expect(
+      loadDatasetTranscriptViewport(
+        'https://example.test/xenium/',
+        {
+          minX: micrometers(0),
+          minY: micrometers(0),
+          maxX: micrometers(10),
+          maxY: micrometers(10),
+        },
+        { validateRangeSupport: vi.fn(async () => undefined), onProgress },
+      ),
+    ).resolves.toEqual(nativeResult)
+
+    expect(transcriptZarrMock.loadTranscriptZarrViewport).toHaveBeenCalledWith(
+      expect.stringContaining('transcripts.zarr.zip'),
+      expect.anything(),
+      expect.objectContaining({ onProgress }),
+    )
+  })
+
   it('falls back to raw transcripts.parquet when native exact Zarr is unavailable', async () => {
     const parquetResult = {
       points: [

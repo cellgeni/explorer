@@ -68,7 +68,10 @@ export function Tooltip({
       }}
       onBlur={hide}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') hide()
+        if (event.key !== 'Escape' || !visible) return
+        // Hiding a shown tooltip is all this press does.
+        event.preventDefault()
+        hide()
       }}
     >
       {cloneElement(children, { 'aria-describedby': id })}

@@ -241,6 +241,7 @@ export function ViewerCore({
   annotationStyleColors = EMPTY_ANNOTATION_STYLE_COLORS,
   cellMetadataTrack = null,
   loadingTasks = EMPTY_LOADING_TASKS,
+  onCancelLoadingTask,
   legendSections = EMPTY_LEGEND_SECTIONS,
   showZoomLevel = false,
   selectionHighlight = null,
@@ -339,6 +340,7 @@ export function ViewerCore({
       annotationStyleColors={annotationStyleColors}
       cellMetadataTrack={cellMetadataTrack}
       loadingTasks={loadingTasks}
+      {...(onCancelLoadingTask === undefined ? {} : { onCancelLoadingTask })}
       legendSections={legendSections}
       showZoomLevel={showZoomLevel}
       selectionHighlight={selectionHighlight}
@@ -422,6 +424,7 @@ interface ViewerSurfaceProps {
   readonly annotationStyleColors: readonly AnnotationColorStyle[]
   readonly cellMetadataTrack: CellMetadataColorStyle | null
   readonly loadingTasks: readonly LoadingTaskSummary[]
+  readonly onCancelLoadingTask?: (id: string) => void
   readonly legendSections: readonly ViewerLegendSection[]
   readonly showZoomLevel: boolean
   readonly selectionHighlight: ViewerSelectionHighlight | null
@@ -501,6 +504,7 @@ function ViewerSurface({
   annotationStyleColors,
   cellMetadataTrack,
   loadingTasks,
+  onCancelLoadingTask,
   legendSections,
   showZoomLevel,
   selectionHighlight,
@@ -1999,7 +2003,7 @@ function ViewerSurface({
             sections={legendSections}
             onCategoryVisibilityChange={onLegendCategoryVisibilityChange}
           />
-          <LoadingIndicator tasks={loadingTasks} />
+          <LoadingIndicator tasks={loadingTasks} onCancel={onCancelLoadingTask} />
           {viewportMessage === null ? null : (
             <p
               className={`viewport-message${viewportMessage.kind === 'error' ? ' viewport-message-error' : ''}`}

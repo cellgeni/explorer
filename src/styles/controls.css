@@ -17,7 +17,9 @@
 .loading-indicator-primary,
 .loading-indicator li {
   display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) auto;
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
+  grid-template-columns: 12px minmax(0, 1fr);
   gap: 6px;
   align-items: center;
   min-width: 0;
@@ -48,6 +50,21 @@
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.loading-task-progress {
+  color: var(--text-1);
+  font-size: var(--font-control);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cancel (15.3-D). The list lets pointer events through to the canvas;
+   its buttons take them. */
+.loading-indicator .loading-task-cancel {
+  min-height: 20px;
+  padding: 0 6px;
+  font-size: var(--font-control);
+  pointer-events: auto;
 }
 
 .loading-indicator ol {

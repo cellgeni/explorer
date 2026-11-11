@@ -54,7 +54,10 @@ export function Drawer({
       hidden={!open}
       className={classNames('ui-drawer', `ui-drawer--${side}`, className)}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose()
+        if (event.key !== 'Escape' || event.defaultPrevented) return
+        // Handled, so the press does not also leave the active tool.
+        event.preventDefault()
+        onClose()
       }}
     >
       <header className="ui-drawer-header">

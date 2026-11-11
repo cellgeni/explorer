@@ -1363,7 +1363,9 @@ describe('App', () => {
     expect(window.location.hash).toMatch(/^#xv=2&/)
     expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Fxenium')
     expect(window.location.hash).toContain('groups=analysis%3A1')
-    expect(window.location.hash).not.toContain('cellBounds')
+    // Boundary toggles are always written: their default depends on the
+    // platform.
+    expect(window.location.hash).toContain('cellBounds=1&nucleusBounds=0')
     expect(window.location.hash).not.toContain('tab=')
     expect(window.location.hash.length).toBeLessThan(200)
   })
@@ -1857,6 +1859,42 @@ describe('App', () => {
       'aria-pressed',
       'true',
     )
+
+    // Esc that closes a popover does only that; the tool stays.
+    fireEvent.keyDown(document.body, { key: 'm' })
+    fireEvent.click(screen.getByRole('button', { name: 'Measure options' }))
+    const options = screen.getByRole('dialog', { name: 'Measure options' })
+    fireEvent.keyDown(options, { key: 'Escape' })
+    expect(
+      screen.queryByRole('dialog', { name: 'Measure options' }),
+    ).not.toBeInTheDocument()
+    expect(within(tools).getByRole('button', { name: 'Measure' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('keeps the Magic Lens of a link through the dataset load', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(DEMO_DATASET_URL)}&tool=magic-lens`,
+    )
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    await screen.findByText(/^Xenium · 1 cell/)
+
+    expect(screen.getByRole('button', { name: 'Magic Lens' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
   })
 
   it('moves the layer controls to the layer panel (15.2-C)', async () => {
@@ -2124,6 +2162,78 @@ describe('App', () => {
     expect(screen.queryByText(/could not be opened/)).not.toBeInTheDocument()
     openControls('diagnostics')
     expect(screen.queryByRole('alert', { name: 'Load issues' })).not.toBeInTheDocument()
+  })
+
+  it('cancels diagnostics from the loading list without an error (15.3-D)', async () => {
+    let signal: AbortSignal | undefined
+    const runDatasetDiagnostics: ReturnType<typeof vi.fn<DatasetDiagnosticsRunner>> =
+      vi.fn((_url, options) => {
+        signal = options?.signal
+        return pendingPromise<Awaited<ReturnType<DatasetDiagnosticsRunner>>>()
+      })
+
+    render(<TestApp runDatasetDiagnostics={runDatasetDiagnostics} />)
+    openControls('diagnostics')
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnose Dataset' }))
+
+    const list = await screen.findByRole('status', { name: 'Active loading tasks' })
+    expect(list).toHaveTextContent('Diagnosing dataset')
+    fireEvent.click(
+      within(list).getByRole('button', { name: 'Cancel diagnosing dataset' }),
+    )
+
+    expect(signal?.aborted).toBe(true)
+    expect(
+      screen.queryByRole('status', { name: 'Active loading tasks' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByLabelText('Activity log')).getByText('Cancelled diagnostics'),
+    ).toBeInTheDocument()
+  })
+
+  it('cancels loading another dataset and keeps the open one (15.3-D)', async () => {
+    const nextUrl = 'https://example.test/next'
+    let nextSignal: AbortSignal | undefined
+    const loadDatasetOverview = vi.fn<DatasetOverviewLoader>(async (baseUrl, options) => {
+      if (baseUrl === nextUrl) {
+        nextSignal = options?.signal
+        return pendingPromise()
+      }
+
+      return [
+        {
+          cellId: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 8,
+        },
+      ]
+    })
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByText(/^Xenium · 1 cell/)
+
+    openControls('open-dataset')
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: nextUrl },
+    })
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const list = await screen.findByRole('status', { name: 'Active loading tasks' })
+    await waitFor(() => {
+      expect(list).toHaveTextContent('next')
+    })
+    fireEvent.click(within(list).getByRole('button', { name: 'Cancel loading dataset' }))
+
+    expect(nextSignal?.aborted).toBe(true)
+    expect(screen.getByText(/^Xenium · 1 cell/)).toBeInTheDocument()
+    expect(screen.getByTestId('deckgl')).toBeInTheDocument()
+    expect(screen.queryByText(/could not be opened/)).not.toBeInTheDocument()
+    openControls('open-dataset')
+    expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeEnabled()
   })
 
   it('scans current viewport cells with the magic lens', async () => {
@@ -4516,6 +4626,10 @@ describe('App', () => {
     openControls('measure')
     expect(screen.getByRole('group', { name: 'Measure unit' })).toBeInTheDocument()
 
+    // The first Esc closes the options; the next leaves the tool.
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('group', { name: 'Measure unit' })).toBeNull()
+    expect(screen.getByText(/Esc stops measuring/)).toBeInTheDocument()
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(screen.queryByText(/Esc stops measuring/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Measure' })).toHaveAttribute(

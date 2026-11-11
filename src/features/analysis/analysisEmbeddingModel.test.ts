@@ -3,6 +3,7 @@ import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
 import { asCellId } from '../../data/cellid'
 import {
   IDLE_ANALYSIS_EMBEDDING_STATE,
+  analysisEmbeddingLoadCancelled,
   analysisEmbeddingLoadFailed,
   analysisEmbeddingLoadReady,
   analysisEmbeddingLoadStarted,
@@ -22,6 +23,23 @@ const embedding: AnalysisEmbedding = {
 }
 
 describe('analysisEmbeddingStatusCopy', () => {
+  it('cancels a load back to the options, or idle without them (15.3-D)', () => {
+    const options = [{ kind: 'umap' as const, label: 'UMAP', sourcePath: 'obsm/X_umap' }]
+
+    expect(
+      analysisEmbeddingLoadCancelled(
+        analysisEmbeddingLoadStarted('https://example.test/output', options),
+      ),
+    ).toEqual(analysisEmbeddingOptionsReady('https://example.test/output', options))
+    expect(
+      analysisEmbeddingLoadCancelled(
+        analysisEmbeddingLoadStarted('https://example.test/output'),
+      ),
+    ).toEqual(IDLE_ANALYSIS_EMBEDDING_STATE)
+    const ready = analysisEmbeddingLoadReady('https://example.test/output', [embedding])
+    expect(analysisEmbeddingLoadCancelled(ready)).toBe(ready)
+  })
+
   it('constructs analysis embedding transitions', () => {
     const error = new Error('failed')
 

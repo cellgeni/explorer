@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import { asCellId } from '../../data/cellid'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import {
@@ -28,6 +28,7 @@ import {
 } from '../errors/loadErrorModel'
 import {
   CELL_GENE_EXPRESSION_LIMIT,
+  IDLE_CELL_DETAIL_STATE,
   IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE,
   cellDetailFailed,
   cellDetailLoading,
@@ -89,6 +90,16 @@ interface UseCellDetailWorkflowOptions {
   readonly setters: UseCellDetailWorkflowSetters
 }
 
+interface UseCellDetailWorkflowResult {
+  // Cancel in the loading list (15.3-D): stops the selected cell's details
+  // and z distribution.
+  readonly cancelCellDetails: () => void
+}
+
+function cellRequestKey(url: string, cellId: string): string {
+  return `${url}\n${cellId}`
+}
+
 export function useCellDetailWorkflow({
   callbacks: { appendDebugEvent, appendFallbackNotice },
   data: {
@@ -105,16 +116,26 @@ export function useCellDetailWorkflow({
     cellTranscriptDistributionRequestIdRef,
   },
   setters: { setCellDetailState, setCellTranscriptDistributionState },
-}: UseCellDetailWorkflowOptions): void {
+}: UseCellDetailWorkflowOptions): UseCellDetailWorkflowResult {
+  // The cell whose loads were cancelled. Its loads start again only once
+  // another cell, or another dataset, is selected.
+  const cancelledCellKeyRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (selectedCell === null || loadState.status !== 'ready') {
       invalidateLatestRequest({
         abortRef: cellDetailAbortRef,
         requestIdRef: cellDetailRequestIdRef,
       })
+      cancelledCellKeyRef.current = null
       return
     }
 
+    if (cancelledCellKeyRef.current === cellRequestKey(loadState.url, selectedCell.id)) {
+      return
+    }
+
+    cancelledCellKeyRef.current = null
     const detailStartedAt = readTimestamp()
     const request = startLatestRequest({
       abortRef: cellDetailAbortRef,
@@ -218,6 +239,23 @@ export function useCellDetailWorkflow({
       queueMicrotask(() => {
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
           setCellTranscriptDistributionState(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
+        }
+      })
+      return
+    }
+
+    if (cancelledCellKeyRef.current === cellRequestKey(loadState.url, selectedCell.id)) {
+      const requestId = invalidateLatestRequest({
+        abortRef: cellTranscriptDistributionAbortRef,
+        requestIdRef: cellTranscriptDistributionRequestIdRef,
+      })
+      queueMicrotask(() => {
+        if (cellTranscriptDistributionRequestIdRef.current === requestId) {
+          setCellTranscriptDistributionState((current) =>
+            current.status === 'loading'
+              ? IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE
+              : current,
+          )
         }
       })
       return
@@ -373,4 +411,39 @@ export function useCellDetailWorkflow({
     setCellTranscriptDistributionState,
     transcriptDistributionEnabled,
   ])
+
+  const cancelCellDetails = useCallback(() => {
+    if (selectedCell === null || loadState.status !== 'ready') {
+      return
+    }
+
+    cancelledCellKeyRef.current = cellRequestKey(loadState.url, selectedCell.id)
+    invalidateLatestRequest({
+      abortRef: cellDetailAbortRef,
+      requestIdRef: cellDetailRequestIdRef,
+    })
+    invalidateLatestRequest({
+      abortRef: cellTranscriptDistributionAbortRef,
+      requestIdRef: cellTranscriptDistributionRequestIdRef,
+    })
+    setCellDetailState((current) =>
+      current.status === 'loading' ? IDLE_CELL_DETAIL_STATE : current,
+    )
+    setCellTranscriptDistributionState((current) =>
+      current.status === 'loading' ? IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE : current,
+    )
+    appendDebugEvent(`Cancelled cell details: ${shortIdentifier(selectedCell.id)}`)
+  }, [
+    appendDebugEvent,
+    cellDetailAbortRef,
+    cellDetailRequestIdRef,
+    cellTranscriptDistributionAbortRef,
+    cellTranscriptDistributionRequestIdRef,
+    loadState,
+    selectedCell,
+    setCellDetailState,
+    setCellTranscriptDistributionState,
+  ])
+
+  return { cancelCellDetails }
 }

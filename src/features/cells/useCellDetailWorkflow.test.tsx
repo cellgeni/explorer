@@ -1,6 +1,8 @@
 import { act, render } from '@testing-library/react'
 import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { RoiGeneStatsLoader } from '../app-shell/appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { CellDetailState, CellTranscriptDistributionState } from './cellDetailModel'
@@ -112,7 +114,133 @@ function Probe({ onReady }: { readonly onReady: (nextSnapshot: Snapshot) => void
   return null
 }
 
+function cellAt(id: string): OverviewCellDatum {
+  return { id, position: [1, -2, 0], radiusPixels: 1, fillColor: [0, 0, 0] }
+}
+
+let cancelCellDetails: () => void = () => undefined
+
+function SelectedCellProbe({
+  selectedCell,
+  loadGeneStats,
+  onReady,
+}: {
+  readonly selectedCell: OverviewCellDatum
+  readonly loadGeneStats: RoiGeneStatsLoader
+  readonly onReady: (nextSnapshot: Snapshot) => void
+}) {
+  const [cellDetailState, setCellDetailState] = React.useState<
+    CellDetailState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [cellTranscriptDistributionState, setCellTranscriptDistributionState] =
+    React.useState<CellTranscriptDistributionState<StructuredLoadError>>({
+      status: 'idle',
+    })
+  const cellDetailAbortRef = React.useRef<AbortController | null>(null)
+  const cellDetailRequestIdRef = React.useRef(0)
+  const cellTranscriptDistributionAbortRef = React.useRef<AbortController | null>(null)
+  const cellTranscriptDistributionRequestIdRef = React.useRef(0)
+
+  const api = useCellDetailWorkflow({
+    callbacks: { appendDebugEvent, appendFallbackNotice },
+    data: { cellDetailState, loadState: readyLoadState, selectedCell },
+    loaders: {
+      loadBoundaryElements,
+      loadCellTranscriptDistribution,
+      loadRoiGeneStats: loadGeneStats,
+    },
+    refs: {
+      cellDetailAbortRef,
+      cellDetailRequestIdRef,
+      cellTranscriptDistributionAbortRef,
+      cellTranscriptDistributionRequestIdRef,
+    },
+    setters: { setCellDetailState, setCellTranscriptDistributionState },
+  })
+
+  React.useEffect(() => {
+    cancelCellDetails = api.cancelCellDetails
+    onReady({
+      cellDetailRequestId: cellDetailRequestIdRef.current,
+      cellDetailState,
+      cellTranscriptDistributionRequestId: cellTranscriptDistributionRequestIdRef.current,
+      cellTranscriptDistributionState,
+    })
+  })
+
+  return null
+}
+
 describe('useCellDetailWorkflow', () => {
+  it("cancels a cell's loads and starts them again only for another cell (15.3-D)", async () => {
+    const signals: AbortSignal[] = []
+    const pendingStats = vi.fn<RoiGeneStatsLoader>((_url, _cells, options) => {
+      if (options?.signal !== undefined) signals.push(options.signal)
+      return new Promise(() => undefined)
+    })
+    const onReady = (nextSnapshot: Snapshot) => {
+      snapshot = nextSnapshot
+    }
+    const { rerender } = render(
+      <SelectedCellProbe
+        selectedCell={cellAt('cell-1')}
+        loadGeneStats={pendingStats}
+        onReady={onReady}
+      />,
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(snapshot.cellDetailState).toMatchObject({
+      status: 'loading',
+      cellId: 'cell-1',
+    })
+    expect(snapshot.cellTranscriptDistributionState).toMatchObject({ status: 'loading' })
+
+    await act(async () => {
+      cancelCellDetails()
+      await Promise.resolve()
+    })
+
+    expect(signals[0]?.aborted).toBe(true)
+    expect(snapshot.cellDetailState).toEqual({ status: 'idle' })
+    expect(snapshot.cellTranscriptDistributionState).toEqual({ status: 'idle' })
+    expect(appendDebugEvent).toHaveBeenCalledWith('Cancelled cell details: cell-1')
+
+    // The effect runs again with a new loader, but not for the same cell.
+    const nextStats = vi.fn<RoiGeneStatsLoader>(() => new Promise(() => undefined))
+    rerender(
+      <SelectedCellProbe
+        selectedCell={cellAt('cell-1')}
+        loadGeneStats={nextStats}
+        onReady={onReady}
+      />,
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(nextStats).not.toHaveBeenCalled()
+    expect(snapshot.cellDetailState).toEqual({ status: 'idle' })
+    expect(snapshot.cellTranscriptDistributionState).toEqual({ status: 'idle' })
+
+    rerender(
+      <SelectedCellProbe
+        selectedCell={cellAt('cell-2')}
+        loadGeneStats={nextStats}
+        onReady={onReady}
+      />,
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(nextStats).toHaveBeenCalledTimes(1)
+    expect(snapshot.cellDetailState).toMatchObject({
+      status: 'loading',
+      cellId: 'cell-2',
+    })
+  })
+
   it('invalidates selected-cell detail and transcript distribution when selection clears', async () => {
     render(
       <Probe

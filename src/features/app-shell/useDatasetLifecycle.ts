@@ -264,6 +264,8 @@ interface UseDatasetLifecycleControls {
   // A dataset is ready on screen, so a new load keeps it until the new one
   // is ready (15.1-F).
   readonly isDatasetLoaded: boolean
+  // A load with nothing on screen is under way, for Cancel (15.3-D).
+  readonly isDatasetLoading: boolean
   readonly geneExpressionColorScale: GeneExpressionColorScale
   readonly transcriptDensityColorScale: TranscriptDensityColorScale
   readonly transcriptExactPointLimit: number
@@ -423,6 +425,7 @@ interface UseDatasetLifecycleSetters {
 // makes its controller the dataset's (datasetAbortRef) and gives it a new
 // loadRequestIdRef value, which other workflows use to tell stale results.
 interface PendingDatasetLoad {
+  readonly url: string
   readonly controller: AbortController
   datasetRequestId: number | null
   readonly queued: (() => void)[]
@@ -438,6 +441,10 @@ interface UseDatasetLifecycleOptions {
 }
 
 interface UseDatasetLifecycleResult {
+  // Cancel in the loading list (15.3-D). A load that would replace the
+  // dataset on screen is dropped and that dataset stays; a load with nothing
+  // on screen goes back to no dataset.
+  readonly cancelDatasetLoad: () => void
   readonly handleDatasetSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
 }
 
@@ -451,6 +458,7 @@ export function useDatasetLifecycle({
   },
   controls: {
     isDatasetLoaded,
+    isDatasetLoading,
     geneExpressionColorScale,
     transcriptDensityColorScale,
     transcriptExactPointLimit,
@@ -590,6 +598,8 @@ export function useDatasetLifecycle({
   const datasetWarmupRequestIdRef = useRef(0)
   // The load that has not replaced the dataset on screen yet (15.1-F).
   const pendingLoadRef = useRef<PendingDatasetLoad | null>(null)
+  // The last load started, pending or committed.
+  const latestLoadRef = useRef<PendingDatasetLoad | null>(null)
 
   useEffect(() => {
     if (didApplyInitialDatasetUrlRef.current) {
@@ -793,11 +803,13 @@ export function useDatasetLifecycle({
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
       pendingLoadRef.current?.controller.abort()
       const load: PendingDatasetLoad = {
+        url: requestedUrl,
         controller: new AbortController(),
         datasetRequestId: null,
         queued: [],
       }
       pendingLoadRef.current = load
+      latestLoadRef.current = load
       const signal = load.controller.signal
       // Current while pending until another load starts, and once committed
       // until another load commits.
@@ -1075,9 +1087,8 @@ export function useDatasetLifecycle({
           setMagicLensState(IDLE_MAGIC_LENS_STATE)
           setCellDetailState(IDLE_CELL_DETAIL_STATE)
           setCellTranscriptDistributionState(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
-          setMagicLensActive(
-            shouldRestoreSharedState ? (sharedState?.magicLensActive ?? false) : false,
-          )
+          // tool=magic-lens, or lens=1 in a version 1 link.
+          setMagicLensActive(sharedTool === 'magic-lens')
           setSelectedCell(null)
           setSelectedGridCell(null)
           setCurrentViewportDetail(null)
@@ -1864,14 +1875,7 @@ export function useDatasetLifecycle({
           return
         }
 
-        setLoadState(datasetLoadFailed(requestedUrl, loadError))
-        setDatasetPlatform(null)
-        setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
-        setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
-        setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
-        setSpatialGridCells([])
-        setFlatMorphologyImage(null)
-        initialShareableStateRef.current = null
+        clearUnreadyDataset(datasetLoadFailed(requestedUrl, loadError))
         appendDebugEvent('Dataset load failed')
         recordTelemetry(
           telemetryEvent('dataset.load', 'failure', {
@@ -1879,20 +1883,60 @@ export function useDatasetLifecycle({
             detail: readErrorMessage(error),
           }),
         )
-        invalidateLatestRequest({
-          abortRef: datasetWarmupAbortRef,
-          requestIdRef: datasetWarmupRequestIdRef,
-        })
-        setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
-        setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
-        cellFeatureMatrixCapabilityKeyRef.current = null
-        setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
-        setGenePanelState(IDLE_GENE_PANEL_STATE)
-        setAnnotationGroupState(IDLE_ANNOTATION_GROUP_STATE)
-        setTranscriptCapabilityState(IDLE_TRANSCRIPT_CAPABILITY_STATE)
-        setTranscriptLayerState(IDLE_TRANSCRIPT_LAYER_STATE)
       }
     }
+  }
+
+  // Clears what a committed load set before its ready point, when it fails
+  // or is cancelled.
+  function clearUnreadyDataset(nextLoadState: DatasetLoadState<StructuredLoadError>) {
+    setLoadState(nextLoadState)
+    setDatasetPlatform(null)
+    setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
+    setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
+    setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
+    setSpatialGridCells([])
+    setFlatMorphologyImage(null)
+    initialShareableStateRef.current = null
+    invalidateLatestRequest({
+      abortRef: datasetWarmupAbortRef,
+      requestIdRef: datasetWarmupRequestIdRef,
+    })
+    setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
+    setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
+    cellFeatureMatrixCapabilityKeyRef.current = null
+    setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+    setGenePanelState(IDLE_GENE_PANEL_STATE)
+    setAnnotationGroupState(IDLE_ANNOTATION_GROUP_STATE)
+    setTranscriptCapabilityState(IDLE_TRANSCRIPT_CAPABILITY_STATE)
+    setTranscriptLayerState(IDLE_TRANSCRIPT_LAYER_STATE)
+  }
+
+  function cancelDatasetLoad() {
+    const pending = pendingLoadRef.current
+
+    if (pending !== null) {
+      pending.controller.abort()
+      pendingLoadRef.current = null
+      setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
+      appendDebugEvent(
+        `Cancelled loading ${shortDatasetLabel(pending.url)}; the open dataset stays`,
+      )
+      return
+    }
+
+    const latest = latestLoadRef.current
+
+    if (!isDatasetLoading || latest === null || latest.controller.signal.aborted) {
+      return
+    }
+
+    // A committed load's controller is the dataset's (datasetAbortRef).
+    latest.controller.abort()
+    abortActiveRequest(datasetAbortRef)
+    clearUnreadyDataset(IDLE_DATASET_LOAD_STATE)
+    setDatasetAbout?.(null)
+    appendDebugEvent(`Cancelled loading ${shortDatasetLabel(latest.url)}`)
   }
 
   async function handleDatasetSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1934,7 +1978,7 @@ export function useDatasetLifecycle({
     startDatasetLoadRef,
   ])
 
-  return { handleDatasetSubmit }
+  return { cancelDatasetLoad, handleDatasetSubmit }
 }
 
 export function mergeMorphologyChannelSettings(options: {

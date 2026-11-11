@@ -24,6 +24,15 @@ Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is
 wrong, a message says why and the current dataset stays.
 
+Work in progress is listed at the bottom left of the view. Loading a dataset,
+diagnostics, transcripts, Magic Lens scans, embeddings, cell details and ROI
+queries can be stopped with `Cancel` there. Cancelling one leaves the view as
+it was before the task started: a cancelled dataset load keeps the dataset
+already open, and cancelled transcripts go back to the points or squares
+shown before. A cancelled task does not start again until you move the view,
+pick another cell, or start it yourself. Exact transcript loads show how far
+they have got as a percentage.
+
 When a dataset folder contains an `explorer.json` manifest, the viewer reads
 files from the locations it lists and applies its display defaults (genes,
 cell colour, layer toggles, opacities, image channels). The activity log, in
