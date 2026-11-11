@@ -40,10 +40,13 @@ export function EmbeddingWindow({
   embedding,
   open,
   onClose,
+  fullWidth = false,
 }: {
   readonly embedding: EmbeddingModel
   readonly open: boolean
   readonly onClose: () => void
+  // Narrow screens (15.2-I): the canvas's width, less a margin.
+  readonly fullWidth?: boolean | undefined
 }) {
   const headingId = useId()
   const panelRef = useRef<HTMLElement>(null)
@@ -106,10 +109,12 @@ export function EmbeddingWindow({
   return (
     <section
       ref={panelRef}
-      className="shell-embedding"
+      className={fullWidth ? 'shell-embedding is-full-width' : 'shell-embedding'}
       aria-labelledby={headingId}
       hidden={!open}
-      style={{ width: size.width, height: size.height }}
+      style={
+        fullWidth ? { height: size.height } : { width: size.width, height: size.height }
+      }
       onKeyDown={(event) => {
         if (event.key === 'Escape' && !isTextEntryTarget(event.target)) onClose()
       }}

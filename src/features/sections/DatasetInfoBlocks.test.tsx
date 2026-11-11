@@ -47,17 +47,8 @@ const VISIUM_VIEW_OPTIONS = testDatasetInfoModel({
 }).viewOptions
 
 describe('DatasetViewOptions', () => {
-  it('keeps every view option in the HUD', () => {
+  it('leaves section controls to the layer panel (15.2-C)', () => {
     render(<DatasetViewOptions viewOptions={VISIUM_VIEW_OPTIONS} />)
-
-    expect(screen.getByTitle('Visium library to show')).toBeInTheDocument()
-    expect(screen.getByTitle('Visium tissue image to show')).toBeInTheDocument()
-    expect(screen.getByLabelText('Show off-tissue spots')).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Bin size' })).toBeInTheDocument()
-  })
-
-  it('leaves section controls to the layer panel in the info drawer (15.2-C)', () => {
-    render(<DatasetViewOptions viewOptions={VISIUM_VIEW_OPTIONS} placement="drawer" />)
 
     expect(screen.getByTitle('Visium library to show')).toBeInTheDocument()
     expect(screen.queryByTitle('Visium tissue image to show')).not.toBeInTheDocument()

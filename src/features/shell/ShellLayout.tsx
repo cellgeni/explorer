@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
+import { Sheet } from '../../components/ui'
 import { isTextEntryTarget } from '../app-shell/activeToolModel'
 import { CardStack } from '../cards/CardStack'
 import type { CardStackModel } from '../cards/cardModels'
@@ -13,8 +14,10 @@ import { EmbeddingWindow } from './EmbeddingWindow'
 import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
 import type { LayerPanelModel } from './layerPanelModel'
+import type { ShellPanelState } from './shellLinkModel'
 import { isLayerPanelKey } from './shortcuts'
 import { TopBar } from './TopBar'
+import { useNarrowScreen } from './useNarrowScreen'
 import type { TopBarModel } from './topBarModel'
 
 interface ShellLayoutProps {
@@ -29,14 +32,18 @@ interface ShellLayoutProps {
   readonly cards: CardStackModel
   // Null where the platform has no cells (images).
   readonly embedding: EmbeddingModel | null
+  // Open sections, the info drawer and the Embedding panel, which the link
+  // keeps (15.2-H).
+  readonly panels: ShellPanelState
+  readonly onPanelsChange: (panels: ShellPanelState) => void
   // The canvas, and the panels that sit over it.
   readonly children: ReactNode
 }
 
-// The new shell (UNIFIED_PLAN.md, 15.2), shown with ?shell=2 until 15.2-J
-// makes it the default: the top bar, the canvas with ⓘ's dataset info drawer
-// and the cards over it, the Embedding panel at its top right, and the layer
-// panel docked on the right.
+// The shell (UNIFIED_PLAN.md, 15.2): the top bar, the canvas with ⓘ's
+// dataset info drawer and the cards over it, the Embedding panel at its top
+// right, and the layer panel docked on the right. Under 860 px the panel is a bottom sheet and the
+// cards dock at the bottom (15.2-I).
 export function ShellLayout({
   topBar,
   info,
@@ -48,13 +55,25 @@ export function ShellLayout({
   annotations,
   cards,
   embedding,
+  panels,
+  onPanelsChange,
   children,
 }: ShellLayoutProps) {
-  const [infoOpen, setInfoOpen] = useState(false)
-  const [embeddingOpen, setEmbeddingOpen] = useState(false)
+  const { infoOpen, embeddingOpen } = panels
+  const setInfoOpen = (open: boolean) => {
+    onPanelsChange({ ...panels, infoOpen: open })
+  }
+  const setEmbeddingOpen = (open: boolean) => {
+    onPanelsChange({ ...panels, embeddingOpen: open })
+  }
+  const narrow = useNarrowScreen()
   const [panelCollapsed, setPanelCollapsed] = useState(false)
+  // On narrow screens the panel is a bottom sheet that starts as a 56 px
+  // handle (15.2-I).
+  const [sheetExpanded, setSheetExpanded] = useState(false)
   const togglePanel = useEffectEvent(() => {
-    setPanelCollapsed((current) => !current)
+    if (narrow) setSheetExpanded((current) => !current)
+    else setPanelCollapsed((current) => !current)
   })
 
   // \ hides or shows the layer panel, except while typing.
@@ -76,6 +95,28 @@ export function ShellLayout({
     }
   }, [])
 
+  function layerPanelContent(variant: 'docked' | 'sheet') {
+    return (
+      <LayerPanel
+        variant={variant}
+        panel={layerPanel}
+        collapsed={panelCollapsed}
+        onCollapsedChange={setPanelCollapsed}
+        image={image}
+        cells={cells}
+        transcripts={transcripts}
+        annotations={annotations}
+        viewOptions={info.viewOptions}
+        expanded={panels.expanded}
+        onExpandedChange={(expanded) => {
+          onPanelsChange({ ...panels, expanded })
+        }}
+        embeddingOpen={embeddingOpen}
+        onEmbeddingOpenChange={setEmbeddingOpen}
+      />
+    )
+  }
+
   return (
     <>
       <TopBar
@@ -84,9 +125,18 @@ export function ShellLayout({
         settings={settings}
         infoOpen={infoOpen}
         onInfoOpenChange={setInfoOpen}
+        narrow={narrow}
       />
-      <div className={panelCollapsed ? 'shell-body is-panel-collapsed' : 'shell-body'}>
-        <div className="shell-canvas">
+      <div
+        className={
+          narrow
+            ? 'shell-body is-narrow'
+            : panelCollapsed
+              ? 'shell-body is-panel-collapsed'
+              : 'shell-body'
+        }
+      >
+        <div className={infoOpen ? 'shell-canvas has-info-drawer' : 'shell-canvas'}>
           <InfoDrawer
             info={info}
             open={infoOpen}
@@ -99,6 +149,7 @@ export function ShellLayout({
           {embedding === null ? null : (
             <EmbeddingWindow
               embedding={embedding}
+              fullWidth={narrow}
               open={embeddingOpen}
               onClose={() => {
                 setEmbeddingOpen(false)
@@ -106,19 +157,27 @@ export function ShellLayout({
             />
           )}
         </div>
-        <LayerPanel
-          panel={layerPanel}
-          collapsed={panelCollapsed}
-          onCollapsedChange={setPanelCollapsed}
-          image={image}
-          cells={cells}
-          transcripts={transcripts}
-          annotations={annotations}
-          viewOptions={info.viewOptions}
-          embeddingOpen={embeddingOpen}
-          onEmbeddingOpenChange={setEmbeddingOpen}
-        />
+        {narrow ? (
+          <Sheet
+            title="Layers"
+            summary={sheetSummary(layerPanel)}
+            expanded={sheetExpanded}
+            onExpandedChange={setSheetExpanded}
+            className="shell-layer-sheet"
+          >
+            {layerPanelContent('sheet')}
+          </Sheet>
+        ) : (
+          layerPanelContent('docked')
+        )}
       </div>
     </>
   )
+}
+
+// The sheet's handle names what colours the cells, or else the first layer.
+function sheetSummary(panel: LayerPanelModel): string | undefined {
+  const section =
+    panel.sections.find((candidate) => candidate.id === 'cells') ?? panel.sections[0]
+  return section === undefined ? undefined : `${section.title}: ${section.summary}`
 }

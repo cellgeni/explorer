@@ -184,6 +184,17 @@ const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
 // its props are unchanged. Skip those renders so ROI drags, the cursor readout,
 // and hover tooltips do not redraw every cell on each pointer move.
 const MemoDeckGL = memo(DeckGL) as typeof DeckGL
+
+// deck.gl's event root takes keyboard focus (tabindex 0), but it sits in an
+// aria-hidden host and the canvas frame handles the keyboard, so it leaves
+// the tab order (axe's aria-hidden-focus).
+function removeDeckFromTabOrder(): void {
+  for (const root of document.querySelectorAll<HTMLElement>(
+    '.deckgl-host [tabindex="0"]',
+  )) {
+    root.tabIndex = -1
+  }
+}
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
@@ -1859,6 +1870,7 @@ function ViewerSurface({
               {...(deckHoverEnabled ? { onHover: handleDeckHover } : {})}
               controller
               layers={layers}
+              onLoad={removeDeckFromTabOrder}
             />
           </div>
         ) : null}

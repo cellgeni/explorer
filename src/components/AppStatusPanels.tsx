@@ -63,7 +63,7 @@ export function DownloadIcon() {
   )
 }
 
-export function CellFeatureMatrixCompatibilityNotice({
+function CellFeatureMatrixCompatibilityNotice({
   state,
 }: {
   readonly state: CellFeatureMatrixCompatibilityNoticeState
@@ -130,7 +130,7 @@ export function ErrorSummary({
   )
 }
 
-export function FallbackNoticeSummary({
+function FallbackNoticeSummary({
   notices,
 }: {
   readonly notices: readonly FallbackNoticeEntry[]

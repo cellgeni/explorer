@@ -11,7 +11,8 @@ that file is too large for the same eager overview path used by 16 µm and 8 µm
   `tissue_positions.parquet`, `scalefactors_json.json`, and
   `filtered_feature_bc_matrix.h5` all answer `HEAD`. The positions file must
   exist even though it is not read.
-- The Dataset tab enables 2 µm when the tier is detected.
+- The `Visium HD dataset` panel (Bins › Appearance) enables 2 µm when the
+  tier is detected.
 - `VisiumHdDataset.readBinnedOverview(2)` does not read the full
   `tissue_positions.parquet`.
 - The 2 µm overview is built from
@@ -41,7 +42,7 @@ with `VisiumHdFilteredBarcodeBudgetExceededError`.
 ## UI Enablement
 
 The app enables the 2 µm segmented control when the 2 µm binned output is
-detected. The older `2 µm budget` Dataset HUD control was removed; normal app
+detected. The older `2 µm budget` dataset control was removed; normal app
 loading uses the barcode-sidecar path without a UI budget field.
 
 The current gzip barcode reader still buffers `barcodes.tsv.gz`. This is much
@@ -59,7 +60,7 @@ profiles use an on-demand DuckDB-WASM query for one `cell_id`, projecting only
 `filtered_feature_bc_matrix.h5`, not the segmented cell matrix.
 
 First paint does not touch `barcode_mappings.parquet`. Selecting a bin (cell
-assignment in `Bin Info`) and projecting expression onto cell boundaries read
+assignment in the Bin card) and projecting expression onto cell boundaries read
 it in bulk with hyparquet. The app passes no row budget, and these reads are
 not cached because the workflows pass an `AbortSignal`, so each selection
 reads the file again.

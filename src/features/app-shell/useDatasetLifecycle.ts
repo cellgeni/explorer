@@ -27,6 +27,7 @@ import {
 } from '../../data/morphologyImage'
 import { type RoiSelection } from '../../data/roiSelection'
 import type { ShareableState } from '../../data/shareableState'
+import { toolFromLink } from '../shell/shellLinkModel'
 import {
   datasetManifestAbout,
   manifestDefaultsNotShared,
@@ -345,7 +346,7 @@ interface UseDatasetLifecycleSetters {
   readonly setCellFillOpacity?: Setter<number>
   readonly setImageLayerOpacity?: Setter<number>
   readonly setShowTranscriptOverlay?: Setter<boolean>
-  // What the Dataset tab shows about a dataset with a manifest.
+  // What the info drawer shows about a dataset with a manifest.
   readonly setDatasetAbout?: Setter<DatasetManifestAbout | null>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
@@ -1056,8 +1057,13 @@ export function useDatasetLifecycle({
               : transcriptExactPointLimit,
           )
           setSelectedGenes(sharedSelectedGenes)
-          setRoiMode('idle')
-          setMeasurementEnabled(false)
+          // A shared link's box, lasso or measure tool stays on (15.2-H).
+          const sharedTool =
+            shouldRestoreSharedState && sharedState !== null
+              ? toolFromLink(sharedState)
+              : 'pan'
+          setRoiMode(sharedTool === 'box' || sharedTool === 'lasso' ? sharedTool : 'idle')
+          setMeasurementEnabled(sharedTool === 'measure')
           setMeasurementResetKey((current) => current + 1)
           setRoiName('ROI 1')
           setRoiState(IDLE_ROI_STATE)

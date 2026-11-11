@@ -7,7 +7,7 @@
   viewer.
 - [User guide](./user-guide.md): loading data, navigation, genes, transcripts,
   annotations, ROI, embeddings, diagnostics, and shareable URLs.
-- [UI reference](./ui-reference.md): every tab, control, default, interaction,
+- [UI reference](./ui-reference.md): every panel, control, default, interaction,
   and shareable URL parameter, with the component that renders it and the
   platforms that show it.
 

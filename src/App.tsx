@@ -4,7 +4,6 @@ import {
   type RoiDrawMode,
   type ViewerTranscriptHoverDetail,
 } from './components/ViewerCore'
-import { AppControlHud } from './features/app-shell/AppControlHud'
 import { setSpatialDataSelection } from './datasets/datasetFactory'
 import type { SpatialDataSelection } from './datasets/spatialDataDataset'
 import {
@@ -18,11 +17,6 @@ import {
   useVisiumHdExpressionProjectionWorkflow,
   type VisiumHdExpressionProjectionState,
 } from './features/genes/useVisiumHdExpressionProjectionWorkflow'
-import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
-import { DatasetHudPanel } from './features/control-hud/DatasetHudPanel'
-import { LayerHudPanel } from './features/control-hud/LayerHudPanel'
-import { GeneHudPanel } from './features/genes/GeneHudPanel'
-import { TranscriptHudPanel } from './features/transcripts/TranscriptHudPanel'
 import { useAnnotationsSectionModel } from './features/sections/annotationsSectionModel'
 import { useCellsSectionModel } from './features/sections/cellsSectionModel'
 import { useDatasetInfoModel } from './features/sections/datasetInfoModel'
@@ -33,22 +27,21 @@ import { useLayerPanelModel } from './features/shell/layerPanelModel'
 import { ShellLayout } from './features/shell/ShellLayout'
 import { useTopBarModel } from './features/shell/topBarModel'
 import { useToolShortcuts } from './features/shell/useToolShortcuts'
-import { CellHudPanel } from './features/control-hud/CellHudPanel'
-import {
-  GeometricRoiHudPanel,
-  RoiHudPanel,
-  VisiumHdRoiHudPanel,
-} from './features/control-hud/RoiHudPanel'
-import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import { useCardStackModel } from './features/cards/cardModels'
 import { useEmbeddingModel } from './features/sections/embeddingModel'
 import {
-  CONTROL_HUD_TABS,
+  cardForLink,
+  cellIdFromLink,
+  hiddenLayersForLink,
+  panelsForLink,
+  panelsFromLink,
+  withShellLink,
+  type ShellPanelState,
+} from './features/shell/shellLinkModel'
+import {
   parseObservationColorMode,
   readDebugModeFromLocation,
-  readShellVersionFromLocation,
   readShareableStateFromLocation,
-  type ControlHudTab,
 } from './features/app-shell/appShellModel'
 import { DatasetLoadToast } from './features/app-shell/DatasetLoadToast'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
@@ -91,7 +84,6 @@ import {
   type TranscriptCapabilitiesLoader,
   type TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
-import { useAppControlIds } from './features/app-shell/useAppControlIds'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
 import { useAppDomainState } from './features/app-shell/useAppDomainState'
@@ -298,13 +290,20 @@ export function App({ dependencies }: AppProps = {}) {
     diagnostics: { runDatasetDiagnostics },
   } = resolveAppDependencies(dependencies)
 
-  const controlIds = useAppControlIds()
+  // An old link's tab opens as panels, a tool or a card (15.2-H).
   const [initialShareableState] = useState<ShareableState>(() =>
-    readShareableStateFromLocation(),
+    withShellLink(readShareableStateFromLocation()),
   )
   const [performanceBudget] = useState<PerformanceBudget>(() => detectPerformanceBudget())
   const [debugMode, setDebugMode] = useState(readDebugModeFromLocation)
-  const [shellVersion] = useState(readShellVersionFromLocation)
+  const [shellPanels, setShellPanels] = useState<ShellPanelState>(() =>
+    panelsFromLink(initialShareableState),
+  )
+  // Cells is the open section until someone changes it.
+  const openPanelIds = useMemo(
+    () => panelsForLink(shellPanels) ?? ['cells'],
+    [shellPanels],
+  )
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const appState = useAppDomainState({ initialShareableState, performanceBudget })
@@ -460,14 +459,10 @@ export function App({ dependencies }: AppProps = {}) {
       visiumHdRoiState,
     },
     runtime: {
-      activeControlHudTab,
       debugLog,
       fallbackNotices,
-      isControlHudCollapsed,
-      setActiveControlHudTab,
       setDebugLog,
       setFallbackNotices,
-      setIsControlHudCollapsed,
       setTelemetryEvents,
       telemetryEvents,
     },
@@ -1197,14 +1192,6 @@ export function App({ dependencies }: AppProps = {}) {
         : isRoiGeneViewportWarmupLoading
           ? 'Preparing genes'
           : roiCopy
-  const geometricRoiHeaderCopy =
-    roiMode === 'box'
-      ? 'Drawing box'
-      : roiMode === 'lasso'
-        ? 'Drawing lasso'
-        : `${geometricAnnotations.length.toLocaleString()} ${
-            geometricAnnotations.length === 1 ? 'shape' : 'shapes'
-          }`
   const isRoiTabLoading =
     roiState.status === 'loading' ||
     roiGeneStatsState.status === 'loading' ||
@@ -1287,28 +1274,10 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptLayerState,
     ],
   )
-  const loadingTabIds = useMemo(
-    () => new Set(loadingTasks.map((task) => task.tabId)),
-    [loadingTasks],
-  )
   const loadingAreas = useMemo(
     () => new Set(loadingTasks.map((task) => task.area)),
     [loadingTasks],
   )
-  const hiddenControlHudTabIds = useMemo<ReadonlySet<ControlHudTab>>(() => {
-    const { cells, magicLens, transcripts } = platformAdapter.capabilities
-    const hiddenTabIds = new Set<ControlHudTab>()
-
-    if (!cells) {
-      hiddenTabIds.add('genes')
-      hiddenTabIds.add('cell')
-    }
-
-    if (!magicLens) hiddenTabIds.add('magic-lens')
-    if (!transcripts) hiddenTabIds.add('transcripts')
-
-    return hiddenTabIds
-  }, [platformAdapter.capabilities])
   const activeRoiSelection = platformRoiSelection(
     platformAdapter,
     roiState,
@@ -1553,7 +1522,7 @@ export function App({ dependencies }: AppProps = {}) {
           : { visiumHdBinSizeMicrometers: diagnosticsVisiumHdBinSize }),
       },
       dump: {
-        activeControlHudTab,
+        openPanels: openPanelIds,
         activeErrors,
         boundaryCellLimit,
         coordinateUnit,
@@ -1874,7 +1843,6 @@ export function App({ dependencies }: AppProps = {}) {
   const handlePinTranscript = useCallback(
     (detail: ViewerTranscriptHoverDetail) => {
       setPinnedTranscript(detail)
-      setActiveControlHudTab('transcripts')
       appendDebugEvent(
         detail.transcript === undefined
           ? 'Pinned transcript density bin'
@@ -1882,7 +1850,7 @@ export function App({ dependencies }: AppProps = {}) {
         { coalesceKey: 'transcript-pin' },
       )
     },
-    [appendDebugEvent, setActiveControlHudTab, setPinnedTranscript],
+    [appendDebugEvent, setPinnedTranscript],
   )
   const { handleViewportChange } = useViewportDataWorkflow({
     callbacks: {
@@ -1935,16 +1903,6 @@ export function App({ dependencies }: AppProps = {}) {
       setShareableViewState,
     },
   })
-  useEffect(() => {
-    if (!hiddenControlHudTabIds.has(activeControlHudTab)) {
-      return
-    }
-
-    setActiveControlHudTab(
-      CONTROL_HUD_TABS.find((tab) => !hiddenControlHudTabIds.has(tab.id))?.id ??
-        'dataset',
-    )
-  }, [activeControlHudTab, hiddenControlHudTabIds, setActiveControlHudTab])
 
   useEffect(() => {
     if (boundaryOverlayRequestKeyRef.current === boundaryOverlayRequestKey) {
@@ -1968,7 +1926,7 @@ export function App({ dependencies }: AppProps = {}) {
       appendFallbackNotice,
     },
     controls: {
-      activeControlHudTab,
+      transcriptControlsOpen: openPanelIds.includes('transcripts'),
       effectiveTranscriptFeatureFilterMode,
       manualTranscriptExactRequestKey,
       showTranscriptOverlay: effectiveShowTranscriptOverlay,
@@ -2434,11 +2392,9 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedGridCell(null)
       setSelectedBoundaryCell(null)
       setSelectedCell(cell)
-      setActiveControlHudTab('cell')
     },
     [
       clearVisiumHdExpressionProfileState,
-      setActiveControlHudTab,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
@@ -2450,11 +2406,9 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCell(null)
       setSelectedGridCell(null)
       setSelectedBoundaryCell(cell)
-      setActiveControlHudTab('cell')
     },
     [
       clearVisiumHdExpressionProfileState,
-      setActiveControlHudTab,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
@@ -2466,11 +2420,9 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCell(null)
       setSelectedBoundaryCell(null)
       setSelectedGridCell(cell)
-      setActiveControlHudTab('cell')
     },
     [
       clearVisiumHdExpressionProfileState,
-      setActiveControlHudTab,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
@@ -2510,12 +2462,10 @@ export function App({ dependencies }: AppProps = {}) {
     handleMagicLensClear,
     handleMagicLensCursorActiveChange,
     handleMagicLensLeave,
-    handleMagicLensMinQvChange,
     handleMagicLensMove,
     handleMagicLensRadiusChange,
     handleMagicLensScopeChange,
     handleMagicLensSummarise,
-    handleRunMagicLens,
   } = useMagicLensWorkflow({
     callbacks: {
       appendDebugEvent,
@@ -2962,6 +2912,23 @@ export function App({ dependencies }: AppProps = {}) {
         : [loadedAnnotationGroupId],
     [initialShareableState.annotationGroupIds, loadedAnnotationGroupId],
   )
+  const sharedPanels = useMemo(() => panelsForLink(shellPanels), [shellPanels])
+  const sharedHiddenLayers = useMemo(
+    () => hiddenLayersForLink(layerVisibility),
+    [layerVisibility],
+  )
+  // A link's `card=cell:<id>` selects that cell once the cells load.
+  const linkedCellIdRef = useRef(cellIdFromLink(initialShareableState))
+  useEffect(() => {
+    const cellId = linkedCellIdRef.current
+    if (cellId === null || loadState.status !== 'ready' || overviewCells.length === 0) {
+      return
+    }
+
+    linkedCellIdRef.current = null
+    const cell = overviewCells.find((candidate) => candidate.id === cellId)
+    if (cell !== undefined) handleViewerCellClick(cell)
+  }, [handleViewerCellClick, loadState.status, overviewCells])
   useShareableUrlHash({
     dataset: {
       annotationUrl: annotationImportUrl,
@@ -3000,7 +2967,6 @@ export function App({ dependencies }: AppProps = {}) {
       showHoverTooltips,
     },
     magicLens: {
-      magicLensActive,
       magicLensMinQv,
       magicLensRadiusMicrometers,
       magicLensScope,
@@ -3021,9 +2987,12 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptPointSize,
     },
     view: {
-      activeControlHudTab,
       activeRoiSelection,
       shareableViewState,
+      panels: sharedPanels,
+      card: cardForLink(selectedCell?.id ?? null),
+      tool: activeTool,
+      hiddenLayers: sharedHiddenLayers,
     },
   })
 
@@ -3034,8 +3003,8 @@ export function App({ dependencies }: AppProps = {}) {
         ? handleVisiumHdRoiComplete
         : handleRoiComplete
 
-  // The section models (UNIFIED_PLAN.md, 15.2-A): the HUD tabs, and the new
-  // shell, take these instead of separate props.
+  // The section models (UNIFIED_PLAN.md, 15.2-A): the layer panel, info
+  // drawer and top bar take these instead of separate props.
   const datasetInfo = useDatasetInfoModel({
     activeErrors,
     appendDebugEvent,
@@ -3275,7 +3244,7 @@ export function App({ dependencies }: AppProps = {}) {
     setDebugMode,
   })
   const [fitRequestKey, setFitRequestKey] = useState(0)
-  useToolShortcuts(shellVersion === 2, topBar.tools.onSelect, () => {
+  useToolShortcuts(true, topBar.tools.onSelect, () => {
     setFitRequestKey((current) => current + 1)
   })
   const layerPanel = useLayerPanelModel({
@@ -3310,8 +3279,8 @@ export function App({ dependencies }: AppProps = {}) {
     setSelectedKind: setSelectedEmbeddingKind,
   })
 
-  // The cards (UNIFIED_PLAN.md, 15.2-D) replace the Magic Lens, ROI and
-  // Cell tabs in the new shell.
+  // The cards (UNIFIED_PLAN.md, 15.2-D): Selection, Cell, Transcript and
+  // Magic Lens.
   const elementPlural = platformAdapter.labels.embeddingElementPlural
   const selectionLensInput = {
     available: platformAdapter.capabilities.magicLens,
@@ -3415,182 +3384,6 @@ export function App({ dependencies }: AppProps = {}) {
     zoomToBbox,
   })
 
-  const controlHud = (
-    <AppControlHud
-      activeControlHudTab={activeControlHudTab}
-      appendDebugEvent={appendDebugEvent}
-      debugMode={debugMode}
-      hiddenTabIds={hiddenControlHudTabIds}
-      isControlHudCollapsed={isControlHudCollapsed}
-      loadingTabIds={loadingTabIds}
-      setActiveControlHudTab={setActiveControlHudTab}
-      setIsControlHudCollapsed={setIsControlHudCollapsed}
-    >
-      {/* The new shell's top bar, drawer and layer panel hold these. */}
-      {shellVersion === 2 ? null : (
-        <>
-          <DatasetHudPanel
-            active={activeControlHudTab === 'dataset'}
-            info={datasetInfo}
-          />
-
-          <LayerHudPanel
-            active={activeControlHudTab === 'layers'}
-            image={imageSection}
-            cells={cellsSection}
-            settings={viewSettings}
-            info={datasetInfo}
-          />
-
-          <GeneHudPanel active={activeControlHudTab === 'genes'} cells={cellsSection} />
-
-          {platformAdapter.capabilities.transcripts ? (
-            <TranscriptHudPanel
-              active={activeControlHudTab === 'transcripts'}
-              transcripts={transcriptsSection}
-            />
-          ) : null}
-        </>
-      )}
-
-      {shellVersion === 2 ? null : (
-        <MagicLensHudPanel
-          active={activeControlHudTab === 'magic-lens'}
-          magicLensScopeInputId={controlIds.magicLensScopeInputId}
-          magicLensRadiusInputId={controlIds.magicLensRadiusInputId}
-          magicLensMinQvInputId={controlIds.magicLensMinQvInputId}
-          magicLensCopy={magicLensCopy}
-          loadEnabled={magicLensLoadEnabled}
-          roiAvailable={activeRoiSelection !== null}
-          magicLensScope={magicLensScope}
-          magicLensState={magicLensState}
-          magicLensRadiusMicrometers={magicLensRadiusMicrometers}
-          magicLensMinQv={magicLensMinQv}
-          minQvVisible={platformAdapter.capabilities.magicLensMinQv}
-          magicLensIsCursorActive={magicLensIsCursorActive}
-          magicLensCanScan={magicLensCanScan}
-          onScopeChange={handleMagicLensScopeChange}
-          onRadiusChange={handleMagicLensRadiusChange}
-          onMinQvChange={handleMagicLensMinQvChange}
-          onCursorActiveChange={handleMagicLensCursorActiveChange}
-          onRunMagicLens={handleRunMagicLens}
-        />
-      )}
-
-      {shellVersion === 2 ? null : (
-        <AnnotationHudPanel
-          active={activeControlHudTab === 'annotations'}
-          annotations={annotationsSection}
-        />
-      )}
-
-      <CellHudPanel
-        active={activeControlHudTab === 'cell'}
-        embeddingViewInputId={controlIds.embeddingViewInputId}
-        embeddingCopy={embeddingCopy}
-        analysisEmbeddingState={analysisEmbeddingState}
-        activeEmbedding={activeEmbedding}
-        annotationStyles={annotationStyleColors}
-        selectedEmbeddingKind={selectedEmbeddingKind}
-        roiCellIds={roiCellIds}
-        isVisiumHdDataset={isVisiumHdDataset}
-        selectedCell={selectedCell}
-        selectedGridCell={activeSelectedGridCell}
-        selectedGridCellAssignmentState={gridCellAssignmentState}
-        selectedGridCellExpressionStatus={selectedGridCellExpressionStatus}
-        selectedBoundaryCell={activeSelectedBoundaryCell}
-        selectedBoundaryCellExpressionStatus={selectedBoundaryCellExpressionStatus}
-        selectedExpressionProfileState={activeVisiumHdExpressionProfileState}
-        selectedCellAnnotationLabels={selectedCellAnnotationLabels}
-        selectedCellInfoVariant={
-          isAnnDataPlatform(platformAdapter) ? 'observations' : 'default'
-        }
-        cellDetailCopy={cellDetailCopy}
-        cellDetailState={cellDetailState}
-        cellTranscriptDistributionState={cellTranscriptDistributionState}
-        cellTranscriptDistributionVisible={
-          platformAdapter.capabilities.cellTranscriptDistribution
-        }
-        loadEnabled={loadState.status === 'ready'}
-        onEmbeddingKindChange={(nextEmbeddingKind) => {
-          setSelectedEmbeddingKind(nextEmbeddingKind)
-          appendDebugEvent(`Embedding view: ${nextEmbeddingKind}`)
-        }}
-        onLoadAnalysisEmbeddings={handleLoadAnalysisEmbeddings}
-        onClearSelectedCell={() => {
-          clearVisiumHdExpressionProfileState()
-          setSelectedCell(null)
-          setSelectedBoundaryCell(null)
-        }}
-        onClearSelectedGridCell={() => {
-          clearVisiumHdExpressionProfileState()
-          setSelectedGridCell(null)
-        }}
-        onClearSelectedBoundaryCell={() => {
-          clearVisiumHdExpressionProfileState()
-          setSelectedBoundaryCell(null)
-        }}
-        onSelectEmbeddingCell={handleEmbeddingElementSelect}
-        onLoadSelectedExpressionProfile={handleLoadVisiumHdExpressionProfile}
-      />
-
-      {shellVersion === 2 ? null : platformAdapter.kind === 'image' ? (
-        <GeometricRoiHudPanel
-          active={activeControlHudTab === 'roi'}
-          roiNameInputId={controlIds.roiNameInputId}
-          roiHeaderCopy={geometricRoiHeaderCopy}
-          canDrawRoi={canDrawRoi}
-          roiMode={roiMode}
-          roiName={roiName}
-          loadEnabled={loadState.status === 'ready'}
-          onRoiModeChange={handleRoiModeChange}
-          onRoiNameChange={setRoiName}
-        />
-      ) : isVisiumHdDataset ? (
-        <VisiumHdRoiHudPanel
-          active={activeControlHudTab === 'roi'}
-          roiNameInputId={controlIds.roiNameInputId}
-          roiHeaderCopy={visiumHdRoiCopy}
-          canDrawRoi={canDrawRoi}
-          roiMode={roiMode}
-          roiName={roiName}
-          loadEnabled={loadState.status === 'ready'}
-          roiState={activeVisiumHdRoiState}
-          roiSummary={visiumHdRoiSummary}
-          roiGeneStatsCopy={roiGeneStatsCopy}
-          roiGeneStatsState={roiGeneStatsState}
-          onRoiModeChange={handleRoiModeChange}
-          onClearRoi={handleClearActiveRoi}
-          onRoiNameChange={setRoiName}
-          onExportRoiBarcodes={handleExportVisiumHdRoiBarcodes}
-          onExportRoiGeoJson={handleExportVisiumHdRoiGeoJson}
-        />
-      ) : (
-        <RoiHudPanel
-          active={activeControlHudTab === 'roi'}
-          roiNameInputId={controlIds.roiNameInputId}
-          roiHeaderCopy={roiHeaderCopy}
-          isLoading={isRoiTabLoading}
-          canDrawRoi={canDrawRoi}
-          roiMode={roiMode}
-          roiName={roiName}
-          loadEnabled={platformFeatureLoadEnabled}
-          roiState={roiState}
-          roiSummary={roiSummary}
-          roiGeneStatsCopy={roiGeneStatsCopy}
-          roiGeneStatsState={roiGeneStatsState}
-          roiTranscriptExportState={roiTranscriptExportState}
-          onRoiModeChange={handleRoiModeChange}
-          onClearRoi={handleClearActiveRoi}
-          onRoiNameChange={setRoiName}
-          onSaveRoiAnnotation={handleSaveRoiAnnotation}
-          onExportRoiCells={handleExportRoiCells}
-          onExportRoiGeoJson={handleExportRoiGeoJson}
-          onExportRoiTranscripts={handleExportRoiTranscripts}
-        />
-      )}
-    </AppControlHud>
-  )
   const viewerRegion = (
     <section className="viewer-region" aria-labelledby="viewer-heading">
       <h2 id="viewer-heading" className="visually-hidden">
@@ -3666,7 +3459,7 @@ export function App({ dependencies }: AppProps = {}) {
         magicLensSummary={magicLensViewerSummary}
         viewResetKey={viewerViewResetKey}
         focusRequest={spatialFocusRequest}
-        navigationControls={shellVersion === 2}
+        navigationControls
         fitRequestKey={fitRequestKey}
         onImageTileError={handleImageTileError}
         onTileCacheEviction={handleTileCacheEviction}
@@ -3720,33 +3513,25 @@ export function App({ dependencies }: AppProps = {}) {
     </a>
   )
 
-  if (shellVersion === 2) {
-    return (
-      <main className="app-shell app-shell--v2">
-        {skipLink}
-        <ShellLayout
-          topBar={topBar}
-          info={datasetInfo}
-          settings={viewSettings}
-          layerPanel={layerPanel}
-          image={imageSection}
-          cells={cellsSection}
-          transcripts={transcriptsSection}
-          annotations={annotationsSection}
-          cards={cards}
-          embedding={platformAdapter.capabilities.cells ? embedding : null}
-        >
-          {viewerRegion}
-        </ShellLayout>
-      </main>
-    )
-  }
-
   return (
     <main className="app-shell">
       {skipLink}
-      {controlHud}
-      {viewerRegion}
+      <ShellLayout
+        topBar={topBar}
+        info={datasetInfo}
+        settings={viewSettings}
+        layerPanel={layerPanel}
+        image={imageSection}
+        cells={cellsSection}
+        transcripts={transcriptsSection}
+        annotations={annotationsSection}
+        cards={cards}
+        embedding={platformAdapter.capabilities.cells ? embedding : null}
+        panels={shellPanels}
+        onPanelsChange={setShellPanels}
+      >
+        {viewerRegion}
+      </ShellLayout>
     </main>
   )
 }

@@ -121,7 +121,7 @@ function CategoryLegend({
       </ul>
       {moreCount <= 0 ? null : (
         <p className="viewer-legend-detail">
-          +{moreCount.toLocaleString()} more in the Annotations tab
+          +{moreCount.toLocaleString()} more in Cells › Clusters
         </p>
       )}
     </div>

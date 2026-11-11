@@ -47,7 +47,7 @@ export interface UseVisiumControlsWorkflowOptions {
   readonly visiumControlState: VisiumControlState
 }
 
-// The Dataset tab's Visium controls. The tissue image switches in place; a
+// The Visium controls. The tissue image switches in place; a
 // library or off-tissue change reloads the dataset (the file is not read
 // again) and restores genes, colours, and layers from the shareable state.
 export function useVisiumControlsWorkflow({

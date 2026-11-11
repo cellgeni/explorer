@@ -37,8 +37,8 @@ repository; it is SpatialData when its root group has `spatialdata_attrs` (see
 A [dataset manifest](../dataset-manifest.md) with `"platform": "spatialdata"`
 names the store in `files.store` and skips the metadata check. Its
 `options` (`coordinateSystem`, `image`, `micrometersPerUnit`) are the starting
-selection: `spatialDataSelectionFor` returns them until a choice in the Dataset
-tab replaces them.
+selection: `spatialDataSelectionFor` returns them until a choice in the info
+drawer's View options replaces them.
 
 ## Store Access
 
@@ -74,17 +74,17 @@ element's coordinate transforms (`src/datasets/spatialDataTransforms.ts`).
 2. **Coordinate system** (`bestCoordinateSystem`): candidates are ranked by
    number of the table's region elements placed in the system, then whether it
    holds an image, then total elements, then whether it is named `global`, then
-   declaration order. The Dataset tab's `Coordinate system` select overrides
-   it (`sdCs` in the shareable URL).
+   declaration order. The `Coordinate system` select in the info drawer's View
+   options overrides it (`sdCs` in the shareable URL).
 3. **Region shapes / labels**: region elements placed in that system.
 4. **Image**: images placed with an axis-aligned, positive-scale affine
    (rotated, sheared, and flipped images are skipped); the one with the
-   smallest x scale (highest resolution) wins unless the Dataset tab's `Image`
+   smallest x scale (highest resolution) wins unless the View options `Image`
    select picks another (`sdImage`).
 5. **Boundary candidates**: non-region shapes whose name matches
    `/(?:^|[_-])cell[_-]?(?:boundar|segmentation|polygon)/i`, for example
    `cell_boundaries`.
-6. Everything else is reported as `skippedElements` in the Dataset tab log.
+6. Everything else is reported as `skippedElements` in the activity log.
 
 ### Supported Transforms
 
@@ -182,7 +182,7 @@ start with their first six channels on.
 ## Units And Extent
 
 - Coordinates are scaled to micrometers by a factor per coordinate system
-  (`src/datasets/spatialDataUnits.ts`): the Dataset tab's `µm per unit`
+  (`src/datasets/spatialDataUnits.ts`): the View options `µm per unit`
   override (`sdUm`), else the x/y axis unit the elements declare, else an
   estimate (`cell_area` against segmentation areas, the Visium 100 µm spot
   pitch, or Visium HD `square_NNNum` bin names). When none applies the factor
@@ -235,8 +235,8 @@ off.
   shown. Labels elements are shown only as traced cell outlines, not as a
   raster layer.
 - Only one coordinate system and one image are shown at a time. They are
-  chosen automatically; the Dataset tab's `Coordinate system` and `Image`
-  selects override the choice and reload the store.
+  chosen automatically; the `Coordinate system` and `Image` selects in View
+  options override the choice and reload the store.
 - Shapes are read whole, not by viewport.
 - Imported CSV/JSON annotations must use Xenium-format cell IDs, so they do
   not match SpatialData obs names.

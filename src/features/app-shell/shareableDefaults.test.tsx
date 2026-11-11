@@ -12,10 +12,13 @@ function initialSettings(initialShareableState = {}) {
       performanceBudget: detectPerformanceBudget(),
     }),
   )
-  const { genes, layers, magicLens, morphology, runtime, transcripts } = result.current
+  const { genes, layers, magicLens, morphology, tools, transcripts } = result.current
 
   return {
-    activeTab: runtime.activeControlHudTab,
+    tool: tools.activeTool,
+    hiddenLayers: (['image', 'cells', 'annotations'] as const).filter(
+      (layer) => !layers.layerVisibility[layer],
+    ),
     selectedGenes: genes.selectedGenes,
     geneExpressionColorScale: genes.geneExpressionColorScale,
     geneExpressionScoreMode: genes.geneExpressionScoreMode,

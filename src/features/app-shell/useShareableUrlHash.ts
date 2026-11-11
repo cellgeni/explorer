@@ -22,9 +22,12 @@ interface ShareableDatasetHashOptions {
 }
 
 interface ShareableViewHashOptions {
-  readonly activeControlHudTab: string
   readonly activeRoiSelection: RoiSelection | null
   readonly shareableViewState: ShareableViewState | undefined
+  readonly panels: readonly string[] | undefined
+  readonly card: string | undefined
+  readonly tool: string
+  readonly hiddenLayers: readonly string[]
 }
 
 interface ShareableLayerHashOptions {
@@ -65,7 +68,6 @@ interface ShareableTranscriptHashOptions {
 }
 
 interface ShareableMagicLensHashOptions {
-  readonly magicLensActive: boolean
   readonly magicLensMinQv: number
   readonly magicLensRadiusMicrometers: number
   readonly magicLensScope: string
@@ -103,7 +105,8 @@ export function useShareableUrlHash({
   const visiumImage = dataset.visiumSelection?.visiumImage
   const visiumLibrary = dataset.visiumSelection?.visiumLibrary
   const visiumOffTissue = dataset.visiumSelection?.visiumOffTissue
-  const { activeControlHudTab, activeRoiSelection, shareableViewState } = view
+  const { activeRoiSelection, card, hiddenLayers, panels, shareableViewState, tool } =
+    view
   const {
     boundaryCellLimit,
     cellMetadataTrackId,
@@ -138,8 +141,7 @@ export function useShareableUrlHash({
     transcriptPointColorMode,
     transcriptPointSize,
   } = transcripts
-  const { magicLensActive, magicLensMinQv, magicLensRadiusMicrometers, magicLensScope } =
-    magicLens
+  const { magicLensMinQv, magicLensRadiusMicrometers, magicLensScope } = magicLens
   useEffect(() => {
     if (typeof window === 'undefined') {
       return
@@ -156,7 +158,10 @@ export function useShareableUrlHash({
           selectedGenes,
           ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
           ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
-          activeTab: activeControlHudTab,
+          ...(panels === undefined ? {} : { panels }),
+          ...(card === undefined ? {} : { card }),
+          tool,
+          hiddenLayers,
           geneExpressionColorScale,
           geneExpressionScoreMode,
           geneExpressionDetailMode,
@@ -187,7 +192,6 @@ export function useShareableUrlHash({
           transcriptOpacity,
           transcriptPointSize,
           magicLensScope,
-          magicLensActive,
           magicLensRadiusMicrometers,
           magicLensMinQv,
           ...(spatialDataCoordinateSystem === undefined
@@ -216,9 +220,12 @@ export function useShareableUrlHash({
       window.clearTimeout(timeout)
     }
   }, [
-    activeControlHudTab,
     activeRoiSelection,
     annotationGroupIds,
+    card,
+    hiddenLayers,
+    panels,
+    tool,
     annotationUrl,
     boundaryCellLimit,
     cellMetadataTrackId,
@@ -237,7 +244,6 @@ export function useShareableUrlHash({
     cellBoundaryOpacity,
     morphologyEnabledChannelIds,
     morphologyZPlane,
-    magicLensActive,
     magicLensMinQv,
     magicLensRadiusMicrometers,
     magicLensScope,
