@@ -2200,11 +2200,19 @@ These change almost nothing on screen, but every later step depends on them.
 - [ ] **C. One source for colour scales.** Generate gradient CSS from the
       stops in `rendering/deckLayerColors.ts` with `colorScaleGradient(scale)`.
       Replace the hand-copied gradients in `transcript-controls.css:212–398`. (S)
-- [ ] **D. Test indirection.** Replace `openHudTab`
+- [x] **D. Test indirection.** Replace `openHudTab`
       (`src/test/appTestHarness.ts:171`) with `openControls(area)`. Area names
       follow the new homes and map to today's tabs, and E2E gets the same helper.
       This touches 75 calls and changes no assertions, so the later shell swap only
       has to edit the helper. (S)
+  - Done 2026-11-11. `src/test/controlAreas.ts` maps 20 areas, such as
+    `color-by`, `cell-appearance` and `tissue-image`, to today's tabs.
+    `openControls` in `appTestHarness.ts` and `tests/e2e/controls.ts` reads it;
+    the E2E version returns the panel.
+  - Tests that read controls from two future homes now open each area in turn,
+    for example `image` and then `cell-appearance` on today's Layers tab.
+  - Not covered: tests that use the Dataset tab without clicking it, because
+    it is open by default. 15.2-J must add `openControls` calls there.
 - [ ] **E. Defaults constant.** Add `DEFAULT_SHAREABLE_STATE`, taken from the
       same defaults that `useAppDomainState.ts` uses, plus a test that checks they
       agree. 15.1-L needs it. (S)

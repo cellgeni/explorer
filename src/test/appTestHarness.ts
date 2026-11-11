@@ -1,6 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 import { micrometers } from '../data/coords'
+import { CONTROL_HUD_TABS } from '../features/app-shell/appShellModel'
 import type {
   AppDependencies,
   AppDependencyOverrides,
@@ -22,6 +23,7 @@ import type {
   VisiumHdBinnedOverview,
 } from '../datasets/visiumHdDataset'
 import type { VisiumHdSegmentedOutputPaths } from '../datasets/visiumHdSegmentations'
+import { CONTROL_AREA_TABS, type ControlArea } from './controlAreas'
 
 type VisiumHdDetection = Extract<
   SpatialDatasetDetection,
@@ -168,8 +170,13 @@ export function appTestDependencies({
   return dependencies
 }
 
-export function openHudTab(name: string): void {
-  fireEvent.click(screen.getByRole('tab', { name }))
+// Shows the controls for an area (see controlAreas.ts). Today this selects the
+// Control HUD tab that holds them, unless it is already selected.
+export function openControls(area: ControlArea): void {
+  const tabId = CONTROL_AREA_TABS[area]
+  const label = CONTROL_HUD_TABS.find((tab) => tab.id === tabId)?.label ?? tabId
+  const tab = screen.getByRole('tab', { name: label })
+  if (tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab)
 }
 
 export function pendingPromise<T>(): Promise<T> {
