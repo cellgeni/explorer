@@ -245,7 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                        |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                        |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                        |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A to G done |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A to H done |
 
 ---
 
@@ -1913,7 +1913,8 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2), started
 with A (section models), B (top bar), C (layer panel), D (cards), E (fit
-and navigation), F (info drawer) and G (embedding panel) done. The
+and navigation), F (info drawer), G (embedding panel) and H (link state)
+done. The
 user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
@@ -2822,7 +2823,7 @@ viewport`; the pinned transcript is in the Transcript card, and the
       `ResizeObserver`).
     - The Cells section has Embedding › `Show Embedding`. With the embeddings
       gone from the HUD, the new shell renders no HUD.
-- [ ] **H. URL panel state.** Add `panel=`, `card=` and `tool=`, and map
+- [x] **H. URL panel state.** Add `panel=`, `card=` and `tool=`, and map
       version 1 `tab=` values. (S)
   - dataset → info drawer
   - layers → image
@@ -2832,6 +2833,21 @@ viewport`; the pinned transcript is in the Transcript card, and the
   - roi → `tool=box`
   - cell → `card=cell`
   - magic-lens → `tool=magic-lens`
+  - Done 2026-11-11. `src/features/shell/shellLinkModel.ts` reads and writes
+    them, each left out at its default.
+    - `panel=` lists the open layer sections, `info` and `embedding`; App
+      now holds that state, so ShellLayout and LayerPanel are controlled.
+    - `tool=` is the active tool in both shells and replaces `lens=1`, which
+      still opens the lens. A shared link's box, lasso or measure tool
+      survives the dataset load's reset.
+    - `card=cell:<id>` reselects a cell once the cells load; the other cards
+      come back from `roi=` and `tool=`. `card=cell` alone, from a version 1
+      `tab=cell`, selects nothing, so that tab also opens the Embedding
+      panel, where the Cell tab's embeddings went.
+    - `hidden=` keeps the layer checkboxes (15.2-C left this to H).
+    - `withShellLink` maps `tab=` when the link sets none of these. A
+      version 1 link wrote `tab=dataset` whatever was open, so in one that
+      opens nothing; in a version 2 link it opens the info drawer.
 - [ ] **I. Narrow screens.** Under 860 px: the overflow menu, the bottom sheet,
       and cards as sheets. (M)
 - [ ] **J. Switch over.** (M)
@@ -3231,7 +3247,7 @@ Sequencing:
       Slice ranges, memory, and bundles.
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
-      M3, the new shell (15.2), has started: A to G are done, H is next.
+      M3, the new shell (15.2), has started: A to H are done, I is next.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 

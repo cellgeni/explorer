@@ -1843,6 +1843,70 @@ describe('App', () => {
     expect(screen.queryByRole('region', { name: 'Embedding' })).not.toBeInTheDocument()
   })
 
+  it('opens the panels, tool, hidden layers and cell a link names with ?shell=2 (15.2-H)', async () => {
+    const cellId = intToCellId(1, 1)
+    window.history.replaceState(
+      null,
+      '',
+      `/?shell=2#xv=2&dataset=${encodeURIComponent(DEMO_DATASET_URL)}&panel=image,info&tool=measure&hidden=cells&card=cell%3A${encodeURIComponent(cellId)}`,
+    )
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+
+    try {
+      render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+
+      expect(await screen.findByRole('region', { name: 'Cell' })).toBeInTheDocument()
+      const panel = screen.getByRole('complementary', { name: 'Layers' })
+      expect(within(panel).getByRole('button', { name: /^Image/ })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      )
+      expect(within(panel).getByRole('button', { name: /^Cells/ })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      )
+      expect(
+        within(panel).getByRole('checkbox', { name: 'Show Cells' }),
+      ).not.toBeChecked()
+      expect(screen.getByRole('dialog', { name: 'Dataset info' })).toBeVisible()
+      expect(screen.getByRole('button', { name: 'Measure' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+
+      fireEvent.click(within(panel).getByRole('button', { name: /^Transcripts/ }))
+      await waitFor(() => {
+        expect(window.location.hash).toContain('panel=image%2Ctranscripts%2Cinfo')
+      })
+      expect(window.location.hash).toContain('tool=measure')
+      expect(window.location.hash).toContain('hidden=cells')
+      expect(window.location.hash).not.toMatch(/[#&]tab=/)
+    } finally {
+      viewport.restore()
+    }
+  })
+
+  it('maps an old tab= to the new shell (15.2-H)', async () => {
+    window.history.replaceState(null, '', '/?shell=2#xv=2&tab=roi')
+
+    render(<TestApp />)
+
+    expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
   it('keeps tool keys off in the current shell', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {

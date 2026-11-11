@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   testAnnotationsSectionModel,
@@ -33,11 +34,32 @@ function header(
   }
 }
 
-function renderPanel(
-  props: Partial<Parameters<typeof LayerPanel>[0]> = {},
-): ReturnType<typeof render> {
-  return render(
+type LayerPanelProps = Parameters<typeof LayerPanel>[0]
+
+// Holds the open sections, as ShellLayout does.
+function StatefulLayerPanel(
+  props: Omit<LayerPanelProps, 'expanded' | 'onExpandedChange'> &
+    Partial<Pick<LayerPanelProps, 'expanded' | 'onExpandedChange'>>,
+) {
+  const [expanded, setExpanded] = useState<readonly LayerSectionId[] | null>(
+    props.expanded ?? null,
+  )
+
+  return (
     <LayerPanel
+      {...props}
+      expanded={expanded}
+      onExpandedChange={(next) => {
+        setExpanded(next)
+        props.onExpandedChange?.(next)
+      }}
+    />
+  )
+}
+
+function renderPanel(props: Partial<LayerPanelProps> = {}): ReturnType<typeof render> {
+  return render(
+    <StatefulLayerPanel
       panel={{
         sections: [
           header('image', 'Image'),
@@ -152,7 +174,7 @@ describe('LayerPanel', () => {
     expect(onCollapsedChange).toHaveBeenCalledWith(true)
 
     rerender(
-      <LayerPanel
+      <StatefulLayerPanel
         panel={{ sections: [header('cells', 'Cells')] }}
         collapsed
         onCollapsedChange={onCollapsedChange}
@@ -205,7 +227,7 @@ describe('LayerPanel', () => {
     expect(onEmbeddingOpenChange).toHaveBeenCalledWith(true)
 
     rerender(
-      <LayerPanel
+      <StatefulLayerPanel
         panel={{ sections: [header('cells', 'Cells')] }}
         collapsed={false}
         onCollapsedChange={vi.fn()}
@@ -222,5 +244,22 @@ describe('LayerPanel', () => {
       'aria-pressed',
       'true',
     )
+  })
+
+  it('opens the sections a link names, and reports changes', () => {
+    const onExpandedChange = vi.fn()
+    renderPanel({ expanded: ['image', 'transcripts'], onExpandedChange })
+
+    expect(screen.getByRole('button', { name: /^Image/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: /^Cells/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cells/ }))
+    expect(onExpandedChange).toHaveBeenCalledWith(['image', 'cells', 'transcripts'])
   })
 })

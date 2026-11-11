@@ -34,7 +34,6 @@ function ShareableUrlHashProbe() {
       showHoverTooltips: false,
     },
     magicLens: {
-      magicLensActive: true,
       magicLensMinQv: 18,
       magicLensRadiusMicrometers: 120,
       magicLensScope: 'cursor',
@@ -63,6 +62,10 @@ function ShareableUrlHashProbe() {
         },
       },
       shareableViewState: { target: [12.346, 78.912, 0], zoom: 1.235 },
+      panels: undefined,
+      card: 'cell:cell-7',
+      tool: 'magic-lens',
+      hiddenLayers: [],
     },
   })
 
@@ -108,7 +111,11 @@ describe('useShareableUrlHash', () => {
     expect(window.location.hash).toContain('cellBoundary=0.35')
     expect(window.location.hash).toContain('channels=Channel%3A1')
     expect(window.location.hash).toMatch(/[#&]z=6(&|$)/)
-    expect(window.location.hash).toContain('lens=1')
+    expect(window.location.hash).toContain('tool=magic-lens')
+    expect(window.location.hash).not.toMatch(/[#&]lens=/)
+    expect(window.location.hash).toContain('card=cell%3Acell-7')
+    expect(window.location.hash).not.toContain('panel=')
+    expect(window.location.hash).not.toContain('hidden=')
     expect(window.location.hash).toContain('lensRadius=120')
     // Selected genes is the default transcript filter.
     expect(window.location.hash).not.toContain('txFilter')

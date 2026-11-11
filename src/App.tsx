@@ -43,6 +43,15 @@ import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import { useCardStackModel } from './features/cards/cardModels'
 import { useEmbeddingModel } from './features/sections/embeddingModel'
 import {
+  cardForLink,
+  cellIdFromLink,
+  hiddenLayersForLink,
+  panelsForLink,
+  panelsFromLink,
+  withShellLink,
+  type ShellPanelState,
+} from './features/shell/shellLinkModel'
+import {
   CONTROL_HUD_TABS,
   parseObservationColorMode,
   readDebugModeFromLocation,
@@ -299,12 +308,18 @@ export function App({ dependencies }: AppProps = {}) {
   } = resolveAppDependencies(dependencies)
 
   const controlIds = useAppControlIds()
+  const [shellVersion] = useState(readShellVersionFromLocation)
+  // The new shell reads an old link's tab as panels, a tool or a card (15.2-H).
   const [initialShareableState] = useState<ShareableState>(() =>
-    readShareableStateFromLocation(),
+    shellVersion === 2
+      ? withShellLink(readShareableStateFromLocation())
+      : readShareableStateFromLocation(),
   )
   const [performanceBudget] = useState<PerformanceBudget>(() => detectPerformanceBudget())
   const [debugMode, setDebugMode] = useState(readDebugModeFromLocation)
-  const [shellVersion] = useState(readShellVersionFromLocation)
+  const [shellPanels, setShellPanels] = useState<ShellPanelState>(() =>
+    panelsFromLink(initialShareableState),
+  )
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const appState = useAppDomainState({ initialShareableState, performanceBudget })
@@ -2962,6 +2977,23 @@ export function App({ dependencies }: AppProps = {}) {
         : [loadedAnnotationGroupId],
     [initialShareableState.annotationGroupIds, loadedAnnotationGroupId],
   )
+  const sharedPanels = useMemo(() => panelsForLink(shellPanels), [shellPanels])
+  const sharedHiddenLayers = useMemo(
+    () => hiddenLayersForLink(layerVisibility),
+    [layerVisibility],
+  )
+  // A link's `card=cell:<id>` selects that cell once the cells load.
+  const linkedCellIdRef = useRef(cellIdFromLink(initialShareableState))
+  useEffect(() => {
+    const cellId = linkedCellIdRef.current
+    if (cellId === null || loadState.status !== 'ready' || overviewCells.length === 0) {
+      return
+    }
+
+    linkedCellIdRef.current = null
+    const cell = overviewCells.find((candidate) => candidate.id === cellId)
+    if (cell !== undefined) handleViewerCellClick(cell)
+  }, [handleViewerCellClick, loadState.status, overviewCells])
   useShareableUrlHash({
     dataset: {
       annotationUrl: annotationImportUrl,
@@ -3000,7 +3032,6 @@ export function App({ dependencies }: AppProps = {}) {
       showHoverTooltips,
     },
     magicLens: {
-      magicLensActive,
       magicLensMinQv,
       magicLensRadiusMicrometers,
       magicLensScope,
@@ -3018,9 +3049,13 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptPointSize,
     },
     view: {
-      activeControlHudTab,
+      activeControlHudTab: shellVersion === 2 ? undefined : activeControlHudTab,
       activeRoiSelection,
       shareableViewState,
+      panels: shellVersion === 2 ? sharedPanels : undefined,
+      card: cardForLink(selectedCell?.id ?? null),
+      tool: activeTool,
+      hiddenLayers: sharedHiddenLayers,
     },
   })
 
@@ -3732,6 +3767,8 @@ export function App({ dependencies }: AppProps = {}) {
           annotations={annotationsSection}
           cards={cards}
           embedding={platformAdapter.capabilities.cells ? embedding : null}
+          panels={shellPanels}
+          onPanelsChange={setShellPanels}
         >
           {viewerRegion}
         </ShellLayout>

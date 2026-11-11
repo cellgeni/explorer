@@ -22,9 +22,14 @@ interface ShareableDatasetHashOptions {
 }
 
 interface ShareableViewHashOptions {
-  readonly activeControlHudTab: string
+  // The current shell's tab; the new shell writes panels instead (15.2-H).
+  readonly activeControlHudTab: string | undefined
   readonly activeRoiSelection: RoiSelection | null
   readonly shareableViewState: ShareableViewState | undefined
+  readonly panels: readonly string[] | undefined
+  readonly card: string | undefined
+  readonly tool: string
+  readonly hiddenLayers: readonly string[]
 }
 
 interface ShareableLayerHashOptions {
@@ -65,7 +70,6 @@ interface ShareableTranscriptHashOptions {
 }
 
 interface ShareableMagicLensHashOptions {
-  readonly magicLensActive: boolean
   readonly magicLensMinQv: number
   readonly magicLensRadiusMicrometers: number
   readonly magicLensScope: string
@@ -103,7 +107,15 @@ export function useShareableUrlHash({
   const visiumImage = dataset.visiumSelection?.visiumImage
   const visiumLibrary = dataset.visiumSelection?.visiumLibrary
   const visiumOffTissue = dataset.visiumSelection?.visiumOffTissue
-  const { activeControlHudTab, activeRoiSelection, shareableViewState } = view
+  const {
+    activeControlHudTab,
+    activeRoiSelection,
+    card,
+    hiddenLayers,
+    panels,
+    shareableViewState,
+    tool,
+  } = view
   const {
     boundaryCellLimit,
     cellMetadataTrackId,
@@ -138,8 +150,7 @@ export function useShareableUrlHash({
     transcriptPointColorMode,
     transcriptPointSize,
   } = transcripts
-  const { magicLensActive, magicLensMinQv, magicLensRadiusMicrometers, magicLensScope } =
-    magicLens
+  const { magicLensMinQv, magicLensRadiusMicrometers, magicLensScope } = magicLens
   useEffect(() => {
     if (typeof window === 'undefined') {
       return
@@ -156,7 +167,13 @@ export function useShareableUrlHash({
           selectedGenes,
           ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
           ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
-          activeTab: activeControlHudTab,
+          ...(activeControlHudTab === undefined
+            ? {}
+            : { activeTab: activeControlHudTab }),
+          ...(panels === undefined ? {} : { panels }),
+          ...(card === undefined ? {} : { card }),
+          tool,
+          hiddenLayers,
           geneExpressionColorScale,
           geneExpressionScoreMode,
           geneExpressionDetailMode,
@@ -187,7 +204,6 @@ export function useShareableUrlHash({
           transcriptOpacity,
           transcriptPointSize,
           magicLensScope,
-          magicLensActive,
           magicLensRadiusMicrometers,
           magicLensMinQv,
           ...(spatialDataCoordinateSystem === undefined
@@ -219,6 +235,10 @@ export function useShareableUrlHash({
     activeControlHudTab,
     activeRoiSelection,
     annotationGroupIds,
+    card,
+    hiddenLayers,
+    panels,
+    tool,
     annotationUrl,
     boundaryCellLimit,
     cellMetadataTrackId,
@@ -237,7 +257,6 @@ export function useShareableUrlHash({
     cellBoundaryOpacity,
     morphologyEnabledChannelIds,
     morphologyZPlane,
-    magicLensActive,
     magicLensMinQv,
     magicLensRadiusMicrometers,
     magicLensScope,

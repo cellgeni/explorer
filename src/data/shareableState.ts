@@ -22,7 +22,17 @@ export interface ShareableState {
   readonly selectedGenes?: readonly string[]
   readonly viewState?: ShareableViewState
   readonly roiSelection?: RoiSelection
+  // The current shell's HUD tab; the new shell writes panels, card and tool
+  // instead and maps an old tab onto them (UNIFIED_PLAN.md, 15.2-H).
   readonly activeTab?: string
+  // Open layer sections, the info drawer and the Embedding panel: `panel=`.
+  readonly panels?: readonly string[]
+  // A card to restore, such as `cell:<id>`: `card=`.
+  readonly card?: string
+  // The active tool when it is not Pan: `tool=`.
+  readonly tool?: string
+  // Hidden layers (image, cells, annotations): `hidden=`.
+  readonly hiddenLayers?: readonly string[]
   readonly geneExpressionColorScale?: string
   readonly geneExpressionScoreMode?: string
   readonly geneExpressionDetailMode?: string
@@ -88,6 +98,10 @@ export function parseShareableState(hash: string): ShareableState {
   const viewState = parseViewState(params.get('view'))
   const roiSelection = parseRoiSelection(params.get('roi'))
   const activeTab = readString(params, 'tab')
+  const panels = readCsvAllowEmpty(params, 'panel')
+  const card = readString(params, 'card')
+  const tool = readString(params, 'tool')
+  const hiddenLayers = readCsv(params, 'hidden')
   const geneExpressionColorScale = readString(params, 'scale')
   const geneExpressionScoreMode = readString(params, 'score')
   const geneExpressionDetailMode = readString(params, 'detail')
@@ -164,6 +178,22 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (activeTab !== undefined) {
     state.activeTab = activeTab
+  }
+
+  if (panels !== undefined) {
+    state.panels = panels
+  }
+
+  if (card !== undefined) {
+    state.card = card
+  }
+
+  if (tool !== undefined) {
+    state.tool = tool
+  }
+
+  if (hiddenLayers !== undefined) {
+    state.hiddenLayers = hiddenLayers
   }
 
   if (geneExpressionColorScale !== undefined) {
@@ -359,6 +389,17 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   setOptionalString(params, 'tab', state.activeTab)
+
+  if (state.panels !== undefined) {
+    params.set('panel', state.panels.join(','))
+  }
+
+  setOptionalString(params, 'card', state.card)
+  setOptionalString(params, 'tool', state.tool)
+
+  if (state.hiddenLayers !== undefined && state.hiddenLayers.length > 0) {
+    params.set('hidden', state.hiddenLayers.join(','))
+  }
   setOptionalString(params, 'scale', state.geneExpressionColorScale)
   setOptionalString(params, 'score', state.geneExpressionScoreMode)
   setOptionalString(params, 'detail', state.geneExpressionDetailMode)

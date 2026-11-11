@@ -139,6 +139,7 @@ import {
   toolAfterRoiMode,
   type ActiveTool,
 } from './activeToolModel'
+import { layerVisibilityFromLink, toolFromLink } from '../shell/shellLinkModel'
 import { DEFAULT_SHAREABLE_STATE } from './shareableDefaults'
 import {
   IDLE_SPATIALDATA_CONTROL_STATE,
@@ -158,12 +159,6 @@ export interface LayerVisibility {
   readonly image: boolean
   readonly cells: boolean
   readonly annotations: boolean
-}
-
-const ALL_LAYERS_VISIBLE: LayerVisibility = {
-  image: true,
-  cells: true,
-  annotations: true,
 }
 
 export function useAppDomainState({
@@ -260,9 +255,7 @@ export function useAppDomainState({
   // One tool at a time (15.1-G). The old flags and their setters are derived
   // from it, so the workflows keep their interfaces and cannot turn on two.
   const [activeTool, setActiveTool] = useState<ActiveTool>(() =>
-    (initialShareableState.magicLensActive ?? DEFAULT_SHAREABLE_STATE.magicLensActive)
-      ? 'magic-lens'
-      : 'pan',
+    toolFromLink(initialShareableState),
   )
   const magicLensActive = activeTool === 'magic-lens'
   const measurementEnabled = activeTool === 'measure'
@@ -422,8 +415,9 @@ export function useAppDomainState({
   )
   // The layer panel's visibility checkboxes (15.2-C). Transcripts use
   // showTranscriptOverlay.
-  const [layerVisibility, setLayerVisibility] =
-    useState<LayerVisibility>(ALL_LAYERS_VISIBLE)
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(() =>
+    layerVisibilityFromLink(initialShareableState),
+  )
   const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(() =>
     normalizeLayerOpacity(
       initialShareableState.cellBoundaryOpacity ??

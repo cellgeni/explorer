@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Button, ChevronRightIcon, Disclosure, IconButton } from '../../components/ui'
 import {
   AnnotationLabelLists,
@@ -55,6 +55,10 @@ interface LayerPanelProps {
   readonly annotations: AnnotationsSectionModel
   // Visium HD bin size, the Visium tissue image and off-tissue spots.
   readonly viewOptions: DatasetViewOptionsModel
+  // The open sections, or null for the default (15.2-H keeps them in the
+  // link).
+  readonly expanded: readonly LayerSectionId[] | null
+  readonly onExpandedChange: (expanded: readonly LayerSectionId[]) => void
   // Cells › Show Embedding opens the Embedding panel (15.2-G).
   readonly embeddingOpen: boolean
   readonly onEmbeddingOpenChange: (open: boolean) => void
@@ -72,19 +76,19 @@ export function LayerPanel({
   transcripts,
   annotations,
   viewOptions,
+  expanded: chosenExpanded,
+  onExpandedChange,
   embeddingOpen,
   onEmbeddingOpenChange,
 }: LayerPanelProps) {
   // Until the user opens or closes a section, Cells is open, or the first
   // section where there are no cells (images).
-  const [chosenExpanded, setExpanded] = useState<ReadonlySet<LayerSectionId> | null>(null)
-  const expanded =
+  const expanded = new Set<LayerSectionId>(
     chosenExpanded ??
-    new Set(
-      panel.sections.some((section) => section.id === 'cells')
+      (panel.sections.some((section) => section.id === 'cells')
         ? ['cells']
-        : panel.sections.slice(0, 1).map((section) => section.id),
-    )
+        : panel.sections.slice(0, 1).map((section) => section.id)),
+  )
   const bodies: Readonly<Record<LayerSectionId, ReactNode>> = {
     image: <ImageSection image={image} viewOptions={viewOptions} />,
     cells: (
@@ -128,12 +132,11 @@ export function LayerPanel({
             header={header}
             expanded={expanded.has(header.id)}
             onExpandedChange={(open) => {
-              setExpanded(() => {
-                const next = new Set(expanded)
-                if (open) next.add(header.id)
-                else next.delete(header.id)
-                return next
-              })
+              onExpandedChange(
+                panel.sections
+                  .map((section) => section.id)
+                  .filter((id) => (id === header.id ? open : expanded.has(id))),
+              )
             }}
           >
             {bodies[header.id]}

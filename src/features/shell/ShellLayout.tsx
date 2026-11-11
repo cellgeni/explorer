@@ -13,6 +13,7 @@ import { EmbeddingWindow } from './EmbeddingWindow'
 import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
 import type { LayerPanelModel } from './layerPanelModel'
+import type { ShellPanelState } from './shellLinkModel'
 import { isLayerPanelKey } from './shortcuts'
 import { TopBar } from './TopBar'
 import type { TopBarModel } from './topBarModel'
@@ -29,6 +30,10 @@ interface ShellLayoutProps {
   readonly cards: CardStackModel
   // Null where the platform has no cells (images).
   readonly embedding: EmbeddingModel | null
+  // Open sections, the info drawer and the Embedding panel, which the link
+  // keeps (15.2-H).
+  readonly panels: ShellPanelState
+  readonly onPanelsChange: (panels: ShellPanelState) => void
   // The canvas, and the panels that sit over it.
   readonly children: ReactNode
 }
@@ -48,10 +53,17 @@ export function ShellLayout({
   annotations,
   cards,
   embedding,
+  panels,
+  onPanelsChange,
   children,
 }: ShellLayoutProps) {
-  const [infoOpen, setInfoOpen] = useState(false)
-  const [embeddingOpen, setEmbeddingOpen] = useState(false)
+  const { infoOpen, embeddingOpen } = panels
+  const setInfoOpen = (open: boolean) => {
+    onPanelsChange({ ...panels, infoOpen: open })
+  }
+  const setEmbeddingOpen = (open: boolean) => {
+    onPanelsChange({ ...panels, embeddingOpen: open })
+  }
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const togglePanel = useEffectEvent(() => {
     setPanelCollapsed((current) => !current)
@@ -115,6 +127,10 @@ export function ShellLayout({
           transcripts={transcripts}
           annotations={annotations}
           viewOptions={info.viewOptions}
+          expanded={panels.expanded}
+          onExpandedChange={(expanded) => {
+            onPanelsChange({ ...panels, expanded })
+          }}
           embeddingOpen={embeddingOpen}
           onEmbeddingOpenChange={setEmbeddingOpen}
         />
