@@ -345,7 +345,10 @@ The section ends with the overlay status
 (`src/features/transcripts/TranscriptStatusPanel.tsx`): source, rendered
 count and query time; `Load exact viewport` when waiting; and the top groups
 (gene, FOV, count; gene and count on Atera). Clicking a transcript or density
-bin pins it in the [Transcript card](#cards).
+bin pins it in the [Transcript card](#cards). An exact load still running
+after 12 s keeps going: it stays in the loading list as `Loading transcripts`,
+with `Cancel`, and the panel says it is slow, that `Cancel` stops it, and how
+to get a faster view.
 
 ### Annotations
 

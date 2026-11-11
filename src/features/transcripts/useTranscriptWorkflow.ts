@@ -38,7 +38,8 @@ import {
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
 import {
-  TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS,
+  TRANSCRIPT_EXACT_SLOW_QUERY_MESSAGE,
+  TRANSCRIPT_EXACT_SLOW_QUERY_MS,
   TRANSCRIPT_NATIVE_DENSITY_MAX_BINS,
   IDLE_TRANSCRIPT_LAYER_STATE,
   buildCellSummaryTranscriptBins,
@@ -52,6 +53,7 @@ import {
   transcriptLayerFailed,
   transcriptLayerLoading,
   transcriptLayerReady,
+  transcriptLayerSlow,
   transcriptLayerUnavailable,
   transcriptLayerWaiting,
   transcriptAggregateFallbackMessage,
@@ -846,7 +848,6 @@ export function useTranscriptWorkflow({
       { coalesceKey: 'transcript-query' },
     )
 
-    let didExactQueryTimeOut = false
     let exactQueryTimeout: number | null = null
     let progressPercent = -1
     const startTimeout = window.setTimeout(() => {
@@ -854,27 +855,23 @@ export function useTranscriptWorkflow({
         return
       }
 
+      // A slow load is not abandoned: on a slow network or device, or while
+      // a shared link's other layers load, the points can arrive well after
+      // 12 s. Changing the view or detail still cancels it.
       exactQueryTimeout = window.setTimeout(() => {
+        exactQueryTimeout = null
+
         if (!request.isCurrent() || request.signal.aborted) {
           return
         }
 
-        didExactQueryTimeOut = true
-        transcriptViewportKeyRef.current = null
-
-        request.complete()
-        request.abortController.abort()
-        setTranscriptLayerState(
-          transcriptLayerWaiting({
-            message:
-              'Exact transcript loading exceeded 12 seconds. Use Density/Auto for this zoom level, zoom closer, or filter to fewer genes.',
-            visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
-          }),
+        setTranscriptLayerState((current) =>
+          transcriptLayerSlow(current, TRANSCRIPT_EXACT_SLOW_QUERY_MESSAGE),
         )
-        appendDebugEvent('Transcript exact query timed out', {
+        appendDebugEvent('Transcript exact query still loading after 12 s', {
           coalesceKey: 'transcript-query',
         })
-      }, TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS)
+      }, TRANSCRIPT_EXACT_SLOW_QUERY_MS)
 
       void loadTranscriptViewport(loadState.url, currentViewportDetail.bbox, {
         signal: request.signal,
@@ -902,7 +899,7 @@ export function useTranscriptWorkflow({
         },
       })
         .then((result) => {
-          if (didExactQueryTimeOut || !request.isCurrent() || request.signal.aborted) {
+          if (!request.isCurrent() || request.signal.aborted) {
             return
           }
 
@@ -945,12 +942,7 @@ export function useTranscriptWorkflow({
           )
         })
         .catch((error) => {
-          if (
-            didExactQueryTimeOut ||
-            isAbortError(error) ||
-            !request.isCurrent() ||
-            request.signal.aborted
-          ) {
+          if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
             return
           }
 

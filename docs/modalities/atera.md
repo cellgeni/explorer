@@ -191,6 +191,12 @@ Points have id `<tile>:<row>`, no FOV, `isGene: true`, and z from
 in a 600 × 400 µm box matched the binned estimate exactly; a 256 × 192 µm view
 of 7,645 points took about 5 s cold and 1.4 s with the range cache warm.
 
+Each step waits for the one before, so round trips add up. Opening a shared
+link at about 150 ms from the host, on a slow CPU, while boundaries and
+expression also load, the E2E test's 8,546-point UMOD view took about 25 s.
+Exact loads are therefore not cut off: after 12 s the panel says the points
+are still loading.
+
 **All features.** With no genes selected, or the Feature filter on All
 features, the layer is cell-summary squares built from the overview's
 `obs/transcript_counts`, with a message asking for a gene filter; Exact waits

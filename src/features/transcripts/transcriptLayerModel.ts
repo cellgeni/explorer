@@ -21,7 +21,10 @@ import {
   transcriptCapabilityLabel,
 } from './transcriptLabels'
 
-export const TRANSCRIPT_EXACT_QUERY_TIMEOUT_MS = 12_000
+// After this long an exact load says it is slow, and keeps loading.
+export const TRANSCRIPT_EXACT_SLOW_QUERY_MS = 12_000
+export const TRANSCRIPT_EXACT_SLOW_QUERY_MESSAGE =
+  'Exact transcripts are still loading after 12 seconds. To stop, use Cancel in the loading list. For a faster view, use Density, zoom closer, or filter to fewer genes.'
 export const TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO = 0.8
 export const TRANSCRIPT_NATIVE_DENSITY_MAX_BINS = 1_500
 
@@ -83,6 +86,8 @@ export type TranscriptLayerState<
       readonly previousLayer?: TranscriptRetainedLayerState
       // What showed before the load, for Cancel (15.3-D).
       readonly previousState?: SettledTranscriptLayerState<ErrorType>
+      // Set once the load is slow (transcriptLayerSlow).
+      readonly message?: string
     }
   | {
       readonly status: 'ready'
@@ -192,6 +197,14 @@ export function transcriptLayerCancelled<ErrorType extends TranscriptLoadErrorSu
   return previousState === undefined || previousState.status === 'error'
     ? IDLE_TRANSCRIPT_LAYER_STATE
     : previousState
+}
+
+// Notes on a load in progress that it is slow; other states are unchanged.
+export function transcriptLayerSlow<ErrorType extends TranscriptLoadErrorSummary>(
+  current: TranscriptLayerState<ErrorType>,
+  message: string,
+): TranscriptLayerState<ErrorType> {
+  return current.status === 'loading' ? { ...current, message } : current
 }
 
 interface TranscriptLayerAggregateOptions {

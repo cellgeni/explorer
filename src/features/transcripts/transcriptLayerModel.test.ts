@@ -12,6 +12,7 @@ import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import {
   IDLE_TRANSCRIPT_CAPABILITY_STATE,
   IDLE_TRANSCRIPT_LAYER_STATE,
+  TRANSCRIPT_EXACT_SLOW_QUERY_MESSAGE,
   buildCellSummaryTranscriptBins,
   estimateVisibleTranscripts,
   estimateVisibleTranscriptsFromCells,
@@ -33,6 +34,7 @@ import {
   transcriptLayerFailed,
   transcriptLayerLoading,
   transcriptLayerReady,
+  transcriptLayerSlow,
   transcriptLayerUnavailable,
   transcriptLayerWaiting,
   transcriptAggregateBinsForRendering,
@@ -437,6 +439,44 @@ describe('transcriptLayerModel', () => {
       url: 'https://example.test/output',
       error,
     })
+  })
+
+  it('notes a slow load without dropping it or the layer shown meanwhile', () => {
+    const ready = transcriptLayerReady({
+      url: 'https://example.test/output',
+      points: [point],
+      groups: [],
+      visibleTranscriptEstimate: 1,
+      hitPointLimit: false,
+      durationMs: 3,
+    })
+    const loading = transcriptLayerLoading(ready, 'https://example.test/output', 10)
+    const slow = transcriptLayerSlow(loading, TRANSCRIPT_EXACT_SLOW_QUERY_MESSAGE)
+
+    expect(slow).toEqual({ ...loading, message: TRANSCRIPT_EXACT_SLOW_QUERY_MESSAGE })
+    expect(
+      transcriptStatusCopy(
+        transcriptCapabilityReady('https://example.test/output', {
+          rawParquet: false,
+          nativeZarr: false,
+        }),
+        slow,
+        true,
+      ),
+    ).toBe('Loading')
+    expect(transcriptPointsForRendering(slow)).toEqual([point])
+    // Cancel goes back to the points shown before the slow load.
+    expect(transcriptLayerCancelled(slow)).toBe(ready)
+    // The next load starts without the note.
+    expect(transcriptLayerLoading(slow, 'https://example.test/output', 5)).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+      visibleTranscriptEstimate: 5,
+      previousLayer: { kind: 'exact', points: [point] },
+      previousState: ready,
+    })
+    // A load that has finished is left alone.
+    expect(transcriptLayerSlow(ready, TRANSCRIPT_EXACT_SLOW_QUERY_MESSAGE)).toBe(ready)
   })
 
   it('parses and normalizes transcript controls', () => {
