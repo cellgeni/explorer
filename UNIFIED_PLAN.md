@@ -2208,13 +2208,29 @@ These change almost nothing on screen, but every later step depends on them.
     used yet; 15.1-K moves the sizes to them.
   - Not converted: the embedding plot draws on its own canvas with fixed
     colours (`EmbeddingPanel.tsx`). It was already dark.
-- [ ] **B. Primitives** in `src/components/ui/`: Button, IconButton,
+- [x] **B. Primitives** in `src/components/ui/`: Button, IconButton,
       Segmented, Select, Checkbox, Switch, Slider, NumberField, Chip (removable),
       Disclosure, Popover, Tooltip, Kbd, Card, Drawer, Sheet. (M)
   - Each one requires `title` in its props type.
   - Extend `nativeTitleAudit.test.ts` to check these components and
     `<summary>`; it currently checks only native elements.
   - No existing UI is migrated in this PR.
+  - Done 2026-11-11: the 16 primitives, styled in `src/styles/ui.css` with
+    tokens only and the new type scale, and exported from
+    `components/ui/index.ts`. `title` is the native tooltip on controls, the
+    heading of Card and Drawer, the handle text of Sheet, the bubble text of
+    Tooltip and the key's meaning on Kbd.
+  - Behaviour: NumberField commits on Enter or blur and clamps; Escape
+    reverts it. Popover moves focus in and closes on Escape (focus back to
+    the trigger) or an outside click. Drawer is not modal, stays mounted
+    while closed and returns focus when it closes. Disclosure and Sheet keep
+    their content mounted. Tooltip shows after 400 ms of hover or at once on
+    focus.
+  - `primitives.test.tsx` covers each one, and a line per primitive with
+    `@ts-expect-error` makes `tsc` fail if `title` ever becomes optional.
+  - The audit now also checks `<summary>` and every component exported from
+    `components/ui`. A native control that is the direct child of a Tooltip
+    counts as titled, because a native title would show a second tooltip.
 - [x] **C. One source for colour scales.** Generate gradient CSS from the
       stops in `rendering/deckLayerColors.ts` with `colorScaleGradient(scale)`.
       Replace the hand-copied gradients in `transcript-controls.css:212–398`. (S)

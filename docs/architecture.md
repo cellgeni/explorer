@@ -26,20 +26,20 @@ files. Parsing happens in the browser:
 
 ## Source Layout
 
-| Directory                               | Contents                                                                                                                                                                 |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/App.tsx`                           | Orchestration root: wires state, workflows, HUD panels, and the viewer                                                                                                   |
-| `src/datasets/`                         | Detection (`datasetFactory.ts`), the `SpatialDataset` interface, and one implementation per platform                                                                     |
-| `src/data/`                             | Platform-neutral readers and models: Parquet, Zarr, HDF5 matrices, transcripts, annotations, embeddings, ROI queries, caches, range probes, diagnostics, shareable state |
-| `src/features/`                         | Feature modules: HUD panels (`*.tsx`), workflow hooks (`use*Workflow.ts`), and pure models (`*Model.ts`)                                                                 |
-| `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                 |
-| `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary                                                                |
-| `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                    |
-| `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                    |
-| `src/workers/`                          | Tile decode pool, Visium HD matrix and Feature Slice workers                                                                                                             |
-| `src/store/`                            | Zustand store (dataset URL)                                                                                                                                              |
-| `src/styles/`                           | CSS per UI area. `tokens.css` defines the dark theme's colours plus the type, spacing and stacking scales; the other files use only those tokens                         |
-| `tests/e2e/`                            | Playwright tests against hosted reference datasets                                                                                                                       |
+| Directory                               | Contents                                                                                                                                                                                 |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/App.tsx`                           | Orchestration root: wires state, workflows, HUD panels, and the viewer                                                                                                                   |
+| `src/datasets/`                         | Detection (`datasetFactory.ts`), the `SpatialDataset` interface, and one implementation per platform                                                                                     |
+| `src/data/`                             | Platform-neutral readers and models: Parquet, Zarr, HDF5 matrices, transcripts, annotations, embeddings, ROI queries, caches, range probes, diagnostics, shareable state                 |
+| `src/features/`                         | Feature modules: HUD panels (`*.tsx`), workflow hooks (`use*Workflow.ts`), and pure models (`*Model.ts`)                                                                                 |
+| `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                                 |
+| `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
+| `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
+| `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                                    |
+| `src/workers/`                          | Tile decode pool, Visium HD matrix and Feature Slice workers                                                                                                                             |
+| `src/store/`                            | Zustand store (dataset URL)                                                                                                                                                              |
+| `src/styles/`                           | CSS per UI area. `tokens.css` defines the dark theme's colours plus the type, spacing and stacking scales; the other files use only those tokens                                         |
+| `tests/e2e/`                            | Playwright tests against hosted reference datasets                                                                                                                                       |
 
 Unit tests sit next to their modules as `*.test.ts(x)` and run with Vitest.
 
