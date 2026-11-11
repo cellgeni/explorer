@@ -1353,6 +1353,48 @@ describe('App', () => {
     expect(window.location.hash.length).toBeLessThan(200)
   })
 
+  it('shares the chosen transcript filter, not All features shown without genes', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({ rawParquet: true, nativeZarr: false }))
+    const props = { loadDatasetOverview, loadGenePanel, loadTranscriptCapabilities }
+
+    const { unmount } = render(<TestApp {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+    openControls('transcripts')
+    expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue('all')
+
+    await waitFor(() => {
+      expect(window.location.hash).toContain('tab=transcripts')
+    })
+    expect(window.location.hash).toContain('dataset=')
+    expect(window.location.hash).not.toContain('txFilter')
+    unmount()
+
+    // Reopening that link and selecting a gene filters to it, as in a fresh
+    // session.
+    render(<TestApp {...props} />)
+    expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+    openControls('genes')
+    fireEvent.change(await screen.findByLabelText('Gene selection'), {
+      target: { value: 'gad' },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Gad1' }))
+    openControls('transcripts')
+    expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue(
+      'selected',
+    )
+  })
+
   it('restores dataset controls from a shareable hash', async () => {
     window.history.replaceState(
       null,
