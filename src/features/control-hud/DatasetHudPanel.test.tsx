@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { testDatasetInfoModel } from '../../test/sectionModels'
 import { DatasetHudPanel } from './DatasetHudPanel'
 
 describe('DatasetHudPanel', () => {
@@ -14,45 +15,31 @@ describe('DatasetHudPanel', () => {
     const onDownloadDiagnostics = vi.fn()
     const onClearDebugLog = vi.fn()
     const onCopyLink = vi.fn(async () => true)
+    const info = testDatasetInfoModel({
+      open: {
+        datasetUrl: 'https://example.test/output',
+        onDatasetUrlChange,
+        shouldLoadMorphology: false,
+        onShouldLoadMorphologyChange,
+        morphologyLabel: 'Morphology image',
+        boundaryCellLimit: 50000,
+        maxBoundaryCellLimit: 100000,
+        boundaryLimitDisabled: false,
+        onBoundaryCellLimitChange,
+        isLoading: false,
+        onSubmit,
+      },
+      share: { canCopyLink: true, onCopyLink },
+      diagnostics: {
+        canRun: true,
+        onRun: onRunDatasetDiagnostics,
+        onDownload: onDownloadDiagnostics,
+        log: [{ id: 1, timestamp: 1_700_000_000_000, message: 'Loaded' }],
+        onClearLog: onClearDebugLog,
+      },
+    })
 
-    render(
-      <DatasetHudPanel
-        active
-        datasetInputId="dataset-url"
-        morphologyInputId="morphology"
-        boundaryLimitInputId="boundary-limit"
-        visiumHdBinSizeInputId="visium-bin-size"
-        datasetAbout={null}
-        datasetUrl="https://example.test/output"
-        shouldLoadMorphology={false}
-        morphologyLabel="Morphology image"
-        boundaryCellLimit={50000}
-        maxBoundaryCellLimit={100000}
-        boundaryControlsDisabled={false}
-        isLoading={false}
-        diagnosticsState={{ status: 'idle' }}
-        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
-        visiumHdControlState={{ status: 'idle' }}
-        spatialDataControlState={{ status: 'idle' }}
-        onSpatialDataSelectionChange={vi.fn()}
-        visiumControlState={{ status: 'idle' }}
-        onVisiumImageChange={vi.fn()}
-        onVisiumViewChange={vi.fn()}
-        activeErrors={[]}
-        fallbackNotices={[]}
-        debugLog={[{ id: 1, timestamp: 1_700_000_000_000, message: 'Loaded' }]}
-        onSubmit={onSubmit}
-        onDatasetUrlChange={onDatasetUrlChange}
-        onShouldLoadMorphologyChange={onShouldLoadMorphologyChange}
-        onBoundaryCellLimitChange={onBoundaryCellLimitChange}
-        onVisiumHdBinSizeChange={vi.fn()}
-        onRunDatasetDiagnostics={onRunDatasetDiagnostics}
-        onDownloadDiagnostics={onDownloadDiagnostics}
-        onClearDebugLog={onClearDebugLog}
-        canCopyLink
-        onCopyLink={onCopyLink}
-      />,
-    )
+    render(<DatasetHudPanel active info={info} />)
 
     fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
       target: { value: 'https://example.test/next' },
@@ -83,58 +70,40 @@ describe('DatasetHudPanel', () => {
 
   it('renders Visium HD bin controls and disables unavailable tiers', () => {
     const onVisiumHdBinSizeChange = vi.fn()
+    const info = testDatasetInfoModel({
+      open: {
+        datasetUrl: 'https://example.test/visium',
+        shouldLoadMorphology: true,
+        morphologyLabel: 'Tissue image',
+        boundaryCellLimit: 50000,
+        maxBoundaryCellLimit: 100000,
+        boundaryLimitDisabled: true,
+        isLoading: false,
+      },
+      viewOptions: {
+        visiumHd: {
+          state: {
+            status: 'ready',
+            url: 'https://example.test/visium',
+            selectedBinSize: 16,
+            binCount: 54_504,
+            options: [
+              { size: 16, available: true, disabled: false, binCount: 54_504 },
+              { size: 8, available: true, disabled: false },
+              {
+                size: 2,
+                available: false,
+                disabled: true,
+                reason: '2 µm binned output was not detected.',
+              },
+            ],
+          },
+          onBinSizeChange: onVisiumHdBinSizeChange,
+        },
+      },
+    })
 
-    render(
-      <DatasetHudPanel
-        active
-        datasetInputId="dataset-url"
-        morphologyInputId="morphology"
-        boundaryLimitInputId="boundary-limit"
-        visiumHdBinSizeInputId="visium-bin-size"
-        datasetAbout={null}
-        datasetUrl="https://example.test/visium"
-        shouldLoadMorphology
-        morphologyLabel="Tissue image"
-        boundaryCellLimit={50000}
-        maxBoundaryCellLimit={100000}
-        boundaryControlsDisabled
-        isLoading={false}
-        diagnosticsState={{ status: 'idle' }}
-        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
-        visiumHdControlState={{
-          status: 'ready',
-          url: 'https://example.test/visium',
-          selectedBinSize: 16,
-          binCount: 54_504,
-          options: [
-            { size: 16, available: true, disabled: false, binCount: 54_504 },
-            { size: 8, available: true, disabled: false },
-            {
-              size: 2,
-              available: false,
-              disabled: true,
-              reason: '2 µm binned output was not detected.',
-            },
-          ],
-        }}
-        spatialDataControlState={{ status: 'idle' }}
-        onSpatialDataSelectionChange={vi.fn()}
-        visiumControlState={{ status: 'idle' }}
-        onVisiumImageChange={vi.fn()}
-        onVisiumViewChange={vi.fn()}
-        activeErrors={[]}
-        fallbackNotices={[]}
-        debugLog={[]}
-        onSubmit={vi.fn()}
-        onDatasetUrlChange={vi.fn()}
-        onShouldLoadMorphologyChange={vi.fn()}
-        onBoundaryCellLimitChange={vi.fn()}
-        onVisiumHdBinSizeChange={onVisiumHdBinSizeChange}
-        onRunDatasetDiagnostics={vi.fn()}
-        onDownloadDiagnostics={vi.fn()}
-        onClearDebugLog={vi.fn()}
-      />,
-    )
+    render(<DatasetHudPanel active info={info} />)
 
     expect(screen.getByText('Visium HD')).toBeInTheDocument()
     expect(screen.getByLabelText('Tissue image')).toBeChecked()
@@ -152,53 +121,35 @@ describe('DatasetHudPanel', () => {
 
   it('forwards 2 µm bin changes when the tier is available', () => {
     const onVisiumHdBinSizeChange = vi.fn()
+    const info = testDatasetInfoModel({
+      open: {
+        datasetUrl: 'https://example.test/visium',
+        shouldLoadMorphology: true,
+        morphologyLabel: 'Tissue image',
+        boundaryCellLimit: 50000,
+        maxBoundaryCellLimit: 100000,
+        boundaryLimitDisabled: true,
+        isLoading: false,
+      },
+      viewOptions: {
+        visiumHd: {
+          state: {
+            status: 'ready',
+            url: 'https://example.test/visium',
+            selectedBinSize: 16,
+            binCount: 54_504,
+            options: [
+              { size: 16, available: true, disabled: false, binCount: 54_504 },
+              { size: 8, available: true, disabled: false },
+              { size: 2, available: true, disabled: false },
+            ],
+          },
+          onBinSizeChange: onVisiumHdBinSizeChange,
+        },
+      },
+    })
 
-    render(
-      <DatasetHudPanel
-        active
-        datasetInputId="dataset-url"
-        morphologyInputId="morphology"
-        boundaryLimitInputId="boundary-limit"
-        visiumHdBinSizeInputId="visium-bin-size"
-        datasetAbout={null}
-        datasetUrl="https://example.test/visium"
-        shouldLoadMorphology
-        morphologyLabel="Tissue image"
-        boundaryCellLimit={50000}
-        maxBoundaryCellLimit={100000}
-        boundaryControlsDisabled
-        isLoading={false}
-        diagnosticsState={{ status: 'idle' }}
-        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
-        visiumHdControlState={{
-          status: 'ready',
-          url: 'https://example.test/visium',
-          selectedBinSize: 16,
-          binCount: 54_504,
-          options: [
-            { size: 16, available: true, disabled: false, binCount: 54_504 },
-            { size: 8, available: true, disabled: false },
-            { size: 2, available: true, disabled: false },
-          ],
-        }}
-        spatialDataControlState={{ status: 'idle' }}
-        onSpatialDataSelectionChange={vi.fn()}
-        visiumControlState={{ status: 'idle' }}
-        onVisiumImageChange={vi.fn()}
-        onVisiumViewChange={vi.fn()}
-        activeErrors={[]}
-        fallbackNotices={[]}
-        debugLog={[]}
-        onSubmit={vi.fn()}
-        onDatasetUrlChange={vi.fn()}
-        onShouldLoadMorphologyChange={vi.fn()}
-        onBoundaryCellLimitChange={vi.fn()}
-        onVisiumHdBinSizeChange={onVisiumHdBinSizeChange}
-        onRunDatasetDiagnostics={vi.fn()}
-        onDownloadDiagnostics={vi.fn()}
-        onClearDebugLog={vi.fn()}
-      />,
-    )
+    render(<DatasetHudPanel active info={info} />)
 
     fireEvent.click(screen.getByRole('button', { name: '2 µm' }))
 
@@ -210,55 +161,38 @@ describe('DatasetHudPanel', () => {
 
   it('changes the SpatialData image and unit scale', () => {
     const onSpatialDataSelectionChange = vi.fn()
-
-    render(
-      <DatasetHudPanel
-        active
-        datasetInputId="dataset-url"
-        morphologyInputId="morphology"
-        boundaryLimitInputId="boundary-limit"
-        visiumHdBinSizeInputId="visium-bin-size"
-        datasetAbout={null}
-        datasetUrl="https://example.test/sample.zarr"
-        shouldLoadMorphology
-        morphologyLabel="Morphology image"
-        boundaryCellLimit={50000}
-        maxBoundaryCellLimit={100000}
-        boundaryControlsDisabled={false}
-        isLoading={false}
-        diagnosticsState={{ status: 'idle' }}
-        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
-        visiumHdControlState={{ status: 'idle' }}
-        spatialDataControlState={{
-          status: 'ready',
-          coordinateSystem: 'global',
-          coordinateSystems: ['global', 'aligned'],
-          image: 'he',
-          images: ['he', 'morphology'],
-          units: {
-            micrometersPerUnit: 0.2125,
-            source: 'estimated',
-            detail: 'cell_area vs seg label pixels',
+    const info = testDatasetInfoModel({
+      open: {
+        datasetUrl: 'https://example.test/sample.zarr',
+        shouldLoadMorphology: true,
+        morphologyLabel: 'Morphology image',
+        boundaryCellLimit: 50000,
+        maxBoundaryCellLimit: 100000,
+        boundaryLimitDisabled: false,
+        isLoading: false,
+      },
+      viewOptions: {
+        spatialData: {
+          state: {
+            status: 'ready',
+            coordinateSystem: 'global',
+            coordinateSystems: ['global', 'aligned'],
+            image: 'he',
+            images: ['he', 'morphology'],
+            units: {
+              micrometersPerUnit: 0.2125,
+              source: 'estimated',
+              detail: 'cell_area vs seg label pixels',
+            },
+            selection: {},
           },
-          selection: {},
-        }}
-        onSpatialDataSelectionChange={onSpatialDataSelectionChange}
-        visiumControlState={{ status: 'idle' }}
-        onVisiumImageChange={vi.fn()}
-        onVisiumViewChange={vi.fn()}
-        activeErrors={[]}
-        fallbackNotices={[]}
-        debugLog={[]}
-        onSubmit={vi.fn()}
-        onDatasetUrlChange={vi.fn()}
-        onShouldLoadMorphologyChange={vi.fn()}
-        onBoundaryCellLimitChange={vi.fn()}
-        onVisiumHdBinSizeChange={vi.fn()}
-        onRunDatasetDiagnostics={vi.fn()}
-        onDownloadDiagnostics={vi.fn()}
-        onClearDebugLog={vi.fn()}
-      />,
-    )
+          disabled: false,
+          onSelectionChange: onSpatialDataSelectionChange,
+        },
+      },
+    })
+
+    render(<DatasetHudPanel active info={info} />)
 
     expect(
       screen.getByText(
@@ -292,63 +226,47 @@ describe('DatasetHudPanel', () => {
   it('shows the Visium library, scale, and tissue image choice', () => {
     const onVisiumImageChange = vi.fn()
     const onVisiumViewChange = vi.fn()
-
-    render(
-      <DatasetHudPanel
-        active
-        datasetInputId="dataset-url"
-        morphologyInputId="morphology"
-        boundaryLimitInputId="boundary-limit"
-        visiumHdBinSizeInputId="visium-bin-size"
-        datasetAbout={null}
-        datasetUrl="https://example.test/visium.h5ad"
-        shouldLoadMorphology
-        morphologyLabel="Tissue image"
-        boundaryCellLimit={50000}
-        maxBoundaryCellLimit={100000}
-        boundaryControlsDisabled={false}
-        isLoading={false}
-        diagnosticsState={{ status: 'idle' }}
-        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
-        visiumHdControlState={{ status: 'idle' }}
-        spatialDataControlState={{ status: 'idle' }}
-        onSpatialDataSelectionChange={vi.fn()}
-        visiumControlState={{
-          status: 'ready',
-          source: 'h5ad',
-          image: 'hires',
-          summary: {
-            libraryId: 'V1_Mouse_Brain',
-            libraryIds: ['V1_Mouse_Brain', 'V1_Mouse_Kidney'],
-            spotCount: 2698,
-            offTissueSpotCount: 2294,
-            showOffTissue: false,
-            spotDiameterMicrometers: 55,
-            units: {
-              micrometersPerPixel: 0.5404,
-              source: 'spot-grid',
-              detail: 'array row/column fit (100 µm spot pitch)',
+    const info = testDatasetInfoModel({
+      open: {
+        datasetUrl: 'https://example.test/visium.h5ad',
+        shouldLoadMorphology: true,
+        morphologyLabel: 'Tissue image',
+        boundaryCellLimit: 50000,
+        maxBoundaryCellLimit: 100000,
+        boundaryLimitDisabled: false,
+        isLoading: false,
+      },
+      viewOptions: {
+        visium: {
+          state: {
+            status: 'ready',
+            source: 'h5ad',
+            image: 'hires',
+            summary: {
+              libraryId: 'V1_Mouse_Brain',
+              libraryIds: ['V1_Mouse_Brain', 'V1_Mouse_Kidney'],
+              spotCount: 2698,
+              offTissueSpotCount: 2294,
+              showOffTissue: false,
+              spotDiameterMicrometers: 55,
+              units: {
+                micrometersPerPixel: 0.5404,
+                source: 'spot-grid',
+                detail: 'array row/column fit (100 µm spot pitch)',
+              },
+              scalefactors: { tissueHiresScalef: 0.17, tissueLowresScalef: 0.05 },
+              images: ['hires', 'lowres'],
+              chemistry: "Spatial 3' v1",
             },
-            scalefactors: { tissueHiresScalef: 0.17, tissueLowresScalef: 0.05 },
-            images: ['hires', 'lowres'],
-            chemistry: "Spatial 3' v1",
           },
-        }}
-        onVisiumImageChange={onVisiumImageChange}
-        onVisiumViewChange={onVisiumViewChange}
-        activeErrors={[]}
-        fallbackNotices={[]}
-        debugLog={[]}
-        onSubmit={vi.fn()}
-        onDatasetUrlChange={vi.fn()}
-        onShouldLoadMorphologyChange={vi.fn()}
-        onBoundaryCellLimitChange={vi.fn()}
-        onVisiumHdBinSizeChange={vi.fn()}
-        onRunDatasetDiagnostics={vi.fn()}
-        onDownloadDiagnostics={vi.fn()}
-        onClearDebugLog={vi.fn()}
-      />,
-    )
+          disabled: false,
+          onImageChange: onVisiumImageChange,
+          onViewChange: onVisiumViewChange,
+        },
+      },
+    })
+
+    render(<DatasetHudPanel active info={info} />)
 
     const section = screen.getByRole('region', { name: 'Visium dataset' })
     expect(section).toHaveTextContent('Visium (H5AD)')
@@ -376,31 +294,18 @@ describe('DatasetHudPanel', () => {
   })
 
   it('renders fallback notices in the dataset HUD', () => {
-    render(
-      <DatasetHudPanel
-        active
-        datasetInputId="dataset-url"
-        morphologyInputId="morphology"
-        boundaryLimitInputId="boundary-limit"
-        visiumHdBinSizeInputId="visium-bin-size"
-        datasetAbout={null}
-        datasetUrl="https://example.test/output"
-        shouldLoadMorphology={false}
-        morphologyLabel="Morphology image"
-        boundaryCellLimit={50000}
-        maxBoundaryCellLimit={100000}
-        boundaryControlsDisabled={false}
-        isLoading={false}
-        diagnosticsState={{ status: 'idle' }}
-        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
-        visiumHdControlState={{ status: 'idle' }}
-        spatialDataControlState={{ status: 'idle' }}
-        onSpatialDataSelectionChange={vi.fn()}
-        visiumControlState={{ status: 'idle' }}
-        onVisiumImageChange={vi.fn()}
-        onVisiumViewChange={vi.fn()}
-        activeErrors={[]}
-        fallbackNotices={[
+    const info = testDatasetInfoModel({
+      open: {
+        datasetUrl: 'https://example.test/output',
+        shouldLoadMorphology: false,
+        morphologyLabel: 'Morphology image',
+        boundaryCellLimit: 50000,
+        maxBoundaryCellLimit: 100000,
+        boundaryLimitDisabled: false,
+        isLoading: false,
+      },
+      diagnostics: {
+        fallbackNotices: [
           {
             id: 1,
             timestamp: 1_700_000_000_000,
@@ -410,18 +315,11 @@ describe('DatasetHudPanel', () => {
             action: 'The first overview read may be slower.',
             detail: 'Out of bounds access',
           },
-        ]}
-        debugLog={[]}
-        onSubmit={vi.fn()}
-        onDatasetUrlChange={vi.fn()}
-        onShouldLoadMorphologyChange={vi.fn()}
-        onBoundaryCellLimitChange={vi.fn()}
-        onVisiumHdBinSizeChange={vi.fn()}
-        onRunDatasetDiagnostics={vi.fn()}
-        onDownloadDiagnostics={vi.fn()}
-        onClearDebugLog={vi.fn()}
-      />,
-    )
+        ],
+      },
+    })
+
+    render(<DatasetHudPanel active info={info} />)
 
     expect(screen.getByRole('status', { name: 'Fallback notices' })).toBeInTheDocument()
     expect(screen.getByText('Fallbacks')).toBeInTheDocument()
@@ -432,52 +330,30 @@ describe('DatasetHudPanel', () => {
   })
 
   it('shows the manifest name, description, and source', () => {
-    render(
-      <DatasetHudPanel
-        active
-        datasetInputId="dataset-url"
-        morphologyInputId="morphology"
-        boundaryLimitInputId="boundary-limit"
-        visiumHdBinSizeInputId="visium-bin-size"
-        datasetAbout={{
-          name: 'Skin Xenium run',
-          description: 'Human skin, 5K panel.',
-          source: {
-            repository: 'BioImage Archive',
-            accession: 'S-BIAD2214',
-            url: 'https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2214',
-            license: 'CC0',
-            citation: 'Example et al. (2025)',
-          },
-        }}
-        datasetUrl="https://example.test/output"
-        shouldLoadMorphology={false}
-        morphologyLabel="Morphology image"
-        boundaryCellLimit={50000}
-        maxBoundaryCellLimit={100000}
-        boundaryControlsDisabled={false}
-        isLoading={false}
-        diagnosticsState={{ status: 'idle' }}
-        cellFeatureMatrixCapabilityState={{ status: 'idle' }}
-        visiumHdControlState={{ status: 'idle' }}
-        spatialDataControlState={{ status: 'idle' }}
-        onSpatialDataSelectionChange={vi.fn()}
-        visiumControlState={{ status: 'idle' }}
-        onVisiumImageChange={vi.fn()}
-        onVisiumViewChange={vi.fn()}
-        activeErrors={[]}
-        fallbackNotices={[]}
-        debugLog={[]}
-        onSubmit={vi.fn()}
-        onDatasetUrlChange={vi.fn()}
-        onShouldLoadMorphologyChange={vi.fn()}
-        onBoundaryCellLimitChange={vi.fn()}
-        onVisiumHdBinSizeChange={vi.fn()}
-        onRunDatasetDiagnostics={vi.fn()}
-        onDownloadDiagnostics={vi.fn()}
-        onClearDebugLog={vi.fn()}
-      />,
-    )
+    const info = testDatasetInfoModel({
+      open: {
+        datasetUrl: 'https://example.test/output',
+        shouldLoadMorphology: false,
+        morphologyLabel: 'Morphology image',
+        boundaryCellLimit: 50000,
+        maxBoundaryCellLimit: 100000,
+        boundaryLimitDisabled: false,
+        isLoading: false,
+      },
+      about: {
+        name: 'Skin Xenium run',
+        description: 'Human skin, 5K panel.',
+        source: {
+          repository: 'BioImage Archive',
+          accession: 'S-BIAD2214',
+          url: 'https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2214',
+          license: 'CC0',
+          citation: 'Example et al. (2025)',
+        },
+      },
+    })
+
+    render(<DatasetHudPanel active info={info} />)
 
     const about = screen.getByRole('region', { name: 'About this dataset' })
     expect(about).toHaveTextContent('Skin Xenium run')

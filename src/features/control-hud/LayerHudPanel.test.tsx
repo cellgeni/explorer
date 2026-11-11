@@ -1,46 +1,20 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import {
+  testCellsSectionModel,
+  testDatasetInfoModel,
+  testImageSectionModel,
+  testViewSettingsModel,
+} from '../../test/sectionModels'
 import { LayerHudPanel } from './LayerHudPanel'
 
 describe('LayerHudPanel', () => {
   it('renders layer controls and forwards display setting updates', () => {
-    const onImageLayerOpacityPercentChange = vi.fn()
-    const onCustomLayerOpacityPercentChange = vi.fn()
-    const onCellFillOpacityPercentChange = vi.fn()
-    const onShowCellBoundariesChange = vi.fn()
-    const onShowNucleusBoundariesChange = vi.fn()
-    const onShowHoverTooltipsChange = vi.fn()
-    const onCellBoundaryOpacityPercentChange = vi.fn()
-    const onCoordinateUnitChange = vi.fn()
-    const onMeasurementEnabledChange = vi.fn()
-    const onMeasurementUnitChange = vi.fn()
-    const onClearMeasurement = vi.fn()
-    const onMorphologyZPlaneChange = vi.fn()
-
-    render(
-      <LayerHudPanel
-        active
-        scaffoldDeckLayerCount={3}
-        bundledDeckVersion="9.3.2"
-        performanceBudget={{
-          profile: 'balanced',
-          overviewRenderCellLimit: 150000,
-          boundaryCellLimit: 50000,
-          maxConcurrentTileRequests: 4,
-          tileCacheMaxTiles: 120,
-          telemetryEventLimit: 120,
-        }}
-        imageOpacityInputId="image-opacity"
-        cellFillOpacityInputId="cell-fill-opacity"
-        cellBoundaryVisibilityInputId="cell-boundary-visibility"
-        nucleusBoundaryVisibilityInputId="nucleus-boundary-visibility"
-        hoverTooltipsInputId="hover-tooltips"
-        cellBoundaryOpacityInputId="cell-boundary-opacity"
-        coordinateUnitInputId="coordinate-unit"
-        measurementModeInputId="measurement-mode"
-        measurementUnitInputId="measurement-unit"
-        customLayerLoadState={{ status: 'idle' }}
-        customLayers={[
+    const image = testImageSectionModel({
+      opacity: 0.8,
+      zStack: { sizeZ: 15, zPlane: 7, micrometersPerPlane: 3, openPlane: vi.fn() },
+      customLayers: {
+        layers: [
           {
             id: 'custom-layer:1',
             label: 'remote.ome.tif',
@@ -52,46 +26,22 @@ describe('LayerHudPanel', () => {
             } as never,
             channels: [],
           },
-        ]}
-        customLayerOpacities={{ 'https://example.test/remote.ome.tif': 0.6 }}
-        loadEnabled
-        imageLayerOpacity={0.8}
-        cellFillOpacity={0.6}
-        cellLayerControlsVisible
-        showCellBoundaries
-        showNucleusBoundaries
-        showHoverTooltips
-        nucleusBoundaryControlsVisible
-        cellBoundaryOpacity={0.4}
-        coordinateUnit="um"
-        measurementEnabled={false}
-        measurementUnit="um"
-        morphologyChannels={[]}
-        morphologyChannelSettings={[]}
-        morphologyZStack={{
-          sizeZ: 15,
-          zPlane: 7,
-          micrometersPerPlane: 3,
-          openPlane: vi.fn(),
-        }}
-        requestedMorphologyZPlane={null}
-        autoContrastChannelIds={[]}
-        onMorphologyZPlaneChange={onMorphologyZPlaneChange}
-        onImageLayerOpacityPercentChange={onImageLayerOpacityPercentChange}
-        onCustomLayerOpacityPercentChange={onCustomLayerOpacityPercentChange}
-        onCellFillOpacityPercentChange={onCellFillOpacityPercentChange}
-        onShowCellBoundariesChange={onShowCellBoundariesChange}
-        onShowNucleusBoundariesChange={onShowNucleusBoundariesChange}
-        onShowHoverTooltipsChange={onShowHoverTooltipsChange}
-        onCellBoundaryOpacityPercentChange={onCellBoundaryOpacityPercentChange}
-        onCoordinateUnitChange={onCoordinateUnitChange}
-        onMeasurementEnabledChange={onMeasurementEnabledChange}
-        onMeasurementUnitChange={onMeasurementUnitChange}
-        onClearMeasurement={onClearMeasurement}
-        onAutoContrast={vi.fn()}
-        onLoadCustomLayer={vi.fn(async () => true)}
-        onRemoveCustomLayer={vi.fn()}
-        onUpdateMorphologyChannel={vi.fn()}
+        ],
+        opacities: { 'https://example.test/remote.ome.tif': 0.6 },
+      },
+    })
+    const cells = testCellsSectionModel({
+      appearance: { fillOpacity: 0.6, boundaryOpacity: 0.4 },
+    })
+    const settings = testViewSettingsModel()
+
+    render(
+      <LayerHudPanel
+        active
+        image={image}
+        cells={cells}
+        settings={settings}
+        info={testDatasetInfoModel()}
       />,
     )
 
@@ -127,21 +77,65 @@ describe('LayerHudPanel', () => {
       }),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Clear Measurement' }))
+    fireEvent.change(screen.getByLabelText('Custom image URL'), {
+      target: { value: ' https://example.test/new.ome.tif ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Layer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove remote.ome.tif' }))
 
-    expect(onImageLayerOpacityPercentChange).toHaveBeenCalledWith(45)
-    expect(onMorphologyZPlaneChange).toHaveBeenCalledWith(9)
-    expect(onCustomLayerOpacityPercentChange).toHaveBeenCalledWith(
+    expect(image.onOpacityPercentChange).toHaveBeenCalledWith(45)
+    expect(image.onZPlaneChange).toHaveBeenCalledWith(9)
+    expect(image.customLayers.onOpacityPercentChange).toHaveBeenCalledWith(
       'https://example.test/remote.ome.tif',
       35,
     )
-    expect(onCellFillOpacityPercentChange).toHaveBeenCalledWith(55)
-    expect(onShowCellBoundariesChange).toHaveBeenCalledWith(false)
-    expect(onShowNucleusBoundariesChange).toHaveBeenCalledWith(false)
-    expect(onShowHoverTooltipsChange).toHaveBeenCalledWith(false)
-    expect(onCellBoundaryOpacityPercentChange).toHaveBeenCalledWith(65)
-    expect(onCoordinateUnitChange).toHaveBeenCalledWith('px')
-    expect(onMeasurementEnabledChange).toHaveBeenCalledWith(true)
-    expect(onMeasurementUnitChange).toHaveBeenCalledWith('px')
-    expect(onClearMeasurement).toHaveBeenCalledTimes(1)
+    expect(cells.appearance.onFillOpacityPercentChange).toHaveBeenCalledWith(55)
+    expect(cells.appearance.onShowCellBoundariesChange).toHaveBeenCalledWith(false)
+    expect(cells.appearance.onShowNucleusBoundariesChange).toHaveBeenCalledWith(false)
+    expect(settings.onShowHoverTooltipsChange).toHaveBeenCalledWith(false)
+    expect(cells.appearance.onBoundaryOpacityPercentChange).toHaveBeenCalledWith(65)
+    expect(settings.onCoordinateUnitChange).toHaveBeenCalledWith('px')
+    expect(settings.measure.onEnabledChange).toHaveBeenCalledWith(true)
+    expect(settings.measure.onUnitChange).toHaveBeenCalledWith('px')
+    expect(settings.measure.onClear).toHaveBeenCalledTimes(1)
+    expect(image.customLayers.onLoad).toHaveBeenCalledWith(
+      'https://example.test/new.ome.tif',
+    )
+    expect(image.customLayers.onRemove).toHaveBeenCalledWith('custom-layer:1')
+  })
+
+  it('hides cell controls for an image and shows the layer stack in debug mode', () => {
+    render(
+      <LayerHudPanel
+        active
+        image={testImageSectionModel()}
+        cells={testCellsSectionModel({ appearance: { available: false } })}
+        settings={testViewSettingsModel()}
+        info={testDatasetInfoModel({
+          diagnostics: {
+            layerStack: {
+              deckLayerCount: 3,
+              deckVersion: '9.3.2',
+              performanceBudget: {
+                profile: 'balanced',
+                overviewRenderCellLimit: 150_000,
+                boundaryCellLimit: 50_000,
+                maxConcurrentTileRequests: 4,
+                tileCacheMaxTiles: 120,
+                telemetryEventLimit: 120,
+              },
+            },
+          },
+        })}
+      />,
+    )
+
+    expect(screen.queryByLabelText('Cell boundaries')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Cell fill opacity')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Hover tooltips')).toBeInTheDocument()
+    expect(screen.getByText('3 Deck Layer - deck.gl 9.3.2')).toBeInTheDocument()
+    expect(
+      screen.getByText('Budget balanced - 150,000 cells - 4 tile requests'),
+    ).toBeInTheDocument()
   })
 })

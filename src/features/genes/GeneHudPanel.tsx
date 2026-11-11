@@ -1,122 +1,19 @@
-import type { ObservationColorMode } from '../../rendering/cellStyling'
-import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import {
-  GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
-  geneExpressionScaleGradient,
-  GENE_EXPRESSION_SCORE_MODE_OPTIONS,
-  isGeneExpressionColorScale,
-  isGeneExpressionScoreMode,
-  type GeneExpressionColorScale,
-  type GeneExpressionScoreMode,
-} from '../../rendering/deckLayers'
-import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
-import { isObservationColorMode } from '../app-shell/appShellModel'
-import { Chip } from '../../components/ui'
-import { GeneOptionList } from './GeneOptionList'
-import {
-  defaultGeneSetName,
-  formatGeneScaleValue,
-  geneSearchEmptyMessage,
-  isGeneExpressionDetailMode,
-  type GeneExpressionState,
-  type GenePanelState,
-  type SavedGeneSet,
-} from './geneControlsModel'
+  CellColorControls,
+  ExpressionDetailControl,
+  GeneExpressionControls,
+  GenePicker,
+} from '../sections/CellsSectionBlocks'
+import type { CellsSectionModel } from '../sections/cellsSectionModel'
 
 interface GeneHudPanelProps {
   readonly active: boolean
-  readonly geneSearchInputId: string
-  readonly geneSetSymbolsInputId: string
-  readonly geneSetNameInputId: string
-  readonly geneSetScoreInputId: string
-  readonly geneScaleInputId: string
-  readonly geneExpressionDetailInputId: string
-  readonly observationModeInputId: string
-  readonly cellMetadataTrackInputId: string
-  readonly analysisHeaderCopy: string
-  readonly geneExpressionCopy: string
-  readonly genePanelState: GenePanelState
-  readonly geneExpressionState: GeneExpressionState
-  readonly geneSearch: string
-  readonly geneSetSymbols: string
-  readonly geneSetName: string
-  readonly geneExpressionScoreMode: GeneExpressionScoreMode
-  readonly savedGeneSets: readonly SavedGeneSet[]
-  readonly selectedGenes: readonly string[]
-  readonly filteredGenes: readonly string[]
-  readonly geneExpressionColorScale: GeneExpressionColorScale
-  readonly geneExpressionScaleMax: number
-  readonly geneExpressionDetailMode: GeneExpressionDetailMode
-  readonly observationColorMode: ObservationColorMode
-  readonly hasAnnotationColors: boolean
-  readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
-  readonly selectedCellMetadataTrackId: string | null
-  readonly onGeneSearchChange: (search: string) => void
-  readonly onToggleGene: (gene: string) => void
-  // Adds a gene from the search list, which also clears the search.
-  readonly onPickGene: (gene: string) => void
-  readonly onGeneSetSymbolsChange: (symbols: string) => void
-  readonly onApplyGeneSetSymbols: () => void
-  readonly onSaveSelectedGeneSet: () => void
-  readonly onGeneSetNameChange: (name: string) => void
-  readonly onGeneExpressionScoreModeChange: (mode: GeneExpressionScoreMode) => void
-  readonly onApplySavedGeneSet: (geneSet: SavedGeneSet) => void
-  readonly onRemoveSavedGeneSet: (id: string) => void
-  readonly onGeneExpressionColorScaleChange: (scale: GeneExpressionColorScale) => void
-  readonly onGeneExpressionDetailModeChange: (mode: GeneExpressionDetailMode) => void
-  readonly onObservationColorModeChange: (mode: ObservationColorMode) => void
-  readonly onCellMetadataTrackChange: (trackId: string) => void
+  readonly cells: CellsSectionModel
 }
 
-export function GeneHudPanel({
-  active,
-  geneSearchInputId,
-  geneSetSymbolsInputId,
-  geneSetNameInputId,
-  geneSetScoreInputId,
-  geneScaleInputId,
-  geneExpressionDetailInputId,
-  observationModeInputId,
-  cellMetadataTrackInputId,
-  analysisHeaderCopy,
-  geneExpressionCopy,
-  genePanelState,
-  geneExpressionState,
-  geneSearch,
-  geneSetSymbols,
-  geneSetName,
-  geneExpressionScoreMode,
-  savedGeneSets,
-  selectedGenes,
-  filteredGenes,
-  geneExpressionColorScale,
-  geneExpressionScaleMax,
-  geneExpressionDetailMode,
-  observationColorMode,
-  hasAnnotationColors,
-  cellMetadataTracks,
-  selectedCellMetadataTrackId,
-  onGeneSearchChange,
-  onToggleGene,
-  onPickGene,
-  onGeneSetSymbolsChange,
-  onApplyGeneSetSymbols,
-  onSaveSelectedGeneSet,
-  onGeneSetNameChange,
-  onGeneExpressionScoreModeChange,
-  onApplySavedGeneSet,
-  onRemoveSavedGeneSet,
-  onGeneExpressionColorScaleChange,
-  onGeneExpressionDetailModeChange,
-  onObservationColorModeChange,
-  onCellMetadataTrackChange,
-}: GeneHudPanelProps) {
-  const isGenePanelReady = genePanelState.status === 'ready'
-  const geneAliases = isGenePanelReady ? genePanelState.aliases : undefined
-  const isGeneWorkLoading =
-    genePanelState.status === 'loading' || geneExpressionState.status === 'loading'
-  const activeCellMetadataTrackId =
-    selectedCellMetadataTrackId ?? cellMetadataTracks[0]?.id ?? ''
+// The Genes tab: the Cells section's gene and colour blocks.
+export function GeneHudPanel({ active, cells }: GeneHudPanelProps) {
+  const { colour, genes } = cells
 
   return (
     <div
@@ -130,269 +27,22 @@ export function GeneHudPanel({
         <div className="section-heading-row">
           <h2 id="analysis-heading">Analysis</h2>
           <span
-            className={isGeneWorkLoading ? 'status-chip is-loading' : 'status-chip'}
+            className={colour.isLoading ? 'status-chip is-loading' : 'status-chip'}
             aria-live="polite"
           >
-            {analysisHeaderCopy}
+            {colour.headerCopy}
           </span>
         </div>
 
-        <label htmlFor={geneSearchInputId}>Gene selection</label>
-        <input
-          id={geneSearchInputId}
-          type="search"
-          autoComplete="off"
-          spellCheck={false}
-          value={geneSearch}
-          disabled={!isGenePanelReady}
-          placeholder="Search genes"
-          title="Gene selection search"
-          onChange={(event) => {
-            onGeneSearchChange(event.currentTarget.value)
-          }}
-        />
-
-        {selectedGenes.length === 0 ? null : (
-          <div className="gene-chip-row" aria-label="Selected genes">
-            {selectedGenes.map((gene) => (
-              <Chip
-                key={gene}
-                title={gene}
-                selected
-                removeTitle={`Remove ${gene}`}
-                onRemove={() => {
-                  onToggleGene(gene)
-                }}
-              >
-                {gene}
-              </Chip>
-            ))}
-          </div>
-        )}
-
-        <GeneOptionList
-          genes={filteredGenes}
-          selectedGenes={selectedGenes}
-          aliases={geneAliases}
-          emptyMessage={geneSearchEmptyMessage(geneSearch, selectedGenes, {
-            noun: 'genes',
-            aliases: geneAliases,
-          })}
-          onToggleGene={onPickGene}
-        />
-
-        <label htmlFor={geneSetSymbolsInputId}>Gene set symbols</label>
-        <textarea
-          id={geneSetSymbolsInputId}
-          className="gene-set-symbols"
-          autoComplete="off"
-          spellCheck={false}
-          rows={1}
-          value={geneSetSymbols}
-          disabled={!isGenePanelReady}
-          placeholder="Actb, Gad1, Slc17a7"
-          title="Gene set symbols"
-          onChange={(event) => {
-            onGeneSetSymbolsChange(event.currentTarget.value)
-          }}
-        />
-        <div className="gene-set-actions">
-          <button
-            type="button"
-            disabled={!isGenePanelReady || geneSetSymbols.trim() === ''}
-            title="Apply gene set symbols"
-            onClick={onApplyGeneSetSymbols}
-          >
-            Apply Symbols
-          </button>
-          <button
-            type="button"
-            disabled={selectedGenes.length === 0}
-            title="Save selected genes as a set"
-            onClick={onSaveSelectedGeneSet}
-          >
-            Save Set
-          </button>
-        </div>
-
-        <label htmlFor={geneSetNameInputId}>Set name</label>
-        <input
-          id={geneSetNameInputId}
-          type="text"
-          autoComplete="off"
-          spellCheck={false}
-          value={geneSetName}
-          placeholder={defaultGeneSetName(selectedGenes)}
-          title="Gene set name"
-          onChange={(event) => {
-            onGeneSetNameChange(event.currentTarget.value)
-          }}
-        />
-
-        {selectedGenes.length < 2 ? null : (
-          <>
-            <label htmlFor={geneSetScoreInputId}>Combine genes</label>
-            <select
-              id={geneSetScoreInputId}
-              value={geneExpressionScoreMode}
-              title="How to combine the selected genes into one score per cell"
-              onChange={(event) => {
-                const nextScoreMode = event.currentTarget.value
-
-                if (isGeneExpressionScoreMode(nextScoreMode)) {
-                  onGeneExpressionScoreModeChange(nextScoreMode)
-                }
-              }}
-            >
-              {GENE_EXPRESSION_SCORE_MODE_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </>
-        )}
-
-        {savedGeneSets.length === 0 ? null : (
-          <div className="gene-set-list" aria-label="Saved gene sets">
-            {savedGeneSets.map((geneSet) => (
-              <div key={geneSet.id} className="gene-set-row">
-                <button
-                  type="button"
-                  className="gene-set-apply"
-                  aria-label={`Apply ${geneSet.name}`}
-                  title={`Apply ${geneSet.name}`}
-                  onClick={() => {
-                    onApplySavedGeneSet(geneSet)
-                  }}
-                >
-                  <span>{geneSet.name}</span>
-                  <small>{geneSet.scoreMode}</small>
-                </button>
-                <button
-                  type="button"
-                  className="gene-set-remove"
-                  aria-label={`Remove ${geneSet.name}`}
-                  title={`Remove ${geneSet.name}`}
-                  onClick={() => {
-                    onRemoveSavedGeneSet(geneSet.id)
-                  }}
-                >
-                  x
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <label htmlFor={geneScaleInputId}>Gene scale</label>
-        <div className="gene-scale-control">
-          <select
-            id={geneScaleInputId}
-            value={geneExpressionColorScale}
-            title="Gene scale"
-            onChange={(event) => {
-              const nextScale = event.currentTarget.value
-
-              if (isGeneExpressionColorScale(nextScale)) {
-                onGeneExpressionColorScaleChange(nextScale)
-              }
-            }}
-          >
-            {GENE_EXPRESSION_COLOR_SCALE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <span
-            className="gene-scale-preview"
-            style={{
-              backgroundImage: geneExpressionScaleGradient(geneExpressionColorScale),
-            }}
-            aria-hidden="true"
-          />
-          <div className="gene-scale-values" aria-label="Gene scale values">
-            <span>0</span>
-            <span>{formatGeneScaleValue(geneExpressionScaleMax / 2)}</span>
-            <span>{formatGeneScaleValue(geneExpressionScaleMax)}</span>
-          </div>
-        </div>
-
-        <label htmlFor={geneExpressionDetailInputId}>Expression detail</label>
-        <select
-          id={geneExpressionDetailInputId}
-          value={geneExpressionDetailMode}
-          title="Expression detail"
-          onChange={(event) => {
-            const nextMode = event.currentTarget.value
-
-            if (isGeneExpressionDetailMode(nextMode)) {
-              onGeneExpressionDetailModeChange(nextMode)
-            }
-          }}
-        >
-          <option value="auto">Auto LOD</option>
-          <option value="exact-region">Exact region</option>
-          <option value="all-cells">All cells</option>
-        </select>
-
-        <label htmlFor={observationModeInputId}>Cell color</label>
-        <select
-          id={observationModeInputId}
-          value={observationColorMode}
-          title="Cell color"
-          onChange={(event) => {
-            const nextMode = event.currentTarget.value
-
-            if (isObservationColorMode(nextMode)) {
-              onObservationColorModeChange(nextMode)
-            }
-          }}
-        >
-          <option value="gene-expression">Gene expression</option>
-          <option value="transcript-count">Transcript count</option>
-          <option value="cell-area">Cell area</option>
-          {hasAnnotationColors ? <option value="annotations">Annotations</option> : null}
-          {cellMetadataTracks.length > 0 ? (
-            <option value="metadata">Metadata</option>
-          ) : null}
-        </select>
-
-        {cellMetadataTracks.length > 0 && observationColorMode === 'metadata' ? (
-          <>
-            <label htmlFor={cellMetadataTrackInputId}>Metadata track</label>
-            <select
-              id={cellMetadataTrackInputId}
-              value={activeCellMetadataTrackId}
-              title="Metadata track"
-              onChange={(event) => {
-                onCellMetadataTrackChange(event.currentTarget.value)
-              }}
-            >
-              {cellMetadataTracks.map((track) => (
-                <option key={track.id} value={track.id}>
-                  {metadataTrackOptionLabel(track)}
-                </option>
-              ))}
-            </select>
-          </>
-        ) : null}
+        <GenePicker genes={genes} />
+        <GeneExpressionControls colour={colour} />
+        <ExpressionDetailControl colour={colour} />
+        <CellColorControls colour={colour} />
 
         <p className="analysis-status" aria-live="polite">
-          {geneExpressionCopy}
+          {colour.statusCopy}
         </p>
       </section>
     </div>
   )
-}
-
-function metadataTrackOptionLabel(track: ContinuousCellMetadataTrack): string {
-  return `${track.label} (${formatMetadataValue(track.min)}-${formatMetadataValue(
-    track.max,
-  )})`
-}
-
-function formatMetadataValue(value: number): string {
-  return Number.isInteger(value) ? value.toLocaleString() : value.toPrecision(3)
 }

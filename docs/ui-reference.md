@@ -63,16 +63,21 @@ and height-capped on small screens, see `src/styles/responsive.css`).
 `Hide Controls` collapses it.
 A tab with a running task shows a loading dot.
 
-| Tab         | Panel component                                                                                               | Hidden for               |
+| Tab         | Panel component and section models                                                                            | Hidden for               |
 | ----------- | ------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| Dataset     | `AppDatasetHudPanel` → `src/features/control-hud/DatasetHudPanel.tsx`                                         | —                        |
-| Layers      | `AppLayerHudPanel` → `src/features/control-hud/LayerHudPanel.tsx`                                             | —                        |
-| Genes       | `AppGeneHudPanel` → `src/features/genes/GeneHudPanel.tsx`                                                     | Image                    |
-| Transcripts | `AppTranscriptHudPanel` → `src/features/transcripts/TranscriptHudPanel.tsx`                                   | All but Xenium and Atera |
+| Dataset     | `src/features/control-hud/DatasetHudPanel.tsx` (dataset info)                                                 | —                        |
+| Layers      | `src/features/control-hud/LayerHudPanel.tsx` (image, cells, view settings, dataset info)                      | —                        |
+| Genes       | `src/features/genes/GeneHudPanel.tsx` (cells)                                                                 | Image                    |
+| Transcripts | `src/features/transcripts/TranscriptHudPanel.tsx` (transcripts)                                               | All but Xenium and Atera |
 | Magic Lens  | `src/features/roi/MagicLensHudPanel.tsx`                                                                      | Image                    |
-| Annotations | `src/features/annotations/AnnotationHudPanel.tsx`                                                             | —                        |
+| Annotations | `src/features/annotations/AnnotationHudPanel.tsx` (annotations)                                               | —                        |
 | ROI         | `RoiHudPanel`, `VisiumHdRoiHudPanel`, or `GeometricRoiHudPanel` in `src/features/control-hud/RoiHudPanel.tsx` | —                        |
 | Cell        | `src/features/control-hud/CellHudPanel.tsx`                                                                   | Image                    |
+
+The Dataset, Layers, Genes, Transcripts and Annotations tabs are made of blocks
+from `src/features/sections/`, each
+taking one section model built in `App.tsx` (see
+[architecture.md](architecture.md#section-models)).
 
 Tab order and labels come from `CONTROL_HUD_TABS`
 (`src/features/app-shell/appShellModel.ts`). Before a dataset is ready the
@@ -535,4 +540,6 @@ annotation colours and visibility, and GeoJSON shapes.
   `src/features/app-shell/useAppDomainState.ts`, grouped by area
   (annotations, analysis, cells, dataset, genes, layers, Magic Lens,
   morphology, ROI, runtime, selection, transcripts, Visium HD).
-- Control element IDs come from `src/features/app-shell/useAppControlIds.ts`.
+- Section blocks make their own control element IDs with `useId`. The Magic
+  Lens, ROI and Cell tabs still take theirs from
+  `src/features/app-shell/useAppControlIds.ts`.
