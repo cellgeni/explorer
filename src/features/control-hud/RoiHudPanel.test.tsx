@@ -172,7 +172,7 @@ describe('RoiHudPanel', () => {
     )
 
     expect(screen.getByLabelText('ROI summary')).toHaveTextContent('Bins')
-    expect(screen.getByLabelText('ROI summary')).toHaveTextContent('16 um')
+    expect(screen.getByLabelText('ROI summary')).toHaveTextContent('16 µm')
     expect(screen.getByLabelText('ROI summary')).toHaveTextContent('In tissue')
     expect(screen.getByLabelText('ROI gene distribution')).toHaveTextContent('ROI genes')
     expect(screen.getByLabelText('ROI gene distribution')).not.toHaveTextContent(

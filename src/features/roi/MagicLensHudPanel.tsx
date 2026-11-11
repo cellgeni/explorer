@@ -1,3 +1,4 @@
+import { withMicrometers } from '../../data/units'
 import { MagicLensPanel } from './RoiPanels'
 import type { MagicLensScope, MagicLensState } from './magicLensModel'
 
@@ -127,7 +128,7 @@ export function MagicLensHudPanel({
             }}
           />
           <output htmlFor={magicLensRadiusInputId}>
-            {magicLensRadiusMicrometers.toLocaleString()} um
+            {withMicrometers(magicLensRadiusMicrometers.toLocaleString())}
           </output>
         </div>
 

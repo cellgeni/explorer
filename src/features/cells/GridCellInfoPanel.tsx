@@ -1,3 +1,4 @@
+import { MICROMETERS } from '../../data/units'
 import type { GridCellDatum } from '../../rendering/deckLayers'
 import {
   gridCellAssignmentLocationLabel,
@@ -42,7 +43,7 @@ export function GridCellInfoPanel({
         </div>
         <div>
           <dt>Bin Size</dt>
-          <dd>{formatMetric(cell.binSizeMicrometers, 'um')}</dd>
+          <dd>{formatMetric(cell.binSizeMicrometers, MICROMETERS)}</dd>
         </div>
         <div>
           <dt>Tissue</dt>

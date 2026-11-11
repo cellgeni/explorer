@@ -2,6 +2,12 @@ import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import {
+  collectAxeFindings,
+  expectAxeFindingsMatchBaseline,
+  type AxeFindings,
+} from './axe'
+import { expectLogEntry, openControls } from './controls'
 
 const VISIUM_HD_REFERENCE_URL =
   'https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f'
@@ -31,7 +37,7 @@ async function loadDefaultXeniumDataset(page: Page) {
   await expect(page.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
 
   await page.getByRole('button', { name: 'Load Dataset' }).click()
-  await expect(page.getByText(/Dataset ready: [1-9][0-9,]* cells/)).toBeVisible({
+  await expectLogEntry(page, /Dataset ready: [1-9][0-9,]* cells/, {
     timeout: XENIUM_LOAD_TIMEOUT_MS,
   })
   await expect(
@@ -57,8 +63,7 @@ async function loadVisiumHdReferenceDataset(page: Page) {
 }
 
 async function expectVisiumHdBoundaryLayersOffByDefault(page: Page) {
-  await page.getByRole('tab', { name: 'Layers' }).click()
-  const layersPanel = page.locator('#hud-panel-layers')
+  const layersPanel = await openControls(page, 'cell-appearance')
   await expect(layersPanel.getByLabel('Cell boundaries')).toBeEnabled()
   await expect(layersPanel.getByLabel('Cell boundaries')).not.toBeChecked()
   await expect(layersPanel.getByLabel('Nucleus boundaries')).toBeEnabled()
@@ -294,12 +299,48 @@ test('shows the scaffolded viewer shell @smoke', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Load Dataset' })).toBeVisible()
 })
 
+test('has no accessibility violations beyond the axe baseline @smoke', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  const findings: AxeFindings = new Map()
+
+  // Every tab of the Control HUD, empty and with data. 15.2 replaces the tabs
+  // with sections and cards, and this walk with one over them.
+  async function checkEachTab(state: string) {
+    for (const name of await page.getByRole('tab').allTextContents()) {
+      await page.getByRole('tab', { name, exact: true }).click()
+      await collectAxeFindings(page, `${state}, ${name} tab`, findings)
+    }
+  }
+
+  await routeTinyH5adFixture(page)
+  await page.goto('/')
+  await checkEachTab('empty viewer')
+
+  await openControls(page, 'open-dataset')
+  const fixtureUrl = new URL('/h5ad-smoke.h5ad', page.url()).toString()
+  await page.getByLabel('Dataset or image URL').fill(fixtureUrl)
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+  await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  const genesPanel = await openControls(page, 'genes')
+  await genesPanel.getByRole('button', { name: 'Actb', exact: true }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText('Expression', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await checkEachTab('H5AD fixture with a gene selected')
+
+  expectAxeFindingsMatchBaseline(findings)
+})
+
 test('shows transcript overlay controls in the browser shell @smoke', async ({
   page,
 }) => {
   await page.goto('/')
 
-  await page.getByRole('tab', { name: 'Transcripts' }).click()
+  await openControls(page, 'transcripts')
 
   await expect(page.getByRole('heading', { name: 'Transcripts' })).toBeVisible()
   await expect(page.getByRole('checkbox', { name: 'Show transcripts' })).toBeDisabled()
@@ -324,7 +365,7 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
   await page.getByLabel('Dataset or image URL').fill(fixtureUrl)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  await expect(page.getByText(/H5AD ready: 4 cells, 3 genes/)).toBeVisible({
+  await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
   await expect(
@@ -335,8 +376,7 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
 
   // H5AD loads with the annotation set on None; categorical obs columns are
   // listed as annotation sets and only load on request.
-  await page.getByRole('tab', { name: 'Genes' }).click()
-  const genesPanel = page.locator('#hud-panel-genes')
+  const genesPanel = await openControls(page, 'genes')
   await expect(
     genesPanel.getByRole('button', { name: 'Actb', exact: true }),
   ).toBeVisible()
@@ -348,18 +388,20 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
     { timeout: H5AD_LOAD_TIMEOUT_MS },
   )
 
-  await page.getByRole('tab', { name: 'Annotations' }).click()
-  const annotationsPanel = page.locator('#hud-panel-annotations')
+  const annotationsPanel = await openControls(page, 'clusters')
   await expect(annotationsPanel.getByLabel('Annotation set')).toHaveValue('none')
   await annotationsPanel.getByLabel('Annotation set').selectOption({ label: 'cluster' })
   await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
-  const loadedAnnotations = annotationsPanel.getByLabel('Loaded annotations')
-  await expect(loadedAnnotations).toContainText('cluster: A', {
+  // One list per set: the set is a heading and labels drop its prefix.
+  const loadedAnnotations = annotationsPanel.getByRole('region', {
+    name: 'cluster labels',
+  })
+  await expect(loadedAnnotations).toContainText('A', {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
-  await expect(loadedAnnotations).toContainText('cluster: B')
+  await expect(loadedAnnotations).toContainText('B')
 
-  await page.getByRole('tab', { name: 'Genes' }).click()
+  await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
 
   // Numeric obs columns are listed as Metadata tracks; values load on selection.
@@ -367,8 +409,7 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
   await expect(genesPanel.getByLabel('Metadata track')).toHaveValue('h5ad:n-genes')
   await expect(genesPanel.getByLabel('Metadata track')).toContainText('score')
 
-  await page.getByRole('tab', { name: 'Cell' }).click()
-  const cellPanel = page.locator('#hud-panel-cell')
+  const cellPanel = await openControls(page, 'embedding')
   await cellPanel.getByRole('button', { name: 'Load Embeddings' }).click()
   await expect(cellPanel.getByLabel('Embedding view')).toContainText('UMAP', {
     timeout: H5AD_LOAD_TIMEOUT_MS,
@@ -393,16 +434,15 @@ test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
   })
   await page.goto(`/#${sharedState.toString()}`)
 
-  await expect(page.getByText(/H5AD ready: 4 cells, 3 genes/)).toBeVisible({
+  await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
-  await expect(page.getByText(/Metadata track ready: score/)).toBeVisible({
+  await expectLogEntry(page, /Metadata track ready: score/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
   await expect(page.getByText(/Loading metadata track n_genes/)).toHaveCount(0)
 
-  await page.getByRole('tab', { name: 'Genes' }).click()
-  const genesPanel = page.locator('#hud-panel-genes')
+  const genesPanel = await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('metadata')
   await expect(genesPanel.getByLabel('Metadata track')).toHaveValue('h5ad:score')
   await expect(page).toHaveURL(/cellTrack=h5ad%3Ascore/)
@@ -456,12 +496,11 @@ test('loads AnnData from an Icechunk repository with gene expression @smoke', as
   await page.getByLabel('Dataset or image URL').fill(repositoryUrl)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  await expect(page.getByText(/Icechunk AnnData ready: 6 cells, 4 genes/)).toBeVisible({
+  await expectLogEntry(page, /Icechunk AnnData ready: 6 cells, 4 genes/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
 
-  await page.getByRole('tab', { name: 'Genes' }).click()
-  const genesPanel = page.locator('#hud-panel-genes')
+  const genesPanel = await openControls(page, 'genes')
   await genesPanel.getByRole('button', { name: 'Gapdh', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
     'Expression all cells: 3 positive cells across 6 slide cells',
@@ -574,28 +613,28 @@ test('switches Visium libraries and off-tissue spots and keeps them in the link 
   await expect(page).toHaveURL(/vimg=hires/)
   await expect(page).toHaveURL(/vlib=section-A/)
 
-  await page.getByRole('tab', { name: 'Genes' }).click()
-  const genesPanel = page.locator('#hud-panel-genes')
+  const genesPanel = await openControls(page, 'genes')
   await genesPanel.getByLabel('Gene selection').fill('GeneB')
   await genesPanel.getByRole('button', { name: 'GeneB', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
     /Expression all cells: 0 positive cells across 70 slide cells/,
   )
 
-  await page.getByRole('tab', { name: 'Dataset' }).click()
+  await openControls(page, 'view-options')
   await library.selectOption('section-B')
-  await expect(page.getByText(/Visium library section-B: 70 spots/)).toBeVisible()
+  await expectLogEntry(page, /Visium library section-B: 70 spots/)
   await expect(page).toHaveURL(/vlib=section-B/)
   // The gene selection survives the reload.
-  await page.getByRole('tab', { name: 'Genes' }).click()
+  await openControls(page, 'genes')
   await expect(genesPanel.locator('.analysis-status')).toContainText(
     /Expression all cells: 70 positive cells across 70 slide cells/,
   )
 
-  await page.getByRole('tab', { name: 'Dataset' }).click()
+  await openControls(page, 'spot-options')
   await visiumPanel.getByLabel('Show off-tissue spots').check()
   await expect(visiumPanel).toContainText('100 × 55 µm (incl. 30 off tissue)')
   await expect(page).toHaveURL(/voff=1/)
+  await openControls(page, 'tissue-image')
   await visiumPanel.getByTitle('Visium tissue image to show').selectOption('')
   await expect(page).toHaveURL(/vimg=none/)
 
@@ -626,14 +665,13 @@ test('loads a Space Ranger Visium folder as 55 um spots with its tissue image @s
   await expect(visiumPanel).toContainText('smoke-library')
   await expect(visiumPanel).toContainText('0.5 µm per pixel (array row/column fit')
   await expect(visiumPanel.getByTitle('Visium tissue image to show')).toHaveValue('hires')
-  await expect(page.getByText(/Visium ready: 36 spots, 3 genes/)).toBeVisible()
-  await expect(page.getByText('Visium hires tissue image ready')).toBeVisible({
+  await expectLogEntry(page, /Visium ready: 36 spots, 3 genes/)
+  await expectLogEntry(page, /Visium hires tissue image ready/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
   await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
 
-  await page.getByRole('tab', { name: 'Genes' }).click()
-  const genesPanel = page.locator('#hud-panel-genes')
+  const genesPanel = await openControls(page, 'genes')
   await genesPanel.getByLabel('Gene selection').fill('Gad1')
   await genesPanel.getByRole('button', { name: 'Gad1', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
@@ -663,13 +701,12 @@ test('loads a CELLxGENE Visium H5AD with uns/spatial as spots over its H&E @live
   await expect(visiumPanel).toContainText('370 × 55 µm (4,622 off tissue hidden)')
   await expect(visiumPanel).toContainText('GSM6592057_M10')
   await expect(visiumPanel).toContainText('µm per pixel (array row/column fit')
-  await expect(page.getByText('Visium hires tissue image ready')).toBeVisible({
+  await expectLogEntry(page, /Visium hires tissue image ready/, {
     timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS,
   })
 
   // Symbols come from the categorical var/feature_name, not the Ensembl index.
-  await page.getByRole('tab', { name: 'Genes' }).click()
-  const genesPanel = page.locator('#hud-panel-genes')
+  const genesPanel = await openControls(page, 'genes')
   await genesPanel.getByLabel('Gene selection').fill('MALAT1')
   await genesPanel.getByRole('button', { name: 'MALAT1', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
@@ -691,7 +728,7 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
   await page.getByLabel('Dataset or image URL').fill(H5AD_PBMC3K_REFERENCE_URL)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  await expect(page.getByText(/H5AD ready: 2,638 cells, 1,838 genes/)).toBeVisible({
+  await expectLogEntry(page, /H5AD ready: 2,638 cells, 1,838 genes/, {
     timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS,
   })
   await expect(
@@ -699,9 +736,9 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
   ).toBeVisible()
   await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
 
-  await page.getByRole('tab', { name: 'Genes' }).click()
-  const genesPanel = page.locator('#hud-panel-genes')
+  const genesPanel = await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('transcript-count')
+  await openControls(page, 'genes')
   await genesPanel.getByLabel('Gene selection').fill('CD79A')
   await genesPanel.getByRole('button', { name: 'CD79A', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
@@ -709,17 +746,15 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
     { timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS },
   )
 
-  await page.getByRole('tab', { name: 'Annotations' }).click()
-  const annotationsPanel = page.locator('#hud-panel-annotations')
+  const annotationsPanel = await openControls(page, 'clusters')
   await expect(annotationsPanel.getByLabel('Annotation set')).toHaveValue('none')
   await annotationsPanel.getByLabel('Annotation set').selectOption({ label: 'leiden' })
   await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
-  await expect(annotationsPanel.getByLabel('Loaded annotations')).toContainText(
-    'leiden: ',
-    { timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS },
-  )
+  await expect(
+    annotationsPanel.getByRole('region', { name: 'leiden labels' }),
+  ).toBeVisible({ timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS })
 
-  await page.getByRole('tab', { name: 'Genes' }).click()
+  await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
 
   await genesPanel.getByLabel('Cell color').selectOption('metadata')
@@ -741,16 +776,15 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   await page.getByLabel('Dataset or image URL').fill(ATERA_REFERENCE_URL)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  await expect(page.getByText(/Atera ready: 93,864 cells, 18,050 genes/)).toBeVisible({
+  await expectLogEntry(page, /Atera ready: 93,864 cells, 18,050 genes/, {
     timeout: ATERA_LOAD_TIMEOUT_MS,
   })
   await expect(page.getByRole('tab', { name: 'Transcripts' })).toBeVisible()
-  await expect(page.getByText('Morphology image ready')).toBeVisible({
+  await expectLogEntry(page, /Morphology image ready/, {
     timeout: ATERA_LOAD_TIMEOUT_MS,
   })
 
-  await page.getByRole('tab', { name: 'Layers' }).click()
-  const layersPanel = page.locator('#hud-panel-layers')
+  const layersPanel = await openControls(page, 'image')
   const imageChannels = layersPanel.getByLabel('Image channels')
   await expect(imageChannels).toContainText('DAPI')
   await expect(imageChannels).toContainText('ATP1A1/CD45/E-Cadherin')
@@ -758,8 +792,7 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   await expect(layersPanel.getByLabel('Cell boundaries')).toBeChecked()
   await expect(layersPanel.getByLabel('Nucleus boundaries')).toBeEnabled()
 
-  await page.getByRole('tab', { name: 'Genes' }).click()
-  const genesPanel = page.locator('#hud-panel-genes')
+  const genesPanel = await openControls(page, 'genes')
   await genesPanel.getByLabel('Gene selection').fill('UMOD')
   await genesPanel.getByRole('button', { name: 'UMOD', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
@@ -767,21 +800,18 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
     { timeout: ATERA_LOAD_TIMEOUT_MS },
   )
 
-  await page.getByRole('tab', { name: 'Annotations' }).click()
-  const annotationsPanel = page.locator('#hud-panel-annotations')
+  const annotationsPanel = await openControls(page, 'clusters')
   await annotationsPanel
     .getByLabel('Annotation set')
     .selectOption({ label: 'azimuth_broad' })
   await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
-  await expect(annotationsPanel.getByLabel('Loaded annotations')).toContainText(
-    'azimuth_broad: Epithelial cell',
-    { timeout: ATERA_LOAD_TIMEOUT_MS },
-  )
+  await expect(
+    annotationsPanel.getByRole('region', { name: 'azimuth_broad labels' }),
+  ).toContainText('Epithelial cell', { timeout: ATERA_LOAD_TIMEOUT_MS })
 
   // With UMOD selected, Atera transcripts are its density from
   // binned_transcripts.zarr.zip; for all features they are cell-summary squares.
-  await page.getByRole('tab', { name: 'Transcripts' }).click()
-  const transcriptsPanel = page.locator('#hud-panel-transcripts')
+  const transcriptsPanel = await openControls(page, 'transcripts')
   const transcriptSummary = transcriptsPanel.getByLabel('Transcript overlay summary')
   await page.getByRole('checkbox', { name: 'Show transcripts' }).check()
   await expect(transcriptsPanel).toContainText(
@@ -819,18 +849,16 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
 
   await loadDefaultXeniumDataset(page)
 
-  await expect(page.getByText('Morphology image ready')).toBeVisible({
+  await expectLogEntry(page, /Morphology image ready/, {
     timeout: XENIUM_LOAD_TIMEOUT_MS,
   })
 
-  await page.getByRole('tab', { name: 'Layers' }).click()
-  const layersPanel = page.locator('#hud-panel-layers')
+  const layersPanel = await openControls(page, 'image')
   const imageChannels = layersPanel.getByLabel('Image channels')
   await expect(imageChannels).toContainText('DAPI')
   await expect(imageChannels).toContainText('18S')
 
-  await page.getByRole('tab', { name: 'Transcripts' }).click()
-  const transcriptsPanel = page.locator('#hud-panel-transcripts')
+  const transcriptsPanel = await openControls(page, 'transcripts')
   await expect(page.getByRole('checkbox', { name: 'Show transcripts' })).toBeEnabled()
   await page.getByRole('combobox', { name: 'Detail' }).selectOption('density')
   await page.getByRole('checkbox', { name: 'Show transcripts' }).check()
@@ -842,8 +870,7 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
     /Rendered[1-9][0-9,]* squares/,
   )
 
-  await page.getByRole('tab', { name: 'ROI' }).click()
-  const roiPanel = page.locator('#hud-panel-roi')
+  const roiPanel = await openControls(page, 'selection')
   await expect(roiPanel.getByRole('button', { name: 'Draw Box' })).toBeEnabled({
     timeout: XENIUM_ROI_TIMEOUT_MS,
   })
@@ -896,8 +923,7 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
     )
   }
 
-  await page.getByRole('tab', { name: 'Cell' }).click()
-  const cellPanel = page.locator('#hud-panel-cell')
+  const cellPanel = await openControls(page, 'cell-card')
   await expect(page.getByRole('heading', { name: 'Cell Info' })).toBeVisible()
   await expect(cellPanel).toContainText('No cell selected')
 })
@@ -942,8 +968,7 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
     '2 µm bins',
   )
 
-  await page.getByRole('tab', { name: 'Genes' }).click()
-  const genesPanel = page.locator('#hud-panel-genes')
+  const genesPanel = await openControls(page, 'genes')
   await genesPanel.getByRole('button', { name: 'A2M', exact: true }).click()
   await expect(genesPanel.getByTitle('Remove A2M')).toBeVisible()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
@@ -951,8 +976,7 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
     { timeout: 60_000 },
   )
 
-  await page.getByRole('tab', { name: 'Magic Lens' }).click()
-  const magicLensPanel = page.locator('#hud-panel-magic-lens')
+  const magicLensPanel = await openControls(page, 'magic-lens')
   await expect(magicLensPanel.getByRole('spinbutton', { name: 'Min QV' })).toHaveCount(0)
   await magicLensPanel.getByRole('button', { name: 'Viewport' }).click()
   await expect(magicLensPanel.getByRole('button', { name: 'Scan Lens' })).toBeEnabled()
@@ -964,13 +988,11 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
     'A2M',
   )
 
-  await page.getByRole('tab', { name: 'Cell' }).click()
-  const cellPanel = page.locator('#hud-panel-cell')
+  const cellPanel = await openControls(page, 'cell-card')
   await expect(page.getByRole('heading', { name: 'Bin Info' })).toBeVisible()
   await expect(cellPanel).toContainText('No bin selected')
 
-  await page.getByRole('tab', { name: 'ROI' }).click()
-  const roiPanel = page.locator('#hud-panel-roi')
+  const roiPanel = await openControls(page, 'selection')
   await expect(roiPanel.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
   await expect(roiPanel.getByRole('button', { name: 'Draw Lasso' })).toBeEnabled()
   await roiPanel.getByRole('button', { name: 'Draw Box' }).click()

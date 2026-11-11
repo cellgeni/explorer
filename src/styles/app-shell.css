@@ -6,14 +6,14 @@
   min-height: 0;
   overflow: hidden;
   padding: 0;
-  background: #000;
+  background: var(--canvas);
 }
 
 .app-error-shell {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #fffdf7;
+  background: var(--surface-0);
 }
 
 .app-error-boundary {
@@ -21,15 +21,15 @@
   gap: 10px;
   width: min(460px, 100%);
   padding: 16px;
-  border: 1px solid rgba(215, 63, 124, 0.32);
+  border: 1px solid var(--danger-border);
   border-radius: 8px;
-  background: rgba(215, 63, 124, 0.08);
+  background: var(--danger-soft);
 }
 
 .app-error-boundary p {
   margin: 0;
-  color: #5d2a38;
-  font-size: 0.82rem;
+  color: var(--text-2);
+  font-size: var(--font-body);
   line-height: 1.35;
 }
 
@@ -38,9 +38,9 @@
   min-height: 30px;
   padding: 5px 10px;
   border-radius: 6px;
-  background: #171511;
-  color: #fffdf7;
+  background: var(--surface-3);
+  color: var(--text-1);
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }

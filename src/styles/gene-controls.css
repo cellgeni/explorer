@@ -6,24 +6,22 @@
   min-width: 0;
 }
 
-.gene-chip,
 .gene-option-list button {
   min-height: 23px;
   padding: 3px 7px;
-  border: 1px solid rgba(23, 21, 17, 0.16);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(255, 253, 247, 0.86);
-  color: #2f2b22;
+  background: var(--surface-2);
+  color: var(--text-2);
   cursor: pointer;
-  font-size: 0.66rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
-.gene-chip,
 .gene-option-list button.selected {
-  border-color: rgba(215, 63, 124, 0.66);
-  background: rgba(215, 63, 124, 0.12);
-  color: #7f2048;
+  border-color: var(--highlight-border);
+  background: var(--highlight-soft);
+  color: var(--highlight);
 }
 
 .gene-option-list {
@@ -63,8 +61,8 @@
 }
 
 .option-empty {
-  color: #5f5848;
-  font-size: 0.64rem;
+  color: var(--text-3);
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
@@ -80,22 +78,21 @@
   min-width: 0;
   min-height: 25px;
   padding: 4px 7px;
-  border: 1px solid rgba(23, 21, 17, 0.16);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #171511;
-  color: #fffdf7;
+  background: var(--surface-3);
+  color: var(--text-1);
   cursor: pointer;
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .gene-set-actions button:hover,
 .gene-set-apply:hover,
 .gene-set-remove:hover {
-  background: #206653;
-  color: #fffdf7;
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .gene-set-actions button:disabled {
@@ -120,15 +117,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  background: rgba(32, 102, 83, 0.1);
-  color: #174d3e;
+  background: var(--accent-soft);
+  color: var(--accent);
   text-align: left;
 }
 
 .gene-set-remove {
   padding: 0;
-  background: rgba(215, 63, 124, 0.1);
-  color: #7f2048;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .gene-set-apply span,
@@ -141,11 +138,11 @@
 
 .gene-set-apply small {
   flex: 0 0 auto;
-  color: #7b4d1d;
-  font-size: 0.58rem;
+  color: var(--text-3);
+  font-size: var(--font-caption);
   font-weight: 700;
 }
 
 .gene-set-apply:hover small {
-  color: #f0c84b;
+  color: var(--accent-contrast);
 }

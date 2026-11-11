@@ -27,9 +27,19 @@ import {
 } from './features/control-hud/RoiHudPanel'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
+  parseObservationColorMode,
+  readDebugModeFromLocation,
   readShareableStateFromLocation,
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
+import { DatasetLoadToast } from './features/app-shell/DatasetLoadToast'
+import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
+import { isTextEntryTarget } from './features/app-shell/activeToolModel'
+import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
+import { viewerLegendSections } from './features/app-shell/viewerLegendModel'
+import { viewerSelectionHighlight } from './features/app-shell/viewerSelectionHighlight'
+import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
+import type { ObservationColorMode } from './rendering/cellStyling'
 import {
   activeVisiumHdRoiStateForPlatform,
   appPlatformAdapterFor,
@@ -86,6 +96,7 @@ import {
 } from './features/app-shell/appRuntimeModel'
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
+  transcriptDensityContentForRendering,
   transcriptStatusCopy,
 } from './features/transcripts/transcriptLayerModel'
 import { cellDetailStatusCopy } from './features/cells/cellDetailModel'
@@ -154,7 +165,10 @@ import {
   formatStructuredError,
   type StructuredLoadError,
 } from './features/errors/loadErrorModel'
-import { morphologyLoadFailed } from './features/dataset/datasetLoadModel'
+import {
+  IDLE_DATASET_LOAD_STATE,
+  morphologyLoadFailed,
+} from './features/dataset/datasetLoadModel'
 import type { TranscriptFeatureFilterMode } from './data/transcriptOverlay'
 import type { RoiSelection } from './data/roiSelection'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
@@ -204,6 +218,7 @@ import type {
 const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
 const EMPTY_GRID_CELL_DATA: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
+const EMPTY_GENE_EXPRESSION_ELEMENTS: readonly OverviewCellDatum[] = []
 
 export type {
   AnalysisEmbeddingsLoader,
@@ -264,6 +279,7 @@ export function App({ dependencies }: AppProps = {}) {
     readShareableStateFromLocation(),
   )
   const [performanceBudget] = useState<PerformanceBudget>(() => detectPerformanceBudget())
+  const [debugMode] = useState(readDebugModeFromLocation)
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const appState = useAppDomainState({ initialShareableState, performanceBudget })
@@ -311,6 +327,7 @@ export function App({ dependencies }: AppProps = {}) {
       diagnosticsState,
       loadState,
       morphologyState,
+      pendingDatasetLoadState,
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
       setDatasetAbout,
@@ -319,6 +336,7 @@ export function App({ dependencies }: AppProps = {}) {
       setDiagnosticsState,
       setLoadState,
       setMorphologyState,
+      setPendingDatasetLoadState,
     },
     genes: {
       geneExpressionBatch,
@@ -487,6 +505,7 @@ export function App({ dependencies }: AppProps = {}) {
       visiumHdControlState,
       visiumHdExpressionProfileState,
     },
+    tools: { activeTool, setActiveTool },
   } = appState
   const effectiveTranscriptFeatureFilterMode: TranscriptFeatureFilterMode =
     selectedGenes.length === 0 ? 'all' : transcriptFeatureFilterMode
@@ -544,8 +563,18 @@ export function App({ dependencies }: AppProps = {}) {
   const initialAnnotationImportUrlRef = useRef(
     initialShareableState.annotationUrl?.trim() || null,
   )
+  // Annotation sets a link names (groups=), loaded once the dataset is ready.
+  const initialAnnotationGroupIdsRef = useRef<readonly string[] | null>(
+    initialShareableState.annotationGroupIds ?? null,
+  )
   const initialSharedRoiSelectionRef = useRef<RoiSelection | null>(
     initialShareableState.roiSelection ?? null,
+  )
+  // The colour mode to go back to when the last gene is removed.
+  const colorModeBeforeGenesRef = useRef<ObservationColorMode>(
+    nonGeneColorMode(
+      parseObservationColorMode(initialShareableState.observationColorMode),
+    ),
   )
   const didApplyInitialDatasetUrlRef = useRef(false)
   const startDatasetLoadRef = useRef<
@@ -558,8 +587,14 @@ export function App({ dependencies }: AppProps = {}) {
     initialShareableState.customImageOpacities ?? [],
   )
   const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
-  const isLoading = loadState.status === 'loading'
+  const isLoading =
+    loadState.status === 'loading' || pendingDatasetLoadState.status === 'loading'
   const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
+  useEffect(() => {
+    document.title = documentTitle(
+      datasetDisplayName(loadedDatasetUrl, datasetAbout?.name),
+    )
+  }, [datasetAbout, loadedDatasetUrl])
   const platformAdapter = appPlatformAdapterFor(loadState, datasetPlatform)
   const isVisiumHdDataset = isVisiumHdPlatform(platformAdapter)
   const platformFeatureLoadEnabled = platformAdapter.featureLoadEnabled(loadState)
@@ -748,6 +783,14 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptPointColorMode,
     },
   })
+  // Gene expression colours cells only when it is the colour mode (D2), so
+  // loading clusters with genes selected shows the clusters.
+  const isGeneExpressionColorMode = observationColorMode === 'gene-expression'
+  const viewerGeneExpressionElements = isGeneExpressionColorMode
+    ? styledGeneExpressionElements
+    : EMPTY_GENE_EXPRESSION_ELEMENTS
+  const geneExpressionColorsReady =
+    isGeneExpressionColorMode && geneExpressionState.status === 'ready'
   const visibleBoundaryLayerData = showCellBoundaries
     ? boundaryLayerData
     : EMPTY_CELL_BOUNDARY_DATA
@@ -755,9 +798,9 @@ export function App({ dependencies }: AppProps = {}) {
     () =>
       styleCellBoundariesByGeneExpression(
         visibleBoundaryLayerData,
-        styledGeneExpressionElements,
+        viewerGeneExpressionElements,
       ),
-    [styledGeneExpressionElements, visibleBoundaryLayerData],
+    [viewerGeneExpressionElements, visibleBoundaryLayerData],
   )
   const visibleNucleusBoundaryLayerData = showNucleusBoundaries
     ? nucleusBoundaryLayerData
@@ -772,10 +815,10 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const expressionStyledSpatialGridCells = useMemo(
     () =>
-      styleGridCellsByGeneExpression(spatialGridCells, styledGeneExpressionElements, {
-        styleUnmatchedCells: geneExpressionState.status === 'ready',
+      styleGridCellsByGeneExpression(spatialGridCells, viewerGeneExpressionElements, {
+        styleUnmatchedCells: geneExpressionColorsReady,
       }),
-    [geneExpressionState.status, spatialGridCells, styledGeneExpressionElements],
+    [geneExpressionColorsReady, spatialGridCells, viewerGeneExpressionElements],
   )
   const viewerGridCells = isVisiumHdBoundarySurfaceReserved
     ? EMPTY_GRID_CELL_DATA
@@ -837,6 +880,54 @@ export function App({ dependencies }: AppProps = {}) {
   const annotationCopy = annotationStatusCopy(annotationState)
   const annotationGroupOptions =
     annotationGroupState.status === 'ready' ? annotationGroupState.groups : []
+  const legendAnnotations = useMemo(() => {
+    if (annotationState.status !== 'ready') return null
+
+    const annotations = filterAnnotationsByVisibleSets(
+      annotationState.annotations,
+      hiddenAnnotationSetIdSet,
+    )
+    const groupLabel =
+      annotationGroupState.status === 'ready'
+        ? annotationGroupState.groups.find(
+            (group) => group.id === selectedAnnotationGroupId,
+          )?.label
+        : undefined
+    const setLabel =
+      groupLabel !== undefined &&
+      annotations.every((annotation) => annotation.label.startsWith(`${groupLabel}: `))
+        ? groupLabel
+        : null
+
+    return {
+      setLabel,
+      items: annotations.map((annotation, index) => ({
+        id: annotation.id,
+        label: annotation.label,
+        color: annotationColors[annotation.id] ?? annotationPaletteColor(index),
+        count: annotation.cellIds.length,
+      })),
+      hiddenIds: hiddenAnnotationIdSet,
+    }
+  }, [
+    annotationColors,
+    annotationGroupState,
+    annotationState,
+    hiddenAnnotationIdSet,
+    hiddenAnnotationSetIdSet,
+    selectedAnnotationGroupId,
+  ])
+  const legendCellAreaMax = useMemo(() => {
+    if (observationColorMode !== 'cell-area') return null
+
+    let max: number | null = null
+    for (const cell of overviewCells) {
+      if (cell.cellArea !== undefined && Number.isFinite(cell.cellArea)) {
+        max = Math.max(max ?? 0, cell.cellArea)
+      }
+    }
+    return max
+  }, [observationColorMode, overviewCells])
   const overviewCellById = useMemo(() => {
     const cellById = new Map<string, OverviewCellDatum>()
 
@@ -846,6 +937,14 @@ export function App({ dependencies }: AppProps = {}) {
 
     return cellById
   }, [overviewCells])
+  // Visium spots off the tissue are not placed while hidden, so annotation
+  // counts leave them out (15.1-I).
+  const annotationPlacedCellIds =
+    visiumControlState.status !== 'idle' &&
+    visiumControlState.summary.offTissueSpotCount > 0 &&
+    !visiumControlState.summary.showOffTissue
+      ? overviewCellById
+      : null
   const gridCellById = useMemo(() => {
     const cellById = new Map<string, GridCellDatum>()
 
@@ -1105,7 +1204,11 @@ export function App({ dependencies }: AppProps = {}) {
         visiumHdExpressionProjectionState,
         genePanelState,
         isRoiGeneViewportWarmupLoading,
-        loadState,
+        // The dataset load in progress, whether or not it replaces one.
+        loadState:
+          pendingDatasetLoadState.status === 'loading'
+            ? pendingDatasetLoadState
+            : loadState,
         magicLensState,
         magicLensLoadingScopeLabel:
           magicLensState.status === 'loading'
@@ -1138,6 +1241,7 @@ export function App({ dependencies }: AppProps = {}) {
       magicLensState,
       morphologyState,
       customMorphologyLayerState,
+      pendingDatasetLoadState,
       roiGeneStatsState,
       roiState,
       roiTranscriptExportState,
@@ -1173,6 +1277,65 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const effectiveShowTranscriptOverlay =
     platformAdapter.effectiveTranscriptOverlay(showTranscriptOverlay)
+  const transcriptDensityContent = useMemo(
+    () => transcriptDensityContentForRendering(transcriptLayerState),
+    [transcriptLayerState],
+  )
+  const legendSections = useMemo(
+    () =>
+      viewerLegendSections({
+        colorMode: observationColorMode,
+        genes: {
+          names: selectedGenes,
+          scoreMode: geneExpressionScoreMode,
+          colorScale: geneExpressionColorScale,
+          scaleMax: geneExpressionScaleMax,
+          loading: geneExpressionState.status !== 'ready',
+        },
+        annotations: legendAnnotations,
+        metadataTrack:
+          activeCellMetadataTrack === null || selectedCellMetadataTrack === null
+            ? null
+            : {
+                label: selectedCellMetadataTrack.label,
+                min: activeCellMetadataTrack.min,
+                max: activeCellMetadataTrack.max,
+              },
+        cellAreaMax: legendCellAreaMax,
+        transcripts: {
+          density:
+            effectiveShowTranscriptOverlay && transcriptDensityContent !== null
+              ? {
+                  colorScale: transcriptDensityColorScale,
+                  labels: transcriptDensityScaleLabels,
+                  content: transcriptDensityContent,
+                }
+              : null,
+          pointColorMode:
+            effectiveShowTranscriptOverlay && transcriptLayerPoints.length > 0
+              ? transcriptPointColorMode
+              : null,
+        },
+      }),
+    [
+      activeCellMetadataTrack,
+      effectiveShowTranscriptOverlay,
+      geneExpressionColorScale,
+      geneExpressionScaleMax,
+      geneExpressionScoreMode,
+      geneExpressionState.status,
+      legendAnnotations,
+      legendCellAreaMax,
+      observationColorMode,
+      selectedCellMetadataTrack,
+      selectedGenes,
+      transcriptDensityColorScale,
+      transcriptDensityContent,
+      transcriptDensityScaleLabels,
+      transcriptLayerPoints,
+      transcriptPointColorMode,
+    ],
+  )
   const magicLensAvailability = platformAdapter.magicLensAvailability(
     loadState,
     spatialGridCells.length,
@@ -1294,6 +1457,7 @@ export function App({ dependencies }: AppProps = {}) {
     () =>
       collectStructuredLoadErrors([
         loadState,
+        pendingDatasetLoadState,
         diagnosticsState,
         morphologyState,
         customMorphologyLayerState,
@@ -1328,6 +1492,7 @@ export function App({ dependencies }: AppProps = {}) {
       magicLensState,
       morphologyState,
       customMorphologyLayerState,
+      pendingDatasetLoadState,
       roiState,
       roiGeneStatsState,
       roiTranscriptExportState,
@@ -1633,17 +1798,27 @@ export function App({ dependencies }: AppProps = {}) {
       loadGeneExpression: loadActiveGeneExpression,
     },
   })
+  useEffect(() => {
+    if (observationColorMode !== 'gene-expression') {
+      colorModeBeforeGenesRef.current = observationColorMode
+    }
+  }, [observationColorMode])
   const toggleGene = useCallback(
     (gene: string) => {
       const isSelected = selectedGenes.includes(gene)
+      const nextGenes = isSelected
+        ? selectedGenes.filter((selectedGene) => selectedGene !== gene)
+        : [...selectedGenes, gene].sort((a, b) => a.localeCompare(b))
 
       appendDebugEvent(isSelected ? `Cleared gene ${gene}` : `Highlight gene ${gene}`)
       resetGeneExpressionSelectionState()
       setManualTranscriptExactRequestKey(null)
-      setSelectedGenes((current) =>
-        isSelected
-          ? current.filter((selectedGene) => selectedGene !== gene)
-          : [...current, gene].sort((a, b) => a.localeCompare(b)),
+      setSelectedGenes(nextGenes)
+      setObservationColorMode((mode) =>
+        colorModeAfterGeneChange(mode, colorModeBeforeGenesRef.current, {
+          added: !isSelected,
+          geneCount: nextGenes.length,
+        }),
       )
     },
     [
@@ -1651,6 +1826,7 @@ export function App({ dependencies }: AppProps = {}) {
       resetGeneExpressionSelectionState,
       selectedGenes,
       setManualTranscriptExactRequestKey,
+      setObservationColorMode,
       setSelectedGenes,
     ],
   )
@@ -1948,6 +2124,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
+    loadAnnotationGroup,
   } = useAnnotationWorkflow({
     callbacks: { appendDebugEvent },
     data: {
@@ -2117,6 +2294,35 @@ export function App({ dependencies }: AppProps = {}) {
       }
     })
   }, [handleImportAnnotationUrl, loadedDatasetUrl, setAnnotationImportUrl])
+  useEffect(() => {
+    const groupIds = initialAnnotationGroupIdsRef.current
+
+    if (
+      groupIds === null ||
+      loadedDatasetUrl === null ||
+      annotationGroupState.status !== 'ready' ||
+      annotationGroupState.url !== loadedDatasetUrl
+    ) {
+      return
+    }
+
+    initialAnnotationGroupIdsRef.current = null
+    const groupId = groupIds.find(
+      (id) =>
+        id === ALL_ANNOTATION_GROUP_ID ||
+        annotationGroupState.groups.some((group) => group.id === id),
+    )
+
+    if (groupId !== undefined) {
+      setSelectedAnnotationGroupId(groupId)
+      loadAnnotationGroup(groupId)
+    }
+  }, [
+    annotationGroupState,
+    loadAnnotationGroup,
+    loadedDatasetUrl,
+    setSelectedAnnotationGroupId,
+  ])
 
   const { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings } =
     useAnalysisEmbeddingWorkflow({
@@ -2184,9 +2390,11 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedGridCell(null)
       setSelectedBoundaryCell(null)
       setSelectedCell(cell)
+      setActiveControlHudTab('cell')
     },
     [
       clearVisiumHdExpressionProfileState,
+      setActiveControlHudTab,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
@@ -2198,9 +2406,11 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCell(null)
       setSelectedGridCell(null)
       setSelectedBoundaryCell(cell)
+      setActiveControlHudTab('cell')
     },
     [
       clearVisiumHdExpressionProfileState,
+      setActiveControlHudTab,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
@@ -2212,13 +2422,44 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCell(null)
       setSelectedBoundaryCell(null)
       setSelectedGridCell(cell)
+      setActiveControlHudTab('cell')
     },
     [
       clearVisiumHdExpressionProfileState,
+      setActiveControlHudTab,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
     ],
+  )
+
+  const handleClearSelection = useCallback(() => {
+    clearVisiumHdExpressionProfileState()
+    setSelectedCell(null)
+    setSelectedBoundaryCell(null)
+    setSelectedGridCell(null)
+  }, [
+    clearVisiumHdExpressionProfileState,
+    setSelectedBoundaryCell,
+    setSelectedCell,
+    setSelectedGridCell,
+  ])
+  const drawnBoundaryById = useMemo(
+    () =>
+      new Map(
+        expressionStyledBoundaryLayerData.map((boundary) => [boundary.id, boundary]),
+      ),
+    [expressionStyledBoundaryLayerData],
+  )
+  const selectionHighlight = useMemo(
+    () =>
+      viewerSelectionHighlight({
+        selectedCell,
+        selectedBoundaryCell,
+        selectedGridCell,
+        drawnBoundaries: drawnBoundaryById,
+      }),
+    [drawnBoundaryById, selectedBoundaryCell, selectedCell, selectedGridCell],
   )
 
   const {
@@ -2265,10 +2506,25 @@ export function App({ dependencies }: AppProps = {}) {
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,
-      setMeasurementEnabled,
       setMeasurementResetKey,
     },
   })
+  // Esc anywhere but a text field leaves the active tool for Pan (D8).
+  useEffect(() => {
+    if (activeTool === 'pan') return
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== 'Escape' || isTextEntryTarget(event.target)) return
+      if (activeTool === 'magic-lens') handleMagicLensLeave()
+      setActiveTool('pan')
+      appendDebugEvent('Tool: Pan')
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [activeTool, appendDebugEvent, handleMagicLensLeave, setActiveTool])
 
   const { handleAutoContrast, queueAutoContrast, updateMorphologyChannel } =
     useMorphologyWorkflow({
@@ -2394,6 +2650,7 @@ export function App({ dependencies }: AppProps = {}) {
       recordTelemetry,
     },
     controls: {
+      isDatasetLoaded: loadState.status === 'ready',
       geneExpressionColorScale,
       transcriptDensityColorScale,
       transcriptExactPointLimit,
@@ -2493,6 +2750,7 @@ export function App({ dependencies }: AppProps = {}) {
       setGenePanelState,
       setHoveredTranscript,
       setLoadState,
+      setPendingDatasetLoadState,
       setMagicLensActive,
       setMagicLensState,
       setManualTranscriptExactRequestKey,
@@ -2619,12 +2877,27 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
+  // The loaded annotation set for the link; until one loads, the link keeps
+  // the sets it was opened with. Memoised so the link is not rescheduled on
+  // every render.
+  const loadedAnnotationGroupId =
+    annotationState.status === 'ready' ? annotationState.groupId : undefined
+  const sharedAnnotationGroupIds = useMemo(
+    () =>
+      loadedAnnotationGroupId === undefined
+        ? (initialShareableState.annotationGroupIds ?? undefined)
+        : [loadedAnnotationGroupId],
+    [initialShareableState.annotationGroupIds, loadedAnnotationGroupId],
+  )
   useShareableUrlHash({
     dataset: {
       annotationUrl: annotationImportUrl,
       customImageOpacities,
       customImageUrls,
-      datasetUrl,
+      // The loaded dataset, not the address box: until a load finishes the
+      // link keeps the dataset it was opened with (15.1-L).
+      datasetUrl: loadedDatasetUrl ?? initialShareableState.datasetUrl ?? '',
+      annotationGroupIds: sharedAnnotationGroupIds,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
     },
@@ -2693,6 +2966,7 @@ export function App({ dependencies }: AppProps = {}) {
       <AppControlHud
         activeControlHudTab={activeControlHudTab}
         appendDebugEvent={appendDebugEvent}
+        debugMode={debugMode}
         hiddenTabIds={hiddenControlHudTabIds}
         isControlHudCollapsed={isControlHudCollapsed}
         loadingTabIds={loadingTabIds}
@@ -2715,6 +2989,7 @@ export function App({ dependencies }: AppProps = {}) {
           handleDownloadDiagnostics={handleDownloadDiagnostics}
           handleRunDatasetDiagnostics={handleRunDatasetDiagnostics}
           handleVisiumHdBinSizeChange={handleVisiumHdBinSizeChange}
+          isDatasetLoaded={loadState.status === 'ready'}
           isLoading={isLoading}
           isVisiumHdDataset={isVisiumHdDataset}
           setBoundaryCellLimit={setBoundaryCellLimit}
@@ -2733,6 +3008,7 @@ export function App({ dependencies }: AppProps = {}) {
         <AppLayerHudPanel
           active={activeControlHudTab === 'layers'}
           appendDebugEvent={appendDebugEvent}
+          debugMode={debugMode}
           autoContrastChannelIds={autoContrastChannelIds}
           cellBoundaryOpacity={cellBoundaryOpacity}
           cellFillOpacity={cellFillOpacity}
@@ -2768,11 +3044,9 @@ export function App({ dependencies }: AppProps = {}) {
           setCoordinateUnit={setCoordinateUnit}
           setCustomLayerOpacity={handleCustomImageLayerOpacityChange}
           setImageLayerOpacity={setImageLayerOpacity}
-          setMagicLensActive={setMagicLensActive}
           setMeasurementEnabled={setMeasurementEnabled}
           setMeasurementResetKey={setMeasurementResetKey}
           setMeasurementUnit={setMeasurementUnit}
-          setRoiMode={setRoiMode}
           updateMorphologyChannel={updateMorphologyChannel}
         />
 
@@ -2884,6 +3158,7 @@ export function App({ dependencies }: AppProps = {}) {
 
         <AnnotationHudPanel
           active={activeControlHudTab === 'annotations'}
+          placedCellIds={annotationPlacedCellIds}
           annotationGroupInputId={controlIds.annotationGroupInputId}
           annotationImportInputId={controlIds.annotationImportInputId}
           annotationImportUrlInputId={controlIds.annotationImportUrlInputId}
@@ -2991,8 +3266,8 @@ export function App({ dependencies }: AppProps = {}) {
             roiName={roiName}
             loadEnabled={loadState.status === 'ready'}
             onRoiModeChange={(nextMode) => {
+              // Starting a shape clears the measurement line.
               if (nextMode !== 'idle') {
-                setMeasurementEnabled(false)
                 setMeasurementResetKey((current) => current + 1)
               }
 
@@ -3021,8 +3296,8 @@ export function App({ dependencies }: AppProps = {}) {
             roiGeneStatsCopy={roiGeneStatsCopy}
             roiGeneStatsState={roiGeneStatsState}
             onRoiModeChange={(nextMode) => {
+              // Starting a shape clears the measurement line.
               if (nextMode !== 'idle') {
-                setMeasurementEnabled(false)
                 setMeasurementResetKey((current) => current + 1)
               }
 
@@ -3056,8 +3331,8 @@ export function App({ dependencies }: AppProps = {}) {
             roiGeneStatsState={roiGeneStatsState}
             roiTranscriptExportState={roiTranscriptExportState}
             onRoiModeChange={(nextMode) => {
+              // Starting a shape clears the measurement line.
               if (nextMode !== 'idle') {
-                setMeasurementEnabled(false)
                 setMeasurementResetKey((current) => current + 1)
               }
 
@@ -3087,8 +3362,8 @@ export function App({ dependencies }: AppProps = {}) {
 
         <ViewerCore
           cells={styledOverviewCells}
-          expressionElements={styledGeneExpressionElements}
-          geneExpressionActive={geneExpressionState.status === 'ready'}
+          expressionElements={viewerGeneExpressionElements}
+          geneExpressionActive={geneExpressionColorsReady}
           geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
           boundaries={expressionStyledBoundaryLayerData}
           nucleusBoundaries={visibleNucleusBoundaryLayerData}
@@ -3127,6 +3402,11 @@ export function App({ dependencies }: AppProps = {}) {
           annotationStyleColors={annotationStyleColors}
           cellMetadataTrack={activeCellMetadataTrack}
           loadingTasks={loadingTasks}
+          legendSections={legendSections}
+          showZoomLevel={debugMode}
+          selectionHighlight={selectionHighlight}
+          onClearSelection={handleClearSelection}
+          onLegendCategoryVisibilityChange={handleAnnotationVisibilityChange}
           coordinateUnit={coordinateUnit}
           measurementEnabled={measurementEnabled}
           measurementUnit={measurementUnit}
@@ -3180,6 +3460,16 @@ export function App({ dependencies }: AppProps = {}) {
             ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
             : {})}
         />
+        {pendingDatasetLoadState.status === 'error' ? (
+          <DatasetLoadToast
+            failedUrl={pendingDatasetLoadState.url}
+            error={pendingDatasetLoadState.error}
+            openDatasetName={datasetDisplayName(loadedDatasetUrl, datasetAbout?.name)}
+            onDismiss={() => {
+              setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
+            }}
+          />
+        ) : null}
       </section>
     </main>
   )
@@ -3369,4 +3659,8 @@ function imageFitExtentFromMorphologyImage(image: MorphologyImage | null): BBox 
     minY: micrometers(0),
     maxY: micrometers(loader.imageHeight * micrometersPerPixel),
   }
+}
+
+function nonGeneColorMode(mode: ObservationColorMode | undefined): ObservationColorMode {
+  return mode === undefined || mode === 'gene-expression' ? 'transcript-count' : mode
 }

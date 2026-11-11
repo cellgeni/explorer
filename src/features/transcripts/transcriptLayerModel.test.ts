@@ -20,6 +20,7 @@ import {
   parseTranscriptFeatureFilterMode,
   parseTranscriptPointColorMode,
   retainedTranscriptLayerState,
+  transcriptBudgetEstimate,
   transcriptCapabilityFailed,
   transcriptCapabilityReady,
   transcriptCapabilityStarted,
@@ -32,9 +33,12 @@ import {
   transcriptAggregateBinsForRendering,
   transcriptAggregateFallbackMessage,
   transcriptAggregateScaleMaxForRendering,
+  transcriptDensityContentForRendering,
   transcriptDensityScaleAriaLabel,
   transcriptDensityScaleValueLabels,
   transcriptExactManualLoadMessage,
+  transcriptGeneDensityMissingMessage,
+  transcriptGeneDensityOverBudgetMessage,
   transcriptNativeAggregateMessage,
   transcriptPointsForRendering,
   transcriptStatusCopy,
@@ -121,6 +125,7 @@ describe('transcriptLayerModel', () => {
           source: 'native-zarr',
           mode: 'density',
           bins: [bin],
+          featureNames: [],
           visibleTranscriptEstimate: 10,
         },
         true,
@@ -142,7 +147,13 @@ describe('transcriptLayerModel', () => {
         status: 'loading',
         url: 'https://example.test/output',
         visibleTranscriptEstimate: 10,
-        previousLayer: { kind: 'aggregate', bins: [bin], scaleMax: 9 },
+        previousLayer: {
+          kind: 'aggregate',
+          source: 'native-zarr',
+          bins: [bin],
+          featureNames: [],
+          scaleMax: 9,
+        },
       }),
     ).toEqual([bin])
     expect(
@@ -150,7 +161,13 @@ describe('transcriptLayerModel', () => {
         status: 'loading',
         url: 'https://example.test/output',
         visibleTranscriptEstimate: 10,
-        previousLayer: { kind: 'aggregate', bins: [bin], scaleMax: 9 },
+        previousLayer: {
+          kind: 'aggregate',
+          source: 'native-zarr',
+          bins: [bin],
+          featureNames: [],
+          scaleMax: 9,
+        },
       }),
     ).toBe(9)
     expect(
@@ -160,10 +177,98 @@ describe('transcriptLayerModel', () => {
         source: 'native-zarr',
         mode: 'density',
         bins: [bin],
+        featureNames: ['SNAP25'],
         visibleTranscriptEstimate: 10,
         scaleMax: 9,
       }),
-    ).toEqual({ kind: 'aggregate', bins: [bin], scaleMax: 9 })
+    ).toEqual({
+      kind: 'aggregate',
+      source: 'native-zarr',
+      bins: [bin],
+      featureNames: ['SNAP25'],
+      scaleMax: 9,
+    })
+  })
+
+  it('estimates exact points from the selected genes only for per-gene outputs', () => {
+    const layer = transcriptLayerWaiting({
+      message: 'zoom',
+      visibleTranscriptEstimate: 1_031,
+    })
+
+    expect(
+      transcriptBudgetEstimate(
+        transcriptCapabilityReady('https://example.test/output', {
+          rawParquet: false,
+          nativeZarr: true,
+          geneRanges: true,
+        }),
+        layer,
+        5_000_000,
+      ),
+    ).toBe(1_031)
+    expect(
+      transcriptBudgetEstimate(
+        transcriptCapabilityReady('https://example.test/output', {
+          rawParquet: true,
+          nativeZarr: true,
+        }),
+        layer,
+        5_000_000,
+      ),
+    ).toBe(5_000_000)
+    expect(transcriptBudgetEstimate(IDLE_TRANSCRIPT_CAPABILITY_STATE, layer, 7)).toBe(7)
+  })
+
+  it('says what the density on screen counts, also while the next view loads', () => {
+    const geneBin = { ...bin, binSizeMicrometers: 40 }
+    const aggregate = transcriptLayerAggregate({
+      source: 'native-zarr',
+      mode: 'density',
+      bins: [geneBin],
+      featureNames: ['SNAP25'],
+      message: 'density',
+      visibleTranscriptEstimate: 10,
+    })
+    const content = {
+      source: 'native-zarr',
+      featureNames: ['SNAP25'],
+      binSizeMicrometers: 40,
+    }
+
+    expect(transcriptDensityContentForRendering(aggregate)).toEqual(content)
+    expect(
+      transcriptDensityContentForRendering(
+        transcriptLayerLoading(aggregate, 'https://example.test/output', 10),
+      ),
+    ).toEqual(content)
+    expect(
+      transcriptDensityContentForRendering(
+        transcriptLayerAggregate({
+          source: 'native-zarr',
+          mode: 'density',
+          bins: [],
+          featureNames: ['SNAP25'],
+          message: 'density',
+          visibleTranscriptEstimate: 0,
+        }),
+      ),
+    ).toBeNull()
+    expect(transcriptDensityContentForRendering(IDLE_TRANSCRIPT_LAYER_STATE)).toBeNull()
+  })
+
+  it('says why density for too many new genes is not read', () => {
+    expect(
+      transcriptGeneDensityOverBudgetMessage(['A', 'B', 'C', 'D'], {
+        chunkCount: 52,
+        chunkLimit: 32,
+      }),
+    ).toBe(
+      'Transcript density for 4 selected genes needs 52 density/gene data chunks, and the app reads up to 32 at a time. Select fewer genes, or zoom in until exact points load.',
+    )
+    expect(transcriptGeneDensityMissingMessage(12)).toBe(
+      'This output has no per-gene density (density/gene), so the 12 squares count all transcripts. Exact points still show the selected genes.',
+    )
   })
 
   it('constructs transcript capability and layer transitions', () => {
@@ -235,6 +340,7 @@ describe('transcriptLayerModel', () => {
         source: 'native-zarr',
         mode: 'density',
         bins: [bin],
+        featureNames: ['SNAP25'],
         message: 'density',
         visibleTranscriptEstimate: 10,
         scaleMax: 9,
@@ -245,6 +351,7 @@ describe('transcriptLayerModel', () => {
       source: 'native-zarr',
       mode: 'density',
       bins: [bin],
+      featureNames: ['SNAP25'],
       message: 'density',
       visibleTranscriptEstimate: 10,
       scaleMax: 9,

@@ -1,7 +1,7 @@
 .control-hud {
-  border: 1px solid rgba(23, 21, 17, 0.12);
-  background: rgba(255, 252, 243, 0.58);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-2);
 }
 
 .control-hud {
@@ -17,7 +17,6 @@
   padding: 6px;
   overflow: hidden;
   border-radius: 8px;
-  backdrop-filter: blur(18px) saturate(1.08);
 }
 
 .control-hud.is-collapsed {
@@ -28,7 +27,6 @@
   border-color: transparent;
   background: transparent;
   box-shadow: none;
-  backdrop-filter: none;
 }
 
 .hud-top-bar {
@@ -44,39 +42,37 @@
   flex: 0 0 auto;
   min-height: 24px;
   padding: 4px 7px;
-  border: 1px solid rgba(23, 21, 17, 0.16);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(23, 21, 17, 0.82);
-  color: #fffdf7;
+  background: var(--surface-1);
+  color: var(--text-1);
   cursor: pointer;
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .hud-toggle:hover {
-  background: #206653;
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .control-hud.is-collapsed .hud-toggle {
-  background: rgba(255, 252, 243, 0.68);
-  color: #171511;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(16px) saturate(1.1);
+  background: var(--surface-2);
+  color: var(--text-1);
+  box-shadow: var(--shadow-1);
 }
 
 .loading-indicator {
   min-width: 0;
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid rgba(246, 242, 232, 0.18);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(23, 21, 17, 0.86);
-  color: #fffdf7;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  background: var(--surface-1);
+  color: var(--text-1);
+  box-shadow: var(--shadow-1);
   overflow-wrap: anywhere;
   pointer-events: none;
-  backdrop-filter: blur(10px);
 }
 
 .loading-indicator-primary,
@@ -86,7 +82,7 @@
   gap: 6px;
   align-items: center;
   min-width: 0;
-  font-size: 0.78rem;
+  font-size: var(--font-body);
   font-weight: 700;
   line-height: 1.18;
 }
@@ -101,15 +97,15 @@
   justify-self: center;
   width: 5px;
   height: 5px;
-  border: 1px solid rgba(240, 200, 75, 0.62);
+  border: 1px solid var(--warning-border);
   border-radius: 999px;
-  background: rgba(240, 200, 75, 0.18);
+  background: var(--warning-soft);
 }
 
 .loading-indicator small {
   overflow: hidden;
-  color: rgba(246, 242, 232, 0.72);
-  font-size: 0.62rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -124,8 +120,8 @@
 }
 
 .loading-indicator li {
-  color: rgba(246, 242, 232, 0.72);
-  font-size: 0.64rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
 }
 
 .loading-spinner,
@@ -134,8 +130,8 @@
 .channel-auto-button:disabled::before {
   width: 8px;
   height: 8px;
-  border: 2px solid rgba(32, 102, 83, 0.24);
-  border-top-color: #206653;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
   border-radius: 999px;
   animation: loading-spin 780ms linear infinite;
 }
@@ -146,8 +142,8 @@
 
 .loading-indicator .loading-spinner {
   justify-self: center;
-  border-color: rgba(246, 242, 232, 0.28);
-  border-top-color: #f0c84b;
+  border-color: var(--border);
+  border-top-color: var(--warning);
 }
 
 .control-hud-content {
@@ -180,15 +176,14 @@
   justify-content: space-between;
   min-height: 24px;
   padding: 4px 5px;
-  border: 1px solid rgba(23, 21, 17, 0.12);
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: rgba(255, 253, 247, 0.46);
-  color: #2f2b22;
+  background: var(--surface-2);
+  color: var(--text-2);
   cursor: pointer;
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   text-align: left;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -198,19 +193,19 @@
 }
 
 .hud-tab-list button:hover {
-  background: rgba(32, 102, 83, 0.14);
+  background: var(--accent-soft);
 }
 
 .hud-tab-list button.active,
 .hud-tab-list button[aria-selected='true'] {
-  border-color: rgba(32, 102, 83, 0.42);
-  background: rgba(32, 102, 83, 0.18);
-  color: #174d3e;
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .hud-tab-list button.is-loading {
-  border-color: rgba(32, 102, 83, 0.28);
-  color: #174d3e;
+  border-color: var(--accent-border);
+  color: var(--accent);
 }
 
 .tab-loading-dot {
@@ -249,16 +244,15 @@
 
 .eyebrow {
   margin: 0 0 3px;
-  color: #7b4d1d;
-  font-size: 0.62rem;
+  color: var(--text-3);
+  font-size: var(--font-control);
   font-weight: 800;
-  text-transform: uppercase;
 }
 
 h1,
 h2 {
   margin: 0;
-  color: #171511;
+  color: var(--text-1);
   line-height: 1.05;
   text-wrap: balance;
 }
@@ -284,15 +278,14 @@ h2 {
 .analysis-section h2,
 .analysis-section p,
 .section-heading-row span {
-  color: #2f2b22;
-  font-size: 0.62rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .layer-section p {
   margin: 0;
-  color: #7b4d1d;
+  color: var(--text-3);
 }
 
 .dataset-form input,
@@ -302,11 +295,11 @@ h2 {
   width: 100%;
   min-width: 0;
   padding: 6px 8px;
-  border: 1px solid rgba(23, 21, 17, 0.22);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: #fffdf7;
-  color: #171511;
-  font-size: 0.76rem;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: var(--font-control);
 }
 
 .analysis-section textarea {
@@ -324,9 +317,9 @@ h2 {
 .analysis-section select {
   appearance: none;
   background:
-    linear-gradient(45deg, transparent 50%, #2f2b22 50%) calc(100% - 14px) 50% / 5px 5px
-      no-repeat,
-    #fffdf7;
+    linear-gradient(45deg, transparent 50%, var(--text-2) 50%) calc(100% - 14px) 50% / 5px
+      5px no-repeat,
+    var(--surface-2);
 }
 
 .dataset-form .dataset-toggle,
@@ -334,11 +327,10 @@ h2 {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #2f2b22;
+  color: var(--text-2);
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: none;
 }
 
 .dataset-toggle input {
@@ -347,30 +339,30 @@ h2 {
   height: 14px;
   padding: 0;
   border-radius: 4px;
-  accent-color: #206653;
+  accent-color: var(--accent);
 }
 
 .visium-hd-controls {
   display: grid;
   gap: 6px;
   padding: 7px 0;
-  border-top: 1px solid rgba(23, 21, 17, 0.12);
-  border-bottom: 1px solid rgba(23, 21, 17, 0.12);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .dataset-about {
   display: grid;
   gap: 4px;
   padding: 7px 0;
-  border-top: 1px solid rgba(23, 21, 17, 0.12);
-  color: #2f2b22;
-  font-size: 0.66rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: var(--font-control);
   line-height: 1.3;
 }
 
 .dataset-about-name {
-  color: #171511;
-  font-size: 0.74rem;
+  color: var(--text-1);
+  font-size: var(--font-control);
   font-weight: 800;
 }
 
@@ -386,9 +378,8 @@ h2 {
 }
 
 .dataset-about dt {
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .dataset-about dd {
@@ -397,7 +388,7 @@ h2 {
 }
 
 .dataset-about a {
-  color: #171511;
+  color: var(--text-1);
   font-weight: 700;
 }
 
@@ -413,17 +404,16 @@ h2 {
 .visium-bin-control > span {
   min-width: 0;
   overflow: hidden;
-  color: #2f2b22;
-  font-size: 0.62rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
   font-weight: 700;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .dataset-platform-row strong {
-  color: #171511;
-  font-size: 0.68rem;
+  color: var(--text-1);
+  font-size: var(--font-control);
   font-weight: 800;
   text-align: right;
 }
@@ -434,9 +424,9 @@ h2 {
   gap: 2px;
   min-width: 122px;
   padding: 2px;
-  border: 1px solid rgba(23, 21, 17, 0.14);
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: rgba(255, 253, 247, 0.45);
+  background: var(--surface-2);
 }
 
 .visium-bin-segmented button {
@@ -446,19 +436,19 @@ h2 {
   border: 0;
   border-radius: 3px;
   background: transparent;
-  color: #2f2b22;
+  color: var(--text-2);
   cursor: pointer;
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 750;
 }
 
 .visium-bin-segmented button[aria-pressed='true'] {
-  background: rgba(23, 21, 17, 0.86);
-  color: #fffdf7;
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .visium-bin-segmented button:not(:disabled):hover {
-  background: rgba(32, 102, 83, 0.14);
+  background: var(--accent-soft);
 }
 
 .visium-bin-segmented button:disabled {
@@ -471,11 +461,11 @@ h2 {
   min-width: 0;
   max-width: 150px;
   padding: 3px 6px;
-  border: 1px solid rgba(23, 21, 17, 0.22);
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
-  background: #fffdf7;
-  color: #171511;
-  font-size: 0.66rem;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: var(--font-control);
 }
 
 .spatialdata-units-inputs {
@@ -491,12 +481,12 @@ h2 {
 .spatialdata-units-inputs button {
   min-height: 21px;
   padding: 2px 6px;
-  border: 1px solid rgba(23, 21, 17, 0.18);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: rgba(255, 253, 247, 0.6);
-  color: #2f2b22;
+  background: var(--surface-2);
+  color: var(--text-2);
   cursor: pointer;
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 750;
 }
 
@@ -507,17 +497,17 @@ h2 {
 
 .visium-hd-note {
   margin: 0;
-  color: #7b4d1d;
-  font-size: 0.66rem;
+  color: var(--text-3);
+  font-size: var(--font-control);
   line-height: 1.25;
 }
 
 .dataset-form button {
   min-height: 30px;
   border-radius: 6px;
-  background: #171511;
-  color: #fffdf7;
-  font-size: 0.76rem;
+  background: var(--surface-3);
+  color: var(--text-1);
+  font-size: var(--font-control);
   font-weight: 700;
   cursor: pointer;
   transition:
@@ -526,7 +516,8 @@ h2 {
 }
 
 .dataset-form button:hover {
-  background: #206653;
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .dataset-form button:active {
@@ -549,21 +540,20 @@ h2 {
 .secondary-file-action {
   min-height: 26px;
   padding: 4px 7px;
-  border: 1px solid rgba(23, 21, 17, 0.16);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(32, 102, 83, 0.1);
-  color: #174d3e;
+  background: var(--accent-soft);
+  color: var(--accent);
   cursor: pointer;
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .secondary-action:hover,
 .secondary-file-action:hover {
-  background: #206653;
-  color: #fffdf7;
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .secondary-action:disabled {
@@ -620,7 +610,7 @@ h2 {
 }
 
 .section-heading-row span {
-  color: #7b4d1d;
+  color: var(--text-2);
   text-align: right;
   white-space: nowrap;
 }
@@ -656,16 +646,28 @@ h2 {
 .section-heading-row .status-chip.is-loading {
   max-width: min(156px, 52%);
   padding: 3px 6px;
-  border: 1px solid rgba(246, 242, 232, 0.18);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(23, 21, 17, 0.86);
-  color: #fffdf7;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  background: var(--surface-1);
+  color: var(--text-1);
+  box-shadow: var(--shadow-1);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .section-heading-row .status-chip.is-loading::before {
-  border-color: rgba(246, 242, 232, 0.28);
-  border-top-color: #f0c84b;
+  border-color: var(--border);
+  border-top-color: var(--warning);
+}
+
+.dataset-share-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+
+.dataset-share-status {
+  color: var(--text-2);
+  font-size: var(--font-caption);
 }

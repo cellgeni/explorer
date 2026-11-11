@@ -9,6 +9,19 @@ export function transcriptAggregateRenderedLabel(
   return `${bins.length.toLocaleString()} squares`
 }
 
+// "SNAP25", "SNAP25, AQP4 and GAD1" or "8 selected genes".
+export function transcriptGenesLabel(featureNames: readonly string[]): string {
+  if (featureNames.length > 3) {
+    return `${featureNames.length.toLocaleString()} selected genes`
+  }
+
+  if (featureNames.length <= 1) {
+    return featureNames[0] ?? ''
+  }
+
+  return `${featureNames.slice(0, -1).join(', ')} and ${featureNames.at(-1) ?? ''}`
+}
+
 export function transcriptCapabilityLabel(capabilities: TranscriptCapabilities): string {
   if (capabilities.geneRanges !== undefined) {
     if (capabilities.nativeZarr && capabilities.geneRanges) {

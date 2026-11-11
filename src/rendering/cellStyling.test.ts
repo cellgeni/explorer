@@ -32,6 +32,10 @@ describe('cell observation styling', () => {
     expect(styled[1]?.fillColor[3]).toBeGreaterThan(styled[0]?.fillColor[3] ?? 0)
   })
 
+  it('leaves cells to the gene expression styling in gene expression mode', () => {
+    expect(styleOverviewCellsByObservation(cells, 'gene-expression')).toBe(cells)
+  })
+
   it('colors overview cells by cell area', () => {
     const styled = styleOverviewCellsByObservation(cells, 'cell-area')
 

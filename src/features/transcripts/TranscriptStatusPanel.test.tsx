@@ -39,8 +39,6 @@ describe('TranscriptStatusPanel', () => {
           exactLoadRequestKey: 'request-key',
           exactLoadEstimate: 80,
         }}
-        exactPointLimit={100}
-        visibleTranscriptEstimate={80}
         hoveredTranscript={null}
         pinnedTranscript={null}
         onPinTranscript={vi.fn()}
@@ -79,8 +77,6 @@ describe('TranscriptStatusPanel', () => {
           hitPointLimit: false,
           durationMs: 12,
         }}
-        exactPointLimit={100}
-        visibleTranscriptEstimate={3}
         hoveredTranscript={hoveredTranscript}
         pinnedTranscript={hoveredTranscript}
         onPinTranscript={onPinTranscript}
@@ -100,7 +96,7 @@ describe('TranscriptStatusPanel', () => {
     expect(onClearPinnedTranscript).toHaveBeenCalledTimes(1)
   })
 
-  it('shows the selected-gene estimate and no FOVs for per-gene outputs', () => {
+  it('shows no FOVs for per-gene outputs', () => {
     render(
       <TranscriptStatusPanel
         capabilityState={{
@@ -117,8 +113,6 @@ describe('TranscriptStatusPanel', () => {
           hitPointLimit: false,
           durationMs: 12,
         }}
-        exactPointLimit={100_000}
-        visibleTranscriptEstimate={5_000_000}
         hoveredTranscript={hoveredTranscript}
         pinnedTranscript={null}
         onPinTranscript={vi.fn()}
@@ -130,7 +124,6 @@ describe('TranscriptStatusPanel', () => {
     const summary = screen.getByLabelText('Transcript overlay summary')
 
     expect(summary).toHaveTextContent('Per-gene LOD + exact')
-    expect(summary).toHaveTextContent('Estimate1,031')
     expect(screen.getByLabelText('Top transcript groups')).toHaveTextContent('UMOD3')
     expect(screen.queryByText('FOV')).not.toBeInTheDocument()
     expect(screen.queryByText('Unassigned')).not.toBeInTheDocument()

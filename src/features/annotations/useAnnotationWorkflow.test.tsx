@@ -163,10 +163,12 @@ describe('useAnnotationWorkflow', () => {
         signal: expect.any(AbortSignal),
       }),
     )
+    // The loaded set is recorded for share links (groups=).
     expect(snapshot.annotationState).toEqual({
       status: 'ready',
       url: 'https://example.test/output',
       annotations,
+      groupId: 'cluster-a',
     })
     expect(snapshot.observationColorMode).toBe('annotations')
     expect(snapshot.annotationColors.a).toBe('#1f77b4')

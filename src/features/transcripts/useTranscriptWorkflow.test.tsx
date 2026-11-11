@@ -234,10 +234,34 @@ describe('useTranscriptWorkflow', () => {
     expect(snapshot.layerState.status).toBe('idle')
   })
 
-  it('keeps Xenium native density on all transcripts when genes are selected', async () => {
+  it('counts the selected genes in Xenium native density (15.1-J)', async () => {
     const loaders = renderWorkflow({
       capabilities: { rawParquet: true, nativeZarr: true },
       detailMode: 'density',
+      selectedGenes: ['EPCAM'],
+      showTranscriptOverlay: true,
+      loaders: {
+        loadTranscriptAggregates: vi.fn(async () => ({
+          ...emptyAggregate(),
+          selectedFeatureNames: ['EPCAM'],
+        })),
+      },
+    })
+
+    await waitFor(() => expect(snapshot.layerState.status).toBe('aggregate'))
+    expect(loaders.loadTranscriptAggregates).toHaveBeenCalledWith(
+      DATASET_URL,
+      viewportDetail.bbox,
+      expect.objectContaining({ featureNames: ['EPCAM'], mode: 'density' }),
+    )
+    expect(snapshot.layerState).toMatchObject({ featureNames: ['EPCAM'] })
+  })
+
+  it('counts all transcripts with the All features filter', async () => {
+    const loaders = renderWorkflow({
+      capabilities: { rawParquet: true, nativeZarr: true },
+      detailMode: 'density',
+      featureFilterMode: 'all',
       selectedGenes: ['EPCAM'],
       showTranscriptOverlay: true,
     })
@@ -246,8 +270,47 @@ describe('useTranscriptWorkflow', () => {
     expect(loaders.loadTranscriptAggregates).toHaveBeenCalledWith(
       DATASET_URL,
       viewportDetail.bbox,
-      expect.objectContaining({ featureNames: [], mode: 'density' }),
+      expect.objectContaining({ featureNames: [] }),
     )
+    expect(snapshot.layerState).toMatchObject({ featureNames: [] })
+  })
+
+  it('says why when the selected genes need too much of density/gene', async () => {
+    renderWorkflow({
+      capabilities: { rawParquet: true, nativeZarr: true },
+      detailMode: 'density',
+      selectedGenes: ['EPCAM'],
+      showTranscriptOverlay: true,
+      loaders: {
+        loadTranscriptAggregates: vi.fn(async () => ({
+          ...emptyAggregate(),
+          selectedFeatureNames: ['EPCAM'],
+          overBudget: { chunkCount: 96, chunkLimit: 32 },
+        })),
+      },
+    })
+
+    await waitFor(() => expect(snapshot.layerState.status).toBe('waiting'))
+    expect(snapshot.layerState).toMatchObject({
+      message: expect.stringMatching(
+        /^Transcript density for EPCAM needs 96 density\/gene data chunks/,
+      ),
+    })
+  })
+
+  it('says so when an output without density/gene counts all transcripts', async () => {
+    renderWorkflow({
+      capabilities: { rawParquet: true, nativeZarr: true },
+      detailMode: 'density',
+      selectedGenes: ['EPCAM'],
+      showTranscriptOverlay: true,
+    })
+
+    await waitFor(() => expect(snapshot.layerState.status).toBe('aggregate'))
+    expect(snapshot.layerState).toMatchObject({
+      featureNames: [],
+      message: expect.stringContaining('This output has no per-gene density'),
+    })
   })
 
   it('shows cell-summary squares for per-gene outputs until genes are selected', async () => {

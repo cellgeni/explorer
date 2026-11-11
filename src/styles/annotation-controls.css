@@ -47,15 +47,15 @@
   align-items: center;
   gap: 5px;
   padding: 4px 5px;
-  border: 1px solid rgba(23, 21, 17, 0.12);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(255, 253, 247, 0.72);
-  color: #2f2b22;
+  background: var(--surface-2);
+  color: var(--text-2);
 }
 
 .annotation-list li.is-hidden {
-  background: rgba(255, 253, 247, 0.44);
-  color: rgba(47, 43, 34, 0.58);
+  background: var(--surface-1);
+  color: var(--text-3);
 }
 
 .metadata-track-list li {
@@ -87,14 +87,14 @@
   display: block;
   width: 100%;
   height: 100%;
-  border: 1px solid rgba(23, 21, 17, 0.28);
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
-  background: var(--annotation-color, #fffdf7);
-  box-shadow: inset 0 0 0 2px rgba(255, 253, 247, 0.82);
+  background: var(--annotation-color, var(--text-2));
+  box-shadow: inset 0 0 0 2px var(--surface-2);
 }
 
 .annotation-color-input:focus-visible + .annotation-color-swatch {
-  outline: 2px solid #d73f7c;
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -111,7 +111,7 @@
   height: 12px;
   min-width: 12px;
   padding: 0;
-  accent-color: #206653;
+  accent-color: var(--accent);
   cursor: pointer;
 }
 
@@ -121,14 +121,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.66rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
 .annotation-list small,
 .metadata-track-list small {
-  color: #7b4d1d;
-  font-size: 0.6rem;
+  color: var(--text-3);
+  font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -137,19 +137,19 @@
   width: 22px;
   height: 20px;
   padding: 0;
-  border: 1px solid rgba(215, 63, 124, 0.18);
+  border: 1px solid var(--danger-border);
   border-radius: 4px;
-  background: rgba(215, 63, 124, 0.1);
-  color: #7f2048;
+  background: var(--danger-soft);
+  color: var(--danger);
   cursor: pointer;
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
   line-height: 1;
 }
 
 .annotation-remove:hover {
-  background: #7f2048;
-  color: #fffdf7;
+  background: var(--danger);
+  color: var(--danger-contrast);
 }
 
 .annotation-size-panel {
@@ -173,12 +173,11 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: #2f2b22;
-  font-size: 0.64rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
   font-weight: 800;
   line-height: 1.12;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -187,8 +186,8 @@
 .annotation-size-axis span,
 .annotation-size-row small,
 .annotation-size-row strong {
-  color: #7b4d1d;
-  font-size: 0.58rem;
+  color: var(--text-2);
+  font-size: var(--font-caption);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -206,13 +205,13 @@
   gap: 4px;
   min-width: 0;
   padding: 5px;
-  border: 1px solid rgba(23, 21, 17, 0.12);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(255, 253, 247, 0.66);
+  background: var(--surface-2);
 }
 
 .annotation-size-plot.is-hidden {
-  background: rgba(255, 253, 247, 0.36);
+  background: var(--surface-1);
 }
 
 .annotation-size-plot.is-hidden .annotation-size-list {
@@ -236,14 +235,13 @@
   height: 12px;
   min-width: 12px;
   padding: 0;
-  accent-color: #206653;
+  accent-color: var(--accent);
 }
 
 .annotation-set-toggle span {
-  color: #7b4d1d;
-  font-size: 0.58rem;
+  color: var(--text-3);
+  font-size: var(--font-caption);
   font-weight: 800;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -258,7 +256,7 @@
 
 .annotation-size-axis {
   padding-bottom: 1px;
-  border-bottom: 1px solid rgba(23, 21, 17, 0.08);
+  border-bottom: 1px solid var(--border);
 }
 
 .annotation-size-axis span:first-child {
@@ -286,8 +284,8 @@
 .annotation-size-label {
   min-width: 0;
   overflow: hidden;
-  color: #2f2b22;
-  font-size: 0.62rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
   font-weight: 800;
   line-height: 1.1;
   text-overflow: ellipsis;
@@ -300,7 +298,7 @@
   min-width: 0;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(23, 21, 17, 0.08);
+  background: var(--surface-3);
 }
 
 .annotation-size-bar {
@@ -308,11 +306,112 @@
   inset: 0 auto 0 0;
   width: var(--annotation-size-width, 0%);
   border-radius: inherit;
-  background: var(--annotation-color, #206653);
-  box-shadow: inset 0 0 0 1px rgba(23, 21, 17, 0.08);
+  background: var(--annotation-color, var(--accent));
 }
 
 .annotation-size-row strong,
 .annotation-size-row small {
   justify-self: end;
+}
+
+/* One list per annotation set, with each label's size bar (15.1-I). */
+.annotation-sets {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.annotation-set {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-2);
+}
+
+.annotation-set.is-hidden .annotation-set-rows {
+  opacity: 0.48;
+}
+
+.annotation-set-heading {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.annotation-set-heading input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.annotation-set-heading h4 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-size: var(--font-control);
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.annotation-set-heading small {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-size: var(--font-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.annotation-set-rows {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.annotation-set-row {
+  display: grid;
+  grid-template-columns: 22px 16px minmax(0, 1fr) 40px auto 34px 20px;
+  gap: 5px;
+  align-items: center;
+  height: 28px;
+  min-width: 0;
+  color: var(--text-1);
+  font-size: var(--font-caption);
+}
+
+.annotation-set-row.is-hidden .annotation-set-label,
+.annotation-set-row.is-hidden .annotation-size-track {
+  opacity: 0.45;
+}
+
+.annotation-set-label {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-control);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotation-set-row strong,
+.annotation-set-row small {
+  justify-self: end;
+  color: var(--text-2);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.annotation-set-row .annotation-remove {
+  width: 20px;
+  height: 20px;
 }

@@ -79,12 +79,14 @@ export {
   DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
   GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
   GENE_EXPRESSION_SCORE_MODE_OPTIONS,
+  geneExpressionScaleGradient,
   isGeneExpressionColorScale,
   isGeneExpressionScoreMode,
   isTranscriptDensityColorScale,
   isTranscriptPointColorMode,
   TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS,
   TRANSCRIPT_POINT_COLOR_MODE_OPTIONS,
+  transcriptDensityScaleGradient,
 } from './deckLayerColors'
 export {
   createGeneExpressionElementStyleIndex,

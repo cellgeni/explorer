@@ -3,6 +3,13 @@ import type { KeyboardEvent, PointerEvent } from 'react'
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
+import { ViewerLegend } from './ViewerLegend'
+import { ViewerSelectionOverlay } from './ViewerSelectionOverlay'
+import {
+  selectionOverlayModel,
+  type ViewerSelectionHighlight,
+} from './viewerSelectionModel'
+import type { ViewerLegendSection } from './viewerLegendTypes'
 import {
   CellBoundaryHoverTooltip,
   GridCellHoverTooltip,
@@ -170,26 +177,35 @@ const MemoDeckGL = memo(DeckGL) as typeof DeckGL
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
+const EMPTY_LEGEND_SECTIONS: readonly ViewerLegendSection[] = []
+// Defaults for omitted props are constants, so a parent re-render that leaves
+// them out does not hand deck.gl new layers.
+const EMPTY_BOUNDARIES: readonly CellBoundaryDatum[] = []
+const EMPTY_GRID_CELLS: readonly GridCellDatum[] = []
+const EMPTY_TRANSCRIPT_BINS: NonNullable<ViewerCoreProps['transcriptAggregateBins']> = []
+const EMPTY_TRANSCRIPT_POINTS: NonNullable<ViewerCoreProps['transcriptPoints']> = []
+const EMPTY_IMAGE_CHANNELS: NonNullable<ViewerCoreProps['imageChannels']> = []
+const EMPTY_LOADING_TASKS: readonly LoadingTaskSummary[] = []
 
 export function ViewerCore({
-  cells = [],
+  cells = EMPTY_OVERVIEW_CELLS,
   fitCells,
-  expressionElements = [],
+  expressionElements = EMPTY_OVERVIEW_CELLS,
   geneExpressionActive = false,
   geneExpressionOverlayEnabled = true,
-  boundaries = [],
-  nucleusBoundaries = [],
+  boundaries = EMPTY_BOUNDARIES,
+  nucleusBoundaries = EMPTY_BOUNDARIES,
   cellBoundaryHoverEnabled = false,
   hoverTooltipsEnabled = true,
   overviewCellSourceLabel = 'Xenium',
-  gridCells = [],
+  gridCells = EMPTY_GRID_CELLS,
   fitGridCells,
   fitImageExtent = null,
-  transcriptAggregateBins = [],
-  transcriptPoints = [],
+  transcriptAggregateBins = EMPTY_TRANSCRIPT_BINS,
+  transcriptPoints = EMPTY_TRANSCRIPT_POINTS,
   geometricAnnotations = EMPTY_GEOMETRIC_ANNOTATIONS,
   imageLoader = null,
-  imageChannels = [],
+  imageChannels = EMPTY_IMAGE_CHANNELS,
   flatImage = null,
   imageOpacity = 1,
   cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
@@ -202,13 +218,18 @@ export function ViewerCore({
   observationColorMode = 'transcript-count',
   annotationStyleColors = EMPTY_ANNOTATION_STYLE_COLORS,
   cellMetadataTrack = null,
-  loadingTasks = [],
+  loadingTasks = EMPTY_LOADING_TASKS,
+  legendSections = EMPTY_LEGEND_SECTIONS,
+  showZoomLevel = false,
+  selectionHighlight = null,
+  onClearSelection,
+  onLegendCategoryVisibilityChange,
   coordinateUnit = 'um',
   measurementEnabled = false,
   measurementUnit = 'um',
   measurementResetKey = 0,
   micrometersPerPixel = DEFAULT_MICROMETERS_PER_PIXEL,
-  physicalUnitLabel = 'μm',
+  physicalUnitLabel = 'µm',
   status = 'idle',
   imageStatus = 'idle',
   boundaryStatus = 'idle',
@@ -286,6 +307,13 @@ export function ViewerCore({
       annotationStyleColors={annotationStyleColors}
       cellMetadataTrack={cellMetadataTrack}
       loadingTasks={loadingTasks}
+      legendSections={legendSections}
+      showZoomLevel={showZoomLevel}
+      selectionHighlight={selectionHighlight}
+      {...(onClearSelection === undefined ? {} : { onClearSelection })}
+      {...(onLegendCategoryVisibilityChange === undefined
+        ? {}
+        : { onLegendCategoryVisibilityChange })}
       coordinateUnit={coordinateUnit}
       measurementEnabled={measurementEnabled}
       measurementUnit={measurementUnit}
@@ -359,6 +387,11 @@ interface ViewerSurfaceProps {
   readonly annotationStyleColors: readonly AnnotationColorStyle[]
   readonly cellMetadataTrack: CellMetadataColorStyle | null
   readonly loadingTasks: readonly LoadingTaskSummary[]
+  readonly legendSections: readonly ViewerLegendSection[]
+  readonly showZoomLevel: boolean
+  readonly selectionHighlight: ViewerSelectionHighlight | null
+  readonly onClearSelection?: () => void
+  readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
   readonly measurementUnit: ViewerCoordinateUnit
@@ -430,6 +463,11 @@ function ViewerSurface({
   annotationStyleColors,
   cellMetadataTrack,
   loadingTasks,
+  legendSections,
+  showZoomLevel,
+  selectionHighlight,
+  onClearSelection,
+  onLegendCategoryVisibilityChange,
   coordinateUnit,
   measurementEnabled,
   measurementUnit,
@@ -478,6 +516,12 @@ function ViewerSurface({
     height: 0,
   })
   const [roiDraft, setRoiDraft] = useState<RoiDraft | null>(null)
+  // A half-drawn shape belongs to the tool that started it.
+  const [roiDraftMode, setRoiDraftMode] = useState(roiMode)
+  if (roiDraftMode !== roiMode) {
+    setRoiDraftMode(roiMode)
+    setRoiDraft(null)
+  }
   const [measurementState, setMeasurementState] = useState<MeasurementState>(() => ({
     resetKey: measurementResetKey,
     draft: null,
@@ -948,6 +992,11 @@ function ViewerSurface({
       : null
   const activeMeasurementLine =
     measurementState.resetKey === measurementResetKey ? measurementState.line : null
+  const activeToolHint = toolHintText({ roiMode, measurementEnabled, magicLensActive })
+  const selectionOverlay = useMemo(
+    () => selectionOverlayModel(selectionHighlight, viewState, viewport),
+    [selectionHighlight, viewState, viewport],
+  )
   const measurementOverlay = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
       return null
@@ -1077,6 +1126,17 @@ function ViewerSurface({
   )
   const handleKeyboardNavigation = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
+      if (
+        event.key === 'Escape' &&
+        activeToolHint === null &&
+        selectionHighlight !== null &&
+        onClearSelection
+      ) {
+        event.preventDefault()
+        onClearSelection()
+        return
+      }
+
       if (!canTrackMouseCoordinates) {
         return
       }
@@ -1094,7 +1154,14 @@ function ViewerSurface({
           : nextViewState,
       )
     },
-    [canTrackMouseCoordinates, initialViewState, viewState],
+    [
+      canTrackMouseCoordinates,
+      initialViewState,
+      activeToolHint,
+      onClearSelection,
+      selectionHighlight,
+      viewState,
+    ],
   )
   const handleDeckClick = useCallback(
     (info: {
@@ -1449,6 +1516,9 @@ function ViewerSurface({
     },
     [roiDraft, viewState, viewport],
   )
+  const handleRoiPointerCancel = useCallback(() => {
+    setRoiDraft(null)
+  }, [])
   const handleRoiPointerUp = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       if (roiDraft === null || viewport.width <= 0 || viewport.height <= 0) {
@@ -1655,139 +1725,164 @@ function ViewerSurface({
   ])
 
   return (
-    <div
-      ref={frameRef}
-      className={[
-        'viewport-frame',
-        magicLensActive ? 'is-magic-lens-active' : '',
-        measurementEnabled ? 'is-measuring-distance' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      role="img"
-      aria-label="Spatial viewer canvas area"
-      aria-describedby={keyboardHelpId}
-      aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - Home"
-      tabIndex={0}
-      onKeyDown={handleKeyboardNavigation}
-      onPointerMove={handleMouseCoordinatePointerMove}
-      onPointerLeave={handlePointerLeave}
-    >
-      <p id={keyboardHelpId} className="visually-hidden">
-        Use arrow keys to pan, plus or minus to zoom, and Home to reset the spatial view.
-        When measuring is enabled, drag across the spatial view to measure a distance.
-      </p>
-      {!hasImage ? <div className="viewport-grid" aria-hidden="true" /> : null}
-      <MorphologyCanvas
-        channels={imageChannels}
-        flatImage={flatImage}
-        loader={imageLoader}
-        opacity={imageOpacity}
-        viewState={viewState}
-        {...(maxConcurrentTileRequests === undefined
-          ? {}
-          : { maxConcurrentTileRequests })}
-        {...(tileCacheMaxTiles === undefined ? {} : { tileCacheMaxTiles })}
-        {...(onImageTileError === undefined ? {} : { onTileError: onImageTileError })}
-        {...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction })}
-      />
-      {hasSpatialData ? (
-        <div className="deckgl-host" aria-hidden="true">
-          <MemoDeckGL
-            views={spatialOverviewView}
-            viewState={viewState}
-            onViewStateChange={handleViewStateChange}
-            onClick={handleDeckClick}
-            {...(deckHoverEnabled ? { onHover: handleDeckHover } : {})}
-            controller
-            layers={layers}
-          />
-        </div>
-      ) : null}
+    <>
       <div
-        className={`roi-draw-layer${roiMode !== 'idle' ? ' active' : ''}`}
-        aria-hidden="true"
-        onPointerDown={handleRoiPointerDown}
-        onPointerMove={handleRoiPointerMove}
-        onPointerUp={handleRoiPointerUp}
+        ref={frameRef}
+        className={[
+          'viewport-frame',
+          magicLensActive ? 'is-magic-lens-active' : '',
+          activeToolHint !== null && !magicLensActive ? 'is-drawing' : '',
+          measurementEnabled ? 'is-measuring-distance' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        role="img"
+        aria-label="Spatial viewer canvas area"
+        aria-describedby={keyboardHelpId}
+        aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - Home"
+        tabIndex={0}
+        onKeyDown={handleKeyboardNavigation}
+        onPointerMove={handleMouseCoordinatePointerMove}
+        onPointerLeave={handlePointerLeave}
       >
-        {roiPathOverlay === null ? null : (
-          <svg className="roi-path-svg" focusable="false" aria-hidden="true">
-            <path
-              className={`roi-lasso-path${roiPathOverlay.isDraft ? ' is-draft' : ''}`}
-              d={roiPathOverlay.d}
+        <p id={keyboardHelpId} className="visually-hidden">
+          Use arrow keys to pan, plus or minus to zoom, and Home to reset the spatial
+          view. When measuring is enabled, drag across the spatial view to measure a
+          distance.
+        </p>
+        {!hasImage ? <div className="viewport-grid" aria-hidden="true" /> : null}
+        <MorphologyCanvas
+          channels={imageChannels}
+          flatImage={flatImage}
+          loader={imageLoader}
+          opacity={imageOpacity}
+          viewState={viewState}
+          {...(maxConcurrentTileRequests === undefined
+            ? {}
+            : { maxConcurrentTileRequests })}
+          {...(tileCacheMaxTiles === undefined ? {} : { tileCacheMaxTiles })}
+          {...(onImageTileError === undefined ? {} : { onTileError: onImageTileError })}
+          {...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction })}
+        />
+        {hasSpatialData ? (
+          <div className="deckgl-host" aria-hidden="true">
+            <MemoDeckGL
+              views={spatialOverviewView}
+              viewState={viewState}
+              onViewStateChange={handleViewStateChange}
+              onClick={handleDeckClick}
+              {...(deckHoverEnabled ? { onHover: handleDeckHover } : {})}
+              controller
+              layers={layers}
             />
-          </svg>
-        )}
-        {roiScreenRect === null ? null : (
-          <span
-            className="roi-rectangle"
-            style={{
-              left: roiScreenRect.left,
-              top: roiScreenRect.top,
-              width: roiScreenRect.width,
-              height: roiScreenRect.height,
-            }}
-          />
-        )}
-      </div>
-      <div
-        className={`measurement-draw-layer${measurementEnabled ? ' active' : ''}`}
-        aria-hidden="true"
-        onPointerDown={handleMeasurementPointerDown}
-        onPointerMove={handleMeasurementPointerMove}
-        onPointerUp={handleMeasurementPointerUp}
-        onPointerCancel={handleMeasurementPointerCancel}
-      >
-        {measurementOverlay === null ? null : (
-          <MeasurementOverlay model={measurementOverlay} />
-        )}
-      </div>
-      {magicLensOverlay === null ? null : (
-        <MagicLensOverlay
-          model={magicLensOverlay}
-          status={magicLensStatus}
-          summary={magicLensSummary}
-        />
-      )}
-      {transcriptHover === null ? null : (
-        <TranscriptHoverTooltip detail={transcriptHover} />
-      )}
-      {cellHover === null || magicLensActive ? null : (
-        <OverviewCellHoverTooltip
-          detail={cellHover}
-          sourceLabel={overviewCellSourceLabel}
-        />
-      )}
-      {gridCellHover === null || magicLensActive ? null : (
-        <GridCellHoverTooltip detail={gridCellHover} />
-      )}
-      {cellBoundaryHover === null || magicLensActive ? null : (
-        <CellBoundaryHoverTooltip detail={cellBoundaryHover} />
-      )}
-      {!hasSpatialData && status === 'idle' ? (
-        <div className="viewport-empty-state" aria-hidden="true">
-          Please load a dataset
-        </div>
-      ) : null}
-      {!canTrackMouseCoordinates ? null : (
-        <div className="viewport-bottom-center-readout">
-          <p className="viewport-zoom-readout" aria-label={`Zoom level ${zoomLevelText}`}>
-            Zoom {zoomLevelText}
-          </p>
-          {mouseCoordinateText === null ? null : (
-            <p
-              className="viewport-coordinate-readout"
-              aria-label={`Mouse coordinates ${mouseCoordinateText}`}
-            >
-              {mouseCoordinateText}
-            </p>
+          </div>
+        ) : null}
+        <div
+          className={`roi-draw-layer${roiMode !== 'idle' ? ' active' : ''}`}
+          aria-hidden="true"
+          onPointerDown={handleRoiPointerDown}
+          onPointerMove={handleRoiPointerMove}
+          onPointerUp={handleRoiPointerUp}
+          onPointerCancel={handleRoiPointerCancel}
+        >
+          {roiPathOverlay === null ? null : (
+            <svg className="roi-path-svg" focusable="false" aria-hidden="true">
+              <path
+                className={`roi-lasso-path${roiPathOverlay.isDraft ? ' is-draft' : ''}`}
+                d={roiPathOverlay.d}
+              />
+            </svg>
+          )}
+          {roiScreenRect === null ? null : (
+            <span
+              className="roi-rectangle"
+              style={{
+                left: roiScreenRect.left,
+                top: roiScreenRect.top,
+                width: roiScreenRect.width,
+                height: roiScreenRect.height,
+              }}
+            />
           )}
         </div>
+        <div
+          className={`measurement-draw-layer${measurementEnabled ? ' active' : ''}`}
+          aria-hidden="true"
+          onPointerDown={handleMeasurementPointerDown}
+          onPointerMove={handleMeasurementPointerMove}
+          onPointerUp={handleMeasurementPointerUp}
+          onPointerCancel={handleMeasurementPointerCancel}
+        >
+          {measurementOverlay === null ? null : (
+            <MeasurementOverlay model={measurementOverlay} />
+          )}
+        </div>
+        {selectionOverlay === null ? null : (
+          <ViewerSelectionOverlay model={selectionOverlay} />
+        )}
+        {magicLensOverlay === null ? null : (
+          <MagicLensOverlay
+            model={magicLensOverlay}
+            status={magicLensStatus}
+            summary={magicLensSummary}
+          />
+        )}
+        {transcriptHover === null ? null : (
+          <TranscriptHoverTooltip detail={transcriptHover} />
+        )}
+        {cellHover === null || magicLensActive ? null : (
+          <OverviewCellHoverTooltip
+            detail={cellHover}
+            sourceLabel={overviewCellSourceLabel}
+          />
+        )}
+        {gridCellHover === null || magicLensActive ? null : (
+          <GridCellHoverTooltip detail={gridCellHover} />
+        )}
+        {cellBoundaryHover === null || magicLensActive ? null : (
+          <CellBoundaryHoverTooltip detail={cellBoundaryHover} />
+        )}
+        {!hasSpatialData && status === 'idle' ? (
+          <div className="viewport-empty-state" aria-hidden="true">
+            Please load a dataset
+          </div>
+        ) : null}
+        {!canTrackMouseCoordinates ? null : (
+          <div className="viewport-bottom-center-readout">
+            {showZoomLevel ? (
+              <p
+                className="viewport-zoom-readout"
+                aria-label={`Zoom level ${zoomLevelText}`}
+              >
+                Zoom {zoomLevelText}
+              </p>
+            ) : null}
+            {mouseCoordinateText === null ? null : (
+              <p
+                className="viewport-coordinate-readout"
+                aria-label={`Mouse coordinates ${mouseCoordinateText}`}
+              >
+                {mouseCoordinateText}
+              </p>
+            )}
+          </div>
+        )}
+        {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
+      </div>
+      {/* Outside the frame, whose role is img: the legend has controls. */}
+      {activeToolHint === null ? null : (
+        <p className="viewport-tool-hint" role="status">
+          {activeToolHint}
+        </p>
       )}
-      {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
-      {loadingTasks.length === 0 && viewportMessage === null ? null : (
+      {legendSections.length === 0 &&
+      loadingTasks.length === 0 &&
+      viewportMessage === null ? null : (
         <div className="viewport-notification-stack">
+          <ViewerLegend
+            sections={legendSections}
+            onCategoryVisibilityChange={onLegendCategoryVisibilityChange}
+          />
           <LoadingIndicator tasks={loadingTasks} />
           {viewportMessage === null ? null : (
             <p
@@ -1799,8 +1894,26 @@ function ViewerSurface({
           )}
         </div>
       )}
-    </div>
+    </>
   )
+}
+
+// What the active tool does, shown at the top of the canvas so it is clear a
+// tool is on and how to leave it.
+function toolHintText({
+  roiMode,
+  measurementEnabled,
+  magicLensActive,
+}: {
+  readonly roiMode: RoiDrawMode
+  readonly measurementEnabled: boolean
+  readonly magicLensActive: boolean
+}): string | null {
+  if (roiMode === 'box') return 'Drag to draw a box. Esc cancels.'
+  if (roiMode === 'lasso') return 'Drag to draw a lasso. Esc cancels.'
+  if (measurementEnabled) return 'Drag to measure a distance. Esc stops measuring.'
+  if (magicLensActive) return 'Move over the map to read the lens. Esc turns it off.'
+  return null
 }
 
 function formatViewportZoom(zoom: number): string {

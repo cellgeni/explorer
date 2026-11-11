@@ -48,6 +48,8 @@ export interface AppDatasetHudPanelProps {
     binSize: VisiumHdBinSizeMicrometers,
   ) => Promise<void>
   readonly isLoading: boolean
+  // A dataset is loaded, so a copied link opens it.
+  readonly isDatasetLoaded?: boolean | undefined
   readonly isVisiumHdDataset: boolean
   readonly setBoundaryCellLimit: Dispatch<SetStateAction<number>>
   readonly setDatasetUrl: (url: string) => void
@@ -79,6 +81,7 @@ export function AppDatasetHudPanel({
   handleRunDatasetDiagnostics,
   handleVisiumHdBinSizeChange,
   isLoading,
+  isDatasetLoaded = false,
   isVisiumHdDataset,
   setBoundaryCellLimit,
   setDatasetUrl,
@@ -139,6 +142,16 @@ export function AppDatasetHudPanel({
       }}
       onRunDatasetDiagnostics={() => {
         void handleRunDatasetDiagnostics()
+      }}
+      canCopyLink={isDatasetLoaded}
+      onCopyLink={async () => {
+        try {
+          await navigator.clipboard.writeText(window.location.href)
+          appendDebugEvent('Link copied')
+          return true
+        } catch {
+          return false
+        }
       }}
       onVisiumHdBinSizeChange={(binSize) => {
         void handleVisiumHdBinSizeChange(binSize)

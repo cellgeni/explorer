@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { RoiDrawMode, ViewerCoordinateUnit } from '../../components/ViewerCore'
+import type { ViewerCoordinateUnit } from '../../components/ViewerCore'
 import { scaffoldDeckLayerCount } from '../../components/viewerCoreModel'
 import type {
   CustomMorphologyLayer,
@@ -56,6 +56,7 @@ export interface AppLayerHudPanelProps {
   readonly requestedMorphologyZPlane: number | null
   readonly selectMorphologyZPlane: (zPlane: number) => void
   readonly performanceBudget: PerformanceBudget
+  readonly debugMode?: boolean | undefined
   readonly showCellBoundaries: boolean
   readonly showNucleusBoundaries: boolean
   readonly showHoverTooltips: boolean
@@ -68,11 +69,9 @@ export interface AppLayerHudPanelProps {
   readonly setCoordinateUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
   readonly setCustomLayerOpacity: (imageUrl: string, opacity: number) => void
   readonly setImageLayerOpacity: Dispatch<SetStateAction<number>>
-  readonly setMagicLensActive: Dispatch<SetStateAction<boolean>>
   readonly setMeasurementEnabled: Dispatch<SetStateAction<boolean>>
   readonly setMeasurementResetKey: Dispatch<SetStateAction<number>>
   readonly setMeasurementUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
-  readonly setRoiMode: Dispatch<SetStateAction<RoiDrawMode>>
   readonly updateMorphologyChannel: (
     id: string,
     patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
@@ -105,6 +104,7 @@ export function AppLayerHudPanel({
   requestedMorphologyZPlane,
   selectMorphologyZPlane,
   performanceBudget,
+  debugMode = false,
   showCellBoundaries,
   showNucleusBoundaries,
   showHoverTooltips,
@@ -117,11 +117,9 @@ export function AppLayerHudPanel({
   setCoordinateUnit,
   setCustomLayerOpacity,
   setImageLayerOpacity,
-  setMagicLensActive,
   setMeasurementEnabled,
   setMeasurementResetKey,
   setMeasurementUnit,
-  setRoiMode,
   updateMorphologyChannel,
 }: AppLayerHudPanelProps) {
   return (
@@ -130,6 +128,7 @@ export function AppLayerHudPanel({
       scaffoldDeckLayerCount={scaffoldDeckLayerCount}
       bundledDeckVersion={bundledDeckVersion}
       performanceBudget={performanceBudget}
+      showDebugInfo={debugMode}
       imageOpacityInputId={controlIds.imageOpacityInputId}
       cellFillOpacityInputId={controlIds.cellFillOpacityInputId}
       cellBoundaryVisibilityInputId={controlIds.cellBoundaryVisibilityInputId}
@@ -223,7 +222,7 @@ export function AppLayerHudPanel({
         }
 
         setCoordinateUnit(nextUnit)
-        appendDebugEvent(`Mouse coordinates: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
+        appendDebugEvent(`Mouse coordinates: ${nextUnit === 'um' ? 'µm' : 'px'}`, {
           coalesceKey: 'coordinate-unit',
         })
       }}
@@ -232,11 +231,10 @@ export function AppLayerHudPanel({
           return
         }
 
+        // Measuring replaces any other tool (activeTool, 15.1-G).
         setMeasurementEnabled(nextEnabled)
 
         if (nextEnabled) {
-          setRoiMode('idle')
-          setMagicLensActive(false)
           handleMagicLensLeave()
         } else {
           setMeasurementResetKey((current) => current + 1)
@@ -253,7 +251,7 @@ export function AppLayerHudPanel({
         }
 
         setMeasurementUnit(nextUnit)
-        appendDebugEvent(`Measure unit: ${nextUnit === 'um' ? 'μm' : 'px'}`, {
+        appendDebugEvent(`Measure unit: ${nextUnit === 'um' ? 'µm' : 'px'}`, {
           coalesceKey: 'measurement-unit',
         })
       }}

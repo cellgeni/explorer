@@ -39,6 +39,16 @@ npm run build
 npm run test:e2e
 ```
 
+One smoke test runs the axe accessibility rules (WCAG 2.2 A and AA) on every
+Control HUD tab, before and after loading a fixture. Known violations are
+listed in `tests/e2e/axe-baseline.json`, and any other violation fails the
+test. When you fix one, the test fails until you remove it from the list; to
+rewrite the list, run:
+
+```sh
+UPDATE_AXE_BASELINE=1 npx playwright test --grep "axe baseline"
+```
+
 The Vite dev and preview servers are configured with cross-origin isolation
 headers needed by the browser-side WASM and decoding paths.
 

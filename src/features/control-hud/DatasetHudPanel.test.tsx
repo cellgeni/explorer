@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { DatasetHudPanel } from './DatasetHudPanel'
 
 describe('DatasetHudPanel', () => {
-  it('renders dataset controls and forwards updates', () => {
+  it('renders dataset controls and forwards updates', async () => {
     const onSubmit = vi.fn((event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
     })
@@ -13,6 +13,7 @@ describe('DatasetHudPanel', () => {
     const onRunDatasetDiagnostics = vi.fn()
     const onDownloadDiagnostics = vi.fn()
     const onClearDebugLog = vi.fn()
+    const onCopyLink = vi.fn(async () => true)
 
     render(
       <DatasetHudPanel
@@ -48,6 +49,8 @@ describe('DatasetHudPanel', () => {
         onRunDatasetDiagnostics={onRunDatasetDiagnostics}
         onDownloadDiagnostics={onDownloadDiagnostics}
         onClearDebugLog={onClearDebugLog}
+        canCopyLink
+        onCopyLink={onCopyLink}
       />,
     )
 
@@ -72,6 +75,10 @@ describe('DatasetHudPanel', () => {
     expect(onRunDatasetDiagnostics).toHaveBeenCalledTimes(1)
     expect(onDownloadDiagnostics).toHaveBeenCalledTimes(1)
     expect(onClearDebugLog).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Link' }))
+    expect(onCopyLink).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('Link copied')).toBeInTheDocument()
   })
 
   it('renders Visium HD bin controls and disables unavailable tiers', () => {

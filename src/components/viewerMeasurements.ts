@@ -56,7 +56,7 @@ export function measurementOverlayModel(
   viewport: CssViewportSize,
   unit: ViewerDistanceUnit,
   micrometersPerPixel: number,
-  physicalUnitLabel = 'μm',
+  physicalUnitLabel = 'µm',
 ): MeasurementOverlayModel {
   const start = rawDataPointToScreen(measurement.start, viewState, viewport)
   const end = rawDataPointToScreen(measurement.end, viewState, viewport)
@@ -102,7 +102,7 @@ export function formatMeasurementDistance(
   distanceMicrometers: number,
   unit: ViewerDistanceUnit,
   micrometersPerPixel: number,
-  physicalUnitLabel = 'μm',
+  physicalUnitLabel = 'µm',
 ): string {
   if (unit === 'px') {
     return `${formatScaleDistance(distanceMicrometers / safeMicrometersPerPixel(micrometersPerPixel))} px`
@@ -116,7 +116,7 @@ export function scaleBarModel(
   viewport: CssViewportSize,
   unit: ViewerDistanceUnit,
   micrometersPerPixel: number,
-  physicalUnitLabel = 'μm',
+  physicalUnitLabel = 'µm',
 ): ScaleBarModel | null {
   const scale = scaleFromZoom(viewState.zoom)
   const targetWidthPixels = Math.max(

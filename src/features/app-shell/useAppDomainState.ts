@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState, type SetStateAction } from 'react'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
 import type {
   RoiDrawMode,
@@ -22,17 +22,10 @@ import type { TelemetryEvent } from '../../data/telemetry'
 import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { MorphologyImage } from '../../data/morphologyImage'
-import {
-  DEFAULT_CELL_FILL_OPACITY,
-  normalizeLayerOpacity,
-} from '../../rendering/layerOpacity'
+import { normalizeLayerOpacity } from '../../rendering/layerOpacity'
 import { normalizeBoundaryCellLimit } from '../../rendering/boundaryViewport'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import {
-  DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
-  DEFAULT_GENE_EXPRESSION_SCORE_MODE,
-  DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
-  DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
   type CellBoundaryDatum,
   type GeneExpressionColorScale,
   type GeneExpressionScoreMode,
@@ -133,11 +126,20 @@ import {
 } from '../transcripts/transcriptLayerModel'
 import {
   parseControlHudTab,
-  parseObservationColorMode,
+  sharedObservationColorMode,
   parseViewerCoordinateUnit,
   type ControlHudTab,
 } from './appShellModel'
 import type { DebugLogEntry, FallbackNoticeEntry } from './appRuntimeModel'
+import {
+  resolveStateAction,
+  roiModeForTool,
+  toolAfterMagicLens,
+  toolAfterMeasurement,
+  toolAfterRoiMode,
+  type ActiveTool,
+} from './activeToolModel'
+import { DEFAULT_SHAREABLE_STATE } from './shareableDefaults'
 import {
   IDLE_SPATIALDATA_CONTROL_STATE,
   type SpatialDataControlState,
@@ -159,6 +161,12 @@ export function useAppDomainState({
   const [loadState, setLoadState] = useState<DatasetLoadState<StructuredLoadError>>(
     IDLE_DATASET_LOAD_STATE,
   )
+  // A load that will replace the dataset on screen (15.1-F): loading until
+  // the new dataset is ready, or the error if it failed, while loadState
+  // keeps describing the dataset still shown. Idle otherwise.
+  const [pendingDatasetLoadState, setPendingDatasetLoadState] = useState<
+    DatasetLoadState<StructuredLoadError>
+  >(IDLE_DATASET_LOAD_STATE)
   const [datasetWarmupState, setDatasetWarmupState] = useState<DatasetWarmupState>(
     IDLE_DATASET_WARMUP_STATE,
   )
@@ -233,57 +241,93 @@ export function useAppDomainState({
     CellTranscriptDistributionState<StructuredLoadError>
   >(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
   const [magicLensScope, setMagicLensScope] = useState<MagicLensScope>(
-    () => parseMagicLensScope(initialShareableState.magicLensScope) ?? 'cursor',
+    () =>
+      parseMagicLensScope(initialShareableState.magicLensScope) ??
+      DEFAULT_SHAREABLE_STATE.magicLensScope,
   )
-  const [magicLensActive, setMagicLensActive] = useState(
-    initialShareableState.magicLensActive ?? false,
+  // One tool at a time (15.1-G). The old flags and their setters are derived
+  // from it, so the workflows keep their interfaces and cannot turn on two.
+  const [activeTool, setActiveTool] = useState<ActiveTool>(() =>
+    (initialShareableState.magicLensActive ?? DEFAULT_SHAREABLE_STATE.magicLensActive)
+      ? 'magic-lens'
+      : 'pan',
   )
+  const magicLensActive = activeTool === 'magic-lens'
+  const measurementEnabled = activeTool === 'measure'
+  const roiMode = roiModeForTool(activeTool)
+  const setMagicLensActive = useCallback((action: SetStateAction<boolean>) => {
+    setActiveTool((tool) =>
+      toolAfterMagicLens(tool, resolveStateAction(action, tool === 'magic-lens')),
+    )
+  }, [])
+  const setMeasurementEnabled = useCallback((action: SetStateAction<boolean>) => {
+    setActiveTool((tool) =>
+      toolAfterMeasurement(tool, resolveStateAction(action, tool === 'measure')),
+    )
+  }, [])
+  const setRoiMode = useCallback((action: SetStateAction<RoiDrawMode>) => {
+    setActiveTool((tool) =>
+      toolAfterRoiMode(tool, resolveStateAction(action, roiModeForTool(tool))),
+    )
+  }, [])
   const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(() =>
-    normalizeMagicLensRadius(initialShareableState.magicLensRadiusMicrometers ?? 80),
+    normalizeMagicLensRadius(
+      initialShareableState.magicLensRadiusMicrometers ??
+        DEFAULT_SHAREABLE_STATE.magicLensRadiusMicrometers,
+    ),
   )
   const [magicLensMinQv, setMagicLensMinQv] = useState(() =>
-    normalizeMagicLensMinQv(initialShareableState.magicLensMinQv ?? 20),
+    normalizeMagicLensMinQv(
+      initialShareableState.magicLensMinQv ?? DEFAULT_SHAREABLE_STATE.magicLensMinQv,
+    ),
   )
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(
-    initialShareableState.transcriptOverlay ?? false,
+    initialShareableState.transcriptOverlay ?? DEFAULT_SHAREABLE_STATE.transcriptOverlay,
   )
   const [transcriptDetailMode, setTranscriptDetailMode] = useState<TranscriptDetailMode>(
-    () => parseTranscriptDetailMode(initialShareableState.transcriptDetailMode) ?? 'auto',
+    () =>
+      parseTranscriptDetailMode(initialShareableState.transcriptDetailMode) ??
+      DEFAULT_SHAREABLE_STATE.transcriptDetailMode,
   )
   const [transcriptMinQv, setTranscriptMinQv] = useState(
-    initialShareableState.transcriptMinQv ?? 20,
+    initialShareableState.transcriptMinQv ?? DEFAULT_SHAREABLE_STATE.transcriptMinQv,
   )
   const [transcriptGeneOnly, setTranscriptGeneOnly] = useState(
-    initialShareableState.transcriptGeneOnly ?? true,
+    initialShareableState.transcriptGeneOnly ??
+      DEFAULT_SHAREABLE_STATE.transcriptGeneOnly,
   )
   const [transcriptFeatureFilterMode, setTranscriptFeatureFilterMode] =
     useState<TranscriptFeatureFilterMode>(
       () =>
         parseTranscriptFeatureFilterMode(
           initialShareableState.transcriptFeatureFilterMode,
-        ) ?? 'selected',
+        ) ?? DEFAULT_SHAREABLE_STATE.transcriptFeatureFilterMode,
     )
   const [transcriptDensityColorScale, setTranscriptDensityColorScale] =
     useState<TranscriptDensityColorScale>(
       () =>
         parseTranscriptDensityColorScale(
           initialShareableState.transcriptDensityColorScale,
-        ) ?? DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
+        ) ?? DEFAULT_SHAREABLE_STATE.transcriptDensityColorScale,
     )
   const [transcriptPointColorMode, setTranscriptPointColorMode] =
     useState<TranscriptPointColorMode>(
       () =>
         parseTranscriptPointColorMode(initialShareableState.transcriptPointColorMode) ??
-        DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
+        DEFAULT_SHAREABLE_STATE.transcriptPointColorMode,
     )
   const [transcriptExactPointLimit, setTranscriptExactPointLimit] = useState(() =>
-    normalizeTranscriptExactPointLimit(initialShareableState.transcriptExactPointLimit),
+    normalizeTranscriptExactPointLimit(
+      initialShareableState.transcriptExactPointLimit ??
+        DEFAULT_SHAREABLE_STATE.transcriptExactPointLimit,
+    ),
   )
   const [transcriptOpacity, setTranscriptOpacity] = useState(
-    initialShareableState.transcriptOpacity ?? 0.85,
+    initialShareableState.transcriptOpacity ?? DEFAULT_SHAREABLE_STATE.transcriptOpacity,
   )
   const [transcriptPointSize, setTranscriptPointSize] = useState(
-    initialShareableState.transcriptPointSize ?? 2,
+    initialShareableState.transcriptPointSize ??
+      DEFAULT_SHAREABLE_STATE.transcriptPointSize,
   )
   const [hoveredTranscript, setHoveredTranscript] =
     useState<ViewerTranscriptHoverDetail | null>(null)
@@ -299,7 +343,9 @@ export function useAppDomainState({
   const [telemetryEvents, setTelemetryEvents] = useState<readonly TelemetryEvent[]>([])
   const [isControlHudCollapsed, setIsControlHudCollapsed] = useState(false)
   const [activeControlHudTab, setActiveControlHudTab] = useState<ControlHudTab>(
-    () => parseControlHudTab(initialShareableState.activeTab) ?? 'dataset',
+    () =>
+      parseControlHudTab(initialShareableState.activeTab) ??
+      DEFAULT_SHAREABLE_STATE.activeTab,
   )
   const [geneExpressionState, setGeneExpressionState] = useState<
     GeneExpressionState<StructuredLoadError>
@@ -333,7 +379,8 @@ export function useAppDomainState({
     readonly SpatialElement[]
   >([])
   const [shouldLoadMorphology, setShouldLoadMorphology] = useState(
-    initialShareableState.shouldLoadMorphology ?? true,
+    initialShareableState.shouldLoadMorphology ??
+      DEFAULT_SHAREABLE_STATE.shouldLoadMorphology,
   )
   const [boundaryCellLimit, setBoundaryCellLimit] = useState(() =>
     normalizeBoundaryCellLimit(
@@ -341,63 +388,70 @@ export function useAppDomainState({
     ),
   )
   const [imageLayerOpacity, setImageLayerOpacity] = useState(() =>
-    normalizeLayerOpacity(initialShareableState.imageOpacity ?? 1),
+    normalizeLayerOpacity(
+      initialShareableState.imageOpacity ?? DEFAULT_SHAREABLE_STATE.imageOpacity,
+    ),
   )
   const [cellFillOpacity, setCellFillOpacity] = useState(() =>
     normalizeLayerOpacity(
-      initialShareableState.cellFillOpacity ?? DEFAULT_CELL_FILL_OPACITY,
+      initialShareableState.cellFillOpacity ?? DEFAULT_SHAREABLE_STATE.cellFillOpacity,
     ),
   )
   const [showCellBoundaries, setShowCellBoundaries] = useState(
-    initialShareableState.showCellBoundaries ?? true,
+    initialShareableState.showCellBoundaries ??
+      DEFAULT_SHAREABLE_STATE.showCellBoundaries,
   )
   const [showNucleusBoundaries, setShowNucleusBoundaries] = useState(
-    initialShareableState.showNucleusBoundaries ?? true,
+    initialShareableState.showNucleusBoundaries ??
+      DEFAULT_SHAREABLE_STATE.showNucleusBoundaries,
   )
   const [showHoverTooltips, setShowHoverTooltips] = useState(
-    initialShareableState.showHoverTooltips ?? true,
+    initialShareableState.showHoverTooltips ?? DEFAULT_SHAREABLE_STATE.showHoverTooltips,
   )
   const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(() =>
-    normalizeLayerOpacity(initialShareableState.cellBoundaryOpacity ?? 1),
+    normalizeLayerOpacity(
+      initialShareableState.cellBoundaryOpacity ??
+        DEFAULT_SHAREABLE_STATE.cellBoundaryOpacity,
+    ),
   )
   const [coordinateUnit, setCoordinateUnit] = useState<ViewerCoordinateUnit>(
-    () => parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ?? 'um',
+    () =>
+      parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ??
+      DEFAULT_SHAREABLE_STATE.coordinateUnit,
   )
-  const [measurementEnabled, setMeasurementEnabled] = useState(false)
   const [measurementUnit, setMeasurementUnit] = useState<ViewerCoordinateUnit>(
     () =>
       parseViewerCoordinateUnit(initialShareableState.measurementUnit) ??
       parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ??
-      'um',
+      DEFAULT_SHAREABLE_STATE.measurementUnit,
   )
   const [measurementResetKey, setMeasurementResetKey] = useState(0)
   const [geneExpressionColorScale, setGeneExpressionColorScale] =
     useState<GeneExpressionColorScale>(
       () =>
         parseGeneExpressionColorScale(initialShareableState.geneExpressionColorScale) ??
-        DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
+        DEFAULT_SHAREABLE_STATE.geneExpressionColorScale,
     )
   const [geneExpressionScoreMode, setGeneExpressionScoreMode] =
     useState<GeneExpressionScoreMode>(
       () =>
         parseGeneExpressionScoreMode(initialShareableState.geneExpressionScoreMode) ??
-        DEFAULT_GENE_EXPRESSION_SCORE_MODE,
+        DEFAULT_SHAREABLE_STATE.geneExpressionScoreMode,
     )
   const [geneExpressionDetailMode, setGeneExpressionDetailMode] =
     useState<GeneExpressionDetailMode>(
       () =>
         parseGeneExpressionDetailMode(initialShareableState.geneExpressionDetailMode) ??
-        'auto',
+        DEFAULT_SHAREABLE_STATE.geneExpressionDetailMode,
     )
   const [selectedGenes, setSelectedGenes] = useState<readonly string[]>(
-    initialShareableState.selectedGenes ?? [],
+    initialShareableState.selectedGenes ?? DEFAULT_SHAREABLE_STATE.selectedGenes,
   )
-  const [roiMode, setRoiMode] = useState<RoiDrawMode>('idle')
   const [roiName, setRoiName] = useState('ROI 1')
   const [observationColorMode, setObservationColorMode] = useState<ObservationColorMode>(
     () =>
-      parseObservationColorMode(initialShareableState.observationColorMode) ??
-      'transcript-count',
+      sharedObservationColorMode(initialShareableState) ??
+      DEFAULT_SHAREABLE_STATE.observationColorMode,
   )
   const [shareableViewState, setShareableViewState] = useState<
     ShareableViewState | undefined
@@ -472,6 +526,7 @@ export function useAppDomainState({
       diagnosticsState,
       loadState,
       morphologyState,
+      pendingDatasetLoadState,
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
       setDatasetAbout,
@@ -480,6 +535,7 @@ export function useAppDomainState({
       setDiagnosticsState,
       setLoadState,
       setMorphologyState,
+      setPendingDatasetLoadState,
     },
     genes: {
       geneExpressionBatch,
@@ -574,6 +630,10 @@ export function useAppDomainState({
       setRoiTranscriptExportState,
       setVisiumHdRoiState,
       visiumHdRoiState,
+    },
+    tools: {
+      activeTool,
+      setActiveTool,
     },
     runtime: {
       activeControlHudTab,

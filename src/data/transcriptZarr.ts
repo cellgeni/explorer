@@ -7,6 +7,7 @@ import { isGeneFeature } from './geneFeatures'
 import type {
   TranscriptAggregateBin,
   TranscriptAggregateFeatureSummary,
+  TranscriptAggregateResult,
   TranscriptGroupSummary,
   TranscriptLodLevel,
   TranscriptPoint,
@@ -16,7 +17,16 @@ const TRANSCRIPT_ZARR_EXACT_LEVEL = 0
 const TRANSCRIPT_GRID_BASE_SIZE_MICROMETERS = 250
 const TRANSCRIPT_DENSITY_DEFAULT_MAX_BINS = 1_500
 const TRANSCRIPT_DENSITY_FEATURE_SUMMARY_LIMIT = 4
-const TRANSCRIPT_FEATURE_CIRCLE_LIMIT = 8
+// The most density/gene data chunks one selected-gene density request reads
+// (15.1-J). density/gene stores each gene's counts for the whole slide
+// together, so the cost depends on the genes, not the view. On the demo a
+// data and indices chunk pair is about 2.3 MB; reading 1 gene took 0.2 s
+// (2.2 MB), 8 genes 0.5 s (11 MB) and 25 genes 1.9 s (56 MB), so 32 chunks,
+// about 75 MB, is about 30 genes.
+export const TRANSCRIPT_GENE_DENSITY_CHUNK_LIMIT = 32
+// Selected-gene counts kept in memory, in (column, count) entries: about
+// 32 MB.
+const DENSITY_GENE_CACHE_ENTRY_LIMIT = 8_000_000
 const UNKNOWN_GENE_INDEX = 65_535
 const UNKNOWN_CODEWORD_INDEX = 65_535
 
@@ -29,6 +39,8 @@ type NumericArray =
   | Uint32Array
   | Float32Array
   | Float64Array
+
+type NumericArrayConstructor = new (length: number) => NumericArray
 
 interface NumericMatrix {
   readonly data: NumericArray
@@ -82,7 +94,26 @@ interface TranscriptDensityGeneMetadata {
   readonly originX: number
   readonly originY: number
   readonly geneNames: readonly string[]
+  readonly geneCache: DensityGeneCache
   indptrDataPromise?: Promise<Uint32Array>
+}
+
+// One gene's counts over the whole slide: row r's columns and counts are
+// cols and counts from rowStarts[r] to rowStarts[r + 1].
+interface DensityGeneCounts {
+  readonly rowStarts: Uint32Array
+  readonly cols: NumericArray
+  readonly counts: NumericArray
+}
+
+// The selected genes already read, by gene index, so later views of the
+// same genes read nothing. The genes used least recently are dropped once
+// the cache holds more than DENSITY_GENE_CACHE_ENTRY_LIMIT entries.
+interface DensityGeneCache {
+  readonly genes: Map<number, DensityGeneCounts>
+  entryCount: number
+  // The largest square on the slide, by gene set and square size.
+  readonly scaleMaxes: Map<string, number>
 }
 
 interface TranscriptTileArrays {
@@ -95,12 +126,41 @@ interface TranscriptTileArrays {
   readonly rowCount: number
 }
 
+// One gene's entries in density/gene data and indices.
 interface DensityGeneRange {
   readonly start: number
   readonly end: number
-  readonly row: number
-  readonly geneName: string
+  readonly geneIndex: number
 }
+
+interface DensityGeneDataChunk {
+  readonly start: number
+  readonly data: NumericArray
+  readonly indices: NumericArray
+}
+
+type DensityGeneDataChunkCache = Map<number, Promise<DensityGeneDataChunk>>
+
+type DensityBinMap = Map<
+  string,
+  { binX: number; binY: number; count: number; featureCounts: Map<string, number> }
+>
+
+type SelectedGeneDensity =
+  | {
+      readonly kind: 'bins'
+      readonly bins: readonly TranscriptAggregateBin[]
+      readonly visibleTranscriptCount: number
+      readonly scaleMax: number
+      readonly level: number
+      readonly tileSizeMicrometers: number
+    }
+  | {
+      readonly kind: 'over-budget'
+      readonly chunkCount: number
+      readonly level: number
+      readonly tileSizeMicrometers: number
+    }
 
 interface TranscriptZarrAggregateOptions {
   readonly signal?: AbortSignal
@@ -298,53 +358,49 @@ export async function loadTranscriptZarrAggregates(
   url: string,
   bbox: BBox,
   options: TranscriptZarrAggregateOptions = {},
-): Promise<{
-  readonly bins: readonly TranscriptAggregateBin[]
-  readonly level: TranscriptLodLevel
-  readonly source: 'native-zarr'
-  readonly selectedFeatureNames: readonly string[]
-  readonly scaleMax?: number
-}> {
+): Promise<TranscriptAggregateResult> {
   const metadata = await cachedTranscriptZarrMetadata(url)
   throwIfAborted(options.signal)
 
-  const mode = options.mode ?? 'density'
   const maxBins = options.maxBins ?? TRANSCRIPT_DENSITY_DEFAULT_MAX_BINS
   const selectedFeatureNames = normalizeFeatureNames(options.featureNames ?? [])
 
-  if (selectedFeatureNames.length > 0) {
-    if (metadata.densityGene === null) {
-      throw new Error(
-        'transcripts.zarr.zip is missing density/gene metadata for selected-feature aggregate bins.',
-      )
-    }
-
-    const densityLevel = transcriptDensityLevelForBbox(
-      bbox,
-      mode,
-      maxBins,
-      nativeDensityBaseBinSize(metadata.densityGene),
-    )
-    const bins = await transcriptZarrDensityGeneBins(metadata, bbox, {
-      mode,
+  if (selectedFeatureNames.length > 0 && metadata.densityGene !== null) {
+    const density = await transcriptZarrSelectedGeneDensity(metadata.densityGene, bbox, {
       maxBins,
       selectedFeatureNames,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
 
+    if (density.kind === 'over-budget') {
+      return {
+        bins: [],
+        level: transcriptLodLevelFromBins([], density.level, density.tileSizeMicrometers),
+        source: 'native-zarr',
+        selectedFeatureNames,
+        overBudget: {
+          chunkCount: density.chunkCount,
+          chunkLimit: TRANSCRIPT_GENE_DENSITY_CHUNK_LIMIT,
+        },
+      }
+    }
+
     return {
-      bins,
+      bins: density.bins,
       level: transcriptLodLevelFromBins(
-        bins,
-        densityLevel.level,
-        densityLevel.tileSizeMicrometers,
+        density.bins,
+        density.level,
+        density.tileSizeMicrometers,
       ),
       source: 'native-zarr',
       selectedFeatureNames,
-      scaleMax: maxTranscriptAggregateCount(bins),
+      scaleMax: density.scaleMax,
+      visibleTranscriptCount: density.visibleTranscriptCount,
     }
   }
 
+  // All transcripts, also for selected genes when the output has no
+  // density/gene: an empty selectedFeatureNames says so.
   const level = chooseTranscriptGridLevel(metadata.gridLevels, bbox, maxBins)
   const bins = transcriptZarrGridLevelBins(level, bbox)
 
@@ -357,7 +413,7 @@ export async function loadTranscriptZarrAggregates(
       transcriptCounts: bins.map((bin) => bin.count),
     },
     source: 'native-zarr',
-    selectedFeatureNames,
+    selectedFeatureNames: [],
     scaleMax: maxNumericValue(level.transcriptCounts),
   }
 }
@@ -505,67 +561,52 @@ function gridTileIntersectsBbox(
   return minX <= bbox.maxX && maxX >= bbox.minX && minY <= bbox.maxY && maxY >= bbox.minY
 }
 
-async function transcriptZarrDensityGeneBins(
-  metadata: TranscriptZarrMetadata,
+// Density for the selected genes from density/gene: a CSR matrix over 10 µm
+// cells with one pointer per (gene, row), gene by gene, so
+// indptr[gene * rows + row] starts that gene's row. Each gene is read whole
+// once and kept. A request whose new genes span more than
+// TRANSCRIPT_GENE_DENSITY_CHUNK_LIMIT data chunks reads nothing.
+async function transcriptZarrSelectedGeneDensity(
+  densityGene: TranscriptDensityGeneMetadata,
   bbox: BBox,
   options: {
-    readonly mode: 'density'
     readonly maxBins: number
     readonly selectedFeatureNames: readonly string[]
     readonly signal?: AbortSignal
   },
-): Promise<readonly TranscriptAggregateBin[]> {
-  const densityGene = metadata.densityGene
-
-  if (densityGene === null) {
-    return []
-  }
-
-  const geneIndexes =
-    options.selectedFeatureNames.length === 0
-      ? allDensityGeneIndexes(densityGene.geneNames)
-      : selectedGeneIndexes(densityGene.geneNames, options.selectedFeatureNames)
-
-  if (geneIndexes.length === 0) {
-    return []
-  }
-
+): Promise<SelectedGeneDensity> {
   const densityLevel = transcriptDensityLevelForBbox(
     bbox,
-    options.mode,
+    'density',
     options.maxBins,
     nativeDensityBaseBinSize(densityGene),
   )
-  const rowRange = densityRowRangeForBbox(densityGene, bbox)
-  const colRange = densityColRangeForBbox(densityGene, bbox)
+  const genes = selectedGeneIndexes(densityGene.geneNames, options.selectedFeatureNames)
+  const missing = genes.filter((gene) => !densityGene.geneCache.genes.has(gene.index))
 
-  if (rowRange === null || colRange === null) {
-    return []
-  }
+  if (missing.length > 0) {
+    const indptr = await readDensityGeneIndptr(densityGene)
+    throwIfAborted(options.signal)
+    const ranges = missing.map((gene) => ({
+      geneIndex: gene.index,
+      start: indptr[gene.index * densityGene.rows] ?? 0,
+      end: indptr[(gene.index + 1) * densityGene.rows] ?? 0,
+    }))
+    const chunkCount = densityGeneChunkCount(
+      ranges,
+      densityGeneDataChunkSize(densityGene),
+    )
 
-  const indptr = await readDensityGeneIndptr(densityGene)
-  throwIfAborted(options.signal)
-
-  const binMap = new Map<
-    string,
-    {
-      binX: number
-      binY: number
-      count: number
-      featureCounts: Map<string, number>
+    if (chunkCount > TRANSCRIPT_GENE_DENSITY_CHUNK_LIMIT) {
+      return {
+        kind: 'over-budget',
+        chunkCount,
+        level: densityLevel.level,
+        tileSizeMicrometers: densityLevel.tileSizeMicrometers,
+      }
     }
-  >()
-  const dataChunkCache = new Map<
-    number,
-    Promise<{
-      readonly start: number
-      readonly data: NumericArray
-      readonly indices: NumericArray
-    }>
-  >()
 
-  if (options.selectedFeatureNames.length > 0) {
-    const ranges = collectDensityGeneRanges(densityGene, indptr, rowRange, geneIndexes)
+    const dataChunkCache: DensityGeneDataChunkCache = new Map()
     await prefetchDensityGeneDataChunks(
       densityGene,
       ranges,
@@ -575,78 +616,104 @@ async function transcriptZarrDensityGeneBins(
 
     for (const range of ranges) {
       throwIfAborted(options.signal)
-      await addDensityGeneRangeToBins({
-        densityGene,
-        start: range.start,
-        end: range.end,
-        row: range.row,
-        colRange,
-        geneName: range.geneName,
-        binSizeMicrometers: densityLevel.tileSizeMicrometers,
-        binMap,
-        dataChunkCache,
-      })
+      storeDensityGene(
+        densityGene.geneCache,
+        range.geneIndex,
+        await readDensityGeneCounts(densityGene, indptr, range, dataChunkCache),
+      )
     }
-  } else {
-    for (let row = rowRange.start; row <= rowRange.end; row += 1) {
-      throwIfAborted(options.signal)
+  }
 
-      for (const gene of geneIndexes) {
-        const pointerIndex = row * densityGene.geneNames.length + gene.index
-        const start = indptr[pointerIndex] ?? 0
-        const end = indptr[pointerIndex + 1] ?? start
+  markDensityGenesUsed(
+    densityGene.geneCache,
+    genes.map((gene) => gene.index),
+  )
 
-        if (end <= start) {
-          continue
-        }
+  // densityLevel fits maxBins even if every square in the box had
+  // transcripts. Squares outside the tissue stay empty, so as with the grids
+  // pyramid, use the finest level whose occupied squares fit.
+  let level = densityLevel
+  let density = selectedGeneDensityBins(densityGene, bbox, genes, level)
 
-        await addDensityGeneRangeToBins({
-          densityGene,
-          start,
-          end,
-          row,
-          colRange,
-          geneName: gene.name,
-          binSizeMicrometers: densityLevel.tileSizeMicrometers,
-          binMap,
-          dataChunkCache,
-        })
+  while (level.level > 0) {
+    const finerLevel = {
+      level: level.level - 1,
+      tileSizeMicrometers: level.tileSizeMicrometers / 2,
+    }
+    const finer = selectedGeneDensityBins(densityGene, bbox, genes, finerLevel)
+
+    if (finer.bins.length > options.maxBins) {
+      break
+    }
+
+    level = finerLevel
+    density = finer
+  }
+
+  return {
+    kind: 'bins',
+    level: level.level,
+    tileSizeMicrometers: level.tileSizeMicrometers,
+    scaleMax: selectedGeneDensityScaleMax(densityGene, genes, level.tileSizeMicrometers),
+    ...density,
+  }
+}
+
+// The largest square on the whole slide at this size, so that, as with the
+// grids pyramid, colours do not change while panning.
+function selectedGeneDensityScaleMax(
+  densityGene: TranscriptDensityGeneMetadata,
+  genes: readonly { readonly index: number }[],
+  tileSizeMicrometers: number,
+): number {
+  const scaleMaxes = densityGene.geneCache.scaleMaxes
+  const key = `${tileSizeMicrometers}:${genes
+    .map((gene) => gene.index)
+    .sort((left, right) => left - right)
+    .join(',')}`
+  const cached = scaleMaxes.get(key)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const counts = new Map<number, number>()
+  const binsPerRow = Math.ceil(
+    (densityGene.originX + densityGene.cols * densityGene.gridSizeX) /
+      tileSizeMicrometers,
+  )
+  let scaleMax = 1
+
+  for (const gene of genes) {
+    const geneCounts = densityGene.geneCache.genes.get(gene.index)
+
+    if (geneCounts === undefined) {
+      continue
+    }
+
+    for (let row = 0; row < densityGene.rows; row += 1) {
+      const y = densityGene.originY + (row + 0.5) * densityGene.gridSizeY
+      const binY = Math.floor(y / tileSizeMicrometers)
+      const end = geneCounts.rowStarts[row + 1] ?? 0
+
+      for (let index = geneCounts.rowStarts[row] ?? end; index < end; index += 1) {
+        const x =
+          densityGene.originX +
+          ((geneCounts.cols[index] ?? 0) + 0.5) * densityGene.gridSizeX
+        const key = binY * binsPerRow + Math.floor(x / tileSizeMicrometers)
+        const count = (counts.get(key) ?? 0) + (geneCounts.counts[index] ?? 0)
+        counts.set(key, count)
+        scaleMax = Math.max(scaleMax, count)
       }
     }
   }
 
-  if (options.selectedFeatureNames.length > 0) {
-    return densityBinMapToFeatureCircleBins(
-      binMap,
-      densityLevel.level,
-      densityLevel.tileSizeMicrometers,
-    )
+  if (scaleMaxes.size >= 64) {
+    scaleMaxes.clear()
   }
 
-  return densityBinMapToAggregateBins(
-    binMap,
-    densityLevel.level,
-    densityLevel.tileSizeMicrometers,
-  )
-}
-
-export function transcriptFeatureCircleOffset(
-  index: number,
-  count: number,
-  binSizeMicrometers: number,
-): { readonly x: number; readonly y: number } {
-  const normalizedBinSize = Math.max(1, binSizeMicrometers)
-  const normalizedCount = Math.max(
-    1,
-    Math.min(TRANSCRIPT_FEATURE_CIRCLE_LIMIT, Math.floor(count)),
-  )
-  const normalizedIndex = Math.max(0, Math.floor(index)) % normalizedCount
-  const unitOffset = featureCircleUnitOffset(normalizedIndex, normalizedCount)
-
-  return {
-    x: unitOffset.x * normalizedBinSize,
-    y: unitOffset.y * normalizedBinSize,
-  }
+  scaleMaxes.set(key, scaleMax)
+  return scaleMax
 }
 
 export function transcriptDensityLevelForBbox(
@@ -678,12 +745,6 @@ export function transcriptDensityLevelForBbox(
 
 function nativeDensityBaseBinSize(densityGene: TranscriptDensityGeneMetadata): number {
   return Math.max(densityGene.gridSizeX, densityGene.gridSizeY, 1)
-}
-
-function allDensityGeneIndexes(
-  geneNames: readonly string[],
-): readonly { readonly index: number; readonly name: string }[] {
-  return geneNames.flatMap((name, index) => (name === undefined ? [] : [{ index, name }]))
 }
 
 function selectedGeneIndexes(
@@ -767,45 +828,130 @@ async function readDensityGeneIndptr(
   return densityGene.indptrDataPromise
 }
 
-function collectDensityGeneRanges(
+function densityGeneChunkCount(
+  ranges: readonly DensityGeneRange[],
+  chunkSize: number,
+): number {
+  const chunkIndexes = new Set<number>()
+
+  for (const range of ranges) {
+    for (const chunkIndex of densityGeneDataChunkIndexes(
+      range.start,
+      range.end,
+      chunkSize,
+    )) {
+      chunkIndexes.add(chunkIndex)
+    }
+  }
+
+  return chunkIndexes.size
+}
+
+function storeDensityGene(
+  cache: DensityGeneCache,
+  geneIndex: number,
+  counts: DensityGeneCounts,
+): void {
+  cache.entryCount += counts.cols.length - (cache.genes.get(geneIndex)?.cols.length ?? 0)
+  cache.genes.set(geneIndex, counts)
+}
+
+// Marks the genes in use as the most recent, then drops the least recent
+// others while the cache is over its limit.
+function markDensityGenesUsed(
+  cache: DensityGeneCache,
+  geneIndexes: readonly number[],
+): void {
+  for (const geneIndex of geneIndexes) {
+    const counts = cache.genes.get(geneIndex)
+
+    if (counts !== undefined) {
+      cache.genes.delete(geneIndex)
+      cache.genes.set(geneIndex, counts)
+    }
+  }
+
+  const inUse = new Set(geneIndexes)
+
+  for (const [geneIndex, counts] of cache.genes) {
+    if (cache.entryCount <= DENSITY_GENE_CACHE_ENTRY_LIMIT || inUse.has(geneIndex)) {
+      break
+    }
+
+    cache.entryCount -= counts.cols.length
+    cache.genes.delete(geneIndex)
+  }
+}
+
+function selectedGeneDensityBins(
   densityGene: TranscriptDensityGeneMetadata,
-  indptr: Uint32Array,
-  rowRange: { readonly start: number; readonly end: number },
-  geneIndexes: readonly { readonly index: number; readonly name: string }[],
-): readonly DensityGeneRange[] {
-  const ranges: DensityGeneRange[] = []
+  bbox: BBox,
+  genes: readonly { readonly index: number; readonly name: string }[],
+  densityLevel: { readonly level: number; readonly tileSizeMicrometers: number },
+): {
+  readonly bins: readonly TranscriptAggregateBin[]
+  readonly visibleTranscriptCount: number
+} {
+  const rowRange = densityRowRangeForBbox(densityGene, bbox)
+  const colRange = densityColRangeForBbox(densityGene, bbox)
+  const binMap: DensityBinMap = new Map()
+  let visibleTranscriptCount = 0
 
-  for (let row = rowRange.start; row <= rowRange.end; row += 1) {
-    for (const gene of geneIndexes) {
-      const pointerIndex = row * densityGene.geneNames.length + gene.index
-      const start = indptr[pointerIndex] ?? 0
-      const end = indptr[pointerIndex + 1] ?? start
+  if (rowRange === null || colRange === null) {
+    return { bins: [], visibleTranscriptCount }
+  }
 
-      if (end > start) {
-        ranges.push({
-          start,
-          end,
-          row,
-          geneName: gene.name,
-        })
+  for (const gene of genes) {
+    const counts = densityGene.geneCache.genes.get(gene.index)
+
+    if (counts === undefined) {
+      continue
+    }
+
+    for (let row = rowRange.start; row <= rowRange.end; row += 1) {
+      const y = densityGene.originY + (row + 0.5) * densityGene.gridSizeY
+      const binY = Math.floor(y / densityLevel.tileSizeMicrometers)
+      const end = counts.rowStarts[row + 1] ?? 0
+
+      for (let index = counts.rowStarts[row] ?? end; index < end; index += 1) {
+        const col = counts.cols[index] ?? -1
+        const count = counts.counts[index] ?? 0
+
+        if (col < colRange.start || col > colRange.end || count <= 0) {
+          continue
+        }
+
+        const x = densityGene.originX + (col + 0.5) * densityGene.gridSizeX
+        const binX = Math.floor(x / densityLevel.tileSizeMicrometers)
+        const key = `${binX},${binY}`
+        let bin = binMap.get(key)
+
+        if (bin === undefined) {
+          bin = { binX, binY, count: 0, featureCounts: new Map() }
+          binMap.set(key, bin)
+        }
+
+        bin.count += count
+        bin.featureCounts.set(gene.name, (bin.featureCounts.get(gene.name) ?? 0) + count)
+        visibleTranscriptCount += count
       }
     }
   }
 
-  return ranges
+  return {
+    bins: densityBinMapToAggregateBins(
+      binMap,
+      densityLevel.level,
+      densityLevel.tileSizeMicrometers,
+    ),
+    visibleTranscriptCount,
+  }
 }
 
 async function prefetchDensityGeneDataChunks(
   densityGene: TranscriptDensityGeneMetadata,
   ranges: readonly DensityGeneRange[],
-  dataChunkCache: Map<
-    number,
-    Promise<{
-      readonly start: number
-      readonly data: NumericArray
-      readonly indices: NumericArray
-    }>
-  >,
+  dataChunkCache: DensityGeneDataChunkCache,
   signal: AbortSignal | undefined,
 ): Promise<void> {
   if (ranges.length === 0) {
@@ -844,97 +990,55 @@ async function prefetchDensityGeneDataChunks(
   )
 }
 
-async function addDensityGeneRangeToBins(options: {
-  readonly densityGene: TranscriptDensityGeneMetadata
-  readonly start: number
-  readonly end: number
-  readonly row: number
-  readonly colRange: { readonly start: number; readonly end: number }
-  readonly geneName: string
-  readonly binSizeMicrometers: number
-  readonly binMap: Map<
-    string,
-    {
-      binX: number
-      binY: number
-      count: number
-      featureCounts: Map<string, number>
-    }
-  >
-  readonly dataChunkCache: Map<
-    number,
-    Promise<{
-      readonly start: number
-      readonly data: NumericArray
-      readonly indices: NumericArray
-    }>
-  >
-}): Promise<void> {
-  const chunkSize = densityGeneDataChunkSize(options.densityGene)
-  const firstChunk = Math.floor(options.start / chunkSize)
-  const lastChunk = Math.floor((options.end - 1) / chunkSize)
+// Copies one gene's entries out of the data chunks they span, with its row
+// starts relative to the first entry.
+async function readDensityGeneCounts(
+  densityGene: TranscriptDensityGeneMetadata,
+  indptr: Uint32Array,
+  range: DensityGeneRange,
+  dataChunkCache: DensityGeneDataChunkCache,
+): Promise<DensityGeneCounts> {
+  const first = range.geneIndex * densityGene.rows
+  const rowStarts = indptr
+    .slice(first, first + densityGene.rows + 1)
+    .map((pointer) => pointer - range.start)
+  const length = range.end - range.start
+  const chunkSize = densityGeneDataChunkSize(densityGene)
+  let cols: NumericArray | null = null
+  let counts: NumericArray | null = null
 
-  for (let chunkIndex = firstChunk; chunkIndex <= lastChunk; chunkIndex += 1) {
-    const chunk = await readDensityGeneDataChunk(
-      options.densityGene,
-      chunkIndex,
-      options.dataChunkCache,
+  for (const chunkIndex of densityGeneDataChunkIndexes(
+    range.start,
+    range.end,
+    chunkSize,
+  )) {
+    const chunk = await readDensityGeneDataChunk(densityGene, chunkIndex, dataChunkCache)
+    const localStart = Math.max(range.start, chunk.start)
+    const localEnd = Math.min(range.end, chunk.start + chunk.data.length)
+    cols ??= new (chunk.indices.constructor as NumericArrayConstructor)(length)
+    counts ??= new (chunk.data.constructor as NumericArrayConstructor)(length)
+    cols.set(
+      chunk.indices.subarray(localStart - chunk.start, localEnd - chunk.start),
+      localStart - range.start,
     )
-    const localStart = Math.max(options.start, chunk.start)
-    const localEnd = Math.min(options.end, chunk.start + chunk.data.length)
+    counts.set(
+      chunk.data.subarray(localStart - chunk.start, localEnd - chunk.start),
+      localStart - range.start,
+    )
+  }
 
-    for (let pointer = localStart; pointer < localEnd; pointer += 1) {
-      const localPointer = pointer - chunk.start
-      const col = chunk.indices[localPointer] ?? -1
-
-      if (col < options.colRange.start || col > options.colRange.end) {
-        continue
-      }
-
-      const count = chunk.data[localPointer] ?? 0
-
-      if (count <= 0) {
-        continue
-      }
-
-      const x = options.densityGene.originX + (col + 0.5) * options.densityGene.gridSizeX
-      const y =
-        options.densityGene.originY + (options.row + 0.5) * options.densityGene.gridSizeY
-      const binX = Math.floor(x / options.binSizeMicrometers)
-      const binY = Math.floor(y / options.binSizeMicrometers)
-      const key = `${binX},${binY}`
-      let bin = options.binMap.get(key)
-
-      if (bin === undefined) {
-        bin = { binX, binY, count: 0, featureCounts: new Map() }
-        options.binMap.set(key, bin)
-      }
-
-      bin.count += count
-      bin.featureCounts.set(
-        options.geneName,
-        (bin.featureCounts.get(options.geneName) ?? 0) + count,
-      )
-    }
+  return {
+    rowStarts,
+    cols: cols ?? new Uint32Array(0),
+    counts: counts ?? new Uint32Array(0),
   }
 }
 
 async function readDensityGeneDataChunk(
   densityGene: TranscriptDensityGeneMetadata,
   chunkIndex: number,
-  cache: Map<
-    number,
-    Promise<{
-      readonly start: number
-      readonly data: NumericArray
-      readonly indices: NumericArray
-    }>
-  >,
-): Promise<{
-  readonly start: number
-  readonly data: NumericArray
-  readonly indices: NumericArray
-}> {
+  cache: DensityGeneDataChunkCache,
+): Promise<DensityGeneDataChunk> {
   const cached = cache.get(chunkIndex)
 
   if (cached !== undefined) {
@@ -987,16 +1091,6 @@ function densityGeneDataChunkIndexes(
   return indexes
 }
 
-function maxTranscriptAggregateCount(bins: readonly TranscriptAggregateBin[]): number {
-  let maxCount = 0
-
-  for (const bin of bins) {
-    maxCount = Math.max(maxCount, bin.count)
-  }
-
-  return Math.max(1, maxCount)
-}
-
 function maxNumericValue(values: readonly number[]): number {
   let maxValue = 0
 
@@ -1010,15 +1104,7 @@ function maxNumericValue(values: readonly number[]): number {
 }
 
 function densityBinMapToAggregateBins(
-  binMap: ReadonlyMap<
-    string,
-    {
-      readonly binX: number
-      readonly binY: number
-      readonly count: number
-      readonly featureCounts: ReadonlyMap<string, number>
-    }
-  >,
+  binMap: DensityBinMap,
   level: number,
   binSizeMicrometers: number,
 ): readonly TranscriptAggregateBin[] {
@@ -1041,75 +1127,9 @@ function densityBinMapToAggregateBins(
         radiusMicrometers: binSizeMicrometers * 0.42,
         binSizeMicrometers,
         count: bin.count,
+        selectedGeneCount: bin.count,
         ...(topFeatures.length === 0 ? {} : { topFeatures }),
       }
-    })
-}
-
-function densityBinMapToFeatureCircleBins(
-  binMap: ReadonlyMap<
-    string,
-    {
-      readonly binX: number
-      readonly binY: number
-      readonly count: number
-      readonly featureCounts: ReadonlyMap<string, number>
-    }
-  >,
-  level: number,
-  binSizeMicrometers: number,
-): readonly TranscriptAggregateBin[] {
-  return [...binMap.entries()]
-    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
-    .flatMap(([, bin]) => {
-      const topFeatures = topFeatureSummaries(
-        bin.featureCounts,
-        TRANSCRIPT_FEATURE_CIRCLE_LIMIT,
-      )
-
-      if (topFeatures.length === 0) {
-        return []
-      }
-
-      const visibleTranscriptCount = topFeatures.reduce(
-        (total, feature) => total + feature.count,
-        0,
-      )
-      const omittedFeatureCount = Math.max(0, bin.featureCounts.size - topFeatures.length)
-      const omittedTranscriptCount = Math.max(0, bin.count - visibleTranscriptCount)
-
-      return topFeatures.map((feature, index) => {
-        const offset = transcriptFeatureCircleOffset(
-          index,
-          topFeatures.length,
-          binSizeMicrometers,
-        )
-
-        return {
-          id: `native-zarr-feature-circle:${level}:${bin.binX}:${bin.binY}:${feature.featureName}`,
-          source: 'native-zarr',
-          glyphType: 'feature-circle',
-          level,
-          binX: bin.binX,
-          binY: bin.binY,
-          position: {
-            x: micrometers((bin.binX + 0.5) * binSizeMicrometers + offset.x),
-            y: micrometers((bin.binY + 0.5) * binSizeMicrometers + offset.y),
-          },
-          radiusMicrometers: featureCircleRadiusMicrometers(
-            topFeatures.length,
-            binSizeMicrometers,
-          ),
-          binSizeMicrometers,
-          count: feature.count,
-          binTotalCount: bin.count,
-          selectedGeneCount: bin.count,
-          topFeatures,
-          featureName: feature.featureName,
-          ...(omittedFeatureCount === 0 ? {} : { omittedFeatureCount }),
-          ...(omittedTranscriptCount === 0 ? {} : { omittedTranscriptCount }),
-        }
-      })
     })
 }
 
@@ -1134,69 +1154,6 @@ function topFeatureSummaries(
     .sort((left, right) => right[1] - left[1])
     .slice(0, Math.max(0, Math.floor(limit)))
     .map(([featureName, count]) => ({ featureName, count }))
-}
-
-function featureCircleUnitOffset(
-  index: number,
-  count: number,
-): { readonly x: number; readonly y: number } {
-  if (count <= 1) {
-    return { x: 0, y: 0 }
-  }
-
-  if (count === 2) {
-    return index === 0 ? { x: -0.22, y: 0 } : { x: 0.22, y: 0 }
-  }
-
-  if (count === 3) {
-    const offsets = [
-      { x: 0, y: -0.24 },
-      { x: -0.21, y: 0.18 },
-      { x: 0.21, y: 0.18 },
-    ]
-
-    return offsets[index] ?? offsets[0]!
-  }
-
-  if (count === 4) {
-    const offsets = [
-      { x: -0.2, y: -0.2 },
-      { x: 0.2, y: -0.2 },
-      { x: -0.2, y: 0.2 },
-      { x: 0.2, y: 0.2 },
-    ]
-
-    return offsets[index] ?? offsets[0]!
-  }
-
-  const radius = 0.28
-  const angle = -Math.PI / 2 + (index * Math.PI * 2) / count
-
-  return {
-    x: Math.cos(angle) * radius,
-    y: Math.sin(angle) * radius,
-  }
-}
-
-function featureCircleRadiusMicrometers(
-  count: number,
-  binSizeMicrometers: number,
-): number {
-  const normalizedBinSize = Math.max(1, binSizeMicrometers)
-
-  if (count <= 1) {
-    return Math.max(2, normalizedBinSize * 0.2)
-  }
-
-  if (count <= 2) {
-    return Math.max(2, normalizedBinSize * 0.15)
-  }
-
-  if (count <= 4) {
-    return Math.max(2, normalizedBinSize * 0.12)
-  }
-
-  return Math.max(2, normalizedBinSize * 0.09)
 }
 
 export function transcriptGroupsFromPoints(
@@ -1315,6 +1272,7 @@ async function loadDensityGeneMetadata(
       originX: origin.x,
       originY: origin.y,
       geneNames: readStringArrayAttribute(densityGene.attrs, 'gene_names'),
+      geneCache: { genes: new Map(), entryCount: 0, scaleMaxes: new Map() },
     }
   } catch {
     return null

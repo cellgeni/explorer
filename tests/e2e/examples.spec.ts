@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
+import { expectLogEntry } from './controls'
 
 // Loads every example in examples/index.json through its README link. The
 // manifest requests to raw.githubusercontent.com are answered from this
@@ -34,9 +35,11 @@ for (const example of examples) {
     )
     await page.goto(`/?dataset=${encodeURIComponent(example.manifestUrl)}`)
 
-    await expect(
-      page.getByText(/(?:Dataset|Atera|H5AD|SpatialData|Image|Visium HD|Visium) ready: /),
-    ).toBeVisible({ timeout: EXAMPLE_LOAD_TIMEOUT_MS })
+    await expectLogEntry(
+      page,
+      /(?:Dataset|Atera|H5AD|SpatialData|Image|Visium HD|Visium) ready: /,
+      { timeout: EXAMPLE_LOAD_TIMEOUT_MS },
+    )
     await expect(page.getByRole('region', { name: 'About this dataset' })).toContainText(
       example.name,
     )

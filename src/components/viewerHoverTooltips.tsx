@@ -1,7 +1,9 @@
+import { withMicrometers, withSquareMicrometers } from '../data/units'
 import type { Position } from '@deck.gl/core'
 import type {
   GridCellDatum,
   OverviewCellDatum,
+  TranscriptAggregateDatum,
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
 import type {
@@ -10,6 +12,7 @@ import type {
   ViewerOverviewCellHoverDetail,
   ViewerTranscriptHoverDetail,
 } from './viewerCoreTypes'
+import { transcriptAggregateTitle } from './viewerHoverModel'
 import { formatCoordinateValue } from './viewerMeasurements'
 
 export function GridCellHoverTooltip({
@@ -104,7 +107,7 @@ export function OverviewCellHoverTooltip({
         {cell.cellArea === undefined ? null : (
           <div>
             <dt>Area</dt>
-            <dd>{formatCoordinateValue(cell.cellArea)} um^2</dd>
+            <dd>{withSquareMicrometers(formatCoordinateValue(cell.cellArea))}</dd>
           </div>
         )}
         {cell.expressionCount === undefined ? null : (
@@ -171,7 +174,7 @@ export function CellBoundaryHoverTooltip({
         {cell?.cellArea === undefined ? null : (
           <div>
             <dt>Cell Area</dt>
-            <dd>{formatCoordinateValue(cell.cellArea)} um^2</dd>
+            <dd>{withSquareMicrometers(formatCoordinateValue(cell.cellArea))}</dd>
           </div>
         )}
         <div>
@@ -213,6 +216,13 @@ function AnnotationLabelsRow({
   )
 }
 
+// Each selected gene's count in a square, when it counts more than one.
+function selectedGeneRows(aggregate: TranscriptAggregateDatum) {
+  const features = aggregate.topFeatures ?? []
+
+  return aggregate.selectedGeneCount === undefined || features.length < 2 ? [] : features
+}
+
 export function TranscriptHoverTooltip({
   detail,
 }: {
@@ -230,16 +240,18 @@ export function TranscriptHoverTooltip({
         }}
         aria-hidden="true"
       >
-        <p>
-          {aggregate.featureName === undefined
-            ? 'Transcript density bin'
-            : aggregate.featureName}
-        </p>
+        <p>{transcriptAggregateTitle(aggregate)}</p>
         <dl>
           <div>
             <dt>Count</dt>
             <dd>{aggregate.count.toLocaleString()}</dd>
           </div>
+          {selectedGeneRows(aggregate).map((feature) => (
+            <div key={feature.featureName}>
+              <dt>{feature.featureName}</dt>
+              <dd>{feature.count.toLocaleString()}</dd>
+            </div>
+          ))}
           {aggregate.binTotalCount === undefined ? null : (
             <div>
               <dt>Total</dt>
@@ -254,7 +266,7 @@ export function TranscriptHoverTooltip({
             <dt>X/Y</dt>
             <dd>
               {formatCoordinateValue(aggregate.position[0] ?? 0)},{' '}
-              {formatCoordinateValue(-(aggregate.position[1] ?? 0))} um
+              {withMicrometers(formatCoordinateValue(-(aggregate.position[1] ?? 0)))}
             </dd>
           </div>
           <div>
@@ -318,13 +330,13 @@ export function TranscriptHoverTooltip({
           <dt>X/Y</dt>
           <dd>
             {formatCoordinateValue(transcript.position[0] ?? 0)},{' '}
-            {formatCoordinateValue(-(transcript.position[1] ?? 0))} um
+            {withMicrometers(formatCoordinateValue(-(transcript.position[1] ?? 0)))}
           </dd>
         </div>
         {transcript.zLocation === undefined ? null : (
           <div>
             <dt>Z</dt>
-            <dd>{formatCoordinateValue(transcript.zLocation)} um</dd>
+            <dd>{withMicrometers(formatCoordinateValue(transcript.zLocation))}</dd>
           </div>
         )}
         {transcript.overlapsNucleus === undefined ? null : (
@@ -336,7 +348,7 @@ export function TranscriptHoverTooltip({
         {transcript.nucleusDistance === undefined ? null : (
           <div>
             <dt>Distance</dt>
-            <dd>{formatCoordinateValue(transcript.nucleusDistance)} um</dd>
+            <dd>{withMicrometers(formatCoordinateValue(transcript.nucleusDistance))}</dd>
           </div>
         )}
       </dl>
@@ -355,13 +367,15 @@ function transcriptCellDisplayLabel(transcript: TranscriptPointDatum): string | 
 function formatGridCellBinSize(cell: GridCellDatum): string {
   return cell.binSizeMicrometers === undefined
     ? 'Unknown'
-    : `${formatCoordinateValue(cell.binSizeMicrometers)} μm`
+    : withMicrometers(formatCoordinateValue(cell.binSizeMicrometers))
 }
 
 function formatOverviewCellPosition(cell: OverviewCellDatum): string {
-  return `${formatCoordinateValue(cell.position[0] ?? 0)}, ${formatCoordinateValue(
-    -(cell.position[1] ?? 0),
-  )} um`
+  return withMicrometers(
+    `${formatCoordinateValue(cell.position[0] ?? 0)}, ${formatCoordinateValue(
+      -(cell.position[1] ?? 0),
+    )}`,
+  )
 }
 
 function formatGridCellImageCoordinate(cell: GridCellDatum): string {
@@ -383,7 +397,7 @@ function formatGridCellTissue(cell: GridCellDatum): string {
 }
 
 function formatBoundaryPolygonArea(polygon: readonly Position[]): string {
-  return `${formatCoordinateValue(boundaryPolygonArea(polygon))} um^2`
+  return withSquareMicrometers(formatCoordinateValue(boundaryPolygonArea(polygon)))
 }
 
 function boundaryPolygonArea(polygon: readonly Position[]): number {

@@ -4,6 +4,11 @@ export type LoadErrorCode =
   | 'range-not-supported'
   | 'size-limit'
   | 'unsupported'
+  // Dataset detection (15.1-E): nothing at the address, credentials needed,
+  // or no response at all (CORS or network).
+  | 'not-found'
+  | 'access-denied'
+  | 'blocked'
   | 'parquet-decode'
   | 'manifest'
   | 'decode'
@@ -70,6 +75,11 @@ export function createStructuredLoadError(
   const normalizedMessage = message.toLowerCase()
   const detail = readErrorDetail(error)
   const rangeReadStatus = readRangeReadFailureStatus(normalizedMessage)
+  const detection = readDatasetDetectionError(error)
+
+  if (detection !== null) {
+    return datasetDetectionLoadError(source, message, detection)
+  }
 
   if (rangeReadStatus === 403 || rangeReadStatus === 404) {
     return withOptionalDetail(
@@ -532,6 +542,91 @@ function withOptionalDetail(
   detail: string | undefined,
 ): StructuredLoadError {
   return detail === undefined ? error : { ...error, detail }
+}
+
+interface DatasetDetectionErrorSummary {
+  readonly kind: string
+  readonly checked: readonly {
+    readonly path: string
+    readonly ok: boolean
+    readonly status?: number
+    readonly error?: string
+  }[]
+}
+
+// DatasetDetectionError (src/datasets/datasetDetectionError.ts), matched by
+// name to keep this module import-free.
+function readDatasetDetectionError(error: unknown): DatasetDetectionErrorSummary | null {
+  if (!(error instanceof Error) || error.name !== 'DatasetDetectionError') {
+    return null
+  }
+
+  const { kind, checked } = error as Error & Partial<DatasetDetectionErrorSummary>
+  return typeof kind === 'string' && Array.isArray(checked) ? { kind, checked } : null
+}
+
+// The detail names the first few files checked; Run Diagnostics shows all.
+const CHECKED_FILES_LISTED = 6
+
+const DATASET_DETECTION_ERRORS: Record<
+  string,
+  { readonly code: LoadErrorCode; readonly title: string; readonly action: string }
+> = {
+  'not-found': {
+    code: 'not-found',
+    title: 'Dataset not found',
+    action:
+      'Check the address. If the files are there, check that they are publicly readable: buckets that deny listing answer HTTP 403 for missing files.',
+  },
+  'access-denied': {
+    code: 'access-denied',
+    title: 'Access denied',
+    action: 'Make the files public, or open them through a public or presigned address.',
+  },
+  blocked: {
+    code: 'blocked',
+    title: 'Request blocked',
+    action:
+      "Check the network connection, then the host's CORS rules: they must allow GET and HEAD with Range from this site. Run Diagnostics shows each request.",
+  },
+  'server-error': {
+    code: 'http',
+    title: 'Host server error',
+    action: SERVER_ERROR_ACTION,
+  },
+  unsupported: {
+    code: 'unsupported',
+    title: 'Unsupported dataset layout',
+    action:
+      'Open the dataset folder or its main file, or add an explorer.json manifest that names the files.',
+  },
+}
+
+function datasetDetectionLoadError(
+  source: LoadErrorSource,
+  message: string,
+  detection: DatasetDetectionErrorSummary,
+): StructuredLoadError {
+  const { code, title, action } =
+    DATASET_DETECTION_ERRORS[detection.kind] ?? DATASET_DETECTION_ERRORS.unsupported!
+  const listed = detection.checked.slice(0, CHECKED_FILES_LISTED)
+  const unlisted = detection.checked.length - listed.length
+  const detail = listed
+    .map((probe) => {
+      const outcome = probe.ok
+        ? 'found'
+        : probe.status !== undefined
+          ? `HTTP ${probe.status}`
+          : (probe.error ?? 'no response')
+      return `${probe.path}: ${outcome}`
+    })
+    .join('; ')
+  const more = unlisted > 0 ? `; and ${unlisted.toLocaleString()} more` : ''
+
+  return withOptionalDetail(
+    { source, code, title, message, action },
+    detail === '' ? undefined : `Checked ${detail}${more}`,
+  )
 }
 
 function readErrorDetail(error: unknown): string | undefined {

@@ -8,7 +8,7 @@ describe('GridCellInfoPanel', () => {
     render(<GridCellInfoPanel cell={gridCellDatum()} />)
 
     expect(screen.getByText('BC-1')).toBeInTheDocument()
-    expect(screen.getByText('16 um')).toBeInTheDocument()
+    expect(screen.getByText('16 µm')).toBeInTheDocument()
     expect(screen.getByText('In tissue')).toBeInTheDocument()
     expect(screen.getByText('row 4, col 7')).toBeInTheDocument()
     expect(screen.getByText('row 128, col 256')).toBeInTheDocument()

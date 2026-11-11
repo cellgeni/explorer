@@ -180,6 +180,38 @@ export function transcriptDensityColor(
   return interpolateColorStops(lowStop, middleStop, highStop, intensity)
 }
 
+// CSS gradients for the scale previews and legends, low on the left. They use
+// the same stops as the map, including their opacity.
+export function geneExpressionScaleGradient(
+  colorScale: GeneExpressionColorScale,
+): string {
+  return colorStopsGradient(GENE_EXPRESSION_COLOR_STOPS[colorScale])
+}
+
+export function transcriptDensityScaleGradient(
+  colorScale: TranscriptDensityColorScale,
+): string {
+  return colorStopsGradient(TRANSCRIPT_DENSITY_COLOR_STOPS[colorScale])
+}
+
+function colorStopsGradient(stops: readonly [ColorStop, ColorStop, ColorStop]): string {
+  return colorsGradient(stops)
+}
+
+// A left-to-right CSS gradient through evenly spaced colours.
+export function colorsGradient(colors: readonly Color[]): string {
+  const last = Math.max(1, colors.length - 1)
+  const stops = colors.map(
+    (color, index) => `${cssRgba(color)} ${Math.round((index / last) * 100)}%`,
+  )
+  return `linear-gradient(90deg, ${stops.join(', ')})`
+}
+
+function cssRgba(color: Color): string {
+  const [red = 0, green = 0, blue = 0, alpha = 255] = color
+  return `rgba(${red}, ${green}, ${blue}, ${Math.round((alpha / 255) * 100) / 100})`
+}
+
 export function boundaryFillColor(color: Color): Color {
   return [
     color[0] ?? 0,

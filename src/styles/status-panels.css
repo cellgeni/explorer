@@ -2,7 +2,7 @@
 .cell-info-empty,
 .embedding-empty {
   margin: 0;
-  color: #7b4d1d;
+  color: var(--text-3);
   overflow-wrap: anywhere;
 }
 
@@ -24,9 +24,9 @@
 
 .embedding-plot-shell {
   overflow: hidden;
-  border: 1px solid rgba(23, 21, 17, 0.28);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: #171511;
+  background: var(--canvas);
 }
 
 .embedding-plot {
@@ -46,9 +46,9 @@
 .embedding-summary div {
   min-width: 0;
   padding: 4px;
-  border: 1px solid rgba(23, 21, 17, 0.12);
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: rgba(255, 253, 247, 0.7);
+  background: var(--surface-2);
 }
 
 .embedding-summary dt,
@@ -58,15 +58,14 @@
 }
 
 .embedding-summary dt {
-  color: #7b4d1d;
-  font-size: 0.54rem;
+  color: var(--text-3);
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .embedding-summary dd {
-  color: #174d3e;
-  font-size: 0.66rem;
+  color: var(--accent);
+  font-size: var(--font-control);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
@@ -77,18 +76,17 @@
   display: grid;
   gap: 5px;
   padding: 6px;
-  border: 1px solid rgba(215, 63, 124, 0.38);
+  border: 1px solid var(--danger-border);
   border-left-width: 3px;
   border-radius: 6px;
-  background: rgba(215, 63, 124, 0.08);
+  background: var(--danger-soft);
 }
 
 .error-summary h2 {
   margin: 0;
-  color: #7f2048;
-  font-size: 0.62rem;
+  color: var(--danger);
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .error-summary ul {
@@ -103,7 +101,12 @@
   display: grid;
   gap: 2px;
   padding-top: 5px;
-  border-top: 1px solid rgba(215, 63, 124, 0.2);
+  border-top: 1px solid var(--danger-border);
+}
+
+.error-summary li button {
+  justify-self: start;
+  margin-top: 4px;
 }
 
 .error-summary li:first-child {
@@ -127,20 +130,20 @@
 }
 
 .error-summary strong {
-  color: #7f2048;
-  font-size: 0.62rem;
+  color: var(--danger);
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
 .error-summary span {
-  color: #171511;
-  font-size: 0.68rem;
+  color: var(--text-1);
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
 .error-summary p {
-  color: #5d2a38;
-  font-size: 0.64rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
   line-height: 1.25;
 }
 
@@ -148,10 +151,10 @@
   display: grid;
   gap: 4px;
   padding: 6px;
-  border: 1px solid rgba(184, 110, 27, 0.34);
-  border-left: 3px solid #b86e1b;
+  border: 1px solid var(--warning-border);
+  border-left: 3px solid var(--warning);
   border-radius: 6px;
-  background: rgba(184, 110, 27, 0.08);
+  background: var(--warning-soft);
 }
 
 .cell-feature-matrix-notice h2,
@@ -162,39 +165,37 @@
 }
 
 .cell-feature-matrix-notice h2 {
-  color: #7b4d1d;
-  font-size: 0.62rem;
+  color: var(--warning);
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .cell-feature-matrix-notice p {
-  color: #5b3c18;
-  font-size: 0.64rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
   line-height: 1.25;
 }
 
 .cell-feature-matrix-notice code {
-  color: #2f2b22;
-  font-size: 0.62rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
 }
 
 .fallback-summary {
   display: grid;
   gap: 5px;
   padding: 6px;
-  border: 1px solid rgba(32, 102, 83, 0.34);
-  border-left: 3px solid #206653;
+  border: 1px solid var(--accent-border);
+  border-left: 3px solid var(--accent);
   border-radius: 6px;
-  background: rgba(32, 102, 83, 0.08);
+  background: var(--accent-faint);
 }
 
 .fallback-summary h2 {
   margin: 0;
-  color: #174d3e;
-  font-size: 0.62rem;
+  color: var(--accent);
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .fallback-summary ol {
@@ -209,7 +210,7 @@
   display: grid;
   gap: 2px;
   padding-top: 5px;
-  border-top: 1px solid rgba(32, 102, 83, 0.2);
+  border-top: 1px solid var(--accent-border);
 }
 
 .fallback-summary li:first-child {
@@ -233,21 +234,21 @@
 }
 
 .fallback-summary strong {
-  color: #174d3e;
-  font-size: 0.62rem;
+  color: var(--accent);
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
 .fallback-summary time {
-  color: #7b4d1d;
-  font-size: 0.58rem;
+  color: var(--text-3);
+  font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
 .fallback-summary p {
-  color: #2f2b22;
-  font-size: 0.64rem;
+  color: var(--text-2);
+  font-size: var(--font-control);
   line-height: 1.25;
 }
 
@@ -255,10 +256,10 @@
   display: grid;
   gap: 5px;
   padding: 5px;
-  border: 1px solid rgba(23, 21, 17, 0.12);
-  border-left: 3px solid #7b4d1d;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-3);
   border-radius: 6px;
-  background: rgba(123, 77, 29, 0.08);
+  background: var(--surface-2);
 }
 
 .dataset-diagnostics-heading {
@@ -280,15 +281,14 @@
 
 .dataset-diagnostics-panel h2,
 .dataset-diagnostics-panel p {
-  color: #7b4d1d;
-  font-size: 0.58rem;
+  color: var(--text-3);
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .dataset-diagnostics-heading span {
-  color: #2f2b22;
-  font-size: 0.58rem;
+  color: var(--text-2);
+  font-size: var(--font-caption);
   font-weight: 700;
 }
 
@@ -307,39 +307,38 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
   align-items: baseline;
-  font-size: 0.6rem;
+  font-size: var(--font-caption);
   line-height: 1.15;
 }
 
 .dataset-diagnostics-panel li span {
-  color: #2f2b22;
+  color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .dataset-diagnostics-panel li strong {
-  color: #174d3e;
-  font-size: 0.54rem;
-  text-transform: uppercase;
+  color: var(--accent);
+  font-size: var(--font-caption);
 }
 
 .dataset-diagnostics-panel .diagnostic-check-warning strong {
-  color: #7b4d1d;
+  color: var(--warning);
 }
 
 .dataset-diagnostics-panel .diagnostic-check-fail strong {
-  color: #7f2048;
+  color: var(--danger);
 }
 
 .activity-log {
   display: grid;
   gap: 4px;
   padding: 5px;
-  border: 1px solid rgba(23, 21, 17, 0.12);
-  border-left: 3px solid #206653;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
   border-radius: 6px;
-  background: rgba(32, 102, 83, 0.06);
+  background: var(--accent-faint);
 }
 
 .activity-log-heading {
@@ -353,28 +352,26 @@
 .activity-log h2,
 .activity-log p {
   margin: 0;
-  color: #174d3e;
-  font-size: 0.58rem;
+  color: var(--accent);
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .activity-log button {
   min-height: 18px;
   padding: 1px 5px;
-  border: 1px solid rgba(23, 21, 17, 0.14);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: rgba(255, 253, 247, 0.8);
-  color: #174d3e;
+  background: var(--surface-2);
+  color: var(--accent);
   cursor: pointer;
-  font-size: 0.54rem;
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .activity-log button:hover {
-  background: #206653;
-  color: #fffdf7;
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .activity-log button:disabled {
@@ -399,13 +396,13 @@
   min-width: 0;
   align-items: baseline;
   padding: 2px 0;
-  color: #2f2b22;
-  font-size: 0.6rem;
+  color: var(--text-2);
+  font-size: var(--font-caption);
   line-height: 1.1;
 }
 
 .activity-log time {
-  color: #7b4d1d;
+  color: var(--text-3);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }

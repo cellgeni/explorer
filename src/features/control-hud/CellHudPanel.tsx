@@ -1,3 +1,4 @@
+import { withSquareMicrometers } from '../../data/units'
 import { EmbeddingPanel } from '../analysis/EmbeddingPanel'
 import { CellExpressionProfilePanel } from '../cells/CellExpressionProfilePanel'
 import { CellInfoPanel, type CellInfoPanelVariant } from '../cells/CellInfoPanel'
@@ -296,7 +297,7 @@ function BoundaryCellInfoPanel({
         </div>
         <div>
           <dt>Area</dt>
-          <dd>{formatBoundaryArea(cell)} um^2</dd>
+          <dd>{withSquareMicrometers(formatBoundaryArea(cell))}</dd>
         </div>
       </dl>
 

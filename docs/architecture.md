@@ -26,20 +26,20 @@ files. Parsing happens in the browser:
 
 ## Source Layout
 
-| Directory                               | Contents                                                                                                                                                                 |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/App.tsx`                           | Orchestration root: wires state, workflows, HUD panels, and the viewer                                                                                                   |
-| `src/datasets/`                         | Detection (`datasetFactory.ts`), the `SpatialDataset` interface, and one implementation per platform                                                                     |
-| `src/data/`                             | Platform-neutral readers and models: Parquet, Zarr, HDF5 matrices, transcripts, annotations, embeddings, ROI queries, caches, range probes, diagnostics, shareable state |
-| `src/features/`                         | Feature modules: HUD panels (`*.tsx`), workflow hooks (`use*Workflow.ts`), and pure models (`*Model.ts`)                                                                 |
-| `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                 |
-| `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary                                                                |
-| `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                    |
-| `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                    |
-| `src/workers/`                          | Tile decode pool, Visium HD matrix and Feature Slice workers                                                                                                             |
-| `src/store/`                            | Zustand store (dataset URL)                                                                                                                                              |
-| `src/styles/`                           | CSS per UI area                                                                                                                                                          |
-| `tests/e2e/`                            | Playwright tests against hosted reference datasets                                                                                                                       |
+| Directory                               | Contents                                                                                                                                                                                 |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/App.tsx`                           | Orchestration root: wires state, workflows, HUD panels, and the viewer                                                                                                                   |
+| `src/datasets/`                         | Detection (`datasetFactory.ts`), the `SpatialDataset` interface, and one implementation per platform                                                                                     |
+| `src/data/`                             | Platform-neutral readers and models: Parquet, Zarr, HDF5 matrices, transcripts, annotations, embeddings, ROI queries, caches, range probes, diagnostics, shareable state                 |
+| `src/features/`                         | Feature modules: HUD panels (`*.tsx`), workflow hooks (`use*Workflow.ts`), and pure models (`*Model.ts`)                                                                                 |
+| `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                                 |
+| `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
+| `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
+| `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                                    |
+| `src/workers/`                          | Tile decode pool, Visium HD matrix and Feature Slice workers                                                                                                                             |
+| `src/store/`                            | Zustand store (dataset URL)                                                                                                                                                              |
+| `src/styles/`                           | CSS per UI area. `tokens.css` defines the dark theme's colours plus the type, spacing and stacking scales; the other files use only those tokens                                         |
+| `tests/e2e/`                            | Playwright tests against hosted reference datasets                                                                                                                                       |
 
 Unit tests sit next to their modules as `*.test.ts(x)` and run with Vitest.
 
@@ -136,8 +136,25 @@ Platforms add their own methods on top, such as `overview()`,
 ### 3. First Paint
 
 `startDatasetLoad` in `useDatasetLifecycle`
-(`src/features/app-shell/useDatasetLifecycle.ts`) resets all per-dataset
-state, runs detection, and then branches per platform:
+(`src/features/app-shell/useDatasetLifecycle.ts`) runs detection and then
+branches per platform. It resets all per-dataset state when the load
+commits:
+
+- With no dataset ready on screen, the load commits at once, before
+  detection.
+- With one on screen, the open dataset stays, with its requests, until the
+  new one is ready (Phase 15.1-F). State the load would set before then (the
+  platform, gene panel, annotation sets, manifest defaults, fallback notices)
+  is queued. At the "ready" point below it commits: the open dataset's
+  `datasetAbortRef` signal is aborted, `loadRequestIdRef` moves on (so other
+  workflows drop the old dataset's results), the cleared state is rendered
+  once with `flushSync` (so effects keyed on the dataset's status and URL
+  rerun even when the same URL reloads, as a Visium library switch does),
+  and then the queue and the new data are applied together.
+- If it fails first, nothing changes on screen: `pendingDatasetLoadState`
+  holds the error, which the Issues card and a toast (`DatasetLoadToast`)
+  show. While a load is pending it is `loading`, which the loading list
+  shows and which disables `Load Dataset`.
 
 | Platform    | Awaited before "ready"                                                  | Started in the background                               |
 | ----------- | ----------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -149,8 +166,9 @@ state, runs detection, and then branches per platform:
 | Atera       | Same as H5AD                                                            | Morphology image                                        |
 | Image       | `meta()`, `image()`, per-channel loaders                                | Auto-contrast                                           |
 
-Each load gets a request ID and `AbortSignal`; results from a superseded load
-are dropped (`isCurrentDatasetLoad`).
+Each load gets its own `AbortSignal`. A newer load aborts a pending one, and
+a committed load's results are dropped once another commits
+(`isCurrentDatasetLoad`).
 
 ### 4. Feature Gating
 

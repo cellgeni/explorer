@@ -1,4 +1,5 @@
 import type { Color } from '@deck.gl/core'
+import { colorsGradient } from './deckLayerColors'
 
 type ColorStop = readonly [number, number, number, number]
 
@@ -27,8 +28,15 @@ export function transcriptFeatureColor(featureName: string): Color {
   )
 }
 
+// Points coloured by quality reach their top colour at QV 40.
+export const TRANSCRIPT_QUALITY_SCALE_MAX = 40
+
+export function transcriptQualityGradient(): string {
+  return colorsGradient([0, 10, 20, 30, 40].map((qv) => transcriptQualityColor(qv)))
+}
+
 export function transcriptQualityColor(qv: number): Color {
-  const t = Math.max(0, Math.min(1, qv / 40))
+  const t = Math.max(0, Math.min(1, qv / TRANSCRIPT_QUALITY_SCALE_MAX))
   return interpolateColorStops(
     [127, 77, 35, 170],
     [221, 127, 75, 215],
