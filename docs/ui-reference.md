@@ -87,7 +87,7 @@ Transcripts tab.
 | `Dataset or image URL`                                       | URL input                       | Demo Xenium URL, or `dataset` from the share URL                            | Any supported source or [dataset manifest](./dataset-manifest.md); see [Architecture](./architecture.md#1-detection)                                      |
 | `Morphology image` (`Tissue image` for Visium and Visium HD) | Checkbox                        | On                                                                          | Read when `Load Dataset` is pressed; off skips the image                                                                                                  |
 | `Boundary limit`                                             | Number                          | 1–100,000; default 2,500 (compact) or 50,000                                | Max visible cells before boundary polygons are deferred. Disabled for Visium HD                                                                           |
-| `Load Dataset`                                               | Submit                          |                                                                             | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results                                                                            |
+| `Load Dataset`                                               | Submit                          |                                                                             | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then |
 | `Bin size`                                                   | Segmented: 16 µm, 8 µm, 2 µm    | 16 µm if present, else 8 µm                                                 | Visium HD only. Undetected tiers are disabled. Shown with "Dataset type" and "Active bins" rows                                                           |
 | `Coordinate system`                                          | Select                          | Chosen automatically                                                        | SpatialData only. Disabled with one coordinate system. Changing it reloads the store, and the image and units follow the new system                       |
 | `Image`                                                      | Select                          | Highest-resolution image in the system, or None                             | SpatialData only. Disabled with fewer than two images. Changing it reloads the store                                                                      |
@@ -97,6 +97,15 @@ Transcripts tab.
 | `Show off-tissue spots`                                      | Checkbox                        | Off                                                                         | Visium, when obs `in_tissue` marks spots off the tissue. Reloads the dataset without reading the file again; genes, colours, and the ROI are kept. `voff` |
 | `Diagnose Dataset`                                           | Button                          |                                                                             | Runs `runDatasetDiagnostics` for the URL                                                                                                                  |
 | Download diagnostics                                         | Icon button                     |                                                                             | Saves `xenium-diagnostics.json` (for every platform)                                                                                                      |
+
+The open dataset stays on screen and usable while another loads (Phase
+15.1-F); the loading list shows "Loading dataset {name}". If the new one
+fails, the open one stays and a toast at the bottom of the view says so
+("Dataset not found: missing could not be opened; {open dataset} is still
+open.", with the error's next step and `Dismiss`). The Issues card has the
+full error until it is dismissed or another load starts. A Visium library or
+off-tissue change also reloads this way: the controls show the new choice at
+once, and the spots change when the reload is ready.
 
 The Visium controls sit in a "Visium dataset" panel
 (`VisiumDatasetControls` in `DatasetHudPanel.tsx`) with read-only rows:

@@ -161,6 +161,12 @@ export function useAppDomainState({
   const [loadState, setLoadState] = useState<DatasetLoadState<StructuredLoadError>>(
     IDLE_DATASET_LOAD_STATE,
   )
+  // A load that will replace the dataset on screen (15.1-F): loading until
+  // the new dataset is ready, or the error if it failed, while loadState
+  // keeps describing the dataset still shown. Idle otherwise.
+  const [pendingDatasetLoadState, setPendingDatasetLoadState] = useState<
+    DatasetLoadState<StructuredLoadError>
+  >(IDLE_DATASET_LOAD_STATE)
   const [datasetWarmupState, setDatasetWarmupState] = useState<DatasetWarmupState>(
     IDLE_DATASET_WARMUP_STATE,
   )
@@ -520,6 +526,7 @@ export function useAppDomainState({
       diagnosticsState,
       loadState,
       morphologyState,
+      pendingDatasetLoadState,
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
       setDatasetAbout,
@@ -528,6 +535,7 @@ export function useAppDomainState({
       setDiagnosticsState,
       setLoadState,
       setMorphologyState,
+      setPendingDatasetLoadState,
     },
     genes: {
       geneExpressionBatch,

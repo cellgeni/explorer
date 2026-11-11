@@ -655,3 +655,44 @@
 .viewport-frame.is-drawing {
   cursor: crosshair;
 }
+
+/* A failed load while the open dataset stays (15.1-F). */
+.dataset-load-toast {
+  position: absolute;
+  z-index: var(--z-toast);
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: 50%;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  width: min(440px, calc(100% - 32px));
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-3);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-2);
+  color: var(--text-1);
+  font-size: var(--font-control);
+  transform: translateX(-50%);
+}
+
+.dataset-load-toast-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dataset-load-toast-text strong {
+  color: var(--danger);
+  font-size: var(--font-body);
+}
+
+.dataset-load-toast-text p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.dataset-load-toast-action {
+  color: var(--text-2);
+}

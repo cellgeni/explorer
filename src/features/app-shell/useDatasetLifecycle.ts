@@ -11,6 +11,7 @@ import type {
   ViewerTranscriptHoverDetail,
   ViewerViewportDetail,
 } from '../../components/ViewerCore'
+import { flushSync } from 'react-dom'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
 import {
   ALL_ANNOTATION_GROUP_ID,
@@ -152,6 +153,7 @@ import {
   IDLE_BOUNDARY_LOAD_STATE,
   IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE,
   IDLE_DATASET_DIAGNOSTICS_STATE,
+  IDLE_DATASET_LOAD_STATE,
   IDLE_DATASET_WARMUP_STATE,
   IDLE_MORPHOLOGY_LOAD_STATE,
   cellFeatureMatrixCapabilityReady,
@@ -258,6 +260,9 @@ interface UseDatasetLifecycleCallbacks {
 }
 
 interface UseDatasetLifecycleControls {
+  // A dataset is ready on screen, so a new load keeps it until the new one
+  // is ready (15.1-F).
+  readonly isDatasetLoaded: boolean
   readonly geneExpressionColorScale: GeneExpressionColorScale
   readonly transcriptDensityColorScale: TranscriptDensityColorScale
   readonly transcriptExactPointLimit: number
@@ -370,6 +375,7 @@ interface UseDatasetLifecycleSetters {
   readonly setGenePanelState: Setter<GenePanelState<StructuredLoadError>>
   readonly setHoveredTranscript: Setter<ViewerTranscriptHoverDetail | null>
   readonly setLoadState: Setter<DatasetLoadState<StructuredLoadError>>
+  readonly setPendingDatasetLoadState: Setter<DatasetLoadState<StructuredLoadError>>
   readonly setMagicLensActive: Setter<boolean>
   readonly setMagicLensState: Setter<MagicLensState<StructuredLoadError>>
   readonly setManualTranscriptExactRequestKey: Setter<string | null>
@@ -411,6 +417,16 @@ interface UseDatasetLifecycleSetters {
   readonly setViewportCellCount: Setter<number | null>
 }
 
+// One dataset load (15.1-F). Until it commits, the dataset on screen stays,
+// with its requests and state; what the load would set is queued. Committing
+// makes its controller the dataset's (datasetAbortRef) and gives it a new
+// loadRequestIdRef value, which other workflows use to tell stale results.
+interface PendingDatasetLoad {
+  readonly controller: AbortController
+  datasetRequestId: number | null
+  readonly queued: (() => void)[]
+}
+
 interface UseDatasetLifecycleOptions {
   readonly callbacks: UseDatasetLifecycleCallbacks
   readonly controls: UseDatasetLifecycleControls
@@ -433,6 +449,7 @@ export function useDatasetLifecycle({
     recordTelemetry,
   },
   controls: {
+    isDatasetLoaded,
     geneExpressionColorScale,
     transcriptDensityColorScale,
     transcriptExactPointLimit,
@@ -531,6 +548,7 @@ export function useDatasetLifecycle({
     setGenePanelState,
     setHoveredTranscript,
     setLoadState,
+    setPendingDatasetLoadState,
     setMagicLensActive,
     setMagicLensState,
     setManualTranscriptExactRequestKey,
@@ -569,6 +587,8 @@ export function useDatasetLifecycle({
   },
 }: UseDatasetLifecycleOptions): UseDatasetLifecycleResult {
   const datasetWarmupRequestIdRef = useRef(0)
+  // The load that has not replaced the dataset on screen yet (15.1-F).
+  const pendingLoadRef = useRef<PendingDatasetLoad | null>(null)
 
   useEffect(() => {
     if (didApplyInitialDatasetUrlRef.current) {
@@ -587,6 +607,7 @@ export function useDatasetLifecycle({
 
   useEffect(() => {
     return () => {
+      pendingLoadRef.current?.controller.abort()
       abortActiveRequest(datasetAbortRef)
       abortActiveRequest(datasetWarmupAbortRef)
       abortActiveRequest(diagnosticsAbortRef)
@@ -769,13 +790,35 @@ export function useDatasetLifecycle({
         }
       }
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
-      onBeforeDatasetLoad?.()
-      const request = startLatestRequest({
-        abortRef: datasetAbortRef,
-        requestIdRef: loadRequestIdRef,
-      })
-      const requestId = request.requestId
-      const isCurrentDatasetLoad = () => request.isCurrent() && !request.signal.aborted
+      pendingLoadRef.current?.controller.abort()
+      const load: PendingDatasetLoad = {
+        controller: new AbortController(),
+        datasetRequestId: null,
+        queued: [],
+      }
+      pendingLoadRef.current = load
+      const signal = load.controller.signal
+      // Current while pending until another load starts, and once committed
+      // until another load commits.
+      const isCurrentDatasetLoad = () =>
+        !signal.aborted &&
+        (load.datasetRequestId === null
+          ? pendingLoadRef.current === load
+          : loadRequestIdRef.current === load.datasetRequestId)
+      const whenCommitted = (update: () => void) => {
+        if (load.datasetRequestId === null) {
+          load.queued.push(update)
+        } else {
+          update()
+        }
+      }
+      const committedRequestId = () => load.datasetRequestId ?? loadRequestIdRef.current
+      // Notices about this dataset; committing clears the old dataset's.
+      const notifyFallbackWhenCommitted: FallbackNotifier = (notice) => {
+        whenCommitted(() => {
+          appendFallbackNotice(notice)
+        })
+      }
       const loadMorphologyInBackground = (
         load: () => Promise<MorphologyImage | null>,
         options: {
@@ -836,7 +879,7 @@ export function useDatasetLifecycle({
 
             queueAutoContrast(
               channelsToAutoContrastOnLoad(image.channelLoaders, channelSettings),
-              { requestId, signal: request.signal },
+              { requestId: committedRequestId(), signal },
             )
           })
           .catch((error) => {
@@ -857,186 +900,229 @@ export function useDatasetLifecycle({
             appendDebugEvent('Morphology image failed')
           })
       }
-      invalidateLatestRequest({
-        abortRef: datasetWarmupAbortRef,
-        requestIdRef: datasetWarmupRequestIdRef,
-      })
-      abortActiveRequest(diagnosticsAbortRef)
-      invalidateLatestRequest({
-        abortRef: analysisEmbeddingAbortRef,
-        requestIdRef: analysisEmbeddingRequestIdRef,
-      })
-      invalidateLatestRequest({
-        abortRef: boundaryAbortRef,
-        requestIdRef: boundaryRequestIdRef,
-      })
-      invalidateLatestRequest({
-        abortRef: geneExpressionAbortRef,
-        requestIdRef: geneExpressionRequestIdRef,
-      })
-      invalidateLatestRequest({
-        abortRef: roiAbortRef,
-        requestIdRef: roiRequestIdRef,
-      })
-      invalidateLatestRequest({
-        abortRef: roiTranscriptExportAbortRef,
-        requestIdRef: roiTranscriptExportRequestIdRef,
-      })
-      invalidateLatestRequest({
-        abortRef: transcriptCapabilityAbortRef,
-        requestIdRef: transcriptCapabilityRequestIdRef,
-      })
-      invalidateLatestRequest({
-        abortRef: transcriptAbortRef,
-        requestIdRef: transcriptRequestIdRef,
-      })
-      abortActiveRequest(roiGeneViewportWarmupAbortRef)
-      invalidateLatestRequest({
-        abortRef: magicLensAbortRef,
-        requestIdRef: magicLensRequestIdRef,
-      })
-      invalidateLatestRequest({
-        abortRef: cellDetailAbortRef,
-        requestIdRef: cellDetailRequestIdRef,
-      })
-      invalidateLatestRequest({
-        abortRef: cellTranscriptDistributionAbortRef,
-        requestIdRef: cellTranscriptDistributionRequestIdRef,
-      })
-      invalidateLatestRequest({
-        abortRef: customMorphologyLayerAbortRef,
-        requestIdRef: customMorphologyLayerRequestIdRef,
-      })
-      clearTimeoutRef(magicLensDebounceRef)
-      clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
-      roiGeneViewportWarmupKeyRef.current = null
+      // Replaces the dataset on screen with this load: cancels the old
+      // dataset's requests, clears its state, then applies what this load
+      // queued.
+      const commit = () => {
+        if (load.datasetRequestId !== null) {
+          return
+        }
+
+        datasetAbortRef.current?.abort()
+        datasetAbortRef.current = load.controller
+        loadRequestIdRef.current += 1
+        load.datasetRequestId = loadRequestIdRef.current
+        pendingLoadRef.current = null
+        const clearOpenDataset = () => {
+          setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
+          onBeforeDatasetLoad?.()
+          invalidateLatestRequest({
+            abortRef: datasetWarmupAbortRef,
+            requestIdRef: datasetWarmupRequestIdRef,
+          })
+          abortActiveRequest(diagnosticsAbortRef)
+          invalidateLatestRequest({
+            abortRef: analysisEmbeddingAbortRef,
+            requestIdRef: analysisEmbeddingRequestIdRef,
+          })
+          invalidateLatestRequest({
+            abortRef: boundaryAbortRef,
+            requestIdRef: boundaryRequestIdRef,
+          })
+          invalidateLatestRequest({
+            abortRef: geneExpressionAbortRef,
+            requestIdRef: geneExpressionRequestIdRef,
+          })
+          invalidateLatestRequest({
+            abortRef: roiAbortRef,
+            requestIdRef: roiRequestIdRef,
+          })
+          invalidateLatestRequest({
+            abortRef: roiTranscriptExportAbortRef,
+            requestIdRef: roiTranscriptExportRequestIdRef,
+          })
+          invalidateLatestRequest({
+            abortRef: transcriptCapabilityAbortRef,
+            requestIdRef: transcriptCapabilityRequestIdRef,
+          })
+          invalidateLatestRequest({
+            abortRef: transcriptAbortRef,
+            requestIdRef: transcriptRequestIdRef,
+          })
+          abortActiveRequest(roiGeneViewportWarmupAbortRef)
+          invalidateLatestRequest({
+            abortRef: magicLensAbortRef,
+            requestIdRef: magicLensRequestIdRef,
+          })
+          invalidateLatestRequest({
+            abortRef: cellDetailAbortRef,
+            requestIdRef: cellDetailRequestIdRef,
+          })
+          invalidateLatestRequest({
+            abortRef: cellTranscriptDistributionAbortRef,
+            requestIdRef: cellTranscriptDistributionRequestIdRef,
+          })
+          invalidateLatestRequest({
+            abortRef: customMorphologyLayerAbortRef,
+            requestIdRef: customMorphologyLayerRequestIdRef,
+          })
+          clearTimeoutRef(magicLensDebounceRef)
+          clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
+          roiGeneViewportWarmupKeyRef.current = null
+
+          setDatasetPlatform(null)
+          setDatasetAbout?.(null)
+          setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
+          setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
+          setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
+          setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
+          setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
+          cellFeatureMatrixCapabilityKeyRef.current = null
+          setOverviewCells([])
+          setSpatialGridCells([])
+          setGeneExpressionBatch(null)
+          setGeneExpressionScaleDomain({ key: '', max: 0 })
+          setMorphologyImage(null)
+          setFlatMorphologyImage(null)
+          setCustomMorphologyLayers([])
+          setCustomImageLayerOpacities({})
+          setCustomMorphologyLayerState(IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE)
+          setMorphologyChannelSettings([])
+          autoContrastChannelIdsRef.current.clear()
+          setAutoContrastChannelIds([])
+          setBoundaryElements([])
+          setNucleusBoundaryElements?.([])
+          setHoveredTranscript(null)
+          setPinnedTranscript(null)
+          setManualTranscriptExactRequestKey(null)
+          setAnnotationColors({})
+          setHiddenAnnotationIds([])
+          setHiddenAnnotationSetIds([])
+          setCellMetadataTracks([])
+          setSelectedCellMetadataTrackId(
+            shouldRestoreSharedState ? (sharedState?.cellMetadataTrackId ?? null) : null,
+          )
+          setAnnotationGroupState(IDLE_ANNOTATION_GROUP_STATE)
+          setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
+          setAnalysisEmbeddingState(IDLE_ANALYSIS_EMBEDDING_STATE)
+          setSelectedEmbeddingKind('umap')
+          setObservationColorMode(
+            shouldRestoreSharedState
+              ? (sharedObservationColorMode({
+                  linkVersion: sharedState?.linkVersion,
+                  observationColorMode: sharedState?.observationColorMode,
+                  selectedGenes: sharedSelectedGenes,
+                }) ?? 'transcript-count')
+              : 'transcript-count',
+          )
+          setGeneExpressionScoreMode(
+            shouldRestoreSharedState
+              ? (parseGeneExpressionScoreMode(sharedState?.geneExpressionScoreMode) ??
+                  DEFAULT_GENE_EXPRESSION_SCORE_MODE)
+              : DEFAULT_GENE_EXPRESSION_SCORE_MODE,
+          )
+          setGeneExpressionDetailMode(
+            shouldRestoreSharedState
+              ? (parseGeneExpressionDetailMode(sharedState?.geneExpressionDetailMode) ??
+                  'auto')
+              : 'auto',
+          )
+          setGeneExpressionColorScale(
+            shouldRestoreSharedState
+              ? (parseGeneExpressionColorScale(sharedState?.geneExpressionColorScale) ??
+                  geneExpressionColorScale)
+              : geneExpressionColorScale,
+          )
+          setTranscriptDensityColorScale(
+            shouldRestoreSharedState
+              ? (parseTranscriptDensityColorScale(
+                  sharedState?.transcriptDensityColorScale,
+                ) ?? transcriptDensityColorScale)
+              : transcriptDensityColorScale,
+          )
+          setTranscriptPointColorMode(
+            shouldRestoreSharedState
+              ? (parseTranscriptPointColorMode(sharedState?.transcriptPointColorMode) ??
+                  transcriptPointColorMode)
+              : transcriptPointColorMode,
+          )
+          setTranscriptExactPointLimit(
+            shouldRestoreSharedState
+              ? sharedState?.transcriptExactPointLimit === undefined
+                ? transcriptExactPointLimit
+                : normalizeTranscriptExactPointLimit(
+                    sharedState.transcriptExactPointLimit,
+                  )
+              : transcriptExactPointLimit,
+          )
+          setSelectedGenes(sharedSelectedGenes)
+          setRoiMode('idle')
+          setMeasurementEnabled(false)
+          setMeasurementResetKey((current) => current + 1)
+          setRoiName('ROI 1')
+          setRoiState(IDLE_ROI_STATE)
+          setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
+          setRoiGeneViewportWarmupState(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
+          setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
+          setTranscriptCapabilityState(IDLE_TRANSCRIPT_CAPABILITY_STATE)
+          setTranscriptLayerState(IDLE_TRANSCRIPT_LAYER_STATE)
+          setMagicLensState(IDLE_MAGIC_LENS_STATE)
+          setCellDetailState(IDLE_CELL_DETAIL_STATE)
+          setCellTranscriptDistributionState(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
+          setMagicLensActive(
+            shouldRestoreSharedState ? (sharedState?.magicLensActive ?? false) : false,
+          )
+          setSelectedCell(null)
+          setSelectedGridCell(null)
+          setCurrentViewportDetail(null)
+          setViewportCellCount(null)
+          setLoadState(datasetLoadStarted(requestedUrl))
+          setMorphologyState(
+            loadImage ? morphologyLoadStarted(requestedUrl) : IDLE_MORPHOLOGY_LOAD_STATE,
+          )
+          setDiagnosticsState(IDLE_DATASET_DIAGNOSTICS_STATE)
+          setBoundaryState(IDLE_BOUNDARY_LOAD_STATE)
+          setGenePanelState(IDLE_GENE_PANEL_STATE)
+          setAnnotationState(IDLE_ANNOTATION_STATE)
+          setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
+          magicLensLastDetailRef.current = null
+          magicLensLastQueryKeyRef.current = null
+          boundaryViewportKeyRef.current = null
+          geneExpressionViewportKeyRef.current = null
+          transcriptViewportKeyRef.current = null
+          lastViewportDetailRef.current = null
+          initialSharedRoiSelectionRef.current = shouldRestoreSharedState
+            ? (sharedState?.roiSelection ?? null)
+            : null
+        }
+
+        // Replacing a dataset on screen renders the cleared state first, as a
+        // load from nothing does, so effects keyed on the dataset's status
+        // and URL see them change, even when the same URL reloads (a Visium
+        // library switch).
+        if (isDatasetLoaded) {
+          flushSync(clearOpenDataset)
+        } else {
+          clearOpenDataset()
+        }
+
+        for (const update of load.queued.splice(0)) {
+          update()
+        }
+      }
 
       setDatasetUrl(requestedUrl)
-      setDatasetPlatform(null)
-      setDatasetAbout?.(null)
-      setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
-      setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
-      setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
-      setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
-      setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
-      cellFeatureMatrixCapabilityKeyRef.current = null
-      setOverviewCells([])
-      setSpatialGridCells([])
-      setGeneExpressionBatch(null)
-      setGeneExpressionScaleDomain({ key: '', max: 0 })
-      setMorphologyImage(null)
-      setFlatMorphologyImage(null)
-      setCustomMorphologyLayers([])
-      setCustomImageLayerOpacities({})
-      setCustomMorphologyLayerState(IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE)
-      setMorphologyChannelSettings([])
-      autoContrastChannelIdsRef.current.clear()
-      setAutoContrastChannelIds([])
-      setBoundaryElements([])
-      setNucleusBoundaryElements?.([])
-      setHoveredTranscript(null)
-      setPinnedTranscript(null)
-      setManualTranscriptExactRequestKey(null)
-      setAnnotationColors({})
-      setHiddenAnnotationIds([])
-      setHiddenAnnotationSetIds([])
-      setCellMetadataTracks([])
-      setSelectedCellMetadataTrackId(
-        shouldRestoreSharedState ? (sharedState?.cellMetadataTrackId ?? null) : null,
-      )
-      setAnnotationGroupState(IDLE_ANNOTATION_GROUP_STATE)
-      setSelectedAnnotationGroupId(ALL_ANNOTATION_GROUP_ID)
-      setAnalysisEmbeddingState(IDLE_ANALYSIS_EMBEDDING_STATE)
-      setSelectedEmbeddingKind('umap')
-      setObservationColorMode(
-        shouldRestoreSharedState
-          ? (sharedObservationColorMode({
-              linkVersion: sharedState?.linkVersion,
-              observationColorMode: sharedState?.observationColorMode,
-              selectedGenes: sharedSelectedGenes,
-            }) ?? 'transcript-count')
-          : 'transcript-count',
-      )
-      setGeneExpressionScoreMode(
-        shouldRestoreSharedState
-          ? (parseGeneExpressionScoreMode(sharedState?.geneExpressionScoreMode) ??
-              DEFAULT_GENE_EXPRESSION_SCORE_MODE)
-          : DEFAULT_GENE_EXPRESSION_SCORE_MODE,
-      )
-      setGeneExpressionDetailMode(
-        shouldRestoreSharedState
-          ? (parseGeneExpressionDetailMode(sharedState?.geneExpressionDetailMode) ??
-              'auto')
-          : 'auto',
-      )
-      setGeneExpressionColorScale(
-        shouldRestoreSharedState
-          ? (parseGeneExpressionColorScale(sharedState?.geneExpressionColorScale) ??
-              geneExpressionColorScale)
-          : geneExpressionColorScale,
-      )
-      setTranscriptDensityColorScale(
-        shouldRestoreSharedState
-          ? (parseTranscriptDensityColorScale(sharedState?.transcriptDensityColorScale) ??
-              transcriptDensityColorScale)
-          : transcriptDensityColorScale,
-      )
-      setTranscriptPointColorMode(
-        shouldRestoreSharedState
-          ? (parseTranscriptPointColorMode(sharedState?.transcriptPointColorMode) ??
-              transcriptPointColorMode)
-          : transcriptPointColorMode,
-      )
-      setTranscriptExactPointLimit(
-        shouldRestoreSharedState
-          ? sharedState?.transcriptExactPointLimit === undefined
-            ? transcriptExactPointLimit
-            : normalizeTranscriptExactPointLimit(sharedState.transcriptExactPointLimit)
-          : transcriptExactPointLimit,
-      )
-      setSelectedGenes(sharedSelectedGenes)
-      setRoiMode('idle')
-      setMeasurementEnabled(false)
-      setMeasurementResetKey((current) => current + 1)
-      setRoiName('ROI 1')
-      setRoiState(IDLE_ROI_STATE)
-      setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
-      setRoiGeneViewportWarmupState(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
-      setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
-      setTranscriptCapabilityState(IDLE_TRANSCRIPT_CAPABILITY_STATE)
-      setTranscriptLayerState(IDLE_TRANSCRIPT_LAYER_STATE)
-      setMagicLensState(IDLE_MAGIC_LENS_STATE)
-      setCellDetailState(IDLE_CELL_DETAIL_STATE)
-      setCellTranscriptDistributionState(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
-      setMagicLensActive(
-        shouldRestoreSharedState ? (sharedState?.magicLensActive ?? false) : false,
-      )
-      setSelectedCell(null)
-      setSelectedGridCell(null)
-      setCurrentViewportDetail(null)
-      setViewportCellCount(null)
-      setLoadState(datasetLoadStarted(requestedUrl))
-      setMorphologyState(
-        loadImage ? morphologyLoadStarted(requestedUrl) : IDLE_MORPHOLOGY_LOAD_STATE,
-      )
-      setDiagnosticsState(IDLE_DATASET_DIAGNOSTICS_STATE)
-      setBoundaryState(IDLE_BOUNDARY_LOAD_STATE)
-      setGenePanelState(IDLE_GENE_PANEL_STATE)
-      setAnnotationState(IDLE_ANNOTATION_STATE)
-      setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
-      magicLensLastDetailRef.current = null
-      magicLensLastQueryKeyRef.current = null
-      boundaryViewportKeyRef.current = null
-      geneExpressionViewportKeyRef.current = null
-      transcriptViewportKeyRef.current = null
-      lastViewportDetailRef.current = null
-      initialSharedRoiSelectionRef.current = shouldRestoreSharedState
-        ? (sharedState?.roiSelection ?? null)
-        : null
+
+      if (isDatasetLoaded) {
+        setPendingDatasetLoadState(datasetLoadStarted(requestedUrl))
+      } else {
+        setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
+        commit()
+      }
 
       try {
         const detection = await detectSpatialDataset(requestedUrl, {
-          signal: request.signal,
+          signal,
         })
 
         if (!isCurrentDatasetLoad()) {
@@ -1047,7 +1133,9 @@ export function useDatasetLifecycle({
         // fields the link sets win, the rest come from the manifest.
         const manifest = detection.platform === 'unknown' ? undefined : detection.manifest
         const manifestDefaults = manifestDefaultsToShareableState(manifest?.defaults)
-        setDatasetAbout?.(datasetManifestAbout(manifest))
+        whenCommitted(() => {
+          setDatasetAbout?.(datasetManifestAbout(manifest))
+        })
         const restoreState: ShareableState = {
           ...manifestDefaults.state,
           ...(shouldRestoreSharedState ? sharedState : {}),
@@ -1063,16 +1151,17 @@ export function useDatasetLifecycle({
               manifest.name === undefined ? '' : ` (${manifest.name})`
             }`,
           )
-          applyManifestDefaults(
-            manifestDefaultsNotShared(
-              manifestDefaults.state,
-              shouldRestoreSharedState ? sharedState : null,
-            ),
+          const notShared = manifestDefaultsNotShared(
+            manifestDefaults.state,
+            shouldRestoreSharedState ? sharedState : null,
           )
+          whenCommitted(() => {
+            applyManifestDefaults(notShared)
+          })
         }
 
         for (const ignored of manifestDefaults.ignored) {
-          appendFallbackNotice({
+          notifyFallbackWhenCommitted({
             source: 'Dataset overview',
             message: `The dataset manifest's ${ignored}, so the viewer default is used.`,
             action: 'Use one of the values listed in the dataset manifest documentation.',
@@ -1111,6 +1200,7 @@ export function useDatasetLifecycle({
 
           const coalescePrefix = label.toLowerCase()
           const elementNoun = label === 'Visium' ? 'spots' : 'cells'
+          commit()
           setOverviewCells(overviewCellsToLayerData(cells))
           setGenePanelState(genePanelLoadReady(requestedUrl, genes, geneAliases))
           setAnnotationGroupState(
@@ -1177,7 +1267,7 @@ export function useDatasetLifecycle({
           )
 
           if (visiumUnitsNeedNotice(summary.units)) {
-            appendFallbackNotice({
+            notifyFallbackWhenCommitted({
               source: 'Dataset overview',
               message: `Visium micrometres per pixel is ${formatVisiumUnits(summary.units)}.`,
               action:
@@ -1186,7 +1276,9 @@ export function useDatasetLifecycle({
             })
           }
 
-          setVisiumControlState(visiumControlReady(source, summary, image))
+          whenCommitted(() => {
+            setVisiumControlState(visiumControlReady(source, summary, image))
+          })
 
           if (!(await loadAnnDataOverview(dataset, 'Visium'))) {
             return
@@ -1231,11 +1323,13 @@ export function useDatasetLifecycle({
         }
 
         if (detection.platform === 'h5ad') {
-          setDatasetPlatform('h5ad')
-          setShowCellBoundaries(false)
-          setShowNucleusBoundaries(false)
-          setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
-          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          whenCommitted(() => {
+            setDatasetPlatform('h5ad')
+            setShowCellBoundaries(false)
+            setShowNucleusBoundaries(false)
+            setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+            setGenePanelState(genePanelLoadStarted(requestedUrl))
+          })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
           })
@@ -1252,8 +1346,10 @@ export function useDatasetLifecycle({
           }
 
           if (visium !== null && isVisiumLifecycleDataset(dataset)) {
-            setDatasetPlatform('visium')
-            setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
+            whenCommitted(() => {
+              setDatasetPlatform('visium')
+              setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
+            })
             await loadVisiumOverview(dataset, 'h5ad', visium)
             return
           }
@@ -1263,10 +1359,12 @@ export function useDatasetLifecycle({
         }
 
         if (detection.platform === 'visium') {
-          setDatasetPlatform('visium')
-          setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
-          setShowNucleusBoundaries(false)
-          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          whenCommitted(() => {
+            setDatasetPlatform('visium')
+            setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
+            setShowNucleusBoundaries(false)
+            setGenePanelState(genePanelLoadStarted(requestedUrl))
+          })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
           })
@@ -1292,22 +1390,22 @@ export function useDatasetLifecycle({
         }
 
         if (detection.platform === 'spatialdata') {
-          setDatasetPlatform('spatialdata')
-          setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
-          setShowNucleusBoundaries(false)
-          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          whenCommitted(() => {
+            setDatasetPlatform('spatialdata')
+            setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
+            setShowNucleusBoundaries(false)
+            setGenePanelState(genePanelLoadStarted(requestedUrl))
+          })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
           })
 
           if (isSpatialDataSummaryDataset(dataset)) {
             const summary = await dataset.summary()
-            setSpatialDataControlState(
-              spatialDataControlReady(
-                summary,
-                spatialDataSelectionFor(detection.baseUrl),
-              ),
-            )
+            const selection = spatialDataSelectionFor(detection.baseUrl)
+            whenCommitted(() => {
+              setSpatialDataControlState(spatialDataControlReady(summary, selection))
+            })
             appendDebugEvent(
               `SpatialData view: coordinate system ${summary.coordinateSystem}; image ${
                 summary.image ?? 'none'
@@ -1340,8 +1438,8 @@ export function useDatasetLifecycle({
                 imageSource.loader.url,
                 imageSource.loader,
                 {
-                  onFallback: appendFallbackNotice,
-                  signal: request.signal,
+                  onFallback: notifyFallbackWhenCommitted,
+                  signal,
                   ...(imageSource.openChannelLoader === undefined
                     ? {}
                     : { openImage: imageSource.openChannelLoader }),
@@ -1361,10 +1459,12 @@ export function useDatasetLifecycle({
         }
 
         if (detection.platform === 'atera') {
-          setDatasetPlatform('atera')
-          setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
-          setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
-          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          whenCommitted(() => {
+            setDatasetPlatform('atera')
+            setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
+            setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
+            setGenePanelState(genePanelLoadStarted(requestedUrl))
+          })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
           })
@@ -1388,8 +1488,8 @@ export function useDatasetLifecycle({
                 ? null
                 : loadMorphologyImage(requestedUrl, {
                     candidates: [morphologyUrl],
-                    signal: request.signal,
-                    onFallback: appendFallbackNotice,
+                    signal,
+                    onFallback: notifyFallbackWhenCommitted,
                     ...restoredZPlane,
                   })
             },
@@ -1401,10 +1501,12 @@ export function useDatasetLifecycle({
         }
 
         if (detection.platform === 'image') {
-          setDatasetPlatform('image')
-          setShowCellBoundaries(false)
-          setShowNucleusBoundaries(false)
-          setMorphologyState(morphologyLoadStarted(detection.imageUrl))
+          whenCommitted(() => {
+            setDatasetPlatform('image')
+            setShowCellBoundaries(false)
+            setShowNucleusBoundaries(false)
+            setMorphologyState(morphologyLoadStarted(detection.imageUrl))
+          })
           const dataset = await getSpatialDataset(detection.baseUrl)
           const [meta, imageSource] = await Promise.all([dataset.meta(), dataset.image()])
 
@@ -1420,8 +1522,8 @@ export function useDatasetLifecycle({
             detection.imageUrl,
             imageSource.loader,
             {
-              onFallback: appendFallbackNotice,
-              signal: request.signal,
+              onFallback: notifyFallbackWhenCommitted,
+              signal,
               ...(imageSource.openChannelLoader === undefined
                 ? {}
                 : { openImage: imageSource.openChannelLoader }),
@@ -1450,6 +1552,7 @@ export function useDatasetLifecycle({
             enabledChannelIds === undefined ? {} : { enabledChannelIds },
           )
 
+          commit()
           setMorphologyImage(image)
           setMorphologyChannelSettings((current) =>
             mergeMorphologyChannelSettings({
@@ -1460,7 +1563,7 @@ export function useDatasetLifecycle({
           )
           queueAutoContrast(
             channelsToAutoContrastOnLoad(image.channelLoaders, channelSettings),
-            { requestId, signal: request.signal },
+            { requestId: committedRequestId(), signal },
           )
           setMorphologyState(morphologyLoadReady(detection.imageUrl))
           initialShareableStateRef.current = null
@@ -1482,9 +1585,11 @@ export function useDatasetLifecycle({
         }
 
         if (detection.platform === 'visium-hd') {
-          setDatasetPlatform('visium-hd')
-          setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
-          setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
+          whenCommitted(() => {
+            setDatasetPlatform('visium-hd')
+            setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
+            setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
+          })
           const dataset = await getSpatialDataset(detection.baseUrl)
 
           if (!isVisiumHdOverviewDataset(dataset)) {
@@ -1492,15 +1597,19 @@ export function useDatasetLifecycle({
           }
 
           if (dataset.genePanel !== undefined) {
-            setGenePanelState(genePanelLoadStarted(requestedUrl))
+            whenCommitted(() => {
+              setGenePanelState(genePanelLoadStarted(requestedUrl))
+            })
             void dataset
-              .genePanel(undefined, { signal: request.signal })
+              .genePanel(undefined, { signal })
               .then((genes) => {
                 if (!isCurrentDatasetLoad()) {
                   return
                 }
 
-                setGenePanelState(genePanelLoadReady(requestedUrl, genes))
+                whenCommitted(() => {
+                  setGenePanelState(genePanelLoadReady(requestedUrl, genes))
+                })
                 appendDebugEvent(
                   `Visium HD gene panel ready: ${genes.length.toLocaleString()} genes`,
                 )
@@ -1514,12 +1623,14 @@ export function useDatasetLifecycle({
                   return
                 }
 
-                setGenePanelState(
-                  genePanelLoadFailed(
-                    requestedUrl,
-                    createStructuredLoadError('Gene panel', error),
-                  ),
-                )
+                whenCommitted(() => {
+                  setGenePanelState(
+                    genePanelLoadFailed(
+                      requestedUrl,
+                      createStructuredLoadError('Gene panel', error),
+                    ),
+                  )
+                })
                 appendDebugEvent('Visium HD gene panel failed')
               })
           }
@@ -1533,6 +1644,7 @@ export function useDatasetLifecycle({
             return
           }
 
+          commit()
           setSpatialGridCells(visiumHdOverviewToGridCellLayerData(overview))
           setVisiumHdControlState(
             visiumHdControlStateFromOverview(
@@ -1600,23 +1712,27 @@ export function useDatasetLifecycle({
           throw datasetDetectionError(detection.checked)
         }
 
-        setDatasetPlatform('xenium')
-        setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
-        setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
-        setAnnotationGroupState(annotationGroupLoadStarted(requestedUrl))
-        setGenePanelState(genePanelLoadStarted(requestedUrl))
-        startDatasetWarmup(requestedUrl, requestId)
+        whenCommitted(() => {
+          setDatasetPlatform('xenium')
+          setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
+          setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
+          setAnnotationGroupState(annotationGroupLoadStarted(requestedUrl))
+          setGenePanelState(genePanelLoadStarted(requestedUrl))
+          startDatasetWarmup(requestedUrl, committedRequestId())
+        })
 
         void loadGenePanel(requestedUrl, {
-          signal: request.signal,
-          onFallback: appendFallbackNotice,
+          signal,
+          onFallback: notifyFallbackWhenCommitted,
         })
           .then((genes) => {
             if (!isCurrentDatasetLoad()) {
               return
             }
 
-            setGenePanelState(genePanelLoadReady(requestedUrl, genes))
+            whenCommitted(() => {
+              setGenePanelState(genePanelLoadReady(requestedUrl, genes))
+            })
             appendDebugEvent(`Gene panel ready: ${genes.length.toLocaleString()} genes`)
           })
           .catch((error) => {
@@ -1628,25 +1744,29 @@ export function useDatasetLifecycle({
               return
             }
 
-            setGenePanelState(
-              genePanelLoadFailed(
-                requestedUrl,
-                createStructuredLoadError('Gene panel', error),
-              ),
-            )
+            whenCommitted(() => {
+              setGenePanelState(
+                genePanelLoadFailed(
+                  requestedUrl,
+                  createStructuredLoadError('Gene panel', error),
+                ),
+              )
+            })
             appendDebugEvent('Gene panel failed')
           })
 
-        void loadAnnotationGroups(requestedUrl, { signal: request.signal })
+        void loadAnnotationGroups(requestedUrl, { signal })
           .then((groups) => {
             if (!isCurrentDatasetLoad()) {
               return
             }
 
-            setAnnotationGroupState(annotationGroupLoadReady(requestedUrl, groups))
-            setSelectedAnnotationGroupId(
-              defaultAnnotationGroupId(groups) ?? ALL_ANNOTATION_GROUP_ID,
-            )
+            whenCommitted(() => {
+              setAnnotationGroupState(annotationGroupLoadReady(requestedUrl, groups))
+              setSelectedAnnotationGroupId(
+                defaultAnnotationGroupId(groups) ?? ALL_ANNOTATION_GROUP_ID,
+              )
+            })
             appendDebugEvent(
               `Annotation sets ready: ${groups.length.toLocaleString()} groups`,
             )
@@ -1660,26 +1780,29 @@ export function useDatasetLifecycle({
               return
             }
 
-            setAnnotationGroupState(
-              annotationGroupLoadFailed(
-                requestedUrl,
-                createStructuredLoadError('Annotations', error),
-              ),
-            )
+            whenCommitted(() => {
+              setAnnotationGroupState(
+                annotationGroupLoadFailed(
+                  requestedUrl,
+                  createStructuredLoadError('Annotations', error),
+                ),
+              )
+            })
             appendDebugEvent('Annotation sets failed')
           })
 
         const cells = await loadDatasetOverview(requestedUrl, {
           includeCellIds: true,
           limit: null,
-          signal: request.signal,
-          onFallback: appendFallbackNotice,
+          signal,
+          onFallback: notifyFallbackWhenCommitted,
         })
 
         if (!isCurrentDatasetLoad()) {
           return
         }
 
+        commit()
         setOverviewCells(overviewCellsToLayerData(cells))
         initialShareableStateRef.current = null
         setLoadState(datasetLoadReady(requestedUrl, cells.length))
@@ -1702,8 +1825,8 @@ export function useDatasetLifecycle({
         loadMorphologyInBackground(
           () =>
             loadMorphologyImage(requestedUrl, {
-              signal: request.signal,
-              onFallback: appendFallbackNotice,
+              signal,
+              onFallback: notifyFallbackWhenCommitted,
               ...restoredZPlane,
             }),
           restoreState.morphologyEnabledChannelIds === undefined
@@ -1719,12 +1842,23 @@ export function useDatasetLifecycle({
           return
         }
 
-        setLoadState(
-          datasetLoadFailed(
-            requestedUrl,
-            createStructuredLoadError('Dataset overview', error),
-          ),
-        )
+        const loadError = createStructuredLoadError('Dataset overview', error)
+
+        // The dataset on screen stays; the failed load is reported instead.
+        if (load.datasetRequestId === null) {
+          pendingLoadRef.current = null
+          setPendingDatasetLoadState(datasetLoadFailed(requestedUrl, loadError))
+          appendDebugEvent('Dataset load failed; the open dataset stays')
+          recordTelemetry(
+            telemetryEvent('dataset.load', 'failure', {
+              startedAt: loadStartedAt,
+              detail: readErrorMessage(error),
+            }),
+          )
+          return
+        }
+
+        setLoadState(datasetLoadFailed(requestedUrl, loadError))
         setDatasetPlatform(null)
         setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
         setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)

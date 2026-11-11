@@ -17,6 +17,10 @@ Supported sources are:
 - Direct OME-TIFF, TIFF, QPTIFF, OME-Zarr, or validated NDPI image URLs.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
 
+Loading another dataset keeps the current one open until the new one is
+ready. If the new one cannot be opened, for example because the address is
+wrong, a message says why and the current dataset stays.
+
 When a dataset folder contains an `explorer.json` manifest, the viewer reads
 files from the locations it lists and applies its display defaults (genes,
 cell colour, layer toggles, opacities, image channels). The Log shows

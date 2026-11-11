@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AnnDataVisiumSummary } from '../../datasets/h5adDataset'
 import {
   IDLE_VISIUM_CONTROL_STATE,
+  visiumControlLoading,
   visiumControlReady,
   visiumImageForLoad,
   visiumSelectionToShareable,
@@ -56,5 +57,28 @@ describe('Visium share-link fields', () => {
     expect(visiumImageForLoad(['lowres'], 'hires')).toBe('lowres')
     expect(visiumImageForLoad(['hires'], 'none')).toBeNull()
     expect(visiumImageForLoad([], undefined)).toBeNull()
+  })
+})
+
+describe('Visium view changes', () => {
+  it('keeps the spots on screen while loading, with the choice asked for', () => {
+    const ready = visiumControlReady('h5ad', SUMMARY, 'hires')
+    const loading = visiumControlLoading(ready, {
+      libraryId: 'lib-A',
+      showOffTissue: true,
+    })
+
+    expect(loading).toEqual({
+      ...ready,
+      status: 'loading',
+      requestedView: { libraryId: 'lib-A', showOffTissue: true },
+    })
+    expect(visiumControlLoading(IDLE_VISIUM_CONTROL_STATE)).toBe(
+      IDLE_VISIUM_CONTROL_STATE,
+    )
+    // A loaded view replaces the request.
+    expect(
+      visiumControlReady('h5ad', { ...SUMMARY, showOffTissue: true }, 'hires'),
+    ).not.toHaveProperty('requestedView')
   })
 })

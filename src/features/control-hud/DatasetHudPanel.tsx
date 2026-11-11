@@ -421,7 +421,7 @@ function VisiumDatasetControls({
           <span>Library</span>
           <select
             title="Visium library to show"
-            value={summary.libraryId}
+            value={state.requestedView?.libraryId ?? summary.libraryId}
             disabled={disabled}
             onChange={(event) => {
               onViewChange({ libraryId: event.currentTarget.value })
@@ -473,7 +473,7 @@ function VisiumDatasetControls({
         <label className="dataset-toggle">
           <input
             type="checkbox"
-            checked={summary.showOffTissue}
+            checked={state.requestedView?.showOffTissue ?? summary.showOffTissue}
             disabled={disabled}
             title="Show the spots that are not under tissue"
             onChange={(event) => {

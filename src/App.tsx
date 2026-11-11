@@ -32,6 +32,7 @@ import {
   readShareableStateFromLocation,
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
+import { DatasetLoadToast } from './features/app-shell/DatasetLoadToast'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { isTextEntryTarget } from './features/app-shell/activeToolModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
@@ -164,7 +165,10 @@ import {
   formatStructuredError,
   type StructuredLoadError,
 } from './features/errors/loadErrorModel'
-import { morphologyLoadFailed } from './features/dataset/datasetLoadModel'
+import {
+  IDLE_DATASET_LOAD_STATE,
+  morphologyLoadFailed,
+} from './features/dataset/datasetLoadModel'
 import type { TranscriptFeatureFilterMode } from './data/transcriptOverlay'
 import type { RoiSelection } from './data/roiSelection'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
@@ -323,6 +327,7 @@ export function App({ dependencies }: AppProps = {}) {
       diagnosticsState,
       loadState,
       morphologyState,
+      pendingDatasetLoadState,
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
       setDatasetAbout,
@@ -331,6 +336,7 @@ export function App({ dependencies }: AppProps = {}) {
       setDiagnosticsState,
       setLoadState,
       setMorphologyState,
+      setPendingDatasetLoadState,
     },
     genes: {
       geneExpressionBatch,
@@ -581,7 +587,8 @@ export function App({ dependencies }: AppProps = {}) {
     initialShareableState.customImageOpacities ?? [],
   )
   const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
-  const isLoading = loadState.status === 'loading'
+  const isLoading =
+    loadState.status === 'loading' || pendingDatasetLoadState.status === 'loading'
   const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
   useEffect(() => {
     document.title = documentTitle(
@@ -1197,7 +1204,11 @@ export function App({ dependencies }: AppProps = {}) {
         visiumHdExpressionProjectionState,
         genePanelState,
         isRoiGeneViewportWarmupLoading,
-        loadState,
+        // The dataset load in progress, whether or not it replaces one.
+        loadState:
+          pendingDatasetLoadState.status === 'loading'
+            ? pendingDatasetLoadState
+            : loadState,
         magicLensState,
         magicLensLoadingScopeLabel:
           magicLensState.status === 'loading'
@@ -1230,6 +1241,7 @@ export function App({ dependencies }: AppProps = {}) {
       magicLensState,
       morphologyState,
       customMorphologyLayerState,
+      pendingDatasetLoadState,
       roiGeneStatsState,
       roiState,
       roiTranscriptExportState,
@@ -1445,6 +1457,7 @@ export function App({ dependencies }: AppProps = {}) {
     () =>
       collectStructuredLoadErrors([
         loadState,
+        pendingDatasetLoadState,
         diagnosticsState,
         morphologyState,
         customMorphologyLayerState,
@@ -1479,6 +1492,7 @@ export function App({ dependencies }: AppProps = {}) {
       magicLensState,
       morphologyState,
       customMorphologyLayerState,
+      pendingDatasetLoadState,
       roiState,
       roiGeneStatsState,
       roiTranscriptExportState,
@@ -2636,6 +2650,7 @@ export function App({ dependencies }: AppProps = {}) {
       recordTelemetry,
     },
     controls: {
+      isDatasetLoaded: loadState.status === 'ready',
       geneExpressionColorScale,
       transcriptDensityColorScale,
       transcriptExactPointLimit,
@@ -2735,6 +2750,7 @@ export function App({ dependencies }: AppProps = {}) {
       setGenePanelState,
       setHoveredTranscript,
       setLoadState,
+      setPendingDatasetLoadState,
       setMagicLensActive,
       setMagicLensState,
       setManualTranscriptExactRequestKey,
@@ -3444,6 +3460,16 @@ export function App({ dependencies }: AppProps = {}) {
             ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
             : {})}
         />
+        {pendingDatasetLoadState.status === 'error' ? (
+          <DatasetLoadToast
+            failedUrl={pendingDatasetLoadState.url}
+            error={pendingDatasetLoadState.error}
+            openDatasetName={datasetDisplayName(loadedDatasetUrl, datasetAbout?.name)}
+            onDismiss={() => {
+              setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
+            }}
+          />
+        ) : null}
       </section>
     </main>
   )
