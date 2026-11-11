@@ -1268,7 +1268,13 @@ export function App({ dependencies }: AppProps = {}) {
           scoreMode: geneExpressionScoreMode,
           colorScale: geneExpressionColorScale,
           scaleMax: geneExpressionScaleMax,
-          loading: geneExpressionState.status !== 'ready',
+          status:
+            geneExpressionState.status === 'ready'
+              ? 'ready'
+              : geneExpressionState.status === 'error' ||
+                  geneExpressionState.status === 'waiting'
+                ? 'unavailable'
+                : 'loading',
         },
         annotations: legendAnnotations,
         metadataTrack:
@@ -2562,12 +2568,19 @@ export function App({ dependencies }: AppProps = {}) {
     setActiveTool('pan')
     appendDebugEvent('Tool: Pan')
   }, [activeTool, appendDebugEvent, handleMagicLensLeave, setActiveTool])
-  // Esc anywhere but a text field leaves the active tool for Pan (D8).
+  // Esc anywhere but a text field leaves the active tool for Pan (D8),
+  // unless it closed a popover, the drawer or a tooltip.
   useEffect(() => {
     if (activeTool === 'pan') return
 
     function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key !== 'Escape' || isTextEntryTarget(event.target)) return
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        isTextEntryTarget(event.target)
+      ) {
+        return
+      }
       returnToPan()
     }
 
@@ -2897,7 +2910,9 @@ export function App({ dependencies }: AppProps = {}) {
 
   const handleSpatialDataSelectionChange = useCallback(
     (selection: SpatialDataSelection) => {
-      setSpatialDataSelection(datasetUrl, selection)
+      // The open dataset, not the address box, which may hold a failed one.
+      const viewUrl = loadedDatasetUrl ?? datasetUrl
+      setSpatialDataSelection(viewUrl, selection)
       setSpatialDataControlState((state) => spatialDataControlLoading(state, selection))
       appendDebugEvent(
         `SpatialData view change: ${[
@@ -2912,9 +2927,15 @@ export function App({ dependencies }: AppProps = {}) {
           .filter((part) => part !== null)
           .join(', ')}`,
       )
-      void startDatasetLoadRef.current?.(datasetUrl, shouldLoadMorphology)
+      void startDatasetLoadRef.current?.(viewUrl, shouldLoadMorphology)
     },
-    [appendDebugEvent, datasetUrl, setSpatialDataControlState, shouldLoadMorphology],
+    [
+      appendDebugEvent,
+      datasetUrl,
+      loadedDatasetUrl,
+      setSpatialDataControlState,
+      shouldLoadMorphology,
+    ],
   )
   const { handleVisiumImageChange, handleVisiumViewChange } = useVisiumControlsWorkflow({
     appendDebugEvent,

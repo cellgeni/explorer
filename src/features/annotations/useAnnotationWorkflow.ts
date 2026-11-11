@@ -418,7 +418,10 @@ export function useAnnotationWorkflow({
       setHiddenAnnotationIds((current) =>
         current.filter((hiddenAnnotationId) => hiddenAnnotationId !== annotationId),
       )
+      // Only a mode that showed the annotations changes; gene expression,
+      // say, stays.
       setObservationColorMode((current) =>
+        current !== 'annotations' ||
         hasReadyAnnotationsAfterRemove(annotationState, annotationId)
           ? current
           : cellMetadataTracks.length > 0
@@ -489,7 +492,9 @@ export function useAnnotationWorkflow({
     setHiddenAnnotationSetIds([])
     setCellMetadataTracks([])
     setSelectedCellMetadataTrackId(null)
-    setObservationColorMode('transcript-count')
+    setObservationColorMode((current) =>
+      current === 'annotations' || current === 'metadata' ? 'transcript-count' : current,
+    )
     appendDebugEvent('Cleared annotations')
   }, [
     appendDebugEvent,

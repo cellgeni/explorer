@@ -1087,9 +1087,8 @@ export function useDatasetLifecycle({
           setMagicLensState(IDLE_MAGIC_LENS_STATE)
           setCellDetailState(IDLE_CELL_DETAIL_STATE)
           setCellTranscriptDistributionState(IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE)
-          setMagicLensActive(
-            shouldRestoreSharedState ? (sharedState?.magicLensActive ?? false) : false,
-          )
+          // tool=magic-lens, or lens=1 in a version 1 link.
+          setMagicLensActive(sharedTool === 'magic-lens')
           setSelectedCell(null)
           setSelectedGridCell(null)
           setCurrentViewportDetail(null)

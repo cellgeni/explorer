@@ -121,7 +121,9 @@ One tool is on at a time (`activeTool`, `src/features/app-shell/activeToolModel.
 D8). Turning one on turns the others off. While a tool other than Pan is on,
 the top of the canvas says what to do, such as "Drag to draw a box. Esc
 cancels." Esc, anywhere except a text field, returns to Pan and drops a
-half-drawn shape; finishing a box or lasso also returns to Pan.
+half-drawn shape; finishing a box or lasso also returns to Pan. An Esc that
+closes a popover, the info drawer, the Embedding panel or a shown tooltip
+does only that, and the tool stays.
 
 - **Box selection** and **Lasso selection** draw a selection (see
   [ROI drawing](#roi-drawing)); its results open in the Selection card. On an
@@ -683,8 +685,9 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 160 ms, with `xv=2`); query-string values are also read on startup, and hash
 values win. Numbers are rounded to three decimals. Version 2 links leave out
 every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a missing
-parameter means the default. Version 1 links, which wrote every value, still
-open as before. `Share` in the top bar copies the address and says "Link
+parameter means the default. `cellBounds` and `nucleusBounds` are always
+written, because a load picks their default by platform when a link is
+silent. Version 1 links, which wrote every value, still open as before. `Share` in the top bar copies the address and says "Link
 copied".
 
 Opening another dataset adds a browser history entry; every other change

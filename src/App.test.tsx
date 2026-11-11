@@ -1363,7 +1363,9 @@ describe('App', () => {
     expect(window.location.hash).toMatch(/^#xv=2&/)
     expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Fxenium')
     expect(window.location.hash).toContain('groups=analysis%3A1')
-    expect(window.location.hash).not.toContain('cellBounds')
+    // Boundary toggles are always written: their default depends on the
+    // platform.
+    expect(window.location.hash).toContain('cellBounds=1&nucleusBounds=0')
     expect(window.location.hash).not.toContain('tab=')
     expect(window.location.hash.length).toBeLessThan(200)
   })
@@ -1854,6 +1856,42 @@ describe('App', () => {
     )
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(within(tools).getByRole('button', { name: 'Pan' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    // Esc that closes a popover does only that; the tool stays.
+    fireEvent.keyDown(document.body, { key: 'm' })
+    fireEvent.click(screen.getByRole('button', { name: 'Measure options' }))
+    const options = screen.getByRole('dialog', { name: 'Measure options' })
+    fireEvent.keyDown(options, { key: 'Escape' })
+    expect(
+      screen.queryByRole('dialog', { name: 'Measure options' }),
+    ).not.toBeInTheDocument()
+    expect(within(tools).getByRole('button', { name: 'Measure' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('keeps the Magic Lens of a link through the dataset load', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(DEMO_DATASET_URL)}&tool=magic-lens`,
+    )
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    await screen.findByText(/^Xenium · 1 cell/)
+
+    expect(screen.getByRole('button', { name: 'Magic Lens' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -4588,6 +4626,10 @@ describe('App', () => {
     openControls('measure')
     expect(screen.getByRole('group', { name: 'Measure unit' })).toBeInTheDocument()
 
+    // The first Esc closes the options; the next leaves the tool.
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('group', { name: 'Measure unit' })).toBeNull()
+    expect(screen.getByText(/Esc stops measuring/)).toBeInTheDocument()
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(screen.queryByText(/Esc stops measuring/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Measure' })).toHaveAttribute(

@@ -506,7 +506,7 @@ Reference: 10x "Understanding Xenium Outputs".
 | `cell_boundaries.parquet`                        | DuckDB (Range)     | Polygon vertices per `cell_id`                                                                       |
 | `nucleus_boundaries.parquet`                     | DuckDB             | Optional nucleus overlay (no implementation recorded)                                                |
 | `transcripts.parquet`                            | DuckDB (Range)     | Per-transcript `cell_id`, `feature_name`, x/y/z, `qv`, `overlaps_nucleus`, `is_gene`                 |
-| `transcripts.zarr.zip`                           | zarrita            | Native transcript LOD: `/grids` pyramid and level-0 tiles; `/density/gene` (not used by the UI)      |
+| `transcripts.zarr.zip`                           | zarrita            | Native transcript LOD: `/grids` pyramid and level-0 tiles; `/density/gene` (selected genes, 15.1-J)  |
 | `cell_feature_matrix.zarr.zip`                   | zarrita            | Per-cell sparse counts (CSC or feature-major)                                                        |
 | `cell_feature_matrix.h5`                         | h5wasm             | Same matrix; fallback                                                                                |
 | `analysis.zarr.zip`                              | zarrita            | Clustering                                                                                           |
@@ -3104,6 +3104,64 @@ Can be skipped after 15.3 ships if time is short.
   - Draw the viewport rectangle from `viewportBbox`. Click or drag to move the
     view.
 - [ ] **E. µm axes.** An optional setting. (S)
+
+#### Review After M4 (2026-11-11)
+
+The user asked for a review of the work so far before 15.3. Two read-only
+passes checked the Done notes against the code and looked for bugs, one over
+15.0 and 15.1 and one over 15.2.
+
+Fixed in one PR after 15.3-D:
+
+- A link with `tool=magic-lens` (or a version 1 `tab=magic-lens`) turned
+  the lens off when its dataset loaded: the commit set it from `lens=`,
+  which version 2 links never write. It now follows the link's tool.
+- One Esc press did two things: closing a popover, the drawer, the
+  Embedding panel or a tooltip also left the active tool. `useDismiss` now
+  takes Escape in the capture phase and marks it handled, the drawer, the
+  Embedding panel and a shown tooltip mark theirs, and App's Esc listener
+  skips a handled press.
+- Removing the last class, or `Clear Annotations`, switched any colour mode
+  to transcript count, so cells coloured by a gene lost their colours. Only
+  the annotations mode (and metadata, for Clear) changes now.
+- Version 2 links dropped `cellBounds=1` and `nucleusBounds=1` as defaults,
+  but a load defaults them by platform (nucleus off on Xenium), so turned-on
+  nucleus outlines reopened off. Both are always written.
+- The legend said "Loading expression" for good when expression failed or
+  was waiting; it now says "Expression unavailable".
+- Changing a SpatialData view option reloaded the address box, which after a
+  failed load (15.1-F) holds the failed URL; it reloads the open dataset.
+
+Open, for 15.5 or later:
+
+- **Load and link state.** During a pending load, a Visium HD bin or LOD
+  request for the old dataset can still land after the new one commits
+  (`visiumHdBinRequestId` is not moved on). The commit applies the gene
+  scale, density scale, point colour and exact limit captured when the load
+  started, undoing changes made meanwhile. `groups=` from the opening link
+  is written for another dataset until its annotations load. A link with
+  `groups=` ignores its own `cellColor` once the set loads. Copy Link copies
+  `location.href`, which is up to 160 ms behind a change.
+- **Shell.** `panel=info` alone reopens with Cells expanded. Crossing 860 px
+  remounts the layer sections, losing a gene search. `card=` keeps only
+  overview cells, not bins or boundary picks. Focus is lost when a card,
+  the Embedding panel or the narrow tool menu closes. The tool `toolbar`
+  has no arrow-key movement, card tabs no Home and End, the resize grip no
+  value, and two annotation headings are out of order.
+- **Smaller.** The `+` and `-` keys zoom half a level and the buttons a whole
+  one. Load errors where every probe answered a 4xx other than 401, 403 and
+  404 are reported as "blocked". "Gene expression" is offered in Cell color
+  with no genes. 15.1-I's Atera graphclust default never runs (Atera loads
+  through the AnnData path). Esc in the drawer's address field closes the
+  drawer.
+- **Cleanup.** Unused CSS from the HUD (`.magic-lens-scope-segmented`,
+  `.measurement-control*`, `.section-heading-*`, `.status-chip`, `.eyebrow`,
+  `.annotation-size-plot*`), the Magic Lens Min QV leftovers
+  (`handleMagicLensMinQvChange`, `capabilities.magicLensMinQv`, `lensQv=`),
+  the feature-circle renderer (15.1-J), `createOverviewViewState`, and the
+  `danger` Button variant. The tokens' "5.4:1 on its own tint" holds on
+  surfaces 0–2 only (4.7:1 on surface 3, still AA). The 15.1-L
+  manifest-defaults gap is still open.
 
 #### 15.5 Close-Out
 
