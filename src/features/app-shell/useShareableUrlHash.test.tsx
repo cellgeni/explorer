@@ -112,9 +112,11 @@ describe('useShareableUrlHash', () => {
     expect(window.location.hash).toContain('imgOpacity=0.45')
     expect(window.location.hash).toContain('cellFill=0.7')
     expect(window.location.hash).toContain('cellBounds=0')
-    // Version 2 links leave defaults out, such as nucleus boundaries on.
+    // Version 2 links leave defaults out, but keep the boundary toggles,
+    // whose default depends on the platform.
     expect(window.location.hash).toMatch(/^#xv=2&/)
-    expect(window.location.hash).not.toContain('nucleusBounds')
+    expect(window.location.hash).toContain('nucleusBounds=1')
+    expect(window.location.hash).not.toContain('transcriptOpacity')
     expect(window.location.hash).toContain('hoverTips=0')
     expect(window.location.hash).toContain('cellBoundary=0.35')
     expect(window.location.hash).toContain('channels=Channel%3A1')

@@ -29,6 +29,7 @@ let snapshot: Snapshot
 
 function Probe({
   initialAnnotationState = { status: 'idle' },
+  initialColorMode = 'transcript-count',
   initialHiddenAnnotationIds = [],
   loadAnnotations,
   onReady,
@@ -36,6 +37,7 @@ function Probe({
   selectedAnnotationGroupId = 'cluster-a',
 }: {
   readonly initialAnnotationState?: AnnotationState<StructuredLoadError>
+  readonly initialColorMode?: ObservationColorMode
   readonly initialHiddenAnnotationIds?: readonly string[]
   readonly loadAnnotations: Parameters<
     typeof useAnnotationWorkflow
@@ -61,7 +63,7 @@ function Probe({
   >([])
   const [, setSelectedCellMetadataTrackId] = React.useState<string | null>(null)
   const [observationColorMode, setObservationColorMode] =
-    React.useState<ObservationColorMode>('transcript-count')
+    React.useState<ObservationColorMode>(initialColorMode)
   const [roiName, setRoiName] = React.useState('Marker ROI')
   const [groupId, setSelectedAnnotationGroupId] = React.useState(
     selectedAnnotationGroupId,
@@ -237,6 +239,38 @@ describe('useAnnotationWorkflow', () => {
 
     expect(snapshot.annotationState).toEqual({ status: 'idle' })
     expect(snapshot.hiddenAnnotationIds).toEqual([])
+  })
+
+  it('keeps a colour mode that does not show the annotations', () => {
+    let api!: ReturnType<typeof useAnnotationWorkflow>
+    let snapshot!: Snapshot
+
+    render(
+      <Probe
+        initialAnnotationState={{
+          status: 'ready',
+          url: 'https://example.test/output',
+          annotations: [{ id: 'a', label: 'A', cellIds: [] }],
+        }}
+        initialColorMode="gene-expression"
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    // With SNAP25 selected, removing the last class leaves the genes on.
+    act(() => {
+      api.handleRemoveAnnotation('a')
+    })
+    expect(snapshot.observationColorMode).toBe('gene-expression')
+
+    act(() => {
+      api.handleClearAnnotations()
+    })
+    expect(snapshot.observationColorMode).toBe('gene-expression')
   })
 
   it('saves ready ROI cells as an annotation', () => {
