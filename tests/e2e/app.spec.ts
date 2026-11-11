@@ -2,6 +2,11 @@ import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import {
+  collectAxeFindings,
+  expectAxeFindingsMatchBaseline,
+  type AxeFindings,
+} from './axe'
 import { openControls } from './controls'
 
 const VISIUM_HD_REFERENCE_URL =
@@ -292,6 +297,42 @@ test('shows the scaffolded viewer shell @smoke', async ({ page }) => {
   )
   await expect(page.getByLabel('Dataset or image URL')).toHaveValue(/\/public\/xenium\//)
   await expect(page.getByRole('button', { name: 'Load Dataset' })).toBeVisible()
+})
+
+test('has no accessibility violations beyond the axe baseline @smoke', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  const findings: AxeFindings = new Map()
+
+  // Every tab of the Control HUD, empty and with data. 15.2 replaces the tabs
+  // with sections and cards, and this walk with one over them.
+  async function checkEachTab(state: string) {
+    for (const name of await page.getByRole('tab').allTextContents()) {
+      await page.getByRole('tab', { name, exact: true }).click()
+      await collectAxeFindings(page, `${state}, ${name} tab`, findings)
+    }
+  }
+
+  await routeTinyH5adFixture(page)
+  await page.goto('/')
+  await checkEachTab('empty viewer')
+
+  await openControls(page, 'open-dataset')
+  const fixtureUrl = new URL('/h5ad-smoke.h5ad', page.url()).toString()
+  await page.getByLabel('Dataset or image URL').fill(fixtureUrl)
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+  await expect(page.getByText(/H5AD ready: 4 cells, 3 genes/)).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  const genesPanel = await openControls(page, 'genes')
+  await genesPanel.getByRole('button', { name: 'Actb', exact: true }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText('Expression', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await checkEachTab('H5AD fixture with a gene selected')
+
+  expectAxeFindingsMatchBaseline(findings)
 })
 
 test('shows transcript overlay controls in the browser shell @smoke', async ({

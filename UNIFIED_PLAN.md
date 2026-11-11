@@ -2249,12 +2249,30 @@ These change almost nothing on screen, but every later step depends on them.
   - Settings that depend on the dataset have no default. Neither does the
     boundary limit, which comes from the device's performance budget, so
     15.1-L must keep writing it.
-- [ ] **F. Accessibility check.** Add `@axe-core/playwright` (pinned, dev
+- [x] **F. Accessibility check.** Add `@axe-core/playwright` (pinned, dev
       only) and run axe in the E2E smoke tests on the main states: the empty
       viewer, a loaded fixture, and each tab open. (S)
   - Today's violations go in a baseline file, `tests/e2e/axe-baseline.json`,
     keyed by rule and target.
   - A new violation fails the test, and the baseline only shrinks.
+  - Done 2026-11-11 with `@axe-core/playwright` 4.14.0. A new smoke test,
+    "has no accessibility violations beyond the axe baseline", opens every
+    tab on the empty viewer and again with the tiny H5AD fixture loaded and a
+    gene selected, and runs the WCAG 2.2 A and AA rules each time
+    (`tests/e2e/axe.ts`). The other smoke tests do not run axe, so that one
+    walk defines the baseline.
+  - A listed violation that no state shows any more also fails, so fixes
+    must shrink the file. `UPDATE_AXE_BASELINE=1` rewrites it. React `useId`
+    values are left out of targets because they change with render order.
+  - The baseline has five entries and no colour-contrast entries:
+    `aria-allowed-attr` on two gene buttons, `aria-prohibited-attr` on the
+    density scale preview, `label-content-name-mismatch` on one button, and
+    `scrollable-region-focusable` on a list.
+  - The old light theme also had no contrast violations, but only because
+    axe cannot work out contrast through a see-through panel over the
+    canvas. With opaque surfaces, axe checks 25–43 text nodes per tab and
+    finds none below AA, leaving 1–5 per tab unresolved, such as text over
+    a gradient. The contrast test in 15.1-K covers what axe cannot.
 
 #### 15.1 Behaviour Fixes In The Current Layout
 
@@ -2381,7 +2399,8 @@ They are independent unless a note says otherwise.
     and the ROI summary.
   - Add a unit test checking every dark token pair used for text and UI parts:
     at least 4.5:1 for text and 3:1 for UI parts.
-  - Remove the colour-contrast entries from the axe baseline (15.0-F).
+  - Keep the axe baseline free of colour-contrast entries (15.0-F found
+    none after the dark theme).
 - [ ] **L. Sharing (F16; needs 15.0-E).** (M)
   - Add a Copy link button (in the Dataset tab now, the top bar later) and a
     "Link copied" toast.
