@@ -27,6 +27,9 @@ export const TOOL_SHORTCUT_KEYS: Readonly<Record<ActiveTool, string>> = {
   'magic-lens': 'O',
 }
 
+// Hides or shows the layer panel (15.2-C), as in 10x Explorer.
+export const LAYER_PANEL_KEY = '\\'
+
 export const TOOL_ORDER: readonly ActiveTool[] = [
   'pan',
   'box',
@@ -52,6 +55,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   },
   { keys: ['+', '−'], action: 'Zoom in or out', group: 'View' },
   { keys: ['Home'], action: 'Return to the first view', group: 'View' },
+  { keys: [LAYER_PANEL_KEY], action: 'Hide or show the layer panel', group: 'View' },
 ]
 
 export interface ShortcutKeyEvent {
@@ -67,4 +71,10 @@ export function toolForShortcutKey(event: ShortcutKeyEvent): ActiveTool | null {
 
   const key = event.key.toUpperCase()
   return TOOL_ORDER.find((tool) => TOOL_SHORTCUT_KEYS[tool] === key) ?? null
+}
+
+export function isLayerPanelKey(event: ShortcutKeyEvent): boolean {
+  return (
+    event.key === LAYER_PANEL_KEY && !event.altKey && !event.ctrlKey && !event.metaKey
+  )
 }

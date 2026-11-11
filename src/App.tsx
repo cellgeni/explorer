@@ -29,6 +29,7 @@ import { useDatasetInfoModel } from './features/sections/datasetInfoModel'
 import { useImageSectionModel } from './features/sections/imageSectionModel'
 import { useTranscriptsSectionModel } from './features/sections/transcriptsSectionModel'
 import { useViewSettingsModel } from './features/sections/viewSettingsModel'
+import { useLayerPanelModel } from './features/shell/layerPanelModel'
 import { ShellLayout } from './features/shell/ShellLayout'
 import { useTopBarModel } from './features/shell/topBarModel'
 import { useToolShortcuts } from './features/shell/useToolShortcuts'
@@ -40,6 +41,8 @@ import {
 } from './features/control-hud/RoiHudPanel'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
+  CONTROL_HUD_TABS,
+  LAYER_PANEL_HUD_TABS,
   parseObservationColorMode,
   readDebugModeFromLocation,
   readShellVersionFromLocation,
@@ -217,7 +220,10 @@ import type {
 import type { GexResult } from './data/gex'
 import type { AnalysisEmbedding } from './data/analysisEmbeddings'
 import type { ContinuousCellMetadataValue } from './data/customAnnotations'
-import type { GeneExpressionScoreMode } from './rendering/deckLayers'
+import type {
+  GeneExpressionScoreMode,
+  GeometricAnnotationDatum,
+} from './rendering/deckLayers'
 import type {
   CellBoundaryDatum,
   GridCellDatum,
@@ -259,6 +265,9 @@ export type {
   TranscriptCapabilitiesLoader,
   TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
+
+// Shapes passed while the Annotations section hides them (15.2-C).
+const NO_GEOMETRY_LAYERS: readonly GeometricAnnotationDatum[] = []
 
 export function App({ dependencies }: AppProps = {}) {
   const {
@@ -377,6 +386,7 @@ export function App({ dependencies }: AppProps = {}) {
       cellFillOpacity,
       coordinateUnit,
       imageLayerOpacity,
+      layerVisibility,
       measurementEnabled,
       measurementResetKey,
       measurementUnit,
@@ -386,6 +396,7 @@ export function App({ dependencies }: AppProps = {}) {
       setCellFillOpacity,
       setCoordinateUnit,
       setImageLayerOpacity,
+      setLayerVisibility,
       setMeasurementEnabled,
       setMeasurementResetKey,
       setMeasurementUnit,
@@ -696,17 +707,19 @@ export function App({ dependencies }: AppProps = {}) {
 
     return opacities.some((opacity) => opacity !== 1) ? opacities : undefined
   }, [customImageLayerOpacities, customMorphologyLayers])
+  // The Image section's checkbox hides the dataset image and custom layers.
+  const renderedImageOpacity = layerVisibility.image ? imageLayerOpacity : 0
   const morphologyChannelOpacities = useMemo(() => {
     const opacities = new Map<string, number>()
 
     for (const channel of morphologyImage?.channelLoaders ?? []) {
-      opacities.set(channel.info.id, imageLayerOpacity)
+      opacities.set(channel.info.id, renderedImageOpacity)
     }
 
     for (const layer of customMorphologyLayers) {
-      const opacity = normalizeLayerOpacity(
-        customImageLayerOpacities[layer.image.url] ?? 1,
-      )
+      const opacity = layerVisibility.image
+        ? normalizeLayerOpacity(customImageLayerOpacities[layer.image.url] ?? 1)
+        : 0
 
       for (const channel of layer.channels) {
         opacities.set(channel.info.id, opacity)
@@ -717,8 +730,9 @@ export function App({ dependencies }: AppProps = {}) {
   }, [
     customImageLayerOpacities,
     customMorphologyLayers,
-    imageLayerOpacity,
+    layerVisibility.image,
     morphologyImage,
+    renderedImageOpacity,
   ])
   const baseMorphologyChannelIds = useMemo(
     () =>
@@ -1268,23 +1282,29 @@ export function App({ dependencies }: AppProps = {}) {
     () => new Set(loadingTasks.map((task) => task.tabId)),
     [loadingTasks],
   )
+  const loadingAreas = useMemo(
+    () => new Set(loadingTasks.map((task) => task.area)),
+    [loadingTasks],
+  )
   const hiddenControlHudTabIds = useMemo<ReadonlySet<ControlHudTab>>(() => {
-    const hiddenTabIds = new Set<ControlHudTab>()
+    const { cells, magicLens, transcripts } = platformAdapter.capabilities
+    // In the new shell the top bar, info drawer and layer panel hold these
+    // tabs' controls (15.2-B, C); the HUD keeps Magic Lens, ROI and Cell
+    // until the cards replace them (15.2-D).
+    const hiddenTabIds = new Set<ControlHudTab>(
+      shellVersion === 2 ? LAYER_PANEL_HUD_TABS : [],
+    )
 
-    if (platformAdapter.kind === 'image') {
+    if (!cells) {
       hiddenTabIds.add('genes')
-      hiddenTabIds.add('transcripts')
-      hiddenTabIds.add('magic-lens')
       hiddenTabIds.add('cell')
-      return hiddenTabIds
     }
 
-    if (!platformAdapter.capabilities.transcripts) {
-      hiddenTabIds.add('transcripts')
-    }
+    if (!magicLens) hiddenTabIds.add('magic-lens')
+    if (!transcripts) hiddenTabIds.add('transcripts')
 
     return hiddenTabIds
-  }, [platformAdapter.capabilities.transcripts, platformAdapter.kind])
+  }, [platformAdapter.capabilities, shellVersion])
   const activeRoiSelection = platformRoiSelection(
     platformAdapter,
     roiState,
@@ -1299,6 +1319,7 @@ export function App({ dependencies }: AppProps = {}) {
   const legendSections = useMemo(
     () =>
       viewerLegendSections({
+        cellsVisible: layerVisibility.cells,
         colorMode: observationColorMode,
         genes: {
           names: selectedGenes,
@@ -1335,6 +1356,7 @@ export function App({ dependencies }: AppProps = {}) {
     [
       activeCellMetadataTrack,
       effectiveShowTranscriptOverlay,
+      layerVisibility.cells,
       geneExpressionColorScale,
       geneExpressionScaleMax,
       geneExpressionScoreMode,
@@ -1914,7 +1936,10 @@ export function App({ dependencies }: AppProps = {}) {
       return
     }
 
-    setActiveControlHudTab('dataset')
+    setActiveControlHudTab(
+      CONTROL_HUD_TABS.find((tab) => !hiddenControlHudTabIds.has(tab.id))?.id ??
+        'dataset',
+    )
   }, [activeControlHudTab, hiddenControlHudTabIds, setActiveControlHudTab])
 
   useEffect(() => {
@@ -3058,7 +3083,7 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
     cellBoundaryOpacity,
     cellFillOpacity,
-    cellLayerControlsVisible: platformAdapter.kind !== 'image',
+    cellLayerControlsVisible: platformAdapter.capabilities.cells,
     cellMetadataTracks,
     geneExpressionBatch,
     geneExpressionColorScale,
@@ -3206,7 +3231,7 @@ export function App({ dependencies }: AppProps = {}) {
       loadingDatasetUrl === null
         ? null
         : (datasetDisplayName(loadingDatasetUrl, undefined) ?? loadingDatasetUrl),
-    magicLensAvailable: platformAdapter.kind !== 'image',
+    magicLensAvailable: platformAdapter.capabilities.magicLens,
     magicLensEnabled: magicLensLoadEnabled,
     magicLensReason: magicLensAvailability.unavailableReason,
     magicLensScope,
@@ -3219,6 +3244,19 @@ export function App({ dependencies }: AppProps = {}) {
     setDebugMode,
   })
   useToolShortcuts(shellVersion === 2, topBar.tools.onSelect)
+  const layerPanel = useLayerPanelModel({
+    annotations: annotationsSection,
+    appendDebugEvent,
+    capabilities: platformAdapter.capabilities,
+    cells: cellsSection,
+    elementNoun: platformAdapter.labels.embeddingElementPlural,
+    image: imageSection,
+    imageAvailable: morphologyImage !== null || flatMorphologyImage !== null,
+    layerVisibility,
+    loadingAreas,
+    setLayerVisibility,
+    transcripts: transcriptsSection,
+  })
 
   const controlHud = (
     <AppControlHud
@@ -3231,24 +3269,32 @@ export function App({ dependencies }: AppProps = {}) {
       setActiveControlHudTab={setActiveControlHudTab}
       setIsControlHudCollapsed={setIsControlHudCollapsed}
     >
-      <DatasetHudPanel active={activeControlHudTab === 'dataset'} info={datasetInfo} />
+      {/* The new shell's top bar, drawer and layer panel hold these. */}
+      {shellVersion === 2 ? null : (
+        <>
+          <DatasetHudPanel
+            active={activeControlHudTab === 'dataset'}
+            info={datasetInfo}
+          />
 
-      <LayerHudPanel
-        active={activeControlHudTab === 'layers'}
-        image={imageSection}
-        cells={cellsSection}
-        settings={viewSettings}
-        info={datasetInfo}
-      />
+          <LayerHudPanel
+            active={activeControlHudTab === 'layers'}
+            image={imageSection}
+            cells={cellsSection}
+            settings={viewSettings}
+            info={datasetInfo}
+          />
 
-      <GeneHudPanel active={activeControlHudTab === 'genes'} cells={cellsSection} />
+          <GeneHudPanel active={activeControlHudTab === 'genes'} cells={cellsSection} />
 
-      {platformAdapter.capabilities.transcripts ? (
-        <TranscriptHudPanel
-          active={activeControlHudTab === 'transcripts'}
-          transcripts={transcriptsSection}
-        />
-      ) : null}
+          {platformAdapter.capabilities.transcripts ? (
+            <TranscriptHudPanel
+              active={activeControlHudTab === 'transcripts'}
+              transcripts={transcriptsSection}
+            />
+          ) : null}
+        </>
+      )}
 
       <MagicLensHudPanel
         active={activeControlHudTab === 'magic-lens'}
@@ -3272,10 +3318,12 @@ export function App({ dependencies }: AppProps = {}) {
         onRunMagicLens={handleRunMagicLens}
       />
 
-      <AnnotationHudPanel
-        active={activeControlHudTab === 'annotations'}
-        annotations={annotationsSection}
-      />
+      {shellVersion === 2 ? null : (
+        <AnnotationHudPanel
+          active={activeControlHudTab === 'annotations'}
+          annotations={annotationsSection}
+        />
+      )}
 
       <CellHudPanel
         active={activeControlHudTab === 'cell'}
@@ -3417,11 +3465,14 @@ export function App({ dependencies }: AppProps = {}) {
         fitImageExtent={imageFitExtent}
         transcriptAggregateBins={transcriptLayerAggregateBins}
         transcriptPoints={transcriptLayerPoints}
-        geometricAnnotations={geometricAnnotationLayerData}
+        geometricAnnotations={
+          layerVisibility.annotations ? geometricAnnotationLayerData : NO_GEOMETRY_LAYERS
+        }
         imageLoader={morphologyImage?.loader ?? null}
         imageChannels={morphologyCanvasChannels}
         flatImage={flatMorphologyImage}
-        imageOpacity={morphologyCanvasChannels.length === 0 ? imageLayerOpacity : 1}
+        imageOpacity={morphologyCanvasChannels.length === 0 ? renderedImageOpacity : 1}
+        cellLayersVisible={layerVisibility.cells}
         cellFillOpacity={cellFillOpacity}
         cellBoundaryOpacity={platformAdapter.kind === 'h5ad' ? 0 : cellBoundaryOpacity}
         pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
@@ -3512,7 +3563,16 @@ export function App({ dependencies }: AppProps = {}) {
     return (
       <main className="app-shell app-shell--v2">
         {skipLink}
-        <ShellLayout topBar={topBar} info={datasetInfo} settings={viewSettings}>
+        <ShellLayout
+          topBar={topBar}
+          info={datasetInfo}
+          settings={viewSettings}
+          layerPanel={layerPanel}
+          image={imageSection}
+          cells={cellsSection}
+          transcripts={transcriptsSection}
+          annotations={annotationsSection}
+        >
           {viewerRegion}
           {controlHud}
         </ShellLayout>

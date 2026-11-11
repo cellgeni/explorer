@@ -39,6 +39,11 @@ export interface AppPlatformLabels {
 }
 
 export interface AppPlatformCapabilities {
+  // Cells, spots or bins to draw and colour; a plain image has none, so it
+  // has no Cells section, Genes or Cell tab (15.2-C).
+  readonly cells: boolean
+  // The Magic Lens tool and tab.
+  readonly magicLens: boolean
   readonly annotations: boolean
   readonly geometricAnnotations: boolean
   readonly magicLensMinQv: boolean
@@ -93,6 +98,8 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'xenium',
   labels: { embeddingElementPlural: 'cells' },
   capabilities: {
+    cells: true,
+    magicLens: true,
     annotations: true,
     geometricAnnotations: true,
     magicLensMinQv: true,
@@ -124,6 +131,8 @@ const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'atera',
   labels: { embeddingElementPlural: 'cells' },
   capabilities: {
+    cells: true,
+    magicLens: true,
     annotations: true,
     geometricAnnotations: true,
     magicLensMinQv: false,
@@ -157,6 +166,8 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'visium-hd',
   labels: { embeddingElementPlural: 'bins' },
   capabilities: {
+    cells: true,
+    magicLens: true,
     annotations: false,
     geometricAnnotations: true,
     magicLensMinQv: false,
@@ -199,6 +210,8 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'h5ad',
   labels: { embeddingElementPlural: 'cells' },
   capabilities: {
+    cells: true,
+    magicLens: true,
     annotations: true,
     geometricAnnotations: true,
     magicLensMinQv: false,
@@ -229,6 +242,8 @@ const VISIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'visium',
   labels: { embeddingElementPlural: 'spots' },
   capabilities: {
+    cells: true,
+    magicLens: true,
     annotations: true,
     geometricAnnotations: true,
     magicLensMinQv: false,
@@ -257,6 +272,8 @@ const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'spatialdata',
   labels: { embeddingElementPlural: 'cells' },
   capabilities: {
+    cells: true,
+    magicLens: true,
     annotations: true,
     geometricAnnotations: true,
     magicLensMinQv: false,
@@ -285,6 +302,8 @@ const IMAGE_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'image',
   labels: { embeddingElementPlural: 'cells' },
   capabilities: {
+    cells: false,
+    magicLens: false,
     annotations: false,
     geometricAnnotations: true,
     magicLensMinQv: false,

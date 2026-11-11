@@ -154,6 +154,18 @@ export interface UseAppDomainStateOptions {
   readonly performanceBudget: PerformanceBudget
 }
 
+export interface LayerVisibility {
+  readonly image: boolean
+  readonly cells: boolean
+  readonly annotations: boolean
+}
+
+const ALL_LAYERS_VISIBLE: LayerVisibility = {
+  image: true,
+  cells: true,
+  annotations: true,
+}
+
 export function useAppDomainState({
   initialShareableState,
   performanceBudget,
@@ -408,6 +420,10 @@ export function useAppDomainState({
   const [showHoverTooltips, setShowHoverTooltips] = useState(
     initialShareableState.showHoverTooltips ?? DEFAULT_SHAREABLE_STATE.showHoverTooltips,
   )
+  // The layer panel's visibility checkboxes (15.2-C). Transcripts use
+  // showTranscriptOverlay.
+  const [layerVisibility, setLayerVisibility] =
+    useState<LayerVisibility>(ALL_LAYERS_VISIBLE)
   const [cellBoundaryOpacity, setCellBoundaryOpacity] = useState(() =>
     normalizeLayerOpacity(
       initialShareableState.cellBoundaryOpacity ??
@@ -561,6 +577,7 @@ export function useAppDomainState({
       cellFillOpacity,
       coordinateUnit,
       imageLayerOpacity,
+      layerVisibility,
       measurementEnabled,
       measurementResetKey,
       measurementUnit,
@@ -570,6 +587,7 @@ export function useAppDomainState({
       setCellFillOpacity,
       setCoordinateUnit,
       setImageLayerOpacity,
+      setLayerVisibility,
       setMeasurementEnabled,
       setMeasurementResetKey,
       setMeasurementUnit,

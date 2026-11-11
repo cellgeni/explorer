@@ -170,6 +170,9 @@ export interface GeometricAnnotationDatum {
 }
 
 export interface OverviewLayerOptions {
+  // False leaves out the cell, boundary, gene expression and grid layers, so
+  // hidden cells cannot be hovered or picked (15.2-C). Defaults to true.
+  readonly cellsVisible?: boolean
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
   readonly cellBoundaryFillEnabled?: boolean

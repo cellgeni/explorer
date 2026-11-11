@@ -88,10 +88,11 @@ Transcripts tab.
 ### New Shell (`?shell=2`)
 
 The redesigned layout (UNIFIED_PLAN.md, 15.2) is built behind `?shell=2` in
-the query string, and becomes the default in 15.2-J. So far it adds a 48 px top
-bar (`src/features/shell/TopBar.tsx`) above the canvas; the Control HUD still
-holds the other controls until the layer panel (15.2-C) and cards (15.2-D)
-replace it.
+the query string, and becomes the default in 15.2-J. It has a 48 px top bar
+(`src/features/shell/TopBar.tsx`) and a 360 px layer panel docked on the right
+(`src/features/shell/LayerPanel.tsx`). The Control HUD keeps only the Magic
+Lens, ROI and Cell tabs, at the top left of the canvas, until the cards
+(15.2-D) replace them.
 
 | Top bar item   | What it does                                                                                                                      |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
@@ -109,6 +110,23 @@ The tool letters work anywhere except in a text field, and leave keys with
 Ctrl, Alt or Cmd alone. The Magic Lens tool turns on the cursor lens. The
 shortcut list comes from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the
 table the key handler reads.
+
+The layer panel is an accordion. Each section's header has a checkbox that
+hides the layer, the name, and a one-line state; a dot shows while the
+section's data loads. Sections stay mounted while closed, so a gene search
+survives. `\` (or the arrow button) collapses the panel to a 40 px strip and
+gives the canvas the space.
+
+| Section             | Shown for      | Header state                                         | Controls                                                                                                                                                                                                                                                                                                                           |
+| ------------------- | -------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Image               | All            | "3 of 27 channels · z 8 of 15 · +1 layer", or "80%"  | Image opacity, Z plane, Visium `Tissue image`, channels, custom image layers. The checkbox hides the image and custom layers                                                                                                                                                                                                       |
+| Cells (Spots, Bins) | All but images | What colours them: "graphclust", "SNAP25", "4 genes" | Appearance (boundaries, opacities, Visium `Show off-tissue spots`, Visium HD bin size); `Cell color`; Genes (picker, sets, `Combine genes`, `Gene scale`, status line); Clusters (annotation sets, labels, metadata tracks); Advanced (`Expression detail`). The checkbox hides cells, boundaries and bins, and drops their legend |
+| Transcripts         | Xenium, Atera  | "SNAP25 · density", "All features · points", "Off"   | `Show transcripts` (the checkbox), Detail; Genes; Appearance; Filters; Advanced (the budget meter); the status and pinned transcript until the Transcript card                                                                                                                                                                     |
+| Annotations         | All            | "2 shapes"                                           | GeoJSON shapes. The checkbox hides the shapes                                                                                                                                                                                                                                                                                      |
+
+Hidden layers leave the deck.gl layer list (`cellsVisible` in
+`createOverviewLayers`), so they cannot be hovered or picked. Visibility is
+not in the link yet (15.2-H).
 
 ## Dataset Tab
 

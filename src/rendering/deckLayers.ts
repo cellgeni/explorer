@@ -246,54 +246,59 @@ export function createOverviewLayers(
     ? Math.max(cellFillOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
     : cellFillOpacity
   const cellPointFilled = effectiveBoundaryFillEnabled || cellBoundaryOpacity <= 0
+  const cellsVisible = options.cellsVisible ?? true
   const layers: LayersList = []
 
-  layers.push(
-    ...createCellBoundaryLayers({
-      boundaries,
-      geometry: cellBoundaryGeometry,
-      style: cellBoundaryStyle,
-      fillEnabled: effectiveBoundaryFillEnabled,
-      cellFillOpacity,
-      cellBoundaryOpacity,
-      pickable: options.cellBoundaryPickable === true,
-    }),
-  )
-  layers.push(
-    ...createNucleusBoundaryLayers(nucleusBoundaries, options.nucleusBoundaryOpacity),
-  )
-  layers.push(
-    createCellPointLayer(pointCells, {
-      cellFillOpacity: cellPointFillOpacity,
-      cellBoundaryOpacity,
-      filled: cellPointFilled,
-      pickable: options.cellPointPickable ?? true,
-      radiusMaxPixels:
-        options.trueSizePoints === true
-          ? UNCAPPED_RADIUS_PIXELS
-          : overviewCellRadiusMaxPixels(
-              options.pointSizeZoomDelta,
-              pointSizeFullViewScale,
-            ),
-      ...(cellPointPacking === undefined
-        ? {}
-        : {
-            packed: {
-              geometry: cellPointPacking.geometry,
-              colors: cachedCellPointLayerColors(
-                cellPointPacking.colors,
-                cellPointFillOpacity,
-                cellBoundaryOpacity,
+  // Hidden cells leave out their layers, so they cannot be hovered or picked
+  // (15.2-C).
+  if (cellsVisible) {
+    layers.push(
+      ...createCellBoundaryLayers({
+        boundaries,
+        geometry: cellBoundaryGeometry,
+        style: cellBoundaryStyle,
+        fillEnabled: effectiveBoundaryFillEnabled,
+        cellFillOpacity,
+        cellBoundaryOpacity,
+        pickable: options.cellBoundaryPickable === true,
+      }),
+    )
+    layers.push(
+      ...createNucleusBoundaryLayers(nucleusBoundaries, options.nucleusBoundaryOpacity),
+    )
+    layers.push(
+      createCellPointLayer(pointCells, {
+        cellFillOpacity: cellPointFillOpacity,
+        cellBoundaryOpacity,
+        filled: cellPointFilled,
+        pickable: options.cellPointPickable ?? true,
+        radiusMaxPixels:
+          options.trueSizePoints === true
+            ? UNCAPPED_RADIUS_PIXELS
+            : overviewCellRadiusMaxPixels(
+                options.pointSizeZoomDelta,
+                pointSizeFullViewScale,
               ),
-              filterValues: cellPointPacking.filterValues,
-              sampleFraction: cellPointPacking.sampleFraction,
-            },
-          }),
-    }),
-  )
+        ...(cellPointPacking === undefined
+          ? {}
+          : {
+              packed: {
+                geometry: cellPointPacking.geometry,
+                colors: cachedCellPointLayerColors(
+                  cellPointPacking.colors,
+                  cellPointFillOpacity,
+                  cellBoundaryOpacity,
+                ),
+                filterValues: cellPointPacking.filterValues,
+                sampleFraction: cellPointPacking.sampleFraction,
+              },
+            }),
+      }),
+    )
+  }
 
   const geneExpressionLayer = createGeneExpressionScatterLayer(
-    visibleGeneExpressionOverlayCells,
+    cellsVisible ? visibleGeneExpressionOverlayCells : [],
     {
       cellFillOpacity: Math.max(
         cellFillOpacity,
@@ -324,7 +329,7 @@ export function createOverviewLayers(
     layers.push(transcriptDensityLayer)
   }
 
-  const gridCellLayer = createGridCellLayer(gridCells, {
+  const gridCellLayer = createGridCellLayer(cellsVisible ? gridCells : [], {
     fillOpacity: gridCellOpacity ?? cellFillOpacity,
     lineOpacity: gridCellOpacity ?? cellBoundaryOpacity,
     geneExpressionActive,

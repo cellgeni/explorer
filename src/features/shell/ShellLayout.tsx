@@ -1,12 +1,20 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
 import { Drawer } from '../../components/ui'
+import { isTextEntryTarget } from '../app-shell/activeToolModel'
+import type { AnnotationsSectionModel } from '../sections/annotationsSectionModel'
+import type { CellsSectionModel } from '../sections/cellsSectionModel'
 import {
   DatasetAbout,
   DatasetDiagnostics,
   DatasetViewOptions,
 } from '../sections/DatasetInfoBlocks'
 import type { DatasetInfoModel } from '../sections/datasetInfoModel'
+import type { ImageSectionModel } from '../sections/imageSectionModel'
+import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
+import { LayerPanel } from './LayerPanel'
+import type { LayerPanelModel } from './layerPanelModel'
+import { isLayerPanelKey } from './shortcuts'
 import { TopBar } from './TopBar'
 import type { TopBarModel } from './topBarModel'
 
@@ -14,15 +22,54 @@ interface ShellLayoutProps {
   readonly topBar: TopBarModel
   readonly info: DatasetInfoModel
   readonly settings: ViewSettingsModel
+  readonly layerPanel: LayerPanelModel
+  readonly image: ImageSectionModel
+  readonly cells: CellsSectionModel
+  readonly transcripts: TranscriptsSectionModel
+  readonly annotations: AnnotationsSectionModel
   // The canvas, and the panels that sit over it.
   readonly children: ReactNode
 }
 
 // The new shell (UNIFIED_PLAN.md, 15.2), shown with ?shell=2 until 15.2-J
-// makes it the default: the top bar over the canvas, and ⓘ's dataset info
-// drawer. The drawer's sections and issue badge come in 15.2-F.
-export function ShellLayout({ topBar, info, settings, children }: ShellLayoutProps) {
+// makes it the default: the top bar, the canvas with ⓘ's dataset info drawer
+// over it, and the layer panel docked on the right. The drawer's sections and
+// issue badge come in 15.2-F.
+export function ShellLayout({
+  topBar,
+  info,
+  settings,
+  layerPanel,
+  image,
+  cells,
+  transcripts,
+  annotations,
+  children,
+}: ShellLayoutProps) {
   const [infoOpen, setInfoOpen] = useState(false)
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const togglePanel = useEffectEvent(() => {
+    setPanelCollapsed((current) => !current)
+  })
+
+  // \ hides or shows the layer panel, except while typing.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.repeat || isTextEntryTarget(event.target)) {
+        return
+      }
+
+      if (!isLayerPanelKey(event)) return
+
+      event.preventDefault()
+      togglePanel()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
 
   return (
     <>
@@ -33,20 +80,32 @@ export function ShellLayout({ topBar, info, settings, children }: ShellLayoutPro
         infoOpen={infoOpen}
         onInfoOpenChange={setInfoOpen}
       />
-      <div className="shell-body">
-        <Drawer
-          title="Dataset info"
-          open={infoOpen}
-          onClose={() => {
-            setInfoOpen(false)
-          }}
-          className="shell-info-drawer"
-        >
-          {info.about === null ? null : <DatasetAbout about={info.about} />}
-          <DatasetViewOptions viewOptions={info.viewOptions} />
-          <DatasetDiagnostics diagnostics={info.diagnostics} />
-        </Drawer>
-        {children}
+      <div className={panelCollapsed ? 'shell-body is-panel-collapsed' : 'shell-body'}>
+        <div className="shell-canvas">
+          <Drawer
+            title="Dataset info"
+            open={infoOpen}
+            onClose={() => {
+              setInfoOpen(false)
+            }}
+            className="shell-info-drawer"
+          >
+            {info.about === null ? null : <DatasetAbout about={info.about} />}
+            <DatasetViewOptions viewOptions={info.viewOptions} placement="drawer" />
+            <DatasetDiagnostics diagnostics={info.diagnostics} />
+          </Drawer>
+          {children}
+        </div>
+        <LayerPanel
+          panel={layerPanel}
+          collapsed={panelCollapsed}
+          onCollapsedChange={setPanelCollapsed}
+          image={image}
+          cells={cells}
+          transcripts={transcripts}
+          annotations={annotations}
+          viewOptions={info.viewOptions}
+        />
       </div>
     </>
   )

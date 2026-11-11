@@ -336,6 +336,26 @@ describe('deck layer factory', () => {
     expect(getPolygon(boundaries[0]!)).toEqual(boundaries[0]!.polygon)
   })
 
+  it('leaves out cell and nucleus layers while cells are hidden (15.2-C)', () => {
+    const nucleusBoundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'nucleus-1',
+        polygon: [
+          [1, -1, 0],
+          [4, -1, 0],
+          [4, -4, 0],
+        ],
+        fillColor: [63, 118, 190, 38],
+        lineColor: [128, 188, 255, 170],
+      },
+    ]
+
+    expect(createOverviewLayers(fixtureCells, [], { nucleusBoundaries })).toHaveLength(2)
+    expect(
+      createOverviewLayers(fixtureCells, [], { nucleusBoundaries, cellsVisible: false }),
+    ).toEqual([])
+  })
+
   it('adds a non-pickable nucleus segmentation polygon layer', () => {
     const nucleusBoundaries: readonly CellBoundaryDatum[] = [
       {

@@ -7,13 +7,29 @@
 
 .shell-body {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
 
-/* Until the layer panel (15.2-C), the HUD sits under the top bar. */
-.shell-body .control-hud {
+.shell-body.is-panel-collapsed {
+  grid-template-columns: minmax(0, 1fr) 40px;
+}
+
+.shell-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Until the cards (15.2-D), the HUD with Magic Lens, ROI and Cell sits where
+   they will, at the top left of the canvas. */
+.shell-canvas .control-hud {
+  right: auto;
+  left: max(12px, env(safe-area-inset-left));
   max-height: calc(100% - 24px);
 }
 
@@ -242,4 +258,149 @@
   align-content: start;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* Layer panel (15.2-C) */
+
+.shell-layer-panel {
+  position: relative;
+  z-index: var(--z-panel);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-1);
+}
+
+.shell-layer-panel-header {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.shell-layer-panel-header h2 {
+  margin: 0;
+  font-size: var(--font-title);
+}
+
+.shell-layer-panel.is-collapsed .shell-layer-panel-header {
+  justify-content: center;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.shell-layer-panel.is-collapsed .shell-layer-panel-toggle .ui-icon {
+  transform: rotate(180deg);
+}
+
+.shell-layer-sections {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.shell-layer-sections[hidden] {
+  display: none;
+}
+
+.shell-layer-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.shell-layer-section-header {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 0 var(--space-2) 0 var(--space-3);
+}
+
+.shell-layer-section-header input {
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.shell-layer-section-header h3 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: inherit;
+}
+
+.shell-layer-section-header button {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: var(--font-body);
+  text-align: left;
+}
+
+.shell-layer-section-header button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.shell-layer-section-name {
+  flex: 0 0 auto;
+  font-weight: 650;
+}
+
+.shell-layer-section.is-layer-hidden .shell-layer-section-name {
+  color: var(--text-3);
+}
+
+.shell-layer-section-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--font-control);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-layer-section-header button .ui-icon {
+  transition: transform 120ms ease;
+}
+
+.shell-layer-section-header button[aria-expanded='true'] .ui-icon {
+  transform: rotate(90deg);
+}
+
+.shell-layer-section-body {
+  display: grid;
+  gap: 6px;
+  padding: var(--space-1) var(--space-3) var(--space-3);
+}
+
+.shell-layer-section-body[hidden] {
+  display: none;
+}
+
+.shell-subheading {
+  margin: var(--space-2) 0 0;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-weight: 700;
+}
+
+.shell-loading-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
 }

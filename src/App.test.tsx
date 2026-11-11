@@ -1682,6 +1682,7 @@ describe('App', () => {
       'true',
     )
 
+    fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
     expect(await screen.findByText('Xenium · 1 cell · 2 genes')).toHaveAttribute(
       'role',
@@ -1698,6 +1699,47 @@ describe('App', () => {
       'aria-pressed',
       'true',
     )
+  })
+
+  it('moves the layer controls to the layer panel with ?shell=2 (15.2-C)', async () => {
+    window.history.replaceState(null, '', '/?shell=2')
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+
+    render(
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByText('Xenium · 1 cell · 2 genes')
+
+    expect(
+      screen
+        .getAllByRole('tab')
+        .filter((tab) => !tab.hidden)
+        .map((tab) => tab.textContent),
+    ).toEqual(['Magic Lens', 'ROI', 'Cell'])
+
+    const panel = screen.getByRole('complementary', { name: 'Layers' })
+    const cells = within(panel).getByRole('region', { name: /^Cells/ })
+    fireEvent.change(within(cells).getByLabelText('Gene selection'), {
+      target: { value: 'gad' },
+    })
+    fireEvent.click(await within(cells).findByRole('button', { name: 'Gad1' }))
+    expect(within(panel).getByRole('button', { name: /^Cells/ })).toHaveTextContent(
+      'Gad1',
+    )
+
+    fireEvent.keyDown(document.body, { key: '\\' })
+    expect(
+      within(panel).getByRole('button', { name: 'Show layers (\\)' }),
+    ).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('keeps tool keys off in the current shell', async () => {
