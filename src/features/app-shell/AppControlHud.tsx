@@ -7,6 +7,8 @@ interface AppControlHudProps {
   readonly activeControlHudTab: ControlHudTab
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly children: ReactNode
+  // Logs HUD tab switches, which only help when debugging.
+  readonly debugMode?: boolean | undefined
   readonly hiddenTabIds?: ReadonlySet<ControlHudTab> | undefined
   readonly isControlHudCollapsed: boolean
   readonly loadingTabIds: ReadonlySet<ControlHudTab>
@@ -18,6 +20,7 @@ export function AppControlHud({
   activeControlHudTab,
   appendDebugEvent,
   children,
+  debugMode = false,
   hiddenTabIds,
   isControlHudCollapsed,
   loadingTabIds,
@@ -36,9 +39,11 @@ export function AppControlHud({
       }}
       onActiveTabChange={(tabId, tabLabel) => {
         setActiveControlHudTab(tabId)
-        appendDebugEvent(`HUD tab: ${tabLabel}`, {
-          coalesceKey: 'hud-tab',
-        })
+        if (debugMode) {
+          appendDebugEvent(`HUD tab: ${tabLabel}`, {
+            coalesceKey: 'hud-tab',
+          })
+        }
       }}
     >
       {children}

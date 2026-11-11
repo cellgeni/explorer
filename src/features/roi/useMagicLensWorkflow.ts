@@ -1,3 +1,4 @@
+import { withMicrometers } from '../../data/units'
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import type {
   ViewerMagicLensDetail,
@@ -83,7 +84,6 @@ interface MagicLensWorkflowSetters {
   readonly setMagicLensState: Dispatch<
     SetStateAction<MagicLensState<StructuredLoadError>>
   >
-  readonly setMeasurementEnabled: Dispatch<SetStateAction<boolean>>
   readonly setMeasurementResetKey: Dispatch<SetStateAction<number>>
 }
 
@@ -141,7 +141,6 @@ export function useMagicLensWorkflow({
     setMagicLensRadiusMicrometers,
     setMagicLensScope,
     setMagicLensState,
-    setMeasurementEnabled,
     setMeasurementResetKey,
   } = setters
 
@@ -384,7 +383,7 @@ export function useMagicLensWorkflow({
 
       setMagicLensRadiusMicrometers(nextRadius)
       magicLensLastQueryKeyRef.current = null
-      appendDebugEvent(`Magic lens radius: ${nextRadius} um`, {
+      appendDebugEvent(`Magic lens radius: ${withMicrometers(String(nextRadius))}`, {
         coalesceKey: 'magic-lens-radius',
       })
     },
@@ -413,7 +412,6 @@ export function useMagicLensWorkflow({
         return
       }
 
-      setMeasurementEnabled(false)
       setMeasurementResetKey((current) => current + 1)
       setMagicLensState(IDLE_MAGIC_LENS_STATE)
       magicLensLastQueryKeyRef.current = null
@@ -425,7 +423,6 @@ export function useMagicLensWorkflow({
       magicLensLastQueryKeyRef,
       setMagicLensActive,
       setMagicLensState,
-      setMeasurementEnabled,
       setMeasurementResetKey,
     ],
   )

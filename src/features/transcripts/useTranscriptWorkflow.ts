@@ -49,6 +49,8 @@ import {
   transcriptLayerWaiting,
   transcriptAggregateFallbackMessage,
   transcriptExactManualLoadMessage,
+  transcriptGeneDensityMissingMessage,
+  transcriptGeneDensityOverBudgetMessage,
   transcriptNativeAggregateMessage,
   transcriptPerGeneCellSummaryMessage,
   transcriptPerGeneExactNeedsGenesMessage,
@@ -349,6 +351,7 @@ export function useTranscriptWorkflow({
                   source: 'cell-summary',
                   mode: 'density',
                   bins,
+                  featureNames: EMPTY_GENE_LIST,
                   message: transcriptPerGeneCellSummaryMessage(hasSelectedGenes),
                   visibleTranscriptEstimate,
                   scaleMax: maxTranscriptAggregateCount(bins),
@@ -481,6 +484,7 @@ export function useTranscriptWorkflow({
                 source: result.source,
                 mode: 'density',
                 bins: result.bins,
+                featureNames: result.selectedFeatureNames,
                 message: transcriptNativeAggregateMessage({
                   mode: 'density',
                   selectedFeatureCount: result.selectedFeatureNames.length,
@@ -508,10 +512,9 @@ export function useTranscriptWorkflow({
       })
     }
 
-    // Native Xenium density covers all transcripts; selected genes filter
-    // exact points only.
-    const aggregateFeatureNames = EMPTY_GENE_LIST
-
+    // With the Selected genes filter, the density counts those genes, from
+    // density/gene (15.1-J). Exact reads still scan every transcript in the
+    // view, so Auto keeps switching on the all-transcript estimate.
     if (plan.kind === 'native-zarr') {
       const maxBins = TRANSCRIPT_NATIVE_DENSITY_MAX_BINS
       const requestKey = transcriptAggregateRequestKey(
@@ -519,7 +522,7 @@ export function useTranscriptWorkflow({
         currentViewportDetail.bbox,
         {
           mode: plan.mode,
-          featureNames: aggregateFeatureNames,
+          featureNames,
           maxBins,
         },
       )
@@ -552,7 +555,7 @@ export function useTranscriptWorkflow({
       void loadTranscriptAggregates(loadState.url, currentViewportDetail.bbox, {
         signal: request.signal,
         mode: plan.mode,
-        featureNames: aggregateFeatureNames,
+        featureNames,
         maxBins,
       })
         .then((result) => {
@@ -562,16 +565,37 @@ export function useTranscriptWorkflow({
 
           const durationMs = Math.max(0, readTimestamp() - transcriptStartedAt)
 
+          if (result.overBudget !== undefined) {
+            setTranscriptLayerState(
+              transcriptLayerWaiting({
+                message: transcriptGeneDensityOverBudgetMessage(
+                  result.selectedFeatureNames,
+                  result.overBudget,
+                ),
+                visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
+              }),
+            )
+            appendDebugEvent(
+              `Selected-gene density skipped: ${result.overBudget.chunkCount.toLocaleString()} data chunks in view`,
+              { coalesceKey: 'transcript-query' },
+            )
+            return
+          }
+
           setTranscriptLayerState(
             transcriptLayerAggregate({
               source: result.source,
               mode: plan.mode,
               bins: result.bins,
-              message: transcriptNativeAggregateMessage({
-                mode: plan.mode,
-                selectedFeatureCount: result.selectedFeatureNames.length,
-                binCount: result.bins.length,
-              }),
+              featureNames: result.selectedFeatureNames,
+              message:
+                featureNames.length > 0 && result.selectedFeatureNames.length === 0
+                  ? transcriptGeneDensityMissingMessage(result.bins.length)
+                  : transcriptNativeAggregateMessage({
+                      mode: plan.mode,
+                      selectedFeatureCount: result.selectedFeatureNames.length,
+                      binCount: result.bins.length,
+                    }),
               visibleTranscriptEstimate: plan.visibleTranscriptEstimate,
               scaleMax: result.scaleMax,
               durationMs,
@@ -643,6 +667,7 @@ export function useTranscriptWorkflow({
               source: 'cell-summary',
               mode: fallbackMode,
               bins,
+              featureNames: EMPTY_GENE_LIST,
               message: transcriptAggregateFallbackMessage({
                 mode: fallbackMode,
                 featureFilterMode: effectiveTranscriptFeatureFilterMode,

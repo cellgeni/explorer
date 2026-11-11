@@ -125,6 +125,7 @@ describe('shareableState', () => {
     expect(hash).toContain('vlib=V1_Mouse+Brain')
     expect(hash).toContain('voff=1')
     expect(parseShareableState(hash)).toEqual({
+      linkVersion: 2,
       visiumImage: 'lowres',
       visiumLibrary: 'V1_Mouse Brain',
       visiumOffTissue: true,
@@ -134,6 +135,7 @@ describe('shareableState', () => {
 
   it('round-trips the first z plane and ignores invalid ones', () => {
     expect(parseShareableState(formatShareableState({ morphologyZPlane: 0 }))).toEqual({
+      linkVersion: 2,
       morphologyZPlane: 0,
     })
     expect(parseShareableState('#z=-1').morphologyZPlane).toBeUndefined()
@@ -147,5 +149,33 @@ describe('shareableState', () => {
     })
 
     expect(shareableViewStateKey(state)).toBe('1.123:2.568:0:-1.222')
+  })
+
+  it('still reads version 1 links, which wrote every field', () => {
+    const state = parseShareableState(
+      '#xv=1&dataset=https%3A%2F%2Fexample.test%2Fxenium&genes=SNAP25&cellColor=transcript-count&tab=dataset&nucleusBounds=1&txFilter=selected',
+    )
+
+    expect(state).toEqual({
+      linkVersion: 1,
+      datasetUrl: 'https://example.test/xenium',
+      selectedGenes: ['SNAP25'],
+      observationColorMode: 'transcript-count',
+      activeTab: 'dataset',
+      showNucleusBoundaries: true,
+      transcriptFeatureFilterMode: 'selected',
+    })
+  })
+
+  it('writes and reads the annotation sets as groups', () => {
+    const hash = formatShareableState({
+      annotationGroupIds: ['analysis:0', 'h5ad:leiden'],
+    })
+
+    expect(hash).toBe('#xv=2&groups=analysis%3A0%2Ch5ad%3Aleiden')
+    expect(parseShareableState(hash).annotationGroupIds).toEqual([
+      'analysis:0',
+      'h5ad:leiden',
+    ])
   })
 })

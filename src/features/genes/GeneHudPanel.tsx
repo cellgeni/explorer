@@ -11,10 +11,12 @@ import {
 } from '../../rendering/deckLayers'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import { isObservationColorMode } from '../app-shell/appShellModel'
+import { Chip } from '../../components/ui'
 import { GeneOptionList } from './GeneOptionList'
 import {
   defaultGeneSetName,
   formatGeneScaleValue,
+  geneSearchEmptyMessage,
   isGeneExpressionDetailMode,
   type GeneExpressionState,
   type GenePanelState,
@@ -51,6 +53,8 @@ interface GeneHudPanelProps {
   readonly selectedCellMetadataTrackId: string | null
   readonly onGeneSearchChange: (search: string) => void
   readonly onToggleGene: (gene: string) => void
+  // Adds a gene from the search list, which also clears the search.
+  readonly onPickGene: (gene: string) => void
   readonly onGeneSetSymbolsChange: (symbols: string) => void
   readonly onApplyGeneSetSymbols: () => void
   readonly onSaveSelectedGeneSet: () => void
@@ -94,6 +98,7 @@ export function GeneHudPanel({
   selectedCellMetadataTrackId,
   onGeneSearchChange,
   onToggleGene,
+  onPickGene,
   onGeneSetSymbolsChange,
   onApplyGeneSetSymbols,
   onSaveSelectedGeneSet,
@@ -150,17 +155,17 @@ export function GeneHudPanel({
         {selectedGenes.length === 0 ? null : (
           <div className="gene-chip-row" aria-label="Selected genes">
             {selectedGenes.map((gene) => (
-              <button
+              <Chip
                 key={gene}
-                type="button"
-                className="gene-chip"
-                title={`Remove ${gene}`}
-                onClick={() => {
+                title={gene}
+                selected
+                removeTitle={`Remove ${gene}`}
+                onRemove={() => {
                   onToggleGene(gene)
                 }}
               >
                 {gene}
-              </button>
+              </Chip>
             ))}
           </div>
         )}
@@ -169,7 +174,11 @@ export function GeneHudPanel({
           genes={filteredGenes}
           selectedGenes={selectedGenes}
           aliases={geneAliases}
-          onToggleGene={onToggleGene}
+          emptyMessage={geneSearchEmptyMessage(geneSearch, selectedGenes, {
+            noun: 'genes',
+            aliases: geneAliases,
+          })}
+          onToggleGene={onPickGene}
         />
 
         <label htmlFor={geneSetSymbolsInputId}>Gene set symbols</label>
@@ -220,25 +229,29 @@ export function GeneHudPanel({
           }}
         />
 
-        <label htmlFor={geneSetScoreInputId}>Signature score</label>
-        <select
-          id={geneSetScoreInputId}
-          value={geneExpressionScoreMode}
-          title="Signature score"
-          onChange={(event) => {
-            const nextScoreMode = event.currentTarget.value
+        {selectedGenes.length < 2 ? null : (
+          <>
+            <label htmlFor={geneSetScoreInputId}>Combine genes</label>
+            <select
+              id={geneSetScoreInputId}
+              value={geneExpressionScoreMode}
+              title="How to combine the selected genes into one score per cell"
+              onChange={(event) => {
+                const nextScoreMode = event.currentTarget.value
 
-            if (isGeneExpressionScoreMode(nextScoreMode)) {
-              onGeneExpressionScoreModeChange(nextScoreMode)
-            }
-          }}
-        >
-          {GENE_EXPRESSION_SCORE_MODE_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+                if (isGeneExpressionScoreMode(nextScoreMode)) {
+                  onGeneExpressionScoreModeChange(nextScoreMode)
+                }
+              }}
+            >
+              {GENE_EXPRESSION_SCORE_MODE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
 
         {savedGeneSets.length === 0 ? null : (
           <div className="gene-set-list" aria-label="Saved gene sets">
@@ -337,6 +350,7 @@ export function GeneHudPanel({
             }
           }}
         >
+          <option value="gene-expression">Gene expression</option>
           <option value="transcript-count">Transcript count</option>
           <option value="cell-area">Cell area</option>
           {hasAnnotationColors ? <option value="annotations">Annotations</option> : null}

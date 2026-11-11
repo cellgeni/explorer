@@ -104,6 +104,8 @@ interface UseAnnotationWorkflowResult {
   readonly handleImportAnnotations: (file: File | null) => Promise<void>
   readonly handleImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly handleLoadAnnotations: () => void
+  // Loads one of the dataset's annotation sets, such as one named by a link.
+  readonly loadAnnotationGroup: (groupId: string) => void
   readonly handleRemoveCellMetadataTrack: (trackId: string) => void
   readonly handleRemoveAnnotation: (annotationId: string) => void
   readonly handleSaveRoiAnnotation: () => void
@@ -145,71 +147,76 @@ export function useAnnotationWorkflow({
     setSelectedCellMetadataTrackId,
   } = setters
 
+  const loadAnnotationGroup = useCallback(
+    (selectedGroupId: string) => {
+      if (loadState.status !== 'ready' || annotationState.status === 'loading') {
+        return
+      }
+
+      if (selectedGroupId === NO_ANNOTATION_GROUP_ID) {
+        return
+      }
+
+      const requestId = loadRequestIdRef.current
+      const signal = datasetAbortRef.current?.signal
+      const groupId =
+        selectedGroupId === ALL_ANNOTATION_GROUP_ID ? undefined : selectedGroupId
+      appendDebugEvent(
+        groupId === undefined ? 'Loading annotations' : `Loading annotations ${groupId}`,
+      )
+      setAnnotationState(annotationLoadStarted(loadState.url))
+
+      void loadAnnotations(loadState.url, {
+        ...(signal === undefined ? {} : { signal }),
+        ...(groupId === undefined ? {} : { groupId }),
+      })
+        .then((annotations) => {
+          if (loadRequestIdRef.current !== requestId) {
+            return
+          }
+
+          setAnnotationState(
+            annotationLoadReady(loadState.url, annotations, selectedGroupId),
+          )
+          setAnnotationColors((current) => colorsForAnnotations(annotations, current))
+          setHiddenAnnotationIds([])
+          if (annotations.length > 0) {
+            setObservationColorMode('annotations')
+          }
+          appendDebugEvent(
+            `Annotations loaded: ${annotations.length.toLocaleString()} labels`,
+          )
+        })
+        .catch((error) => {
+          if (isAbortError(error) || loadRequestIdRef.current !== requestId) {
+            return
+          }
+
+          setAnnotationState(
+            annotationLoadFailed(
+              loadState.url,
+              createStructuredLoadError('Annotations', error),
+            ),
+          )
+          appendDebugEvent('Annotations failed')
+        })
+    },
+    [
+      annotationState,
+      appendDebugEvent,
+      datasetAbortRef,
+      loadAnnotations,
+      loadRequestIdRef,
+      loadState,
+      setAnnotationColors,
+      setHiddenAnnotationIds,
+      setAnnotationState,
+      setObservationColorMode,
+    ],
+  )
   const handleLoadAnnotations = useCallback(() => {
-    if (loadState.status !== 'ready' || annotationState.status === 'loading') {
-      return
-    }
-
-    if (selectedAnnotationGroupId === NO_ANNOTATION_GROUP_ID) {
-      return
-    }
-
-    const requestId = loadRequestIdRef.current
-    const signal = datasetAbortRef.current?.signal
-    const groupId =
-      selectedAnnotationGroupId === ALL_ANNOTATION_GROUP_ID
-        ? undefined
-        : selectedAnnotationGroupId
-    appendDebugEvent(
-      groupId === undefined ? 'Loading annotations' : `Loading annotations ${groupId}`,
-    )
-    setAnnotationState(annotationLoadStarted(loadState.url))
-
-    void loadAnnotations(loadState.url, {
-      ...(signal === undefined ? {} : { signal }),
-      ...(groupId === undefined ? {} : { groupId }),
-    })
-      .then((annotations) => {
-        if (loadRequestIdRef.current !== requestId) {
-          return
-        }
-
-        setAnnotationState(annotationLoadReady(loadState.url, annotations))
-        setAnnotationColors((current) => colorsForAnnotations(annotations, current))
-        setHiddenAnnotationIds([])
-        if (annotations.length > 0) {
-          setObservationColorMode('annotations')
-        }
-        appendDebugEvent(
-          `Annotations loaded: ${annotations.length.toLocaleString()} labels`,
-        )
-      })
-      .catch((error) => {
-        if (isAbortError(error) || loadRequestIdRef.current !== requestId) {
-          return
-        }
-
-        setAnnotationState(
-          annotationLoadFailed(
-            loadState.url,
-            createStructuredLoadError('Annotations', error),
-          ),
-        )
-        appendDebugEvent('Annotations failed')
-      })
-  }, [
-    annotationState,
-    appendDebugEvent,
-    datasetAbortRef,
-    loadAnnotations,
-    loadRequestIdRef,
-    loadState,
-    selectedAnnotationGroupId,
-    setAnnotationColors,
-    setHiddenAnnotationIds,
-    setAnnotationState,
-    setObservationColorMode,
-  ])
+    loadAnnotationGroup(selectedAnnotationGroupId)
+  }, [loadAnnotationGroup, selectedAnnotationGroupId])
 
   const handleAnnotationGroupChange = useCallback(
     (nextGroupId: string) => {
@@ -239,6 +246,7 @@ export function useAnnotationWorkflow({
             importedAnnotations,
             importedPrefix,
           ),
+          current.status === 'ready' ? current.groupId : undefined,
         ),
       )
       setAnnotationColors((current) =>
@@ -520,10 +528,11 @@ export function useAnnotationWorkflow({
     roiIdRef.current += 1
     appendDebugEvent(`Saved ROI annotation ${name}`)
     setAnnotationState((current) =>
-      annotationLoadReady(loadState.url, [
-        annotation,
-        ...(current.status === 'ready' ? current.annotations : []),
-      ]),
+      annotationLoadReady(
+        loadState.url,
+        [annotation, ...(current.status === 'ready' ? current.annotations : [])],
+        current.status === 'ready' ? current.groupId : undefined,
+      ),
     )
     setAnnotationColors((current) => ({
       ...current,
@@ -551,6 +560,7 @@ export function useAnnotationWorkflow({
     handleImportAnnotations,
     handleImportAnnotationUrl,
     handleLoadAnnotations,
+    loadAnnotationGroup,
     handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,

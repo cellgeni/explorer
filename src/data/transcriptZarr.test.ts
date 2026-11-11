@@ -4,7 +4,6 @@ import {
   loadTranscriptZarrGenePanel,
   parseTranscriptZarrGenePanelAttrs,
   transcriptDensityLevelForBbox,
-  transcriptFeatureCircleOffset,
   transcriptGroupsFromPoints,
   transcriptZarrGridLevelBins,
   transcriptZarrTileKeysForViewport,
@@ -146,17 +145,6 @@ describe('transcriptZarr', () => {
         10,
       ),
     ).toEqual({ level: 2, tileSizeMicrometers: 40 })
-  })
-
-  it('lays out selected-gene feature circles inside a density bin', () => {
-    expect(transcriptFeatureCircleOffset(0, 1, 100)).toEqual({ x: 0, y: 0 })
-    expect(transcriptFeatureCircleOffset(0, 2, 100)).toEqual({ x: -22, y: 0 })
-    expect(transcriptFeatureCircleOffset(1, 2, 100)).toEqual({ x: 22, y: 0 })
-    expect(transcriptFeatureCircleOffset(2, 3, 100)).toEqual({ x: 21, y: 18 })
-
-    const cappedOffset = transcriptFeatureCircleOffset(8, 12, 100)
-    expect(cappedOffset.x).toBeCloseTo(0)
-    expect(cappedOffset.y).toBeCloseTo(-28)
   })
 
   it('extracts gene panel names from transcript Zarr root attributes', () => {

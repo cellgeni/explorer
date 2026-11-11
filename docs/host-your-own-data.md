@@ -26,8 +26,8 @@ Important rules:
 
 - Return `206 Partial Content` for `Range: bytes=0-0`.
 - Send CORS headers on `403` and `404` responses too, or serve a folder index
-  page, so missing files are reported as missing rather than as network
-  failures. See
+  page, so missing files are reported as missing ("Dataset not found") rather
+  than as network failures ("Request blocked"). See
   [Hosts that hide error responses](./s3-cors-playbook.md#hosts-that-hide-error-responses).
 - Do not serve Parquet, TIFF, Zarr zip, OME-Zarr chunks, or HDF5 with transfer
   `Content-Encoding`.

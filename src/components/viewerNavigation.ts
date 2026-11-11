@@ -60,7 +60,7 @@ export function formatMouseCoordinate(
   coordinate: MouseCoordinate,
   unit: ViewerCoordinateUnit,
   micrometersPerPixel: number,
-  physicalUnitLabel = 'μm',
+  physicalUnitLabel = 'µm',
 ): string {
   if (unit === 'px') {
     const pixelSize = safeMicrometersPerPixel(micrometersPerPixel)

@@ -265,6 +265,27 @@ export function formatGeneScaleValue(value: number): string {
   })
 }
 
+// How well a gene matches a lower-case search: 0 exact (name or alias),
+// 1 name prefix, 2 alias prefix, 3 name substring, 4 alias substring, or null.
+function geneSearchRank(
+  gene: string,
+  normalizedSearch: string,
+  alias: string | undefined,
+): number | null {
+  const name = gene.toLowerCase()
+  const normalizedAlias = alias?.toLowerCase()
+
+  if (name === normalizedSearch || normalizedAlias === normalizedSearch) return 0
+  if (name.startsWith(normalizedSearch)) return 1
+  if (normalizedAlias?.startsWith(normalizedSearch) === true) return 2
+  if (name.includes(normalizedSearch)) return 3
+  if (normalizedAlias?.includes(normalizedSearch) === true) return 4
+  return null
+}
+
+// Genes that match the search and are not selected yet: exact matches first,
+// then name prefixes, alias prefixes and substrings, each in panel order. An
+// empty search lists every unselected gene in panel order.
 export function filterGeneOptions(
   genes: readonly string[],
   search: string,
@@ -276,27 +297,61 @@ export function filterGeneOptions(
 ): readonly string[] {
   const normalizedSearch = search.trim().toLowerCase()
   const selected = new Set(selectedGenes)
-  const matches: string[] = []
+  const limit = options.limit ?? Infinity
 
-  for (const gene of genes) {
-    if (selected.has(gene)) {
-      continue
+  if (normalizedSearch.length === 0) {
+    const matches: string[] = []
+
+    for (const gene of genes) {
+      if (matches.length >= limit) break
+      if (!selected.has(gene)) matches.push(gene)
     }
 
-    if (
-      normalizedSearch.length === 0 ||
-      gene.toLowerCase().includes(normalizedSearch) ||
-      options.aliases?.get(gene)?.toLowerCase().includes(normalizedSearch) === true
-    ) {
-      matches.push(gene)
-    }
-
-    if (options.limit !== undefined && matches.length >= options.limit) {
-      break
-    }
+    return matches
   }
 
-  return matches
+  const ranked: { readonly gene: string; readonly rank: number }[] = []
+
+  for (const gene of genes) {
+    if (selected.has(gene)) continue
+    const rank = geneSearchRank(gene, normalizedSearch, options.aliases?.get(gene))
+    if (rank !== null) ranked.push({ gene, rank })
+  }
+
+  // Array sort is stable, so panel order holds within a rank.
+  return ranked
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, limit)
+    .map(({ gene }) => gene)
+}
+
+// What an empty search result says. The list leaves selected genes out, so a
+// search for one of them says it is already selected.
+export function geneSearchEmptyMessage(
+  search: string,
+  selectedGenes: readonly string[],
+  options: {
+    readonly noun: 'genes' | 'features'
+    readonly aliases?: ReadonlyMap<string, string> | undefined
+  },
+): string {
+  const normalizedSearch = search.trim().toLowerCase()
+  const matches =
+    normalizedSearch.length === 0
+      ? []
+      : selectedGenes.filter(
+          (gene) =>
+            geneSearchRank(gene, normalizedSearch, options.aliases?.get(gene)) !== null,
+        )
+
+  if (matches.length === 0) return `No matching ${options.noun}`
+
+  const names =
+    matches.length <= 3
+      ? matches.join(', ')
+      : `${matches.slice(0, 3).join(', ')} and ${(matches.length - 3).toLocaleString()} more`
+
+  return `${names} ${matches.length === 1 ? 'is' : 'are'} already selected`
 }
 
 export function parseGeneSetSymbols(

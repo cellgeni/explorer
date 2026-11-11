@@ -10,6 +10,9 @@ export type AnnotationState<ErrorType = unknown> =
       readonly status: 'ready'
       readonly url: string
       readonly annotations: readonly Annotation[]
+      // The dataset's own annotation set that was loaded, which share links
+      // carry as groups= (15.1-L). Imported annotations add to it.
+      readonly groupId?: string
     }
   | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
 
@@ -35,8 +38,11 @@ export function annotationLoadStarted(url: string): AnnotationState<never> {
 export function annotationLoadReady(
   url: string,
   annotations: readonly Annotation[],
+  groupId?: string,
 ): AnnotationState<never> {
-  return { status: 'ready', url, annotations }
+  return groupId === undefined
+    ? { status: 'ready', url, annotations }
+    : { status: 'ready', url, annotations, groupId }
 }
 
 export function annotationLoadFailed<ErrorType>(
@@ -156,8 +162,15 @@ export function annotationSetIdForAnnotation(annotation: Annotation): string {
   return annotationSizeGrouping(annotation).id
 }
 
+// Cells that are on the map. Visium hides spots off the tissue, which then
+// should not count towards a label's size.
+export interface PlacedCellIds {
+  has(cellId: string): boolean
+}
+
 export function annotationSizePlots(
   annotations: readonly Annotation[],
+  placedCellIds: PlacedCellIds | null = null,
 ): readonly AnnotationSizePlot[] {
   const groups = new Map<
     string,
@@ -177,7 +190,13 @@ export function annotationSizePlots(
       totalCellAssignments: 0,
       maxCellCount: 0,
     }
-    const cellCount = annotation.cellIds.length
+    const cellCount =
+      placedCellIds === null
+        ? annotation.cellIds.length
+        : annotation.cellIds.reduce(
+            (count, cellId) => (placedCellIds.has(cellId) ? count + 1 : count),
+            0,
+          )
 
     current.rows.push({
       id: annotation.id,
@@ -348,4 +367,27 @@ function annotationSizeGrouping(annotation: Annotation): {
     label: 'Loaded annotations',
     rowLabel: annotation.label,
   }
+}
+
+// More categories than this, and a column labels cells rather than grouping
+// them.
+const ID_LIKE_CATEGORY_LIMIT = 500
+
+// H5AD and SpatialData columns that identify cells or ontology terms rather
+// than group them (15.1-I). They are listed apart, under "More columns".
+export function isIdLikeAnnotationGroup(group: AnnotationGroupOption): boolean {
+  const label = group.label.toLowerCase()
+  return (
+    label.endsWith('_ontology_term_id') ||
+    label === 'observation_joinid' ||
+    group.groupCount > ID_LIKE_CATEGORY_LIMIT
+  )
+}
+
+// The set chosen when a dataset's sets are listed: Xenium's graphclust, or
+// the first set. "All" stacked every clustering and was a poor default.
+export function defaultAnnotationGroupId(
+  groups: readonly AnnotationGroupOption[],
+): string | undefined {
+  return (groups.find((group) => group.label === 'graphclust') ?? groups[0])?.id
 }

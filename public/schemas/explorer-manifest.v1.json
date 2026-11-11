@@ -405,8 +405,14 @@
           "description": "Genes to select. Names must match the gene panel exactly."
         },
         "colorCellsBy": {
-          "enum": ["transcript-count", "cell-area", "annotations", "metadata"],
-          "description": "The Cell color control."
+          "enum": [
+            "gene-expression",
+            "transcript-count",
+            "cell-area",
+            "annotations",
+            "metadata"
+          ],
+          "description": "The Cell color control. Without it, genes colour cells by gene expression."
         },
         "geneColorScale": {
           "enum": [

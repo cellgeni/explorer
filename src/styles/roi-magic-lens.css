@@ -25,12 +25,11 @@
 .roi-summary-list dd {
   margin: 0;
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
 }
 
 .roi-summary-list dt {
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .roi-summary-list dd {
@@ -46,7 +45,7 @@
   border-radius: 6px;
   background: var(--surface-2);
   color: var(--text-3);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
@@ -65,14 +64,13 @@
 
 .roi-gene-heading span {
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .roi-gene-heading small {
   color: var(--text-3);
-  font-size: 0.6rem;
+  font-size: var(--font-caption);
   font-weight: 700;
 }
 
@@ -96,7 +94,7 @@
 .roi-gene-row span {
   overflow: hidden;
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -104,7 +102,7 @@
 
 .roi-gene-row strong {
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-variant-numeric: tabular-nums;
 }
 
@@ -127,7 +125,7 @@
 
 .roi-gene-list small {
   color: var(--text-3);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -139,9 +137,8 @@
 
 .magic-lens-scope > span {
   color: var(--text-2);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .magic-lens-scope-segmented {
@@ -161,9 +158,8 @@
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .magic-lens-scope-segmented button[aria-pressed='true'] {
@@ -193,7 +189,7 @@
 
 .magic-lens-radius-control output {
   color: var(--text-2);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -207,7 +203,7 @@
   border-radius: 6px;
   background: var(--surface-2);
   color: var(--text-3);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
@@ -238,12 +234,11 @@
 .magic-lens-summary-list dd {
   margin: 0;
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
 }
 
 .magic-lens-summary-list dt {
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .magic-lens-summary-list dd {
@@ -262,14 +257,13 @@
 
 .magic-lens-gene-heading span {
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .magic-lens-gene-heading small {
   color: var(--text-3);
-  font-size: 0.6rem;
+  font-size: var(--font-caption);
   font-weight: 700;
 }
 
@@ -300,7 +294,7 @@
 .magic-lens-gene-row span {
   overflow: hidden;
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -308,7 +302,7 @@
 
 .magic-lens-gene-row strong {
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-variant-numeric: tabular-nums;
 }
 
@@ -331,7 +325,7 @@
 
 .magic-lens-gene-list small {
   color: var(--text-3);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }

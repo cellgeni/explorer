@@ -195,11 +195,20 @@ export function transcriptDensityScaleGradient(
 }
 
 function colorStopsGradient(stops: readonly [ColorStop, ColorStop, ColorStop]): string {
-  const [low, middle, high] = stops.map(cssRgba)
-  return `linear-gradient(90deg, ${low} 0%, ${middle} 50%, ${high} 100%)`
+  return colorsGradient(stops)
 }
 
-function cssRgba([red, green, blue, alpha]: ColorStop): string {
+// A left-to-right CSS gradient through evenly spaced colours.
+export function colorsGradient(colors: readonly Color[]): string {
+  const last = Math.max(1, colors.length - 1)
+  const stops = colors.map(
+    (color, index) => `${cssRgba(color)} ${Math.round((index / last) * 100)}%`,
+  )
+  return `linear-gradient(90deg, ${stops.join(', ')})`
+}
+
+function cssRgba(color: Color): string {
+  const [red = 0, green = 0, blue = 0, alpha = 255] = color
   return `rgba(${red}, ${green}, ${blue}, ${Math.round((alpha / 255) * 100) / 100})`
 }
 

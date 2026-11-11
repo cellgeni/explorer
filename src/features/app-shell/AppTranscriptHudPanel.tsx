@@ -32,7 +32,6 @@ type AppTranscriptControlIds = Pick<
   | 'transcriptDetailInputId'
   | 'transcriptDensityScaleInputId'
   | 'transcriptPointColorInputId'
-  | 'transcriptPointBudgetInputId'
   | 'transcriptMinQvInputId'
   | 'transcriptFeatureFilterInputId'
   | 'transcriptFeatureSearchInputId'
@@ -209,7 +208,6 @@ export function AppTranscriptHudPanel({
       transcriptDetailInputId={controlIds.transcriptDetailInputId}
       transcriptDensityScaleInputId={controlIds.transcriptDensityScaleInputId}
       transcriptPointColorInputId={controlIds.transcriptPointColorInputId}
-      transcriptPointBudgetInputId={controlIds.transcriptPointBudgetInputId}
       transcriptMinQvInputId={controlIds.transcriptMinQvInputId}
       transcriptFeatureFilterInputId={controlIds.transcriptFeatureFilterInputId}
       transcriptFeatureSearchInputId={controlIds.transcriptFeatureSearchInputId}

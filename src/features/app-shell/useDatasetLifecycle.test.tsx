@@ -1,4 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import type {
@@ -81,6 +82,8 @@ function Probe({
   setSpatialGridCells = vi.fn(),
   setVisiumHdControlState = vi.fn(),
   initialShareableState = {},
+  isDatasetLoaded = false,
+  onBeforeDatasetLoad,
   startDatasetLoadRef = { current: null },
   warmDatasetForRoi = vi.fn(async () => undefined),
 }: {
@@ -106,6 +109,8 @@ function Probe({
   readonly setSpatialGridCells?: LifecycleOptions['setters']['setSpatialGridCells']
   readonly setVisiumHdControlState?: LifecycleOptions['setters']['setVisiumHdControlState']
   readonly initialShareableState?: LifecycleOptions['initialState']['initialShareableState']
+  readonly isDatasetLoaded?: boolean
+  readonly onBeforeDatasetLoad?: () => void
   readonly startDatasetLoadRef?: LifecycleOptions['refs']['startDatasetLoadRef']
   readonly warmDatasetForRoi?: LifecycleOptions['loaders']['warmDatasetForRoi']
 }) {
@@ -115,10 +120,12 @@ function Probe({
     callbacks: {
       appendDebugEvent: vi.fn(),
       appendFallbackNotice,
+      ...(onBeforeDatasetLoad === undefined ? {} : { onBeforeDatasetLoad }),
       queueAutoContrast: vi.fn(),
       recordTelemetry: vi.fn(),
     },
     controls: {
+      isDatasetLoaded,
       geneExpressionColorScale: 'plasma',
       transcriptDensityColorScale: 'thermal',
       transcriptExactPointLimit: 100_000,
@@ -213,6 +220,7 @@ function Probe({
       setGenePanelState,
       setHoveredTranscript: noopSetter,
       setLoadState,
+      setPendingDatasetLoadState: noopSetter,
       setMagicLensActive: noopSetter,
       setMagicLensState: noopSetter,
       setManualTranscriptExactRequestKey: noopSetter,
@@ -361,6 +369,238 @@ describe('useDatasetLifecycle', () => {
     expect(refs.cellDetailAbortRef.current).toBeNull()
     expect(refs.cellTranscriptDistributionAbortRef.current).toBeNull()
     expect(refs.customMorphologyLayerAbortRef.current).toBeNull()
+  })
+
+  describe('replacing an open dataset (15.1-F)', () => {
+    const OPEN_URL = 'https://example.test/open'
+    const NEXT_URL = 'https://example.test/next'
+
+    function deferred<T>() {
+      let resolve: (value: T) => void = () => undefined
+      const promise = new Promise<T>((next) => {
+        resolve = next
+      })
+      return { promise, resolve }
+    }
+
+    function statusOf(state: unknown): string {
+      return (state as { readonly status?: string }).status ?? '?'
+    }
+
+    function startLoad() {
+      return {
+        current: null as
+          | ((datasetUrl: string, loadImage: boolean) => Promise<void>)
+          | null,
+      }
+    }
+
+    it('keeps the open dataset when the new one cannot be found', async () => {
+      const refs = createLifecycleRefs()
+      const openDatasetSignal = refs.datasetAbortRef.current.signal
+      const startDatasetLoadRef = startLoad()
+      const setLoadState = vi.fn()
+      const setOverviewCells = vi.fn()
+      const setDatasetPlatform = vi.fn()
+      const setPendingDatasetLoadState = vi.fn()
+      const appendFallbackNotice = vi.fn()
+      const onBeforeDatasetLoad = vi.fn()
+
+      render(
+        <Probe
+          refs={refs}
+          isDatasetLoaded
+          appendFallbackNotice={appendFallbackNotice}
+          detectSpatialDataset={vi.fn(async () => ({
+            platform: 'unknown' as const,
+            baseUrl: NEXT_URL,
+            checked: [
+              {
+                path: 'experiment.xenium',
+                url: `${NEXT_URL}/experiment.xenium`,
+                ok: false,
+                status: 404,
+              },
+              {
+                path: 'cells.parquet',
+                url: `${NEXT_URL}/cells.parquet`,
+                ok: false,
+                status: 404,
+              },
+            ],
+          }))}
+          setDatasetPlatform={setDatasetPlatform}
+          setLoadState={setLoadState}
+          startDatasetLoadRef={startDatasetLoadRef}
+          extraSetters={{ setOverviewCells, setPendingDatasetLoadState }}
+          onBeforeDatasetLoad={onBeforeDatasetLoad}
+        />,
+      )
+
+      await act(async () => {
+        await startDatasetLoadRef.current?.(NEXT_URL, false)
+      })
+
+      expect(setLoadState).not.toHaveBeenCalled()
+      expect(setOverviewCells).not.toHaveBeenCalled()
+      expect(setDatasetPlatform).not.toHaveBeenCalled()
+      expect(onBeforeDatasetLoad).not.toHaveBeenCalled()
+      expect(openDatasetSignal.aborted).toBe(false)
+      expect(setPendingDatasetLoadState).toHaveBeenNthCalledWith(1, {
+        status: 'loading',
+        url: NEXT_URL,
+      })
+      expect(setPendingDatasetLoadState).toHaveBeenLastCalledWith({
+        status: 'error',
+        url: NEXT_URL,
+        error: expect.objectContaining({ code: 'not-found' }),
+      })
+    })
+
+    it('replaces the open dataset only when the new overview is ready', async () => {
+      const refs = createLifecycleRefs()
+      const openDatasetSignal = refs.datasetAbortRef.current.signal
+      const startDatasetLoadRef = startLoad()
+      const overview = deferred<[]>()
+      const updates: string[] = []
+      const setLoadState = vi.fn((state: unknown) => {
+        updates.push(`load:${statusOf(state)}`)
+      })
+      const setOverviewCells = vi.fn(() => {
+        updates.push('cells')
+      })
+      const setDatasetPlatform = vi.fn((platform: unknown) => {
+        updates.push(`platform:${String(platform)}`)
+      })
+      const setGenePanelState = vi.fn((state: unknown) => {
+        updates.push(`genes:${statusOf(state)}`)
+      })
+      const setPendingDatasetLoadState = vi.fn((state: unknown) => {
+        updates.push(`pending:${statusOf(state)}`)
+      })
+
+      render(
+        <Probe
+          refs={refs}
+          isDatasetLoaded
+          loadDatasetOverview={vi.fn(() => overview.promise)}
+          loadGenePanel={vi.fn(async () => ['GENEA'])}
+          setDatasetPlatform={setDatasetPlatform}
+          setGenePanelState={setGenePanelState}
+          setLoadState={setLoadState}
+          startDatasetLoadRef={startDatasetLoadRef}
+          extraSetters={{ setOverviewCells, setPendingDatasetLoadState }}
+        />,
+      )
+
+      let load: Promise<void> | undefined
+      await act(async () => {
+        load = startDatasetLoadRef.current?.(NEXT_URL, false)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      // The gene panel is ready, but the open dataset is still shown.
+      expect(updates).toEqual(['pending:loading'])
+      expect(openDatasetSignal.aborted).toBe(false)
+
+      await act(async () => {
+        overview.resolve([])
+        await load
+      })
+
+      expect(openDatasetSignal.aborted).toBe(true)
+      expect(updates).toEqual([
+        'pending:loading',
+        'pending:idle',
+        'platform:null',
+        'cells',
+        'load:loading',
+        'genes:idle',
+        'platform:xenium',
+        'genes:loading',
+        'genes:ready',
+        'cells',
+        'load:ready',
+      ])
+    })
+
+    it('renders the cleared state before the new one, also for the same URL', async () => {
+      const refs = createLifecycleRefs()
+      const startDatasetLoadRef = startLoad()
+      const rendered: string[] = []
+
+      function Recorder() {
+        const [loadState, setLoadState] = useState<
+          Parameters<LifecycleOptions['setters']['setLoadState']>[0]
+        >({ status: 'ready', url: OPEN_URL, cellCount: 1 })
+        const status = typeof loadState === 'function' ? '?' : loadState.status
+        rendered.push(status)
+
+        return (
+          <Probe
+            refs={refs}
+            isDatasetLoaded={status === 'ready'}
+            setLoadState={setLoadState}
+            startDatasetLoadRef={startDatasetLoadRef}
+          />
+        )
+      }
+
+      render(<Recorder />)
+      rendered.length = 0
+
+      // A Visium library switch reloads the open URL. Effects keyed on the
+      // dataset's status and URL only rerun if a render shows it loading.
+      await act(async () => {
+        await startDatasetLoadRef.current?.(OPEN_URL, false)
+      })
+
+      expect(rendered).toEqual(['loading', 'ready'])
+    })
+
+    it('drops a pending load when another starts', async () => {
+      const refs = createLifecycleRefs()
+      const startDatasetLoadRef = startLoad()
+      const first = deferred<[]>()
+      const setLoadState = vi.fn()
+      const loadDatasetOverview = vi
+        .fn()
+        .mockImplementationOnce(() => first.promise)
+        .mockImplementationOnce(async () => [])
+
+      render(
+        <Probe
+          refs={refs}
+          isDatasetLoaded
+          loadDatasetOverview={loadDatasetOverview}
+          setLoadState={setLoadState}
+          startDatasetLoadRef={startDatasetLoadRef}
+        />,
+      )
+
+      let firstLoad: Promise<void> | undefined
+      await act(async () => {
+        firstLoad = startDatasetLoadRef.current?.(OPEN_URL, false)
+        await Promise.resolve()
+      })
+      await act(async () => {
+        await startDatasetLoadRef.current?.(NEXT_URL, false)
+      })
+      await act(async () => {
+        first.resolve([])
+        await firstLoad
+      })
+
+      expect(setLoadState).toHaveBeenCalledWith({
+        status: 'ready',
+        url: NEXT_URL,
+        cellCount: 0,
+      })
+      expect(setLoadState).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'ready', url: OPEN_URL }),
+      )
+    })
   })
 
   it('shows Xenium cell boundaries by default on a fresh dataset load', async () => {

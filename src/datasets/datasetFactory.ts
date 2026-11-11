@@ -9,6 +9,7 @@ import {
   setFolderListing,
 } from '../data/folderListing'
 import { noteReadableResponse } from '../data/hostResponses'
+import { datasetDetectionError } from './datasetDetectionError'
 import { icechunkCompanionFileUrl, isIcechunkUrl } from '../zarr/icechunkUrl'
 import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
@@ -1128,7 +1129,7 @@ export async function createSpatialDataset(
     })
   }
 
-  throw new Error('Unsupported spatial dataset layout.')
+  throw datasetDetectionError(detection.checked)
 }
 
 export function cachedSpatialDataset(

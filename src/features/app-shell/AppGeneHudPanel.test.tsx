@@ -40,7 +40,7 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     observationColorMode: 'transcript-count',
     rememberGeneExpressionScaleMax: vi.fn(),
     resetGeneExpressionSelectionState: vi.fn(),
-    selectedGenes: ['Actb'],
+    selectedGenes: ['Actb', 'Slc17a7'],
     setGeneExpressionColorScale: vi.fn(),
     setGeneExpressionDetailMode: vi.fn(),
     setGeneExpressionScaleDomain: vi.fn(),
@@ -73,7 +73,7 @@ describe('AppGeneHudPanel', () => {
       target: { value: 'Marker set' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save Set' }))
-    fireEvent.change(screen.getByLabelText('Signature score'), {
+    fireEvent.change(screen.getByLabelText('Combine genes'), {
       target: { value: 'mean' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Apply Marker set' }))
@@ -90,7 +90,8 @@ describe('AppGeneHudPanel', () => {
 
     expect(props.toggleGene).toHaveBeenCalledWith('Gad1')
     expect(props.setSelectedGenes).toHaveBeenCalledWith(['Actb', 'Gad1'])
-    expect(props.setSelectedGenes).toHaveBeenCalledWith(['Actb'])
+    expect(props.setSelectedGenes).toHaveBeenCalledWith(['Actb', 'Slc17a7'])
+    expect(props.setObservationColorMode).toHaveBeenCalledWith('gene-expression')
     expect(props.setGeneExpressionScoreMode).toHaveBeenCalledWith('sum')
     expect(props.setGeneExpressionScoreMode).toHaveBeenCalledWith('mean')
     expect(props.setGeneExpressionColorScale).toHaveBeenCalledWith('viridis')

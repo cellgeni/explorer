@@ -945,8 +945,8 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('aaaaaaaa-1')).toBeInTheDocument()
     expect(screen.getByText('Xenium')).toBeInTheDocument()
-    expect(screen.getByText('123.4, 56.7 um')).toBeInTheDocument()
-    expect(screen.getByText('40 um^2')).toBeInTheDocument()
+    expect(screen.getByText('123.4, 56.7 µm')).toBeInTheDocument()
+    expect(screen.getByText('40 µm²')).toBeInTheDocument()
     expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
     expect(screen.getByText('Annotations')).toBeInTheDocument()
     expect(screen.getByText('T cells, Portal macrophages')).toBeInTheDocument()
@@ -973,7 +973,7 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('AAACCCAAGAAACACT-1')).toBeInTheDocument()
     expect(screen.getByText('H5AD')).toBeInTheDocument()
-    expect(screen.getByText('12.3, 45.6 um')).toBeInTheDocument()
+    expect(screen.getByText('12.3, 45.6 µm')).toBeInTheDocument()
     expect(screen.getByText('27')).toBeInTheDocument()
   })
 
@@ -995,7 +995,7 @@ describe('ViewerCore', () => {
     expect(screen.getByText('cell-bin:0:0')).toBeInTheDocument()
     expect(screen.getByText('Overview')).toBeInTheDocument()
     expect(screen.getByText('14')).toBeInTheDocument()
-    expect(screen.getByText('50, 60 um')).toBeInTheDocument()
+    expect(screen.getByText('50, 60 µm')).toBeInTheDocument()
   })
 
   it('shows grid-cell hover metadata', () => {
@@ -1008,7 +1008,7 @@ describe('ViewerCore', () => {
     })
 
     expect(screen.getByText('BC-1')).toBeInTheDocument()
-    expect(screen.getByText('16 μm')).toBeInTheDocument()
+    expect(screen.getByText('16 µm')).toBeInTheDocument()
     expect(screen.getByText('4, 7')).toBeInTheDocument()
     expect(screen.getByText('128, 256 px')).toBeInTheDocument()
     expect(screen.getByText('In tissue')).toBeInTheDocument()
@@ -1052,7 +1052,7 @@ describe('ViewerCore', () => {
 
     expect(document.querySelector('.viewer-magic-lens-hud')).toHaveTextContent('C7')
     expect(screen.queryByText('BC-1')).not.toBeInTheDocument()
-    expect(screen.queryByText('16 μm')).not.toBeInTheDocument()
+    expect(screen.queryByText('16 µm')).not.toBeInTheDocument()
   })
 
   it('shows segmented cell boundary hover metadata when enabled', () => {
@@ -1096,7 +1096,7 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('cellid_000000001-1')).toBeInTheDocument()
     expect(screen.getByText('Segmented')).toBeInTheDocument()
-    expect(screen.getByText('100 um^2')).toBeInTheDocument()
+    expect(screen.getByText('100 µm²')).toBeInTheDocument()
     expect(screen.getByText('Actb, Pecam1, Col1a1 +1')).toBeInTheDocument()
   })
 
@@ -1150,14 +1150,14 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('aaaaaaab-1')).toBeInTheDocument()
     expect(screen.getByText('Xenium')).toBeInTheDocument()
-    expect(screen.getByText('123.4, 56.7 um')).toBeInTheDocument()
+    expect(screen.getByText('123.4, 56.7 µm')).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
-    expect(screen.getByText('40 um^2')).toBeInTheDocument()
+    expect(screen.getByText('40 µm²')).toBeInTheDocument()
     expect(screen.getByText('T cells, Portal macrophages')).toBeInTheDocument()
     expect(screen.getByText('T cells, Portal macrophages').closest('div')).toHaveClass(
       'hover-tooltip-annotation-row',
     )
-    expect(screen.getByText('100 um^2')).toBeInTheDocument()
+    expect(screen.getByText('100 µm²')).toBeInTheDocument()
   })
 
   it('suppresses bin and cell hover metadata when disabled without removing clicks', () => {
@@ -1741,6 +1741,15 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('shows the zoom number only when asked, for debugging', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+
+    render(<ViewerCore cells={[overviewCellDatum()]} />)
+
+    expect(screen.queryByLabelText(/^Zoom level/)).toBeNull()
+  })
+
   it('tracks mouse coordinates in micrometers and image pixels', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
@@ -1752,20 +1761,27 @@ describe('ViewerCore', () => {
         fillColor: [215, 63, 124, 220],
       },
     ]
-    const { rerender } = render(<ViewerCore cells={cells} />)
+    const { rerender } = render(<ViewerCore cells={cells} showZoomLevel />)
     const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
 
     expect(await screen.findByLabelText('Zoom level 4.00')).toHaveTextContent('Zoom 4.00')
-    expect(await screen.findByLabelText('Scale bar 5 μm')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Scale bar 5 µm')).toBeInTheDocument()
     expect(document.querySelector('.viewport-scale-bar-track')).toHaveStyle({
       width: '80px',
     })
 
     fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
 
-    expect(await screen.findByText('X 1234 μm | Y 5678 μm')).toBeInTheDocument()
+    expect(await screen.findByText('X 1234 µm | Y 5678 µm')).toBeInTheDocument()
 
-    rerender(<ViewerCore cells={cells} coordinateUnit="px" micrometersPerPixel={0.5} />)
+    rerender(
+      <ViewerCore
+        cells={cells}
+        coordinateUnit="px"
+        micrometersPerPixel={0.5}
+        showZoomLevel
+      />,
+    )
     expect(await screen.findByLabelText('Scale bar 10 px')).toBeInTheDocument()
     fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
 
@@ -1807,7 +1823,7 @@ describe('ViewerCore', () => {
       pointerId: 1,
     })
 
-    expect(await screen.findByText('256 μm')).toBeInTheDocument()
+    expect(await screen.findByText('256 µm')).toBeInTheDocument()
 
     fireEvent.pointerUp(measurementLayer, {
       clientX: 116,
@@ -1815,7 +1831,7 @@ describe('ViewerCore', () => {
       pointerId: 1,
     })
 
-    expect(screen.getByText('256 μm')).toBeInTheDocument()
+    expect(screen.getByText('256 µm')).toBeInTheDocument()
 
     rerender(
       <ViewerCore
@@ -1959,6 +1975,104 @@ describe('ViewerCore', () => {
       height: '16px',
     })
     expect(deckGlMock.renderCount).toBe(renderCountBeforeDrag)
+  })
+
+  it('does not re-render deck layers when the legend collapses or a category is toggled', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onLegendCategoryVisibilityChange = vi.fn()
+
+    render(
+      <ViewerCore
+        cells={[overviewCellDatum()]}
+        legendSections={[
+          {
+            kind: 'categories',
+            id: 'cells',
+            title: 'graphclust',
+            items: [
+              { id: 'c1', label: 'Cluster 1', color: '#4cc39a', count: 1, visible: true },
+            ],
+          },
+        ]}
+        onLegendCategoryVisibilityChange={onLegendCategoryVisibilityChange}
+      />,
+    )
+
+    const renderCountBefore = deckGlMock.renderCount
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Cluster 1, 1 cell' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Legend' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Legend' }))
+
+    expect(onLegendCategoryVisibilityChange).toHaveBeenCalledWith('c1', false)
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
+  })
+
+  it('marks the selection without redrawing deck layers, and Esc clears it', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+    const onClearSelection = vi.fn()
+
+    const { rerender } = render(
+      <ViewerCore cells={cells} onClearSelection={onClearSelection} />,
+    )
+    const renderCountBefore = deckGlMock.renderCount
+
+    rerender(
+      <ViewerCore
+        cells={cells}
+        onClearSelection={onClearSelection}
+        selectionHighlight={{
+          kind: 'point',
+          id: 'cell-1',
+          position: [0, 0, 0],
+          radius: 2,
+        }}
+      />,
+    )
+
+    expect(document.querySelector('.viewer-selection-overlay circle')).not.toBeNull()
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
+
+    fireEvent.keyDown(screen.getByRole('img', { name: 'Spatial viewer canvas area' }), {
+      key: 'Escape',
+    })
+    expect(onClearSelection).toHaveBeenCalledTimes(1)
+  })
+
+  it('says which tool is on and drops a half-drawn shape when it changes', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+
+    const { rerender } = render(<ViewerCore cells={cells} roiMode="box" />)
+    const roiLayer = document.querySelector('.roi-draw-layer')
+
+    if (!(roiLayer instanceof HTMLElement)) {
+      throw new Error('Expected ROI draw layer.')
+    }
+
+    expect(screen.getByText('Drag to draw a box. Esc cancels.')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Spatial viewer canvas area' })).toHaveClass(
+      'is-drawing',
+    )
+
+    fireEvent.pointerDown(roiLayer, { clientX: 100, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(roiLayer, { clientX: 120, clientY: 70, pointerId: 1 })
+    expect(document.querySelector('.roi-rectangle')).not.toBeNull()
+    fireEvent.pointerCancel(roiLayer, { pointerId: 1 })
+    expect(document.querySelector('.roi-rectangle')).toBeNull()
+
+    fireEvent.pointerDown(roiLayer, { clientX: 100, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(roiLayer, { clientX: 120, clientY: 70, pointerId: 1 })
+    rerender(<ViewerCore cells={cells} roiMode="idle" />)
+    expect(document.querySelector('.roi-rectangle')).toBeNull()
+    expect(screen.queryByText(/Esc cancels/)).toBeNull()
+
+    rerender(<ViewerCore cells={cells} roiMode="box" />)
+    expect(document.querySelector('.roi-rectangle')).toBeNull()
   })
 
   it('emits a lasso ROI selection from a dragged polygon path', async () => {

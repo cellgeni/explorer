@@ -6,7 +6,6 @@
   min-width: 0;
 }
 
-.gene-chip,
 .gene-option-list button {
   min-height: 23px;
   padding: 3px 7px;
@@ -15,11 +14,10 @@
   background: var(--surface-2);
   color: var(--text-2);
   cursor: pointer;
-  font-size: 0.66rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
-.gene-chip,
 .gene-option-list button.selected {
   border-color: var(--highlight-border);
   background: var(--highlight-soft);
@@ -64,7 +62,7 @@
 
 .option-empty {
   color: var(--text-3);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
@@ -85,10 +83,9 @@
   background: var(--surface-3);
   color: var(--text-1);
   cursor: pointer;
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .gene-set-actions button:hover,
@@ -142,7 +139,7 @@
 .gene-set-apply small {
   flex: 0 0 auto;
   color: var(--text-3);
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
 }
 

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   isObservationColorMode,
+  manifestObservationColorMode,
   parseControlHudTab,
   parseObservationColorMode,
   parseViewerCoordinateUnit,
+  readDebugModeFromLocation,
   readShareableStateFromLocation,
+  sharedObservationColorMode,
 } from './appShellModel'
 
 describe('appShellModel', () => {
@@ -33,5 +36,65 @@ describe('appShellModel', () => {
       activeTab: 'genes',
       coordinateUnit: 'px',
     })
+  })
+
+  it('reads the gene expression colour mode', () => {
+    expect(isObservationColorMode('gene-expression')).toBe(true)
+    expect(parseObservationColorMode('gene-expression')).toBe('gene-expression')
+  })
+
+  it('opens links with genes in gene expression, as they looked before the mode', () => {
+    expect(
+      sharedObservationColorMode({
+        observationColorMode: 'annotations',
+        selectedGenes: ['SNAP25'],
+      }),
+    ).toBe('gene-expression')
+    expect(
+      sharedObservationColorMode({
+        observationColorMode: 'annotations',
+        selectedGenes: [],
+      }),
+    ).toBe('annotations')
+    expect(sharedObservationColorMode({ observationColorMode: 'nope' })).toBeUndefined()
+    // Version 2 links name the mode whenever it is not the default.
+    expect(
+      sharedObservationColorMode({
+        linkVersion: 2,
+        observationColorMode: 'annotations',
+        selectedGenes: ['SNAP25'],
+      }),
+    ).toBe('annotations')
+    expect(
+      sharedObservationColorMode({ linkVersion: 2, selectedGenes: ['SNAP25'] }),
+    ).toBeUndefined()
+  })
+
+  it('lets a manifest colour by another mode while it selects genes', () => {
+    expect(
+      manifestObservationColorMode({
+        observationColorMode: 'annotations',
+        selectedGenes: ['SNAP25'],
+      }),
+    ).toBe('annotations')
+    expect(manifestObservationColorMode({ selectedGenes: ['SNAP25'] })).toBe(
+      'gene-expression',
+    )
+    expect(manifestObservationColorMode({})).toBeUndefined()
+  })
+
+  it('turns on debug mode from ?debug=1 or #debug=1', () => {
+    const original = window.location.href
+
+    try {
+      window.history.replaceState(null, '', '/?debug=1')
+      expect(readDebugModeFromLocation()).toBe(true)
+      window.history.replaceState(null, '', '/#genes=SNAP25&debug=1')
+      expect(readDebugModeFromLocation()).toBe(true)
+      window.history.replaceState(null, '', '/?debug=0')
+      expect(readDebugModeFromLocation()).toBe(false)
+    } finally {
+      window.history.replaceState(null, '', original)
+    }
   })
 })

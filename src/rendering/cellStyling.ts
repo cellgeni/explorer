@@ -1,5 +1,6 @@
 import type { Color } from '@deck.gl/core'
 import type { CellId } from '../data/cellid'
+import { colorsGradient } from './deckLayerColors'
 import type { OverviewCellDatum } from './deckLayers'
 
 export type ObservationColorMode =
@@ -7,6 +8,9 @@ export type ObservationColorMode =
   | 'cell-area'
   | 'annotations'
   | 'metadata'
+  // Colours come from the selected genes' expression, applied by the gene
+  // expression styling rather than here.
+  | 'gene-expression'
 
 export interface AnnotationColorStyle {
   readonly id: string
@@ -56,6 +60,10 @@ export function createObservationColorizer(
   mode: ObservationColorMode,
   options: ObservationStyleOptions = {},
 ): ((cell: OverviewCellDatum) => Color) | null {
+  if (mode === 'gene-expression') {
+    return null
+  }
+
   if (mode === 'annotations') {
     return annotationColorizer(options.annotations ?? [])
   }
@@ -193,4 +201,21 @@ function hexToRgba(hexColor: string, alpha: number): Color {
     Number.parseInt(normalized.slice(4, 6), 16),
     alpha,
   ]
+}
+
+const LEGEND_STEPS = [0, 0.25, 0.5, 0.75, 1]
+
+// Legend gradients for the continuous colour modes, low on the left. Cell
+// area scales by the square root of area / the largest area, so the gradient
+// runs in that intensity.
+export function cellAreaScaleGradient(): string {
+  return colorsGradient(
+    LEGEND_STEPS.map((intensity) =>
+      observationColor(intensity * intensity, 1, 'cell-area'),
+    ),
+  )
+}
+
+export function metadataScaleGradient(): string {
+  return colorsGradient(LEGEND_STEPS.map((intensity) => metadataColor(intensity, 0, 1)))
 }

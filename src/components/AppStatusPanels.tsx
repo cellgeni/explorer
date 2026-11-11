@@ -1,3 +1,4 @@
+import { Disclosure } from './ui'
 import {
   summarizeDatasetDiagnostics,
   type DatasetDiagnosticsReport,
@@ -89,8 +90,11 @@ export function CellFeatureMatrixCompatibilityNotice({
 
 export function ErrorSummary({
   errors,
+  onRunDiagnostics,
 }: {
   readonly errors: readonly StructuredLoadErrorSummary[]
+  // Offered on a dataset load error, whose cause diagnostics can show.
+  readonly onRunDiagnostics?: (() => void) | undefined
 }) {
   if (errors.length === 0) {
     return null
@@ -109,6 +113,16 @@ export function ErrorSummary({
             <p>{error.message}</p>
             <p>{error.action}</p>
             {error.detail === undefined ? null : <p>{error.detail}</p>}
+            {onRunDiagnostics !== undefined && error.source === 'Dataset overview' ? (
+              <button
+                type="button"
+                className="secondary-action"
+                title="Check each file the dataset needs and show what the host answered"
+                onClick={onRunDiagnostics}
+              >
+                Run Diagnostics
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -259,31 +273,66 @@ export function ActivityLog({
 }) {
   return (
     <section className="activity-log" aria-label="Activity log">
-      <div className="activity-log-heading">
-        <h2>Log</h2>
-        <button
-          type="button"
-          disabled={entries.length === 0}
-          title="Clear activity log"
-          onClick={onClear}
-        >
-          Clear
-        </button>
-      </div>
-      {entries.length === 0 ? (
-        <p>Idle</p>
-      ) : (
-        <ol>
-          {entries.map((entry) => (
-            <li key={entry.id}>
-              <time dateTime={new Date(entry.timestamp).toISOString()}>
-                {formatDebugTimestamp(entry.timestamp)}
-              </time>
-              <span title={entry.message}>{entry.message}</span>
-            </li>
-          ))}
-        </ol>
-      )}
+      <Disclosure
+        title="Show or hide the activity log"
+        summary={
+          entries.length === 0 ? 'Log' : `Log (${entries.length.toLocaleString()})`
+        }
+      >
+        <div className="activity-log-heading">
+          <button
+            type="button"
+            disabled={entries.length === 0}
+            title="Clear activity log"
+            onClick={onClear}
+          >
+            Clear
+          </button>
+        </div>
+        {entries.length === 0 ? (
+          <p>Idle</p>
+        ) : (
+          <ol>
+            {entries.map((entry) => (
+              <li key={entry.id}>
+                <time dateTime={new Date(entry.timestamp).toISOString()}>
+                  {formatDebugTimestamp(entry.timestamp)}
+                </time>
+                <span title={entry.message}>{entry.message}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Disclosure>
+    </section>
+  )
+}
+
+// The matrix warning and fallback notices as one closed item, since they
+// explain slower paths rather than ask for action.
+export function DataAccessNotes({
+  matrixState,
+  notices,
+}: {
+  readonly matrixState: CellFeatureMatrixCompatibilityNoticeState
+  readonly notices: readonly FallbackNoticeEntry[]
+}) {
+  const hasMatrixWarning = matrixState.status === 'ready' && !matrixState.hasCellMajorCsc
+  const count = notices.length + (hasMatrixWarning ? 1 : 0)
+
+  if (count === 0) {
+    return null
+  }
+
+  return (
+    <section className="data-access-notes" aria-label="Data access notes">
+      <Disclosure
+        title="Show or hide notes on how the data is read"
+        summary={`Data access notes (${count.toLocaleString()})`}
+      >
+        <CellFeatureMatrixCompatibilityNotice state={matrixState} />
+        <FallbackNoticeSummary notices={notices} />
+      </Disclosure>
     </section>
   )
 }

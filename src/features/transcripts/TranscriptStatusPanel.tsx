@@ -1,4 +1,5 @@
 import type { ViewerTranscriptHoverDetail } from '../../components/ViewerCore'
+import { transcriptAggregateTitle } from '../../components/viewerHoverModel'
 import type { TranscriptPointDatum } from '../../rendering/deckLayers'
 import {
   transcriptAggregateRenderedLabel,
@@ -12,8 +13,6 @@ import type {
 interface TranscriptStatusPanelProps {
   readonly capabilityState: TranscriptCapabilityState
   readonly layerState: TranscriptLayerState
-  readonly exactPointLimit: number
-  readonly visibleTranscriptEstimate: number
   readonly hoveredTranscript: ViewerTranscriptHoverDetail | null
   readonly pinnedTranscript: ViewerTranscriptHoverDetail | null
   readonly onPinTranscript: (detail: ViewerTranscriptHoverDetail) => void
@@ -24,8 +23,6 @@ interface TranscriptStatusPanelProps {
 export function TranscriptStatusPanel({
   capabilityState,
   layerState,
-  exactPointLimit,
-  visibleTranscriptEstimate,
   hoveredTranscript,
   pinnedTranscript,
   onPinTranscript,
@@ -36,13 +33,8 @@ export function TranscriptStatusPanel({
     capabilityState.status === 'ready' ? capabilityState.capabilities : null
   const exactLoadRequestKey =
     layerState.status === 'waiting' ? layerState.exactLoadRequestKey : undefined
-  // Per-gene outputs (Atera) estimate the selected genes, not all
-  // transcripts, and have no FOVs.
+  // Per-gene outputs (Atera) have no FOVs.
   const isPerGene = capabilities?.geneRanges !== undefined
-  const estimate =
-    isPerGene && 'visibleTranscriptEstimate' in layerState
-      ? layerState.visibleTranscriptEstimate
-      : visibleTranscriptEstimate
 
   return (
     <div className="transcript-status-panel">
@@ -54,14 +46,6 @@ export function TranscriptStatusPanel({
               ? capabilityStateLabel(capabilityState)
               : transcriptCapabilityLabel(capabilities)}
           </dd>
-        </div>
-        <div>
-          <dt>Estimate</dt>
-          <dd>{estimate.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>Exact budget</dt>
-          <dd>{exactPointLimit.toLocaleString()}</dd>
         </div>
         {layerState.status === 'ready' ? (
           <>
@@ -254,9 +238,7 @@ function TranscriptInspectionPanel({
         </button>
       </div>
       <strong className="transcript-hover-title">
-        {aggregate.featureName === undefined
-          ? 'Transcript density bin'
-          : aggregate.featureName}
+        {transcriptAggregateTitle(aggregate)}
       </strong>
       <dl>
         <div>

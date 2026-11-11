@@ -142,14 +142,14 @@ describe('AnnotationHudPanel', () => {
         'https://example.test/labels.csv',
       )
     })
+    // One list per set, with each label's count in its row.
     expect(
-      within(screen.getByRole('list', { name: 'Loaded annotations' })).getByText('1'),
+      within(screen.getByRole('group', { name: 'Loaded annotations' })).getByText('1'),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Astrocytes visible')).not.toBeChecked()
-    expect(screen.getByRole('region', { name: 'Set sizes' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Loaded annotations cell counts')).toHaveTextContent(
-      'Astrocytes',
-    )
+    expect(
+      screen.getByRole('region', { name: 'Loaded annotations labels' }),
+    ).toHaveTextContent('Astrocytes')
     expect(
       screen.getByRole('list', { name: 'Loaded metadata tracks' }),
     ).toHaveTextContent('confidence')
@@ -173,6 +173,12 @@ describe('AnnotationHudPanel', () => {
             id: 'analysis:cell-type',
             label: 'cell_type',
             groupingName: 'cell_type',
+            groupCount: 4,
+          },
+          {
+            id: 'analysis:cell-type-id',
+            label: 'cell_type_ontology_term_id',
+            groupingName: 'cell_type_ontology_term_id',
             groupCount: 4,
           },
         ]}
@@ -209,13 +215,19 @@ describe('AnnotationHudPanel', () => {
     expect(within(annotationSet).getByRole('option', { name: 'cell_type' })).toHaveValue(
       'analysis:cell-type',
     )
+    // Identifier columns are listed apart.
+    expect(
+      within(
+        within(annotationSet).getByRole('group', { name: 'More columns' }),
+      ).getByRole('option'),
+    ).toHaveTextContent('cell_type_ontology_term_id')
 
     fireEvent.change(annotationSet, { target: { value: 'analysis:cell-type' } })
 
     expect(onAnnotationGroupChange).toHaveBeenCalledWith('analysis:cell-type')
   })
 
-  it('renders annotation size plots grouped by annotation set', () => {
+  it('lists labels by annotation set with their sizes', () => {
     render(
       <AnnotationHudPanel
         active
@@ -278,11 +290,11 @@ describe('AnnotationHudPanel', () => {
     )
 
     const graphclustRows = within(
-      screen.getByLabelText('graphclust cell counts'),
+      screen.getByRole('region', { name: 'graphclust labels' }),
     ).getAllByRole('listitem')
-    const kmeansRows = within(screen.getByLabelText('kmeans 3 cell counts')).getAllByRole(
-      'listitem',
-    )
+    const kmeansRows = within(
+      screen.getByRole('region', { name: 'kmeans 3 labels' }),
+    ).getAllByRole('listitem')
 
     expect(graphclustRows[0]).toHaveTextContent('2')
     expect(graphclustRows[0]).toHaveTextContent('67%')
@@ -294,7 +306,7 @@ describe('AnnotationHudPanel', () => {
     expect(screen.getByLabelText('kmeans 3 visible')).toBeChecked()
   })
 
-  it('virtualizes large annotation lists and size plots', () => {
+  it('virtualizes long label lists', () => {
     const annotations = Array.from({ length: 80 }, (_value, index) => ({
       id: `analysis:0:${index}`,
       label: `group: Label ${String(index).padStart(2, '0')}`,
@@ -342,24 +354,16 @@ describe('AnnotationHudPanel', () => {
       />,
     )
 
-    const annotationList = screen.getByRole('list', { name: 'Loaded annotations' })
-    expect(within(annotationList).getAllByRole('listitem')).toHaveLength(12)
-    expect(within(annotationList).queryByText('group: Label 79')).not.toBeInTheDocument()
+    const setList = within(
+      screen.getByRole('region', { name: 'group labels' }),
+    ).getByRole('list')
+    expect(within(setList).getAllByRole('listitem')).toHaveLength(12)
+    expect(within(setList).queryByText('Label 79')).not.toBeInTheDocument()
 
-    fireEvent.scroll(annotationList, {
-      target: { scrollTop: 80 * 34 },
+    fireEvent.scroll(setList, {
+      target: { scrollTop: 80 * 28 },
     })
 
-    expect(within(annotationList).getByText('group: Label 79')).toBeInTheDocument()
-
-    const sizeList = screen.getByLabelText('group cell counts')
-    expect(within(sizeList).getAllByRole('listitem')).toHaveLength(12)
-    expect(within(sizeList).queryByText('Label 79')).not.toBeInTheDocument()
-
-    fireEvent.scroll(sizeList, {
-      target: { scrollTop: 80 * 22 },
-    })
-
-    expect(within(sizeList).getByText('Label 79')).toBeInTheDocument()
+    expect(within(setList).getByText('Label 79')).toBeInTheDocument()
   })
 })

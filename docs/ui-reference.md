@@ -24,12 +24,37 @@ Platform names used below: **Xenium**, **Visium HD**, **H5AD**,
         ├── ROI drawing, measurement, Magic Lens overlays
         ├── Hover tooltip
         ├── Zoom + mouse coordinate readout, scale bar
-        └── Loading indicator and viewport messages
+        └── Legend, loading indicator and viewport messages (bottom left)
 ```
 
 `src/main.tsx` wraps `App` in `AppErrorBoundary`
 (`src/components/AppErrorBoundary.tsx`), which shows "Application error" with a
 `Retry` button if rendering throws.
+
+The browser tab reads "{dataset} · Spatial Omics Explorer" once a dataset has
+loaded. The name is the manifest's `name`, or else the last part of the URL
+that is not `outs`, `explorer.json` or `experiment.xenium`. The favicon is
+`public/favicon.svg`.
+
+### Canvas Legend
+
+`ViewerLegend` (`src/components/ViewerLegend.tsx`) sits at the bottom left,
+above the loading indicator, and explains what the canvas shows. The `Legend`
+header collapses it. It has a section for each of these, scales first and
+category lists last:
+
+- `Cell color` Gene expression: the genes (up to three names, then "+n"),
+  "Expression per cell" or "{Sum|Mean|Mean z-score} of n genes per cell", and
+  the gene scale from 0 to its maximum.
+- `Cell color` Annotations: the set name and the first 12 labels, each with a
+  visibility checkbox, swatch and cell count, then "+n more in the Annotations
+  tab". The checkboxes are the same as the Annotations tab's.
+- `Cell color` Metadata: the track name and its range.
+- `Cell color` Cell area: µm² on a square-root scale.
+- Transcripts drawn as density: "Transcript density" with the density scale;
+  or points coloured by quality: QV 0 to 40+.
+
+Transcript count, the default, has no legend.
 
 ### Control HUD
 
@@ -62,7 +87,7 @@ Transcripts tab.
 | `Dataset or image URL`                                       | URL input                       | Demo Xenium URL, or `dataset` from the share URL                            | Any supported source or [dataset manifest](./dataset-manifest.md); see [Architecture](./architecture.md#1-detection)                                      |
 | `Morphology image` (`Tissue image` for Visium and Visium HD) | Checkbox                        | On                                                                          | Read when `Load Dataset` is pressed; off skips the image                                                                                                  |
 | `Boundary limit`                                             | Number                          | 1–100,000; default 2,500 (compact) or 50,000                                | Max visible cells before boundary polygons are deferred. Disabled for Visium HD                                                                           |
-| `Load Dataset`                                               | Submit                          |                                                                             | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results                                                                            |
+| `Load Dataset`                                               | Submit                          |                                                                             | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then |
 | `Bin size`                                                   | Segmented: 16 µm, 8 µm, 2 µm    | 16 µm if present, else 8 µm                                                 | Visium HD only. Undetected tiers are disabled. Shown with "Dataset type" and "Active bins" rows                                                           |
 | `Coordinate system`                                          | Select                          | Chosen automatically                                                        | SpatialData only. Disabled with one coordinate system. Changing it reloads the store, and the image and units follow the new system                       |
 | `Image`                                                      | Select                          | Highest-resolution image in the system, or None                             | SpatialData only. Disabled with fewer than two images. Changing it reloads the store                                                                      |
@@ -72,6 +97,15 @@ Transcripts tab.
 | `Show off-tissue spots`                                      | Checkbox                        | Off                                                                         | Visium, when obs `in_tissue` marks spots off the tissue. Reloads the dataset without reading the file again; genes, colours, and the ROI are kept. `voff` |
 | `Diagnose Dataset`                                           | Button                          |                                                                             | Runs `runDatasetDiagnostics` for the URL                                                                                                                  |
 | Download diagnostics                                         | Icon button                     |                                                                             | Saves `xenium-diagnostics.json` (for every platform)                                                                                                      |
+
+The open dataset stays on screen and usable while another loads (Phase
+15.1-F); the loading list shows "Loading dataset {name}". If the new one
+fails, the open one stays and a toast at the bottom of the view says so
+("Dataset not found: missing could not be opened; {open dataset} is still
+open.", with the error's next step and `Dismiss`). The Issues card has the
+full error until it is dismissed or another load starts. A Visium library or
+off-tissue change also reloads this way: the controls show the new choice at
+once, and the spots change when the reload is ready.
 
 The Visium controls sit in a "Visium dataset" panel
 (`VisiumDatasetControls` in `DatasetHudPanel.tsx`) with read-only rows:
@@ -95,18 +129,18 @@ deposit, followed by the licence and citation.
 
 Status panels in the same tab (`src/components/AppStatusPanels.tsx`):
 
-| Panel          | Shows                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------------------------- |
-| Diagnostics    | Per-check pass / warning / fail with a summary line                                                  |
-| Matrix Warning | Xenium `cell_feature_matrix.zarr.zip` has no CSC arrays (ROI gene stats will use the slower H5 path) |
-| Fallbacks      | Up to 16 notices when a slower or partial path was used                                              |
-| Issues         | Structured errors from any workflow (`role="alert"`)                                                 |
-| Log            | Up to 32 timestamped activity entries, newest first; `Clear` empties it                              |
+| Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Diagnostics           | Per-check pass / warning / fail with a summary line                                                                                                                                                                                                                                                                                                                                             |
+| Data access notes (n) | Closed by default. Holds the Matrix Warning (Xenium `cell_feature_matrix.zarr.zip` has no CSC arrays, so ROI gene stats use the slower H5 path) and Fallbacks (up to 16 notices when a slower or partial path was used)                                                                                                                                                                         |
+| Issues                | Structured errors from any workflow (`role="alert"`). A dataset that does not load says why: "Dataset not found" (HTTP 404, or 403 from buckets that deny listing), "Access denied" (401), "Request blocked" (no response: CORS or network), "Host server error", or "Unsupported dataset layout" with the files it did find. It lists the first six files checked and offers `Run Diagnostics` |
+| Log (n)               | Closed by default. Up to 32 timestamped activity entries, newest first; `Clear` empties it. HUD tab switches are logged only in debug mode                                                                                                                                                                                                                                                      |
 
 ## Layers Tab
 
-The header "Layer Stack" shows the deck.gl layer count and the
-[performance budget](./architecture.md#performance-budget) profile.
+The header is "Layer Stack". In debug mode it also shows the deck.gl layer
+count and the [performance budget](./architecture.md#performance-budget)
+profile.
 
 | Control                           | Type                                                   | Range / default                                  | Platforms                                                          |
 | --------------------------------- | ------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------ |
@@ -143,21 +177,21 @@ The header "Layer Stack" shows the deck.gl layer count and the
 Header "Analysis" with a status chip ("{n} genes", "Loading", the expression
 mode, …). Hidden for Image.
 
-| Control                 | Type                                       | Values / default                                               | Notes                                                                                                                                 |
-| ----------------------- | ------------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `Gene selection`        | Search                                     |                                                                | Case-insensitive substring of the name or [alias](./modalities/h5ad.md#index-and-gene-names); excludes selected genes                 |
-| Gene list               | Virtualized buttons (`GeneOptionList.tsx`) |                                                                | Click toggles a gene                                                                                                                  |
-| Selected-gene chips     | Buttons                                    |                                                                | Click removes                                                                                                                         |
-| `Gene set symbols`      | Textarea                                   | e.g. `Actb, Gad1, Slc17a7`                                     | Split on whitespace, comma, semicolon; matches names, then aliases                                                                    |
-| `Apply Symbols`         | Button                                     |                                                                | Replaces the selection with matching genes                                                                                            |
-| `Save Set` / `Set name` | Button + text                              |                                                                | Saves the selection and score mode for this session                                                                                   |
-| Saved sets              | Apply / `x` buttons                        |                                                                | Apply restores genes and score mode                                                                                                   |
-| `Signature score`       | Select                                     | **Sum**, Mean, Z-score                                         | How multi-gene selections combine                                                                                                     |
-| `Gene scale`            | Select + gradient preview                  | Gold, Magma, Viridis, **Plasma**, Cividis, Teal, Rose, Glasbey | The gene colour bar                                                                                                                   |
-| `Expression detail`     | Select                                     | **Auto LOD**, Exact region, All cells                          | See below                                                                                                                             |
-| `Cell color`            | Select                                     | **Transcript count**, Cell area, Annotations, Metadata         | Annotations appears once annotations are loaded; Metadata once a metadata track is loaded (H5AD/SpatialData numeric obs, or imported) |
-| `Metadata track`        | Select                                     | "{label} ({min}-{max})"                                        | When `Cell color` is Metadata. H5AD/SpatialData tracks read their values on first selection                                           |
-| Status line             | Text                                       | e.g. "Expression exact region: N cells"                        |                                                                                                                                       |
+| Control                 | Type                                       | Values / default                                                        | Notes                                                                                                                                                                                                                                                                                               |
+| ----------------------- | ------------------------------------------ | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Gene selection`        | Search                                     |                                                                         | Case-insensitive match on the name or [alias](./modalities/h5ad.md#index-and-gene-names): exact matches first, then name prefixes, alias prefixes and substrings. Leaves out selected genes, and says "{gene} is already selected" when a search finds only those. Picking a gene clears the search |
+| Gene list               | Virtualized buttons (`GeneOptionList.tsx`) |                                                                         | Click toggles a gene. Adding a gene switches `Cell color` to Gene expression                                                                                                                                                                                                                        |
+| Selected-gene chips     | Chips with ×                               |                                                                         | × (`Remove {gene}`) removes. Removing the last gene puts `Cell color` back to the mode used before                                                                                                                                                                                                  |
+| `Gene set symbols`      | Textarea                                   | e.g. `Actb, Gad1, Slc17a7`                                              | Split on whitespace, comma, semicolon; matches names, then aliases                                                                                                                                                                                                                                  |
+| `Apply Symbols`         | Button                                     |                                                                         | Replaces the selection with matching genes                                                                                                                                                                                                                                                          |
+| `Save Set` / `Set name` | Button + text                              |                                                                         | Saves the selection and score mode for this session                                                                                                                                                                                                                                                 |
+| Saved sets              | Apply / `x` buttons                        |                                                                         | Apply restores genes and score mode                                                                                                                                                                                                                                                                 |
+| `Combine genes`         | Select                                     | **Sum**, Mean, Z-score                                                  | Shown with 2 or more genes: how they combine into one score per cell                                                                                                                                                                                                                                |
+| `Gene scale`            | Select + gradient preview                  | Gold, Magma, Viridis, **Plasma**, Cividis, Teal, Rose, Glasbey          | The gene colour bar                                                                                                                                                                                                                                                                                 |
+| `Expression detail`     | Select                                     | **Auto LOD**, Exact region, All cells                                   | See below                                                                                                                                                                                                                                                                                           |
+| `Cell color`            | Select                                     | Gene expression, **Transcript count**, Cell area, Annotations, Metadata | Gene expression colours cells by the selected genes; the other modes ignore them. Annotations appears once annotations are loaded; Metadata once a metadata track is loaded (H5AD/SpatialData numeric obs, or imported)                                                                             |
+| `Metadata track`        | Select                                     | "{label} ({min}-{max})"                                                 | When `Cell color` is Metadata. H5AD/SpatialData tracks read their values on first selection                                                                                                                                                                                                         |
+| Status line             | Text                                       | e.g. "Expression exact region: N cells"                                 |                                                                                                                                                                                                                                                                                                     |
 
 `Expression detail` (`src/data/geneExpressionLod.ts`):
 
@@ -183,32 +217,49 @@ Atera stores transcripts per gene (see
 
 - With Selected genes, density squares sum the selected genes, and Auto
   switches to exact points when the selected genes' count in view fits the
-  budget. The Estimate is that count, not the all-transcript cell estimate.
+  budget. The `Exact points` meter shows that count, not the all-transcript
+  cell estimate.
 - With All features, or no genes selected, the layer is cell-summary squares
   from cell transcript counts, and Exact waits for genes.
 - `Gene-only calls` is disabled, and transcripts have no FOV.
 - Density always counts QV ≥ 20; `Min QV` applies to exact points.
 
-| Control              | Type             | Range / default                            | Notes                                                                           |
-| -------------------- | ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------- |
-| `Show transcripts`   | Checkbox         | Off                                        | Enables the overlay                                                             |
-| `Detail`             | Select           | **Auto**, Density, Exact                   | Auto shows exact points when the visible estimate fits the budget, else density |
-| `Exact budget`       | Number           | 1–1,000,000, step 1,000; 100,000           | At ≥ 80% of the budget, `Load exact viewport` must be pressed                   |
-| `Feature filter`     | Select           | **Selected genes**, All features           | Selected genes needs at least one selected gene; applies to exact points        |
-| Feature chips        | Buttons          |                                            | Remove from the shared gene selection                                           |
-| `Feature search`     | Search           | Up to 24 results                           | Adds the gene and switches the filter to Selected genes                         |
-| `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal | Normalized to the dataset/level count domain                                    |
-| `Point color`        | Select           | **Feature**, QV                            | Exact points                                                                    |
-| `Min QV`             | Number           | 0–40; 20                                   | Exact points                                                                    |
-| `Gene-only calls`    | Checkbox         | On                                         | Excludes control probes                                                         |
-| `Transcript opacity` | Slider 0–100%    | 85%                                        |                                                                                 |
-| `Point size`         | Slider 1–6 px    | 2 px                                       |                                                                                 |
+| Control              | Type             | Range / default                                | Notes                                                                                  |
+| -------------------- | ---------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `Show transcripts`   | Checkbox         | Off                                            | Enables the overlay                                                                    |
+| `Detail`             | Select           | **Auto**, Density, Exact                       | Auto shows exact points when the visible estimate fits the budget, else density        |
+| `Exact points`       | Meter            | "{estimate} of {budget} points"                | Fills with the view's transcripts; warning colour over the budget                      |
+| `Edit Max`           | Button           | Shows `Exact budget`                           | `Exact budget`: number, 1–1,000,000, step 1,000; 100,000; commits on Enter or blur     |
+| `Feature filter`     | Select           | **Selected genes**, All features               | Selected genes needs at least one selected gene; applies to density and exact points   |
+| Feature chips        | Chips with ×     |                                                | × (`Remove {gene} from transcript features`) removes it from the shared gene selection |
+| `Feature search`     | Search           | Up to 24 results, ranked like `Gene selection` | Adds the gene and switches the filter to Selected genes                                |
+| `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal     | Normalized to the largest square on the slide at the current square size               |
+| `Point color`        | Select           | **Feature**, QV                                | Exact points                                                                           |
+| `Min QV`             | Number           | 0–40; 20                                       | Exact points                                                                           |
+| `Gene-only calls`    | Checkbox         | On                                             | Excludes control probes                                                                |
+| `Transcript opacity` | Slider 0–100%    | 85%                                            |                                                                                        |
+| `Point size`         | Slider 1–6 px    | 2 px                                           |                                                                                        |
+
+At ≥ 80% of the budget, `Load exact viewport` must be pressed.
+
+On Xenium (Phase 15.1-J), density follows `Feature filter` too: with Selected
+genes the squares count only those genes (see
+[Xenium](./modalities/xenium.md#transcripts)). If the newly selected genes
+need more than 32 `density/gene` data chunks, nothing is drawn and the panel
+says to select fewer genes. Auto's switch to exact points still uses the
+all-transcript estimate, which is what an exact read scans.
+
+The canvas legend names what the squares count and their size: "SNAP25
+transcripts per 40 µm bin", "SNAP25 and AQP4 transcripts per …", "Transcripts
+of 8 selected genes per …", "All transcripts per …", or "Transcripts in cells
+per …" for cell-summary squares. The hover card's title says the same, and
+for several genes it lists each gene's count in the square (top 4).
 
 `TranscriptStatusPanel` (`src/features/transcripts/TranscriptStatusPanel.tsx`)
-below the controls shows source, estimate, budget, rendered count, and query
-time; `Load exact viewport` when waiting; top groups (gene, FOV, count; gene
-and count on Atera); and hovered and pinned transcript or density-bin cards
-with `Pin` / `Clear`.
+below the controls shows source, rendered count, and query time;
+`Load exact viewport` when waiting; top groups (gene, FOV, count; gene and
+count on Atera); and hovered and pinned transcript or density-bin cards with
+`Pin` / `Clear`.
 
 ## Magic Lens Tab
 
@@ -236,20 +287,22 @@ Header chip: "{n} labels", "Loading sets", "Unavailable", or "Idle".
 
 Xenium, H5AD, SpatialData.
 
-| Control                         | Type                         | Values / default                                                         | Notes                                                                                                                                                                                                                                                            |
-| ------------------------------- | ---------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Annotation set`                | Select                       | None, All, dataset groups; **All** (Xenium), **None** (H5AD/SpatialData) | Groups come from `analysis.zarr.zip` or categorical `obs` columns                                                                                                                                                                                                |
-| `Load Annotations`              | Button                       |                                                                          | Loads the selected set and switches `Cell color` to Annotations                                                                                                                                                                                                  |
-| `Clear Annotations`             | Button                       |                                                                          |                                                                                                                                                                                                                                                                  |
-| `Export Annotations`            | Button                       |                                                                          | Downloads `annotations.csv`                                                                                                                                                                                                                                      |
-| `Import File`                   | File input (`.csv`, `.json`) |                                                                          | CSV: a `cell_id`/`cellid`/`cell` column and a `label`/`annotation`/`group`/`cluster` column; extra numeric columns become metadata tracks. JSON: rows or `{label: [ids]}` (`src/data/customAnnotations.ts`). Cell IDs must be Xenium format (`/^[a-p]{8}-\d+$/`) |
-| `Annotation URL` + `Import URL` | URL form                     |                                                                          | Same formats from a URL; saved in the share URL                                                                                                                                                                                                                  |
+| Control                         | Type                         | Values / default                                                                                   | Notes                                                                                                                                                                                                                                                            |
+| ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Annotation set`                | Select                       | None, All, dataset groups; **graphclust** or the first group (Xenium), **None** (H5AD/SpatialData) | Groups come from `analysis.zarr.zip` or categorical `obs` columns. Columns that identify cells (`*_ontology_term_id`, `observation_joinid`, or more than 500 categories) are listed under "More columns"                                                         |
+| `Load Annotations`              | Button                       |                                                                                                    | Loads the selected set and switches `Cell color` to Annotations                                                                                                                                                                                                  |
+| `Clear Annotations`             | Button                       |                                                                                                    |                                                                                                                                                                                                                                                                  |
+| `Export Annotations`            | Button                       |                                                                                                    | Downloads `annotations.csv`                                                                                                                                                                                                                                      |
+| `Import File`                   | File input (`.csv`, `.json`) |                                                                                                    | CSV: a `cell_id`/`cellid`/`cell` column and a `label`/`annotation`/`group`/`cluster` column; extra numeric columns become metadata tracks. JSON: rows or `{label: [ids]}` (`src/data/customAnnotations.ts`). Cell IDs must be Xenium format (`/^[a-p]{8}-\d+$/`) |
+| `Annotation URL` + `Import URL` | URL form                     |                                                                                                    | Same formats from a URL; saved in the share URL                                                                                                                                                                                                                  |
 
 Loaded state:
 
-- **Set sizes**: bar plot per set with a `Visible` checkbox.
-- **Loaded annotations**: per label colour picker, visibility checkbox, cell
-  count, and `x`.
+- **Loaded annotations**: one list per set, headed by the set name, its cell
+  total and a visibility checkbox. Each row has a colour picker, a visibility
+  checkbox, the label without the set prefix, a bar of its size, its cell
+  count and share of the set, and `×`. Visium spots hidden off the tissue are
+  not counted.
 - **Metadata tracks**: per track label, cell count, range, and `x`.
 
 ### GeoJSON Shapes
@@ -298,6 +351,11 @@ GeoJSON shape in the Annotations tab; no cell or gene queries run.
 
 Hidden for Image. The detail heading reads "Bin Info" for Visium HD bins and
 "Cell Info" otherwise.
+
+Clicking a cell, spot or bin on the canvas selects it and opens this tab. The
+selection is marked over the canvas in the highlight colour: its outline when
+its boundary or bin is drawn, otherwise a ring around the point. Esc on the
+canvas, or `Clear Cell`, clears it.
 
 ### Embeddings
 
@@ -371,6 +429,16 @@ Keyboard (focus the spatial view first; `src/components/viewerNavigation.ts`):
 | `+` or `=`         | Zoom in by 0.5           |
 | `-` or `_`         | Zoom out by 0.5          |
 | `Home`             | Reset to the fitted view |
+| `Esc`              | Clear the selected cell  |
+
+### Tools
+
+One tool is on at a time: Pan (the default), Draw Box, Draw Lasso, Distance
+measure or the Magic Lens cursor (`activeTool`,
+`src/features/app-shell/activeToolModel.ts`). Turning one on turns the others
+off. While a tool is on, the top of the canvas says what to do, such as "Drag
+to draw a box. Esc cancels." Esc, anywhere except a text field, returns to Pan
+and drops a half-drawn shape; finishing a box or lasso also returns to Pan.
 
 ### Picking
 
@@ -406,7 +474,11 @@ apart, at least 3 points). ROIs smaller than 1 µm × 1 µm are ignored.
 
 ### Readouts And Messages
 
-- Bottom centre: `Zoom N.NN` and mouse X/Y in µm or px.
+Debug mode, turned on with `?debug=1` (or `#debug=1`) in the address, adds
+developer details: the zoom number, the Layers tab's deck.gl and budget lines,
+and HUD tab switches in the log.
+
+- Bottom centre: mouse X/Y in µm or px, and `Zoom N.NN` in debug mode.
 - Bottom right: scale bar (1/2/5 steps), in the `Mouse coordinates` unit.
 - Bottom left: loading indicator (current task plus up to 3 more) and viewport
   messages ("Loading overview cells…", "Reading OME-TIFF image…", errors).
@@ -418,30 +490,35 @@ Transcripts (`Density color`) tabs.
 ## Shareable URL
 
 `src/data/shareableState.ts` writes the state to the URL hash (debounced
-160 ms, with `xv=1`); query-string values are also read on startup, and hash
-values win. Numbers are rounded to three decimals.
+160 ms, with `xv=2`); query-string values are also read on startup, and hash
+values win. Numbers are rounded to three decimals. Version 2 links leave out
+every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a missing
+parameter means the default. Version 1 links, which wrote every value, still
+open as before. `Copy Link` in the Dataset tab copies the address and says
+"Link copied".
 
-| Parameter                                                                                                 | Meaning                                                                                                               |
-| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `dataset`                                                                                                 | Dataset URL (loaded automatically)                                                                                    |
-| `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                                                                        |
-| `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                            |
-| `genes`                                                                                                   | Selected genes (comma-separated)                                                                                      |
-| `view`                                                                                                    | Target x, y, z, zoom                                                                                                  |
-| `roi`                                                                                                     | `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`                                                                        |
-| `tab`                                                                                                     | Active HUD tab                                                                                                        |
-| `scale`, `score`, `detail`, `cellColor`                                                                   | Gene scale, signature score, expression detail, cell colour mode                                                      |
-| `cellTrack`                                                                                               | Selected `Metadata` track id; written only when `cellColor=metadata`                                                  |
-| `coord`, `measureUnit`                                                                                    | `um` or `px`                                                                                                          |
-| `morphology`, `cellBounds`, `nucleusBounds`, `hoverTips`                                                  | Booleans                                                                                                              |
-| `boundaryLimit`                                                                                           | Boundary limit                                                                                                        |
-| `imgOpacity`, `cellFill`, `cellBoundary`                                                                  | Opacities (0–1)                                                                                                       |
-| `channels`                                                                                                | Enabled image channel IDs                                                                                             |
-| `z`                                                                                                       | Zero-based z plane of an OME-TIFF z-stack dataset image                                                               |
-| `tx`, `txDetail`, `txFilter`, `txGene`, `txBudget`, `txQv`, `txSize`, `txOpacity`, `txDensity`, `txColor` | Transcript controls                                                                                                   |
-| `lens`, `lensScope`, `lensRadius`, `lensQv`                                                               | Magic Lens controls                                                                                                   |
-| `sdCs`, `sdImage`, `sdUm`                                                                                 | SpatialData coordinate system, image, and µm-per-unit override                                                        |
-| `vimg`, `vlib`, `voff`                                                                                    | Visium tissue image (`hires`, `lowres`, `none`), library (only with several), and `1` when off-tissue spots are shown |
+| Parameter                                                                                                 | Meaning                                                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                            |
+| `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                                                                                                                                                    |
+| `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically)                                                                                                     |
+| `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                                                                                                        |
+| `genes`                                                                                                   | Selected genes (comma-separated)                                                                                                                                                                  |
+| `view`                                                                                                    | Target x, y, z, zoom                                                                                                                                                                              |
+| `roi`                                                                                                     | `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`                                                                                                                                                    |
+| `tab`                                                                                                     | Active HUD tab                                                                                                                                                                                    |
+| `scale`, `score`, `detail`, `cellColor`                                                                   | Gene scale, signature score, expression detail, cell colour mode. A version 1 link with `genes` opens in Gene expression whatever `cellColor` says, as such links looked before that mode existed |
+| `cellTrack`                                                                                               | Selected `Metadata` track id; written only when `cellColor=metadata`                                                                                                                              |
+| `coord`, `measureUnit`                                                                                    | `um` or `px`                                                                                                                                                                                      |
+| `morphology`, `cellBounds`, `nucleusBounds`, `hoverTips`                                                  | Booleans                                                                                                                                                                                          |
+| `boundaryLimit`                                                                                           | Boundary limit                                                                                                                                                                                    |
+| `imgOpacity`, `cellFill`, `cellBoundary`                                                                  | Opacities (0–1)                                                                                                                                                                                   |
+| `channels`                                                                                                | Enabled image channel IDs                                                                                                                                                                         |
+| `z`                                                                                                       | Zero-based z plane of an OME-TIFF z-stack dataset image                                                                                                                                           |
+| `tx`, `txDetail`, `txFilter`, `txGene`, `txBudget`, `txQv`, `txSize`, `txOpacity`, `txDensity`, `txColor` | Transcript controls                                                                                                                                                                               |
+| `lens`, `lensScope`, `lensRadius`, `lensQv`                                                               | Magic Lens controls                                                                                                                                                                               |
+| `sdCs`, `sdImage`, `sdUm`                                                                                 | SpatialData coordinate system, image, and µm-per-unit override                                                                                                                                    |
+| `vimg`, `vlib`, `voff`                                                                                    | Visium tissue image (`hires`, `lowres`, `none`), library (only with several), and `1` when off-tissue spots are shown                                                                             |
 
 Dataset-specific values (genes, ROI, channels, z plane, boundaries, colour
 modes, lens, SpatialData view)

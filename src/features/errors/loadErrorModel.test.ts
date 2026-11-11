@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { FileNotListedError } from '../../data/folderListing'
+import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import { LikelyMissingFileError } from '../../data/hostResponses'
 import { assertHttpRangeSupport } from '../../data/rangeSupport'
 import {
@@ -294,6 +295,53 @@ describe('loadErrorModel', () => {
     ).toEqual([error])
     expect(readErrorMessage(new Error('specific'))).toBe('specific')
     expect(readErrorMessage({})).toBe('Unknown dataset error')
+  })
+
+  it('turns a failed dataset detection into a specific error with the files checked', () => {
+    const notFound = createStructuredLoadError(
+      'Dataset overview',
+      datasetDetectionError([
+        { path: 'experiment.xenium', url: 'u1', ok: false, status: 404 },
+        { path: 'cells.zarr.zip', url: 'u2', ok: false, status: 403 },
+      ]),
+    )
+
+    expect(notFound).toMatchObject({
+      code: 'not-found',
+      title: 'Dataset not found',
+      message: 'None of the 2 expected files were found at this address.',
+      detail: 'Checked experiment.xenium: HTTP 404; cells.zarr.zip: HTTP 403',
+    })
+    expect(notFound.action).toContain('403')
+
+    const blocked = createStructuredLoadError(
+      'Dataset overview',
+      datasetDetectionError([
+        { path: 'a', url: 'u', ok: false, error: 'Failed to fetch' },
+      ]),
+    )
+    expect(blocked).toMatchObject({ code: 'blocked', title: 'Request blocked' })
+    expect(blocked.action).toContain('CORS')
+
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
+        datasetDetectionError([{ path: 'a', url: 'u', ok: true, status: 200 }]),
+      ),
+    ).toMatchObject({ code: 'unsupported', title: 'Unsupported dataset layout' })
+
+    const many = createStructuredLoadError(
+      'Dataset overview',
+      datasetDetectionError(
+        Array.from({ length: 8 }, (_value, index) => ({
+          path: `f${index}`,
+          url: `u${index}`,
+          ok: false,
+          status: 404,
+        })),
+      ),
+    )
+    expect(many.detail).toMatch(/f5: HTTP 404; and 2 more$/)
   })
 })
 

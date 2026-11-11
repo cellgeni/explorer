@@ -167,7 +167,7 @@ whole-slide UMOD request is 165 squares of 640 µm that sum to the stored
 **Choosing density or points.** The estimate, not the all-transcript cell
 estimate, goes to `planTranscriptLod`: Auto shows exact points when it fits
 the `Exact budget`, density otherwise; the manual-load prompt at 80% of the
-budget applies as for Xenium. The panel's Estimate shows this count.
+budget applies as for Xenium. The `Exact points` meter shows this count.
 
 **Exact points.** For each visible tile, `gene_offset` (`[genes, 2]` uint32)
 gives each selected gene's `[start, end)` rows; tiles are sorted by gene. The

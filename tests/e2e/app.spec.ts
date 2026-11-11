@@ -7,7 +7,7 @@ import {
   expectAxeFindingsMatchBaseline,
   type AxeFindings,
 } from './axe'
-import { openControls } from './controls'
+import { expectLogEntry, openControls } from './controls'
 
 const VISIUM_HD_REFERENCE_URL =
   'https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f'
@@ -37,7 +37,7 @@ async function loadDefaultXeniumDataset(page: Page) {
   await expect(page.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
 
   await page.getByRole('button', { name: 'Load Dataset' }).click()
-  await expect(page.getByText(/Dataset ready: [1-9][0-9,]* cells/)).toBeVisible({
+  await expectLogEntry(page, /Dataset ready: [1-9][0-9,]* cells/, {
     timeout: XENIUM_LOAD_TIMEOUT_MS,
   })
   await expect(
@@ -322,7 +322,7 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
   const fixtureUrl = new URL('/h5ad-smoke.h5ad', page.url()).toString()
   await page.getByLabel('Dataset or image URL').fill(fixtureUrl)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
-  await expect(page.getByText(/H5AD ready: 4 cells, 3 genes/)).toBeVisible({
+  await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
   const genesPanel = await openControls(page, 'genes')
@@ -365,7 +365,7 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
   await page.getByLabel('Dataset or image URL').fill(fixtureUrl)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  await expect(page.getByText(/H5AD ready: 4 cells, 3 genes/)).toBeVisible({
+  await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
   await expect(
@@ -392,11 +392,14 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
   await expect(annotationsPanel.getByLabel('Annotation set')).toHaveValue('none')
   await annotationsPanel.getByLabel('Annotation set').selectOption({ label: 'cluster' })
   await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
-  const loadedAnnotations = annotationsPanel.getByLabel('Loaded annotations')
-  await expect(loadedAnnotations).toContainText('cluster: A', {
+  // One list per set: the set is a heading and labels drop its prefix.
+  const loadedAnnotations = annotationsPanel.getByRole('region', {
+    name: 'cluster labels',
+  })
+  await expect(loadedAnnotations).toContainText('A', {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
-  await expect(loadedAnnotations).toContainText('cluster: B')
+  await expect(loadedAnnotations).toContainText('B')
 
   await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
@@ -431,10 +434,10 @@ test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
   })
   await page.goto(`/#${sharedState.toString()}`)
 
-  await expect(page.getByText(/H5AD ready: 4 cells, 3 genes/)).toBeVisible({
+  await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
-  await expect(page.getByText(/Metadata track ready: score/)).toBeVisible({
+  await expectLogEntry(page, /Metadata track ready: score/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
   await expect(page.getByText(/Loading metadata track n_genes/)).toHaveCount(0)
@@ -493,7 +496,7 @@ test('loads AnnData from an Icechunk repository with gene expression @smoke', as
   await page.getByLabel('Dataset or image URL').fill(repositoryUrl)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  await expect(page.getByText(/Icechunk AnnData ready: 6 cells, 4 genes/)).toBeVisible({
+  await expectLogEntry(page, /Icechunk AnnData ready: 6 cells, 4 genes/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
 
@@ -619,7 +622,7 @@ test('switches Visium libraries and off-tissue spots and keeps them in the link 
 
   await openControls(page, 'view-options')
   await library.selectOption('section-B')
-  await expect(page.getByText(/Visium library section-B: 70 spots/)).toBeVisible()
+  await expectLogEntry(page, /Visium library section-B: 70 spots/)
   await expect(page).toHaveURL(/vlib=section-B/)
   // The gene selection survives the reload.
   await openControls(page, 'genes')
@@ -662,8 +665,8 @@ test('loads a Space Ranger Visium folder as 55 um spots with its tissue image @s
   await expect(visiumPanel).toContainText('smoke-library')
   await expect(visiumPanel).toContainText('0.5 µm per pixel (array row/column fit')
   await expect(visiumPanel.getByTitle('Visium tissue image to show')).toHaveValue('hires')
-  await expect(page.getByText(/Visium ready: 36 spots, 3 genes/)).toBeVisible()
-  await expect(page.getByText('Visium hires tissue image ready')).toBeVisible({
+  await expectLogEntry(page, /Visium ready: 36 spots, 3 genes/)
+  await expectLogEntry(page, /Visium hires tissue image ready/, {
     timeout: H5AD_LOAD_TIMEOUT_MS,
   })
   await expect(page.getByRole('tab', { name: 'Transcripts' })).toHaveCount(0)
@@ -698,7 +701,7 @@ test('loads a CELLxGENE Visium H5AD with uns/spatial as spots over its H&E @live
   await expect(visiumPanel).toContainText('370 × 55 µm (4,622 off tissue hidden)')
   await expect(visiumPanel).toContainText('GSM6592057_M10')
   await expect(visiumPanel).toContainText('µm per pixel (array row/column fit')
-  await expect(page.getByText('Visium hires tissue image ready')).toBeVisible({
+  await expectLogEntry(page, /Visium hires tissue image ready/, {
     timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS,
   })
 
@@ -725,7 +728,7 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
   await page.getByLabel('Dataset or image URL').fill(H5AD_PBMC3K_REFERENCE_URL)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  await expect(page.getByText(/H5AD ready: 2,638 cells, 1,838 genes/)).toBeVisible({
+  await expectLogEntry(page, /H5AD ready: 2,638 cells, 1,838 genes/, {
     timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS,
   })
   await expect(
@@ -747,10 +750,9 @@ test('loads the hosted PBMC3K H5AD fixture @live', async ({ page }) => {
   await expect(annotationsPanel.getByLabel('Annotation set')).toHaveValue('none')
   await annotationsPanel.getByLabel('Annotation set').selectOption({ label: 'leiden' })
   await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
-  await expect(annotationsPanel.getByLabel('Loaded annotations')).toContainText(
-    'leiden: ',
-    { timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS },
-  )
+  await expect(
+    annotationsPanel.getByRole('region', { name: 'leiden labels' }),
+  ).toBeVisible({ timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS })
 
   await openControls(page, 'color-by')
   await expect(genesPanel.getByLabel('Cell color')).toHaveValue('annotations')
@@ -774,11 +776,11 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   await page.getByLabel('Dataset or image URL').fill(ATERA_REFERENCE_URL)
   await page.getByRole('button', { name: 'Load Dataset' }).click()
 
-  await expect(page.getByText(/Atera ready: 93,864 cells, 18,050 genes/)).toBeVisible({
+  await expectLogEntry(page, /Atera ready: 93,864 cells, 18,050 genes/, {
     timeout: ATERA_LOAD_TIMEOUT_MS,
   })
   await expect(page.getByRole('tab', { name: 'Transcripts' })).toBeVisible()
-  await expect(page.getByText('Morphology image ready')).toBeVisible({
+  await expectLogEntry(page, /Morphology image ready/, {
     timeout: ATERA_LOAD_TIMEOUT_MS,
   })
 
@@ -803,10 +805,9 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
     .getByLabel('Annotation set')
     .selectOption({ label: 'azimuth_broad' })
   await annotationsPanel.getByRole('button', { name: 'Load Annotations' }).click()
-  await expect(annotationsPanel.getByLabel('Loaded annotations')).toContainText(
-    'azimuth_broad: Epithelial cell',
-    { timeout: ATERA_LOAD_TIMEOUT_MS },
-  )
+  await expect(
+    annotationsPanel.getByRole('region', { name: 'azimuth_broad labels' }),
+  ).toContainText('Epithelial cell', { timeout: ATERA_LOAD_TIMEOUT_MS })
 
   // With UMOD selected, Atera transcripts are its density from
   // binned_transcripts.zarr.zip; for all features they are cell-summary squares.
@@ -848,7 +849,7 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
 
   await loadDefaultXeniumDataset(page)
 
-  await expect(page.getByText('Morphology image ready')).toBeVisible({
+  await expectLogEntry(page, /Morphology image ready/, {
     timeout: XENIUM_LOAD_TIMEOUT_MS,
   })
 

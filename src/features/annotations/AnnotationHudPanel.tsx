@@ -10,20 +10,19 @@ import type { Annotation } from '../../datasets/spatialDataset'
 import type { GeometricAnnotationFeature } from './geometricAnnotationModel'
 import {
   annotationSizePlots,
+  isIdLikeAnnotationGroup,
   type AnnotationGroupState,
   type AnnotationSizePlot,
   type AnnotationState,
+  type PlacedCellIds,
 } from './annotationModel'
 
-const ANNOTATION_LIST_ROW_HEIGHT = 34
-const ANNOTATION_LIST_VISIBLE_ROWS = 8
-const ANNOTATION_LIST_OVERSCAN_ROWS = 4
 const METADATA_TRACK_ROW_HEIGHT = 34
 const METADATA_TRACK_VISIBLE_ROWS = 6
 const METADATA_TRACK_OVERSCAN_ROWS = 3
-const ANNOTATION_SIZE_ROW_HEIGHT = 22
-const ANNOTATION_SIZE_VISIBLE_ROWS = 8
-const ANNOTATION_SIZE_OVERSCAN_ROWS = 4
+const ANNOTATION_SET_ROW_HEIGHT = 28
+const ANNOTATION_SET_VISIBLE_ROWS = 8
+const ANNOTATION_SET_OVERSCAN_ROWS = 4
 
 interface AnnotationHudPanelProps {
   readonly active: boolean
@@ -40,6 +39,9 @@ interface AnnotationHudPanelProps {
   readonly annotationColors: Readonly<Record<string, string>>
   readonly hiddenAnnotationSetIds: readonly string[]
   readonly hiddenAnnotationIds: readonly string[]
+  // Set when some cells are not on the map (Visium spots off the tissue),
+  // so label counts leave them out.
+  readonly placedCellIds?: PlacedCellIds | null | undefined
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly geometricAnnotations: readonly GeometricAnnotationFeature[]
   readonly geometricAnnotationsEnabled: boolean
@@ -81,6 +83,7 @@ export const AnnotationHudPanel = memo(function AnnotationHudPanel({
   annotationColors,
   hiddenAnnotationSetIds,
   hiddenAnnotationIds,
+  placedCellIds = null,
   cellMetadataTracks,
   geometricAnnotations,
   geometricAnnotationsEnabled,
@@ -182,11 +185,22 @@ export const AnnotationHudPanel = memo(function AnnotationHudPanel({
             >
               <option value={NO_ANNOTATION_GROUP_ID}>None</option>
               <option value={ALL_ANNOTATION_GROUP_ID}>All</option>
-              {annotationGroupOptions.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.label}
-                </option>
-              ))}
+              {annotationGroupOptions
+                .filter((group) => !isIdLikeAnnotationGroup(group))
+                .map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.label}
+                  </option>
+                ))}
+              {annotationGroupOptions.some(isIdLikeAnnotationGroup) ? (
+                <optgroup label="More columns">
+                  {annotationGroupOptions.filter(isIdLikeAnnotationGroup).map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
             <button
               type="button"
@@ -281,17 +295,14 @@ export const AnnotationHudPanel = memo(function AnnotationHudPanel({
         ) : null}
         {annotationState.status === 'ready' && annotationState.annotations.length > 0 ? (
           <>
-            <AnnotationSizeCharts
-              annotations={loadedAnnotations}
-              annotationColors={annotationColors}
-              hiddenAnnotationSetIds={hiddenAnnotationSetIds}
-              onAnnotationSetVisibilityChange={onAnnotationSetVisibilityChange}
-            />
-            <AnnotationList
+            <AnnotationSetLists
               annotations={loadedAnnotations}
               annotationColors={annotationColors}
               hiddenAnnotationIds={hiddenAnnotationIds}
+              hiddenAnnotationSetIds={hiddenAnnotationSetIds}
+              placedCellIds={placedCellIds}
               onAnnotationColorChange={onAnnotationColorChange}
+              onAnnotationSetVisibilityChange={onAnnotationSetVisibilityChange}
               onAnnotationVisibilityChange={onAnnotationVisibilityChange}
               onRemoveAnnotation={onRemoveAnnotation}
             />
@@ -442,109 +453,206 @@ function geometryTypeLabel(annotation: GeometricAnnotationFeature): string {
   return `${annotation.geometry.coordinates.length.toLocaleString()} polygons`
 }
 
-function AnnotationList({
+// One list per annotation set (15.1-I): each label's swatch, visibility, name
+// without the set prefix, a bar of its size, its count and share of the set.
+function AnnotationSetLists({
   annotations,
   annotationColors,
   hiddenAnnotationIds,
+  hiddenAnnotationSetIds,
+  placedCellIds,
   onAnnotationColorChange,
+  onAnnotationSetVisibilityChange,
   onAnnotationVisibilityChange,
   onRemoveAnnotation,
 }: {
   readonly annotations: readonly Annotation[]
   readonly annotationColors: Readonly<Record<string, string>>
   readonly hiddenAnnotationIds: readonly string[]
+  readonly hiddenAnnotationSetIds: readonly string[]
+  readonly placedCellIds: PlacedCellIds | null
   readonly onAnnotationColorChange: (annotationId: string, color: string) => void
+  readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
   readonly onAnnotationVisibilityChange: (annotationId: string, visible: boolean) => void
   readonly onRemoveAnnotation: (annotationId: string) => void
 }) {
-  const listKey = itemListKey(annotations)
-  const [scrollState, setScrollState] = useState({ key: '', scrollTop: 0 })
+  const plots = useMemo(
+    () => annotationSizePlots(annotations, placedCellIds),
+    [annotations, placedCellIds],
+  )
+  const annotationById = useMemo(() => {
+    const byId = new Map<string, { readonly label: string; readonly index: number }>()
+    annotations.forEach((annotation, index) => {
+      byId.set(annotation.id, { label: annotation.label, index })
+    })
+    return byId
+  }, [annotations])
   const hiddenAnnotationIdSet = useMemo(
     () => new Set(hiddenAnnotationIds),
     [hiddenAnnotationIds],
   )
-  const virtualRows = virtualWindow({
-    itemCount: annotations.length,
-    rowHeight: ANNOTATION_LIST_ROW_HEIGHT,
-    visibleRows: ANNOTATION_LIST_VISIBLE_ROWS,
-    overscanRows: ANNOTATION_LIST_OVERSCAN_ROWS,
-    scrollTop: scrollState.key === listKey ? scrollState.scrollTop : 0,
-  })
-  const visibleAnnotations = annotations.slice(
-    virtualRows.startIndex,
-    virtualRows.endIndex,
+  const hiddenAnnotationSetIdSet = useMemo(
+    () => new Set(hiddenAnnotationSetIds),
+    [hiddenAnnotationSetIds],
   )
 
   return (
-    <ul
-      className="annotation-list is-virtualized"
-      aria-label="Loaded annotations"
-      onScroll={(event) => {
-        setScrollState({ key: listKey, scrollTop: event.currentTarget.scrollTop })
-      }}
-      style={{
-        height: `${virtualRows.viewportHeight}px`,
-        paddingTop: `${virtualRows.beforeHeight}px`,
-        paddingBottom: `${virtualRows.afterHeight}px`,
-      }}
-    >
-      {visibleAnnotations.map((annotation, visibleIndex) => {
-        const annotationIndex = virtualRows.startIndex + visibleIndex
-        const annotationColor =
-          annotationColors[annotation.id] ?? annotationPaletteColor(annotationIndex)
-        const visible = !hiddenAnnotationIdSet.has(annotation.id)
+    <div className="annotation-sets" role="group" aria-label="Loaded annotations">
+      {plots.map((plot) => (
+        <AnnotationSetList
+          key={plot.id}
+          plot={plot}
+          annotationById={annotationById}
+          annotationColors={annotationColors}
+          hiddenAnnotationIdSet={hiddenAnnotationIdSet}
+          visible={!hiddenAnnotationSetIdSet.has(plot.id)}
+          onAnnotationColorChange={onAnnotationColorChange}
+          onAnnotationSetVisibilityChange={onAnnotationSetVisibilityChange}
+          onAnnotationVisibilityChange={onAnnotationVisibilityChange}
+          onRemoveAnnotation={onRemoveAnnotation}
+        />
+      ))}
+    </div>
+  )
+}
 
-        return (
-          <li
-            key={annotation.id}
-            className={visible ? undefined : 'is-hidden'}
-            aria-setsize={annotations.length}
-            aria-posinset={annotationIndex + 1}
-          >
-            <label
-              className="annotation-color-picker"
-              style={{ '--annotation-color': annotationColor } as CSSProperties}
+function AnnotationSetList({
+  plot,
+  annotationById,
+  annotationColors,
+  hiddenAnnotationIdSet,
+  visible,
+  onAnnotationColorChange,
+  onAnnotationSetVisibilityChange,
+  onAnnotationVisibilityChange,
+  onRemoveAnnotation,
+}: {
+  readonly plot: AnnotationSizePlot
+  readonly annotationById: ReadonlyMap<
+    string,
+    { readonly label: string; readonly index: number }
+  >
+  readonly annotationColors: Readonly<Record<string, string>>
+  readonly hiddenAnnotationIdSet: ReadonlySet<string>
+  readonly visible: boolean
+  readonly onAnnotationColorChange: (annotationId: string, color: string) => void
+  readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
+  readonly onAnnotationVisibilityChange: (annotationId: string, visible: boolean) => void
+  readonly onRemoveAnnotation: (annotationId: string) => void
+}) {
+  const [scrollTop, setScrollTop] = useState(0)
+  const virtualRows = virtualWindow({
+    itemCount: plot.rows.length,
+    rowHeight: ANNOTATION_SET_ROW_HEIGHT,
+    visibleRows: ANNOTATION_SET_VISIBLE_ROWS,
+    overscanRows: ANNOTATION_SET_OVERSCAN_ROWS,
+    scrollTop,
+  })
+  const visibleRows = plot.rows.slice(virtualRows.startIndex, virtualRows.endIndex)
+
+  return (
+    <section
+      className={visible ? 'annotation-set' : 'annotation-set is-hidden'}
+      aria-label={`${plot.label} labels`}
+    >
+      <div className="annotation-set-heading">
+        <input
+          type="checkbox"
+          checked={visible}
+          aria-label={`${plot.label} visible`}
+          title={`${plot.label} visible`}
+          onChange={(event) => {
+            onAnnotationSetVisibilityChange(plot.id, event.currentTarget.checked)
+          }}
+        />
+        <h4>{plot.label}</h4>
+        <small>{plot.totalCellAssignments.toLocaleString()} cells</small>
+      </div>
+      <ol
+        className="annotation-set-rows is-virtualized"
+        onScroll={(event) => {
+          setScrollTop(event.currentTarget.scrollTop)
+        }}
+        style={{
+          height: `${virtualRows.viewportHeight}px`,
+          paddingTop: `${virtualRows.beforeHeight}px`,
+          paddingBottom: `${virtualRows.afterHeight}px`,
+        }}
+      >
+        {visibleRows.map((row, visibleIndex) => {
+          const rowIndex = virtualRows.startIndex + visibleIndex
+          const annotation = annotationById.get(row.id)
+          const fullLabel = annotation?.label ?? row.label
+          const color =
+            annotationColors[row.id] ??
+            annotationPaletteColor(annotation?.index ?? rowIndex)
+          const rowVisible = !hiddenAnnotationIdSet.has(row.id)
+          const width =
+            plot.maxCellCount === 0 ? 0 : (row.cellCount / plot.maxCellCount) * 100
+
+          return (
+            <li
+              key={row.id}
+              className={
+                rowVisible ? 'annotation-set-row' : 'annotation-set-row is-hidden'
+              }
+              aria-setsize={plot.rows.length}
+              aria-posinset={rowIndex + 1}
+              style={
+                {
+                  '--annotation-color': color,
+                  '--annotation-size-width': `${width}%`,
+                } as CSSProperties
+              }
             >
-              <input
-                className="annotation-color-input"
-                type="color"
-                aria-label={`${annotation.label} color`}
-                value={annotationColor}
-                title={`${annotation.label} color`}
-                onChange={(event) => {
-                  onAnnotationColorChange(annotation.id, event.currentTarget.value)
+              <label className="annotation-color-picker">
+                <input
+                  className="annotation-color-input"
+                  type="color"
+                  aria-label={`${fullLabel} color`}
+                  value={color}
+                  title={`${fullLabel} color`}
+                  onChange={(event) => {
+                    onAnnotationColorChange(row.id, event.currentTarget.value)
+                  }}
+                />
+                <span className="annotation-color-swatch" aria-hidden="true" />
+              </label>
+              <label className="annotation-visibility-toggle">
+                <input
+                  type="checkbox"
+                  checked={rowVisible}
+                  aria-label={`${fullLabel} visible`}
+                  title={`${fullLabel} visible`}
+                  onChange={(event) => {
+                    onAnnotationVisibilityChange(row.id, event.currentTarget.checked)
+                  }}
+                />
+              </label>
+              <span className="annotation-set-label" title={fullLabel}>
+                {row.label}
+              </span>
+              <span className="annotation-size-track" aria-hidden="true">
+                <span className="annotation-size-bar" />
+              </span>
+              <strong>{row.cellCount.toLocaleString()}</strong>
+              <small>{formatAnnotationFraction(row.fraction)}</small>
+              <button
+                type="button"
+                className="annotation-remove"
+                aria-label={`Remove ${fullLabel}`}
+                title={`Remove ${fullLabel}`}
+                onClick={() => {
+                  onRemoveAnnotation(row.id)
                 }}
-              />
-              <span className="annotation-color-swatch" aria-hidden="true" />
-            </label>
-            <label className="annotation-visibility-toggle">
-              <input
-                type="checkbox"
-                checked={visible}
-                aria-label={`${annotation.label} visible`}
-                title={`${annotation.label} visible`}
-                onChange={(event) => {
-                  onAnnotationVisibilityChange(annotation.id, event.currentTarget.checked)
-                }}
-              />
-            </label>
-            <span>{annotation.label}</span>
-            <small>{annotation.cellIds.length.toLocaleString()}</small>
-            <button
-              type="button"
-              className="annotation-remove"
-              aria-label={`Remove ${annotation.label}`}
-              title={`Remove ${annotation.label}`}
-              onClick={() => {
-                onRemoveAnnotation(annotation.id)
-              }}
-            >
-              x
-            </button>
-          </li>
-        )
-      })}
-    </ul>
+              >
+                ×
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+    </section>
   )
 }
 
@@ -613,180 +721,6 @@ function formatMetadataTrackDomain(track: ContinuousCellMetadataTrack): string {
 
 function formatMetadataValue(value: number): string {
   return Number.isInteger(value) ? value.toLocaleString() : value.toPrecision(3)
-}
-
-function AnnotationSizeCharts({
-  annotations,
-  annotationColors,
-  hiddenAnnotationSetIds,
-  onAnnotationSetVisibilityChange,
-}: {
-  readonly annotations: readonly Annotation[]
-  readonly annotationColors: Readonly<Record<string, string>>
-  readonly hiddenAnnotationSetIds: readonly string[]
-  readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
-}) {
-  const plots = useMemo(() => annotationSizePlots(annotations), [annotations])
-  const hiddenAnnotationSetIdSet = useMemo(
-    () => new Set(hiddenAnnotationSetIds),
-    [hiddenAnnotationSetIds],
-  )
-  const annotationIndexById = useMemo(() => {
-    const indexes = new Map<string, number>()
-
-    annotations.forEach((annotation, index) => {
-      indexes.set(annotation.id, index)
-    })
-
-    return indexes
-  }, [annotations])
-
-  if (plots.length === 0) {
-    return null
-  }
-
-  const totalAssignments = plots.reduce(
-    (total, plot) => total + plot.totalCellAssignments,
-    0,
-  )
-
-  return (
-    <section className="annotation-size-panel" aria-labelledby="annotation-size-heading">
-      <div className="annotation-size-heading">
-        <h3 id="annotation-size-heading">Set sizes</h3>
-        <small>{totalAssignments.toLocaleString()} cell assignments</small>
-      </div>
-      <div className="annotation-size-plots">
-        {plots.map((plot) => (
-          <AnnotationSizePlotView
-            key={plot.id}
-            plot={plot}
-            annotationColors={annotationColors}
-            annotationIndexById={annotationIndexById}
-            visible={!hiddenAnnotationSetIdSet.has(plot.id)}
-            onVisibilityChange={onAnnotationSetVisibilityChange}
-          />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function AnnotationSizePlotView({
-  plot,
-  annotationColors,
-  annotationIndexById,
-  visible,
-  onVisibilityChange,
-}: {
-  readonly plot: AnnotationSizePlot
-  readonly annotationColors: Readonly<Record<string, string>>
-  readonly annotationIndexById: ReadonlyMap<string, number>
-  readonly visible: boolean
-  readonly onVisibilityChange: (setId: string, visible: boolean) => void
-}) {
-  const headingId = `annotation-size-${plot.id.replaceAll(':', '-')}`
-
-  return (
-    <article
-      className={visible ? 'annotation-size-plot' : 'annotation-size-plot is-hidden'}
-      aria-label={`${plot.label} size plot`}
-    >
-      <div className="annotation-size-plot-heading">
-        <h4 id={headingId}>{plot.label}</h4>
-        <div className="annotation-size-plot-actions">
-          <small>{plot.totalCellAssignments.toLocaleString()}</small>
-          <label className="annotation-set-toggle">
-            <input
-              type="checkbox"
-              checked={visible}
-              aria-label={`${plot.label} visible`}
-              title={`${plot.label} visible`}
-              onChange={(event) => {
-                onVisibilityChange(plot.id, event.currentTarget.checked)
-              }}
-            />
-            <span>Visible</span>
-          </label>
-        </div>
-      </div>
-      <div className="annotation-size-axis" aria-hidden="true">
-        <span>0</span>
-        <span>{plot.maxCellCount.toLocaleString()} cells</span>
-      </div>
-      <AnnotationSizeRowList
-        plot={plot}
-        annotationColors={annotationColors}
-        annotationIndexById={annotationIndexById}
-      />
-    </article>
-  )
-}
-
-function AnnotationSizeRowList({
-  plot,
-  annotationColors,
-  annotationIndexById,
-}: {
-  readonly plot: AnnotationSizePlot
-  readonly annotationColors: Readonly<Record<string, string>>
-  readonly annotationIndexById: ReadonlyMap<string, number>
-}) {
-  const [scrollTop, setScrollTop] = useState(0)
-  const virtualRows = virtualWindow({
-    itemCount: plot.rows.length,
-    rowHeight: ANNOTATION_SIZE_ROW_HEIGHT,
-    visibleRows: ANNOTATION_SIZE_VISIBLE_ROWS,
-    overscanRows: ANNOTATION_SIZE_OVERSCAN_ROWS,
-    scrollTop,
-  })
-  const visibleRows = plot.rows.slice(virtualRows.startIndex, virtualRows.endIndex)
-
-  return (
-    <ol
-      className="annotation-size-list is-virtualized"
-      aria-label={`${plot.label} cell counts`}
-      onScroll={(event) => {
-        setScrollTop(event.currentTarget.scrollTop)
-      }}
-      style={{
-        height: `${virtualRows.viewportHeight}px`,
-        paddingTop: `${virtualRows.beforeHeight}px`,
-        paddingBottom: `${virtualRows.afterHeight}px`,
-      }}
-    >
-      {visibleRows.map((row, visibleIndex) => {
-        const rowIndex = virtualRows.startIndex + visibleIndex
-        const width =
-          plot.maxCellCount === 0 ? 0 : (row.cellCount / plot.maxCellCount) * 100
-        const annotationColor =
-          annotationColors[row.id] ??
-          annotationPaletteColor(annotationIndexById.get(row.id) ?? rowIndex)
-
-        return (
-          <li
-            key={row.id}
-            className="annotation-size-row"
-            aria-setsize={plot.rows.length}
-            aria-posinset={rowIndex + 1}
-            style={
-              {
-                '--annotation-color': annotationColor,
-                '--annotation-size-width': `${width}%`,
-              } as CSSProperties
-            }
-          >
-            <span className="annotation-size-label">{row.label}</span>
-            <span className="annotation-size-track" aria-hidden="true">
-              <span className="annotation-size-bar" />
-            </span>
-            <strong>{row.cellCount.toLocaleString()}</strong>
-            <small>{formatAnnotationFraction(row.fraction)}</small>
-          </li>
-        )
-      })}
-    </ol>
-  )
 }
 
 function formatAnnotationFraction(fraction: number): string {

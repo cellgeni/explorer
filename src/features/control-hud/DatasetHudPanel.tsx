@@ -1,11 +1,10 @@
 import type { ComponentProps, FormEventHandler } from 'react'
 import {
   ActivityLog,
-  CellFeatureMatrixCompatibilityNotice,
+  DataAccessNotes,
   DatasetDiagnosticsPanel,
   DownloadIcon,
   ErrorSummary,
-  FallbackNoticeSummary,
 } from '../../components/AppStatusPanels'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import { visiumHdBinSizeLabel, type VisiumHdControlState } from '../dataset/visiumHdModel'
@@ -18,15 +17,16 @@ import {
   type VisiumControlState,
 } from '../dataset/visiumModel'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
+import { Select } from '../../components/ui'
 import type { AnnDataVisiumView } from '../../datasets/h5adDataset'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 type DatasetDiagnosticsState = ComponentProps<typeof DatasetDiagnosticsPanel>['state']
 type CellFeatureMatrixCompatibilityState = ComponentProps<
-  typeof CellFeatureMatrixCompatibilityNotice
->['state']
+  typeof DataAccessNotes
+>['matrixState']
 type ErrorSummaryItems = ComponentProps<typeof ErrorSummary>['errors']
-type FallbackNoticeItems = ComponentProps<typeof FallbackNoticeSummary>['notices']
+type FallbackNoticeItems = ComponentProps<typeof DataAccessNotes>['notices']
 type ActivityLogEntries = ComponentProps<typeof ActivityLog>['entries']
 
 interface DatasetHudPanelProps {
@@ -60,6 +60,10 @@ interface DatasetHudPanelProps {
   readonly onBoundaryCellLimitChange: (limit: number) => void
   readonly onVisiumHdBinSizeChange: (binSize: VisiumHdBinSizeMicrometers) => void
   readonly onRunDatasetDiagnostics: () => void
+  // Copies the share link; resolves false when the clipboard refused.
+  readonly onCopyLink?: (() => Promise<boolean>) | undefined
+  // Whether a dataset is loaded, so the link opens it.
+  readonly canCopyLink?: boolean | undefined
   readonly onDownloadDiagnostics: () => void
   readonly onClearDebugLog: () => void
 }
@@ -95,6 +99,8 @@ export function DatasetHudPanel({
   onBoundaryCellLimitChange,
   onVisiumHdBinSizeChange,
   onRunDatasetDiagnostics,
+  onCopyLink,
+  canCopyLink = false,
   onDownloadDiagnostics,
   onClearDebugLog,
 }: DatasetHudPanelProps) {
@@ -156,6 +162,9 @@ export function DatasetHudPanel({
           {isLoading ? 'Loading…' : 'Load Dataset'}
         </button>
       </form>
+      {onCopyLink === undefined ? null : (
+        <CopyLinkButton disabled={!canCopyLink} onCopyLink={onCopyLink} />
+      )}
       {datasetAbout === null ? null : <DatasetAbout about={datasetAbout} />}
       <VisiumHdDatasetControls
         inputId={visiumHdBinSizeInputId}
@@ -199,11 +208,61 @@ export function DatasetHudPanel({
         </button>
       </div>
       <DatasetDiagnosticsPanel state={diagnosticsState} />
-      <CellFeatureMatrixCompatibilityNotice state={cellFeatureMatrixCapabilityState} />
-      <FallbackNoticeSummary notices={fallbackNotices} />
+      <DataAccessNotes
+        matrixState={cellFeatureMatrixCapabilityState}
+        notices={fallbackNotices}
+      />
 
-      <ErrorSummary errors={activeErrors} />
+      <ErrorSummary errors={activeErrors} onRunDiagnostics={onRunDatasetDiagnostics} />
       <ActivityLog entries={debugLog} onClear={onClearDebugLog} />
+    </div>
+  )
+}
+
+const COPY_STATUS_MS = 2500
+
+// Copies the address, which holds the view (15.1-L), and says so for a moment.
+function CopyLinkButton({
+  disabled,
+  onCopyLink,
+}: {
+  readonly disabled: boolean
+  readonly onCopyLink: () => Promise<boolean>
+}) {
+  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
+
+  useEffect(() => {
+    if (status === 'idle') return
+    const timeout = window.setTimeout(() => {
+      setStatus('idle')
+    }, COPY_STATUS_MS)
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [status])
+
+  return (
+    <div className="dataset-share-row">
+      <button
+        type="button"
+        className="secondary-action"
+        disabled={disabled}
+        title="Copy a link that opens this dataset with the current view"
+        onClick={() => {
+          void onCopyLink().then((copied) => {
+            setStatus(copied ? 'copied' : 'failed')
+          })
+        }}
+      >
+        Copy Link
+      </button>
+      <span role="status" className="dataset-share-status">
+        {status === 'copied'
+          ? 'Link copied'
+          : status === 'failed'
+            ? 'Could not copy; copy the address bar instead'
+            : ''}
+      </span>
     </div>
   )
 }
@@ -362,7 +421,7 @@ function VisiumDatasetControls({
           <span>Library</span>
           <select
             title="Visium library to show"
-            value={summary.libraryId}
+            value={state.requestedView?.libraryId ?? summary.libraryId}
             disabled={disabled}
             onChange={(event) => {
               onViewChange({ libraryId: event.currentTarget.value })
@@ -393,32 +452,28 @@ function VisiumDatasetControls({
           {formatVisiumUnits(summary.units)}
         </strong>
       </div>
-      <label className="visium-bin-control">
-        <span>Tissue image</span>
-        <select
-          title="Visium tissue image to show"
-          value={state.image ?? ''}
-          disabled={disabled || summary.images.length === 0}
-          onChange={(event) => {
-            const value = event.currentTarget.value
-            onImageChange(value === 'hires' || value === 'lowres' ? value : null)
-          }}
-        >
-          <option value="">
-            {summary.images.length === 0 ? 'None available' : 'None'}
-          </option>
-          {summary.images.map((image) => (
-            <option key={image} value={image}>
-              {visiumImageLabel(image)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <Select<VisiumImageKind | ''>
+        className="ui-field--inline"
+        label="Tissue image"
+        title="Visium tissue image to show"
+        value={state.image ?? ''}
+        disabled={disabled || summary.images.length === 0}
+        options={[
+          { value: '', label: summary.images.length === 0 ? 'None available' : 'None' },
+          ...summary.images.map((image) => ({
+            value: image,
+            label: visiumImageLabel(image),
+          })),
+        ]}
+        onChange={(value) => {
+          onImageChange(value === '' ? null : value)
+        }}
+      />
       {summary.offTissueSpotCount === 0 ? null : (
         <label className="dataset-toggle">
           <input
             type="checkbox"
-            checked={summary.showOffTissue}
+            checked={state.requestedView?.showOffTissue ?? summary.showOffTissue}
             disabled={disabled}
             title="Show the spots that are not under tissue"
             onChange={(event) => {

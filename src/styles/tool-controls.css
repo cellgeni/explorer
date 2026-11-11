@@ -19,9 +19,8 @@
   align-items: center;
   gap: 6px;
   color: var(--text-2);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .boundary-layer-toggles input {
@@ -51,9 +50,8 @@
 .layer-opacity-header label,
 .layer-opacity-header span {
   color: var(--text-2);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .layer-opacity-header span {
@@ -61,14 +59,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Uppercase would turn "µm" into "ΜM". */
-.z-plane-control .layer-opacity-header span {
-  text-transform: none;
-}
-
 .layer-opacity-control input[type='range'] {
   width: 100%;
-  accent-color: var(--highlight);
+  accent-color: var(--accent);
 }
 
 .coordinate-unit-control {
@@ -83,10 +76,9 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-2);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -109,9 +101,8 @@
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
-  text-transform: none;
 }
 
 .coordinate-unit-segmented button[aria-pressed='true'] {
@@ -138,10 +129,9 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-2);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -154,9 +144,8 @@
   background: var(--surface-2);
   color: var(--text-2);
   cursor: pointer;
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 800;
-  text-transform: uppercase;
 }
 
 .measurement-control-header button[aria-pressed='true'] {
@@ -185,9 +174,8 @@
 
 .custom-layer-form label {
   color: var(--text-2);
-  font-size: 0.62rem;
+  font-size: var(--font-control);
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .custom-layer-row {
@@ -204,7 +192,7 @@
   border-radius: 6px;
   background: var(--surface-2);
   color: var(--text-1);
-  font-size: 0.72rem;
+  font-size: var(--font-control);
 }
 
 .custom-layer-list {
@@ -236,7 +224,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -244,9 +232,8 @@
 
 .custom-layer-summary small {
   color: var(--text-3);
-  font-size: 0.56rem;
+  font-size: var(--font-caption);
   font-weight: 800;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -262,7 +249,7 @@
   background: var(--surface-3);
   color: var(--text-3);
   cursor: pointer;
-  font-size: 0.68rem;
+  font-size: var(--font-control);
   font-weight: 800;
   line-height: 1;
 }
@@ -286,7 +273,7 @@
   gap: 5px;
   color: var(--text-2);
   cursor: pointer;
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-weight: 700;
 }
 
@@ -323,10 +310,9 @@
   background: var(--warning);
   color: var(--warning-contrast);
   cursor: pointer;
-  font-size: 0.58rem;
+  font-size: var(--font-caption);
   font-weight: 700;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .channel-auto-button:disabled {
@@ -356,7 +342,7 @@
   border-radius: 4px;
   background: var(--surface-2);
   color: var(--text-2);
-  font-size: 0.64rem;
+  font-size: var(--font-control);
   font-variant-numeric: tabular-nums;
 }
 
