@@ -11,6 +11,8 @@ import type {
 import type { MagicLensState } from '../roi/magicLensModel'
 import type { RoiState } from '../roi/roiModel'
 import {
+  bboxAroundDeckPoint,
+  bboxAroundDeckPolygon,
   binsSelectionCard,
   cellCard,
   cellsSelectionCard,
@@ -59,6 +61,7 @@ function cellsInput(roiState: RoiState) {
     status: '6,229 cells',
     summary: { cellCount: 6229, meanTranscriptCount: 112.25, meanCellArea: 48 },
     transcriptExportState: { status: 'idle' as const },
+    zoomToBbox: vi.fn(),
   }
 }
 
@@ -109,6 +112,23 @@ describe('selection card', () => {
     expect(
       card?.variant === 'geometry' ? [] : card?.exports.map((action) => action.label),
     ).toEqual(['Export GeoJSON', 'Export Cells', 'Export Transcripts'])
+  })
+
+  it('goes to the whole selection', () => {
+    const input = cellsInput({
+      status: 'ready',
+      url: 'https://example.test',
+      bbox: BBOX,
+      selection: SELECTION,
+      cells: [],
+      hitCellLimit: false,
+    })
+    const card = cellsSelectionCard(input)
+
+    if (card?.variant !== 'cells') throw new Error('Expected a cell selection')
+    card.onGoTo()
+
+    expect(input.zoomToBbox).toHaveBeenCalledWith(BBOX)
   })
 
   it('keeps exports off while the selection loads, and marks a running export', () => {
@@ -181,6 +201,7 @@ describe('selection card', () => {
       },
       status: '12 bins',
       summary: { binCount: 12, inTissueCount: 10, binSizeMicrometers: 8 },
+      zoomToBbox: vi.fn(),
     })
 
     expect(card).toMatchObject({
@@ -249,6 +270,7 @@ describe('cell card', () => {
       },
       profile: { state: undefined, onLoad: undefined },
       onClose: vi.fn(),
+      zoomToBbox: vi.fn(),
     }
   }
 
@@ -267,11 +289,85 @@ describe('cell card', () => {
   })
 })
 
+describe('Go To regions', () => {
+  it('turns deck.gl points and polygons into data boxes, y down', () => {
+    expect(bboxAroundDeckPoint([10, -20, 0], 5)).toEqual({
+      minX: 5,
+      maxX: 15,
+      minY: 15,
+      maxY: 25,
+    })
+    expect(
+      bboxAroundDeckPolygon(
+        [
+          [0, -10],
+          [8, -10],
+          [8, -4],
+        ],
+        1,
+      ),
+    ).toEqual({ minX: -1, maxX: 9, minY: 3, maxY: 11 })
+  })
+
+  it('goes to a cell, a bin and a pinned transcript', () => {
+    const zoomToBbox = vi.fn()
+    const card = cellCard({
+      cell: {
+        selected: { id: 'cell-1', position: [100, -200] } as unknown as OverviewCellDatum,
+        title: 'Cell',
+        status: 'Selected',
+        annotationLabels: [],
+        state: { status: 'idle' },
+        distributionState: { status: 'idle' },
+        distributionVisible: false,
+        variant: 'default',
+      },
+      boundary: { selected: null, expressionStatus: undefined },
+      gridCell: {
+        selected: null,
+        assignmentState: { status: 'idle' },
+        expressionStatus: undefined,
+      },
+      profile: { state: undefined, onLoad: undefined },
+      onClose: vi.fn(),
+      zoomToBbox,
+    })
+    const transcript = transcriptCard({
+      capabilityState: { status: 'idle' },
+      onClose: vi.fn(),
+      pinned: {
+        aggregate: { position: [0, 0], binSizeMicrometers: 16 },
+      } as unknown as ViewerTranscriptHoverDetail,
+      zoomToBbox,
+    })
+
+    card?.onGoTo()
+    transcript?.onGoTo()
+
+    expect(zoomToBbox).toHaveBeenNthCalledWith(1, {
+      minX: 60,
+      maxX: 140,
+      minY: 160,
+      maxY: 240,
+    })
+    expect(zoomToBbox).toHaveBeenNthCalledWith(2, {
+      minX: -32,
+      maxX: 32,
+      minY: -32,
+      maxY: 32,
+    })
+  })
+})
+
 describe('transcript card', () => {
   it('shows the pinned transcript or bin', () => {
     const point = { transcript: { id: 't1' } } as ViewerTranscriptHoverDetail
     const bin = { aggregate: { featureName: 'SNAP25' } } as ViewerTranscriptHoverDetail
-    const base = { capabilityState: { status: 'idle' } as const, onClose: vi.fn() }
+    const base = {
+      capabilityState: { status: 'idle' } as const,
+      onClose: vi.fn(),
+      zoomToBbox: vi.fn(),
+    }
 
     expect(transcriptCard({ ...base, pinned: null })).toBeNull()
     expect(transcriptCard({ ...base, pinned: point })).toMatchObject({
@@ -354,6 +450,7 @@ describe('useCardStackModel', () => {
         },
         transcript: null,
         magicLens: null,
+        zoomToBbox: vi.fn(),
       }),
     )
 

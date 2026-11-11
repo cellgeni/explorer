@@ -1145,6 +1145,14 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setSpatialFocusRequest],
   )
+  // The cards' Go To buttons (UNIFIED_PLAN.md, 15.2-E).
+  const zoomToBbox = useCallback(
+    (bbox: BBox) => {
+      spatialFocusRequestIdRef.current += 1
+      setSpatialFocusRequest({ key: spatialFocusRequestIdRef.current, bbox })
+    },
+    [setSpatialFocusRequest],
+  )
   const focusSpatialViewOnGridCell = useCallback(
     (cell: GridCellDatum) => {
       spatialFocusRequestIdRef.current += 1
@@ -3253,7 +3261,10 @@ export function App({ dependencies }: AppProps = {}) {
     platform: platformAdapter.kind,
     setDebugMode,
   })
-  useToolShortcuts(shellVersion === 2, topBar.tools.onSelect)
+  const [fitRequestKey, setFitRequestKey] = useState(0)
+  useToolShortcuts(shellVersion === 2, topBar.tools.onSelect, () => {
+    setFitRequestKey((current) => current + 1)
+  })
   const layerPanel = useLayerPanelModel({
     annotations: annotationsSection,
     appendDebugEvent,
@@ -3370,6 +3381,7 @@ export function App({ dependencies }: AppProps = {}) {
           status: magicLensCopy,
         }
       : null,
+    zoomToBbox,
   })
 
   const controlHud = (
@@ -3624,6 +3636,8 @@ export function App({ dependencies }: AppProps = {}) {
         magicLensSummary={magicLensViewerSummary}
         viewResetKey={viewerViewResetKey}
         focusRequest={spatialFocusRequest}
+        navigationControls={shellVersion === 2}
+        fitRequestKey={fitRequestKey}
         onImageTileError={handleImageTileError}
         onTileCacheEviction={handleTileCacheEviction}
         onViewportCellCountChange={setViewportCellCount}

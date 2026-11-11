@@ -1416,6 +1416,71 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('fits the measured canvas, and zooms, fits and goes to regions (15.2-E)', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      ...rect,
+      width: 1000,
+      height: 600,
+      right: 1000,
+      bottom: 600,
+    })
+    const cells: readonly OverviewCellDatum[] = [
+      { id: 'cell-1', position: [0, 0, 0], radiusPixels: 4, fillColor: [1, 2, 3, 255] },
+      {
+        id: 'cell-2',
+        position: [2000, -1000, 0],
+        radiusPixels: 4,
+        fillColor: [1, 2, 3, 255],
+      },
+    ]
+    const fittedZoom = Math.log2((1000 - 48) / 2000)
+    const { rerender } = render(<ViewerCore cells={cells} navigationControls />)
+
+    await waitFor(() => {
+      expect(deckGlMock.viewState?.zoom).toBeCloseTo(fittedZoom)
+    })
+    expect(deckGlMock.viewState?.target).toEqual([1000, -500, 0])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in (+)' }))
+    expect(deckGlMock.viewState?.zoom).toBeCloseTo(fittedZoom + 1)
+    fireEvent.click(screen.getByRole('button', { name: 'Fit to view (F)' }))
+    expect(deckGlMock.viewState?.zoom).toBeCloseTo(fittedZoom)
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out (−)' }))
+    expect(deckGlMock.viewState?.zoom).toBeCloseTo(fittedZoom - 1)
+
+    rerender(<ViewerCore cells={cells} navigationControls fitRequestKey={1} />)
+    await waitFor(() => {
+      expect(deckGlMock.viewState?.zoom).toBeCloseTo(fittedZoom)
+    })
+
+    rerender(
+      <ViewerCore
+        cells={cells}
+        navigationControls
+        fitRequestKey={1}
+        focusRequest={{
+          key: 1,
+          bbox: {
+            minX: micrometers(100),
+            maxX: micrometers(200),
+            minY: micrometers(100),
+            maxY: micrometers(150),
+          },
+        }}
+      />,
+    )
+    await waitFor(() => {
+      expect(deckGlMock.viewState?.target).toEqual([150, -125, 0])
+    })
+    expect(deckGlMock.viewState?.zoom).toBeCloseTo(Math.log2((1000 - 48) / 100))
+  })
+
+  it('leaves out the zoom buttons unless asked', () => {
+    render(<ViewerCore cells={[]} imageLoader={null} />)
+
+    expect(screen.queryByRole('group', { name: 'Zoom' })).not.toBeInTheDocument()
+  })
+
   it('centers the spatial view when a focus request is received', async () => {
     const cells: readonly OverviewCellDatum[] = [
       {
@@ -1732,7 +1797,15 @@ describe('ViewerCore', () => {
     )
 
     render(
-      <ViewerCore cells={cells} onViewportCellCountChange={onViewportCellCountChange} />,
+      <ViewerCore
+        cells={cells}
+        onViewportCellCountChange={onViewportCellCountChange}
+        // A broad view that shows part of the grid: the old 720 px fit.
+        initialViewStateOverride={{
+          target: [4500, -4500, 0],
+          zoom: Math.log2(720 / 9000),
+        }}
+      />,
     )
 
     await waitFor(() => {

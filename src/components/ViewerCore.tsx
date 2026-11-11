@@ -3,6 +3,7 @@ import type { KeyboardEvent, PointerEvent } from 'react'
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
+import { FitIcon, IconButton, MinusIcon, PlusIcon } from './ui'
 import { ViewerLegend } from './ViewerLegend'
 import { ViewerSelectionOverlay } from './ViewerSelectionOverlay'
 import {
@@ -64,12 +65,20 @@ import {
   createCellBoundaryLayerStyle,
   createGeneExpressionElementStyleIndex,
   createOverviewLayers,
-  createOverviewViewState,
   expressingElementsByScore,
   spatialOverviewView,
   styleCellsByGeneExpression,
   styleGridCellsByGeneExpression,
 } from '../rendering/deckLayers'
+import {
+  FIT_FALLBACK_VIEWPORT,
+  FIT_PADDING_PIXELS,
+  extentKey,
+  fitExtentViewState,
+  overviewFitExtent,
+  viewStateForBbox,
+  type DeckExtent,
+} from '../rendering/overviewViewState'
 import {
   DEFAULT_OVERVIEW_RENDER_CELL_LIMIT,
   estimateOverviewCellCountInBbox,
@@ -129,6 +138,7 @@ import {
   type ScreenPoint,
 } from './viewerMeasurements'
 import type {
+  InitialViewStateOverride,
   RoiDrawMode,
   ViewerCellBoundaryHoverDetail,
   ViewerCoordinateUnit,
@@ -247,6 +257,8 @@ export function ViewerCore({
   initialViewStateOverride,
   viewResetKey,
   focusRequest = null,
+  navigationControls = false,
+  fitRequestKey = 0,
   overviewRenderCellLimit,
   clipOverviewCellsToViewport = true,
   maxConcurrentTileRequests,
@@ -266,16 +278,23 @@ export function ViewerCore({
 }: ViewerCoreProps) {
   const viewFitCells = fitCells ?? cells
   const viewFitGridCells = fitGridCells ?? gridCells
-  const fittedViewState = useMemo(
-    () => createOverviewViewState(viewFitCells, viewFitGridCells, fitImageExtent),
+  const fitExtent = useMemo(
+    () => overviewFitExtent(viewFitCells, viewFitGridCells, fitImageExtent),
     [fitImageExtent, viewFitCells, viewFitGridCells],
   )
-  const initialViewState = useMemo(
-    () => mergeInitialViewState(fittedViewState, initialViewStateOverride),
-    [fittedViewState, initialViewStateOverride],
-  )
   const resetKey =
-    viewResetKey === undefined ? viewStateKey(initialViewState) : String(viewResetKey)
+    viewResetKey === undefined
+      ? `${extentKey(fitExtent)}|${
+          initialViewStateOverride === undefined
+            ? 'fit'
+            : viewStateKey(
+                mergeInitialViewState(
+                  fitExtentViewState(fitExtent),
+                  initialViewStateOverride,
+                ),
+              )
+        }`
+      : String(viewResetKey)
 
   return (
     <ViewerSurface
@@ -322,10 +341,12 @@ export function ViewerCore({
       measurementResetKey={measurementResetKey}
       micrometersPerPixel={micrometersPerPixel}
       physicalUnitLabel={physicalUnitLabel}
-      initialViewState={initialViewState}
-      fittedViewZoom={fittedViewState.zoom}
+      fitExtent={fitExtent}
+      initialViewStateOverride={initialViewStateOverride}
       viewResetKey={resetKey}
       focusRequest={focusRequest}
+      navigationControls={navigationControls}
+      fitRequestKey={fitRequestKey}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
       clipOverviewCellsToViewport={clipOverviewCellsToViewport}
       {...(maxConcurrentTileRequests === undefined ? {} : { maxConcurrentTileRequests })}
@@ -401,10 +422,12 @@ interface ViewerSurfaceProps {
   readonly measurementResetKey: number
   readonly micrometersPerPixel: number
   readonly physicalUnitLabel: string
-  readonly initialViewState: OverviewViewState
-  readonly fittedViewZoom: number
+  readonly fitExtent: DeckExtent | null
+  readonly initialViewStateOverride: InitialViewStateOverride | undefined
   readonly viewResetKey: string
   readonly focusRequest: ViewerFocusRequest | null
+  readonly navigationControls: boolean
+  readonly fitRequestKey: number
   readonly overviewRenderCellLimit?: number | null
   readonly clipOverviewCellsToViewport: boolean
   readonly maxConcurrentTileRequests?: number
@@ -478,10 +501,12 @@ function ViewerSurface({
   measurementResetKey,
   micrometersPerPixel,
   physicalUnitLabel,
-  initialViewState,
-  fittedViewZoom,
+  fitExtent,
+  initialViewStateOverride,
   viewResetKey,
   focusRequest,
+  navigationControls,
+  fitRequestKey,
   overviewRenderCellLimit,
   clipOverviewCellsToViewport,
   maxConcurrentTileRequests,
@@ -514,11 +539,26 @@ function ViewerSurface({
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
   const keyboardHelpId = useId()
-  const [viewState, setViewState] = useState<OverviewViewState>(initialViewState)
   const [viewport, setViewport] = useState<CssViewportSize>({
     width: 0,
     height: 0,
   })
+  const viewportMeasured = viewport.width > 0 && viewport.height > 0
+  // Fit uses the measured canvas (F18). Level of detail keeps measuring zoom
+  // from the 720 px fit, so cells draw the same at a given scale as before.
+  const fittedViewState = useMemo(
+    () =>
+      viewportMeasured
+        ? fitExtentViewState(fitExtent, viewport, FIT_PADDING_PIXELS)
+        : fitExtentViewState(fitExtent),
+    [fitExtent, viewport, viewportMeasured],
+  )
+  const fittedViewZoom = useMemo(() => fitExtentViewState(fitExtent).zoom, [fitExtent])
+  const initialViewState = useMemo(
+    () => mergeInitialViewState(fittedViewState, initialViewStateOverride),
+    [fittedViewState, initialViewStateOverride],
+  )
+  const [viewState, setViewState] = useState<OverviewViewState>(initialViewState)
   const [roiDraft, setRoiDraft] = useState<RoiDraft | null>(null)
   // A half-drawn shape belongs to the tool that started it.
   const [roiDraftMode, setRoiDraftMode] = useState(roiMode)
@@ -545,21 +585,49 @@ function ViewerSurface({
     useState<BoundaryStyleViewport | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
   const mouseCoordinateFrameRef = useRef<number | null>(null)
-  const lastAppliedViewResetKeyRef = useRef(viewResetKey)
+  // The first measurement of the canvas fits again, so a view set up before
+  // it (against the 720 px fallback) fills the real canvas.
+  const effectiveResetKey = `${viewResetKey}|${viewportMeasured ? 'measured' : 'unmeasured'}`
+  const lastAppliedViewResetKeyRef = useRef(effectiveResetKey)
   const lastAppliedFocusRequestKeyRef = useRef<number | null>(null)
+  const lastAppliedFitRequestKeyRef = useRef(fitRequestKey)
   const cellExtentBbox = useMemo(() => overviewCellsExtentBbox(cells), [cells])
   useEffect(() => {
-    if (lastAppliedViewResetKeyRef.current === viewResetKey) {
+    if (lastAppliedViewResetKeyRef.current === effectiveResetKey) {
       return
     }
 
-    lastAppliedViewResetKeyRef.current = viewResetKey
+    lastAppliedViewResetKeyRef.current = effectiveResetKey
     setViewState((currentViewState) =>
       equivalentViewState(currentViewState, initialViewState)
         ? currentViewState
         : initialViewState,
     )
-  }, [initialViewState, viewResetKey])
+  }, [effectiveResetKey, initialViewState])
+  const fitView = useCallback(() => {
+    setViewState((currentViewState) =>
+      equivalentViewState(currentViewState, fittedViewState)
+        ? currentViewState
+        : fittedViewState,
+    )
+  }, [fittedViewState])
+  useEffect(() => {
+    if (lastAppliedFitRequestKeyRef.current === fitRequestKey) {
+      return
+    }
+
+    lastAppliedFitRequestKeyRef.current = fitRequestKey
+    fitView()
+  }, [fitRequestKey, fitView])
+  const zoomBy = useCallback((delta: number) => {
+    setViewState((currentViewState) => ({
+      ...currentViewState,
+      zoom: Math.min(
+        currentViewState.maxZoom,
+        Math.max(currentViewState.minZoom, currentViewState.zoom + delta),
+      ),
+    }))
+  }, [])
   useEffect(() => {
     if (
       focusRequest === null ||
@@ -570,16 +638,27 @@ function ViewerSurface({
 
     lastAppliedFocusRequestKeyRef.current = focusRequest.key
     setViewState((currentViewState) => {
-      const nextViewState: OverviewViewState = {
-        ...currentViewState,
-        target: [focusRequest.target[0], focusRequest.target[1], focusRequest.target[2]],
-      }
+      const nextViewState: OverviewViewState =
+        'bbox' in focusRequest
+          ? viewStateForBbox(
+              focusRequest.bbox,
+              viewportMeasured ? viewport : FIT_FALLBACK_VIEWPORT,
+              currentViewState,
+            )
+          : {
+              ...currentViewState,
+              target: [
+                focusRequest.target[0],
+                focusRequest.target[1],
+                focusRequest.target[2],
+              ],
+            }
 
       return equivalentViewState(currentViewState, nextViewState)
         ? currentViewState
         : nextViewState
     })
-  }, [focusRequest])
+  }, [focusRequest, viewport, viewportMeasured])
   const viewportBbox = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
       return null
@@ -1875,7 +1954,26 @@ function ViewerSurface({
         )}
         {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
       </div>
-      {/* Outside the frame, whose role is img: the legend has controls. */}
+      {/* Outside the frame, whose role is img: these have controls. */}
+      {navigationControls && canTrackMouseCoordinates ? (
+        <div className="viewport-navigation" role="group" aria-label="Zoom">
+          <IconButton
+            title="Zoom out (−)"
+            icon={<MinusIcon />}
+            onClick={() => {
+              zoomBy(-1)
+            }}
+          />
+          <IconButton
+            title="Zoom in (+)"
+            icon={<PlusIcon />}
+            onClick={() => {
+              zoomBy(1)
+            }}
+          />
+          <IconButton title="Fit to view (F)" icon={<FitIcon />} onClick={fitView} />
+        </div>
+      ) : null}
       {activeToolHint === null ? null : (
         <p className="viewport-tool-hint" role="status">
           {activeToolHint}

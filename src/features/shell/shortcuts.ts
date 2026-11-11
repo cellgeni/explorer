@@ -30,6 +30,9 @@ export const TOOL_SHORTCUT_KEYS: Readonly<Record<ActiveTool, string>> = {
 // Hides or shows the layer panel (15.2-C), as in 10x Explorer.
 export const LAYER_PANEL_KEY = '\\'
 
+// Fits the data to the view (15.2-E); Home returns to the first view.
+export const FIT_KEY = 'F'
+
 export const TOOL_ORDER: readonly ActiveTool[] = [
   'pan',
   'box',
@@ -55,6 +58,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
   },
   { keys: ['+', '−'], action: 'Zoom in or out', group: 'View' },
   { keys: ['Home'], action: 'Return to the first view', group: 'View' },
+  // F works anywhere, like the tool letters (useToolShortcuts).
+  { keys: [FIT_KEY], action: 'Fit the data to the view', group: 'View' },
   { keys: [LAYER_PANEL_KEY], action: 'Hide or show the layer panel', group: 'View' },
 ]
 
@@ -76,5 +81,14 @@ export function toolForShortcutKey(event: ShortcutKeyEvent): ActiveTool | null {
 export function isLayerPanelKey(event: ShortcutKeyEvent): boolean {
   return (
     event.key === LAYER_PANEL_KEY && !event.altKey && !event.ctrlKey && !event.metaKey
+  )
+}
+
+export function isFitKey(event: ShortcutKeyEvent): boolean {
+  return (
+    event.key.toUpperCase() === FIT_KEY &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey
   )
 }

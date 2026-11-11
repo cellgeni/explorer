@@ -21,6 +21,7 @@ function selection(
 ): RegionSelectionCardModel {
   return {
     variant: 'cells',
+    onGoTo: vi.fn(),
     name: 'ROI 1',
     nameLabel: 'ROI name',
     onNameChange: vi.fn(),
@@ -120,15 +121,17 @@ describe('CardStack', () => {
     expect(card.lens?.onRun).toHaveBeenCalledTimes(1)
   })
 
-  it('renames, saves, exports and clears a selection', () => {
+  it('renames, saves, exports, goes to and clears a selection', () => {
     const card = selection()
     render(<CardStack cards={{ ...NO_CARDS, selection: card }} />)
 
     fireEvent.change(screen.getByLabelText('ROI name'), { target: { value: 'Cortex' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save ROI' }))
     fireEvent.click(screen.getByRole('button', { name: 'Export GeoJSON' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Go To' }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }))
 
+    expect(card.onGoTo).toHaveBeenCalledTimes(1)
     expect(card.onNameChange).toHaveBeenCalledWith('Cortex')
     expect(card.onSave).toHaveBeenCalledTimes(1)
     expect(card.exports[0]?.onExport).toHaveBeenCalledTimes(1)
@@ -162,8 +165,9 @@ describe('CardStack', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('shows the selected cell and clears it', () => {
+  it('shows the selected cell, goes to it and clears it', () => {
     const onClose = vi.fn()
+    const onGoTo = vi.fn()
     render(
       <CardStack
         cards={{
@@ -173,6 +177,7 @@ describe('CardStack', () => {
             title: 'Cell',
             status: 'Selected',
             loading: false,
+            onGoTo,
             onClose,
             cell: {
               id: 'cell-1',
@@ -192,7 +197,9 @@ describe('CardStack', () => {
     const card = screen.getByRole('region', { name: 'Cell' })
     expect(within(card).getByText('cell-1')).toBeInTheDocument()
     expect(within(card).getByText('T cells')).toBeInTheDocument()
+    fireEvent.click(within(card).getByRole('button', { name: 'Go To' }))
     fireEvent.click(within(card).getByRole('button', { name: 'Clear selected cell' }))
+    expect(onGoTo).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
@@ -216,6 +223,7 @@ describe('CardStack', () => {
               },
             } as unknown as ViewerTranscriptHoverDetail,
             showFov: true,
+            onGoTo: vi.fn(),
             onClose,
           },
         }}
