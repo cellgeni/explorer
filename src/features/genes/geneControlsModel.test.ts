@@ -4,6 +4,7 @@ import {
   IDLE_GENE_PANEL_STATE,
   defaultGeneSetName,
   filterGeneOptions,
+  geneSearchEmptyMessage,
   geneExpressionLoadFailed,
   geneExpressionLoadReady,
   geneExpressionLoadStarted,
@@ -217,5 +218,39 @@ describe('geneControlsModel', () => {
       ),
     ).toEqual(['MYH6', 'MYH7', 'NPPB'])
     expect(defaultGeneSetName(['A', 'B', 'C', 'D'])).toBe('A, B, C +1')
+  })
+
+  it('ranks exact matches, then prefixes, alias prefixes and substrings', () => {
+    const genes = ['NIPSNAP1', 'SNAP25', 'XSNAP', 'SNAP23', 'GAD1']
+    const aliases = new Map([['GAD1', 'SNAPLIKE']])
+
+    expect(filterGeneOptions(genes, 'snap', [], { aliases })).toEqual([
+      'SNAP25',
+      'SNAP23',
+      'GAD1',
+      'NIPSNAP1',
+      'XSNAP',
+    ])
+    expect(filterGeneOptions(genes, 'snap25', [])).toEqual(['SNAP25'])
+    expect(filterGeneOptions(genes, 'snaplike', [], { aliases })).toEqual(['GAD1'])
+    expect(filterGeneOptions(genes, 'snap', ['SNAP25'], { limit: 2 })).toEqual([
+      'SNAP23',
+      'NIPSNAP1',
+    ])
+  })
+
+  it('says when a search finds only genes that are already selected', () => {
+    expect(geneSearchEmptyMessage('snap25', ['SNAP25'], { noun: 'genes' })).toBe(
+      'SNAP25 is already selected',
+    )
+    expect(
+      geneSearchEmptyMessage('snap', ['SNAP23', 'SNAP25', 'SNAP29', 'SNAP91'], {
+        noun: 'genes',
+      }),
+    ).toBe('SNAP23, SNAP25, SNAP29 and 1 more are already selected')
+    expect(geneSearchEmptyMessage('zzz', ['SNAP25'], { noun: 'features' })).toBe(
+      'No matching features',
+    )
+    expect(geneSearchEmptyMessage('', [], { noun: 'genes' })).toBe('No matching genes')
   })
 })

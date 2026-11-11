@@ -14,7 +14,9 @@ import {
   type TranscriptDensityColorScale,
   type TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
+import { Chip } from '../../components/ui'
 import { opacityToPercent } from '../../rendering/layerOpacity'
+import { geneSearchEmptyMessage } from '../genes/geneControlsModel'
 import { TranscriptStatusPanel } from './TranscriptStatusPanel'
 import {
   isTranscriptDetailMode,
@@ -230,17 +232,17 @@ export function TranscriptHudPanel({
         {selectedGenes.length === 0 ? null : (
           <div className="gene-chip-row" aria-label="Transcript selected features">
             {selectedGenes.map((gene) => (
-              <button
+              <Chip
                 key={gene}
-                type="button"
-                className="gene-chip"
-                title={`Remove ${gene} from transcript features`}
-                onClick={() => {
+                title={gene}
+                selected
+                removeTitle={`Remove ${gene} from transcript features`}
+                onRemove={() => {
                   onToggleSelectedFeature(gene)
                 }}
               >
                 {gene}
-              </button>
+              </Chip>
             ))}
           </div>
         )}
@@ -263,7 +265,11 @@ export function TranscriptHudPanel({
         {transcriptFeatureSearch.trim() === '' ? null : (
           <div className="gene-option-list" aria-label="Transcript feature options">
             {filteredTranscriptFeatures.length === 0 ? (
-              <span className="option-empty">No matching features</span>
+              <span className="option-empty">
+                {geneSearchEmptyMessage(transcriptFeatureSearch, selectedGenes, {
+                  noun: 'features',
+                })}
+              </span>
             ) : (
               filteredTranscriptFeatures.map((gene) => (
                 <button

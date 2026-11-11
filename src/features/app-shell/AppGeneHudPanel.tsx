@@ -221,6 +221,10 @@ export function AppGeneHudPanel({
       selectedCellMetadataTrackId={selectedCellMetadataTrackId}
       onGeneSearchChange={setGeneSearch}
       onToggleGene={toggleGene}
+      onPickGene={(gene) => {
+        toggleGene(gene)
+        setGeneSearch('')
+      }}
       onGeneSetSymbolsChange={setGeneSetSymbols}
       onApplyGeneSetSymbols={applyGeneSetSymbols}
       onSaveSelectedGeneSet={saveSelectedGeneSet}

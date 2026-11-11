@@ -11,10 +11,12 @@ import {
 } from '../../rendering/deckLayers'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import { isObservationColorMode } from '../app-shell/appShellModel'
+import { Chip } from '../../components/ui'
 import { GeneOptionList } from './GeneOptionList'
 import {
   defaultGeneSetName,
   formatGeneScaleValue,
+  geneSearchEmptyMessage,
   isGeneExpressionDetailMode,
   type GeneExpressionState,
   type GenePanelState,
@@ -51,6 +53,8 @@ interface GeneHudPanelProps {
   readonly selectedCellMetadataTrackId: string | null
   readonly onGeneSearchChange: (search: string) => void
   readonly onToggleGene: (gene: string) => void
+  // Adds a gene from the search list, which also clears the search.
+  readonly onPickGene: (gene: string) => void
   readonly onGeneSetSymbolsChange: (symbols: string) => void
   readonly onApplyGeneSetSymbols: () => void
   readonly onSaveSelectedGeneSet: () => void
@@ -94,6 +98,7 @@ export function GeneHudPanel({
   selectedCellMetadataTrackId,
   onGeneSearchChange,
   onToggleGene,
+  onPickGene,
   onGeneSetSymbolsChange,
   onApplyGeneSetSymbols,
   onSaveSelectedGeneSet,
@@ -150,17 +155,17 @@ export function GeneHudPanel({
         {selectedGenes.length === 0 ? null : (
           <div className="gene-chip-row" aria-label="Selected genes">
             {selectedGenes.map((gene) => (
-              <button
+              <Chip
                 key={gene}
-                type="button"
-                className="gene-chip"
-                title={`Remove ${gene}`}
-                onClick={() => {
+                title={gene}
+                selected
+                removeTitle={`Remove ${gene}`}
+                onRemove={() => {
                   onToggleGene(gene)
                 }}
               >
                 {gene}
-              </button>
+              </Chip>
             ))}
           </div>
         )}
@@ -169,7 +174,11 @@ export function GeneHudPanel({
           genes={filteredGenes}
           selectedGenes={selectedGenes}
           aliases={geneAliases}
-          onToggleGene={onToggleGene}
+          emptyMessage={geneSearchEmptyMessage(geneSearch, selectedGenes, {
+            noun: 'genes',
+            aliases: geneAliases,
+          })}
+          onToggleGene={onPickGene}
         />
 
         <label htmlFor={geneSetSymbolsInputId}>Gene set symbols</label>

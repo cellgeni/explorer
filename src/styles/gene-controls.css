@@ -6,7 +6,6 @@
   min-width: 0;
 }
 
-.gene-chip,
 .gene-option-list button {
   min-height: 23px;
   padding: 3px 7px;
@@ -19,7 +18,6 @@
   font-weight: 700;
 }
 
-.gene-chip,
 .gene-option-list button.selected {
   border-color: var(--highlight-border);
   background: var(--highlight-soft);

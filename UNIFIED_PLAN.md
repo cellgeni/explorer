@@ -2328,7 +2328,7 @@ They are independent unless a note says otherwise.
     manifest in `examples/` sets both.
   - Hover details for cells now carry gene counts only in Gene expression
     mode; Cell info still shows them in every mode.
-- [ ] **B. Gene search (F10).** (S)
+- [x] **B. Gene search (F10).** (S)
   - Rank matches exact, then prefix, then alias prefix, then substring, in
     `filterGeneOptions` (`genes/geneControlsModel.ts:268–300`).
   - Give chips an × with `title="Remove {gene}"`, which E2E already looks for.
@@ -2337,6 +2337,17 @@ They are independent unless a note says otherwise.
     (`GeneOptionList.tsx:21`).
   - Apply the same to the transcript feature search
     (`AppTranscriptHudPanel.tsx:157`).
+  - Done 2026-11-11. `filterGeneOptions` ranks matches into exact (name or
+    alias), name prefix, alias prefix, name substring and alias substring,
+    keeping panel order within each rank; "snap" now lists SNAP25 before
+    NIPSNAP1. The transcript feature search uses the same function.
+  - Selected genes and transcript features are `Chip` primitives (15.0-B)
+    whose × is named "Remove {gene}" (or "… from transcript features").
+    Tests that clicked a chip by gene name now click its ×.
+  - `geneSearchEmptyMessage` names the selected genes a search matches
+    ("SNAP25 is already selected", up to three names and "and n more").
+    Picking from the Genes list clears the search; the Transcripts search
+    already did.
 - [ ] **C. Canvas legend (F2, F9; needs A).** `ViewerLegend` sits in the
       bottom-left stack as a sibling of `MemoDeckGL`, never inside it. (M)
   - Inputs: colour mode; gene names, score mode, scale and

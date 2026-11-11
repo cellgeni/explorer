@@ -74,7 +74,9 @@ describe('TranscriptHudPanel', () => {
     fireEvent.change(screen.getByLabelText('Feature filter'), {
       target: { value: 'all' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Actb' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove Actb from transcript features' }),
+    )
     fireEvent.change(screen.getByLabelText('Feature search'), {
       target: { value: 'gad' },
     })

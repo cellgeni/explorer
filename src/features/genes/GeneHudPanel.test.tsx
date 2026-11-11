@@ -7,6 +7,7 @@ describe('GeneHudPanel', () => {
     const handlers = {
       onGeneSearchChange: vi.fn(),
       onToggleGene: vi.fn(),
+      onPickGene: vi.fn(),
       onGeneSetSymbolsChange: vi.fn(),
       onApplyGeneSetSymbols: vi.fn(),
       onSaveSelectedGeneSet: vi.fn(),
@@ -83,7 +84,7 @@ describe('GeneHudPanel', () => {
     fireEvent.change(screen.getByLabelText('Gene selection'), {
       target: { value: 'gad' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Actb' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Actb' }))
     fireEvent.click(screen.getByRole('button', { name: 'Gad1' }))
     fireEvent.change(screen.getByLabelText('Gene set symbols'), {
       target: { value: 'Actb Gad1' },
@@ -111,7 +112,7 @@ describe('GeneHudPanel', () => {
 
     expect(handlers.onGeneSearchChange).toHaveBeenCalledWith('gad')
     expect(handlers.onToggleGene).toHaveBeenCalledWith('Actb')
-    expect(handlers.onToggleGene).toHaveBeenCalledWith('Gad1')
+    expect(handlers.onPickGene).toHaveBeenCalledWith('Gad1')
     expect(handlers.onGeneSetSymbolsChange).toHaveBeenCalledWith('Actb Gad1')
     expect(handlers.onApplyGeneSetSymbols).toHaveBeenCalledTimes(1)
     expect(handlers.onSaveSelectedGeneSet).toHaveBeenCalledTimes(1)

@@ -1373,8 +1373,8 @@ describe('App', () => {
       'true',
     )
     expect(screen.getByRole('combobox', { name: 'Gene scale' })).toHaveValue('viridis')
-    expect(screen.getByRole('button', { name: 'Actb' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Gad1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Actb' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Gad1' })).toBeInTheDocument()
 
     await waitFor(() => {
       expect(screen.getByLabelText('Dataset or image URL')).toHaveValue(
@@ -3700,6 +3700,13 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Gad1' }))
 
     expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Gad1')
+    // The pick clears the search, and searching for it again says why it is
+    // not listed.
+    expect(screen.getByLabelText('Gene selection')).toHaveValue('')
+    fireEvent.change(screen.getByLabelText('Gene selection'), {
+      target: { value: 'GAD1' },
+    })
+    expect(screen.getByText('Gad1 is already selected')).toBeInTheDocument()
   })
 
   it('colours cells by one mode at a time, so clusters show while a gene is selected', async () => {
@@ -3791,11 +3798,7 @@ describe('App', () => {
       ).toBeVisible()
 
       openControls('genes')
-      fireEvent.click(
-        within(screen.getByLabelText('Selected genes')).getByRole('button', {
-          name: 'Actb',
-        }),
-      )
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Actb' }))
       openControls('color-by')
       expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
         'annotations',
@@ -4672,7 +4675,7 @@ ${cd16Negative},CD16- NK cells`,
     expect(savedSets).toHaveTextContent('Interneuron set')
     expect(savedSets).toHaveTextContent('mean')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Actb' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Actb' }))
     expect(screen.getByLabelText('Selected genes')).not.toHaveTextContent('Actb')
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply Interneuron set' }))
