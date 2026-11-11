@@ -2009,6 +2009,39 @@ describe('ViewerCore', () => {
     expect(deckGlMock.renderCount).toBe(renderCountBefore)
   })
 
+  it('marks the selection without redrawing deck layers, and Esc clears it', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+    const onClearSelection = vi.fn()
+
+    const { rerender } = render(
+      <ViewerCore cells={cells} onClearSelection={onClearSelection} />,
+    )
+    const renderCountBefore = deckGlMock.renderCount
+
+    rerender(
+      <ViewerCore
+        cells={cells}
+        onClearSelection={onClearSelection}
+        selectionHighlight={{
+          kind: 'point',
+          id: 'cell-1',
+          position: [0, 0, 0],
+          radius: 2,
+        }}
+      />,
+    )
+
+    expect(document.querySelector('.viewer-selection-overlay circle')).not.toBeNull()
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
+
+    fireEvent.keyDown(screen.getByRole('img', { name: 'Spatial viewer canvas area' }), {
+      key: 'Escape',
+    })
+    expect(onClearSelection).toHaveBeenCalledTimes(1)
+  })
+
   it('emits a lasso ROI selection from a dragged polygon path', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

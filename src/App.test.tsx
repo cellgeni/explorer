@@ -3824,6 +3824,40 @@ describe('App', () => {
     }
   })
 
+  it('marks a clicked cell, opens its details, and clears it with Esc', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+
+    try {
+      render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      fireEvent.click(await screen.findByTestId('deck-layer-cells-overview-scatter'))
+
+      expect(screen.getByRole('tab', { name: 'Cell' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+      expect(document.querySelector('.viewer-selection-overlay circle')).not.toBeNull()
+
+      fireEvent.keyDown(screen.getByRole('img', { name: 'Spatial viewer canvas area' }), {
+        key: 'Escape',
+      })
+      expect(document.querySelector('.viewer-selection-overlay')).toBeNull()
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('loads built-in analysis annotations on request', async () => {
     const cellId = intToCellId(1, 1)
     const loadDatasetOverview = vi.fn(async () => [

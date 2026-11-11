@@ -2374,7 +2374,7 @@ They are independent unless a note says otherwise.
   - New gradients for the legend share `colorsGradient`
     (`deckLayerColors.ts`): `cellAreaScaleGradient`, `metadataScaleGradient`
     and `transcriptQualityGradient`.
-- [ ] **D. Selected-cell highlight (F3).** (S–M)
+- [x] **D. Selected-cell highlight (F3).** (S–M)
   - For points, spots and bins, draw an SVG ring positioned with
     `rawDataPointToScreen` (`viewerMeasurements.ts:38`), so the deck does not
     redraw.
@@ -2382,6 +2382,17 @@ They are independent unless a note says otherwise.
     cell ID.
   - A click opens the Cell tab until the cards arrive in 15.2. Esc clears the
     selection.
+  - Done 2026-11-11. App describes the selection (`viewerSelectionHighlight`)
+    and ViewerCore draws it as SVG next to the deck
+    (`ViewerSelectionOverlay`), so selecting never redraws the map. The
+    no-redraw test covers it.
+  - Instead of a deck outline layer, boundaries are outlined in the same
+    SVG: a cell picked as a point is outlined when its boundary is drawn,
+    looked up by cell ID, and bins use their polygon. Points without a
+    boundary get a ring at least 7 px across.
+  - Esc on the canvas clears the selection (Esc for tools comes in 15.1-G).
+  - ViewerCore's empty-array defaults are now constants. A parent re-render
+    that left those props out used to hand deck.gl new layers.
 - [ ] **E. Load errors (F5).** At `useDatasetLifecycle.ts:1594`, use
       `detection.checked` (`datasetFactory.ts:1181–1214`) to raise specific
       errors. (M)

@@ -324,6 +324,11 @@ GeoJSON shape in the Annotations tab; no cell or gene queries run.
 Hidden for Image. The detail heading reads "Bin Info" for Visium HD bins and
 "Cell Info" otherwise.
 
+Clicking a cell, spot or bin on the canvas selects it and opens this tab. The
+selection is marked over the canvas in the highlight colour: its outline when
+its boundary or bin is drawn, otherwise a ring around the point. Esc on the
+canvas, or `Clear Cell`, clears it.
+
 ### Embeddings
 
 | Control                                                   | Notes                                                                                                                                                            |

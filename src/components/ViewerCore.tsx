@@ -4,6 +4,11 @@ import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from '
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
 import { ViewerLegend } from './ViewerLegend'
+import { ViewerSelectionOverlay } from './ViewerSelectionOverlay'
+import {
+  selectionOverlayModel,
+  type ViewerSelectionHighlight,
+} from './viewerSelectionModel'
 import type { ViewerLegendSection } from './viewerLegendTypes'
 import {
   CellBoundaryHoverTooltip,
@@ -173,26 +178,34 @@ const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
 const EMPTY_LEGEND_SECTIONS: readonly ViewerLegendSection[] = []
+// Defaults for omitted props are constants, so a parent re-render that leaves
+// them out does not hand deck.gl new layers.
+const EMPTY_BOUNDARIES: readonly CellBoundaryDatum[] = []
+const EMPTY_GRID_CELLS: readonly GridCellDatum[] = []
+const EMPTY_TRANSCRIPT_BINS: NonNullable<ViewerCoreProps['transcriptAggregateBins']> = []
+const EMPTY_TRANSCRIPT_POINTS: NonNullable<ViewerCoreProps['transcriptPoints']> = []
+const EMPTY_IMAGE_CHANNELS: NonNullable<ViewerCoreProps['imageChannels']> = []
+const EMPTY_LOADING_TASKS: readonly LoadingTaskSummary[] = []
 
 export function ViewerCore({
-  cells = [],
+  cells = EMPTY_OVERVIEW_CELLS,
   fitCells,
-  expressionElements = [],
+  expressionElements = EMPTY_OVERVIEW_CELLS,
   geneExpressionActive = false,
   geneExpressionOverlayEnabled = true,
-  boundaries = [],
-  nucleusBoundaries = [],
+  boundaries = EMPTY_BOUNDARIES,
+  nucleusBoundaries = EMPTY_BOUNDARIES,
   cellBoundaryHoverEnabled = false,
   hoverTooltipsEnabled = true,
   overviewCellSourceLabel = 'Xenium',
-  gridCells = [],
+  gridCells = EMPTY_GRID_CELLS,
   fitGridCells,
   fitImageExtent = null,
-  transcriptAggregateBins = [],
-  transcriptPoints = [],
+  transcriptAggregateBins = EMPTY_TRANSCRIPT_BINS,
+  transcriptPoints = EMPTY_TRANSCRIPT_POINTS,
   geometricAnnotations = EMPTY_GEOMETRIC_ANNOTATIONS,
   imageLoader = null,
-  imageChannels = [],
+  imageChannels = EMPTY_IMAGE_CHANNELS,
   flatImage = null,
   imageOpacity = 1,
   cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
@@ -205,9 +218,11 @@ export function ViewerCore({
   observationColorMode = 'transcript-count',
   annotationStyleColors = EMPTY_ANNOTATION_STYLE_COLORS,
   cellMetadataTrack = null,
-  loadingTasks = [],
+  loadingTasks = EMPTY_LOADING_TASKS,
   legendSections = EMPTY_LEGEND_SECTIONS,
   showZoomLevel = false,
+  selectionHighlight = null,
+  onClearSelection,
   onLegendCategoryVisibilityChange,
   coordinateUnit = 'um',
   measurementEnabled = false,
@@ -294,6 +309,8 @@ export function ViewerCore({
       loadingTasks={loadingTasks}
       legendSections={legendSections}
       showZoomLevel={showZoomLevel}
+      selectionHighlight={selectionHighlight}
+      {...(onClearSelection === undefined ? {} : { onClearSelection })}
       {...(onLegendCategoryVisibilityChange === undefined
         ? {}
         : { onLegendCategoryVisibilityChange })}
@@ -372,6 +389,8 @@ interface ViewerSurfaceProps {
   readonly loadingTasks: readonly LoadingTaskSummary[]
   readonly legendSections: readonly ViewerLegendSection[]
   readonly showZoomLevel: boolean
+  readonly selectionHighlight: ViewerSelectionHighlight | null
+  readonly onClearSelection?: () => void
   readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
@@ -446,6 +465,8 @@ function ViewerSurface({
   loadingTasks,
   legendSections,
   showZoomLevel,
+  selectionHighlight,
+  onClearSelection,
   onLegendCategoryVisibilityChange,
   coordinateUnit,
   measurementEnabled,
@@ -965,6 +986,10 @@ function ViewerSurface({
       : null
   const activeMeasurementLine =
     measurementState.resetKey === measurementResetKey ? measurementState.line : null
+  const selectionOverlay = useMemo(
+    () => selectionOverlayModel(selectionHighlight, viewState, viewport),
+    [selectionHighlight, viewState, viewport],
+  )
   const measurementOverlay = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
       return null
@@ -1094,6 +1119,12 @@ function ViewerSurface({
   )
   const handleKeyboardNavigation = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Escape' && selectionHighlight !== null && onClearSelection) {
+        event.preventDefault()
+        onClearSelection()
+        return
+      }
+
       if (!canTrackMouseCoordinates) {
         return
       }
@@ -1111,7 +1142,13 @@ function ViewerSurface({
           : nextViewState,
       )
     },
-    [canTrackMouseCoordinates, initialViewState, viewState],
+    [
+      canTrackMouseCoordinates,
+      initialViewState,
+      onClearSelection,
+      selectionHighlight,
+      viewState,
+    ],
   )
   const handleDeckClick = useCallback(
     (info: {
@@ -1762,6 +1799,9 @@ function ViewerSurface({
             <MeasurementOverlay model={measurementOverlay} />
           )}
         </div>
+        {selectionOverlay === null ? null : (
+          <ViewerSelectionOverlay model={selectionOverlay} />
+        )}
         {magicLensOverlay === null ? null : (
           <MagicLensOverlay
             model={magicLensOverlay}

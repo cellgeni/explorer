@@ -34,6 +34,7 @@ import {
 } from './features/app-shell/appShellModel'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { viewerLegendSections } from './features/app-shell/viewerLegendModel'
+import { viewerSelectionHighlight } from './features/app-shell/viewerSelectionHighlight'
 import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import {
@@ -2325,9 +2326,11 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedGridCell(null)
       setSelectedBoundaryCell(null)
       setSelectedCell(cell)
+      setActiveControlHudTab('cell')
     },
     [
       clearVisiumHdExpressionProfileState,
+      setActiveControlHudTab,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
@@ -2339,9 +2342,11 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCell(null)
       setSelectedGridCell(null)
       setSelectedBoundaryCell(cell)
+      setActiveControlHudTab('cell')
     },
     [
       clearVisiumHdExpressionProfileState,
+      setActiveControlHudTab,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
@@ -2353,13 +2358,44 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCell(null)
       setSelectedBoundaryCell(null)
       setSelectedGridCell(cell)
+      setActiveControlHudTab('cell')
     },
     [
       clearVisiumHdExpressionProfileState,
+      setActiveControlHudTab,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
     ],
+  )
+
+  const handleClearSelection = useCallback(() => {
+    clearVisiumHdExpressionProfileState()
+    setSelectedCell(null)
+    setSelectedBoundaryCell(null)
+    setSelectedGridCell(null)
+  }, [
+    clearVisiumHdExpressionProfileState,
+    setSelectedBoundaryCell,
+    setSelectedCell,
+    setSelectedGridCell,
+  ])
+  const drawnBoundaryById = useMemo(
+    () =>
+      new Map(
+        expressionStyledBoundaryLayerData.map((boundary) => [boundary.id, boundary]),
+      ),
+    [expressionStyledBoundaryLayerData],
+  )
+  const selectionHighlight = useMemo(
+    () =>
+      viewerSelectionHighlight({
+        selectedCell,
+        selectedBoundaryCell,
+        selectedGridCell,
+        drawnBoundaries: drawnBoundaryById,
+      }),
+    [drawnBoundaryById, selectedBoundaryCell, selectedCell, selectedGridCell],
   )
 
   const {
@@ -3272,6 +3308,8 @@ export function App({ dependencies }: AppProps = {}) {
           loadingTasks={loadingTasks}
           legendSections={legendSections}
           showZoomLevel={debugMode}
+          selectionHighlight={selectionHighlight}
+          onClearSelection={handleClearSelection}
           onLegendCategoryVisibilityChange={handleAnnotationVisibilityChange}
           coordinateUnit={coordinateUnit}
           measurementEnabled={measurementEnabled}

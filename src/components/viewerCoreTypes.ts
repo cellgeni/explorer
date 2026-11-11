@@ -1,6 +1,7 @@
 import type { BBox, DataPoint } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { ViewerLegendSection } from './viewerLegendTypes'
+import type { ViewerSelectionHighlight } from './viewerSelectionModel'
 import type {
   AnnotationColorStyle,
   CellMetadataColorStyle,
@@ -61,6 +62,10 @@ export interface ViewerCoreProps {
   readonly loadingTasks?: readonly LoadingTaskSummary[]
   // The canvas legend, bottom left above the loading indicator.
   readonly legendSections?: readonly ViewerLegendSection[]
+  // The selected cell, spot or bin, marked over the canvas. Esc on the canvas
+  // calls onClearSelection.
+  readonly selectionHighlight?: ViewerSelectionHighlight | null
+  readonly onClearSelection?: () => void
   // The zoom number is for debugging (?debug=1).
   readonly showZoomLevel?: boolean
   readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
