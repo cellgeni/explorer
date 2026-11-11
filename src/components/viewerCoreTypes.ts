@@ -90,6 +90,9 @@ export interface ViewerCoreProps {
   readonly roiMode?: RoiDrawMode
   readonly roiBbox?: BBox | null
   readonly roiSelection?: RoiSelection | null
+  // Saved selections to outline (UNIFIED_PLAN.md, 15.4-A). The active one
+  // gives roiSelection its colour; the rest are drawn dashed.
+  readonly selectionOutlines?: readonly ViewerSelectionOutline[]
   readonly magicLensActive?: boolean
   readonly magicLensRadiusMicrometers?: number
   readonly magicLensStatus?: ViewerMagicLensStatus
@@ -188,3 +191,10 @@ export interface ViewerOverviewCellHoverDetail {
 }
 
 export type RoiDrawMode = 'idle' | 'box' | 'lasso'
+
+export interface ViewerSelectionOutline {
+  readonly id: string
+  readonly color: string
+  readonly active: boolean
+  readonly selection: RoiSelection
+}

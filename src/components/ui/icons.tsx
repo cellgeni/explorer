@@ -130,3 +130,23 @@ export function FitIcon() {
     </svg>
   )
 }
+
+// Selection rows (UNIFIED_PLAN.md, 15.4-A).
+
+export function PencilIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M3 13l1-3.5L10.5 3 13 5.5 6.5 12z" />
+      <path d="M9 4.5l2.5 2.5" />
+    </svg>
+  )
+}
+
+export function TargetIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <circle cx="8" cy="8" r="4.5" />
+      <path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3" />
+    </svg>
+  )
+}

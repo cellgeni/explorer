@@ -64,7 +64,7 @@ function Probe({
   const [, setSelectedCellMetadataTrackId] = React.useState<string | null>(null)
   const [observationColorMode, setObservationColorMode] =
     React.useState<ObservationColorMode>(initialColorMode)
-  const [roiName, setRoiName] = React.useState('Marker ROI')
+  const [roiName] = React.useState('Marker ROI')
   const [groupId, setSelectedAnnotationGroupId] = React.useState(
     selectedAnnotationGroupId,
   )
@@ -106,7 +106,6 @@ function Probe({
       setHiddenAnnotationIds,
       setHiddenAnnotationSetIds,
       setObservationColorMode,
-      setRoiName,
       setSelectedAnnotationGroupId,
       setSelectedCellMetadataTrackId,
     },
@@ -319,7 +318,8 @@ describe('useAnnotationWorkflow', () => {
         : '',
     ).toBe('roi:1:marker-roi')
     expect(snapshot.observationColorMode).toBe('annotations')
-    expect(snapshot.roiName).toBe('ROI 2')
+    // The selection keeps its name (15.4-A).
+    expect(snapshot.roiName).toBe('Marker ROI')
   })
 
   it('exports ready annotations as CSV', async () => {

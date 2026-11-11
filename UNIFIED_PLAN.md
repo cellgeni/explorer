@@ -3082,11 +3082,54 @@ genes`; their texts are in `shell/helpText.ts` and follow
 
 Can be skipped after 15.3 ships if time is short.
 
-- [ ] **A. Multiple selections (F13).** (L)
+- [x] **A. Multiple selections (F13).** (L)
   - List selections in Annotations by class, each with rename, colour,
     visibility, delete and Go to.
   - A new drawing adds a selection, and the card shows the active one.
   - `roi=` stores the active selection.
+  - Done 2026-11-11. `useSelectionList` (`src/features/roi/`) keeps the
+    selections for the open dataset (and Visium library), with the pure
+    `selectionListModel`. It sits above the ROI workflows, which still hold
+    one ROI, the active selection's, so cells, genes, exports, Magic Lens and
+    Cancel are unchanged.
+    - Drawing on cells, spots or bins adds "ROI n" in the next of 8 bright
+      colours (the first is the old overlay yellow) and runs it. Choosing a
+      name in the list runs it again, since results are not kept per
+      selection; the data layer's caches make that quick.
+    - The active selection is the list's choice while the workflow holds an
+      ROI, so a cancelled cells query or a Visium HD bin size change leaves
+      none active and the selection listed.
+    - The Selection card's × is now `Close selection`, which keeps the
+      selection; `Delete` (danger) removes it. Delete in the card or the list
+      offers Undo, which puts it back at its index and, if it was the card's
+      and no other is, shows it again. This replaces 15.3-C's Clear selection
+      undo. `ROI name` renames the selection. `Save ROI` no longer renames to
+      the next "ROI n".
+    - Annotations › Selections (`SelectionListBlock.tsx`): swatch, visible,
+      the name (`Show {name}`, pressed when active), area, `Go to`, `Rename`
+      (inline; Enter or blur keeps, Esc reverts) and `Delete`. The header
+      says "2 selections · 1 shape". Not on images, where drawing still makes
+      GeoJSON shapes.
+    - Canvas: `ViewerCore` takes `selectionOutlines`. The card's selection is
+      drawn as before in its own colour (`--selection-color`); other visible
+      ones are dashed SVG outlines beside `MemoDeckGL`, covered by the
+      no-redraw test. Hiding Annotations hides the dashed ones.
+    - `roi=` is still the card's selection. The link replay moved from both
+      ROI workflows into the list: it waits until ROI drawing is allowed
+      (Xenium preparation, Visium HD bins), so a Visium HD link no longer
+      runs before its bins load, and a saved selection with the same outline
+      is shown instead of a copy (a Visium off-tissue toggle replays the
+      link). While it waits, the address leaves out `roi=`.
+    - "By class" is read as one row per selection, as classes are listed;
+      selections are not grouped further.
+    - A review before the PRs found, and this fixes: the link rounds
+      coordinates to 0.001, so a replayed ROI now matches a saved outline
+      within that (a Visium off-tissue toggle added a copy); drawing while
+      ROI drawing is not allowed (a Visium HD level load, Xenium
+      preparation) is kept, as before 15.4-A, and only a link's ROI waits;
+      the list is keyed on the SpatialData coordinate system and scale too;
+      and coming back to a dataset starts empty, while a reload of the same
+      view keeps the list.
 - [ ] **B. Enriched genes (F13).** (L, with a method note in the docs)
   - The Selection card's Genes tab ranks genes by log2 fold change of mean
     expression inside the selection versus a matched sample outside it, reusing

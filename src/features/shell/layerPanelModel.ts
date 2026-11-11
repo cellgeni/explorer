@@ -7,6 +7,7 @@ import type { LayerVisibility } from '../app-shell/useAppDomainState'
 import type {
   AnnotationsSectionModel,
   GeometricShapesModel,
+  SelectionListModel,
 } from '../sections/annotationsSectionModel'
 import type { CellsSectionModel } from '../sections/cellsSectionModel'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
@@ -140,10 +141,23 @@ export function transcriptsSummary(transcripts: TranscriptsSectionModel): string
   return parts.join(' · ')
 }
 
-export function shapesSummary(shapes: GeometricShapesModel): string {
-  return shapes.shapes.length === 0
-    ? 'No shapes'
-    : countLabel(shapes.shapes.length, 'shape')
+// "2 selections · 1 shape", or "No shapes".
+export function annotationsSummary(
+  selections: SelectionListModel,
+  shapes: GeometricShapesModel,
+): string {
+  const parts = [
+    ...(selections.available && selections.selections.length > 0
+      ? [countLabel(selections.selections.length, 'selection')]
+      : []),
+    ...(shapes.shapes.length > 0 ? [countLabel(shapes.shapes.length, 'shape')] : []),
+  ]
+
+  return parts.length === 0
+    ? selections.available
+      ? 'No selections'
+      : 'No shapes'
+    : parts.join(' · ')
 }
 
 export interface LayerPanelModelInput {
@@ -227,7 +241,11 @@ export function useLayerPanelModel({
 
   if (capabilities.geometricAnnotations) {
     sections.push(
-      visibilityHeader('annotations', 'Annotations', shapesSummary(annotations.shapes)),
+      visibilityHeader(
+        'annotations',
+        'Annotations',
+        annotationsSummary(annotations.selections, annotations.shapes),
+      ),
     )
   }
 

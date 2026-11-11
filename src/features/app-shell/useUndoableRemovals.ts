@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
-import type { RoiSelection } from '../../data/roiSelection'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type { AnnotationState } from '../annotations/annotationModel'
 import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotationModel'
@@ -8,9 +7,9 @@ import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { AppendDebugEvent } from './appRuntimeModel'
 import type { UndoOffer } from './useUndoToast'
 
-// The removals that offer Undo (UNIFIED_PLAN.md, 15.3-C): clearing the
-// selection, removing a class, a metadata track or every annotation,
-// removing a shape or clearing them all. Each takes a snapshot first, and
+// The removals that offer Undo (UNIFIED_PLAN.md, 15.3-C): removing a
+// class, a metadata track or every annotation, removing a shape or clearing
+// them all. Deleting a selection offers its own (useSelectionList, 15.4-A). Each takes a snapshot first, and
 // Undo puts it back only if nothing it covers has changed since, so Undo
 // never throws away later work.
 
@@ -40,13 +39,6 @@ export interface UndoableRemovalsInput {
     readonly onRemove: (annotationId: string) => void
     readonly onClear: () => void
   }
-  readonly selection: {
-    readonly selection: RoiSelection | null
-    readonly name: string
-    readonly onClear: () => void
-    // Draws it again under its name, which reruns its queries.
-    readonly restore: (selection: RoiSelection, name: string) => void
-  }
 }
 
 export interface UndoableRemovals {
@@ -55,7 +47,6 @@ export interface UndoableRemovals {
   readonly handleClearAnnotations: () => void
   readonly handleRemoveShape: (annotationId: string) => void
   readonly handleClearShapes: () => void
-  readonly handleClearSelection: () => void
 }
 
 // Counts the commits in which any of `values` changed. A removal expects
@@ -75,7 +66,6 @@ export function useUndoableRemovals({
   appendDebugEvent,
   annotations,
   shapes,
-  selection,
 }: UndoableRemovalsInput): UndoableRemovals {
   const {
     annotationState,
@@ -100,10 +90,6 @@ export function useUndoableRemovals({
     observationColorMode,
   ])
   const shapeCommits = useCommitCount([shapes.shapes])
-  const currentSelectionRef = useRef(selection.selection)
-  useEffect(() => {
-    currentSelectionRef.current = selection.selection
-  }, [selection.selection])
 
   const offerAnnotationUndo = useCallback(
     (message: string, remove: () => void) => {
@@ -212,45 +198,11 @@ export function useUndoableRemovals({
     )
   }, [clearShapes, currentShapes.length, offerShapeUndo])
 
-  const {
-    selection: activeSelection,
-    name: selectionName,
-    onClear: clearSelection,
-    restore: restoreSelection,
-  } = selection
-  const handleClearSelection = useCallback(() => {
-    clearSelection()
-    if (activeSelection === null) return
-
-    const name = selectionName.trim()
-    const message = `Cleared ${name === '' ? 'the selection' : name}`
-    offerUndo({
-      message,
-      undo: () => {
-        // A selection drawn since stays.
-        if (currentSelectionRef.current !== null) {
-          appendDebugEvent(`Not undone: a newer selection (${message})`)
-          return
-        }
-        restoreSelection(activeSelection, selectionName)
-        appendDebugEvent(`Undone: ${message}`)
-      },
-    })
-  }, [
-    activeSelection,
-    appendDebugEvent,
-    clearSelection,
-    offerUndo,
-    restoreSelection,
-    selectionName,
-  ])
-
   return {
     handleRemoveAnnotation,
     handleRemoveCellMetadataTrack,
     handleClearAnnotations,
     handleRemoveShape,
     handleClearShapes,
-    handleClearSelection,
   }
 }

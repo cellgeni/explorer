@@ -84,7 +84,6 @@ function Probe({
     RoiTranscriptExportState<StructuredLoadError>
   >({ status: 'loading', url: 'https://example.test/output' })
   const debugMessagesRef = React.useRef<string[]>([])
-  const initialSharedRoiSelectionRef = React.useRef<RoiSelection | null>(null)
   const magicLensAbortRef = React.useRef<AbortController | null>(new AbortController())
   const magicLensDebounceRef = React.useRef<number | null>(null)
   const magicLensLastDetailRef = React.useRef<ViewerMagicLensDetail | null>(null)
@@ -138,7 +137,6 @@ function Probe({
       loadRoiTranscripts: vi.fn(async () => []),
     },
     refs: {
-      initialSharedRoiSelectionRef,
       magicLensAbortRef,
       magicLensDebounceRef,
       magicLensLastDetailRef,
@@ -250,7 +248,6 @@ function WarmupProbe({
   const [roiTranscriptExportState, setRoiTranscriptExportState] = React.useState<
     RoiTranscriptExportState<StructuredLoadError>
   >({ status: 'idle' })
-  const initialSharedRoiSelectionRef = React.useRef<RoiSelection | null>(null)
   const magicLensAbortRef = React.useRef<AbortController | null>(null)
   const magicLensDebounceRef = React.useRef<number | null>(null)
   const magicLensLastDetailRef = React.useRef<ViewerMagicLensDetail | null>(null)
@@ -293,7 +290,6 @@ function WarmupProbe({
       loadRoiTranscripts,
     },
     refs: {
-      initialSharedRoiSelectionRef,
       magicLensAbortRef,
       magicLensDebounceRef,
       magicLensLastDetailRef,

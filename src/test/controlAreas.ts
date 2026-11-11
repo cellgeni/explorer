@@ -55,6 +55,8 @@ export const CONTROL_AREAS = {
   clusters: { kind: 'section', section: CELLS_SECTION },
   // Annotations section: GeoJSON shapes.
   shapes: { kind: 'section', section: /^Annotations/ },
+  // Annotations section: saved selections (15.4-A).
+  selections: { kind: 'section', section: /^Annotations/ },
   // The selection tools are in the top bar; the Selection card shows a
   // selection.
   selection: { kind: 'none' },

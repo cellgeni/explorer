@@ -5453,6 +5453,121 @@ ${cd16Negative},CD16- NK cells`,
     }
   })
 
+  it('keeps each drawn selection and shows the chosen one in the card', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [
+      {
+        id: cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 12,
+        cellArea: 30,
+      },
+    ])
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      async () => ({
+        genes: [],
+        cellCount: 1,
+        sampledCellCount: 1,
+        totalCount: 0,
+        hitCellLimit: false,
+      }),
+    )
+
+    function drawBox(from: number, to: number) {
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
+      const roiLayer = document.querySelector('.roi-draw-layer')
+
+      if (!(roiLayer instanceof HTMLElement)) {
+        throw new Error('Expected ROI draw layer.')
+      }
+
+      fireEvent.pointerDown(roiLayer, { clientX: from, clientY: from, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: to, clientY: to, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: to, clientY: to, pointerId: 1 })
+    }
+
+    try {
+      render(
+        <TestApp
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+      openControls('open-dataset')
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openControls('selection')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+          'aria-disabled',
+          'false',
+        )
+      })
+      drawBox(480, 520)
+      expect(await screen.findByRole('region', { name: 'ROI 1' })).toBeInTheDocument()
+      drawBox(300, 340)
+      expect(await screen.findByRole('region', { name: 'ROI 2' })).toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'ROI 1' })).toBeNull()
+
+      // Both are listed; the card's is pressed, and the other is outlined.
+      openControls('selections')
+      const list = screen.getByRole('list', { name: 'Selections' })
+      expect(within(list).getByRole('button', { name: 'ROI 1' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      )
+      expect(within(list).getByRole('button', { name: 'ROI 2' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      expect(document.querySelectorAll('.roi-saved-path')).toHaveLength(1)
+
+      // Choosing ROI 1 runs its queries again and shows it in the card.
+      fireEvent.click(within(list).getByRole('button', { name: 'ROI 1' }))
+      expect(await screen.findByRole('region', { name: 'ROI 1' })).toBeInTheDocument()
+      expect(loadRoiCells).toHaveBeenCalledTimes(3)
+      const firstBox = loadRoiCells.mock.calls[0]?.[1]
+      expect(loadRoiCells.mock.calls[2]?.[1]).toEqual(firstBox)
+
+      // Renaming in the card renames the listed selection.
+      fireEvent.change(screen.getByLabelText('ROI name'), { target: { value: 'Cortex' } })
+      expect(within(list).getByRole('button', { name: 'Cortex' })).toBeInTheDocument()
+
+      // Closing the card keeps the selection.
+      fireEvent.click(screen.getByRole('button', { name: 'Close selection' }))
+      expect(screen.queryByRole('region', { name: 'Cortex' })).toBeNull()
+      expect(within(list).getAllByRole('listitem')).toHaveLength(2)
+      expect(document.querySelectorAll('.roi-saved-path')).toHaveLength(2)
+
+      // Deleting offers Undo, which puts it back in its place.
+      fireEvent.click(within(list).getByRole('button', { name: 'Delete Cortex' }))
+      expect(within(list).getAllByRole('listitem')).toHaveLength(1)
+      expect(screen.getByText('Deleted Cortex')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+      expect(
+        within(list)
+          .getAllByRole('listitem')
+          .map((item) => within(item).getAllByRole('button')[0]?.textContent),
+      ).toEqual(['Cortex', 'ROI 2'])
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('starts a bbox-backed ROI query from a lasso selection', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),

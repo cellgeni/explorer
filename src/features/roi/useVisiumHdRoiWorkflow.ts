@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import type { RoiDrawMode } from '../../components/ViewerCore'
 import { summarizeRoiGeneExpression } from '../../data/roiGeneStats'
 import type { RoiSelection } from '../../data/roiSelection'
@@ -66,7 +66,6 @@ interface UseVisiumHdRoiWorkflowLoaders {
 }
 
 interface UseVisiumHdRoiWorkflowRefs {
-  readonly initialSharedRoiSelectionRef: MutableRef<RoiSelection | null>
   readonly roiGeneAbortRef: MutableRef<AbortController | null>
   readonly roiGeneRequestIdRef: MutableRef<number>
   readonly roiIdRef: MutableRef<number>
@@ -103,7 +102,7 @@ export function useVisiumHdRoiWorkflow({
   controls: { activeBinSize, isVisiumHdDataset, roiName },
   data: { activeRoiState, gridCells, loadState },
   loaders: { getSpatialDataset },
-  refs: { initialSharedRoiSelectionRef, roiGeneAbortRef, roiGeneRequestIdRef, roiIdRef },
+  refs: { roiGeneAbortRef, roiGeneRequestIdRef, roiIdRef },
   setters: { setRoiGeneStatsState, setRoiMode, setRoiName, setVisiumHdRoiState },
 }: UseVisiumHdRoiWorkflowOptions): UseVisiumHdRoiWorkflowResult {
   const readyDatasetUrl = loadState.status === 'ready' ? loadState.url : null
@@ -275,30 +274,6 @@ export function useVisiumHdRoiWorkflow({
     clearVisiumHdRoiState()
     appendDebugEvent('Cleared ROI')
   }, [appendDebugEvent, clearRoi, clearVisiumHdRoiState, isVisiumHdDataset, setRoiMode])
-
-  useEffect(() => {
-    const selection = initialSharedRoiSelectionRef.current
-
-    if (
-      !isVisiumHdDataset ||
-      selection === null ||
-      readyDatasetUrl === null ||
-      activeRoiState.status !== 'idle'
-    ) {
-      return
-    }
-
-    initialSharedRoiSelectionRef.current = null
-    setRoiName('Shared ROI')
-    handleVisiumHdRoiComplete(selection)
-  }, [
-    activeRoiState.status,
-    handleVisiumHdRoiComplete,
-    initialSharedRoiSelectionRef,
-    isVisiumHdDataset,
-    readyDatasetUrl,
-    setRoiName,
-  ])
 
   return {
     clearVisiumHdRoiState,

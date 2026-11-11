@@ -2,7 +2,6 @@ import { act, renderHook } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
-import type { RoiSelection } from '../../data/roiSelection'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotationModel'
 import type { AnnotationState } from '../annotations/annotationModel'
@@ -41,16 +40,6 @@ const SHAPE: GeometricAnnotationFeature = {
   },
 }
 
-const BOX: RoiSelection = {
-  kind: 'box',
-  bbox: {
-    minX: micrometers(0),
-    minY: micrometers(0),
-    maxX: micrometers(10),
-    maxY: micrometers(10),
-  },
-}
-
 // The removals with real state, as App holds it.
 function useHarness() {
   const [annotationState, setAnnotationState] = useState(READY_ANNOTATIONS)
@@ -70,8 +59,6 @@ function useHarness() {
   const [observationColorMode, setObservationColorMode] =
     useState<ObservationColorMode>('annotations')
   const [shapes, setShapes] = useState<readonly GeometricAnnotationFeature[]>([SHAPE])
-  const [selection, setSelection] = useState<RoiSelection | null>(BOX)
-  const [name, setName] = useState('ROI 1')
   const [offer, setOffer] = useState<UndoOffer | null>(null)
 
   const removals: UndoableRemovals = useUndoableRemovals({
@@ -123,17 +110,6 @@ function useHarness() {
         setShapes([])
       },
     },
-    selection: {
-      selection,
-      name,
-      onClear: () => {
-        setSelection(null)
-      },
-      restore: (restored, restoredName) => {
-        setName(restoredName)
-        setSelection(restored)
-      },
-    },
   })
 
   return {
@@ -144,10 +120,6 @@ function useHarness() {
     observationColorMode,
     setAnnotationState,
     shapes,
-    selection,
-    setSelection,
-    name,
-    setName,
   }
 }
 
@@ -232,33 +204,5 @@ describe('useUndoableRemovals', () => {
       result.current.offer?.undo()
     })
     expect(result.current.shapes).toEqual([SHAPE])
-  })
-
-  it('draws a cleared selection again under its name, unless one was drawn since', () => {
-    const { result } = renderHook(useHarness)
-
-    act(() => {
-      result.current.removals.handleClearSelection()
-      result.current.setName('ROI 2')
-    })
-    expect(result.current.offer?.message).toBe('Cleared ROI 1')
-    expect(result.current.selection).toBeNull()
-    act(() => {
-      result.current.offer?.undo()
-    })
-    expect(result.current.selection).toBe(BOX)
-    expect(result.current.name).toBe('ROI 1')
-
-    act(() => {
-      result.current.removals.handleClearSelection()
-    })
-    const newer: RoiSelection = { ...BOX, kind: 'box' }
-    act(() => {
-      result.current.setSelection(newer)
-    })
-    act(() => {
-      result.current.offer?.undo()
-    })
-    expect(result.current.selection).toBe(newer)
   })
 })

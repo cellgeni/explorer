@@ -11,6 +11,7 @@ import type {
 } from '../rendering/deckLayers'
 import { asCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
+import type { RoiSelection } from '../data/roiSelection'
 import type { TiffPyramidLoader } from '../tiff/loader'
 
 type MockDeckHover = (info: {
@@ -2048,6 +2049,56 @@ describe('ViewerCore', () => {
       height: '16px',
     })
     expect(deckGlMock.renderCount).toBe(renderCountBeforeDrag)
+  })
+
+  it('outlines saved selections in their colours without redrawing deck layers (15.4-A)', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+    const active: RoiSelection = {
+      kind: 'box',
+      bbox: {
+        minX: micrometers(0),
+        minY: micrometers(0),
+        maxX: micrometers(256),
+        maxY: micrometers(256),
+      },
+    }
+    const other: RoiSelection = {
+      kind: 'lasso',
+      bbox: active.bbox,
+      points: [
+        { x: micrometers(0), y: micrometers(0) },
+        { x: micrometers(256), y: micrometers(0) },
+        { x: micrometers(256), y: micrometers(256) },
+      ],
+    }
+
+    const { rerender } = render(<ViewerCore cells={cells} />)
+    const renderCountBefore = deckGlMock.renderCount
+
+    rerender(
+      <ViewerCore
+        cells={cells}
+        roiSelection={active}
+        selectionOutlines={[
+          { id: 'selection-1', color: '#4bd6f0', active: false, selection: other },
+          { id: 'selection-2', color: '#f04bc8', active: true, selection: active },
+        ]}
+      />,
+    )
+
+    const saved = document.querySelectorAll('.roi-saved-path')
+    expect(saved).toHaveLength(1)
+    expect(saved[0]?.getAttribute('d')).toMatch(/^M.*Z$/)
+    expect((saved[0] as SVGElement).style.getPropertyValue('--selection-color')).toBe(
+      '#4bd6f0',
+    )
+    const rectangle = document.querySelector('.roi-rectangle')
+    expect((rectangle as HTMLElement).style.getPropertyValue('--selection-color')).toBe(
+      '#f04bc8',
+    )
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
   })
 
   it('does not re-render deck layers when the legend collapses or a category is toggled', () => {

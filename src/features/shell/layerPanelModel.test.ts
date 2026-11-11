@@ -9,7 +9,7 @@ import {
 import {
   cellsSummary,
   imageSummary,
-  shapesSummary,
+  annotationsSummary,
   transcriptsSummary,
   useLayerPanelModel,
   type LayerPanelModelInput,
@@ -154,14 +154,28 @@ describe('layer section summaries', () => {
     ).toBe('All features · points')
   })
 
-  it('counts shapes', () => {
-    expect(shapesSummary(testAnnotationsSectionModel().shapes)).toBe('No shapes')
+  it('counts selections and shapes', () => {
+    function summary(model: ReturnType<typeof testAnnotationsSectionModel>): string {
+      return annotationsSummary(model.selections, model.shapes)
+    }
+
+    expect(summary(testAnnotationsSectionModel())).toBe('No selections')
     expect(
-      shapesSummary(
-        testAnnotationsSectionModel({ shapes: { shapes: [{ id: 'a' } as never] } })
-          .shapes,
+      summary(testAnnotationsSectionModel({ selections: { available: false } })),
+    ).toBe('No shapes')
+    expect(
+      summary(
+        testAnnotationsSectionModel({ shapes: { shapes: [{ id: 'a' } as never] } }),
       ),
     ).toBe('1 shape')
+    expect(
+      summary(
+        testAnnotationsSectionModel({
+          selections: { selections: [{ id: 'a' }, { id: 'b' }] as never },
+          shapes: { shapes: [{ id: 'a' } as never] },
+        }),
+      ),
+    ).toBe('2 selections · 1 shape')
   })
 })
 

@@ -79,7 +79,8 @@ to these guides. A small ⓘ beside some controls, such as `Expression detail`,
 point at it, tab to it or tap it.
 
 The URL hash updates with the current dataset URL, viewport, selected genes,
-ROI, open panels, tool, cell card, hidden layers, and control state. `Share` in
+the selection shown in the card, open panels, tool, cell card, hidden layers,
+and control state. `Share` in
 the top bar copies the link to share the same view. Older links with `tab=`
 still work. Each dataset you open is a step in the browser's history, so Back
 returns to the previous dataset, or to the start screen.
@@ -176,17 +177,23 @@ Use Cells › Clusters to load built-in analysis labels or import local CSV/JSON
 cell annotations when the active platform supports cell-id annotations. H5AD
 categorical `obs` tracks appear as annotation sets.
 
-The layer panel's Annotations section exposes `GeoJSON shapes` when geometric
-annotations are available. Import GeoJSON `Feature` or `FeatureCollection`
-files containing Polygon or MultiPolygon geometry, edit shape colors and
-visibility, remove shapes, or export the current shapes as GeoJSON.
+The layer panel's Annotations section lists your selections and exposes
+`GeoJSON shapes` when geometric annotations are available. Import GeoJSON
+`Feature` or `FeatureCollection` files containing Polygon or MultiPolygon
+geometry, edit shape colors and visibility, remove shapes, or export the
+current shapes as GeoJSON.
 
 Use the Box selection (`R`) or Lasso selection (`L`) tool to draw box or lasso
-regions. The Selection card shows the ROI: Xenium ROIs can be saved as
+regions. Each drawing is kept as a selection, named "ROI 1", "ROI 2" and so on,
+and the Selection card shows the newest: Xenium ROIs can be saved as
 annotations (`Save ROI`), export selected cells or transcripts, and inspect top
-ROI genes. Visium HD ROIs select bins and export barcodes. On image-only
-sources a New shape card opens, and drawn geometry is saved as GeoJSON shapes
-in the Annotations section instead of querying cells or genes.
+ROI genes. Visium HD ROIs select bins and export barcodes. Annotations ›
+Selections lists every selection with its colour, visibility and area;
+choosing a name shows that selection in the card again, and each row has
+`Go to`, `Rename` and `Delete`. Closing the card keeps the selection; its
+`Delete` button removes it. On image-only sources a New shape card opens, and
+drawn geometry is saved as GeoJSON shapes in the Annotations section instead
+of querying cells or genes.
 
 The Magic Lens tool (`O`) is available for Xenium and Visium HD. It shows a
 lens at the cursor; its options set the `Radius`, and `Summarise View` scans
@@ -194,7 +201,7 @@ the whole view. Results appear in the Magic Lens card. Xenium lens scans
 summarize cells, their transcript counts, and top genes from the cell-feature
 matrix. Visium HD lens scans summarize UMIs and bins.
 
-Removing something — clearing the selection, a class, a metadata track, all
+Removing something — deleting a selection, a class, a metadata track, all
 annotations, a GeoJSON shape or a saved gene set — shows a toast with `Undo`
 for 8 seconds (Ctrl+Z or Cmd+Z also works). Undo only puts things back while
 nothing they cover has changed since.

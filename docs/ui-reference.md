@@ -321,6 +321,30 @@ bin pins it in the [Transcript card](#cards).
 
 ### Annotations
 
+Selections (Phase 15.4-A), on every platform with cells, spots or bins
+(`src/features/sections/SelectionListBlock.tsx`,
+`src/features/roi/useSelectionList.ts`). Each box or lasso drawn with the
+selection tools is kept here, in drawing order, and the newest shows in the
+[Selection card](#selection). They belong to the dataset and its frame (the
+Visium library, or the SpatialData coordinate system and scale): another
+dataset or frame, or coming back to one, starts with none, while a reload of
+the same view (a Visium off-tissue toggle) keeps them.
+
+| Control             | Notes                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Swatch              | `{name} color`. New selections take the next of 8 bright colours; the outline on the canvas uses it                       |
+| Checkbox            | `{name} visible`. Hidden selections are not outlined; the one in the card always is                                       |
+| Name                | `Show {name}`: shows it in the Selection card and runs its queries again (pressed while it is the card's)                 |
+| Area                | µm², from the box or lasso                                                                                                |
+| `Go to {name}`      | Fits the view to it                                                                                                       |
+| `Rename {name}`     | Swaps the name for a field: Enter or leaving it keeps the new name, Esc the old one. The card's `ROI name` renames it too |
+| `Delete {name}` (x) | Removes it, with [Undo](#undo)                                                                                            |
+
+On the canvas, the card's selection is drawn solid with a light fill in its
+colour; the other visible selections are dashed outlines. Hiding the
+Annotations layer hides those outlines, not the card's. The section header
+counts them: "2 selections · 1 shape".
+
 GeoJSON shapes, on all platforms (`src/features/annotations/geometricAnnotationModel.ts`):
 
 | Control          | Notes                                                                                                                                     |
@@ -340,20 +364,23 @@ the info drawer is open they move to its right. Closing a card clears what it
 shows. Selection, Cell and Transcript cards have `Go To`, which shows what the
 card is about (`zoomToBbox`).
 
-| Card                     | Shown when                                                     | Close                                       |
-| ------------------------ | -------------------------------------------------------------- | ------------------------------------------- |
-| Selection (the ROI name) | A box or lasso selection exists (cells, spots, Visium HD bins) | `Clear selection`                           |
-| New shape                | Box or Lasso selection is on, on an image                      | `Stop drawing`                              |
-| Cell, Spot or Bin        | A cell, spot, bin or Visium HD cell is clicked                 | `Clear selected cell` (or spot, bin)        |
-| Transcript               | A transcript or density bin is clicked (pinned)                | `Clear pinned transcript`                   |
-| Magic Lens               | The Magic Lens tool is on, or `Summarise View` ran             | `Turn off Magic Lens` or `Clear Magic Lens` |
+| Card                     | Shown when                                                    | Close                                       |
+| ------------------------ | ------------------------------------------------------------- | ------------------------------------------- |
+| Selection (the ROI name) | A selection is drawn or chosen (cells, spots, Visium HD bins) | `Close selection` (the selection stays)     |
+| New shape                | Box or Lasso selection is on, on an image                     | `Stop drawing`                              |
+| Cell, Spot or Bin        | A cell, spot, bin or Visium HD cell is clicked                | `Clear selected cell` (or spot, bin)        |
+| Transcript               | A transcript or density bin is clicked (pinned)               | `Clear pinned transcript`                   |
+| Magic Lens               | The Magic Lens tool is on, or `Summarise View` ran            | `Turn off Magic Lens` or `Clear Magic Lens` |
 
 ### Selection
 
-Under the name, "6,229 cells · 943,210 µm²" (count and area), or what is
-running ("Querying genes"). Then `ROI name` and, for cells, `Save ROI`, which
-adds the selection as an annotation and colours by annotations; the name
-increments after saving.
+The card shows one selection from Annotations › Selections: the one drawn
+last, or the one chosen there. Under the name, "6,229 cells · 943,210 µm²"
+(count and area), or what is running ("Querying genes"). Then `ROI name`,
+which renames the selection, and, for cells, `Save ROI`, which adds the
+selection as an annotation and colours by annotations. `Delete` (after the
+exports) removes the selection, with [Undo](#undo); closing the card keeps it
+in the list.
 
 | Tab                         | Contents                                                                                                                  |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -501,7 +528,9 @@ ignored. The label shows µm or px; pixel values use the image µm/px.
 ### ROI Drawing
 
 Box: drag a rectangle. Lasso: drag freehand (points at least 4 screen px
-apart, at least 3 points). ROIs smaller than 1 µm × 1 µm are ignored.
+apart, at least 3 points). ROIs smaller than 1 µm × 1 µm are ignored. Each
+ROI drawn on cells, spots or bins is added to Annotations › Selections as
+"ROI n" and shown in the Selection card.
 
 ### Readouts And Messages
 
@@ -525,7 +554,7 @@ coordinates` unit.
   | Scanning magic lens                       | No result; the lens stays on and scans again when it moves                  |
   | Loading embeddings                        | `Load Embeddings` again                                                     |
   | Loading cell details, cell z distribution | The Cell card's sections read "Waiting" until another cell is selected      |
-  | Querying ROI cells                        | No ROI                                                                      |
+  | Querying ROI cells                        | The card closes; the selection stays in Annotations › Selections            |
   | Querying ROI genes                        | The ROI and its cells stay, without top genes                               |
 
   A cancelled transcript read, Magic Lens scan or cell load does not start
@@ -546,18 +575,19 @@ such as "Removed kmeans 3: Cluster 1", with `Undo` and `Dismiss`
 8 s, but not while the pointer or focus is on it; Ctrl+Z or Cmd+Z also undoes,
 except in a text field. A newer removal or another dataset replaces it.
 
-| Removal                             | Undo                                                                |
-| ----------------------------------- | ------------------------------------------------------------------- |
-| Selection card › `Clear selection`  | Draws the selection again under its name, which reruns its queries  |
-| A class (`Remove {set}: {label}`)   | Puts the class back with its colour, visibility and the colour mode |
-| A metadata track                    | Puts the track back                                                 |
-| `Clear Annotations`                 | Puts back every class and track, and the colour mode                |
-| A GeoJSON shape, or `Clear GeoJSON` | Puts the shapes back                                                |
-| A saved gene set (`Remove {set}`)   | Puts the set back in its place                                      |
+| Removal                             | Undo                                                                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| A selection (`Delete`)              | Puts it back in its place; if it was in the card and no other selection is, shows it there again, rerunning its queries |
+| A class (`Remove {set}: {label}`)   | Puts the class back with its colour, visibility and the colour mode                                                     |
+| A metadata track                    | Puts the track back                                                                                                     |
+| `Clear Annotations`                 | Puts back every class and track, and the colour mode                                                                    |
+| A GeoJSON shape, or `Clear GeoJSON` | Puts the shapes back                                                                                                    |
+| A saved gene set (`Remove {set}`)   | Puts the set back in its place                                                                                          |
 
 Undo puts back what the removal took only while nothing it covers has changed
-since (`useUndoableRemovals`): after, say, loading another annotation set, or
-drawing a new selection, it does nothing rather than undo that work.
+since (`useUndoableRemovals`): after, say, loading another annotation set, it
+does nothing rather than undo that work. A deleted selection always goes back
+in the list, since nothing drawn later is lost.
 
 ## Info Drawer
 
@@ -703,7 +733,7 @@ the page reloads that entry's link, with its view and settings.
 | `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                                                                                                                                                                                                                                             |
 | `genes`                                                                                                   | Selected genes (comma-separated)                                                                                                                                                                                                                                                                                                       |
 | `view`                                                                                                    | Target x, y, z, zoom                                                                                                                                                                                                                                                                                                                   |
-| `roi`                                                                                                     | `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`                                                                                                                                                                                                                                                                                         |
+| `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens` |
 | `panel`                                                                                                   | The open layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer) and `embedding`, comma-separated; left out while only the default section is open                                                                                                                                                   |
 | `tool`                                                                                                    | The active tool: `box`, `lasso`, `measure` or `magic-lens`; left out for Pan. Replaces `lens=1`, which version 1 links still use                                                                                                                                                                                                       |
@@ -726,11 +756,13 @@ A link with `dataset` skips the [start screen](#start-screen).
 Dataset-specific values (genes, ROI, channels, z plane, boundaries, colour
 modes, lens, SpatialData view)
 are restored only when the loaded URL matches the shared `dataset`. A restored
-ROI is re-run as "Shared ROI".
+ROI is added to the selections as "Shared ROI" once ROI queries can run (after
+dataset preparation, or once Visium HD bins load); a saved selection with the
+same outline is shown instead, as after a Visium off-tissue toggle.
 
 Not saved: the layer panel collapse, the measurement line, a selected bin
 or Visium HD cell, a pinned transcript, saved gene sets, annotation colours
-and visibility, and GeoJSON shapes.
+and visibility, selections other than the card's, and GeoJSON shapes.
 
 ## State
 

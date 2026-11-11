@@ -4,6 +4,7 @@ import type {
   AnnotationsSectionModel,
   GeometricShapesModel,
   MetadataTracksModel,
+  SelectionListModel,
 } from '../features/sections/annotationsSectionModel'
 import type {
   CellAppearanceModel,
@@ -284,6 +285,7 @@ export function testAnnotationsSectionModel(
     readonly isLoading?: boolean
     readonly sets?: Partial<AnnotationSetsModel>
     readonly metadataTracks?: Partial<MetadataTracksModel>
+    readonly selections?: Partial<SelectionListModel>
     readonly shapes?: Partial<GeometricShapesModel>
   } = {},
 ): AnnotationsSectionModel {
@@ -321,6 +323,19 @@ export function testAnnotationsSectionModel(
       tracks: [],
       onRemove: vi.fn(),
       ...overrides.metadataTracks,
+    },
+    selections: {
+      available: true,
+      selections: [],
+      activeId: null,
+      canActivate: true,
+      onActivate: vi.fn(),
+      onRename: vi.fn(),
+      onColorChange: vi.fn(),
+      onVisibilityChange: vi.fn(),
+      onDelete: vi.fn(),
+      onGoTo: vi.fn(),
+      ...overrides.selections,
     },
     shapes: {
       enabled: true,
