@@ -26,7 +26,7 @@ describe('AppControlHud', () => {
   })
 
   it('routes shell tab and collapse actions through debug logging', () => {
-    const props = baseProps()
+    const props = baseProps({ debugMode: true })
 
     render(<AppControlHud {...props} />)
 
@@ -39,5 +39,15 @@ describe('AppControlHud', () => {
     })
     expect(props.setIsControlHudCollapsed).toHaveBeenCalledWith(true)
     expect(props.appendDebugEvent).toHaveBeenCalledWith('HUD collapsed')
+  })
+
+  it('logs tab switches only in debug mode', () => {
+    const props = baseProps()
+
+    render(<AppControlHud {...props} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Layers' }))
+
+    expect(props.setActiveControlHudTab).toHaveBeenCalledWith('layers')
+    expect(props.appendDebugEvent).not.toHaveBeenCalled()
   })
 })

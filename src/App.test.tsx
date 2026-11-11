@@ -198,6 +198,9 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Load Layer' })).toBeDisabled()
     openControls('layer-stack')
     const layerStack = screen.getByRole('region', { name: 'Layer Stack' })
+    // The deck.gl layer and budget lines appear only with ?debug=1.
+    expect(within(layerStack).queryByText(/deck\.gl/)).not.toBeInTheDocument()
+    expect(within(layerStack).queryByText(/^Budget/)).not.toBeInTheDocument()
     expect(within(layerStack).queryByText('cells')).not.toBeInTheDocument()
     expect(within(layerStack).queryByText('boundaries')).not.toBeInTheDocument()
     expect(within(layerStack).queryByText('image')).not.toBeInTheDocument()

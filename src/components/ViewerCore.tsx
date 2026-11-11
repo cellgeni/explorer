@@ -207,6 +207,7 @@ export function ViewerCore({
   cellMetadataTrack = null,
   loadingTasks = [],
   legendSections = EMPTY_LEGEND_SECTIONS,
+  showZoomLevel = false,
   onLegendCategoryVisibilityChange,
   coordinateUnit = 'um',
   measurementEnabled = false,
@@ -292,6 +293,7 @@ export function ViewerCore({
       cellMetadataTrack={cellMetadataTrack}
       loadingTasks={loadingTasks}
       legendSections={legendSections}
+      showZoomLevel={showZoomLevel}
       {...(onLegendCategoryVisibilityChange === undefined
         ? {}
         : { onLegendCategoryVisibilityChange })}
@@ -369,6 +371,7 @@ interface ViewerSurfaceProps {
   readonly cellMetadataTrack: CellMetadataColorStyle | null
   readonly loadingTasks: readonly LoadingTaskSummary[]
   readonly legendSections: readonly ViewerLegendSection[]
+  readonly showZoomLevel: boolean
   readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
@@ -442,6 +445,7 @@ function ViewerSurface({
   cellMetadataTrack,
   loadingTasks,
   legendSections,
+  showZoomLevel,
   onLegendCategoryVisibilityChange,
   coordinateUnit,
   measurementEnabled,
@@ -1787,12 +1791,14 @@ function ViewerSurface({
         ) : null}
         {!canTrackMouseCoordinates ? null : (
           <div className="viewport-bottom-center-readout">
-            <p
-              className="viewport-zoom-readout"
-              aria-label={`Zoom level ${zoomLevelText}`}
-            >
-              Zoom {zoomLevelText}
-            </p>
+            {showZoomLevel ? (
+              <p
+                className="viewport-zoom-readout"
+                aria-label={`Zoom level ${zoomLevelText}`}
+              >
+                Zoom {zoomLevelText}
+              </p>
+            ) : null}
             {mouseCoordinateText === null ? null : (
               <p
                 className="viewport-coordinate-readout"

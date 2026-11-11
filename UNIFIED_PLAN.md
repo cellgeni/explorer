@@ -2415,12 +2415,21 @@ They are independent unless a note says otherwise.
   - Add an `is-drawing` cursor class.
   - Return to Pan after a shape is finished.
   - Keep reading `lens=` from URLs.
-- [ ] **H. Developer information (F8).** (S)
+- [x] **H. Developer information (F8).** (S)
   - Show the Layers header lines (`LayerHudPanel.tsx:152–161`) and the zoom
     number (`ViewerCore.tsx:1773–1787`) only in debug mode.
   - Merge Matrix warning and Fallbacks into one "Data access notes (n)" item.
   - Collapse the Log by default.
   - Show "HUD tab:" log lines only in debug mode.
+  - Done 2026-11-11. Debug mode is `?debug=1` or `#debug=1`
+    (`readDebugModeFromLocation`), read once at start; Settings › Show debug
+    info comes with Settings in 15.2.
+  - Matrix warning and Fallbacks are one closed `Disclosure`, "Data access
+    notes (n)", and the Log is a closed "Log (n)". Both stay mounted.
+  - The log held the only "Dataset ready" and "… image ready" lines, which
+    15 E2E checks waited for. They now use `expectLogEntry`
+    (`tests/e2e/controls.ts`), which opens the log first. A clearer "loaded"
+    signal comes with the top bar summary in 15.2-B.
 - [ ] **I. Annotation sets (F14).** (M)
   - The Xenium default becomes `graphclust` (or the first group), not All.
   - Show one list per set, with the size bars merged into the rows: swatch,

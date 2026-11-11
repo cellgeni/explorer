@@ -28,6 +28,7 @@ import {
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
 import {
   parseObservationColorMode,
+  readDebugModeFromLocation,
   readShareableStateFromLocation,
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
@@ -270,6 +271,7 @@ export function App({ dependencies }: AppProps = {}) {
     readShareableStateFromLocation(),
   )
   const [performanceBudget] = useState<PerformanceBudget>(() => detectPerformanceBudget())
+  const [debugMode] = useState(readDebugModeFromLocation)
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const appState = useAppDomainState({ initialShareableState, performanceBudget })
@@ -2832,6 +2834,7 @@ export function App({ dependencies }: AppProps = {}) {
       <AppControlHud
         activeControlHudTab={activeControlHudTab}
         appendDebugEvent={appendDebugEvent}
+        debugMode={debugMode}
         hiddenTabIds={hiddenControlHudTabIds}
         isControlHudCollapsed={isControlHudCollapsed}
         loadingTabIds={loadingTabIds}
@@ -2872,6 +2875,7 @@ export function App({ dependencies }: AppProps = {}) {
         <AppLayerHudPanel
           active={activeControlHudTab === 'layers'}
           appendDebugEvent={appendDebugEvent}
+          debugMode={debugMode}
           autoContrastChannelIds={autoContrastChannelIds}
           cellBoundaryOpacity={cellBoundaryOpacity}
           cellFillOpacity={cellFillOpacity}
@@ -3267,6 +3271,7 @@ export function App({ dependencies }: AppProps = {}) {
           cellMetadataTrack={activeCellMetadataTrack}
           loadingTasks={loadingTasks}
           legendSections={legendSections}
+          showZoomLevel={debugMode}
           onLegendCategoryVisibilityChange={handleAnnotationVisibilityChange}
           coordinateUnit={coordinateUnit}
           measurementEnabled={measurementEnabled}

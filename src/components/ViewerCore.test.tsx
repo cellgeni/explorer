@@ -1741,6 +1741,15 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('shows the zoom number only when asked, for debugging', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+
+    render(<ViewerCore cells={[overviewCellDatum()]} />)
+
+    expect(screen.queryByLabelText(/^Zoom level/)).toBeNull()
+  })
+
   it('tracks mouse coordinates in micrometers and image pixels', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
@@ -1752,7 +1761,7 @@ describe('ViewerCore', () => {
         fillColor: [215, 63, 124, 220],
       },
     ]
-    const { rerender } = render(<ViewerCore cells={cells} />)
+    const { rerender } = render(<ViewerCore cells={cells} showZoomLevel />)
     const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
 
     expect(await screen.findByLabelText('Zoom level 4.00')).toHaveTextContent('Zoom 4.00')
@@ -1765,7 +1774,14 @@ describe('ViewerCore', () => {
 
     expect(await screen.findByText('X 1234 μm | Y 5678 μm')).toBeInTheDocument()
 
-    rerender(<ViewerCore cells={cells} coordinateUnit="px" micrometersPerPixel={0.5} />)
+    rerender(
+      <ViewerCore
+        cells={cells}
+        coordinateUnit="px"
+        micrometersPerPixel={0.5}
+        showZoomLevel
+      />,
+    )
     expect(await screen.findByLabelText('Scale bar 10 px')).toBeInTheDocument()
     fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
 

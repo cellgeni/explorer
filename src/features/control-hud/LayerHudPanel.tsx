@@ -19,6 +19,8 @@ interface LayerHudPanelProps {
   readonly scaffoldDeckLayerCount: number
   readonly bundledDeckVersion: string
   readonly performanceBudget: PerformanceBudget
+  // The deck.gl layer and budget lines are for debugging (?debug=1).
+  readonly showDebugInfo?: boolean | undefined
   readonly imageOpacityInputId: string
   readonly cellFillOpacityInputId: string
   readonly cellBoundaryVisibilityInputId: string
@@ -74,6 +76,7 @@ export function LayerHudPanel({
   scaffoldDeckLayerCount,
   bundledDeckVersion,
   performanceBudget,
+  showDebugInfo = false,
   imageOpacityInputId,
   cellFillOpacityInputId,
   cellBoundaryVisibilityInputId,
@@ -152,14 +155,18 @@ export function LayerHudPanel({
     >
       <section className="layer-section" aria-labelledby="layer-heading">
         <h2 id="layer-heading">Layer Stack</h2>
-        <p>
-          {scaffoldDeckLayerCount} Deck Layer - deck.gl {bundledDeckVersion}
-        </p>
-        <p>
-          Budget {performanceBudget.profile} -{' '}
-          {performanceBudget.overviewRenderCellLimit.toLocaleString()} cells -{' '}
-          {performanceBudget.maxConcurrentTileRequests} tile requests
-        </p>
+        {showDebugInfo ? (
+          <>
+            <p>
+              {scaffoldDeckLayerCount} Deck Layer - deck.gl {bundledDeckVersion}
+            </p>
+            <p>
+              Budget {performanceBudget.profile} -{' '}
+              {performanceBudget.overviewRenderCellLimit.toLocaleString()} cells -{' '}
+              {performanceBudget.maxConcurrentTileRequests} tile requests
+            </p>
+          </>
+        ) : null}
         <div className="boundary-layer-toggles" aria-label="Layer display controls">
           {cellLayerControlsVisible ? (
             <label htmlFor={cellBoundaryVisibilityInputId}>

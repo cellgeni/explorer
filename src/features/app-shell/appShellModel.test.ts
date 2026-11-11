@@ -5,6 +5,7 @@ import {
   parseControlHudTab,
   parseObservationColorMode,
   parseViewerCoordinateUnit,
+  readDebugModeFromLocation,
   readShareableStateFromLocation,
   sharedObservationColorMode,
 } from './appShellModel'
@@ -69,5 +70,20 @@ describe('appShellModel', () => {
       'gene-expression',
     )
     expect(manifestObservationColorMode({})).toBeUndefined()
+  })
+
+  it('turns on debug mode from ?debug=1 or #debug=1', () => {
+    const original = window.location.href
+
+    try {
+      window.history.replaceState(null, '', '/?debug=1')
+      expect(readDebugModeFromLocation()).toBe(true)
+      window.history.replaceState(null, '', '/#genes=SNAP25&debug=1')
+      expect(readDebugModeFromLocation()).toBe(true)
+      window.history.replaceState(null, '', '/?debug=0')
+      expect(readDebugModeFromLocation()).toBe(false)
+    } finally {
+      window.history.replaceState(null, '', original)
+    }
   })
 })

@@ -1,11 +1,10 @@
 import type { ComponentProps, FormEventHandler } from 'react'
 import {
   ActivityLog,
-  CellFeatureMatrixCompatibilityNotice,
+  DataAccessNotes,
   DatasetDiagnosticsPanel,
   DownloadIcon,
   ErrorSummary,
-  FallbackNoticeSummary,
 } from '../../components/AppStatusPanels'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import { visiumHdBinSizeLabel, type VisiumHdControlState } from '../dataset/visiumHdModel'
@@ -23,10 +22,10 @@ import { useState } from 'react'
 
 type DatasetDiagnosticsState = ComponentProps<typeof DatasetDiagnosticsPanel>['state']
 type CellFeatureMatrixCompatibilityState = ComponentProps<
-  typeof CellFeatureMatrixCompatibilityNotice
->['state']
+  typeof DataAccessNotes
+>['matrixState']
 type ErrorSummaryItems = ComponentProps<typeof ErrorSummary>['errors']
-type FallbackNoticeItems = ComponentProps<typeof FallbackNoticeSummary>['notices']
+type FallbackNoticeItems = ComponentProps<typeof DataAccessNotes>['notices']
 type ActivityLogEntries = ComponentProps<typeof ActivityLog>['entries']
 
 interface DatasetHudPanelProps {
@@ -199,8 +198,10 @@ export function DatasetHudPanel({
         </button>
       </div>
       <DatasetDiagnosticsPanel state={diagnosticsState} />
-      <CellFeatureMatrixCompatibilityNotice state={cellFeatureMatrixCapabilityState} />
-      <FallbackNoticeSummary notices={fallbackNotices} />
+      <DataAccessNotes
+        matrixState={cellFeatureMatrixCapabilityState}
+        notices={fallbackNotices}
+      />
 
       <ErrorSummary errors={activeErrors} />
       <ActivityLog entries={debugLog} onClear={onClearDebugLog} />

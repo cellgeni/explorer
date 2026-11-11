@@ -61,6 +61,8 @@ export interface ViewerCoreProps {
   readonly loadingTasks?: readonly LoadingTaskSummary[]
   // The canvas legend, bottom left above the loading indicator.
   readonly legendSections?: readonly ViewerLegendSection[]
+  // The zoom number is for debugging (?debug=1).
+  readonly showZoomLevel?: boolean
   readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
   readonly coordinateUnit?: ViewerCoordinateUnit
   readonly measurementEnabled?: boolean

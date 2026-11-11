@@ -120,18 +120,18 @@ deposit, followed by the licence and citation.
 
 Status panels in the same tab (`src/components/AppStatusPanels.tsx`):
 
-| Panel          | Shows                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------------------------- |
-| Diagnostics    | Per-check pass / warning / fail with a summary line                                                  |
-| Matrix Warning | Xenium `cell_feature_matrix.zarr.zip` has no CSC arrays (ROI gene stats will use the slower H5 path) |
-| Fallbacks      | Up to 16 notices when a slower or partial path was used                                              |
-| Issues         | Structured errors from any workflow (`role="alert"`)                                                 |
-| Log            | Up to 32 timestamped activity entries, newest first; `Clear` empties it                              |
+| Panel                 | Shows                                                                                                                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Diagnostics           | Per-check pass / warning / fail with a summary line                                                                                                                                                                     |
+| Data access notes (n) | Closed by default. Holds the Matrix Warning (Xenium `cell_feature_matrix.zarr.zip` has no CSC arrays, so ROI gene stats use the slower H5 path) and Fallbacks (up to 16 notices when a slower or partial path was used) |
+| Issues                | Structured errors from any workflow (`role="alert"`)                                                                                                                                                                    |
+| Log (n)               | Closed by default. Up to 32 timestamped activity entries, newest first; `Clear` empties it. HUD tab switches are logged only in debug mode                                                                              |
 
 ## Layers Tab
 
-The header "Layer Stack" shows the deck.gl layer count and the
-[performance budget](./architecture.md#performance-budget) profile.
+The header is "Layer Stack". In debug mode it also shows the deck.gl layer
+count and the [performance budget](./architecture.md#performance-budget)
+profile.
 
 | Control                           | Type                                                   | Range / default                                  | Platforms                                                          |
 | --------------------------------- | ------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------ |
@@ -431,7 +431,11 @@ apart, at least 3 points). ROIs smaller than 1 µm × 1 µm are ignored.
 
 ### Readouts And Messages
 
-- Bottom centre: `Zoom N.NN` and mouse X/Y in µm or px.
+Debug mode, turned on with `?debug=1` (or `#debug=1`) in the address, adds
+developer details: the zoom number, the Layers tab's deck.gl and budget lines,
+and HUD tab switches in the log.
+
+- Bottom centre: mouse X/Y in µm or px, and `Zoom N.NN` in debug mode.
 - Bottom right: scale bar (1/2/5 steps), in the `Mouse coordinates` unit.
 - Bottom left: loading indicator (current task plus up to 3 more) and viewport
   messages ("Loading overview cells…", "Reading OME-TIFF image…", errors).

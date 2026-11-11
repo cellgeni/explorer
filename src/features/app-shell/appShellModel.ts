@@ -80,3 +80,19 @@ export function manifestObservationColorMode(defaults: {
     ((defaults.selectedGenes?.length ?? 0) > 0 ? 'gene-expression' : undefined)
   )
 }
+
+// Debug mode shows developer details: the deck.gl layer and budget lines, the
+// zoom number and HUD tab switches in the log (UNIFIED_PLAN.md, D6). Turn it
+// on with ?debug=1 (or #debug=1) in the address.
+export function readDebugModeFromLocation(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  const { search, hash } = window.location
+
+  return (
+    new URLSearchParams(search).get('debug') === '1' ||
+    new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash).get('debug') === '1'
+  )
+}

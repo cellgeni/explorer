@@ -56,6 +56,7 @@ export interface AppLayerHudPanelProps {
   readonly requestedMorphologyZPlane: number | null
   readonly selectMorphologyZPlane: (zPlane: number) => void
   readonly performanceBudget: PerformanceBudget
+  readonly debugMode?: boolean | undefined
   readonly showCellBoundaries: boolean
   readonly showNucleusBoundaries: boolean
   readonly showHoverTooltips: boolean
@@ -105,6 +106,7 @@ export function AppLayerHudPanel({
   requestedMorphologyZPlane,
   selectMorphologyZPlane,
   performanceBudget,
+  debugMode = false,
   showCellBoundaries,
   showNucleusBoundaries,
   showHoverTooltips,
@@ -130,6 +132,7 @@ export function AppLayerHudPanel({
       scaffoldDeckLayerCount={scaffoldDeckLayerCount}
       bundledDeckVersion={bundledDeckVersion}
       performanceBudget={performanceBudget}
+      showDebugInfo={debugMode}
       imageOpacityInputId={controlIds.imageOpacityInputId}
       cellFillOpacityInputId={controlIds.cellFillOpacityInputId}
       cellBoundaryVisibilityInputId={controlIds.cellBoundaryVisibilityInputId}
