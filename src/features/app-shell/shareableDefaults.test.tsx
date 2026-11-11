@@ -1,7 +1,8 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { detectPerformanceBudget } from '../../data/performanceBudget'
-import { DEFAULT_SHAREABLE_STATE } from './shareableDefaults'
+import { formatShareableState, parseShareableState } from '../../data/shareableState'
+import { DEFAULT_SHAREABLE_STATE, withoutShareableDefaults } from './shareableDefaults'
 import { useAppDomainState } from './useAppDomainState'
 
 function initialSettings(initialShareableState = {}) {
@@ -53,5 +54,26 @@ describe('DEFAULT_SHAREABLE_STATE', () => {
 
   it('survives the app normalising it when a link spells every default out', () => {
     expect(initialSettings(DEFAULT_SHAREABLE_STATE)).toEqual(DEFAULT_SHAREABLE_STATE)
+  })
+
+  it('leaves defaults out of a link, which then opens with the same settings', () => {
+    const settings = { ...DEFAULT_SHAREABLE_STATE, cellFillOpacity: 0.7 }
+    const trimmed = withoutShareableDefaults(settings)
+
+    expect(trimmed).toEqual({ cellFillOpacity: 0.7 })
+    expect(formatShareableState(trimmed)).toBe('#xv=2&cellFill=0.7')
+    expect(initialSettings(parseShareableState(formatShareableState(trimmed)))).toEqual({
+      ...DEFAULT_SHAREABLE_STATE,
+      cellFillOpacity: 0.7,
+    })
+  })
+
+  it('keeps a measure unit that differs from the mouse coordinate unit', () => {
+    expect(
+      withoutShareableDefaults({ coordinateUnit: 'px', measurementUnit: 'um' }),
+    ).toEqual({ coordinateUnit: 'px', measurementUnit: 'um' })
+    expect(
+      withoutShareableDefaults({ coordinateUnit: 'px', measurementUnit: 'px' }),
+    ).toEqual({ coordinateUnit: 'px' })
   })
 })

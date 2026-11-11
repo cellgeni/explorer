@@ -1,7 +1,9 @@
 import { micrometers, type BBox, type DataPoint } from './coords'
 import type { RoiSelection } from './roiSelection'
 
-const HASH_VERSION = '1'
+// Version 2 (15.1-L) leaves default values out, so a missing field means its
+// default; version 1 wrote every field. The parser reads both.
+const HASH_VERSION = '2'
 
 export interface ShareableViewState {
   readonly target: readonly [number, number, number]
@@ -9,8 +11,12 @@ export interface ShareableViewState {
 }
 
 export interface ShareableState {
+  // The link's xv; links without one are version 1.
+  readonly linkVersion?: number
   readonly datasetUrl?: string
   readonly annotationUrl?: string
+  // Annotation sets loaded from the dataset itself, such as graphclust.
+  readonly annotationGroupIds?: readonly string[]
   readonly customImageUrls?: readonly string[]
   readonly customImageOpacities?: readonly number[]
   readonly selectedGenes?: readonly string[]
@@ -72,8 +78,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   const params = new URLSearchParams(rawHash)
   const state: MutableShareableState = {}
+  const linkVersion = parsePositiveInteger(params.get('xv'))
   const datasetUrl = readString(params, 'dataset')
   const annotationUrl = readString(params, 'annotationUrl')
+  const annotationGroupIds = readCsv(params, 'groups')
   const customImageUrls = readStrings(params, 'customImageUrl')
   const customImageOpacities = readUnitNumbers(params, 'customImageOpacity')
   const selectedGenes = readCsv(params, 'genes')
@@ -118,8 +126,16 @@ export function parseShareableState(hash: string): ShareableState {
   const visiumLibrary = readString(params, 'vlib')
   const visiumOffTissue = parseBoolean(params.get('voff'))
 
+  if (linkVersion !== undefined) {
+    state.linkVersion = linkVersion
+  }
+
   if (datasetUrl !== undefined) {
     state.datasetUrl = datasetUrl
+  }
+
+  if (annotationGroupIds !== undefined) {
+    state.annotationGroupIds = annotationGroupIds
   }
 
   if (annotationUrl !== undefined) {
@@ -311,6 +327,10 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   setOptionalString(params, 'annotationUrl', state.annotationUrl)
+
+  if (state.annotationGroupIds !== undefined && state.annotationGroupIds.length > 0) {
+    params.set('groups', state.annotationGroupIds.join(','))
+  }
 
   if (state.customImageUrls !== undefined) {
     for (const customImageUrl of state.customImageUrls) {

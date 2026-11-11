@@ -2529,7 +2529,7 @@ They are independent unless a note says otherwise.
     (4.5:1), text on bright fills (4.5:1), and borders, accent and focus
     against the panel (3:1). The axe baseline still has no contrast
     entries.
-- [ ] **L. Sharing (F16; needs 15.0-E).** (M)
+- [x] **L. Sharing (F16; needs 15.0-E).** (M)
   - Add a Copy link button (in the Dataset tab now, the top bar later) and a
     "Link copied" toast.
   - Leave defaults out and set `xv=2`.
@@ -2537,6 +2537,26 @@ They are independent unless a note says otherwise.
     (`AppDatasetHudPanel.tsx:126`).
   - Add `groups=`.
   - Version 1 links still parse unchanged; test this.
+  - Done 2026-11-11. Links are version 2: `withoutShareableDefaults` drops
+    every value equal to `DEFAULT_SHAREABLE_STATE`, keeping a measure unit
+    that differs from the mouse unit. The parser records `linkVersion`. For
+    version 2 `cellColor` is taken as written; version 1 links keep the
+    genes-mean-gene-expression rule from 15.1-A.
+  - A loaded Xenium view's link went from about 650 characters to under 200;
+    the App test checks this.
+  - `dataset=` is the loaded dataset, or the link's own dataset until one
+    loads. A failed load no longer rewrites the link.
+  - `groups=` carries the loaded dataset annotation set. `AnnotationState`
+    records `groupId`, which imports and saved ROIs keep. A link with
+    `groups=` loads that set once the dataset's sets are listed
+    (`loadAnnotationGroup`).
+  - `Copy Link` sits under Load Dataset. It is enabled once a dataset is
+    loaded, says "Link copied" for 2.5 s, or says to copy the address bar
+    when the clipboard refuses.
+  - Known gap: a manifest's `defaults` fill in fields a link leaves out. A
+    value that the user set back to the app default is left out of the link,
+    so the link reopens with the manifest's value instead. Fix by omitting
+    values equal to the manifest-merged defaults of the loaded dataset.
 - [x] **M. Title and favicon (F19).** Set the page title to "{dataset} ·
       Spatial Omics Explorer" and add an SVG favicon in `public/`. (S)
   - Done 2026-11-11 (`app-shell/documentTitle.ts`). The name comes from the

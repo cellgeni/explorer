@@ -1286,6 +1286,68 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
   })
 
+  it('shares the loaded dataset and annotation set, leaving defaults out', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#xv=2&dataset=https%3A%2F%2Fexample.test%2Fxenium&groups=analysis%3A1',
+    )
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadAnnotationGroups: ReturnType<typeof vi.fn<AnnotationGroupLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:0', label: 'graphclust', groupingName: 'g', groupCount: 1 },
+        { id: 'analysis:1', label: 'kmeans 3', groupingName: 'k', groupCount: 1 },
+      ],
+    )
+    const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:1:0', label: 'kmeans 3: Cluster 1', cellIds: [cellId] },
+      ],
+    )
+
+    render(
+      <TestApp
+        loadDatasetOverview={loadDatasetOverview}
+        loadAnnotationGroups={loadAnnotationGroups}
+        loadAnnotations={loadAnnotations}
+      />,
+    )
+
+    // The link's annotation set loads with the dataset.
+    await waitFor(() => {
+      expect(loadAnnotations).toHaveBeenCalledWith(
+        'https://example.test/xenium',
+        expect.objectContaining({ groupId: 'analysis:1' }),
+      )
+    })
+    openControls('clusters')
+    expect(screen.getByRole('combobox', { name: 'Annotation set' })).toHaveValue(
+      'analysis:1',
+    )
+
+    // Typing another address does not change the link until it loads.
+    openControls('open-dataset')
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: 'https://example.test/other' },
+    })
+    await waitFor(() => {
+      expect(window.location.hash).toContain('cellColor=annotations')
+    })
+    expect(window.location.hash).toMatch(/^#xv=2&/)
+    expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Fxenium')
+    expect(window.location.hash).toContain('groups=analysis%3A1')
+    expect(window.location.hash).not.toContain('cellBounds')
+    expect(window.location.hash).not.toContain('tab=')
+    expect(window.location.hash.length).toBeLessThan(200)
+  })
+
   it('restores dataset controls from a shareable hash', async () => {
     window.history.replaceState(
       null,

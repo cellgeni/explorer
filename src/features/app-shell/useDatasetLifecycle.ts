@@ -950,6 +950,7 @@ export function useDatasetLifecycle({
       setObservationColorMode(
         shouldRestoreSharedState
           ? (sharedObservationColorMode({
+              linkVersion: sharedState?.linkVersion,
               observationColorMode: sharedState?.observationColorMode,
               selectedGenes: sharedSelectedGenes,
             }) ?? 'transcript-count')

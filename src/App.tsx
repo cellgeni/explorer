@@ -34,6 +34,7 @@ import {
 } from './features/app-shell/appShellModel'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { isTextEntryTarget } from './features/app-shell/activeToolModel'
+import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import { viewerLegendSections } from './features/app-shell/viewerLegendModel'
 import { viewerSelectionHighlight } from './features/app-shell/viewerSelectionHighlight'
 import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
@@ -554,6 +555,10 @@ export function App({ dependencies }: AppProps = {}) {
   const initialShareableStateRef = useRef<ShareableState | null>(initialShareableState)
   const initialAnnotationImportUrlRef = useRef(
     initialShareableState.annotationUrl?.trim() || null,
+  )
+  // Annotation sets a link names (groups=), loaded once the dataset is ready.
+  const initialAnnotationGroupIdsRef = useRef<readonly string[] | null>(
+    initialShareableState.annotationGroupIds ?? null,
   )
   const initialSharedRoiSelectionRef = useRef<RoiSelection | null>(
     initialShareableState.roiSelection ?? null,
@@ -2092,6 +2097,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
+    loadAnnotationGroup,
   } = useAnnotationWorkflow({
     callbacks: { appendDebugEvent },
     data: {
@@ -2261,6 +2267,35 @@ export function App({ dependencies }: AppProps = {}) {
       }
     })
   }, [handleImportAnnotationUrl, loadedDatasetUrl, setAnnotationImportUrl])
+  useEffect(() => {
+    const groupIds = initialAnnotationGroupIdsRef.current
+
+    if (
+      groupIds === null ||
+      loadedDatasetUrl === null ||
+      annotationGroupState.status !== 'ready' ||
+      annotationGroupState.url !== loadedDatasetUrl
+    ) {
+      return
+    }
+
+    initialAnnotationGroupIdsRef.current = null
+    const groupId = groupIds.find(
+      (id) =>
+        id === ALL_ANNOTATION_GROUP_ID ||
+        annotationGroupState.groups.some((group) => group.id === id),
+    )
+
+    if (groupId !== undefined) {
+      setSelectedAnnotationGroupId(groupId)
+      loadAnnotationGroup(groupId)
+    }
+  }, [
+    annotationGroupState,
+    loadAnnotationGroup,
+    loadedDatasetUrl,
+    setSelectedAnnotationGroupId,
+  ])
 
   const { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings } =
     useAnalysisEmbeddingWorkflow({
@@ -2813,12 +2848,27 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
+  // The loaded annotation set for the link; until one loads, the link keeps
+  // the sets it was opened with. Memoised so the link is not rescheduled on
+  // every render.
+  const loadedAnnotationGroupId =
+    annotationState.status === 'ready' ? annotationState.groupId : undefined
+  const sharedAnnotationGroupIds = useMemo(
+    () =>
+      loadedAnnotationGroupId === undefined
+        ? (initialShareableState.annotationGroupIds ?? undefined)
+        : [loadedAnnotationGroupId],
+    [initialShareableState.annotationGroupIds, loadedAnnotationGroupId],
+  )
   useShareableUrlHash({
     dataset: {
       annotationUrl: annotationImportUrl,
       customImageOpacities,
       customImageUrls,
-      datasetUrl,
+      // The loaded dataset, not the address box: until a load finishes the
+      // link keeps the dataset it was opened with (15.1-L).
+      datasetUrl: loadedDatasetUrl ?? initialShareableState.datasetUrl ?? '',
+      annotationGroupIds: sharedAnnotationGroupIds,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
     },
@@ -2910,6 +2960,7 @@ export function App({ dependencies }: AppProps = {}) {
           handleDownloadDiagnostics={handleDownloadDiagnostics}
           handleRunDatasetDiagnostics={handleRunDatasetDiagnostics}
           handleVisiumHdBinSizeChange={handleVisiumHdBinSizeChange}
+          isDatasetLoaded={loadState.status === 'ready'}
           isLoading={isLoading}
           isVisiumHdDataset={isVisiumHdDataset}
           setBoundaryCellLimit={setBoundaryCellLimit}

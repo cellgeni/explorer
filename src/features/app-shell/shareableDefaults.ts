@@ -44,3 +44,31 @@ export const DEFAULT_SHAREABLE_STATE = {
   magicLensRadiusMicrometers: 80,
   magicLensMinQv: 20,
 } as const satisfies ShareableState
+
+// The state with every default value left out, for a version 2 link
+// (15.1-L). A measure unit is kept when it differs from the mouse coordinate
+// unit, because a link without one measures in that unit.
+export function withoutShareableDefaults(state: ShareableState): ShareableState {
+  const result: Record<string, unknown> = { ...state }
+
+  for (const [key, defaultValue] of Object.entries(DEFAULT_SHAREABLE_STATE)) {
+    if (key === 'measurementUnit') continue
+    if (sameValue(result[key], defaultValue)) delete result[key]
+  }
+
+  const coordinateUnit = state.coordinateUnit ?? DEFAULT_SHAREABLE_STATE.coordinateUnit
+  if (state.measurementUnit === coordinateUnit) delete result.measurementUnit
+
+  return result as ShareableState
+}
+
+function sameValue(value: unknown, defaultValue: unknown): boolean {
+  if (Array.isArray(value) && Array.isArray(defaultValue)) {
+    return (
+      value.length === defaultValue.length &&
+      value.every((item, index) => item === defaultValue[index])
+    )
+  }
+
+  return value === defaultValue
+}

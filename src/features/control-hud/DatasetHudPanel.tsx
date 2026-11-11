@@ -19,7 +19,7 @@ import {
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import { Select } from '../../components/ui'
 import type { AnnDataVisiumView } from '../../datasets/h5adDataset'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 type DatasetDiagnosticsState = ComponentProps<typeof DatasetDiagnosticsPanel>['state']
 type CellFeatureMatrixCompatibilityState = ComponentProps<
@@ -60,6 +60,10 @@ interface DatasetHudPanelProps {
   readonly onBoundaryCellLimitChange: (limit: number) => void
   readonly onVisiumHdBinSizeChange: (binSize: VisiumHdBinSizeMicrometers) => void
   readonly onRunDatasetDiagnostics: () => void
+  // Copies the share link; resolves false when the clipboard refused.
+  readonly onCopyLink?: (() => Promise<boolean>) | undefined
+  // Whether a dataset is loaded, so the link opens it.
+  readonly canCopyLink?: boolean | undefined
   readonly onDownloadDiagnostics: () => void
   readonly onClearDebugLog: () => void
 }
@@ -95,6 +99,8 @@ export function DatasetHudPanel({
   onBoundaryCellLimitChange,
   onVisiumHdBinSizeChange,
   onRunDatasetDiagnostics,
+  onCopyLink,
+  canCopyLink = false,
   onDownloadDiagnostics,
   onClearDebugLog,
 }: DatasetHudPanelProps) {
@@ -156,6 +162,9 @@ export function DatasetHudPanel({
           {isLoading ? 'Loading…' : 'Load Dataset'}
         </button>
       </form>
+      {onCopyLink === undefined ? null : (
+        <CopyLinkButton disabled={!canCopyLink} onCopyLink={onCopyLink} />
+      )}
       {datasetAbout === null ? null : <DatasetAbout about={datasetAbout} />}
       <VisiumHdDatasetControls
         inputId={visiumHdBinSizeInputId}
@@ -206,6 +215,54 @@ export function DatasetHudPanel({
 
       <ErrorSummary errors={activeErrors} onRunDiagnostics={onRunDatasetDiagnostics} />
       <ActivityLog entries={debugLog} onClear={onClearDebugLog} />
+    </div>
+  )
+}
+
+const COPY_STATUS_MS = 2500
+
+// Copies the address, which holds the view (15.1-L), and says so for a moment.
+function CopyLinkButton({
+  disabled,
+  onCopyLink,
+}: {
+  readonly disabled: boolean
+  readonly onCopyLink: () => Promise<boolean>
+}) {
+  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
+
+  useEffect(() => {
+    if (status === 'idle') return
+    const timeout = window.setTimeout(() => {
+      setStatus('idle')
+    }, COPY_STATUS_MS)
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [status])
+
+  return (
+    <div className="dataset-share-row">
+      <button
+        type="button"
+        className="secondary-action"
+        disabled={disabled}
+        title="Copy a link that opens this dataset with the current view"
+        onClick={() => {
+          void onCopyLink().then((copied) => {
+            setStatus(copied ? 'copied' : 'failed')
+          })
+        }}
+      >
+        Copy Link
+      </button>
+      <span role="status" className="dataset-share-status">
+        {status === 'copied'
+          ? 'Link copied'
+          : status === 'failed'
+            ? 'Could not copy; copy the address bar instead'
+            : ''}
+      </span>
     </div>
   )
 }

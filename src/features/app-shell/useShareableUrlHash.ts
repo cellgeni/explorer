@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
 import type { RoiSelection } from '../../data/roiSelection'
 import { formatShareableState, type ShareableViewState } from '../../data/shareableState'
+import { withoutShareableDefaults } from './shareableDefaults'
 
 interface ShareableDatasetHashOptions {
   readonly annotationUrl: string
+  readonly annotationGroupIds?: readonly string[] | undefined
   readonly customImageOpacities: readonly number[] | undefined
   readonly customImageUrls: readonly string[]
   readonly datasetUrl: string
@@ -86,7 +88,13 @@ export function useShareableUrlHash({
   transcripts,
   view,
 }: UseShareableUrlHashOptions): void {
-  const { annotationUrl, customImageOpacities, customImageUrls, datasetUrl } = dataset
+  const {
+    annotationGroupIds,
+    annotationUrl,
+    customImageOpacities,
+    customImageUrls,
+    datasetUrl,
+  } = dataset
   const spatialDataCoordinateSystem =
     dataset.spatialDataSelection?.spatialDataCoordinateSystem
   const spatialDataImage = dataset.spatialDataSelection?.spatialDataImage
@@ -138,59 +146,62 @@ export function useShareableUrlHash({
     }
 
     const timeout = window.setTimeout(() => {
-      const hash = formatShareableState({
-        datasetUrl,
-        annotationUrl,
-        customImageUrls,
-        ...(customImageOpacities === undefined ? {} : { customImageOpacities }),
-        selectedGenes,
-        ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
-        ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
-        activeTab: activeControlHudTab,
-        geneExpressionColorScale,
-        geneExpressionScoreMode,
-        geneExpressionDetailMode,
-        observationColorMode,
-        ...(cellMetadataTrackId === null ? {} : { cellMetadataTrackId }),
-        coordinateUnit,
-        measurementUnit,
-        shouldLoadMorphology,
-        boundaryCellLimit,
-        imageOpacity,
-        cellFillOpacity,
-        showCellBoundaries,
-        showNucleusBoundaries,
-        showHoverTooltips,
-        cellBoundaryOpacity,
-        ...(morphologyEnabledChannelIds === undefined
-          ? {}
-          : { morphologyEnabledChannelIds }),
-        ...(morphologyZPlane === undefined ? {} : { morphologyZPlane }),
-        transcriptOverlay: showTranscriptOverlay,
-        transcriptDetailMode,
-        transcriptDensityColorScale,
-        transcriptPointColorMode,
-        transcriptExactPointLimit,
-        transcriptMinQv,
-        transcriptGeneOnly,
-        transcriptFeatureFilterMode,
-        transcriptOpacity,
-        transcriptPointSize,
-        magicLensScope,
-        magicLensActive,
-        magicLensRadiusMicrometers,
-        magicLensMinQv,
-        ...(spatialDataCoordinateSystem === undefined
-          ? {}
-          : { spatialDataCoordinateSystem }),
-        ...(spatialDataImage === undefined ? {} : { spatialDataImage }),
-        ...(spatialDataMicrometersPerUnit === undefined
-          ? {}
-          : { spatialDataMicrometersPerUnit }),
-        ...(visiumImage === undefined ? {} : { visiumImage }),
-        ...(visiumLibrary === undefined ? {} : { visiumLibrary }),
-        ...(visiumOffTissue === undefined ? {} : { visiumOffTissue }),
-      })
+      const hash = formatShareableState(
+        withoutShareableDefaults({
+          datasetUrl,
+          annotationUrl,
+          ...(annotationGroupIds === undefined ? {} : { annotationGroupIds }),
+          customImageUrls,
+          ...(customImageOpacities === undefined ? {} : { customImageOpacities }),
+          selectedGenes,
+          ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
+          ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
+          activeTab: activeControlHudTab,
+          geneExpressionColorScale,
+          geneExpressionScoreMode,
+          geneExpressionDetailMode,
+          observationColorMode,
+          ...(cellMetadataTrackId === null ? {} : { cellMetadataTrackId }),
+          coordinateUnit,
+          measurementUnit,
+          shouldLoadMorphology,
+          boundaryCellLimit,
+          imageOpacity,
+          cellFillOpacity,
+          showCellBoundaries,
+          showNucleusBoundaries,
+          showHoverTooltips,
+          cellBoundaryOpacity,
+          ...(morphologyEnabledChannelIds === undefined
+            ? {}
+            : { morphologyEnabledChannelIds }),
+          ...(morphologyZPlane === undefined ? {} : { morphologyZPlane }),
+          transcriptOverlay: showTranscriptOverlay,
+          transcriptDetailMode,
+          transcriptDensityColorScale,
+          transcriptPointColorMode,
+          transcriptExactPointLimit,
+          transcriptMinQv,
+          transcriptGeneOnly,
+          transcriptFeatureFilterMode,
+          transcriptOpacity,
+          transcriptPointSize,
+          magicLensScope,
+          magicLensActive,
+          magicLensRadiusMicrometers,
+          magicLensMinQv,
+          ...(spatialDataCoordinateSystem === undefined
+            ? {}
+            : { spatialDataCoordinateSystem }),
+          ...(spatialDataImage === undefined ? {} : { spatialDataImage }),
+          ...(spatialDataMicrometersPerUnit === undefined
+            ? {}
+            : { spatialDataMicrometersPerUnit }),
+          ...(visiumImage === undefined ? {} : { visiumImage }),
+          ...(visiumLibrary === undefined ? {} : { visiumLibrary }),
+          ...(visiumOffTissue === undefined ? {} : { visiumOffTissue }),
+        }),
+      )
 
       if (window.location.hash !== hash) {
         window.history.replaceState(
@@ -207,6 +218,7 @@ export function useShareableUrlHash({
   }, [
     activeControlHudTab,
     activeRoiSelection,
+    annotationGroupIds,
     annotationUrl,
     boundaryCellLimit,
     cellMetadataTrackId,

@@ -57,6 +57,17 @@ describe('appShellModel', () => {
       }),
     ).toBe('annotations')
     expect(sharedObservationColorMode({ observationColorMode: 'nope' })).toBeUndefined()
+    // Version 2 links name the mode whenever it is not the default.
+    expect(
+      sharedObservationColorMode({
+        linkVersion: 2,
+        observationColorMode: 'annotations',
+        selectedGenes: ['SNAP25'],
+      }),
+    ).toBe('annotations')
+    expect(
+      sharedObservationColorMode({ linkVersion: 2, selectedGenes: ['SNAP25'] }),
+    ).toBeUndefined()
   })
 
   it('lets a manifest colour by another mode while it selects genes', () => {

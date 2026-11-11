@@ -10,6 +10,9 @@ export type AnnotationState<ErrorType = unknown> =
       readonly status: 'ready'
       readonly url: string
       readonly annotations: readonly Annotation[]
+      // The dataset's own annotation set that was loaded, which share links
+      // carry as groups= (15.1-L). Imported annotations add to it.
+      readonly groupId?: string
     }
   | { readonly status: 'error'; readonly url: string; readonly error: ErrorType }
 
@@ -35,8 +38,11 @@ export function annotationLoadStarted(url: string): AnnotationState<never> {
 export function annotationLoadReady(
   url: string,
   annotations: readonly Annotation[],
+  groupId?: string,
 ): AnnotationState<never> {
-  return { status: 'ready', url, annotations }
+  return groupId === undefined
+    ? { status: 'ready', url, annotations }
+    : { status: 'ready', url, annotations, groupId }
 }
 
 export function annotationLoadFailed<ErrorType>(
