@@ -15,6 +15,8 @@ export interface DebugLogAppendOptions {
   readonly coalesceKey?: string
 }
 
+export type AppendDebugEvent = (message: string, options?: DebugLogAppendOptions) => void
+
 export interface LoadingTask {
   readonly id: string
   readonly tabId: ControlHudTab

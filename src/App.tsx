@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ViewerCore, type ViewerTranscriptHoverDetail } from './components/ViewerCore'
 import { AppControlHud } from './features/app-shell/AppControlHud'
-import { AppDatasetHudPanel } from './features/app-shell/AppDatasetHudPanel'
 import { setSpatialDataSelection } from './datasets/datasetFactory'
 import type { SpatialDataSelection } from './datasets/spatialDataDataset'
 import {
@@ -9,9 +8,6 @@ import {
   spatialDataSelectionToShareable,
 } from './features/dataset/spatialDataModel'
 import { visiumSelectionToShareable } from './features/dataset/visiumModel'
-import { AppGeneHudPanel } from './features/app-shell/AppGeneHudPanel'
-import { AppLayerHudPanel } from './features/app-shell/AppLayerHudPanel'
-import { AppTranscriptHudPanel } from './features/app-shell/AppTranscriptHudPanel'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
 import {
@@ -19,6 +15,16 @@ import {
   type VisiumHdExpressionProjectionState,
 } from './features/genes/useVisiumHdExpressionProjectionWorkflow'
 import { AnnotationHudPanel } from './features/annotations/AnnotationHudPanel'
+import { DatasetHudPanel } from './features/control-hud/DatasetHudPanel'
+import { LayerHudPanel } from './features/control-hud/LayerHudPanel'
+import { GeneHudPanel } from './features/genes/GeneHudPanel'
+import { TranscriptHudPanel } from './features/transcripts/TranscriptHudPanel'
+import { useAnnotationsSectionModel } from './features/sections/annotationsSectionModel'
+import { useCellsSectionModel } from './features/sections/cellsSectionModel'
+import { useDatasetInfoModel } from './features/sections/datasetInfoModel'
+import { useImageSectionModel } from './features/sections/imageSectionModel'
+import { useTranscriptsSectionModel } from './features/sections/transcriptsSectionModel'
+import { useViewSettingsModel } from './features/sections/viewSettingsModel'
 import { CellHudPanel } from './features/control-hud/CellHudPanel'
 import {
   GeometricRoiHudPanel,
@@ -2961,6 +2967,193 @@ export function App({ dependencies }: AppProps = {}) {
         ? handleVisiumHdRoiComplete
         : handleRoiComplete
 
+  // The section models (UNIFIED_PLAN.md, 15.2-A): the HUD tabs, and the new
+  // shell, take these instead of separate props.
+  const datasetInfo = useDatasetInfoModel({
+    activeErrors,
+    appendDebugEvent,
+    boundaryCellLimit,
+    cellFeatureMatrixCapabilityState,
+    datasetAbout,
+    datasetUrl,
+    debugLog,
+    debugMode,
+    diagnosticsState,
+    fallbackNotices,
+    handleDatasetSubmit,
+    handleDownloadDiagnostics,
+    handleRunDatasetDiagnostics,
+    handleSpatialDataSelectionChange,
+    handleVisiumHdBinSizeChange,
+    handleVisiumImageChange,
+    handleVisiumViewChange,
+    isDatasetLoaded: loadState.status === 'ready',
+    isLoading,
+    isVisiumHdDataset,
+    performanceBudget,
+    setBoundaryCellLimit,
+    setDatasetUrl,
+    setDebugLog,
+    setShouldLoadMorphology,
+    shouldLoadMorphology,
+    spatialDataControlState,
+    visiumControlState,
+    visiumHdControlState,
+  })
+  const imageSection = useImageSectionModel({
+    appendDebugEvent,
+    autoContrastChannelIds,
+    customLayerLoadState: customMorphologyLayerState,
+    customLayerOpacities: customImageLayerOpacities,
+    customLayers: customMorphologyLayers,
+    handleAutoContrast,
+    handleLoadCustomLayer,
+    handleRemoveCustomLayer: handleRemoveCustomImageLayer,
+    imageLayerOpacity,
+    loadEnabled: loadState.status === 'ready',
+    morphologyChannelSettings,
+    morphologyChannels,
+    morphologyZStack: morphologyImage?.zStack,
+    requestedMorphologyZPlane,
+    selectMorphologyZPlane,
+    setCustomLayerOpacity: handleCustomImageLayerOpacityChange,
+    setImageLayerOpacity,
+    updateMorphologyChannel,
+  })
+  const cellsSection = useCellsSectionModel({
+    analysisHeaderCopy,
+    appendDebugEvent,
+    cellBoundaryOpacity,
+    cellFillOpacity,
+    cellLayerControlsVisible: platformAdapter.kind !== 'image',
+    cellMetadataTracks,
+    geneExpressionBatch,
+    geneExpressionColorScale,
+    geneExpressionCopy,
+    geneExpressionDetailMode,
+    geneExpressionScaleDatasetUrl,
+    geneExpressionScaleMax,
+    geneExpressionScoreMode,
+    geneExpressionState,
+    geneOptions,
+    genePanelState,
+    hasAnnotationColors:
+      annotationState.status === 'ready' && annotationState.annotations.length > 0,
+    nucleusBoundaryControlsVisible: platformAdapter.capabilities.nucleusBoundaries,
+    observationColorMode,
+    rememberGeneExpressionScaleMax,
+    resetGeneExpressionSelectionState,
+    selectedCellMetadataTrackId: selectedCellMetadataTrack?.id ?? null,
+    selectedGenes,
+    setCellBoundaryOpacity,
+    setCellFillOpacity,
+    setGeneExpressionColorScale,
+    setGeneExpressionDetailMode,
+    setGeneExpressionScaleDomain,
+    setGeneExpressionScoreMode,
+    setManualTranscriptExactRequestKey,
+    setObservationColorMode,
+    setSelectedCellMetadataTrackId,
+    setSelectedGenes,
+    setShowCellBoundaries,
+    setShowNucleusBoundaries,
+    showCellBoundaries,
+    showNucleusBoundaries,
+    toggleGene,
+    transcriptViewportKeyRef,
+  })
+  const transcriptsSection = useTranscriptsSectionModel({
+    appendDebugEvent,
+    effectiveTranscriptFeatureFilterMode,
+    geneOnlyFilterEnabled: platformAdapter.capabilities.transcriptGeneOnlyFilter,
+    geneOptions,
+    genePanelState,
+    handlePinTranscript,
+    hoveredTranscript,
+    loadEnabled: platformFeatureLoadEnabled,
+    pinnedTranscript,
+    resetGeneExpressionSelectionState,
+    selectedGenes,
+    setManualTranscriptExactRequestKey,
+    setPinnedTranscript,
+    setSelectedGenes,
+    setShowTranscriptOverlay,
+    setTranscriptDensityColorScale,
+    setTranscriptDetailMode,
+    setTranscriptExactPointLimit,
+    setTranscriptFeatureFilterMode,
+    setTranscriptGeneOnly,
+    setTranscriptMinQv,
+    setTranscriptOpacity,
+    setTranscriptPointColorMode,
+    setTranscriptPointSize,
+    showTranscriptOverlay: effectiveShowTranscriptOverlay,
+    toggleGene,
+    transcriptCapabilityState,
+    transcriptCopy,
+    transcriptDensityColorScale,
+    transcriptDensityScaleLabels,
+    transcriptDensityScaleMax,
+    transcriptDetailMode,
+    transcriptExactPointLimit,
+    transcriptGeneOnly,
+    transcriptLayerState,
+    transcriptMinQv,
+    transcriptOpacity,
+    transcriptPointColorMode,
+    transcriptPointSize,
+    transcriptViewportKeyRef,
+    visibleTranscriptEstimate,
+  })
+  const annotationsSection = useAnnotationsSectionModel({
+    annotationColors,
+    annotationGroupOptions,
+    annotationGroupState,
+    annotationHeaderCopy,
+    annotationImportUrl,
+    annotationPlacedCellIds,
+    annotationState,
+    cellMetadataTracks,
+    geometricAnnotations,
+    geometricAnnotationsEnabled:
+      platformAdapter.capabilities.geometricAnnotations && loadState.status === 'ready',
+    handleAnnotationColorChange,
+    handleAnnotationGroupChange,
+    handleAnnotationSetVisibilityChange,
+    handleAnnotationVisibilityChange,
+    handleClearAnnotations,
+    handleClearGeometricAnnotations,
+    handleExportAnnotations,
+    handleExportGeometricAnnotations,
+    handleGeometricAnnotationColorChange,
+    handleGeometricAnnotationVisibilityChange,
+    handleImportAnnotationUrl,
+    handleImportAnnotations,
+    handleImportGeometricAnnotations,
+    handleLoadAnnotations,
+    handleRemoveAnnotation,
+    handleRemoveCellMetadataTrack,
+    handleRemoveGeometricAnnotation,
+    hiddenAnnotationIds,
+    hiddenAnnotationSetIds,
+    loadEnabled: platformAdapter.capabilities.annotations && platformFeatureLoadEnabled,
+    selectedAnnotationGroupId,
+    setAnnotationImportUrl,
+  })
+  const viewSettings = useViewSettingsModel({
+    appendDebugEvent,
+    coordinateUnit,
+    handleMagicLensLeave,
+    measurementEnabled,
+    measurementUnit,
+    setCoordinateUnit,
+    setMeasurementEnabled,
+    setMeasurementResetKey,
+    setMeasurementUnit,
+    setShowHoverTooltips,
+    showHoverTooltips,
+  })
+
   return (
     <main className="app-shell">
       <a className="skip-link" href="#viewer-heading">
@@ -2976,164 +3169,22 @@ export function App({ dependencies }: AppProps = {}) {
         setActiveControlHudTab={setActiveControlHudTab}
         setIsControlHudCollapsed={setIsControlHudCollapsed}
       >
-        <AppDatasetHudPanel
-          active={activeControlHudTab === 'dataset'}
-          activeErrors={activeErrors}
-          appendDebugEvent={appendDebugEvent}
-          boundaryCellLimit={boundaryCellLimit}
-          cellFeatureMatrixCapabilityState={cellFeatureMatrixCapabilityState}
-          controlIds={controlIds}
-          datasetAbout={datasetAbout}
-          datasetUrl={datasetUrl}
-          debugLog={debugLog}
-          fallbackNotices={fallbackNotices}
-          diagnosticsState={diagnosticsState}
-          handleDatasetSubmit={handleDatasetSubmit}
-          handleDownloadDiagnostics={handleDownloadDiagnostics}
-          handleRunDatasetDiagnostics={handleRunDatasetDiagnostics}
-          handleVisiumHdBinSizeChange={handleVisiumHdBinSizeChange}
-          isDatasetLoaded={loadState.status === 'ready'}
-          isLoading={isLoading}
-          isVisiumHdDataset={isVisiumHdDataset}
-          setBoundaryCellLimit={setBoundaryCellLimit}
-          setDatasetUrl={setDatasetUrl}
-          setDebugLog={setDebugLog}
-          setShouldLoadMorphology={setShouldLoadMorphology}
-          shouldLoadMorphology={shouldLoadMorphology}
-          visiumHdControlState={visiumHdControlState}
-          spatialDataControlState={spatialDataControlState}
-          handleSpatialDataSelectionChange={handleSpatialDataSelectionChange}
-          visiumControlState={visiumControlState}
-          handleVisiumImageChange={handleVisiumImageChange}
-          handleVisiumViewChange={handleVisiumViewChange}
-        />
+        <DatasetHudPanel active={activeControlHudTab === 'dataset'} info={datasetInfo} />
 
-        <AppLayerHudPanel
+        <LayerHudPanel
           active={activeControlHudTab === 'layers'}
-          appendDebugEvent={appendDebugEvent}
-          debugMode={debugMode}
-          autoContrastChannelIds={autoContrastChannelIds}
-          cellBoundaryOpacity={cellBoundaryOpacity}
-          cellFillOpacity={cellFillOpacity}
-          cellLayerControlsVisible={platformAdapter.kind !== 'image'}
-          controlIds={controlIds}
-          coordinateUnit={coordinateUnit}
-          customLayerLoadState={customMorphologyLayerState}
-          customLayers={customMorphologyLayers}
-          customLayerOpacities={customImageLayerOpacities}
-          handleAutoContrast={handleAutoContrast}
-          handleLoadCustomLayer={handleLoadCustomLayer}
-          handleMagicLensLeave={handleMagicLensLeave}
-          handleRemoveCustomLayer={handleRemoveCustomImageLayer}
-          imageLayerOpacity={imageLayerOpacity}
-          loadEnabled={loadState.status === 'ready'}
-          measurementEnabled={measurementEnabled}
-          measurementUnit={measurementUnit}
-          morphologyChannelSettings={morphologyChannelSettings}
-          morphologyChannels={morphologyChannels}
-          morphologyZStack={morphologyImage?.zStack}
-          requestedMorphologyZPlane={requestedMorphologyZPlane}
-          selectMorphologyZPlane={selectMorphologyZPlane}
-          performanceBudget={performanceBudget}
-          showCellBoundaries={showCellBoundaries}
-          showNucleusBoundaries={showNucleusBoundaries}
-          showHoverTooltips={showHoverTooltips}
-          nucleusBoundaryControlsVisible={platformAdapter.capabilities.nucleusBoundaries}
-          setCellBoundaryOpacity={setCellBoundaryOpacity}
-          setCellFillOpacity={setCellFillOpacity}
-          setShowCellBoundaries={setShowCellBoundaries}
-          setShowNucleusBoundaries={setShowNucleusBoundaries}
-          setShowHoverTooltips={setShowHoverTooltips}
-          setCoordinateUnit={setCoordinateUnit}
-          setCustomLayerOpacity={handleCustomImageLayerOpacityChange}
-          setImageLayerOpacity={setImageLayerOpacity}
-          setMeasurementEnabled={setMeasurementEnabled}
-          setMeasurementResetKey={setMeasurementResetKey}
-          setMeasurementUnit={setMeasurementUnit}
-          updateMorphologyChannel={updateMorphologyChannel}
+          image={imageSection}
+          cells={cellsSection}
+          settings={viewSettings}
+          info={datasetInfo}
         />
 
-        <AppGeneHudPanel
-          active={activeControlHudTab === 'genes'}
-          analysisHeaderCopy={analysisHeaderCopy}
-          appendDebugEvent={appendDebugEvent}
-          controlIds={controlIds}
-          geneExpressionColorScale={geneExpressionColorScale}
-          geneExpressionBatch={geneExpressionBatch}
-          geneExpressionCopy={geneExpressionCopy}
-          geneExpressionDetailMode={geneExpressionDetailMode}
-          geneExpressionScaleMax={geneExpressionScaleMax}
-          geneExpressionScaleDatasetUrl={geneExpressionScaleDatasetUrl}
-          geneExpressionScoreMode={geneExpressionScoreMode}
-          geneExpressionState={geneExpressionState}
-          genePanelState={genePanelState}
-          geneOptions={geneOptions}
-          hasAnnotationColors={
-            annotationState.status === 'ready' && annotationState.annotations.length > 0
-          }
-          cellMetadataTracks={cellMetadataTracks}
-          selectedCellMetadataTrackId={selectedCellMetadataTrack?.id ?? null}
-          observationColorMode={observationColorMode}
-          rememberGeneExpressionScaleMax={rememberGeneExpressionScaleMax}
-          resetGeneExpressionSelectionState={resetGeneExpressionSelectionState}
-          selectedGenes={selectedGenes}
-          setGeneExpressionColorScale={setGeneExpressionColorScale}
-          setGeneExpressionDetailMode={setGeneExpressionDetailMode}
-          setGeneExpressionScaleDomain={setGeneExpressionScaleDomain}
-          setGeneExpressionScoreMode={setGeneExpressionScoreMode}
-          setManualTranscriptExactRequestKey={setManualTranscriptExactRequestKey}
-          setSelectedCellMetadataTrackId={setSelectedCellMetadataTrackId}
-          setObservationColorMode={setObservationColorMode}
-          setSelectedGenes={setSelectedGenes}
-          toggleGene={toggleGene}
-          transcriptViewportKeyRef={transcriptViewportKeyRef}
-        />
+        <GeneHudPanel active={activeControlHudTab === 'genes'} cells={cellsSection} />
 
         {platformAdapter.capabilities.transcripts ? (
-          <AppTranscriptHudPanel
+          <TranscriptHudPanel
             active={activeControlHudTab === 'transcripts'}
-            appendDebugEvent={appendDebugEvent}
-            controlIds={controlIds}
-            effectiveTranscriptFeatureFilterMode={effectiveTranscriptFeatureFilterMode}
-            geneOnlyFilterEnabled={platformAdapter.capabilities.transcriptGeneOnlyFilter}
-            geneOptions={geneOptions}
-            genePanelState={genePanelState}
-            handlePinTranscript={handlePinTranscript}
-            hoveredTranscript={hoveredTranscript}
-            loadEnabled={platformFeatureLoadEnabled}
-            pinnedTranscript={pinnedTranscript}
-            resetGeneExpressionSelectionState={resetGeneExpressionSelectionState}
-            selectedGenes={selectedGenes}
-            setManualTranscriptExactRequestKey={setManualTranscriptExactRequestKey}
-            setPinnedTranscript={setPinnedTranscript}
-            setSelectedGenes={setSelectedGenes}
-            setShowTranscriptOverlay={setShowTranscriptOverlay}
-            setTranscriptDensityColorScale={setTranscriptDensityColorScale}
-            setTranscriptDetailMode={setTranscriptDetailMode}
-            setTranscriptExactPointLimit={setTranscriptExactPointLimit}
-            setTranscriptFeatureFilterMode={setTranscriptFeatureFilterMode}
-            setTranscriptGeneOnly={setTranscriptGeneOnly}
-            setTranscriptMinQv={setTranscriptMinQv}
-            setTranscriptOpacity={setTranscriptOpacity}
-            setTranscriptPointColorMode={setTranscriptPointColorMode}
-            setTranscriptPointSize={setTranscriptPointSize}
-            showTranscriptOverlay={effectiveShowTranscriptOverlay}
-            toggleGene={toggleGene}
-            transcriptCapabilityState={transcriptCapabilityState}
-            transcriptCopy={transcriptCopy}
-            transcriptDensityColorScale={transcriptDensityColorScale}
-            transcriptDensityScaleLabels={transcriptDensityScaleLabels}
-            transcriptDensityScaleMax={transcriptDensityScaleMax}
-            transcriptDetailMode={transcriptDetailMode}
-            transcriptExactPointLimit={transcriptExactPointLimit}
-            transcriptGeneOnly={transcriptGeneOnly}
-            transcriptLayerState={transcriptLayerState}
-            transcriptMinQv={transcriptMinQv}
-            transcriptOpacity={transcriptOpacity}
-            transcriptPointColorMode={transcriptPointColorMode}
-            transcriptPointSize={transcriptPointSize}
-            transcriptViewportKeyRef={transcriptViewportKeyRef}
-            visibleTranscriptEstimate={visibleTranscriptEstimate}
+            transcripts={transcriptsSection}
           />
         ) : null}
 
@@ -3161,52 +3212,7 @@ export function App({ dependencies }: AppProps = {}) {
 
         <AnnotationHudPanel
           active={activeControlHudTab === 'annotations'}
-          placedCellIds={annotationPlacedCellIds}
-          annotationGroupInputId={controlIds.annotationGroupInputId}
-          annotationImportInputId={controlIds.annotationImportInputId}
-          annotationImportUrlInputId={controlIds.annotationImportUrlInputId}
-          annotationImportUrl={annotationImportUrl}
-          annotationHeaderCopy={annotationHeaderCopy}
-          loadEnabled={
-            platformAdapter.capabilities.annotations && platformFeatureLoadEnabled
-          }
-          selectedAnnotationGroupId={selectedAnnotationGroupId}
-          annotationGroupOptions={annotationGroupOptions}
-          annotationState={annotationState}
-          annotationGroupState={annotationGroupState}
-          annotationColors={annotationColors}
-          hiddenAnnotationSetIds={hiddenAnnotationSetIds}
-          hiddenAnnotationIds={hiddenAnnotationIds}
-          cellMetadataTracks={cellMetadataTracks}
-          geometricAnnotations={geometricAnnotations}
-          geometricAnnotationsEnabled={
-            platformAdapter.capabilities.geometricAnnotations &&
-            loadState.status === 'ready'
-          }
-          onAnnotationGroupChange={handleAnnotationGroupChange}
-          onLoadAnnotations={handleLoadAnnotations}
-          onClearAnnotations={handleClearAnnotations}
-          onExportAnnotations={handleExportAnnotations}
-          onImportAnnotations={(file) => {
-            void handleImportAnnotations(file)
-          }}
-          onAnnotationImportUrlChange={setAnnotationImportUrl}
-          onImportAnnotationUrl={handleImportAnnotationUrl}
-          onAnnotationColorChange={handleAnnotationColorChange}
-          onAnnotationSetVisibilityChange={handleAnnotationSetVisibilityChange}
-          onAnnotationVisibilityChange={handleAnnotationVisibilityChange}
-          onRemoveAnnotation={handleRemoveAnnotation}
-          onRemoveCellMetadataTrack={handleRemoveCellMetadataTrack}
-          onImportGeometricAnnotations={(file) => {
-            void handleImportGeometricAnnotations(file)
-          }}
-          onExportGeometricAnnotations={handleExportGeometricAnnotations}
-          onClearGeometricAnnotations={handleClearGeometricAnnotations}
-          onGeometricAnnotationColorChange={handleGeometricAnnotationColorChange}
-          onGeometricAnnotationVisibilityChange={
-            handleGeometricAnnotationVisibilityChange
-          }
-          onRemoveGeometricAnnotation={handleRemoveGeometricAnnotation}
+          annotations={annotationsSection}
         />
 
         <CellHudPanel

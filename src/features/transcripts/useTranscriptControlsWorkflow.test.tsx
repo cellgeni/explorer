@@ -18,7 +18,6 @@ interface TranscriptControlsSnapshot {
   readonly selectedGenes: readonly string[]
   readonly transcriptExactPointLimit: number
   readonly transcriptFeatureFilterMode: TranscriptFeatureFilterMode
-  readonly transcriptFeatureSearch: string
   readonly transcriptMinQv: number
   readonly transcriptOpacity: number
   readonly transcriptPointSize: number
@@ -50,7 +49,6 @@ function TranscriptControlsProbe({ onReady }: TranscriptControlsProbeProps) {
     React.useState(100_000)
   const [transcriptFeatureFilterMode, setTranscriptFeatureFilterMode] =
     React.useState<TranscriptFeatureFilterMode>('all')
-  const [transcriptFeatureSearch, setTranscriptFeatureSearch] = React.useState('ga')
   const [transcriptGeneOnly, setTranscriptGeneOnly] = React.useState(true)
   const [transcriptMinQv, setTranscriptMinQv] = React.useState(20)
   const [transcriptOpacity, setTranscriptOpacity] = React.useState(0.85)
@@ -88,7 +86,6 @@ function TranscriptControlsProbe({ onReady }: TranscriptControlsProbeProps) {
       setTranscriptDetailMode,
       setTranscriptExactPointLimit,
       setTranscriptFeatureFilterMode,
-      setTranscriptFeatureSearch,
       setTranscriptGeneOnly,
       setTranscriptMinQv,
       setTranscriptOpacity,
@@ -105,7 +102,6 @@ function TranscriptControlsProbe({ onReady }: TranscriptControlsProbeProps) {
       selectedGenes,
       transcriptExactPointLimit,
       transcriptFeatureFilterMode,
-      transcriptFeatureSearch,
       transcriptMinQv,
       transcriptOpacity,
       transcriptPointSize,
@@ -147,7 +143,7 @@ describe('useTranscriptControlsWorkflow', () => {
     )
   })
 
-  it('picks transcript features', () => {
+  it('picks transcript features and says whether it did', () => {
     render(
       <TranscriptControlsProbe
         onReady={(nextApi, nextSnapshot) => {
@@ -157,15 +153,23 @@ describe('useTranscriptControlsWorkflow', () => {
       />,
     )
 
+    let picked = false
     act(() => {
-      transcriptControlsApi.pickTranscriptFeature('Gad1')
+      picked = transcriptControlsApi.pickTranscriptFeature('Gad1')
     })
 
+    expect(picked).toBe(true)
     expect(transcriptControlsSnapshot.selectedGenes).toEqual(['Gad1'])
     expect(transcriptControlsSnapshot.transcriptFeatureFilterMode).toBe('selected')
-    expect(transcriptControlsSnapshot.transcriptFeatureSearch).toBe('')
     expect(transcriptControlsSnapshot.resetGeneExpressionCount).toBe(1)
     expect(transcriptControlsSnapshot.manualTranscriptExactRequestKey).toBeNull()
+
+    act(() => {
+      picked = transcriptControlsApi.pickTranscriptFeature('NotInPanel')
+    })
+
+    expect(picked).toBe(false)
+    expect(transcriptControlsSnapshot.selectedGenes).toEqual(['Gad1'])
   })
 
   it('delegates chip toggles to the gene workflow while invalidating transcript data', () => {

@@ -1,40 +1,11 @@
 import { useId } from 'react'
 
+// Label IDs for the panels that still take them. The section blocks
+// (15.2-A) make their own; these go when the cards replace the Cell, ROI and
+// Magic Lens tabs (15.2-D).
 export interface AppControlIds {
-  readonly datasetInputId: string
-  readonly morphologyInputId: string
-  readonly boundaryLimitInputId: string
-  readonly visiumHdBinSizeInputId: string
-  readonly imageOpacityInputId: string
-  readonly cellFillOpacityInputId: string
-  readonly cellBoundaryVisibilityInputId: string
-  readonly nucleusBoundaryVisibilityInputId: string
-  readonly hoverTooltipsInputId: string
-  readonly cellBoundaryOpacityInputId: string
-  readonly coordinateUnitInputId: string
-  readonly measurementModeInputId: string
-  readonly measurementUnitInputId: string
-  readonly geneSearchInputId: string
-  readonly geneSetSymbolsInputId: string
-  readonly geneSetNameInputId: string
-  readonly geneSetScoreInputId: string
-  readonly geneScaleInputId: string
-  readonly geneExpressionDetailInputId: string
-  readonly annotationImportInputId: string
-  readonly annotationImportUrlInputId: string
-  readonly annotationGroupInputId: string
-  readonly cellMetadataTrackInputId: string
   readonly embeddingViewInputId: string
   readonly roiNameInputId: string
-  readonly observationModeInputId: string
-  readonly transcriptDetailInputId: string
-  readonly transcriptDensityScaleInputId: string
-  readonly transcriptPointColorInputId: string
-  readonly transcriptMinQvInputId: string
-  readonly transcriptFeatureFilterInputId: string
-  readonly transcriptFeatureSearchInputId: string
-  readonly transcriptOpacityInputId: string
-  readonly transcriptPointSizeInputId: string
   readonly magicLensScopeInputId: string
   readonly magicLensRadiusInputId: string
   readonly magicLensMinQvInputId: string
@@ -42,40 +13,8 @@ export interface AppControlIds {
 
 export function useAppControlIds(): AppControlIds {
   return {
-    datasetInputId: useId(),
-    morphologyInputId: useId(),
-    boundaryLimitInputId: useId(),
-    visiumHdBinSizeInputId: useId(),
-    imageOpacityInputId: useId(),
-    cellFillOpacityInputId: useId(),
-    cellBoundaryVisibilityInputId: useId(),
-    nucleusBoundaryVisibilityInputId: useId(),
-    hoverTooltipsInputId: useId(),
-    cellBoundaryOpacityInputId: useId(),
-    coordinateUnitInputId: useId(),
-    measurementModeInputId: useId(),
-    measurementUnitInputId: useId(),
-    geneSearchInputId: useId(),
-    geneSetSymbolsInputId: useId(),
-    geneSetNameInputId: useId(),
-    geneSetScoreInputId: useId(),
-    geneScaleInputId: useId(),
-    geneExpressionDetailInputId: useId(),
-    annotationImportInputId: useId(),
-    annotationImportUrlInputId: useId(),
-    annotationGroupInputId: useId(),
-    cellMetadataTrackInputId: useId(),
     embeddingViewInputId: useId(),
     roiNameInputId: useId(),
-    observationModeInputId: useId(),
-    transcriptDetailInputId: useId(),
-    transcriptDensityScaleInputId: useId(),
-    transcriptPointColorInputId: useId(),
-    transcriptMinQvInputId: useId(),
-    transcriptFeatureFilterInputId: useId(),
-    transcriptFeatureSearchInputId: useId(),
-    transcriptOpacityInputId: useId(),
-    transcriptPointSizeInputId: useId(),
     magicLensScopeInputId: useId(),
     magicLensRadiusInputId: useId(),
     magicLensMinQvInputId: useId(),

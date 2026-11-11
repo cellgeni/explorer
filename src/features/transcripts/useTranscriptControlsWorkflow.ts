@@ -45,7 +45,6 @@ interface TranscriptControlsSetterOptions {
   readonly setTranscriptFeatureFilterMode: Dispatch<
     SetStateAction<TranscriptFeatureFilterMode>
   >
-  readonly setTranscriptFeatureSearch: Dispatch<SetStateAction<string>>
   readonly setTranscriptGeneOnly: Dispatch<SetStateAction<boolean>>
   readonly setTranscriptMinQv: Dispatch<SetStateAction<number>>
   readonly setTranscriptOpacity: Dispatch<SetStateAction<number>>
@@ -79,7 +78,9 @@ interface UseTranscriptControlsWorkflowResult {
     nextMode: TranscriptPointColorMode,
   ) => void
   readonly handleTranscriptPointSizeChange: (value: number) => void
-  readonly pickTranscriptFeature: (gene: string) => void
+  // Adds a gene to the selection and filters transcripts to it; false when the
+  // gene is not in the panel.
+  readonly pickTranscriptFeature: (gene: string) => boolean
 }
 
 export function useTranscriptControlsWorkflow({
@@ -94,7 +95,6 @@ export function useTranscriptControlsWorkflow({
     setTranscriptDetailMode,
     setTranscriptExactPointLimit,
     setTranscriptFeatureFilterMode,
-    setTranscriptFeatureSearch,
     setTranscriptGeneOnly,
     setTranscriptMinQv,
     setTranscriptOpacity,
@@ -244,7 +244,7 @@ export function useTranscriptControlsWorkflow({
   const pickTranscriptFeature = useCallback(
     (gene: string) => {
       if (!geneOptions.includes(gene)) {
-        return
+        return false
       }
 
       appendDebugEvent(`Transcript feature filter added ${gene}`, {
@@ -259,7 +259,7 @@ export function useTranscriptControlsWorkflow({
           ? current
           : [...current, gene].sort((a, b) => a.localeCompare(b)),
       )
-      setTranscriptFeatureSearch('')
+      return true
     },
     [
       appendDebugEvent,
@@ -268,7 +268,6 @@ export function useTranscriptControlsWorkflow({
       setManualTranscriptExactRequestKey,
       setSelectedGenes,
       setTranscriptFeatureFilterMode,
-      setTranscriptFeatureSearch,
       transcriptViewportKeyRef,
     ],
   )

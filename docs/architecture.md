@@ -33,6 +33,7 @@ files. Parsing happens in the browser:
 | `src/data/`                             | Platform-neutral readers and models: Parquet, Zarr, HDF5 matrices, transcripts, annotations, embeddings, ROI queries, caches, range probes, diagnostics, shareable state                 |
 | `src/features/`                         | Feature modules: HUD panels (`*.tsx`), workflow hooks (`use*Workflow.ts`), and pure models (`*Model.ts`)                                                                                 |
 | `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                                 |
+| `src/features/sections/`                | Section models (`*Model.ts`) and the blocks that render them (`*Blocks.tsx`); see [Section Models](#section-models)                                                                      |
 | `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
 | `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
 | `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                                    |
@@ -215,6 +216,36 @@ lets tests replace them.
   drawing, measurement, and the Magic Lens overlay. Layer factories are in
   `src/rendering/deckLayers.ts`.
 - `MorphologyCanvas` draws image tiles on a 2D canvas underneath deck.gl.
+
+## Section Models
+
+The control panels take section models instead of separate props
+(UNIFIED_PLAN.md, 15.2-A). `App.tsx` builds six, one hook each, in
+`src/features/sections/`:
+
+| Model                     | Hook                         | Holds                                                                                                             |
+| ------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `DatasetInfoModel`        | `useDatasetInfoModel`        | Open a dataset, Copy Link, About, platform view options (Visium HD, Visium, SpatialData), diagnostics and the log |
+| `ImageSectionModel`       | `useImageSectionModel`       | Image opacity, z plane, channels, custom image layers                                                             |
+| `CellsSectionModel`       | `useCellsSectionModel`       | Cell appearance (boundaries, opacities), the gene selection, and what colours cells                               |
+| `TranscriptsSectionModel` | `useTranscriptsSectionModel` | Transcript display, gene filter, colours, filters, point style, budget, hovered and pinned transcript             |
+| `AnnotationsSectionModel` | `useAnnotationsSectionModel` | Annotation sets and labels, metadata tracks, GeoJSON shapes                                                       |
+| `ViewSettingsModel`       | `useViewSettingsModel`       | Hover tooltips, mouse coordinate units, the measure tool                                                          |
+
+- A model holds values and intent callbacks such as `onOpacityPercentChange`.
+  The hook does what the old panel wrappers did: converts percents, normalizes
+  inputs, writes the debug log, and resets pending requests.
+- Blocks (`*Blocks.tsx`) are small components that each take one model or
+  sub-model, such as `GenePicker` (`cells.genes`) or `CustomImageLayers`
+  (`image.customLayers`). The HUD tabs arrange them today; the new shell
+  (15.2-C onwards) arranges the same blocks into the layer panel, cards and
+  info drawer.
+- Typing stays local: the gene search, gene set drafts, saved gene sets and the
+  transcript feature search live in their blocks, so a keystroke does not
+  re-render `App`.
+- Blocks make their own label IDs with `useId`.
+- `src/test/sectionModels.ts` builds idle models with mock callbacks for block
+  and panel tests.
 
 ## Coordinates
 

@@ -2,20 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
+import { testAnnotationsSectionModel } from '../../test/sectionModels'
 import { AnnotationHudPanel } from './AnnotationHudPanel'
-
-function disabledGeometricAnnotationProps() {
-  return {
-    geometricAnnotations: [],
-    geometricAnnotationsEnabled: false,
-    onImportGeometricAnnotations: vi.fn(),
-    onExportGeometricAnnotations: vi.fn(),
-    onClearGeometricAnnotations: vi.fn(),
-    onGeometricAnnotationColorChange: vi.fn(),
-    onGeometricAnnotationVisibilityChange: vi.fn(),
-    onRemoveGeometricAnnotation: vi.fn(),
-  }
-}
 
 describe('AnnotationHudPanel', () => {
   it('renders annotation controls and forwards user actions', async () => {
@@ -25,32 +13,28 @@ describe('AnnotationHudPanel', () => {
     const onExportAnnotations = vi.fn()
     const onImportAnnotations = vi.fn()
     const onAnnotationImportUrlChange = vi.fn()
-    const onImportAnnotationUrl = vi.fn(async () => true)
+    const onImportAnnotationUrl = vi.fn(async () => {})
     const onAnnotationColorChange = vi.fn()
     const onAnnotationSetVisibilityChange = vi.fn()
     const onAnnotationVisibilityChange = vi.fn()
     const onRemoveAnnotation = vi.fn()
     const onRemoveCellMetadataTrack = vi.fn()
-
-    render(
-      <AnnotationHudPanel
-        active
-        annotationGroupInputId="annotation-group"
-        annotationImportInputId="annotation-import"
-        annotationImportUrlInputId="annotation-import-url"
-        annotationImportUrl="https://example.test/labels.csv"
-        annotationHeaderCopy="1 label"
-        loadEnabled
-        selectedAnnotationGroupId="cluster-a"
-        annotationGroupOptions={[
+    const annotations = testAnnotationsSectionModel({
+      headerCopy: '1 label',
+      sets: {
+        available: true,
+        loadEnabled: true,
+        selectedGroupId: 'cluster-a',
+        groupOptions: [
           {
             id: 'cluster-a',
             label: 'Cluster A',
             groupingName: 'celltype',
             groupCount: 1,
           },
-        ]}
-        annotationState={{
+        ],
+        onGroupChange: onAnnotationGroupChange,
+        state: {
           status: 'ready',
           url: 'https://example.test/output',
           annotations: [
@@ -60,16 +44,30 @@ describe('AnnotationHudPanel', () => {
               cellIds: [asCellId('aaaaaaaa-1')],
             },
           ],
-        }}
-        annotationGroupState={{
+        },
+        groupState: {
           status: 'ready',
           url: 'https://example.test/output',
           groups: [],
-        }}
-        annotationColors={{ astro: '#123456' }}
-        hiddenAnnotationSetIds={[]}
-        hiddenAnnotationIds={['astro']}
-        cellMetadataTracks={[
+        },
+        onLoad: onLoadAnnotations,
+        canClear: true,
+        onClear: onClearAnnotations,
+        onExport: onExportAnnotations,
+        onImportFile: onImportAnnotations,
+        importUrl: 'https://example.test/labels.csv',
+        onImportUrlChange: onAnnotationImportUrlChange,
+        onImportUrl: onImportAnnotationUrl,
+        colors: { astro: '#123456' },
+        hiddenSetIds: [],
+        hiddenIds: ['astro'],
+        onColorChange: onAnnotationColorChange,
+        onSetVisibilityChange: onAnnotationSetVisibilityChange,
+        onVisibilityChange: onAnnotationVisibilityChange,
+        onRemove: onRemoveAnnotation,
+      },
+      metadataTracks: {
+        tracks: [
           {
             id: 'metadata:confidence',
             label: 'confidence',
@@ -81,22 +79,13 @@ describe('AnnotationHudPanel', () => {
             min: 0.5,
             max: 0.7,
           },
-        ]}
-        {...disabledGeometricAnnotationProps()}
-        onAnnotationGroupChange={onAnnotationGroupChange}
-        onLoadAnnotations={onLoadAnnotations}
-        onClearAnnotations={onClearAnnotations}
-        onExportAnnotations={onExportAnnotations}
-        onImportAnnotations={onImportAnnotations}
-        onAnnotationImportUrlChange={onAnnotationImportUrlChange}
-        onImportAnnotationUrl={onImportAnnotationUrl}
-        onAnnotationColorChange={onAnnotationColorChange}
-        onAnnotationSetVisibilityChange={onAnnotationSetVisibilityChange}
-        onAnnotationVisibilityChange={onAnnotationVisibilityChange}
-        onRemoveAnnotation={onRemoveAnnotation}
-        onRemoveCellMetadataTrack={onRemoveCellMetadataTrack}
-      />,
-    )
+        ],
+        onRemove: onRemoveCellMetadataTrack,
+      },
+      shapes: { enabled: false, shapes: [] },
+    })
+
+    render(<AnnotationHudPanel active annotations={annotations} />)
 
     fireEvent.change(screen.getByLabelText('Annotation set'), {
       target: { value: 'all' },
@@ -157,18 +146,13 @@ describe('AnnotationHudPanel', () => {
 
   it('keeps annotation loading disabled until a group is selected', () => {
     const onAnnotationGroupChange = vi.fn()
-
-    render(
-      <AnnotationHudPanel
-        active
-        annotationGroupInputId="annotation-group"
-        annotationImportInputId="annotation-import"
-        annotationImportUrlInputId="annotation-import-url"
-        annotationImportUrl=""
-        annotationHeaderCopy="Idle"
-        loadEnabled
-        selectedAnnotationGroupId={NO_ANNOTATION_GROUP_ID}
-        annotationGroupOptions={[
+    const annotations = testAnnotationsSectionModel({
+      headerCopy: 'Idle',
+      sets: {
+        available: true,
+        loadEnabled: true,
+        selectedGroupId: NO_ANNOTATION_GROUP_ID,
+        groupOptions: [
           {
             id: 'analysis:cell-type',
             label: 'cell_type',
@@ -181,32 +165,21 @@ describe('AnnotationHudPanel', () => {
             groupingName: 'cell_type_ontology_term_id',
             groupCount: 4,
           },
-        ]}
-        annotationState={{ status: 'idle' }}
-        annotationGroupState={{
+        ],
+        onGroupChange: onAnnotationGroupChange,
+        state: { status: 'idle' },
+        groupState: {
           status: 'ready',
           url: 'https://example.test/output',
           groups: [],
-        }}
-        annotationColors={{}}
-        hiddenAnnotationSetIds={[]}
-        hiddenAnnotationIds={[]}
-        cellMetadataTracks={[]}
-        {...disabledGeometricAnnotationProps()}
-        onAnnotationGroupChange={onAnnotationGroupChange}
-        onLoadAnnotations={vi.fn()}
-        onClearAnnotations={vi.fn()}
-        onExportAnnotations={vi.fn()}
-        onImportAnnotations={vi.fn()}
-        onAnnotationImportUrlChange={vi.fn()}
-        onImportAnnotationUrl={vi.fn(async () => true)}
-        onAnnotationColorChange={vi.fn()}
-        onAnnotationSetVisibilityChange={vi.fn()}
-        onAnnotationVisibilityChange={vi.fn()}
-        onRemoveAnnotation={vi.fn()}
-        onRemoveCellMetadataTrack={vi.fn()}
-      />,
-    )
+        },
+        canClear: false,
+        importUrl: '',
+      },
+      shapes: { enabled: false, shapes: [] },
+    })
+
+    render(<AnnotationHudPanel active annotations={annotations} />)
 
     const annotationSet = screen.getByRole('combobox', { name: 'Annotation set' })
 
@@ -228,18 +201,14 @@ describe('AnnotationHudPanel', () => {
   })
 
   it('lists labels by annotation set with their sizes', () => {
-    render(
-      <AnnotationHudPanel
-        active
-        annotationGroupInputId="annotation-group"
-        annotationImportInputId="annotation-import"
-        annotationImportUrlInputId="annotation-import-url"
-        annotationImportUrl=""
-        annotationHeaderCopy="3 labels"
-        loadEnabled
-        selectedAnnotationGroupId="all"
-        annotationGroupOptions={[]}
-        annotationState={{
+    const annotations = testAnnotationsSectionModel({
+      headerCopy: '3 labels',
+      sets: {
+        available: true,
+        loadEnabled: true,
+        selectedGroupId: 'all',
+        groupOptions: [],
+        state: {
           status: 'ready',
           url: 'https://example.test/output',
           annotations: [
@@ -263,31 +232,22 @@ describe('AnnotationHudPanel', () => {
               ],
             },
           ],
-        }}
-        annotationGroupState={{
+        },
+        groupState: {
           status: 'ready',
           url: 'https://example.test/output',
           groups: [],
-        }}
-        annotationColors={{ 'analysis:0:1': '#abcdef' }}
-        hiddenAnnotationSetIds={['analysis:graphclust']}
-        hiddenAnnotationIds={[]}
-        cellMetadataTracks={[]}
-        {...disabledGeometricAnnotationProps()}
-        onAnnotationGroupChange={vi.fn()}
-        onLoadAnnotations={vi.fn()}
-        onClearAnnotations={vi.fn()}
-        onExportAnnotations={vi.fn()}
-        onImportAnnotations={vi.fn()}
-        onAnnotationImportUrlChange={vi.fn()}
-        onImportAnnotationUrl={vi.fn(async () => true)}
-        onAnnotationColorChange={vi.fn()}
-        onAnnotationSetVisibilityChange={vi.fn()}
-        onAnnotationVisibilityChange={vi.fn()}
-        onRemoveAnnotation={vi.fn()}
-        onRemoveCellMetadataTrack={vi.fn()}
-      />,
-    )
+        },
+        canClear: true,
+        importUrl: '',
+        colors: { 'analysis:0:1': '#abcdef' },
+        hiddenSetIds: ['analysis:graphclust'],
+        hiddenIds: [],
+      },
+      shapes: { enabled: false, shapes: [] },
+    })
+
+    render(<AnnotationHudPanel active annotations={annotations} />)
 
     const graphclustRows = within(
       screen.getByRole('region', { name: 'graphclust labels' }),
@@ -307,52 +267,38 @@ describe('AnnotationHudPanel', () => {
   })
 
   it('virtualizes long label lists', () => {
-    const annotations = Array.from({ length: 80 }, (_value, index) => ({
+    const labels = Array.from({ length: 80 }, (_value, index) => ({
       id: `analysis:0:${index}`,
       label: `group: Label ${String(index).padStart(2, '0')}`,
       cellIds: [asCellId(`aaaaaaaa-${index}`)],
     }))
-
-    render(
-      <AnnotationHudPanel
-        active
-        annotationGroupInputId="annotation-group"
-        annotationImportInputId="annotation-import"
-        annotationImportUrlInputId="annotation-import-url"
-        annotationImportUrl=""
-        annotationHeaderCopy="80 labels"
-        loadEnabled
-        selectedAnnotationGroupId="all"
-        annotationGroupOptions={[]}
-        annotationState={{
+    const annotations = testAnnotationsSectionModel({
+      headerCopy: '80 labels',
+      sets: {
+        available: true,
+        loadEnabled: true,
+        selectedGroupId: 'all',
+        groupOptions: [],
+        state: {
           status: 'ready',
           url: 'https://example.test/output',
-          annotations,
-        }}
-        annotationGroupState={{
+          annotations: labels,
+        },
+        groupState: {
           status: 'ready',
           url: 'https://example.test/output',
           groups: [],
-        }}
-        annotationColors={{}}
-        hiddenAnnotationSetIds={[]}
-        hiddenAnnotationIds={[]}
-        cellMetadataTracks={[]}
-        {...disabledGeometricAnnotationProps()}
-        onAnnotationGroupChange={vi.fn()}
-        onLoadAnnotations={vi.fn()}
-        onClearAnnotations={vi.fn()}
-        onExportAnnotations={vi.fn()}
-        onImportAnnotations={vi.fn()}
-        onAnnotationImportUrlChange={vi.fn()}
-        onImportAnnotationUrl={vi.fn(async () => true)}
-        onAnnotationColorChange={vi.fn()}
-        onAnnotationSetVisibilityChange={vi.fn()}
-        onAnnotationVisibilityChange={vi.fn()}
-        onRemoveAnnotation={vi.fn()}
-        onRemoveCellMetadataTrack={vi.fn()}
-      />,
-    )
+        },
+        canClear: true,
+        importUrl: '',
+        colors: {},
+        hiddenSetIds: [],
+        hiddenIds: [],
+      },
+      shapes: { enabled: false, shapes: [] },
+    })
+
+    render(<AnnotationHudPanel active annotations={annotations} />)
 
     const setList = within(
       screen.getByRole('region', { name: 'group labels' }),
