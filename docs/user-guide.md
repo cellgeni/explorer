@@ -186,8 +186,13 @@ current shapes as GeoJSON.
 Use the Box selection (`R`) or Lasso selection (`L`) tool to draw box or lasso
 regions. Each drawing is kept as a selection, named "ROI 1", "ROI 2" and so on,
 and the Selection card shows the newest: Xenium ROIs can be saved as
-annotations (`Save ROI`), export selected cells or transcripts, and inspect top
-ROI genes. Visium HD ROIs select bins and export barcodes. Annotations ›
+annotations (`Save ROI`) and export selected cells or transcripts. Visium HD
+ROIs select bins and export barcodes. The card's Genes tab ranks the genes
+enriched in the selection against a sample of cells from the rest of the
+tissue, with the share of cells expressing each inside and outside and a
+minimum share filter; `Most abundant` ranks by count instead. Clicking a gene
+colours the cells by it. The [UI reference](./ui-reference.md#genes-tab)
+explains the method. Annotations ›
 Selections lists every selection with its colour, visibility and area;
 choosing a name shows that selection in the card again, and each row has
 `Go to`, `Rename` and `Delete`. Closing the card keeps the selection; its

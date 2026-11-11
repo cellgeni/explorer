@@ -142,6 +142,7 @@ import { useVisiumHdMagicLensSummary } from './features/roi/useVisiumHdMagicLens
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import { useSelectionList } from './features/roi/useSelectionList'
 import { selectionDatasetKey, selectionOutlines } from './features/roi/selectionListModel'
+import { referenceSampleIndices } from './features/roi/roiEnrichmentModel'
 import { useVisiumHdRoiWorkflow } from './features/roi/useVisiumHdRoiWorkflow'
 import {
   roiGeneDatasetWarmupKey,
@@ -219,6 +220,7 @@ import {
   type MorphologyImage,
 } from './data/morphologyImage'
 import { micrometers, type BBox } from './data/coords'
+import type { CellId } from './data/cellid'
 import { slug } from './utils/slug'
 import type {
   Annotation,
@@ -463,12 +465,14 @@ export function App({ dependencies }: AppProps = {}) {
       roiGeneViewportWarmupState,
       roiMode,
       roiName,
+      roiReferenceState,
       roiState,
       roiTranscriptExportState,
       setRoiGeneStatsState,
       setRoiGeneViewportWarmupState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setRoiState,
       setRoiTranscriptExportState,
       setVisiumHdRoiState,
@@ -1820,6 +1824,26 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedGenes,
     ],
   )
+  // A gene in the Selection card colours the cells by it alone (15.4-B).
+  const showGene = useCallback(
+    (gene: string) => {
+      appendDebugEvent(`Colour by gene ${gene}`)
+      if (selectedGenes.length !== 1 || selectedGenes[0] !== gene) {
+        resetGeneExpressionSelectionState()
+        setManualTranscriptExactRequestKey(null)
+        setSelectedGenes([gene])
+      }
+      setObservationColorMode('gene-expression')
+    },
+    [
+      appendDebugEvent,
+      resetGeneExpressionSelectionState,
+      selectedGenes,
+      setManualTranscriptExactRequestKey,
+      setObservationColorMode,
+      setSelectedGenes,
+    ],
+  )
   const handlePinTranscript = useCallback(
     (detail: ViewerTranscriptHoverDetail) => {
       setPinnedTranscript(detail)
@@ -2063,6 +2087,35 @@ export function App({ dependencies }: AppProps = {}) {
     setters: { setGridCellAssignmentState },
   })
 
+  // The reference sample for enriched genes (15.4-B): runs of consecutive
+  // cells spread through the overview, which is in matrix row order. On
+  // Xenium the index is the cell-feature matrix row.
+  const roiReferenceCells = useMemo<readonly DatasetCell[]>(() => {
+    const withRows = platformAdapter.kind === 'xenium'
+    return referenceSampleIndices(overviewCells.length).flatMap((index) => {
+      const cell = overviewCells[index]
+      if (cell === undefined) return []
+      return [
+        {
+          // Overview IDs are the dataset's own: Xenium cell IDs, or obs
+          // names, which the AnnData readers take as they are.
+          id: cell.id as CellId,
+          position: {
+            x: micrometers(cell.position[0] ?? 0),
+            y: micrometers(-(cell.position[1] ?? 0)),
+          },
+          ...(withRows ? { cellFeatureMatrixRow: index } : {}),
+        },
+      ]
+    })
+  }, [overviewCells, platformAdapter.kind])
+  const roiReferenceBins = useMemo(
+    () =>
+      referenceSampleIndices(expressionStyledSpatialGridCells.length).flatMap(
+        (index) => expressionStyledSpatialGridCells[index] ?? [],
+      ),
+    [expressionStyledSpatialGridCells],
+  )
   const {
     handleCancelRoiCells,
     handleCancelRoiGenes,
@@ -2082,6 +2135,7 @@ export function App({ dependencies }: AppProps = {}) {
       magicLensScope,
       viewportGeneWarmupEnabled: !isAnnDataPlatform(platformAdapter),
       roiName,
+      referenceCells: roiReferenceCells,
     },
     data: {
       loadState,
@@ -2113,6 +2167,7 @@ export function App({ dependencies }: AppProps = {}) {
       setRoiGeneViewportWarmupState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setRoiState,
       setRoiTranscriptExportState,
     },
@@ -2137,6 +2192,7 @@ export function App({ dependencies }: AppProps = {}) {
       activeRoiState: activeVisiumHdRoiState,
       gridCells: expressionStyledSpatialGridCells,
       loadState,
+      referenceBins: roiReferenceBins,
     },
     loaders: {
       getSpatialDataset,
@@ -2150,6 +2206,7 @@ export function App({ dependencies }: AppProps = {}) {
       setRoiGeneStatsState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setVisiumHdRoiState,
     },
   })
@@ -3510,6 +3567,13 @@ export function App({ dependencies }: AppProps = {}) {
       handleMagicLensSummarise('roi')
     },
   }
+  const selectionGenesInput = {
+    copy: roiGeneStatsCopy,
+    state: roiGeneStatsState,
+    reference: roiReferenceState,
+    selectedGenes,
+    onShowGene: showGene,
+  }
   const cards = useCardStackModel({
     selection:
       platformAdapter.kind === 'image'
@@ -3525,7 +3589,7 @@ export function App({ dependencies }: AppProps = {}) {
         : isVisiumHdDataset
           ? {
               variant: 'bins',
-              genes: { copy: roiGeneStatsCopy, state: roiGeneStatsState },
+              genes: selectionGenesInput,
               lens: selectionLensInput,
               name: roiName,
               nameDisabled: loadState.status !== 'ready',
@@ -3544,7 +3608,7 @@ export function App({ dependencies }: AppProps = {}) {
                 singular: elementPlural.replace(/s$/, ''),
                 plural: elementPlural,
               },
-              genes: { copy: roiGeneStatsCopy, state: roiGeneStatsState },
+              genes: selectionGenesInput,
               lens: selectionLensInput,
               loading: isRoiTabLoading,
               name: roiName,

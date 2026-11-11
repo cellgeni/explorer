@@ -3130,13 +3130,47 @@ Can be skipped after 15.3 ships if time is short.
       the list is keyed on the SpatialData coordinate system and scale too;
       and coming back to a dataset starts empty, while a reload of the same
       view keeps the list.
-- [ ] **B. Enriched genes (F13).** (L, with a method note in the docs)
+- [x] **B. Enriched genes (F13).** (L, with a method note in the docs)
   - The Selection card's Genes tab ranks genes by log2 fold change of mean
     expression inside the selection versus a matched sample outside it, reusing
     the ROI warm-up sample.
   - It shows the % of cells expressing inside and outside, with a minimum %
     filter. "Most abundant" stays as a second sort.
   - Clicking a gene sets `Colour by` to Gene expression.
+  - Done 2026-11-11. The method note is in `docs/ui-reference.md` (Selection
+    › Genes tab). `roiEnrichmentModel` holds the pure parts: the reference
+    sample, the outside filter, the fold change and `rankRoiGenes`.
+    - The reference ("matched sample") is one per dataset: 8 runs of 64
+      consecutive cells spread through the overview, which is in matrix row
+      order, so where the matrix is stored by cell a run reads one or two
+      chunks; random cells would touch a chunk each. On Visium HD, runs of
+      the loaded bins. On Xenium the overview index is the matrix row, so
+      the fast row path is used. The demo's Zarr matrix has no cell-major
+      arrays, so its ROI genes read `cell_feature_matrix.h5`: the first read
+      took 60 s (as before), then the comparison for a 37,000-cell box took
+      91 ms and the 10,000-cell refinement 1.1 s, and the striatum box
+      ranked STRIP2, EBF1, BCL11B, DACH1 and PDE10A first.
+    - "Reusing the ROI warm-up": the warm-up now also reads the whole
+      reference after its 32-cell read, so a selection's comparison (the
+      reference cells outside its outline, by `roiSelectionContains`) comes
+      from the IndexedDB byte cache. AnnData platforms have no warm-up and
+      read it with the first selection.
+    - Order per selection: the 32-cell preview, then the comparison, then
+      the full refinement. Every read now asks for all genes (`ALL_GENES`),
+      not the top 10, so each can be compared. The comparison is its own
+      state (`roiReferenceState`) and its errors stay there; Cancel ROI
+      genes and Clear reset it.
+    - Fold change: log2((mean in + 0.1) / (mean out + 0.1)), means over the
+      sampled cells with zeros. Minimum % (default 10%) applies to both sorts;
+      up to 20 genes show. Until the comparison is ready, Enriched lists by
+      count and says why.
+    - A gene's row (`Colour cells by {gene}`) makes it the only selected
+      gene and sets Colour by to Gene expression, so each click shows one
+      gene; adding it to a list would have shown a combined score.
+    - The review before the PRs found that a Visium HD selection with no
+      bins returned before cancelling the previous selection's read, so its
+      genes (and now its comparison) landed on the empty one; that read is
+      now cancelled.
 - [ ] **C. Transcript gene legend.** Each gene gets a colour swatch, an eye
       toggle and its count, in the Transcripts section and in the legend, as in 10x
       Explorer. Colours can be edited. (M)

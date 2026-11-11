@@ -33,7 +33,17 @@ import {
   type RoiGeneStatsState,
 } from './roiModel'
 import {
+  IDLE_ROI_REFERENCE_STATE,
+  referenceOutsideSelection,
+  roiReferenceFailed,
+  roiReferenceLoading,
+  roiReferenceReady,
+  roiReferenceUnavailable,
+  type RoiReferenceState,
+} from './roiEnrichmentModel'
+import {
   IDLE_VISIUM_HD_ROI_STATE,
+  gridCellDatumCenter,
   selectVisiumHdGridCellsInRoi,
   visiumHdRoiBinsToCsv,
   visiumHdRoiReady,
@@ -43,6 +53,8 @@ import {
 interface MutableRef<T> {
   current: T
 }
+
+const NO_REFERENCE_BINS: readonly GridCellDatum[] = []
 
 interface UseVisiumHdRoiWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
@@ -59,6 +71,9 @@ interface UseVisiumHdRoiWorkflowData {
   readonly activeRoiState: VisiumHdRoiState
   readonly gridCells: readonly GridCellDatum[]
   readonly loadState: DatasetLoadState<StructuredLoadError>
+  // The reference sample for enriched genes (15.4-B): bins spread over the
+  // loaded bins. Those outside a selection are its comparison.
+  readonly referenceBins?: readonly GridCellDatum[]
 }
 
 interface UseVisiumHdRoiWorkflowLoaders {
@@ -77,6 +92,9 @@ interface UseVisiumHdRoiWorkflowSetters {
   >
   readonly setRoiMode: Dispatch<SetStateAction<RoiDrawMode>>
   readonly setRoiName: Dispatch<SetStateAction<string>>
+  readonly setRoiReferenceState: Dispatch<
+    SetStateAction<RoiReferenceState<StructuredLoadError>>
+  >
   readonly setVisiumHdRoiState: Dispatch<SetStateAction<VisiumHdRoiState>>
 }
 
@@ -100,10 +118,16 @@ interface UseVisiumHdRoiWorkflowResult {
 export function useVisiumHdRoiWorkflow({
   callbacks: { appendDebugEvent, clearRoi },
   controls: { activeBinSize, isVisiumHdDataset, roiName },
-  data: { activeRoiState, gridCells, loadState },
+  data: { activeRoiState, gridCells, loadState, referenceBins = NO_REFERENCE_BINS },
   loaders: { getSpatialDataset },
   refs: { roiGeneAbortRef, roiGeneRequestIdRef, roiIdRef },
-  setters: { setRoiGeneStatsState, setRoiMode, setRoiName, setVisiumHdRoiState },
+  setters: {
+    setRoiGeneStatsState,
+    setRoiMode,
+    setRoiName,
+    setRoiReferenceState,
+    setVisiumHdRoiState,
+  },
 }: UseVisiumHdRoiWorkflowOptions): UseVisiumHdRoiWorkflowResult {
   const readyDatasetUrl = loadState.status === 'ready' ? loadState.url : null
 
@@ -114,7 +138,14 @@ export function useVisiumHdRoiWorkflow({
     })
     setVisiumHdRoiState(IDLE_VISIUM_HD_ROI_STATE)
     setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
-  }, [roiGeneAbortRef, roiGeneRequestIdRef, setRoiGeneStatsState, setVisiumHdRoiState])
+    setRoiReferenceState(IDLE_ROI_REFERENCE_STATE)
+  }, [
+    roiGeneAbortRef,
+    roiGeneRequestIdRef,
+    setRoiGeneStatsState,
+    setRoiReferenceState,
+    setVisiumHdRoiState,
+  ])
 
   const handleVisiumHdRoiComplete = useCallback(
     (selection: RoiSelection) => {
@@ -128,6 +159,7 @@ export function useVisiumHdRoiWorkflow({
 
       setRoiMode('idle')
       setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
+      setRoiReferenceState(IDLE_ROI_REFERENCE_STATE)
       setVisiumHdRoiState(
         visiumHdRoiReady({
           url: readyDatasetUrl,
@@ -145,6 +177,12 @@ export function useVisiumHdRoiWorkflow({
       )
 
       if (barcodes.length === 0 || binSize === undefined) {
+        // An earlier selection's reads must not land on this one.
+        invalidateLatestRequest({
+          abortRef: roiGeneAbortRef,
+          requestIdRef: roiGeneRequestIdRef,
+        })
+        setRoiReferenceState(IDLE_ROI_REFERENCE_STATE)
         setRoiGeneStatsState(
           roiGeneStatsReady(
             readyDatasetUrl,
@@ -166,6 +204,59 @@ export function useVisiumHdRoiWorkflow({
         `ROI genes started: ${barcodes.length.toLocaleString()} Visium HD bins`,
       )
 
+      // The reference bins outside the selection, for enriched genes
+      // (15.4-B), read after the selection's own. Its errors stay in its
+      // own state.
+      const readReference = (dataset: VisiumHdExpressionProfileDataset) => {
+        const outside = referenceOutsideSelection(
+          referenceBins,
+          selection,
+          gridCellDatumCenter,
+        ).map((bin) => bin.id)
+
+        if (outside.length === 0) {
+          setRoiReferenceState(roiReferenceUnavailable(readyDatasetUrl))
+          return Promise.resolve()
+        }
+
+        setRoiReferenceState(roiReferenceLoading(readyDatasetUrl, outside.length))
+
+        return dataset
+          .matrix(outside, binSize, { signal: request.signal })
+          .then((matrix) => {
+            if (!request.isCurrent() || request.signal.aborted) {
+              return
+            }
+
+            setRoiReferenceState(
+              roiReferenceReady(
+                readyDatasetUrl,
+                summarizeRoiGeneExpression(matrix, {
+                  cellCount: outside.length,
+                  geneLimit: Number.MAX_SAFE_INTEGER,
+                  sampledCellIds: outside,
+                }),
+              ),
+            )
+            appendDebugEvent(
+              `ROI reference ready: ${outside.length.toLocaleString()} Visium HD bins outside`,
+            )
+          })
+          .catch((error: unknown) => {
+            if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
+              return
+            }
+
+            setRoiReferenceState(
+              roiReferenceFailed(
+                readyDatasetUrl,
+                createStructuredLoadError('ROI genes', error),
+              ),
+            )
+            appendDebugEvent('ROI reference failed')
+          })
+      }
+
       void getSpatialDataset(readyDatasetUrl)
         .then((dataset) => {
           if (!isVisiumHdExpressionProfileDataset(dataset)) {
@@ -176,23 +267,26 @@ export function useVisiumHdRoiWorkflow({
 
           const profileDataset = dataset as VisiumHdExpressionProfileDataset
 
-          return profileDataset.matrix(barcodes, binSize, { signal: request.signal })
-        })
-        .then((matrix) => {
-          if (!request.isCurrent() || request.signal.aborted) {
-            return
-          }
+          return profileDataset
+            .matrix(barcodes, binSize, { signal: request.signal })
+            .then((matrix) => {
+              if (!request.isCurrent() || request.signal.aborted) {
+                return undefined
+              }
 
-          const stats = summarizeRoiGeneExpression(matrix, {
-            cellCount: barcodes.length,
-            geneLimit: Number.MAX_SAFE_INTEGER,
-            sampledCellIds: barcodes,
-          })
+              const stats = summarizeRoiGeneExpression(matrix, {
+                cellCount: barcodes.length,
+                geneLimit: Number.MAX_SAFE_INTEGER,
+                sampledCellIds: barcodes,
+              })
 
-          setRoiGeneStatsState(roiGeneStatsReady(readyDatasetUrl, stats))
-          appendDebugEvent(
-            `ROI genes ready: ${stats.genes.length.toLocaleString()} genes across ${barcodes.length.toLocaleString()} Visium HD bins`,
-          )
+              setRoiGeneStatsState(roiGeneStatsReady(readyDatasetUrl, stats))
+              appendDebugEvent(
+                `ROI genes ready: ${stats.genes.length.toLocaleString()} genes across ${barcodes.length.toLocaleString()} Visium HD bins`,
+              )
+
+              return readReference(profileDataset)
+            })
         })
         .catch((error: unknown) => {
           if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
@@ -218,12 +312,14 @@ export function useVisiumHdRoiWorkflow({
       gridCells,
       isVisiumHdDataset,
       readyDatasetUrl,
+      referenceBins,
       roiGeneAbortRef,
       roiGeneRequestIdRef,
       roiIdRef,
       setRoiGeneStatsState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setVisiumHdRoiState,
     ],
   )

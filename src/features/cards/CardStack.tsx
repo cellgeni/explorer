@@ -165,6 +165,9 @@ function RegionSelectionCard({ card }: { readonly card: RegionSelectionCardModel
               elementSingular={card.genes.elementSingular}
               state={card.genes.state}
               title={card.genes.title}
+              reference={card.genes.reference}
+              selectedGenes={card.genes.selectedGenes}
+              onShowGene={card.genes.onShowGene}
             />
             {card.genes.state.status === 'idle' ? (
               <p className="roi-gene-status" aria-live="polite">

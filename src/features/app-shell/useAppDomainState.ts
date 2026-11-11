@@ -115,6 +115,10 @@ import {
 } from '../roi/roiModel'
 import { type VisiumHdRoiState, IDLE_VISIUM_HD_ROI_STATE } from '../roi/visiumHdRoiModel'
 import {
+  IDLE_ROI_REFERENCE_STATE,
+  type RoiReferenceState,
+} from '../roi/roiEnrichmentModel'
+import {
   IDLE_TRANSCRIPT_CAPABILITY_STATE,
   IDLE_TRANSCRIPT_LAYER_STATE,
   parseTranscriptDensityColorScale,
@@ -226,6 +230,10 @@ export function useAppDomainState({
   >(IDLE_ROI_GENE_STATS_STATE)
   const [roiGeneViewportWarmupState, setRoiGeneViewportWarmupState] =
     useState<RoiGeneViewportWarmupState>(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
+  // The comparison for enriched genes (15.4-B).
+  const [roiReferenceState, setRoiReferenceState] = useState<
+    RoiReferenceState<StructuredLoadError>
+  >(IDLE_ROI_REFERENCE_STATE)
   const [roiTranscriptExportState, setRoiTranscriptExportState] = useState<
     RoiTranscriptExportState<StructuredLoadError>
   >(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
@@ -621,12 +629,14 @@ export function useAppDomainState({
       roiGeneViewportWarmupState,
       roiMode,
       roiName,
+      roiReferenceState,
       roiState,
       roiTranscriptExportState,
       setRoiGeneStatsState,
       setRoiGeneViewportWarmupState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setRoiState,
       setRoiTranscriptExportState,
       setVisiumHdRoiState,

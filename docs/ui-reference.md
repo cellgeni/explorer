@@ -382,11 +382,57 @@ selection as an annotation and colours by annotations. `Delete` (after the
 exports) removes the selection, with [Undo](#undo); closing the card keeps it
 in the list.
 
-| Tab                         | Contents                                                                                                                  |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Genes                       | Top genes: count, % of total, % of cells, mean per cell (a 32-cell preview, then refined). Visium HD: ROI genes over bins |
-| Cells (Spots, Bins)         | Cells, mean transcripts and mean area; for bins, the count, bin size and in-tissue count                                  |
-| Transcripts (or Expression) | `Summarise Transcripts`: Magic Lens over the selection (D14). Expression where the lens counts UMIs or values             |
+| Tab                         | Contents                                                                                                               |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Genes                       | Genes ranked as Enriched or Most abundant, with % of cells expressing inside and outside (see [Genes tab](#genes-tab)) |
+| Cells (Spots, Bins)         | Cells, mean transcripts and mean area; for bins, the count, bin size and in-tissue count                               |
+| Transcripts (or Expression) | `Summarise Transcripts`: Magic Lens over the selection (D14). Expression where the lens counts UMIs or values          |
+
+#### Genes tab
+
+Phase 15.4-B (`src/features/roi/roiEnrichmentModel.ts`,
+`src/features/roi/RoiPanels.tsx`). Up to 20 genes, each with a bar, the share
+of cells (spots, bins) expressing it inside and outside, and its mean per
+cell inside; under Most abundant also its count and share of all counts.
+
+| Control                                  | Notes                                                                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `Enriched` / `Most abundant`             | Enriched (the default) ranks by log2 fold change over the cells outside, shown as "+2.4"; Most abundant by count inside |
+| `Min % of cells` (spots, bins)           | Any, 5%, 10% (default), 25% or 50%: leaves out genes expressed in fewer of the cells inside, under either sort          |
+| A gene's name (`Colour cells by {gene}`) | Makes it the only selected gene and sets `Cell color` to Gene expression; pressed while it is selected                  |
+
+The line above the list says what the selection is compared with: "Compared
+with 503 cells outside", "Comparing with … outside…" while that reads, or
+"No comparison: …" when no sampled cell is outside the selection or the read
+failed. Until there is a comparison, Enriched lists by count.
+
+Method:
+
+- **Inside.** The selection's cells, read as for the old top genes: a
+  32-cell preview first, then up to 10,000 cells (an even sample when there
+  are more); Visium HD reads every selected bin. Values are as the matrix
+  stores them: counts for Xenium, Atera and Visium HD, and `X` for H5AD,
+  Visium and SpatialData, which may already be normalised or log-transformed.
+- **Outside.** One reference sample per dataset: 8 runs of 64 consecutive
+  cells (or loaded bins) spread evenly through the dataset's list, which is
+  in matrix row order, so each run reads about one chunk. Those inside the
+  selection's box or lasso are left out, and the rest are the comparison.
+  Xenium reads the whole sample after loading, with the ROI warm-up, so a
+  selection's comparison comes from the cache; other platforms read it with
+  the first selection. On the Xenium demo, whose Zarr matrix has no
+  cell-major arrays, ROI genes read `cell_feature_matrix.h5`; once that was
+  read, the comparison for a 37,000-cell box took 91 ms.
+- **Mean per cell** is the sum over the sampled cells divided by their
+  number, so cells without the gene count as 0. **% of cells** is the share
+  with a value above 0.
+- **log2 fold change** = log2((mean inside + 0.1) / (mean outside + 0.1)). The
+  pseudocount of 0.1 per cell keeps genes absent outside finite and damps
+  genes with a few counts in a small selection; the minimum % filter does
+  the rest. Ties go to the higher mean inside.
+- This ranks genes for a look; it is not a test. There are no p-values, the
+  reference is a fixed sample of up to 512 cells, and neighbouring cells are
+  not independent. Use exported cells for a proper differential expression
+  analysis.
 
 Exports: `Export GeoJSON` (`{name}-roi.geojson`), `Export Cells`
 (`{name}-cells.csv`, up to 50,000 cells), `Export Transcripts`

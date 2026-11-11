@@ -10,6 +10,7 @@ import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { IDLE_VISIUM_HD_ROI_STATE, type VisiumHdRoiState } from './visiumHdRoiModel'
 import type { RoiGeneStatsState } from './roiModel'
+import type { RoiReferenceState } from './roiEnrichmentModel'
 import { useVisiumHdRoiWorkflow } from './useVisiumHdRoiWorkflow'
 
 const selection: RoiSelection = {
@@ -65,6 +66,7 @@ const readyVisiumHdRoiState: VisiumHdRoiState = {
 interface Snapshot {
   readonly debugMessages: readonly string[]
   readonly roiGeneStatsState: RoiGeneStatsState<StructuredLoadError>
+  readonly roiReferenceState: RoiReferenceState<StructuredLoadError>
   readonly roiMode: RoiDrawMode
   readonly roiName: string
   readonly visiumHdRoiState: VisiumHdRoiState
@@ -84,6 +86,7 @@ function Probe({
   isVisiumHdDataset = true,
   loadState = readyLoadState,
   onReady,
+  referenceBins,
   roiName: initialRoiName = 'ROI 1',
 }: {
   readonly clearRoi?: () => void
@@ -95,6 +98,7 @@ function Probe({
     nextApi: ReturnType<typeof useVisiumHdRoiWorkflow>,
     nextSnapshot: Snapshot,
   ) => void
+  readonly referenceBins?: readonly GridCellDatum[]
   readonly roiName?: string
 }) {
   const [roiMode, setRoiMode] = React.useState<RoiDrawMode>('box')
@@ -102,6 +106,9 @@ function Probe({
   const [visiumHdRoiState, setVisiumHdRoiState] = React.useState(initialVisiumHdRoiState)
   const [roiGeneStatsState, setRoiGeneStatsState] = React.useState<
     RoiGeneStatsState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [roiReferenceState, setRoiReferenceState] = React.useState<
+    RoiReferenceState<StructuredLoadError>
   >({ status: 'idle' })
   const debugMessagesRef = React.useRef<string[]>([])
   const roiGeneAbortRef = React.useRef<AbortController | null>(null)
@@ -124,6 +131,7 @@ function Probe({
       activeRoiState: visiumHdRoiState,
       gridCells: selectedGridCells,
       loadState,
+      ...(referenceBins === undefined ? {} : { referenceBins }),
     },
     loaders: {
       getSpatialDataset,
@@ -137,6 +145,7 @@ function Probe({
       setRoiGeneStatsState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setVisiumHdRoiState,
     },
   })
@@ -147,6 +156,7 @@ function Probe({
       roiGeneStatsState,
       roiMode,
       roiName,
+      roiReferenceState,
       visiumHdRoiState,
     })
   })
@@ -231,6 +241,102 @@ describe('useVisiumHdRoiWorkflow', () => {
         sampledCellCount: 1,
         totalCount: 9,
       },
+    })
+  })
+
+  it('keeps an earlier selection’s reads off a newer, empty one', async () => {
+    let resolveMatrix: (value: unknown) => void = () => undefined
+    const matrix = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveMatrix = resolve
+        }),
+    )
+    const getSpatialDataset = vi.fn(async () => ({
+      matrix,
+    })) as unknown as SpatialDatasetLoader
+
+    render(
+      <Probe
+        getSpatialDataset={getSpatialDataset}
+        referenceBins={selectedGridCells}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleVisiumHdRoiComplete(selection)
+    })
+    await waitFor(() => {
+      expect(matrix).toHaveBeenCalledTimes(1)
+    })
+    // A box with no bins.
+    act(() => {
+      api.handleVisiumHdRoiComplete({
+        kind: 'box',
+        bbox: {
+          minX: micrometers(100),
+          minY: micrometers(100),
+          maxX: micrometers(120),
+          maxY: micrometers(120),
+        },
+      })
+    })
+    await act(async () => {
+      resolveMatrix({
+        geneNames: ['A2M'],
+        cells: new Map([['s_008um_1_1', { geneNames: ['A2M'], counts: [7] }]]),
+      })
+      await Promise.resolve()
+    })
+
+    expect(snapshot.roiGeneStatsState).toMatchObject({
+      status: 'ready',
+      stats: { genes: [], cellCount: 0 },
+    })
+    expect(snapshot.roiReferenceState).toEqual({ status: 'idle' })
+    expect(matrix).toHaveBeenCalledTimes(1)
+  })
+
+  it('compares the selected bins with the reference bins outside (15.4-B)', async () => {
+    const matrix = vi.fn(async (barcodes: readonly string[]) => ({
+      geneNames: ['A2M'],
+      cells: new Map(
+        barcodes.map((barcode) => [barcode, { geneNames: ['A2M'], counts: [3] }]),
+      ),
+    }))
+    const getSpatialDataset = vi.fn(async () => ({
+      matrix,
+    })) as unknown as SpatialDatasetLoader
+
+    render(
+      <Probe
+        getSpatialDataset={getSpatialDataset}
+        referenceBins={selectedGridCells}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleVisiumHdRoiComplete(selection)
+    })
+
+    await waitFor(() => {
+      expect(snapshot.roiReferenceState.status).toBe('ready')
+    })
+    expect(matrix).toHaveBeenLastCalledWith(
+      ['s_008um_9_9'],
+      8,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(snapshot.roiReferenceState).toMatchObject({
+      stats: { sampledCellCount: 1, genes: [expect.objectContaining({ gene: 'A2M' })] },
     })
   })
 
