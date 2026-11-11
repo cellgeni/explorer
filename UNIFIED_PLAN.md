@@ -245,7 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                       |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)       |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                       |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | Planned (2026-11-11); not started                       |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: 15.0 done (2026-11-11); 15.1 next          |
 
 ---
 
@@ -1910,7 +1910,8 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 
 ### Phase 15 — Interface Redesign
 
-Planned 2026-11-11; not started. The user asked for a usability review of the
+Planned 2026-11-11. 15.0 (foundations) done 2026-11-11; 15.1 next. The user
+asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
 - The UI review of 2026-11-10. It walked through eight tasks on the hosted
@@ -2888,8 +2889,8 @@ Sequencing:
 - [ ] Hosted Visium HD optimization: profiling, segmentation streaming, Feature
       Slice ranges, memory, and bundles.
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
-      in five milestones, starting with the dark tokens and the `Colour by`
-      fix.
+      in five milestones. 15.0 (foundations, six tasks) is done; 15.1 starts
+      with the `Colour by` fix.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
