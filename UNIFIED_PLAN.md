@@ -2454,8 +2454,12 @@ They are independent unless a note says otherwise.
     (`AppDatasetHudPanel.tsx:126`).
   - Add `groups=`.
   - Version 1 links still parse unchanged; test this.
-- [ ] **M. Title and favicon (F19).** Set the page title to "{dataset} ·
+- [x] **M. Title and favicon (F19).** Set the page title to "{dataset} ·
       Spatial Omics Explorer" and add an SVG favicon in `public/`. (S)
+  - Done 2026-11-11 (`app-shell/documentTitle.ts`). The name comes from the
+    manifest's `name`, or else the URL's last segment, skipping `outs`,
+    `explorer.json` and `experiment.xenium`. The title changes only when a
+    load finishes. Before any load it is "Spatial Omics Explorer".
 
 #### 15.2 Shell Re-Layout
 

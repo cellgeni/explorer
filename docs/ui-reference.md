@@ -31,6 +31,11 @@ Platform names used below: **Xenium**, **Visium HD**, **H5AD**,
 (`src/components/AppErrorBoundary.tsx`), which shows "Application error" with a
 `Retry` button if rendering throws.
 
+The browser tab reads "{dataset} · Spatial Omics Explorer" once a dataset has
+loaded. The name is the manifest's `name`, or else the last part of the URL
+that is not `outs`, `explorer.json` or `experiment.xenium`. The favicon is
+`public/favicon.svg`.
+
 ### Control HUD
 
 `ControlHudShell` is an opaque dark panel floating at the top right (narrower

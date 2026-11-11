@@ -31,6 +31,7 @@ import {
   readShareableStateFromLocation,
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
+import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
 import type { ObservationColorMode } from './rendering/cellStyling'
 import {
@@ -570,6 +571,11 @@ export function App({ dependencies }: AppProps = {}) {
   const initialShouldLoadMorphologyRef = useRef(shouldLoadMorphology)
   const isLoading = loadState.status === 'loading'
   const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
+  useEffect(() => {
+    document.title = documentTitle(
+      datasetDisplayName(loadedDatasetUrl, datasetAbout?.name),
+    )
+  }, [datasetAbout, loadedDatasetUrl])
   const platformAdapter = appPlatformAdapterFor(loadState, datasetPlatform)
   const isVisiumHdDataset = isVisiumHdPlatform(platformAdapter)
   const platformFeatureLoadEnabled = platformAdapter.featureLoadEnabled(loadState)

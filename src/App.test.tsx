@@ -3693,6 +3693,9 @@ describe('App', () => {
 
     openControls('genes')
     expect(await screen.findByText('3 genes')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(document.title).toMatch(/^[^·]+ · Spatial Omics Explorer$/)
+    })
 
     fireEvent.change(screen.getByLabelText('Gene selection'), {
       target: { value: 'gad' },
