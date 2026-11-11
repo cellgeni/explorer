@@ -2182,7 +2182,7 @@ From [§2](#2-working-rules):
 
 These change almost nothing on screen, but every later step depends on them.
 
-- [ ] **A. Dark tokens.** Add `tokens.css` with the dark theme in
+- [x] **A. Dark tokens.** Add `tokens.css` with the dark theme in
       [Visual System](#visual-system), then convert the 12 stylesheets one file at
       a time, replacing about 440 hard-coded colours. (M)
   - This is where the theme changes: the panel, inputs, chips and status
@@ -2190,6 +2190,24 @@ These change almost nothing on screen, but every later step depends on them.
   - Layout, sizes and copy stay as they are.
   - Set `color-scheme: dark` and a dark `theme-color` in `index.html`, so
     native controls and scrollbars match.
+  - Done 2026-11-11. All 413 colour literals in the 11 other stylesheets now
+    use tokens, and none are left outside `tokens.css`. The five
+    `backdrop-filter` blurs are gone and every surface is opaque.
+  - Colour roles: four surfaces, three text levels, `--border` and
+    `--border-strong`, and `--accent` (green), `--focus` and `--highlight`
+    (magenta), `--danger`, `--warning`, with `-soft`/`-border` tints made with
+    `color-mix()`. Canvas marks have their own `--overlay-*` tokens.
+  - Every text token is at least 5.4:1 on every surface, and each role colour
+    on its own tint at least 5.4:1. `--border-strong` is 3:1 against the
+    panel, for form controls.
+  - Mapping rules: errors and Remove buttons take `--danger`, selected genes
+    and transcript hover take `--highlight`, pressed segments become solid
+    accent, and hover fills switch their text to `--accent-contrast` or
+    `--danger-contrast`.
+  - The type, spacing, radius, shadow and z-index tokens are defined but not
+    used yet; 15.1-K moves the sizes to them.
+  - Not converted: the embedding plot draws on its own canvas with fixed
+    colours (`EmbeddingPanel.tsx`). It was already dark.
 - [ ] **B. Primitives** in `src/components/ui/`: Button, IconButton,
       Segmented, Select, Checkbox, Switch, Slider, NumberField, Chip (removable),
       Disclosure, Popover, Tooltip, Kbd, Card, Drawer, Sheet. (M)

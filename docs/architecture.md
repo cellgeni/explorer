@@ -38,7 +38,7 @@ files. Parsing happens in the browser:
 | `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                    |
 | `src/workers/`                          | Tile decode pool, Visium HD matrix and Feature Slice workers                                                                                                             |
 | `src/store/`                            | Zustand store (dataset URL)                                                                                                                                              |
-| `src/styles/`                           | CSS per UI area                                                                                                                                                          |
+| `src/styles/`                           | CSS per UI area. `tokens.css` defines the dark theme's colours plus the type, spacing and stacking scales; the other files use only those tokens                         |
 | `tests/e2e/`                            | Playwright tests against hosted reference datasets                                                                                                                       |
 
 Unit tests sit next to their modules as `*.test.ts(x)` and run with Vitest.

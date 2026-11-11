@@ -1,7 +1,6 @@
 :root {
-  color: #171511;
-  color-scheme: light;
-  background: #f6f2e8;
+  color: var(--text-1);
+  background: var(--surface-0);
   font-family: 'Avenir Next', 'DIN Alternate', 'Segoe UI', system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -17,7 +16,7 @@ html {
   min-width: 320px;
   height: 100%;
   min-height: 100%;
-  background: #f6f2e8;
+  background: var(--surface-0);
 }
 
 body {
@@ -26,11 +25,8 @@ body {
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
-  background:
-    linear-gradient(90deg, rgba(32, 102, 83, 0.08) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(32, 102, 83, 0.08) 1px, transparent 1px), #f6f2e8;
-  background-size: 44px 44px;
-  -webkit-tap-highlight-color: rgba(32, 102, 83, 0.18);
+  background: var(--surface-0);
+  -webkit-tap-highlight-color: var(--accent-soft);
 }
 
 button,
@@ -49,7 +45,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid #d73f7c;
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
 
@@ -60,8 +56,8 @@ textarea:focus-visible {
   left: max(12px, env(safe-area-inset-left));
   padding: 10px 12px;
   border-radius: 6px;
-  background: #171511;
-  color: #fffdf7;
+  background: var(--surface-3);
+  color: var(--text-1);
   font-weight: 800;
   text-decoration: none;
   transform: translateY(calc(-100% - 18px));
@@ -69,7 +65,7 @@ textarea:focus-visible {
 }
 
 .skip-link:focus-visible {
-  outline: 3px solid #d73f7c;
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
   transform: translateY(0);
 }

@@ -1,0 +1,92 @@
+/*
+ * Design tokens (UNIFIED_PLAN.md, Phase 15 › Visual System).
+ *
+ * The app has one theme, dark. Surfaces are opaque so that panels look the
+ * same over fluorescence, H&E and density layers. A light theme would only
+ * redefine the colour roles below.
+ *
+ * Contrast on --surface-0…3: --text-1 12.3–16.7:1, --text-2 8.3–11.3:1,
+ * --text-3 5.4–7.3:1, and every role colour at least 5:1, so all of them can
+ * be used for text. Role text on its own -soft background is at least 5.4:1.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, darkest first. */
+  --canvas: #000;
+  --surface-0: #0c0c0b;
+  --surface-1: #161614;
+  --surface-2: #1f1f1c;
+  --surface-3: #2b2a26;
+
+  /* Text, strongest first. */
+  --text-1: #f0ede5;
+  --text-2: #c9c4b8;
+  --text-3: #a39e91;
+
+  /* --border-strong has 3:1 against the panel, for form controls. */
+  --border: #3a3934;
+  --border-strong: #6e6b62;
+
+  /* Roles. Green is the accent and magenta the focus ring and highlight, as
+     before, lightened to pass contrast on dark surfaces. */
+  --accent: #4cc39a;
+  --accent-contrast: #06140e;
+  --focus: #f06ba3;
+  --highlight: #f58bb6;
+  --danger: #ff8a80;
+  --danger-contrast: #1f0b09;
+  --warning: #f0c84b;
+  --warning-contrast: #1a1608;
+  --success: var(--accent);
+
+  /* Tints of the roles, for backgrounds and borders. */
+  --accent-faint: color-mix(in srgb, var(--accent) 8%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --accent-border: color-mix(in srgb, var(--accent) 45%, transparent);
+  --highlight-faint: color-mix(in srgb, var(--highlight) 8%, transparent);
+  --highlight-soft: color-mix(in srgb, var(--highlight) 16%, transparent);
+  --highlight-border: color-mix(in srgb, var(--highlight) 45%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 14%, transparent);
+  --danger-border: color-mix(in srgb, var(--danger) 45%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
+  --warning-border: color-mix(in srgb, var(--warning) 45%, transparent);
+
+  /* Marks drawn over the canvas: selections, measurements, the lens. */
+  --overlay-selection: #f0c84b;
+  --overlay-selection-fill: color-mix(in srgb, var(--overlay-selection) 15%, transparent);
+  --overlay-measure: #25aca6;
+  --overlay-halo: rgb(255 253 247 / 0.55);
+  --overlay-shade: rgb(0 0 0 / 0.7);
+
+  /* Type scale. Sizes move to it in 15.1-K. */
+  --font-caption: 0.6875rem; /* 11px */
+  --font-control: 0.75rem; /* 12px */
+  --font-body: 0.8125rem; /* 13px */
+  --font-title: 0.9375rem; /* 15px */
+  --font-heading: 1.125rem; /* 18px */
+
+  /* 4-point spacing, radius and elevation. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-3: 8px;
+  --radius-pill: 999px;
+  --shadow-1: 0 10px 28px rgb(0 0 0 / 0.45);
+  --shadow-2: 0 18px 48px rgb(0 0 0 / 0.55);
+
+  /* Stacking, back to front. */
+  --z-canvas: 0;
+  --z-canvas-overlay: 6;
+  --z-legend: 8;
+  --z-cards: 10;
+  --z-panel: 12;
+  --z-drawer: 14;
+  --z-popover: 16;
+  --z-toast: 18;
+}

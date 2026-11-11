@@ -33,8 +33,9 @@ Platform names used below: **Xenium**, **Visium HD**, **H5AD**,
 
 ### Control HUD
 
-`ControlHudShell` is a floating panel (top right; narrower and height-capped on
-small screens, see `src/styles/responsive.css`). `Hide Controls` collapses it.
+`ControlHudShell` is an opaque dark panel floating at the top right (narrower
+and height-capped on small screens, see `src/styles/responsive.css`).
+`Hide Controls` collapses it.
 A tab with a running task shows a loading dot.
 
 | Tab         | Panel component                                                                                               | Hidden for               |
