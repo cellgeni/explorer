@@ -8,7 +8,8 @@ import {
   isGeneExpressionScoreMode,
 } from '../../rendering/deckLayers'
 import { opacityToPercent } from '../../rendering/layerOpacity'
-import { Chip } from '../../components/ui'
+import { Chip, InfoTip } from '../../components/ui'
+import { COMBINE_GENES_HELP, EXPRESSION_DETAIL_HELP } from '../shell/helpText'
 import { isObservationColorMode } from '../app-shell/appShellModel'
 import { GeneOptionList } from '../genes/GeneOptionList'
 import {
@@ -292,7 +293,10 @@ export function GeneExpressionControls({ colour }: { readonly colour: CellColour
     <>
       {colour.selectedGeneCount < 2 ? null : (
         <>
-          <label htmlFor={scoreInputId}>Combine genes</label>
+          <div className="ui-label-row">
+            <label htmlFor={scoreInputId}>Combine genes</label>
+            <InfoTip title="Combine genes">{COMBINE_GENES_HELP}</InfoTip>
+          </div>
           <select
             id={scoreInputId}
             value={colour.scoreMode}
@@ -360,7 +364,10 @@ export function ExpressionDetailControl({
 
   return (
     <>
-      <label htmlFor={inputId}>Expression detail</label>
+      <div className="ui-label-row">
+        <label htmlFor={inputId}>Expression detail</label>
+        <InfoTip title="Expression detail">{EXPRESSION_DETAIL_HELP}</InfoTip>
+      </div>
       <select
         id={inputId}
         value={colour.detailMode}

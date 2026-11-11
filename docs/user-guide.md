@@ -24,6 +24,15 @@ Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is
 wrong, a message says why and the current dataset stays.
 
+Work in progress is listed at the bottom left of the view. Loading a dataset,
+diagnostics, transcripts, Magic Lens scans, embeddings, cell details and ROI
+queries can be stopped with `Cancel` there. Cancelling one leaves the view as
+it was before the task started: a cancelled dataset load keeps the dataset
+already open, and cancelled transcripts go back to the points or squares
+shown before. A cancelled task does not start again until you move the view,
+pick another cell, or start it yourself. Exact transcript loads show how far
+they have got as a percentage.
+
 When a dataset folder contains an `explorer.json` manifest, the viewer reads
 files from the locations it lists and applies its display defaults (genes,
 cell colour, layer toggles, opacities, image channels). The activity log, in
@@ -64,10 +73,16 @@ focusable:
 - `+` and `-` zoom in and out.
 - `Home` resets to the fitted dataset view.
 
+`?` (or the Help button in the top bar) lists every keyboard shortcut and links
+to these guides. A small ⓘ beside some controls, such as `Expression detail`,
+`Combine genes`, `Min QV` and `Boundary limit`, explains the term when you
+point at it, tab to it or tap it.
+
 The URL hash updates with the current dataset URL, viewport, selected genes,
 ROI, open panels, tool, cell card, hidden layers, and control state. `Share` in
 the top bar copies the link to share the same view. Older links with `tab=`
-still work.
+still work. Each dataset you open is a step in the browser's history, so Back
+returns to the previous dataset, or to the start screen.
 
 ## Layers And Genes
 
@@ -178,6 +193,11 @@ lens at the cursor; its options set the `Radius`, and `Summarise View` scans
 the whole view. Results appear in the Magic Lens card. Xenium lens scans
 summarize cells, their transcript counts, and top genes from the cell-feature
 matrix. Visium HD lens scans summarize UMIs and bins.
+
+Removing something — clearing the selection, a class, a metadata track, all
+annotations, a GeoJSON shape or a saved gene set — shows a toast with `Undo`
+for 8 seconds (Ctrl+Z or Cmd+Z also works). Undo only puts things back while
+nothing they cover has changed since.
 
 The Embedding panel, opened from Cells › `Show Embedding`, loads UMAP/t-SNE or
 H5AD `obsm` embeddings when the dataset provides them. Clicking an embedding

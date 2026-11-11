@@ -116,7 +116,15 @@ export function EmbeddingWindow({
         fullWidth ? { height: size.height } : { width: size.width, height: size.height }
       }
       onKeyDown={(event) => {
-        if (event.key === 'Escape' && !isTextEntryTarget(event.target)) onClose()
+        if (
+          event.key !== 'Escape' ||
+          event.defaultPrevented ||
+          isTextEntryTarget(event.target)
+        ) {
+          return
+        }
+        event.preventDefault()
+        onClose()
       }}
     >
       <header className="ui-card-header">

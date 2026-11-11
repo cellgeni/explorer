@@ -44,6 +44,12 @@ import {
   readShareableStateFromLocation,
 } from './features/app-shell/appShellModel'
 import { DatasetLoadToast } from './features/app-shell/DatasetLoadToast'
+import { UndoToast } from './features/app-shell/UndoToast'
+import {
+  useUndoableRemovals,
+  type AnnotationSnapshot,
+} from './features/app-shell/useUndoableRemovals'
+import { useUndoToast } from './features/app-shell/useUndoToast'
 import { StartScreen } from './features/start/StartScreen'
 import type { DatasetLibraryModel } from './features/start/datasetLibraryModel'
 import { EXAMPLES_INDEX_URL } from './features/start/examplesIndex'
@@ -103,10 +109,12 @@ import {
   appendFallbackNoticeEntry,
   appendDebugLogEntry,
   createLoadingTasks,
+  isCancellableLoadingTaskId,
   createFallbackNoticeEntry,
   createDebugLogEntry,
   downloadTextFile,
   invalidateLatestRequest,
+  type CancellableLoadingTaskId,
   type DebugLogAppendOptions,
 } from './features/app-shell/appRuntimeModel'
 import {
@@ -633,6 +641,12 @@ export function App({ dependencies }: AppProps = {}) {
     loadState.status === 'error' ||
     (loadState.status === 'idle' && !(linkOpensDataset && !datasetLoadStarted))
   const examplesIndex = useExamplesIndex({ loadIndex: loadExamplesIndex })
+  // Undo after a removal (15.3-C); another dataset ends the offer.
+  const undoToast = useUndoToast()
+  const { dismiss: dismissUndo, offerUndo } = undoToast
+  useEffect(() => {
+    dismissUndo()
+  }, [dismissUndo, loadedDatasetUrl])
   const recentDatasets = useRecentDatasets()
   const { add: addRecentDataset } = recentDatasets
   useEffect(() => {
@@ -1233,76 +1247,6 @@ export function App({ dependencies }: AppProps = {}) {
         : null,
     [activeVisiumHdRoiState],
   )
-  const loadingTasks = useMemo(
-    () =>
-      createLoadingTasks({
-        analysisEmbeddingState,
-        annotationGroupState,
-        annotationState,
-        autoContrastChannelCount: autoContrastChannelIds.length,
-        boundaryState,
-        cellDetailState,
-        cellTranscriptDistributionState,
-        visiumHdExpressionProfileState: activeVisiumHdExpressionProfileState,
-        datasetWarmupState,
-        diagnosticsState,
-        geneExpressionState,
-        geneExpressionLoadingLabel:
-          geneExpressionState.status === 'loading'
-            ? geneExpressionModeLabel(geneExpressionState.mode)
-            : undefined,
-        visiumHdExpressionProjectionState,
-        genePanelState,
-        isRoiGeneViewportWarmupLoading,
-        // The dataset load in progress, whether or not it replaces one.
-        loadState:
-          pendingDatasetLoadState.status === 'loading'
-            ? pendingDatasetLoadState
-            : loadState,
-        magicLensState,
-        magicLensLoadingScopeLabel:
-          magicLensState.status === 'loading'
-            ? magicLensScopeLabel(magicLensState.scope)
-            : undefined,
-        morphologyState,
-        customMorphologyLayerState,
-        roiGeneStatsState,
-        roiState,
-        roiTranscriptExportState,
-        transcriptCapabilityState,
-        transcriptLayerState,
-      }),
-    [
-      analysisEmbeddingState,
-      annotationGroupState,
-      annotationState,
-      autoContrastChannelIds.length,
-      boundaryState,
-      cellDetailState,
-      cellTranscriptDistributionState,
-      activeVisiumHdExpressionProfileState,
-      datasetWarmupState,
-      diagnosticsState,
-      geneExpressionState,
-      genePanelState,
-      visiumHdExpressionProjectionState,
-      isRoiGeneViewportWarmupLoading,
-      loadState,
-      magicLensState,
-      morphologyState,
-      customMorphologyLayerState,
-      pendingDatasetLoadState,
-      roiGeneStatsState,
-      roiState,
-      roiTranscriptExportState,
-      transcriptCapabilityState,
-      transcriptLayerState,
-    ],
-  )
-  const loadingAreas = useMemo(
-    () => new Set(loadingTasks.map((task) => task.area)),
-    [loadingTasks],
-  )
   const activeRoiSelection = platformRoiSelection(
     platformAdapter,
     roiState,
@@ -1324,7 +1268,13 @@ export function App({ dependencies }: AppProps = {}) {
           scoreMode: geneExpressionScoreMode,
           colorScale: geneExpressionColorScale,
           scaleMax: geneExpressionScaleMax,
-          loading: geneExpressionState.status !== 'ready',
+          status:
+            geneExpressionState.status === 'ready'
+              ? 'ready'
+              : geneExpressionState.status === 'error' ||
+                  geneExpressionState.status === 'waiting'
+                ? 'unavailable'
+                : 'loading',
         },
         annotations: legendAnnotations,
         metadataTrack:
@@ -1535,60 +1485,63 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptLayerState,
     ],
   )
-  const { handleDownloadDiagnostics, handleRunDatasetDiagnostics } =
-    useDatasetDiagnosticsWorkflow({
-      callbacks: {
-        appendDebugEvent,
-        recordTelemetry,
-      },
-      controls: {
-        ...(diagnosticsVisiumHdBinSize === undefined
-          ? {}
-          : { visiumHdBinSizeMicrometers: diagnosticsVisiumHdBinSize }),
-      },
-      dump: {
-        openPanels: openPanelIds,
-        activeErrors,
-        boundaryCellLimit,
-        coordinateUnit,
-        datasetUrl,
-        debugLog,
-        diagnosticsState,
-        geneExpressionBatch,
-        geneExpressionColorScale,
-        geneExpressionDetailMode,
-        geneExpressionScoreMode,
-        geneExpressionState,
-        hoveredTranscript,
-        loadState,
-        manualTranscriptExactRequestKey,
-        measurementEnabled,
-        measurementUnit,
-        observationColorMode,
-        performanceBudget,
-        pinnedTranscript,
-        selectedGenes,
-        shareableViewState,
-        shouldLoadMorphology,
-        showTranscriptOverlay: effectiveShowTranscriptOverlay,
-        telemetryEvents,
-        transcriptCapabilityState,
-        transcriptDensityColorScale,
-        transcriptDetailMode,
-        transcriptExactManualLoadRatio: TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
-        transcriptExactPointLimit,
-        transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
-        transcriptGeneOnly,
-        transcriptLayerState,
-        transcriptMinQv,
-        transcriptOpacity,
-        transcriptPointColorMode,
-        transcriptPointSize,
-      },
-      loaders: { runDatasetDiagnostics },
-      refs: { diagnosticsAbortRef },
-      setters: { setDiagnosticsState },
-    })
+  const {
+    handleCancelDatasetDiagnostics,
+    handleDownloadDiagnostics,
+    handleRunDatasetDiagnostics,
+  } = useDatasetDiagnosticsWorkflow({
+    callbacks: {
+      appendDebugEvent,
+      recordTelemetry,
+    },
+    controls: {
+      ...(diagnosticsVisiumHdBinSize === undefined
+        ? {}
+        : { visiumHdBinSizeMicrometers: diagnosticsVisiumHdBinSize }),
+    },
+    dump: {
+      openPanels: openPanelIds,
+      activeErrors,
+      boundaryCellLimit,
+      coordinateUnit,
+      datasetUrl,
+      debugLog,
+      diagnosticsState,
+      geneExpressionBatch,
+      geneExpressionColorScale,
+      geneExpressionDetailMode,
+      geneExpressionScoreMode,
+      geneExpressionState,
+      hoveredTranscript,
+      loadState,
+      manualTranscriptExactRequestKey,
+      measurementEnabled,
+      measurementUnit,
+      observationColorMode,
+      performanceBudget,
+      pinnedTranscript,
+      selectedGenes,
+      shareableViewState,
+      shouldLoadMorphology,
+      showTranscriptOverlay: effectiveShowTranscriptOverlay,
+      telemetryEvents,
+      transcriptCapabilityState,
+      transcriptDensityColorScale,
+      transcriptDetailMode,
+      transcriptExactManualLoadRatio: TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
+      transcriptExactPointLimit,
+      transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
+      transcriptGeneOnly,
+      transcriptLayerState,
+      transcriptMinQv,
+      transcriptOpacity,
+      transcriptPointColorMode,
+      transcriptPointSize,
+    },
+    loaders: { runDatasetDiagnostics },
+    refs: { diagnosticsAbortRef },
+    setters: { setDiagnosticsState },
+  })
   const handleImageTileError = useCallback(
     (error: Error) => {
       setMorphologyState((current) => {
@@ -1945,7 +1898,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleViewportChange(detail)
   }, [boundaryOverlayRequestKey, handleViewportChange, loadState.status])
 
-  useTranscriptWorkflow({
+  const { cancelTranscriptLoad, transcriptLoadProgress } = useTranscriptWorkflow({
     callbacks: {
       appendDebugEvent,
       appendFallbackNotice,
@@ -1982,12 +1935,86 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptViewportKeyRef,
     },
     setters: {
+      setManualTranscriptExactRequestKey,
       setTranscriptCapabilityState,
       setTranscriptLayerState,
     },
   })
+  // Built after the transcript workflow, which reports exact-read progress.
+  const loadingTasks = useMemo(
+    () =>
+      createLoadingTasks({
+        analysisEmbeddingState,
+        annotationGroupState,
+        annotationState,
+        autoContrastChannelCount: autoContrastChannelIds.length,
+        boundaryState,
+        cellDetailState,
+        cellTranscriptDistributionState,
+        visiumHdExpressionProfileState: activeVisiumHdExpressionProfileState,
+        datasetWarmupState,
+        diagnosticsState,
+        geneExpressionState,
+        geneExpressionLoadingLabel:
+          geneExpressionState.status === 'loading'
+            ? geneExpressionModeLabel(geneExpressionState.mode)
+            : undefined,
+        visiumHdExpressionProjectionState,
+        genePanelState,
+        isRoiGeneViewportWarmupLoading,
+        // The dataset load in progress, whether or not it replaces one.
+        loadState:
+          pendingDatasetLoadState.status === 'loading'
+            ? pendingDatasetLoadState
+            : loadState,
+        magicLensState,
+        magicLensLoadingScopeLabel:
+          magicLensState.status === 'loading'
+            ? magicLensScopeLabel(magicLensState.scope)
+            : undefined,
+        morphologyState,
+        customMorphologyLayerState,
+        roiGeneStatsState,
+        roiState,
+        roiTranscriptExportState,
+        transcriptCapabilityState,
+        transcriptLayerState,
+        transcriptLoadProgress,
+      }),
+    [
+      analysisEmbeddingState,
+      annotationGroupState,
+      annotationState,
+      autoContrastChannelIds.length,
+      boundaryState,
+      cellDetailState,
+      cellTranscriptDistributionState,
+      activeVisiumHdExpressionProfileState,
+      datasetWarmupState,
+      diagnosticsState,
+      geneExpressionState,
+      genePanelState,
+      visiumHdExpressionProjectionState,
+      isRoiGeneViewportWarmupLoading,
+      loadState,
+      magicLensState,
+      morphologyState,
+      customMorphologyLayerState,
+      pendingDatasetLoadState,
+      roiGeneStatsState,
+      roiState,
+      roiTranscriptExportState,
+      transcriptCapabilityState,
+      transcriptLayerState,
+      transcriptLoadProgress,
+    ],
+  )
+  const loadingAreas = useMemo(
+    () => new Set(loadingTasks.map((task) => task.area)),
+    [loadingTasks],
+  )
 
-  useCellDetailWorkflow({
+  const { cancelCellDetails } = useCellDetailWorkflow({
     callbacks: {
       appendDebugEvent,
       appendFallbackNotice,
@@ -2035,6 +2062,8 @@ export function App({ dependencies }: AppProps = {}) {
   })
 
   const {
+    handleCancelRoiCells,
+    handleCancelRoiGenes,
     handleClearRoi,
     handleExportRoiCells,
     handleExportRoiGeoJson,
@@ -2351,32 +2380,35 @@ export function App({ dependencies }: AppProps = {}) {
     setSelectedAnnotationGroupId,
   ])
 
-  const { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings } =
-    useAnalysisEmbeddingWorkflow({
-      callbacks: {
-        appendDebugEvent,
-        appendFallbackNotice,
-        onSelectedCellFocus: focusSpatialViewOnCell,
-      },
-      data: {
-        analysisEmbeddingState,
-        loadState,
-        overviewCellById,
-        selectedEmbeddingKind,
-      },
-      loaders: {
-        loadAnalysisEmbeddings: loadActiveAnalysisEmbeddings,
-      },
-      refs: {
-        analysisEmbeddingAbortRef,
-        analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
-      },
-      setters: {
-        setAnalysisEmbeddingState,
-        setSelectedCell,
-        setSelectedEmbeddingKind,
-      },
-    })
+  const {
+    handleCancelAnalysisEmbeddings,
+    handleEmbeddingCellSelect,
+    handleLoadAnalysisEmbeddings,
+  } = useAnalysisEmbeddingWorkflow({
+    callbacks: {
+      appendDebugEvent,
+      appendFallbackNotice,
+      onSelectedCellFocus: focusSpatialViewOnCell,
+    },
+    data: {
+      analysisEmbeddingState,
+      loadState,
+      overviewCellById,
+      selectedEmbeddingKind,
+    },
+    loaders: {
+      loadAnalysisEmbeddings: loadActiveAnalysisEmbeddings,
+    },
+    refs: {
+      analysisEmbeddingAbortRef,
+      analysisEmbeddingRequestIdRef: analysisEmbeddingRequestId,
+    },
+    setters: {
+      setAnalysisEmbeddingState,
+      setSelectedCell,
+      setSelectedEmbeddingKind,
+    },
+  })
   const handleEmbeddingElementSelect = useCallback(
     (elementId: string) => {
       if (!isVisiumHdDataset) {
@@ -2484,6 +2516,7 @@ export function App({ dependencies }: AppProps = {}) {
   )
 
   const {
+    handleCancelMagicLens,
     handleMagicLensClear,
     handleMagicLensCursorActiveChange,
     handleMagicLensLeave,
@@ -2535,12 +2568,19 @@ export function App({ dependencies }: AppProps = {}) {
     setActiveTool('pan')
     appendDebugEvent('Tool: Pan')
   }, [activeTool, appendDebugEvent, handleMagicLensLeave, setActiveTool])
-  // Esc anywhere but a text field leaves the active tool for Pan (D8).
+  // Esc anywhere but a text field leaves the active tool for Pan (D8),
+  // unless it closed a popover, the drawer or a tooltip.
   useEffect(() => {
     if (activeTool === 'pan') return
 
     function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key !== 'Escape' || isTextEntryTarget(event.target)) return
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        isTextEntryTarget(event.target)
+      ) {
+        return
+      }
       returnToPan()
     }
 
@@ -2689,7 +2729,7 @@ export function App({ dependencies }: AppProps = {}) {
     loadedDatasetUrl,
   ])
 
-  const { handleDatasetSubmit } = useDatasetLifecycle({
+  const { cancelDatasetLoad, handleDatasetSubmit } = useDatasetLifecycle({
     callbacks: {
       appendDebugEvent,
       appendFallbackNotice,
@@ -2699,6 +2739,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     controls: {
       isDatasetLoaded: loadState.status === 'ready',
+      isDatasetLoading: loadState.status === 'loading',
       geneExpressionColorScale,
       transcriptDensityColorScale,
       transcriptExactPointLimit,
@@ -2837,10 +2878,41 @@ export function App({ dependencies }: AppProps = {}) {
       setViewportCellCount,
     },
   })
+  // Cancel in the loading list (15.3-D). ViewerCore gets one stable
+  // callback, so deck.gl never sees a new prop; it calls the latest
+  // handlers, and only for a task still in the list.
+  const cancelLoadingTaskRef = useRef<(id: string) => void>(() => undefined)
+  useEffect(() => {
+    const cancelTask: Record<CancellableLoadingTaskId, () => void> = {
+      dataset: cancelDatasetLoad,
+      'dataset-diagnostics': handleCancelDatasetDiagnostics,
+      'transcript-overlay': cancelTranscriptLoad,
+      'magic-lens': handleCancelMagicLens,
+      embeddings: handleCancelAnalysisEmbeddings,
+      'cell-details': cancelCellDetails,
+      'cell-transcripts': cancelCellDetails,
+      'roi-cells': handleCancelRoiCells,
+      'roi-genes': handleCancelRoiGenes,
+    }
+
+    cancelLoadingTaskRef.current = (id) => {
+      if (
+        isCancellableLoadingTaskId(id) &&
+        loadingTasks.some((task) => task.id === id && task.cancellable === true)
+      ) {
+        cancelTask[id]()
+      }
+    }
+  })
+  const handleCancelLoadingTask = useCallback((id: string) => {
+    cancelLoadingTaskRef.current(id)
+  }, [])
 
   const handleSpatialDataSelectionChange = useCallback(
     (selection: SpatialDataSelection) => {
-      setSpatialDataSelection(datasetUrl, selection)
+      // The open dataset, not the address box, which may hold a failed one.
+      const viewUrl = loadedDatasetUrl ?? datasetUrl
+      setSpatialDataSelection(viewUrl, selection)
       setSpatialDataControlState((state) => spatialDataControlLoading(state, selection))
       appendDebugEvent(
         `SpatialData view change: ${[
@@ -2855,9 +2927,15 @@ export function App({ dependencies }: AppProps = {}) {
           .filter((part) => part !== null)
           .join(', ')}`,
       )
-      void startDatasetLoadRef.current?.(datasetUrl, shouldLoadMorphology)
+      void startDatasetLoadRef.current?.(viewUrl, shouldLoadMorphology)
     },
-    [appendDebugEvent, datasetUrl, setSpatialDataControlState, shouldLoadMorphology],
+    [
+      appendDebugEvent,
+      datasetUrl,
+      loadedDatasetUrl,
+      setSpatialDataControlState,
+      shouldLoadMorphology,
+    ],
   )
   const { handleVisiumImageChange, handleVisiumViewChange } = useVisiumControlsWorkflow({
     appendDebugEvent,
@@ -3027,6 +3105,63 @@ export function App({ dependencies }: AppProps = {}) {
       : platformAdapter.kind === 'visium-hd'
         ? handleVisiumHdRoiComplete
         : handleRoiComplete
+  const restoreAnnotationSnapshot = useCallback(
+    (snapshot: AnnotationSnapshot) => {
+      setAnnotationState(snapshot.annotationState)
+      setAnnotationColors(snapshot.annotationColors)
+      setHiddenAnnotationIds(snapshot.hiddenAnnotationIds)
+      setHiddenAnnotationSetIds(snapshot.hiddenAnnotationSetIds)
+      setCellMetadataTracks(snapshot.cellMetadataTracks)
+      setSelectedCellMetadataTrackId(snapshot.selectedCellMetadataTrackId)
+      setObservationColorMode(snapshot.observationColorMode)
+    },
+    [
+      setAnnotationColors,
+      setAnnotationState,
+      setCellMetadataTracks,
+      setHiddenAnnotationIds,
+      setHiddenAnnotationSetIds,
+      setObservationColorMode,
+      setSelectedCellMetadataTrackId,
+    ],
+  )
+  const restoreRoiSelection = useCallback(
+    (selection: RoiSelection, name: string) => {
+      setRoiName(name)
+      activeRoiCompleteHandler(selection)
+    },
+    [activeRoiCompleteHandler, setRoiName],
+  )
+  // Removals that offer Undo (15.3-C).
+  const undoable = useUndoableRemovals({
+    offerUndo,
+    appendDebugEvent,
+    annotations: {
+      annotationState,
+      annotationColors,
+      hiddenAnnotationIds,
+      hiddenAnnotationSetIds,
+      cellMetadataTracks,
+      selectedCellMetadataTrackId,
+      observationColorMode,
+      restore: restoreAnnotationSnapshot,
+      onRemove: handleRemoveAnnotation,
+      onRemoveTrack: handleRemoveCellMetadataTrack,
+      onClear: handleClearAnnotations,
+    },
+    shapes: {
+      shapes: geometricAnnotations,
+      restore: setGeometricAnnotations,
+      onRemove: handleRemoveGeometricAnnotation,
+      onClear: handleClearGeometricAnnotations,
+    },
+    selection: {
+      selection: activeRoiSelection,
+      name: roiName,
+      onClear: handleClearActiveRoi,
+      restore: restoreRoiSelection,
+    },
+  })
 
   // The section models (UNIFIED_PLAN.md, 15.2-A): the layer panel, info
   // drawer and top bar take these instead of separate props.
@@ -3126,6 +3261,7 @@ export function App({ dependencies }: AppProps = {}) {
   const cellsSection = useCellsSectionModel({
     analysisHeaderCopy,
     appendDebugEvent,
+    offerUndo,
     cellBoundaryOpacity,
     cellFillOpacity,
     cellLayerControlsVisible: platformAdapter.capabilities.cells,
@@ -3224,8 +3360,8 @@ export function App({ dependencies }: AppProps = {}) {
     handleAnnotationGroupChange,
     handleAnnotationSetVisibilityChange,
     handleAnnotationVisibilityChange,
-    handleClearAnnotations,
-    handleClearGeometricAnnotations,
+    handleClearAnnotations: undoable.handleClearAnnotations,
+    handleClearGeometricAnnotations: undoable.handleClearShapes,
     handleExportAnnotations,
     handleExportGeometricAnnotations,
     handleGeometricAnnotationColorChange,
@@ -3234,9 +3370,9 @@ export function App({ dependencies }: AppProps = {}) {
     handleImportAnnotations,
     handleImportGeometricAnnotations,
     handleLoadAnnotations,
-    handleRemoveAnnotation,
-    handleRemoveCellMetadataTrack,
-    handleRemoveGeometricAnnotation,
+    handleRemoveAnnotation: undoable.handleRemoveAnnotation,
+    handleRemoveCellMetadataTrack: undoable.handleRemoveCellMetadataTrack,
+    handleRemoveGeometricAnnotation: undoable.handleRemoveShape,
     hiddenAnnotationIds,
     hiddenAnnotationSetIds,
     loadEnabled: platformAdapter.capabilities.annotations && platformFeatureLoadEnabled,
@@ -3362,7 +3498,7 @@ export function App({ dependencies }: AppProps = {}) {
               lens: selectionLensInput,
               name: roiName,
               nameDisabled: loadState.status !== 'ready',
-              onClose: handleClearActiveRoi,
+              onClose: undoable.handleClearSelection,
               onExportBarcodes: handleExportVisiumHdRoiBarcodes,
               onExportGeoJson: handleExportVisiumHdRoiGeoJson,
               onNameChange: setRoiName,
@@ -3381,7 +3517,7 @@ export function App({ dependencies }: AppProps = {}) {
               loading: isRoiTabLoading,
               name: roiName,
               nameDisabled: !platformFeatureLoadEnabled,
-              onClose: handleClearActiveRoi,
+              onClose: undoable.handleClearSelection,
               onExportCells: handleExportRoiCells,
               onExportGeoJson: handleExportRoiGeoJson,
               onExportTranscripts: handleExportRoiTranscripts,
@@ -3487,6 +3623,7 @@ export function App({ dependencies }: AppProps = {}) {
         annotationStyleColors={annotationStyleColors}
         cellMetadataTrack={activeCellMetadataTrack}
         loadingTasks={loadingTasks}
+        onCancelLoadingTask={handleCancelLoadingTask}
         legendSections={legendSections}
         showZoomLevel={debugMode}
         selectionHighlight={selectionHighlight}
@@ -3554,16 +3691,19 @@ export function App({ dependencies }: AppProps = {}) {
           error={loadState.status === 'error' ? loadState.error : null}
         />
       ) : null}
-      {pendingDatasetLoadState.status === 'error' ? (
-        <DatasetLoadToast
-          failedUrl={pendingDatasetLoadState.url}
-          error={pendingDatasetLoadState.error}
-          openDatasetName={loadedDatasetName}
-          onDismiss={() => {
-            setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
-          }}
-        />
-      ) : null}
+      <div className="viewer-toasts">
+        {pendingDatasetLoadState.status === 'error' ? (
+          <DatasetLoadToast
+            failedUrl={pendingDatasetLoadState.url}
+            error={pendingDatasetLoadState.error}
+            openDatasetName={loadedDatasetName}
+            onDismiss={() => {
+              setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
+            }}
+          />
+        ) : null}
+        <UndoToast store={undoToast} />
+      </div>
     </section>
   )
   const skipLink = (

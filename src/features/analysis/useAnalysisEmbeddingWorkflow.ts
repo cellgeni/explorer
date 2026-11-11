@@ -4,6 +4,7 @@ import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import type { AnalysisEmbeddingsLoader } from '../app-shell/appDependencies'
 import {
+  invalidateLatestRequest,
   isAbortError,
   startLatestRequest,
   type DebugLogAppendOptions,
@@ -14,6 +15,7 @@ import {
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
 import {
+  analysisEmbeddingLoadCancelled,
   analysisEmbeddingLoadFailed,
   analysisEmbeddingLoadReady,
   analysisEmbeddingLoadStarted,
@@ -64,6 +66,8 @@ interface UseAnalysisEmbeddingWorkflowOptions {
 }
 
 interface UseAnalysisEmbeddingWorkflowResult {
+  // Cancel in the loading list (15.3-D).
+  readonly handleCancelAnalysisEmbeddings: () => void
   readonly handleEmbeddingCellSelect: (cellId: string) => void
   readonly handleLoadAnalysisEmbeddings: () => void
 }
@@ -155,6 +159,20 @@ export function useAnalysisEmbeddingWorkflow({
     setSelectedEmbeddingKind,
   ])
 
+  const handleCancelAnalysisEmbeddings = useCallback(() => {
+    invalidateLatestRequest({
+      abortRef: analysisEmbeddingAbortRef,
+      requestIdRef: analysisEmbeddingRequestIdRef,
+    })
+    setAnalysisEmbeddingState(analysisEmbeddingLoadCancelled)
+    appendDebugEvent('Cancelled embeddings')
+  }, [
+    analysisEmbeddingAbortRef,
+    analysisEmbeddingRequestIdRef,
+    appendDebugEvent,
+    setAnalysisEmbeddingState,
+  ])
+
   const handleEmbeddingCellSelect = useCallback(
     (cellId: string) => {
       const cell = overviewCellById.get(cellId)
@@ -167,5 +185,9 @@ export function useAnalysisEmbeddingWorkflow({
     [onSelectedCellFocus, overviewCellById, setSelectedCell],
   )
 
-  return { handleEmbeddingCellSelect, handleLoadAnalysisEmbeddings }
+  return {
+    handleCancelAnalysisEmbeddings,
+    handleEmbeddingCellSelect,
+    handleLoadAnalysisEmbeddings,
+  }
 }

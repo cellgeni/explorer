@@ -412,3 +412,19 @@ export function defaultGeneSetName(genes: readonly string[]): string {
 
   return `${genes.slice(0, 3).join(', ')} +${genes.length - 3}`
 }
+
+// A removed gene set put back at its old place (15.3-C). A set saved since
+// under the same name, or the same set, wins.
+export function withGeneSetAt(
+  sets: readonly SavedGeneSet[],
+  geneSet: SavedGeneSet,
+  index: number,
+): readonly SavedGeneSet[] {
+  const name = geneSet.name.toLowerCase()
+  if (sets.some((set) => set.id === geneSet.id || set.name.toLowerCase() === name)) {
+    return sets
+  }
+
+  const at = Math.min(Math.max(index, 0), sets.length)
+  return [...sets.slice(0, at), geneSet, ...sets.slice(at)]
+}

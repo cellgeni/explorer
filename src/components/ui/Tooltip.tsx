@@ -18,13 +18,25 @@ export interface TooltipProps {
   // title would show a second tooltip.
   readonly children: ReactElement<{ 'aria-describedby'?: string | undefined }>
   readonly placement?: 'top' | 'bottom' | undefined
+  // Centred on the child, or starting at its left edge, which keeps a wide
+  // tooltip inside a side panel.
+  readonly align?: 'center' | 'start' | undefined
+  // Wraps a sentence or two instead of one line (InfoTip).
+  readonly wide?: boolean | undefined
   // Extra content after the text, such as a Kbd.
   readonly detail?: ReactNode
 }
 
 // A styled tooltip, shown after a short hover or at once on keyboard focus,
 // and hidden by Escape.
-export function Tooltip({ title, children, placement = 'top', detail }: TooltipProps) {
+export function Tooltip({
+  title,
+  children,
+  placement = 'top',
+  align = 'center',
+  wide = false,
+  detail,
+}: TooltipProps) {
   const id = useId()
   const [visible, setVisible] = useState(false)
   const [hovering, setHovering] = useState(false)
@@ -56,14 +68,22 @@ export function Tooltip({ title, children, placement = 'top', detail }: TooltipP
       }}
       onBlur={hide}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') hide()
+        if (event.key !== 'Escape' || !visible) return
+        // Hiding a shown tooltip is all this press does.
+        event.preventDefault()
+        hide()
       }}
     >
       {cloneElement(children, { 'aria-describedby': id })}
       <span
         role="tooltip"
         id={id}
-        className={classNames('ui-tooltip', `ui-tooltip--${placement}`)}
+        className={classNames(
+          'ui-tooltip',
+          `ui-tooltip--${placement}`,
+          align === 'start' && 'ui-tooltip--start',
+          wide && 'ui-tooltip--wide',
+        )}
         hidden={!visible}
       >
         {title}

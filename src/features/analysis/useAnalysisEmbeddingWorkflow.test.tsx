@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import type { AnalysisEmbeddingKind } from '../../data/analysisEmbeddings'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { AnalysisEmbeddingsLoader } from '../app-shell/appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { AnalysisEmbeddingState } from './analysisEmbeddingModel'
@@ -27,10 +28,12 @@ let api: ReturnType<typeof useAnalysisEmbeddingWorkflow>
 let snapshot: Snapshot
 
 function Probe({
+  initialState = { status: 'idle' },
   onReady,
   onSelectedCellFocus,
   loadAnalysisEmbeddings,
 }: {
+  readonly initialState?: AnalysisEmbeddingState<StructuredLoadError>
   readonly onReady: (
     nextApi: ReturnType<typeof useAnalysisEmbeddingWorkflow>,
     nextSnapshot: Snapshot,
@@ -40,9 +43,8 @@ function Probe({
     typeof useAnalysisEmbeddingWorkflow
   >[0]['loaders']['loadAnalysisEmbeddings']
 }) {
-  const [embeddingState, setAnalysisEmbeddingState] = React.useState<
-    AnalysisEmbeddingState<StructuredLoadError>
-  >({ status: 'idle' })
+  const [embeddingState, setAnalysisEmbeddingState] =
+    React.useState<AnalysisEmbeddingState<StructuredLoadError>>(initialState)
   const [selectedCell, setSelectedCell] = React.useState<OverviewCellDatum | null>(null)
   const [selectedEmbeddingKind, setSelectedEmbeddingKind] =
     React.useState<AnalysisEmbeddingKind>('tsne')
@@ -132,6 +134,64 @@ describe('useAnalysisEmbeddingWorkflow', () => {
     expect(snapshot.embeddingState.status).toBe('ready')
     expect(snapshot.selectedEmbeddingKind).toBe('umap')
     expect(snapshot.debugMessages).toContain('Embeddings loaded: 1 views')
+  })
+
+  it('cancels a load back to the embeddings on offer (15.3-D)', async () => {
+    const options = [{ kind: 'umap' as const, label: 'UMAP', sourcePath: 'obsm/X_umap' }]
+    let signal: AbortSignal | undefined
+    let resolve: (value: Awaited<ReturnType<AnalysisEmbeddingsLoader>>) => void = () =>
+      undefined
+    const loadAnalysisEmbeddings = vi.fn<AnalysisEmbeddingsLoader>(
+      (_url, loadOptions) => {
+        signal = loadOptions?.signal
+        return new Promise((next) => {
+          resolve = next
+        })
+      },
+    )
+
+    render(
+      <Probe
+        initialState={{
+          status: 'available',
+          url: 'https://example.test/output',
+          options,
+        }}
+        loadAnalysisEmbeddings={loadAnalysisEmbeddings}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleLoadAnalysisEmbeddings()
+    })
+    expect(snapshot.embeddingState.status).toBe('loading')
+
+    act(() => {
+      api.handleCancelAnalysisEmbeddings()
+    })
+    await act(async () => {
+      resolve([
+        {
+          kind: 'umap',
+          label: 'UMAP',
+          sourcePath: 'obsm/X_umap',
+          points: [{ id: asCellId('aaaaaaaa-1'), x: 1, y: 2 }],
+        },
+      ])
+      await Promise.resolve()
+    })
+
+    expect(signal?.aborted).toBe(true)
+    expect(snapshot.embeddingState).toEqual({
+      status: 'available',
+      url: 'https://example.test/output',
+      options,
+    })
+    expect(snapshot.debugMessages).toContain('Cancelled embeddings')
   })
 
   it('selects overview cells from embedding clicks', () => {

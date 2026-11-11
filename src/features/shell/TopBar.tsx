@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
 import {
   BoxSelectIcon,
   Button,
@@ -19,7 +19,7 @@ import {
   Tooltip,
 } from '../../components/ui'
 import { withMicrometers } from '../../data/units'
-import type { ActiveTool } from '../app-shell/activeToolModel'
+import { isTextEntryTarget, type ActiveTool } from '../app-shell/activeToolModel'
 import { BoundaryLimitField, OpenDatasetForm } from '../sections/DatasetInfoBlocks'
 import type { DatasetInfoModel, OpenDatasetModel } from '../sections/datasetInfoModel'
 import { useCopyLinkStatus } from '../sections/useCopyLinkStatus'
@@ -31,7 +31,8 @@ import {
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
 import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
 import { ExampleGallery, RecentDatasetList } from '../start/StartScreen'
-import { SHORTCUTS } from './shortcuts'
+import { HELP_LINKS } from './docLinks'
+import { isHelpKey, SHORTCUTS } from './shortcuts'
 import type {
   DatasetSummary,
   MagicLensToolModel,
@@ -110,14 +111,7 @@ export function TopBar({
       </div>
       <div className="shell-top-bar-end">
         <ShareButton info={info} iconOnly={narrow} />
-        <Popover
-          title="Help"
-          align="end"
-          trigger={<HelpIcon />}
-          triggerClassName="ui-icon-button"
-        >
-          <ShortcutList />
-        </Popover>
+        <HelpMenu />
         <Popover
           title="Settings"
           align="end"
@@ -399,6 +393,58 @@ function ShareButton({
         {message}
       </span>
     </span>
+  )
+}
+
+// Help (15.3-B): the shortcuts and links to the guides. ? opens and closes
+// it, except while typing.
+function HelpMenu() {
+  const [open, setOpen] = useState(false)
+  const toggle = useEffectEvent(() => {
+    setOpen((current) => !current)
+  })
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.repeat || isTextEntryTarget(event.target)) {
+        return
+      }
+      if (!isHelpKey(event)) return
+
+      event.preventDefault()
+      toggle()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  return (
+    <Popover
+      title="Help"
+      align="end"
+      open={open}
+      onOpenChange={setOpen}
+      trigger={<HelpIcon />}
+      triggerClassName="ui-icon-button"
+      className="shell-help"
+    >
+      <ShortcutList />
+      <nav className="shell-help-links" aria-label="Guides">
+        <h3>Guides</h3>
+        <ul>
+          {HELP_LINKS.map((link) => (
+            <li key={link.href}>
+              <a href={link.href} target="_blank" rel="noopener noreferrer">
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </Popover>
   )
 }
 

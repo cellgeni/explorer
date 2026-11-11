@@ -100,6 +100,7 @@ export function testCellsSectionModel(
       onToggle: vi.fn(),
       onApply: vi.fn(),
       log: vi.fn(),
+      onOfferUndo: vi.fn(),
       ...overrides.genes,
     },
     colour: {

@@ -9,6 +9,7 @@ import type {
 } from '../../rendering/deckLayers'
 import { percentToOpacity } from '../../rendering/layerOpacity'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
+import type { UndoOffer } from '../app-shell/useUndoToast'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type {
   GeneExpressionScaleDomain,
@@ -54,6 +55,8 @@ export interface GeneSelectionModel {
   ) => void
   // For the picker's own actions, such as saving a gene set.
   readonly log: AppendDebugEvent
+  // Removing a saved gene set offers Undo (15.3-C).
+  readonly onOfferUndo: (offer: UndoOffer) => void
 }
 
 export interface CellColourModel {
@@ -81,6 +84,7 @@ export interface CellColourModel {
 export interface CellsSectionModelInput {
   readonly analysisHeaderCopy: string
   readonly appendDebugEvent: AppendDebugEvent
+  readonly offerUndo: (offer: UndoOffer) => void
   readonly cellBoundaryOpacity: number
   readonly cellFillOpacity: number
   readonly cellLayerControlsVisible: boolean
@@ -129,6 +133,7 @@ export interface CellsSectionModelInput {
 export function useCellsSectionModel({
   analysisHeaderCopy,
   appendDebugEvent,
+  offerUndo,
   cellBoundaryOpacity,
   cellFillOpacity,
   cellLayerControlsVisible,
@@ -243,6 +248,7 @@ export function useCellsSectionModel({
       onToggle: toggleGene,
       onApply: applyGenes,
       log: appendDebugEvent,
+      onOfferUndo: offerUndo,
     },
     colour: {
       headerCopy: analysisHeaderCopy,

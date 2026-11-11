@@ -33,6 +33,9 @@ export const LAYER_PANEL_KEY = '\\'
 // Fits the data to the view (15.2-E); Home returns to the first view.
 export const FIT_KEY = 'F'
 
+// Opens or closes Help (15.3-B).
+export const HELP_KEY = '?'
+
 export const TOOL_ORDER: readonly ActiveTool[] = [
   'pan',
   'box',
@@ -56,11 +59,13 @@ export const SHORTCUTS: readonly Shortcut[] = [
     action: 'Move the view; Shift moves further',
     group: 'View',
   },
-  { keys: ['+', '−'], action: 'Zoom in or out', group: 'View' },
+  // The keys as typed: '-', not the '−' sign the zoom buttons show.
+  { keys: ['+', '-'], action: 'Zoom in or out', group: 'View' },
   { keys: ['Home'], action: 'Return to the first view', group: 'View' },
   // F works anywhere, like the tool letters (useToolShortcuts).
   { keys: [FIT_KEY], action: 'Fit the data to the view', group: 'View' },
   { keys: [LAYER_PANEL_KEY], action: 'Hide or show the layer panel', group: 'View' },
+  { keys: [HELP_KEY], action: 'Show or hide this help', group: 'View' },
 ]
 
 export interface ShortcutKeyEvent {
@@ -82,6 +87,11 @@ export function isLayerPanelKey(event: ShortcutKeyEvent): boolean {
   return (
     event.key === LAYER_PANEL_KEY && !event.altKey && !event.ctrlKey && !event.metaKey
   )
+}
+
+// '?' needs Shift on most layouts, so only Ctrl, Alt and Cmd rule it out.
+export function isHelpKey(event: ShortcutKeyEvent): boolean {
+  return event.key === HELP_KEY && !event.altKey && !event.ctrlKey && !event.metaKey
 }
 
 export function isFitKey(event: ShortcutKeyEvent): boolean {

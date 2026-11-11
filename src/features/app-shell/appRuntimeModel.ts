@@ -33,6 +33,40 @@ export interface LoadingTask {
   readonly area: LoadingTaskArea
   readonly label: string
   readonly detail?: string
+  // The loading list offers Cancel (15.3-D).
+  readonly cancellable?: boolean
+  // How far the task has got, 0 to 1, where it knows.
+  readonly progress?: number
+}
+
+// Tasks the loading list can cancel (15.3-D). App maps each to the workflow
+// that owns its request; cancelling returns that state to idle.
+export type CancellableLoadingTaskId =
+  | 'dataset'
+  | 'dataset-diagnostics'
+  | 'transcript-overlay'
+  | 'magic-lens'
+  | 'embeddings'
+  | 'cell-details'
+  | 'cell-transcripts'
+  | 'roi-cells'
+  | 'roi-genes'
+
+const CANCELLABLE_LOADING_TASK_IDS: ReadonlySet<string> =
+  new Set<CancellableLoadingTaskId>([
+    'dataset',
+    'dataset-diagnostics',
+    'transcript-overlay',
+    'magic-lens',
+    'embeddings',
+    'cell-details',
+    'cell-transcripts',
+    'roi-cells',
+    'roi-genes',
+  ])
+
+export function isCancellableLoadingTaskId(id: string): id is CancellableLoadingTaskId {
+  return CANCELLABLE_LOADING_TASK_IDS.has(id)
 }
 
 export interface FallbackNoticeEntry extends FallbackNotice {
@@ -83,6 +117,8 @@ interface LoadingTaskStateInputs {
   readonly autoContrastChannelCount: number
   readonly geneExpressionLoadingLabel?: string | undefined
   readonly magicLensLoadingScopeLabel?: string | undefined
+  // Exact transcript tiles read so far, 0 to 1.
+  readonly transcriptLoadProgress?: number | undefined
 }
 
 interface LoadingStatusState {
@@ -139,6 +175,7 @@ export function createLoadingTasks({
   autoContrastChannelCount,
   geneExpressionLoadingLabel = 'Loading expression',
   magicLensLoadingScopeLabel = 'Lens',
+  transcriptLoadProgress,
 }: LoadingTaskStateInputs): readonly LoadingTask[] {
   const tasks: LoadingTask[] = []
 
@@ -241,6 +278,9 @@ export function createLoadingTasks({
       area: 'transcripts',
       label: 'Loading transcripts',
       detail: `${visibleTranscriptEstimate.toLocaleString()} estimated`,
+      ...(transcriptLoadProgress === undefined
+        ? {}
+        : { progress: transcriptLoadProgress }),
     })
   }
 
@@ -340,7 +380,9 @@ export function createLoadingTasks({
     })
   }
 
-  return tasks
+  return tasks.map((task) =>
+    isCancellableLoadingTaskId(task.id) ? { ...task, cancellable: true } : task,
+  )
 }
 
 export function createDebugLogEntry(

@@ -3,7 +3,7 @@ import { Button, CloseIcon, IconButton } from '../../components/ui'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { OpenDatasetForm } from '../sections/DatasetInfoBlocks'
 import type { OpenDatasetModel } from '../sections/datasetInfoModel'
-import { USER_GUIDE_LOADING_DATA_URL } from './docLinks'
+import { USER_GUIDE_LOADING_DATA_URL } from '../shell/docLinks'
 import {
   datasetLinkHref,
   examplesUnavailableMessage,

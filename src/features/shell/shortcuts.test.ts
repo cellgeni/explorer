@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   isFitKey,
+  isHelpKey,
   isLayerPanelKey,
   SHORTCUTS,
   TOOL_ORDER,
@@ -60,5 +61,21 @@ describe('shortcuts', () => {
     expect(SHORTCUTS.find((shortcut) => shortcut.keys.includes('F'))?.action).toBe(
       'Fit the data to the view',
     )
+  })
+
+  it('opens Help with ?, typed with or without Shift', () => {
+    expect(isHelpKey(key('?'))).toBe(true)
+    const shifted = { ...key('?'), shiftKey: true }
+    expect(isHelpKey(shifted)).toBe(true)
+    expect(isHelpKey(key('?', { meta: true }))).toBe(false)
+    expect(isHelpKey(key('/'))).toBe(false)
+    expect(SHORTCUTS.find((shortcut) => shortcut.keys.includes('?'))?.action).toBe(
+      'Show or hide this help',
+    )
+  })
+
+  it('prints the keys as typed', () => {
+    const zoom = SHORTCUTS.find((shortcut) => shortcut.action === 'Zoom in or out')
+    expect(zoom?.keys).toEqual(['+', '-'])
   })
 })
