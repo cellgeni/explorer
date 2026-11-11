@@ -24,16 +24,85 @@ import type { SpatialDataControlState } from '../dataset/spatialDataModel'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { VisiumControlState } from '../dataset/visiumModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
+import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
 
 // The dataset itself: opening one, sharing it, what it is, its view options
 // and diagnostics (UNIFIED_PLAN.md, 15.2-A). Today this is the Dataset tab;
 // the new shell spreads it over the info drawer, the start screen and Share.
 export interface DatasetInfoModel {
+  // What is open, for the info drawer's Dataset section (15.2-F). Empty
+  // before a dataset is ready.
+  readonly facts: readonly DatasetFact[]
   readonly open: OpenDatasetModel
   readonly share: ShareLinkModel
   readonly about: DatasetManifestAbout | null
   readonly viewOptions: DatasetViewOptionsModel
   readonly diagnostics: DatasetDiagnosticsModel
+}
+
+export interface DatasetFact {
+  readonly label: string
+  readonly value: string
+}
+
+export interface DatasetFactsInput {
+  readonly platform: AppPlatformKind
+  readonly url: string
+  // 'cells', 'spots' or 'bins'.
+  readonly elementNoun: string
+  readonly elementCount: number
+  readonly geneCount: number | null
+  readonly channelCount: number
+  readonly zPlaneCount: number
+  // A single RGB tissue image (Visium) rather than channels.
+  readonly hasFlatImage: boolean
+  readonly micrometersPerPixel: number | undefined
+}
+
+function imageFact(input: DatasetFactsInput): string {
+  if (input.channelCount === 0) {
+    return input.hasFlatImage ? 'Tissue image' : 'None'
+  }
+
+  const channels = `${input.channelCount.toLocaleString()} ${
+    input.channelCount === 1 ? 'channel' : 'channels'
+  }`
+  return input.zPlaneCount > 1
+    ? `${channels} · ${input.zPlaneCount.toLocaleString()} z planes`
+    : channels
+}
+
+// Platform, counts, image, pixel size and address, exact where the top bar's
+// summary chip rounds.
+export function datasetFacts(input: DatasetFactsInput): readonly DatasetFact[] {
+  const facts: DatasetFact[] = [
+    { label: 'Platform', value: PLATFORM_NAMES[input.platform] },
+  ]
+
+  if (input.platform !== 'image') {
+    facts.push({
+      label: input.elementNoun.charAt(0).toUpperCase() + input.elementNoun.slice(1),
+      value: input.elementCount.toLocaleString(),
+    })
+  }
+
+  if (input.geneCount !== null) {
+    facts.push({ label: 'Genes', value: input.geneCount.toLocaleString() })
+  }
+
+  facts.push({ label: 'Image', value: imageFact(input) })
+
+  if (input.micrometersPerPixel !== undefined) {
+    facts.push({
+      label: 'Pixel size',
+      value: `${input.micrometersPerPixel.toLocaleString(undefined, {
+        maximumSignificantDigits: 4,
+      })} µm/px`,
+    })
+  }
+
+  facts.push({ label: 'Address', value: input.url })
+  return facts
 }
 
 export interface OpenDatasetModel {
@@ -106,6 +175,8 @@ export interface DatasetInfoModelInput {
   readonly boundaryCellLimit: number
   readonly cellFeatureMatrixCapabilityState: CellFeatureMatrixCapabilityState
   readonly datasetAbout: DatasetManifestAbout | null
+  // The loaded dataset, once it is ready.
+  readonly datasetFactsInput: DatasetFactsInput | null
   readonly datasetUrl: string
   readonly debugLog: readonly DebugLogEntry[]
   readonly debugMode: boolean
@@ -140,6 +211,7 @@ export function useDatasetInfoModel({
   boundaryCellLimit,
   cellFeatureMatrixCapabilityState,
   datasetAbout,
+  datasetFactsInput,
   datasetUrl,
   debugLog,
   debugMode,
@@ -166,6 +238,7 @@ export function useDatasetInfoModel({
   visiumHdControlState,
 }: DatasetInfoModelInput): DatasetInfoModel {
   return {
+    facts: datasetFactsInput === null ? [] : datasetFacts(datasetFactsInput),
     open: {
       datasetUrl,
       onDatasetUrlChange: setDatasetUrl,

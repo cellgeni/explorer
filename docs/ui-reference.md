@@ -100,7 +100,7 @@ panel (15.2-G).
 | `Explorer`     | The app name                                                                                                                          |
 | Dataset name ▾ | The loaded dataset's name (manifest name or folder), or "Open a dataset". Opens a menu with the open-dataset form                     |
 | Summary        | Platform and counts, e.g. "Xenium · 1.41 M cells · 5,001 genes"; "Opening {name}…" while one loads. A `status` region                 |
-| `Dataset info` | ⓘ: opens a drawer with About, view options (Visium, SpatialData), diagnostics, data access notes, issues and the log                  |
+| `Dataset info` | ⓘ: opens the info drawer (below). A badge counts load issues, and the name says so: "Dataset info (2 issues)"                         |
 | Tools          | Pan `P`, Box selection `R`, Lasso selection `L`, Measure `M`, Magic Lens `O`; one is pressed. A tool that cannot be used says why     |
 | Measure ▾      | While measuring: the measure unit and `Clear Measurement`                                                                             |
 | Magic Lens ▾   | The lens `Radius`, and `Summarise View`, which scans the whole view into the Magic Lens card. `Min QV` is hidden (it changes nothing) |
@@ -129,6 +129,17 @@ gives the canvas the space.
 Hidden layers leave the deck.gl layer list (`cellsVisible` in
 `createOverviewLayers`), so they cannot be hovered or picked. Visibility is
 not in the link yet (15.2-H).
+
+The info drawer (`src/features/shell/InfoDrawer.tsx`) is 380 px wide, on the
+left over the canvas, and not modal. Esc or `Close` closes it. Its sections:
+
+| Section              | Contents                                                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dataset              | Platform, exact counts (cells, spots or bins; genes), image ("4 channels · 15 z planes", "Tissue image", "None"), pixel size in µm/px, address |
+| About                | The manifest's name, description, source, licence and citation, when it has them                                                               |
+| View options         | The Visium library and SpatialData coordinate system, image and scale, on those platforms                                                      |
+| Open another dataset | The URL, morphology image and `Load Dataset`; `Boundary limit` under Advanced                                                                  |
+| Diagnostics          | `Diagnose Dataset`, the download, the report, "Data access notes (n)", load issues and the activity log; the layer stack lines in debug mode   |
 
 Cards are 360 px wide and stack in this order, scrolling when they outgrow
 the canvas; a card that appears scrolls into view. Closing a card clears what

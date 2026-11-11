@@ -1,19 +1,14 @@
 import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
-import { Drawer } from '../../components/ui'
 import { isTextEntryTarget } from '../app-shell/activeToolModel'
 import { CardStack } from '../cards/CardStack'
 import type { CardStackModel } from '../cards/cardModels'
 import type { AnnotationsSectionModel } from '../sections/annotationsSectionModel'
 import type { CellsSectionModel } from '../sections/cellsSectionModel'
-import {
-  DatasetAbout,
-  DatasetDiagnostics,
-  DatasetViewOptions,
-} from '../sections/DatasetInfoBlocks'
 import type { DatasetInfoModel } from '../sections/datasetInfoModel'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
 import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
+import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
 import type { LayerPanelModel } from './layerPanelModel'
 import { isLayerPanelKey } from './shortcuts'
@@ -36,8 +31,7 @@ interface ShellLayoutProps {
 
 // The new shell (UNIFIED_PLAN.md, 15.2), shown with ?shell=2 until 15.2-J
 // makes it the default: the top bar, the canvas with ⓘ's dataset info drawer
-// and the cards over it, and the layer panel docked on the right. The
-// drawer's sections and issue badge come in 15.2-F.
+// and the cards over it, and the layer panel docked on the right.
 export function ShellLayout({
   topBar,
   info,
@@ -86,18 +80,13 @@ export function ShellLayout({
       />
       <div className={panelCollapsed ? 'shell-body is-panel-collapsed' : 'shell-body'}>
         <div className="shell-canvas">
-          <Drawer
-            title="Dataset info"
+          <InfoDrawer
+            info={info}
             open={infoOpen}
             onClose={() => {
               setInfoOpen(false)
             }}
-            className="shell-info-drawer"
-          >
-            {info.about === null ? null : <DatasetAbout about={info.about} />}
-            <DatasetViewOptions viewOptions={info.viewOptions} placement="drawer" />
-            <DatasetDiagnostics diagnostics={info.diagnostics} />
-          </Drawer>
+          />
           {children}
           <CardStack cards={cards} />
         </div>

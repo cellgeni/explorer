@@ -1,6 +1,6 @@
 import type { ActiveTool } from '../app-shell/activeToolModel'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
-import type { AppPlatformKind } from '../app-shell/platformAdapter'
+import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
 import type { MagicLensScope } from '../roi/magicLensModel'
 import type { RoiDrawMode } from '../../components/ViewerCore'
 import { TOOL_LABELS, TOOL_ORDER, TOOL_SHORTCUT_KEYS } from './shortcuts'
@@ -48,16 +48,6 @@ export interface ToolOption {
   readonly reason?: string | undefined
 }
 
-const PLATFORM_LABELS: Readonly<Record<AppPlatformKind, string>> = {
-  xenium: 'Xenium',
-  atera: 'Atera',
-  visium: 'Visium',
-  'visium-hd': 'Visium HD',
-  h5ad: 'H5AD',
-  spatialdata: 'SpatialData',
-  image: 'Image',
-}
-
 // "1.41 M" from a million up, so the chip stays short; exact below that.
 export function formatCompactCount(count: number): string {
   if (count >= 1_000_000) {
@@ -84,7 +74,7 @@ export function datasetSummaryText({
   readonly geneCount: number | null
   readonly channelCount: number
 }): string {
-  const parts = [PLATFORM_LABELS[platform]]
+  const parts = [PLATFORM_NAMES[platform]]
 
   if (platform === 'image') {
     if (channelCount > 0) parts.push(plural(channelCount, 'channels'))

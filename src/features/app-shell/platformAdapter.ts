@@ -34,6 +34,17 @@ export type AppPlatformKind =
   | 'spatialdata'
   | 'image'
 
+// The platform as the top bar's summary and the info drawer name it.
+export const PLATFORM_NAMES: Readonly<Record<AppPlatformKind, string>> = {
+  xenium: 'Xenium',
+  atera: 'Atera',
+  visium: 'Visium',
+  'visium-hd': 'Visium HD',
+  h5ad: 'H5AD',
+  spatialdata: 'SpatialData',
+  image: 'Image',
+}
+
 export interface AppPlatformLabels {
   readonly embeddingElementPlural: 'cells' | 'bins' | 'spots'
 }

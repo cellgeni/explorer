@@ -127,6 +127,29 @@ describe('TopBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dataset info' }))
 
     expect(onInfoOpenChange).toHaveBeenCalledWith(true)
+    expect(document.querySelector('.shell-issue-badge')).toBeNull()
+  })
+
+  it('counts load issues on ⓘ', () => {
+    const error = { title: 'Boundaries failed', message: 'HTTP 403' } as never
+    renderTopBar({
+      info: testDatasetInfoModel({ diagnostics: { errors: [error, error] } }),
+    })
+
+    expect(
+      screen.getByRole('button', { name: 'Dataset info (2 issues)' }),
+    ).toBeInTheDocument()
+    expect(document.querySelector('.shell-issue-badge')).toHaveTextContent('2')
+  })
+
+  it('keeps the boundary limit under Advanced in the dataset menu', () => {
+    renderTopBar()
+
+    fireEvent.click(screen.getByRole('button', { name: /Sob23 brain/ }))
+
+    expect(
+      screen.getByTitle('Advanced dataset options').closest('details'),
+    ).not.toHaveAttribute('open')
   })
 
   it('shows measure options only while measuring', () => {

@@ -1,6 +1,11 @@
 import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useDatasetInfoModel, type DatasetInfoModelInput } from './datasetInfoModel'
+import {
+  datasetFacts,
+  useDatasetInfoModel,
+  type DatasetFactsInput,
+  type DatasetInfoModelInput,
+} from './datasetInfoModel'
 
 function input(overrides: Partial<DatasetInfoModelInput> = {}): DatasetInfoModelInput {
   return {
@@ -9,6 +14,7 @@ function input(overrides: Partial<DatasetInfoModelInput> = {}): DatasetInfoModel
     boundaryCellLimit: 50_000,
     cellFeatureMatrixCapabilityState: { status: 'idle' },
     datasetAbout: null,
+    datasetFactsInput: null,
     datasetUrl: 'https://example.test/output',
     debugLog: [],
     debugMode: false,
@@ -127,5 +133,66 @@ describe('useDatasetInfoModel', () => {
 
     writeText.mockRejectedValueOnce(new Error('denied'))
     await expect(result.current.share.onCopyLink()).resolves.toBe(false)
+  })
+})
+
+describe('datasetFacts', () => {
+  const xenium: DatasetFactsInput = {
+    platform: 'xenium',
+    url: 'https://example.test/output',
+    elementNoun: 'cells',
+    elementCount: 1_414_155,
+    geneCount: 5001,
+    channelCount: 4,
+    zPlaneCount: 1,
+    hasFlatImage: false,
+    micrometersPerPixel: 0.2125,
+  }
+
+  it('lists the platform, exact counts, image, pixel size and address', () => {
+    expect(datasetFacts(xenium)).toEqual([
+      { label: 'Platform', value: 'Xenium' },
+      { label: 'Cells', value: '1,414,155' },
+      { label: 'Genes', value: '5,001' },
+      { label: 'Image', value: '4 channels' },
+      { label: 'Pixel size', value: '0.2125 µm/px' },
+      { label: 'Address', value: 'https://example.test/output' },
+    ])
+  })
+
+  it('describes spots with a tissue image, and images by their planes', () => {
+    expect(
+      datasetFacts({
+        ...xenium,
+        platform: 'visium',
+        elementNoun: 'spots',
+        elementCount: 370,
+        channelCount: 0,
+        hasFlatImage: true,
+        micrometersPerPixel: undefined,
+      }).map((fact) => fact.value),
+    ).toEqual(['Visium', '370', '5,001', 'Tissue image', 'https://example.test/output'])
+    expect(
+      datasetFacts({
+        ...xenium,
+        platform: 'image',
+        geneCount: null,
+        channelCount: 1,
+        zPlaneCount: 15,
+      }).map((fact) => fact.label),
+    ).toEqual(['Platform', 'Image', 'Pixel size', 'Address'])
+    expect(datasetFacts({ ...xenium, channelCount: 1, zPlaneCount: 15 })[3]?.value).toBe(
+      '1 channel · 15 z planes',
+    )
+  })
+
+  it('is empty in the model until a dataset is ready', () => {
+    const empty = renderHook(() => useDatasetInfoModel(input()))
+    const ready = renderHook(() =>
+      useDatasetInfoModel(input({ datasetFactsInput: xenium })),
+    )
+
+    expect(empty.result.current.facts).toEqual([])
+    expect(ready.result.current.facts[0]).toEqual({ label: 'Platform', value: 'Xenium' })
   })
 })

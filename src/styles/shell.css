@@ -378,8 +378,88 @@
 
 .shell-info-drawer .ui-drawer-body {
   align-content: start;
+  gap: var(--space-4);
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* Info drawer sections (15.2-F) */
+
+.shell-drawer-section {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.shell-drawer-section + .shell-drawer-section {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.shell-drawer-section > h3 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: var(--font-body);
+  font-weight: 650;
+}
+
+.shell-drawer-empty {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.shell-dataset-facts {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.shell-dataset-facts > div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.shell-dataset-facts dt {
+  color: var(--text-2);
+}
+
+.shell-dataset-facts dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.shell-layer-stack p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-control);
+}
+
+/* ⓘ's issue count */
+
+.shell-info-button {
+  position: relative;
+  display: inline-flex;
+}
+
+.shell-issue-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--danger);
+  color: var(--danger-contrast);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
 }
 
 /* Layer panel (15.2-C) */

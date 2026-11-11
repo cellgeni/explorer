@@ -69,13 +69,10 @@ export function TopBar({
         <span className="shell-brand">Explorer</span>
         <DatasetMenu name={model.datasetName} open={info.open} />
         <SummaryChip summary={model.summary} />
-        <IconButton
-          title="Dataset info"
-          icon={<InfoIcon />}
-          aria-expanded={infoOpen}
-          onClick={() => {
-            onInfoOpenChange(!infoOpen)
-          }}
+        <InfoButton
+          issueCount={info.diagnostics.errors.length}
+          open={infoOpen}
+          onOpenChange={onInfoOpenChange}
         />
       </div>
       <div className="shell-top-bar-tools">
@@ -134,6 +131,41 @@ export function TopBar({
   )
 }
 
+// ⓘ, with a badge counting load issues, which the drawer's Diagnostics lists
+// (15.2-F).
+function InfoButton({
+  issueCount,
+  open,
+  onOpenChange,
+}: {
+  readonly issueCount: number
+  readonly open: boolean
+  readonly onOpenChange: (open: boolean) => void
+}) {
+  const label =
+    issueCount === 0
+      ? 'Dataset info'
+      : `Dataset info (${issueCount.toLocaleString()} ${issueCount === 1 ? 'issue' : 'issues'})`
+
+  return (
+    <span className="shell-info-button">
+      <IconButton
+        title={label}
+        icon={<InfoIcon />}
+        aria-expanded={open}
+        onClick={() => {
+          onOpenChange(!open)
+        }}
+      />
+      {issueCount === 0 ? null : (
+        <span className="shell-issue-badge" aria-hidden="true">
+          {issueCount > 9 ? '9+' : issueCount}
+        </span>
+      )}
+    </span>
+  )
+}
+
 // The dataset name opens a menu to open another dataset. Examples and recent
 // datasets join it with the start screen (15.3-A).
 function DatasetMenu({
@@ -160,6 +192,7 @@ function DatasetMenu({
       }
     >
       <OpenDatasetForm
+        boundaryLimit="advanced"
         open={{
           ...open,
           onSubmit: (event) => {
