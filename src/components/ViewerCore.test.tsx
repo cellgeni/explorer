@@ -2082,6 +2082,53 @@ describe('ViewerCore', () => {
     expect(deckGlMock.renderCount).toBe(renderCountBefore)
   })
 
+  it('cancels a loading task and shows its progress without redrawing deck layers (15.3-D)', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+    const onCancelLoadingTask = vi.fn()
+
+    const { rerender } = render(
+      <ViewerCore cells={cells} onCancelLoadingTask={onCancelLoadingTask} />,
+    )
+    const renderCountBefore = deckGlMock.renderCount
+
+    rerender(
+      <ViewerCore
+        cells={cells}
+        onCancelLoadingTask={onCancelLoadingTask}
+        loadingTasks={[
+          {
+            id: 'transcript-overlay',
+            label: 'Loading transcripts',
+            cancellable: true,
+            progress: 0.25,
+          },
+        ]}
+      />,
+    )
+    rerender(
+      <ViewerCore
+        cells={cells}
+        onCancelLoadingTask={onCancelLoadingTask}
+        loadingTasks={[
+          {
+            id: 'transcript-overlay',
+            label: 'Loading transcripts',
+            cancellable: true,
+            progress: 0.5,
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('50%')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel loading transcripts' }))
+
+    expect(onCancelLoadingTask).toHaveBeenCalledWith('transcript-overlay')
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
+  })
+
   it('marks the selection without redrawing deck layers, and Esc clears it', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

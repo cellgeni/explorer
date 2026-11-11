@@ -245,7 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                               |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)               |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                               |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M3 done (2026-11-11); 15.3 A, B done; C, D next |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M4 done (2026-11-11); M5 (15.4) and 15.5 remain |
 
 ---
 
@@ -506,7 +506,7 @@ Reference: 10x "Understanding Xenium Outputs".
 | `cell_boundaries.parquet`                        | DuckDB (Range)     | Polygon vertices per `cell_id`                                                                       |
 | `nucleus_boundaries.parquet`                     | DuckDB             | Optional nucleus overlay (no implementation recorded)                                                |
 | `transcripts.parquet`                            | DuckDB (Range)     | Per-transcript `cell_id`, `feature_name`, x/y/z, `qv`, `overlaps_nucleus`, `is_gene`                 |
-| `transcripts.zarr.zip`                           | zarrita            | Native transcript LOD: `/grids` pyramid and level-0 tiles; `/density/gene` (not used by the UI)      |
+| `transcripts.zarr.zip`                           | zarrita            | Native transcript LOD: `/grids` pyramid and level-0 tiles; `/density/gene` (selected genes, 15.1-J)  |
 | `cell_feature_matrix.zarr.zip`                   | zarrita            | Per-cell sparse counts (CSC or feature-major)                                                        |
 | `cell_feature_matrix.h5`                         | h5wasm             | Same matrix; fallback                                                                                |
 | `analysis.zarr.zip`                              | zarrita            | Clustering                                                                                           |
@@ -1912,8 +1912,8 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2 A–J),
-done 2026-11-11: it is the only shell. In M4, the start screen (15.3-A)
-and Help (15.3-B) are done. The user asked for a usability review of the
+done 2026-11-11: it is the only shell. M4 (15.3 A–D: start screen, Help,
+Undo, Cancel) done 2026-11-11. The user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
 - The UI review of 2026-11-10. It walked through eight tasks on the hosted
@@ -2985,18 +2985,98 @@ viewport`; the pinned transcript is in the Transcript card, and the
 genes`; their texts are in `shell/helpText.ts` and follow
     `docs/ui-reference.md`. `helpText.test.tsx` renders each block and
     checks the description.
-- [ ] **C. Undo (F17).** (M)
+- [x] **C. Undo (F17).** (M)
   - Show an Undo toast for 8 s after: Clear selection; delete a selection,
     shape or class; remove an annotation set; Clear GeoJSON; remove a gene
     set.
   - Opening another dataset adds a browser history entry so that Back returns
     to the previous one. Today `useShareableUrlHash` only replaces the entry.
-- [ ] **D. Cancel (F17).** (M)
+  - Done 2026-11-11. `useUndoToast` (`app-shell/`) holds one offer
+    (message and undo); `UndoToast` shows it at the bottom of the canvas in
+    a `.viewer-toasts` stack with the 15.1-F load toast. It goes after 8 s,
+    except while hovered or focused, which give it the full time again;
+    Ctrl+Z or Cmd+Z undoes outside text fields; Undo runs once. A newer
+    offer replaces it, and another dataset dismisses it.
+  - `useUndoableRemovals` wraps the removals App hands the section models
+    and the Selection card: Clear selection (cells and Visium HD bins), a
+    class, a metadata track, Clear Annotations (with one selection until
+    15.4-A, "remove an annotation set" and "delete a selection" are these),
+    a shape and Clear (GeoJSON). Each takes a snapshot first; Undo restores
+    it only if the state it covers changed in exactly one commit since (the
+    removal's), so it never throws away later work. A cleared selection is
+    drawn again under its name, rerunning its queries, unless a newer one
+    exists.
+  - Saved gene sets live in the gene picker, so `removeSavedGeneSet` offers
+    its own Undo through `GeneSelectionModel.onOfferUndo`, which puts the
+    set back at its index (`withGeneSetAt`) unless one with that name was
+    saved since.
+  - History: `useShareableUrlHash` pushes an entry when the link's dataset
+    differs from the one the address names (the hash's, else the query
+    string's), and replaces it otherwise, so the start screen, a link's own
+    dataset and every other change keep one entry. On `popstate` to an
+    entry for another dataset it reloads the page, which restores that
+    entry's whole link (view, genes, panels), and writes nothing more.
+    Loading through history in place would have restored only the dataset.
+- [x] **D. Cancel (F17).** (M)
   - Add a Cancel button to tasks that can be cancelled: ROI genes, exact
     transcripts, embeddings, Magic Lens, cell details, diagnostics.
   - Each task maps to its abort ref (`App.tsx:512–532`) and resets its state
     to idle, so it leaves the list.
   - Show a percentage where it is known.
+  - Done 2026-11-11. `createLoadingTasks` marks nine tasks `cancellable`
+    (`CancellableLoadingTaskId`): the dataset load, diagnostics, transcripts,
+    the Magic Lens scan, embeddings, cell details, the cell z distribution,
+    ROI cells and ROI genes. `LoadingIndicator` gives each a `Cancel` button
+    named after the task ("Cancel querying ROI genes") and never folds them
+    into "+n more".
+    - App gives ViewerCore one stable `onCancelLoadingTask`, backed by a ref,
+      which calls the owning workflow only for a task still in the list. The
+      buttons sit in the notification stack, outside `MemoDeckGL`; the
+      ViewerCore test checks that a new list, a new percentage and a press of
+      Cancel do not re-render deck.gl.
+    - Each cancel invalidates the task's request (`invalidateLatestRequest`),
+      returns its state to idle and logs "Cancelled …". A cancel is not an
+      error and shows no error card.
+    - ROI (`useRoiWorkflow`): `handleCancelRoiGenes` keeps the ROI and its
+      cells; `handleCancelRoiCells` drops the ROI, as Clear does. Visium HD
+      ROI genes use the same request refs, so they cancel too.
+    - Transcripts (`useTranscriptWorkflow`): `cancelTranscriptLoad`. The
+      loading state keeps the state shown before it (`previousState`), and
+      `transcriptLayerCancelled` goes back to it; an earlier error becomes
+      idle. `transcriptViewportKeyRef` keeps the cancelled key, so the effect
+      does not start the read again for the same view; per-gene (Atera)
+      density keeps its own cancelled key. The manual-load key is cleared, so
+      `Load exact viewport` shows and works again.
+    - Magic Lens: `handleCancelMagicLens` leaves the lens on. Its last query
+      key stays, so the cursor lens scans again only when it moves.
+    - Embeddings: back to the embeddings on offer
+      (`analysisEmbeddingLoadCancelled`), or idle when none were listed.
+    - Cell details: `useCellDetailWorkflow` now returns `cancelCellDetails`,
+      which stops the details and the z distribution. Neither starts again
+      until another cell or dataset is selected.
+    - Diagnostics: `handleCancelDatasetDiagnostics`.
+  - `useDatasetLifecycle` returns `cancelDatasetLoad`. A pending load
+    (15.1-F) is aborted and dropped and the open dataset stays, so a stalled
+    load no longer keeps `Load Dataset` disabled. A load with nothing on
+    screen is aborted and cleared as a failed one is (`clearUnreadyDataset`,
+    now shared with the failure path), with `loadState` idle.
+  - Percentages: only the Xenium exact transcript read knows how far it has
+    got. `loadTranscriptZarrViewport` reads the view's level-0 tiles one by
+    one and reports the share read (`onProgress`); the list shows whole
+    percents, and only changes re-render the app. The Parquet metadata step
+    after it (up to 1.5 s) runs at 100%. The Parquet exact path, Atera,
+    density reads, ROI genes, embeddings, Magic Lens, cell details,
+    diagnostics and dataset loads have no count to report and show none.
+  - Not cancellable: dataset preparation, the gene panel, images and custom
+    layers, boundaries, gene expression, annotation sets and labels, the
+    transcript check, Visium HD expression profiles and projection, auto
+    contrast and the ROI transcript export. Each could join the same way.
+  - Beyond the plan: ROI cells and the cell z distribution can be cancelled
+    too, and "transcripts" covers density reads as well as exact points.
+  - Tests cover the model, the indicator, the no-redraw check, each
+    workflow's cancel (including no restart for the same inputs and the
+    transcript layer going back to its earlier points), both dataset-load
+    cases, tile progress, and two App tests (diagnostics; a replacing load).
 
 #### 15.4 Selections And Analysis
 
@@ -3024,6 +3104,64 @@ Can be skipped after 15.3 ships if time is short.
   - Draw the viewport rectangle from `viewportBbox`. Click or drag to move the
     view.
 - [ ] **E. µm axes.** An optional setting. (S)
+
+#### Review After M4 (2026-11-11)
+
+The user asked for a review of the work so far before 15.3. Two read-only
+passes checked the Done notes against the code and looked for bugs, one over
+15.0 and 15.1 and one over 15.2.
+
+Fixed in one PR after 15.3-D:
+
+- A link with `tool=magic-lens` (or a version 1 `tab=magic-lens`) turned
+  the lens off when its dataset loaded: the commit set it from `lens=`,
+  which version 2 links never write. It now follows the link's tool.
+- One Esc press did two things: closing a popover, the drawer, the
+  Embedding panel or a tooltip also left the active tool. `useDismiss` now
+  takes Escape in the capture phase and marks it handled, the drawer, the
+  Embedding panel and a shown tooltip mark theirs, and App's Esc listener
+  skips a handled press.
+- Removing the last class, or `Clear Annotations`, switched any colour mode
+  to transcript count, so cells coloured by a gene lost their colours. Only
+  the annotations mode (and metadata, for Clear) changes now.
+- Version 2 links dropped `cellBounds=1` and `nucleusBounds=1` as defaults,
+  but a load defaults them by platform (nucleus off on Xenium), so turned-on
+  nucleus outlines reopened off. Both are always written.
+- The legend said "Loading expression" for good when expression failed or
+  was waiting; it now says "Expression unavailable".
+- Changing a SpatialData view option reloaded the address box, which after a
+  failed load (15.1-F) holds the failed URL; it reloads the open dataset.
+
+Open, for 15.5 or later:
+
+- **Load and link state.** During a pending load, a Visium HD bin or LOD
+  request for the old dataset can still land after the new one commits
+  (`visiumHdBinRequestId` is not moved on). The commit applies the gene
+  scale, density scale, point colour and exact limit captured when the load
+  started, undoing changes made meanwhile. `groups=` from the opening link
+  is written for another dataset until its annotations load. A link with
+  `groups=` ignores its own `cellColor` once the set loads. Copy Link copies
+  `location.href`, which is up to 160 ms behind a change.
+- **Shell.** `panel=info` alone reopens with Cells expanded. Crossing 860 px
+  remounts the layer sections, losing a gene search. `card=` keeps only
+  overview cells, not bins or boundary picks. Focus is lost when a card,
+  the Embedding panel or the narrow tool menu closes. The tool `toolbar`
+  has no arrow-key movement, card tabs no Home and End, the resize grip no
+  value, and two annotation headings are out of order.
+- **Smaller.** The `+` and `-` keys zoom half a level and the buttons a whole
+  one. Load errors where every probe answered a 4xx other than 401, 403 and
+  404 are reported as "blocked". "Gene expression" is offered in Cell color
+  with no genes. 15.1-I's Atera graphclust default never runs (Atera loads
+  through the AnnData path). Esc in the drawer's address field closes the
+  drawer.
+- **Cleanup.** Unused CSS from the HUD (`.magic-lens-scope-segmented`,
+  `.measurement-control*`, `.section-heading-*`, `.status-chip`, `.eyebrow`,
+  `.annotation-size-plot*`), the Magic Lens Min QV leftovers
+  (`handleMagicLensMinQvChange`, `capabilities.magicLensMinQv`, `lensQv=`),
+  the feature-circle renderer (15.1-J), `createOverviewViewState`, and the
+  `danger` Button variant. The tokens' "5.4:1 on its own tint" holds on
+  surfaces 0–2 only (4.7:1 on surface 3, still AA). The 15.1-L
+  manifest-defaults gap is still open.
 
 #### 15.5 Close-Out
 
@@ -3345,8 +3483,8 @@ Sequencing:
       Slice ranges, memory, and bundles.
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
-      M3, the new shell (15.2), is done; M4 (15.3) is under way, with the
-      start screen (15.3-A) and Help (15.3-B) done.
+      M3, the new shell (15.2), is done; M4 (15.3: start screen, Help, Undo,
+      Cancel) is done. M5 (15.4) is optional, then the 15.5 close-out.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 

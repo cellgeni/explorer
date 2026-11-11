@@ -284,6 +284,84 @@ describe('useMagicLensWorkflow', () => {
     expect(snapshot.debugMessages).toContain('Magic lens scope unavailable')
   })
 
+  it('cancels a cursor scan, keeping the lens on until it moves (15.3-D)', async () => {
+    vi.useFakeTimers()
+    const deferred = createDeferred<Awaited<ReturnType<MagicLensSummaryLoader>>>()
+    const capturedSignals: AbortSignal[] = []
+    const loadMagicLensSummary: MagicLensSummaryLoader = vi.fn(
+      async (_baseUrl, _selection, options) => {
+        capturedSignals.push(options.signal)
+        return deferred.promise
+      },
+    )
+    const lensAt = (x: number): ViewerMagicLensDetail => ({
+      center: { x: micrometers(x), y: micrometers(5) },
+      radiusMicrometers: 4,
+      bbox: {
+        minX: micrometers(x - 4),
+        minY: micrometers(1),
+        maxX: micrometers(x + 4),
+        maxY: micrometers(9),
+      },
+      screen: { x: x * 10, y: 50 },
+    })
+
+    try {
+      render(
+        <Probe
+          loadMagicLensSummary={loadMagicLensSummary}
+          onReady={(nextApi, nextSnapshot) => {
+            api = nextApi
+            snapshot = nextSnapshot
+          }}
+        />,
+      )
+
+      act(() => {
+        api.handleMagicLensCursorActiveChange(true)
+      })
+      act(() => {
+        api.handleMagicLensMove(lensAt(5))
+        vi.advanceTimersByTime(320)
+      })
+      expect(snapshot.magicLensState).toMatchObject({ status: 'loading' })
+
+      act(() => {
+        api.handleCancelMagicLens()
+      })
+      await act(async () => {
+        deferred.resolve({
+          transcriptCount: 10,
+          cellCount: 1,
+          geneCount: 1,
+          selectedGeneTranscriptCount: 0,
+          topGenes: [],
+          hitLimit: false,
+        })
+        await Promise.resolve()
+      })
+
+      expect(capturedSignals[0]?.aborted).toBe(true)
+      expect(snapshot.magicLensState).toEqual({ status: 'idle' })
+      expect(snapshot.magicLensActive).toBe(true)
+      expect(snapshot.debugMessages).toContain('Cancelled Magic Lens scan')
+
+      act(() => {
+        api.handleMagicLensMove(lensAt(5))
+        vi.advanceTimersByTime(320)
+      })
+      expect(loadMagicLensSummary).toHaveBeenCalledTimes(1)
+
+      act(() => {
+        api.handleMagicLensMove(lensAt(6))
+        vi.advanceTimersByTime(320)
+      })
+      expect(loadMagicLensSummary).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('clears a result and turns the cursor lens off', () => {
     const deferred = createDeferred<Awaited<ReturnType<MagicLensSummaryLoader>>>()
     const capturedSignals: AbortSignal[] = []

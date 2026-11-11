@@ -55,6 +55,8 @@ export interface TranscriptZarrViewportOptions {
   readonly minQv?: number
   readonly geneOnly?: boolean
   readonly featureNames?: readonly string[]
+  // The share of the view's tiles read, 0 to 1, after each tile (15.3-D).
+  readonly onProgress?: (fraction: number) => void
 }
 
 export interface TranscriptZarrGenePanelOptions {
@@ -198,10 +200,11 @@ export async function loadTranscriptZarrViewport(
   const points: TranscriptPoint[] = []
   let hitPointLimit = false
 
-  for (const tileKey of tileKeys) {
+  for (const [tileIndex, tileKey] of tileKeys.entries()) {
     throwIfAborted(options.signal)
 
     const arrays = await loadTranscriptTileArrays(metadata.root, tileKey, !geneOnly)
+    options.onProgress?.((tileIndex + 1) / tileKeys.length)
 
     for (let row = 0; row < arrays.rowCount; row += 1) {
       const valid = arrays.valid === undefined ? 1 : readMatrixValue(arrays.valid, row, 0)

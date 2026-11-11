@@ -25,6 +25,7 @@ import {
   transcriptCapabilityReady,
   transcriptCapabilityStarted,
   transcriptLayerAggregate,
+  transcriptLayerCancelled,
   transcriptLayerFailed,
   transcriptLayerLoading,
   transcriptLayerReady,
@@ -190,6 +191,49 @@ describe('transcriptLayerModel', () => {
     })
   })
 
+  it('cancels a load back to what showed before it (15.3-D)', () => {
+    const url = 'https://example.test/output'
+    const ready = transcriptLayerReady({
+      url,
+      points: [point],
+      groups: [],
+      visibleTranscriptEstimate: 1,
+      hitPointLimit: false,
+      durationMs: 3,
+    })
+    const waiting = transcriptLayerWaiting({
+      message: 'Load exact viewport',
+      visibleTranscriptEstimate: 90_000,
+      exactLoadRequestKey: 'request-key',
+      exactLoadEstimate: 90_000,
+    })
+
+    // Through two loads in a row, back to the points shown before the first.
+    expect(
+      transcriptLayerCancelled(
+        transcriptLayerLoading(transcriptLayerLoading(ready, url, 10), url, 20),
+      ),
+    ).toBe(ready)
+    expect(transcriptLayerCancelled(transcriptLayerLoading(waiting, url, 10))).toBe(
+      waiting,
+    )
+    expect(
+      transcriptLayerCancelled(
+        transcriptLayerLoading(IDLE_TRANSCRIPT_LAYER_STATE, url, 10),
+      ),
+    ).toEqual(IDLE_TRANSCRIPT_LAYER_STATE)
+    expect(
+      transcriptLayerCancelled(
+        transcriptLayerLoading(
+          transcriptLayerFailed(url, { message: 'failed' }),
+          url,
+          10,
+        ),
+      ),
+    ).toEqual(IDLE_TRANSCRIPT_LAYER_STATE)
+    expect(transcriptLayerCancelled(ready)).toBe(ready)
+  })
+
   it('estimates exact points from the selected genes only for per-gene outputs', () => {
     const layer = transcriptLayerWaiting({
       message: 'zoom',
@@ -334,6 +378,15 @@ describe('transcriptLayerModel', () => {
       url: 'https://example.test/output',
       visibleTranscriptEstimate: 10,
       previousLayer: { kind: 'exact', points: [point] },
+      previousState: {
+        status: 'ready',
+        url: 'https://example.test/output',
+        points: [point],
+        groups: [],
+        visibleTranscriptEstimate: 1,
+        hitPointLimit: false,
+        durationMs: 3,
+      },
     })
     expect(
       transcriptLayerAggregate({

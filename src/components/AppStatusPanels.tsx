@@ -1,4 +1,4 @@
-import { Disclosure } from './ui'
+import { Button, Disclosure } from './ui'
 import {
   summarizeDatasetDiagnostics,
   type DatasetDiagnosticsReport,
@@ -36,7 +36,12 @@ export interface LoadingTaskSummary {
   readonly id: string
   readonly label: string
   readonly detail?: string
+  readonly cancellable?: boolean
+  // 0 to 1, where the task knows how far it has got.
+  readonly progress?: number
 }
+
+const SECONDARY_LOADING_TASK_LIMIT = 3
 
 interface ActivityLogEntry {
   readonly id: number
@@ -213,21 +218,26 @@ export function DatasetDiagnosticsPanel({
 
 export function LoadingIndicator({
   tasks,
+  onCancel,
 }: {
   readonly tasks: readonly LoadingTaskSummary[]
+  // Cancel (15.3-D), for tasks marked cancellable.
+  readonly onCancel?: ((id: string) => void) | undefined
 }) {
-  if (tasks.length === 0) {
-    return null
-  }
-
   const primaryTask = tasks[0]
-  const secondaryTasks = tasks.slice(1)
 
   if (primaryTask === undefined) {
     return null
   }
 
-  const visibleSecondaryTasks = secondaryTasks.slice(0, 3)
+  // Up to 3 more tasks show; the rest count as "+n more". A task that can be
+  // cancelled always shows, so its Cancel button is never hidden.
+  const secondaryTasks = tasks.slice(1)
+  const visibleSecondaryTasks = secondaryTasks.filter(
+    (task, index) =>
+      index < SECONDARY_LOADING_TASK_LIMIT ||
+      (task.cancellable === true && onCancel !== undefined),
+  )
   const hiddenTaskCount = secondaryTasks.length - visibleSecondaryTasks.length
 
   return (
@@ -240,16 +250,14 @@ export function LoadingIndicator({
     >
       <div className="loading-indicator-primary">
         <span className="loading-spinner" aria-hidden="true" />
-        <span className="loading-task-label">{primaryTask.label}</span>
-        {primaryTask.detail === undefined ? null : <small>{primaryTask.detail}</small>}
+        <LoadingTaskRow task={primaryTask} onCancel={onCancel} />
       </div>
       {visibleSecondaryTasks.length === 0 ? null : (
         <ol aria-label="Additional loading tasks">
           {visibleSecondaryTasks.map((task) => (
             <li key={task.id}>
               <span className="loading-task-bullet" aria-hidden="true" />
-              <span className="loading-task-label">{task.label}</span>
-              {task.detail === undefined ? null : <small>{task.detail}</small>}
+              <LoadingTaskRow task={task} onCancel={onCancel} />
             </li>
           ))}
           {hiddenTaskCount > 0 ? (
@@ -262,6 +270,58 @@ export function LoadingIndicator({
       )}
     </section>
   )
+}
+
+function LoadingTaskRow({
+  task,
+  onCancel,
+}: {
+  readonly task: LoadingTaskSummary
+  readonly onCancel: ((id: string) => void) | undefined
+}) {
+  const cancelName = `Cancel ${sentenceTail(task.label)}`
+
+  return (
+    <>
+      <span className="loading-task-label">{task.label}</span>
+      {task.detail === undefined ? null : <small>{task.detail}</small>}
+      {task.progress === undefined ? null : (
+        <span className="loading-task-progress">
+          {formatLoadingProgress(task.progress)}
+        </span>
+      )}
+      {task.cancellable === true && onCancel !== undefined ? (
+        <Button
+          variant="ghost"
+          className="loading-task-cancel"
+          title={cancelName}
+          aria-label={cancelName}
+          onClick={() => {
+            onCancel(task.id)
+          }}
+        >
+          Cancel
+        </Button>
+      ) : null}
+    </>
+  )
+}
+
+// Whole percent, rounded down.
+function formatLoadingProgress(progress: number): string {
+  const clamped = Math.min(1, Math.max(0, progress))
+
+  return `${Math.floor(clamped * 100)}%`
+}
+
+// "Loading dataset" becomes "loading dataset" inside "Cancel …"; a leading
+// acronym ("ROI …") keeps its capitals.
+function sentenceTail(label: string): string {
+  const firstWord = label.split(' ', 1)[0] ?? ''
+
+  return firstWord === firstWord.toUpperCase()
+    ? label
+    : `${label.charAt(0).toLowerCase()}${label.slice(1)}`
 }
 
 export function ActivityLog({

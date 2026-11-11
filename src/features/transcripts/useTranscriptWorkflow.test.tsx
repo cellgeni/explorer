@@ -35,6 +35,10 @@ interface Snapshot {
   readonly capabilityState: TranscriptCapabilityState<StructuredLoadError>
   readonly debugMessages: readonly string[]
   readonly layerState: TranscriptLayerState<StructuredLoadError>
+  readonly manualExactRequestKey: string | null
+  readonly result: ReturnType<typeof useTranscriptWorkflow>
+  // What `Load exact viewport` does (useTranscriptControlsWorkflow).
+  readonly loadExactViewport: (requestKey: string) => void
 }
 
 type Loaders = Parameters<typeof useTranscriptWorkflow>[0]['loaders']
@@ -47,6 +51,7 @@ interface ProbeOptions {
   readonly overviewCells?: readonly OverviewCellDatum[]
   readonly selectedGenes?: readonly string[]
   readonly showTranscriptOverlay?: boolean
+  readonly viewportDetail?: ViewerViewportDetail
   readonly visibleTranscriptEstimate?: number
 }
 
@@ -98,6 +103,9 @@ function Probe({
   const [layerState, setTranscriptLayerState] = React.useState<
     TranscriptLayerState<StructuredLoadError>
   >({ status: 'idle' })
+  const [manualExactRequestKey, setManualTranscriptExactRequestKey] = React.useState<
+    string | null
+  >(null)
   const debugMessagesRef = React.useRef<string[]>([])
   const loadRequestIdRef = React.useRef(1)
   const transcriptAbortRef = React.useRef<AbortController | null>(null)
@@ -116,7 +124,7 @@ function Probe({
   }, [])
   const selectedGenes = options.selectedGenes ?? NO_GENES
 
-  useTranscriptWorkflow({
+  const result = useTranscriptWorkflow({
     callbacks: {
       appendDebugEvent,
       appendFallbackNotice,
@@ -125,7 +133,7 @@ function Probe({
       transcriptControlsOpen: true,
       effectiveTranscriptFeatureFilterMode:
         options.featureFilterMode ?? (selectedGenes.length > 0 ? 'selected' : 'all'),
-      manualTranscriptExactRequestKey: null,
+      manualTranscriptExactRequestKey: manualExactRequestKey,
       showTranscriptOverlay: options.showTranscriptOverlay ?? false,
       transcriptDetailMode: options.detailMode ?? 'auto',
       transcriptExactPointLimit: 100_000,
@@ -134,7 +142,7 @@ function Probe({
       visibleTranscriptEstimate: options.visibleTranscriptEstimate ?? 0,
     },
     data: {
-      currentViewportDetail: viewportDetail,
+      currentViewportDetail: options.viewportDetail ?? viewportDetail,
       loadState,
       overviewCells: options.overviewCells ?? EMPTY_CELLS,
       selectedGenes,
@@ -150,6 +158,7 @@ function Probe({
       transcriptViewportKeyRef,
     },
     setters: {
+      setManualTranscriptExactRequestKey,
       setTranscriptCapabilityState,
       setTranscriptLayerState,
     },
@@ -160,6 +169,12 @@ function Probe({
       capabilityState,
       debugMessages: debugMessagesRef.current,
       layerState,
+      manualExactRequestKey,
+      result,
+      loadExactViewport: (requestKey) => {
+        setManualTranscriptExactRequestKey(requestKey)
+        transcriptViewportKeyRef.current = null
+      },
     })
   })
 
@@ -451,6 +466,172 @@ describe('useTranscriptWorkflow', () => {
     await waitFor(() => expect(snapshot.layerState.status).toBe('unavailable'))
     expect(snapshot.layerState).toMatchObject({
       message: 'Per-gene transcript density is unavailable: HTTP 403',
+    })
+  })
+  describe('Cancel (15.3-D)', () => {
+    const XENIUM_CAPABILITIES: TranscriptCapabilities = {
+      rawParquet: true,
+      nativeZarr: false,
+    }
+
+    function viewportAt(x: number): ViewerViewportDetail {
+      return {
+        ...viewportDetail,
+        bbox: {
+          minX: micrometers(x),
+          minY: micrometers(0),
+          maxX: micrometers(x + 10),
+          maxY: micrometers(10),
+        },
+      }
+    }
+
+    function exactPoint(id: string) {
+      return {
+        id,
+        cellId: null,
+        featureName: 'EPCAM',
+        fovName: null,
+        position: { x: micrometers(2), y: micrometers(2) },
+        qv: 40,
+      }
+    }
+
+    function renderProbe(loaders: Loaders, options: ProbeOptions) {
+      const onReady = (nextSnapshot: Snapshot) => {
+        snapshot = nextSnapshot
+      }
+      const view = render(<Probe loaders={loaders} options={options} onReady={onReady} />)
+
+      return (nextOptions: ProbeOptions) => {
+        view.rerender(<Probe loaders={loaders} options={nextOptions} onReady={onReady} />)
+      }
+    }
+
+    it('goes back to the points shown before and does not restart for the same view', async () => {
+      const first = exactPoint('first')
+      let pendingSignal: AbortSignal | undefined
+      const loadTranscriptViewport = vi.fn<Loaders['loadTranscriptViewport']>(
+        async (_url, _bbox, loadOptions) => {
+          if (loadTranscriptViewport.mock.calls.length === 1) {
+            return { points: [first], groups: [], hitPointLimit: false }
+          }
+
+          pendingSignal = loadOptions?.signal
+          loadOptions?.onProgress?.(0.256)
+          return new Promise(() => undefined)
+        },
+      )
+      const loaders = { ...defaultLoaders(), loadTranscriptViewport }
+      const options: ProbeOptions = {
+        capabilities: XENIUM_CAPABILITIES,
+        detailMode: 'exact',
+        showTranscriptOverlay: true,
+        visibleTranscriptEstimate: 10,
+      }
+      const rerender = renderProbe(loaders, { ...options, viewportDetail: viewportAt(0) })
+
+      await waitFor(() => expect(snapshot.layerState.status).toBe('ready'))
+      const shown = snapshot.layerState
+
+      rerender({ ...options, viewportDetail: viewportAt(20) })
+      await waitFor(() => expect(snapshot.result.transcriptLoadProgress).toBe(0.256))
+      expect(snapshot.layerState.status).toBe('loading')
+
+      act(() => {
+        snapshot.result.cancelTranscriptLoad()
+      })
+
+      expect(pendingSignal?.aborted).toBe(true)
+      expect(snapshot.layerState).toBe(shown)
+      expect(snapshot.result.transcriptLoadProgress).toBeUndefined()
+      expect(snapshot.debugMessages).toContain('Cancelled transcripts')
+
+      // The same view again (a new object) does not start the read again.
+      rerender({ ...options, viewportDetail: viewportAt(20) })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      })
+      expect(loadTranscriptViewport).toHaveBeenCalledTimes(2)
+      expect(snapshot.layerState).toBe(shown)
+
+      rerender({ ...options, viewportDetail: viewportAt(40) })
+      await waitFor(() => expect(loadTranscriptViewport).toHaveBeenCalledTimes(3))
+    })
+
+    it('shows `Load exact viewport` again after cancelling a manual load', async () => {
+      const loadTranscriptViewport = vi.fn<Loaders['loadTranscriptViewport']>(
+        () => new Promise(() => undefined),
+      )
+      renderProbe(
+        { ...defaultLoaders(), loadTranscriptViewport },
+        {
+          capabilities: XENIUM_CAPABILITIES,
+          detailMode: 'exact',
+          showTranscriptOverlay: true,
+          visibleTranscriptEstimate: 90_000,
+        },
+      )
+
+      await waitFor(() => expect(snapshot.layerState.status).toBe('waiting'))
+      const requestKey =
+        snapshot.layerState.status === 'waiting'
+          ? snapshot.layerState.exactLoadRequestKey
+          : undefined
+      expect(requestKey).toBeDefined()
+
+      act(() => {
+        snapshot.loadExactViewport(requestKey ?? '')
+      })
+      await waitFor(() => expect(loadTranscriptViewport).toHaveBeenCalledTimes(1))
+      expect(snapshot.layerState.status).toBe('loading')
+
+      act(() => {
+        snapshot.result.cancelTranscriptLoad()
+      })
+      await waitFor(() =>
+        expect(snapshot.layerState).toMatchObject({
+          status: 'waiting',
+          exactLoadRequestKey: requestKey,
+        }),
+      )
+      expect(snapshot.manualExactRequestKey).toBeNull()
+
+      act(() => {
+        snapshot.loadExactViewport(requestKey ?? '')
+      })
+      await waitFor(() => expect(loadTranscriptViewport).toHaveBeenCalledTimes(2))
+    })
+
+    it('does not restart a cancelled per-gene density read for the same view', async () => {
+      const loadTranscriptAggregates = vi.fn<Loaders['loadTranscriptAggregates']>(
+        () => new Promise(() => undefined),
+      )
+      const options: ProbeOptions = {
+        capabilities: PER_GENE_CAPABILITIES,
+        selectedGenes: ['UMOD'],
+        showTranscriptOverlay: true,
+        viewportDetail: viewportAt(0),
+      }
+      const rerender = renderProbe(
+        { ...defaultLoaders(), loadTranscriptAggregates },
+        options,
+      )
+
+      await waitFor(() => expect(snapshot.layerState.status).toBe('loading'))
+      act(() => {
+        snapshot.result.cancelTranscriptLoad()
+      })
+      expect(snapshot.layerState).toEqual({ status: 'idle' })
+
+      rerender({ ...options, viewportDetail: viewportAt(0) })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(loadTranscriptAggregates).toHaveBeenCalledTimes(1)
+
+      rerender({ ...options, viewportDetail: viewportAt(30) })
+      await waitFor(() => expect(loadTranscriptAggregates).toHaveBeenCalledTimes(2))
     })
   })
 })

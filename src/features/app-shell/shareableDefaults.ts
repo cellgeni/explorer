@@ -46,6 +46,14 @@ export const DEFAULT_SHAREABLE_STATE = {
   magicLensMinQv: 20,
 } as const satisfies ShareableState
 
+// Written even at their default: a dataset load picks its own default for
+// them when the link is silent (nucleus outlines off on Xenium, Atera and
+// Visium HD; cell outlines off on Visium and Visium HD).
+const PLATFORM_DEFAULT_KEYS: ReadonlySet<string> = new Set([
+  'showCellBoundaries',
+  'showNucleusBoundaries',
+])
+
 // The state with every default value left out, for a version 2 link
 // (15.1-L). A measure unit is kept when it differs from the mouse coordinate
 // unit, because a link without one measures in that unit.
@@ -53,7 +61,7 @@ export function withoutShareableDefaults(state: ShareableState): ShareableState 
   const result: Record<string, unknown> = { ...state }
 
   for (const [key, defaultValue] of Object.entries(DEFAULT_SHAREABLE_STATE)) {
-    if (key === 'measurementUnit') continue
+    if (key === 'measurementUnit' || PLATFORM_DEFAULT_KEYS.has(key)) continue
     if (sameValue(result[key], defaultValue)) delete result[key]
   }
 

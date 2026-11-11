@@ -3,7 +3,9 @@ import { useEffect, useEffectEvent, type RefObject } from 'react'
 export type DismissReason = 'escape' | 'outside'
 
 // While active, calls onDismiss when Escape is pressed or the pointer goes
-// down outside every element in refs.
+// down outside every element in refs. Escape is taken in the capture phase
+// and marked handled (defaultPrevented), so the same press does not also
+// leave the active tool.
 export function useDismiss(
   active: boolean,
   refs: readonly RefObject<HTMLElement | null>[],
@@ -18,16 +20,18 @@ export function useDismiss(
     if (!active) return
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') dismiss('escape')
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      dismiss('escape')
     }
     function handlePointerDown(event: PointerEvent) {
       if (!isInside(event.target)) dismiss('outside')
     }
 
-    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('keydown', handleKeyDown, true)
     document.addEventListener('pointerdown', handlePointerDown)
     return () => {
-      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('keydown', handleKeyDown, true)
       document.removeEventListener('pointerdown', handlePointerDown)
     }
   }, [active])

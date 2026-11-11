@@ -107,6 +107,8 @@ export type MagicLensSummaryLoader = (
 ) => Promise<MagicLensSummary>
 
 interface UseMagicLensWorkflowResult {
+  // Cancel in the loading list (15.3-D).
+  readonly handleCancelMagicLens: () => void
   readonly handleMagicLensClear: () => void
   readonly handleMagicLensCursorActiveChange: (active: boolean) => void
   readonly handleMagicLensLeave: () => void
@@ -439,6 +441,26 @@ export function useMagicLensWorkflow({
     setMagicLensState,
   ])
 
+  // Cancel stops the scan but leaves the lens on. The last query key stays,
+  // so the cursor lens scans again only when it moves.
+  const handleCancelMagicLens = useCallback(() => {
+    clearTimeoutRef(magicLensDebounceRef)
+    invalidateLatestRequest({
+      abortRef: magicLensAbortRef,
+      requestIdRef: magicLensRequestIdRef,
+    })
+    setMagicLensState((current) =>
+      current.status === 'loading' ? IDLE_MAGIC_LENS_STATE : current,
+    )
+    appendDebugEvent('Cancelled Magic Lens scan')
+  }, [
+    appendDebugEvent,
+    magicLensAbortRef,
+    magicLensDebounceRef,
+    magicLensRequestIdRef,
+    setMagicLensState,
+  ])
+
   const handleMagicLensRadiusChange = useCallback(
     (value: number) => {
       const nextRadius = normalizeMagicLensRadius(value)
@@ -550,6 +572,7 @@ export function useMagicLensWorkflow({
   )
 
   return {
+    handleCancelMagicLens,
     handleMagicLensClear,
     handleMagicLensCursorActiveChange,
     handleMagicLensLeave,

@@ -22,6 +22,7 @@ import {
   parseGeneExpressionDetailMode,
   parseGeneExpressionScoreMode,
   parseGeneSetSymbols,
+  withGeneSetAt,
 } from './geneControlsModel'
 
 describe('geneControlsModel', () => {
@@ -252,5 +253,22 @@ describe('geneControlsModel', () => {
       'No matching features',
     )
     expect(geneSearchEmptyMessage('', [], { noun: 'genes' })).toBe('No matching genes')
+  })
+
+  it('puts a removed gene set back at its place, unless it is back already', () => {
+    const set = (id: string, name: string) => ({
+      id,
+      name,
+      genes: ['Actb'],
+      scoreMode: 'sum' as const,
+    })
+    const remaining = [set('a', 'First'), set('c', 'Third')]
+
+    expect(
+      withGeneSetAt(remaining, set('b', 'Second'), 1).map((geneSet) => geneSet.id),
+    ).toEqual(['a', 'b', 'c'])
+    expect(withGeneSetAt(remaining, set('b', 'Second'), 9).at(-1)?.id).toBe('b')
+    // A set saved since under the same name wins.
+    expect(withGeneSetAt(remaining, set('b', 'third'), 0)).toBe(remaining)
   })
 })

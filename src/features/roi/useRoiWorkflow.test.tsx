@@ -46,8 +46,12 @@ let api: ReturnType<typeof useRoiWorkflow>
 let snapshot: Snapshot
 
 function Probe({
+  loadRoiCells,
+  loadRoiGeneStats,
   onReady,
 }: {
+  readonly loadRoiCells?: RoiCellsLoader
+  readonly loadRoiGeneStats?: RoiGeneStatsLoader
   readonly onReady: (
     nextApi: ReturnType<typeof useRoiWorkflow>,
     nextSnapshot: Snapshot,
@@ -121,14 +125,16 @@ function Probe({
       roiState,
     },
     loaders: {
-      loadRoiCells: vi.fn(async () => []),
-      loadRoiGeneStats: vi.fn(async () => ({
-        genes: [],
-        cellCount: 0,
-        sampledCellCount: 0,
-        totalCount: 0,
-        hitCellLimit: false,
-      })),
+      loadRoiCells: loadRoiCells ?? vi.fn(async () => []),
+      loadRoiGeneStats:
+        loadRoiGeneStats ??
+        vi.fn(async () => ({
+          genes: [],
+          cellCount: 0,
+          sampledCellCount: 0,
+          totalCount: 0,
+          hitCellLimit: false,
+        })),
       loadRoiTranscripts: vi.fn(async () => []),
     },
     refs: {
@@ -174,6 +180,14 @@ function Probe({
   void roiName
 
   return null
+}
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined
+  const promise = new Promise<T>((next) => {
+    resolve = next
+  })
+  return { promise, resolve }
 }
 
 const warmupCells = [
@@ -354,6 +368,89 @@ describe('useRoiWorkflow', () => {
     expect(snapshot.magicLensState).toEqual({ status: 'idle' })
     expect(snapshot.roiRequestId).toBe(5)
     expect(snapshot.debugMessages).toContain('Cleared ROI')
+  })
+
+  it('cancels ROI genes, keeping the ROI and its cells (15.3-D)', async () => {
+    const stats = deferred<Awaited<ReturnType<RoiGeneStatsLoader>>>()
+    let genesSignal: AbortSignal | undefined
+    const loadRoiCells = vi.fn<RoiCellsLoader>(async () => [
+      { id: asCellId('aaaaaaaa-1'), position: { x: micrometers(1), y: micrometers(2) } },
+    ])
+    const loadRoiGeneStats = vi.fn<RoiGeneStatsLoader>((_url, _cells, options) => {
+      genesSignal = options?.signal
+      return stats.promise
+    })
+
+    render(
+      <Probe
+        loadRoiCells={loadRoiCells}
+        loadRoiGeneStats={loadRoiGeneStats}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      api.handleRoiComplete(selection)
+    })
+    expect(snapshot.roiGeneStatsState).toMatchObject({ status: 'loading' })
+
+    act(() => {
+      api.handleCancelRoiGenes()
+    })
+
+    expect(genesSignal?.aborted).toBe(true)
+    expect(snapshot.roiGeneStatsState).toEqual({ status: 'idle' })
+    expect(snapshot.roiState).toMatchObject({ status: 'ready' })
+    expect(snapshot.debugMessages).toContain('Cancelled ROI genes')
+
+    await act(async () => {
+      stats.resolve({
+        genes: [],
+        cellCount: 1,
+        sampledCellCount: 1,
+        totalCount: 0,
+        hitCellLimit: false,
+      })
+      await stats.promise
+    })
+
+    expect(snapshot.roiGeneStatsState).toEqual({ status: 'idle' })
+    expect(loadRoiGeneStats).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels ROI cells, dropping the ROI (15.3-D)', async () => {
+    const cells = deferred<Awaited<ReturnType<RoiCellsLoader>>>()
+    const loadRoiCells = vi.fn<RoiCellsLoader>(() => cells.promise)
+
+    render(
+      <Probe
+        loadRoiCells={loadRoiCells}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleRoiComplete(selection)
+    })
+    expect(snapshot.roiState).toMatchObject({ status: 'loading' })
+
+    act(() => {
+      api.handleCancelRoiCells()
+    })
+    await act(async () => {
+      cells.resolve([])
+      await cells.promise
+    })
+
+    expect(snapshot.roiState).toEqual({ status: 'idle' })
+    expect(snapshot.roiGeneStatsState).toEqual({ status: 'idle' })
+    expect(snapshot.debugMessages).toContain('Cancelled ROI cells')
   })
 
   it('exports ready ROI geometry as GeoJSON', async () => {
