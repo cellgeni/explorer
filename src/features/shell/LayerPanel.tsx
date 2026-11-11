@@ -62,6 +62,9 @@ interface LayerPanelProps {
   // Cells › Show Embedding opens the Embedding panel (15.2-G).
   readonly embeddingOpen: boolean
   readonly onEmbeddingOpenChange: (open: boolean) => void
+  // 'sheet' is the sections alone, for the bottom sheet on narrow screens
+  // (15.2-I), which has its own handle instead of the collapse button.
+  readonly variant?: 'docked' | 'sheet' | undefined
 }
 
 // The layer panel (UNIFIED_PLAN.md, 15.2-C): Image, Cells (Spots or Bins),
@@ -80,6 +83,7 @@ export function LayerPanel({
   onExpandedChange,
   embeddingOpen,
   onEmbeddingOpenChange,
+  variant = 'docked',
 }: LayerPanelProps) {
   // Until the user opens or closes a section, Cells is open, or the first
   // section where there are no cells (images).
@@ -108,6 +112,27 @@ export function LayerPanel({
     ),
   }
 
+  const sections = panel.sections.map((header) => (
+    <LayerSection
+      key={header.id}
+      header={header}
+      expanded={expanded.has(header.id)}
+      onExpandedChange={(open) => {
+        onExpandedChange(
+          panel.sections
+            .map((section) => section.id)
+            .filter((id) => (id === header.id ? open : expanded.has(id))),
+        )
+      }}
+    >
+      {bodies[header.id]}
+    </LayerSection>
+  ))
+
+  if (variant === 'sheet') {
+    return <div className="shell-layer-sections">{sections}</div>
+  }
+
   return (
     <aside
       className={collapsed ? 'shell-layer-panel is-collapsed' : 'shell-layer-panel'}
@@ -126,22 +151,7 @@ export function LayerPanel({
         />
       </header>
       <div className="shell-layer-sections" hidden={collapsed}>
-        {panel.sections.map((header) => (
-          <LayerSection
-            key={header.id}
-            header={header}
-            expanded={expanded.has(header.id)}
-            onExpandedChange={(open) => {
-              onExpandedChange(
-                panel.sections
-                  .map((section) => section.id)
-                  .filter((id) => (id === header.id ? open : expanded.has(id))),
-              )
-            }}
-          >
-            {bodies[header.id]}
-          </LayerSection>
-        ))}
+        {sections}
       </div>
     </aside>
   )

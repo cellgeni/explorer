@@ -245,7 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                        |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                        |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                        |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A to H done |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A to I done |
 
 ---
 
@@ -1913,8 +1913,8 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2), started
 with A (section models), B (top bar), C (layer panel), D (cards), E (fit
-and navigation), F (info drawer), G (embedding panel) and H (link state)
-done. The
+and navigation), F (info drawer), G (embedding panel), H (link state) and
+I (narrow screens) done. The
 user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
@@ -2848,8 +2848,19 @@ viewport`; the pinned transcript is in the Transcript card, and the
     - `withShellLink` maps `tab=` when the link sets none of these. A
       version 1 link wrote `tab=dataset` whatever was open, so in one that
       opens nothing; in a version 2 link it opens the info drawer.
-- [ ] **I. Narrow screens.** Under 860 px: the overflow menu, the bottom sheet,
+- [x] **I. Narrow screens.** Under 860 px: the overflow menu, the bottom sheet,
       and cards as sheets. (M)
+  - Done 2026-11-11. `useNarrowScreen` (a `matchMedia` store) switches
+    ShellLayout.
+    - The tools fold into `ToolMenu`, a popover whose button shows the
+      active tool; Share drops its label, the brand hides, and the summary
+      chip stays as a hidden status region.
+    - The layer panel renders its sections (`variant="sheet"`) in the
+      `Sheet` primitive, which peeks 56 px with "Layers" and the Cells
+      summary; `\` opens and closes it.
+    - Cards dock at the bottom of the canvas as full-width sheets, and the
+      Embedding panel takes the canvas's width.
+    - Checked at 375 × 812 on the Xenium demo.
 - [ ] **J. Switch over.** (M)
   - Make the new shell the default.
   - Delete `ControlHudShell`, `AppControlHud`, `CONTROL_HUD_TABS`,
@@ -3247,7 +3258,7 @@ Sequencing:
       Slice ranges, memory, and bundles.
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
-      M3, the new shell (15.2), has started: A to H are done, I is next.
+      M3, the new shell (15.2), has started: A to I are done, J is next.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 

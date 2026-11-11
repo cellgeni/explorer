@@ -130,6 +130,18 @@ Hidden layers leave the deck.gl layer list (`cellsVisible` in
 `createOverviewLayers`), so they cannot be hovered or picked. The link keeps
 them (`hidden=`), and the open sections (`panel=`).
 
+Under 860 px wide (`useNarrowScreen`) the new shell folds up:
+
+- The tools fold into a menu: its button shows the active tool ("Tools:
+  Pan"), and it lists each tool with its key and, when off, why. The brand is
+  hidden, the summary chip is read out but not shown, and Share shows only
+  its icon. The Magic Lens options appear only while the lens is on.
+- The layer panel becomes a bottom sheet whose 56 px handle says "Layers" and
+  what colours the cells ("Cells: graphclust"). Tapping it, or `\`, opens it
+  to at most 65% of the screen.
+- Cards dock at the bottom of the canvas as full-width sheets, above the
+  layer sheet's handle, and the Embedding panel takes the canvas's width.
+
 The Embedding panel (UMAP or t-SNE) opens from Cells › `Show Embedding` and
 closes with `Close embedding` or Esc. It holds `Embedding view`, `Load
 Embeddings` and the plot, linked to the selection both ways as the Cell tab's
