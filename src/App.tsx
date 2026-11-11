@@ -2937,7 +2937,10 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptDensityColorScale,
       transcriptDetailMode,
       transcriptExactPointLimit,
-      transcriptFeatureFilterMode: effectiveTranscriptFeatureFilterMode,
+      // The chosen filter, not the one in effect: with no genes selected the
+      // filter shows All features, but the link should still say Selected
+      // genes (the default, so left out) and apply it once genes are chosen.
+      transcriptFeatureFilterMode,
       transcriptGeneOnly,
       transcriptMinQv,
       transcriptOpacity,
