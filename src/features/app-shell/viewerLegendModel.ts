@@ -33,6 +33,9 @@ const SCORE_MODE_LABELS: Record<GeneExpressionScoreMode, string> = {
 }
 
 export interface ViewerLegendInput {
+  // False while the layer panel hides the cells (15.2-C), so their colour
+  // scale leaves the legend. Defaults to true.
+  readonly cellsVisible?: boolean
   readonly colorMode: ObservationColorMode
   readonly genes: {
     readonly names: readonly string[]
@@ -71,7 +74,7 @@ export interface ViewerLegendInput {
 // points by feature gets its own legend in 15.4-C.
 export function viewerLegendSections(input: ViewerLegendInput): ViewerLegendSection[] {
   const sections: ViewerLegendSection[] = []
-  const cellSection = cellColorLegendSection(input)
+  const cellSection = input.cellsVisible === false ? null : cellColorLegendSection(input)
 
   if (cellSection !== null) sections.push(cellSection)
 

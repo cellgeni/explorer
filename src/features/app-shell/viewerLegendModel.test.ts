@@ -53,6 +53,16 @@ describe('viewerLegendSections', () => {
     })
   })
 
+  it('leaves out the cell colour while the cells are hidden', () => {
+    const genes = { ...input().genes, scaleMax: 11, names: ['SNAP25'] }
+
+    expect(
+      viewerLegendSections(
+        input({ cellsVisible: false, colorMode: 'gene-expression', genes }),
+      ),
+    ).toEqual([])
+  })
+
   it('lists categories without the set prefix and with their visibility', () => {
     const [section] = viewerLegendSections(
       input({

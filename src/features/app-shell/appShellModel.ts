@@ -15,6 +15,16 @@ export const CONTROL_HUD_TABS = [
 
 export type ControlHudTab = (typeof CONTROL_HUD_TABS)[number]['id']
 
+// The tabs whose controls the new shell's top bar, info drawer and layer
+// panel hold (15.2-B, C), so its HUD leaves them out.
+export const LAYER_PANEL_HUD_TABS: readonly ControlHudTab[] = [
+  'dataset',
+  'layers',
+  'genes',
+  'transcripts',
+  'annotations',
+]
+
 export function readShareableStateFromLocation(): ShareableState {
   if (typeof window === 'undefined') {
     return {}

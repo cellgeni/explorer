@@ -7,7 +7,6 @@ import {
   ErrorSummary,
 } from '../../components/AppStatusPanels'
 import { Select } from '../../components/ui'
-import type { AnnDataVisiumView } from '../../datasets/h5adDataset'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
@@ -114,26 +113,24 @@ export function BoundaryLimitField({ open }: { readonly open: OpenDatasetModel }
 
 // Visium HD bins, Visium spots and the SpatialData view, whichever the
 // dataset has.
+// In the new shell's info drawer ('drawer'), Visium HD bin size, the Visium
+// tissue image and off-tissue spots live in their layer panel sections
+// instead (15.2-C).
 export function DatasetViewOptions({
   viewOptions: { spatialData, visium, visiumHd },
+  placement = 'hud',
 }: {
   readonly viewOptions: DatasetViewOptionsModel
+  readonly placement?: 'hud' | 'drawer' | undefined
 }) {
-  const binSizeInputId = useId()
-
   return (
     <>
-      <VisiumHdDatasetControls
-        inputId={binSizeInputId}
-        state={visiumHd.state}
-        onBinSizeChange={visiumHd.onBinSizeChange}
-      />
+      {placement === 'hud' ? <VisiumHdBinControls visiumHd={visiumHd} /> : null}
       {visium.state.status === 'idle' ? null : (
         <VisiumDatasetControls
+          visium={visium}
           state={visium.state}
-          disabled={visium.disabled}
-          onImageChange={visium.onImageChange}
-          onViewChange={visium.onViewChange}
+          withSectionControls={placement === 'hud'}
         />
       )}
       {spatialData.state.status === 'idle' ? null : (
@@ -285,6 +282,23 @@ export function DatasetAbout({ about }: { readonly about: DatasetManifestAbout }
   )
 }
 
+// Visium HD's type, bin count and bin size: the Bins section.
+export function VisiumHdBinControls({
+  visiumHd,
+}: {
+  readonly visiumHd: DatasetViewOptionsModel['visiumHd']
+}) {
+  const inputId = useId()
+
+  return (
+    <VisiumHdDatasetControls
+      inputId={inputId}
+      state={visiumHd.state}
+      onBinSizeChange={visiumHd.onBinSizeChange}
+    />
+  )
+}
+
 function VisiumHdDatasetControls({
   inputId,
   state,
@@ -358,16 +372,17 @@ function VisiumHdDatasetControls({
 }
 
 function VisiumDatasetControls({
+  visium,
   state,
-  disabled,
-  onImageChange,
-  onViewChange,
+  withSectionControls,
 }: {
-  readonly state: Exclude<VisiumControlState, { readonly status: 'idle' }>
-  readonly disabled: boolean
-  readonly onImageChange: (image: VisiumImageKind | null) => void
-  readonly onViewChange: (view: AnnDataVisiumView) => void
+  readonly visium: VisiumViewModel
+  readonly state: LoadedVisiumState
+  // The tissue image and off-tissue spots, which the new shell puts in the
+  // Image and Spots sections.
+  readonly withSectionControls: boolean
 }) {
+  const { disabled, onViewChange } = visium
   const { summary } = state
   const offTissue = summary.offTissueSpotCount.toLocaleString()
 
@@ -424,38 +439,75 @@ function VisiumDatasetControls({
           {formatVisiumUnits(summary.units)}
         </strong>
       </div>
-      <Select<VisiumImageKind | ''>
-        className="ui-field--inline"
-        label="Tissue image"
-        title="Visium tissue image to show"
-        value={state.image ?? ''}
-        disabled={disabled || summary.images.length === 0}
-        options={[
-          { value: '', label: summary.images.length === 0 ? 'None available' : 'None' },
-          ...summary.images.map((image) => ({
-            value: image,
-            label: visiumImageLabel(image),
-          })),
-        ]}
-        onChange={(value) => {
-          onImageChange(value === '' ? null : value)
+      {withSectionControls ? (
+        <>
+          <VisiumTissueImageSelect visium={visium} />
+          <VisiumOffTissueToggle visium={visium} />
+        </>
+      ) : null}
+    </section>
+  )
+}
+
+type VisiumViewModel = DatasetViewOptionsModel['visium']
+type LoadedVisiumState = Exclude<VisiumControlState, { readonly status: 'idle' }>
+
+// The Visium tissue image: the Image section in the new shell.
+export function VisiumTissueImageSelect({
+  visium,
+}: {
+  readonly visium: VisiumViewModel
+}) {
+  const { disabled, onImageChange, state } = visium
+
+  if (state.status === 'idle') {
+    return null
+  }
+
+  const { summary } = state
+
+  return (
+    <Select<VisiumImageKind | ''>
+      className="ui-field--inline"
+      label="Tissue image"
+      title="Visium tissue image to show"
+      value={state.image ?? ''}
+      disabled={disabled || summary.images.length === 0}
+      options={[
+        { value: '', label: summary.images.length === 0 ? 'None available' : 'None' },
+        ...summary.images.map((image) => ({
+          value: image,
+          label: visiumImageLabel(image),
+        })),
+      ]}
+      onChange={(value) => {
+        onImageChange(value === '' ? null : value)
+      }}
+    />
+  )
+}
+
+// Show off-tissue spots: the Spots section in the new shell.
+export function VisiumOffTissueToggle({ visium }: { readonly visium: VisiumViewModel }) {
+  const { disabled, onViewChange, state } = visium
+
+  if (state.status === 'idle' || state.summary.offTissueSpotCount === 0) {
+    return null
+  }
+
+  return (
+    <label className="dataset-toggle">
+      <input
+        type="checkbox"
+        checked={state.requestedView?.showOffTissue ?? state.summary.showOffTissue}
+        disabled={disabled}
+        title="Show the spots that are not under tissue"
+        onChange={(event) => {
+          onViewChange({ showOffTissue: event.currentTarget.checked })
         }}
       />
-      {summary.offTissueSpotCount === 0 ? null : (
-        <label className="dataset-toggle">
-          <input
-            type="checkbox"
-            checked={state.requestedView?.showOffTissue ?? summary.showOffTissue}
-            disabled={disabled}
-            title="Show the spots that are not under tissue"
-            onChange={(event) => {
-              onViewChange({ showOffTissue: event.currentTarget.checked })
-            }}
-          />
-          <span>Show off-tissue spots</span>
-        </label>
-      )}
-    </section>
+      <span>Show off-tissue spots</span>
+    </label>
   )
 }
 

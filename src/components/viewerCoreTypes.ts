@@ -48,6 +48,8 @@ export interface ViewerCoreProps {
   readonly imageChannels?: readonly MorphologyCanvasChannel[]
   readonly flatImage?: FlatMorphologyCanvasImage | null
   readonly imageOpacity?: number
+  // False hides cells, boundaries and bins, and stops them being picked.
+  readonly cellLayersVisible?: boolean
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
   readonly pointSizeFullViewScale?: number

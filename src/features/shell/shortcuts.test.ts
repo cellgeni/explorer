@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isLayerPanelKey,
   SHORTCUTS,
   TOOL_ORDER,
   TOOL_SHORTCUT_KEYS,
@@ -42,5 +43,12 @@ describe('shortcuts', () => {
     for (const letter of letters) {
       expect(listed.filter((listedKey) => listedKey === letter)).toHaveLength(1)
     }
+  })
+
+  it('hides the layer panel with a backslash', () => {
+    expect(isLayerPanelKey(key('\\'))).toBe(true)
+    expect(isLayerPanelKey(key('\\', { meta: true }))).toBe(false)
+    expect(toolForShortcutKey(key('\\'))).toBeNull()
+    expect(SHORTCUTS.some((shortcut) => shortcut.keys.includes('\\'))).toBe(true)
   })
 })

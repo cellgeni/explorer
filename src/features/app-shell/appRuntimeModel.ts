@@ -17,9 +17,21 @@ export interface DebugLogAppendOptions {
 
 export type AppendDebugEvent = (message: string, options?: DebugLogAppendOptions) => void
 
+// Where a task's result shows in the new shell (15.2-C): a layer panel
+// section, the info drawer ('dataset'), or a card.
+export type LoadingTaskArea =
+  | 'dataset'
+  | 'image'
+  | 'cells'
+  | 'transcripts'
+  | 'magic-lens'
+  | 'selection'
+  | 'cell'
+
 export interface LoadingTask {
   readonly id: string
   readonly tabId: ControlHudTab
+  readonly area: LoadingTaskArea
   readonly label: string
   readonly detail?: string
 }
@@ -135,6 +147,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'dataset',
       tabId: 'dataset',
+      area: 'dataset',
       label: 'Loading dataset',
       detail: shortDatasetLabel(loadState.url),
     })
@@ -144,6 +157,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'dataset-warmup',
       tabId: 'dataset',
+      area: 'dataset',
       label: 'Preparing dataset',
       detail: shortDatasetLabel(datasetWarmupState.url),
     })
@@ -153,23 +167,35 @@ export function createLoadingTasks({
     tasks.push({
       id: 'dataset-diagnostics',
       tabId: 'dataset',
+      area: 'dataset',
       label: 'Diagnosing dataset',
       detail: shortDatasetLabel(diagnosticsState.url),
     })
   }
 
   if (genePanelState.status === 'loading') {
-    tasks.push({ id: 'gene-panel', tabId: 'genes', label: 'Loading gene panel' })
+    tasks.push({
+      id: 'gene-panel',
+      tabId: 'genes',
+      area: 'cells',
+      label: 'Loading gene panel',
+    })
   }
 
   if (morphologyState.status === 'loading') {
-    tasks.push({ id: 'morphology', tabId: 'layers', label: 'Loading image' })
+    tasks.push({
+      id: 'morphology',
+      tabId: 'layers',
+      area: 'image',
+      label: 'Loading image',
+    })
   }
 
   if (customMorphologyLayerState.status === 'loading') {
     tasks.push({
       id: 'custom-morphology-layer',
       tabId: 'layers',
+      area: 'image',
       label: 'Loading custom layer',
     })
   }
@@ -178,18 +204,25 @@ export function createLoadingTasks({
     tasks.push({
       id: 'annotation-sets',
       tabId: 'annotations',
+      area: 'cells',
       label: 'Loading annotation sets',
     })
   }
 
   if (boundaryState.status === 'loading') {
-    tasks.push({ id: 'boundaries', tabId: 'layers', label: 'Loading boundaries' })
+    tasks.push({
+      id: 'boundaries',
+      tabId: 'layers',
+      area: 'cells',
+      label: 'Loading boundaries',
+    })
   }
 
   if (geneExpressionState.status === 'loading') {
     tasks.push({
       id: 'gene-expression',
       tabId: 'genes',
+      area: 'cells',
       label: geneExpressionLoadingLabel,
       detail: geneExpressionState.genes?.join(', ') ?? '',
     })
@@ -199,6 +232,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'visium-hd-expression-projection',
       tabId: 'genes',
+      area: 'cells',
       label: 'Mapping expression to cells',
     })
   }
@@ -207,6 +241,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'transcript-capabilities',
       tabId: 'transcripts',
+      area: 'transcripts',
       label: 'Checking transcripts',
     })
   }
@@ -216,6 +251,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'transcript-overlay',
       tabId: 'transcripts',
+      area: 'transcripts',
       label: 'Loading transcripts',
       detail: `${visibleTranscriptEstimate.toLocaleString()} estimated`,
     })
@@ -225,6 +261,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'magic-lens',
       tabId: 'magic-lens',
+      area: 'magic-lens',
       label: 'Scanning magic lens',
       detail: magicLensLoadingScopeLabel,
     })
@@ -234,18 +271,25 @@ export function createLoadingTasks({
     tasks.push({
       id: 'annotations',
       tabId: 'annotations',
+      area: 'cells',
       label: 'Loading annotations',
     })
   }
 
   if (analysisEmbeddingState.status === 'loading') {
-    tasks.push({ id: 'embeddings', tabId: 'cell', label: 'Loading embeddings' })
+    tasks.push({
+      id: 'embeddings',
+      tabId: 'cell',
+      area: 'cells',
+      label: 'Loading embeddings',
+    })
   }
 
   if (cellDetailState.status === 'loading') {
     tasks.push({
       id: 'cell-details',
       tabId: 'cell',
+      area: 'cell',
       label: 'Loading cell details',
       detail: shortIdentifier(cellDetailState.cellId ?? ''),
     })
@@ -255,6 +299,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'cell-transcripts',
       tabId: 'cell',
+      area: 'cell',
       label: 'Loading cell z distribution',
       detail: shortIdentifier(cellTranscriptDistributionState.cellId ?? ''),
     })
@@ -264,19 +309,26 @@ export function createLoadingTasks({
     tasks.push({
       id: 'visium-hd-expression-profile',
       tabId: 'cell',
+      area: 'cell',
       label: 'Loading expression profile',
       detail: shortIdentifier(visiumHdExpressionProfileState.selectionId ?? ''),
     })
   }
 
   if (roiState.status === 'loading') {
-    tasks.push({ id: 'roi-cells', tabId: 'roi', label: 'Querying ROI cells' })
+    tasks.push({
+      id: 'roi-cells',
+      tabId: 'roi',
+      area: 'selection',
+      label: 'Querying ROI cells',
+    })
   }
 
   if (isRoiGeneViewportWarmupLoading) {
     tasks.push({
       id: 'roi-gene-warmup',
       tabId: 'roi',
+      area: 'selection',
       label: 'Preparing cell feature matrix',
     })
   }
@@ -286,6 +338,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'roi-genes',
       tabId: 'roi',
+      area: 'selection',
       label: 'Querying ROI genes',
       detail: `${cellCount.toLocaleString()} cells`,
     })
@@ -295,6 +348,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'roi-transcripts',
       tabId: 'roi',
+      area: 'selection',
       label: 'Exporting ROI transcripts',
     })
   }
@@ -304,6 +358,7 @@ export function createLoadingTasks({
     tasks.push({
       id: 'auto-contrast',
       tabId: 'layers',
+      area: 'image',
       label: 'Auto contrast',
       detail: `${autoContrastChannelCount.toLocaleString()} ${channelNoun}`,
     })

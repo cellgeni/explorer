@@ -208,6 +208,7 @@ export function ViewerCore({
   imageChannels = EMPTY_IMAGE_CHANNELS,
   flatImage = null,
   imageOpacity = 1,
+  cellLayersVisible = true,
   cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
   cellBoundaryOpacity = 1,
   pointSizeFullViewScale = 1,
@@ -296,6 +297,7 @@ export function ViewerCore({
       imageChannels={imageChannels}
       flatImage={flatImage}
       imageOpacity={imageOpacity}
+      cellLayersVisible={cellLayersVisible}
       cellFillOpacity={cellFillOpacity}
       cellBoundaryOpacity={cellBoundaryOpacity}
       pointSizeFullViewScale={pointSizeFullViewScale}
@@ -376,6 +378,7 @@ interface ViewerSurfaceProps {
   readonly imageChannels: readonly MorphologyCanvasChannel[]
   readonly flatImage: FlatMorphologyCanvasImage | null
   readonly imageOpacity: number
+  readonly cellLayersVisible: boolean
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
   readonly pointSizeFullViewScale: number
@@ -452,6 +455,7 @@ function ViewerSurface({
   imageChannels,
   flatImage,
   imageOpacity,
+  cellLayersVisible,
   cellFillOpacity,
   cellBoundaryOpacity,
   pointSizeFullViewScale,
@@ -806,6 +810,7 @@ function ViewerSurface({
   const layers = useMemo(
     () =>
       createOverviewLayers(cells, boundaries, {
+        cellsVisible: cellLayersVisible,
         cellFillOpacity,
         cellBoundaryOpacity,
         cellPointPickable,
@@ -829,6 +834,7 @@ function ViewerSurface({
       }),
     [
       cellBoundaryOpacity,
+      cellLayersVisible,
       cellPointPickable,
       cellFillOpacity,
       cellBoundaryFillEnabled,
