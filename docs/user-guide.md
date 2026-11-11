@@ -99,6 +99,12 @@ segmentation toggles there when segmented outputs are detected.
 Custom image layers accept remote OME-TIFF or OME-Zarr URLs and render through
 the same channel controls as dataset morphology.
 
+The minimap at the bottom right of the canvas shows the whole dataset (its
+image, or its cells as dots) with the current view as a box; click or drag on
+it to move the view. Settings › `Show minimap` hides it, and Settings ›
+`Show axes` adds rulers with the coordinates along the top and left edges of
+the canvas, in the scale bar's unit.
+
 The Cells section's Genes picker supports individual gene selection and
 multi-gene signatures for Xenium, Visium HD, H5AD, and SpatialData. `Auto LOD`,
 the default `Expression detail` under Advanced, loads expression for every
@@ -154,7 +160,10 @@ transcript records can be loaded and inspected.
 Use `Feature filter` to switch between all features and the currently selected
 genes. `Feature search` can add genes directly from the Transcripts section.
 The `Point color` control colors exact transcript points either by feature
-identity or by QV.
+identity or by QV. Colored by feature, the Transcripts section and the canvas
+legend list the genes on screen, each with its color, an eye that hides its
+points, and its number of points in view; selected genes each get their own
+color, and clicking a swatch changes it.
 
 When exact mode is close to the configured point budget, the section shows
 `Load exact viewport` instead of starting the fetch automatically. Use it when
@@ -186,8 +195,13 @@ current shapes as GeoJSON.
 Use the Box selection (`R`) or Lasso selection (`L`) tool to draw box or lasso
 regions. Each drawing is kept as a selection, named "ROI 1", "ROI 2" and so on,
 and the Selection card shows the newest: Xenium ROIs can be saved as
-annotations (`Save ROI`), export selected cells or transcripts, and inspect top
-ROI genes. Visium HD ROIs select bins and export barcodes. Annotations ›
+annotations (`Save ROI`) and export selected cells or transcripts. Visium HD
+ROIs select bins and export barcodes. The card's Genes tab ranks the genes
+enriched in the selection against a sample of cells from the rest of the
+tissue, with the share of cells expressing each inside and outside and a
+minimum share filter; `Most abundant` ranks by count instead. Clicking a gene
+colours the cells by it. The [UI reference](./ui-reference.md#genes-tab)
+explains the method. Annotations ›
 Selections lists every selection with its colour, visibility and area;
 choosing a name shows that selection in the card again, and each row has
 `Go to`, `Rename` and `Delete`. Closing the card keeps the selection; its

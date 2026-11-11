@@ -73,7 +73,11 @@ export interface ViewerCoreProps {
   readonly onClearSelection?: () => void
   // The zoom number is for debugging (?debug=1).
   readonly showZoomLevel?: boolean
-  readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
+  readonly onLegendCategoryVisibilityChange?: (
+    id: string,
+    visible: boolean,
+    sectionId: string,
+  ) => void
   readonly coordinateUnit?: ViewerCoordinateUnit
   readonly measurementEnabled?: boolean
   readonly measurementUnit?: ViewerCoordinateUnit
@@ -102,6 +106,10 @@ export interface ViewerCoreProps {
   readonly focusRequest?: ViewerFocusRequest | null
   // The zoom −, + and Fit buttons (UNIFIED_PLAN.md, 15.2-E).
   readonly navigationControls?: boolean
+  // The minimap at the bottom right (15.4-D).
+  readonly minimap?: boolean
+  // Rulers along the top and left edges, in the scale bar's unit (15.4-E).
+  readonly axes?: boolean
   // Fits the data to the view whenever it changes (the F key).
   readonly fitRequestKey?: number
   readonly overviewRenderCellLimit?: number | null

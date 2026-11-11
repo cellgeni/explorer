@@ -7,11 +7,16 @@ import {
   type ViewerLegendSection,
 } from './viewerLegendTypes'
 
+// The section id tells the eyes of transcript genes from those of classes.
+export type LegendCategoryVisibilityChange = (
+  id: string,
+  visible: boolean,
+  sectionId: string,
+) => void
+
 interface ViewerLegendProps {
   readonly sections: readonly ViewerLegendSection[]
-  readonly onCategoryVisibilityChange?:
-    | ((id: string, visible: boolean) => void)
-    | undefined
+  readonly onCategoryVisibilityChange?: LegendCategoryVisibilityChange | undefined
 }
 
 // The canvas legend in the bottom-left stack. It sits next to the deck.gl
@@ -86,10 +91,11 @@ function CategoryLegend({
   onVisibilityChange,
 }: {
   readonly section: CategoryLegendSection
-  readonly onVisibilityChange?: ((id: string, visible: boolean) => void) | undefined
+  readonly onVisibilityChange?: LegendCategoryVisibilityChange | undefined
 }) {
   const shown = section.items.slice(0, LEGEND_CATEGORY_LIMIT)
-  const moreCount = section.items.length - shown.length
+  const moreCount = section.items.length - shown.length + (section.moreCount ?? 0)
+  const noun = section.noun ?? { singular: 'cell', plural: 'cells' }
 
   return (
     <div className="viewer-legend-section">
@@ -102,10 +108,10 @@ function CategoryLegend({
                 type="checkbox"
                 checked={item.visible}
                 disabled={onVisibilityChange === undefined}
-                aria-label={`${item.label}, ${item.count.toLocaleString()} ${item.count === 1 ? 'cell' : 'cells'}`}
+                aria-label={`${item.label}, ${item.count.toLocaleString()} ${item.count === 1 ? noun.singular : noun.plural}`}
                 title={`${item.visible ? 'Hide' : 'Show'} ${item.label}`}
                 onChange={(event) => {
-                  onVisibilityChange?.(item.id, event.currentTarget.checked)
+                  onVisibilityChange?.(item.id, event.currentTarget.checked, section.id)
                 }}
               />
               <span
@@ -121,7 +127,7 @@ function CategoryLegend({
       </ul>
       {moreCount <= 0 ? null : (
         <p className="viewer-legend-detail">
-          +{moreCount.toLocaleString()} more in Cells › Clusters
+          +{moreCount.toLocaleString()} more in {section.moreWhere ?? 'Cells › Clusters'}
         </p>
       )}
     </div>

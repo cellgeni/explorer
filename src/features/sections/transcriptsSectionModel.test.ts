@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { testTranscriptsSectionModel } from '../../test/sectionModels'
 import {
   useTranscriptsSectionModel,
   type TranscriptsSectionModelInput,
@@ -11,6 +12,7 @@ function input(
   return {
     appendDebugEvent: vi.fn(),
     effectiveTranscriptFeatureFilterMode: 'selected',
+    geneLegend: testTranscriptsSectionModel().geneLegend,
     geneOnlyFilterEnabled: true,
     geneOptions: ['Actb', 'Gad1'],
     genePanelState: {

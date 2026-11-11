@@ -16,6 +16,7 @@ import type {
   TranscriptLayerState,
 } from '../transcripts/transcriptLayerModel'
 import { useTranscriptControlsWorkflow } from '../transcripts/useTranscriptControlsWorkflow'
+import type { TranscriptGeneLegendModel } from '../transcripts/useTranscriptGeneLegend'
 
 // Transcript display, gene filter, appearance and filters, the exact-point
 // budget, and the hovered or pinned transcript (UNIFIED_PLAN.md, 15.2-A).
@@ -35,6 +36,8 @@ export interface TranscriptsSectionModel {
   readonly onExactPointLimitChange: (limit: number) => void
   readonly onLoadExactViewport: (requestKey: string) => void
   readonly features: TranscriptFeatureModel
+  // Each gene's swatch, eye and count (15.4-C).
+  readonly geneLegend: TranscriptGeneLegendModel
   readonly densityColorScale: TranscriptDensityColorScale
   readonly onDensityColorScaleChange: (scale: TranscriptDensityColorScale) => void
   readonly densityScaleMax: number | undefined
@@ -73,6 +76,7 @@ export interface TranscriptFeatureModel {
 export interface TranscriptsSectionModelInput {
   readonly appendDebugEvent: AppendDebugEvent
   readonly effectiveTranscriptFeatureFilterMode: TranscriptFeatureFilterMode
+  readonly geneLegend: TranscriptGeneLegendModel
   readonly geneOnlyFilterEnabled: boolean
   readonly geneOptions: readonly string[]
   readonly genePanelState: GenePanelState<StructuredLoadError>
@@ -123,6 +127,7 @@ export interface TranscriptsSectionModelInput {
 export function useTranscriptsSectionModel({
   appendDebugEvent,
   effectiveTranscriptFeatureFilterMode,
+  geneLegend,
   geneOnlyFilterEnabled,
   geneOptions,
   genePanelState,
@@ -226,6 +231,7 @@ export function useTranscriptsSectionModel({
       onToggle: handleToggleTranscriptSelectedFeature,
       onPick: pickTranscriptFeature,
     },
+    geneLegend,
     densityColorScale: transcriptDensityColorScale,
     onDensityColorScaleChange: handleTranscriptDensityColorScaleChange,
     densityScaleMax: transcriptDensityScaleMax,

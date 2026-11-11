@@ -443,6 +443,133 @@
   box-shadow: var(--shadow-1);
 }
 
+/* µm axes (15.4-E): rulers along the top and left edges. */
+.viewer-axes {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  pointer-events: none;
+}
+
+.viewer-axis {
+  position: absolute;
+  background: color-mix(in srgb, var(--surface-0) 78%, transparent);
+  color: var(--text-2);
+  font-size: var(--font-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-axis-x {
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.viewer-axis-y {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 20px;
+  border-right: 1px solid var(--border);
+}
+
+.viewer-axis-tick {
+  position: absolute;
+  background: var(--text-2);
+}
+
+.viewer-axis-x .viewer-axis-tick {
+  bottom: 0;
+  width: 1px;
+  height: 5px;
+}
+
+.viewer-axis-y .viewer-axis-tick {
+  right: 0;
+  width: 5px;
+  height: 1px;
+}
+
+.viewer-axis-label {
+  position: absolute;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.viewer-axis-x .viewer-axis-label {
+  bottom: 6px;
+  translate: -50% 0;
+}
+
+/* Read bottom to top, as on a plot's y axis. */
+.viewer-axis-y .viewer-axis-label {
+  right: 6px;
+  writing-mode: vertical-rl;
+  translate: 0 -50%;
+  rotate: 180deg;
+}
+
+.viewer-axis-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.viewer-axis-unit {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+/* The minimap (15.4-D), above the zoom buttons. */
+.viewer-minimap {
+  --minimap-dot: var(--text-3);
+
+  position: absolute;
+  z-index: 5;
+  right: 12px;
+  bottom: 100px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--canvas);
+  box-shadow: var(--shadow-1);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.viewer-minimap .morphology-canvas,
+.viewer-minimap-dots {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.viewer-minimap-view {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  pointer-events: none;
+}
+
+@media (max-width: 859.98px) {
+  .viewer-minimap {
+    display: none;
+  }
+}
+
 .viewport-scale-bar {
   position: absolute;
   z-index: 4;

@@ -7,6 +7,12 @@ import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 export interface ViewSettingsModel {
   readonly showHoverTooltips: boolean
   readonly onShowHoverTooltipsChange: (enabled: boolean) => void
+  // The minimap (15.4-D).
+  readonly showMinimap: boolean
+  readonly onShowMinimapChange: (enabled: boolean) => void
+  // Rulers along the canvas edges (15.4-E).
+  readonly showAxes: boolean
+  readonly onShowAxesChange: (enabled: boolean) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly onCoordinateUnitChange: (unit: ViewerCoordinateUnit) => void
   readonly measure: MeasureToolModel
@@ -30,8 +36,12 @@ export interface ViewSettingsModelInput {
   readonly setMeasurementEnabled: Dispatch<SetStateAction<boolean>>
   readonly setMeasurementResetKey: Dispatch<SetStateAction<number>>
   readonly setMeasurementUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
+  readonly setShowAxes: Dispatch<SetStateAction<boolean>>
   readonly setShowHoverTooltips: Dispatch<SetStateAction<boolean>>
+  readonly setShowMinimap: Dispatch<SetStateAction<boolean>>
+  readonly showAxes: boolean
   readonly showHoverTooltips: boolean
+  readonly showMinimap: boolean
 }
 
 export function useViewSettingsModel({
@@ -44,10 +54,32 @@ export function useViewSettingsModel({
   setMeasurementEnabled,
   setMeasurementResetKey,
   setMeasurementUnit,
+  setShowAxes,
   setShowHoverTooltips,
+  setShowMinimap,
+  showAxes,
   showHoverTooltips,
+  showMinimap,
 }: ViewSettingsModelInput): ViewSettingsModel {
   return {
+    showAxes,
+    onShowAxesChange: (nextEnabled) => {
+      if (showAxes === nextEnabled) return
+
+      setShowAxes(nextEnabled)
+      appendDebugEvent(nextEnabled ? 'Axes shown' : 'Axes hidden', {
+        coalesceKey: 'axes-visible',
+      })
+    },
+    showMinimap,
+    onShowMinimapChange: (nextEnabled) => {
+      if (showMinimap === nextEnabled) return
+
+      setShowMinimap(nextEnabled)
+      appendDebugEvent(nextEnabled ? 'Minimap shown' : 'Minimap hidden', {
+        coalesceKey: 'minimap-visible',
+      })
+    },
     showHoverTooltips,
     onShowHoverTooltipsChange: (nextEnabled) => {
       if (showHoverTooltips === nextEnabled) {

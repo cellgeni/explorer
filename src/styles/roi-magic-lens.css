@@ -74,11 +74,60 @@
   font-weight: 700;
 }
 
+/* Enriched genes (15.4-B): sort, minimum share of cells, the comparison. */
+.roi-gene-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: end;
+}
+
+.roi-gene-min-percent {
+  min-width: 96px;
+}
+
+.roi-gene-reference {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-weight: 700;
+}
+
+.roi-gene-row-button {
+  width: 100%;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.roi-gene-row-button:hover span,
+.roi-gene-row-button[aria-pressed='true'] span {
+  color: var(--text-1);
+  text-decoration: underline;
+}
+
+.roi-gene-row-button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.roi-gene-list li:has(.roi-gene-row-button[aria-pressed='true']) {
+  border-color: var(--accent);
+}
+
 .roi-gene-list {
   display: grid;
   gap: 4px;
+  max-height: 320px;
   margin: 0;
   padding: 0;
+  overflow: auto;
   list-style: none;
 }
 

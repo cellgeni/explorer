@@ -46,3 +46,37 @@ export function roiSelectionArea(selection: RoiSelection): number {
 
   return Math.abs(twiceArea) / 2
 }
+
+// Whether a point (data µm) is inside the box, or inside the lasso's polygon
+// (even-odd rule).
+export function roiSelectionContains(selection: RoiSelection, point: DataPoint): boolean {
+  const { minX, minY, maxX, maxY } = selection.bbox
+
+  if (point.x < minX || point.x > maxX || point.y < minY || point.y > maxY) {
+    return false
+  }
+
+  if (selection.kind === 'box') return true
+
+  const { points } = selection
+  let inside = false
+
+  for (let index = 0, previous = points.length - 1; index < points.length; index += 1) {
+    const current = points[index]
+    const before = points[previous]
+    previous = index
+
+    if (current === undefined || before === undefined) continue
+
+    if (
+      current.y > point.y !== before.y > point.y &&
+      point.x <
+        ((before.x - current.x) * (point.y - current.y)) / (before.y - current.y) +
+          current.x
+    ) {
+      inside = !inside
+    }
+  }
+
+  return inside
+}

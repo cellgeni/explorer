@@ -201,7 +201,7 @@ export function roiGeneStatsStatusCopy<ErrorType extends RoiLoadErrorSummary>(
       return 'Genes: none'
     }
 
-    return `Genes: top ${roiGeneStatsState.stats.genes.length}`
+    return `Genes: ${roiGeneStatsState.stats.genes.length.toLocaleString()} detected`
   }
 
   if (roiGeneStatsState.status === 'error') {

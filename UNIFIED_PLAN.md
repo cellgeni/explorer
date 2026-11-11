@@ -225,27 +225,27 @@ writing UI code.
 
 ## 3. Status At A Glance
 
-| Track                           | Scope                                                    | Status                                                          |
-| ------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
-| Phase 1                         | Foundation and migration                                 | Done                                                            |
-| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                          |
-| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09              |
-| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                            |
-| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                     |
-| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**         |
-| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                              |
-| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done               |
-| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                            |
-| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**         |
-| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                        |
-| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                        |
-| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                               |
-| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                               |
-| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                               |
-| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                               |
-| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)               |
-| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                               |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M4 done (2026-11-11); M5 (15.4) and 15.5 remain |
+| Track                           | Scope                                                    | Status                                                           |
+| ------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
+| Phase 1                         | Foundation and migration                                 | Done                                                             |
+| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                           |
+| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09               |
+| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                             |
+| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                      |
+| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**          |
+| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                               |
+| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                |
+| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                             |
+| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**          |
+| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                         |
+| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                         |
+| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                |
+| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                                |
+| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                                |
+| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                |
+| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                |
+| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M5 done (2026-11-11); the 15.5 close-out remains |
 
 ---
 
@@ -1913,7 +1913,9 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2 A–J),
 done 2026-11-11: it is the only shell. M4 (15.3 A–D: start screen, Help,
-Undo, Cancel) done 2026-11-11. The user asked for a usability review of the
+Undo, Cancel) done 2026-11-11. M5 (15.4 A–E: selections, enriched genes,
+transcript gene legend, minimap, axes) done 2026-11-11. The user asked for a
+usability review of the
 interface and then a plan for the changes. The plan rests on:
 
 - The UI review of 2026-11-10. It walked through eight tasks on the hosted
@@ -3130,23 +3132,120 @@ Can be skipped after 15.3 ships if time is short.
       the list is keyed on the SpatialData coordinate system and scale too;
       and coming back to a dataset starts empty, while a reload of the same
       view keeps the list.
-- [ ] **B. Enriched genes (F13).** (L, with a method note in the docs)
+- [x] **B. Enriched genes (F13).** (L, with a method note in the docs)
   - The Selection card's Genes tab ranks genes by log2 fold change of mean
     expression inside the selection versus a matched sample outside it, reusing
     the ROI warm-up sample.
   - It shows the % of cells expressing inside and outside, with a minimum %
     filter. "Most abundant" stays as a second sort.
   - Clicking a gene sets `Colour by` to Gene expression.
-- [ ] **C. Transcript gene legend.** Each gene gets a colour swatch, an eye
+  - Done 2026-11-11. The method note is in `docs/ui-reference.md` (Selection
+    › Genes tab). `roiEnrichmentModel` holds the pure parts: the reference
+    sample, the outside filter, the fold change and `rankRoiGenes`.
+    - The reference ("matched sample") is one per dataset: 8 runs of 64
+      consecutive cells spread through the overview, which is in matrix row
+      order, so where the matrix is stored by cell a run reads one or two
+      chunks; random cells would touch a chunk each. On Visium HD, runs of
+      the loaded bins. On Xenium the overview index is the matrix row, so
+      the fast row path is used. The demo's Zarr matrix has no cell-major
+      arrays, so its ROI genes read `cell_feature_matrix.h5`: the first read
+      took 60 s (as before), then the comparison for a 37,000-cell box took
+      91 ms and the 10,000-cell refinement 1.1 s, and the striatum box
+      ranked STRIP2, EBF1, BCL11B, DACH1 and PDE10A first.
+    - "Reusing the ROI warm-up": the warm-up now also reads the whole
+      reference after its 32-cell read, so a selection's comparison (the
+      reference cells outside its outline, by `roiSelectionContains`) comes
+      from the IndexedDB byte cache. AnnData platforms have no warm-up and
+      read it with the first selection.
+    - Order per selection: the 32-cell preview, then the comparison, then
+      the full refinement. Every read now asks for all genes (`ALL_GENES`),
+      not the top 10, so each can be compared. The comparison is its own
+      state (`roiReferenceState`) and its errors stay there; Cancel ROI
+      genes and Clear reset it.
+    - Fold change: log2((mean in + 0.1) / (mean out + 0.1)), means over the
+      sampled cells with zeros. Minimum % (default 10%) applies to both sorts;
+      up to 20 genes show. Until the comparison is ready, Enriched lists by
+      count and says why.
+    - A gene's row (`Colour cells by {gene}`) makes it the only selected
+      gene and sets Colour by to Gene expression, so each click shows one
+      gene; adding it to a list would have shown a combined score.
+    - The review before the PRs found that a Visium HD selection with no
+      bins returned before cancelling the previous selection's read, so its
+      genes (and now its comparison) landed on the empty one; that read is
+      now cancelled.
+- [x] **C. Transcript gene legend.** Each gene gets a colour swatch, an eye
       toggle and its count, in the Transcripts section and in the legend, as in 10x
       Explorer. Colours can be edited. (M)
-- [ ] **D. Minimap.** (M)
+  - Done 2026-11-11. `useTranscriptGeneLegend` and the pure
+    `transcriptGeneLegendModel` (`src/features/transcripts/`) build one list
+    for the Transcripts section (`TranscriptGeneListBlock.tsx`, under Genes)
+    and the canvas legend ("Transcripts", the first 12, then "+n more in
+    Transcripts").
+    - It applies while exact points are coloured by Feature: the selected
+      genes in order under Selected genes, or the 24 genes with most points
+      in view under All features. Counts are the points loaded in view.
+      Density squares and QV colours have no per-gene colour, so the section
+      says so instead.
+    - Colours: a selected gene takes the first of 12 colours (the first 8
+      are the old feature palette) that no other selected gene has, and
+      keeps it: the gene list is sorted, so colours by position would move
+      when a gene is added. Other genes keep their colour from the name, as
+      before. An edited colour is kept per gene for the session
+      (`transcriptGeneColors`). Not in the link.
+    - The eye hides a gene's points on the client (`hiddenTranscriptGenes`,
+      reset per dataset), so nothing is read again. The legend's checkboxes
+      are the same eyes: `ViewerLegend` now passes the section id, and App
+      routes `transcript-genes` to the genes and the rest to annotation
+      classes.
+    - The point layer takes the colour and hidden set
+      (`transcriptPointsToLayerData` options), looking each gene's colour up
+      once. The legend follows the points loaded, not those drawn, so hiding
+      every gene in view keeps it (found on the demo: hiding SNAP25, the only
+      gene in view, removed the legend).
+    - Checked on the Xenium demo at 2 µm scale with GFAP and SNAP25 and
+      exact points: four SNAP25 points listed and drawn yellow, hidden and
+      shown again from the section and the legend.
+    - The review before the PRs found that hidden genes stayed hidden under
+      QV colours, where the list and Show All are not shown; hiding now
+      applies only while points are coloured by gene.
+- [x] **D. Minimap.** (M)
   - Draw the coarsest image pyramid level with a small `TileCache` and
     `drawMorphologyTileChannels` (`rendering/morphologyCanvas.ts:62`).
   - Use `flatImage` for Visium, and the cell extent when there is no image.
   - Draw the viewport rectangle from `viewportBbox`. Click or drag to move the
     view.
-- [ ] **E. µm axes.** An optional setting. (S)
+  - Done 2026-11-11. `ViewerMinimap` (`src/components/`) with the pure
+    `viewerMinimapModel` (layout, view box, click to target, dot sample).
+    - It renders a second `MorphologyCanvas` with a view state that fits the
+      dataset's extent (`fitExtent`) into the minimap, so the image path is
+      the existing one: `bestLevel` picks the coarsest level, and the canvas
+      keeps its own `TileCache` (24 tiles, 2 requests), drawn by
+      `drawMorphologyTileChannels`; Visium's `flatImage` the same way.
+    - With no image it draws up to 6,000 cells (or bin corners) as dots
+      rather than an empty extent, so the tissue's shape shows.
+    - The view box comes from `viewportBbox`; a click centres the view there
+      at the same zoom, and a drag follows the pointer.
+    - It is outside `MemoDeckGL`, and the no-redraw test covers showing it.
+      Settings › `Show minimap` (on, for the session) and screens under 860
+      px hide it.
+    - Checked on the Xenium demo: the DAPI channel at its coarsest level,
+      98 × 168 px; after zooming in, a click moved the view to that place.
+    - The review before the PRs found the minimap blank with every channel
+      off; it now shows the dots then, by one rule for both places.
+- [x] **E. µm axes.** An optional setting. (S)
+  - Done 2026-11-11. Settings › `Show axes` (off, for the session) draws
+    rulers along the top and left edges of the canvas
+    (`src/components/ViewerAxes.tsx`, `viewerAxesModel.ts`), as the bottom
+    edge holds the legend, the readout and the zoom buttons.
+    - Ticks are at the smallest 1, 2 or 5 × 10ⁿ at least 80 px apart, in the
+      scale bar's unit: µm, image px with `Mouse coordinates` px, or "units"
+      for a SpatialData store without a scale. The unit closes the top ruler;
+      the left ruler's labels read bottom to top.
+    - Ticks under the corner or at the far edge are left out. The rulers are
+      `aria-hidden` (the coordinate readout says the same), sit beside
+      `MemoDeckGL`, and the no-redraw test covers them.
+    - Checked on the Xenium demo: −6,000 to 16,000 µm across the fitted view
+      in 2,000 µm steps, and 200 µm steps four zoom steps in.
 
 #### Review After M4 (2026-11-11)
 
@@ -3527,7 +3626,8 @@ Sequencing:
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
       M3, the new shell (15.2), is done; M4 (15.3: start screen, Help, Undo,
-      Cancel) is done. M5 (15.4) is optional, then the 15.5 close-out.
+      Cancel) is done; M5 (15.4: selections, enriched genes, transcript gene
+      legend, minimap, axes) is done. The 15.5 close-out remains.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 

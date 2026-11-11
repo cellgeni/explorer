@@ -23,6 +23,7 @@ import type {
   RoiTranscriptExportState,
 } from '../roi/roiModel'
 import type { VisiumHdRoiState, VisiumHdRoiSummary } from '../roi/visiumHdRoiModel'
+import type { RoiReferenceState } from '../roi/roiEnrichmentModel'
 import type { TranscriptCapabilityState } from '../transcripts/transcriptLayerModel'
 
 // The cards (UNIFIED_PLAN.md, 15.2-D) stack at the top left of the canvas in
@@ -45,6 +46,11 @@ export interface SelectionStat {
 export interface SelectionGenesModel {
   readonly copy: string
   readonly state: RoiGeneStatsState
+  // The comparison outside the selection, for enriched genes (15.4-B).
+  readonly reference: RoiReferenceState
+  readonly selectedGenes: readonly string[]
+  // Colours by the gene (Colour by › Gene expression).
+  readonly onShowGene: (gene: string) => void
   readonly title: string
   readonly elementSingular: string
   readonly elementPlural: string
@@ -183,6 +189,11 @@ interface SelectionNameInput {
   readonly nameDisabled: boolean
 }
 
+type SelectionGenesInput = Pick<
+  SelectionGenesModel,
+  'copy' | 'state' | 'reference' | 'selectedGenes' | 'onShowGene'
+>
+
 interface SelectionLensInput {
   readonly available: boolean
   readonly enabled: boolean
@@ -225,7 +236,7 @@ export function cellsSelectionCard({
   zoomToBbox,
 }: SelectionNameInput & {
   readonly elementNoun: { readonly singular: string; readonly plural: string }
-  readonly genes: { readonly copy: string; readonly state: RoiGeneStatsState }
+  readonly genes: SelectionGenesInput
   readonly lens: SelectionLensInput
   readonly loading: boolean
   readonly onClose: () => void
@@ -327,7 +338,7 @@ export function binsSelectionCard({
   summary,
   zoomToBbox,
 }: SelectionNameInput & {
-  readonly genes: { readonly copy: string; readonly state: RoiGeneStatsState }
+  readonly genes: SelectionGenesInput
   readonly lens: SelectionLensInput
   readonly onClose: () => void
   readonly onDelete: () => void

@@ -55,9 +55,34 @@ describe('ViewerLegend', () => {
     expect(screen.getByText('1,000')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Cluster 2, 2,000 cells' }))
-    expect(onChange).toHaveBeenCalledWith('cluster-2', true)
+    expect(onChange).toHaveBeenCalledWith('cluster-2', true, categories.id)
     fireEvent.click(screen.getByRole('checkbox', { name: 'Cluster 1, 1,000 cells' }))
-    expect(onChange).toHaveBeenCalledWith('cluster-1', false)
+    expect(onChange).toHaveBeenCalledWith('cluster-1', false, categories.id)
+  })
+
+  it('counts transcripts and points to the Transcripts section for the rest', () => {
+    render(
+      <ViewerLegend
+        sections={[
+          {
+            kind: 'categories',
+            id: 'transcript-genes',
+            title: 'Transcripts',
+            items: [
+              { id: 'GFAP', label: 'GFAP', color: '#f8c550', count: 1, visible: true },
+            ],
+            noun: { singular: 'transcript', plural: 'transcripts' },
+            moreCount: 3,
+            moreWhere: 'Transcripts',
+          },
+        ]}
+      />,
+    )
+
+    expect(
+      screen.getByRole('checkbox', { name: 'GFAP, 1 transcript' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('+3 more in Transcripts')).toBeInTheDocument()
   })
 
   it('collapses to its header', () => {

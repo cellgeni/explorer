@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ViewerCore } from './ViewerCore'
+import { ViewerCore, type ViewerViewportDetail } from './ViewerCore'
 import { scaffoldDeckLayerCount } from './viewerCoreModel'
 import type {
   CellBoundaryDatum,
@@ -2101,6 +2101,73 @@ describe('ViewerCore', () => {
     expect(deckGlMock.renderCount).toBe(renderCountBefore)
   })
 
+  it('shows a minimap without redrawing deck layers, and moves the view from it (15.4-D)', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onViewportChange = vi.fn()
+    const cells = [
+      { ...overviewCellDatum(), id: 'a', position: [0, 0, 0] },
+      { ...overviewCellDatum(), id: 'b', position: [1_000, -500, 0] },
+    ] satisfies OverviewCellDatum[]
+
+    const { rerender } = render(
+      <ViewerCore cells={cells} onViewportChange={onViewportChange} />,
+    )
+    expect(document.querySelector('.viewer-minimap')).toBeNull()
+    const renderCountBefore = deckGlMock.renderCount
+
+    rerender(<ViewerCore cells={cells} onViewportChange={onViewportChange} minimap />)
+
+    const minimap = screen.getByRole('img', {
+      name: 'Minimap of the whole dataset; the box is the view',
+    })
+    // No image: the cells are dots.
+    expect(minimap.querySelector('.viewer-minimap-dots')).not.toBeNull()
+    expect(minimap.querySelector('.viewer-minimap-view')).not.toBeNull()
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
+
+    await waitFor(() => {
+      expect(onViewportChange).toHaveBeenCalled()
+    })
+    const before = onViewportChange.mock.lastCall?.[0] as ViewerViewportDetail
+    onViewportChange.mockClear()
+
+    // The minimap's right edge is east of the data.
+    fireEvent.pointerDown(minimap, { clientX: 160, clientY: 40, pointerId: 1, button: 0 })
+    fireEvent.pointerUp(minimap, { clientX: 160, clientY: 40, pointerId: 1 })
+
+    await waitFor(() => {
+      expect(onViewportChange).toHaveBeenCalled()
+    })
+    const after = onViewportChange.mock.lastCall?.[0] as ViewerViewportDetail
+    expect(after.bbox.minX).toBeGreaterThan(before.bbox.minX)
+  })
+
+  it('draws µm axes along the edges without redrawing deck layers (15.4-E)', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+
+    const { rerender } = render(<ViewerCore cells={cells} />)
+    expect(document.querySelector('.viewer-axes')).toBeNull()
+    const renderCountBefore = deckGlMock.renderCount
+
+    rerender(<ViewerCore cells={cells} axes />)
+
+    const axes = document.querySelector('.viewer-axes')
+    expect(axes).toHaveAttribute('aria-hidden', 'true')
+    expect(axes?.querySelector('.viewer-axis-unit')).toHaveTextContent('µm')
+    expect(
+      axes?.querySelectorAll('.viewer-axis-x .viewer-axis-tick').length,
+    ).toBeGreaterThan(0)
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
+
+    rerender(
+      <ViewerCore cells={cells} axes coordinateUnit="px" micrometersPerPixel={0.5} />,
+    )
+    expect(document.querySelector('.viewer-axis-unit')).toHaveTextContent('px')
+  })
+
   it('does not re-render deck layers when the legend collapses or a category is toggled', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
@@ -2129,7 +2196,11 @@ describe('ViewerCore', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Legend' }))
     fireEvent.click(screen.getByRole('button', { name: 'Legend' }))
 
-    expect(onLegendCategoryVisibilityChange).toHaveBeenCalledWith('c1', false)
+    expect(onLegendCategoryVisibilityChange).toHaveBeenCalledWith(
+      'c1',
+      false,
+      expect.any(String),
+    )
     expect(deckGlMock.renderCount).toBe(renderCountBefore)
   })
 

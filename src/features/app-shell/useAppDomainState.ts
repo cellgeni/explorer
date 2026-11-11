@@ -115,6 +115,10 @@ import {
 } from '../roi/roiModel'
 import { type VisiumHdRoiState, IDLE_VISIUM_HD_ROI_STATE } from '../roi/visiumHdRoiModel'
 import {
+  IDLE_ROI_REFERENCE_STATE,
+  type RoiReferenceState,
+} from '../roi/roiEnrichmentModel'
+import {
   IDLE_TRANSCRIPT_CAPABILITY_STATE,
   IDLE_TRANSCRIPT_LAYER_STATE,
   parseTranscriptDensityColorScale,
@@ -226,6 +230,10 @@ export function useAppDomainState({
   >(IDLE_ROI_GENE_STATS_STATE)
   const [roiGeneViewportWarmupState, setRoiGeneViewportWarmupState] =
     useState<RoiGeneViewportWarmupState>(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
+  // The comparison for enriched genes (15.4-B).
+  const [roiReferenceState, setRoiReferenceState] = useState<
+    RoiReferenceState<StructuredLoadError>
+  >(IDLE_ROI_REFERENCE_STATE)
   const [roiTranscriptExportState, setRoiTranscriptExportState] = useState<
     RoiTranscriptExportState<StructuredLoadError>
   >(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
@@ -329,6 +337,14 @@ export function useAppDomainState({
     initialShareableState.transcriptPointSize ??
       DEFAULT_SHAREABLE_STATE.transcriptPointSize,
   )
+  // The transcript gene legend (15.4-C): edited colours, and genes whose
+  // points are hidden.
+  const [transcriptGeneColors, setTranscriptGeneColors] = useState<
+    Readonly<Record<string, string>>
+  >({})
+  const [hiddenTranscriptGenes, setHiddenTranscriptGenes] = useState<readonly string[]>(
+    [],
+  )
   const [hoveredTranscript, setHoveredTranscript] =
     useState<ViewerTranscriptHoverDetail | null>(null)
   const [pinnedTranscript, setPinnedTranscript] =
@@ -402,6 +418,10 @@ export function useAppDomainState({
   const [showHoverTooltips, setShowHoverTooltips] = useState(
     initialShareableState.showHoverTooltips ?? DEFAULT_SHAREABLE_STATE.showHoverTooltips,
   )
+  // Settings › Show minimap (15.4-D) and Show axes (15.4-E), for the
+  // session.
+  const [showMinimap, setShowMinimap] = useState(true)
+  const [showAxes, setShowAxes] = useState(false)
   // The layer panel's visibility checkboxes (15.2-C). Transcripts use
   // showTranscriptOverlay.
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(() =>
@@ -576,10 +596,14 @@ export function useAppDomainState({
       setMeasurementUnit,
       setObservationColorMode,
       setShowCellBoundaries,
+      setShowAxes,
       setShowHoverTooltips,
+      setShowMinimap,
       setShowNucleusBoundaries,
+      showAxes,
       showCellBoundaries,
       showHoverTooltips,
+      showMinimap,
       showNucleusBoundaries,
     },
     magicLens: {
@@ -621,12 +645,14 @@ export function useAppDomainState({
       roiGeneViewportWarmupState,
       roiMode,
       roiName,
+      roiReferenceState,
       roiState,
       roiTranscriptExportState,
       setRoiGeneStatsState,
       setRoiGeneViewportWarmupState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setRoiState,
       setRoiTranscriptExportState,
       setVisiumHdRoiState,
@@ -660,9 +686,11 @@ export function useAppDomainState({
       spatialFocusRequest,
     },
     transcripts: {
+      hiddenTranscriptGenes,
       hoveredTranscript,
       manualTranscriptExactRequestKey,
       pinnedTranscript,
+      setHiddenTranscriptGenes,
       setHoveredTranscript,
       setManualTranscriptExactRequestKey,
       setPinnedTranscript,
@@ -672,6 +700,7 @@ export function useAppDomainState({
       setTranscriptDetailMode,
       setTranscriptExactPointLimit,
       setTranscriptFeatureFilterMode,
+      setTranscriptGeneColors,
       setTranscriptGeneOnly,
       setTranscriptLayerState,
       setTranscriptMinQv,
@@ -684,6 +713,7 @@ export function useAppDomainState({
       transcriptDetailMode,
       transcriptExactPointLimit,
       transcriptFeatureFilterMode,
+      transcriptGeneColors,
       transcriptGeneOnly,
       transcriptLayerState,
       transcriptMinQv,
