@@ -2413,7 +2413,7 @@ They are independent unless a note says otherwise.
   - Tie `viewResetKey` (`App.tsx:827`) and the platform adapter to the loaded
     dataset.
   - On failure (:1705–1745), keep the old dataset and show an error toast.
-- [ ] **G. Tools (F12).** (M)
+- [x] **G. Tools (F12).** (M)
   - Replace `magicLensActive`, `measurementEnabled` and `roiMode`
     (`useAppDomainState.ts:238, 366, 395`) with
     `activeTool: 'pan' | 'box' | 'lasso' | 'measure' | 'magic-lens'`.
@@ -2426,6 +2426,19 @@ They are independent unless a note says otherwise.
   - Add an `is-drawing` cursor class.
   - Return to Pan after a shape is finished.
   - Keep reading `lens=` from URLs.
+  - Done 2026-11-11. `useAppDomainState` holds one `activeTool`
+    (`app-shell/activeToolModel.ts`). `magicLensActive`,
+    `measurementEnabled` and `roiMode` are derived from it, and their old
+    setters are stable adapters over it. The workflows keep their
+    interfaces, but turning one tool on turns the others off. The manual
+    switching in App, the Layers panel and the Magic Lens workflow is gone.
+  - Esc anywhere except a text field returns to Pan (a listener in App).
+    Esc on the canvas clears the selection only when no tool is on.
+  - ViewerCore drops a half-drawn shape when the ROI tool changes and on
+    `pointercancel`, adds `is-drawing` to the frame, and shows a hint at the
+    top of the canvas ("Drag to draw a box. Esc cancels."). That hint is what
+    tells users a drawing mode is on (F12).
+  - Finishing a box or lasso already returned to idle, which is now Pan.
 - [x] **H. Developer information (F8).** (S)
   - Show the Layers header lines (`LayerHudPanel.tsx:152–161`) and the zoom
     number (`ViewerCore.tsx:1773–1787`) only in debug mode.

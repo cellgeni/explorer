@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { RoiDrawMode, ViewerCoordinateUnit } from '../../components/ViewerCore'
+import type { ViewerCoordinateUnit } from '../../components/ViewerCore'
 import { scaffoldDeckLayerCount } from '../../components/viewerCoreModel'
 import type {
   CustomMorphologyLayer,
@@ -69,11 +69,9 @@ export interface AppLayerHudPanelProps {
   readonly setCoordinateUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
   readonly setCustomLayerOpacity: (imageUrl: string, opacity: number) => void
   readonly setImageLayerOpacity: Dispatch<SetStateAction<number>>
-  readonly setMagicLensActive: Dispatch<SetStateAction<boolean>>
   readonly setMeasurementEnabled: Dispatch<SetStateAction<boolean>>
   readonly setMeasurementResetKey: Dispatch<SetStateAction<number>>
   readonly setMeasurementUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
-  readonly setRoiMode: Dispatch<SetStateAction<RoiDrawMode>>
   readonly updateMorphologyChannel: (
     id: string,
     patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
@@ -119,11 +117,9 @@ export function AppLayerHudPanel({
   setCoordinateUnit,
   setCustomLayerOpacity,
   setImageLayerOpacity,
-  setMagicLensActive,
   setMeasurementEnabled,
   setMeasurementResetKey,
   setMeasurementUnit,
-  setRoiMode,
   updateMorphologyChannel,
 }: AppLayerHudPanelProps) {
   return (
@@ -235,11 +231,10 @@ export function AppLayerHudPanel({
           return
         }
 
+        // Measuring replaces any other tool (activeTool, 15.1-G).
         setMeasurementEnabled(nextEnabled)
 
         if (nextEnabled) {
-          setRoiMode('idle')
-          setMagicLensActive(false)
           handleMagicLensLeave()
         } else {
           setMeasurementResetKey((current) => current + 1)

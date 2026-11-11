@@ -516,6 +516,12 @@ function ViewerSurface({
     height: 0,
   })
   const [roiDraft, setRoiDraft] = useState<RoiDraft | null>(null)
+  // A half-drawn shape belongs to the tool that started it.
+  const [roiDraftMode, setRoiDraftMode] = useState(roiMode)
+  if (roiDraftMode !== roiMode) {
+    setRoiDraftMode(roiMode)
+    setRoiDraft(null)
+  }
   const [measurementState, setMeasurementState] = useState<MeasurementState>(() => ({
     resetKey: measurementResetKey,
     draft: null,
@@ -986,6 +992,7 @@ function ViewerSurface({
       : null
   const activeMeasurementLine =
     measurementState.resetKey === measurementResetKey ? measurementState.line : null
+  const activeToolHint = toolHintText({ roiMode, measurementEnabled, magicLensActive })
   const selectionOverlay = useMemo(
     () => selectionOverlayModel(selectionHighlight, viewState, viewport),
     [selectionHighlight, viewState, viewport],
@@ -1119,7 +1126,12 @@ function ViewerSurface({
   )
   const handleKeyboardNavigation = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === 'Escape' && selectionHighlight !== null && onClearSelection) {
+      if (
+        event.key === 'Escape' &&
+        activeToolHint === null &&
+        selectionHighlight !== null &&
+        onClearSelection
+      ) {
         event.preventDefault()
         onClearSelection()
         return
@@ -1145,6 +1157,7 @@ function ViewerSurface({
     [
       canTrackMouseCoordinates,
       initialViewState,
+      activeToolHint,
       onClearSelection,
       selectionHighlight,
       viewState,
@@ -1503,6 +1516,9 @@ function ViewerSurface({
     },
     [roiDraft, viewState, viewport],
   )
+  const handleRoiPointerCancel = useCallback(() => {
+    setRoiDraft(null)
+  }, [])
   const handleRoiPointerUp = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       if (roiDraft === null || viewport.width <= 0 || viewport.height <= 0) {
@@ -1715,6 +1731,7 @@ function ViewerSurface({
         className={[
           'viewport-frame',
           magicLensActive ? 'is-magic-lens-active' : '',
+          activeToolHint !== null && !magicLensActive ? 'is-drawing' : '',
           measurementEnabled ? 'is-measuring-distance' : '',
         ]
           .filter(Boolean)
@@ -1766,6 +1783,7 @@ function ViewerSurface({
           onPointerDown={handleRoiPointerDown}
           onPointerMove={handleRoiPointerMove}
           onPointerUp={handleRoiPointerUp}
+          onPointerCancel={handleRoiPointerCancel}
         >
           {roiPathOverlay === null ? null : (
             <svg className="roi-path-svg" focusable="false" aria-hidden="true">
@@ -1852,6 +1870,11 @@ function ViewerSurface({
         {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
       </div>
       {/* Outside the frame, whose role is img: the legend has controls. */}
+      {activeToolHint === null ? null : (
+        <p className="viewport-tool-hint" role="status">
+          {activeToolHint}
+        </p>
+      )}
       {legendSections.length === 0 &&
       loadingTasks.length === 0 &&
       viewportMessage === null ? null : (
@@ -1873,6 +1896,24 @@ function ViewerSurface({
       )}
     </>
   )
+}
+
+// What the active tool does, shown at the top of the canvas so it is clear a
+// tool is on and how to leave it.
+function toolHintText({
+  roiMode,
+  measurementEnabled,
+  magicLensActive,
+}: {
+  readonly roiMode: RoiDrawMode
+  readonly measurementEnabled: boolean
+  readonly magicLensActive: boolean
+}): string | null {
+  if (roiMode === 'box') return 'Drag to draw a box. Esc cancels.'
+  if (roiMode === 'lasso') return 'Drag to draw a lasso. Esc cancels.'
+  if (measurementEnabled) return 'Drag to measure a distance. Esc stops measuring.'
+  if (magicLensActive) return 'Move over the map to read the lens. Esc turns it off.'
+  return null
 }
 
 function formatViewportZoom(zoom: number): string {

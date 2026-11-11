@@ -3858,6 +3858,41 @@ describe('App', () => {
     }
   })
 
+  it('keeps one tool on at a time and returns to Pan on Esc', async () => {
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    openControls('selection')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Draw Box' })).toBeEnabled()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Draw Box' }))
+    expect(screen.getByText('Drag to draw a box. Esc cancels.')).toBeInTheDocument()
+
+    openControls('measure')
+    fireEvent.click(screen.getByRole('button', { name: 'Distance measure' }))
+    expect(screen.queryByText('Drag to draw a box. Esc cancels.')).toBeNull()
+    expect(
+      screen.getByText('Drag to measure a distance. Esc stops measuring.'),
+    ).toBeInTheDocument()
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByText(/Esc stops measuring/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Distance measure' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
   it('loads built-in analysis annotations on request', async () => {
     const cellId = intToCellId(1, 1)
     const loadDatasetOverview = vi.fn(async () => [

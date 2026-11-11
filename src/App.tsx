@@ -33,6 +33,7 @@ import {
   type ControlHudTab,
 } from './features/app-shell/appShellModel'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
+import { isTextEntryTarget } from './features/app-shell/activeToolModel'
 import { viewerLegendSections } from './features/app-shell/viewerLegendModel'
 import { viewerSelectionHighlight } from './features/app-shell/viewerSelectionHighlight'
 import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
@@ -496,6 +497,7 @@ export function App({ dependencies }: AppProps = {}) {
       visiumHdControlState,
       visiumHdExpressionProfileState,
     },
+    tools: { activeTool, setActiveTool },
   } = appState
   const effectiveTranscriptFeatureFilterMode: TranscriptFeatureFilterMode =
     selectedGenes.length === 0 ? 'all' : transcriptFeatureFilterMode
@@ -2442,10 +2444,25 @@ export function App({ dependencies }: AppProps = {}) {
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,
-      setMeasurementEnabled,
       setMeasurementResetKey,
     },
   })
+  // Esc anywhere but a text field leaves the active tool for Pan (D8).
+  useEffect(() => {
+    if (activeTool === 'pan') return
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== 'Escape' || isTextEntryTarget(event.target)) return
+      if (activeTool === 'magic-lens') handleMagicLensLeave()
+      setActiveTool('pan')
+      appendDebugEvent('Tool: Pan')
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [activeTool, appendDebugEvent, handleMagicLensLeave, setActiveTool])
 
   const { handleAutoContrast, queueAutoContrast, updateMorphologyChannel } =
     useMorphologyWorkflow({
@@ -2947,11 +2964,9 @@ export function App({ dependencies }: AppProps = {}) {
           setCoordinateUnit={setCoordinateUnit}
           setCustomLayerOpacity={handleCustomImageLayerOpacityChange}
           setImageLayerOpacity={setImageLayerOpacity}
-          setMagicLensActive={setMagicLensActive}
           setMeasurementEnabled={setMeasurementEnabled}
           setMeasurementResetKey={setMeasurementResetKey}
           setMeasurementUnit={setMeasurementUnit}
-          setRoiMode={setRoiMode}
           updateMorphologyChannel={updateMorphologyChannel}
         />
 
@@ -3170,8 +3185,8 @@ export function App({ dependencies }: AppProps = {}) {
             roiName={roiName}
             loadEnabled={loadState.status === 'ready'}
             onRoiModeChange={(nextMode) => {
+              // Starting a shape clears the measurement line.
               if (nextMode !== 'idle') {
-                setMeasurementEnabled(false)
                 setMeasurementResetKey((current) => current + 1)
               }
 
@@ -3200,8 +3215,8 @@ export function App({ dependencies }: AppProps = {}) {
             roiGeneStatsCopy={roiGeneStatsCopy}
             roiGeneStatsState={roiGeneStatsState}
             onRoiModeChange={(nextMode) => {
+              // Starting a shape clears the measurement line.
               if (nextMode !== 'idle') {
-                setMeasurementEnabled(false)
                 setMeasurementResetKey((current) => current + 1)
               }
 
@@ -3235,8 +3250,8 @@ export function App({ dependencies }: AppProps = {}) {
             roiGeneStatsState={roiGeneStatsState}
             roiTranscriptExportState={roiTranscriptExportState}
             onRoiModeChange={(nextMode) => {
+              // Starting a shape clears the measurement line.
               if (nextMode !== 'idle') {
-                setMeasurementEnabled(false)
                 setMeasurementResetKey((current) => current + 1)
               }
 

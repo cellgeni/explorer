@@ -61,11 +61,9 @@ function baseProps(overrides: Partial<Props> = {}): Props {
     setCoordinateUnit: vi.fn(),
     setCustomLayerOpacity: vi.fn(),
     setImageLayerOpacity: vi.fn(),
-    setMagicLensActive: vi.fn(),
     setMeasurementEnabled: vi.fn(),
     setMeasurementResetKey: vi.fn(),
     setMeasurementUnit: vi.fn(),
-    setRoiMode: vi.fn(),
     updateMorphologyChannel: vi.fn(),
     ...overrides,
   }
@@ -124,7 +122,7 @@ describe('AppLayerHudPanel', () => {
     })
   })
 
-  it('coordinates measurement mode with ROI and magic lens state', () => {
+  it('turns on measuring and leaves the magic lens', () => {
     const props = baseProps()
 
     render(<AppLayerHudPanel {...props} />)
@@ -132,8 +130,6 @@ describe('AppLayerHudPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Distance measure' }))
 
     expect(props.setMeasurementEnabled).toHaveBeenCalledWith(true)
-    expect(props.setRoiMode).toHaveBeenCalledWith('idle')
-    expect(props.setMagicLensActive).toHaveBeenCalledWith(false)
     expect(props.handleMagicLensLeave).toHaveBeenCalledTimes(1)
     expect(props.appendDebugEvent).toHaveBeenCalledWith('Distance measure enabled', {
       coalesceKey: 'measurement-mode',

@@ -2042,6 +2042,39 @@ describe('ViewerCore', () => {
     expect(onClearSelection).toHaveBeenCalledTimes(1)
   })
 
+  it('says which tool is on and drops a half-drawn shape when it changes', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+
+    const { rerender } = render(<ViewerCore cells={cells} roiMode="box" />)
+    const roiLayer = document.querySelector('.roi-draw-layer')
+
+    if (!(roiLayer instanceof HTMLElement)) {
+      throw new Error('Expected ROI draw layer.')
+    }
+
+    expect(screen.getByText('Drag to draw a box. Esc cancels.')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Spatial viewer canvas area' })).toHaveClass(
+      'is-drawing',
+    )
+
+    fireEvent.pointerDown(roiLayer, { clientX: 100, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(roiLayer, { clientX: 120, clientY: 70, pointerId: 1 })
+    expect(document.querySelector('.roi-rectangle')).not.toBeNull()
+    fireEvent.pointerCancel(roiLayer, { pointerId: 1 })
+    expect(document.querySelector('.roi-rectangle')).toBeNull()
+
+    fireEvent.pointerDown(roiLayer, { clientX: 100, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(roiLayer, { clientX: 120, clientY: 70, pointerId: 1 })
+    rerender(<ViewerCore cells={cells} roiMode="idle" />)
+    expect(document.querySelector('.roi-rectangle')).toBeNull()
+    expect(screen.queryByText(/Esc cancels/)).toBeNull()
+
+    rerender(<ViewerCore cells={cells} roiMode="box" />)
+    expect(document.querySelector('.roi-rectangle')).toBeNull()
+  })
+
   it('emits a lasso ROI selection from a dragged polygon path', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

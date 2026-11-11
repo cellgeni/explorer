@@ -401,6 +401,16 @@ Keyboard (focus the spatial view first; `src/components/viewerNavigation.ts`):
 | `+` or `=`         | Zoom in by 0.5           |
 | `-` or `_`         | Zoom out by 0.5          |
 | `Home`             | Reset to the fitted view |
+| `Esc`              | Clear the selected cell  |
+
+### Tools
+
+One tool is on at a time: Pan (the default), Draw Box, Draw Lasso, Distance
+measure or the Magic Lens cursor (`activeTool`,
+`src/features/app-shell/activeToolModel.ts`). Turning one on turns the others
+off. While a tool is on, the top of the canvas says what to do, such as "Drag
+to draw a box. Esc cancels." Esc, anywhere except a text field, returns to Pan
+and drops a half-drawn shape; finishing a box or lasso also returns to Pan.
 
 ### Picking
 

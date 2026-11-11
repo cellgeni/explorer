@@ -636,3 +636,26 @@
   vector-effect: non-scaling-stroke;
   filter: drop-shadow(0 0 1px var(--overlay-shade)) drop-shadow(0 0 2px var(--overlay-shade));
 }
+
+/* Says which tool is on and how to leave it (15.1-G). */
+.viewport-tool-hint {
+  position: absolute;
+  z-index: 5;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  max-width: min(420px, calc(100% - 24px));
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+  color: var(--text-1);
+  font-size: var(--font-control);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.viewport-frame.is-drawing {
+  cursor: crosshair;
+}

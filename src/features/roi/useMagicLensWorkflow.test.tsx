@@ -18,7 +18,6 @@ interface Snapshot {
   readonly magicLensRadiusMicrometers: number
   readonly magicLensScope: MagicLensScope
   readonly magicLensState: MagicLensState<StructuredLoadError>
-  readonly measurementEnabled: boolean
   readonly measurementResetKey: number
 }
 
@@ -56,7 +55,6 @@ function Probe({
   const [magicLensState, setMagicLensState] = React.useState<
     MagicLensState<StructuredLoadError>
   >({ status: 'idle' })
-  const [measurementEnabled, setMeasurementEnabled] = React.useState(true)
   const [measurementResetKey, setMeasurementResetKey] = React.useState(0)
   const debugMessagesRef = React.useRef<string[]>([])
   const magicLensAbortRef = React.useRef<AbortController | null>(null)
@@ -113,7 +111,6 @@ function Probe({
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,
-      setMeasurementEnabled,
       setMeasurementResetKey,
     },
   })
@@ -126,7 +123,6 @@ function Probe({
       magicLensRadiusMicrometers,
       magicLensScope,
       magicLensState,
-      measurementEnabled,
       measurementResetKey,
     })
   })
@@ -135,7 +131,7 @@ function Probe({
 }
 
 describe('useMagicLensWorkflow', () => {
-  it('enables cursor lens while disabling measurement mode', () => {
+  it('enables the cursor lens and clears the measurement line', () => {
     render(
       <Probe
         onReady={(nextApi, nextSnapshot) => {
@@ -150,7 +146,6 @@ describe('useMagicLensWorkflow', () => {
     })
 
     expect(snapshot.magicLensActive).toBe(true)
-    expect(snapshot.measurementEnabled).toBe(false)
     expect(snapshot.measurementResetKey).toBe(1)
     expect(snapshot.debugMessages).toContain('Magic lens enabled')
   })

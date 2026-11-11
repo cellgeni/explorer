@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState, type SetStateAction } from 'react'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
 import type {
   RoiDrawMode,
@@ -131,6 +131,14 @@ import {
   type ControlHudTab,
 } from './appShellModel'
 import type { DebugLogEntry, FallbackNoticeEntry } from './appRuntimeModel'
+import {
+  resolveStateAction,
+  roiModeForTool,
+  toolAfterMagicLens,
+  toolAfterMeasurement,
+  toolAfterRoiMode,
+  type ActiveTool,
+} from './activeToolModel'
 import { DEFAULT_SHAREABLE_STATE } from './shareableDefaults'
 import {
   IDLE_SPATIALDATA_CONTROL_STATE,
@@ -231,9 +239,31 @@ export function useAppDomainState({
       parseMagicLensScope(initialShareableState.magicLensScope) ??
       DEFAULT_SHAREABLE_STATE.magicLensScope,
   )
-  const [magicLensActive, setMagicLensActive] = useState(
-    initialShareableState.magicLensActive ?? DEFAULT_SHAREABLE_STATE.magicLensActive,
+  // One tool at a time (15.1-G). The old flags and their setters are derived
+  // from it, so the workflows keep their interfaces and cannot turn on two.
+  const [activeTool, setActiveTool] = useState<ActiveTool>(() =>
+    (initialShareableState.magicLensActive ?? DEFAULT_SHAREABLE_STATE.magicLensActive)
+      ? 'magic-lens'
+      : 'pan',
   )
+  const magicLensActive = activeTool === 'magic-lens'
+  const measurementEnabled = activeTool === 'measure'
+  const roiMode = roiModeForTool(activeTool)
+  const setMagicLensActive = useCallback((action: SetStateAction<boolean>) => {
+    setActiveTool((tool) =>
+      toolAfterMagicLens(tool, resolveStateAction(action, tool === 'magic-lens')),
+    )
+  }, [])
+  const setMeasurementEnabled = useCallback((action: SetStateAction<boolean>) => {
+    setActiveTool((tool) =>
+      toolAfterMeasurement(tool, resolveStateAction(action, tool === 'measure')),
+    )
+  }, [])
+  const setRoiMode = useCallback((action: SetStateAction<RoiDrawMode>) => {
+    setActiveTool((tool) =>
+      toolAfterRoiMode(tool, resolveStateAction(action, roiModeForTool(tool))),
+    )
+  }, [])
   const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = useState(() =>
     normalizeMagicLensRadius(
       initialShareableState.magicLensRadiusMicrometers ??
@@ -383,7 +413,6 @@ export function useAppDomainState({
       parseViewerCoordinateUnit(initialShareableState.coordinateUnit) ??
       DEFAULT_SHAREABLE_STATE.coordinateUnit,
   )
-  const [measurementEnabled, setMeasurementEnabled] = useState(false)
   const [measurementUnit, setMeasurementUnit] = useState<ViewerCoordinateUnit>(
     () =>
       parseViewerCoordinateUnit(initialShareableState.measurementUnit) ??
@@ -412,7 +441,6 @@ export function useAppDomainState({
   const [selectedGenes, setSelectedGenes] = useState<readonly string[]>(
     initialShareableState.selectedGenes ?? DEFAULT_SHAREABLE_STATE.selectedGenes,
   )
-  const [roiMode, setRoiMode] = useState<RoiDrawMode>('idle')
   const [roiName, setRoiName] = useState('ROI 1')
   const [observationColorMode, setObservationColorMode] = useState<ObservationColorMode>(
     () =>
@@ -594,6 +622,10 @@ export function useAppDomainState({
       setRoiTranscriptExportState,
       setVisiumHdRoiState,
       visiumHdRoiState,
+    },
+    tools: {
+      activeTool,
+      setActiveTool,
     },
     runtime: {
       activeControlHudTab,
