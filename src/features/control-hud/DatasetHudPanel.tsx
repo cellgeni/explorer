@@ -203,7 +203,7 @@ export function DatasetHudPanel({
         notices={fallbackNotices}
       />
 
-      <ErrorSummary errors={activeErrors} />
+      <ErrorSummary errors={activeErrors} onRunDiagnostics={onRunDatasetDiagnostics} />
       <ActivityLog entries={debugLog} onClear={onClearDebugLog} />
     </div>
   )

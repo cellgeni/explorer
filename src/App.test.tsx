@@ -1556,6 +1556,45 @@ describe('App', () => {
     )
   })
 
+  it('says a dataset was not found, with the files checked, and offers diagnostics', async () => {
+    const detectSpatialDataset = vi.fn(async (baseUrl: string) => ({
+      platform: 'unknown' as const,
+      baseUrl,
+      checked: [
+        {
+          path: 'experiment.xenium',
+          url: `${baseUrl}/experiment.xenium`,
+          ok: false,
+          status: 404,
+        },
+        {
+          path: 'cells.zarr.zip',
+          url: `${baseUrl}/cells.zarr.zip`,
+          ok: false,
+          status: 404,
+        },
+      ],
+    }))
+    const runDatasetDiagnostics: ReturnType<typeof vi.fn<DatasetDiagnosticsRunner>> =
+      vi.fn(() => pendingPromise<Awaited<ReturnType<DatasetDiagnosticsRunner>>>())
+
+    render(
+      <TestApp
+        detectSpatialDataset={detectSpatialDataset}
+        runDatasetDiagnostics={runDatasetDiagnostics}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const issues = await screen.findByRole('alert', { name: 'Load issues' })
+    expect(issues).toHaveTextContent('Dataset not found')
+    expect(issues).toHaveTextContent('Checked experiment.xenium: HTTP 404')
+    expect(issues).not.toHaveTextContent('Unsupported')
+
+    fireEvent.click(within(issues).getByRole('button', { name: 'Run Diagnostics' }))
+    expect(runDatasetDiagnostics).toHaveBeenCalledTimes(1)
+  })
+
   it('scans current viewport cells with the magic lens', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),

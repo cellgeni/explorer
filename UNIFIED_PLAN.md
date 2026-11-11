@@ -2393,7 +2393,7 @@ They are independent unless a note says otherwise.
   - Esc on the canvas clears the selection (Esc for tools comes in 15.1-G).
   - ViewerCore's empty-array defaults are now constants. A parent re-render
     that left those props out used to hand deck.gl new layers.
-- [ ] **E. Load errors (F5).** At `useDatasetLifecycle.ts:1594`, use
+- [x] **E. Load errors (F5).** At `useDatasetLifecycle.ts:1594`, use
       `detection.checked` (`datasetFactory.ts:1181–1214`) to raise specific
       errors. (M)
   - The kinds are:
@@ -2404,6 +2404,20 @@ They are independent unless a note says otherwise.
   - Add these kinds to `errors/loadErrorModel.ts:1–10`, each with a title and
     a next step.
   - The error card offers Run diagnostics.
+  - Done 2026-11-11. `classifyDatasetDetection`
+    (`datasets/datasetDetectionError.ts`) reads the probes: any readable file
+    means "unsupported" (listing what was found); a 401 means access denied;
+    all 5xx means a server error; 403 or 404 means not found; no response at
+    all means blocked, unless a folder listing ruled every file out. Both
+    throw sites (`useDatasetLifecycle`, `createSpatialDataset`) raise a
+    `DatasetDetectionError`.
+  - `loadErrorModel` adds the codes `not-found`, `access-denied` and
+    `blocked`. Each kind has a title and a next step, and the detail lists
+    the first six files checked with their answers.
+  - Checked in the browser: a missing folder on the Sanger bucket now says
+    "Dataset not found" (28 files, HTTP 404), and example.com, which has no
+    CORS, says "Request blocked". Both said "Unsupported spatial dataset
+    layout" before. The Issues card offers Run Diagnostics.
 - [ ] **F. Keep the current dataset until the new one loads (F4).** This is its
       own PR and carries the most test work. (L)
   - Add a pending-load slot next to `loadState`.

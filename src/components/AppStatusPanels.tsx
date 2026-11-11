@@ -90,8 +90,11 @@ export function CellFeatureMatrixCompatibilityNotice({
 
 export function ErrorSummary({
   errors,
+  onRunDiagnostics,
 }: {
   readonly errors: readonly StructuredLoadErrorSummary[]
+  // Offered on a dataset load error, whose cause diagnostics can show.
+  readonly onRunDiagnostics?: (() => void) | undefined
 }) {
   if (errors.length === 0) {
     return null
@@ -110,6 +113,16 @@ export function ErrorSummary({
             <p>{error.message}</p>
             <p>{error.action}</p>
             {error.detail === undefined ? null : <p>{error.detail}</p>}
+            {onRunDiagnostics !== undefined && error.source === 'Dataset overview' ? (
+              <button
+                type="button"
+                className="secondary-action"
+                title="Check each file the dataset needs and show what the host answered"
+                onClick={onRunDiagnostics}
+              >
+                Run Diagnostics
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>

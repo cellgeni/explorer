@@ -194,6 +194,7 @@ import {
   setSpatialDataSelection,
   spatialDataSelectionFor,
 } from '../../datasets/datasetFactory'
+import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import type { AnnDataVisiumSummary, AnnDataVisiumView } from '../../datasets/h5adDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import {
@@ -1594,7 +1595,7 @@ export function useDatasetLifecycle({
         }
 
         if (detection.platform === 'unknown') {
-          throw new Error('Unsupported spatial dataset layout.')
+          throw datasetDetectionError(detection.checked)
         }
 
         setDatasetPlatform('xenium')
