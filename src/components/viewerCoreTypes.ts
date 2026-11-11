@@ -62,6 +62,9 @@ export interface ViewerCoreProps {
   readonly annotationStyleColors?: readonly AnnotationColorStyle[]
   readonly cellMetadataTrack?: CellMetadataColorStyle | null
   readonly loadingTasks?: readonly LoadingTaskSummary[]
+  // Cancel in the loading list (15.3-D), with the task's id. The list sits
+  // outside deck.gl, so cancelling does not redraw layers.
+  readonly onCancelLoadingTask?: (id: string) => void
   // The canvas legend, bottom left above the loading indicator.
   readonly legendSections?: readonly ViewerLegendSection[]
   // The selected cell, spot or bin, marked over the canvas. Esc on the canvas

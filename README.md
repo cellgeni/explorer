@@ -134,7 +134,9 @@ the active source.
 [`examples/`](examples/README.md) lists public datasets from data repositories
 (BioImage Archive, CELLxGENE, IDR, and others) with links that open them in
 the hosted viewer. Each is a dataset manifest pointing at the repository's own
-files; add one with `npm run examples` to refresh the list.
+files; add one with `npm run examples` to refresh the list. The viewer's start
+screen reads the same list from `main` at runtime, so a new example appears
+there without a release.
 
 ## Additional Docs And Decisions
 

@@ -11,6 +11,7 @@ import {
   formatElapsed,
   invalidateLatestRequest,
   isAbortError,
+  isCancellableLoadingTaskId,
   shortDatasetLabel,
   shortIdentifier,
   startLatestRequest,
@@ -76,6 +77,53 @@ describe('appRuntimeModel', () => {
     expect(tasks[1]).toMatchObject({ detail: 'Actb, Gad1' })
     expect(tasks[5]).toMatchObject({ detail: '1,234 cells' })
     expect(tasks[6]).toMatchObject({ detail: '2 channels' })
+  })
+
+  it('marks the tasks the loading list can cancel, with progress where known', () => {
+    const tasks = createLoadingTasks(
+      loadingInputs({
+        loadState: { status: 'loading', url: 'https://example.test/output' },
+        datasetWarmupState: { status: 'loading', url: 'https://example.test/output' },
+        diagnosticsState: { status: 'loading', url: 'https://example.test/output' },
+        genePanelState: { status: 'loading' },
+        transcriptLayerState: { status: 'loading', visibleTranscriptEstimate: 900 },
+        transcriptLoadProgress: 0.42,
+        magicLensState: { status: 'loading' },
+        analysisEmbeddingState: { status: 'loading' },
+        cellDetailState: { status: 'loading', cellId: 'cell-1' },
+        cellTranscriptDistributionState: { status: 'loading', cellId: 'cell-1' },
+        roiState: { status: 'loading' },
+        roiGeneStatsState: { status: 'loading', cellCount: 12 },
+      }),
+    )
+
+    expect(
+      tasks.filter((task) => task.cancellable === true).map((task) => task.id),
+    ).toEqual([
+      'dataset',
+      'dataset-diagnostics',
+      'transcript-overlay',
+      'magic-lens',
+      'embeddings',
+      'cell-details',
+      'cell-transcripts',
+      'roi-cells',
+      'roi-genes',
+    ])
+    expect(tasks.find((task) => task.id === 'dataset-warmup')).not.toHaveProperty(
+      'cancellable',
+    )
+    expect(tasks.find((task) => task.id === 'gene-panel')).not.toHaveProperty(
+      'cancellable',
+    )
+    expect(tasks.find((task) => task.id === 'transcript-overlay')).toMatchObject({
+      progress: 0.42,
+    })
+    expect(
+      tasks.filter((task) => task.progress !== undefined).map((task) => task.id),
+    ).toEqual(['transcript-overlay'])
+    expect(isCancellableLoadingTaskId('roi-genes')).toBe(true)
+    expect(isCancellableLoadingTaskId('boundaries')).toBe(false)
   })
 
   it('coalesces debug log entries and enforces the log limit', () => {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './viewerStore'
+import { initialViewerState, useViewerStore } from './viewerStore'
 
 afterEach(() => {
   const { setDatasetUrl, setViewState } = useViewerStore.getState()
@@ -13,7 +13,7 @@ afterEach(() => {
 
 describe('viewer store', () => {
   it('keeps lightweight UI state outside data caches', () => {
-    expect(useViewerStore.getState().datasetUrl).toBe(DEMO_DATASET_URL)
+    expect(useViewerStore.getState().datasetUrl).toBe('')
 
     useViewerStore.getState().setDatasetUrl('https://example.test/output')
     useViewerStore.getState().setViewState({

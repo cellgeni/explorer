@@ -139,6 +139,9 @@ interface UseRoiWorkflowOptions {
 }
 
 interface UseRoiWorkflowResult {
+  // Cancel in the loading list (15.3-D).
+  readonly handleCancelRoiCells: () => void
+  readonly handleCancelRoiGenes: () => void
   readonly handleClearRoi: () => void
   readonly handleExportRoiCells: () => void
   readonly handleExportRoiGeoJson: () => void
@@ -610,6 +613,30 @@ export function useRoiWorkflow({
     setRoiTranscriptExportState,
   ])
 
+  // Cancelling the cells query drops the ROI, as Clear does.
+  const handleCancelRoiCells = useCallback(() => {
+    invalidateLatestRequest({
+      abortRef: roiAbortRef,
+      requestIdRef: roiRequestIdRef,
+    })
+    setRoiState((current) => (current.status === 'loading' ? IDLE_ROI_STATE : current))
+    setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
+    appendDebugEvent('Cancelled ROI cells')
+  }, [appendDebugEvent, roiAbortRef, roiRequestIdRef, setRoiGeneStatsState, setRoiState])
+
+  // Cancelling the genes query keeps the ROI and its cells. The genes load
+  // again only for a new ROI.
+  const handleCancelRoiGenes = useCallback(() => {
+    invalidateLatestRequest({
+      abortRef: roiAbortRef,
+      requestIdRef: roiRequestIdRef,
+    })
+    setRoiGeneStatsState((current) =>
+      current.status === 'loading' ? IDLE_ROI_GENE_STATS_STATE : current,
+    )
+    appendDebugEvent('Cancelled ROI genes')
+  }, [appendDebugEvent, roiAbortRef, roiRequestIdRef, setRoiGeneStatsState])
+
   const handleExportRoiCells = useCallback(() => {
     if (roiState.status !== 'ready') {
       return
@@ -699,6 +726,8 @@ export function useRoiWorkflow({
   ])
 
   return {
+    handleCancelRoiCells,
+    handleCancelRoiGenes,
     handleClearRoi,
     handleExportRoiCells,
     handleExportRoiGeoJson,

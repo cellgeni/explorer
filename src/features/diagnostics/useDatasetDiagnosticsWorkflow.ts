@@ -5,6 +5,7 @@ import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetDiagnosticsRunner } from '../app-shell/appDependencies'
 import {
   downloadTextFile,
+  invalidateLatestRequest,
   isAbortError,
   readTimestamp,
   shortDatasetLabel,
@@ -12,6 +13,7 @@ import {
   type DebugLogAppendOptions,
 } from '../app-shell/appRuntimeModel'
 import {
+  IDLE_DATASET_DIAGNOSTICS_STATE,
   datasetDiagnosticsFailed,
   datasetDiagnosticsReady,
   datasetDiagnosticsStarted,
@@ -61,6 +63,8 @@ interface UseDatasetDiagnosticsWorkflowOptions {
 }
 
 interface UseDatasetDiagnosticsWorkflowResult {
+  // Cancel in the loading list (15.3-D).
+  readonly handleCancelDatasetDiagnostics: () => void
   readonly handleDownloadDiagnostics: () => void
   readonly handleRunDatasetDiagnostics: () => Promise<void>
 }
@@ -186,6 +190,17 @@ export function useDatasetDiagnosticsWorkflow({
     visiumHdBinSizeMicrometers,
   ])
 
+  const handleCancelDatasetDiagnostics = useCallback(() => {
+    invalidateLatestRequest({
+      abortRef: diagnosticsAbortRef,
+      requestIdRef: diagnosticsRequestIdRef,
+    })
+    setDiagnosticsState((current) =>
+      current.status === 'loading' ? IDLE_DATASET_DIAGNOSTICS_STATE : current,
+    )
+    appendDebugEvent('Cancelled diagnostics')
+  }, [appendDebugEvent, diagnosticsAbortRef, setDiagnosticsState])
+
   const handleDownloadDiagnostics = useCallback(() => {
     downloadTextFile(
       'xenium-diagnostics.json',
@@ -276,5 +291,9 @@ export function useDatasetDiagnosticsWorkflow({
     transcriptPointSize,
   ])
 
-  return { handleDownloadDiagnostics, handleRunDatasetDiagnostics }
+  return {
+    handleCancelDatasetDiagnostics,
+    handleDownloadDiagnostics,
+    handleRunDatasetDiagnostics,
+  }
 }

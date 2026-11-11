@@ -6,7 +6,8 @@ import {
   DownloadIcon,
   ErrorSummary,
 } from '../../components/AppStatusPanels'
-import { Disclosure, Select } from '../../components/ui'
+import { Disclosure, InfoTip, Select } from '../../components/ui'
+import { BOUNDARY_LIMIT_HELP } from '../shell/helpText'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
@@ -31,14 +32,18 @@ export function OpenDatasetForm({
   boundaryLimit = 'inline',
 }: {
   readonly open: OpenDatasetModel
-  readonly boundaryLimit?: 'inline' | 'advanced' | undefined
+  // The start screen leaves it to Settings.
+  readonly boundaryLimit?: 'inline' | 'advanced' | 'none' | undefined
 }) {
   const datasetInputId = useId()
   const morphologyInputId = useId()
   const boundaryLimitInputId = useId()
   const boundaryLimitField = (
     <>
-      <label htmlFor={boundaryLimitInputId}>Boundary limit</label>
+      <div className="ui-label-row">
+        <label htmlFor={boundaryLimitInputId}>Boundary limit</label>
+        <InfoTip title="Boundary limit">{BOUNDARY_LIMIT_HELP}</InfoTip>
+      </div>
       <input
         id={boundaryLimitInputId}
         name="boundaryCellLimit"
@@ -88,7 +93,7 @@ export function OpenDatasetForm({
         />
         <span>{open.morphologyLabel}</span>
       </label>
-      {boundaryLimit === 'inline' ? (
+      {boundaryLimit === 'none' ? null : boundaryLimit === 'inline' ? (
         boundaryLimitField
       ) : (
         <Disclosure
@@ -112,7 +117,10 @@ export function BoundaryLimitField({ open }: { readonly open: OpenDatasetModel }
 
   return (
     <div className="shell-setting-field">
-      <label htmlFor={inputId}>Boundary limit</label>
+      <div className="ui-label-row">
+        <label htmlFor={inputId}>Boundary limit</label>
+        <InfoTip title="Boundary limit">{BOUNDARY_LIMIT_HELP}</InfoTip>
+      </div>
       <input
         id={inputId}
         type="number"

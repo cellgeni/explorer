@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   testDatasetInfoModel,
+  testDatasetLibraryModel,
   testTopBarModel,
   testViewSettingsModel,
 } from '../../test/sectionModels'
@@ -15,6 +16,7 @@ function renderTopBar(
     <TopBar
       model={testTopBarModel()}
       info={testDatasetInfoModel()}
+      library={testDatasetLibraryModel()}
       settings={testViewSettingsModel()}
       infoOpen={false}
       onInfoOpenChange={vi.fn()}
@@ -164,6 +166,7 @@ describe('TopBar', () => {
       <TopBar
         model={testTopBarModel({ tools: { active: 'measure' } })}
         info={testDatasetInfoModel()}
+        library={testDatasetLibraryModel()}
         settings={settings}
         infoOpen={false}
         onInfoOpenChange={vi.fn()}
@@ -215,5 +218,35 @@ describe('TopBar', () => {
 
     expect(info.share.onCopyLink).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Link copied')).toBeInTheDocument()
+  })
+
+  it('opens Help with ?, listing the shortcuts and the guides (15.3-B)', () => {
+    renderTopBar()
+
+    fireEvent.keyDown(document.body, { key: '?', shiftKey: true })
+    const help = screen.getByRole('dialog', { name: 'Help' })
+    expect(within(help).getByText('Show or hide this help')).toBeInTheDocument()
+    expect(within(help).getByText('Fit the data to the view')).toBeInTheDocument()
+    const guides = within(help).getByRole('navigation', { name: 'Guides' })
+    expect(within(guides).getByRole('link', { name: 'User guide' })).toHaveAttribute(
+      'href',
+      'https://github.com/cellgeni/explorer/blob/main/docs/user-guide.md',
+    )
+    expect(
+      within(guides).getByRole('link', { name: 'Hosting your own data' }),
+    ).toHaveAttribute('target', '_blank')
+
+    fireEvent.keyDown(document.body, { key: '?', shiftKey: true })
+    expect(screen.queryByRole('dialog', { name: 'Help' })).not.toBeInTheDocument()
+  })
+
+  it('leaves ? alone while typing', () => {
+    renderTopBar()
+    const search = document.createElement('input')
+    document.body.append(search)
+
+    fireEvent.keyDown(search, { key: '?', shiftKey: true })
+    expect(screen.queryByRole('dialog', { name: 'Help' })).not.toBeInTheDocument()
+    search.remove()
   })
 })

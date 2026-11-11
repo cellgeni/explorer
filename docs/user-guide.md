@@ -5,8 +5,11 @@ the [UI reference](./ui-reference.md).
 
 ## Loading Data
 
-Open the dataset name menu in the top bar, paste a source URL in
-`Dataset or image URL`, then choose `Load Dataset`. Supported sources are:
+With no dataset open, the canvas shows the start screen: paste a source URL
+in `Dataset or image URL` and choose `Load Dataset`, or pick an example or a
+recent dataset. Later, open another dataset from the dataset name menu in the
+top bar, which has the same form, recent datasets and examples. A link that
+names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 
 - Xenium output folders containing `experiment.xenium`.
 - Standard Visium (55 µm spots) Space Ranger `outs/` folders.
@@ -20,6 +23,15 @@ Open the dataset name menu in the top bar, paste a source URL in
 Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is
 wrong, a message says why and the current dataset stays.
+
+Work in progress is listed at the bottom left of the view. Loading a dataset,
+diagnostics, transcripts, Magic Lens scans, embeddings, cell details and ROI
+queries can be stopped with `Cancel` there. Cancelling one leaves the view as
+it was before the task started: a cancelled dataset load keeps the dataset
+already open, and cancelled transcripts go back to the points or squares
+shown before. A cancelled task does not start again until you move the view,
+pick another cell, or start it yourself. Exact transcript loads show how far
+they have got as a percentage.
 
 When a dataset folder contains an `explorer.json` manifest, the viewer reads
 files from the locations it lists and applies its display defaults (genes,
@@ -38,6 +50,19 @@ appear only when the active source supports them. For example, image-only
 sources have no Cells or Transcripts section, Magic Lens or cell cards, while
 Visium, Visium HD, H5AD, and SpatialData have no Transcripts section.
 
+### Examples And Recent Datasets
+
+The start screen's examples are public datasets listed in the repository's
+[`examples/`](../examples/README.md) folder, read from GitHub when the start
+screen opens. Each card names the dataset, its platform and where the data
+comes from. Clicking a card opens the example in place; Ctrl-click or
+Cmd-click opens it in a new tab. If GitHub cannot be reached, the start
+screen says so, offers `Retry`, and still offers the Xenium demo dataset.
+
+The last eight datasets you opened are listed under Recent, in this browser
+only. Remove one with its ×. If the first dataset cannot be opened, the start
+screen comes back with the reason above the form.
+
 ## Spatial Navigation
 
 Use mouse pan and zoom for normal navigation. The spatial view is also keyboard
@@ -48,10 +73,16 @@ focusable:
 - `+` and `-` zoom in and out.
 - `Home` resets to the fitted dataset view.
 
+`?` (or the Help button in the top bar) lists every keyboard shortcut and links
+to these guides. A small ⓘ beside some controls, such as `Expression detail`,
+`Combine genes`, `Min QV` and `Boundary limit`, explains the term when you
+point at it, tab to it or tap it.
+
 The URL hash updates with the current dataset URL, viewport, selected genes,
 ROI, open panels, tool, cell card, hidden layers, and control state. `Share` in
 the top bar copies the link to share the same view. Older links with `tab=`
-still work.
+still work. Each dataset you open is a step in the browser's history, so Back
+returns to the previous dataset, or to the start screen.
 
 ## Layers And Genes
 
@@ -162,6 +193,11 @@ lens at the cursor; its options set the `Radius`, and `Summarise View` scans
 the whole view. Results appear in the Magic Lens card. Xenium lens scans
 summarize cells, their transcript counts, and top genes from the cell-feature
 matrix. Visium HD lens scans summarize UMIs and bins.
+
+Removing something — clearing the selection, a class, a metadata track, all
+annotations, a GeoJSON shape or a saved gene set — shows a toast with `Undo`
+for 8 seconds (Ctrl+Z or Cmd+Z also works). Undo only puts things back while
+nothing they cover has changed since.
 
 The Embedding panel, opened from Cells › `Show Embedding`, loads UMAP/t-SNE or
 H5AD `obsm` embeddings when the dataset provides them. Clicking an embedding

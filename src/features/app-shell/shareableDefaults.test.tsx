@@ -63,12 +63,25 @@ describe('DEFAULT_SHAREABLE_STATE', () => {
     const settings = { ...DEFAULT_SHAREABLE_STATE, cellFillOpacity: 0.7 }
     const trimmed = withoutShareableDefaults(settings)
 
-    expect(trimmed).toEqual({ cellFillOpacity: 0.7 })
-    expect(formatShareableState(trimmed)).toBe('#xv=2&cellFill=0.7')
+    expect(trimmed).toEqual({
+      cellFillOpacity: 0.7,
+      showCellBoundaries: true,
+      showNucleusBoundaries: true,
+    })
+    expect(formatShareableState(trimmed)).toBe(
+      '#xv=2&cellFill=0.7&cellBounds=1&nucleusBounds=1',
+    )
     expect(initialSettings(parseShareableState(formatShareableState(trimmed)))).toEqual({
       ...DEFAULT_SHAREABLE_STATE,
       cellFillOpacity: 0.7,
     })
+  })
+
+  it('keeps the boundary toggles, whose default depends on the platform', () => {
+    // Xenium opens with nucleus outlines off unless the link turns them on.
+    expect(
+      withoutShareableDefaults({ showCellBoundaries: true, showNucleusBoundaries: true }),
+    ).toEqual({ showCellBoundaries: true, showNucleusBoundaries: true })
   })
 
   it('keeps a measure unit that differs from the mouse coordinate unit', () => {

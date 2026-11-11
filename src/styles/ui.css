@@ -449,6 +449,51 @@ button.ui-chip-label {
   display: none;
 }
 
+.ui-tooltip--start {
+  left: 0;
+  transform: none;
+}
+
+.ui-tooltip--wide {
+  display: block;
+  width: max-content;
+  max-width: min(260px, 70vw);
+  line-height: 1.4;
+  white-space: normal;
+}
+
+/* InfoTip: a ⓘ after a label, 24 px across for WCAG 2.2 target size. */
+.ui-info-tip {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px 0;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-3);
+  cursor: help;
+}
+
+.ui-info-tip:hover,
+.ui-info-tip:focus-visible {
+  color: var(--text-1);
+}
+
+.ui-info-tip .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* A control's label with an InfoTip after it. */
+.ui-label-row {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+}
+
 .ui-tooltip--top {
   bottom: calc(100% + 6px);
 }

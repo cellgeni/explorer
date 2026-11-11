@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Chip } from '../../components/ui'
+import { Chip, InfoTip } from '../../components/ui'
+import { MIN_QV_HELP, TRANSCRIPT_DETAIL_HELP } from '../shell/helpText'
 import {
   TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS,
   TRANSCRIPT_POINT_COLOR_MODE_OPTIONS,
@@ -47,7 +48,10 @@ export function TranscriptDisplayControls({ transcripts }: TranscriptsProps) {
         <span>Show transcripts</span>
       </label>
 
-      <label htmlFor={detailInputId}>Detail</label>
+      <div className="ui-label-row">
+        <label htmlFor={detailInputId}>Detail</label>
+        <InfoTip title="Transcript detail">{TRANSCRIPT_DETAIL_HELP}</InfoTip>
+      </div>
       <select
         id={detailInputId}
         value={transcripts.detailMode}
@@ -276,7 +280,10 @@ export function TranscriptFilterControls({ transcripts }: TranscriptsProps) {
 
   return (
     <>
-      <label htmlFor={minQvInputId}>Min QV</label>
+      <div className="ui-label-row">
+        <label htmlFor={minQvInputId}>Min QV</label>
+        <InfoTip title="Min QV">{MIN_QV_HELP}</InfoTip>
+      </div>
       <input
         id={minQvInputId}
         type="number"

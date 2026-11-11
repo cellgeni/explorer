@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
 import {
   BoxSelectIcon,
   Button,
@@ -19,7 +19,7 @@ import {
   Tooltip,
 } from '../../components/ui'
 import { withMicrometers } from '../../data/units'
-import type { ActiveTool } from '../app-shell/activeToolModel'
+import { isTextEntryTarget, type ActiveTool } from '../app-shell/activeToolModel'
 import { BoundaryLimitField, OpenDatasetForm } from '../sections/DatasetInfoBlocks'
 import type { DatasetInfoModel, OpenDatasetModel } from '../sections/datasetInfoModel'
 import { useCopyLinkStatus } from '../sections/useCopyLinkStatus'
@@ -29,7 +29,10 @@ import {
   MeasureToolOptions,
 } from '../sections/ViewSettingsBlocks'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
-import { SHORTCUTS } from './shortcuts'
+import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
+import { ExampleGallery, RecentDatasetList } from '../start/StartScreen'
+import { HELP_LINKS } from './docLinks'
+import { isHelpKey, SHORTCUTS } from './shortcuts'
 import type {
   DatasetSummary,
   MagicLensToolModel,
@@ -48,6 +51,7 @@ const TOOL_ICONS: Readonly<Record<ActiveTool, ReactNode>> = {
 interface TopBarProps {
   readonly model: TopBarModel
   readonly info: DatasetInfoModel
+  readonly library: DatasetLibraryModel
   readonly settings: ViewSettingsModel
   readonly infoOpen: boolean
   readonly onInfoOpenChange: (open: boolean) => void
@@ -62,6 +66,7 @@ interface TopBarProps {
 export function TopBar({
   model,
   info,
+  library,
   settings,
   infoOpen,
   onInfoOpenChange,
@@ -71,7 +76,7 @@ export function TopBar({
     <header className="shell-top-bar">
       <div className="shell-top-bar-start">
         <span className="shell-brand">Explorer</span>
-        <DatasetMenu name={model.datasetName} open={info.open} />
+        <DatasetMenu name={model.datasetName} open={info.open} library={library} />
         <SummaryChip summary={model.summary} />
         <InfoButton
           issueCount={info.diagnostics.errors.length}
@@ -106,14 +111,7 @@ export function TopBar({
       </div>
       <div className="shell-top-bar-end">
         <ShareButton info={info} iconOnly={narrow} />
-        <Popover
-          title="Help"
-          align="end"
-          trigger={<HelpIcon />}
-          triggerClassName="ui-icon-button"
-        >
-          <ShortcutList />
-        </Popover>
+        <HelpMenu />
         <Popover
           title="Settings"
           align="end"
@@ -171,22 +169,31 @@ function InfoButton({
   )
 }
 
-// The dataset name opens a menu to open another dataset. Examples and recent
-// datasets join it with the start screen (15.3-A).
+// The dataset name opens a menu to open another dataset, with recent
+// datasets and the examples (15.3-A).
 function DatasetMenu({
   name,
   open,
+  library,
 }: {
   readonly name: string | null
   readonly open: OpenDatasetModel
+  readonly library: DatasetLibraryModel
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const openFromMenu = (url: string) => {
+    library.onOpen(url)
+    setMenuOpen(false)
+  }
 
   return (
     <Popover
       title="Open dataset"
       open={menuOpen}
-      onOpenChange={setMenuOpen}
+      onOpenChange={(nextOpen) => {
+        setMenuOpen(nextOpen)
+        if (nextOpen) library.onLoadExamples()
+      }}
       triggerClassName="shell-dataset-name"
       className="shell-dataset-menu"
       trigger={
@@ -206,6 +213,20 @@ function DatasetMenu({
           },
         }}
       />
+      {library.recent.length === 0 ? null : (
+        <section className="shell-dataset-menu-section" aria-label="Recent">
+          <h3>Recent</h3>
+          <RecentDatasetList
+            recent={library.recent}
+            onOpen={openFromMenu}
+            onRemove={library.onRemoveRecent}
+          />
+        </section>
+      )}
+      <section className="shell-dataset-menu-section" aria-label="Examples">
+        <h3>Examples</h3>
+        <ExampleGallery library={{ ...library, onOpen: openFromMenu }} variant="menu" />
+      </section>
     </Popover>
   )
 }
@@ -372,6 +393,58 @@ function ShareButton({
         {message}
       </span>
     </span>
+  )
+}
+
+// Help (15.3-B): the shortcuts and links to the guides. ? opens and closes
+// it, except while typing.
+function HelpMenu() {
+  const [open, setOpen] = useState(false)
+  const toggle = useEffectEvent(() => {
+    setOpen((current) => !current)
+  })
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.repeat || isTextEntryTarget(event.target)) {
+        return
+      }
+      if (!isHelpKey(event)) return
+
+      event.preventDefault()
+      toggle()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  return (
+    <Popover
+      title="Help"
+      align="end"
+      open={open}
+      onOpenChange={setOpen}
+      trigger={<HelpIcon />}
+      triggerClassName="ui-icon-button"
+      className="shell-help"
+    >
+      <ShortcutList />
+      <nav className="shell-help-links" aria-label="Guides">
+        <h3>Guides</h3>
+        <ul>
+          {HELP_LINKS.map((link) => (
+            <li key={link.href}>
+              <a href={link.href} target="_blank" rel="noopener noreferrer">
+                {link.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </Popover>
   )
 }
 

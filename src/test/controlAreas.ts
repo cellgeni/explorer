@@ -4,7 +4,8 @@
 // through openControls(), so a layout change edits this table and the two
 // helpers, not the tests.
 export type ControlAreaPlace =
-  // The dataset name's menu in the top bar.
+  // The start screen while it shows, else the dataset name's menu in the
+  // top bar.
   | { readonly kind: 'dataset-menu' }
   // ⓘ's info drawer.
   | { readonly kind: 'info-drawer' }

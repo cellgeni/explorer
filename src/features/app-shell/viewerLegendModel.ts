@@ -42,7 +42,8 @@ export interface ViewerLegendInput {
     readonly scoreMode: GeneExpressionScoreMode
     readonly colorScale: GeneExpressionColorScale
     readonly scaleMax: number
-    readonly loading: boolean
+    // Unavailable: the expression failed, or the platform is waiting.
+    readonly status: 'loading' | 'ready' | 'unavailable'
   }
   // The loaded annotations with their colours, or null when none are loaded.
   readonly annotations: {
@@ -110,18 +111,21 @@ export function viewerLegendSections(input: ViewerLegendInput): ViewerLegendSect
 function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection | null {
   switch (input.colorMode) {
     case 'gene-expression': {
-      const { names, scoreMode, colorScale, scaleMax, loading } = input.genes
+      const { names, scoreMode, colorScale, scaleMax, status } = input.genes
       if (names.length === 0) return null
 
       return {
         kind: 'continuous',
         id: 'cells',
         title: geneListLabel(names),
-        detail: loading
-          ? 'Loading expression'
-          : names.length === 1
-            ? 'Expression per cell'
-            : `${SCORE_MODE_LABELS[scoreMode]} of ${names.length.toLocaleString()} genes per cell`,
+        detail:
+          status === 'loading'
+            ? 'Loading expression'
+            : status === 'unavailable'
+              ? 'Expression unavailable'
+              : names.length === 1
+                ? 'Expression per cell'
+                : `${SCORE_MODE_LABELS[scoreMode]} of ${names.length.toLocaleString()} genes per cell`,
         gradient: geneExpressionScaleGradient(colorScale),
         min: '0',
         max: formatGeneScaleValue(scaleMax),

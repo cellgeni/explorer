@@ -80,6 +80,7 @@ export function appTestDependencies({
   loadCellTranscriptDistribution,
   loadCustomMorphologyLayer,
   loadDatasetOverview,
+  loadExamplesIndex,
   loadGeneExpression,
   loadGenePanel,
   loadMorphologyImage,
@@ -104,6 +105,8 @@ export function appTestDependencies({
   const dependencies: MutableDependencyOverrides = {}
 
   if (loadDatasetOverview !== undefined) dataset.loadDatasetOverview = loadDatasetOverview
+  // Never GitHub: no examples unless a test gives some.
+  dataset.loadExamplesIndex = loadExamplesIndex ?? (async () => [])
   if (loadGenePanel !== undefined) dataset.loadGenePanel = loadGenePanel
   if (detectSpatialDataset !== undefined)
     dataset.detectSpatialDataset = detectSpatialDataset
@@ -177,7 +180,12 @@ export function openControls(area: ControlArea): void {
 
   switch (place.kind) {
     case 'dataset-menu':
-      // The open info drawer has the same form; one copy keeps labels unique.
+      // The start screen and the open info drawer have the same form; one
+      // copy keeps labels unique.
+      if (screen.queryByRole('region', { name: 'Open a dataset' }) !== null) {
+        closeButton(infoButton())
+        return
+      }
       if (isExpanded(infoButton())) return
       openButton(screen.getByTitle('Open dataset'))
       return

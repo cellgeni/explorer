@@ -140,6 +140,8 @@ export interface TranscriptViewportOptions {
   readonly featureNames?: readonly string[]
   readonly metadataEnrichmentTimeoutMs?: number
   readonly onFallback?: FallbackNotifier
+  // Native Zarr tiles read, 0 to 1. The Parquet path does not report it.
+  readonly onProgress?: (fraction: number) => void
 }
 
 export interface TranscriptCapabilityOptions {
@@ -266,6 +268,7 @@ export async function loadDatasetTranscriptViewport(
       minQv: options.minQv ?? 20,
       geneOnly: options.geneOnly ?? true,
       featureNames: options.featureNames ?? [],
+      ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
     })
 
     throwIfAborted(options.signal)

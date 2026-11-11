@@ -62,6 +62,13 @@ import type {
 import type { Annotation, ElementBatch } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { RoiSelectionInput } from '../../data/roiSelection'
+import { fetchExamplesIndex, type Example } from '../start/examplesIndex'
+
+// The start screen's example gallery (UNIFIED_PLAN.md, 15.3-A).
+export type ExamplesIndexLoader = (
+  url: string,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<readonly Example[]>
 
 export type DatasetOverviewLoader = (
   baseUrl: string,
@@ -182,6 +189,8 @@ export type TranscriptViewportLoader = (
     readonly geneOnly?: boolean
     readonly featureNames?: readonly string[]
     readonly onFallback?: FallbackNotifier
+    // How far the read has got, 0 to 1, where the reader knows.
+    readonly onProgress?: (fraction: number) => void
   },
 ) => Promise<{
   readonly points: readonly TranscriptPoint[]
@@ -229,6 +238,7 @@ export interface AppDependencies {
     readonly detectSpatialDataset: SpatialDatasetDetector
     readonly getSpatialDataset: SpatialDatasetLoader
     readonly warmDatasetForRoi: DatasetWarmupLoader
+    readonly loadExamplesIndex: ExamplesIndexLoader
   }
   readonly morphology: {
     readonly loadMorphologyImage: MorphologyImageLoader
@@ -290,6 +300,7 @@ export type AppDependencySlotOverrides = Partial<{
   readonly detectSpatialDataset: SpatialDatasetDetector
   readonly getSpatialDataset: SpatialDatasetLoader
   readonly computeAutoChannelContrast: AutoChannelContrastLoader
+  readonly loadExamplesIndex: ExamplesIndexLoader
 }>
 
 export interface AppProps {
@@ -303,6 +314,7 @@ export const defaultAppDependencies = {
     detectSpatialDataset,
     getSpatialDataset: cachedSpatialDataset,
     warmDatasetForRoi,
+    loadExamplesIndex: fetchExamplesIndex,
   },
   morphology: {
     loadMorphologyImage,

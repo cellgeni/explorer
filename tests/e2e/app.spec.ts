@@ -8,7 +8,10 @@ import {
   type AxeFindings,
 } from './axe'
 import { expectLogEntry, openControls } from './controls'
+import { failExamplesIndex, routeLocalExamplesIndex } from './examples'
 
+const XENIUM_DEMO_URL =
+  'https://mp33.cog.sanger.ac.uk/public/xenium/output-XETG00155__0033412__Sob23-BRA-0-FFPE-2-s30__20240829__110328'
 const VISIUM_HD_REFERENCE_URL =
   'https://mp33.cog.sanger.ac.uk/public/visiumhd/spaceranger401_count_50314_48d90238006ebffe73177a68c2b4f48f'
 const H5AD_PBMC3K_REFERENCE_URL = 'https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad'
@@ -30,11 +33,16 @@ const H5AD_LOAD_TIMEOUT_MS = 60_000
 const H5AD_HOSTED_LOAD_TIMEOUT_MS = 120_000
 const HOSTED_FIXTURE_PREFLIGHT_TIMEOUT_MS = 10_000
 
+// The start screen's example gallery is served from this checkout.
+test.beforeEach(async ({ page }) => {
+  await routeLocalExamplesIndex(page)
+})
+
 async function loadDefaultXeniumDataset(page: Page) {
   await page.goto('/')
 
   await openControls(page, 'open-dataset')
-  await expect(page.getByLabel('Dataset or image URL')).toHaveValue(/\/public\/xenium\//)
+  await page.getByLabel('Dataset or image URL').fill(XENIUM_DEMO_URL)
   await openControls(page, 'open-dataset')
   await expect(page.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
 
@@ -297,9 +305,95 @@ test('shows the scaffolded viewer shell @smoke', async ({ page }) => {
 
   await expect(page.getByRole('toolbar', { name: 'Tools' })).toBeVisible()
   await expect(page.getByRole('complementary', { name: 'Layers' })).toBeVisible()
+  const start = await openControls(page, 'open-dataset')
+  await expect(start).toHaveAccessibleName('Open a dataset')
+  await expect(start.getByLabel('Dataset or image URL')).toHaveValue('')
+  await expect(start.getByRole('button', { name: 'Load Dataset' })).toBeVisible()
+})
+
+test('lists the examples on the start screen, and opens one in place @smoke', async ({
+  page,
+}) => {
+  const { examples } = JSON.parse(
+    await readFile(new URL('../../examples/index.json', import.meta.url), 'utf8'),
+  ) as {
+    readonly examples: readonly { readonly name: string; readonly manifestUrl: string }[]
+  }
+  const first = examples[0]
+  if (first === undefined) throw new Error('examples/index.json lists no examples')
+  await routeTinyH5adFixture(page)
+  await page.goto('/')
+  // The first example's manifest is answered here and opens the tiny H5AD
+  // fixture, so nothing leaves the machine.
+  const fixtureUrl = new URL('/h5ad-smoke.h5ad', page.url()).href
+  await page.route(first.manifestUrl, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        version: 1,
+        platform: 'h5ad',
+        name: first.name,
+        files: { h5ad: fixtureUrl },
+      }),
+    }),
+  )
+
+  const gallery = page
+    .getByRole('region', { name: 'Open a dataset' })
+    .getByRole('list', { name: 'Examples' })
+  await expect(gallery.getByRole('listitem')).toHaveCount(examples.length)
+  const link = gallery.getByRole('link', { name: first.name })
+  await expect(link).toHaveAttribute(
+    'href',
+    `/?dataset=${encodeURIComponent(first.manifestUrl)}`,
+  )
+
+  // A plain click opens it in place, without reloading the page.
+  await page.evaluate(() => {
+    document.documentElement.dataset.startScreenTest = 'same page'
+  })
+  await link.click()
+  await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-start-screen-test',
+    'same page',
+  )
+  await expect(page.getByRole('region', { name: 'Open a dataset' })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Close Dataset info' }).click()
   const menu = await openControls(page, 'open-dataset')
-  await expect(menu.getByLabel('Dataset or image URL')).toHaveValue(/\/public\/xenium\//)
-  await expect(menu.getByRole('button', { name: 'Load Dataset' })).toBeVisible()
+  await expect(
+    menu.getByRole('list', { name: 'Recent datasets' }).getByRole('link', {
+      name: first.name,
+    }),
+  ).toBeVisible()
+})
+
+test('offers the demo when the examples cannot be loaded @smoke', async ({ page }) => {
+  await failExamplesIndex(page)
+  await page.goto('/')
+
+  const start = page.getByRole('region', { name: 'Open a dataset' })
+  await expect(start).toContainText("Examples couldn't be loaded from GitHub.")
+  await expect(start.getByRole('button', { name: 'Retry' })).toBeVisible()
+  await expect(
+    start
+      .getByRole('list', { name: 'Demo dataset' })
+      .getByRole('link', { name: 'Human brain (Xenium 5K demo)' }),
+  ).toHaveAttribute('href', `/?dataset=${encodeURIComponent(XENIUM_DEMO_URL)}`)
+})
+
+test('skips the start screen for a link that names a dataset @smoke', async ({
+  page,
+}) => {
+  await routeTinyH5adFixture(page)
+  await page.goto('/?dataset=%2Fh5ad-smoke.h5ad')
+
+  await expect(page.getByRole('region', { name: 'Open a dataset' })).toHaveCount(0)
 })
 
 test('has no accessibility violations beyond the axe baseline @smoke', async ({

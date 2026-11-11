@@ -31,6 +31,8 @@ import type {
   ViewSettingsModel,
 } from '../features/sections/viewSettingsModel'
 import type { EmbeddingModel } from '../features/sections/embeddingModel'
+import type { DatasetLibraryModel } from '../features/start/datasetLibraryModel'
+import { DEFAULT_EXAMPLES_INDEX_URL } from '../features/start/examplesIndex'
 import type { ToolGroupModel, TopBarModel } from '../features/shell/topBarModel'
 import { toolOptions } from '../features/shell/topBarModel'
 
@@ -98,6 +100,7 @@ export function testCellsSectionModel(
       onToggle: vi.fn(),
       onApply: vi.fn(),
       log: vi.fn(),
+      onOfferUndo: vi.fn(),
       ...overrides.genes,
     },
     colour: {
@@ -382,6 +385,21 @@ export function testEmbeddingModel(
     selectedElementId: null,
     elementLabel: 'cells',
     onSelectElement: vi.fn(),
+    ...overrides,
+  }
+}
+
+export function testDatasetLibraryModel(
+  overrides: Partial<DatasetLibraryModel> = {},
+): DatasetLibraryModel {
+  return {
+    examples: { status: 'idle' },
+    examplesIndexUrl: DEFAULT_EXAMPLES_INDEX_URL,
+    onLoadExamples: vi.fn(),
+    onRetryExamples: vi.fn(),
+    recent: [],
+    onRemoveRecent: vi.fn(),
+    onOpen: vi.fn(),
     ...overrides,
   }
 }

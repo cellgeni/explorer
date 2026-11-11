@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { RoiSelection } from '../../data/roiSelection'
 import { formatShareableState, type ShareableViewState } from '../../data/shareableState'
+import { readShareableStateFromLocation } from './appShellModel'
 import { withoutShareableDefaults } from './shareableDefaults'
 
 interface ShareableDatasetHashOptions {
@@ -80,8 +81,23 @@ interface UseShareableUrlHashOptions {
   readonly genes: ShareableGeneHashOptions
   readonly transcripts: ShareableTranscriptHashOptions
   readonly magicLens: ShareableMagicLensHashOptions
+  // Back or Forward reached an entry for another dataset. Reloading opens
+  // that entry's link, with its view and settings.
+  readonly onHistoryDatasetChange?: () => void
 }
 
+function reloadPage(): void {
+  window.location.reload()
+}
+
+// The dataset the address names: the hash's, or else the query string's.
+function linkedDatasetUrl(): string {
+  return readShareableStateFromLocation().datasetUrl?.trim() ?? ''
+}
+
+// Writes the view to the address (15.1-L). Opening another dataset adds a
+// history entry, so Back returns to the previous dataset or to the start
+// screen (15.3-C); every other change replaces the current entry.
 export function useShareableUrlHash({
   dataset,
   genes,
@@ -89,6 +105,7 @@ export function useShareableUrlHash({
   magicLens,
   transcripts,
   view,
+  onHistoryDatasetChange = reloadPage,
 }: UseShareableUrlHashOptions): void {
   const {
     annotationGroupIds,
@@ -142,12 +159,36 @@ export function useShareableUrlHash({
     transcriptPointSize,
   } = transcripts
   const { magicLensMinQv, magicLensRadiusMicrometers, magicLensScope } = magicLens
+  const datasetUrlRef = useRef(datasetUrl)
+  // Set once Back or Forward is reloading the page, so no write lands on the
+  // entry it moved to.
+  const leavingRef = useRef(false)
+
+  useEffect(() => {
+    datasetUrlRef.current = datasetUrl
+  }, [datasetUrl])
+
+  useEffect(() => {
+    function handlePopState() {
+      if (linkedDatasetUrl() === datasetUrlRef.current.trim()) return
+      leavingRef.current = true
+      onHistoryDatasetChange()
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [onHistoryDatasetChange])
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return
     }
 
     const timeout = window.setTimeout(() => {
+      if (leavingRef.current) return
+
       const hash = formatShareableState(
         withoutShareableDefaults({
           datasetUrl,
@@ -208,11 +249,14 @@ export function useShareableUrlHash({
       )
 
       if (window.location.hash !== hash) {
-        window.history.replaceState(
-          null,
-          '',
-          `${window.location.pathname}${window.location.search}${hash}`,
-        )
+        const url = `${window.location.pathname}${window.location.search}${hash}`
+        const nextDatasetUrl = datasetUrl.trim()
+
+        if (nextDatasetUrl !== '' && nextDatasetUrl !== linkedDatasetUrl()) {
+          window.history.pushState(null, '', url)
+        } else {
+          window.history.replaceState(null, '', url)
+        }
       }
     }, 160)
 

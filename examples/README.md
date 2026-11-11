@@ -13,6 +13,13 @@ Any deployment of the viewer can open the same manifest URL. Changes to a
 manifest on `main` reach the links within about five minutes (GitHub's raw
 file cache), without a viewer release.
 
+The viewer's start screen reads `index.json` from `main` at runtime and shows
+each example as a card, so merging an example adds it to the gallery of every
+deployment, also without a release. A card opens the manifest on the
+deployment it is shown on, never the `viewerUrl` in the index. A build can
+read another index with `VITE_EXAMPLES_INDEX_URL` (see
+[Deploy to S3](../docs/deploy-to-s3.md#build-locally)).
+
 <!-- examples:start -->
 
 | Example                                                                                                                                                                                                     | Platform | What it shows                                                                                                                                                                                          | Source                                                                                                                              | Licence   |                                                                 |

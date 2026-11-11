@@ -10,6 +10,7 @@ import type { EmbeddingModel } from '../sections/embeddingModel'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
 import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
+import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
 import { EmbeddingWindow } from './EmbeddingWindow'
 import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
@@ -23,6 +24,8 @@ import type { TopBarModel } from './topBarModel'
 interface ShellLayoutProps {
   readonly topBar: TopBarModel
   readonly info: DatasetInfoModel
+  // Examples and recent datasets, in the dataset name's menu (15.3-A).
+  readonly library: DatasetLibraryModel
   readonly settings: ViewSettingsModel
   readonly layerPanel: LayerPanelModel
   readonly image: ImageSectionModel
@@ -47,6 +50,7 @@ interface ShellLayoutProps {
 export function ShellLayout({
   topBar,
   info,
+  library,
   settings,
   layerPanel,
   image,
@@ -122,6 +126,7 @@ export function ShellLayout({
       <TopBar
         model={topBar}
         info={info}
+        library={library}
         settings={settings}
         infoOpen={infoOpen}
         onInfoOpenChange={setInfoOpen}

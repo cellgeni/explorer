@@ -119,7 +119,11 @@ function TestApp(props: AppTestDependencyProps) {
 describe('App', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/')
-    useViewerStore.setState(initialViewerState)
+    // The start screen keeps the examples for the session (15.3-A).
+    window.sessionStorage.clear()
+    // The address box starts empty (15.3-A); most tests load the demo as if
+    // its address had been typed in.
+    useViewerStore.setState({ ...initialViewerState, datasetUrl: DEMO_DATASET_URL })
     vi.mocked(warmDatasetForRoi).mockClear()
   })
 
@@ -128,6 +132,7 @@ describe('App', () => {
   })
 
   it('renders the shell with each control in its place', () => {
+    useViewerStore.setState(initialViewerState)
     render(<TestApp />)
 
     expect(screen.queryByText('Xenium Explorer')).not.toBeInTheDocument()
@@ -138,7 +143,7 @@ describe('App', () => {
     const datasetInput = screen.getByLabelText('Dataset or image URL')
     expect(datasetInput).toBeInstanceOf(HTMLInputElement)
     if (datasetInput instanceof HTMLInputElement) {
-      expect(datasetInput.value).toContain('/public/xenium/')
+      expect(datasetInput.value).toBe('')
     }
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Morphology image' })).toBeChecked()
@@ -1358,7 +1363,9 @@ describe('App', () => {
     expect(window.location.hash).toMatch(/^#xv=2&/)
     expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Fxenium')
     expect(window.location.hash).toContain('groups=analysis%3A1')
-    expect(window.location.hash).not.toContain('cellBounds')
+    // Boundary toggles are always written: their default depends on the
+    // platform.
+    expect(window.location.hash).toContain('cellBounds=1&nucleusBounds=0')
     expect(window.location.hash).not.toContain('tab=')
     expect(window.location.hash.length).toBeLessThan(200)
   })
@@ -1726,6 +1733,96 @@ describe('App', () => {
     expect(runDatasetDiagnostics).toHaveBeenCalledTimes(1)
   })
 
+  it('opens an example from the start screen and remembers it (15.3-A)', async () => {
+    useViewerStore.setState(initialViewerState)
+    const exampleUrl = 'https://example.test/examples/skin/explorer.json'
+    const loadExamplesIndex = vi.fn(async () => [
+      {
+        id: 'bia/skin',
+        name: 'Human skin',
+        manifestUrl: exampleUrl,
+        platform: 'xenium',
+        description: 'Skin on the 5K panel.',
+      },
+    ])
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+
+    render(
+      <TestApp
+        loadExamplesIndex={loadExamplesIndex}
+        loadDatasetOverview={loadDatasetOverview}
+      />,
+    )
+    const start = screen.getByRole('region', { name: 'Open a dataset' })
+    expect(within(start).getByLabelText('Dataset or image URL')).toHaveValue('')
+    fireEvent.click(await within(start).findByRole('link', { name: 'Human skin' }))
+
+    await waitFor(() => {
+      expect(loadDatasetOverview).toHaveBeenCalledWith(exampleUrl, expect.anything())
+    })
+    expect(await screen.findByText(/^Xenium · 1 cell/)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Open a dataset' }),
+    ).not.toBeInTheDocument()
+    expect(loadExamplesIndex).toHaveBeenCalledTimes(1)
+
+    // The dataset menu lists it under Recent, and has the examples too.
+    openControls('open-dataset')
+    const menu = screen.getByRole('dialog', { name: 'Open dataset' })
+    expect(
+      within(within(menu).getByRole('list', { name: 'Recent datasets' })).getByRole(
+        'link',
+        // The folder names it: explorer.json says nothing.
+        { name: 'skin' },
+      ),
+    ).toHaveAttribute('href', `/?dataset=${encodeURIComponent(exampleUrl)}`)
+    expect(
+      within(within(menu).getByRole('list', { name: 'Examples' })).getByRole('link', {
+        name: 'Human skin',
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('skips the start screen for a link that names a dataset (15.3-A)', () => {
+    useViewerStore.setState(initialViewerState)
+    window.history.replaceState(
+      null,
+      '',
+      `/?dataset=${encodeURIComponent(DEMO_DATASET_URL)}`,
+    )
+    const loadDatasetOverview = vi.fn(() =>
+      pendingPromise<Awaited<ReturnType<DatasetOverviewLoader>>>(),
+    )
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+
+    expect(
+      screen.queryByRole('region', { name: 'Open a dataset' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the start screen again, with the reason, when the first load fails (15.3-A)', async () => {
+    const loadDatasetOverview = vi.fn(async () => {
+      throw new Error('HTTP 500 for cells.parquet')
+    })
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const start = await screen.findByRole('region', { name: 'Open a dataset' })
+    expect(within(start).getByRole('alert')).toHaveTextContent('HTTP 500')
+    expect(within(start).getByLabelText('Dataset or image URL')).toHaveValue(
+      DEMO_DATASET_URL,
+    )
+  })
+
   it('shows the top bar and picks tools by key (15.2-B)', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
@@ -1759,6 +1856,42 @@ describe('App', () => {
     )
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(within(tools).getByRole('button', { name: 'Pan' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    // Esc that closes a popover does only that; the tool stays.
+    fireEvent.keyDown(document.body, { key: 'm' })
+    fireEvent.click(screen.getByRole('button', { name: 'Measure options' }))
+    const options = screen.getByRole('dialog', { name: 'Measure options' })
+    fireEvent.keyDown(options, { key: 'Escape' })
+    expect(
+      screen.queryByRole('dialog', { name: 'Measure options' }),
+    ).not.toBeInTheDocument()
+    expect(within(tools).getByRole('button', { name: 'Measure' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('keeps the Magic Lens of a link through the dataset load', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(DEMO_DATASET_URL)}&tool=magic-lens`,
+    )
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    await screen.findByText(/^Xenium · 1 cell/)
+
+    expect(screen.getByRole('button', { name: 'Magic Lens' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
@@ -2029,6 +2162,78 @@ describe('App', () => {
     expect(screen.queryByText(/could not be opened/)).not.toBeInTheDocument()
     openControls('diagnostics')
     expect(screen.queryByRole('alert', { name: 'Load issues' })).not.toBeInTheDocument()
+  })
+
+  it('cancels diagnostics from the loading list without an error (15.3-D)', async () => {
+    let signal: AbortSignal | undefined
+    const runDatasetDiagnostics: ReturnType<typeof vi.fn<DatasetDiagnosticsRunner>> =
+      vi.fn((_url, options) => {
+        signal = options?.signal
+        return pendingPromise<Awaited<ReturnType<DatasetDiagnosticsRunner>>>()
+      })
+
+    render(<TestApp runDatasetDiagnostics={runDatasetDiagnostics} />)
+    openControls('diagnostics')
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnose Dataset' }))
+
+    const list = await screen.findByRole('status', { name: 'Active loading tasks' })
+    expect(list).toHaveTextContent('Diagnosing dataset')
+    fireEvent.click(
+      within(list).getByRole('button', { name: 'Cancel diagnosing dataset' }),
+    )
+
+    expect(signal?.aborted).toBe(true)
+    expect(
+      screen.queryByRole('status', { name: 'Active loading tasks' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByLabelText('Activity log')).getByText('Cancelled diagnostics'),
+    ).toBeInTheDocument()
+  })
+
+  it('cancels loading another dataset and keeps the open one (15.3-D)', async () => {
+    const nextUrl = 'https://example.test/next'
+    let nextSignal: AbortSignal | undefined
+    const loadDatasetOverview = vi.fn<DatasetOverviewLoader>(async (baseUrl, options) => {
+      if (baseUrl === nextUrl) {
+        nextSignal = options?.signal
+        return pendingPromise()
+      }
+
+      return [
+        {
+          cellId: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 8,
+        },
+      ]
+    })
+
+    render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByText(/^Xenium · 1 cell/)
+
+    openControls('open-dataset')
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: nextUrl },
+    })
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    const list = await screen.findByRole('status', { name: 'Active loading tasks' })
+    await waitFor(() => {
+      expect(list).toHaveTextContent('next')
+    })
+    fireEvent.click(within(list).getByRole('button', { name: 'Cancel loading dataset' }))
+
+    expect(nextSignal?.aborted).toBe(true)
+    expect(screen.getByText(/^Xenium · 1 cell/)).toBeInTheDocument()
+    expect(screen.getByTestId('deckgl')).toBeInTheDocument()
+    expect(screen.queryByText(/could not be opened/)).not.toBeInTheDocument()
+    openControls('open-dataset')
+    expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeEnabled()
   })
 
   it('scans current viewport cells with the magic lens', async () => {
@@ -4421,6 +4626,10 @@ describe('App', () => {
     openControls('measure')
     expect(screen.getByRole('group', { name: 'Measure unit' })).toBeInTheDocument()
 
+    // The first Esc closes the options; the next leaves the tool.
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByRole('group', { name: 'Measure unit' })).toBeNull()
+    expect(screen.getByText(/Esc stops measuring/)).toBeInTheDocument()
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(screen.queryByText(/Esc stops measuring/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Measure' })).toHaveAttribute(
@@ -4542,6 +4751,15 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
+
+    // Undo (15.3-C) puts the class back with its colour and the colour mode.
+    expect(screen.getByText('Removed kmeans 3: Cluster 1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+      'annotations',
+    )
+    openControls('clusters')
+    expect(screen.getByLabelText('kmeans 3: Cluster 1 color')).toHaveValue('#d62728')
   })
 
   it('imports custom CSV annotations from a local file', async () => {
@@ -5359,6 +5577,10 @@ ${cd16Negative},CD16- NK cells`,
     fireEvent.click(screen.getByRole('button', { name: 'Remove Interneuron set' }))
 
     expect(screen.queryByLabelText('Saved gene sets')).not.toBeInTheDocument()
+
+    // Undo (15.3-C) puts the set back.
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(screen.getByLabelText('Saved gene sets')).toHaveTextContent('Interneuron set')
   })
 })
 

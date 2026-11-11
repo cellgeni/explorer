@@ -9,6 +9,7 @@ import {
   Disclosure,
   Drawer,
   IconButton,
+  InfoTip,
   Kbd,
   NumberField,
   Popover,
@@ -68,9 +69,11 @@ describe('UI primitives', () => {
       <Sheet expanded onExpandedChange={noop}>
         Body
       </Sheet>,
+      // @ts-expect-error title is required
+      <InfoTip>Explanation</InfoTip>,
     ]
 
-    expect(elements).toHaveLength(16)
+    expect(elements).toHaveLength(17)
   })
 
   it('renders buttons with a native title, a type and an icon label', () => {
@@ -338,6 +341,42 @@ describe('UI primitives', () => {
     expect(tooltip).toBeVisible()
     fireEvent.pointerLeave(button)
     expect(tooltip).not.toBeVisible()
+  })
+
+  it('marks the Escape that closes a popover or a shown tooltip as handled', () => {
+    render(
+      <>
+        <Popover title="Help" trigger="?">
+          Body
+        </Popover>
+        <Tooltip title="Lasso selection">
+          <button type="button">Lasso</button>
+        </Tooltip>
+      </>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '?' }))
+    // fireEvent returns false when a handler called preventDefault.
+    expect(fireEvent.keyDown(document.body, { key: 'Escape' })).toBe(false)
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    const lasso = screen.getByRole('button', { name: 'Lasso' })
+    expect(fireEvent.keyDown(lasso, { key: 'Escape' })).toBe(true)
+    fireEvent.focus(lasso)
+    expect(fireEvent.keyDown(lasso, { key: 'Escape' })).toBe(false)
+  })
+
+  it('explains a term from a small button, on focus or hover', () => {
+    render(<InfoTip title="Min QV">Quality value, on the Phred scale.</InfoTip>)
+
+    const button = screen.getByRole('button', { name: 'About Min QV' })
+    expect(button).toHaveAccessibleDescription('Quality value, on the Phred scale.')
+    const tooltip = screen.getByRole('tooltip', { hidden: true })
+    expect(tooltip).toHaveClass('ui-tooltip--wide', 'ui-tooltip--start')
+    expect(tooltip).not.toBeVisible()
+
+    fireEvent.focus(button)
+    expect(tooltip).toBeVisible()
   })
 
   it('names a card by its title and closes it', () => {

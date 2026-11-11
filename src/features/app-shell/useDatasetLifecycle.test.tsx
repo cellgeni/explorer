@@ -1,5 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import type {
@@ -83,7 +83,9 @@ function Probe({
   setVisiumHdControlState = vi.fn(),
   initialShareableState = {},
   isDatasetLoaded = false,
+  isDatasetLoading = false,
   onBeforeDatasetLoad,
+  resultRef,
   startDatasetLoadRef = { current: null },
   warmDatasetForRoi = vi.fn(async () => undefined),
 }: {
@@ -110,13 +112,15 @@ function Probe({
   readonly setVisiumHdControlState?: LifecycleOptions['setters']['setVisiumHdControlState']
   readonly initialShareableState?: LifecycleOptions['initialState']['initialShareableState']
   readonly isDatasetLoaded?: boolean
+  readonly isDatasetLoading?: boolean
   readonly onBeforeDatasetLoad?: () => void
+  readonly resultRef?: { current: ReturnType<typeof useDatasetLifecycle> | null }
   readonly startDatasetLoadRef?: LifecycleOptions['refs']['startDatasetLoadRef']
   readonly warmDatasetForRoi?: LifecycleOptions['loaders']['warmDatasetForRoi']
 }) {
   const noopSetter = vi.fn()
 
-  useDatasetLifecycle({
+  const result = useDatasetLifecycle({
     callbacks: {
       appendDebugEvent: vi.fn(),
       appendFallbackNotice,
@@ -126,6 +130,7 @@ function Probe({
     },
     controls: {
       isDatasetLoaded,
+      isDatasetLoading,
       geneExpressionColorScale: 'plasma',
       transcriptDensityColorScale: 'thermal',
       transcriptExactPointLimit: 100_000,
@@ -258,6 +263,10 @@ function Probe({
       setViewportCellCount: noopSetter,
       ...extraSetters,
     },
+  })
+
+  useEffect(() => {
+    if (resultRef !== undefined) resultRef.current = result
   })
 
   return null
@@ -557,6 +566,106 @@ describe('useDatasetLifecycle', () => {
       })
 
       expect(rendered).toEqual(['loading', 'ready'])
+    })
+
+    it('cancels a pending load and keeps the open dataset (15.3-D)', async () => {
+      const refs = createLifecycleRefs()
+      const openDatasetSignal = refs.datasetAbortRef.current.signal
+      const startDatasetLoadRef = startLoad()
+      const resultRef: { current: ReturnType<typeof useDatasetLifecycle> | null } = {
+        current: null,
+      }
+      const overview = deferred<[]>()
+      let overviewSignal: AbortSignal | undefined
+      const setLoadState = vi.fn()
+      const setOverviewCells = vi.fn()
+      const setPendingDatasetLoadState = vi.fn()
+      const onBeforeDatasetLoad = vi.fn()
+
+      render(
+        <Probe
+          refs={refs}
+          isDatasetLoaded
+          loadDatasetOverview={vi.fn((_url, options) => {
+            overviewSignal = options?.signal
+            return overview.promise
+          })}
+          setLoadState={setLoadState}
+          startDatasetLoadRef={startDatasetLoadRef}
+          resultRef={resultRef}
+          extraSetters={{ setOverviewCells, setPendingDatasetLoadState }}
+          onBeforeDatasetLoad={onBeforeDatasetLoad}
+        />,
+      )
+
+      let load: Promise<void> | undefined
+      await act(async () => {
+        load = startDatasetLoadRef.current?.(NEXT_URL, false)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      act(() => {
+        resultRef.current?.cancelDatasetLoad()
+      })
+      await act(async () => {
+        overview.resolve([])
+        await load
+      })
+
+      expect(overviewSignal?.aborted).toBe(true)
+      expect(openDatasetSignal.aborted).toBe(false)
+      expect(setPendingDatasetLoadState).toHaveBeenLastCalledWith({ status: 'idle' })
+      expect(setLoadState).not.toHaveBeenCalled()
+      expect(setOverviewCells).not.toHaveBeenCalled()
+      expect(onBeforeDatasetLoad).not.toHaveBeenCalled()
+    })
+
+    it('cancels a first load back to no dataset (15.3-D)', async () => {
+      const refs = createLifecycleRefs()
+      const startDatasetLoadRef = startLoad()
+      const resultRef: { current: ReturnType<typeof useDatasetLifecycle> | null } = {
+        current: null,
+      }
+      const overview = deferred<[]>()
+      const loadStates: string[] = []
+      const setLoadState = vi.fn((state: unknown) => {
+        loadStates.push(statusOf(state))
+      })
+      const setGenePanelState = vi.fn()
+      const setDatasetPlatform = vi.fn()
+
+      render(
+        <Probe
+          refs={refs}
+          isDatasetLoading
+          loadDatasetOverview={vi.fn(() => overview.promise)}
+          setDatasetPlatform={setDatasetPlatform}
+          setGenePanelState={setGenePanelState}
+          setLoadState={setLoadState}
+          startDatasetLoadRef={startDatasetLoadRef}
+          resultRef={resultRef}
+        />,
+      )
+
+      let load: Promise<void> | undefined
+      await act(async () => {
+        load = startDatasetLoadRef.current?.(NEXT_URL, false)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      const datasetSignal = refs.datasetAbortRef.current?.signal
+      act(() => {
+        resultRef.current?.cancelDatasetLoad()
+      })
+      await act(async () => {
+        overview.resolve([])
+        await load
+      })
+
+      expect(datasetSignal?.aborted).toBe(true)
+      expect(loadStates).toEqual(['loading', 'idle'])
+      expect(setDatasetPlatform).toHaveBeenLastCalledWith(null)
+      expect(setGenePanelState).toHaveBeenLastCalledWith({ status: 'idle' })
     })
 
     it('drops a pending load when another starts', async () => {

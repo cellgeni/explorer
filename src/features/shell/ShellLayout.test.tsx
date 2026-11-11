@@ -4,6 +4,7 @@ import {
   testAnnotationsSectionModel,
   testCellsSectionModel,
   testDatasetInfoModel,
+  testDatasetLibraryModel,
   testEmbeddingModel,
   testImageSectionModel,
   testTopBarModel,
@@ -31,6 +32,7 @@ function renderShell() {
     <ShellLayout
       topBar={testTopBarModel()}
       info={testDatasetInfoModel()}
+      library={testDatasetLibraryModel()}
       settings={testViewSettingsModel()}
       layerPanel={{
         sections: [
@@ -100,6 +102,7 @@ describe('ShellLayout', () => {
       <ShellLayout
         topBar={topBar}
         info={testDatasetInfoModel()}
+        library={testDatasetLibraryModel()}
         settings={testViewSettingsModel()}
         layerPanel={{ sections: [] }}
         image={testImageSectionModel()}
