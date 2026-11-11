@@ -409,6 +409,21 @@
   font-size: var(--font-caption);
 }
 
+/* Zoom −, + and Fit (15.2-E), above the scale bar. */
+.viewport-navigation {
+  position: absolute;
+  z-index: 5;
+  right: 12px;
+  bottom: 60px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+}
+
 .viewport-scale-bar {
   position: absolute;
   z-index: 4;

@@ -139,6 +139,7 @@ function RegionSelectionCard({ card }: { readonly card: RegionSelectionCardModel
           {card.loading || card.summary === null ? card.status : card.summary}
         </span>
       }
+      actions={<GoToButton title="Go to the selection" onGoTo={card.onGoTo} />}
       closeTitle={card.closeTitle}
       onClose={card.onClose}
       className="shell-card"
@@ -288,6 +289,21 @@ function Tabs<T extends string>({
   )
 }
 
+// Shows what the card is about (zoomToBbox, 15.2-E).
+function GoToButton({
+  title,
+  onGoTo,
+}: {
+  readonly title: string
+  readonly onGoTo: () => void
+}) {
+  return (
+    <Button title={title} variant="ghost" className="shell-card-go-to" onClick={onGoTo}>
+      Go To
+    </Button>
+  )
+}
+
 export function CellCard({ card }: { readonly card: CellCardModel }) {
   return (
     <Card
@@ -296,6 +312,12 @@ export function CellCard({ card }: { readonly card: CellCardModel }) {
         <span className={card.loading ? 'shell-card-status is-loading' : undefined}>
           {card.status}
         </span>
+      }
+      actions={
+        <GoToButton
+          title={`Go to the selected ${card.title.toLowerCase()}`}
+          onGoTo={card.onGoTo}
+        />
       }
       closeTitle={`Clear selected ${card.title.toLowerCase()}`}
       onClose={card.onClose}
@@ -334,6 +356,12 @@ export function TranscriptCard({ card }: { readonly card: TranscriptCardModel })
   return (
     <Card
       title={card.title}
+      actions={
+        <GoToButton
+          title={`Go to the pinned ${card.title.toLowerCase()}`}
+          onGoTo={card.onGoTo}
+        />
+      }
       closeTitle="Clear pinned transcript"
       onClose={card.onClose}
       className="shell-card"

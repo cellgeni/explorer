@@ -1,4 +1,5 @@
 import type { ViewerTranscriptHoverDetail } from '../../components/ViewerCore'
+import { micrometers, type BBox } from '../../data/coords'
 import { roiSelectionArea, type RoiSelection } from '../../data/roiSelection'
 import { formatSquareMicrometers, withMicrometers } from '../../data/units'
 import type {
@@ -83,6 +84,8 @@ interface SelectionCardBase {
 
 export interface RegionSelectionCardModel extends SelectionCardBase {
   readonly variant: 'cells' | 'bins'
+  // Shows the whole selection (zoomToBbox, 15.2-E).
+  readonly onGoTo: () => void
   // "6,229 cells · 943,210 µm²", once the selection is read.
   readonly summary: string | null
   // The tab with the counts: "Cells", "Spots" or "Bins".
@@ -111,6 +114,53 @@ function formatMean(value: number | undefined): string {
   return value === undefined
     ? '0'
     : value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
+
+// Go To regions, in data µm (y down) from deck.gl positions (y up).
+export type ZoomToBbox = (bbox: BBox) => void
+
+const GO_TO_CELL_HALF_SIZE = 40
+const GO_TO_MARGIN = 20
+
+export function bboxAroundDeckPoint(
+  position: ArrayLike<number>,
+  halfSizeMicrometers: number,
+): BBox {
+  const x = position[0] ?? 0
+  const y = -(position[1] ?? 0)
+
+  return {
+    minX: micrometers(x - halfSizeMicrometers),
+    maxX: micrometers(x + halfSizeMicrometers),
+    minY: micrometers(y - halfSizeMicrometers),
+    maxY: micrometers(y + halfSizeMicrometers),
+  }
+}
+
+export function bboxAroundDeckPolygon(
+  polygon: readonly ArrayLike<number>[],
+  marginMicrometers: number,
+): BBox {
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const point of polygon) {
+    const x = point[0] ?? 0
+    const deckY = point[1] ?? 0
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, -deckY)
+    maxY = Math.max(maxY, -deckY)
+  }
+
+  return {
+    minX: micrometers(minX - marginMicrometers),
+    maxX: micrometers(maxX + marginMicrometers),
+    minY: micrometers(minY - marginMicrometers),
+    maxY: micrometers(maxY + marginMicrometers),
+  }
 }
 
 export function selectionSummary(
@@ -168,6 +218,7 @@ export function cellsSelectionCard({
   status,
   summary,
   transcriptExportState,
+  zoomToBbox,
 }: SelectionNameInput & {
   readonly elementNoun: { readonly singular: string; readonly plural: string }
   readonly genes: { readonly copy: string; readonly state: RoiGeneStatsState }
@@ -182,6 +233,7 @@ export function cellsSelectionCard({
   readonly status: string
   readonly summary: RoiSummary | null
   readonly transcriptExportState: RoiTranscriptExportState
+  readonly zoomToBbox: ZoomToBbox
 }): SelectionCardModel | null {
   if (roiState.status === 'idle') return null
 
@@ -193,6 +245,9 @@ export function cellsSelectionCard({
 
   return {
     variant: 'cells',
+    onGoTo: () => {
+      zoomToBbox(roiState.selection.bbox)
+    },
     name,
     nameLabel: 'ROI name',
     onNameChange,
@@ -263,6 +318,7 @@ export function binsSelectionCard({
   roiState,
   status,
   summary,
+  zoomToBbox,
 }: SelectionNameInput & {
   readonly genes: { readonly copy: string; readonly state: RoiGeneStatsState }
   readonly lens: SelectionLensInput
@@ -272,6 +328,7 @@ export function binsSelectionCard({
   readonly roiState: VisiumHdRoiState
   readonly status: string
   readonly summary: VisiumHdRoiSummary | null
+  readonly zoomToBbox: ZoomToBbox
 }): SelectionCardModel | null {
   if (roiState.status === 'idle') return null
 
@@ -298,6 +355,9 @@ export function binsSelectionCard({
 
   return {
     variant: 'bins',
+    onGoTo: () => {
+      zoomToBbox(roiState.selection.bbox)
+    },
     name,
     nameLabel: 'ROI name',
     onNameChange,
@@ -379,6 +439,7 @@ interface CellCardBase {
   readonly title: string
   readonly status: string
   readonly loading: boolean
+  readonly onGoTo: () => void
   readonly onClose: () => void
 }
 
@@ -414,6 +475,7 @@ export function cellCard({
   gridCell,
   onClose,
   profile,
+  zoomToBbox,
 }: {
   readonly cell: {
     readonly selected: OverviewCellDatum | null
@@ -441,6 +503,7 @@ export function cellCard({
     readonly onLoad: (() => void) | undefined
   }
   readonly onClose: () => void
+  readonly zoomToBbox: ZoomToBbox
 }): CellCardModel | null {
   if (boundary.selected !== null) {
     return {
@@ -448,6 +511,9 @@ export function cellCard({
       title: 'Cell',
       status: 'Selected cell',
       loading: false,
+      onGoTo: () => {
+        zoomToBbox(bboxAroundDeckPolygon(boundary.selected?.polygon ?? [], GO_TO_MARGIN))
+      },
       onClose,
       cell: boundary.selected,
       expressionStatus: boundary.expressionStatus,
@@ -462,6 +528,9 @@ export function cellCard({
       title: 'Bin',
       status: 'Selected bin',
       loading: false,
+      onGoTo: () => {
+        zoomToBbox(bboxAroundDeckPolygon(gridCell.selected?.polygon ?? [], GO_TO_MARGIN))
+      },
       onClose,
       cell: gridCell.selected,
       assignmentState: gridCell.assignmentState,
@@ -471,15 +540,19 @@ export function cellCard({
     }
   }
 
-  if (cell.selected === null) return null
+  const selected = cell.selected
+  if (selected === null) return null
 
   return {
     kind: 'cell',
+    onGoTo: () => {
+      zoomToBbox(bboxAroundDeckPoint(selected.position, GO_TO_CELL_HALF_SIZE))
+    },
     title: cell.title,
     status: cell.status,
-    loading: cell.state.status === 'loading' && cell.state.cellId === cell.selected.id,
+    loading: cell.state.status === 'loading' && cell.state.cellId === selected.id,
     onClose,
-    cell: cell.selected,
+    cell: selected,
     annotationLabels: cell.annotationLabels,
     state: cell.state,
     distributionState: cell.distributionState,
@@ -496,6 +569,7 @@ export interface TranscriptCardModel {
   readonly detail: ViewerTranscriptHoverDetail
   // Per-gene outputs (Atera) have no FOVs.
   readonly showFov: boolean
+  readonly onGoTo: () => void
   readonly onClose: () => void
 }
 
@@ -503,10 +577,12 @@ export function transcriptCard({
   capabilityState,
   onClose,
   pinned,
+  zoomToBbox,
 }: {
   readonly capabilityState: TranscriptCapabilityState
   readonly onClose: () => void
   readonly pinned: ViewerTranscriptHoverDetail | null
+  readonly zoomToBbox: ZoomToBbox
 }): TranscriptCardModel | null {
   if (pinned === null) return null
 
@@ -523,6 +599,11 @@ export function transcriptCard({
     showFov:
       capabilityState.status !== 'ready' ||
       capabilityState.capabilities.geneRanges === undefined,
+    onGoTo: () => {
+      const position = pinned.transcript?.position ?? pinned.aggregate?.position ?? []
+      const binSize = pinned.aggregate?.binSizeMicrometers ?? 0
+      zoomToBbox(bboxAroundDeckPoint(position, Math.max(GO_TO_MARGIN, binSize * 2)))
+    },
     onClose,
   }
 }
@@ -566,17 +647,22 @@ export function magicLensCard({
 
 // Stack
 
+type WithoutZoom<T> = Omit<T, 'zoomToBbox'>
+
 export type SelectionCardInput =
-  | ({ readonly variant: 'cells' } & Parameters<typeof cellsSelectionCard>[0])
-  | ({ readonly variant: 'bins' } & Parameters<typeof binsSelectionCard>[0])
+  | ({ readonly variant: 'cells' } & WithoutZoom<
+      Parameters<typeof cellsSelectionCard>[0]
+    >)
+  | ({ readonly variant: 'bins' } & WithoutZoom<Parameters<typeof binsSelectionCard>[0]>)
   | ({ readonly variant: 'geometry' } & Parameters<typeof geometrySelectionCard>[0])
 
 export interface CardStackModelInput {
   readonly selection: SelectionCardInput
-  readonly cell: Parameters<typeof cellCard>[0]
+  readonly cell: WithoutZoom<Parameters<typeof cellCard>[0]>
   // Null where the platform has no transcripts or no Magic Lens.
-  readonly transcript: Parameters<typeof transcriptCard>[0] | null
+  readonly transcript: WithoutZoom<Parameters<typeof transcriptCard>[0]> | null
   readonly magicLens: Parameters<typeof magicLensCard>[0] | null
+  readonly zoomToBbox: ZoomToBbox
 }
 
 // Built in App, like the section models.
@@ -585,16 +671,18 @@ export function useCardStackModel({
   cell,
   transcript,
   magicLens,
+  zoomToBbox,
 }: CardStackModelInput): CardStackModel {
   return {
     selection:
       selection.variant === 'cells'
-        ? cellsSelectionCard(selection)
+        ? cellsSelectionCard({ ...selection, zoomToBbox })
         : selection.variant === 'bins'
-          ? binsSelectionCard(selection)
+          ? binsSelectionCard({ ...selection, zoomToBbox })
           : geometrySelectionCard(selection),
-    cell: cellCard(cell),
-    transcript: transcript === null ? null : transcriptCard(transcript),
+    cell: cellCard({ ...cell, zoomToBbox }),
+    transcript:
+      transcript === null ? null : transcriptCard({ ...transcript, zoomToBbox }),
     magicLens: magicLens === null ? null : magicLensCard(magicLens),
   }
 }

@@ -94,6 +94,10 @@ export interface ViewerCoreProps {
   readonly initialViewStateOverride?: InitialViewStateOverride
   readonly viewResetKey?: string | number
   readonly focusRequest?: ViewerFocusRequest | null
+  // The new shell's zoom −, + and Fit buttons (UNIFIED_PLAN.md, 15.2-E).
+  readonly navigationControls?: boolean
+  // Fits the data to the view whenever it changes (the F key).
+  readonly fitRequestKey?: number
   readonly overviewRenderCellLimit?: number | null
   readonly clipOverviewCellsToViewport?: boolean
   readonly maxConcurrentTileRequests?: number
@@ -117,10 +121,11 @@ export interface InitialViewStateOverride {
   readonly zoom?: number
 }
 
-export interface ViewerFocusRequest {
-  readonly key: number
-  readonly target: readonly [number, number, number]
-}
+// Centres the view on a deck.gl point, keeping the zoom, or shows a region
+// in data µm (zoomToBbox, for the cards' Go To buttons).
+export type ViewerFocusRequest =
+  | { readonly key: number; readonly target: readonly [number, number, number] }
+  | { readonly key: number; readonly bbox: BBox }
 
 export type ViewerMagicLensStatus = 'idle' | 'loading' | 'ready' | 'error'
 

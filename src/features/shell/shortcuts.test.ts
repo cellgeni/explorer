@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isFitKey,
   isLayerPanelKey,
   SHORTCUTS,
   TOOL_ORDER,
@@ -50,5 +51,14 @@ describe('shortcuts', () => {
     expect(isLayerPanelKey(key('\\', { meta: true }))).toBe(false)
     expect(toolForShortcutKey(key('\\'))).toBeNull()
     expect(SHORTCUTS.some((shortcut) => shortcut.keys.includes('\\'))).toBe(true)
+  })
+
+  it('fits the view with F, which no tool uses', () => {
+    expect(isFitKey(key('f'))).toBe(true)
+    expect(isFitKey(key('F', { ctrl: true }))).toBe(false)
+    expect(toolForShortcutKey(key('f'))).toBeNull()
+    expect(SHORTCUTS.find((shortcut) => shortcut.keys.includes('F'))?.action).toBe(
+      'Fit the data to the view',
+    )
   })
 })

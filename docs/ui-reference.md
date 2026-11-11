@@ -132,7 +132,8 @@ not in the link yet (15.2-H).
 
 Cards are 360 px wide and stack in this order, scrolling when they outgrow
 the canvas; a card that appears scrolls into view. Closing a card clears what
-it shows.
+it shows. Selection, Cell and Transcript cards have `Go To`, which shows what
+the card is about.
 
 | Card                     | Shown when                                                     | Contents                                                                                                                                                                                                                                                                                                                    |
 | ------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -482,16 +483,28 @@ From `src/features/app-shell/platformAdapter.ts` and the tab rules in
 Mouse: drag to pan, scroll or pinch to zoom, double-click to zoom in. Zoom is
 clamped to −10…10; the fitted view is clamped to −10…4.
 
+The fitted view fills the canvas as measured, less 24 px on each side
+(`fitExtentViewState`, `src/rendering/overviewViewState.ts`); before the canvas
+is measured it assumes 720 px, and the first measurement fits again. A shared
+link's `view` wins over the fit. Level of detail still measures zoom from the
+720 px fit, so cells draw the same at a given scale.
+
 Keyboard (focus the spatial view first; `src/components/viewerNavigation.ts`):
 
-| Key                | Action                   |
-| ------------------ | ------------------------ |
-| Arrow keys         | Pan 64 screen px         |
-| Shift + arrow keys | Pan 256 screen px        |
-| `+` or `=`         | Zoom in by 0.5           |
-| `-` or `_`         | Zoom out by 0.5          |
-| `Home`             | Reset to the fitted view |
-| `Esc`              | Clear the selected cell  |
+| Key                | Action                                          |
+| ------------------ | ----------------------------------------------- |
+| Arrow keys         | Pan 64 screen px                                |
+| Shift + arrow keys | Pan 256 screen px                               |
+| `+` or `=`         | Zoom in by 0.5                                  |
+| `-` or `_`         | Zoom out by 0.5                                 |
+| `Home`             | Return to the first view (the link's, or a fit) |
+| `Esc`              | Clear the selected cell                         |
+
+In the new shell (`?shell=2`), `F` fits the data to the view from anywhere but
+a text field, and the bottom right of the canvas has `Zoom out (−)`, `Zoom in
+(+)` (a whole zoom level each) and `Fit to view (F)` above the scale bar. The
+cards' `Go To` buttons show their selection, cell, bin or transcript
+(`zoomToBbox`: a `focusRequest` with a `bbox`).
 
 ### Tools
 
