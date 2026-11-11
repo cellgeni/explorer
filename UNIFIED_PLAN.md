@@ -15,6 +15,9 @@ git history, the code, and the current `docs/`. Work recorded only from git is
 marked with its commit. Items the plan had marked done but the 2026-11-08 review
 found incomplete are marked **Reopened**.
 
+On 2026-11-11, [Phase 15](#phase-15--interface-redesign) was added. It plans
+an interface redesign that follows a UI review.
+
 Where records disagree, the later decision is kept and the earlier one is marked
 **Superseded**. [Appendix A](#appendix-a-reconciliation-notes) lists every
 conflict and how it was resolved. `PLAN_VS_DOCS.md` records the review that
@@ -242,6 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                       |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)       |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                       |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | Planned (2026-11-11); not started                       |
 
 ---
 
@@ -1034,6 +1038,9 @@ windowed level-of-detail system, not one point layer over
 - **Superseded:** selected-feature density from `/density/gene`, and 10x-style
   feature-circle glyphs (one per bin and gene, top 8 per bin). Both were removed
   from the user-facing modes on 2026-06-06.
+- **Reopened** (2026-11-11): selected-feature density from `/density/gene`
+  returns in [Phase 15](#phase-15--interface-redesign), task 15.1-J. The
+  feature-circle glyphs stay removed.
 
 #### Level-Of-Detail Options
 
@@ -1901,6 +1908,691 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 - [x] The CELLxGENE heart example now opens as Visium; its description says
       2,913 spots under tissue of 4,992.
 
+### Phase 15 — Interface Redesign
+
+Planned 2026-11-11; not started. The user asked for a usability review of the
+interface and then a plan for the changes. The plan rests on:
+
+- The UI review of 2026-11-10. It walked through eight tasks on the hosted
+  Xenium demo (1,414,155 cells) and the Census Visium H5AD, checked them
+  against Nielsen's heuristics, and took screenshots at 1440×900, 1024×700 and
+  390 px.
+- A layout comparison with Vitessce, CELLxGENE Explorer, TissUUmaps 3/4 and
+  10x Explorer. The 10x Explorer web viewer was checked hands-on on 2026-11-11.
+- A code map of the shell, viewer, tests and docs made on 2026-11-11. It is
+  cited below as `file:line`; line numbers drift as the code changes.
+
+The user decided on 2026-11-11:
+
+- a dark theme (D11);
+- no transition period for the old tabs (D12);
+- examples fetched from GitHub at runtime (D9);
+- selected-gene transcript density reopened (D13);
+- Magic Lens keeps its name but leaves its tab (D14);
+- `@axe-core/playwright` as a dev dependency (D10).
+
+Sizes are for one developer: **S** ≤ 1 day, **M** 2–4 days, **L** 1–2 weeks.
+
+#### Goals And Non-Goals
+
+Goals:
+
+- Fix every High and Medium finding in
+  [the findings](#findings-from-the-ui-review),
+  confirmed by re-running the eight review tasks.
+- Move to the 10x Explorer layout model: a top bar, a layer panel organised by
+  data type, floating result cards, and canvas tools and legend.
+- Meet WCAG 2.2 AA contrast for all text, with no control text below 12 px.
+- Keep every feature unless a decision below removes it, on all seven
+  platforms: Xenium, Atera, Visium, Visium HD, H5AD, SpatialData and Image.
+- Keep existing share links and dataset manifest `defaults` working.
+
+Non-goals:
+
+- A user-arranged multi-view grid like Vitessce's.
+- New analysis beyond ranking ROI genes against the rest of the tissue (see
+  15.4-B). No differential expression between arbitrary groups and no
+  clustering.
+- A mobile-first design. Screens under 860 px stay usable but are not
+  optimised.
+- Data-path performance work, which belongs to the existing optimization pass.
+
+#### Findings From The UI Review
+
+| ID  | Finding                                                                                                                                                                          | Severity | Fixed in       |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------- |
+| F1  | A selected gene silently overrides `Cell color`. Loading clusters while a gene is selected changes nothing on the map (`rendering/cellPointStyle.ts:26–43`).                     | High     | 15.1-A         |
+| F2  | There is no legend on the canvas. The colour scale exists only inside the Genes tab.                                                                                             | High     | 15.1-C         |
+| F3  | Clicking a cell shows no highlight and does not open its details (`App.tsx:2181–2193`; nothing in `rendering/` draws a selection).                                               | High     | 15.1-D, 15.2   |
+| F4  | A failed load wipes the dataset already on screen (`useDatasetLifecycle.ts:912–1030` runs before detection).                                                                     | High     | 15.1-F         |
+| F5  | 404, 403 and CORS failures are reported as "Unsupported spatial dataset layout" (`useDatasetLifecycle.ts:1594`).                                                                 | High     | 15.1-E         |
+| F6  | The see-through panel over the dark canvas gives text a contrast of 2.2–2.3:1.                                                                                                   | High     | 15.0-A, 15.1-K |
+| F7  | 106 of the 116 font sizes are under 11 px, and 48 rules force uppercase.                                                                                                         | High     | 15.1-K         |
+| F8  | Developer information sits in the user UI: the deck.gl layer and budget lines, the zoom number, the Log, and the matrix and fallback notices.                                    | Medium   | 15.1-H, 15.2-F |
+| F9  | Selecting a second gene silently sums the two into one score, and the colour bar names neither gene nor unit.                                                                    | Medium   | 15.1-A, 15.1-C |
+| F10 | Gene search is not ranked (NIPSNAP1 comes before SNAP25), gene chips have no ×, and "No matching genes" appears straight after a pick.                                           | Medium   | 15.1-B         |
+| F11 | With genes selected, the transcript layer still shows density for all transcripts, at 85% opacity (`useTranscriptWorkflow.ts:511`).                                              | Medium   | 15.1-J         |
+| F12 | Esc does nothing. Tools are three separate flags that only partly exclude each other, and nothing shows that drawing mode is on.                                                 | Medium   | 15.1-G         |
+| F13 | Only one ROI at a time. Its top genes are ranked by raw count, and the gene rows can't be clicked.                                                                               | Medium   | 15.4-A, 15.4-B |
+| F14 | The Xenium default annotation set "All" stacks 10 clusterings. Clusters are listed twice. H5AD shows raw ID columns, and spot counts include hidden off-tissue spots.            | Medium   | 15.1-I         |
+| F15 | There is no start screen and no examples. The demo URL is prefilled with no explanation.                                                                                         | Medium   | 15.3-A         |
+| F16 | There is no Copy link button. The URL hash is about 650 characters because it includes defaults. Cluster sets are not shared, and typing in the URL box rewrites the share link. | Medium   | 15.1-L         |
+| F17 | Clear and Remove can't be undone, and long queries can't be cancelled.                                                                                                           | Medium   | 15.3-C, 15.3-D |
+| F18 | Fit to view assumes a 720 px viewport and ignores the panel (`rendering/overviewViewState.ts:15–60`). At 1024 px wide the panel covers 41% of the canvas.                        | Medium   | 15.2-E         |
+| F19 | The page title is "viewer" and there is no favicon.                                                                                                                              | Low      | 15.1-M         |
+| F20 | Units are written inconsistently (um, um^2, um2, µm), and some controls are styled differently (a native select, a default-blue slider).                                         | Low      | 15.0-B, 15.1-K |
+| F21 | Magic Lens `Min QV` does nothing. This is an existing [open item](#12-open-items).                                                                                               | Low      | 15.2-D         |
+| F22 | There is no in-app help, and keyboard shortcuts are mentioned only in screen-reader text.                                                                                        | Low      | 15.3-B         |
+| F23 | The embedding is a 300 px scatter plot placed above the Cell info.                                                                                                               | Low      | 15.2-G         |
+
+#### Target Design
+
+##### Layout (1024 px and wider)
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│ ◆ Explorer │ Sob23 brain ▾  Xenium · 1.41 M cells · 5,001 genes  ⓘ │ ✋ ▭ ◯ ⟷ ◎ │ ⧉ Share ? ⚙ │ 48 px
+├───────────────────────────────────────────────────────────────┬─────────────────────────┤
+│ ┌ Selection 1 ──────────── × ┐                                 │ ☑ Image               › │
+│ │ 6,229 cells · 0.94 mm²      │                                │ ☑ Cells    graphclust ⌄ │
+│ │ Genes │ Cells │ Transcripts │                                │   Colour by [Clusters ▾]│
+│ └─────────────────────────────┘                                │   ■ Cluster 1   149,084 │
+│                                                                │   ■ Cluster 2   128,390 │
+│                         canvas                                 │ ☐ Transcripts         › │
+│ ┌ graphclust ─────────────┐                        [−][+][⤢]   │ ☐ Annotations         › │
+│ │ ■ 1  ■ 2  ■ 3  … +9      │                        ├─ 2 mm ─┤  │                         │
+│ └─────────────────────────┘    X 3,375 µm  Y 5,522 µm          │ 360 px, opaque          │
+└───────────────────────────────────────────────────────────────┴─────────────────────────┘
+```
+
+- **Top bar** (48 px), left to right:
+  - The dataset name. It opens a menu: Open dataset…, Examples, Recent.
+  - A summary chip with platform and counts.
+  - ⓘ, which opens the dataset info drawer.
+  - The tool group: Pan `P`, Box `R`, Lasso `L`, Measure `M`, Magic Lens `O`.
+  - Share (copy link), Help `?`, Settings.
+- **Layer panel** (right, 360 px, opaque), with sections Image, Cells (titled
+  Spots or Bins on those platforms), Transcripts and Annotations.
+  - Each header holds a visibility checkbox, the name, a one-line state such
+    as "graphclust" or "4 genes · points", and an arrow.
+  - Sections stay mounted while collapsed, as HUD panels do today, so local
+    state such as a gene search survives.
+  - The whole panel collapses to a 40 px strip with `\`.
+- **Cards** (top left, 360 px): Selection, Cell or Bin, Transcript, Magic Lens. Each
+  card can be closed and has Go to.
+- **Canvas furniture:**
+  - Bottom left: the legend, plus the progress and notification stack.
+  - Bottom right: zoom −, +, Fit, and the scale bar.
+  - Bottom centre: the cursor coordinates.
+  - The zoom number appears only in debug mode.
+- **Info drawer** (left, 380 px, over the canvas) with these sections:
+  - Dataset: platform, counts, gene panel, µm/px and where it came from, image.
+  - About: the manifest's name, description and source.
+  - View options: SpatialData coordinate system, image and scale; Visium
+    library.
+  - Open another dataset.
+  - Diagnostics.
+- **Start screen** when no dataset is loaded: a URL field and Open button, an
+  example gallery, recent datasets, and a link to the supported formats.
+- **Under 860 px:**
+  - The tools fold into an overflow menu.
+  - The layer panel becomes a bottom sheet that peeks 56 px.
+  - Cards become sheets.
+
+##### Visual System
+
+- **Tokens** live in `src/styles/tokens.css`:
+  - Colour roles: `--surface-0…3`, `--text-1…3`, `--accent`,
+    `--accent-contrast`, `--border`, `--focus`, `--danger`, `--warning`,
+    `--success`, `--canvas`.
+  - Type scale: 11 caption, 12 control, 13 body, 15 title, 18 heading.
+  - A 4-point spacing scale, plus radius and shadow tokens.
+  - z-index layers: canvas 0–6, legend 8, cards 10, panel 12, drawer 14,
+    popover 16, toast 18.
+- **Dark theme (D11).**
+  - Every surface is near-black or dark grey and opaque. Panel, cards, legend,
+    drawer, popovers and start screen all match the black canvas, so they look
+    the same over fluorescence, H&E and density layers.
+  - Text runs from near-white to mid-grey.
+  - The current green and magenta stay as the accent and focus colours,
+    lightened until they pass contrast on dark surfaces.
+  - `color-scheme: dark` makes native controls and scrollbars match.
+  - There is no light theme for now. The tokens leave room to add one later.
+- Surfaces are opaque. No backdrop blur behind text.
+- Labels and headings use sentence case. Buttons keep their current Title Case
+  names, which 160 test queries depend on. No CSS uppercase anywhere.
+- One length and area formatter produces µm and µm² everywhere.
+- Icons are inline SVG, pinned in the repo. No icon fonts and no CDN.
+
+#### Product Decisions
+
+- **DECISION D1 — Layout model.** Use 10x Explorer's model. It is the closest
+  match in domain, it groups controls by data type, and it leaves about 75% of
+  a 1440 px screen to the canvas. CELLxGENE's two fixed side panels leave about
+  49%.
+- **DECISION D2 — One source for cell colour.** `Colour by` has six options:
+  Clusters (an annotation set), Gene expression, Metadata, Transcript count,
+  Cell area, and None.
+  - Gene expression is one of these options, never an override.
+  - Picking genes in the Cells section switches `Colour by` to Gene
+    expression. Picking genes in Transcripts does not.
+  - Removing the last gene restores the previous mode.
+- **DECISION D3 — One shared gene list** (the URL's `genes=`). Cells use it
+  when `Colour by` is Gene expression, and Transcripts use it when the filter
+  is Selected genes.
+- **DECISION D4 — Clusters belong to Cells**, as 10x Explorer's "Groups" do.
+  The Annotations section holds selections and GeoJSON shapes. Choosing a set
+  loads it; there is no separate Load button.
+- **DECISION D5 — Casing.** Buttons keep Title Case and labels use sentence
+  case. The CSS uppercase rules go.
+- **DECISION D6 — Developer information** moves to Diagnostics in the info
+  drawer. The deck.gl layer and budget lines and the zoom number appear only
+  with `?debug=1` or Settings › Show debug info.
+- **DECISION D7 — Share URL version 2.**
+  - Default values are left out.
+  - `panel=`, `card=` and `tool=` replace `tab=`, and version 1 links are
+    mapped.
+  - `dataset=` follows the loaded dataset, not the text box.
+  - Dataset cluster sets are shared through `groups=`.
+- **DECISION D8 — Tools are one `activeTool` value.** Esc returns to Pan, and
+  finishing a shape returns to Pan.
+- **DECISION D9 — Examples are fetched from GitHub at runtime** (user,
+  2026-11-11). New examples appear without a new release.
+  - The source is the raw `examples/index.json` on `main`. A build can point
+    it elsewhere.
+  - Gallery links are built from `manifestUrl`, so self-hosted deployments
+    link to themselves.
+  - If the fetch fails, the start screen still offers the demo dataset.
+- **DECISION D10 — No new runtime dependencies for the UI.** Popovers,
+  drawers and tooltips are built in-house. The one new dev dependency is
+  `@axe-core/playwright`, pinned, for accessibility checks (user,
+  2026-11-11).
+- **DECISION D11 — Dark theme** (user, 2026-11-11). It ships in 15.0-A, and
+  [Visual System](#visual-system) describes it.
+- **DECISION D12 — No transition period** (user, 2026-11-11). No tutorials
+  depend on the current tabs. The old shell is deleted when the new one
+  becomes the default (15.2-J), and old `tab=` links are still mapped.
+- **DECISION D13 — Selected-gene transcript density is reopened** (user,
+  2026-11-11). This reverses [Appendix A](#appendix-a-reconciliation-notes) row 10. Density
+  follows the gene filter; see 15.1-J.
+- **DECISION D14 — Magic Lens keeps its name and leaves its tab** (user,
+  2026-11-11).
+  - The cursor lens becomes the Magic Lens tool in the top bar (`O`), with its
+    results in a Magic Lens card.
+  - The viewport scope becomes "Summarise view" in the tool's popover.
+  - The ROI scope becomes the Selection card's Transcripts tab.
+
+#### Where Each Control Goes
+
+| Today: tab › control                                                 | New home                                                                                 |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Dataset › URL, Morphology/Tissue image, Load Dataset                 | Start screen; Info drawer › Open another dataset                                         |
+| Dataset › Boundary limit                                             | Open another dataset › Advanced; Settings                                                |
+| Dataset › Bin size (Visium HD)                                       | Bins section                                                                             |
+| Dataset › Coordinate system, Image, µm per unit (SpatialData)        | Info drawer › View options (the image choice is also in the Image section)               |
+| Dataset › Tissue image, Show off-tissue spots (Visium)               | Image section; Spots section                                                             |
+| Dataset › Library (Visium)                                           | Info drawer › View options                                                               |
+| Dataset › Diagnose, download, Matrix warning, Fallbacks, Issues, Log | Info drawer › Diagnostics (warnings and fallbacks as one "Data access notes (n)" item)   |
+| Dataset › About this dataset                                         | Info drawer › About                                                                      |
+| Layers › Layer stack line                                            | Diagnostics, debug mode only                                                             |
+| Layers › Cell/Nucleus boundaries, fill and boundary opacity          | Cells › Appearance                                                                       |
+| Layers › Hover tooltips, Mouse coordinates unit                      | Settings                                                                                 |
+| Layers › Image opacity, Z plane, channels, custom image layers       | Image section                                                                            |
+| Layers › Distance measure, Measure unit, Clear Measurement           | Measure tool and its popover                                                             |
+| Genes › Search, list, chips, gene sets                               | Cells › Colour by › Gene expression (gene picker)                                        |
+| Genes › Signature score, Gene scale                                  | Cells › Gene expression ("Combine genes" when there are 2 or more; colour scale); legend |
+| Genes › Expression detail                                            | Cells › Advanced                                                                         |
+| Genes › Cell color, Metadata track                                   | Cells › Colour by                                                                        |
+| Genes › status line                                                  | Legend footer ("231,404 of 1,414,155 cells express SNAP25")                              |
+| Transcripts › all controls                                           | Transcripts section: Display, Genes, Appearance, Filters, and Advanced (budget meter)    |
+| Transcripts › status panel, pinned transcript                        | Section header summary; Transcript card                                                  |
+| Magic Lens › cursor lens, radius                                     | Magic Lens tool and its popover; Magic Lens card                                         |
+| Magic Lens › Viewport scope                                          | Magic Lens popover › Summarise view                                                      |
+| Magic Lens › ROI scope                                               | Selection card › Transcripts tab                                                         |
+| Magic Lens › Min QV                                                  | Hidden until it changes results                                                          |
+| Annotations › set, load/clear, labels, set sizes                     | Cells › Colour by › Clusters (one list: swatch, visibility, name, count, %)              |
+| Annotations › Import file/URL, Export                                | Cells › Clusters ⋯ menu                                                                  |
+| Annotations › Metadata tracks                                        | Cells › Colour by › Metadata                                                             |
+| Annotations › GeoJSON import, export, shapes                         | Annotations section                                                                      |
+| ROI › Draw Box, Draw Lasso, Clear                                    | Top-bar tools; Esc; the card's Delete                                                    |
+| ROI › name, summary, top genes, Save, exports                        | Selection card                                                                           |
+| Cell › Embeddings                                                    | Embedding panel (Cells › Show embedding)                                                 |
+| Cell › Cell/Bin info, gene expression, Clear                         | Cell or Bin card                                                                         |
+| Shell › Hide Controls                                                | Panel collapse button and `\`                                                            |
+
+#### Work Rules
+
+From [§2](#2-working-rules):
+
+- One checkbox is one reviewable PR, with tests and docs in the same PR.
+- A refactor PR does not change behaviour, and a behaviour PR does not
+  restructure.
+- Every PR passes `npm test`, `npm run typecheck`, `npm run lint`,
+  `npm run build` and the E2E smoke tests.
+- PRs that change UI also go through this **platform checklist**:
+  - the Xenium demo;
+  - Atera kidney;
+  - Census Visium H5AD;
+  - the Visium HD reference;
+  - PBMC3K H5AD;
+  - the SpatialData Visium store;
+  - an OME-TIFF and a QPTIFF image.
+
+#### 15.0 Foundations
+
+These change almost nothing on screen, but every later step depends on them.
+
+- [ ] **A. Dark tokens.** Add `tokens.css` with the dark theme in
+      [Visual System](#visual-system), then convert the 12 stylesheets one file at
+      a time, replacing about 440 hard-coded colours. (M)
+  - This is where the theme changes: the panel, inputs, chips and status
+    panels go dark and opaque.
+  - Layout, sizes and copy stay as they are.
+  - Set `color-scheme: dark` and a dark `theme-color` in `index.html`, so
+    native controls and scrollbars match.
+- [ ] **B. Primitives** in `src/components/ui/`: Button, IconButton,
+      Segmented, Select, Checkbox, Switch, Slider, NumberField, Chip (removable),
+      Disclosure, Popover, Tooltip, Kbd, Card, Drawer, Sheet. (M)
+  - Each one requires `title` in its props type.
+  - Extend `nativeTitleAudit.test.ts` to check these components and
+    `<summary>`; it currently checks only native elements.
+  - No existing UI is migrated in this PR.
+- [ ] **C. One source for colour scales.** Generate gradient CSS from the
+      stops in `rendering/deckLayerColors.ts` with `colorScaleGradient(scale)`.
+      Replace the hand-copied gradients in `transcript-controls.css:212–398`. (S)
+- [ ] **D. Test indirection.** Replace `openHudTab`
+      (`src/test/appTestHarness.ts:171`) with `openControls(area)`. Area names
+      follow the new homes and map to today's tabs, and E2E gets the same helper.
+      This touches 75 calls and changes no assertions, so the later shell swap only
+      has to edit the helper. (S)
+- [ ] **E. Defaults constant.** Add `DEFAULT_SHAREABLE_STATE`, taken from the
+      same defaults that `useAppDomainState.ts` uses, plus a test that checks they
+      agree. 15.1-L needs it. (S)
+- [ ] **F. Accessibility check.** Add `@axe-core/playwright` (pinned, dev
+      only) and run axe in the E2E smoke tests on the main states: the empty
+      viewer, a loaded fixture, and each tab open. (S)
+  - Today's violations go in a baseline file, `tests/e2e/axe-baseline.json`,
+    keyed by rule and target.
+  - A new violation fails the test, and the baseline only shrinks.
+
+#### 15.1 Behaviour Fixes In The Current Layout
+
+These go into the existing tabs first, so users benefit before the re-layout.
+They are independent unless a note says otherwise.
+
+- [ ] **A. `Colour by` (F1, F9).** Add `'gene-expression'` to
+      `ObservationColorMode` (`rendering/cellStyling.ts:5`). (M)
+  - These places should follow the mode instead of `geneExpressionActive`:
+    - `cellPointStyle.ts:26–43`
+    - the boundary styling (`ViewerCore.tsx:689–718`, `App.tsx:754–761`)
+    - the grid styling (`ViewerCore.tsx:627–633`, `App.tsx:773–779`)
+    - the fill-opacity boost (`deckLayers.ts:237–245`)
+  - Picking a gene sets the mode. Removing the last gene restores the previous
+    mode. `Cell color` shows "Gene expression".
+  - The manifest's `colorCellsBy` enum gains `gene-expression`
+    (`public/schemas/explorer-manifest.v1.json:408`, parser, schema test).
+  - Version 1 links that have `genes=` resolve to gene mode, which matches the
+    old behaviour.
+  - The score select appears only with 2 or more genes, labelled "Combine
+    genes".
+- [ ] **B. Gene search (F10).** (S)
+  - Rank matches exact, then prefix, then alias prefix, then substring, in
+    `filterGeneOptions` (`genes/geneControlsModel.ts:268–300`).
+  - Give chips an × with `title="Remove {gene}"`, which E2E already looks for.
+  - Clear the query after a pick.
+  - Show "{gene} is already selected" rather than "No matching genes"
+    (`GeneOptionList.tsx:21`).
+  - Apply the same to the transcript feature search
+    (`AppTranscriptHudPanel.tsx:157`).
+- [ ] **C. Canvas legend (F2, F9; needs A).** `ViewerLegend` sits in the
+      bottom-left stack as a sibling of `MemoDeckGL`, never inside it. (M)
+  - Inputs: colour mode; gene names, score mode, scale and
+    `geneExpressionScaleMax`; annotation colours, counts and visibility; the
+    metadata track's min and max; the density scale and maximum; the point
+    colour mode (`useViewerLayerData.ts:150–246`).
+  - Continuous scales show a title, a gradient, and min/max with units.
+  - Categories show the first 12 with visibility toggles, then "+k more".
+  - It can be collapsed.
+  - Extend the no-redraw test (`ViewerCore.test.tsx:1939–1962`) to cover it.
+- [ ] **D. Selected-cell highlight (F3).** (S–M)
+  - For points, spots and bins, draw an SVG ring positioned with
+    `rawDataPointToScreen` (`viewerMeasurements.ts:38`), so the deck does not
+    redraw.
+  - Add a memoised outline layer only while boundaries are drawn, keyed by
+    cell ID.
+  - A click opens the Cell tab until the cards arrive in 15.2. Esc clears the
+    selection.
+- [ ] **E. Load errors (F5).** At `useDatasetLifecycle.ts:1594`, use
+      `detection.checked` (`datasetFactory.ts:1181–1214`) to raise specific
+      errors. (M)
+  - The kinds are:
+    - not found (404, or 403 from a bucket that hides listings);
+    - access denied;
+    - blocked by CORS (a TypeError on HEAD);
+    - unsupported layout, listing what was found.
+  - Add these kinds to `errors/loadErrorModel.ts:1–10`, each with a title and
+    a next step.
+  - The error card offers Run diagnostics.
+- [ ] **F. Keep the current dataset until the new one loads (F4).** This is its
+      own PR and carries the most test work. (L)
+  - Add a pending-load slot next to `loadState`.
+  - Move the wipe (`useDatasetLifecycle.ts:912–1030`) and
+    `onBeforeDatasetLoad` (`App.tsx:1924–1934`) to the success points (about
+    :1123, :1462, :1540, :1677).
+  - Tie `viewResetKey` (`App.tsx:827`) and the platform adapter to the loaded
+    dataset.
+  - On failure (:1705–1745), keep the old dataset and show an error toast.
+- [ ] **G. Tools (F12).** (M)
+  - Replace `magicLensActive`, `measurementEnabled` and `roiMode`
+    (`useAppDomainState.ts:238, 366, 395`) with
+    `activeTool: 'pan' | 'box' | 'lasso' | 'measure' | 'magic-lens'`.
+  - One setter enforces that only one is on. It replaces the logic in
+    `App.tsx:2993–3062`, `AppLayerHudPanel.tsx:230–240` and
+    `useMagicLensWorkflow.ts:407–420`.
+  - Esc cancels an unfinished shape and returns to Pan.
+  - Add `onPointerCancel` to the ROI layer.
+  - Clear `roiDraft` when the tool changes.
+  - Add an `is-drawing` cursor class.
+  - Return to Pan after a shape is finished.
+  - Keep reading `lens=` from URLs.
+- [ ] **H. Developer information (F8).** (S)
+  - Show the Layers header lines (`LayerHudPanel.tsx:152–161`) and the zoom
+    number (`ViewerCore.tsx:1773–1787`) only in debug mode.
+  - Merge Matrix warning and Fallbacks into one "Data access notes (n)" item.
+  - Collapse the Log by default.
+  - Show "HUD tab:" log lines only in debug mode.
+- [ ] **I. Annotation sets (F14).** (M)
+  - The Xenium default becomes `graphclust` (or the first group), not All.
+  - Show one list per set, with the size bars merged into the rows: swatch,
+    visibility, name without the set prefix, count and %.
+  - For H5AD and SpatialData, put columns that look like IDs
+    (`*_ontology_term_id`, `observation_joinid`, or more than 500 categories)
+    under "More columns".
+  - Leave hidden off-tissue spots out of the counts.
+- [ ] **J. Selected-gene transcript density (F11).** This reopens
+      [Appendix A](#appendix-a-reconciliation-notes) row 10, by user decision on 2026-11-11.
+      (M–L)
+  - When the filter is Selected genes and at least one gene is chosen, request
+    density from `/density/gene`. The reader already does this
+    (`data/transcriptZarr.ts:300–325`); the workflow switches it off by
+    passing `EMPTY_GENE_LIST` (`useTranscriptWorkflow.ts:511`). The request
+    key already includes the gene names.
+  - With All features, or with no genes chosen, keep the `/grids` density for
+    all transcripts, labelled "All transcripts".
+  - Normalise the colour to the selected genes' maximum (`scaleMax`). The
+    legend reads, for example, "SNAP25 transcripts per 50 µm bin", and the
+    hover card shows selected-gene counts.
+  - Base Auto's switch from density to points on the selected genes'
+    count in view, as Atera already does.
+  - Measure time and memory on the demo (5,001 genes) with 1, 8 and 25 genes.
+    Set a gene limit from those numbers. Above the limit, say why, and keep
+    showing the points.
+  - Show the point budget as a meter ("28,724 of 100,000 points", with Edit
+    max) instead of number fields.
+  - Update `docs/modalities/xenium.md`, and resolve the **Reopened** marks on
+    Appendix A row 10 and on the Phase 5.1 note.
+- [ ] **K. Type and contrast (F6, F7, F20).** (M)
+  - Remove the 48 `text-transform: uppercase` rules.
+  - Use 12 px for control text and 11 px for captions.
+  - Replace the native Visium select and the default slider with the
+    primitives.
+  - Use the unit formatter in tooltips (`viewerHoverTooltips.tsx`), Cell info
+    and the ROI summary.
+  - Add a unit test checking every dark token pair used for text and UI parts:
+    at least 4.5:1 for text and 3:1 for UI parts.
+  - Remove the colour-contrast entries from the axe baseline (15.0-F).
+- [ ] **L. Sharing (F16; needs 15.0-E).** (M)
+  - Add a Copy link button (in the Dataset tab now, the top bar later) and a
+    "Link copied" toast.
+  - Leave defaults out and set `xv=2`.
+  - Take `dataset=` from the loaded dataset, not from the box
+    (`AppDatasetHudPanel.tsx:126`).
+  - Add `groups=`.
+  - Version 1 links still parse unchanged; test this.
+- [ ] **M. Title and favicon (F19).** Set the page title to "{dataset} ·
+      Spatial Omics Explorer" and add an SVG favicon in `public/`. (S)
+
+#### 15.2 Shell Re-Layout
+
+The new shell is built behind `?shell=2` so the app keeps working after every
+PR. That flag is for development only. No tutorials depend on the current tabs,
+so step J makes the new shell the default and deletes the old one in the same
+release, with no transition period. Old `tab=` links keep working through the
+mapping in H.
+
+- [ ] **A. Section models.** Split the eight HUD panels into blocks that each
+      take a view model, all built in App: `useImageSectionModel`,
+      `useCellsSectionModel`, `useTranscriptsSectionModel`,
+      `useAnnotationsSectionModel` and `useDatasetInfoModel`. (L)
+  - The new shell then takes about five models instead of 30–43 separate
+    props (Layers 43, Transcripts 43, Annotations 35).
+  - This is a refactor only.
+- [ ] **B. Top bar.** (M)
+  - The dataset name with its menu, the summary chip and ⓘ.
+  - Tools are tied to `activeTool`, and their tooltips show the shortcut.
+  - Share, Help and Settings sit on the right.
+- [ ] **C. Layer panel.** (L)
+  - An accordion of Image, Cells/Spots/Bins, Transcripts and Annotations.
+  - Each header holds a visibility checkbox and a one-line state.
+  - Sections stay mounted.
+  - Platform gating moves from `App.tsx:1152–1168` into `platformAdapter.ts`
+    as capabilities.
+  - Loading tasks are tagged by section instead of by tab
+    (`appRuntimeModel.ts:103–310`).
+  - The panel can collapse to a 40 px strip.
+- [ ] **D. Cards.** (L)
+  - Cards stack at the top left:
+    - Selection: cells, Visium HD bins, and the image-geometry variant.
+    - Cell or Bin: `CellInfoPanel`, `GridCellInfoPanel`.
+    - Transcript: the pinned transcript.
+    - Magic Lens: the cursor summary.
+  - Magic Lens moves as D14 describes. The tool takes the cursor scope,
+    "Summarise view" in its popover takes the viewport scope, and the
+    Selection card's Transcripts tab takes the ROI scope. `MagicLensHudPanel`
+    is retired.
+  - `Min QV` is hidden until it changes results (F21).
+- [ ] **E. Fit and navigation (F18).** (M)
+  - `createOverviewViewState` takes the real viewport size and the space taken
+    by the top bar and open panel, instead of 720 px.
+  - Add `zoomToBbox`, which the cards' Go to buttons need.
+  - Add zoom −, + and Fit buttons. `F` fits; Home still returns to the initial
+    view.
+- [ ] **F. Info drawer.** (M)
+  - Sections: Dataset summary, About, View options, Open another dataset (with
+    boundary limit under Advanced), and Diagnostics.
+  - An issue count badge shows on ⓘ.
+- [ ] **G. Embedding (F23).** A floating, resizable panel opened from Cells ›
+      Show embedding, using the existing `EmbeddingPanel`. Selection sync stays as
+      it is. (M)
+- [ ] **H. URL panel state.** Add `panel=`, `card=` and `tool=`, and map
+      version 1 `tab=` values. (S)
+  - dataset → info drawer
+  - layers → image
+  - genes → cells
+  - transcripts → transcripts
+  - annotations → cells
+  - roi → `tool=box`
+  - cell → `card=cell`
+  - magic-lens → `tool=magic-lens`
+- [ ] **I. Narrow screens.** Under 860 px: the overflow menu, the bottom sheet,
+      and cards as sheets. (M)
+- [ ] **J. Switch over.** (M)
+  - Make the new shell the default.
+  - Delete `ControlHudShell`, `AppControlHud`, `CONTROL_HUD_TABS`,
+    `control-hud.css` and the `?shell=` flag.
+  - Rewrite `docs/ui-reference.md`.
+
+#### 15.3 Start Screen, Help, Recovery
+
+- [ ] **A. Start screen with examples fetched from GitHub (F15).** (M)
+  - A URL field and an Open button.
+  - **Example gallery.** Fetch the index when the start screen opens, from
+    `EXAMPLES_INDEX_URL`.
+    - The default is
+      `https://raw.githubusercontent.com/cellgeni/explorer/main/examples/index.json`.
+    - A build can override it with `VITE_EXAMPLES_INDEX_URL`. This is the
+      app's first use of `import.meta.env`, so add the type declaration.
+    - Give the request a 5 s timeout and parse it with
+      `parseExamplesIndex`. That parser accepts `version: 1`, skips invalid
+      entries, ignores unknown fields, and renders text only, never HTML.
+    - Keep the result for the session in `sessionStorage`, wrapped in
+      try/catch.
+    - Each card shows name, platform, description and source/licence.
+    - A card opens `?dataset=<manifestUrl>` on the current origin, never the
+      entry's `viewerUrl`, so self-hosted copies stay on their own host.
+    - If the fetch fails, show "Examples couldn't be loaded from GitHub" with
+      Retry, plus the built-in demo dataset (`DEMO_DATASET_URL`). The start
+      screen is never empty.
+  - Up to 8 recent datasets, which can be removed. They are stored in
+    `localStorage`, wrapped in try/catch.
+  - A "What can I open?" link.
+  - The demo is no longer prefilled in the URL box.
+  - `?dataset=` links skip the start screen.
+- [ ] **B. Help (F22).** (S)
+  - A `?` popover listing the shortcuts and linking to the user guide and
+    dataset docs.
+  - The list comes from the same `SHORTCUTS` table the key handlers use.
+  - Add info tooltips for LOD, QV, Boundary limit and Combine genes.
+- [ ] **C. Undo (F17).** (M)
+  - Show an Undo toast for 8 s after: Clear selection; delete a selection,
+    shape or class; remove an annotation set; Clear GeoJSON; remove a gene
+    set.
+  - Opening another dataset adds a browser history entry so that Back returns
+    to the previous one. Today `useShareableUrlHash` only replaces the entry.
+- [ ] **D. Cancel (F17).** (M)
+  - Add a Cancel button to tasks that can be cancelled: ROI genes, exact
+    transcripts, embeddings, Magic Lens, cell details, diagnostics.
+  - Each task maps to its abort ref (`App.tsx:512–532`) and resets its state
+    to idle, so it leaves the list.
+  - Show a percentage where it is known.
+
+#### 15.4 Selections And Analysis
+
+Can be skipped after 15.3 ships if time is short.
+
+- [ ] **A. Multiple selections (F13).** (L)
+  - List selections in Annotations by class, each with rename, colour,
+    visibility, delete and Go to.
+  - A new drawing adds a selection, and the card shows the active one.
+  - `roi=` stores the active selection.
+- [ ] **B. Enriched genes (F13).** (L, with a method note in the docs)
+  - The Selection card's Genes tab ranks genes by log2 fold change of mean
+    expression inside the selection versus a matched sample outside it, reusing
+    the ROI warm-up sample.
+  - It shows the % of cells expressing inside and outside, with a minimum %
+    filter. "Most abundant" stays as a second sort.
+  - Clicking a gene sets `Colour by` to Gene expression.
+- [ ] **C. Transcript gene legend.** Each gene gets a colour swatch, an eye
+      toggle and its count, in the Transcripts section and in the legend, as in 10x
+      Explorer. Colours can be edited. (M)
+- [ ] **D. Minimap.** (M)
+  - Draw the coarsest image pyramid level with a small `TileCache` and
+    `drawMorphologyTileChannels` (`rendering/morphologyCanvas.ts:62`).
+  - Use `flatImage` for Visium, and the cell extent when there is no image.
+  - Draw the viewport rectangle from `viewportBbox`. Click or drag to move the
+    view.
+- [ ] **E. µm axes.** An optional setting. (S)
+
+#### 15.5 Close-Out
+
+- [ ] Re-run the eight review tasks on the Xenium demo and Census Visium at
+      1440, 1024 and 390 px, and record the results in the phase record.
+- [ ] Accessibility pass:
+  - the axe baseline from 15.0-F is empty;
+  - a keyboard-only run of tasks 1–5;
+  - focus order;
+  - ARIA for the accordion, drawer and cards.
+- [ ] Record the outcome in this phase, and update the out-of-date test
+      inventory in [§9](#9-testing-and-ci).
+
+#### Testing
+
+- **Unit tests.** Each new model gets pure tests: colour-mode resolution, gene
+  ranking, error classification, version 1 → version 2 share state, `tab=`
+  mapping, the shortcut table, fit with panel space, and contrast across token
+  pairs.
+- **Component tests.** Sections and cards are rendered directly, as the
+  current panel tests already do. Those tests break only when a label changes.
+- **`App.test.tsx`.** 45 of its 57 tests open tabs. After 15.0-D they all go
+  through `openControls()`, so the shell swap only edits that helper.
+- **E2E.**
+  - All 13 tests in `app.spec.ts` click tabs. The 7 smoke tests stay in CI.
+  - Add one test per review task (tasks 1–5) on fixtures. The axe check from
+    15.0-F runs in every smoke test.
+  - Live tests stay nightly.
+  - `examples.spec.ts` keeps its status-text checks.
+  - Smoke tests serve the examples index from the local
+    `examples/index.json` through `page.route`. They also cover the "couldn't
+    be loaded" fallback, so CI never depends on GitHub. One nightly live test
+    fetches the real index.
+  - A live Xenium test checks that selected-gene density names the gene in
+    its legend and hover card.
+- **Redraw guard.** Every new canvas overlay goes in the no-redraw test.
+- **Screenshots.** Take them for review in PRs: start screen, each section,
+  and each card at 1440×900. Use headless Chromium with
+  `--use-angle=metal --enable-gpu`, which gets the real GPU on Apple Silicon.
+  They are not pixel baselines, because GPU output varies.
+
+#### Docs To Update
+
+Each PR updates the docs it affects. The full list:
+
+- `docs/ui-reference.md`: rewrite by area (top bar, sections, cards, canvas,
+  info drawer, start screen, settings, URL parameters) in 15.2-J. Edit it
+  piece by piece before then.
+- `docs/user-guide.md`: rewrite the task walkthroughs for the new layout.
+- `docs/dataset-manifest.md`, plus `public/schemas/explorer-manifest.v1.json`
+  ("Dataset tab" at :26, :146, :381; control names at :409–426; the
+  `colorCellsBy` enum).
+- `docs/architecture.md`: shell structure and platform gating.
+- Control names in `docs/modalities/*.md`, `docs/host-your-own-data.md`,
+  `docs/image-only-and-geojson.md` and `docs/zchunkstore.md`.
+- `README.md:135`, `docs/README.md:10`, and `examples/README.md:29`. The
+  examples README should also say that the app reads `index.json` from `main`
+  at runtime.
+- `docs/deploy-to-s3.md`: the start screen fetches from
+  raw.githubusercontent.com, and `VITE_EXAMPLES_INDEX_URL` can change that.
+- `docs/modalities/xenium.md`: selected-gene density.
+- This plan: the phase record, plus Appendix A row 10 and the Phase 5.1 note
+  once 15.1-J ships.
+
+#### Risks
+
+| Risk                                                                 | Effect                                                                | Mitigation                                                                                                      |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| New overlay props make `DeckGL` redraw                               | About 9 s per interaction in headless tests, and stutter on real GPUs | Put overlays next to `MemoDeckGL`, not inside it; memoise `controller` and `layers`; extend the no-redraw test  |
+| Moving panels makes prop lists even longer                           | `App.tsx` gets harder to change                                       | Build the section models (15.2-A) before the new shell                                                          |
+| Test churn (about 96 assertions depend on tabs, 228 on button names) | Slow PRs                                                              | Add the `openControls` helper first; keep button names; change casing only in CSS                               |
+| Breaking share links or manifests                                    | Saved views stop working                                              | Keep the version 1 parser; add mapping tests; only add to the manifest enum                                     |
+| 15.1-F changes how datasets load                                     | Load regressions                                                      | Its own PR, with tests on each platform and a live E2E run                                                      |
+| Seven platforms with different controls                              | A platform's control gets missed                                      | Run the platform checklist on each PR; gate on capabilities                                                     |
+| 15.4 grows                                                           | The redesign is delayed                                               | 15.4 is optional after 15.3                                                                                     |
+| Wrapper components dodge `nativeTitleAudit`                          | Unlabelled controls get through                                       | Extend the audit to the primitives (15.0-B)                                                                     |
+| The examples fetch fails (GitHub down, offline, blocked network)     | The start screen has no examples                                      | 5 s timeout; offer the demo dataset and a Retry; keep the result for the session; CI routes the request locally |
+| GitHub's raw cache (about 5 min) or a bad `index.json` on `main`     | New examples appear late, or the gallery breaks                       | A tolerant parser that skips bad entries; `npm run examples -- --check` stays in CI                             |
+| Selected-gene density is slow with many genes                        | Slow panning with large gene sets                                     | Set a gene limit from the 15.1-J measurements; above it, keep showing points and say why                        |
+
+#### Order And Size
+
+| Milestone                  | Contents                                 | Size            | Fixes                                          |
+| -------------------------- | ---------------------------------------- | --------------- | ---------------------------------------------- |
+| M1 — Honest canvas         | 15.0 A–F; 15.1 A, B, C, D, E, G, H, K, M | about 7 weeks   | All High except F4; F8, F9, F10, F12, F19, F20 |
+| M2 — Safe loading, sharing | 15.1 F, I, J, L                          | about 4 weeks   | F4, F11, F14, F16                              |
+| M3 — New shell             | 15.2 A–J                                 | about 8–9 weeks | F3 (cards), F8 (drawer), F18, F21, F23         |
+| M4 — Getting started       | 15.3 A–D                                 | about 2 weeks   | F15, F17, F22                                  |
+| M5 — Selections            | 15.4 A–E                                 | about 4 weeks   | F13                                            |
+
+- **Critical path:** 15.0-D → 15.1-A → 15.1-C → 15.2-A → 15.2-C → 15.2-J.
+- **Can run in parallel:** 15.1-E and F (loading) alongside 15.1-A to D
+  (colour and legend). 15.1-J (density) can start at any time, but its legend
+  text needs 15.1-C.
+- **Dark theme timing:** the dark theme arrives with the tokens in 15.0-A, so
+  users see it in the first release, before the layout changes.
+- **Releases:** tag a release after each milestone. M1 alone fixes most of
+  what the review found.
+- **Effort:** these sizes add up to about 6 months for one developer working
+  without help. M1 and M2 together are about 40% of the effort.
+
 ---
 
 ## 7. Application Structure And Refactor Record
@@ -2119,6 +2811,9 @@ Sequencing:
       rendering cost, without behaviour changes.
 - [ ] Hosted Visium HD optimization: profiling, segmentation streaming, Feature
       Slice ranges, memory, and bundles.
+- [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
+      in five milestones, starting with the dark tokens and the `Colour by`
+      fix.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
@@ -2128,7 +2823,8 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 - [x] H5AD and SpatialData: read boolean `obs` columns on the reference backend
       (0/1 tracks, 2026-11-09).
 - [ ] Visium HD: low-res tissue image fallback.
-- [ ] Magic Lens: make `Min QV` change results, or hide it.
+- [ ] Magic Lens: make `Min QV` change results, or hide it. Phase 15.2-D
+      hides it until it works.
 - [ ] Xenium diagnostics: check the image chosen from `experiment.xenium`
       instead of `morphology.ome.tif` (a dataset manifest's image is already
       checked), plus `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, and
@@ -2208,54 +2904,55 @@ until needed; cell-major matrix sidecars; papaparse.
 
 Where the sources conflicted, and what this document keeps.
 
-| #   | Topic                            | Earlier record                                                                             | Later record (kept)                                                                 |
-| --- | -------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| 1   | DuckDB `httpfs`                  | `PLAN.md`: `LOAD httpfs` is redundant; don't rely on it                                    | Phase 5.1: load `httpfs` at bootstrap, non-fatal on older bundles                   |
-| 2   | `transcripts.zarr.zip`           | `PLAN.md`: drop it; `density/` is only an optional accelerator                             | Phase 5.1: it is the native LOD and exact-point source                              |
-| 3   | Multi-channel compositing        | `PLAN.md`: Viv `XRLayer`                                                                   | Phase 3: Canvas2D additive compositing                                              |
-| 4   | Zustand scope                    | `PLAN.md`: shared store for React and the deck.gl loop                                     | Refactor: viewer store only; React domain state                                     |
-| 5   | Request orchestration location   | Refactor decisions: async orchestration stays in `App.tsx`                                 | `OPTIMIZATIONS.md`: workflow hooks own requests                                     |
-| 6   | Phase order around 5.1           | "Begin Phase 5.1 only after" the feature-fix and optimization passes                       | Phase 5.1 began after the correctness pass; the optimization pass was deferred      |
-| 7   | Overview points                  | Phase 1: bin points at low zoom                                                            | Phase 4: no CPU aggregation; all viewport-clipped centroids; Phase 5 budget caps    |
-| 8   | Expression limits                | Analysis slice: 5,000 visible cells                                                        | Phase 4: `Auto LOD` exact below 5,000; `Exact region` up to 50,000                  |
-| 9   | Boundary limit default           | Phase 1: 5,000                                                                             | Phase 5: set by the performance budget (values not recorded)                        |
-| 10  | Transcript selected-gene density | Option C: `/density/gene` for selected features; feature circles                           | 2026-06-06: only `/grids` density; filters apply in Exact                           |
-| 11  | Magic Lens data path             | Phase 5: exact-circle transcript scans                                                     | Feature-fix: ROI cell query plus matrix gene stats                                  |
-| 12  | ROI gene warmup                  | Per viewport                                                                               | Once per dataset                                                                    |
-| 13  | ROI gene fallback                | Phase 4: `transcripts.parquet` aggregation                                                 | Feature-fix: CSC Zarr, then H5; nothing else by default                             |
-| 14  | Visium HD expression             | Paused, then 64 MB H5 budget guard                                                         | Feature Slice lazy-range worker for overlays; lazy-range matrix worker for profiles |
-| 15  | 2 µm tier                        | Disabled → env-var budget → runtime `2 µm budget` field                                    | Budget fields removed; all rows unless a caller caps                                |
-| 16  | `Mapping rows` field             | `UPDATED_PLAN.md` says it was added, in an entry placed _after_ the one that removes it    | Removed. The file is not in date order; the removal is the final state              |
-| 17  | Segmentation GeoJSON budget      | 64 MB full-file limit                                                                      | No default limit; streaming by bounding box                                         |
-| 18  | Status header vs sequence        | "Phase 5.1 complete" (dated 2026-06-07) and "optimization pass remains a future follow-up" | Both kept: 5.1 done, optimization open                                              |
-| 19  | "Keep `PLAN.md` unchanged"       | Phases 5.1 and 7 asked for new phases to go only in `UPDATED_PLAN.md`                      | Moot after this merge                                                               |
-| 20  | `OPTIMIZATIONS.md` item numbers  | Progress notes mix the 4-step sequence numbers with the 14-item list numbers               | This document uses names and the 14-item numbering                                  |
-| 21  | Persistent cache medium          | `PLAN.md`: OPFS or IndexedDB                                                               | IndexedDB only                                                                      |
-| 22  | H5AD remote reads                | Product decision: worker-backed Range reader                                               | Not done; 300 MiB whole-file gate plus kerchunk reference (still open)              |
-| 23  | Expression LOD                   | Phase 4: `Auto LOD` exact below 5,000 visible cells; samples thin all cells                | November 2026: every cell up to 500,000 cells; samples keep every expressing cell   |
-| 24  | `Exact region` above the limit   | Phase 4: wait instead of sampling                                                          | November 2026: sample, keeping every expressing cell                                |
-| 25  | Low-zoom expression marks        | Phase 4: fixed data-space bins                                                             | `0ed880d`: every expressing cell drawn at every zoom                                |
-| 26  | Overview points                  | Phase 4: all viewport-clipped centroids                                                    | `bf6ebc8`: GPU-resident cells with a fixed-rank sample capped by the budget         |
-| 27  | Boundary limit values            | Phase 5: "set by the performance budget"                                                   | 2,500 (compact) or 50,000; range 1–100,000; also loads at zoom ≥ −0.25              |
-| 28  | Phase 8 status                   | Merged plan: nothing checked                                                               | Shipped in `f7ff9c5` on 2026-07-09; closed                                          |
-| 29  | COOP/COEP in production          | Docs disagreed (required vs only for threaded WASM)                                        | Recommended for parity; not required by the current build                           |
-| 30  | Items marked done in the records | H5AD tracks and workers, Visium HD low-res, Magic Lens QV, diagnostics, image fallback     | **Reopened** after the 2026-11-08 review                                            |
+| #   | Topic                            | Earlier record                                                                             | Later record (kept)                                                                               |
+| --- | -------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| 1   | DuckDB `httpfs`                  | `PLAN.md`: `LOAD httpfs` is redundant; don't rely on it                                    | Phase 5.1: load `httpfs` at bootstrap, non-fatal on older bundles                                 |
+| 2   | `transcripts.zarr.zip`           | `PLAN.md`: drop it; `density/` is only an optional accelerator                             | Phase 5.1: it is the native LOD and exact-point source                                            |
+| 3   | Multi-channel compositing        | `PLAN.md`: Viv `XRLayer`                                                                   | Phase 3: Canvas2D additive compositing                                                            |
+| 4   | Zustand scope                    | `PLAN.md`: shared store for React and the deck.gl loop                                     | Refactor: viewer store only; React domain state                                                   |
+| 5   | Request orchestration location   | Refactor decisions: async orchestration stays in `App.tsx`                                 | `OPTIMIZATIONS.md`: workflow hooks own requests                                                   |
+| 6   | Phase order around 5.1           | "Begin Phase 5.1 only after" the feature-fix and optimization passes                       | Phase 5.1 began after the correctness pass; the optimization pass was deferred                    |
+| 7   | Overview points                  | Phase 1: bin points at low zoom                                                            | Phase 4: no CPU aggregation; all viewport-clipped centroids; Phase 5 budget caps                  |
+| 8   | Expression limits                | Analysis slice: 5,000 visible cells                                                        | Phase 4: `Auto LOD` exact below 5,000; `Exact region` up to 50,000                                |
+| 9   | Boundary limit default           | Phase 1: 5,000                                                                             | Phase 5: set by the performance budget (values not recorded)                                      |
+| 10  | Transcript selected-gene density | Option C: `/density/gene` for selected features; feature circles                           | 2026-06-06: only `/grids` density; filters apply in Exact. **Reopened** 2026-11-11 (Phase 15.1-J) |
+| 11  | Magic Lens data path             | Phase 5: exact-circle transcript scans                                                     | Feature-fix: ROI cell query plus matrix gene stats                                                |
+| 12  | ROI gene warmup                  | Per viewport                                                                               | Once per dataset                                                                                  |
+| 13  | ROI gene fallback                | Phase 4: `transcripts.parquet` aggregation                                                 | Feature-fix: CSC Zarr, then H5; nothing else by default                                           |
+| 14  | Visium HD expression             | Paused, then 64 MB H5 budget guard                                                         | Feature Slice lazy-range worker for overlays; lazy-range matrix worker for profiles               |
+| 15  | 2 µm tier                        | Disabled → env-var budget → runtime `2 µm budget` field                                    | Budget fields removed; all rows unless a caller caps                                              |
+| 16  | `Mapping rows` field             | `UPDATED_PLAN.md` says it was added, in an entry placed _after_ the one that removes it    | Removed. The file is not in date order; the removal is the final state                            |
+| 17  | Segmentation GeoJSON budget      | 64 MB full-file limit                                                                      | No default limit; streaming by bounding box                                                       |
+| 18  | Status header vs sequence        | "Phase 5.1 complete" (dated 2026-06-07) and "optimization pass remains a future follow-up" | Both kept: 5.1 done, optimization open                                                            |
+| 19  | "Keep `PLAN.md` unchanged"       | Phases 5.1 and 7 asked for new phases to go only in `UPDATED_PLAN.md`                      | Moot after this merge                                                                             |
+| 20  | `OPTIMIZATIONS.md` item numbers  | Progress notes mix the 4-step sequence numbers with the 14-item list numbers               | This document uses names and the 14-item numbering                                                |
+| 21  | Persistent cache medium          | `PLAN.md`: OPFS or IndexedDB                                                               | IndexedDB only                                                                                    |
+| 22  | H5AD remote reads                | Product decision: worker-backed Range reader                                               | Not done; 300 MiB whole-file gate plus kerchunk reference (still open)                            |
+| 23  | Expression LOD                   | Phase 4: `Auto LOD` exact below 5,000 visible cells; samples thin all cells                | November 2026: every cell up to 500,000 cells; samples keep every expressing cell                 |
+| 24  | `Exact region` above the limit   | Phase 4: wait instead of sampling                                                          | November 2026: sample, keeping every expressing cell                                              |
+| 25  | Low-zoom expression marks        | Phase 4: fixed data-space bins                                                             | `0ed880d`: every expressing cell drawn at every zoom                                              |
+| 26  | Overview points                  | Phase 4: all viewport-clipped centroids                                                    | `bf6ebc8`: GPU-resident cells with a fixed-rank sample capped by the budget                       |
+| 27  | Boundary limit values            | Phase 5: "set by the performance budget"                                                   | 2,500 (compact) or 50,000; range 1–100,000; also loads at zoom ≥ −0.25                            |
+| 28  | Phase 8 status                   | Merged plan: nothing checked                                                               | Shipped in `f7ff9c5` on 2026-07-09; closed                                                        |
+| 29  | COOP/COEP in production          | Docs disagreed (required vs only for threaded WASM)                                        | Recommended for parity; not required by the current build                                         |
+| 30  | Items marked done in the records | H5AD tracks and workers, Visium HD low-res, Magic Lens QV, diagnostics, image fallback     | **Reopened** after the 2026-11-08 review                                                          |
 
 ## Appendix B: Source Map
 
-| Section in this document   | Source                                                                                                           |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| 1. Purpose, POC            | `PLAN.md` intro, §0; reference URLs from `PLAN.md` and `UPDATED_PLAN.md`                                         |
-| 2. Working rules           | `PLAN.md` "How to use", conventions, DoD, skills; `UPDATED_PLAN.md` skills, refactor decisions, current sequence |
-| 3. Status                  | `UPDATED_PLAN.md` stage assessment and phase checklists; `OPTIMIZATIONS.md`                                      |
-| 4. Architecture decisions  | `PLAN.md` §1; amendments from `UPDATED_PLAN.md` Phases 1–7 and boundary decision                                 |
-| 5. Data contracts          | `PLAN.md` §2; `UPDATED_PLAN.md` Phase 5.1, 6, 7, 8 facts                                                         |
-| 6. Phase records           | `PLAN.md` §3; `UPDATED_PLAN.md` running TODOs, notes, closeouts, feature-fix pass, Phases 5.1–8                  |
-| 7. Refactor record         | `UPDATED_PLAN.md` app refactor decisions; `OPTIMIZATIONS.md`                                                     |
-| 8. Hosting                 | `PLAN.md` §4                                                                                                     |
-| 9. Testing                 | `PLAN.md` §5; `UPDATED_PLAN.md` test coverage assessment; 2026-11-08 repository count                            |
-| 10. Tech stack             | `PLAN.md` §6, with outcomes from `UPDATED_PLAN.md`                                                               |
-| 11. Risks                  | `PLAN.md` §7                                                                                                     |
-| 12. Open items             | Every unchecked item in all three files, plus the 2026-11-08 review                                              |
-| Phases 8–10, November work | Commits `f7ff9c5` to `0ed880d` (2026-07-09 to 2026-11-08), the code, and `docs/`                                 |
-| Reopened items, known gaps | The 2026-11-08 review (`PLAN_VS_DOCS.md`), checked against the code                                              |
+| Section in this document   | Source                                                                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Purpose, POC            | `PLAN.md` intro, §0; reference URLs from `PLAN.md` and `UPDATED_PLAN.md`                                                            |
+| 2. Working rules           | `PLAN.md` "How to use", conventions, DoD, skills; `UPDATED_PLAN.md` skills, refactor decisions, current sequence                    |
+| 3. Status                  | `UPDATED_PLAN.md` stage assessment and phase checklists; `OPTIMIZATIONS.md`                                                         |
+| 4. Architecture decisions  | `PLAN.md` §1; amendments from `UPDATED_PLAN.md` Phases 1–7 and boundary decision                                                    |
+| 5. Data contracts          | `PLAN.md` §2; `UPDATED_PLAN.md` Phase 5.1, 6, 7, 8 facts                                                                            |
+| 6. Phase records           | `PLAN.md` §3; `UPDATED_PLAN.md` running TODOs, notes, closeouts, feature-fix pass, Phases 5.1–8                                     |
+| 7. Refactor record         | `UPDATED_PLAN.md` app refactor decisions; `OPTIMIZATIONS.md`                                                                        |
+| 8. Hosting                 | `PLAN.md` §4                                                                                                                        |
+| 9. Testing                 | `PLAN.md` §5; `UPDATED_PLAN.md` test coverage assessment; 2026-11-08 repository count                                               |
+| 10. Tech stack             | `PLAN.md` §6, with outcomes from `UPDATED_PLAN.md`                                                                                  |
+| 11. Risks                  | `PLAN.md` §7                                                                                                                        |
+| 12. Open items             | Every unchecked item in all three files, plus the 2026-11-08 review                                                                 |
+| Phases 8–10, November work | Commits `f7ff9c5` to `0ed880d` (2026-07-09 to 2026-11-08), the code, and `docs/`                                                    |
+| Reopened items, known gaps | The 2026-11-08 review (`PLAN_VS_DOCS.md`), checked against the code                                                                 |
+| Phase 15                   | The 2026-11-10 UI review, the 2026-11-11 layout comparison (Vitessce, CELLxGENE Explorer, TissUUmaps, 10x Explorer), and a code map |
