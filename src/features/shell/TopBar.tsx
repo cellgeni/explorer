@@ -14,9 +14,11 @@ import {
   Popover,
   RulerIcon,
   SettingsIcon,
+  Slider,
   Switch,
   Tooltip,
 } from '../../components/ui'
+import { withMicrometers } from '../../data/units'
 import type { ActiveTool } from '../app-shell/activeToolModel'
 import { BoundaryLimitField, OpenDatasetForm } from '../sections/DatasetInfoBlocks'
 import type { DatasetInfoModel, OpenDatasetModel } from '../sections/datasetInfoModel'
@@ -28,7 +30,12 @@ import {
 } from '../sections/ViewSettingsBlocks'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
 import { SHORTCUTS } from './shortcuts'
-import type { DatasetSummary, ToolGroupModel, TopBarModel } from './topBarModel'
+import type {
+  DatasetSummary,
+  MagicLensToolModel,
+  ToolGroupModel,
+  TopBarModel,
+} from './topBarModel'
 
 const TOOL_ICONS: Readonly<Record<ActiveTool, ReactNode>> = {
   pan: <PanIcon />,
@@ -83,6 +90,17 @@ export function TopBar({
             <MeasureToolOptions measure={settings.measure} />
           </Popover>
         ) : null}
+        {model.magicLens === null ? null : (
+          <Popover
+            title="Magic Lens options"
+            align="start"
+            trigger={<ChevronDownIcon />}
+            triggerClassName="ui-icon-button"
+            className="shell-lens-options"
+          >
+            <MagicLensOptions lens={model.magicLens} />
+          </Popover>
+        )}
       </div>
       <div className="shell-top-bar-end">
         <ShareButton info={info} />
@@ -198,6 +216,32 @@ export function ToolGroup({ tools }: { readonly tools: ToolGroupModel }) {
         </Tooltip>
       ))}
     </div>
+  )
+}
+
+// The cursor lens's radius, and Summarise View, whose result opens in the
+// Magic Lens card (D14).
+function MagicLensOptions({ lens }: { readonly lens: MagicLensToolModel }) {
+  return (
+    <>
+      <Slider
+        title="Magic lens radius"
+        label="Radius"
+        min={10}
+        max={500}
+        step={10}
+        value={lens.radiusMicrometers}
+        formatValue={(value) => withMicrometers(value.toLocaleString())}
+        onChange={lens.onRadiusChange}
+      />
+      <Button
+        title="Summarise the whole view with Magic Lens"
+        disabled={!lens.canSummariseView}
+        onClick={lens.onSummariseView}
+      >
+        Summarise View
+      </Button>
+    </>
   )
 }
 

@@ -13,3 +13,12 @@ export function withMicrometers(value: string): string {
 export function withSquareMicrometers(value: string): string {
   return `${value} ${SQUARE_MICROMETERS}`
 }
+
+// "943,210 µm²": whole numbers once an area is large, so the figure stays
+// short, and a decimal or two below that.
+export function formatSquareMicrometers(value: number): string {
+  const digits = value < 10 ? 2 : value < 1_000 ? 1 : 0
+  return withSquareMicrometers(
+    value.toLocaleString(undefined, { maximumFractionDigits: digits }),
+  )
+}

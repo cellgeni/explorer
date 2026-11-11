@@ -40,9 +40,10 @@ import {
   VisiumHdRoiHudPanel,
 } from './features/control-hud/RoiHudPanel'
 import { MagicLensHudPanel } from './features/roi/MagicLensHudPanel'
+import { useCardStackModel } from './features/cards/cardModels'
 import {
   CONTROL_HUD_TABS,
-  LAYER_PANEL_HUD_TABS,
+  NEW_SHELL_HIDDEN_HUD_TABS,
   parseObservationColorMode,
   readDebugModeFromLocation,
   readShellVersionFromLocation,
@@ -1288,11 +1289,11 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const hiddenControlHudTabIds = useMemo<ReadonlySet<ControlHudTab>>(() => {
     const { cells, magicLens, transcripts } = platformAdapter.capabilities
-    // In the new shell the top bar, info drawer and layer panel hold these
-    // tabs' controls (15.2-B, C); the HUD keeps Magic Lens, ROI and Cell
-    // until the cards replace them (15.2-D).
+    // In the new shell the top bar, info drawer, layer panel and cards hold
+    // these tabs' controls (15.2-B to D); the HUD keeps the embeddings until
+    // 15.2-G.
     const hiddenTabIds = new Set<ControlHudTab>(
-      shellVersion === 2 ? LAYER_PANEL_HUD_TABS : [],
+      shellVersion === 2 ? NEW_SHELL_HIDDEN_HUD_TABS : [],
     )
 
     if (!cells) {
@@ -2503,12 +2504,14 @@ export function App({ dependencies }: AppProps = {}) {
   )
 
   const {
+    handleMagicLensClear,
     handleMagicLensCursorActiveChange,
     handleMagicLensLeave,
     handleMagicLensMinQvChange,
     handleMagicLensMove,
     handleMagicLensRadiusChange,
     handleMagicLensScopeChange,
+    handleMagicLensSummarise,
     handleRunMagicLens,
   } = useMagicLensWorkflow({
     callbacks: {
@@ -3235,11 +3238,18 @@ export function App({ dependencies }: AppProps = {}) {
         ? null
         : (datasetDisplayName(loadingDatasetUrl, undefined) ?? loadingDatasetUrl),
     magicLensAvailable: platformAdapter.capabilities.magicLens,
+    magicLensCanSummariseView:
+      currentViewportDetail !== null && magicLensState.status !== 'loading',
     magicLensEnabled: magicLensLoadEnabled,
+    magicLensRadiusMicrometers,
     magicLensReason: magicLensAvailability.unavailableReason,
     magicLensScope,
     onMagicLensCursorActiveChange: handleMagicLensCursorActiveChange,
+    onMagicLensRadiusChange: handleMagicLensRadiusChange,
     onMagicLensScopeChange: handleMagicLensScopeChange,
+    onMagicLensSummariseView: () => {
+      handleMagicLensSummarise('viewport')
+    },
     onMeasureEnabledChange: viewSettings.measure.onEnabledChange,
     onReturnToPan: returnToPan,
     onRoiModeChange: handleRoiModeChange,
@@ -3259,6 +3269,110 @@ export function App({ dependencies }: AppProps = {}) {
     loadingAreas,
     setLayerVisibility,
     transcripts: transcriptsSection,
+  })
+
+  // The cards (UNIFIED_PLAN.md, 15.2-D) replace the Magic Lens, ROI and
+  // Cell tabs in the new shell.
+  const elementPlural = platformAdapter.labels.embeddingElementPlural
+  const selectionLensInput = {
+    available: platformAdapter.capabilities.magicLens,
+    enabled: magicLensLoadEnabled && activeRoiSelection !== null,
+    label: platformAdapter.capabilities.transcripts ? 'Transcripts' : 'Expression',
+    state: magicLensState,
+    onRun: () => {
+      handleMagicLensSummarise('roi')
+    },
+  }
+  const cards = useCardStackModel({
+    selection:
+      platformAdapter.kind === 'image'
+        ? {
+            variant: 'geometry',
+            drawing: roiMode === 'idle' ? null : roiMode,
+            name: roiName,
+            nameDisabled: loadState.status !== 'ready',
+            onClose: returnToPan,
+            onNameChange: setRoiName,
+            shapeCount: geometricAnnotations.length,
+          }
+        : isVisiumHdDataset
+          ? {
+              variant: 'bins',
+              genes: { copy: roiGeneStatsCopy, state: roiGeneStatsState },
+              lens: selectionLensInput,
+              name: roiName,
+              nameDisabled: loadState.status !== 'ready',
+              onClose: handleClearActiveRoi,
+              onExportBarcodes: handleExportVisiumHdRoiBarcodes,
+              onExportGeoJson: handleExportVisiumHdRoiGeoJson,
+              onNameChange: setRoiName,
+              roiState: activeVisiumHdRoiState,
+              status: visiumHdRoiCopy,
+              summary: visiumHdRoiSummary,
+            }
+          : {
+              variant: 'cells',
+              elementNoun: {
+                singular: elementPlural.replace(/s$/, ''),
+                plural: elementPlural,
+              },
+              genes: { copy: roiGeneStatsCopy, state: roiGeneStatsState },
+              lens: selectionLensInput,
+              loading: isRoiTabLoading,
+              name: roiName,
+              nameDisabled: !platformFeatureLoadEnabled,
+              onClose: handleClearActiveRoi,
+              onExportCells: handleExportRoiCells,
+              onExportGeoJson: handleExportRoiGeoJson,
+              onExportTranscripts: handleExportRoiTranscripts,
+              onNameChange: setRoiName,
+              onSave: handleSaveRoiAnnotation,
+              roiState,
+              status: roiHeaderCopy,
+              summary: roiSummary,
+              transcriptExportState: roiTranscriptExportState,
+            },
+    cell: {
+      cell: {
+        selected: selectedCell,
+        title: platformAdapter.kind === 'visium' ? 'Spot' : 'Cell',
+        status: cellDetailCopy,
+        annotationLabels: selectedCellAnnotationLabels,
+        state: cellDetailState,
+        distributionState: cellTranscriptDistributionState,
+        distributionVisible: platformAdapter.capabilities.cellTranscriptDistribution,
+        variant: isAnnDataPlatform(platformAdapter) ? 'observations' : 'default',
+      },
+      boundary: {
+        selected: activeSelectedBoundaryCell,
+        expressionStatus: selectedBoundaryCellExpressionStatus,
+      },
+      gridCell: {
+        selected: activeSelectedGridCell,
+        assignmentState: gridCellAssignmentState,
+        expressionStatus: selectedGridCellExpressionStatus,
+      },
+      profile: {
+        state: activeVisiumHdExpressionProfileState,
+        onLoad: handleLoadVisiumHdExpressionProfile,
+      },
+      onClose: handleClearSelection,
+    },
+    transcript: platformAdapter.capabilities.transcripts
+      ? {
+          capabilityState: transcriptCapabilityState,
+          onClose: transcriptsSection.onClearPinnedTranscript,
+          pinned: pinnedTranscript,
+        }
+      : null,
+    magicLens: platformAdapter.capabilities.magicLens
+      ? {
+          cursorActive: magicLensIsCursorActive,
+          onClose: handleMagicLensClear,
+          state: magicLensState,
+          status: magicLensCopy,
+        }
+      : null,
   })
 
   const controlHud = (
@@ -3299,27 +3413,29 @@ export function App({ dependencies }: AppProps = {}) {
         </>
       )}
 
-      <MagicLensHudPanel
-        active={activeControlHudTab === 'magic-lens'}
-        magicLensScopeInputId={controlIds.magicLensScopeInputId}
-        magicLensRadiusInputId={controlIds.magicLensRadiusInputId}
-        magicLensMinQvInputId={controlIds.magicLensMinQvInputId}
-        magicLensCopy={magicLensCopy}
-        loadEnabled={magicLensLoadEnabled}
-        roiAvailable={activeRoiSelection !== null}
-        magicLensScope={magicLensScope}
-        magicLensState={magicLensState}
-        magicLensRadiusMicrometers={magicLensRadiusMicrometers}
-        magicLensMinQv={magicLensMinQv}
-        minQvVisible={platformAdapter.capabilities.magicLensMinQv}
-        magicLensIsCursorActive={magicLensIsCursorActive}
-        magicLensCanScan={magicLensCanScan}
-        onScopeChange={handleMagicLensScopeChange}
-        onRadiusChange={handleMagicLensRadiusChange}
-        onMinQvChange={handleMagicLensMinQvChange}
-        onCursorActiveChange={handleMagicLensCursorActiveChange}
-        onRunMagicLens={handleRunMagicLens}
-      />
+      {shellVersion === 2 ? null : (
+        <MagicLensHudPanel
+          active={activeControlHudTab === 'magic-lens'}
+          magicLensScopeInputId={controlIds.magicLensScopeInputId}
+          magicLensRadiusInputId={controlIds.magicLensRadiusInputId}
+          magicLensMinQvInputId={controlIds.magicLensMinQvInputId}
+          magicLensCopy={magicLensCopy}
+          loadEnabled={magicLensLoadEnabled}
+          roiAvailable={activeRoiSelection !== null}
+          magicLensScope={magicLensScope}
+          magicLensState={magicLensState}
+          magicLensRadiusMicrometers={magicLensRadiusMicrometers}
+          magicLensMinQv={magicLensMinQv}
+          minQvVisible={platformAdapter.capabilities.magicLensMinQv}
+          magicLensIsCursorActive={magicLensIsCursorActive}
+          magicLensCanScan={magicLensCanScan}
+          onScopeChange={handleMagicLensScopeChange}
+          onRadiusChange={handleMagicLensRadiusChange}
+          onMinQvChange={handleMagicLensMinQvChange}
+          onCursorActiveChange={handleMagicLensCursorActiveChange}
+          onRunMagicLens={handleRunMagicLens}
+        />
+      )}
 
       {shellVersion === 2 ? null : (
         <AnnotationHudPanel
@@ -3376,9 +3492,10 @@ export function App({ dependencies }: AppProps = {}) {
         }}
         onSelectEmbeddingCell={handleEmbeddingElementSelect}
         onLoadSelectedExpressionProfile={handleLoadVisiumHdExpressionProfile}
+        embeddingOnly={shellVersion === 2}
       />
 
-      {platformAdapter.kind === 'image' ? (
+      {shellVersion === 2 ? null : platformAdapter.kind === 'image' ? (
         <GeometricRoiHudPanel
           active={activeControlHudTab === 'roi'}
           roiNameInputId={controlIds.roiNameInputId}
@@ -3575,9 +3692,13 @@ export function App({ dependencies }: AppProps = {}) {
           cells={cellsSection}
           transcripts={transcriptsSection}
           annotations={annotationsSection}
+          cards={cards}
         >
           {viewerRegion}
-          {controlHud}
+          {/* Images have no embeddings, so no HUD tab is left (15.2-D). */}
+          {CONTROL_HUD_TABS.some((tab) => !hiddenControlHudTabIds.has(tab.id))
+            ? controlHud
+            : null}
         </ShellLayout>
       </main>
     )

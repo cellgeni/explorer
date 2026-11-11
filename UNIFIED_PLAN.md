@@ -245,7 +245,7 @@ writing UI code.
 | Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                        |
 | Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                        |
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                        |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A to C done |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1 and M2 done (2026-11-11); M3 (15.2) started, A to D done |
 
 ---
 
@@ -1912,7 +1912,7 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 
 Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2), started
-with A (section models), B (top bar) and C (layer panel) done. The
+with A (section models), B (top bar), C (layer panel) and D (cards) done. The
 user asked for a usability review of the
 interface and then a plan for the changes. The plan rests on:
 
@@ -2744,7 +2744,7 @@ mapping in H.
       Transcript card (D).
     - The info drawer's view options leave out what moved to sections
       (`DatasetViewOptions placement="drawer"`).
-- [ ] **D. Cards.** (L)
+- [x] **D. Cards.** (L)
   - Cards stack at the top left:
     - Selection: cells, Visium HD bins, and the image-geometry variant.
     - Cell or Bin: `CellInfoPanel`, `GridCellInfoPanel`.
@@ -2755,6 +2755,26 @@ mapping in H.
     Selection card's Transcripts tab takes the ROI scope. `MagicLensHudPanel`
     is retired.
   - `Min QV` is hidden until it changes results (F21).
+  - Done 2026-11-11, behind `?shell=2`. `useCardStackModel`
+    (`src/features/cards/`) builds the four cards; each is null while there
+    is nothing to show, and closing one clears its state (the selection, the
+    cell, the pinned transcript, the lens result).
+    - Selection: the ROI name is the title, with "6,229 cells · 943,210 µm²"
+      under it (one µm² formatter, `formatSquareMicrometers`); `ROI name` and
+      `Save ROI`; tabs Genes, Cells (Spots, Bins) and Transcripts
+      (Expression where the lens counts UMIs or values); the exports. On an
+      image, a New shape card names the next shape while Box or Lasso is on.
+    - Magic Lens: the tool's popover has `Radius` and `Summarise View`;
+      `handleMagicLensSummarise` switches scope and scans in one step, and
+      `handleMagicLensClear` backs the card's close button. The Selection
+      card shows only a result for the selection, the Magic Lens card only
+      cursor and view results. `MagicLensHudPanel` stays for the old shell
+      until J deletes it.
+    - The Transcripts section keeps the overlay status and `Load exact
+viewport`; the pinned transcript is in the Transcript card, and the
+      canvas tooltip covers hovering.
+    - The HUD keeps only the Cell tab's embeddings, back at the top right of
+      the canvas, until G. Go to joins the cards with `zoomToBbox` in E.
 - [ ] **E. Fit and navigation (F18).** (M)
   - `createOverviewViewState` takes the real viewport size and the space taken
     by the top bar and open panel, instead of 720 px.
@@ -3177,7 +3197,7 @@ Sequencing:
       Slice ranges, memory, and bundles.
 - [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
-      M3, the new shell (15.2), has started: A to C are done, D is next.
+      M3, the new shell (15.2), has started: A to D are done, E is next.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
@@ -3187,8 +3207,8 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 - [x] H5AD and SpatialData: read boolean `obs` columns on the reference backend
       (0/1 tracks, 2026-11-09).
 - [ ] Visium HD: low-res tissue image fallback.
-- [ ] Magic Lens: make `Min QV` change results, or hide it. Phase 15.2-D
-      hides it until it works.
+- [ ] Magic Lens: make `Min QV` change results, or hide it. The new shell
+      hides it (15.2-D); the old Magic Lens tab goes in 15.2-J.
 - [ ] Xenium diagnostics: check the image chosen from `experiment.xenium`
       instead of `morphology.ome.tif` (a dataset manifest's image is already
       checked), plus `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, and

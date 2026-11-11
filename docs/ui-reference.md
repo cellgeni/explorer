@@ -90,21 +90,23 @@ Transcripts tab.
 The redesigned layout (UNIFIED_PLAN.md, 15.2) is built behind `?shell=2` in
 the query string, and becomes the default in 15.2-J. It has a 48 px top bar
 (`src/features/shell/TopBar.tsx`) and a 360 px layer panel docked on the right
-(`src/features/shell/LayerPanel.tsx`). The Control HUD keeps only the Magic
-Lens, ROI and Cell tabs, at the top left of the canvas, until the cards
-(15.2-D) replace them.
+(`src/features/shell/LayerPanel.tsx`). Cards stack at the top left of the
+canvas (`src/features/cards/CardStack.tsx`). The Control HUD keeps only the
+Cell tab's embeddings, at the top right of the canvas, until the embedding
+panel (15.2-G).
 
-| Top bar item   | What it does                                                                                                                      |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `Explorer`     | The app name                                                                                                                      |
-| Dataset name ▾ | The loaded dataset's name (manifest name or folder), or "Open a dataset". Opens a menu with the open-dataset form                 |
-| Summary        | Platform and counts, e.g. "Xenium · 1.41 M cells · 5,001 genes"; "Opening {name}…" while one loads. A `status` region             |
-| `Dataset info` | ⓘ: opens a drawer with About, view options (Visium, SpatialData), diagnostics, data access notes, issues and the log              |
-| Tools          | Pan `P`, Box selection `R`, Lasso selection `L`, Measure `M`, Magic Lens `O`; one is pressed. A tool that cannot be used says why |
-| Measure ▾      | While measuring: the measure unit and `Clear Measurement`                                                                         |
-| `Share`        | Copies the link, as `Copy Link` does, and says "Link copied"                                                                      |
-| `Help`         | Lists the keyboard shortcuts                                                                                                      |
-| `Settings`     | Hover tooltips, mouse coordinate unit, boundary limit, and `Show debug info` (the same as `?debug=1`)                             |
+| Top bar item   | What it does                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `Explorer`     | The app name                                                                                                                          |
+| Dataset name ▾ | The loaded dataset's name (manifest name or folder), or "Open a dataset". Opens a menu with the open-dataset form                     |
+| Summary        | Platform and counts, e.g. "Xenium · 1.41 M cells · 5,001 genes"; "Opening {name}…" while one loads. A `status` region                 |
+| `Dataset info` | ⓘ: opens a drawer with About, view options (Visium, SpatialData), diagnostics, data access notes, issues and the log                  |
+| Tools          | Pan `P`, Box selection `R`, Lasso selection `L`, Measure `M`, Magic Lens `O`; one is pressed. A tool that cannot be used says why     |
+| Measure ▾      | While measuring: the measure unit and `Clear Measurement`                                                                             |
+| Magic Lens ▾   | The lens `Radius`, and `Summarise View`, which scans the whole view into the Magic Lens card. `Min QV` is hidden (it changes nothing) |
+| `Share`        | Copies the link, as `Copy Link` does, and says "Link copied"                                                                          |
+| `Help`         | Lists the keyboard shortcuts                                                                                                          |
+| `Settings`     | Hover tooltips, mouse coordinate unit, boundary limit, and `Show debug info` (the same as `?debug=1`)                                 |
 
 The tool letters work anywhere except in a text field, and leave keys with
 Ctrl, Alt or Cmd alone. The Magic Lens tool turns on the cursor lens. The
@@ -121,12 +123,24 @@ gives the canvas the space.
 | ------------------- | -------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Image               | All            | "3 of 27 channels · z 8 of 15 · +1 layer", or "80%"  | Image opacity, Z plane, Visium `Tissue image`, channels, custom image layers. The checkbox hides the image and custom layers                                                                                                                                                                                                       |
 | Cells (Spots, Bins) | All but images | What colours them: "graphclust", "SNAP25", "4 genes" | Appearance (boundaries, opacities, Visium `Show off-tissue spots`, Visium HD bin size); `Cell color`; Genes (picker, sets, `Combine genes`, `Gene scale`, status line); Clusters (annotation sets, labels, metadata tracks); Advanced (`Expression detail`). The checkbox hides cells, boundaries and bins, and drops their legend |
-| Transcripts         | Xenium, Atera  | "SNAP25 · density", "All features · points", "Off"   | `Show transcripts` (the checkbox), Detail; Genes; Appearance; Filters; Advanced (the budget meter); the status and pinned transcript until the Transcript card                                                                                                                                                                     |
+| Transcripts         | Xenium, Atera  | "SNAP25 · density", "All features · points", "Off"   | `Show transcripts` (the checkbox), Detail; Genes; Appearance; Filters; Advanced (the budget meter); the overlay status, `Load exact viewport` and top groups                                                                                                                                                                       |
 | Annotations         | All            | "2 shapes"                                           | GeoJSON shapes. The checkbox hides the shapes                                                                                                                                                                                                                                                                                      |
 
 Hidden layers leave the deck.gl layer list (`cellsVisible` in
 `createOverviewLayers`), so they cannot be hovered or picked. Visibility is
 not in the link yet (15.2-H).
+
+Cards are 360 px wide and stack in this order, scrolling when they outgrow
+the canvas; a card that appears scrolls into view. Closing a card clears what
+it shows.
+
+| Card                     | Shown when                                                     | Contents                                                                                                                                                                                                                                                                                                                    |
+| ------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Selection (the ROI name) | A box or lasso selection exists (cells, spots, Visium HD bins) | "6,229 cells · 943,210 µm²"; `ROI name`, `Save ROI` (not Visium HD); tabs Genes (top genes), Cells/Spots/Bins (counts and means), Transcripts or Expression (`Summarise Transcripts`: Magic Lens over the selection); `Export GeoJSON`, `Export Cells`, `Export Transcripts` or `Export Barcodes`. Close: `Clear selection` |
+| New shape                | Box or lasso is on, on an image                                | `Shape name` for the next shape, and the shape count. Close: `Stop drawing`                                                                                                                                                                                                                                                 |
+| Cell, Spot or Bin        | A cell, spot, bin or Visium HD cell is clicked                 | The Cell Info, Bin Info or boundary cell details the Cell tab showed. Close: `Clear selected cell` (or spot, bin)                                                                                                                                                                                                           |
+| Transcript               | A transcript or density bin is clicked (pinned)                | Its gene, ID, FOV, cell, QV, position, or the bin's counts and top genes. Close: `Clear pinned transcript`                                                                                                                                                                                                                  |
+| Magic Lens               | The Magic Lens tool is on, or `Summarise View` ran             | "Move the cursor…", then the lens summary and top genes. Close: `Turn off Magic Lens` or `Clear Magic Lens`                                                                                                                                                                                                                 |
 
 ## Dataset Tab
 

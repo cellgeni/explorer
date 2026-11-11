@@ -1766,7 +1766,7 @@ describe('App', () => {
         .getAllByRole('tab')
         .filter((tab) => !tab.hidden)
         .map((tab) => tab.textContent),
-    ).toEqual(['Magic Lens', 'ROI', 'Cell'])
+    ).toEqual(['Cell'])
 
     const panel = screen.getByRole('complementary', { name: 'Layers' })
     const cells = within(panel).getByRole('region', { name: /^Cells/ })
@@ -1782,6 +1782,38 @@ describe('App', () => {
     expect(
       within(panel).getByRole('button', { name: 'Show layers (\\)' }),
     ).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('shows a clicked cell in a card with ?shell=2 (15.2-D)', async () => {
+    window.history.replaceState(null, '', '/?shell=2')
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+
+    try {
+      render(<TestApp loadDatasetOverview={loadDatasetOverview} />)
+      fireEvent.click(screen.getByRole('button', { name: /Open a dataset/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+      fireEvent.click(await screen.findByTestId('deck-layer-cells-overview-scatter'))
+
+      const card = screen.getByRole('region', { name: 'Cell' })
+      expect(within(card).getByText('22 µm²')).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Cell Info' })).not.toBeInTheDocument()
+
+      fireEvent.click(within(card).getByRole('button', { name: 'Clear selected cell' }))
+      expect(screen.queryByRole('region', { name: 'Cell' })).not.toBeInTheDocument()
+      expect(document.querySelector('.viewer-selection-overlay')).toBeNull()
+    } finally {
+      viewport.restore()
+    }
   })
 
   it('keeps tool keys off in the current shell', async () => {

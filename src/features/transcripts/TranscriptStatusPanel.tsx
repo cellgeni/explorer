@@ -18,6 +18,9 @@ interface TranscriptStatusPanelProps {
   readonly onPinTranscript: (detail: ViewerTranscriptHoverDetail) => void
   readonly onClearPinnedTranscript: () => void
   readonly onLoadExactViewport: (requestKey: string) => void
+  // The new shell shows the pinned transcript in its Transcript card
+  // (15.2-D), and the canvas tooltip covers hovering.
+  readonly showInspection?: boolean
 }
 
 export function TranscriptStatusPanel({
@@ -28,6 +31,7 @@ export function TranscriptStatusPanel({
   onPinTranscript,
   onClearPinnedTranscript,
   onLoadExactViewport,
+  showInspection = true,
 }: TranscriptStatusPanelProps) {
   const capabilities =
     capabilityState.status === 'ready' ? capabilityState.capabilities : null
@@ -128,7 +132,7 @@ export function TranscriptStatusPanel({
         </div>
       ) : null}
 
-      {pinnedTranscript === null ? null : (
+      {!showInspection || pinnedTranscript === null ? null : (
         <TranscriptInspectionPanel
           detail={pinnedTranscript}
           showFov={!isPerGene}
@@ -137,7 +141,7 @@ export function TranscriptStatusPanel({
           onAction={onClearPinnedTranscript}
         />
       )}
-      {hoveredTranscript === null ? null : (
+      {!showInspection || hoveredTranscript === null ? null : (
         <TranscriptInspectionPanel
           detail={hoveredTranscript}
           showFov={!isPerGene}
@@ -152,7 +156,9 @@ export function TranscriptStatusPanel({
   )
 }
 
-function TranscriptInspectionPanel({
+// One transcript or density bin. Without an action (the Transcript card has
+// its own close button), the heading row is left out.
+export function TranscriptInspectionPanel({
   detail,
   showFov,
   title,
@@ -161,9 +167,9 @@ function TranscriptInspectionPanel({
 }: {
   readonly detail: ViewerTranscriptHoverDetail
   readonly showFov: boolean
-  readonly title: string
-  readonly actionLabel: string
-  readonly onAction: () => void
+  readonly title?: string | undefined
+  readonly actionLabel?: string | undefined
+  readonly onAction?: (() => void) | undefined
 }) {
   if (detail.transcript !== undefined) {
     const transcript = detail.transcript
@@ -171,12 +177,12 @@ function TranscriptInspectionPanel({
 
     return (
       <div className="transcript-hover-panel">
-        <div className="transcript-hover-heading">
-          <p>{title}</p>
-          <button type="button" title={`${actionLabel} transcript`} onClick={onAction}>
-            {actionLabel}
-          </button>
-        </div>
+        <InspectionHeading
+          title={title}
+          actionLabel={actionLabel}
+          actionTitle={`${actionLabel} transcript`}
+          onAction={onAction}
+        />
         <strong className="transcript-hover-title">{transcript.featureName}</strong>
         <dl>
           <div>
@@ -231,12 +237,12 @@ function TranscriptInspectionPanel({
 
   return (
     <div className="transcript-hover-panel">
-      <div className="transcript-hover-heading">
-        <p>{title}</p>
-        <button type="button" title={`${actionLabel} transcript bin`} onClick={onAction}>
-          {actionLabel}
-        </button>
-      </div>
+      <InspectionHeading
+        title={title}
+        actionLabel={actionLabel}
+        actionTitle={`${actionLabel} transcript bin`}
+        onAction={onAction}
+      />
       <strong className="transcript-hover-title">
         {transcriptAggregateTitle(aggregate)}
       </strong>
@@ -293,6 +299,31 @@ function TranscriptInspectionPanel({
           ))}
         </ol>
       )}
+    </div>
+  )
+}
+
+function InspectionHeading({
+  title,
+  actionLabel,
+  actionTitle,
+  onAction,
+}: {
+  readonly title: string | undefined
+  readonly actionLabel: string | undefined
+  readonly actionTitle: string
+  readonly onAction: (() => void) | undefined
+}) {
+  if (title === undefined || actionLabel === undefined || onAction === undefined) {
+    return null
+  }
+
+  return (
+    <div className="transcript-hover-heading">
+      <p>{title}</p>
+      <button type="button" title={actionTitle} onClick={onAction}>
+        {actionLabel}
+      </button>
     </div>
   )
 }

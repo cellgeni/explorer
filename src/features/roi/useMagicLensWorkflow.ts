@@ -107,12 +107,16 @@ export type MagicLensSummaryLoader = (
 ) => Promise<MagicLensSummary>
 
 interface UseMagicLensWorkflowResult {
+  readonly handleMagicLensClear: () => void
   readonly handleMagicLensCursorActiveChange: (active: boolean) => void
   readonly handleMagicLensLeave: () => void
   readonly handleMagicLensMinQvChange: (value: number) => void
   readonly handleMagicLensMove: (detail: ViewerMagicLensDetail) => void
   readonly handleMagicLensRadiusChange: (value: number) => void
   readonly handleMagicLensScopeChange: (scope: MagicLensScope) => void
+  // The new shell's "Summarise View" and the Selection card's Transcripts tab
+  // (15.2-D): switch to the scope and scan it in one step.
+  readonly handleMagicLensSummarise: (scope: 'viewport' | 'roi') => void
   readonly handleRunMagicLens: () => void
 }
 
@@ -377,6 +381,64 @@ export function useMagicLensWorkflow({
     ],
   )
 
+  const handleMagicLensSummarise = useCallback(
+    (scope: 'viewport' | 'roi') => {
+      if (loadState.status !== 'ready') {
+        return
+      }
+
+      const selection = resolveMagicLensSelection(
+        scope,
+        currentViewportDetail,
+        activeRoiSelection,
+      )
+
+      if (selection === null) {
+        appendDebugEvent('Magic lens scope unavailable')
+        return
+      }
+
+      if (scope !== magicLensScope) {
+        handleMagicLensScopeChange(scope)
+      }
+
+      runMagicLensQuery(selection, scope)
+    },
+    [
+      activeRoiSelection,
+      appendDebugEvent,
+      currentViewportDetail,
+      handleMagicLensScopeChange,
+      loadState.status,
+      magicLensScope,
+      runMagicLensQuery,
+    ],
+  )
+
+  // Closing the Magic Lens card drops its result and, if the cursor lens is
+  // on, turns it off.
+  const handleMagicLensClear = useCallback(() => {
+    clearTimeoutRef(magicLensDebounceRef)
+    magicLensLastDetailRef.current = null
+    magicLensLastQueryKeyRef.current = null
+    invalidateLatestRequest({
+      abortRef: magicLensAbortRef,
+      requestIdRef: magicLensRequestIdRef,
+    })
+    setMagicLensActive(false)
+    setMagicLensState(IDLE_MAGIC_LENS_STATE)
+    appendDebugEvent('Magic lens cleared')
+  }, [
+    appendDebugEvent,
+    magicLensAbortRef,
+    magicLensDebounceRef,
+    magicLensLastDetailRef,
+    magicLensLastQueryKeyRef,
+    magicLensRequestIdRef,
+    setMagicLensActive,
+    setMagicLensState,
+  ])
+
   const handleMagicLensRadiusChange = useCallback(
     (value: number) => {
       const nextRadius = normalizeMagicLensRadius(value)
@@ -488,12 +550,14 @@ export function useMagicLensWorkflow({
   )
 
   return {
+    handleMagicLensClear,
     handleMagicLensCursorActiveChange,
     handleMagicLensLeave,
     handleMagicLensMinQvChange,
     handleMagicLensMove,
     handleMagicLensRadiusChange,
     handleMagicLensScopeChange,
+    handleMagicLensSummarise,
     handleRunMagicLens,
   }
 }

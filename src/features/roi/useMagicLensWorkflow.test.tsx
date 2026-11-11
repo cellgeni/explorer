@@ -222,6 +222,101 @@ describe('useMagicLensWorkflow', () => {
     expect(snapshot.magicLensState).toEqual({ status: 'idle' })
     expect(snapshot.debugMessages).not.toContain('Magic lens ready: 1 cells')
   })
+
+  it('summarises the view from the cursor lens in one step', async () => {
+    const summary = {
+      transcriptCount: 10,
+      cellCount: 1,
+      geneCount: 1,
+      selectedGeneTranscriptCount: 0,
+      topGenes: [],
+      hitLimit: false,
+    }
+    const loadMagicLensSummary: MagicLensSummaryLoader = vi.fn(async () => summary)
+
+    render(
+      <Probe
+        loadMagicLensSummary={loadMagicLensSummary}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleMagicLensCursorActiveChange(true)
+    })
+    await act(async () => {
+      api.handleMagicLensSummarise('viewport')
+      await Promise.resolve()
+    })
+
+    expect(loadMagicLensSummary).toHaveBeenCalledWith(
+      'https://example.test/output',
+      { kind: 'box', bbox: viewportDetail.bbox },
+      expect.objectContaining({ scope: 'viewport' }),
+    )
+    expect(snapshot.magicLensScope).toBe('viewport')
+    expect(snapshot.magicLensActive).toBe(false)
+    expect(snapshot.magicLensState).toMatchObject({ status: 'ready', scope: 'viewport' })
+  })
+
+  it('does not scan a selection that is not there', () => {
+    const loadMagicLensSummary: MagicLensSummaryLoader = vi.fn()
+
+    render(
+      <Probe
+        loadMagicLensSummary={loadMagicLensSummary}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleMagicLensSummarise('roi')
+    })
+
+    expect(loadMagicLensSummary).not.toHaveBeenCalled()
+    expect(snapshot.magicLensScope).toBe('cursor')
+    expect(snapshot.debugMessages).toContain('Magic lens scope unavailable')
+  })
+
+  it('clears a result and turns the cursor lens off', () => {
+    const deferred = createDeferred<Awaited<ReturnType<MagicLensSummaryLoader>>>()
+    const capturedSignals: AbortSignal[] = []
+    const loadMagicLensSummary: MagicLensSummaryLoader = vi.fn(
+      async (_baseUrl, _selection, options) => {
+        capturedSignals.push(options.signal)
+        return deferred.promise
+      },
+    )
+
+    render(
+      <Probe
+        initialMagicLensScope="viewport"
+        loadMagicLensSummary={loadMagicLensSummary}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleRunMagicLens()
+    })
+    act(() => {
+      api.handleMagicLensClear()
+    })
+
+    expect(capturedSignals[0]?.aborted).toBe(true)
+    expect(snapshot.magicLensState).toEqual({ status: 'idle' })
+    expect(snapshot.magicLensActive).toBe(false)
+    expect(snapshot.debugMessages).toContain('Magic lens cleared')
+  })
 })
 
 function createDeferred<T>(): {

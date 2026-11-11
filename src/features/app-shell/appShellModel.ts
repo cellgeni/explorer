@@ -15,14 +15,17 @@ export const CONTROL_HUD_TABS = [
 
 export type ControlHudTab = (typeof CONTROL_HUD_TABS)[number]['id']
 
-// The tabs whose controls the new shell's top bar, info drawer and layer
-// panel hold (15.2-B, C), so its HUD leaves them out.
-export const LAYER_PANEL_HUD_TABS: readonly ControlHudTab[] = [
+// The tabs whose controls the new shell's top bar, info drawer, layer panel
+// and cards hold (15.2-B to D), so its HUD leaves them out. It keeps the Cell
+// tab, for the embeddings, until 15.2-G.
+export const NEW_SHELL_HIDDEN_HUD_TABS: readonly ControlHudTab[] = [
   'dataset',
   'layers',
   'genes',
   'transcripts',
+  'magic-lens',
   'annotations',
+  'roi',
 ]
 
 export function readShareableStateFromLocation(): ShareableState {

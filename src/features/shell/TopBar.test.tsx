@@ -87,6 +87,23 @@ describe('TopBar', () => {
     expect(model.tools.onSelect).toHaveBeenCalledWith('pan')
   })
 
+  it('sets the lens radius and summarises the view from the Magic Lens popover', () => {
+    const model = testTopBarModel()
+    renderTopBar({ model })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Magic Lens options' }))
+    const popover = screen.getByRole('dialog', { name: 'Magic Lens options' })
+    fireEvent.change(within(popover).getByLabelText('Radius'), {
+      target: { value: '120' },
+    })
+    fireEvent.click(within(popover).getByRole('button', { name: 'Summarise View' }))
+
+    expect(within(popover).getByText('80 µm')).toBeInTheDocument()
+    expect(model.magicLens?.onRadiusChange).toHaveBeenCalledWith(120)
+    expect(model.magicLens?.onSummariseView).toHaveBeenCalledTimes(1)
+    expect(within(popover).queryByLabelText('Min QV')).not.toBeInTheDocument()
+  })
+
   it('opens another dataset from the name menu and closes it', () => {
     const info = testDatasetInfoModel({ open: { datasetUrl: 'https://example.test/a' } })
     renderTopBar({ info })

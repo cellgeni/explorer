@@ -290,8 +290,8 @@ function TranscriptsSection({
         <TranscriptBudget transcripts={transcripts} />
       </Disclosure>
 
-      {/* The status and pinned transcript move to the Transcript card (15.2-D). */}
-      <TranscriptDetails transcripts={transcripts} />
+      {/* The pinned transcript is in the Transcript card (15.2-D). */}
+      <TranscriptDetails transcripts={transcripts} showInspection={false} />
     </div>
   )
 }
