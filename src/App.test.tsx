@@ -5568,6 +5568,125 @@ ${cd16Negative},CD16- NK cells`,
     }
   })
 
+  it('ranks enriched genes against cells outside and colours by a clicked gene', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    // The view fits the three cells, so a box at its centre holds the
+    // middle one; the corners are the comparison.
+    const insideId = intToCellId(1, 1)
+    const cornerIds = [intToCellId(2, 1), intToCellId(3, 1)] as const
+    const loadDatasetOverview = vi.fn(async () =>
+      [
+        { cellId: cornerIds[0], x: 0 },
+        { cellId: insideId, x: 2_500 },
+        { cellId: cornerIds[1], x: 5_000 },
+      ].map(({ cellId, x }) => ({
+        cellId,
+        position: { x: micrometers(x), y: micrometers(x) },
+        transcriptCount: 8,
+        cellArea: 22,
+      })),
+    )
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gfap'])
+    const loadRoiCells: ReturnType<typeof vi.fn<RoiCellsLoader>> = vi.fn(async () => [
+      {
+        id: insideId,
+        position: { x: micrometers(2_500), y: micrometers(2_500) },
+        transcriptCount: 12,
+        cellArea: 30,
+      },
+    ])
+    function geneStat(gene: string, count: number) {
+      return {
+        gene,
+        count,
+        detectedCells: 1,
+        percentCells: 100,
+        meanPerCell: count,
+        percentTotal: 50,
+      }
+    }
+    const loadRoiGeneStats: ReturnType<typeof vi.fn<RoiGeneStatsLoader>> = vi.fn(
+      async (_url, cells) => ({
+        // The cell inside has more Gfap; those outside, more Actb.
+        genes:
+          cells[0]?.id === insideId
+            ? [geneStat('Actb', 20), geneStat('Gfap', 8)]
+            : [geneStat('Actb', 40), geneStat('Gfap', 1)],
+        cellCount: cells.length,
+        sampledCellCount: cells.length,
+        totalCount: 28,
+        hitCellLimit: false,
+      }),
+    )
+
+    try {
+      render(
+        <TestApp
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+        />,
+      )
+      openControls('open-dataset')
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      openControls('selection')
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+          'aria-disabled',
+          'false',
+        )
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
+      const roiLayer = document.querySelector('.roi-draw-layer')
+
+      if (!(roiLayer instanceof HTMLElement)) {
+        throw new Error('Expected ROI draw layer.')
+      }
+
+      fireEvent.pointerDown(roiLayer, { clientX: 480, clientY: 480, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: 520, clientY: 520, pointerId: 1 })
+
+      const genes = await screen.findByLabelText('ROI gene distribution')
+      expect(
+        await within(genes).findByText('Compared with 2 cells outside'),
+      ).toBeInTheDocument()
+      expect(loadRoiGeneStats).toHaveBeenCalledWith(
+        DEMO_DATASET_URL,
+        [
+          expect.objectContaining({ id: cornerIds[0], cellFeatureMatrixRow: 0 }),
+          expect.objectContaining({ id: cornerIds[1], cellFeatureMatrixRow: 2 }),
+        ],
+        expect.objectContaining({ geneLimit: Number.MAX_SAFE_INTEGER }),
+      )
+      expect(
+        within(genes)
+          .getAllByRole('listitem')
+          .map((row) => row.querySelector('.roi-gene-row span')?.textContent),
+      ).toEqual(['Gfap', 'Actb'])
+
+      const gfap = within(genes).getByRole('button', { name: /^Gfap/ })
+      expect(gfap).toHaveAttribute('title', 'Colour cells by Gfap')
+      fireEvent.click(gfap)
+      expect(within(genes).getByRole('button', { name: /^Gfap/ })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      openControls('color-by')
+      expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+        'gene-expression',
+      )
+      openControls('genes')
+      expect(screen.getByLabelText('Selected genes')).toHaveTextContent('Gfap')
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('starts a bbox-backed ROI query from a lasso selection', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),

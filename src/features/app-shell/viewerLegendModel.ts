@@ -22,6 +22,10 @@ import {
 import { withMicrometers } from '../../data/units'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import { transcriptGenesLabel } from '../transcripts/transcriptLabels'
+import type { TranscriptGeneLegend } from '../transcripts/transcriptGeneLegendModel'
+
+// The legend section for transcript genes; its eyes hide genes, not classes.
+export const TRANSCRIPT_GENE_LEGEND_ID = 'transcript-genes'
 import type { TranscriptDensityContent } from '../transcripts/transcriptLayerModel'
 
 const GENE_NAME_LIMIT = 3
@@ -65,14 +69,16 @@ export interface ViewerLegendInput {
       readonly content: TranscriptDensityContent
     } | null
     readonly pointColorMode: TranscriptPointColorMode | null
+    // Genes coloured on the canvas, with points by gene (15.4-C).
+    readonly genes?: TranscriptGeneLegend | null
   }
 }
 
 // The legend for what the canvas shows: the cell colour mode, then the
-// transcripts when they are drawn as density or coloured by quality. A list
-// of categories goes last, so it cannot push a scale out of view.
-// Transcript count is the plain default and needs no legend; colouring
-// points by feature gets its own legend in 15.4-C.
+// transcripts when they are drawn as density, coloured by quality, or
+// coloured by gene (15.4-C). Lists of categories go last, so they cannot
+// push a scale out of view. Transcript count is the plain default and needs
+// no legend.
 export function viewerLegendSections(input: ViewerLegendInput): ViewerLegendSection[] {
   const sections: ViewerLegendSection[] = []
   const cellSection = input.cellsVisible === false ? null : cellColorLegendSection(input)
@@ -99,6 +105,23 @@ export function viewerLegendSections(input: ViewerLegendInput): ViewerLegendSect
       gradient: transcriptQualityGradient(),
       min: '0',
       max: `${TRANSCRIPT_QUALITY_SCALE_MAX}+`,
+    })
+  } else if (pointColorMode === 'feature' && input.transcripts.genes != null) {
+    const { items, moreCount } = input.transcripts.genes
+    sections.push({
+      kind: 'categories',
+      id: TRANSCRIPT_GENE_LEGEND_ID,
+      title: 'Transcripts',
+      items: items.map((item) => ({
+        id: item.gene,
+        label: item.gene,
+        color: item.color,
+        count: item.count,
+        visible: item.visible,
+      })),
+      noun: { singular: 'transcript', plural: 'transcripts' },
+      moreCount,
+      moreWhere: 'Transcripts',
     })
   }
 

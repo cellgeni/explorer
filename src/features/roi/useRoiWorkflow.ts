@@ -7,6 +7,7 @@ import type {
 import { ROI_CELL_EXPORT_LIMIT } from '../../data/roiCells'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { RoiSelection } from '../../data/roiSelection'
+import type { DatasetCell } from '../../datasets/xeniumDataset'
 import type {
   RoiCellsLoader,
   RoiGeneStatsLoader,
@@ -64,11 +65,23 @@ import {
   type RoiState,
   type RoiTranscriptExportState,
 } from './roiModel'
+import {
+  ALL_GENES,
+  IDLE_ROI_REFERENCE_STATE,
+  referenceOutsideSelection,
+  roiReferenceFailed,
+  roiReferenceLoading,
+  roiReferenceReady,
+  roiReferenceUnavailable,
+  type RoiReferenceState,
+} from './roiEnrichmentModel'
 import { slug } from '../../utils/slug'
 
 interface MutableRef<T> {
   current: T
 }
+
+const NO_REFERENCE_CELLS: readonly DatasetCell[] = []
 
 interface UseRoiWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
@@ -81,6 +94,10 @@ interface UseRoiWorkflowControls {
   readonly magicLensScope: MagicLensScope
   readonly viewportGeneWarmupEnabled?: boolean
   readonly roiName: string
+  // The reference sample for enriched genes (15.4-B): cells spread over the
+  // tissue. Those outside a selection are its comparison; the warm-up reads
+  // them all first.
+  readonly referenceCells?: readonly DatasetCell[]
 }
 
 interface UseRoiWorkflowData {
@@ -122,6 +139,9 @@ interface UseRoiWorkflowSetters {
   >
   readonly setRoiMode: Dispatch<SetStateAction<RoiDrawMode>>
   readonly setRoiName: Dispatch<SetStateAction<string>>
+  readonly setRoiReferenceState: Dispatch<
+    SetStateAction<RoiReferenceState<StructuredLoadError>>
+  >
   readonly setRoiState: Dispatch<SetStateAction<RoiState<StructuredLoadError>>>
   readonly setRoiTranscriptExportState: Dispatch<
     SetStateAction<RoiTranscriptExportState<StructuredLoadError>>
@@ -156,6 +176,7 @@ export function useRoiWorkflow({
     magicLensScope,
     viewportGeneWarmupEnabled = true,
     roiName,
+    referenceCells = NO_REFERENCE_CELLS,
   },
   data: { loadState, roiState },
   loaders: { loadRoiCells, loadRoiGeneStats, loadRoiTranscripts },
@@ -180,6 +201,7 @@ export function useRoiWorkflow({
     setRoiGeneViewportWarmupState,
     setRoiMode,
     setRoiName,
+    setRoiReferenceState,
     setRoiState,
     setRoiTranscriptExportState,
   },
@@ -316,6 +338,42 @@ export function useRoiWorkflow({
             coalesceKey: 'roi-gene-warmup',
           })
           setRoiGeneViewportWarmupState(roiGeneViewportWarmupReady(warmupKey))
+
+          // The reference sample for enriched genes (15.4-B), read now so a
+          // selection's comparison comes from the cache.
+          if (referenceCells.length === 0) {
+            return
+          }
+
+          const referenceStartedAt = readTimestamp()
+          try {
+            await loadRoiGeneStats(readyDatasetUrl, referenceCells, {
+              signal: request.signal,
+              cellLimit: referenceCells.length,
+              sampleStrategy: 'head',
+              geneLimit: ALL_GENES,
+              onFallback: appendFallbackNotice,
+            })
+          } catch (error) {
+            if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
+              return
+            }
+
+            appendDebugEvent(
+              `ROI warmup reference skipped (${formatElapsed(referenceStartedAt)})`,
+            )
+            return
+          }
+
+          if (!request.isCurrent() || request.signal.aborted) {
+            return
+          }
+
+          appendDebugEvent(
+            `ROI warmup reference ready: ${referenceCells.length.toLocaleString()} cells in ${formatElapsed(
+              referenceStartedAt,
+            )}`,
+          )
         } catch (error) {
           if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
             return
@@ -341,6 +399,7 @@ export function useRoiWorkflow({
     loadRoiCells,
     loadRoiGeneStats,
     loadState,
+    referenceCells,
     roiGeneViewportWarmupAbortRef,
     roiGeneViewportWarmupKeyRef,
     roiGeneViewportWarmupRequestIdRef,
@@ -356,6 +415,7 @@ export function useRoiWorkflow({
         return
       }
 
+      const url = loadState.url
       const bbox = selection.bbox
       const roiStartedAt = readTimestamp()
       const roiCellsStartedAt = roiStartedAt
@@ -380,6 +440,7 @@ export function useRoiWorkflow({
       setRoiGeneViewportWarmupState(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
       setRoiState(roiLoading(loadState.url, bbox, selection))
       setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
+      setRoiReferenceState(IDLE_ROI_REFERENCE_STATE)
       setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
       setMagicLensState(IDLE_MAGIC_LENS_STATE)
       appendDebugEvent(`${roiSelectionLabel(selection)} drawn: ROI cells started`)
@@ -406,11 +467,116 @@ export function useRoiWorkflow({
           )
 
           if (cells.length === 0) {
-            setRoiGeneStatsState(roiGeneStatsReady(loadState.url, emptyRoiGeneStats()))
+            setRoiGeneStatsState(roiGeneStatsReady(url, emptyRoiGeneStats()))
             return undefined
           }
 
-          setRoiGeneStatsState(roiGeneStatsLoading(loadState.url, cells.length))
+          // The reference cells outside the selection, for enriched genes
+          // (15.4-B). Its errors stay in its own state.
+          const readReference = (): Promise<void> => {
+            const outside = referenceOutsideSelection(
+              referenceCells,
+              selection,
+              (cell) => cell.position,
+            )
+
+            if (outside.length === 0) {
+              setRoiReferenceState(roiReferenceUnavailable(url))
+              return Promise.resolve()
+            }
+
+            const referenceStartedAt = readTimestamp()
+            setRoiReferenceState(roiReferenceLoading(url, outside.length))
+            appendDebugEvent(
+              `ROI reference started: ${outside.length.toLocaleString()} cells outside`,
+            )
+
+            return loadRoiGeneStats(url, outside, {
+              signal: request.signal,
+              cellLimit: outside.length,
+              sampleStrategy: 'head',
+              geneLimit: ALL_GENES,
+              onFallback: appendFallbackNotice,
+            })
+              .then((stats) => {
+                if (!request.isCurrent() || request.signal.aborted) {
+                  return
+                }
+
+                setRoiReferenceState(roiReferenceReady(url, stats))
+                appendDebugEvent(
+                  `ROI reference ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
+                    referenceStartedAt,
+                  )}`,
+                )
+              })
+              .catch((error: unknown) => {
+                if (
+                  isAbortError(error) ||
+                  !request.isCurrent() ||
+                  request.signal.aborted
+                ) {
+                  return
+                }
+
+                setRoiReferenceState(
+                  roiReferenceFailed(url, createStructuredLoadError('ROI genes', error)),
+                )
+                appendDebugEvent(
+                  `ROI reference failed (${formatElapsed(referenceStartedAt)})`,
+                )
+              })
+          }
+
+          const refine = (): Promise<void> => {
+            const refinementStartedAt = readTimestamp()
+            appendDebugEvent(
+              `ROI genes refinement started: ${cells.length.toLocaleString()} cells`,
+            )
+            return deferRoiGeneRefinement()
+              .then(() => {
+                if (!request.isCurrent() || request.signal.aborted) {
+                  return undefined
+                }
+
+                return loadRoiGeneStats(url, cells, {
+                  signal: request.signal,
+                  geneLimit: ALL_GENES,
+                  onFallback: appendFallbackNotice,
+                })
+              })
+              .then((stats) => {
+                if (!request.isCurrent() || request.signal.aborted) {
+                  return
+                }
+
+                if (stats === undefined) {
+                  return
+                }
+
+                setRoiGeneStatsState(roiGeneStatsReady(url, stats))
+                appendDebugEvent(
+                  `ROI genes ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
+                    refinementStartedAt,
+                  )} (total ${formatElapsed(roiStartedAt)})`,
+                )
+              })
+              .catch((error: unknown) => {
+                if (
+                  isAbortError(error) ||
+                  !request.isCurrent() ||
+                  request.signal.aborted
+                ) {
+                  return
+                }
+
+                appendDebugEvent(
+                  `ROI gene refinement failed (${formatElapsed(refinementStartedAt)})`,
+                )
+              })
+          }
+
+          setRoiGeneStatsState(roiGeneStatsLoading(url, cells.length))
           const previewStartedAt = readTimestamp()
           appendDebugEvent(
             `ROI genes preview started: sample ${Math.min(
@@ -419,83 +585,41 @@ export function useRoiWorkflow({
             ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
           )
 
-          return loadRoiGeneStats(loadState.url, cells, {
+          // The preview first, then the comparison, then every cell.
+          return loadRoiGeneStats(url, cells, {
             signal: request.signal,
             cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             sampleStrategy: 'head',
+            geneLimit: ALL_GENES,
             onFallback: appendFallbackNotice,
           })
             .then((previewStats) => {
               if (!request.isCurrent() || request.signal.aborted) {
-                return
+                return undefined
               }
 
-              setRoiGeneStatsState(roiGeneStatsReady(loadState.url, previewStats))
+              setRoiGeneStatsState(roiGeneStatsReady(url, previewStats))
               appendDebugEvent(
                 `ROI genes preview ready: ${previewStats.genes.length.toLocaleString()} genes in ${formatElapsed(
                   previewStartedAt,
                 )}`,
               )
 
-              if (cells.length <= ROI_GENE_STATS_PREVIEW_CELL_LIMIT) {
-                return undefined
-              }
-
-              const refinementStartedAt = readTimestamp()
-              appendDebugEvent(
-                `ROI genes refinement started: ${cells.length.toLocaleString()} cells`,
+              return readReference().then(() =>
+                cells.length <= ROI_GENE_STATS_PREVIEW_CELL_LIMIT ||
+                !request.isCurrent() ||
+                request.signal.aborted
+                  ? undefined
+                  : refine(),
               )
-              return deferRoiGeneRefinement()
-                .then(() => {
-                  if (!request.isCurrent() || request.signal.aborted) {
-                    return undefined
-                  }
-
-                  return loadRoiGeneStats(loadState.url, cells, {
-                    signal: request.signal,
-                    onFallback: appendFallbackNotice,
-                  })
-                })
-                .then((stats) => {
-                  if (!request.isCurrent() || request.signal.aborted) {
-                    return
-                  }
-
-                  if (stats === undefined) {
-                    return
-                  }
-
-                  setRoiGeneStatsState(roiGeneStatsReady(loadState.url, stats))
-                  appendDebugEvent(
-                    `ROI genes ready: ${stats.genes.length.toLocaleString()} genes in ${formatElapsed(
-                      refinementStartedAt,
-                    )} (total ${formatElapsed(roiStartedAt)})`,
-                  )
-                })
-                .catch((error) => {
-                  if (
-                    isAbortError(error) ||
-                    !request.isCurrent() ||
-                    request.signal.aborted
-                  ) {
-                    return
-                  }
-
-                  appendDebugEvent(
-                    `ROI gene refinement failed (${formatElapsed(refinementStartedAt)})`,
-                  )
-                })
             })
-            .catch((error) => {
+            .catch((error: unknown) => {
               if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
                 return
               }
 
               setRoiGeneStatsState(
-                roiGeneStatsFailed(
-                  loadState.url,
-                  createStructuredLoadError('ROI genes', error),
-                ),
+                roiGeneStatsFailed(url, createStructuredLoadError('ROI genes', error)),
               )
               appendDebugEvent(
                 `ROI genes unsupported (${formatElapsed(previewStartedAt)})`,
@@ -534,6 +658,7 @@ export function useRoiWorkflow({
       magicLensLastDetailRef,
       magicLensLastQueryKeyRef,
       magicLensRequestIdRef,
+      referenceCells,
       roiAbortRef,
       roiGeneViewportWarmupAbortRef,
       roiGeneViewportWarmupRequestIdRef,
@@ -545,6 +670,7 @@ export function useRoiWorkflow({
       setRoiGeneViewportWarmupState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setRoiState,
       setRoiTranscriptExportState,
     ],
@@ -569,6 +695,7 @@ export function useRoiWorkflow({
     setRoiMode('idle')
     setRoiState(IDLE_ROI_STATE)
     setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
+    setRoiReferenceState(IDLE_ROI_REFERENCE_STATE)
     setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)
     appendDebugEvent('Cleared ROI')
   }, [
@@ -583,6 +710,7 @@ export function useRoiWorkflow({
     setMagicLensState,
     setRoiGeneStatsState,
     setRoiMode,
+    setRoiReferenceState,
     setRoiState,
     setRoiTranscriptExportState,
   ])
@@ -595,8 +723,16 @@ export function useRoiWorkflow({
     })
     setRoiState((current) => (current.status === 'loading' ? IDLE_ROI_STATE : current))
     setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
+    setRoiReferenceState(IDLE_ROI_REFERENCE_STATE)
     appendDebugEvent('Cancelled ROI cells')
-  }, [appendDebugEvent, roiAbortRef, roiRequestIdRef, setRoiGeneStatsState, setRoiState])
+  }, [
+    appendDebugEvent,
+    roiAbortRef,
+    roiRequestIdRef,
+    setRoiGeneStatsState,
+    setRoiReferenceState,
+    setRoiState,
+  ])
 
   // Cancelling the genes query keeps the ROI and its cells. The genes load
   // again only for a new ROI.
@@ -608,8 +744,17 @@ export function useRoiWorkflow({
     setRoiGeneStatsState((current) =>
       current.status === 'loading' ? IDLE_ROI_GENE_STATS_STATE : current,
     )
+    setRoiReferenceState((current) =>
+      current.status === 'loading' ? IDLE_ROI_REFERENCE_STATE : current,
+    )
     appendDebugEvent('Cancelled ROI genes')
-  }, [appendDebugEvent, roiAbortRef, roiRequestIdRef, setRoiGeneStatsState])
+  }, [
+    appendDebugEvent,
+    roiAbortRef,
+    roiRequestIdRef,
+    setRoiGeneStatsState,
+    setRoiReferenceState,
+  ])
 
   const handleExportRoiCells = useCallback(() => {
     if (roiState.status !== 'ready') {

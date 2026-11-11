@@ -40,6 +40,7 @@ import {
   TranscriptPointStyleControls,
 } from '../sections/TranscriptsSectionBlocks'
 import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
+import { TranscriptGeneList } from '../sections/TranscriptGeneListBlock'
 import type {
   LayerPanelModel,
   LayerSectionHeader,
@@ -321,6 +322,7 @@ function TranscriptsSection({
 
       <SubHeading>Genes</SubHeading>
       <TranscriptFeatureControls features={transcripts.features} />
+      <TranscriptGeneList geneLegend={transcripts.geneLegend} />
 
       <SubHeading>Appearance</SubHeading>
       <TranscriptColourControls transcripts={transcripts} />

@@ -9,6 +9,7 @@ import type {
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { RoiSelection } from '../../data/roiSelection'
+import type { DatasetCell } from '../../datasets/xeniumDataset'
 import type { RoiCellsLoader, RoiGeneStatsLoader } from '../app-shell/appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
@@ -20,6 +21,7 @@ import type {
   RoiTranscriptExportState,
 } from './roiModel'
 import { ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS } from './roiModel'
+import { ALL_GENES, type RoiReferenceState } from './roiEnrichmentModel'
 import { useRoiWorkflow } from './useRoiWorkflow'
 
 const selection: RoiSelection = {
@@ -37,6 +39,7 @@ interface Snapshot {
   readonly magicLensState: MagicLensState<StructuredLoadError>
   readonly roiGeneStatsState: RoiGeneStatsState<StructuredLoadError>
   readonly roiMode: RoiDrawMode
+  readonly roiReferenceState: RoiReferenceState<StructuredLoadError>
   readonly roiRequestId: number
   readonly roiState: RoiState<StructuredLoadError>
   readonly roiTranscriptExportState: RoiTranscriptExportState<StructuredLoadError>
@@ -49,9 +52,11 @@ function Probe({
   loadRoiCells,
   loadRoiGeneStats,
   onReady,
+  referenceCells,
 }: {
   readonly loadRoiCells?: RoiCellsLoader
   readonly loadRoiGeneStats?: RoiGeneStatsLoader
+  readonly referenceCells?: readonly DatasetCell[]
   readonly onReady: (
     nextApi: ReturnType<typeof useRoiWorkflow>,
     nextSnapshot: Snapshot,
@@ -67,6 +72,9 @@ function Probe({
     React.useState<RoiGeneViewportWarmupState>({ status: 'idle' })
   const [roiMode, setRoiMode] = React.useState<RoiDrawMode>('box')
   const [roiName, setRoiName] = React.useState('ROI 1')
+  const [roiReferenceState, setRoiReferenceState] = React.useState<
+    RoiReferenceState<StructuredLoadError>
+  >({ status: 'idle' })
   const [roiState, setRoiState] = React.useState<RoiState<StructuredLoadError>>({
     status: 'ready',
     url: 'https://example.test/output',
@@ -118,6 +126,7 @@ function Probe({
       currentViewportDetail: null,
       magicLensScope,
       roiName,
+      ...(referenceCells === undefined ? {} : { referenceCells }),
     },
     data: {
       loadState,
@@ -157,6 +166,7 @@ function Probe({
       setRoiGeneViewportWarmupState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setRoiState,
       setRoiTranscriptExportState,
     },
@@ -168,6 +178,7 @@ function Probe({
       magicLensState,
       roiGeneStatsState,
       roiMode,
+      roiReferenceState,
       roiRequestId: roiRequestIdRef.current,
       roiState,
       roiTranscriptExportState,
@@ -224,12 +235,14 @@ function WarmupProbe({
   datasetUrl = 'https://example.test/output',
   loadRoiCells,
   loadRoiGeneStats,
+  referenceCells,
   viewportGeneWarmupEnabled = true,
 }: {
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly datasetUrl?: string
   readonly loadRoiCells: RoiCellsLoader
   readonly loadRoiGeneStats: RoiGeneStatsLoader
+  readonly referenceCells?: readonly DatasetCell[]
   readonly viewportGeneWarmupEnabled?: boolean
 }) {
   const [magicLensState, setMagicLensState] = React.useState<
@@ -242,6 +255,9 @@ function WarmupProbe({
     React.useState<RoiGeneViewportWarmupState>({ status: 'idle' })
   const [roiMode, setRoiMode] = React.useState<RoiDrawMode>('idle')
   const [roiName, setRoiName] = React.useState('ROI 1')
+  const [roiReferenceState, setRoiReferenceState] = React.useState<
+    RoiReferenceState<StructuredLoadError>
+  >({ status: 'idle' })
   const [roiState, setRoiState] = React.useState<RoiState<StructuredLoadError>>({
     status: 'idle',
   })
@@ -279,6 +295,7 @@ function WarmupProbe({
       magicLensScope: 'roi',
       roiName,
       viewportGeneWarmupEnabled,
+      ...(referenceCells === undefined ? {} : { referenceCells }),
     },
     data: {
       loadState,
@@ -310,6 +327,7 @@ function WarmupProbe({
       setRoiGeneViewportWarmupState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setRoiState,
       setRoiTranscriptExportState,
     },
@@ -319,6 +337,7 @@ function WarmupProbe({
   void roiGeneStatsState
   void roiGeneViewportWarmupState
   void roiMode
+  void roiReferenceState
   void roiTranscriptExportState
 
   return null
@@ -504,6 +523,181 @@ describe('useRoiWorkflow', () => {
     expect(click).toHaveBeenCalledTimes(1)
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:test')
     expect(snapshot.debugMessages).toContain('Exported ROI GeoJSON ROI 1')
+  })
+
+  it('compares the selection with the reference cells outside it (15.4-B)', async () => {
+    const inside = {
+      id: asCellId('aaaaaaaa-1'),
+      position: { x: micrometers(1), y: micrometers(2) },
+    }
+    const referenceCells: readonly DatasetCell[] = [
+      { id: asCellId('bbbbbbbb-1'), position: { x: micrometers(5), y: micrometers(5) } },
+      { id: asCellId('cccccccc-1'), position: { x: micrometers(50), y: micrometers(5) } },
+      { id: asCellId('dddddddd-1'), position: { x: micrometers(60), y: micrometers(5) } },
+    ]
+    const loadRoiCells = vi.fn<RoiCellsLoader>(async () => [inside])
+    const loadRoiGeneStats = vi.fn<RoiGeneStatsLoader>(async (_url, cells) => ({
+      genes: [],
+      cellCount: cells.length,
+      sampledCellCount: cells.length,
+      totalCount: 0,
+      hitCellLimit: false,
+    }))
+
+    render(
+      <Probe
+        loadRoiCells={loadRoiCells}
+        loadRoiGeneStats={loadRoiGeneStats}
+        referenceCells={referenceCells}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      api.handleRoiComplete(selection)
+    })
+
+    // The preview and the reference ask for every gene; the reference
+    // leaves out the cell inside the box.
+    expect(loadRoiGeneStats).toHaveBeenNthCalledWith(
+      1,
+      'https://example.test/output',
+      [inside],
+      expect.objectContaining({ geneLimit: ALL_GENES, sampleStrategy: 'head' }),
+    )
+    expect(loadRoiGeneStats).toHaveBeenNthCalledWith(
+      2,
+      'https://example.test/output',
+      referenceCells.slice(1),
+      expect.objectContaining({ cellLimit: 2, geneLimit: ALL_GENES }),
+    )
+    expect(snapshot.roiReferenceState).toMatchObject({
+      status: 'ready',
+      stats: { sampledCellCount: 2 },
+    })
+    expect(snapshot.debugMessages).toContain('ROI reference started: 2 cells outside')
+
+    act(() => {
+      api.handleClearRoi()
+    })
+    expect(snapshot.roiReferenceState).toEqual({ status: 'idle' })
+  })
+
+  it('says the reference is unavailable when none of it is outside', async () => {
+    const loadRoiCells = vi.fn<RoiCellsLoader>(async () => [
+      { id: asCellId('aaaaaaaa-1'), position: { x: micrometers(1), y: micrometers(2) } },
+    ])
+    const loadRoiGeneStats = vi.fn<RoiGeneStatsLoader>(async () => ({
+      genes: [],
+      cellCount: 1,
+      sampledCellCount: 1,
+      totalCount: 0,
+      hitCellLimit: false,
+    }))
+
+    render(
+      <Probe
+        loadRoiCells={loadRoiCells}
+        loadRoiGeneStats={loadRoiGeneStats}
+        referenceCells={[
+          {
+            id: asCellId('bbbbbbbb-1'),
+            position: { x: micrometers(5), y: micrometers(5) },
+          },
+        ]}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      api.handleRoiComplete(selection)
+    })
+
+    expect(loadRoiGeneStats).toHaveBeenCalledTimes(1)
+    expect(snapshot.roiReferenceState).toEqual({
+      status: 'unavailable',
+      url: 'https://example.test/output',
+    })
+  })
+
+  it('keeps the genes when the reference read fails', async () => {
+    const loadRoiCells = vi.fn<RoiCellsLoader>(async () => [
+      { id: asCellId('aaaaaaaa-1'), position: { x: micrometers(1), y: micrometers(2) } },
+    ])
+    const loadRoiGeneStats = vi.fn<RoiGeneStatsLoader>(async (_url, cells) => {
+      if (cells[0]?.id === asCellId('cccccccc-1')) throw new Error('Range read failed')
+      return {
+        genes: [],
+        cellCount: 1,
+        sampledCellCount: 1,
+        totalCount: 0,
+        hitCellLimit: false,
+      }
+    })
+
+    render(
+      <Probe
+        loadRoiCells={loadRoiCells}
+        loadRoiGeneStats={loadRoiGeneStats}
+        referenceCells={[
+          {
+            id: asCellId('cccccccc-1'),
+            position: { x: micrometers(50), y: micrometers(5) },
+          },
+        ]}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      api.handleRoiComplete(selection)
+    })
+
+    expect(snapshot.roiGeneStatsState).toMatchObject({ status: 'ready' })
+    expect(snapshot.roiReferenceState).toMatchObject({ status: 'error' })
+  })
+
+  it('reads the reference sample during the warm-up (15.4-B)', async () => {
+    vi.useFakeTimers()
+    const loadRoiCells = roiCellsLoader()
+    const loadRoiGeneStats = roiGeneStatsLoader()
+    const referenceCells: readonly DatasetCell[] = [
+      { id: asCellId('cccccccc-1'), position: { x: micrometers(50), y: micrometers(5) } },
+    ]
+
+    try {
+      const view = render(
+        <WarmupProbe
+          currentViewportDetail={firstViewportDetail}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+          referenceCells={referenceCells}
+        />,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
+      })
+
+      expect(loadRoiGeneStats).toHaveBeenCalledTimes(2)
+      expect(loadRoiGeneStats).toHaveBeenLastCalledWith(
+        'https://example.test/output',
+        referenceCells,
+        expect.objectContaining({ cellLimit: 1, geneLimit: ALL_GENES }),
+      )
+      view.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps ROI gene warmup scoped to the dataset while the viewport moves', async () => {

@@ -13,8 +13,12 @@ function input(overrides: Partial<ViewSettingsModelInput> = {}): ViewSettingsMod
     setMeasurementEnabled: vi.fn(),
     setMeasurementResetKey: vi.fn(),
     setMeasurementUnit: vi.fn(),
+    setShowAxes: vi.fn(),
     setShowHoverTooltips: vi.fn(),
+    setShowMinimap: vi.fn(),
+    showAxes: false,
     showHoverTooltips: true,
+    showMinimap: true,
     ...overrides,
   }
 }
@@ -78,6 +82,34 @@ describe('useViewSettingsModel', () => {
     })
     expect(options.appendDebugEvent).toHaveBeenCalledWith('Measure unit: px', {
       coalesceKey: 'measurement-unit',
+    })
+  })
+
+  it('shows and hides the minimap, logging only changes', () => {
+    const options = input()
+    const { result } = renderHook(() => useViewSettingsModel(options))
+
+    result.current.onShowMinimapChange(true)
+    result.current.onShowMinimapChange(false)
+
+    expect(options.setShowMinimap).toHaveBeenCalledTimes(1)
+    expect(options.setShowMinimap).toHaveBeenCalledWith(false)
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Minimap hidden', {
+      coalesceKey: 'minimap-visible',
+    })
+  })
+
+  it('shows and hides the axes, logging only changes', () => {
+    const options = input()
+    const { result } = renderHook(() => useViewSettingsModel(options))
+
+    result.current.onShowAxesChange(false)
+    result.current.onShowAxesChange(true)
+
+    expect(options.setShowAxes).toHaveBeenCalledTimes(1)
+    expect(options.setShowAxes).toHaveBeenCalledWith(true)
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Axes shown', {
+      coalesceKey: 'axes-visible',
     })
   })
 })

@@ -315,3 +315,37 @@
   font-size: var(--font-caption);
   font-variant-numeric: tabular-nums;
 }
+
+/* The transcript gene list (15.4-C): swatch, eye, gene, count. */
+.transcript-gene-panel {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.transcript-gene-list {
+  max-height: 240px;
+}
+
+.transcript-gene-list li {
+  grid-template-columns: 22px 16px minmax(0, 1fr) auto;
+}
+
+.transcript-gene-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.transcript-gene-footer small,
+.transcript-gene-note {
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-weight: 700;
+}
+
+.transcript-gene-note {
+  margin: 0;
+}

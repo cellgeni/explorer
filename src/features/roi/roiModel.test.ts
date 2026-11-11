@@ -179,7 +179,7 @@ describe('roiModel', () => {
           hitCellLimit: false,
         },
       }),
-    ).toBe('Genes: top 1')
+    ).toBe('Genes: 1 detected')
   })
 
   it('summarizes cells, selections, names, and warmup keys', () => {

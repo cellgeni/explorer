@@ -26,7 +26,8 @@ the canvas, and the layer panel docked on the right.
         │   │   ├── ROI drawing, measurement and Magic Lens overlays, hover tooltip
         │   │   ├── Bottom left: legend, loading indicator, viewport messages
         │   │   ├── Bottom centre: mouse coordinates
-        │   │   ├── Bottom right: Zoom out, Zoom in, Fit to view; scale bar
+        │   │   ├── Bottom right: minimap; Zoom out, Zoom in, Fit to view; scale bar
+        │   │   ├── Top and left edges: axes, when on in Settings
         │   │   └── StartScreen, before a dataset opens   src/features/start/StartScreen.tsx
         │   ├── InfoDrawer (ⓘ, 380 px, left)   src/features/shell/InfoDrawer.tsx
         │   ├── CardStack (360 px, top left)    src/features/cards/CardStack.tsx
@@ -141,6 +142,8 @@ does only that, and the tool stays.
 | Control             | Type              | Default                                    | Notes                                                                             |
 | ------------------- | ----------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
 | `Hover tooltips`    | Checkbox          | On                                         | Transcript tooltips ignore it                                                     |
+| `Show minimap`      | Checkbox          | On                                         | The [minimap](#minimap) at the bottom right; for the session, not in the link     |
+| `Show axes`         | Checkbox          | Off                                        | [Axes](#axes) along the top and left edges; for the session, not in the link      |
 | `Mouse coordinates` | Segmented µm / px | µm                                         | Also sets the scale-bar unit                                                      |
 | `Boundary limit`    | Number            | 1–100,000; 2,500 (compact) or 50,000       | Most visible cells before boundary polygons are deferred. Disabled for Visium HD  |
 | `Show debug info`   | Switch            | Off, or on with `?debug=1` (or `#debug=1`) | Shows the zoom number, and the deck.gl layer and budget lines in Diagnostics (D6) |
@@ -291,12 +294,33 @@ Atera stores transcripts per gene (see
 | `Feature filter`     | Select           | **Selected genes**, All features               | Selected genes needs at least one selected gene; applies to density and exact points   |
 | Feature chips        | Chips with ×     |                                                | × (`Remove {gene} from transcript features`) removes it from the shared gene selection |
 | `Feature search`     | Search           | Up to 24 results, ranked like `Gene selection` | Adds the gene and switches the filter to Selected genes                                |
+| Gene list            | Rows             | See below                                      | With exact points coloured by Feature (Phase 15.4-C)                                   |
 | `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal     | Normalized to the largest square on the slide at the current square size               |
 | `Point color`        | Select           | **Feature**, QV                                | Exact points                                                                           |
 | `Min QV`             | Number           | 0–40; 20                                       | Exact points                                                                           |
 | `Gene-only calls`    | Checkbox         | On                                             | Excludes control probes                                                                |
 | `Transcript opacity` | Slider 0–100%    | 85%                                            |                                                                                        |
 | `Point size`         | Slider 1–6 px    | 2 px                                           |                                                                                        |
+
+The gene list (`src/features/sections/TranscriptGeneListBlock.tsx`,
+`src/features/transcripts/useTranscriptGeneLegend.ts`) shows, while exact
+points are coloured by Feature, the genes coloured on the canvas: the
+selected genes in order with Selected genes, or the 24 genes with most points
+in view with All features ("+n more genes in view"). Each row has:
+
+- a swatch (`{gene} transcript color`). A selected gene gets the first of
+  12 colours no other selected gene has, and keeps it while others are added
+  or removed; other genes keep the colour from their name. A colour chosen
+  here is kept for that gene, also in other datasets, for the session.
+- an eye (`{gene} transcripts visible`), which hides that gene's points.
+  `Show All` shows them again. Hidden genes reset when another dataset opens,
+  and QV colours show every point.
+- the number of its points loaded in view, hidden ones included.
+
+The canvas legend lists the same genes under "Transcripts" (the first 12,
+then "+n more in Transcripts"), and its checkboxes are the same eyes; it
+stays while every gene in view is hidden. With density squares or QV colours
+there is no list; the section says why.
 
 At ≥ 80% of the budget, `Load exact viewport` must be pressed.
 
@@ -382,11 +406,57 @@ selection as an annotation and colours by annotations. `Delete` (after the
 exports) removes the selection, with [Undo](#undo); closing the card keeps it
 in the list.
 
-| Tab                         | Contents                                                                                                                  |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Genes                       | Top genes: count, % of total, % of cells, mean per cell (a 32-cell preview, then refined). Visium HD: ROI genes over bins |
-| Cells (Spots, Bins)         | Cells, mean transcripts and mean area; for bins, the count, bin size and in-tissue count                                  |
-| Transcripts (or Expression) | `Summarise Transcripts`: Magic Lens over the selection (D14). Expression where the lens counts UMIs or values             |
+| Tab                         | Contents                                                                                                               |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Genes                       | Genes ranked as Enriched or Most abundant, with % of cells expressing inside and outside (see [Genes tab](#genes-tab)) |
+| Cells (Spots, Bins)         | Cells, mean transcripts and mean area; for bins, the count, bin size and in-tissue count                               |
+| Transcripts (or Expression) | `Summarise Transcripts`: Magic Lens over the selection (D14). Expression where the lens counts UMIs or values          |
+
+#### Genes tab
+
+Phase 15.4-B (`src/features/roi/roiEnrichmentModel.ts`,
+`src/features/roi/RoiPanels.tsx`). Up to 20 genes, each with a bar, the share
+of cells (spots, bins) expressing it inside and outside, and its mean per
+cell inside; under Most abundant also its count and share of all counts.
+
+| Control                                  | Notes                                                                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `Enriched` / `Most abundant`             | Enriched (the default) ranks by log2 fold change over the cells outside, shown as "+2.4"; Most abundant by count inside |
+| `Min % of cells` (spots, bins)           | Any, 5%, 10% (default), 25% or 50%: leaves out genes expressed in fewer of the cells inside, under either sort          |
+| A gene's name (`Colour cells by {gene}`) | Makes it the only selected gene and sets `Cell color` to Gene expression; pressed while it is selected                  |
+
+The line above the list says what the selection is compared with: "Compared
+with 503 cells outside", "Comparing with … outside…" while that reads, or
+"No comparison: …" when no sampled cell is outside the selection or the read
+failed. Until there is a comparison, Enriched lists by count.
+
+Method:
+
+- **Inside.** The selection's cells, read as for the old top genes: a
+  32-cell preview first, then up to 10,000 cells (an even sample when there
+  are more); Visium HD reads every selected bin. Values are as the matrix
+  stores them: counts for Xenium, Atera and Visium HD, and `X` for H5AD,
+  Visium and SpatialData, which may already be normalised or log-transformed.
+- **Outside.** One reference sample per dataset: 8 runs of 64 consecutive
+  cells (or loaded bins) spread evenly through the dataset's list, which is
+  in matrix row order, so each run reads about one chunk. Those inside the
+  selection's box or lasso are left out, and the rest are the comparison.
+  Xenium reads the whole sample after loading, with the ROI warm-up, so a
+  selection's comparison comes from the cache; other platforms read it with
+  the first selection. On the Xenium demo, whose Zarr matrix has no
+  cell-major arrays, ROI genes read `cell_feature_matrix.h5`; once that was
+  read, the comparison for a 37,000-cell box took 91 ms.
+- **Mean per cell** is the sum over the sampled cells divided by their
+  number, so cells without the gene count as 0. **% of cells** is the share
+  with a value above 0.
+- **log2 fold change** = log2((mean inside + 0.1) / (mean outside + 0.1)). The
+  pseudocount of 0.1 per cell keeps genes absent outside finite and damps
+  genes with a few counts in a small selection; the minimum % filter does
+  the rest. Ties go to the higher mean inside.
+- This ranks genes for a look; it is not a test. There are no p-values, the
+  reference is a fixed sample of up to 512 cells, and neighbouring cells are
+  not independent. Use exported cells for a proper differential expression
+  analysis.
 
 Exports: `Export GeoJSON` (`{name}-roi.geojson`), `Export Cells`
 (`{name}-cells.csv`, up to 50,000 cells), `Export Transcripts`
@@ -467,8 +537,10 @@ category lists last:
 - `Cell color` Metadata: the track name and its range.
 - `Cell color` Cell area: µm² on a square-root scale.
 - Transcripts drawn as density: what the squares count ("SNAP25 transcripts per
-  40 µm bin") with the density scale; or points coloured by quality: QV 0 to
-  40+.
+  40 µm bin") with the density scale; points coloured by quality: QV 0 to
+  40+; or points coloured by Feature: "Transcripts", each gene with an eye,
+  its swatch and its points in view (15.4-C), as in the Transcripts section's
+  gene list.
 
 Transcript count, the default, has no legend. Hidden cells drop their legend.
 
@@ -532,11 +604,37 @@ apart, at least 3 points). ROIs smaller than 1 µm × 1 µm are ignored. Each
 ROI drawn on cells, spots or bins is added to Annotations › Selections as
 "ROI n" and shown in the Selection card.
 
+### Minimap
+
+The minimap (Phase 15.4-D, `src/components/ViewerMinimap.tsx`) shows the
+whole dataset at the bottom right, above the zoom buttons: up to 168 px on its
+longer side, in the shape of the dataset's extent. The view is a box in the
+accent colour (at least 6 px, so it stays visible when zoomed in). A click
+centres the view there, keeping the zoom, and dragging moves it along.
+
+- With an image, it draws the image's enabled channels at the coarsest
+  pyramid level with its own small tile cache (24 tiles, 2 requests at a
+  time), through `MorphologyCanvas`; Visium uses its tissue image.
+- Without one, or with every channel off, up to 6,000 cells (or Visium HD
+  bins) are dots.
+- It sits beside the deck.gl canvas, so showing it does not redraw the map.
+  It is hidden under 860 px and with Settings › `Show minimap` off.
+
+### Axes
+
+With Settings › `Show axes` on (Phase 15.4-E, `src/components/ViewerAxes.tsx`),
+rulers run along the top and left edges of the canvas with the data
+coordinates: x along the top, y (increasing downwards, as in the data) down
+the left, read bottom to top. Ticks are at 1, 2 or 5 × 10ⁿ, at least 80 px
+apart, in the scale bar's unit (µm, px with `Mouse coordinates` px, or
+"units"), which closes the top ruler. They are hidden from screen readers;
+the coordinate readout says the same.
+
 ### Readouts And Messages
 
 - Bottom centre: mouse X/Y in µm or px, and `Zoom N.NN` with debug info on.
-- Bottom right: zoom buttons, then the scale bar (1/2/5 steps) in the `Mouse
-coordinates` unit.
+- Bottom right: the [minimap](#minimap), zoom buttons, then the scale bar
+  (1/2/5 steps) in the `Mouse coordinates` unit.
 - Bottom left: the legend, the loading indicator (current task plus up to 3
   more) and viewport messages ("Loading overview cells…", "Reading OME-TIFF
   image…", errors).

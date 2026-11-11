@@ -46,7 +46,13 @@ function lens(state: MagicLensState = { status: 'idle' }) {
 function cellsInput(roiState: RoiState) {
   return {
     elementNoun: { singular: 'cell', plural: 'cells' },
-    genes: { copy: 'Genes loading', state: { status: 'idle' as const } },
+    genes: {
+      copy: 'Genes loading',
+      state: { status: 'idle' as const },
+      reference: { status: 'idle' as const },
+      selectedGenes: [],
+      onShowGene: vi.fn(),
+    },
     lens: lens(),
     loading: false,
     name: 'ROI 1',
@@ -184,7 +190,13 @@ describe('selection card', () => {
 
   it('shows a Visium HD bin selection with its bin size', () => {
     const card = binsSelectionCard({
-      genes: { copy: '', state: { status: 'idle' } },
+      genes: {
+        copy: '',
+        state: { status: 'idle' },
+        reference: { status: 'idle' },
+        selectedGenes: [],
+        onShowGene: vi.fn(),
+      },
       lens: lens(),
       name: 'ROI 2',
       nameDisabled: false,

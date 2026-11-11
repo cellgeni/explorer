@@ -4,7 +4,7 @@ import {
   ScatterplotLayer,
   SolidPolygonLayer,
 } from '@deck.gl/layers'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { intToCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
 import {
@@ -1539,6 +1539,32 @@ describe('deck layer factory', () => {
 
     expect(qualityDatum?.fillColor).toEqual([221, 127, 75, 215])
     expect(qualityDatum?.fillColor).not.toEqual(featureDatum?.fillColor)
+  })
+
+  it('colours points by a given gene colour and leaves out hidden genes (15.4-C)', () => {
+    const transcript = (id: string, featureName: string) => ({
+      id,
+      cellId: null,
+      featureName,
+      fovName: 'FOV-1',
+      position: { x: micrometers(10), y: micrometers(20) },
+      qv: 30,
+    })
+    const featureColor = vi.fn((): [number, number, number, number] => [1, 2, 3, 235])
+    const data = transcriptPointsToLayerData(
+      [
+        transcript('tx-1', 'Actb'),
+        transcript('tx-2', 'Gad1'),
+        transcript('tx-3', 'Actb'),
+      ],
+      'feature',
+      { featureColor, hiddenFeatures: new Set(['Gad1']) },
+    )
+
+    expect(data.map((datum) => datum.id)).toEqual(['tx-1', 'tx-3'])
+    expect(data[0]?.fillColor).toEqual([1, 2, 3, 235])
+    // One colour lookup per gene.
+    expect(featureColor).toHaveBeenCalledTimes(1)
   })
 
   it('uses stable feature colors for exact transcript points from the same gene', () => {

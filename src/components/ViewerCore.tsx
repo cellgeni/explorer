@@ -6,6 +6,10 @@ import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
 import { FitIcon, IconButton, MinusIcon, PlusIcon } from './ui'
 import { ViewerLegend } from './ViewerLegend'
 import { ViewerSelectionOverlay } from './ViewerSelectionOverlay'
+import { ViewerMinimap } from './ViewerMinimap'
+import { ViewerAxes } from './ViewerAxes'
+import { viewerAxesModel } from './viewerAxesModel'
+import { minimapDrawsImage, minimapLayout, minimapPoints } from './viewerMinimapModel'
 import {
   selectionOverlayModel,
   type ViewerSelectionHighlight,
@@ -202,6 +206,7 @@ const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
 const EMPTY_SELECTION_OUTLINES: readonly ViewerSelectionOutline[] = []
+const NO_MINIMAP_POINTS: readonly (readonly [number, number])[] = []
 const EMPTY_LEGEND_SECTIONS: readonly ViewerLegendSection[] = []
 // Defaults for omitted props are constants, so a parent re-render that leaves
 // them out does not hand deck.gl new layers.
@@ -275,6 +280,8 @@ export function ViewerCore({
   viewResetKey,
   focusRequest = null,
   navigationControls = false,
+  minimap = false,
+  axes = false,
   fitRequestKey = 0,
   overviewRenderCellLimit,
   clipOverviewCellsToViewport = true,
@@ -298,6 +305,23 @@ export function ViewerCore({
   const fitExtent = useMemo(
     () => overviewFitExtent(viewFitCells, viewFitGridCells, fitImageExtent),
     [fitImageExtent, viewFitCells, viewFitGridCells],
+  )
+  // Without an image the minimap shows where the cells (or bins) are.
+  const minimapImageless = !minimapDrawsImage(imageLoader, imageChannels, flatImage)
+  const minimapDots = useMemo(
+    () =>
+      !minimap || !minimapImageless
+        ? NO_MINIMAP_POINTS
+        : viewFitCells.length > 0
+          ? minimapPoints(viewFitCells, (cell) => [
+              cell.position[0] ?? 0,
+              cell.position[1] ?? 0,
+            ])
+          : minimapPoints(viewFitGridCells, (cell) => {
+              const corner = cell.polygon[0]
+              return corner === undefined ? null : [corner[0] ?? 0, corner[1] ?? 0]
+            }),
+    [minimap, minimapImageless, viewFitCells, viewFitGridCells],
   )
   const resetKey =
     viewResetKey === undefined
@@ -364,6 +388,9 @@ export function ViewerCore({
       viewResetKey={resetKey}
       focusRequest={focusRequest}
       navigationControls={navigationControls}
+      minimap={minimap}
+      axes={axes}
+      minimapPoints={minimapDots}
       fitRequestKey={fitRequestKey}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
       clipOverviewCellsToViewport={clipOverviewCellsToViewport}
@@ -435,7 +462,11 @@ interface ViewerSurfaceProps {
   readonly showZoomLevel: boolean
   readonly selectionHighlight: ViewerSelectionHighlight | null
   readonly onClearSelection?: () => void
-  readonly onLegendCategoryVisibilityChange?: (id: string, visible: boolean) => void
+  readonly onLegendCategoryVisibilityChange?: (
+    id: string,
+    visible: boolean,
+    sectionId: string,
+  ) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
   readonly measurementUnit: ViewerCoordinateUnit
@@ -447,6 +478,9 @@ interface ViewerSurfaceProps {
   readonly viewResetKey: string
   readonly focusRequest: ViewerFocusRequest | null
   readonly navigationControls: boolean
+  readonly minimap: boolean
+  readonly axes: boolean
+  readonly minimapPoints: readonly (readonly [number, number])[]
   readonly fitRequestKey: number
   readonly overviewRenderCellLimit?: number | null
   readonly clipOverviewCellsToViewport: boolean
@@ -528,6 +562,9 @@ function ViewerSurface({
   viewResetKey,
   focusRequest,
   navigationControls,
+  minimap,
+  axes,
+  minimapPoints: minimapDots,
   fitRequestKey,
   overviewRenderCellLimit,
   clipOverviewCellsToViewport,
@@ -689,6 +726,17 @@ function ViewerSurface({
 
     return morphologyViewportBbox(viewState, viewport)
   }, [viewState, viewport])
+  // The minimap (15.4-D): the fitted extent, and moving the view to a point.
+  const minimapView = useMemo(
+    () => (minimap ? minimapLayout(fitExtent) : null),
+    [fitExtent, minimap],
+  )
+  const handleMinimapNavigate = useCallback((target: readonly [number, number]) => {
+    setViewState((currentViewState) => ({
+      ...currentViewState,
+      target: [target[0], target[1], currentViewState.target[2] ?? 0],
+    }))
+  }, [])
   const renderGridCellLods = useMemo(
     () => createGridCellRenderLods(gridCells),
     [gridCells],
@@ -1188,6 +1236,27 @@ function ViewerSurface({
           physicalUnitLabel,
         )
   const zoomLevelText = formatViewportZoom(viewState.zoom)
+  const axesModel = useMemo(
+    () =>
+      !axes || !canTrackMouseCoordinates
+        ? null
+        : viewerAxesModel(
+            viewState,
+            viewport,
+            coordinateUnit,
+            micrometersPerPixel,
+            physicalUnitLabel,
+          ),
+    [
+      axes,
+      canTrackMouseCoordinates,
+      coordinateUnit,
+      micrometersPerPixel,
+      physicalUnitLabel,
+      viewState,
+      viewport,
+    ],
+  )
   const scaleBar = useMemo(
     () =>
       !canTrackMouseCoordinates || viewport.width <= 0 || viewport.height <= 0
@@ -2009,9 +2078,21 @@ function ViewerSurface({
             )}
           </div>
         )}
+        {axesModel === null ? null : <ViewerAxes model={axesModel} />}
         {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
       </div>
       {/* Outside the frame, whose role is img: these have controls. */}
+      {minimapView !== null && canTrackMouseCoordinates ? (
+        <ViewerMinimap
+          layout={minimapView}
+          imageLoader={imageLoader}
+          imageChannels={imageChannels}
+          flatImage={flatImage}
+          points={minimapDots}
+          viewBbox={viewportBbox}
+          onNavigate={handleMinimapNavigate}
+        />
+      ) : null}
       {navigationControls && canTrackMouseCoordinates ? (
         <div className="viewport-navigation" role="group" aria-label="Zoom">
           <IconButton

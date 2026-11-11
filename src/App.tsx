@@ -58,7 +58,10 @@ import { useExamplesIndex } from './features/start/useExamplesIndex'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { isTextEntryTarget } from './features/app-shell/activeToolModel'
 import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
-import { viewerLegendSections } from './features/app-shell/viewerLegendModel'
+import {
+  TRANSCRIPT_GENE_LEGEND_ID,
+  viewerLegendSections,
+} from './features/app-shell/viewerLegendModel'
 import { viewerSelectionHighlight } from './features/app-shell/viewerSelectionHighlight'
 import { colorModeAfterGeneChange } from './features/genes/geneColorModeModel'
 import type { ObservationColorMode } from './rendering/cellStyling'
@@ -120,6 +123,7 @@ import {
 import {
   TRANSCRIPT_EXACT_MANUAL_LOAD_RATIO,
   transcriptDensityContentForRendering,
+  transcriptPointsForRendering,
   transcriptStatusCopy,
 } from './features/transcripts/transcriptLayerModel'
 import { cellDetailStatusCopy } from './features/cells/cellDetailModel'
@@ -141,7 +145,9 @@ import { useMagicLensWorkflow } from './features/roi/useMagicLensWorkflow'
 import { useVisiumHdMagicLensSummary } from './features/roi/useVisiumHdMagicLensSummary'
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import { useSelectionList } from './features/roi/useSelectionList'
+import { useTranscriptGeneLegend } from './features/transcripts/useTranscriptGeneLegend'
 import { selectionDatasetKey, selectionOutlines } from './features/roi/selectionListModel'
+import { referenceSampleIndices } from './features/roi/roiEnrichmentModel'
 import { useVisiumHdRoiWorkflow } from './features/roi/useVisiumHdRoiWorkflow'
 import {
   roiGeneDatasetWarmupKey,
@@ -219,6 +225,7 @@ import {
   type MorphologyImage,
 } from './data/morphologyImage'
 import { micrometers, type BBox } from './data/coords'
+import type { CellId } from './data/cellid'
 import { slug } from './utils/slug'
 import type {
   Annotation,
@@ -418,10 +425,14 @@ export function App({ dependencies }: AppProps = {}) {
       setMeasurementUnit,
       setObservationColorMode,
       setShowCellBoundaries,
+      setShowAxes,
       setShowHoverTooltips,
+      setShowMinimap,
       setShowNucleusBoundaries,
+      showAxes,
       showCellBoundaries,
       showHoverTooltips,
+      showMinimap,
       showNucleusBoundaries,
     },
     magicLens: {
@@ -463,12 +474,14 @@ export function App({ dependencies }: AppProps = {}) {
       roiGeneViewportWarmupState,
       roiMode,
       roiName,
+      roiReferenceState,
       roiState,
       roiTranscriptExportState,
       setRoiGeneStatsState,
       setRoiGeneViewportWarmupState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setRoiState,
       setRoiTranscriptExportState,
       setVisiumHdRoiState,
@@ -498,9 +511,11 @@ export function App({ dependencies }: AppProps = {}) {
       spatialFocusRequest,
     },
     transcripts: {
+      hiddenTranscriptGenes,
       hoveredTranscript,
       manualTranscriptExactRequestKey,
       pinnedTranscript,
+      setHiddenTranscriptGenes,
       setHoveredTranscript,
       setManualTranscriptExactRequestKey,
       setPinnedTranscript,
@@ -510,6 +525,7 @@ export function App({ dependencies }: AppProps = {}) {
       setTranscriptDetailMode,
       setTranscriptExactPointLimit,
       setTranscriptFeatureFilterMode,
+      setTranscriptGeneColors,
       setTranscriptGeneOnly,
       setTranscriptLayerState,
       setTranscriptMinQv,
@@ -522,6 +538,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptDetailMode,
       transcriptExactPointLimit,
       transcriptFeatureFilterMode,
+      transcriptGeneColors,
       transcriptGeneOnly,
       transcriptLayerState,
       transcriptMinQv,
@@ -793,6 +810,23 @@ export function App({ dependencies }: AppProps = {}) {
     },
     loaders: { getSpatialDataset },
   })
+  // The transcript gene legend (15.4-C): each gene's colour and eye.
+  const transcriptGenes = useTranscriptGeneLegend({
+    appendDebugEvent,
+    colorMode: transcriptPointColorMode,
+    colors: transcriptGeneColors,
+    filterMode: effectiveTranscriptFeatureFilterMode,
+    hiddenGenes: hiddenTranscriptGenes,
+    layerState: transcriptLayerState,
+    overlayShown: platformAdapter.effectiveTranscriptOverlay(showTranscriptOverlay),
+    selectedGenes,
+    setColors: setTranscriptGeneColors,
+    setHiddenGenes: setHiddenTranscriptGenes,
+  })
+  // Hidden genes belong to the dataset; colours are kept.
+  useEffect(() => {
+    setHiddenTranscriptGenes([])
+  }, [loadedDatasetUrl, setHiddenTranscriptGenes])
   const {
     activeCellMetadataTrack,
     annotationStyleColors,
@@ -844,7 +878,9 @@ export function App({ dependencies }: AppProps = {}) {
       morphologyImage,
     },
     transcripts: {
+      hiddenTranscriptGenes: transcriptGenes.hiddenGenes,
       transcriptDensityColorScale,
+      transcriptGeneColor: transcriptGenes.featureColor,
       transcriptLayerState,
       transcriptPointColorMode,
     },
@@ -1171,6 +1207,15 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setHiddenAnnotationIds],
   )
+  // The legend's eyes: transcript genes, or annotation classes.
+  const { onVisibilityChange: setTranscriptGeneVisible } = transcriptGenes.model
+  const handleLegendCategoryVisibilityChange = useCallback(
+    (id: string, visible: boolean, sectionId: string) => {
+      if (sectionId === TRANSCRIPT_GENE_LEGEND_ID) setTranscriptGeneVisible(id, visible)
+      else handleAnnotationVisibilityChange(id, visible)
+    },
+    [handleAnnotationVisibilityChange, setTranscriptGeneVisible],
+  )
   const focusSpatialViewOnCell = useCallback(
     (cell: OverviewCellDatum) => {
       spatialFocusRequestIdRef.current += 1
@@ -1297,10 +1342,14 @@ export function App({ dependencies }: AppProps = {}) {
                   content: transcriptDensityContent,
                 }
               : null,
+          // Loaded points, not drawn ones: hiding every gene in view keeps
+          // the legend, so they can be shown again.
           pointColorMode:
-            effectiveShowTranscriptOverlay && transcriptLayerPoints.length > 0
+            effectiveShowTranscriptOverlay &&
+            transcriptPointsForRendering(transcriptLayerState).length > 0
               ? transcriptPointColorMode
               : null,
+          genes: transcriptGenes.legend,
         },
       }),
     [
@@ -1319,7 +1368,8 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptDensityColorScale,
       transcriptDensityContent,
       transcriptDensityScaleLabels,
-      transcriptLayerPoints,
+      transcriptGenes.legend,
+      transcriptLayerState,
       transcriptPointColorMode,
     ],
   )
@@ -1820,6 +1870,26 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedGenes,
     ],
   )
+  // A gene in the Selection card colours the cells by it alone (15.4-B).
+  const showGene = useCallback(
+    (gene: string) => {
+      appendDebugEvent(`Colour by gene ${gene}`)
+      if (selectedGenes.length !== 1 || selectedGenes[0] !== gene) {
+        resetGeneExpressionSelectionState()
+        setManualTranscriptExactRequestKey(null)
+        setSelectedGenes([gene])
+      }
+      setObservationColorMode('gene-expression')
+    },
+    [
+      appendDebugEvent,
+      resetGeneExpressionSelectionState,
+      selectedGenes,
+      setManualTranscriptExactRequestKey,
+      setObservationColorMode,
+      setSelectedGenes,
+    ],
+  )
   const handlePinTranscript = useCallback(
     (detail: ViewerTranscriptHoverDetail) => {
       setPinnedTranscript(detail)
@@ -2063,6 +2133,35 @@ export function App({ dependencies }: AppProps = {}) {
     setters: { setGridCellAssignmentState },
   })
 
+  // The reference sample for enriched genes (15.4-B): runs of consecutive
+  // cells spread through the overview, which is in matrix row order. On
+  // Xenium the index is the cell-feature matrix row.
+  const roiReferenceCells = useMemo<readonly DatasetCell[]>(() => {
+    const withRows = platformAdapter.kind === 'xenium'
+    return referenceSampleIndices(overviewCells.length).flatMap((index) => {
+      const cell = overviewCells[index]
+      if (cell === undefined) return []
+      return [
+        {
+          // Overview IDs are the dataset's own: Xenium cell IDs, or obs
+          // names, which the AnnData readers take as they are.
+          id: cell.id as CellId,
+          position: {
+            x: micrometers(cell.position[0] ?? 0),
+            y: micrometers(-(cell.position[1] ?? 0)),
+          },
+          ...(withRows ? { cellFeatureMatrixRow: index } : {}),
+        },
+      ]
+    })
+  }, [overviewCells, platformAdapter.kind])
+  const roiReferenceBins = useMemo(
+    () =>
+      referenceSampleIndices(expressionStyledSpatialGridCells.length).flatMap(
+        (index) => expressionStyledSpatialGridCells[index] ?? [],
+      ),
+    [expressionStyledSpatialGridCells],
+  )
   const {
     handleCancelRoiCells,
     handleCancelRoiGenes,
@@ -2082,6 +2181,7 @@ export function App({ dependencies }: AppProps = {}) {
       magicLensScope,
       viewportGeneWarmupEnabled: !isAnnDataPlatform(platformAdapter),
       roiName,
+      referenceCells: roiReferenceCells,
     },
     data: {
       loadState,
@@ -2113,6 +2213,7 @@ export function App({ dependencies }: AppProps = {}) {
       setRoiGeneViewportWarmupState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setRoiState,
       setRoiTranscriptExportState,
     },
@@ -2137,6 +2238,7 @@ export function App({ dependencies }: AppProps = {}) {
       activeRoiState: activeVisiumHdRoiState,
       gridCells: expressionStyledSpatialGridCells,
       loadState,
+      referenceBins: roiReferenceBins,
     },
     loaders: {
       getSpatialDataset,
@@ -2150,6 +2252,7 @@ export function App({ dependencies }: AppProps = {}) {
       setRoiGeneStatsState,
       setRoiMode,
       setRoiName,
+      setRoiReferenceState,
       setVisiumHdRoiState,
     },
   })
@@ -3333,6 +3436,7 @@ export function App({ dependencies }: AppProps = {}) {
   const transcriptsSection = useTranscriptsSectionModel({
     appendDebugEvent,
     effectiveTranscriptFeatureFilterMode,
+    geneLegend: transcriptGenes.model,
     geneOnlyFilterEnabled: platformAdapter.capabilities.transcriptGeneOnlyFilter,
     geneOptions,
     genePanelState,
@@ -3420,8 +3524,12 @@ export function App({ dependencies }: AppProps = {}) {
     setMeasurementEnabled,
     setMeasurementResetKey,
     setMeasurementUnit,
+    setShowAxes,
     setShowHoverTooltips,
+    setShowMinimap,
+    showAxes,
     showHoverTooltips,
+    showMinimap,
   })
   const loadingDatasetUrl =
     pendingDatasetLoadState.status === 'loading'
@@ -3510,6 +3618,13 @@ export function App({ dependencies }: AppProps = {}) {
       handleMagicLensSummarise('roi')
     },
   }
+  const selectionGenesInput = {
+    copy: roiGeneStatsCopy,
+    state: roiGeneStatsState,
+    reference: roiReferenceState,
+    selectedGenes,
+    onShowGene: showGene,
+  }
   const cards = useCardStackModel({
     selection:
       platformAdapter.kind === 'image'
@@ -3525,7 +3640,7 @@ export function App({ dependencies }: AppProps = {}) {
         : isVisiumHdDataset
           ? {
               variant: 'bins',
-              genes: { copy: roiGeneStatsCopy, state: roiGeneStatsState },
+              genes: selectionGenesInput,
               lens: selectionLensInput,
               name: roiName,
               nameDisabled: loadState.status !== 'ready',
@@ -3544,7 +3659,7 @@ export function App({ dependencies }: AppProps = {}) {
                 singular: elementPlural.replace(/s$/, ''),
                 plural: elementPlural,
               },
-              genes: { copy: roiGeneStatsCopy, state: roiGeneStatsState },
+              genes: selectionGenesInput,
               lens: selectionLensInput,
               loading: isRoiTabLoading,
               name: roiName,
@@ -3661,7 +3776,7 @@ export function App({ dependencies }: AppProps = {}) {
         showZoomLevel={debugMode}
         selectionHighlight={selectionHighlight}
         onClearSelection={handleClearSelection}
-        onLegendCategoryVisibilityChange={handleAnnotationVisibilityChange}
+        onLegendCategoryVisibilityChange={handleLegendCategoryVisibilityChange}
         coordinateUnit={coordinateUnit}
         measurementEnabled={measurementEnabled}
         measurementUnit={measurementUnit}
@@ -3683,6 +3798,8 @@ export function App({ dependencies }: AppProps = {}) {
         viewResetKey={viewerViewResetKey}
         focusRequest={spatialFocusRequest}
         navigationControls
+        minimap={showMinimap}
+        axes={showAxes}
         fitRequestKey={fitRequestKey}
         onImageTileError={handleImageTileError}
         onTileCacheEviction={handleTileCacheEviction}

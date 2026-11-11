@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  TRANSCRIPT_GENE_LEGEND_ID,
   geneListLabel,
   transcriptDensityDetail,
   viewerLegendSections,
@@ -145,6 +146,39 @@ describe('viewerLegendSections', () => {
         input({ transcripts: { density: null, pointColorMode: 'quality' } }),
       ),
     ).toEqual([expect.objectContaining({ title: 'Transcript quality (QV)', max: '40+' })])
+  })
+
+  it('lists the transcript genes with their colours when points are coloured by gene', () => {
+    expect(
+      viewerLegendSections(
+        input({
+          transcripts: {
+            density: null,
+            pointColorMode: 'feature',
+            genes: {
+              items: [
+                { gene: 'SNAP25', color: '#4cd3c2', visible: true, count: 12 },
+                { gene: 'GFAP', color: '#f8c550', visible: false, count: 3 },
+              ],
+              moreCount: 4,
+            },
+          },
+        }),
+      ),
+    ).toEqual([
+      {
+        kind: 'categories',
+        id: TRANSCRIPT_GENE_LEGEND_ID,
+        title: 'Transcripts',
+        items: [
+          { id: 'SNAP25', label: 'SNAP25', color: '#4cd3c2', count: 12, visible: true },
+          { id: 'GFAP', label: 'GFAP', color: '#f8c550', count: 3, visible: false },
+        ],
+        noun: { singular: 'transcript', plural: 'transcripts' },
+        moreCount: 4,
+        moreWhere: 'Transcripts',
+      },
+    ])
   })
 
   it('says what the transcript density counts and per what size of bin', () => {
