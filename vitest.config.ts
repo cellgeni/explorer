@@ -1,9 +1,17 @@
 import react from '@vitejs/plugin-react'
 import { configDefaults, defineConfig } from 'vitest/config'
 
+// V8 coverage slows the App tests enough on CI's 4-vCPU runner that they
+// overrun the 5 s test and 1 s waitFor/findBy defaults (CI #94–#99). A
+// coverage run gives them longer; `npm test` keeps the defaults.
+const coverageRun = process.argv.includes('--coverage')
+
 export default defineConfig({
   plugins: [react()],
   test: {
+    ...(coverageRun
+      ? { testTimeout: 30_000, env: { TESTING_LIBRARY_ASYNC_TIMEOUT_MS: '5000' } }
+      : {}),
     environment: 'jsdom',
     exclude: [
       ...configDefaults.exclude,

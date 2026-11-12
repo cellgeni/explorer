@@ -411,7 +411,10 @@ describe('App', () => {
       expect(screen.queryByRole('button', { name: 'Magic Lens' })).toBeNull()
 
       openControls('image')
-      expect(screen.getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+      // The channels arrive after image() resolves.
+      await waitFor(() => {
+        expect(screen.getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+      })
       expect(screen.getByRole('checkbox', { name: 'Marker' })).toBeChecked()
       expect(screen.getByLabelText('DAPI color')).toHaveValue('#5890ff')
       expect(screen.queryByRole('slider', { name: 'Cell fill opacity' })).toBeNull()
@@ -1402,9 +1405,11 @@ describe('App', () => {
       )
     })
     openControls('clusters')
-    expect(screen.getByRole('combobox', { name: 'Annotation set' })).toHaveValue(
-      'analysis:1',
-    )
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Annotation set' })).toHaveValue(
+        'analysis:1',
+      )
+    })
 
     // Typing another address does not change the link until it loads.
     openControls('open-dataset')

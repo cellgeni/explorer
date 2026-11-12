@@ -3811,9 +3811,13 @@ From a run of `npm test` and the repository:
       under coverage (CI #94, #97 and #98) failed each time in different
       `App.test.tsx` tests: under coverage the runner is slow enough for their
       1 s waits, and for checks read straight after an async load, to fail.
-      `npm test` stays the required check.
-- [ ] Make those `App.test.tsx` checks wait for the state they read, then make
-      the coverage job required.
+      `npm test` stays the required check. A coverage run now gives each test
+      30 s and `waitFor`/`findBy` 5 s (`vitest.config.ts`, `src/test/setup.ts`);
+      `npm test` keeps the 5 s and 1 s defaults. Two checks that read the image
+      channels and the linked annotation set before they loaded now wait.
+- [ ] Make the coverage job required once it has passed on the runner for a
+      while; if another `App.test.tsx` check fails there, make it wait for the
+      state it reads.
 - [ ] Deeper Visium HD browser coverage: segmentation controls, Bin Info
       inspection, and loading the 2 µm tier when the environment allows.
 - [ ] Direct tests for small helpers and leaf components if they gain behaviour
