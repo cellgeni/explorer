@@ -1,13 +1,18 @@
-import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet'
+import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
+import { coalescingAsyncBuffer } from '../data/coalescingAsyncBuffer'
 import { datasetFileUrlFor } from '../data/datasetFiles'
 import {
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
 } from '../data/persistentByteRangeCache'
+import { mapWithConcurrency } from '../utils/mapWithConcurrency'
+import { waitForSharedLoad } from '../utils/sharedLoad'
 import { parseVisiumHdSquareBarcode } from './visiumHdBarcodes'
 import { normalizeVisiumHdBarcodeMappingRowBudget } from './visiumHdStrategy'
-import type { AsyncBuffer, Compressors } from 'hyparquet'
+import type { AsyncBuffer, Compressors, FileMetaData } from 'hyparquet'
+import type { CoalescingAsyncBufferOptions } from '../data/coalescingAsyncBuffer'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
+import type { SharedLoad } from '../utils/sharedLoad'
 import type { SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from './visiumHdDataset'
 
@@ -21,6 +26,11 @@ export const VISIUM_HD_BARCODE_MAPPING_COLUMNS = [
 ] as const
 
 export { normalizeVisiumHdBarcodeMappingRowBudget } from './visiumHdStrategy'
+
+// A bin read decodes at most this many rows per hyparquet read, and runs at
+// most VISIUM_HD_BARCODE_MAPPING_READ_CONCURRENCY reads at once.
+export const VISIUM_HD_BARCODE_MAPPING_ROWS_PER_READ = 262_144
+export const VISIUM_HD_BARCODE_MAPPING_READ_CONCURRENCY = 2
 
 export interface VisiumHdBarcodeMapping {
   readonly square002um: SpatialElementId
@@ -39,8 +49,31 @@ export interface VisiumHdBarcodeMappingCellAssignment {
   readonly inCell: boolean
 }
 
+export interface VisiumHdBarcodeMappingBinSelection {
+  readonly binSizeMicrometers: VisiumHdBinSizeMicrometers
+  readonly binIds: readonly SpatialElementId[]
+}
+
+// The file's size and parsed footer, read once and shared by later bin reads.
+export interface VisiumHdBarcodeMappingsSource {
+  readonly byteLength: number
+  readonly metadata: FileMetaData
+}
+
+export type VisiumHdBarcodeMappingsSourceCache = Map<
+  string,
+  SharedLoad<VisiumHdBarcodeMappingsSource>
+>
+
 export interface ReadVisiumHdBarcodeMappingsOptions {
+  // Rows the read may decode. Without `bins` that is the whole file.
   readonly maxRows?: number
+  // Read only these bins' rows. Row groups whose barcode statistics rule out
+  // every bin are skipped; Space Ranger sorts the file by 2 µm barcode, so one
+  // 16 µm bin needs about 3 of the reference's 1,123 row groups.
+  readonly bins?: VisiumHdBarcodeMappingBinSelection
+  // Holds the file's size and footer per URL across bin reads.
+  readonly sourceCache?: VisiumHdBarcodeMappingsSourceCache
   readonly file?: AsyncBuffer
   readonly fetcher?: typeof fetch
   readonly signal?: AbortSignal
@@ -48,14 +81,23 @@ export interface ReadVisiumHdBarcodeMappingsOptions {
   readonly loadCompressors?: () => Promise<Compressors>
   readonly readObjects?: VisiumHdBarcodeMappingsObjectReader
   readonly byteRangeCache?: PersistentByteRangeCache | null
+  // How the URL reads are merged and limited; see coalescingAsyncBuffer.
+  readonly rangeRequests?: CoalescingAsyncBufferOptions
 }
 
 export interface VisiumHdBarcodeMappingsReadObjectsOptions {
   readonly file: AsyncBuffer
+  readonly metadata?: FileMetaData
   readonly columns: readonly string[]
   readonly rowFormat: 'object'
+  readonly rowStart?: number
   readonly rowEnd?: number
   readonly compressors?: Compressors
+}
+
+export interface VisiumHdBarcodeMappingRowRange {
+  readonly rowStart: number
+  readonly rowEnd: number
 }
 
 export type VisiumHdBarcodeMappingsObjectReader = (
@@ -84,6 +126,11 @@ export async function readVisiumHdBarcodeMappings(
       ? undefined
       : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
   const url = datasetFileUrlFor(baseUrl, 'barcodeMappings')
+
+  if (options.bins !== undefined) {
+    return readVisiumHdBarcodeMappingsForBins(url, options.bins, maxRows, options)
+  }
+
   const file = options.file ?? (await barcodeMappingsFileFromUrl(url, options))
   const compressors =
     options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
@@ -96,6 +143,143 @@ export async function readVisiumHdBarcodeMappings(
   })
 
   return parseVisiumHdBarcodeMappingRows(rows, maxRows === undefined ? {} : { maxRows })
+}
+
+async function readVisiumHdBarcodeMappingsForBins(
+  url: string,
+  bins: VisiumHdBarcodeMappingBinSelection,
+  maxRows: number | undefined,
+  options: ReadVisiumHdBarcodeMappingsOptions,
+): Promise<readonly VisiumHdBarcodeMapping[]> {
+  if (bins.binIds.length === 0) {
+    return []
+  }
+
+  const { file, metadata } = await barcodeMappingsFileWithMetadata(url, options)
+  const column = visiumHdBarcodeMappingBinColumn(bins.binSizeMicrometers)
+  const ranges = visiumHdBarcodeMappingRowRanges(metadata, column, bins.binIds)
+  const rowCount = ranges.reduce(
+    (total, range) => total + range.rowEnd - range.rowStart,
+    0,
+  )
+
+  if (maxRows !== undefined && rowCount > maxRows) {
+    throw new VisiumHdBarcodeMappingsBudgetExceededError(rowCount, maxRows)
+  }
+
+  if (ranges.length === 0) {
+    return []
+  }
+
+  const compressors =
+    options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
+  const readObjects = options.readObjects ?? readHyparquetObjects
+  const binIds = new Set<unknown>(bins.binIds)
+  const batches = await mapWithConcurrency(
+    ranges,
+    VISIUM_HD_BARCODE_MAPPING_READ_CONCURRENCY,
+    async (range) => {
+      const rows = await readObjects({
+        file,
+        metadata,
+        columns: VISIUM_HD_BARCODE_MAPPING_COLUMNS,
+        rowFormat: 'object',
+        rowStart: range.rowStart,
+        rowEnd: range.rowEnd,
+        compressors,
+      })
+
+      return rows.filter((row) => binIds.has(row[column]))
+    },
+  )
+
+  return parseVisiumHdBarcodeMappingRows(batches.flat())
+}
+
+// Row ranges holding the row groups that may contain one of `binIds` in
+// `column`: those without string min/max statistics, or whose range holds a
+// bin. Neighbouring row groups share a range of up to `maxRowsPerRange` rows.
+export function visiumHdBarcodeMappingRowRanges(
+  metadata: Pick<FileMetaData, 'row_groups'>,
+  column: string,
+  binIds: readonly string[],
+  maxRowsPerRange = VISIUM_HD_BARCODE_MAPPING_ROWS_PER_READ,
+): readonly VisiumHdBarcodeMappingRowRange[] {
+  const sortedBinIds = [...new Set(binIds)].sort(compareStrings)
+  const ranges: { rowStart: number; rowEnd: number }[] = []
+  let groupStart = 0
+
+  for (const rowGroup of metadata.row_groups) {
+    const groupEnd = groupStart + Number(rowGroup.num_rows)
+    const statistics = rowGroup.columns.find(
+      (chunk) => chunk.meta_data?.path_in_schema[0] === column,
+    )?.meta_data?.statistics
+    const min = statistics?.min_value ?? statistics?.min
+    const max = statistics?.max_value ?? statistics?.max
+    const mayHoldBin =
+      typeof min !== 'string' ||
+      typeof max !== 'string' ||
+      sortedRangeHasValue(sortedBinIds, min, max)
+
+    if (groupEnd > groupStart && mayHoldBin) {
+      const last = ranges.at(-1)
+
+      if (
+        last !== undefined &&
+        last.rowEnd === groupStart &&
+        groupEnd - last.rowStart <= maxRowsPerRange
+      ) {
+        last.rowEnd = groupEnd
+      } else {
+        ranges.push({ rowStart: groupStart, rowEnd: groupEnd })
+      }
+    }
+
+    groupStart = groupEnd
+  }
+
+  return ranges
+}
+
+function visiumHdBarcodeMappingBinColumn(
+  binSizeMicrometers: VisiumHdBinSizeMicrometers,
+): 'square_002um' | 'square_008um' | 'square_016um' {
+  switch (binSizeMicrometers) {
+    case 2:
+      return 'square_002um'
+    case 8:
+      return 'square_008um'
+    case 16:
+      return 'square_016um'
+  }
+}
+
+// Whether any of the sorted `values` lies in [min, max].
+function sortedRangeHasValue(
+  values: readonly string[],
+  min: string,
+  max: string,
+): boolean {
+  let low = 0
+  let high = values.length
+
+  while (low < high) {
+    const middle = (low + high) >>> 1
+
+    if ((values[middle] as string) < min) {
+      low = middle + 1
+    } else {
+      high = middle
+    }
+  }
+
+  return low < values.length && (values[low] as string) <= max
+}
+
+// Parquet orders string statistics by bytes, and for these ASCII barcodes
+// that is the order of `<` on JS strings.
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
 }
 
 export function parseVisiumHdBarcodeMappingRows(
@@ -169,15 +353,53 @@ export function parseVisiumHdBarcodeMappingRow(
   }
 }
 
+type BarcodeMappingsFileOptions = Pick<
+  ReadVisiumHdBarcodeMappingsOptions,
+  'byteRangeCache' | 'fetcher' | 'rangeRequests' | 'signal'
+>
+
+async function barcodeMappingsFileWithMetadata(
+  url: string,
+  options: ReadVisiumHdBarcodeMappingsOptions,
+): Promise<{ readonly file: AsyncBuffer; readonly metadata: FileMetaData }> {
+  if (options.file !== undefined) {
+    return { file: options.file, metadata: await parquetMetadataAsync(options.file) }
+  }
+
+  const source =
+    options.sourceCache === undefined
+      ? await readBarcodeMappingsSource(url, options)
+      : await waitForSharedLoad(
+          options.sourceCache,
+          url,
+          (signal) => readBarcodeMappingsSource(url, { ...options, signal }),
+          options.signal,
+        )
+  const file = await barcodeMappingsFileFromUrl(url, options, source.byteLength)
+
+  return { file, metadata: source.metadata }
+}
+
+async function readBarcodeMappingsSource(
+  url: string,
+  options: BarcodeMappingsFileOptions,
+): Promise<VisiumHdBarcodeMappingsSource> {
+  const file = await barcodeMappingsFileFromUrl(url, options)
+
+  return { byteLength: file.byteLength, metadata: await parquetMetadataAsync(file) }
+}
+
+// Reads go through coalescingAsyncBuffer, which merges hyparquet's per-column
+// chunk reads and limits how many are in flight. The footer cache sits on
+// top so hyparquet's footer reads keep their exact ranges.
 async function barcodeMappingsFileFromUrl(
   url: string,
-  options: Pick<
-    ReadVisiumHdBarcodeMappingsOptions,
-    'byteRangeCache' | 'fetcher' | 'signal'
-  >,
+  options: BarcodeMappingsFileOptions,
+  byteLength?: number,
 ): Promise<AsyncBuffer> {
   const file = await asyncBufferFromUrl({
     url,
+    ...(byteLength === undefined ? {} : { byteLength }),
     ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
     ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
   })
@@ -186,10 +408,10 @@ async function barcodeMappingsFileFromUrl(
       ? defaultPersistentByteRangeCache()
       : options.byteRangeCache
 
-  return cacheFooterByteRanges(file, {
+  return cacheFooterByteRanges(coalescingAsyncBuffer(file, options.rangeRequests), {
     cache: byteRangeCache,
     url,
-  }) as AsyncBuffer
+  })
 }
 
 async function readHyparquetObjects(
@@ -197,9 +419,11 @@ async function readHyparquetObjects(
 ): Promise<readonly Record<string, unknown>[]> {
   return (await parquetReadObjects({
     file: options.file,
+    ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
     columns: [...options.columns],
     rowFormat: options.rowFormat,
     ...(options.compressors === undefined ? {} : { compressors: options.compressors }),
+    ...(options.rowStart === undefined ? {} : { rowStart: options.rowStart }),
     ...(options.rowEnd === undefined ? {} : { rowEnd: options.rowEnd }),
   })) as readonly Record<string, unknown>[]
 }

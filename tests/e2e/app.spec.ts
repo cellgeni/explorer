@@ -30,8 +30,9 @@ const XENIUM_TRANSCRIPT_TIMEOUT_MS = 120_000
 const XENIUM_ROI_TIMEOUT_MS = 120_000
 const VISIUM_HD_LOAD_TIMEOUT_MS = 90_000
 const VISIUM_HD_BIN_PROFILE_TIMEOUT_MS = 120_000
-// The cell assignment reads all of barcode_mappings.parquet (110 MB).
-const VISIUM_HD_BIN_ASSIGNMENT_TIMEOUT_MS = 180_000
+// The cell assignment reads the footer of barcode_mappings.parquet (704 KB)
+// and the few row groups that can hold the bin, about 300 KB for 16 µm.
+const VISIUM_HD_BIN_ASSIGNMENT_TIMEOUT_MS = 60_000
 // Each boundary request streams the whole cell (68 MB) and nucleus (44 MB)
 // segmentation GeoJSON and keeps the polygons around the view.
 const VISIUM_HD_BOUNDARY_TIMEOUT_MS = 180_000
@@ -1386,12 +1387,6 @@ test('opens a Visium HD bin card from the keyboard and again from its link @live
 }) => {
   test.setTimeout(300_000)
 
-  // The card's cell assignment reads barcode_mappings.parquet with thousands
-  // of parallel range requests, which Chromium rejects, and the rejections can
-  // take the card's other reads with them (see the cell assignment test
-  // below). Blocking the file keeps this test to the rest of the card.
-  await page.route('**/barcode_mappings.parquet', (route) => route.abort())
-
   await openVisiumHdReferenceTissueLink(page)
   const binCard = await selectVisiumHdBinAtCentre(page)
   const barcode = await binCard.getByText(/^s_016um_\d{5}_\d{5}-1$/).innerText()
@@ -1412,14 +1407,14 @@ test('opens a Visium HD bin card from the keyboard and again from its link @live
   await expectVisiumHdBinProfile(binCard)
 })
 
-// Expected to fail: the card reads all of barcode_mappings.parquet (110 MB)
-// with about 6,700 parallel range requests, Chromium rejects most of them
-// (net::ERR_INSUFFICIENT_RESOURCES), and the card shows "Network request
-// failed: Failed to fetch". Remove test.fail() once the reads are limited.
+// Reading all of barcode_mappings.parquet (110 MB, 1,123 row groups) sent
+// 6,738 range requests at once, one per column chunk, and Chromium failed
+// them with net::ERR_INSUFFICIENT_RESOURCES ("Network request failed: Failed
+// to fetch"). The card now reads only the row groups that can hold the bin,
+// with merged and limited range requests.
 test('reads a Visium HD bin cell assignment from barcode_mappings.parquet @live', async ({
   page,
 }) => {
-  test.fail()
   test.setTimeout(300_000)
 
   await openVisiumHdReferenceTissueLink(page)
@@ -1467,9 +1462,6 @@ test('switches Visium HD to 2 um bins, read exactly once zoomed in @live', async
 }) => {
   test.setTimeout(160_000)
   test.slow()
-
-  // See the bin card test above.
-  await page.route('**/barcode_mappings.parquet', (route) => route.abort())
 
   const visiumPanel = await openVisiumHdReferenceTissueLink(page)
   const twoMicrometers = visiumPanel.getByRole('button', { name: '2 µm' })
