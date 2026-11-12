@@ -47,7 +47,8 @@ files. Parsing happens in the browser:
 
 Unit tests sit next to their modules as `*.test.ts(x)` and run with Vitest.
 `npm run test:coverage` adds V8 coverage over `src/` with minimum thresholds;
-CI runs it on every pull request and uploads the report.
+CI runs it on every pull request and uploads the report, but only `npm test`
+blocks a merge.
 
 ## Load Pipeline
 

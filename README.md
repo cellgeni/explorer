@@ -34,7 +34,8 @@ npm run preview
 
 `npm run test:coverage` runs the unit tests with V8 coverage, writes an HTML
 report to `coverage/`, and fails below the thresholds in `vitest.config.ts`. CI
-runs it on every pull request.
+runs it on every pull request in a separate job that reports but does not block;
+`npm test` is the required check.
 
 End-to-end tests use the built app through Vite preview:
 
