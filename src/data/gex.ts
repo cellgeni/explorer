@@ -5,6 +5,7 @@ import { cachedZipFileStoreFromUrl } from '../zarr/cachedZipStore'
 import { geneExpressionStageTiming } from './geneExpressionTiming'
 import { createGeneFeatureIndex } from './geneFeatures'
 import { selectionToSql } from './gexSelection'
+import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 import type {
   FeatureBarcodeMatrixWorkerRequest,
   FeatureBarcodeMatrixWorkerResponse,
@@ -122,7 +123,7 @@ const SELECTED_GENE_CELL_MAJOR_CELL_THRESHOLD = 2_000
 const SELECTED_GENE_CELL_MAJOR_GENE_THRESHOLD = 32
 const FEATURE_BARCODE_MATRIX_WORKER_MAX_ATTEMPTS = 3
 const FEATURE_BARCODE_MATRIX_WORKER_RETRY_DELAY_MS = 250
-const h5MatrixCache = new Map<string, Promise<H5MatrixCache>>()
+const h5MatrixCache = new Map<string, SharedLoad<H5MatrixCache>>()
 const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
 const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
 const zarrMatrixCellIdDataCache = new Map<string, Promise<Uint32Array>>()
@@ -1510,22 +1511,13 @@ function loadH5Matrix(
   url: string,
   options: CellFeatureMatrixReadOptions,
 ): Promise<H5MatrixCache> {
-  const cached = h5MatrixCache.get(url)
-
-  if (cached !== undefined) {
-    return cached
-  }
-
-  const promise = loadH5MatrixUncached(url, options).catch((error: unknown) => {
-    if (h5MatrixCache.get(url) === promise) {
-      h5MatrixCache.delete(url)
-    }
-
-    throw error
-  })
-
-  h5MatrixCache.set(url, promise)
-  return promise
+  // Shared by every caller and cancelled only when they all cancel (15.5-E).
+  return waitForSharedLoad(
+    h5MatrixCache,
+    url,
+    (signal) => loadH5MatrixUncached(url, { ...options, signal }),
+    options.signal,
+  )
 }
 
 async function zarrCellMajorSparseRanges(

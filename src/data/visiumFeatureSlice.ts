@@ -1,4 +1,5 @@
 import { isGeneFeature } from './geneFeatures'
+import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
 import type {
   VisiumFeatureSliceWorkerRequest,
@@ -100,7 +101,7 @@ const METADATA_JSON_ATTR_NAME = 'metadata_json'
 const FEATURE_SLICES_GROUP_NAME = '/feature_slices'
 const FEATURE_NAME_DATASET = '/features/name'
 const FEATURE_TYPE_DATASET = '/features/feature_type'
-const featureSliceCache = new Map<string, Promise<VisiumFeatureSliceCache>>()
+const featureSliceCache = new Map<string, SharedLoad<VisiumFeatureSliceCache>>()
 let nextFeatureSliceWorkerRequestId = 1
 
 export async function gexFromVisiumFeatureSliceH5<ElementId extends string>(
@@ -455,24 +456,13 @@ function loadVisiumFeatureSliceH5(
   url: string,
   options: VisiumFeatureSliceReadOptions,
 ): Promise<VisiumFeatureSliceCache> {
-  const cached = featureSliceCache.get(url)
-
-  if (cached !== undefined) {
-    return cached
-  }
-
-  const promise = loadVisiumFeatureSliceH5Uncached(url, options).catch(
-    (error: unknown) => {
-      if (featureSliceCache.get(url) === promise) {
-        featureSliceCache.delete(url)
-      }
-
-      throw error
-    },
+  // Shared by every caller and cancelled only when they all cancel (15.5-E).
+  return waitForSharedLoad(
+    featureSliceCache,
+    url,
+    (signal) => loadVisiumFeatureSliceH5Uncached(url, { ...options, signal }),
+    options.signal,
   )
-
-  featureSliceCache.set(url, promise)
-  return promise
 }
 
 async function loadVisiumFeatureSliceH5Uncached(

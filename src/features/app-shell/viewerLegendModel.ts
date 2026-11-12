@@ -40,6 +40,9 @@ export interface ViewerLegendInput {
   // False while the layer panel hides the cells (15.2-C), so their colour
   // scale leaves the legend. Defaults to true.
   readonly cellsVisible?: boolean
+  // What one observation is called: a cell, or a spot on Visium (15.5-E).
+  // Defaults to cell.
+  readonly cellNoun?: { readonly singular: string; readonly plural: string }
   readonly colorMode: ObservationColorMode
   readonly genes: {
     readonly names: readonly string[]
@@ -131,6 +134,13 @@ export function viewerLegendSections(input: ViewerLegendInput): ViewerLegendSect
   ]
 }
 
+function cellNoun(input: ViewerLegendInput): {
+  readonly singular: string
+  readonly plural: string
+} {
+  return input.cellNoun ?? { singular: 'cell', plural: 'cells' }
+}
+
 function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection | null {
   switch (input.colorMode) {
     case 'gene-expression': {
@@ -147,8 +157,8 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
             : status === 'unavailable'
               ? 'Expression unavailable'
               : names.length === 1
-                ? 'Expression per cell'
-                : `${SCORE_MODE_LABELS[scoreMode]} of ${names.length.toLocaleString()} genes per cell`,
+                ? `Expression per ${cellNoun(input).singular}`
+                : `${SCORE_MODE_LABELS[scoreMode]} of ${names.length.toLocaleString()} genes per ${cellNoun(input).singular}`,
         gradient: geneExpressionScaleGradient(colorScale),
         min: '0',
         max: formatGeneScaleValue(scaleMax),
@@ -163,6 +173,7 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
         kind: 'categories',
         id: 'cells',
         title: annotations.setLabel ?? 'Annotations',
+        noun: cellNoun(input),
         items: annotations.items.map((item) => ({
           ...item,
           label:

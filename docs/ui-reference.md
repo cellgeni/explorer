@@ -249,7 +249,7 @@ Loaded state:
   total and a visibility checkbox. Each row has a colour picker, a visibility
   checkbox, the label without the set prefix, a bar of its size, its cell
   count and share of the set, and `×`. Visium spots hidden off the tissue are
-  not counted.
+  not counted, here or in the legend.
 - **Metadata tracks**: per track label, cell count, range, and `x`.
 
 **Embedding**: `Show Embedding` opens the [Embedding panel](#embedding-panel).
@@ -385,8 +385,10 @@ Import rules are in [Image-only and GeoJSON](./image-only-and-geojson.md).
 
 ## Cards
 
-Cards are 360 px wide and stack at the top left of the canvas in this order,
-scrolling when they outgrow it; a card that appears scrolls into view. While
+Cards are 360 px wide and stack at the top left of the canvas in this order.
+The stack ends above the legend and loading list at the bottom left (at least
+240 px tall), and scrolls when the cards outgrow it; a card that appears
+scrolls into view. While
 the info drawer is open they move to its right. Closing a card clears what it
 shows. Selection, Cell and Transcript cards have `Go To`, which shows what the
 card is about (`zoomToBbox`). A card that closes while it holds keyboard
@@ -538,10 +540,11 @@ category lists last:
 
 - `Cell color` Gene expression: the genes (up to three names, then "+n"),
   "Expression per cell" or "{Sum|Mean|Mean z-score} of n genes per cell", and
-  the gene scale from 0 to its maximum.
+  the gene scale from 0 to its maximum. Visium says spot, and Visium HD bin.
 - `Cell color` Annotations: the set name and the first 12 labels, each with a
   visibility checkbox, swatch and cell count, then "+n more in Cells ›
-  Clusters". The checkboxes are the same as those in Cells › Clusters.
+  Clusters". The checkboxes and counts are the same as those in Cells ›
+  Clusters: Visium spots hidden off the tissue are left out.
 - `Cell color` Metadata: the track name and its range.
 - `Cell color` Cell area: µm² on a square-root scale.
 - Transcripts drawn as density: what the squares count ("SNAP25 transcripts per
@@ -680,8 +683,10 @@ the coordinate readout says the same.
 - Exact transcript points from `transcripts.zarr.zip` show a percentage: the
   share of the view's tiles read. Other tasks do not know how far they have
   got and show none.
-- Bottom centre, above the readout: toasts (`.viewer-toasts`): a failed load
-  while another dataset stays open, and [Undo](#undo).
+- Bottom, above the readout: toasts (`.viewer-toasts`): a failed load
+  while another dataset stays open, and [Undo](#undo). Wider than 860 px they
+  centre between the legend and loading list and the minimap, so they cover
+  neither (`ShellLayout` measures both).
 - Before any dataset: the [start screen](#start-screen).
 
 ### Undo

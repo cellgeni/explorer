@@ -1,4 +1,11 @@
-import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { isTextEntryTarget } from '../app-shell/activeToolModel'
 import { CardStack } from '../cards/CardStack'
 import type { CardStackModel } from '../cards/cardModels'
@@ -70,6 +77,8 @@ export function ShellLayout({
     onPanelsChange({ ...panels, embeddingOpen: open })
   }
   const narrow = useNarrowScreen()
+  const canvasRef = useRef<HTMLDivElement>(null)
+  useCanvasCornerSizes(canvasRef)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   // On narrow screens the panel is a bottom sheet that starts as a 56 px
   // handle (15.2-I).
@@ -147,7 +156,10 @@ export function ShellLayout({
               : 'shell-body'
         }
       >
-        <div className={infoOpen ? 'shell-canvas has-info-drawer' : 'shell-canvas'}>
+        <div
+          ref={canvasRef}
+          className={infoOpen ? 'shell-canvas has-info-drawer' : 'shell-canvas'}
+        >
           <InfoDrawer
             info={info}
             open={infoOpen}
@@ -172,6 +184,74 @@ export function ShellLayout({
       </div>
     </>
   )
+}
+
+// The cards stop above the legend and loading list at the bottom left, so a
+// tall card never covers them; the card stack scrolls instead. Toasts centre
+// between that stack and the minimap at the bottom right (15.5-E). The sizes
+// go to CSS as custom properties on the canvas, without a render.
+function useCanvasCornerSizes(canvasRef: RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (canvas === null || typeof ResizeObserver === 'undefined') return
+
+    let bottomLeft: Element | null = null
+    let bottomRight: Element | null = null
+    const update = () => {
+      const bounds = canvas.getBoundingClientRect()
+      const left = bottomLeft?.getBoundingClientRect()
+      const right = bottomRight?.getBoundingClientRect()
+      canvas.style.setProperty('--canvas-bottom-left-height', pixels(left?.height ?? 0))
+      canvas.style.setProperty(
+        '--canvas-bottom-left-width',
+        pixels(bottomLeft === null ? 0 : contentRight(bottomLeft) - bounds.left),
+      )
+      if (right === undefined) {
+        canvas.style.removeProperty('--canvas-bottom-right-width')
+      } else {
+        const width = pixels(bounds.right - right.left)
+        canvas.style.setProperty('--canvas-bottom-right-width', width)
+      }
+    }
+    const resize = new ResizeObserver(update)
+    resize.observe(canvas)
+    // The legend and loading list come and go, and so does the minimap.
+    const track = () => {
+      const nextLeft = canvas.querySelector('.viewport-notification-stack')
+      const nextRight = canvas.querySelector('.viewer-minimap')
+      if (nextLeft === bottomLeft && nextRight === bottomRight) return
+      for (const element of [bottomLeft, bottomRight]) {
+        if (element !== null) resize.unobserve(element)
+      }
+      bottomLeft = nextLeft
+      bottomRight = nextRight
+      for (const element of [bottomLeft, bottomRight]) {
+        if (element !== null) resize.observe(element)
+      }
+      update()
+    }
+    const mutation = new MutationObserver(track)
+    mutation.observe(canvas, { childList: true, subtree: true })
+    track()
+
+    return () => {
+      resize.disconnect()
+      mutation.disconnect()
+    }
+  }, [canvasRef])
+}
+
+// The stack is a fixed-width column; what covers the canvas is its widest
+// child, such as a 260 px legend without the loading list.
+function contentRight(element: Element): number {
+  return Math.max(
+    element.getBoundingClientRect().left,
+    ...Array.from(element.children, (child) => child.getBoundingClientRect().right),
+  )
+}
+
+function pixels(size: number): string {
+  return `${Math.max(0, Math.ceil(size))}px`
 }
 
 // The sheet's handle names what colours the cells, or else the first layer.

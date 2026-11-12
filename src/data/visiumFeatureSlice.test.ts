@@ -69,9 +69,10 @@ describe('Visium HD Feature Slice H5', () => {
       geneNames: [],
       counts: [],
     })
+    // The read runs under the shared load's own signal (15.5-E).
     expect(fetcher).toHaveBeenCalledWith(
       'https://example.test/visium/feature_slice-fixture-a.h5',
-      {},
+      { signal: expect.any(AbortSignal) },
     )
   })
 

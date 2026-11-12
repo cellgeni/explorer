@@ -3450,9 +3450,74 @@ listed them. Written down in 15.5 from the findings each one turned up:
     by its heading with a labelled close button; scrollable regions with
     focusable content and focus rings on everything that takes focus
     (`[tabindex='0']` and `summary` were missing one).
-- [ ] **E. Re-run the eight review tasks** on the Xenium demo and Census
+- [x] **E. Re-run the eight review tasks** on the Xenium demo and Census
       Visium at 1440, 1024 and 390 px, and record the results in the phase
       record. (S)
+  - Done 2026-11-12. `scripts/review-tasks.mjs` runs the eight tasks against
+    the dev server in headless Chromium with the GPU, one dataset and width at
+    a time (1440×900, 1024×700, 390×844), and saves a screenshot per task and
+    a JSON record. It picks and drags only on tissue that no card, legend,
+    toast or minimap covers, and under 860 px closes the cards first, as on a
+    phone. The first runs found four faults, fixed here, and every task
+    passed once they were fixed:
+
+    | Task           | Xenium demo (1.41 M cells)                                                                                                                                                             | Census Visium H5AD (370 spots)                                                               |
+    | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+    | 1. Open        | Start screen lists 6 examples; ready 3.9–6.0 s after `Load`                                                                                                                            | Same; ready 1.0–4.6 s                                                                        |
+    | 2. Gene        | SNAP25; legend "SNAP25, Expression per cell, 0–11" 3.6–5.3 s later                                                                                                                     | "ACTB" ranks ACTB first; "Expression per spot, 0–85" at once                                 |
+    | 3. Clusters    | graphclust (12 classes) recolours the map with SNAP25 still selected; Cluster 1 hidden from the legend                                                                                 | pathologist_annotation, the first set with two or more classes (3); Normal Epithelium hidden |
+    | 4. One cell    | Click opens the Cell card with a ring, and its details load                                                                                                                            | Spot card (865–1,824 genes)                                                                  |
+    | 5. Region      | Box ROI card, "Compared with 448–512 cells outside", enriched genes (NKX2-1 +1.3), 11–17 s                                                                                             | 13–174 spots, about 3 s                                                                      |
+    | 6. Transcripts | Legend "SNAP25 transcripts per 320 µm bin"                                                                                                                                             | Not offered on Visium                                                                        |
+    | 7. Share       | `Share` copies a 428–431 character link; it reopens with the set, gene, ROI and cards                                                                                                  | 413–444 characters; same                                                                     |
+    | 8. Recover     | A missing address toasts "Dataset not found … is still open"; Undo restores a removed class; `Cancel querying ROI cells` stops a second ROI (at 390 px the smaller box finished first) | Same, but the ROI query finishes before Cancel can be pressed                                |
+
+  - **Fixed: shared loads failed when their first caller cancelled.** On
+    Xenium a cell opened, or an ROI drawn, in the first 30 s after load stayed
+    on "Loading" for good: its details, its z distribution and the ROI genes
+    (over two minutes in a probe, with no request open). The range probe
+    (`assertHttpRangeSupport`) is cached per file and ran under its first
+    caller's signal, here the viewport warm-up ("Preparing cell feature
+    matrix"), which the new cell or ROI cancels. The other callers got its
+    `AbortError`, took it for their own and stopped silently. A `sharedLoad`
+    (`src/utils/sharedLoad.ts`) now runs the probe, the whole-file H5 matrix
+    (`loadH5Matrix`) and Visium HD's `feature_slice.h5` under its own signal,
+    aborted only when every caller has; each caller stops at its own signal.
+    In the probe the cell's 376 genes now arrive about 20 s after the click,
+    and task 5 takes 15 s instead of 25.
+  - **Fixed: cards covered the legend.** A tall card at 1440 px hid the legend
+    and loading list. The card stack now ends 12 px above them (at least 240
+    px tall) and scrolls; `ShellLayout` measures them into
+    `--canvas-bottom-left-height`.
+  - **Fixed: the failed-load toast covered the loading list's Cancel buttons.**
+    Wider than 860 px, toasts centre between the legend and loading list and
+    the minimap (`--canvas-bottom-left-width`, measured from the stack's widest
+    child, and `--canvas-bottom-right-width`).
+  - **Fixed: the Visium legend counted spots hidden off the tissue** (4,992 for
+    a set the panel counted as 370). It uses the panel's placed-cell count
+    (`placedAnnotationCellCount`, 15.1-I), and says spot or bin instead of cell
+    on Visium and Visium HD.
+  - **The findings the tasks cover hold:** F1 (task 3), F2 (2, 3, 6), F3 (4),
+    F4 and F5 (8), F9 and F10 (2), F11 (6), F12 (5: the tool hint, Esc), F13
+    (5 and 8: a second ROI, ranked genes), F14 (3: graphclust is the default
+    set; Visium counts), F15 (1), F16 (7), F17 (8), and F18 (the 1024 px fit
+    sits beside the panel). F6–F8 were checked by axe in D and in the
+    screenshots.
+  - **Recorded, not fixed** (in [§12](#12-open-items)):
+    - For up to 4 s at a time in the first 30 s after the Xenium demo loads,
+      the page does not respond: the viewport warm-up reads cells and a matrix
+      sample on the main thread (the open item on main-thread exceptions).
+    - Under 860 px an open card's sheet, up to 55% of the height, covers the
+      legend, the zoom buttons and the minimap. Pinch, `F` and closing the
+      card still work.
+    - At 1024 px with the loading list showing there is no room between it
+      and the minimap, so a toast overlaps one of them until dismissed.
+    - Visium still says "cells" in the Clusters set total, Metadata track
+      counts ("4,992 cells", every obs row) and the gene summary ("359
+      positive cells across 370 slide cells").
+    - No link parameter carries hidden classes, so the reopened view shows
+      Cluster 1 again.
+
 - [ ] **F. Record the outcome** in this phase, and update the out-of-date test
       inventory in [§9](#9-testing-and-ci). (S)
 
@@ -3808,6 +3873,21 @@ Other gaps found in the review:
 - [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,
       annotation set, channel colours and contrast, and initial camera (see
       [Phase 11](#phase-11--dataset-manifest)).
+
+Found by the [15.5-E](#155-close-out) re-run (2026-11-12):
+
+- [ ] Under 860 px an open card's sheet (up to 55% of the height) covers the
+      legend, the zoom buttons and the minimap.
+- [ ] At 1024 px with the loading list showing, a toast has no room between
+      the list and the minimap and overlaps one of them.
+- [ ] Visium says "cells" in the Clusters set total, the Metadata track counts
+      (which also count every obs row, 4,992 on the Census file, not the 370
+      placed spots) and the gene summary ("positive cells across 370 slide
+      cells").
+- [ ] Links do not carry hidden classes, so a shared view shows them again.
+- [ ] The Xenium viewport warm-up ("Preparing cell feature matrix") blocks the
+      main thread for up to 4 s at a time in the first 30 s after load; see the
+      main-thread exceptions above.
 
 Features:
 

@@ -169,6 +169,7 @@ import {
   filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
   linkAnnotationGroupId,
+  placedAnnotationCellCount,
   type AnnotationState,
 } from './features/annotations/annotationModel'
 import {
@@ -988,6 +989,23 @@ export function App({ dependencies }: AppProps = {}) {
   const annotationCopy = annotationStatusCopy(annotationState)
   const annotationGroupOptions =
     annotationGroupState.status === 'ready' ? annotationGroupState.groups : []
+  const overviewCellById = useMemo(() => {
+    const cellById = new Map<string, OverviewCellDatum>()
+
+    for (const cell of overviewCells) {
+      cellById.set(cell.id, cell)
+    }
+
+    return cellById
+  }, [overviewCells])
+  // Visium spots off the tissue are not placed while hidden, so annotation
+  // counts, in the panel and the legend, leave them out (15.1-I, 15.5-E).
+  const annotationPlacedCellIds =
+    visiumControlState.status !== 'idle' &&
+    visiumControlState.summary.offTissueSpotCount > 0 &&
+    !visiumControlState.summary.showOffTissue
+      ? overviewCellById
+      : null
   const legendAnnotations = useMemo(() => {
     if (annotationState.status !== 'ready') return null
 
@@ -1013,13 +1031,14 @@ export function App({ dependencies }: AppProps = {}) {
         id: annotation.id,
         label: annotation.label,
         color: annotationColors[annotation.id] ?? annotationPaletteColor(index),
-        count: annotation.cellIds.length,
+        count: placedAnnotationCellCount(annotation, annotationPlacedCellIds),
       })),
       hiddenIds: hiddenAnnotationIdSet,
     }
   }, [
     annotationColors,
     annotationGroupState,
+    annotationPlacedCellIds,
     annotationState,
     hiddenAnnotationIdSet,
     hiddenAnnotationSetIdSet,
@@ -1036,23 +1055,6 @@ export function App({ dependencies }: AppProps = {}) {
     }
     return max
   }, [observationColorMode, overviewCells])
-  const overviewCellById = useMemo(() => {
-    const cellById = new Map<string, OverviewCellDatum>()
-
-    for (const cell of overviewCells) {
-      cellById.set(cell.id, cell)
-    }
-
-    return cellById
-  }, [overviewCells])
-  // Visium spots off the tissue are not placed while hidden, so annotation
-  // counts leave them out (15.1-I).
-  const annotationPlacedCellIds =
-    visiumControlState.status !== 'idle' &&
-    visiumControlState.summary.offTissueSpotCount > 0 &&
-    !visiumControlState.summary.showOffTissue
-      ? overviewCellById
-      : null
   const gridCellById = useMemo(() => {
     const cellById = new Map<string, GridCellDatum>()
 
@@ -1315,6 +1317,10 @@ export function App({ dependencies }: AppProps = {}) {
     () =>
       viewerLegendSections({
         cellsVisible: layerVisibility.cells,
+        cellNoun: {
+          singular: platformAdapter.labels.embeddingElementPlural.replace(/s$/, ''),
+          plural: platformAdapter.labels.embeddingElementPlural,
+        },
         colorMode: observationColorMode,
         genes: {
           names: selectedGenes,
@@ -1369,6 +1375,7 @@ export function App({ dependencies }: AppProps = {}) {
       legendAnnotations,
       legendCellAreaMax,
       observationColorMode,
+      platformAdapter.labels.embeddingElementPlural,
       selectedCellMetadataTrack,
       selectedGenes,
       transcriptDensityColorScale,

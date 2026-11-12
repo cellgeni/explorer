@@ -171,6 +171,18 @@ export interface PlacedCellIds {
   has(cellId: string): boolean
 }
 
+export function placedAnnotationCellCount(
+  annotation: Annotation,
+  placedCellIds: PlacedCellIds | null,
+): number {
+  return placedCellIds === null
+    ? annotation.cellIds.length
+    : annotation.cellIds.reduce(
+        (count, cellId) => (placedCellIds.has(cellId) ? count + 1 : count),
+        0,
+      )
+}
+
 export function annotationSizePlots(
   annotations: readonly Annotation[],
   placedCellIds: PlacedCellIds | null = null,
@@ -193,13 +205,7 @@ export function annotationSizePlots(
       totalCellAssignments: 0,
       maxCellCount: 0,
     }
-    const cellCount =
-      placedCellIds === null
-        ? annotation.cellIds.length
-        : annotation.cellIds.reduce(
-            (count, cellId) => (placedCellIds.has(cellId) ? count + 1 : count),
-            0,
-          )
+    const cellCount = placedAnnotationCellCount(annotation, placedCellIds)
 
     current.rows.push({
       id: annotation.id,
