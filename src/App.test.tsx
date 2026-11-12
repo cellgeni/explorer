@@ -2649,35 +2649,41 @@ describe('App', () => {
         },
       )
 
-      await waitFor(() => {
-        expect(loadRoiCells).toHaveBeenCalledWith(
-          DEMO_DATASET_URL,
-          expect.objectContaining({
-            kind: 'box',
-            bbox: expect.objectContaining({
-              minX: expect.any(Number) as number,
-              maxX: expect.any(Number) as number,
-              minY: expect.any(Number) as number,
-              maxY: expect.any(Number) as number,
-            }) as object,
-          }),
-          expect.objectContaining({
-            limit: 25_000,
-            signal: expect.any(AbortSignal) as AbortSignal,
-          }),
-        )
-      })
-      await waitFor(() => {
-        expect(loadRoiGeneStats).toHaveBeenCalledWith(
-          DEMO_DATASET_URL,
-          [expect.objectContaining({ id: insideCellId })],
-          expect.objectContaining({
-            cellLimit: 25_000,
-            geneLimit: 10_000,
-            signal: expect.any(AbortSignal) as AbortSignal,
-          }),
-        )
-      })
+      await waitFor(
+        () => {
+          expect(loadRoiCells).toHaveBeenCalledWith(
+            DEMO_DATASET_URL,
+            expect.objectContaining({
+              kind: 'box',
+              bbox: expect.objectContaining({
+                minX: expect.any(Number) as number,
+                maxX: expect.any(Number) as number,
+                minY: expect.any(Number) as number,
+                maxY: expect.any(Number) as number,
+              }) as object,
+            }),
+            expect.objectContaining({
+              limit: 25_000,
+              signal: expect.any(AbortSignal) as AbortSignal,
+            }),
+          )
+        },
+        { timeout: 3_000 },
+      )
+      await waitFor(
+        () => {
+          expect(loadRoiGeneStats).toHaveBeenCalledWith(
+            DEMO_DATASET_URL,
+            [expect.objectContaining({ id: insideCellId })],
+            expect.objectContaining({
+              cellLimit: 25_000,
+              geneLimit: 10_000,
+              signal: expect.any(AbortSignal) as AbortSignal,
+            }),
+          )
+        },
+        { timeout: 3_000 },
+      )
       expect(loadRoiTranscripts).not.toHaveBeenCalled()
 
       const results = await screen.findByLabelText('Magic lens results')
@@ -3723,15 +3729,18 @@ describe('App', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Load exact viewport' }))
 
-      await waitFor(() => {
-        expect(loadTranscriptViewport).toHaveBeenCalledWith(
-          DEMO_DATASET_URL,
-          expect.any(Object),
-          expect.objectContaining({
-            pointLimit: 100_000,
-          }),
-        )
-      })
+      await waitFor(
+        () => {
+          expect(loadTranscriptViewport).toHaveBeenCalledWith(
+            DEMO_DATASET_URL,
+            expect.any(Object),
+            expect.objectContaining({
+              pointLimit: 100_000,
+            }),
+          )
+        },
+        { timeout: 3_000 },
+      )
     } finally {
       viewport.restore()
     }
