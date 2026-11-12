@@ -111,20 +111,6 @@ export function fitExtentViewState(
   }
 }
 
-export function createOverviewViewState(
-  cells: readonly OverviewCellDatum[],
-  gridCells: readonly GridCellDatum[] = [],
-  imageExtent: BBox | null = null,
-  viewport: CssViewportSize = FIT_FALLBACK_VIEWPORT,
-  paddingPixels = 0,
-): OverviewViewState {
-  return fitExtentViewState(
-    overviewFitExtent(cells, gridCells, imageExtent),
-    viewport,
-    paddingPixels,
-  )
-}
-
 // zoomToBbox: the view that shows a region (in data µm, y down), as the
 // cards' Go To buttons ask for. The zoom stays within the view's limits.
 export function viewStateForBbox(

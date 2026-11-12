@@ -102,7 +102,29 @@ describe('viewerLegendSections', () => {
         { id: 'a', label: 'Cluster 1', color: '#ff0000', count: 10, visible: true },
         { id: 'b', label: 'Cluster 2', color: '#00ff00', count: 5, visible: false },
       ],
+      noun: { singular: 'cell', plural: 'cells' },
     })
+  })
+
+  it('counts spots on Visium (15.5-E)', () => {
+    const spot = { singular: 'spot', plural: 'spots' }
+    const genes = { ...input().genes, scaleMax: 85, names: ['ACTB'] }
+    const annotations = {
+      setLabel: null,
+      items: [{ id: 'a', label: 'Fibrosis', color: '#ff0000', count: 131 }],
+      hiddenIds: new Set<string>(),
+    }
+
+    expect(
+      viewerLegendSections(
+        input({ cellNoun: spot, colorMode: 'gene-expression', genes }),
+      ),
+    ).toEqual([expect.objectContaining({ detail: 'Expression per spot' })])
+    expect(
+      viewerLegendSections(
+        input({ cellNoun: spot, colorMode: 'annotations', annotations }),
+      ),
+    ).toEqual([expect.objectContaining({ noun: spot })])
   })
 
   it('shows metadata and area ranges, and transcript density after the cells', () => {

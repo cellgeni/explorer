@@ -244,8 +244,8 @@ not passed to the readers, so it does not change the result.
 
 ## Known Limitations
 
-- The Magic Lens `Min QV` setting has no effect on results, so its control is
-  hidden.
+- The Magic Lens has no QV filter. A `Min QV` setting that had no effect on
+  results was removed in Phase 15.5.
 - Only one morphology image path from `experiment.xenium` is opened: the first
   one the folder's index page lists, or the first path when the host serves no
   index page. A path that fails to open is not retried with the next one.

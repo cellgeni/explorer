@@ -97,7 +97,6 @@ import { IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE } from '../morphology/customMor
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
 import {
   IDLE_MAGIC_LENS_STATE,
-  normalizeMagicLensMinQv,
   normalizeMagicLensRadius,
   parseMagicLensScope,
   type MagicLensScope,
@@ -149,6 +148,7 @@ import {
   type VisiumControlState,
 } from '../dataset/visiumModel'
 
+const NO_MANIFEST_DEFAULTS: ShareableState = {}
 export interface UseAppDomainStateOptions {
   readonly initialShareableState: ShareableState
   readonly performanceBudget: PerformanceBudget
@@ -282,11 +282,6 @@ export function useAppDomainState({
     normalizeMagicLensRadius(
       initialShareableState.magicLensRadiusMicrometers ??
         DEFAULT_SHAREABLE_STATE.magicLensRadiusMicrometers,
-    ),
-  )
-  const [magicLensMinQv, setMagicLensMinQv] = useState(() =>
-    normalizeMagicLensMinQv(
-      initialShareableState.magicLensMinQv ?? DEFAULT_SHAREABLE_STATE.magicLensMinQv,
     ),
   )
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(
@@ -486,6 +481,9 @@ export function useAppDomainState({
   const [, setViewportCellCount] = useState<number | null>(null)
   const [datasetPlatform, setDatasetPlatform] = useState<Platform | null>(null)
   const [datasetAbout, setDatasetAbout] = useState<DatasetManifestAbout | null>(null)
+  // The loaded dataset's manifest defaults, which its links leave out.
+  const [datasetManifestDefaults, setDatasetManifestDefaults] =
+    useState<ShareableState>(NO_MANIFEST_DEFAULTS)
   const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>(
     IDLE_VISIUM_HD_CONTROL_STATE,
   )
@@ -540,6 +538,7 @@ export function useAppDomainState({
       boundaryState,
       cellFeatureMatrixCapabilityState,
       datasetAbout,
+      datasetManifestDefaults,
       datasetPlatform,
       datasetWarmupState,
       diagnosticsState,
@@ -549,6 +548,7 @@ export function useAppDomainState({
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
       setDatasetAbout,
+      setDatasetManifestDefaults,
       setDatasetPlatform,
       setDatasetWarmupState,
       setDiagnosticsState,
@@ -608,12 +608,10 @@ export function useAppDomainState({
     },
     magicLens: {
       magicLensActive,
-      magicLensMinQv,
       magicLensRadiusMicrometers,
       magicLensScope,
       magicLensState,
       setMagicLensActive,
-      setMagicLensMinQv,
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,

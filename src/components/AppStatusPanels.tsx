@@ -83,7 +83,7 @@ function CellFeatureMatrixCompatibilityNotice({
       role="status"
       aria-label="Cell-feature matrix warning"
     >
-      <h2>Matrix Warning</h2>
+      <h4>Matrix Warning</h4>
       <p>
         <code>cell_feature_matrix.zarr.zip</code> is not in CSC format. Selected-gene
         reads may use the older feature-major Zarr layout; ROI gene stats will fall back
@@ -107,7 +107,7 @@ export function ErrorSummary({
 
   return (
     <section className="error-summary" role="alert" aria-label="Load issues">
-      <h2>Issues</h2>
+      <h4>Issues</h4>
       <ul>
         {errors.map((error) => (
           <li key={`${error.source}:${error.code}:${error.message}`}>
@@ -151,7 +151,7 @@ function FallbackNoticeSummary({
       aria-label="Fallback notices"
       aria-live="polite"
     >
-      <h2>Fallbacks</h2>
+      <h4>Fallbacks</h4>
       <ol>
         {notices.map((notice) => (
           <li key={notice.id}>
@@ -183,7 +183,7 @@ export function DatasetDiagnosticsPanel({
   if (state.status === 'loading') {
     return (
       <section className="dataset-diagnostics-panel" aria-label="Dataset diagnostics">
-        <h2>Diagnostics</h2>
+        <h4>Diagnostics</h4>
         <p role="status">Running checks</p>
       </section>
     )
@@ -192,7 +192,7 @@ export function DatasetDiagnosticsPanel({
   if (state.status === 'error') {
     return (
       <section className="dataset-diagnostics-panel" aria-label="Dataset diagnostics">
-        <h2>Diagnostics</h2>
+        <h4>Diagnostics</h4>
         <p>{state.error.title}</p>
       </section>
     )
@@ -201,10 +201,10 @@ export function DatasetDiagnosticsPanel({
   return (
     <section className="dataset-diagnostics-panel" aria-label="Dataset diagnostics">
       <div className="dataset-diagnostics-heading">
-        <h2>Diagnostics</h2>
+        <h4>Diagnostics</h4>
         <span>{summarizeDatasetDiagnostics(state.report)}</span>
       </div>
-      <ol>
+      <ol tabIndex={0} aria-label="Diagnostic checks">
         {state.report.checks.map((check) => (
           <li key={check.id} className={`diagnostic-check-${check.status}`}>
             <span>{check.label}</span>
@@ -352,7 +352,8 @@ export function ActivityLog({
         {entries.length === 0 ? (
           <p>Idle</p>
         ) : (
-          <ol>
+          // It scrolls, so it takes focus for the keyboard (15.5-D).
+          <ol tabIndex={0} aria-label="Activity log entries">
             {entries.map((entry) => (
               <li key={entry.id}>
                 <time dateTime={new Date(entry.timestamp).toISOString()}>

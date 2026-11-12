@@ -70,8 +70,16 @@ focusable:
 
 - Arrow keys pan the spatial view.
 - Shift plus an arrow key pans farther.
-- `+` and `-` zoom in and out.
+- `+` and `-` zoom in and out by one level, as the zoom buttons do.
 - `Home` resets to the fitted dataset view.
+- A ring marks the centre of the view while it has keyboard focus. `Enter`
+  opens the cell, spot or bin there in its card. With Box selection on (`R`),
+  `Enter` selects everything in view, so you can frame a region with the
+  arrow keys and `+`/`-` and select it without a mouse.
+
+Everything else is reachable with Tab. The tool buttons are one stop: use the
+arrow keys to move between them. Closing a card, a menu or the Embedding panel
+puts focus back where you were.
 
 `?` (or the Help button in the top bar) lists every keyboard shortcut and links
 to these guides. A small ⓘ beside some controls, such as `Expression detail`,

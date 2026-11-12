@@ -7,7 +7,8 @@
  *
  * Contrast on --surface-0…3: --text-1 12.3–16.7:1, --text-2 8.3–11.3:1,
  * --text-3 5.4–7.3:1, and every role colour at least 5:1, so all of them can
- * be used for text. Role text on its own -soft background is at least 5.4:1.
+ * be used for text. Role text on its own -soft background is at least 5.4:1
+ * on --surface-0…2 and 4.7:1 on --surface-3, which is still AA.
  */
 :root {
   color-scheme: dark;

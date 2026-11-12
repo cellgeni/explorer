@@ -594,6 +594,12 @@ const DATASET_DETECTION_ERRORS: Record<
     title: 'Host server error',
     action: SERVER_ERROR_ACTION,
   },
+  refused: {
+    code: 'http',
+    title: 'Request refused',
+    action:
+      'Check the address. HTTP 429 means too many requests: wait, then load again. Run Diagnostics shows each request.',
+  },
   unsupported: {
     code: 'unsupported',
     title: 'Unsupported dataset layout',

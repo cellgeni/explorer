@@ -1,5 +1,1 @@
-{
-  "aria-allowed-attr": ["button[title=\"Gad1\"]", "button[title=\"Gapdh\"]"],
-  "aria-prohibited-attr": [".transcript-density-scale-preview-wrap"],
-  "scrollable-region-focusable": ["ol"]
-}
+{}

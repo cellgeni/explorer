@@ -259,6 +259,9 @@ How defaults combine with other settings:
 - A [shareable URL](./ui-reference.md#shareable-url) for the same dataset wins
   field by field: a link that sets `genes` keeps its genes, and the manifest
   fills in what the link leaves out. The link applies only to the first load.
+  The app's links leave out values equal to the manifest's defaults, and
+  write a value the user set back to the app default (such as `genes=` with
+  no genes), so the manifest does not replace it.
 - A value that is not one of the listed options, such as `"colorCellsBy":
 "cluster"`, leaves the control at its default and adds a notice under
   Fallbacks, in the info drawer's Data access notes. Type errors, such as a

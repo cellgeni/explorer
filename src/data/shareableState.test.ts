@@ -59,7 +59,6 @@ describe('shareableState', () => {
       magicLensScope: 'cursor',
       magicLensActive: true,
       magicLensRadiusMicrometers: 120,
-      magicLensMinQv: 18,
     })
 
     const state = parseShareableState(hash)
@@ -102,7 +101,6 @@ describe('shareableState', () => {
     expect(state.magicLensScope).toBe('cursor')
     expect(state.magicLensActive).toBe(true)
     expect(state.magicLensRadiusMicrometers).toBe(120)
-    expect(state.magicLensMinQv).toBe(18)
   })
 
   it('round-trips all morphology channels disabled', () => {

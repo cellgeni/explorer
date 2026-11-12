@@ -21,12 +21,10 @@ import type {
   CellBoundaryDatum,
   OverviewCellDatum,
   OverviewLayerOptions,
-  TranscriptAggregateDatum,
 } from './deckLayerTypes'
 import { createGridCellLayer } from './gridCellRenderer'
 import {
   createTranscriptDensityLayer,
-  createTranscriptFeatureCircleLayer,
   createTranscriptPointLayer,
 } from './transcriptRenderer'
 import { createGeometricAnnotationLayers } from './geometricAnnotationRenderer'
@@ -98,7 +96,6 @@ export {
   styleGridCellsByGeneExpression,
 } from './geneExpressionRenderer'
 export { gridCellBatchesToLayerData } from './gridCellRenderer'
-export { createOverviewViewState } from './overviewViewState'
 export {
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
@@ -114,13 +111,6 @@ export const bundledDeckVersion = deckVersion
 
 // Layers are rebuilt on every view change, so derived arrays are cached by
 // their inputs to keep layer data identical between frames.
-const transcriptBinSplits = new WeakMap<
-  readonly TranscriptAggregateDatum[],
-  {
-    readonly density: readonly TranscriptAggregateDatum[]
-    readonly featureCircles: readonly TranscriptAggregateDatum[]
-  }
->()
 const cellsWithoutBoundariesCache = new WeakMap<
   readonly OverviewCellDatum[],
   { readonly ids: ReadonlySet<string>; readonly cells: readonly OverviewCellDatum[] }
@@ -133,24 +123,6 @@ const cellPointLayerColorsCache = new WeakMap<
     readonly colors: CellPointLayerColors
   }
 >()
-
-function splitTranscriptAggregateBins(bins: readonly TranscriptAggregateDatum[]): {
-  readonly density: readonly TranscriptAggregateDatum[]
-  readonly featureCircles: readonly TranscriptAggregateDatum[]
-} {
-  const cached = transcriptBinSplits.get(bins)
-
-  if (cached !== undefined) {
-    return cached
-  }
-
-  const split = {
-    density: bins.filter((bin) => bin.glyphType !== 'feature-circle'),
-    featureCircles: bins.filter((bin) => bin.glyphType === 'feature-circle'),
-  }
-  transcriptBinSplits.set(bins, split)
-  return split
-}
 
 function cellsWithoutBoundaries(
   cells: readonly OverviewCellDatum[],
@@ -215,7 +187,7 @@ export function createOverviewLayers(
         })
       : EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY)
   const cellBoundaryStyle = options.cellBoundaryStyle ?? EMPTY_CELL_BOUNDARY_LAYER_STYLE
-  const transcriptAggregateBins = options.transcriptAggregateBins ?? []
+  const transcriptDensityBins = options.transcriptAggregateBins ?? []
   const geometricAnnotations = options.geometricAnnotations ?? []
   const gridCells = options.gridCells ?? []
   const gridCellOpacity =
@@ -223,8 +195,6 @@ export function createOverviewLayers(
       ? undefined
       : normalizeLayerOpacity(options.gridCellOpacity)
   const nucleusBoundaries = options.nucleusBoundaries ?? []
-  const { density: transcriptDensityBins, featureCircles: transcriptFeatureCircleBins } =
-    splitTranscriptAggregateBins(transcriptAggregateBins)
   const transcriptPoints = options.transcriptPoints ?? []
   const visibleGeneExpressionOverlayCells = cellsWithoutBoundaries(
     geneExpressionOverlayElements,
@@ -340,15 +310,6 @@ export function createOverviewLayers(
   }
 
   layers.push(...createGeometricAnnotationLayers(geometricAnnotations))
-
-  const transcriptFeatureCircleLayer = createTranscriptFeatureCircleLayer(
-    transcriptFeatureCircleBins,
-    options.transcriptOpacity,
-  )
-
-  if (transcriptFeatureCircleLayer !== null) {
-    layers.push(transcriptFeatureCircleLayer)
-  }
 
   const transcriptPointLayer = createTranscriptPointLayer(transcriptPoints, {
     ...(options.transcriptOpacity === undefined

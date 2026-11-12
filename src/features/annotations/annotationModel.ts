@@ -1,4 +1,7 @@
-import type { AnnotationGroupOption } from '../../data/datasetAnnotations'
+import {
+  ALL_ANNOTATION_GROUP_ID,
+  type AnnotationGroupOption,
+} from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
 import { slug } from '../../utils/slug'
@@ -168,6 +171,18 @@ export interface PlacedCellIds {
   has(cellId: string): boolean
 }
 
+export function placedAnnotationCellCount(
+  annotation: Annotation,
+  placedCellIds: PlacedCellIds | null,
+): number {
+  return placedCellIds === null
+    ? annotation.cellIds.length
+    : annotation.cellIds.reduce(
+        (count, cellId) => (placedCellIds.has(cellId) ? count + 1 : count),
+        0,
+      )
+}
+
 export function annotationSizePlots(
   annotations: readonly Annotation[],
   placedCellIds: PlacedCellIds | null = null,
@@ -190,13 +205,7 @@ export function annotationSizePlots(
       totalCellAssignments: 0,
       maxCellCount: 0,
     }
-    const cellCount =
-      placedCellIds === null
-        ? annotation.cellIds.length
-        : annotation.cellIds.reduce(
-            (count, cellId) => (placedCellIds.has(cellId) ? count + 1 : count),
-            0,
-          )
+    const cellCount = placedAnnotationCellCount(annotation, placedCellIds)
 
     current.rows.push({
       id: annotation.id,
@@ -390,4 +399,14 @@ export function defaultAnnotationGroupId(
   groups: readonly AnnotationGroupOption[],
 ): string | undefined {
   return (groups.find((group) => group.label === 'graphclust') ?? groups[0])?.id
+}
+
+// The first set a link's groups= names that the dataset lists (15.1-L).
+export function linkAnnotationGroupId(
+  groupIds: readonly string[],
+  groups: readonly AnnotationGroupOption[],
+): string | undefined {
+  return groupIds.find(
+    (id) => id === ALL_ANNOTATION_GROUP_ID || groups.some((group) => group.id === id),
+  )
 }

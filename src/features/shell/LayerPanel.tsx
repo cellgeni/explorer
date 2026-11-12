@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from 'react'
 import { Button, ChevronRightIcon, Disclosure, IconButton } from '../../components/ui'
+import { classNames } from '../../components/ui/classNames'
 import {
   AnnotationLabelLists,
   AnnotationSetControls,
@@ -46,6 +47,7 @@ import type {
   LayerSectionHeader,
   LayerSectionId,
 } from './layerPanelModel'
+import { defaultExpandedSections } from './shellLinkModel'
 
 interface LayerPanelProps {
   readonly panel: LayerPanelModel
@@ -64,9 +66,15 @@ interface LayerPanelProps {
   // Cells › Show Embedding opens the Embedding panel (15.2-G).
   readonly embeddingOpen: boolean
   readonly onEmbeddingOpenChange: (open: boolean) => void
-  // 'sheet' is the sections alone, for the bottom sheet on narrow screens
-  // (15.2-I), which has its own handle instead of the collapse button.
-  readonly variant?: 'docked' | 'sheet' | undefined
+  // Under 860 px the panel is a bottom sheet (15.2-I): a handle that names
+  // what colours the cells, instead of the collapse button.
+  readonly sheet?: LayerSheetProps | undefined
+}
+
+export interface LayerSheetProps {
+  readonly expanded: boolean
+  readonly onExpandedChange: (expanded: boolean) => void
+  readonly summary?: string | undefined
 }
 
 // The layer panel (UNIFIED_PLAN.md, 15.2-C): Image, Cells (Spots or Bins),
@@ -85,15 +93,14 @@ export function LayerPanel({
   onExpandedChange,
   embeddingOpen,
   onEmbeddingOpenChange,
-  variant = 'docked',
+  sheet,
 }: LayerPanelProps) {
-  // Until the user opens or closes a section, Cells is open, or the first
-  // section where there are no cells (images).
+  const bodyId = useId()
+  // Until the user opens or closes a section, Cells is open, or Image where
+  // there are no cells.
   const expanded = new Set<LayerSectionId>(
     chosenExpanded ??
-      (panel.sections.some((section) => section.id === 'cells')
-        ? ['cells']
-        : panel.sections.slice(0, 1).map((section) => section.id)),
+      defaultExpandedSections(panel.sections.some((section) => section.id === 'cells')),
   )
   const bodies: Readonly<Record<LayerSectionId, ReactNode>> = {
     image: <ImageSection image={image} viewOptions={viewOptions} />,
@@ -132,28 +139,60 @@ export function LayerPanel({
     </LayerSection>
   ))
 
-  if (variant === 'sheet') {
-    return <div className="shell-layer-sections">{sections}</div>
-  }
-
+  // One tree for both, so crossing 860 px keeps each section's state, such
+  // as a gene search (15.5-B); only the header differs.
   return (
     <aside
-      className={collapsed ? 'shell-layer-panel is-collapsed' : 'shell-layer-panel'}
+      className={classNames(
+        sheet === undefined ? 'shell-layer-panel' : 'ui-sheet shell-layer-sheet',
+        sheet === undefined
+          ? collapsed && 'is-collapsed'
+          : sheet.expanded && 'is-expanded',
+      )}
       aria-label="Layers"
     >
-      <header className="shell-layer-panel-header">
-        {collapsed ? null : <h2>Layers</h2>}
-        <IconButton
-          title={collapsed ? 'Show layers (\\)' : 'Hide layers (\\)'}
-          icon={<ChevronRightIcon />}
-          aria-expanded={!collapsed}
-          className="shell-layer-panel-toggle"
-          onClick={() => {
-            onCollapsedChange(!collapsed)
-          }}
-        />
-      </header>
-      <div className="shell-layer-sections" hidden={collapsed}>
+      {sheet === undefined ? (
+        <header className="shell-layer-panel-header">
+          {collapsed ? null : <h2>Layers</h2>}
+          <IconButton
+            title={collapsed ? 'Show layers (\\)' : 'Hide layers (\\)'}
+            icon={<ChevronRightIcon />}
+            aria-expanded={!collapsed}
+            aria-controls={bodyId}
+            className="shell-layer-panel-toggle"
+            onClick={() => {
+              onCollapsedChange(!collapsed)
+            }}
+          />
+        </header>
+      ) : (
+        <h2 className="shell-layer-sheet-heading">
+          <button
+            type="button"
+            className="ui-sheet-handle"
+            title={sheet.expanded ? 'Collapse Layers' : 'Expand Layers'}
+            aria-expanded={sheet.expanded}
+            aria-controls={bodyId}
+            onClick={() => {
+              sheet.onExpandedChange(!sheet.expanded)
+            }}
+          >
+            <span className="ui-sheet-grip" aria-hidden="true" />
+            <span className="ui-sheet-title">Layers</span>
+            {sheet.summary === undefined ? null : (
+              <span className="ui-sheet-summary">{sheet.summary}</span>
+            )}
+          </button>
+        </h2>
+      )}
+      <div
+        id={bodyId}
+        className={classNames(
+          'shell-layer-sections',
+          sheet !== undefined && 'ui-sheet-body',
+        )}
+        hidden={sheet === undefined ? collapsed : !sheet.expanded}
+      >
         {sections}
       </div>
     </aside>

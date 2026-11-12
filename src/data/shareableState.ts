@@ -64,7 +64,6 @@ export interface ShareableState {
   readonly magicLensScope?: string
   readonly magicLensActive?: boolean
   readonly magicLensRadiusMicrometers?: number
-  readonly magicLensMinQv?: number
   readonly spatialDataCoordinateSystem?: string
   readonly spatialDataImage?: string
   readonly spatialDataMicrometersPerUnit?: number
@@ -94,7 +93,8 @@ export function parseShareableState(hash: string): ShareableState {
   const annotationGroupIds = readCsv(params, 'groups')
   const customImageUrls = readStrings(params, 'customImageUrl')
   const customImageOpacities = readUnitNumbers(params, 'customImageOpacity')
-  const selectedGenes = readCsv(params, 'genes')
+  // An empty genes= clears a dataset manifest's genes.
+  const selectedGenes = readCsvAllowEmpty(params, 'genes')
   const viewState = parseViewState(params.get('view'))
   const roiSelection = parseRoiSelection(params.get('roi'))
   const activeTab = readString(params, 'tab')
@@ -132,7 +132,6 @@ export function parseShareableState(hash: string): ShareableState {
   const magicLensScope = readString(params, 'lensScope')
   const magicLensActive = parseBoolean(params.get('lens'))
   const magicLensRadiusMicrometers = parsePositiveInteger(params.get('lensRadius'))
-  const magicLensMinQv = parseNonNegativeInteger(params.get('lensQv'))
   const spatialDataCoordinateSystem = readString(params, 'sdCs')
   const spatialDataImage = readString(params, 'sdImage')
   const spatialDataMicrometersPerUnit = parsePositiveNumber(params.get('sdUm'))
@@ -316,10 +315,6 @@ export function parseShareableState(hash: string): ShareableState {
     state.magicLensRadiusMicrometers = magicLensRadiusMicrometers
   }
 
-  if (magicLensMinQv !== undefined) {
-    state.magicLensMinQv = magicLensMinQv
-  }
-
   if (spatialDataCoordinateSystem !== undefined) {
     state.spatialDataCoordinateSystem = spatialDataCoordinateSystem
   }
@@ -376,7 +371,9 @@ export function formatShareableState(state: ShareableState): string {
     }
   }
 
-  if (state.selectedGenes !== undefined && state.selectedGenes.length > 0) {
+  // Written even when empty, which a link does only to clear a manifest's
+  // genes (withoutShareableDefaults leaves out the usual empty list).
+  if (state.selectedGenes !== undefined) {
     params.set('genes', state.selectedGenes.join(','))
   }
 
@@ -507,10 +504,6 @@ export function formatShareableState(state: ShareableState): string {
       'lensRadius',
       Math.max(1, Math.floor(state.magicLensRadiusMicrometers)).toString(),
     )
-  }
-
-  if (state.magicLensMinQv !== undefined && Number.isFinite(state.magicLensMinQv)) {
-    params.set('lensQv', Math.max(0, Math.floor(state.magicLensMinQv)).toString())
   }
 
   setOptionalString(params, 'sdCs', state.spatialDataCoordinateSystem)

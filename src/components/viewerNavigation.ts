@@ -6,6 +6,9 @@ import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { InitialViewStateOverride, ViewerCoordinateUnit } from './viewerCoreTypes'
 import { formatCoordinateValue, safeMicrometersPerPixel } from './viewerMeasurements'
 
+// One zoom level, for the + and - keys and the zoom buttons alike.
+export const ZOOM_STEP = 1
+
 export interface BoundaryStyleViewport {
   readonly bbox: BBox
   readonly zoom: number
@@ -125,13 +128,13 @@ export function viewStateFromKeyboardEvent(
     case '=':
       return {
         ...viewState,
-        zoom: clampZoom(viewState.zoom + 0.5, viewState),
+        zoom: clampZoom(viewState.zoom + ZOOM_STEP, viewState),
       }
     case '-':
     case '_':
       return {
         ...viewState,
-        zoom: clampZoom(viewState.zoom - 0.5, viewState),
+        zoom: clampZoom(viewState.zoom - ZOOM_STEP, viewState),
       }
     case 'Home':
       return initialViewState

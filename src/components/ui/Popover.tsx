@@ -16,9 +16,9 @@ export interface PopoverProps {
   readonly className?: string | undefined
 }
 
-// A panel that opens below its trigger button. Focus moves into it; Escape
-// closes it and returns focus to the trigger, and so does a click outside
-// (without moving focus).
+// A panel that opens below its trigger button. Focus moves into it; Escape,
+// or closing from inside, returns focus to the trigger. A click outside also
+// closes it, without moving focus.
 export function Popover({
   title,
   trigger,
@@ -40,13 +40,31 @@ export function Popover({
     onOpenChange?.(nextOpen)
   }
 
+  const wasOpenRef = useRef(isOpen)
+  const dismissedOutsideRef = useRef(false)
+
   useDismiss(isOpen, [triggerRef, panelRef], (reason) => {
+    dismissedOutsideRef.current = reason === 'outside'
     setOpen(false)
     if (reason === 'escape') triggerRef.current?.focus()
   })
 
   useEffect(() => {
-    if (isOpen && panelRef.current !== null) focusFirst(panelRef.current)
+    const wasOpen = wasOpenRef.current
+    wasOpenRef.current = isOpen
+
+    if (isOpen) {
+      dismissedOutsideRef.current = false
+      if (panelRef.current !== null) focusFirst(panelRef.current)
+      return
+    }
+
+    // Closed from inside, such as by picking a menu item: the focused
+    // element went with the panel, so focus returns to the trigger
+    // (15.5-D). A click outside leaves focus where it went.
+    const lost =
+      document.activeElement === null || document.activeElement === document.body
+    if (wasOpen && lost && !dismissedOutsideRef.current) triggerRef.current?.focus()
   }, [isOpen])
 
   return (

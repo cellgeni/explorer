@@ -47,40 +47,6 @@ export function createTranscriptDensityLayer(
   })
 }
 
-export function createTranscriptFeatureCircleLayer(
-  bins: readonly TranscriptAggregateDatum[],
-  opacity: number | undefined,
-): ScatterplotLayer<TranscriptAggregateDatum> | null {
-  if (bins.length === 0) {
-    return null
-  }
-
-  const transcriptOpacity = normalizeLayerOpacity(opacity ?? DEFAULT_LAYER_OPACITY)
-
-  return new ScatterplotLayer<TranscriptAggregateDatum>({
-    id: 'transcript-feature-circles',
-    data: bins,
-    pickable: true,
-    radiusUnits: 'common',
-    radiusMinPixels: 2,
-    radiusMaxPixels: 18,
-    stroked: true,
-    filled: true,
-    opacity: 1,
-    lineWidthUnits: 'pixels',
-    lineWidthMinPixels: 0.75,
-    getPosition: (bin) => bin.position,
-    getRadius: (bin) => bin.radiusMicrometers,
-    getFillColor: (bin) => colorWithOpacity(bin.fillColor, transcriptOpacity),
-    getLineColor: () => colorWithOpacity([12, 12, 10, 160], transcriptOpacity),
-    getLineWidth: 0.75,
-    updateTriggers: {
-      getFillColor: [transcriptOpacity],
-      getLineColor: [transcriptOpacity],
-    },
-  })
-}
-
 export function createTranscriptPointLayer(
   transcripts: readonly TranscriptPointDatum[],
   options: {
@@ -185,14 +151,9 @@ export function transcriptAggregateBinsToLayerData(
   }
 
   let localDensityMax = 1
-  let localFeatureCircleMax = 1
 
   for (const bin of bins) {
-    if (bin.glyphType === 'feature-circle') {
-      localFeatureCircleMax = Math.max(localFeatureCircleMax, bin.count)
-    } else {
-      localDensityMax = Math.max(localDensityMax, bin.count)
-    }
+    localDensityMax = Math.max(localDensityMax, bin.count)
   }
 
   const densityScaleMax =
@@ -201,9 +162,7 @@ export function transcriptAggregateBinsToLayerData(
       : options.scaleMax
 
   return bins.map((bin) => {
-    const denominator =
-      bin.glyphType === 'feature-circle' ? localFeatureCircleMax : densityScaleMax
-    const intensity = Math.sqrt(Math.max(bin.count, 0) / Math.max(1, denominator))
+    const intensity = Math.sqrt(Math.max(bin.count, 0) / Math.max(1, densityScaleMax))
 
     return {
       id: bin.id,
@@ -231,10 +190,7 @@ export function transcriptAggregateBinsToLayerData(
       ...(bin.topFeatures === undefined ? {} : { topFeatures: bin.topFeatures }),
       ...(bin.featureName === undefined ? {} : { featureName: bin.featureName }),
       ...(bin.fovName === undefined ? {} : { fovName: bin.fovName }),
-      fillColor:
-        bin.glyphType === 'feature-circle' && bin.featureName !== undefined
-          ? transcriptFeatureColor(bin.featureName)
-          : transcriptDensityColor(colorScale, intensity),
+      fillColor: transcriptDensityColor(colorScale, intensity),
     }
   })
 }

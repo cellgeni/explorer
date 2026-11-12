@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { formatShareableState, parseShareableState } from '../../data/shareableState'
 import {
   DEFAULT_SHELL_PANELS,
+  defaultExpandedSections,
   cardForLink,
-  cellIdFromLink,
+  cardFromLink,
   hiddenLayersForLink,
   layerVisibilityFromLink,
   mapControlHudTab,
@@ -35,7 +36,7 @@ describe('version 1 tabs in the new shell', () => {
       transcripts: { panels: ['transcripts'] },
       annotations: { panels: ['cells'] },
       roi: { tool: 'box' },
-      cell: { panels: ['embedding'], card: 'cell' },
+      cell: { panels: ['cells', 'embedding'], card: 'cell' },
       'magic-lens': { tool: 'magic-lens' },
     })
     expect(mapControlHudTab('unknown')).toEqual({})
@@ -62,37 +63,60 @@ describe('version 1 tabs in the new shell', () => {
 })
 
 describe('panels in the link', () => {
-  it('reads sections, the drawer and the embedding, keeping the default where none are named', () => {
+  it('reads exactly the sections, drawer and embedding a link names', () => {
     expect(panelsFromLink({})).toBe(DEFAULT_SHELL_PANELS)
     expect(panelsFromLink({ panels: ['image', 'info'] })).toEqual({
       expanded: ['image'],
       infoOpen: true,
       embeddingOpen: false,
     })
-    expect(panelsFromLink({ panels: ['embedding'] }).expanded).toBeNull()
+    // The drawer alone: every section closed (15.5-B).
+    expect(panelsFromLink({ panels: ['info'] })).toEqual({
+      expanded: [],
+      infoOpen: true,
+      embeddingOpen: false,
+    })
     expect(panelsFromLink({ panels: [] }).expanded).toEqual([])
   })
 
-  it('writes nothing at the default and every open panel otherwise', () => {
-    expect(panelsForLink(DEFAULT_SHELL_PANELS)).toBeUndefined()
+  it('writes nothing at the default, and the default sections beside the drawer', () => {
+    const cells = defaultExpandedSections(true)
+
+    expect(cells).toEqual(['cells'])
+    expect(defaultExpandedSections(false)).toEqual(['image'])
+    expect(panelsForLink(DEFAULT_SHELL_PANELS, cells)).toBeUndefined()
     expect(
-      panelsForLink({
-        expanded: ['cells', 'transcripts'],
-        infoOpen: false,
-        embeddingOpen: true,
-      }),
+      panelsForLink({ expanded: null, infoOpen: true, embeddingOpen: false }, cells),
+    ).toEqual(['cells', 'info'])
+    expect(
+      panelsForLink(
+        { expanded: ['cells', 'transcripts'], infoOpen: false, embeddingOpen: true },
+        cells,
+      ),
     ).toEqual(['cells', 'transcripts', 'embedding'])
     expect(
-      panelsForLink({ expanded: [], infoOpen: false, embeddingOpen: false }),
+      panelsForLink({ expanded: [], infoOpen: false, embeddingOpen: false }, cells),
     ).toEqual([])
   })
 
   it('round-trips through the link', () => {
-    const panels = { expanded: ['image' as const], infoOpen: true, embeddingOpen: false }
-    const hash = formatShareableState({ panels: panelsForLink(panels) ?? [] })
-
-    expect(hash).toBe('#xv=2&panel=image%2Cinfo')
-    expect(panelsFromLink(parseShareableState(hash))).toEqual(panels)
+    for (const panels of [
+      { expanded: ['image' as const], infoOpen: true, embeddingOpen: false },
+      { expanded: [], infoOpen: true, embeddingOpen: false },
+    ]) {
+      const hash = formatShareableState({
+        panels: panelsForLink(panels, ['cells']) ?? [],
+      })
+      expect(panelsFromLink(parseShareableState(hash))).toEqual(panels)
+    }
+    expect(
+      formatShareableState({
+        panels:
+          panelsForLink({ expanded: [], infoOpen: true, embeddingOpen: false }, [
+            'cells',
+          ]) ?? [],
+      }),
+    ).toBe('#xv=2&panel=info')
     expect(panelsFromLink(parseShareableState('#xv=2&panel='))).toEqual({
       expanded: [],
       infoOpen: false,
@@ -109,11 +133,24 @@ describe('tool, card and hidden layers in the link', () => {
     expect(toolFromLink(parseShareableState('#tool=lasso'))).toBe('lasso')
   })
 
-  it('restores a selected cell', () => {
-    expect(cardForLink('cell-7')).toBe('cell:cell-7')
-    expect(cardForLink(null)).toBeUndefined()
-    expect(cellIdFromLink(parseShareableState('#card=cell%3Acell-7'))).toBe('cell-7')
-    expect(cellIdFromLink({ card: 'cell' })).toBeNull()
+  it('restores a selected cell, bin or boundary', () => {
+    expect(cardForLink({ cellId: 'cell-7' })).toBe('cell:cell-7')
+    expect(cardForLink({ binId: 'BC-1', cellId: undefined })).toBe('bin:BC-1')
+    expect(cardForLink({ boundaryId: 'seg-3', binId: 'BC-1' })).toBe('boundary:seg-3')
+    expect(cardForLink({})).toBeUndefined()
+    expect(cardFromLink(parseShareableState('#card=cell%3Acell-7'))).toEqual({
+      kind: 'cell',
+      id: 'cell-7',
+    })
+    // Ids may hold colons.
+    expect(cardFromLink({ card: 'bin:s_016um:00012' })).toEqual({
+      kind: 'bin',
+      id: 's_016um:00012',
+    })
+    expect(cardFromLink({ card: 'boundary:seg-3' })?.kind).toBe('boundary')
+    expect(cardFromLink({ card: 'cell' })).toBeNull()
+    expect(cardFromLink({ card: 'cell:' })).toBeNull()
+    expect(cardFromLink({ card: 'spot:1' })).toBeNull()
   })
 
   it('hides layers', () => {

@@ -1,12 +1,14 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
 import { Button, Card } from '../../components/ui'
+import { focusFirst } from '../../components/ui/useDismiss'
 import { BoundaryCellInfoPanel } from '../cells/BoundaryCellInfoPanel'
 import { CellInfoPanel } from '../cells/CellInfoPanel'
 import { GridCellInfoPanel } from '../cells/GridCellInfoPanel'
@@ -58,12 +60,39 @@ export function CardStack({ cards }: { readonly cards: CardStackModel }) {
 }
 
 // A card that appears, or a new cell, scrolls into view if the stack has
-// grown past the canvas.
+// grown past the canvas. A card that closes while it holds focus hands focus
+// to the card now in its place, or else to the canvas (15.5-D).
 function CardSlot({ children }: { readonly children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     ref.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [])
+
+  // A layout cleanup runs while the card is still in the page.
+  useLayoutEffect(() => {
+    const slot = ref.current
+    return () => {
+      const stack = slot?.parentElement
+      if (slot === null || stack === null || stack === undefined) return
+      if (!slot.contains(document.activeElement)) return
+
+      const index = [...stack.children].indexOf(slot)
+      queueMicrotask(() => {
+        const active = document.activeElement
+        if (active !== null && active !== document.body) return
+
+        const slots = stack.isConnected
+          ? stack.querySelectorAll<HTMLElement>(':scope > .shell-card-slot')
+          : []
+        const next = slots[Math.min(index, slots.length - 1)]
+        if (next !== undefined) {
+          focusFirst(next)
+          return
+        }
+        document.querySelector<HTMLElement>('.viewport-frame')?.focus()
+      })
+    }
   }, [])
 
   return (
@@ -204,12 +233,7 @@ function RegionSelectionCard({ card }: { readonly card: RegionSelectionCardModel
             {action.busy ? (action.busyLabel ?? action.label) : action.label}
           </Button>
         ))}
-        <Button
-          title="Delete selection"
-          variant="danger"
-          className="shell-card-delete"
-          onClick={card.onDelete}
-        >
+        <Button title="Delete selection" variant="danger" onClick={card.onDelete}>
           Delete
         </Button>
       </div>
@@ -249,13 +273,23 @@ function Tabs<T extends string>({
   const baseId = useId()
   const tabRefs = useRef(new Map<T, HTMLButtonElement>())
 
+  // Arrows move to the next or previous tab, Home and End to the first or
+  // last, as the ARIA tabs pattern has it.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const step =
-      event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : undefined
-    if (step === undefined) return
-
     const index = tabs.findIndex((tab) => tab.id === active)
-    const next = tabs[(index + step + tabs.length) % tabs.length]
+    const nextIndex =
+      event.key === 'ArrowRight'
+        ? index + 1
+        : event.key === 'ArrowLeft'
+          ? index - 1
+          : event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? tabs.length - 1
+              : undefined
+    if (nextIndex === undefined) return
+
+    const next = tabs[(nextIndex + tabs.length) % tabs.length]
     if (next === undefined) return
 
     event.preventDefault()

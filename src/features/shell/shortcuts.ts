@@ -62,6 +62,12 @@ export const SHORTCUTS: readonly Shortcut[] = [
   // The keys as typed: '-', not the '−' sign the zoom buttons show.
   { keys: ['+', '-'], action: 'Zoom in or out', group: 'View' },
   { keys: ['Home'], action: 'Return to the first view', group: 'View' },
+  // A ring marks the centre while the canvas has focus (15.5-D).
+  {
+    keys: ['Enter'],
+    action: 'Open the cell at the centre; with Box selection, select the view',
+    group: 'View',
+  },
   // F works anywhere, like the tool letters (useToolShortcuts).
   { keys: [FIT_KEY], action: 'Fit the data to the view', group: 'View' },
   { keys: [LAYER_PANEL_KEY], action: 'Hide or show the layer panel', group: 'View' },

@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { CloseIcon, IconButton } from '../../components/ui'
+import { useFocusReturn } from '../../components/ui/useFocusReturn'
 import { isTextEntryTarget } from '../app-shell/activeToolModel'
 import { EmbeddingControls, EmbeddingPlot } from '../sections/EmbeddingBlocks'
 import type { EmbeddingModel } from '../sections/embeddingModel'
@@ -34,8 +35,9 @@ function clampPanelSize(size: PanelSize, maxSize: PanelSize): PanelSize {
 
 // The embedding beside the tissue (UNIFIED_PLAN.md, 15.2-G, F23): a panel at
 // the top right of the canvas, opened from Cells › Show Embedding. The grip
-// at its bottom left resizes it, by pointer or arrow keys. It stays mounted
-// while closed, so it keeps its size.
+// at its bottom left resizes it, by pointer or arrow keys, and says the new
+// size. It stays mounted while closed, so it keeps its size. Opening moves
+// focus into it; closing returns focus to Show Embedding (15.5-D).
 export function EmbeddingWindow({
   embedding,
   open,
@@ -49,9 +51,12 @@ export function EmbeddingWindow({
   readonly fullWidth?: boolean | undefined
 }) {
   const headingId = useId()
+  const sizeId = useId()
   const panelRef = useRef<HTMLElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
   const dragRef = useRef<{ x: number; y: number; size: PanelSize } | null>(null)
   const [size, setSize] = useState<PanelSize>(DEFAULT_SIZE)
+  useFocusReturn(open, panelRef, returnFocusRef)
 
   function maxSize(): PanelSize {
     const canvas = panelRef.current?.parentElement
@@ -145,6 +150,7 @@ export function EmbeddingWindow({
         className="shell-embedding-resize"
         title="Resize the embedding panel: drag, or use the arrow keys"
         aria-label="Resize the embedding panel"
+        aria-describedby={sizeId}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -155,6 +161,10 @@ export function EmbeddingWindow({
           <path d="M1 3l8 8M1 7l4 4" />
         </svg>
       </button>
+      {/* The grip's value: read with it, and again after each change. */}
+      <span id={sizeId} className="visually-hidden" aria-live="polite">
+        {fullWidth ? `${size.height} px high` : `${size.width} by ${size.height} px`}
+      </span>
     </section>
   )
 }

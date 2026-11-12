@@ -81,8 +81,9 @@
 }
 
 .start-screen-section h3,
-.shell-dataset-menu-section h3 {
+.shell-dataset-menu-section h2 {
   margin: 0;
+  line-height: inherit;
   color: var(--text-2);
   font-size: var(--font-control);
   font-weight: 700;

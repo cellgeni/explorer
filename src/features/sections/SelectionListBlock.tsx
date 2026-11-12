@@ -24,7 +24,7 @@ export function SelectionListPanel({
   return (
     <section className="annotation-size-panel" aria-labelledby="selection-list-heading">
       <div className="annotation-size-heading">
-        <h3 id="selection-list-heading">Selections</h3>
+        <h4 id="selection-list-heading">Selections</h4>
         <small>
           {selections.length === 0
             ? 'None'

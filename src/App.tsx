@@ -31,8 +31,9 @@ import { useCardStackModel } from './features/cards/cardModels'
 import { useEmbeddingModel } from './features/sections/embeddingModel'
 import {
   cardForLink,
-  cellIdFromLink,
+  cardFromLink,
   hiddenLayersForLink,
+  defaultExpandedSections,
   panelsForLink,
   panelsFromLink,
   withShellLink,
@@ -57,7 +58,6 @@ import { useRecentDatasets } from './features/start/recentDatasets'
 import { useExamplesIndex } from './features/start/useExamplesIndex'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { isTextEntryTarget } from './features/app-shell/activeToolModel'
-import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import {
   TRANSCRIPT_GENE_LEGEND_ID,
   viewerLegendSections,
@@ -168,6 +168,8 @@ import {
   annotationStatusCopy,
   filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
+  linkAnnotationGroupId,
+  placedAnnotationCellCount,
   type AnnotationState,
 } from './features/annotations/annotationModel'
 import {
@@ -322,11 +324,7 @@ export function App({ dependencies }: AppProps = {}) {
   const [shellPanels, setShellPanels] = useState<ShellPanelState>(() =>
     panelsFromLink(initialShareableState),
   )
-  // Cells is the open section until someone changes it.
-  const openPanelIds = useMemo(
-    () => panelsForLink(shellPanels) ?? ['cells'],
-    [shellPanels],
-  )
+
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const appState = useAppDomainState({ initialShareableState, performanceBudget })
@@ -369,6 +367,7 @@ export function App({ dependencies }: AppProps = {}) {
       boundaryState,
       cellFeatureMatrixCapabilityState,
       datasetAbout,
+      datasetManifestDefaults,
       datasetPlatform,
       datasetWarmupState,
       diagnosticsState,
@@ -378,6 +377,7 @@ export function App({ dependencies }: AppProps = {}) {
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
       setDatasetAbout,
+      setDatasetManifestDefaults,
       setDatasetPlatform,
       setDatasetWarmupState,
       setDiagnosticsState,
@@ -437,12 +437,10 @@ export function App({ dependencies }: AppProps = {}) {
     },
     magicLens: {
       magicLensActive,
-      magicLensMinQv,
       magicLensRadiusMicrometers,
       magicLensScope,
       magicLensState,
       setMagicLensActive,
-      setMagicLensMinQv,
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,
@@ -650,6 +648,15 @@ export function App({ dependencies }: AppProps = {}) {
     document.title = documentTitle(loadedDatasetName)
   }, [loadedDatasetName])
   const platformAdapter = appPlatformAdapterFor(loadState, datasetPlatform)
+  // The sections open until someone opens or closes one.
+  const defaultPanelIds = useMemo(
+    () => defaultExpandedSections(platformAdapter.capabilities.cells),
+    [platformAdapter.capabilities.cells],
+  )
+  const openPanelIds = useMemo(
+    () => panelsForLink(shellPanels, defaultPanelIds) ?? defaultPanelIds,
+    [defaultPanelIds, shellPanels],
+  )
   // The start screen (UNIFIED_PLAN.md, 15.3-A) shows until a load starts,
   // unless the link names a dataset, and again when a load fails with
   // nothing else open.
@@ -982,6 +989,23 @@ export function App({ dependencies }: AppProps = {}) {
   const annotationCopy = annotationStatusCopy(annotationState)
   const annotationGroupOptions =
     annotationGroupState.status === 'ready' ? annotationGroupState.groups : []
+  const overviewCellById = useMemo(() => {
+    const cellById = new Map<string, OverviewCellDatum>()
+
+    for (const cell of overviewCells) {
+      cellById.set(cell.id, cell)
+    }
+
+    return cellById
+  }, [overviewCells])
+  // Visium spots off the tissue are not placed while hidden, so annotation
+  // counts, in the panel and the legend, leave them out (15.1-I, 15.5-E).
+  const annotationPlacedCellIds =
+    visiumControlState.status !== 'idle' &&
+    visiumControlState.summary.offTissueSpotCount > 0 &&
+    !visiumControlState.summary.showOffTissue
+      ? overviewCellById
+      : null
   const legendAnnotations = useMemo(() => {
     if (annotationState.status !== 'ready') return null
 
@@ -1007,13 +1031,14 @@ export function App({ dependencies }: AppProps = {}) {
         id: annotation.id,
         label: annotation.label,
         color: annotationColors[annotation.id] ?? annotationPaletteColor(index),
-        count: annotation.cellIds.length,
+        count: placedAnnotationCellCount(annotation, annotationPlacedCellIds),
       })),
       hiddenIds: hiddenAnnotationIdSet,
     }
   }, [
     annotationColors,
     annotationGroupState,
+    annotationPlacedCellIds,
     annotationState,
     hiddenAnnotationIdSet,
     hiddenAnnotationSetIdSet,
@@ -1030,23 +1055,6 @@ export function App({ dependencies }: AppProps = {}) {
     }
     return max
   }, [observationColorMode, overviewCells])
-  const overviewCellById = useMemo(() => {
-    const cellById = new Map<string, OverviewCellDatum>()
-
-    for (const cell of overviewCells) {
-      cellById.set(cell.id, cell)
-    }
-
-    return cellById
-  }, [overviewCells])
-  // Visium spots off the tissue are not placed while hidden, so annotation
-  // counts leave them out (15.1-I).
-  const annotationPlacedCellIds =
-    visiumControlState.status !== 'idle' &&
-    visiumControlState.summary.offTissueSpotCount > 0 &&
-    !visiumControlState.summary.showOffTissue
-      ? overviewCellById
-      : null
   const gridCellById = useMemo(() => {
     const cellById = new Map<string, GridCellDatum>()
 
@@ -1309,6 +1317,10 @@ export function App({ dependencies }: AppProps = {}) {
     () =>
       viewerLegendSections({
         cellsVisible: layerVisibility.cells,
+        cellNoun: {
+          singular: platformAdapter.labels.embeddingElementPlural.replace(/s$/, ''),
+          plural: platformAdapter.labels.embeddingElementPlural,
+        },
         colorMode: observationColorMode,
         genes: {
           names: selectedGenes,
@@ -1363,6 +1375,7 @@ export function App({ dependencies }: AppProps = {}) {
       legendAnnotations,
       legendCellAreaMax,
       observationColorMode,
+      platformAdapter.labels.embeddingElementPlural,
       selectedCellMetadataTrack,
       selectedGenes,
       transcriptDensityColorScale,
@@ -2455,9 +2468,17 @@ export function App({ dependencies }: AppProps = {}) {
   useEffect(() => {
     const groupIds = initialAnnotationGroupIdsRef.current
 
+    if (groupIds === null || loadedDatasetUrl === null) {
+      return
+    }
+
+    // Only the link's own dataset takes its sets.
+    if (loadedDatasetUrl !== initialShareableState.datasetUrl?.trim()) {
+      initialAnnotationGroupIdsRef.current = null
+      return
+    }
+
     if (
-      groupIds === null ||
-      loadedDatasetUrl === null ||
       annotationGroupState.status !== 'ready' ||
       annotationGroupState.url !== loadedDatasetUrl
     ) {
@@ -2465,18 +2486,24 @@ export function App({ dependencies }: AppProps = {}) {
     }
 
     initialAnnotationGroupIdsRef.current = null
-    const groupId = groupIds.find(
-      (id) =>
-        id === ALL_ANNOTATION_GROUP_ID ||
-        annotationGroupState.groups.some((group) => group.id === id),
-    )
+    const groupId = linkAnnotationGroupId(groupIds, annotationGroupState.groups)
 
     if (groupId !== undefined) {
       setSelectedAnnotationGroupId(groupId)
-      loadAnnotationGroup(groupId)
+      // The commit already applied the link's colour mode; a version 2 link
+      // leaves out the default one. A hand-written link with no version and
+      // no cellColor= colours cells by the set, as choosing it would.
+      loadAnnotationGroup(groupId, {
+        switchColorMode:
+          initialShareableState.linkVersion === undefined &&
+          initialShareableState.observationColorMode === undefined,
+      })
     }
   }, [
     annotationGroupState,
+    initialShareableState.datasetUrl,
+    initialShareableState.linkVersion,
+    initialShareableState.observationColorMode,
     loadAnnotationGroup,
     loadedDatasetUrl,
     setSelectedAnnotationGroupId,
@@ -2633,7 +2660,6 @@ export function App({ dependencies }: AppProps = {}) {
     },
     controls: {
       magicLensActive,
-      magicLensMinQv,
       magicLensScope,
     },
     data: {
@@ -2658,7 +2684,6 @@ export function App({ dependencies }: AppProps = {}) {
     },
     setters: {
       setMagicLensActive,
-      setMagicLensMinQv,
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,
@@ -2842,10 +2867,6 @@ export function App({ dependencies }: AppProps = {}) {
     controls: {
       isDatasetLoaded: loadState.status === 'ready',
       isDatasetLoading: loadState.status === 'loading',
-      geneExpressionColorScale,
-      transcriptDensityColorScale,
-      transcriptExactPointLimit,
-      transcriptPointColorMode,
     },
     initialState: {
       initialShareableState,
@@ -2903,6 +2924,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptCapabilityRequestIdRef: transcriptCapabilityRequestId,
       transcriptRequestIdRef: transcriptRequestId,
       transcriptViewportKeyRef,
+      visiumHdBinRequestIdRef: visiumHdBinRequestId,
     },
     setters: {
       setAnalysisEmbeddingState,
@@ -2918,6 +2940,7 @@ export function App({ dependencies }: AppProps = {}) {
       setImageLayerOpacity,
       setShowTranscriptOverlay,
       setDatasetAbout,
+      setDatasetManifestDefaults,
       setAutoContrastChannelIds,
       setBoundaryElements,
       setBoundaryState,
@@ -3105,36 +3128,94 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
-  // The loaded annotation set for the link; until one loads, the link keeps
-  // the sets it was opened with. Memoised so the link is not rescheduled on
-  // every render.
+  // The loaded annotation set for the link. Until one loads, a link for its
+  // own dataset keeps the sets it was opened with; once the dataset's sets
+  // are listed and none of them matches, or another dataset loads, it drops
+  // them. Memoised so the link is not rescheduled on every render.
   const loadedAnnotationGroupId =
     annotationState.status === 'ready' ? annotationState.groupId : undefined
+  const [linkAnnotationGroupIds, setLinkAnnotationGroupIds] = useState(
+    initialShareableState.annotationGroupIds ?? null,
+  )
+  if (
+    linkAnnotationGroupIds !== null &&
+    loadedDatasetUrl !== null &&
+    (loadedDatasetUrl !== initialShareableState.datasetUrl?.trim() ||
+      (annotationState.status === 'ready' && annotationState.url === loadedDatasetUrl) ||
+      (annotationGroupState.status === 'ready' &&
+        annotationGroupState.url === loadedDatasetUrl &&
+        linkAnnotationGroupId(linkAnnotationGroupIds, annotationGroupState.groups) ===
+          undefined))
+  ) {
+    setLinkAnnotationGroupIds(null)
+  }
   const sharedAnnotationGroupIds = useMemo(
     () =>
       loadedAnnotationGroupId === undefined
-        ? (initialShareableState.annotationGroupIds ?? undefined)
+        ? (linkAnnotationGroupIds ?? undefined)
         : [loadedAnnotationGroupId],
-    [initialShareableState.annotationGroupIds, loadedAnnotationGroupId],
+    [linkAnnotationGroupIds, loadedAnnotationGroupId],
   )
-  const sharedPanels = useMemo(() => panelsForLink(shellPanels), [shellPanels])
+  const sharedPanels = useMemo(
+    () => panelsForLink(shellPanels, defaultPanelIds),
+    [defaultPanelIds, shellPanels],
+  )
   const sharedHiddenLayers = useMemo(
     () => hiddenLayersForLink(layerVisibility),
     [layerVisibility],
   )
-  // A link's `card=cell:<id>` selects that cell once the cells load.
-  const linkedCellIdRef = useRef(cellIdFromLink(initialShareableState))
+  // A link's `card=` selects that cell, bin or boundary once it is loaded
+  // for the link's dataset. Another selection, or another dataset, drops it.
+  const linkedCardRef = useRef(cardFromLink(initialShareableState))
   useEffect(() => {
-    const cellId = linkedCellIdRef.current
-    if (cellId === null || loadState.status !== 'ready' || overviewCells.length === 0) {
+    const card = linkedCardRef.current
+    if (card === null || loadedDatasetUrl === null) return
+
+    if (
+      loadedDatasetUrl !== initialShareableState.datasetUrl?.trim() ||
+      selectedCell !== null ||
+      selectedGridCell !== null ||
+      selectedBoundaryCell !== null
+    ) {
+      linkedCardRef.current = null
       return
     }
 
-    linkedCellIdRef.current = null
-    const cell = overviewCells.find((candidate) => candidate.id === cellId)
-    if (cell !== undefined) handleViewerCellClick(cell)
-  }, [handleViewerCellClick, loadState.status, overviewCells])
-  useShareableUrlHash({
+    if (card.kind === 'cell') {
+      if (overviewCells.length === 0) return
+      linkedCardRef.current = null
+      const cell = overviewCells.find((candidate) => candidate.id === card.id)
+      if (cell !== undefined) handleViewerCellClick(cell)
+      return
+    }
+
+    // Bins and boundaries load with the view, which the link also restores.
+    if (card.kind === 'bin') {
+      const bin = gridCellById.get(card.id)
+      if (bin === undefined) return
+      linkedCardRef.current = null
+      handleViewerGridCellClick(bin)
+      return
+    }
+
+    const boundary = drawnBoundaryById.get(card.id)
+    if (boundary === undefined) return
+    linkedCardRef.current = null
+    handleViewerCellBoundaryClick(boundary)
+  }, [
+    drawnBoundaryById,
+    gridCellById,
+    handleViewerCellBoundaryClick,
+    handleViewerCellClick,
+    handleViewerGridCellClick,
+    initialShareableState.datasetUrl,
+    loadedDatasetUrl,
+    overviewCells,
+    selectedBoundaryCell,
+    selectedCell,
+    selectedGridCell,
+  ])
+  const currentShareUrl = useShareableUrlHash({
     dataset: {
       annotationUrl: annotationImportUrl,
       customImageOpacities,
@@ -3142,6 +3223,9 @@ export function App({ dependencies }: AppProps = {}) {
       // The loaded dataset, not the address box: until a load finishes the
       // link keeps the dataset it was opened with (15.1-L).
       datasetUrl: loadedDatasetUrl ?? initialShareableState.datasetUrl ?? '',
+      // A value equal to the manifest's default is left out; one the user set
+      // back to the app default is kept, so the manifest does not replace it.
+      datasetDefaults: datasetManifestDefaults,
       annotationGroupIds: sharedAnnotationGroupIds,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
@@ -3172,7 +3256,6 @@ export function App({ dependencies }: AppProps = {}) {
       showHoverTooltips,
     },
     magicLens: {
-      magicLensMinQv,
       magicLensRadiusMicrometers,
       magicLensScope,
     },
@@ -3195,7 +3278,11 @@ export function App({ dependencies }: AppProps = {}) {
       activeRoiSelection,
       shareableViewState,
       panels: sharedPanels,
-      card: cardForLink(selectedCell?.id ?? null),
+      card: cardForLink({
+        cellId: selectedCell?.id,
+        binId: selectedGridCell?.id,
+        boundaryId: selectedBoundaryCell?.id,
+      }),
       tool: activeTool,
       hiddenLayers: sharedHiddenLayers,
     },
@@ -3338,6 +3425,7 @@ export function App({ dependencies }: AppProps = {}) {
     setDatasetUrl,
     setDebugLog,
     setShouldLoadMorphology,
+    shareUrl: currentShareUrl,
     shouldLoadMorphology,
     spatialDataControlState,
     visiumControlState,

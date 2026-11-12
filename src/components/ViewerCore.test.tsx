@@ -1417,6 +1417,70 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('opens the cell at the centre, or selects the view, with Enter (15.5-D)', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      ...rect,
+      width: 1000,
+      height: 600,
+      right: 1000,
+      bottom: 600,
+    })
+    const cells: readonly OverviewCellDatum[] = [
+      { id: 'left', position: [0, 0, 0], radiusPixels: 4, fillColor: [1, 2, 3, 255] },
+      {
+        id: 'middle',
+        position: [1000, -500, 0],
+        radiusPixels: 4,
+        fillColor: [1, 2, 3, 255],
+      },
+      {
+        id: 'right',
+        position: [2000, -1000, 0],
+        radiusPixels: 4,
+        fillColor: [1, 2, 3, 255],
+      },
+    ]
+    const onCellClick = vi.fn()
+    const onRoiComplete = vi.fn()
+    const { rerender } = render(
+      <ViewerCore
+        cells={cells}
+        onCellClick={onCellClick}
+        onRoiComplete={onRoiComplete}
+      />,
+    )
+    await waitFor(() => {
+      expect(deckGlMock.viewState?.target).toEqual([1000, -500, 0])
+    })
+    const canvas = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+
+    fireEvent.keyDown(canvas, { key: 'Enter' })
+    expect(onCellClick).toHaveBeenCalledWith(cells[1])
+
+    // Away from every cell, Enter opens nothing.
+    fireEvent.keyDown(canvas, { key: 'ArrowRight', shiftKey: true })
+    fireEvent.keyDown(canvas, { key: 'Enter' })
+    expect(onCellClick).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <ViewerCore
+        cells={cells}
+        onCellClick={onCellClick}
+        onRoiComplete={onRoiComplete}
+        roiMode="box"
+      />,
+    )
+    fireEvent.keyDown(canvas, { key: 'Enter' })
+    expect(onRoiComplete).toHaveBeenCalledWith({
+      kind: 'box',
+      bbox: expect.objectContaining({
+        minX: expect.any(Number),
+        maxX: expect.any(Number),
+      }),
+    })
+    expect(onCellClick).toHaveBeenCalledTimes(1)
+  })
+
   it('fits the measured canvas, and zooms, fits and goes to regions (15.2-E)', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       ...rect,

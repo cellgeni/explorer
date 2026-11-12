@@ -1,5 +1,6 @@
 import { fileNotListedError } from './folderListing'
 import { likelyMissingFileError, noteReadableResponse } from './hostResponses'
+import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 
 export type RangeSupportFetcher = typeof fetch
 
@@ -10,7 +11,7 @@ export interface AssertHttpRangeSupportOptions {
 }
 
 const RANGE_PROBE_HEADER = 'bytes=0-0'
-const rangeSupportCache = new Map<string, Promise<void>>()
+const rangeSupportCache = new Map<string, SharedLoad<void>>()
 
 export async function assertHttpRangeSupport(
   url: string,
@@ -23,26 +24,14 @@ export async function assertHttpRangeSupport(
     return
   }
 
-  const cacheKey = rangeSupportCacheKey(url, options.label)
-  const cached = rangeSupportCache.get(cacheKey)
-
-  if (cached !== undefined) {
-    await cached
-    throwIfAborted(options.signal)
-    return
-  }
-
-  const promise = assertHttpRangeSupportUncached(url, options).catch((error: unknown) => {
-    if (rangeSupportCache.get(cacheKey) === promise) {
-      rangeSupportCache.delete(cacheKey)
-    }
-
-    throw error
-  })
-
-  rangeSupportCache.set(cacheKey, promise)
-  await promise
-  throwIfAborted(options.signal)
+  // Callers share one probe per file. It is cancelled only when they all
+  // cancel, so one caller's cancel cannot fail the others (15.5-E).
+  await waitForSharedLoad(
+    rangeSupportCache,
+    rangeSupportCacheKey(url, options.label),
+    (signal) => assertHttpRangeSupportUncached(url, { ...options, signal }),
+    options.signal,
+  )
 }
 
 async function assertHttpRangeSupportUncached(

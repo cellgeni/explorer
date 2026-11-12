@@ -15,7 +15,6 @@ import {
   magicLensPrimaryMetricLabel,
   magicLensScopeLabel,
   magicLensStatusCopy,
-  normalizeMagicLensMinQv,
   normalizeMagicLensRadius,
   parseMagicLensScope,
   resolveMagicLensSelection,
@@ -158,14 +157,11 @@ describe('magicLensModel', () => {
           center: { x: micrometers(9), y: micrometers(17) },
           radiusMicrometers: 44.4,
         },
-        19,
         ['Gad1', 'actb'],
       ),
-    ).toBe('2:4:44:19:actb,gad1')
+    ).toBe('2:4:44:actb,gad1')
     expect(normalizeMagicLensRadius(Number.NaN)).toBe(80)
     expect(normalizeMagicLensRadius(1_000)).toBe(500)
-    expect(normalizeMagicLensMinQv(-5)).toBe(0)
-    expect(normalizeMagicLensMinQv(Number.NaN)).toBe(20)
   })
 
   it('summarizes Visium HD expression bins with expression labels', () => {

@@ -14,9 +14,14 @@ describe('GeneOptionList', () => {
       <GeneOptionList genes={genes} selectedGenes={[]} onToggleGene={onToggleGene} />,
     )
 
-    const list = screen.getByLabelText('Gene options')
+    const list = screen.getByRole('list', { name: 'Gene options' })
 
     expect(within(list).getByRole('button', { name: 'Gene000' })).toBeInTheDocument()
+    // Each rendered row says where it is among all 200.
+    expect(within(list).getAllByRole('listitem')[0]).toHaveAttribute(
+      'aria-setsize',
+      '200',
+    )
     expect(within(list).queryByRole('button', { name: 'Gene199' })).toBeNull()
 
     fireEvent.scroll(list, { target: { scrollTop: 200 * 28 } })

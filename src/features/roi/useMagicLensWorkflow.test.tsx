@@ -14,7 +14,6 @@ import { useMagicLensWorkflow, type MagicLensSummaryLoader } from './useMagicLen
 interface Snapshot {
   readonly debugMessages: readonly string[]
   readonly magicLensActive: boolean
-  readonly magicLensMinQv: number
   readonly magicLensRadiusMicrometers: number
   readonly magicLensScope: MagicLensScope
   readonly magicLensState: MagicLensState<StructuredLoadError>
@@ -48,7 +47,6 @@ function Probe({
   ) => void
 }) {
   const [magicLensActive, setMagicLensActive] = React.useState(false)
-  const [magicLensMinQv, setMagicLensMinQv] = React.useState(20)
   const [magicLensRadiusMicrometers, setMagicLensRadiusMicrometers] = React.useState(80)
   const [magicLensScope, setMagicLensScope] =
     React.useState<MagicLensScope>(initialMagicLensScope)
@@ -78,7 +76,6 @@ function Probe({
     },
     controls: {
       magicLensActive,
-      magicLensMinQv,
       magicLensScope,
     },
     data: {
@@ -107,7 +104,6 @@ function Probe({
     },
     setters: {
       setMagicLensActive,
-      setMagicLensMinQv,
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,
@@ -119,7 +115,6 @@ function Probe({
     onReady(nextApi, {
       debugMessages: debugMessagesRef.current,
       magicLensActive,
-      magicLensMinQv,
       magicLensRadiusMicrometers,
       magicLensScope,
       magicLensState,
@@ -150,7 +145,7 @@ describe('useMagicLensWorkflow', () => {
     expect(snapshot.debugMessages).toContain('Magic lens enabled')
   })
 
-  it('normalizes radius and min QV controls', () => {
+  it('normalizes the radius', () => {
     render(
       <Probe
         onReady={(nextApi, nextSnapshot) => {
@@ -162,11 +157,9 @@ describe('useMagicLensWorkflow', () => {
 
     act(() => {
       api.handleMagicLensRadiusChange(0)
-      api.handleMagicLensMinQvChange(-5)
     })
 
     expect(snapshot.magicLensRadiusMicrometers).toBeGreaterThan(0)
-    expect(snapshot.magicLensMinQv).toBe(0)
   })
 
   it('cancels stale viewport scans when switching back to cursor scope', async () => {

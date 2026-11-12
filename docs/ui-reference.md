@@ -121,7 +121,9 @@ describes its button (`About {term}`) for screen readers. The texts are in
 One tool is on at a time (`activeTool`, `src/features/app-shell/activeToolModel.ts`,
 D8). Turning one on turns the others off. While a tool other than Pan is on,
 the top of the canvas says what to do, such as "Drag to draw a box. Esc
-cancels." Esc, anywhere except a text field, returns to Pan and drops a
+cancels." The tools are one tab stop, on the active tool; the arrow keys,
+`Home` and `End` move between them (the ARIA toolbar pattern). Esc, anywhere
+except a text field, returns to Pan and drops a
 half-drawn shape; finishing a box or lasso also returns to Pan. An Esc that
 closes a popover, the info drawer, the Embedding panel or a shown tooltip
 does only that, and the tool stays.
@@ -135,7 +137,8 @@ does only that, and the tool stays.
   Magic Lens card summarises the transcripts (Xenium) or expression (Visium
   HD) under it; queries are debounced by 320 ms. It is not offered on images,
   and says "Unavailable" where the platform cannot scan (Atera, Visium, H5AD,
-  SpatialData). `Min QV` is hidden, because it changes nothing yet (F21).
+  SpatialData). It has no QV filter: the `Min QV` setting changed nothing
+  (F21) and was removed in 15.5-C.
 
 ### Settings
 
@@ -209,10 +212,10 @@ Titled Spots on Visium and Bins on Visium HD. Its parts, top to bottom:
 
 **Colour by**
 
-| Control          | Type   | Values / default                                                        | Notes                                                                                                                                                                                                                   |
-| ---------------- | ------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Cell color`     | Select | Gene expression, **Transcript count**, Cell area, Annotations, Metadata | Gene expression colours cells by the selected genes; the other modes ignore them. Annotations appears once annotations are loaded; Metadata once a metadata track is loaded (H5AD/SpatialData numeric obs, or imported) |
-| `Metadata track` | Select | "{label} ({min}-{max})"                                                 | When `Cell color` is Metadata. H5AD/SpatialData tracks read their values on first selection                                                                                                                             |
+| Control          | Type   | Values / default                                                        | Notes                                                                                                                                                                                                                                                         |
+| ---------------- | ------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cell color`     | Select | Gene expression, **Transcript count**, Cell area, Annotations, Metadata | Gene expression colours cells by the selected genes, and is offered once a gene is picked; the other modes ignore them. Annotations appears once annotations are loaded; Metadata once a metadata track is loaded (H5AD/SpatialData numeric obs, or imported) |
+| `Metadata track` | Select | "{label} ({min}-{max})"                                                 | When `Cell color` is Metadata. H5AD/SpatialData tracks read their values on first selection                                                                                                                                                                   |
 
 **Genes**
 
@@ -231,14 +234,14 @@ Titled Spots on Visium and Bins on Visium HD. Its parts, top to bottom:
 
 **Clusters** (Xenium, Atera, Visium, H5AD, SpatialData; D4)
 
-| Control                         | Type                         | Values / default                                                                                   | Notes                                                                                                                                                                                                                                                            |
-| ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Annotation set`                | Select                       | None, All, dataset groups; **graphclust** or the first group (Xenium), **None** (H5AD/SpatialData) | Groups come from `analysis.zarr.zip` or categorical `obs` columns. Columns that identify cells (`*_ontology_term_id`, `observation_joinid`, or more than 500 categories) are listed under "More columns"                                                         |
-| `Load Annotations`              | Button                       |                                                                                                    | Loads the selected set and switches `Cell color` to Annotations                                                                                                                                                                                                  |
-| `Clear Annotations`             | Button                       |                                                                                                    |                                                                                                                                                                                                                                                                  |
-| `Export Annotations`            | Button                       |                                                                                                    | Downloads `annotations.csv`                                                                                                                                                                                                                                      |
-| `Import File`                   | File input (`.csv`, `.json`) |                                                                                                    | CSV: a `cell_id`/`cellid`/`cell` column and a `label`/`annotation`/`group`/`cluster` column; extra numeric columns become metadata tracks. JSON: rows or `{label: [ids]}` (`src/data/customAnnotations.ts`). Cell IDs must be Xenium format (`/^[a-p]{8}-\d+$/`) |
-| `Annotation URL` + `Import URL` | URL form                     |                                                                                                    | Same formats from a URL; saved in the share URL                                                                                                                                                                                                                  |
+| Control                         | Type                         | Values / default                                                                                          | Notes                                                                                                                                                                                                                                                            |
+| ------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Annotation set`                | Select                       | None, All, dataset groups; **graphclust** or the first group (Xenium, Atera), **None** (H5AD/SpatialData) | Groups come from `analysis.zarr.zip` or categorical `obs` columns. Columns that identify cells (`*_ontology_term_id`, `observation_joinid`, or more than 500 categories) are listed under "More columns"                                                         |
+| `Load Annotations`              | Button                       |                                                                                                           | Loads the selected set and switches `Cell color` to Annotations                                                                                                                                                                                                  |
+| `Clear Annotations`             | Button                       |                                                                                                           |                                                                                                                                                                                                                                                                  |
+| `Export Annotations`            | Button                       |                                                                                                           | Downloads `annotations.csv`                                                                                                                                                                                                                                      |
+| `Import File`                   | File input (`.csv`, `.json`) |                                                                                                           | CSV: a `cell_id`/`cellid`/`cell` column and a `label`/`annotation`/`group`/`cluster` column; extra numeric columns become metadata tracks. JSON: rows or `{label: [ids]}` (`src/data/customAnnotations.ts`). Cell IDs must be Xenium format (`/^[a-p]{8}-\d+$/`) |
+| `Annotation URL` + `Import URL` | URL form                     |                                                                                                           | Same formats from a URL; saved in the share URL                                                                                                                                                                                                                  |
 
 Loaded state:
 
@@ -246,7 +249,7 @@ Loaded state:
   total and a visibility checkbox. Each row has a colour picker, a visibility
   checkbox, the label without the set prefix, a bar of its size, its cell
   count and share of the set, and `×`. Visium spots hidden off the tissue are
-  not counted.
+  not counted, here or in the legend.
 - **Metadata tracks**: per track label, cell count, range, and `x`.
 
 **Embedding**: `Show Embedding` opens the [Embedding panel](#embedding-panel).
@@ -382,11 +385,15 @@ Import rules are in [Image-only and GeoJSON](./image-only-and-geojson.md).
 
 ## Cards
 
-Cards are 360 px wide and stack at the top left of the canvas in this order,
-scrolling when they outgrow it; a card that appears scrolls into view. While
+Cards are 360 px wide and stack at the top left of the canvas in this order.
+The stack ends above the legend and loading list at the bottom left (at least
+240 px tall), and scrolls when the cards outgrow it; a card that appears
+scrolls into view. While
 the info drawer is open they move to its right. Closing a card clears what it
 shows. Selection, Cell and Transcript cards have `Go To`, which shows what the
-card is about (`zoomToBbox`).
+card is about (`zoomToBbox`). A card that closes while it holds keyboard
+focus hands it to the card now in its place, or to the spatial view. In the
+Selection card's tabs, the arrow keys, `Home` and `End` move between tabs.
 
 | Card                     | Shown when                                                    | Close                                       |
 | ------------------------ | ------------------------------------------------------------- | ------------------------------------------- |
@@ -511,7 +518,10 @@ Cells › `Show Embedding` and closes with `Close embedding` or Esc
 (`src/features/shell/EmbeddingWindow.tsx`). It sits at the top right of the
 canvas, 360 × 400 px at first; the grip at its bottom left (`Resize the
 embedding panel`) resizes it by dragging or with the arrow keys, from 280 ×
-260 px up to the canvas, and the plot redraws at its new size.
+260 px up to the canvas, and the plot redraws at its new size. The grip's
+description is the size ("360 by 400 px"), announced again after each change.
+Opening the panel moves focus into it, and closing it returns focus to
+`Show Embedding`.
 
 | Control                                                   | Notes                                                                                                                                                            |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -530,10 +540,11 @@ category lists last:
 
 - `Cell color` Gene expression: the genes (up to three names, then "+n"),
   "Expression per cell" or "{Sum|Mean|Mean z-score} of n genes per cell", and
-  the gene scale from 0 to its maximum.
+  the gene scale from 0 to its maximum. Visium says spot, and Visium HD bin.
 - `Cell color` Annotations: the set name and the first 12 labels, each with a
   visibility checkbox, swatch and cell count, then "+n more in Cells ›
-  Clusters". The checkboxes are the same as those in Cells › Clusters.
+  Clusters". The checkboxes and counts are the same as those in Cells ›
+  Clusters: Visium spots hidden off the tissue are left out.
 - `Cell color` Metadata: the track name and its range.
 - `Cell color` Cell area: µm² on a square-root scale.
 - Transcripts drawn as density: what the squares count ("SNAP25 transcripts per
@@ -564,11 +575,19 @@ except for `F`):
 | ------------------ | ----------------------------------------------- |
 | Arrow keys         | Pan 64 screen px                                |
 | Shift + arrow keys | Pan 256 screen px                               |
-| `+` or `=`         | Zoom in by 0.5                                  |
-| `-` or `_`         | Zoom out by 0.5                                 |
+| `+` or `=`         | Zoom in one level, as the button does           |
+| `-` or `_`         | Zoom out one level                              |
 | `F`                | Fit the data to the view, from anywhere         |
 | `Home`             | Return to the first view (the link's, or a fit) |
+| `Enter`            | Open what is at the centre; see below           |
 | `Esc`              | Clear the selected cell                         |
+
+While the spatial view has keyboard focus, a 48 px ring marks its centre.
+`Enter` opens the Visium HD bin at the centre, or else the cell or spot
+nearest it within 24 screen px (or inside its drawn size), as a click would
+(`src/components/viewerKeyboardPick.ts`, 15.5-D). With Box selection on,
+`Enter` selects the whole view instead, so a selection can be framed with the
+arrow keys and `+`/`-` and made without a pointer. Lasso stays pointer-only.
 
 ### Picking
 
@@ -578,6 +597,8 @@ Click (`ViewerCore.tsx`, `src/components/viewerPicking.ts`):
 - Visium HD bin: selects the bin (zoomed-out aggregate bins are not pickable).
 - Cell point or boundary: selects the cell.
 - Embedding point: selects the cell or bin and recentres the view.
+- `Enter` on the focused view: the bin or cell at its centre (see
+  [Navigation](#navigation)).
 
 ### Hover Tooltips
 
@@ -599,7 +620,8 @@ ignored. The label shows µm or px; pixel values use the image µm/px.
 
 ### ROI Drawing
 
-Box: drag a rectangle. Lasso: drag freehand (points at least 4 screen px
+Box: drag a rectangle, or press `Enter` on the focused view to select all of
+it. Lasso: drag freehand (points at least 4 screen px
 apart, at least 3 points). ROIs smaller than 1 µm × 1 µm are ignored. Each
 ROI drawn on cells, spots or bins is added to Annotations › Selections as
 "ROI n" and shown in the Selection card.
@@ -661,8 +683,10 @@ the coordinate readout says the same.
 - Exact transcript points from `transcripts.zarr.zip` show a percentage: the
   share of the view's tiles read. Other tasks do not know how far they have
   got and show none.
-- Bottom centre, above the readout: toasts (`.viewer-toasts`): a failed load
-  while another dataset stays open, and [Undo](#undo).
+- Bottom, above the readout: toasts (`.viewer-toasts`): a failed load
+  while another dataset stays open, and [Undo](#undo). Wider than 860 px they
+  centre between the legend and loading list and the minimap, so they cover
+  neither (`ShellLayout` measures both).
 - Before any dataset: the [start screen](#start-screen).
 
 ### Undo
@@ -691,7 +715,8 @@ in the list, since nothing drawn later is lost.
 
 ⓘ opens the info drawer (`src/features/shell/InfoDrawer.tsx`): 380 px wide, on
 the left over the canvas, and not modal. Esc or `Close Dataset info` closes
-it. Its sections render only while it is open.
+it; Esc in a text field, such as the address, first leaves the field. Its
+sections render only while it is open.
 
 | Section              | Contents                                                                                                                                       |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -760,12 +785,12 @@ deposit, followed by the licence and citation.
 saves `xenium-diagnostics.json` (for every platform). Then
 (`src/components/AppStatusPanels.tsx`):
 
-| Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                                          |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Diagnostics           | Per-check pass / warning / fail with a summary line                                                                                                                                                                                                                                                                                                                                                            |
-| Data access notes (n) | Closed by default. Holds the Matrix Warning (Xenium `cell_feature_matrix.zarr.zip` has no CSC arrays, so ROI gene stats use the slower H5 path) and Fallbacks (up to 16 notices when a slower or partial path was used)                                                                                                                                                                                        |
-| Load issues           | Structured errors from any workflow (`role="alert"`). A dataset that does not load says why: "Dataset not found" (HTTP 404, or 403 from buckets that deny listing), "Access denied" (401), "Request blocked" (no response: CORS or network), "Host server error", or "Unsupported dataset layout" with the files it did find. It lists the first six files checked and offers `Run Diagnostics`. ⓘ counts them |
-| Log (n)               | Closed by default. Up to 32 timestamped activity entries, newest first; `Clear` empties it                                                                                                                                                                                                                                                                                                                     |
+| Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Diagnostics           | Per-check pass / warning / fail with a summary line                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Data access notes (n) | Closed by default. Holds the Matrix Warning (Xenium `cell_feature_matrix.zarr.zip` has no CSC arrays, so ROI gene stats use the slower H5 path) and Fallbacks (up to 16 notices when a slower or partial path was used)                                                                                                                                                                                                                                                  |
+| Load issues           | Structured errors from any workflow (`role="alert"`). A dataset that does not load says why: "Dataset not found" (HTTP 404, or 403 from buckets that deny listing), "Access denied" (401), "Request blocked" (no response: CORS or network), "Host server error", "Request refused" (another 4xx, such as 400, 405 or 429), or "Unsupported dataset layout" with the files it did find. It lists the first six files checked and offers `Run Diagnostics`. ⓘ counts them |
+| Log (n)               | Closed by default. Up to 32 timestamped activity entries, newest first; `Clear` empties it                                                                                                                                                                                                                                                                                                                                                                               |
 
 With debug info on, the deck.gl layer count and the
 [performance budget](./architecture.md#performance-budget) profile follow.
@@ -775,12 +800,14 @@ With debug info on, the deck.gl layer count and the
 Under 860 px wide (`useNarrowScreen`) the shell folds up:
 
 - The tools fold into a menu: its button shows the active tool ("Tools:
-  Pan"), and it lists each tool with its key and, when off, why. The brand is
+  Pan"), and it lists each tool with its key and, when off, why. Picking one
+  closes the menu and returns focus to its button. The brand is
   hidden, the summary chip is read out but not shown, and Share shows only its
   icon. The Magic Lens options appear only while the lens is on.
 - The layer panel becomes a bottom sheet whose 56 px handle says "Layers" and
   what colours the cells ("Cells: graphclust"). Tapping it, or `\`, opens it
-  to at most 65% of the screen.
+  to at most 65% of the screen. It is the same panel as on wide screens, so a
+  gene search or other half-done entry survives a resize across 860 px.
 - Cards dock at the bottom of the canvas as full-width sheets, above the
   layer sheet's handle, and the Embedding panel takes the canvas's width.
 
@@ -813,10 +840,15 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 160 ms, with `xv=2`); query-string values are also read on startup, and hash
 values win. Numbers are rounded to three decimals. Version 2 links leave out
 every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a missing
-parameter means the default. `cellBounds` and `nucleusBounds` are always
-written, because a load picks their default by platform when a link is
-silent. Version 1 links, which wrote every value, still open as before. `Share` in the top bar copies the address and says "Link
-copied".
+parameter means the default. For a dataset with a
+[manifest](./dataset-manifest.md#defaults), the manifest's `defaults` take the
+place of the app's: a value equal to the manifest's is left out, and one set
+back to the app default is written, so the manifest does not bring its value
+back. `cellBounds` and `nucleusBounds` are always written, because a load
+picks their default by platform when a link is silent. Version 1 links, which
+wrote every value, still open as before. `Share` in the top bar and
+`Copy Link` copy the link for the current state, which the address shows up
+to 160 ms later, and say "Link copied".
 
 Opening another dataset adds a browser history entry; every other change
 replaces the current one (15.3-C). Back returns to the previous dataset, or to
@@ -827,15 +859,15 @@ the page reloads that entry's link, with its view and settings.
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                                                                                                                                                                 |
 | `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                                                                                                                                                                                                                                                                                         |
-| `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically)                                                                                                                                                                                                                                          |
+| `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically, keeping the link's `cellColor`; a hand-written link without `xv` or `cellColor` colours cells by it). Until it loads, a link for the same dataset keeps the opening link's `groups`; another dataset's link leaves it out                |
 | `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                                                                                                                                                                                                                                             |
-| `genes`                                                                                                   | Selected genes (comma-separated)                                                                                                                                                                                                                                                                                                       |
+| `genes`                                                                                                   | Selected genes (comma-separated). Empty (`genes=`) when the user removed a manifest's default genes                                                                                                                                                                                                                                    |
 | `view`                                                                                                    | Target x, y, z, zoom                                                                                                                                                                                                                                                                                                                   |
 | `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens` |
-| `panel`                                                                                                   | The open layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer) and `embedding`, comma-separated; left out while only the default section is open                                                                                                                                                   |
+| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer) and `embedding`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                                |
 | `tool`                                                                                                    | The active tool: `box`, `lasso`, `measure` or `magic-lens`; left out for Pan. Replaces `lens=1`, which version 1 links still use                                                                                                                                                                                                       |
-| `card`                                                                                                    | `cell:<id>`: the selected cell, selected again once the cells load                                                                                                                                                                                                                                                                     |
+| `card`                                                                                                    | `cell:<id>`, `bin:<id>` (Visium HD) or `boundary:<id>` (an outline without a cell): the selection, made again once it is loaded in the link's view                                                                                                                                                                                     |
 | `hidden`                                                                                                  | Hidden layers: `image`, `cells`, `annotations`                                                                                                                                                                                                                                                                                         |
 | `scale`, `score`, `detail`, `cellColor`                                                                   | Gene scale, signature score, expression detail, cell colour mode. A version 1 link with `genes` opens in Gene expression whatever `cellColor` says, as such links looked before that mode existed                                                                                                                                      |
 | `cellTrack`                                                                                               | Selected `Metadata` track id; written only when `cellColor=metadata`                                                                                                                                                                                                                                                                   |
@@ -846,7 +878,7 @@ the page reloads that entry's link, with its view and settings.
 | `channels`                                                                                                | Enabled image channel IDs                                                                                                                                                                                                                                                                                                              |
 | `z`                                                                                                       | Zero-based z plane of an OME-TIFF z-stack dataset image                                                                                                                                                                                                                                                                                |
 | `tx`, `txDetail`, `txFilter`, `txGene`, `txBudget`, `txQv`, `txSize`, `txOpacity`, `txDensity`, `txColor` | Transcript controls. `txFilter` is the chosen `Feature filter`, not the All features shown while no gene is selected, so such a link leaves it out                                                                                                                                                                                     |
-| `lensScope`, `lensRadius`, `lensQv`                                                                       | Magic Lens controls (`lens=1` in older links turns the lens on)                                                                                                                                                                                                                                                                        |
+| `lensScope`, `lensRadius`                                                                                 | Magic Lens controls (`lens=1` in older links turns the lens on; their `lensQv` is ignored)                                                                                                                                                                                                                                             |
 | `sdCs`, `sdImage`, `sdUm`                                                                                 | SpatialData coordinate system, image, and µm-per-unit override                                                                                                                                                                                                                                                                         |
 | `vimg`, `vlib`, `voff`                                                                                    | Visium tissue image (`hires`, `lowres`, `none`), library (only with several), and `1` when off-tissue spots are shown                                                                                                                                                                                                                  |
 
@@ -858,8 +890,7 @@ ROI is added to the selections as "Shared ROI" once ROI queries can run (after
 dataset preparation, or once Visium HD bins load); a saved selection with the
 same outline is shown instead, as after a Visium off-tissue toggle.
 
-Not saved: the layer panel collapse, the measurement line, a selected bin
-or Visium HD cell, a pinned transcript, saved gene sets, annotation colours
+Not saved: the layer panel collapse, the measurement line, a pinned transcript, saved gene sets, annotation colours
 and visibility, selections other than the card's, and GeoJSON shapes.
 
 ## State

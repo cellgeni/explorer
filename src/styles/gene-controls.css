@@ -45,12 +45,15 @@
   min-width: 0;
 }
 
-.gene-option-list.is-virtualized button {
+.gene-option-list.is-virtualized .gene-option-item {
   position: absolute;
   right: 2px;
   left: 0;
+}
+
+.gene-option-list.is-virtualized button {
   display: block;
-  width: calc(100% - 2px);
+  width: 100%;
   min-height: 24px;
   height: 24px;
   overflow: hidden;

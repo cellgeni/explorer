@@ -26,8 +26,42 @@
   outline-offset: -3px;
 }
 
+/* While the canvas has keyboard focus, a ring marks the centre: Enter opens
+   the cell in it, as KEYBOARD_PICK_RADIUS_PIXELS reaches (15.5-D). */
+.viewer-keyboard-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 6;
+  display: none;
+  width: 48px;
+  height: 48px;
+  border: 2px solid var(--focus);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px var(--canvas),
+    inset 0 0 0 1px var(--canvas);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.viewer-keyboard-crosshair::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--focus);
+  content: '';
+  transform: translate(-50%, -50%);
+}
+
+.viewport-frame:focus-visible > .viewer-keyboard-crosshair {
+  display: block;
+}
+
 .morphology-canvas,
-.deck-layer-surface,
 .viewport-grid {
   position: absolute;
   inset: 0;
@@ -733,12 +767,13 @@
   list-style: none;
 }
 
+/* Rows 25 px apart, so each eye is a 24 px target (WCAG 2.5.8, 15.5-D). */
 .viewer-legend-categories label {
   display: grid;
   grid-template-columns: 14px 12px minmax(0, 1fr) auto;
   gap: 6px;
   align-items: center;
-  min-height: 22px;
+  min-height: 24px;
   cursor: pointer;
   font-size: var(--font-caption);
 }

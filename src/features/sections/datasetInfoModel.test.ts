@@ -42,6 +42,7 @@ function input(overrides: Partial<DatasetInfoModelInput> = {}): DatasetInfoModel
     setDatasetUrl: vi.fn(),
     setDebugLog: vi.fn(),
     setShouldLoadMorphology: vi.fn(),
+    shareUrl: () => 'https://example.test/#dataset=a',
     shouldLoadMorphology: true,
     spatialDataControlState: { status: 'idle' },
     visiumControlState: { status: 'idle' },
@@ -120,7 +121,7 @@ describe('useDatasetInfoModel', () => {
     })
   })
 
-  it('copies the address and says whether the clipboard took it', async () => {
+  it('copies the current link and says whether the clipboard took it', async () => {
     const writeText = vi.fn(async () => {})
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     const options = input({ isDatasetLoaded: true })
@@ -128,7 +129,7 @@ describe('useDatasetInfoModel', () => {
 
     expect(result.current.share.canCopyLink).toBe(true)
     await expect(result.current.share.onCopyLink()).resolves.toBe(true)
-    expect(writeText).toHaveBeenCalledWith(window.location.href)
+    expect(writeText).toHaveBeenCalledWith('https://example.test/#dataset=a')
     expect(options.appendDebugEvent).toHaveBeenCalledWith('Link copied')
 
     writeText.mockRejectedValueOnce(new Error('denied'))

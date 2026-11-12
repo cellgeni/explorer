@@ -1,4 +1,10 @@
-import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react'
 import {
   BoxSelectIcon,
   Button,
@@ -77,7 +83,8 @@ export function TopBar({
   return (
     <header className="shell-top-bar">
       <div className="shell-top-bar-start">
-        <span className="shell-brand">Explorer</span>
+        {/* The page's one h1 (15.5-D); under 860 px it is read, not shown. */}
+        <h1 className="shell-brand">Explorer</h1>
         <DatasetMenu name={model.datasetName} open={info.open} library={library} />
         <SummaryChip summary={model.summary} />
         <InfoButton
@@ -218,8 +225,10 @@ function DatasetMenu({
         }}
       />
       {library.recent.length === 0 ? null : (
-        <section className="shell-dataset-menu-section" aria-label="Recent">
-          <h3>Recent</h3>
+        // Not named regions: the start screen behind has its own Recent and
+        // Examples (15.5-D). Headings start at h2 in a dialog.
+        <section className="shell-dataset-menu-section">
+          <h2>Recent</h2>
           <RecentDatasetList
             recent={library.recent}
             onOpen={openFromMenu}
@@ -227,8 +236,8 @@ function DatasetMenu({
           />
         </section>
       )}
-      <section className="shell-dataset-menu-section" aria-label="Examples">
-        <h3>Examples</h3>
+      <section className="shell-dataset-menu-section">
+        <h2>Examples</h2>
         <ExampleGallery library={{ ...library, onOpen: openFromMenu }} variant="menu" />
       </section>
     </Popover>
@@ -249,9 +258,39 @@ function SummaryChip({ summary }: { readonly summary: DatasetSummary }) {
 
 // One tool at a time (D8). A tool that cannot be used stays focusable, so its
 // tooltip can say why.
+// One tab stop, on the active tool; arrows, Home and End move between the
+// tools, as the ARIA toolbar pattern has it (15.5-D).
 export function ToolGroup({ tools }: { readonly tools: ToolGroupModel }) {
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const buttons = [
+      ...event.currentTarget.querySelectorAll<HTMLButtonElement>('button.shell-tool'),
+    ]
+    const index = buttons.findIndex((button) => button === event.target)
+    if (index < 0) return
+
+    const nextIndex =
+      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        ? (index + 1) % buttons.length
+        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+          ? (index - 1 + buttons.length) % buttons.length
+          : event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? buttons.length - 1
+              : undefined
+    if (nextIndex === undefined) return
+
+    event.preventDefault()
+    buttons[nextIndex]?.focus()
+  }
+
   return (
-    <div className="shell-tools" role="toolbar" aria-label="Tools">
+    <div
+      className="shell-tools"
+      role="toolbar"
+      aria-label="Tools"
+      onKeyDown={handleKeyDown}
+    >
       {tools.options.map((option) => (
         <Tooltip
           key={option.tool}
@@ -270,6 +309,7 @@ export function ToolGroup({ tools }: { readonly tools: ToolGroupModel }) {
             aria-pressed={tools.active === option.tool}
             aria-disabled={option.disabled}
             aria-keyshortcuts={option.shortcut}
+            tabIndex={tools.active === option.tool ? 0 : -1}
             onClick={() => {
               tools.onSelect(option.tool)
             }}
@@ -437,7 +477,7 @@ function HelpMenu() {
     >
       <ShortcutList />
       <nav className="shell-help-links" aria-label="Guides">
-        <h3>Guides</h3>
+        <h2>Guides</h2>
         <ul>
           {HELP_LINKS.map((link) => (
             <li key={link.href}>
@@ -459,7 +499,7 @@ function ShortcutList() {
     <div className="shell-shortcuts">
       {groups.map((group) => (
         <section key={group} aria-label={`${group} shortcuts`}>
-          <h3>{group}</h3>
+          <h2>{group}</h2>
           <dl>
             {SHORTCUTS.filter((shortcut) => shortcut.group === group).map((shortcut) => (
               <div key={shortcut.action}>

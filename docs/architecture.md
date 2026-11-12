@@ -333,6 +333,14 @@ See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 The byte-range cache keys do not include an ETag, so replacing a file in place
 at the same URL can serve stale bytes until site data is cleared.
 
+A load that several callers wait on (range probes, whole-file H5 matrices,
+Visium HD's `feature_slice.h5`) is a `sharedLoad`
+(`src/utils/sharedLoad.ts`). It runs under its own signal, aborted only when
+every caller waiting on it has aborted, and each caller stops waiting at its
+own signal. Before 15.5-E the first caller's signal ran the load, so its
+cancel failed the others with an `AbortError` they took for their own, and
+their cards stayed on "Loading".
+
 ## Workers
 
 | Worker                           | Created by                       | Purpose                                                                                        |

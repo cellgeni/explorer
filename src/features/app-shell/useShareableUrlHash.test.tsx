@@ -1,4 +1,5 @@
 import { act, render } from '@testing-library/react'
+import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import { useShareableUrlHash } from './useShareableUrlHash'
@@ -7,12 +8,14 @@ function ShareableUrlHashProbe({
   datasetUrl = 'https://example.test/output',
   selectedGenes = ['Actb', 'Gad1'],
   onHistoryDatasetChange,
+  onShareUrl,
 }: {
   readonly datasetUrl?: string
   readonly selectedGenes?: readonly string[]
   readonly onHistoryDatasetChange?: () => void
+  readonly onShareUrl?: (shareUrl: () => string) => void
 }) {
-  useShareableUrlHash({
+  const shareUrl = useShareableUrlHash({
     ...(onHistoryDatasetChange === undefined ? {} : { onHistoryDatasetChange }),
     dataset: {
       annotationUrl: 'https://example.test/annotations/manual.csv',
@@ -43,7 +46,6 @@ function ShareableUrlHashProbe({
       showHoverTooltips: false,
     },
     magicLens: {
-      magicLensMinQv: 18,
       magicLensRadiusMicrometers: 120,
       magicLensScope: 'cursor',
     },
@@ -76,6 +78,9 @@ function ShareableUrlHashProbe({
       hiddenLayers: [],
     },
   })
+  useEffect(() => {
+    onShareUrl?.(shareUrl)
+  }, [onShareUrl, shareUrl])
 
   return null
 }
@@ -130,6 +135,25 @@ describe('useShareableUrlHash', () => {
     // Selected genes is the default transcript filter.
     expect(window.location.hash).not.toContain('txFilter')
     expect(window.location.hash).not.toContain('cellTrack')
+  })
+
+  it('gives the link for the current state before the address has it', () => {
+    const latest: { shareUrl?: () => string } = {}
+    const onShareUrl = (next: () => string) => {
+      latest.shareUrl = next
+    }
+    const { rerender } = render(<ShareableUrlHashProbe onShareUrl={onShareUrl} />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    rerender(<ShareableUrlHashProbe onShareUrl={onShareUrl} selectedGenes={['Sox2']} />)
+
+    // Copy Link right after a change: the address is still behind.
+    expect(window.location.hash).toContain('genes=Actb%2CGad1')
+    expect(latest.shareUrl?.()).toBe(
+      `${window.location.origin}/${window.location.hash.replace('genes=Actb%2CGad1', 'genes=Sox2')}`,
+    )
   })
 
   it('adds a history entry when another dataset opens (15.3-C)', () => {

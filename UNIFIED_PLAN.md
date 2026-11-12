@@ -225,27 +225,27 @@ writing UI code.
 
 ## 3. Status At A Glance
 
-| Track                           | Scope                                                    | Status                                                           |
-| ------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
-| Phase 1                         | Foundation and migration                                 | Done                                                             |
-| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                           |
-| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09               |
-| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                             |
-| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                      |
-| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**          |
-| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                               |
-| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                |
-| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                             |
-| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**          |
-| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                         |
-| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                         |
-| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                |
-| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                                |
-| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                                |
-| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                |
-| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                |
-| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M5 done (2026-11-11); the 15.5 close-out remains |
+| Track                           | Scope                                                    | Status                                                       |
+| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
+| Phase 1                         | Foundation and migration                                 | Done                                                         |
+| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                       |
+| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09           |
+| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                         |
+| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                  |
+| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**      |
+| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                           |
+| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done            |
+| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                         |
+| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**      |
+| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                     |
+| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                     |
+| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                            |
+| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                            |
+| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                            |
+| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                            |
+| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)            |
+| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                            |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | Done: M1–M5 (2026-11-11) and the 15.5 close-out (2026-11-12) |
 
 ---
 
@@ -1914,7 +1914,8 @@ Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2 A–J),
 done 2026-11-11: it is the only shell. M4 (15.3 A–D: start screen, Help,
 Undo, Cancel) done 2026-11-11. M5 (15.4 A–E: selections, enriched genes,
-transcript gene legend, minimap, axes) done 2026-11-11. The user asked for a
+transcript gene legend, minimap, axes) done 2026-11-11. The 15.5 close-out
+(A–F) done 2026-11-12, which completes the phase. The user asked for a
 usability review of the
 interface and then a plan for the changes. The plan rests on:
 
@@ -3276,46 +3277,266 @@ Fixed in one PR after 15.3-D:
 
 Open, for 15.5 or later:
 
-- **Load and link state.** During a pending load, a Visium HD bin or LOD
-  request for the old dataset can still land after the new one commits
+- **Load and link state** (fixed in 15.5-A). During a pending load, a
+  Visium HD bin or LOD request for the old dataset can still land after the
+  new one commits
   (`visiumHdBinRequestId` is not moved on). The commit applies the gene
   scale, density scale, point colour and exact limit captured when the load
   started, undoing changes made meanwhile. `groups=` from the opening link
   is written for another dataset until its annotations load. A link with
   `groups=` ignores its own `cellColor` once the set loads. Copy Link copies
   `location.href`, which is up to 160 ms behind a change.
-- **Shell.** `panel=info` alone reopens with Cells expanded. Crossing 860 px
+- **Shell** (the first three fixed in 15.5-B, the rest in 15.5-D).
+  `panel=info` alone reopens with Cells expanded. Crossing 860 px
   remounts the layer sections, losing a gene search. `card=` keeps only
   overview cells, not bins or boundary picks. Focus is lost when a card,
   the Embedding panel or the narrow tool menu closes. The tool `toolbar`
   has no arrow-key movement, card tabs no Home and End, the resize grip no
   value, and two annotation headings are out of order.
-- **Smaller.** The `+` and `-` keys zoom half a level and the buttons a whole
-  one. Load errors where every probe answered a 4xx other than 401, 403 and
-  404 are reported as "blocked". "Gene expression" is offered in Cell color
-  with no genes. 15.1-I's Atera graphclust default never runs (Atera loads
-  through the AnnData path). Esc in the drawer's address field closes the
-  drawer.
-- **Cleanup.** Unused CSS from the HUD (`.magic-lens-scope-segmented`,
+- **Smaller** (fixed in 15.5-B). The `+` and `-` keys zoom half a level and
+  the buttons a whole one. Load errors where every probe answered a 4xx other
+  than 401, 403 and 404 are reported as "blocked". "Gene expression" is
+  offered in Cell color with no genes. 15.1-I's Atera graphclust default never
+  runs (Atera loads through the AnnData path). Esc in the drawer's address
+  field closes the drawer.
+- **Cleanup** (done in 15.5-C). Unused CSS from the HUD (`.magic-lens-scope-segmented`,
   `.measurement-control*`, `.section-heading-*`, `.status-chip`, `.eyebrow`,
   `.annotation-size-plot*`), the Magic Lens Min QV leftovers
   (`handleMagicLensMinQvChange`, `capabilities.magicLensMinQv`, `lensQv=`),
   the feature-circle renderer (15.1-J), `createOverviewViewState`, and the
   `danger` Button variant. The tokens' "5.4:1 on its own tint" holds on
   surfaces 0–2 only (4.7:1 on surface 3, still AA). The 15.1-L
-  manifest-defaults gap is still open.
+  manifest-defaults gap is still open (fixed in 15.5-A).
 
 #### 15.5 Close-Out
 
-- [ ] Re-run the eight review tasks on the Xenium demo and Census Visium at
-      1440, 1024 and 390 px, and record the results in the phase record.
-- [ ] Accessibility pass:
+A to C take the open items from the [review after M4](#review-after-m4-2026-11-11)
+(user, 2026-11-12: "implement all of 15.5"); D to F are the close-out
+proper. The re-run (E) comes after the fixes, so it checks what ships.
+
+The review of 2026-11-10 walked through eight tasks, but this plan never
+listed them. Written down in 15.5 from the findings each one turned up:
+
+1. Open a dataset: from the start screen, an example or a typed address (F4,
+   F5, F15).
+2. Colour cells by a gene and read the legend (F1, F2, F9, F10).
+3. Show the clusters and hide one (F1, F14).
+4. Inspect one cell (F3).
+5. Select a region and read its genes (F12, F13).
+6. Show the transcripts of the selected genes (F11).
+7. Share the view, and reopen the link (F16).
+8. Recover: a bad address, a removal to undo, a long query to cancel (F4, F5,
+   F17).
+
+- [x] **A. Load and link state.** (S)
+  - Done 2026-11-12.
+  - A load's commit now invalidates Visium HD bin-size and LOD reads
+    (`visiumHdBinRequestIdRef`, which has no abort controller), so one for
+    the old dataset cannot land on the new one.
+  - The commit sets the gene scale, density scale, point colour and exact
+    limit from the link, or else keeps the current value through a
+    functional update. Before, it applied the values captured when the load
+    started, undoing changes made while it was pending. The four `controls`
+    inputs of `useDatasetLifecycle` are gone.
+  - `groups=` from the opening link is kept only for its own dataset, until
+    one of its sets loads or the dataset's sets are listed without a match.
+    The link's sets are also applied only to that dataset.
+  - A link's set loads under the link's own `cellColor`
+    (`loadAnnotationGroup(…, { switchColorMode: false })`). A hand-written
+    link with neither `xv` nor `cellColor` still colours by the set, as
+    choosing it would.
+  - `Copy Link` and `Share` copy the link for the current state:
+    `useShareableUrlHash` formats the hash at once, writes the address after
+    160 ms as before, and returns the current link.
+  - The 15.1-L manifest-defaults gap: links leave out values equal to the
+    loaded dataset's manifest defaults (kept as `datasetManifestDefaults`)
+    rather than the app's, so a value set back to the app default is written.
+    An empty `genes=` now means "no genes", for a manifest that sets genes.
+- [x] **B. Shell and smaller fixes.** (M)
+  - Done 2026-11-12. The shell items of the open list that are not
+    accessibility (those are in D), and every "smaller" one.
+  - `panel=` lists exactly what is open: `panel=info` is the drawer with
+    every section closed. With the drawer or Embedding open and the sections
+    at their default, the link writes the default section out
+    (`defaultExpandedSections`: Cells, or Image without cells). Version 2
+    links from 15.2-H to 15.5 that wrote `panel=info` for "default sections
+    and the drawer" now open with the sections closed. An old link's
+    `tab=cell` maps to `panel=cells,embedding`.
+  - The layer panel and the narrow bottom sheet are one element tree
+    (`LayerPanel` with a `sheet` prop; only the header differs), so crossing
+    860 px keeps a gene search, a transcript search, a custom layer URL and a
+    rename in progress. The `Sheet` primitive had no other use and is gone.
+    The sheet's handle sits in an `h2`, like the docked panel's heading.
+  - `card=` also restores a Visium HD bin (`bin:<id>`) and an outline with no
+    cell (`boundary:<id>`), once loaded in the link's view, and only for the
+    link's dataset; another selection first cancels it.
+  - `+` and `-` zoom one level, as the buttons do (`ZOOM_STEP`).
+  - Detection answered only by other 4xx statuses (400, 405, 410, 429) is
+    "Request refused" (`refused`, code `http`) with the statuses, not
+    "Request blocked".
+  - `Cell color` offers Gene expression once a gene is picked (or while it is
+    the mode, as from a link).
+  - Atera picks graphclust, or the first set, on the AnnData path too.
+  - Esc in a drawer text field, such as the address, leaves the field; a
+    second Esc closes the drawer.
+- [x] **C. Cleanup.** (S)
+  - Done 2026-11-12. Behaviour is unchanged apart from old links' `lensQv=`,
+    which had no effect and is now ignored.
+  - CSS with no user, found by checking every class in `src/styles` against
+    the sources: the HUD's `.magic-lens-scope*`, `.magic-lens-radius-control`,
+    `.measurement-control*`, `.section-heading-*`, `.status-chip`, `.eyebrow`
+    and `.annotation-size-plot*` rules, plus `.annotation-size-axis`, `-row`,
+    `-label`, `-list`, `.annotation-set-toggle` and `.deck-layer-surface`
+    (about 300 lines). `diagnostic-check-*` is built from a status and stays.
+  - The Magic Lens Min QV chain: `magicLensMinQv` state and its threading,
+    `handleMagicLensMinQvChange`, `normalizeMagicLensMinQv`, the query key's
+    QV part, `capabilities.magicLensMinQv` and `lensQv=` in links. The open
+    item in [§12](#12-open-items) is closed by its removal.
+  - The feature-circle transcript renderer (`createTranscriptFeatureCircleLayer`
+    and its branches): no reader made `feature-circle` bins since 15.1-J, so
+    `glyphType` is now only `density`.
+  - `createOverviewViewState`, which only tests used.
+  - The `danger` Button variant stays: 15.4-A's card `Delete` uses it. Its
+    `shell-card-delete` class had no CSS and is gone.
+  - `tokens.css` says the role-on-tint contrast is 5.4:1 on surfaces 0–2 and
+    4.7:1 on surface 3.
+- [x] **D. Accessibility pass.** (M)
   - the axe baseline from 15.0-F is empty;
   - a keyboard-only run of tasks 1–5;
   - focus order;
   - ARIA for the accordion, drawer and cards.
-- [ ] Record the outcome in this phase, and update the out-of-date test
-      inventory in [§9](#9-testing-and-ci).
+  - Done 2026-11-12.
+  - **axe.** `tests/e2e/axe-baseline.json` is `{}`. The gene options are a
+    `list` whose items carry `aria-setsize` and `aria-posinset` (a button
+    cannot); the density scale preview is `role="img"`; the activity log and
+    diagnostic check lists, which scroll, take focus and have names. The walk
+    now also runs axe's best-practice rules, which found popover headings
+    that skipped from `h1` to `h3` and the dataset menu's Recent and Examples
+    regions named like the start screen's. A new smoke test checks the Cell
+    and Selection cards, where axe found the legend's eyes under the 24 px
+    target size of WCAG 2.5.8; legend rows are now 25 px apart.
+  - **Keyboard run of tasks 1–5.** It found two tasks that needed a pointer:
+    opening a cell (4) and selecting a region (5). While the spatial view has
+    keyboard focus a ring marks its centre, and `Enter` opens the bin, or the
+    cell or spot nearest the centre within 24 px, as a click would
+    (`viewerKeyboardPick.ts`). With Box selection on, `Enter` selects the whole
+    view, so a region is framed with the arrows and `+`/`-`. Lasso stays
+    pointer-only; a free path is exempt from WCAG 2.1.1. Help lists `Enter`.
+    The smoke test "runs the first five review tasks with the keyboard alone"
+    does all five on the H5AD fixture with Tab, typing, Enter, Space, arrows
+    and tool letters only, and fails if Tab cannot reach a control.
+  - **Focus order.** Tab runs: skip link, top bar, info drawer (when open),
+    the spatial view, cards, Embedding panel, layer panel, which follows the
+    screen from left to right. Focus no longer falls to the page when
+    something closes: a card that closes while focused hands focus to the
+    card in its place, or the spatial view; a popover closed from inside (a
+    tool picked from the narrow menu, a dataset opened from the menu) returns
+    it to its trigger; the Embedding panel takes focus when it opens and
+    gives it back to `Show Embedding`, as the drawer does (`useFocusReturn`,
+    shared with the drawer).
+  - **Headings.** The brand is the page's `h1` (read, not shown, under 860
+    px). In the layer panel: `h2` Layers, `h3` sections, `h4` sub-headings
+    (now also Selections and GeoJSON shapes, which were `h3`), and `h5` for
+    a cluster set's name and Metadata tracks (`h4` and `h3` before). The info
+    drawer's status panels are `h4` under its `h3` sections (they were `h2`).
+    Popovers start at `h2`.
+  - **ARIA.** The tool `toolbar` has one tab stop, on the active tool, and
+    the arrows, `Home` and `End` move along it. Card tabs take `Home` and
+    `End` too. The Embedding grip's description is its size, in a polite
+    live region, so it is read after each change; a 2-D grip has no single
+    `aria-valuenow`. Checked and unchanged: the layer sections are the APG
+    accordion (`h3` > `button[aria-expanded][aria-controls]` > `region`
+    labelled by the button); the drawer is a non-modal `dialog` labelled by
+    its heading that returns focus on close; each card is a `region` named
+    by its heading with a labelled close button; scrollable regions with
+    focusable content and focus rings on everything that takes focus
+    (`[tabindex='0']` and `summary` were missing one).
+- [x] **E. Re-run the eight review tasks** on the Xenium demo and Census
+      Visium at 1440, 1024 and 390 px, and record the results in the phase
+      record. (S)
+  - Done 2026-11-12. `scripts/review-tasks.mjs` runs the eight tasks against
+    the dev server in headless Chromium with the GPU, one dataset and width at
+    a time (1440×900, 1024×700, 390×844), and saves a screenshot per task and
+    a JSON record. It picks and drags only on tissue that no card, legend,
+    toast or minimap covers, and under 860 px closes the cards first, as on a
+    phone. The first runs found four faults, fixed here, and every task
+    passed once they were fixed:
+
+    | Task           | Xenium demo (1.41 M cells)                                                                                                                                                             | Census Visium H5AD (370 spots)                                                               |
+    | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+    | 1. Open        | Start screen lists 6 examples; ready 3.9–6.0 s after `Load`                                                                                                                            | Same; ready 1.0–4.6 s                                                                        |
+    | 2. Gene        | SNAP25; legend "SNAP25, Expression per cell, 0–11" 3.6–5.3 s later                                                                                                                     | "ACTB" ranks ACTB first; "Expression per spot, 0–85" at once                                 |
+    | 3. Clusters    | graphclust (12 classes) recolours the map with SNAP25 still selected; Cluster 1 hidden from the legend                                                                                 | pathologist_annotation, the first set with two or more classes (3); Normal Epithelium hidden |
+    | 4. One cell    | Click opens the Cell card with a ring, and its details load                                                                                                                            | Spot card (865–1,824 genes)                                                                  |
+    | 5. Region      | Box ROI card, "Compared with 448–512 cells outside", enriched genes (NKX2-1 +1.3), 11–17 s                                                                                             | 13–174 spots, about 3 s                                                                      |
+    | 6. Transcripts | Legend "SNAP25 transcripts per 320 µm bin"                                                                                                                                             | Not offered on Visium                                                                        |
+    | 7. Share       | `Share` copies a 428–431 character link; it reopens with the set, gene, ROI and cards                                                                                                  | 413–444 characters; same                                                                     |
+    | 8. Recover     | A missing address toasts "Dataset not found … is still open"; Undo restores a removed class; `Cancel querying ROI cells` stops a second ROI (at 390 px the smaller box finished first) | Same, but the ROI query finishes before Cancel can be pressed                                |
+
+  - **Fixed: shared loads failed when their first caller cancelled.** On
+    Xenium a cell opened, or an ROI drawn, in the first 30 s after load stayed
+    on "Loading" for good: its details, its z distribution and the ROI genes
+    (over two minutes in a probe, with no request open). The range probe
+    (`assertHttpRangeSupport`) is cached per file and ran under its first
+    caller's signal, here the viewport warm-up ("Preparing cell feature
+    matrix"), which the new cell or ROI cancels. The other callers got its
+    `AbortError`, took it for their own and stopped silently. A `sharedLoad`
+    (`src/utils/sharedLoad.ts`) now runs the probe, the whole-file H5 matrix
+    (`loadH5Matrix`) and Visium HD's `feature_slice.h5` under its own signal,
+    aborted only when every caller has; each caller stops at its own signal.
+    In the probe the cell's 376 genes now arrive about 20 s after the click,
+    and task 5 takes 15 s instead of 25.
+  - **Fixed: cards covered the legend.** A tall card at 1440 px hid the legend
+    and loading list. The card stack now ends 12 px above them (at least 240
+    px tall) and scrolls; `ShellLayout` measures them into
+    `--canvas-bottom-left-height`.
+  - **Fixed: the failed-load toast covered the loading list's Cancel buttons.**
+    Wider than 860 px, toasts centre between the legend and loading list and
+    the minimap (`--canvas-bottom-left-width`, measured from the stack's widest
+    child, and `--canvas-bottom-right-width`).
+  - **Fixed: the Visium legend counted spots hidden off the tissue** (4,992 for
+    a set the panel counted as 370). It uses the panel's placed-cell count
+    (`placedAnnotationCellCount`, 15.1-I), and says spot or bin instead of cell
+    on Visium and Visium HD.
+  - **The findings the tasks cover hold:** F1 (task 3), F2 (2, 3, 6), F3 (4),
+    F4 and F5 (8), F9 and F10 (2), F11 (6), F12 (5: the tool hint, Esc), F13
+    (5 and 8: a second ROI, ranked genes), F14 (3: graphclust is the default
+    set; Visium counts), F15 (1), F16 (7), F17 (8), and F18 (the 1024 px fit
+    sits beside the panel). F6–F8 were checked by axe in D and in the
+    screenshots.
+  - **Recorded, not fixed** (in [§12](#12-open-items)):
+    - For up to 4 s at a time in the first 30 s after the Xenium demo loads,
+      the page does not respond: the viewport warm-up reads cells and a matrix
+      sample on the main thread (the open item on main-thread exceptions).
+    - Under 860 px an open card's sheet, up to 55% of the height, covers the
+      legend, the zoom buttons and the minimap. Pinch, `F` and closing the
+      card still work.
+    - At 1024 px with the loading list showing there is no room between it
+      and the minimap, so a toast overlaps one of them until dismissed.
+    - Visium still says "cells" in the Clusters set total, Metadata track
+      counts ("4,992 cells", every obs row) and the gene summary ("359
+      positive cells across 370 slide cells").
+    - No link parameter carries hidden classes, so the reopened view shows
+      Cluster 1 again.
+
+- [x] **F. Record the outcome** in this phase, and update the out-of-date test
+      inventory in [§9](#9-testing-and-ci). (S)
+  - Done 2026-11-12. Phase 15 is complete, measured against its
+    [goals](#goals-and-non-goals):
+    - Every High and Medium finding (F1–F18) has its fix. The re-run (E)
+      confirmed the ones the eight tasks reach; contrast and text size (F6,
+      F7) rest on 15.0-A and 15.1-K and the axe walk, now with an empty
+      baseline and best-practice rules (D).
+    - The layout is the 10x Explorer model (15.2), the only shell.
+    - Share links: version 1 links still open (15.1-L), and links leave out
+      the dataset manifest's defaults rather than the app's (15.5-A). One
+      meaning changed: `panel=info` from 15.2-H to 15.5 now opens with the
+      sections closed (15.5-B).
+    - Nothing is left from the [review after M4](#review-after-m4-2026-11-11).
+      The re-run's open items are in [§12](#12-open-items).
+  - [§9](#9-testing-and-ci) has a new inventory (2026-11-12) and its open list
+    is updated: CI runs on every PR; coverage, SpatialData E2E and a
+    Xenium-shaped golden bundle are still open.
 
 #### Testing
 
@@ -3542,20 +3763,36 @@ and has `Diagnose Dataset`.
 - Coverage was judged good enough to continue the feature-fix and optimization
   sequence.
 
-### Inventory (2026-11-08, Static Count)
+### Inventory (2026-11-12)
 
-Counted from the repository, not from a test run:
+From a run of `npm test` and the repository:
 
-- 149 colocated unit test files with about 821 `it`/`test` cases, against 209
-  non-test source files under `src/`.
-- 7 Playwright tests in `tests/e2e/app.spec.ts`: the viewer shell, transcript
-  controls, a local H5AD fixture, the hosted PBMC3K H5AD, the live Xenium
-  dataset (morphology, transcripts, ROI, Cell), the Visium HD reference (image
-  and 16 µm bins), and Visium HD tiers (16/8 µm switching, 2 µm enabled,
-  Feature Slice gene, Magic Lens, ROI).
-- Phase 8 test-plan items each have a matching unit or component test.
-- No E2E covers SpatialData, OME-Zarr, or image-only sources.
-- There is still no `.github/` workflow and no coverage configuration.
+- `npm test`: 211 Vitest files with 1,617 tests (1,516 `it`/`test` calls
+  before `.each` expands them), against 308 non-test source files under
+  `src/`. Under full-suite load a few `App.test.tsx` tests that load 50,000
+  cells can time out; they pass when the file runs alone.
+- 25 Playwright tests: 12 smoke tests, offline, and 13 live ones.
+  - Smoke (`tests/e2e/app.spec.ts`): the shell; the start screen's examples
+    and their offline fallback; a link that names a dataset; the axe walk;
+    review tasks 1–5 by keyboard alone; transcript controls; an H5AD fixture
+    with obs tracks and genes; a shared H5AD link coloured by a metadata
+    track; AnnData from Icechunk; Visium libraries and off-tissue spots; and
+    a Space Ranger Visium folder. Fixtures are built in the test or served
+    from `src/test/fixtures` through `page.route`, and the examples index
+    from `examples/index.json`.
+  - Live: a CELLxGENE Visium H5AD, PBMC3K, the Atera kidney run, the Xenium
+    demo (morphology, transcripts, ROI, Cell), and the Visium HD reference and
+    its tiers. `tests/e2e/examples.spec.ts` loads every example in
+    `examples/` (Xenium, QPTIFF, OME-Zarr and three H5AD) and the index from
+    GitHub.
+- CI (`.github/workflows`): `ci.yml` runs on every PR and push to `main`:
+  format check, lint, typecheck, unit tests and build, then the smoke tests in
+  Chromium. `e2e-live.yml` runs every Playwright test at 03:00 UTC on
+  weekdays and on demand. `release.yml` runs typecheck, unit tests and the
+  smoke tests before it attaches the app zip; `pages.yml` deploys GitHub
+  Pages.
+- The eight review tasks run live with `scripts/review-tasks.mjs` (15.5-E),
+  by hand against the dev server, not in CI.
 
 ### Open
 
@@ -3566,10 +3803,12 @@ Counted from the repository, not from a test run:
       inspection, and loading the 2 µm tier when the environment allows.
 - [ ] Direct tests for small helpers and leaf components if they gain behaviour
       (assignment/status helpers, cell expression panels, worker messages).
-- [ ] CI pipeline and the committed golden fixture bundle (no completion
-      recorded; no `.github/` directory).
-- [ ] E2E smoke tests for SpatialData (shapes and labels stores), OME-Zarr, and
-      image-only TIFF sources.
+- [x] CI pipeline: `ci.yml` gates every PR (see the inventory).
+- [ ] A committed Xenium-shaped golden fixture bundle. Unit tests build their
+      Xenium data in code, and the smoke tests have no Xenium dataset.
+- [ ] E2E for SpatialData (shapes and labels stores), and smoke tests for
+      OME-Zarr and image-only TIFF. Only the nightly examples load an OME-Zarr
+      and a QPTIFF image.
 
 ---
 
@@ -3623,11 +3862,12 @@ Sequencing:
       rendering cost, without behaviour changes.
 - [ ] Hosted Visium HD optimization: profiling, segmentation streaming, Feature
       Slice ranges, memory, and bundles.
-- [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
+- [x] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
       M3, the new shell (15.2), is done; M4 (15.3: start screen, Help, Undo,
       Cancel) is done; M5 (15.4: selections, enriched genes, transcript gene
-      legend, minimap, axes) is done. The 15.5 close-out remains.
+      legend, minimap, axes) is done. The 15.5 close-out is done
+      (2026-11-12).
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
@@ -3637,8 +3877,8 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 - [x] H5AD and SpatialData: read boolean `obs` columns on the reference backend
       (0/1 tracks, 2026-11-09).
 - [ ] Visium HD: low-res tissue image fallback.
-- [ ] Magic Lens: make `Min QV` change results, or hide it. The new shell
-      hides it (15.2-D); the old Magic Lens tab goes in 15.2-J.
+- [x] Magic Lens: make `Min QV` change results, or hide it. The new shell
+      hid it (15.2-D); 15.5-C removed it.
 - [ ] Xenium diagnostics: check the image chosen from `experiment.xenium`
       instead of `morphology.ome.tif` (a dataset manifest's image is already
       checked), plus `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, and
@@ -3669,6 +3909,21 @@ Other gaps found in the review:
 - [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,
       annotation set, channel colours and contrast, and initial camera (see
       [Phase 11](#phase-11--dataset-manifest)).
+
+Found by the [15.5-E](#155-close-out) re-run (2026-11-12):
+
+- [ ] Under 860 px an open card's sheet (up to 55% of the height) covers the
+      legend, the zoom buttons and the minimap.
+- [ ] At 1024 px with the loading list showing, a toast has no room between
+      the list and the minimap and overlaps one of them.
+- [ ] Visium says "cells" in the Clusters set total, the Metadata track counts
+      (which also count every obs row, 4,992 on the Census file, not the 370
+      placed spots) and the gene summary ("positive cells across 370 slide
+      cells").
+- [ ] Links do not carry hidden classes, so a shared view shows them again.
+- [ ] The Xenium viewport warm-up ("Preparing cell feature matrix") blocks the
+      main thread for up to 4 s at a time in the first 30 s after load; see the
+      main-thread exceptions above.
 
 Features:
 

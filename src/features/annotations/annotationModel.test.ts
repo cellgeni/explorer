@@ -23,6 +23,7 @@ import {
   filterAnnotationsByVisibleSets,
   hasReadyAnnotationsAfterRemove,
   mergeImportedAnnotations,
+  placedAnnotationCellCount,
   removeHiddenAnnotationIdsByPrefix,
   removeAnnotationColor,
   removeAnnotationColorsByPrefix,
@@ -310,6 +311,17 @@ describe('annotationModel', () => {
       annotationSizePlots(annotations, new Set(['aaaaaaaa-1', 'aaaaaaac-1']))[0]?.rows[0]
         ?.cellCount,
     ).toBe(2)
+  })
+
+  it('gives the legend the same placed-cell count as the panel (15.5-E)', () => {
+    const annotation: Annotation = {
+      id: 'a',
+      label: 'set: A',
+      cellIds: [asCellId('aaaaaaaa-1'), asCellId('aaaaaaab-1'), asCellId('aaaaaaac-1')],
+    }
+
+    expect(placedAnnotationCellCount(annotation, null)).toBe(3)
+    expect(placedAnnotationCellCount(annotation, new Set(['aaaaaaab-1']))).toBe(1)
   })
 
   it('picks graphclust, or the first set, as the default', () => {

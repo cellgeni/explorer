@@ -360,7 +360,6 @@ export function magicLensEmptyGeneMessage(summary: MagicLensSummary): string {
 
 export function magicLensDetailQueryKey(
   detail: MagicLensQueryDetail,
-  minQv: number,
   selectedGenes: readonly string[],
 ): string {
   const roundedX = Math.round(detail.center.x / 4)
@@ -370,13 +369,9 @@ export function magicLensDetailQueryKey(
     .sort()
     .join(',')
 
-  return [
-    roundedX,
-    roundedY,
-    Math.round(detail.radiusMicrometers),
-    minQv,
-    selectedGeneKey,
-  ].join(':')
+  return [roundedX, roundedY, Math.round(detail.radiusMicrometers), selectedGeneKey].join(
+    ':',
+  )
 }
 
 export function normalizeMagicLensRadius(value: number): number {
@@ -385,12 +380,4 @@ export function normalizeMagicLensRadius(value: number): number {
   }
 
   return Math.max(10, Math.min(500, Math.round(value)))
-}
-
-export function normalizeMagicLensMinQv(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 20
-  }
-
-  return Math.max(0, Math.min(40, Math.round(value)))
 }

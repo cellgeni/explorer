@@ -153,6 +153,37 @@ describe('HTTP Range support diagnostics', () => {
 
     expect(fetcher).toHaveBeenCalledOnce()
   })
+
+  it('keeps a shared probe for other callers when the first one cancels (15.5-E)', async () => {
+    let respond: (response: Response) => void = () => {}
+    const fetcher = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          respond = resolve
+          init?.signal?.addEventListener('abort', () => {
+            reject(Object.assign(new Error('Fetch aborted.'), { name: 'AbortError' }))
+          })
+        }),
+    )
+    vi.stubGlobal('fetch', fetcher)
+    const url = 'https://example.test/xenium/range-shared-test.parquet'
+    const first = new AbortController()
+    const firstProbe = assertHttpRangeSupport(url, {
+      label: 'range-shared-test.parquet',
+      signal: first.signal,
+    })
+    const secondProbe = assertHttpRangeSupport(url, {
+      label: 'range-shared-test.parquet',
+      signal: new AbortController().signal,
+    })
+
+    first.abort()
+    await expect(firstProbe).rejects.toMatchObject({ name: 'AbortError' })
+    respond(rangeResponse(206, 'bytes 0-0/100'))
+
+    await expect(secondProbe).resolves.toBeUndefined()
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
 })
 
 function rangeResponse(status: number, contentRange: string | null): Response {

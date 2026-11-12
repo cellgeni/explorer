@@ -644,6 +644,37 @@ describe('App', () => {
     }
   })
 
+  it('reopens a link’s Visium HD bin card (15.5-B)', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(visiumUrl)}&card=bin%3ABC-2`,
+    )
+    const viewport = installAppViewportFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
+    )
+    const visiumDataset = createVisiumHdDatasetMock({ overview: visiumOverviewFixture() })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+
+      const card = await screen.findByRole('region', { name: 'Bin' })
+      expect(card).toHaveTextContent('BC-2')
+      await waitFor(() => {
+        expect(window.location.hash).toContain('card=bin%3ABC-2')
+      })
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('scans Visium HD viewport bins with selected-gene magic lens expression', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
@@ -1357,9 +1388,13 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
       target: { value: 'https://example.test/other' },
     })
+    // Xenium turns nucleus outlines off once the dataset is ready.
     await waitFor(() => {
-      expect(window.location.hash).toContain('cellColor=annotations')
+      expect(window.location.hash).toContain('nucleusBounds=0')
     })
+    // The link left out cellColor, so cells keep the default colour mode
+    // when its set loads.
+    expect(window.location.hash).not.toContain('cellColor=')
     expect(window.location.hash).toMatch(/^#xv=2&/)
     expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Fxenium')
     expect(window.location.hash).toContain('groups=analysis%3A1')
@@ -1368,6 +1403,60 @@ describe('App', () => {
     expect(window.location.hash).toContain('cellBounds=1&nucleusBounds=0')
     expect(window.location.hash).not.toContain('tab=')
     expect(window.location.hash.length).toBeLessThan(200)
+  })
+
+  it('keeps a link’s sets to its own dataset, and colours by them only when the link is hand-written', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?dataset=https%3A%2F%2Fexample.test%2Fxenium&groups=analysis%3A1',
+    )
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadAnnotationGroups: ReturnType<typeof vi.fn<AnnotationGroupLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:1', label: 'kmeans 3', groupingName: 'k', groupCount: 1 },
+      ],
+    )
+    // The second dataset's set never finishes loading.
+    const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(
+      async (url: string) =>
+        url === 'https://example.test/xenium'
+          ? [{ id: 'analysis:1:0', label: 'kmeans 3: Cluster 1', cellIds: [cellId] }]
+          : new Promise<never>(() => {}),
+    )
+
+    render(
+      <TestApp
+        loadDatasetOverview={loadDatasetOverview}
+        loadAnnotationGroups={loadAnnotationGroups}
+        loadAnnotations={loadAnnotations}
+      />,
+    )
+
+    // No version and no cellColor=: the set colours cells, as choosing it
+    // would.
+    await waitFor(() => {
+      expect(window.location.hash).toContain('cellColor=annotations')
+    })
+    expect(window.location.hash).toContain('groups=analysis%3A1')
+
+    openControls('open-dataset')
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: 'https://example.test/other' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await waitFor(() => {
+      expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Fother')
+    })
+    // The first link's set is not the other dataset's.
+    expect(window.location.hash).not.toContain('groups=')
   })
 
   it('shares the chosen transcript filter, not All features shown without genes', async () => {

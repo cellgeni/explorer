@@ -230,6 +230,7 @@ export function TranscriptColourControls({ transcripts }: TranscriptsProps) {
         </select>
         <div
           className="transcript-density-scale-preview-wrap"
+          role="img"
           aria-label={densityScaleLabel}
           title={densityScaleLabel}
         >

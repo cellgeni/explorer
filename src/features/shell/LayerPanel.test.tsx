@@ -218,6 +218,32 @@ describe('LayerPanel', () => {
     ).toBeInTheDocument()
   })
 
+  it('offers Gene expression only once a gene is picked (15.5-B)', () => {
+    const { rerender } = renderPanel()
+    const options = () =>
+      within(screen.getByLabelText('Cell color'))
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+
+    expect(options()).not.toContain('Gene expression')
+
+    rerender(
+      <StatefulLayerPanel
+        panel={{ sections: [header('cells', 'Cells')] }}
+        collapsed={false}
+        onCollapsedChange={vi.fn()}
+        image={testImageSectionModel()}
+        cells={testCellsSectionModel({ colour: { selectedGeneCount: 1 } })}
+        transcripts={testTranscriptsSectionModel()}
+        annotations={testAnnotationsSectionModel()}
+        viewOptions={testDatasetInfoModel().viewOptions}
+        embeddingOpen={false}
+        onEmbeddingOpenChange={vi.fn()}
+      />,
+    )
+    expect(options()).toContain('Gene expression')
+  })
+
   it('opens the Embedding panel from Cells', () => {
     const onEmbeddingOpenChange = vi.fn()
     const { rerender } = renderPanel({ onEmbeddingOpenChange })

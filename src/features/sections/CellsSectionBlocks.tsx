@@ -410,7 +410,11 @@ export function CellColorControls({ colour }: { readonly colour: CellColourModel
           }
         }}
       >
-        <option value="gene-expression">Gene expression</option>
+        {/* Picking a gene chooses it (D2); without genes it would colour
+            nothing (15.5-B). */}
+        {colour.selectedGeneCount > 0 || colour.mode === 'gene-expression' ? (
+          <option value="gene-expression">Gene expression</option>
+        ) : null}
         <option value="transcript-count">Transcript count</option>
         <option value="cell-area">Cell area</option>
         {colour.hasAnnotationColors ? (

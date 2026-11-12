@@ -24,7 +24,7 @@ const HIDEABLE_LAYERS: readonly (keyof LayerVisibility)[] = [
 ]
 
 export interface ShellPanelState {
-  // Null until someone opens or closes a section: Cells, or the first one.
+  // Null until someone opens or closes a section: the default sections.
   readonly expanded: readonly LayerSectionId[] | null
   readonly infoOpen: boolean
   readonly embeddingOpen: boolean
@@ -34,6 +34,12 @@ export const DEFAULT_SHELL_PANELS: ShellPanelState = {
   expanded: null,
   infoOpen: false,
   embeddingOpen: false,
+}
+
+// The sections open until the user opens or closes one: Cells, or Image
+// where there are no cells.
+export function defaultExpandedSections(hasCells: boolean): readonly LayerSectionId[] {
+  return hasCells ? ['cells'] : ['image']
 }
 
 // An old link's control tab, as the shell reads it.
@@ -58,8 +64,8 @@ export function mapControlHudTab(tab: string | undefined): {
     case 'magic-lens':
       return { tool: 'magic-lens' }
     case 'cell':
-      // The Cell tab also held the embeddings.
-      return { panels: ['embedding'], card: 'cell' }
+      // The Cell tab also held the embeddings, which belong to Cells.
+      return { panels: ['cells', 'embedding'], card: 'cell' }
     default:
       return {}
   }
@@ -98,43 +104,68 @@ export function toolFromLink(state: ShareableState): ActiveTool {
   )
 }
 
+// `panel=` lists exactly what is open: `panel=info` is the drawer with every
+// section closed.
 export function panelsFromLink(state: ShareableState): ShellPanelState {
   if (state.panels === undefined) return DEFAULT_SHELL_PANELS
 
-  const expanded = LAYER_SECTION_IDS.filter((id) => state.panels?.includes(id))
-
   return {
-    // A link that names only the drawer or embedding keeps the sections'
-    // default.
-    expanded: expanded.length === 0 && state.panels.length > 0 ? null : expanded,
+    expanded: LAYER_SECTION_IDS.filter((id) => state.panels?.includes(id)),
     infoOpen: state.panels.includes('info'),
     embeddingOpen: state.panels.includes('embedding'),
   }
 }
 
+// Left out at the default; with the drawer or embedding open, the default
+// sections are written out.
 export function panelsForLink(
   panels: ShellPanelState,
+  defaultExpanded: readonly LayerSectionId[],
 ): readonly ShellPanelId[] | undefined {
-  const open: ShellPanelId[] = [
-    ...(panels.expanded ?? []),
+  if (panels.expanded === null && !panels.infoOpen && !panels.embeddingOpen) {
+    return undefined
+  }
+
+  return [
+    ...(panels.expanded ?? defaultExpanded),
     ...(panels.infoOpen ? (['info'] as const) : []),
     ...(panels.embeddingOpen ? (['embedding'] as const) : []),
   ]
-
-  return panels.expanded === null && open.length === 0 ? undefined : open
 }
 
-// `card=cell:<id>` restores a selected cell; the other cards come back from
-// the link's selection (`roi=`) and tool.
-export function cellIdFromLink(state: ShareableState): string | null {
-  const card = state.card
-  return card !== undefined && card.startsWith('cell:') && card.length > 'cell:'.length
-    ? card.slice('cell:'.length)
-    : null
+// `card=` restores a selected cell (`cell:<id>`), Visium HD bin (`bin:<id>`)
+// or drawn boundary without a cell (`boundary:<id>`); the other cards come
+// back from the link's selection (`roi=`) and tool.
+export type LinkedCardKind = 'cell' | 'bin' | 'boundary'
+
+export interface LinkedCard {
+  readonly kind: LinkedCardKind
+  readonly id: string
 }
 
-export function cardForLink(selectedCellId: string | null): string | undefined {
-  return selectedCellId === null ? undefined : `cell:${selectedCellId}`
+const LINKED_CARD_KINDS: readonly LinkedCardKind[] = ['cell', 'bin', 'boundary']
+
+export function cardFromLink(state: ShareableState): LinkedCard | null {
+  const card = state.card ?? ''
+  const separator = card.indexOf(':')
+  const kind = LINKED_CARD_KINDS.find(
+    (candidate) => candidate === card.slice(0, separator),
+  )
+  const id = card.slice(separator + 1)
+
+  return separator > 0 && kind !== undefined && id.length > 0 ? { kind, id } : null
+}
+
+// The card shown, as the card stack picks it: a boundary, then a bin, then
+// a cell.
+export function cardForLink(selection: {
+  readonly cellId?: string | undefined
+  readonly binId?: string | undefined
+  readonly boundaryId?: string | undefined
+}): string | undefined {
+  if (selection.boundaryId !== undefined) return `boundary:${selection.boundaryId}`
+  if (selection.binId !== undefined) return `bin:${selection.binId}`
+  return selection.cellId === undefined ? undefined : `cell:${selection.cellId}`
 }
 
 export function layerVisibilityFromLink(state: ShareableState): LayerVisibility {

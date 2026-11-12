@@ -89,6 +89,25 @@ describe('TopBar', () => {
     expect(model.tools.onSelect).toHaveBeenCalledWith('pan')
   })
 
+  it('has one tab stop in the tools, and moves between them with arrows (15.5-D)', () => {
+    renderTopBar()
+
+    const toolbar = screen.getByRole('toolbar', { name: 'Tools' })
+    const pan = within(toolbar).getByRole('button', { name: 'Pan' })
+    const tools = within(toolbar).getAllByRole('button')
+    expect(tools.filter((tool) => tool.tabIndex === 0)).toEqual([pan])
+
+    pan.focus()
+    fireEvent.keyDown(pan, { key: 'ArrowRight' })
+    expect(within(toolbar).getByRole('button', { name: 'Box selection' })).toHaveFocus()
+    fireEvent.keyDown(document.activeElement!, { key: 'End' })
+    expect(tools.at(-1)).toHaveFocus()
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' })
+    expect(pan).toHaveFocus()
+    fireEvent.keyDown(pan, { key: 'ArrowLeft' })
+    expect(tools.at(-1)).toHaveFocus()
+  })
+
   it('sets the lens radius and summarises the view from the Magic Lens popover', () => {
     const model = testTopBarModel()
     renderTopBar({ model })
