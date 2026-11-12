@@ -55,7 +55,10 @@ error), `files.segmentedOutputs` replaces the segmented-output probes, and
 | `segmented_outputs/cell_segmentations.geojson`, else `graphclust_annotated_cell_segmentations.geojson`                                          | Optional                  | `readVisiumHdSegmentationElements` (`visiumHdSegmentations.ts`)                                        | fetch + streaming JSON scanner               | Polygon/MultiPolygon in full-res pixels, `cell_id`, label and colour properties                                                  | Cell boundaries                                                                   |
 | `segmented_outputs/nucleus_segmentations.geojson`, else `graphclust_annotated_nucleus_segmentations.geojson`, else `nucleus_instance_mask.tiff` | Optional                  | Same, or `readVisiumHdNucleusInstanceMaskRasterFromTiff`                                               | JSON scanner / `geotiff` windowed read       | Polygons, or mask labels traced into polygons                                                                                    | Nucleus boundaries                                                                |
 
-Probed or diagnosed but **never read**: `T/spatial/tissue_lowres_image.png`,
+`T/spatial/tissue_lowres_image.png` is drawn instead of the high-res PNG when
+that cannot be read (a `HEAD` decides), with a notice naming the skipped path.
+
+Probed or diagnosed but **never read**:
 `segmented_outputs/spatial/scalefactors_json.json`,
 `segmented_outputs/filtered_feature_cell_matrix.h5`, and
 `segmented_outputs/raw_feature_cell_matrix.h5`. Clustering CSVs, CytAssist
@@ -130,7 +133,7 @@ Without an 8 or 16 µm tier, 2 µm loading fails with
 | Segmented-cell profile     | DuckDB-WASM query on `barcode_mappings.parquet` for one `cell_id`, then `matrix()` over those bins at the active size. The segmented `filtered_feature_cell_matrix.h5` is not used.                                                  |
 | Cell/nucleus boundaries    | `elements(bbox)` / `segmentationElements('nucleus', bbox)`. The GeoJSON is streamed in full for each new viewport and filtered; loading is gated by the boundary viewport rule (see [Xenium](./xenium.md#viewport-cell-boundaries)). |
 | Expression projection      | `useVisiumHdExpressionProjectionWorkflow` splits each bin's count across its mapped cells; the result feeds status text                                                                                                              |
-| Tissue image               | The active tier's `tissue_hires_image.png`, drawn at `(px / tissue_hires_scalef) × microns_per_pixel`. No pyramid and no lowres fallback.                                                                                            |
+| Tissue image               | The active tier's `tissue_hires_image.png`, drawn at `(px / tissue_hires_scalef) × microns_per_pixel`. No pyramid; `tissue_lowres_image.png` at `tissue_lowres_scalef` when the high-res PNG cannot be read.                         |
 | Embeddings                 | Per-tier `projection.csv`, then root `analysis/`                                                                                                                                                                                     |
 | ROI                        | `useVisiumHdRoiWorkflow` selects bins whose centre is inside the box/lasso (up to 50,000), then `matrix(barcodes, binSize)`; exports barcodes CSV and GeoJSON                                                                        |
 | Magic Lens                 | `useVisiumHdMagicLensSummary`: up to 25,000 bins; `matrix()` when no genes are selected, otherwise selected-gene expression filtered to the lens                                                                                     |
@@ -196,5 +199,5 @@ Changing the bin size runs `useVisiumHdBinWorkflow`.
   stand-in bins but query the 2 µm matrix (found by reading the code; not
   reproduced).
 - Segmentation GeoJSON is re-streamed for each new viewport.
-- Diagnostics mark `tissue_hires_image.png` as required, fetch segmentation
-  GeoJSON in full, and do not check `barcodes.tsv.gz` or `features.tsv.gz`.
+- Diagnostics range-check one per-tier UMAP path, while the viewer searches
+  the tier's paths and then the root's.

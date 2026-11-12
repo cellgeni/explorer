@@ -88,7 +88,7 @@ point at it, tab to it or tap it.
 
 The URL hash updates with the current dataset URL, viewport, selected genes,
 the selection shown in the card, open panels, tool, cell card, hidden layers,
-and control state. `Share` in
+hidden annotation classes, and control state. `Share` in
 the top bar copies the link to share the same view. Older links with `tab=`
 still work. Each dataset you open is a step in the browser's history, so Back
 returns to the previous dataset, or to the start screen.
@@ -130,9 +130,11 @@ selected cell. Numeric `obs` columns are also listed as `Cell color` →
 `Metadata` tracks as soon as the dataset loads; a track's values are read when
 you first colour by it.
 
-Imported CSV/JSON annotations and metadata tracks (Cells › Clusters) currently
-require Xenium-format cell IDs such as `aaabbbcc-1`, so files keyed by H5AD or
-SpatialData obs names are rejected.
+Imported CSV/JSON annotations and metadata tracks (Cells › Clusters) use the
+dataset's own cell IDs: Xenium IDs such as `aaabbbcc-1`, H5AD obs names and
+Visium barcodes, or SpatialData instance IDs. If none of the imported cells
+are on the map, the import fails and says so; if some are not, a note under
+the import controls says how many.
 
 For Visium HD, selected-gene overlays read the dataset's `feature_slice.h5`
 (required for gene overlays) and paint the active square-bin grid. The Cell

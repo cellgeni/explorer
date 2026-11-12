@@ -130,9 +130,14 @@ vertices, then rings with fewer than 3 vertices are dropped.
 
 Capabilities are checked lazily, when the overlay is on or the Transcripts
 section is open (`loadDatasetTranscriptCapabilities`,
-`src/data/transcriptOverlay.ts`). The visible transcript estimate is the sum of
-overview `transcript_counts` in the viewport. `planTranscriptLod` then chooses
-density or exact points.
+`src/data/transcriptOverlay.ts`). Once the check has read the
+`transcripts.zarr.zip` metadata, the visible transcript estimate sums the
+level-0 tile counts (`grid_number_objects`) in the viewport, weighting edge
+tiles by the share of their area in view (`estimateTranscriptZarrViewportCount`).
+It counts every transcript, whatever `Min QV` and `Gene-only calls` say.
+Without a Zarr, or before its metadata loads, it is the sum of overview
+`transcript_counts` in the viewport. `planTranscriptLod` then chooses density
+or exact points.
 
 - **Density, all transcripts.** With the All features filter, or no genes
   selected, `loadTranscriptZarrAggregates` picks the finest Zarr grid level
@@ -246,15 +251,12 @@ not passed to the readers, so it does not change the result.
 
 - The Magic Lens has no QV filter. A `Min QV` setting that had no effect on
   results was removed in Phase 15.5.
-- Only one morphology image path from `experiment.xenium` is opened: the first
-  one the folder's index page lists, or the first path when the host serves no
-  index page. A path that fails to open is not retried with the next one.
+- The morphology image is the first `experiment.xenium` path the folder's
+  index page lists, or the first path when the host serves no index page. A
+  path that fails to open falls back to the next one, with a notice naming
+  the paths passed over (2026-11-12).
 - The XOA 2.0+ z-stack `morphology.ome.tif` does not render correctly (one
   tile at the wrong scale, or a JPEG-2000 decode error); the
   `morphology_focus/` images do. A dataset without `morphology_focus/`, such
   as some BioImage Archive deposits, falls back to it.
-- Diagnostics check `morphology.ome.tif` unless a dataset manifest names the
-  image, rather than the image chosen from `experiment.xenium`, and do not
-  check `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, or embedding
-  CSVs.
 - ROI gene stats assume `cells.parquet` row order matches the matrix row order.
