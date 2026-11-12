@@ -175,8 +175,8 @@ Optional but supported Visium HD files include:
 
 - Root `barcode_mappings.parquet` for bin-to-cell assignment and
   segmented-cell expression profiles.
-- `spatial/tissue_hires_image.png` in each tier for the tissue underlay
-  (`tissue_lowres_image.png` is not used).
+- `spatial/tissue_hires_image.png` in each tier for the tissue underlay;
+  `tissue_lowres_image.png` is drawn instead when the high-res PNG is missing.
 - Binned `analysis/umap/gene_expression_2_components/projection.csv` (or root
   `analysis/…`) for embedding views.
 - Segmented outputs under `segmented_outputs/`:

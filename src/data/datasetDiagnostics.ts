@@ -1,4 +1,12 @@
-import { datasetFileUrl, datasetFileUrlFor, xeniumManifestFileFor } from './datasetFiles'
+import { EMBEDDING_CANDIDATES, analysisEmbeddingLabel } from './analysisEmbeddings'
+import {
+  datasetFileLabelFor,
+  datasetFileUrl,
+  datasetFileUrlFor,
+  xeniumManifestFileFor,
+} from './datasetFiles'
+import { likelyMissingFileError, noteReadableResponse } from './hostResponses'
+import { morphologyImagePathsFromExperiment } from './morphologyImage'
 import { assertHttpRangeSupport } from './rangeSupport'
 import {
   detectSpatialDataset,
@@ -93,9 +101,18 @@ const XENIUM_OPTIONAL_RANGE_FILES: readonly DatasetRoleFile[] = [
   { id: 'transcripts', label: 'Transcripts', role: 'transcripts' },
   { id: 'transcripts-zarr', label: 'Transcript native LOD', role: 'transcriptsZarr' },
   { id: 'feature-matrix', label: 'Feature matrix', role: 'cellFeatureMatrix' },
+  // ROI gene statistics fall back to it when the Zarr matrix cannot be read.
+  { id: 'feature-matrix-h5', label: 'Feature matrix H5', role: 'cellFeatureMatrixH5' },
+  // Cluster groups for the Annotations section.
+  { id: 'analysis', label: 'Analysis clusters', role: 'analysis' },
 ]
 
-const XENIUM_DEFAULT_MORPHOLOGY_PATH = 'morphology.ome.tif'
+// Read whole; without it the gene list comes from transcripts.zarr.zip.
+const XENIUM_GENE_PANEL_FILE: DatasetRoleFile = {
+  id: 'gene-panel',
+  label: 'Gene panel',
+  role: 'genePanel',
+}
 
 const VISIUM_HD_ROOT_RANGE_FILES: readonly DatasetRoleFile[] = [
   { id: 'visium-hd-feature-slice', label: 'Feature Slice H5', role: 'featureSlice' },
@@ -113,6 +130,11 @@ const VISIUM_HD_SEGMENTED_READABLE_FILES = [
     path: 'segmented_outputs/spatial/scalefactors_json.json',
     output: 'scalefactorsPath',
   },
+] as const satisfies readonly VisiumHdSegmentedFile[]
+
+// Often tens of MB, so checked with HEAD; the reader also sizes them with HEAD
+// before streaming them.
+const VISIUM_HD_SEGMENTED_HEAD_FILES = [
   {
     id: 'visium-hd-cell-segmentations',
     label: 'Visium HD cell segmentations GeoJSON',
@@ -311,7 +333,12 @@ export async function runDatasetDiagnostics(
 
   // With a dataset manifest, experiment.xenium only supplies the pixel size
   // and, when the manifest names no image, the morphology image paths.
-  checks.push(await checkManifest(baseUrl, detection.manifest === undefined, options))
+  const experiment = await checkManifest(
+    baseUrl,
+    detection.manifest === undefined,
+    options,
+  )
+  checks.push(experiment.check)
 
   for (const file of XENIUM_REQUIRED_RANGE_FILES) {
     checks.push(await checkRangeFile(baseUrl, roleFile(baseUrl, file), true, options))
@@ -322,19 +349,15 @@ export async function runDatasetDiagnostics(
   }
 
   checks.push(
-    await checkRangeFile(
+    await checkReadableFile(
       baseUrl,
-      {
-        id: 'morphology',
-        label: 'Morphology image',
-        path:
-          xeniumManifestFileFor(baseUrl, 'morphology')?.url ??
-          XENIUM_DEFAULT_MORPHOLOGY_PATH,
-      },
+      roleFile(baseUrl, XENIUM_GENE_PANEL_FILE),
       false,
       options,
     ),
   )
+  checks.push(...(await checkXeniumEmbeddings(baseUrl, options)))
+  checks.push(await checkXeniumMorphologyImage(baseUrl, experiment.json, options))
 
   return {
     baseUrl,
@@ -385,13 +408,26 @@ function manifestDiagnosticCheck(
   })
 }
 
+// Checks experiment.xenium and returns its JSON, which names the morphology
+// images; `json` is undefined when it cannot be read.
 async function checkManifest(
   baseUrl: string,
   required: boolean,
   options: DatasetDiagnosticsOptions,
-): Promise<DatasetDiagnosticCheck> {
+): Promise<{ readonly check: DatasetDiagnosticCheck; readonly json: unknown }> {
   const url = datasetFileUrlFor(baseUrl, 'experiment')
   const startedAt = Date.now()
+  const check = (status: DatasetDiagnosticStatus, message: string) =>
+    diagnosticCheck({
+      id: 'experiment-manifest',
+      label: 'Experiment manifest',
+      url,
+      required,
+      status,
+      message,
+      startedAt,
+    })
+  const failed = required ? 'fail' : 'warning'
 
   try {
     const response = await (options.fetcher ?? fetch)(url, {
@@ -400,37 +436,177 @@ async function checkManifest(
     })
 
     if (!response.ok) {
-      return diagnosticCheck({
-        id: 'experiment-manifest',
-        label: 'Experiment manifest',
-        url,
-        required,
-        status: required ? 'fail' : 'warning',
-        message: `HTTP ${response.status}`,
-        startedAt,
-      })
+      discardBody(response)
+      return { check: check(failed, `HTTP ${response.status}`), json: undefined }
     }
 
-    return diagnosticCheck({
-      id: 'experiment-manifest',
-      label: 'Experiment manifest',
-      url,
-      required,
-      status: 'pass',
-      message: 'Readable',
-      startedAt,
-    })
+    let json: unknown
+
+    try {
+      json = await response.json()
+    } catch (cause) {
+      return {
+        check: check(failed, `Not valid JSON: ${errorMessage(cause)}`),
+        json: undefined,
+      }
+    }
+
+    return { check: check('pass', 'Readable'), json }
   } catch (cause) {
+    return { check: check(failed, errorMessage(cause)), json: undefined }
+  }
+}
+
+// The projections the Analysis section loads: the manifest's `umap` or
+// `tsne` file, else the first standard path that exists. The CSVs are read
+// whole, so HEAD shows whether they can be fetched without downloading them.
+async function checkXeniumEmbeddings(
+  baseUrl: string,
+  options: DatasetDiagnosticsOptions,
+): Promise<readonly DatasetDiagnosticCheck[]> {
+  const checks: DatasetDiagnosticCheck[] = []
+
+  for (const kind of ['umap', 'tsne'] as const) {
+    const named = xeniumManifestFileFor(baseUrl, kind)
+    const paths =
+      named === undefined
+        ? EMBEDDING_CANDIDATES.filter((candidate) => candidate.kind === kind).map(
+            (candidate) => candidate.path,
+          )
+        : [named.url]
+
+    checks.push(
+      await checkFirstHeadFile(
+        baseUrl,
+        { id: `${kind}-projection`, label: `${analysisEmbeddingLabel(kind)} projection` },
+        paths,
+        options,
+      ),
+    )
+  }
+
+  return checks
+}
+
+// The first of `paths` that HEAD can read, as the viewer loads the first that
+// exists. When none can, the first path's failure. Optional.
+async function checkFirstHeadFile(
+  baseUrl: string,
+  file: { readonly id: string; readonly label: string },
+  paths: readonly string[],
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const startedAt = Date.now()
+  let firstFailure: DatasetDiagnosticCheck | undefined
+
+  for (const path of paths) {
+    const check = await checkHeadFile(baseUrl, { ...file, path }, false, options)
+
+    if (check.status === 'pass') {
+      return check
+    }
+
+    firstFailure ??= check
+  }
+
+  return diagnosticCheck({
+    id: file.id,
+    label: file.label,
+    url: firstFailure?.url ?? baseUrl,
+    required: false,
+    status: 'warning',
+    message:
+      paths.length > 1
+        ? `${firstFailure?.message ?? 'Not found'}; ${paths.slice(1).join(', ')} also could not be read`
+        : (firstFailure?.message ?? 'Not found'),
+    startedAt,
+  })
+}
+
+// The image the viewer opens (loadMorphologyImage): the manifest's, else the
+// first image experiment.xenium names that can be read. Paths the folder
+// listing leaves out fail their Range probe without a request, as the viewer
+// skips them.
+async function checkXeniumMorphologyImage(
+  baseUrl: string,
+  experiment: unknown,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const id = 'morphology'
+  const label = 'Morphology image'
+  const startedAt = Date.now()
+  const named = xeniumManifestFileFor(baseUrl, 'morphology')
+  const candidates =
+    named !== undefined
+      ? [named.url]
+      : experiment === undefined
+        ? []
+        : morphologyImagePathsFromExperiment(experiment)
+
+  if (candidates.length === 0) {
+    const experimentFile = datasetFileLabelFor(baseUrl, 'experiment')
+
     return diagnosticCheck({
-      id: 'experiment-manifest',
-      label: 'Experiment manifest',
-      url,
-      required,
-      status: required ? 'fail' : 'warning',
-      message: errorMessage(cause),
+      id,
+      label,
+      url: datasetFileUrlFor(baseUrl, 'experiment'),
+      required: false,
+      status: 'warning',
+      message:
+        experiment === undefined
+          ? `${experimentFile} could not be read, so the viewer has no image path.`
+          : `${experimentFile} names no OME-TIFF morphology image.`,
       startedAt,
     })
   }
+
+  const failures: { readonly path: string; readonly check: DatasetDiagnosticCheck }[] = []
+
+  for (const path of candidates) {
+    const check = await checkRangeFile(baseUrl, { id, label, path }, false, options)
+
+    if (check.status !== 'pass') {
+      failures.push({ path, check })
+      continue
+    }
+
+    const firstFailure = failures[0]
+
+    return firstFailure === undefined
+      ? check
+      : diagnosticCheck({
+          id,
+          label,
+          url: check.url,
+          required: false,
+          status: 'warning',
+          message: `Byte-range readable. The viewer opens this image because ${failures
+            .map((failure) => failure.path)
+            .join(', ')}, named first in ${datasetFileLabelFor(
+            baseUrl,
+            'experiment',
+          )}, could not be read: ${firstFailure.check.message}`,
+          startedAt,
+        })
+  }
+
+  // The viewer reports the preferred image's failure.
+  const [first, ...rest] = failures
+
+  return diagnosticCheck({
+    id,
+    label,
+    url: first?.check.url ?? baseUrl,
+    required: false,
+    status: 'warning',
+    message:
+      rest.length === 0
+        ? (first?.check.message ?? 'Not found')
+        : `${first?.check.message ?? 'Not found'}; ${rest
+            .map((failure) => failure.path)
+            .join(', ')} also could not be read`,
+    startedAt,
+  })
 }
 
 const ATERA_RANGE_FILES: readonly {
@@ -949,10 +1125,20 @@ async function checkHeadFile(
   const startedAt = Date.now()
 
   try {
-    const response = await (options.fetcher ?? fetch)(url, {
-      method: 'HEAD',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    let response: Response
+
+    try {
+      response = await (options.fetcher ?? fetch)(url, {
+        method: 'HEAD',
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      })
+    } catch (cause) {
+      // A host that hides its error responses (EBI FTP) makes a missing file
+      // look like a network failure.
+      throw likelyMissingFileError(file.label, url, cause) ?? cause
+    }
+
+    noteReadableResponse(url, response.status)
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
@@ -1058,29 +1244,39 @@ async function runVisiumHdDiagnostics(
         options,
       ),
     )
+    // The gene list (readVisiumHdFeatureGenePanel) and, for 2 µm, the bins
+    // themselves (readVisiumHdFilteredMatrixBarcodes) are read whole from
+    // these, so HEAD shows whether they can be fetched.
     checks.push(
-      await checkRangeFile(
+      await checkHeadFile(
         detection.baseUrl,
         {
-          id: `visium-hd-${suffix}-tissue-hires`,
-          label: `Visium HD ${suffix} high-res tissue image`,
-          path: `${bin.outputPath}/spatial/tissue_hires_image.png`,
+          id: `visium-hd-${suffix}-features`,
+          label: `Visium HD ${suffix} features`,
+          path: `${bin.outputPath}/filtered_feature_bc_matrix/features.tsv.gz`,
         },
         true,
         options,
       ),
     )
+
+    if (bin.binSizeMicrometers === 2) {
+      checks.push(
+        await checkHeadFile(
+          detection.baseUrl,
+          {
+            id: `visium-hd-${suffix}-barcodes`,
+            label: `Visium HD ${suffix} barcodes`,
+            path: `${bin.outputPath}/filtered_feature_bc_matrix/barcodes.tsv.gz`,
+          },
+          true,
+          options,
+        ),
+      )
+    }
+
     checks.push(
-      await checkRangeFile(
-        detection.baseUrl,
-        {
-          id: `visium-hd-${suffix}-tissue-lowres`,
-          label: `Visium HD ${suffix} low-res tissue image`,
-          path: `${bin.outputPath}/spatial/tissue_lowres_image.png`,
-        },
-        false,
-        options,
-      ),
+      ...(await checkVisiumHdTissueImages(detection.baseUrl, bin, suffix, options)),
     )
     checks.push(
       await checkRangeFile(
@@ -1119,6 +1315,17 @@ async function runVisiumHdDiagnostics(
       )
     }
 
+    for (const file of VISIUM_HD_SEGMENTED_HEAD_FILES) {
+      checks.push(
+        await checkHeadFile(
+          detection.baseUrl,
+          segmentedFile(detection, file),
+          false,
+          options,
+        ),
+      )
+    }
+
     for (const file of VISIUM_HD_SEGMENTED_RANGE_FILES) {
       checks.push(
         await checkRangeFile(
@@ -1132,6 +1339,66 @@ async function runVisiumHdDiagnostics(
   }
 
   return checks
+}
+
+// The viewer shows the high-res tissue image, else the low-res one, so each is
+// optional but a tier with neither fails. Browsers load the PNGs whole, so
+// HEAD is enough.
+async function checkVisiumHdTissueImages(
+  baseUrl: string,
+  bin: VisiumHdBinDescriptor,
+  suffix: string,
+  options: DatasetDiagnosticsOptions,
+): Promise<readonly DatasetDiagnosticCheck[]> {
+  const startedAt = Date.now()
+  const hires = await checkHeadFile(
+    baseUrl,
+    {
+      id: `visium-hd-${suffix}-tissue-hires`,
+      label: `Visium HD ${suffix} high-res tissue image`,
+      path: `${bin.outputPath}/spatial/tissue_hires_image.png`,
+    },
+    false,
+    options,
+  )
+  const lowres = await checkHeadFile(
+    baseUrl,
+    {
+      id: `visium-hd-${suffix}-tissue-lowres`,
+      label: `Visium HD ${suffix} low-res tissue image`,
+      path: `${bin.outputPath}/spatial/tissue_lowres_image.png`,
+    },
+    false,
+    options,
+  )
+
+  if (hires.status === 'pass') {
+    return [hires, lowres]
+  }
+
+  if (lowres.status === 'pass') {
+    return [
+      {
+        ...hires,
+        message: `${hires.message}. The viewer shows the low-res image instead.`,
+      },
+      lowres,
+    ]
+  }
+
+  return [
+    hires,
+    lowres,
+    diagnosticCheck({
+      id: `visium-hd-${suffix}-tissue-image`,
+      label: `Visium HD ${suffix} tissue image`,
+      url: hires.url,
+      required: true,
+      status: 'fail',
+      message: 'Neither the high-res nor the low-res tissue image can be read.',
+      startedAt,
+    }),
+  ]
 }
 
 // The detected path (from the manifest or the probe), else the standard one.
@@ -1251,6 +1518,8 @@ async function checkDirectRangeFile(
   }
 }
 
+// GET for small files read whole. Only the status is used, so the body is
+// cancelled rather than downloaded.
 async function checkReadableFile(
   baseUrl: string,
   file: { readonly id: string; readonly label: string; readonly path: string },
@@ -1265,6 +1534,7 @@ async function checkReadableFile(
       method: 'GET',
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
+    discardBody(response)
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
@@ -1413,4 +1683,10 @@ function detectionDiagnosticCheck(
 
 function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
+}
+
+// Stops downloading a body that will not be read. Cancelling rejects only
+// when the download has already failed, which does not change the check.
+function discardBody(response: Response): void {
+  response.body?.cancel().catch(() => undefined)
 }

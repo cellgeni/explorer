@@ -61,6 +61,17 @@ profiles use an on-demand DuckDB-WASM query for one `cell_id`, projecting only
 
 First paint does not touch `barcode_mappings.parquet`. Selecting a bin (cell
 assignment in the Bin card) and projecting expression onto cell boundaries read
-it in bulk with hyparquet. The app passes no row budget, and these reads are
-not cached because the workflows pass an `AbortSignal`, so each selection
-reads the file again.
+it with hyparquet, but only the row groups that can hold the requested bins.
+Space Ranger sorts the file by 2 µm barcode, so row groups whose `square_002um`,
+`square_008um` or `square_016um` min/max statistics rule out every bin are
+skipped. On the reference (1,123 row groups of 10,000 rows) one 16 µm bin is
+about 300 KB in one range request. The file's size and footer (704 KB) are read
+once per dataset. The app passes no row budget; a budget caps the rows in the
+row groups read.
+
+hyparquet reads each column chunk with its own range request and starts them
+all at once. A whole-file read sent 6,738, and Chromium failed them with
+`net::ERR_INSUFFICIENT_RESOURCES`, taking other reads in flight with them.
+The reader's URL buffer (`coalescingAsyncBuffer`, `src/data/`) merges the
+slices asked for together into ranges of up to 8 MB and keeps at most four
+requests in flight.

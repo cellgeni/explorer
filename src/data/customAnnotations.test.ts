@@ -193,4 +193,75 @@ ${cellC},T cell,0,,0.9`,
       },
     ])
   })
+
+  // Each platform names cells its own way; an exported file imports back.
+  it('reads Visium barcodes from an annotation export', () => {
+    expect(
+      parseCustomAnnotations(
+        `annotation_id,label,cell_id
+analysis:leiden:0,leiden: 0,AAACAAGTATCTCCCA-1
+analysis:leiden:0,leiden: 0,AAACACCAATAACTGC-1
+analysis:leiden:1,leiden: 1,AAACAGAGCGACTCCT-1`,
+        'annotations.csv',
+      ),
+    ).toEqual([
+      {
+        id: 'custom:annotations-csv:leiden-0',
+        label: 'leiden: 0',
+        cellIds: ['AAACAAGTATCTCCCA-1', 'AAACACCAATAACTGC-1'],
+      },
+      {
+        id: 'custom:annotations-csv:leiden-1',
+        label: 'leiden: 1',
+        cellIds: ['AAACAGAGCGACTCCT-1'],
+      },
+    ])
+  })
+
+  it('reads integer-like SpatialData instance IDs from CSV and JSON', () => {
+    const imported = parseCustomAnnotationImport(
+      `cell_id,cell_type,score
+0,T cell,0.5
+1,B cell,0.25
+ 17 ,T cell,0.75`,
+      'instances.csv',
+    )
+
+    expect(imported.annotations).toEqual([
+      {
+        id: 'custom:instances-csv:cell-type:t-cell',
+        label: 'cell_type: T cell',
+        cellIds: ['0', '17'],
+      },
+      {
+        id: 'custom:instances-csv:cell-type:b-cell',
+        label: 'cell_type: B cell',
+        cellIds: ['1'],
+      },
+    ])
+    expect(imported.metadataTracks[0]?.values).toEqual([
+      { cellId: '0', value: 0.5 },
+      { cellId: '1', value: 0.25 },
+      { cellId: '17', value: 0.75 },
+    ])
+    expect(
+      parseCustomAnnotations(
+        JSON.stringify([
+          { label: 'Tumour', cell_id: '3' },
+          { label: 'Tumour', cell_id: '4' },
+          { label: 'Stroma', cellIds: ['5'] },
+        ]),
+        'instances.json',
+      ),
+    ).toEqual([
+      { id: 'custom:instances-json:stroma', label: 'Stroma', cellIds: ['5'] },
+      { id: 'custom:instances-json:tumour', label: 'Tumour', cellIds: ['3', '4'] },
+    ])
+  })
+
+  it('rejects an empty JSON cell ID', () => {
+    expect(() =>
+      parseCustomAnnotations(JSON.stringify({ Tumour: ['3', ' '] }), 'labels.json'),
+    ).toThrow('Cell ID is empty.')
+  })
 })

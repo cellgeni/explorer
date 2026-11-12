@@ -22,17 +22,33 @@ export interface SqlFragment {
   readonly params: readonly SqlParameter[]
 }
 
+// The Parquet type of a coordinate column. Xenium stores cell centroids as
+// DOUBLE, and boundary vertices and transcript locations as FLOAT.
+export type SqlCoordinateType = 'DOUBLE' | 'FLOAT'
+
+// DuckDB compares a FLOAT column with a DOUBLE parameter by casting the
+// column, and a cast column cannot be checked against Parquet row-group
+// statistics, so every row group is read. Casting the bounds to FLOAT keeps
+// the comparison on the column. On a DOUBLE column the bounds then move by at
+// most half a FLOAT step, under 1 nm for coordinates below 32,768 µm.
+export function betweenSql(column: string, type: SqlCoordinateType = 'DOUBLE'): string {
+  return type === 'FLOAT'
+    ? `${column} BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)`
+    : `${column} BETWEEN ? AND ?`
+}
+
 export function selectionToSql(
   selection: Selection,
   xCol: string,
   yCol: string,
+  type: SqlCoordinateType = 'DOUBLE',
 ): SqlFragment {
   if (selection.kind === 'circle') {
     const { cx, cy, radius } = selection
 
     return {
-      sql: `${xCol} BETWEEN ? AND ?
-AND ${yCol} BETWEEN ? AND ?
+      sql: `${betweenSql(xCol, type)}
+AND ${betweenSql(yCol, type)}
 AND (${xCol}-?)*(${xCol}-?) + (${yCol}-?)*(${yCol}-?) <= ?`,
       params: [
         cx - radius,
@@ -60,8 +76,8 @@ AND (${xCol}-?)*(${xCol}-?) + (${yCol}-?)*(${yCol}-?) <= ?`,
   const wkt = `POLYGON((${ring}, ${firstPoint.x} ${firstPoint.y}))`
 
   return {
-    sql: `${xCol} BETWEEN ? AND ?
-AND ${yCol} BETWEEN ? AND ?
+    sql: `${betweenSql(xCol, type)}
+AND ${betweenSql(yCol, type)}
 AND ST_Within(ST_Point(${xCol}, ${yCol}), ST_GeomFromText(?))`,
     params: [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys), wkt],
   }

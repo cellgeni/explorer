@@ -1487,6 +1487,70 @@ describe('App', () => {
     expect(window.location.hash).not.toContain('groups=')
   })
 
+  it('keeps the classes a link hides once its set loads', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#xv=2&dataset=https%3A%2F%2Fexample.test%2Fxenium&groups=analysis%3A1&hiddenClasses=analysis%3A1%3A0%2Canalysis%3A9%3A9',
+    )
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(2, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: cellA,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+      {
+        cellId: cellB,
+        position: { x: micrometers(30), y: micrometers(40) },
+        transcriptCount: 12,
+      },
+    ])
+    const loadAnnotationGroups: ReturnType<typeof vi.fn<AnnotationGroupLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:1', label: 'kmeans 3', groupingName: 'k', groupCount: 2 },
+      ],
+    )
+    const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:1:0', label: 'kmeans 3: Cluster 1', cellIds: [cellA] },
+        { id: 'analysis:1:1', label: 'kmeans 3: Cluster 2', cellIds: [cellB] },
+      ],
+    )
+
+    render(
+      <TestApp
+        loadDatasetOverview={loadDatasetOverview}
+        loadAnnotationGroups={loadAnnotationGroups}
+        loadAnnotations={loadAnnotations}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(loadAnnotations).toHaveBeenCalledWith(
+        'https://example.test/xenium',
+        expect.objectContaining({ groupId: 'analysis:1' }),
+      )
+    })
+    openControls('clusters')
+    // Loading the set does not show the class again.
+    await waitFor(() => {
+      expect(screen.getByLabelText('kmeans 3: Cluster 1 visible')).not.toBeChecked()
+    })
+    expect(screen.getByLabelText('kmeans 3: Cluster 2 visible')).toBeChecked()
+    // The link keeps the class and drops the one the set does not have.
+    await waitFor(() => {
+      expect(window.location.hash).toContain('hiddenClasses=analysis%3A1%3A0')
+      expect(window.location.hash).not.toContain('analysis%3A9')
+    })
+
+    fireEvent.click(screen.getByLabelText('kmeans 3: Cluster 1 visible'))
+    await waitFor(() => {
+      expect(window.location.hash).not.toContain('hiddenClasses=')
+    })
+  })
+
   it('shares the chosen transcript filter, not All features shown without genes', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
@@ -4124,6 +4188,78 @@ describe('App', () => {
     }
   })
 
+  it('switches Auto on the transcripts.zarr.zip grid counts once they are read', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    // The cell in view holds 8 transcripts, which alone would load exact points.
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb'])
+    // Two 10 µm tiles inside the view hold 120,000 transcripts; the tile
+    // outside it is not counted.
+    const loadTranscriptCapabilities: ReturnType<
+      typeof vi.fn<TranscriptCapabilitiesLoader>
+    > = vi.fn(async () => ({
+      rawParquet: true,
+      nativeZarr: true,
+      nativeZarrGridCounts: {
+        level: 0,
+        tileSizeMicrometers: 10,
+        gridKeys: ['0,0', '1,1', '10,10'],
+        transcriptCounts: [60_000, 60_000, 1_000_000],
+      },
+    }))
+    const loadTranscriptAggregates: ReturnType<typeof vi.fn<TranscriptAggregateLoader>> =
+      vi.fn(async () => ({
+        source: 'native-zarr',
+        selectedFeatureNames: [],
+        level: { level: 0, gridSizeMicrometers: 10, gridKeys: [], transcriptCounts: [] },
+        scaleMax: 60_000,
+        bins: [],
+      }))
+    const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> =
+      vi.fn(() => pendingPromise())
+
+    try {
+      render(
+        <TestApp
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadTranscriptCapabilities={loadTranscriptCapabilities}
+          loadTranscriptAggregates={loadTranscriptAggregates}
+          loadTranscriptViewport={loadTranscriptViewport}
+        />,
+      )
+      openControls('open-dataset')
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
+      openControls('transcripts')
+      expect(await screen.findByText('Native LOD + exact')).toBeInTheDocument()
+      expect(screen.getByRole('combobox', { name: 'Feature filter' })).toHaveValue('all')
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
+
+      expect(
+        await screen.findByText(/Showing native all-transcript density squares/),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('meter', { name: 'Exact points' })).toHaveAttribute(
+        'aria-valuetext',
+        '120,000 of 100,000 points',
+      )
+      expect(loadTranscriptAggregates).toHaveBeenCalled()
+      expect(loadTranscriptViewport).not.toHaveBeenCalled()
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('times out exact transcript loading instead of staying busy forever', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
@@ -4934,6 +5070,42 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
       'transcript-count',
     )
+  })
+
+  it('says how many imported cells are not on the map', async () => {
+    const cellId = intToCellId(1, 1)
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => [])
+    const file = new File(
+      [`cell_id,label\n${cellId},Manual ROI\n${intToCellId(9, 1)},Manual ROI`],
+      'manual.csv',
+      { type: 'text/csv' },
+    )
+
+    render(
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    openControls('clusters')
+    await waitFor(() => {
+      expect(screen.getByLabelText('Import File')).toBeEnabled()
+    })
+    fireEvent.change(screen.getByLabelText('Import File'), {
+      target: { files: [file] },
+    })
+
+    expect(
+      await screen.findByText('1 of 2 imported cells are not on the map.'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Loaded annotations')).toHaveTextContent('Manual ROI')
   })
 
   it('keeps imported annotations with colliding label slugs removable independently', async () => {

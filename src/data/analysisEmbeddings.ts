@@ -37,13 +37,13 @@ export interface ParseAnalysisEmbeddingCsvOptions {
   readonly sourcePath?: string
 }
 
-interface EmbeddingCandidate {
+export interface EmbeddingCandidate {
   readonly kind: AnalysisEmbeddingKind
   readonly label: string
   readonly path: string
 }
 
-const EMBEDDING_CANDIDATES: readonly EmbeddingCandidate[] = [
+export const EMBEDDING_CANDIDATES: readonly EmbeddingCandidate[] = [
   {
     kind: 'umap',
     label: 'UMAP',

@@ -10,6 +10,7 @@ import {
   type VisiumHdTissuePositionsReader,
 } from './visiumHdDatasetReaders'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
+import type { FallbackNotifier } from '../data/fallbackNotice'
 import type {
   ReadVisiumHdFilteredMatrixBarcodesOptions,
   VisiumHdSquareBarcode,
@@ -103,6 +104,12 @@ export interface VisiumHdBarcodeMappingCellQueryOptions {
   readonly signal?: AbortSignal
 }
 
+export interface VisiumHdImageOptions {
+  // Told when the high-res tissue image is missing and the low-res one is
+  // shown instead.
+  readonly onFallback?: FallbackNotifier
+}
+
 export type VisiumHdBarcodeMappingsForCellReader = (
   baseUrl: string,
   cellId: SpatialElementId,
@@ -185,8 +192,11 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     return this.readers.segmentationElements(kind, bbox, binSizeMicrometers)
   }
 
-  image(binSizeMicrometers?: VisiumHdBinSizeMicrometers): Promise<ImageSource | null> {
-    return this.readers.image(binSizeMicrometers)
+  image(
+    binSizeMicrometers?: VisiumHdBinSizeMicrometers,
+    options: VisiumHdImageOptions = {},
+  ): Promise<ImageSource | null> {
+    return this.readers.image(binSizeMicrometers, options)
   }
 
   transcripts(): Promise<GexResult<SpatialElementId>> {

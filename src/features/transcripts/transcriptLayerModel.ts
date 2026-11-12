@@ -1,4 +1,5 @@
 import { micrometers, type BBox } from '../../data/coords'
+import { estimateTranscriptZarrViewportCount } from '../../data/transcriptZarr'
 import type {
   TranscriptAggregateBin,
   TranscriptCapabilities,
@@ -360,7 +361,7 @@ export function transcriptAggregateScaleMaxForRendering<
 // The transcripts an exact read would load in this view, for the point
 // budget meter. Per-gene outputs (Atera) read only the selected genes, so
 // their estimate is the selected-gene count from the density; other outputs
-// read every transcript in the view, estimated from the cells.
+// read every transcript in the view (estimateVisibleTranscripts).
 export function transcriptBudgetEstimate<ErrorType extends TranscriptLoadErrorSummary>(
   capabilityState: TranscriptCapabilityState<ErrorType>,
   layerState: TranscriptLayerState<ErrorType>,
@@ -522,6 +523,26 @@ export function normalizeTranscriptPointSize(value: number): number {
   }
 
   return Math.max(1, Math.min(6, Math.round(value)))
+}
+
+// The transcripts in view, which Auto and the point budget compare with the
+// budget. With transcripts.zarr.zip grid counts, read in the capability check,
+// it counts every transcript in the level-0 tiles in view, which is what a
+// Xenium exact read scans. Without them, and until the check ends, it sums the
+// transcript counts of the cells in view (cells.parquet on Xenium).
+export function estimateVisibleTranscripts<ErrorType extends TranscriptLoadErrorSummary>(
+  capabilityState: TranscriptCapabilityState<ErrorType>,
+  cells: readonly OverviewCellDatum[],
+  bbox: BBox,
+): number {
+  const gridCounts =
+    capabilityState.status === 'ready'
+      ? capabilityState.capabilities.nativeZarrGridCounts
+      : undefined
+
+  return gridCounts === undefined
+    ? estimateVisibleTranscriptsFromCells(cells, bbox)
+    : estimateTranscriptZarrViewportCount(gridCounts, bbox)
 }
 
 export function estimateVisibleTranscriptsFromCells(

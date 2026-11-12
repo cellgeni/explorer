@@ -33,6 +33,9 @@ export interface ShareableState {
   readonly tool?: string
   // Hidden layers (image, cells, annotations): `hidden=`.
   readonly hiddenLayers?: readonly string[]
+  // Hidden annotation classes, such as `analysis:leiden:3`: `hiddenClasses=`,
+  // comma-separated, with `%` and `,` in an ID written as `%25` and `%2C`.
+  readonly hiddenAnnotationIds?: readonly string[]
   readonly geneExpressionColorScale?: string
   readonly geneExpressionScoreMode?: string
   readonly geneExpressionDetailMode?: string
@@ -102,6 +105,7 @@ export function parseShareableState(hash: string): ShareableState {
   const card = readString(params, 'card')
   const tool = readString(params, 'tool')
   const hiddenLayers = readCsv(params, 'hidden')
+  const hiddenAnnotationIds = readEscapedCsv(params, 'hiddenClasses')
   const geneExpressionColorScale = readString(params, 'scale')
   const geneExpressionScoreMode = readString(params, 'score')
   const geneExpressionDetailMode = readString(params, 'detail')
@@ -193,6 +197,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (hiddenLayers !== undefined) {
     state.hiddenLayers = hiddenLayers
+  }
+
+  if (hiddenAnnotationIds !== undefined) {
+    state.hiddenAnnotationIds = hiddenAnnotationIds
   }
 
   if (geneExpressionColorScale !== undefined) {
@@ -397,6 +405,14 @@ export function formatShareableState(state: ShareableState): string {
   if (state.hiddenLayers !== undefined && state.hiddenLayers.length > 0) {
     params.set('hidden', state.hiddenLayers.join(','))
   }
+
+  const hiddenAnnotationIds = (state.hiddenAnnotationIds ?? []).filter(
+    (annotationId) => annotationId.trim() !== '',
+  )
+
+  if (hiddenAnnotationIds.length > 0) {
+    params.set('hiddenClasses', hiddenAnnotationIds.map(escapeCsvEntry).join(','))
+  }
   setOptionalString(params, 'scale', state.geneExpressionColorScale)
   setOptionalString(params, 'score', state.geneExpressionScoreMode)
   setOptionalString(params, 'detail', state.geneExpressionDetailMode)
@@ -595,6 +611,26 @@ function readCsv(params: URLSearchParams, name: string): readonly string[] | und
     .filter((entry) => entry.length > 0)
 
   return entries.length === 0 ? undefined : entries
+}
+
+// A comma-separated list whose entries may hold commas, written as `%2C`
+// (and `%` as `%25`).
+function readEscapedCsv(
+  params: URLSearchParams,
+  name: string,
+): readonly string[] | undefined {
+  return readCsv(params, name)?.map(unescapeCsvEntry)
+}
+
+function escapeCsvEntry(entry: string): string {
+  return entry.replaceAll('%', '%25').replaceAll(',', '%2C')
+}
+
+// Any other `%` is kept as written, so a hand-written link cannot fail here.
+function unescapeCsvEntry(entry: string): string {
+  return entry.replace(/%(25|2C)/gi, (_match, code: string) =>
+    code === '25' ? '%' : ',',
+  )
 }
 
 function readCsvAllowEmpty(

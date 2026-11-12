@@ -232,11 +232,11 @@ writing UI code.
 | Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09           |
 | Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                         |
 | Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                  |
-| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**      |
+| Phase 5                         | Production polish                                        | Done; reopened diagnostics fixed 2026-11-12                  |
 | Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                           |
 | Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done            |
 | Phase 5.1                       | Transcript visualization with LOD                        | Done                                                         |
-| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**      |
+| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics fixed 2026-11-12  |
 | Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                     |
 | Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                     |
 | Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                            |
@@ -293,6 +293,10 @@ TypeScript and modules are non-negotiable; React is the recommended default.
   queries, so a busy scan cannot block them.
 - Keep row groups reasonably sized in any data you control, so bounding-box
   pruning fetches few chunks.
+- Match the bounds to the column's Parquet type. DuckDB casts a FLOAT column
+  compared with DOUBLE parameters and then cannot prune by row-group
+  statistics, so FLOAT columns (Xenium boundary vertices and transcript
+  locations) take `CAST(? AS FLOAT)` bounds (`betweenSql`, 2026-11-12).
 - ExternalFileCache (checked 2026-11-12): on by default in the bundled DuckDB
   v1.5.1, and left on. Its effect in the browser is not measured; see
   [Open Items](#12-open-items).
@@ -915,11 +919,17 @@ tests, typecheck, lint, and E2E.
 - [x] React error boundary, dataset diagnostics (manifest plus required and
       optional byte-range assets), and a downloadable JSON dump (controls,
       errors, telemetry, diagnostics, budget).
-- [ ] **Reopened (2026-11-08):** Xenium diagnostics check a hard-coded
-      `morphology.ome.tif` instead of the manifest's image, and skip
-      `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, and embedding CSVs.
-      The dump was always named `xenium-diagnostics.json`; since 2026-11-12 it
-      is `<platform>-diagnostics.json`.
+- [x] **Reopened (2026-11-08), fixed 2026-11-12:** Xenium diagnostics checked
+      a hard-coded `morphology.ome.tif` instead of the manifest's image, and
+      skipped `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, and
+      embedding CSVs. They now check the image the viewer picks (the
+      manifest's, else each `experiment.xenium` path in order, with a warning
+      naming any passed over), range-check `analysis.zarr.zip` and
+      `cell_feature_matrix.h5`, and check `gene_panel.json` and the UMAP and
+      t-SNE projections (a manifest's `umap`/`tsne` entries replace the
+      standard paths). All of these are optional and warn when absent. The
+      dump was always named `xenium-diagnostics.json`; since 2026-11-12 it is
+      `<platform>-diagnostics.json`.
 - [x] Privacy-respecting local telemetry (loads, diagnostics, tile-cache
       evictions), kept in memory and exported only through the dump.
 - [x] Docs: `docs/user-guide.md`, `docs/host-your-own-data.md`, and the root
@@ -1077,6 +1087,20 @@ windowed level-of-detail system, not one point layer over
       separate worker, so transcript work cannot block ROI export or Magic Lens.
 - [x] The visible-count estimate uses `cells.parquet` transcript counts. Native
       Zarr counts are the next accuracy improvement.
+  - Since 2026-11-12, once the capability check has read the
+    `transcripts.zarr.zip` metadata, the estimate (Auto, the `Exact points`
+    meter, the `Load exact viewport` prompt) sums the level-0 per-tile counts
+    (`grid_number_objects`), weighting tiles at the view's edge by the share
+    of their area in view. Coarser levels hold a sample (level 1 76%, level 7
+    1% on the demo), so only level 0 counts what an exact read scans. Before
+    the counts load, and without a Zarr, it sums `cells.parquet`. On one demo
+    tile the Zarr count was 279,681, the cells' sum 224,468, and the exact
+    points at the default filters 244,827: the Zarr count includes low-QV and
+    control transcripts, so it overestimates where the cells' sum
+    underestimated, and views outside cells (372 demo tiles have no centroid)
+    are no longer counted as empty. The capability check now waits for that
+    metadata (about 4.6 s on the demo), which density and exact reads need
+    anyway.
 
 #### Rendering
 
@@ -1201,9 +1225,12 @@ Xenium UI unchanged.
      left-handed image bases. Hover and selection show barcode, bin size,
      array row/column, full-res pixel, and expression.
 - [x] 4. Flat tissue image with scale-factor alignment and opacity.
-  - [ ] **Reopened (2026-11-08):** fallback from high-res to low-res. Only
-        `tissue_hires_image.png` is loaded; the low-res path is recorded but
-        never read.
+  - [x] **Reopened (2026-11-08), fixed 2026-11-12:** fallback from high-res
+        to low-res. `image()` sends a `HEAD` for `tissue_hires_image.png`; if
+        it cannot be read (or a folder listing leaves it out), the viewer
+        draws `tissue_lowres_image.png` at `tissue_lowres_scalef` and a
+        notice names the skipped path, on the first load and after a bin
+        switch. With neither image it fails as before.
 - [x] 5. Binned gene panel (`features.tsv.gz`) and expression. Never use the
      Xenium cell-ID codec for Visium.
 - [x] 6. ROI over bins with barcode export; embeddings from binned
@@ -1328,7 +1355,9 @@ Known gaps (2026-11-08 review):
   only helps when the same box is requested again.
 - Barcode-mapping reads are not cached when an `AbortSignal` is passed, and the
   app always passes one, so each bin selection re-reads
-  `barcode_mappings.parquet`.
+  `barcode_mappings.parquet`. Fixed 2026-11-12: they are shared loads, and a
+  bin selection reads only the row groups that can hold the bin (see
+  [Open Items](#12-open-items)).
 - 16 µm first paint also reads the whole 8 µm positions file to derive the
   basis. The 2 µm positions file must exist for detection, though it is never
   read. With only a 2 µm tier, the default load fails.
@@ -1344,9 +1373,14 @@ Known gaps (2026-11-08 review):
 - [x] Hover and click on a bin show barcode, size, tissue status, array
       row/column, image coordinate, and expression.
 - [x] Diagnostics check the files that matter for the selected mode.
-  - [ ] **Reopened (2026-11-08):** the high-res PNG is marked required,
-        segmentation GeoJSON is fetched in full, and `barcodes.tsv.gz` and
-        `features.tsv.gz` are not checked.
+  - [x] **Reopened (2026-11-08), fixed 2026-11-12:** the high-res PNG was
+        marked required, segmentation GeoJSON was fetched in full, and
+        `barcodes.tsv.gz` and `features.tsv.gz` were not checked. Both tissue
+        images are now optional `HEAD` checks, with a required check that one
+        of them can be read; the GeoJSONs get a `HEAD`; `features.tsv.gz` is
+        required on every tier and `barcodes.tsv.gz` on 2 µm. Checks that read
+        only the status, and the Range probe, cancel the body, so a host that
+        ignores Range no longer starts a whole-file download.
 - [x] Unit tests cover detection, scalefactors, tissue positions, the affine
       transform, grid layer conversion, and capability gating.
 - [x] Browser smoke covers image plus 16 µm bins (54,504 bins).
@@ -1429,8 +1463,10 @@ continuous.
 - Diagnostics check the H5AD URL instead of Xenium files.
 - Size gate and kerchunk reference: see [5.3](#53-anndata-h5ad).
 - Cell Info shows `obs` values as "Observations" (`6fe02be`, 2026-07-09).
-- Imported CSV/JSON annotation files are parsed with the Xenium cell-ID rule
-  (`/^[a-p]{8}-\d+$/`), so files keyed by H5AD obs names are rejected.
+- Imported CSV/JSON annotation files were parsed with the Xenium cell-ID rule
+  (`/^[a-p]{8}-\d+$/`), so files keyed by H5AD obs names were rejected. Since
+  2026-11-12 any non-empty ID is accepted (`asAnyCellId`) and checked against
+  the placed cells: none on the map is an error, some missing a notice.
 
 #### Definition Of Done (MVP)
 
@@ -1453,7 +1489,7 @@ continuous.
 - [ ] Add richer schema diagnostics, including a check of the `.h5ad.json`
       reference.
 - [ ] Offer numeric `obs` columns as `Metadata` colour tracks.
-- [ ] Accept obs names in imported CSV/JSON annotation files.
+- [x] Accept obs names in imported CSV/JSON annotation files (2026-11-12).
 - [x] Read boolean `obs` columns on the reference backend (2026-11-09).
 - [x] Read `nullable-string-array` obs and var indexes, which anndata 0.13
       writes under pandas 3, plus nullable string, integer, and boolean `obs`
@@ -1627,9 +1663,9 @@ planned in advance.
 - [ ] `points` (transcripts), extra images, and extra tables are not shown.
 - [ ] Shapes are read whole, not by viewport.
 - [ ] `meta()` waits for the image, so a broken image also blocks boundaries.
-- [ ] Imported CSV/JSON annotations must use Xenium cell IDs (shared with
+- [x] Imported CSV/JSON annotations must use Xenium cell IDs (shared with
       [Phase 7](#phase-7--anndata-h5ad)). Boolean `obs` columns were fixed on
-      2026-11-09.
+      2026-11-09; imports accept any cell ID since 2026-11-12.
 - [ ] Diagnostics check only one image chunk.
 - [ ] No E2E coverage; the reference stores in
       [1](#reference-datasets) are used for manual testing.
@@ -3516,14 +3552,15 @@ listed them. Written down in 15.5 from the findings each one turned up:
       sample on the main thread (the open item on main-thread exceptions).
     - Under 860 px an open card's sheet, up to 55% of the height, covers the
       legend, the zoom buttons and the minimap. Pinch, `F` and closing the
-      card still work.
+      card still work. (Fixed 2026-11-12; see [§12](#12-open-items).)
     - At 1024 px with the loading list showing there is no room between it
       and the minimap, so a toast overlaps one of them until dismissed.
+      (Fixed 2026-11-12.)
     - Visium still says "cells" in the Clusters set total, Metadata track
       counts ("4,992 cells", every obs row) and the gene summary ("359
       positive cells across 370 slide cells").
     - No link parameter carries hidden classes, so the reopened view shows
-      Cluster 1 again.
+      Cluster 1 again. (Fixed 2026-11-12: `hiddenClasses=`.)
 
 - [x] **F. Record the outcome** in this phase, and update the out-of-date test
       inventory in [§9](#9-testing-and-ci). (S)
@@ -3775,9 +3812,12 @@ From a run of `npm test` and the repository:
 
 - `npm test`: 211 Vitest files with 1,617 tests (1,516 `it`/`test` calls
   before `.each` expands them), against 308 non-test source files under
-  `src/`. Under full-suite load a few `App.test.tsx` tests that load 50,000
+  `src/`. After the S-sized open items (2026-11-12): 234 files with 1,820
+  tests and one `it.todo`, including fast-check property tests
+  (`*.property.test.ts`). Under full-suite load a few `App.test.tsx` tests that load 50,000
   cells can time out; they pass when the file runs alone.
-- 25 Playwright tests: 12 smoke tests, offline, and 13 live ones.
+- 25 Playwright tests: 12 smoke tests, offline, and 13 live ones. Four live
+  Visium HD tests were added on 2026-11-12, making 29.
   - Smoke (`tests/e2e/app.spec.ts`): the shell; the start screen's examples
     and their offline fallback; a link that names a dataset; the axe walk;
     review tasks 1–5 by keyboard alone; transcript controls; an H5AD fixture
@@ -3818,13 +3858,16 @@ From a run of `npm test` and the repository:
 - [ ] Make the coverage job required once it has passed on the runner for a
       while; if another `App.test.tsx` check fails there, make it wait for the
       state it reads.
-- [ ] Deeper Visium HD browser coverage: segmentation controls, Bin Info
+- [x] Deeper Visium HD browser coverage: segmentation controls, Bin Info
       inspection, and loading the 2 µm tier when the environment allows.
-- [ ] Direct tests for small helpers and leaf components if they gain behaviour
+      Done 2026-11-12; see [Open Items](#12-open-items).
+- [x] Direct tests for small helpers and leaf components if they gain behaviour
       (assignment/status helpers, cell expression panels, worker messages).
+      Done 2026-11-12 for 16 helpers and three cell panels, with property
+      tests for coordinate, affine and cell-ID round trips.
 - [x] CI pipeline: `ci.yml` gates every PR (see the inventory).
 - [ ] Deploy previews for pull requests. `pages.yml` deploys only pushes to
-      `main`.
+      `main`. See [Open Items](#12-open-items) for what a preview would need.
 - [ ] A committed Xenium-shaped golden fixture bundle. Unit tests build their
       Xenium data in code, and the smoke tests have no Xenium dataset.
 - [ ] E2E for SpatialData (shapes and labels stores), and smoke tests for
@@ -3877,7 +3920,8 @@ From a run of `npm test` and the repository:
 Every unchecked item in this plan. On 2026-11-12 each item was checked against
 the code at `35479d6`. None of the items open on 2026-11-09 had been finished;
 where part of one exists, a note says which part. Four small items were closed
-the same day.
+the same day, and later that day the items sized as half a day or less, except
+deploy previews.
 
 Sequencing:
 
@@ -3900,24 +3944,38 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 - [ ] H5AD: read HDF5 in a worker (h5wasm runs on the main thread).
 - [x] H5AD and SpatialData: read boolean `obs` columns on the reference backend
       (0/1 tracks, 2026-11-09).
-- [ ] Visium HD: low-res tissue image fallback.
+- [x] Visium HD: low-res tissue image fallback (2026-11-12). Without a
+      readable high-res PNG the viewer draws the low-res one, with a notice.
 - [x] Magic Lens: make `Min QV` change results, or hide it. The new shell
       hid it (15.2-D); 15.5-C removed it.
-- [ ] Xenium diagnostics: check the image chosen from `experiment.xenium`
+- [x] Xenium diagnostics: check the image chosen from `experiment.xenium`
       instead of `morphology.ome.tif` (a dataset manifest's image is already
       checked), plus `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, and
-      embedding CSVs.
-- [ ] Visium HD diagnostics: treat the high-res PNG as optional, avoid fetching
-      whole GeoJSON files, and check `barcodes.tsv.gz` and `features.tsv.gz`.
+      embedding CSVs (2026-11-12; see [Phase 5](#phase-5--production-polish)).
+- [x] Visium HD diagnostics: treat the high-res PNG as optional, avoid fetching
+      whole GeoJSON files, and check `barcodes.tsv.gz` and `features.tsv.gz`
+      (2026-11-12; see [Phase 6](#phase-6--visium-hd)).
+- [ ] Diagnostics left as they were on 2026-11-12: the Visium HD per-tier UMAP
+      check range-checks one path while the viewer searches the tier's paths
+      and then the root's, and the standard Visium analysis check reports the
+      last candidate's failure, not the first.
 - [x] Xenium image choice: fall back to the next `experiment.xenium` path when
       the first fails (2026-11-12). A notice names the paths passed over.
 
 Other gaps found in the review:
 
-- [ ] Imported CSV/JSON annotations accept only Xenium cell IDs, so H5AD and
-      SpatialData files are rejected.
-- [ ] Visium HD: cache barcode-mapping reads across bin selections, and avoid
-      re-streaming segmentation GeoJSON for every viewport.
+- [x] Imported CSV/JSON annotations accept only Xenium cell IDs, so H5AD and
+      SpatialData files are rejected. Since 2026-11-12 any non-empty ID is
+      accepted. When none of the imported cells are on the map, the import
+      fails with "Imported cells not found"; when some are not, a notice under
+      the import controls says how many.
+- [x] Visium HD: cache barcode-mapping reads across bin selections
+      (2026-11-12). Whole-file and per-cell reads are shared loads
+      (`waitForSharedLoad`) that callers' signals no longer bypass. A bin
+      selection reads only the row groups that can hold the bin, and the file's
+      size and footer are read once per dataset, so a later selection is one
+      range request (about 300 KB for a 16 µm bin on the reference).
+- [ ] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport.
 - [ ] Byte-range cache keys omit the `ETag`.
 - [ ] Main-thread exceptions to the worker convention: hyparquet, zarrita
       reads, h5wasm for H5AD and the Xenium H5 fallback, and auto-contrast.
@@ -3939,22 +3997,48 @@ Other gaps found in the review:
 
 Found by the [15.5-E](#155-close-out) re-run (2026-11-12):
 
-- [ ] Under 860 px an open card's sheet (up to 55% of the height) covers the
+- [x] Under 860 px an open card's sheet (up to 55% of the height) covers the
       legend, the zoom buttons and the scale bar. (The minimap is already
-      hidden under 860 px.)
-- [ ] At 1024 px with the loading list showing, a toast has no room between
+      hidden under 860 px.) Since 2026-11-12 `ShellLayout` measures the sheet
+      into `--canvas-bottom-sheet-height`, and the zoom buttons, scale bar,
+      pointer readout and legend stack sit above it; the legend scrolls in the
+      room left.
+- [x] At 1024 px with the loading list showing, a toast has no room between
       the list and the minimap and overlaps one of them. Partly fixed in 15.5-E:
       toasts centre in the gap, but keep a 280 px minimum width, so a narrower
-      gap still overlaps.
+      gap still overlaps. Since 2026-11-12, where the gap is under 304 px
+      (280 plus 12 each side) the canvas gets `data-toast-raised` and toasts
+      centre on it above both corners (`--toast-bottom`), never off the top.
+- [ ] A raised toast can cover an open card: at 1024 px with the layer panel
+      open the canvas is 664 px wide and the card stack 360 px, so no position
+      clears the card, the legend and the minimap at once. Under 860 px a
+      toast still sits over the card sheet. Found 2026-11-12.
 - [ ] Visium says "cells" in the Clusters set total, the Metadata track counts
       (which also count every obs row, 4,992 on the Census file, not the 370
       placed spots) and the gene summary ("positive cells across 370 slide
       cells"). The Visium adapter already has the noun "spots"
       (`labels.embeddingElementPlural`); these strings do not use it.
-- [ ] Links do not carry hidden classes, so a shared view shows them again.
-- [ ] The Xenium viewport warm-up ("Preparing cell feature matrix") blocks the
-      main thread for up to 4 s at a time in the first 30 s after load; see the
-      main-thread exceptions above.
+- [x] Links do not carry hidden classes, so a shared view shows them again.
+      Since 2026-11-12 `hiddenClasses=<id>,<id>` carries them (`%` and `,`
+      inside an ID are escaped); they are applied once the link's set or
+      annotation URL loads, and IDs not in the loaded labels are dropped.
+- [ ] Links do not carry hidden annotation sets (the per-set visibility
+      checkbox), only hidden classes. Found 2026-11-12.
+- [ ] A link with both `groups=` and `annotationUrl=` can lose the imported
+      labels: loading a set replaces all labels, so an import that finishes
+      first is dropped. Found by reading the code on 2026-11-12.
+- [ ] The Xenium demo blocks the main thread for up to 4 s at a time in the
+      first 30 s after load; see the main-thread exceptions above. 15.5-E put
+      this on the viewport warm-up ("Preparing cell feature matrix"). CPU
+      profiles over CDP on 2026-11-12 (headless Chromium with GPU, fresh and
+      warm profiles; stalls of up to 1.8 s here) put it on the load instead:
+      hyparquet decoding `cells.parquet` for the overview (0.4–0.6 s), the
+      first render with the overview layer build (2.3–3.0 s), and the first
+      JPEG 2000 morphology decode (0.6–0.7 s). The warm-up's cell query runs in
+      DuckDB's worker. The H5 download (above) was not part of these: its
+      1.3–1.7 s block came when the download ended, 63–70 s after load, and
+      would land in the first 30 s only above about 20 MB/s. That block is
+      gone with the fix.
 
 Features:
 
@@ -3974,10 +4058,14 @@ Features:
 - [x] Standard Visium (spots) from the original Phase 6
       ([Phase 14](#phase-14--standard-visium-spots), 2026-11-10).
 - [ ] Visium HD dataset annotations from `analysis/` (original Phase 6).
-- [ ] Transcript estimate from native Zarr counts instead of `cells.parquet`.
-      Partly done: with selected genes the estimate comes from the
-      `density/gene` counts (`550ba3b`). With All features, and for the Auto
-      switch, it still sums `cells.parquet`.
+- [x] Transcript estimate from native Zarr counts instead of `cells.parquet`.
+      With selected genes the estimate comes from the `density/gene` counts
+      (`550ba3b`); since 2026-11-12, All features and the Auto switch use the
+      level-0 `transcripts.zarr.zip` tile counts (see
+      [Phase 5.1](#phase-51--transcript-visualization)).
+- [ ] The Zarr transcript estimate counts every transcript in a tile, so it
+      ignores `Min QV` and `Gene-only calls` (87.5% of a sampled demo tile
+      passes the defaults) and assumes even density within each 250 µm tile.
 - [ ] Codeword-level density (needs a dataset with `/density/codeword`).
 - [ ] Streaming or viewport-scoped 2 µm barcode reads for very large deployments
       (`barcodes.tsv.gz` is still buffered).
@@ -3986,13 +4074,87 @@ Original-brief items with no outcome:
 
 - [ ] `nucleus_boundaries.parquet` overlay for Xenium (not read).
 - [ ] `metrics_summary.csv` QC display (not read; papaparse not adopted).
-- [ ] DuckDB ExternalFileCache evaluation. Checked 2026-11-12: the bundled
+- [x] DuckDB ExternalFileCache evaluation. Checked 2026-11-12: the bundled
       DuckDB (v1.5.1) has it on by default (`enable_external_file_cache = true`,
       `validate_external_file_cache = VALIDATE_ALL`), and the app does not
-      change it. Whether it saves requests in the browser on repeated Xenium
-      boundary or ROI queries is not measured. DuckDB still reads Xenium
-      boundaries, ROI cells, cell transcripts and gene expression.
-- [ ] Property tests for coordinate round trips.
+      change it. DuckDB still reads Xenium boundaries, ROI cells, cell
+      transcripts and gene expression. Measured the same day on the Xenium
+      demo in headed Chromium, counting the DuckDB workers' requests over CDP,
+      with the cache on and off:
+  - Returning to a boundary viewport: about 107 requests and 103 MB of
+    `cell_boundaries.parquet` (18–23 s) on every return with it off; 0–4
+    requests and 0–6 MB (1.5–2.8 s) with it on, 0 from the second return.
+  - Redrawing the same or an overlapping ROI box: 11 requests per query off,
+    0 on (0.13–0.16 s). Opening the same Cell card again: 101 requests and
+    95 MB off, 4 and 6 MB on.
+  - `VALIDATE_ALL` costs no requests (one `HEAD` per file per instance). The
+    app's IndexedDB cache is not in front of DuckDB, and Chrome's HTTP cache
+    did not hold the 1.5 MB boundary ranges. Keep the default; each instance
+    holds what it read (about 120 MB on the boundary instance) in its worker.
+    The boundary and ROI instances stay separate, because each runs one
+    query at a time and a cold boundary query took about 20 s (about 7 s
+    since the FLOAT cast below).
+- [x] Xenium boundary queries read nearly all of `cell_boundaries.parquet`
+      (95–103 MB of 109 MB, even for one cell). Found and fixed 2026-11-12.
+      `vertex_x`/`vertex_y` are FLOAT and the `BETWEEN ? AND ?` parameters
+      DOUBLE, so DuckDB cast the column and pruned no row groups (36 of 36
+      read where the statistics allow 13). The bounds are now cast
+      (`BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)`, `betweenSql` in
+      `src/data/gexSelection.ts`).
+  - Measured on the Xenium demo in headed Chromium, counting the DuckDB
+    workers' requests over CDP with the external file cache off: a cold
+    Cell-card boundary query went from 103 requests, 96 MB and 25.1 s to 38
+    requests, 35 MB and 7.1 s, with the same 27,337 rows.
+  - The `transcripts.parquet` queries had the same mismatch (`x_location` and
+    `y_location` are FLOAT; 7.1 GB in 2,117 row groups on the demo) and cast
+    their bounds too: the ROI transcripts CSV, exact-point queries (cell IDs
+    for Zarr points, or the points without a Zarr), the Parquet
+    z-distribution fallback and `gexFromTranscriptsParquet`. The statistics
+    allow 11 of the 2,117 row groups for a 300 µm box at the slide centre.
+    The effect in the browser is not measured.
+  - `cells.parquet` centroids are DOUBLE and are not cast. The cast is
+    harmless on a DOUBLE column. In a DuckDB v1.5.1 test in Node, it still
+    pruned (3.3 of 32.5 MB read with or without it). The bounds move by
+    less than half a FLOAT step, under 1 nm below 32,768 µm. One of 17,843
+    test rows lay in that sliver. On a FLOAT test file the same query read
+    16.4 of 16.6 MB uncast and 1.7 MB cast, with the same rows.
+- [x] Every Xenium demo load downloads the whole 433 MB
+      `cell_feature_matrix.h5`: the ROI warm-up falls back from the
+      feature-major Zarr matrix to the H5 file, which h5wasm reads whole. Seen
+      on `main` (`f6dcb88`) on 2026-11-12. Traced and fixed the same day:
+  - Cause: the viewport warm-up's 32-cell gene sample (`useRoiWorkflow`)
+    went through `loadDatasetRoiGeneStats`, whose Zarr read throws without
+    `csc/` arrays and then fell back to `gexFromCellFeatureMatrixH5`. The
+    request's CDP initiator stack: `loadH5MatrixUncached` ← `loadH5Matrix` ←
+    `loadRoiGeneStatsMatrix` ← `loadDatasetRoiGeneStats` ← the warm-up. The
+    bucket sends no `Cache-Control` and Chrome did not keep the file (a warm
+    profile downloaded it again), so every load paid the download (52–65 s
+    here), a 1.3–1.7 s main-thread block when it ended (h5wasm copying the
+    file into its file system and decoding 1.4 million barcodes), and the H5
+    notice under Data access notes.
+  - Fix: the warm-up's two reads pass `allowH5Fallback: false`. Where the Zarr
+    matrix cannot serve the cells, `loadDatasetRoiGeneStats` throws
+    `RoiGeneStatsH5FallbackSkippedError` instead of reading the H5, and the
+    warm-up ends without the gene sample or the enriched-genes reference (the
+    log says "no matrix sample"). Datasets with CSC arrays warm up as before.
+    A drawn ROI, a cell and the Magic Lens still fall back, with the notice.
+    On the demo the warm-up now takes 2.5 s with no H5 request; the first
+    ROI's genes take about 52 s, the download the warm-up used to hide from
+    an ROI drawn a minute or more after load.
+  - Not done: reading cell rows from the feature-major Zarr. A cell's counts
+    are spread over every gene's entries, so it means reading all of
+    `indices`.
+- [x] Property tests for coordinate round trips (2026-11-12, fast-check
+      4.10.2): `coords.ts` (µm↔px, screen↔data, `viewportBbox`, tile cover),
+      the SpatialData affines, and cell-ID integer pairs.
+- [ ] `tilesForBbox` returns edge tiles for a bbox wholly outside the image,
+      because it clamps tile indices to the grid rather than to the image. For
+      `{minX: -500, maxX: -100}` on a 250 × 180 px level with 100 × 80 px tiles
+      it returns column 0. The loaders have their own copies
+      (`src/tiff/loader.ts:801`, `src/zarr/omeZarrLoader.ts:369`), so a view
+      panned off the left or top of an image still requests that edge's
+      tiles. Found by the property tests (an `it.todo` in
+      `coords.property.test.ts`).
 - [ ] Memory ceiling with eviction telemetry beyond tile caches. Partly done:
       budgets scale with device memory, and the tile LRU (with eviction
       telemetry), the OME-Zarr chunk cache and the IndexedDB cache each evict
@@ -4005,20 +4167,73 @@ Testing:
       [Testing And CI](#9-testing-and-ci).
 - [ ] Make the coverage job required, once the timing-sensitive `App.test.tsx`
       checks pass under coverage on the runner.
-- [ ] Deeper Visium HD browser coverage. Partly done: the live test covers the
+- [x] Deeper Visium HD browser coverage. Partly done: the live test covers the
       8 and 16 µm tiers, a Feature Slice gene, Summarise View, a box ROI and
       barcode export. Segmentation boundaries, the Bin card and the 2 µm tier
-      are not covered.
+      are not covered. Since 2026-11-12 four more live tests (`@live`, run
+      nightly) open the reference at 1 px/µm on the right-hand section:
+  - The Bin card, opened with Enter at the crosshair: barcode, size, tissue
+    flag, array and image position, and the bin's expression profile; then the
+    same card from a fresh load of its `card=bin:` link.
+  - Cell and nucleus boundaries: 13,644 cells and 13,548 nuclei around that
+    view, about 25 s locally.
+  - The 2 µm tier (`test.slow()`): 3,443,936 bins in 7–15 s locally (42 s with
+    6× CPU and 150 ms latency emulated), about 2 GB of JS heap, then a 2 µm
+    Bin card.
+  - The Bin card's cell assignment: "Loaded" in about 1.3 s locally after
+    Enter, from 4 requests (HEAD, two footer reads, one 300 KB range).
+- [x] The Bin card's cell assignment fails on the Visium HD reference with
+      "Network request failed: Failed to fetch". Reading the 110 MB
+      `barcode_mappings.parquet` (`readVisiumHdBarcodeMappings`, hyparquet
+      `parquetReadObjects` on a URL buffer) sends about 6,700 range requests
+      within a second, and Chromium rejects them with
+      `net::ERR_INSUFFICIENT_RESOURCES`; other reads in flight, such as
+      `feature_slice.h5`, can fail with them. Found by the live tests on
+      2026-11-12. Fixed 2026-11-12:
+  - Cause: given `columns`, hyparquet's `parquetPlan` makes one range per
+    column chunk without merging neighbours, and `prefetchAsyncBuffer` starts
+    them all at once: 1,123 row groups × 6 columns = 6,738 requests.
+  - The reader's URL buffer (`coalescingAsyncBuffer`) merges slices asked for
+    together into ranges of up to 8 MB and keeps at most 4 in flight. A
+    whole-file read is now 14 data requests (24 s in Node, 3.6 GB of heap).
+  - The card and expression projection read only the row groups whose
+    `square_0XXum` statistics can hold the bins: about 3 of 1,123 for one
+    16 µm bin. Bin reads decode at most 262,144 rows per hyparquet read, two
+    at a time.
+  - The live test passes without `test.fail()`, and the Bin card and 2 µm
+    live tests no longer block the file.
+- [ ] The Visium HD Bin card shows "Score 0" for a selected gene the bin
+      expresses unless cells are coloured by gene expression: bins only get
+      expression counts in that mode, and `activeSelectedGridCell`
+      (`App.tsx`) fills in 0. Found 2026-11-12.
+- [ ] While a Visium HD tier loads, `Active bins` shows the old count with the
+      new size ("54,504 at 2 µm"): `visiumHdControlLoading` keeps `binCount`
+      but drops `loadedBinSize`. Found 2026-11-12.
+- [ ] Clicking a Visium HD bin selects nothing under software WebGL (headless
+      Chromium), because bin picking relies on deck.gl's picking, and bins have
+      no coordinate fallback as cells do. Enter at the crosshair works. Not
+      root-caused; found 2026-11-12.
 - [ ] E2E for SpatialData, OME-Zarr, and image-only sources. Partly done: the
       nightly examples test loads an OME-Zarr and a QPTIFF. Nothing loads
       SpatialData in a browser, and no smoke test covers these sources.
-- [ ] Direct tests for small helpers. About 14 pure helpers have no test, for
+- [x] Direct tests for small helpers. About 14 pure helpers have no test, for
       example `slug.ts`, `mapWithConcurrency.ts`, `asyncLimiter.ts`,
       `readMaybeGzipText.ts`, `omeZarrUrl.ts` and `fallbackNotice.ts`, and the
-      two cell expression panels have none.
+      two cell expression panels have none. Since 2026-11-12, 16 helpers and
+      three cell panels have tests (`geneFeatures.ts` and `gexSelection.ts`
+      are tested through `gex.test.ts`). They found a race in
+      `createAsyncLimiter`: a finishing task freed its slot before the next
+      waiter took it, so a task arriving in between ran over the limit. It now
+      hands the slot straight to the waiter.
 - [x] CI pipeline: `ci.yml` gates every PR.
 - [ ] Deploy previews for pull requests. `pages.yml` deploys only pushes to
-      `main`.
+      `main`. Checked 2026-11-12: Pages deployed from Actions serves one site
+      with no per-PR paths, so a preview URL needs the Pages source switched
+      to a `gh-pages` branch (an admin setting) with a folder per PR. A build
+      is about 95 MB, 77 MB of it the two DuckDB WASM files, so each push adds
+      that to the branch's history and the 1 GB site limit holds about nine
+      previews. Without a URL, CI could upload each PR's build as an
+      artifact.
 - [ ] The golden fixture bundle (a committed, Xenium-shaped one).
 
 Closed since the merge: Phase 8 (image-only and GeoJSON), and the "true all-cell

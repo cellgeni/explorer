@@ -27,7 +27,10 @@ interface Snapshot {
 let api: ReturnType<typeof useAnnotationWorkflow>
 let snapshot: Snapshot
 
+const NO_DATASET_CELL_IDS: ReadonlySet<string> = new Set()
+
 function Probe({
+  datasetCellIds = NO_DATASET_CELL_IDS,
   initialAnnotationState = { status: 'idle' },
   initialColorMode = 'transcript-count',
   initialHiddenAnnotationIds = [],
@@ -36,6 +39,7 @@ function Probe({
   roiState = { status: 'idle' },
   selectedAnnotationGroupId = 'cluster-a',
 }: {
+  readonly datasetCellIds?: ReadonlySet<string>
   readonly initialAnnotationState?: AnnotationState<StructuredLoadError>
   readonly initialColorMode?: ObservationColorMode
   readonly initialHiddenAnnotationIds?: readonly string[]
@@ -87,6 +91,7 @@ function Probe({
     data: {
       annotationState,
       cellMetadataTracks,
+      datasetCellIds,
       datasetUrl: 'https://example.test/output',
       loadState,
       roiName,
@@ -451,5 +456,140 @@ describe('useAnnotationWorkflow', () => {
     expect(snapshot.debugMessages).toContain(
       'Imported annotations: 0 labels, 1 metadata tracks',
     )
+  })
+
+  it('imports Visium barcodes and says how many cells are not on the map', async () => {
+    const file = new File(
+      [
+        `cell_id,label
+AAACAAGTATCTCCCA-1,Tumour
+AAACACCAATAACTGC-1,Tumour
+AAACAGAGCGACTCCT-1,Stroma`,
+      ],
+      'spots.csv',
+      { type: 'text/csv' },
+    )
+
+    render(
+      <Probe
+        datasetCellIds={new Set(['AAACAAGTATCTCCCA-1', 'AAACACCAATAACTGC-1'])}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(file)
+    })
+
+    expect(
+      snapshot.annotationState.status === 'ready'
+        ? snapshot.annotationState.annotations.map((annotation) => annotation.cellIds)
+        : [],
+    ).toEqual([['AAACAAGTATCTCCCA-1', 'AAACACCAATAACTGC-1'], ['AAACAGAGCGACTCCT-1']])
+    expect(api.annotationImportNotice).toBe('1 of 3 imported cells are not on the map.')
+
+    act(() => {
+      api.handleClearAnnotations()
+    })
+
+    expect(api.annotationImportNotice).toBeNull()
+  })
+
+  it('fails an import when none of its cells are on the map', async () => {
+    const file = new File([`cell_id,label\n0,T cell\n1,B cell`], 'instances.csv', {
+      type: 'text/csv',
+    })
+
+    render(
+      <Probe
+        datasetCellIds={new Set(['aaaaaaaa-1'])}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(file)
+    })
+
+    expect(snapshot.annotationState).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error: {
+        source: 'Annotations',
+        code: 'unknown',
+        title: 'Imported cells not found',
+        message: 'None of the 2 imported cells are on the map.',
+        action: "Check that the file's cell IDs come from this dataset.",
+      },
+    })
+    expect(api.annotationImportNotice).toBeNull()
+    expect(snapshot.debugMessages).toContain('Annotation import failed')
+  })
+
+  it('keeps the classes a link hides once its set loads, if the set has them', async () => {
+    const annotations: readonly Annotation[] = [
+      { id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] },
+      { id: 'b', label: 'Neurons', cellIds: [asCellId('bbbbbbbb-2')] },
+    ]
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => annotations)}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.loadAnnotationGroup('cluster-a', { hiddenAnnotationIds: ['b', 'gone'] })
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(snapshot.annotationState.status).toBe('ready')
+    expect(snapshot.hiddenAnnotationIds).toEqual(['b'])
+  })
+
+  it('keeps the imported classes a link hides', async () => {
+    const cellId = asCellId('aaaaaaaa-1')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () => new Response(`cell_id,label\n${cellId},Remote ROI\n${cellId},Other`),
+      ),
+    )
+
+    render(
+      <Probe
+        initialHiddenAnnotationIds={['analysis:0:1']}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotationUrl('https://example.test/manual.csv', {
+        hiddenAnnotationIds: ['custom:manual-csv:remote-roi', 'custom:manual-csv:gone'],
+      })
+    })
+
+    expect(snapshot.hiddenAnnotationIds).toEqual([
+      'analysis:0:1',
+      'custom:manual-csv:remote-roi',
+    ])
   })
 })

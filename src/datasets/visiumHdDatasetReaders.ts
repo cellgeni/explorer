@@ -1,4 +1,7 @@
 import { datasetFileUrl } from '../data/datasetFiles'
+import { notifyFallback } from '../data/fallbackNotice'
+import { isListedAsMissing } from '../data/folderListing'
+import { noteReadableResponse } from '../data/hostResponses'
 import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from '../data/gex'
 import type {
   VisiumFeatureSliceReadOptions,
@@ -15,6 +18,7 @@ import type {
   ReadVisiumHdBarcodeMappingsOptions,
   VisiumHdBarcodeMapping,
   VisiumHdBarcodeMappingCellAssignment,
+  VisiumHdBarcodeMappingsSourceCache,
 } from './visiumHdBarcodeMappings'
 import type {
   ReadVisiumHdFilteredMatrixBarcodesOptions,
@@ -65,8 +69,10 @@ import type {
   VisiumHdBinDescriptor,
   VisiumHdBinSizeMicrometers,
   VisiumHdGeneExpressionQueryOptions,
+  VisiumHdImageOptions,
 } from './visiumHdDataset'
 import { normalizeGeneList, normalizeSampleStride } from './xeniumDatasetRows'
+import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 
 export type VisiumHdTissuePositionsReader = (
   options: ReadVisiumHdTissuePositionsOptions,
@@ -255,14 +261,18 @@ export class VisiumHdDatasetReaderController {
     VisiumHdBinSizeMicrometers,
     Promise<readonly VisiumHdSquareBarcode[]>
   >()
-  private readonly barcodeMappingPromises = new Map<
+  // Barcode-mapping reads are shared by callers with their own signals (see
+  // waitForSharedLoad), so a bin selection's cancel does not drop the cache.
+  private readonly barcodeMappingLoads = new Map<
     number,
-    Promise<readonly VisiumHdBarcodeMapping[]>
+    SharedLoad<readonly VisiumHdBarcodeMapping[]>
   >()
-  private readonly barcodeMappingCellPromises = new Map<
+  private readonly barcodeMappingCellLoads = new Map<
     SpatialElementId,
-    Promise<readonly VisiumHdBarcodeMapping[]>
+    SharedLoad<readonly VisiumHdBarcodeMapping[]>
   >()
+  // barcode_mappings.parquet's size and footer, read once for all bin reads.
+  private readonly barcodeMappingSources: VisiumHdBarcodeMappingsSourceCache = new Map()
   private readonly segmentationPromises = new Map<
     string,
     Promise<readonly SpatialElement[]>
@@ -420,66 +430,34 @@ export class VisiumHdDatasetReaderController {
       options.maxRows === undefined
         ? undefined
         : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
-    const cacheKey = maxRows ?? Number.POSITIVE_INFINITY
-    const existing = this.barcodeMappingPromises.get(cacheKey)
 
-    if (existing !== undefined && options.signal === undefined) {
-      return existing
-    }
-
-    const promise = this.barcodeMappingsReader(this.baseUrl, {
-      ...(maxRows === undefined ? {} : { maxRows }),
-      fetcher: this.fetcher,
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-      ...(this.readObjects === undefined ? {} : { readObjects: this.readObjects }),
-      ...(this.loadCompressors === undefined
-        ? {}
-        : { loadCompressors: this.loadCompressors }),
-      ...(this.byteRangeCache === undefined
-        ? {}
-        : { byteRangeCache: this.byteRangeCache }),
-    }).catch((error: unknown) => {
-      if (this.barcodeMappingPromises.get(cacheKey) === promise) {
-        this.barcodeMappingPromises.delete(cacheKey)
-      }
-
-      throw error
-    })
-
-    if (options.signal === undefined) {
-      this.barcodeMappingPromises.set(cacheKey, promise)
-    }
-
-    return promise
+    return waitForSharedLoad(
+      this.barcodeMappingLoads,
+      maxRows ?? Number.POSITIVE_INFINITY,
+      (signal) =>
+        this.barcodeMappingsReader(this.baseUrl, {
+          ...(maxRows === undefined ? {} : { maxRows }),
+          ...this.barcodeMappingReadOptions(),
+          signal,
+        }),
+      options.signal,
+    )
   }
 
   barcodeMappingsForCell(
     cellId: SpatialElementId,
     options: VisiumHdBarcodeMappingCellQueryOptions = {},
   ): Promise<readonly VisiumHdBarcodeMapping[]> {
-    const existing = this.barcodeMappingCellPromises.get(cellId)
-
-    if (existing !== undefined && options.signal === undefined) {
-      return existing
-    }
-
-    const promise = this.barcodeMappingsForCellReader(this.baseUrl, cellId, {
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    }).catch((error: unknown) => {
-      if (this.barcodeMappingCellPromises.get(cellId) === promise) {
-        this.barcodeMappingCellPromises.delete(cellId)
-      }
-
-      throw error
-    })
-
-    if (options.signal === undefined) {
-      this.barcodeMappingCellPromises.set(cellId, promise)
-    }
-
-    return promise
+    return waitForSharedLoad(
+      this.barcodeMappingCellLoads,
+      cellId,
+      (signal) => this.barcodeMappingsForCellReader(this.baseUrl, cellId, { signal }),
+      options.signal,
+    )
   }
 
+  // Reads only the row groups that may hold `binIds`: for one bin, a few
+  // row groups in one range request, after the footer on the first read.
   async barcodeMappingAssignments(
     binSizeMicrometers: VisiumHdBinSizeMicrometers,
     binIds: readonly SpatialElementId[],
@@ -489,8 +467,18 @@ export class VisiumHdDatasetReaderController {
       return []
     }
 
+    const maxRows =
+      options.maxRows === undefined
+        ? undefined
+        : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
     const [mappings, barcodeMappingsModule] = await Promise.all([
-      this.barcodeMappings(options),
+      this.barcodeMappingsReader(this.baseUrl, {
+        ...(maxRows === undefined ? {} : { maxRows }),
+        bins: { binSizeMicrometers, binIds },
+        sourceCache: this.barcodeMappingSources,
+        ...this.barcodeMappingReadOptions(),
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      }),
       import('./visiumHdBarcodeMappings'),
     ])
 
@@ -499,6 +487,19 @@ export class VisiumHdDatasetReaderController {
       binSizeMicrometers,
       binIds,
     )
+  }
+
+  private barcodeMappingReadOptions(): ReadVisiumHdBarcodeMappingsOptions {
+    return {
+      fetcher: this.fetcher,
+      ...(this.readObjects === undefined ? {} : { readObjects: this.readObjects }),
+      ...(this.loadCompressors === undefined
+        ? {}
+        : { loadCompressors: this.loadCompressors }),
+      ...(this.byteRangeCache === undefined
+        ? {}
+        : { byteRangeCache: this.byteRangeCache }),
+    }
   }
 
   async segmentationElements(
@@ -510,18 +511,50 @@ export class VisiumHdDatasetReaderController {
     return this.segmentationElementsWithScalefactors(kind, bbox, overview.scalefactors)
   }
 
+  // The high-res tissue PNG, else the low-res one with its own scale factor
+  // and size, as for standard Visium. When neither can be read, the high-res
+  // image is returned and fails to load as before.
   async image(
     binSizeMicrometers = this.defaultBinSizeMicrometers,
+    options: VisiumHdImageOptions = {},
   ): Promise<ImageSource | null> {
     const overview = await this.readBinnedOverview(binSizeMicrometers)
-    const size = flatImageSizeFromScalefactors(overview.scalefactors)
+    const { scalefactors, sourcePaths } = overview
+    const hires = await probeTissueImage(
+      datasetFileUrl(this.baseUrl, sourcePaths.tissueHiresImage),
+      this.fetcher,
+    )
+    const lowres =
+      hires === null
+        ? undefined
+        : await probeTissueImage(
+            datasetFileUrl(this.baseUrl, sourcePaths.tissueLowresImage),
+            this.fetcher,
+          )
 
-    return {
-      kind: 'flat',
-      url: datasetFileUrl(this.baseUrl, overview.sourcePaths.tissueHiresImage),
-      scaleFactor: overview.scalefactors.tissueHiresScale,
-      ...(size === null ? {} : { size }),
+    if (hires !== null && lowres === null) {
+      notifyFallback(options.onFallback, {
+        source: 'Morphology image',
+        message: `${sourcePaths.tissueHiresImage} ${hires}, so the app shows ${sourcePaths.tissueLowresImage}, the low-res tissue image, instead.`,
+        action:
+          'Add the high-res tissue image to the dataset folder to show the tissue in more detail.',
+        coalesceKey: `visium-hd-tissue-image:${this.baseUrl}`,
+      })
+
+      return flatImageSource(
+        datasetFileUrl(this.baseUrl, sourcePaths.tissueLowresImage),
+        scalefactors.tissueLowresScale,
+        scalefactors.tissueLowresImageWidth,
+        scalefactors.tissueLowresImageHeight,
+      )
     }
+
+    return flatImageSource(
+      datasetFileUrl(this.baseUrl, sourcePaths.tissueHiresImage),
+      scalefactors.tissueHiresScale,
+      scalefactors.tissueHiresImageWidth,
+      scalefactors.tissueHiresImageHeight,
+    )
   }
 
   async geneExpression(
@@ -780,17 +813,40 @@ export function findBin(
   return bin
 }
 
-function flatImageSizeFromScalefactors(
-  scalefactors: VisiumHdScalefactors,
-): readonly [number, number] | null {
-  if (
-    scalefactors.tissueHiresImageWidth === undefined ||
-    scalefactors.tissueHiresImageHeight === undefined
-  ) {
-    return null
+// The size comes from the scalefactors when they record it; otherwise the
+// browser measures the loaded image.
+function flatImageSource(
+  url: string,
+  scaleFactor: number,
+  width: number | undefined,
+  height: number | undefined,
+): ImageSource {
+  return {
+    kind: 'flat',
+    url,
+    scaleFactor,
+    ...(width === undefined || height === undefined ? {} : { size: [width, height] }),
+  }
+}
+
+// Null when the tissue image can be fetched, else why not. A file the dataset
+// folder's listing leaves out is not requested; otherwise a HEAD request
+// checks it, as detection does.
+async function probeTissueImage(
+  url: string,
+  fetcher: typeof fetch,
+): Promise<string | null> {
+  if (isListedAsMissing(url)) {
+    return 'is not in the dataset folder listing'
   }
 
-  return [scalefactors.tissueHiresImageWidth, scalefactors.tissueHiresImageHeight]
+  try {
+    const response = await fetcher(url, { method: 'HEAD' })
+    noteReadableResponse(url, response.status)
+    return response.ok ? null : `could not be read (HTTP ${response.status})`
+  } catch (error) {
+    return `could not be read (${error instanceof Error ? error.message : String(error)})`
+  }
 }
 
 function preferredTwoMicrometerBasisSourceBinSize(

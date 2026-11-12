@@ -176,4 +176,45 @@ describe('shareableState', () => {
       'h5ad:leiden',
     ])
   })
+
+  it('writes and reads hidden annotation classes, leaving none out', () => {
+    const hash = formatShareableState({
+      annotationGroupIds: ['h5ad:leiden'],
+      hiddenAnnotationIds: ['analysis:leiden:0', 'custom:labels-csv:t-cell'],
+    })
+
+    expect(hash).toBe(
+      '#xv=2&groups=h5ad%3Aleiden&hiddenClasses=analysis%3Aleiden%3A0%2Ccustom%3Alabels-csv%3At-cell',
+    )
+    expect(parseShareableState(hash).hiddenAnnotationIds).toEqual([
+      'analysis:leiden:0',
+      'custom:labels-csv:t-cell',
+    ])
+    // No hidden classes, no parameter: older links stay the same.
+    expect(formatShareableState({ annotationGroupIds: ['h5ad:leiden'] })).toBe(
+      formatShareableState({
+        annotationGroupIds: ['h5ad:leiden'],
+        hiddenAnnotationIds: [],
+      }),
+    )
+    expect(formatShareableState({ hiddenAnnotationIds: [] })).toBe('#xv=2')
+    expect(parseShareableState('#xv=2&groups=h5ad%3Aleiden')).not.toHaveProperty(
+      'hiddenAnnotationIds',
+    )
+    expect(parseShareableState('#hiddenClasses=').hiddenAnnotationIds).toBeUndefined()
+  })
+
+  it('escapes commas and percent signs in hidden class IDs', () => {
+    const ids = ['analysis:CD4+, naive:1', 'custom:100%:a b', 'roi:1:%2C']
+    const hash = formatShareableState({ hiddenAnnotationIds: ids })
+
+    expect(new URLSearchParams(hash.slice(1)).get('hiddenClasses')).toBe(
+      'analysis:CD4+%2C naive:1,custom:100%25:a b,roi:1:%252C',
+    )
+    expect(parseShareableState(hash).hiddenAnnotationIds).toEqual(ids)
+    // A stray % in a hand-written link is kept.
+    expect(
+      parseShareableState('#hiddenClasses=a%252Cb,100%').hiddenAnnotationIds,
+    ).toEqual(['a,b', '100%'])
+  })
 })

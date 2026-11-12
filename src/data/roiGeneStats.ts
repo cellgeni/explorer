@@ -45,6 +45,10 @@ export interface LoadDatasetRoiGeneStatsOptions {
   readonly cellLimit?: number
   readonly geneLimit?: number
   readonly sampleStrategy?: RoiGeneStatsSampleStrategy
+  // False stops at the Zarr matrix: cell_feature_matrix.h5 is read whole
+  // (433 MB on the Xenium demo), so reads nobody asked for, such as the
+  // viewport warm-up, leave it to the first ROI.
+  readonly allowH5Fallback?: boolean
   readonly allowTranscriptFallback?: boolean
   readonly onFallback?: FallbackNotifier
   readonly readH5Matrix?: (
@@ -80,6 +84,7 @@ export async function loadDatasetRoiGeneStats(
   const matrix = await loadRoiGeneStatsMatrix(baseUrl, dataset, sampledCells, {
     validateRangeSupport: options.validateRangeSupport ?? assertHttpRangeSupport,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
+    allowH5Fallback: options.allowH5Fallback ?? true,
     allowTranscriptFallback: options.allowTranscriptFallback ?? false,
     onFallback: options.onFallback,
     readH5Matrix: options.readH5Matrix ?? gexFromCellFeatureMatrixH5,
@@ -159,6 +164,7 @@ async function loadRoiGeneStatsMatrix(
   options: {
     readonly validateRangeSupport: DatasetRangeValidator
     readonly signal?: AbortSignal
+    readonly allowH5Fallback: boolean
     readonly allowTranscriptFallback: boolean
     readonly onFallback: FallbackNotifier | undefined
     readonly readH5Matrix: (
@@ -190,6 +196,10 @@ async function loadRoiGeneStatsMatrix(
   } catch (error) {
     if (isAbortError(error)) {
       throw error
+    }
+
+    if (!options.allowH5Fallback) {
+      throw new RoiGeneStatsH5FallbackSkippedError(error)
     }
 
     matrixError = error
@@ -300,6 +310,18 @@ function abortError(signal: AbortSignal): Error {
   const error = new Error('ROI gene stats request aborted.')
   error.name = 'AbortError'
   return error
+}
+
+// The Zarr matrix could not serve the cells, and the caller did not allow the
+// H5 fallback (allowH5Fallback: false).
+export class RoiGeneStatsH5FallbackSkippedError extends Error {
+  constructor(zarrCause: unknown) {
+    super(
+      'The native Zarr cell-feature matrix could not serve these cells, and this read does not fall back to cell_feature_matrix.h5.',
+      { cause: zarrCause },
+    )
+    this.name = 'RoiGeneStatsH5FallbackSkippedError'
+  }
 }
 
 function unsupportedRoiGeneStatsError(zarrCause: unknown, h5Cause: unknown): Error {

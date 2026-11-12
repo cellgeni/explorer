@@ -97,7 +97,17 @@ polygons when zoom ≥ −0.25 or the visible overview cell count is below
 `Boundary limit` (1–100,000; default 2,500 on compact devices, 50,000
 otherwise). Requests are keyed by the bbox quantized to 50 µm. One DuckDB
 query selects cells whose centroid is within the bbox ± 75 µm and their
-vertices, then rings with fewer than 3 vertices are dropped.
+vertices within the bbox ± max(5% of its width, 150 µm), then rings with
+fewer than 3 vertices are dropped.
+
+`vertex_x` and `vertex_y` are FLOAT, so the vertex bounds are cast to FLOAT
+(`betweenSql`, `src/data/gexSelection.ts`). DuckDB casts a FLOAT column
+compared with DOUBLE parameters and then cannot skip row groups by their
+statistics. Measured on the demo on 2026-11-12 with DuckDB's file cache off,
+the cast took a cold Cell-card boundary query from 103 requests, 96 MB of the
+109 MB file and 25.1 s to 38 requests, 35 MB and 7.1 s. Queries on
+`transcripts.parquet` cast their `x_location` and `y_location` bounds the same
+way. `cells.parquet` centroids are DOUBLE and are compared as they are.
 
 ### Selected-Gene Expression
 
@@ -130,9 +140,14 @@ vertices, then rings with fewer than 3 vertices are dropped.
 
 Capabilities are checked lazily, when the overlay is on or the Transcripts
 section is open (`loadDatasetTranscriptCapabilities`,
-`src/data/transcriptOverlay.ts`). The visible transcript estimate is the sum of
-overview `transcript_counts` in the viewport. `planTranscriptLod` then chooses
-density or exact points.
+`src/data/transcriptOverlay.ts`). Once the check has read the
+`transcripts.zarr.zip` metadata, the visible transcript estimate sums the
+level-0 tile counts (`grid_number_objects`) in the viewport, weighting edge
+tiles by the share of their area in view (`estimateTranscriptZarrViewportCount`).
+It counts every transcript, whatever `Min QV` and `Gene-only calls` say.
+Without a Zarr, or before its metadata loads, it is the sum of overview
+`transcript_counts` in the viewport. `planTranscriptLod` then chooses density
+or exact points.
 
 - **Density, all transcripts.** With the All features filter, or no genes
   selected, `loadTranscriptZarrAggregates` picks the finest Zarr grid level
@@ -196,6 +211,11 @@ density or exact points.
   10,000-cell refinement. Uses CSC Zarr rows from `file_row_number`, falling
   back to `cell_feature_matrix.h5`. Without either, ROI gene stats are
   unsupported.
+- Warm-up (`useRoiWorkflow`): after load, reads up to 5,000 cells in the view
+  and a 32-cell gene sample, then the enriched-genes reference sample, so the
+  first ROI is quicker. It reads genes only from CSC Zarr
+  (`allowH5Fallback: false`): the H5 fallback is a whole-file read (433 MB on
+  the demo), so without CSC arrays the first ROI reads it.
 - Exports: cells CSV (from memory), GeoJSON, and transcripts CSV (DuckDB on
   `transcripts.parquet`, up to 100,000 rows, QV ≥ 20).
 
@@ -246,15 +266,12 @@ not passed to the readers, so it does not change the result.
 
 - The Magic Lens has no QV filter. A `Min QV` setting that had no effect on
   results was removed in Phase 15.5.
-- Only one morphology image path from `experiment.xenium` is opened: the first
-  one the folder's index page lists, or the first path when the host serves no
-  index page. A path that fails to open is not retried with the next one.
+- The morphology image is the first `experiment.xenium` path the folder's
+  index page lists, or the first path when the host serves no index page. A
+  path that fails to open falls back to the next one, with a notice naming
+  the paths passed over (2026-11-12).
 - The XOA 2.0+ z-stack `morphology.ome.tif` does not render correctly (one
   tile at the wrong scale, or a JPEG-2000 decode error); the
   `morphology_focus/` images do. A dataset without `morphology_focus/`, such
   as some BioImage Archive deposits, falls back to it.
-- Diagnostics check `morphology.ome.tif` unless a dataset manifest names the
-  image, rather than the image chosen from `experiment.xenium`, and do not
-  check `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, or embedding
-  CSVs.
 - ROI gene stats assume `cells.parquet` row order matches the matrix row order.

@@ -5,10 +5,12 @@ import {
   visiumHdAvailableBinSizes,
   visiumHdGridLoadBinSize,
 } from '../../data/visiumHdGridLod'
+import type { FallbackNotice, FallbackNotifier } from '../../data/fallbackNotice'
 import type { DatasetMeta, ImageSource } from '../../datasets/spatialDataset'
 import type {
   VisiumHdBinnedOverview,
   VisiumHdBinSizeMicrometers,
+  VisiumHdImageOptions,
 } from '../../datasets/visiumHdDataset'
 import { type GridCellDatum } from '../../rendering/deckLayers'
 import {
@@ -68,7 +70,10 @@ interface Setter<T> {
 export interface VisiumHdOverviewDataset {
   readonly maxTwoMicrometerFilteredBarcodes?: number | undefined
   meta(binSizeMicrometers?: VisiumHdBinSizeMicrometers): Promise<DatasetMeta>
-  image(binSizeMicrometers?: VisiumHdBinSizeMicrometers): Promise<ImageSource | null>
+  image(
+    binSizeMicrometers?: VisiumHdBinSizeMicrometers,
+    options?: VisiumHdImageOptions,
+  ): Promise<ImageSource | null>
   genePanel?(
     binSizeMicrometers?: VisiumHdBinSizeMicrometers,
     options?: { readonly signal?: AbortSignal },
@@ -81,6 +86,8 @@ export interface VisiumHdOverviewDataset {
 interface VisiumHdBinWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly onBeforeBinSizeChange?: () => void
+  // Receives the notice when the tier's hi-res tissue image is passed over.
+  readonly onFallback?: FallbackNotifier | undefined
 }
 
 interface VisiumHdBinWorkflowControls {
@@ -143,7 +150,7 @@ export function useVisiumHdBinWorkflow({
   refs,
   setters,
 }: UseVisiumHdBinWorkflowOptions): UseVisiumHdBinWorkflowResult {
-  const { appendDebugEvent, onBeforeBinSizeChange } = callbacks
+  const { appendDebugEvent, onBeforeBinSizeChange, onFallback } = callbacks
   const { currentViewportDetail, shouldLoadMorphology, visiumHdControlState } = controls
   const { flatMorphologyImage, loadedDatasetUrl } = data
   const { getSpatialDataset } = loaders
@@ -282,10 +289,20 @@ export function useVisiumHdBinWorkflow({
         }
 
         setMorphologyState(morphologyLoadStarted(datasetUrl))
-        const imageSource = await dataset.image(overviewBinSize)
+        // Notices wait until this request is still the latest one.
+        const imageNotices: FallbackNotice[] = []
+        const imageSource = await dataset.image(overviewBinSize, {
+          onFallback: (notice) => {
+            imageNotices.push(notice)
+          },
+        })
 
         if (requestIdRef.current !== requestId) {
           return
+        }
+
+        for (const notice of imageNotices) {
+          onFallback?.(notice)
         }
 
         const flatImage = flatMorphologyImageFromSource(imageSource, meta)
@@ -325,6 +342,7 @@ export function useVisiumHdBinWorkflow({
       getSpatialDataset,
       loadedDatasetUrl,
       onBeforeBinSizeChange,
+      onFallback,
       requestIdRef,
       setFlatMorphologyImage,
       setGeneExpressionBatch,

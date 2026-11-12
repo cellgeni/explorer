@@ -135,6 +135,7 @@ export type RoiGeneStatsLoader = (
     readonly cellLimit?: number
     readonly geneLimit?: number
     readonly sampleStrategy?: 'stratified' | 'head'
+    readonly allowH5Fallback?: boolean
     readonly onFallback?: FallbackNotifier
   },
 ) => Promise<RoiGeneStats>

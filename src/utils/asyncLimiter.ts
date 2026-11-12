@@ -7,18 +7,25 @@ export function createAsyncLimiter(
 
   return async function runLimited<T>(task: () => Promise<T>): Promise<T> {
     if (active >= maxConcurrent) {
+      // A finishing task hands its slot straight to the next waiter, so a
+      // task that arrives before the waiter resumes cannot take it.
       await new Promise<void>((resolve) => {
         queue.push(resolve)
       })
+    } else {
+      active += 1
     }
-
-    active += 1
 
     try {
       return await task()
     } finally {
-      active -= 1
-      queue.shift()?.()
+      const next = queue.shift()
+
+      if (next === undefined) {
+        active -= 1
+      } else {
+        next()
+      }
     }
   }
 }

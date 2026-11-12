@@ -5,6 +5,7 @@ import type {
   ViewerViewportDetail,
 } from '../../components/ViewerCore'
 import { ROI_CELL_EXPORT_LIMIT } from '../../data/roiCells'
+import { RoiGeneStatsH5FallbackSkippedError } from '../../data/roiGeneStats'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { DatasetCell } from '../../datasets/xeniumDataset'
@@ -318,10 +319,13 @@ export function useRoiWorkflow({
               ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
           )
+          // Only from the Zarr matrix: the H5 fallback reads the whole file
+          // (433 MB on the Xenium demo), which waits for an ROI.
           const stats = await loadRoiGeneStats(readyDatasetUrl, cells, {
             signal: request.signal,
             cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             sampleStrategy: 'head',
+            allowH5Fallback: false,
             onFallback: appendFallbackNotice,
           })
 
@@ -352,6 +356,7 @@ export function useRoiWorkflow({
               cellLimit: referenceCells.length,
               sampleStrategy: 'head',
               geneLimit: ALL_GENES,
+              allowH5Fallback: false,
               onFallback: appendFallbackNotice,
             })
           } catch (error) {
@@ -376,6 +381,17 @@ export function useRoiWorkflow({
           )
         } catch (error) {
           if (isAbortError(error) || !request.isCurrent() || request.signal.aborted) {
+            return
+          }
+
+          if (error instanceof RoiGeneStatsH5FallbackSkippedError) {
+            appendDebugEvent(
+              `ROI gene warmup ready: no matrix sample, the Zarr matrix cannot serve cells and the H5 fallback waits for an ROI (${formatElapsed(warmupStartedAt)})`,
+              {
+                coalesceKey: 'roi-gene-warmup',
+              },
+            )
+            setRoiGeneViewportWarmupState(roiGeneViewportWarmupReady(warmupKey))
             return
           }
 

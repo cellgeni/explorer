@@ -246,6 +246,19 @@ export function useTranscriptWorkflow({
         setTranscriptCapabilityState(
           transcriptCapabilityReady(requestedUrl, capabilities),
         )
+
+        if (capabilities.nativeZarrGridCountsError !== undefined) {
+          appendFallbackNotice({
+            source: 'Transcripts',
+            message:
+              'transcripts.zarr.zip grid counts were unavailable, so the app estimates visible transcripts from cell transcript counts.',
+            action:
+              'Auto and the exact point budget use this estimate, which leaves out transcripts outside cells.',
+            detail: capabilities.nativeZarrGridCountsError,
+            coalesceKey: `transcript-estimate-cells:${requestedUrl}`,
+          })
+        }
+
         appendDebugEvent(
           `Transcript outputs: ${transcriptCapabilityLabel(capabilities)} (${formatElapsed(
             transcriptStartedAt,
@@ -279,6 +292,7 @@ export function useTranscriptWorkflow({
   }, [
     transcriptControlsOpen,
     appendDebugEvent,
+    appendFallbackNotice,
     loadRequestIdRef,
     loadState,
     loadTranscriptCapabilities,
@@ -562,7 +576,8 @@ export function useTranscriptWorkflow({
 
     // With the Selected genes filter, the density counts those genes, from
     // density/gene (15.1-J). Exact reads still scan every transcript in the
-    // view, so Auto keeps switching on the all-transcript estimate.
+    // view, so Auto keeps switching on the all-transcript estimate, from the
+    // transcripts.zarr.zip grid counts when the capability check read them.
     if (plan.kind === 'native-zarr') {
       const maxBins = TRANSCRIPT_NATIVE_DENSITY_MAX_BINS
       const requestKey = transcriptAggregateRequestKey(

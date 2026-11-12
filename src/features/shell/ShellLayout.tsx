@@ -78,7 +78,7 @@ export function ShellLayout({
   }
   const narrow = useNarrowScreen()
   const canvasRef = useRef<HTMLDivElement>(null)
-  useCanvasCornerSizes(canvasRef)
+  useCanvasCornerSizes(canvasRef, narrow)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   // On narrow screens the panel is a bottom sheet that starts as a 56 px
   // handle (15.2-I).
@@ -186,46 +186,86 @@ export function ShellLayout({
   )
 }
 
+// A toast is at least 280 px wide, with 12 px clear on each side (shell.css).
+const TOAST_MIN_WIDTH = 280
+const TOAST_MARGIN = 12
+
 // The cards stop above the legend and loading list at the bottom left, so a
 // tall card never covers them; the card stack scrolls instead. Toasts centre
-// between that stack and the minimap at the bottom right (15.5-E). The sizes
-// go to CSS as custom properties on the canvas, without a render.
-function useCanvasCornerSizes(canvasRef: RefObject<HTMLDivElement | null>) {
+// between that stack and the minimap at the bottom right (15.5-E), or rise
+// above both where the gap is too narrow for a toast. Under 860 px an open
+// card docks at the bottom as a sheet, and the zoom buttons, scale bar and
+// legend rise above it. The sizes go to CSS as custom properties on the
+// canvas, without a render.
+function useCanvasCornerSizes(
+  canvasRef: RefObject<HTMLDivElement | null>,
+  narrow: boolean,
+) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (canvas === null || typeof ResizeObserver === 'undefined') return
 
     let bottomLeft: Element | null = null
     let bottomRight: Element | null = null
+    let cards: Element | null = null
+    let toasts: Element | null = null
     const update = () => {
       const bounds = canvas.getBoundingClientRect()
       const left = bottomLeft?.getBoundingClientRect()
       const right = bottomRight?.getBoundingClientRect()
+      const leftWidth = bottomLeft === null ? 0 : contentRight(bottomLeft) - bounds.left
+      const rightWidth = right === undefined ? 0 : bounds.right - right.left
       canvas.style.setProperty('--canvas-bottom-left-height', pixels(left?.height ?? 0))
-      canvas.style.setProperty(
-        '--canvas-bottom-left-width',
-        pixels(bottomLeft === null ? 0 : contentRight(bottomLeft) - bounds.left),
-      )
+      canvas.style.setProperty('--canvas-bottom-left-width', pixels(leftWidth))
       if (right === undefined) {
         canvas.style.removeProperty('--canvas-bottom-right-width')
       } else {
-        const width = pixels(bounds.right - right.left)
-        canvas.style.setProperty('--canvas-bottom-right-width', width)
+        canvas.style.setProperty('--canvas-bottom-right-width', pixels(rightWidth))
+      }
+
+      // How far up the canvas a docked card reaches; the canvas runs on
+      // under it.
+      const sheetTop = narrow ? cards?.getBoundingClientRect().top : undefined
+      canvas.style.setProperty(
+        '--canvas-bottom-sheet-height',
+        pixels(sheetTop === undefined ? 0 : bounds.bottom - sheetTop),
+      )
+
+      // A gap too narrow for a toast, as at 1024 px with the loading list
+      // showing, sends toasts above both corners, though never off the top.
+      const raised =
+        !narrow &&
+        bounds.width - leftWidth - rightWidth < TOAST_MIN_WIDTH + 2 * TOAST_MARGIN
+      canvas.toggleAttribute('data-toast-raised', raised)
+      if (raised) {
+        const clear =
+          Math.max(
+            left === undefined ? 0 : bounds.bottom - left.top,
+            right === undefined ? 0 : bounds.bottom - right.top,
+          ) + TOAST_MARGIN
+        const highest =
+          bounds.height - (toasts?.getBoundingClientRect().height ?? 0) - TOAST_MARGIN
+        canvas.style.setProperty('--toast-bottom', pixels(Math.min(clear, highest)))
+      } else {
+        canvas.style.removeProperty('--toast-bottom')
       }
     }
     const resize = new ResizeObserver(update)
     resize.observe(canvas)
-    // The legend and loading list come and go, and so does the minimap.
+    // The legend and loading list come and go, and so do the minimap, the
+    // cards and the toasts.
     const track = () => {
-      const nextLeft = canvas.querySelector('.viewport-notification-stack')
-      const nextRight = canvas.querySelector('.viewer-minimap')
-      if (nextLeft === bottomLeft && nextRight === bottomRight) return
-      for (const element of [bottomLeft, bottomRight]) {
+      const previous = [bottomLeft, bottomRight, cards, toasts]
+      bottomLeft = canvas.querySelector('.viewport-notification-stack')
+      bottomRight = canvas.querySelector('.viewer-minimap')
+      cards = canvas.querySelector('.shell-card-stack')
+      toasts = canvas.querySelector('.viewer-toasts')
+      const next = [bottomLeft, bottomRight, cards, toasts]
+      if (next.every((element, index) => element === previous[index])) return
+      for (const element of previous) {
         if (element !== null) resize.unobserve(element)
       }
-      bottomLeft = nextLeft
-      bottomRight = nextRight
-      for (const element of [bottomLeft, bottomRight]) {
+      for (const element of next) {
         if (element !== null) resize.observe(element)
       }
       update()
@@ -238,7 +278,7 @@ function useCanvasCornerSizes(canvasRef: RefObject<HTMLDivElement | null>) {
       resize.disconnect()
       mutation.disconnect()
     }
-  }, [canvasRef])
+  }, [canvasRef, narrow])
 }
 
 // The stack is a fixed-width column; what covers the canvas is its widest
