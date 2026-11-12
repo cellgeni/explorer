@@ -3792,8 +3792,9 @@ From a run of `npm test` and the repository:
     `examples/` (Xenium, QPTIFF, OME-Zarr and three H5AD) and the index from
     GitHub.
 - CI (`.github/workflows`): `ci.yml` runs on every PR and push to `main`:
-  format check, lint, typecheck, unit tests with coverage (since 2026-11-12)
-  and build, then the smoke tests in Chromium. `e2e-live.yml` runs every Playwright test at 03:00 UTC on
+  format check, lint, typecheck, unit tests and build, then the smoke tests in
+  Chromium. A separate job runs `npm run test:coverage` and uploads the report
+  without blocking. `e2e-live.yml` runs every Playwright test at 03:00 UTC on
   weekdays and on demand. `release.yml` runs typecheck, unit tests and the
   smoke tests before it attaches the app zip; `pages.yml` deploys GitHub
   Pages.
@@ -3805,8 +3806,18 @@ From a run of `npm test` and the repository:
 - [x] Coverage reporter and thresholds (2026-11-12). `npm run test:coverage`
       runs V8 coverage over `src/` and fails below 85% of statements, 74% of
       branches, 88% of functions and 85% of lines; the baseline was 86.1%,
-      75.3%, 89.4% and 86.1%. CI runs it in place of `npm test` and uploads the
-      HTML and lcov report.
+      75.3%, 89.4% and 86.1%. CI runs it in a separate job that uploads the
+      HTML and lcov report but does not block. Running the required unit tests
+      under coverage (CI #94, #97 and #98) failed each time in different
+      `App.test.tsx` tests: under coverage the runner is slow enough for their
+      1 s waits, and for checks read straight after an async load, to fail.
+      `npm test` stays the required check. A coverage run now gives each test
+      30 s and `waitFor`/`findBy` 5 s (`vitest.config.ts`, `src/test/setup.ts`);
+      `npm test` keeps the 5 s and 1 s defaults. Two checks that read the image
+      channels and the linked annotation set before they loaded now wait.
+- [ ] Make the coverage job required once it has passed on the runner for a
+      while; if another `App.test.tsx` check fails there, make it wait for the
+      state it reads.
 - [ ] Deeper Visium HD browser coverage: segmentation controls, Bin Info
       inspection, and loading the 2 µm tier when the environment allows.
 - [ ] Direct tests for small helpers and leaf components if they gain behaviour
@@ -3990,7 +4001,10 @@ Original-brief items with no outcome:
 Testing:
 
 - [x] Coverage reporter and thresholds (2026-11-12): `npm run test:coverage`,
-      run by CI; see [Testing And CI](#9-testing-and-ci).
+      run by CI in a job that does not block; see
+      [Testing And CI](#9-testing-and-ci).
+- [ ] Make the coverage job required, once the timing-sensitive `App.test.tsx`
+      checks pass under coverage on the runner.
 - [ ] Deeper Visium HD browser coverage. Partly done: the live test covers the
       8 and 16 µm tiers, a Feature Slice gene, Summarise View, a box ROI and
       barcode export. Segmentation boundaries, the Bin card and the 2 µm tier
