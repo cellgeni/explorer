@@ -15,7 +15,7 @@ permissions:
 jobs:
   check:
     name: Format, lint, typecheck, unit tests, build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -45,7 +45,9 @@ jobs:
 
   e2e-smoke:
     name: E2E smoke (Chromium, offline)
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is now 26.04, where Playwright 1.60 cannot install
+    # Chromium (1.61 and later can). Every workflow uses the same image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
