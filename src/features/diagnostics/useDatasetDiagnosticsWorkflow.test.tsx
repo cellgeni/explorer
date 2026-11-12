@@ -3,6 +3,7 @@ import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { DatasetDiagnosticsReport } from '../../data/datasetDiagnostics'
 import type { TelemetryEvent } from '../../data/telemetry'
+import type { Platform } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetDiagnosticsRunner } from '../app-shell/appDependencies'
 import type { DatasetDiagnosticsState } from '../dataset/datasetLoadModel'
@@ -39,6 +40,7 @@ interface DiagnosticsSnapshot {
 }
 
 interface DiagnosticsProbeProps {
+  readonly datasetPlatform?: Platform | null
   readonly datasetUrl?: string
   readonly onReady: (
     api: ReturnType<typeof useDatasetDiagnosticsWorkflow>,
@@ -52,6 +54,7 @@ let diagnosticsApi: ReturnType<typeof useDatasetDiagnosticsWorkflow>
 let diagnosticsSnapshot: DiagnosticsSnapshot
 
 function DiagnosticsProbe({
+  datasetPlatform = null,
   datasetUrl = ' https://example.test/output ',
   onReady,
   runDatasetDiagnostics,
@@ -74,6 +77,7 @@ function DiagnosticsProbe({
       },
     },
     controls: {
+      datasetPlatform,
       ...(visiumHdBinSizeMicrometers === undefined ? {} : { visiumHdBinSizeMicrometers }),
     },
     dump: {
@@ -350,6 +354,37 @@ describe('useDatasetDiagnosticsWorkflow', () => {
     expect(diagnosticsSnapshot.debugMessages).toContain('Cancelled diagnostics')
     expect(diagnosticsSnapshot.debugMessages).not.toContain('Diagnostics failed')
     expect(diagnosticsSnapshot.telemetryEvents).toEqual([])
+  })
+
+  it('names the dump after the loaded dataset platform', () => {
+    const fileNames: string[] = []
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      fileNames.push(this.download)
+    })
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+
+    try {
+      render(
+        <DiagnosticsProbe
+          datasetPlatform="visium-hd"
+          onReady={(nextApi) => {
+            diagnosticsApi = nextApi
+          }}
+          runDatasetDiagnostics={vi.fn(async () => successfulReport)}
+        />,
+      )
+
+      act(() => {
+        diagnosticsApi.handleDownloadDiagnostics()
+      })
+
+      expect(fileNames).toEqual(['visium-hd-diagnostics.json'])
+    } finally {
+      vi.restoreAllMocks()
+    }
   })
 })
 

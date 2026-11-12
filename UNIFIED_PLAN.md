@@ -228,7 +228,7 @@ writing UI code.
 | Track                           | Scope                                                    | Status                                                       |
 | ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
 | Phase 1                         | Foundation and migration                                 | Done                                                         |
-| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                       |
+| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback fixed 2026-11-12                   |
 | Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09           |
 | Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                         |
 | Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                  |
@@ -293,7 +293,9 @@ TypeScript and modules are non-negotiable; React is the recommended default.
   queries, so a busy scan cannot block them.
 - Keep row groups reasonably sized in any data you control, so bounding-box
   pruning fetches few chunks.
-- Not recorded as done: evaluating DuckDB's ExternalFileCache.
+- ExternalFileCache (checked 2026-11-12): on by default in the bundled DuckDB
+  v1.5.1, and left on. Its effect in the browser is not measured; see
+  [Open Items](#12-open-items).
 
 ### 4.4 Image Layer — DECISION: Custom JPEG-2000 Path; Canvas2D Compositing
 
@@ -765,8 +767,10 @@ Notes:
   DuckDB and Zarr stages that cannot be aborted are checked between awaits.
 - Image loading reads the manifest once, opens only declared TIFF paths, and
   prefers MIP, then focus, then full-resolution.
-  **Reopened (2026-11-08):** only the first candidate path is tried; there is no
-  fallback to the next one if it fails (`morphologyImage.ts`).
+  **Reopened (2026-11-08), fixed (2026-11-12):** only the first candidate path
+  was tried. Now an image that fails to open falls back to the next declared
+  path, a cancelled load stops, and a notice names the paths passed over
+  (`morphologyImage.ts`).
 - Structured errors carry source, code, title, message, action, and optional
   detail.
 - `cells.parquet` decode failures name the columns, URL, and likely encoding
@@ -914,7 +918,8 @@ tests, typecheck, lint, and E2E.
 - [ ] **Reopened (2026-11-08):** Xenium diagnostics check a hard-coded
       `morphology.ome.tif` instead of the manifest's image, and skip
       `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, and embedding CSVs.
-      The dump is always named `xenium-diagnostics.json`.
+      The dump was always named `xenium-diagnostics.json`; since 2026-11-12 it
+      is `<platform>-diagnostics.json`.
 - [x] Privacy-respecting local telemetry (loads, diagnostics, tile-cache
       evictions), kept in memory and exported only through the dump.
 - [x] Docs: `docs/user-guide.md`, `docs/host-your-own-data.md`, and the root
@@ -1542,8 +1547,9 @@ instead of extending cell-ID annotations. Shipped on 2026-07-09 (`f7ff9c5`,
 
 #### Known Gaps
 
-- [ ] A failed GeoJSON import logs "GeoJSON annotation import failed" without
-      the reason.
+- [x] A failed GeoJSON import logs "GeoJSON annotation import failed" without
+      the reason. Fixed 2026-11-12: a message under `Import GeoJSON` gives the
+      file name and the reason (not JSON, wrong geometry, or no polygons).
 - [ ] `id` and `visible` properties are not imported, and shapes are not saved
       in the shareable URL.
 - [ ] No E2E coverage for image-only sources.
@@ -3786,8 +3792,8 @@ From a run of `npm test` and the repository:
     `examples/` (Xenium, QPTIFF, OME-Zarr and three H5AD) and the index from
     GitHub.
 - CI (`.github/workflows`): `ci.yml` runs on every PR and push to `main`:
-  format check, lint, typecheck, unit tests and build, then the smoke tests in
-  Chromium. `e2e-live.yml` runs every Playwright test at 03:00 UTC on
+  format check, lint, typecheck, unit tests with coverage (since 2026-11-12)
+  and build, then the smoke tests in Chromium. `e2e-live.yml` runs every Playwright test at 03:00 UTC on
   weekdays and on demand. `release.yml` runs typecheck, unit tests and the
   smoke tests before it attaches the app zip; `pages.yml` deploys GitHub
   Pages.
@@ -3796,14 +3802,18 @@ From a run of `npm test` and the repository:
 
 ### Open
 
-- [ ] Add a coverage reporter and thresholds before using the suite as a release
-      gate. `vitest.config.ts` has no coverage provider and `package.json` has
-      no coverage script.
+- [x] Coverage reporter and thresholds (2026-11-12). `npm run test:coverage`
+      runs V8 coverage over `src/` and fails below 85% of statements, 74% of
+      branches, 88% of functions and 85% of lines; the baseline was 86.1%,
+      75.3%, 89.4% and 86.1%. CI runs it in place of `npm test` and uploads the
+      HTML and lcov report.
 - [ ] Deeper Visium HD browser coverage: segmentation controls, Bin Info
       inspection, and loading the 2 µm tier when the environment allows.
 - [ ] Direct tests for small helpers and leaf components if they gain behaviour
       (assignment/status helpers, cell expression panels, worker messages).
 - [x] CI pipeline: `ci.yml` gates every PR (see the inventory).
+- [ ] Deploy previews for pull requests. `pages.yml` deploys only pushes to
+      `main`.
 - [ ] A committed Xenium-shaped golden fixture bundle. Unit tests build their
       Xenium data in code, and the smoke tests have no Xenium dataset.
 - [ ] E2E for SpatialData (shapes and labels stores), and smoke tests for
@@ -3853,7 +3863,10 @@ From a run of `npm test` and the repository:
 
 ## 12. Open Items
 
-Every unchecked item in this plan, updated 2026-11-09.
+Every unchecked item in this plan. On 2026-11-12 each item was checked against
+the code at `35479d6`. None of the items open on 2026-11-09 had been finished;
+where part of one exists, a note says which part. Four small items were closed
+the same day.
 
 Sequencing:
 
@@ -3885,8 +3898,8 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
       embedding CSVs.
 - [ ] Visium HD diagnostics: treat the high-res PNG as optional, avoid fetching
       whole GeoJSON files, and check `barcodes.tsv.gz` and `features.tsv.gz`.
-- [ ] Xenium image choice: fall back to the next `experiment.xenium` path when
-      the first fails.
+- [x] Xenium image choice: fall back to the next `experiment.xenium` path when
+      the first fails (2026-11-12). A notice names the paths passed over.
 
 Other gaps found in the review:
 
@@ -3900,8 +3913,11 @@ Other gaps found in the review:
 - [ ] Xenium still loads through free functions in `src/data/` instead of one
       `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
       `meta()` reads the manifest.
-- [ ] The diagnostics dump is named `xenium-diagnostics.json` on every platform.
-- [ ] A failed GeoJSON import does not show the reason.
+- [x] The diagnostics dump is named `xenium-diagnostics.json` on every platform.
+      Now `<platform>-diagnostics.json`, after the loaded dataset, else the
+      platform diagnostics found, else `dataset` (2026-11-12).
+- [x] A failed GeoJSON import does not show the reason. A message under
+      `Import GeoJSON` now gives the file name and the reason (2026-11-12).
 - [ ] Visium HD: with only a 2 µm tier the default load fails, and 2 µm
       detection needs a positions file that is never read.
 - [x] Remove `'visium'` from the `Platform` union or implement it
@@ -3913,13 +3929,17 @@ Other gaps found in the review:
 Found by the [15.5-E](#155-close-out) re-run (2026-11-12):
 
 - [ ] Under 860 px an open card's sheet (up to 55% of the height) covers the
-      legend, the zoom buttons and the minimap.
+      legend, the zoom buttons and the scale bar. (The minimap is already
+      hidden under 860 px.)
 - [ ] At 1024 px with the loading list showing, a toast has no room between
-      the list and the minimap and overlaps one of them.
+      the list and the minimap and overlaps one of them. Partly fixed in 15.5-E:
+      toasts centre in the gap, but keep a 280 px minimum width, so a narrower
+      gap still overlaps.
 - [ ] Visium says "cells" in the Clusters set total, the Metadata track counts
       (which also count every obs row, 4,992 on the Census file, not the 370
       placed spots) and the gene summary ("positive cells across 370 slide
-      cells").
+      cells"). The Visium adapter already has the noun "spots"
+      (`labels.embeddingElementPlural`); these strings do not use it.
 - [ ] Links do not carry hidden classes, so a shared view shows them again.
 - [ ] The Xenium viewport warm-up ("Preparing cell feature matrix") blocks the
       main thread for up to 4 s at a time in the first 30 s after load; see the
@@ -3930,15 +3950,23 @@ Features:
 - [ ] `t`/`z` selection for OME-Zarr, and a `Z plane` control for custom image
       layers (OME-TIFF dataset images have one).
 - [ ] H5AD: worker-backed lazy Range reads, `/layers/*` and `/raw/X`, and richer
-      schema diagnostics.
+      schema diagnostics. Partly done: lazy Range reads work through
+      kerchunk and Icechunk companions (`6971ceb`, `b71ffc8`), on the main
+      thread. Only `/X` is read, and diagnostics check only that the file
+      answers Range requests or the repository opens.
 - [ ] SpatialData: `points` (transcripts), extra images and tables, and
-      viewport-scoped shape reads.
+      viewport-scoped shape reads. Partly done: the info drawer picks one image
+      at a time, and the primary table is read. Points are not read, and shapes
+      are read whole, then filtered to the viewport.
 - [ ] Atera: ROI transcript export, the cell z histogram, Magic Lens, and
       Azimuth colours (see [Phase 12](#phase-12--10x-atera-output)).
 - [x] Standard Visium (spots) from the original Phase 6
       ([Phase 14](#phase-14--standard-visium-spots), 2026-11-10).
 - [ ] Visium HD dataset annotations from `analysis/` (original Phase 6).
 - [ ] Transcript estimate from native Zarr counts instead of `cells.parquet`.
+      Partly done: with selected genes the estimate comes from the
+      `density/gene` counts (`550ba3b`). With All features, and for the Auto
+      switch, it still sums `cells.parquet`.
 - [ ] Codeword-level density (needs a dataset with `/density/codeword`).
 - [ ] Streaming or viewport-scoped 2 µm barcode reads for very large deployments
       (`barcodes.tsv.gz` is still buffered).
@@ -3947,17 +3975,37 @@ Original-brief items with no outcome:
 
 - [ ] `nucleus_boundaries.parquet` overlay for Xenium (not read).
 - [ ] `metrics_summary.csv` QC display (not read; papaparse not adopted).
-- [ ] DuckDB ExternalFileCache evaluation.
+- [ ] DuckDB ExternalFileCache evaluation. Checked 2026-11-12: the bundled
+      DuckDB (v1.5.1) has it on by default (`enable_external_file_cache = true`,
+      `validate_external_file_cache = VALIDATE_ALL`), and the app does not
+      change it. Whether it saves requests in the browser on repeated Xenium
+      boundary or ROI queries is not measured. DuckDB still reads Xenium
+      boundaries, ROI cells, cell transcripts and gene expression.
 - [ ] Property tests for coordinate round trips.
-- [ ] Memory ceiling with eviction telemetry beyond tile caches.
+- [ ] Memory ceiling with eviction telemetry beyond tile caches. Partly done:
+      budgets scale with device memory, and the tile LRU (with eviction
+      telemetry), the OME-Zarr chunk cache and the IndexedDB cache each evict
+      on their own. There is no app-wide ceiling.
 
 Testing:
 
-- [ ] Coverage reporter and thresholds.
-- [ ] Deeper Visium HD browser coverage.
-- [ ] E2E for SpatialData, OME-Zarr, and image-only sources.
-- [ ] Direct tests for small helpers.
-- [ ] CI pipeline, deploy previews, and the golden fixture bundle.
+- [x] Coverage reporter and thresholds (2026-11-12): `npm run test:coverage`,
+      run by CI; see [Testing And CI](#9-testing-and-ci).
+- [ ] Deeper Visium HD browser coverage. Partly done: the live test covers the
+      8 and 16 µm tiers, a Feature Slice gene, Summarise View, a box ROI and
+      barcode export. Segmentation boundaries, the Bin card and the 2 µm tier
+      are not covered.
+- [ ] E2E for SpatialData, OME-Zarr, and image-only sources. Partly done: the
+      nightly examples test loads an OME-Zarr and a QPTIFF. Nothing loads
+      SpatialData in a browser, and no smoke test covers these sources.
+- [ ] Direct tests for small helpers. About 14 pure helpers have no test, for
+      example `slug.ts`, `mapWithConcurrency.ts`, `asyncLimiter.ts`,
+      `readMaybeGzipText.ts`, `omeZarrUrl.ts` and `fallbackNotice.ts`, and the
+      two cell expression panels have none.
+- [x] CI pipeline: `ci.yml` gates every PR.
+- [ ] Deploy previews for pull requests. `pages.yml` deploys only pushes to
+      `main`.
+- [ ] The golden fixture bundle (a committed, Xenium-shaped one).
 
 Closed since the merge: Phase 8 (image-only and GeoJSON), and the "true all-cell
 whole-slide expression scan" from Phase 4 (`Auto LOD` and `All cells` load every

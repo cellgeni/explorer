@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DatasetDiagnosticsReport } from '../../data/datasetDiagnostics'
-import { createDiagnosticsDump } from './diagnosticsDump'
+import { createDiagnosticsDump, diagnosticsDumpFileName } from './diagnosticsDump'
 
 const report: DatasetDiagnosticsReport = {
   baseUrl: 'https://example.test/output',
@@ -177,5 +177,37 @@ describe('createDiagnosticsDump', () => {
       activityLog: [{ message: 'Loaded' }],
       telemetryEvents: [{ name: 'load' }],
     })
+  })
+})
+
+describe('diagnosticsDumpFileName', () => {
+  it('uses the loaded dataset platform first', () => {
+    expect(
+      diagnosticsDumpFileName('h5ad', {
+        status: 'ready',
+        url: 'https://example.test/output',
+        report,
+      }),
+    ).toBe('h5ad-diagnostics.json')
+  })
+
+  it('falls back to the platform diagnostics found, then to dataset', () => {
+    expect(
+      diagnosticsDumpFileName(null, {
+        status: 'ready',
+        url: 'https://example.test/output',
+        report,
+      }),
+    ).toBe('xenium-diagnostics.json')
+    expect(
+      diagnosticsDumpFileName(null, {
+        status: 'ready',
+        url: 'https://example.test/output',
+        report: { ...report, platform: 'unknown' },
+      }),
+    ).toBe('dataset-diagnostics.json')
+    expect(diagnosticsDumpFileName(null, { status: 'idle' })).toBe(
+      'dataset-diagnostics.json',
+    )
   })
 })

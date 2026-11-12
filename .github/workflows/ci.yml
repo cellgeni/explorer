@@ -36,9 +36,16 @@ jobs:
       - name: Typecheck
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run typecheck
-      - name: Unit tests
+      - name: Unit tests with coverage
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm test
+        run: npm run test:coverage
+      - name: Upload coverage report
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
       - name: Build
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run build

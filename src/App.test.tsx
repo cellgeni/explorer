@@ -437,6 +437,28 @@ describe('App', () => {
       expect(screen.getByRole('heading', { name: 'GeoJSON shapes' })).toBeInTheDocument()
       expect(screen.queryByRole('combobox', { name: 'Annotation set' })).toBeNull()
 
+      // A failed import says why, and the next good import clears it.
+      fireEvent.change(screen.getByLabelText('Import GeoJSON'), {
+        target: {
+          files: [
+            new File(
+              [
+                JSON.stringify({
+                  type: 'Feature',
+                  properties: {},
+                  geometry: { type: 'LineString', coordinates: [] },
+                }),
+              ],
+              'line.geojson',
+              { type: 'application/geo+json' },
+            ),
+          ],
+        },
+      })
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Could not import line.geojson. GeoJSON geometry must be Polygon or MultiPolygon.',
+      )
+
       fireEvent.change(screen.getByLabelText('Import GeoJSON'), {
         target: {
           files: [
@@ -466,6 +488,7 @@ describe('App', () => {
       })
 
       expect(await screen.findByText('Image region')).toBeInTheDocument()
+      expect(screen.queryByText(/Could not import line\.geojson/)).toBeNull()
       expect(screen.getByRole('button', { name: 'Export GeoJSON' })).toBeEnabled()
       expect(screen.getByTestId('deck-layer-geometric-annotations')).toHaveAttribute(
         'data-count',
@@ -2626,35 +2649,41 @@ describe('App', () => {
         },
       )
 
-      await waitFor(() => {
-        expect(loadRoiCells).toHaveBeenCalledWith(
-          DEMO_DATASET_URL,
-          expect.objectContaining({
-            kind: 'box',
-            bbox: expect.objectContaining({
-              minX: expect.any(Number) as number,
-              maxX: expect.any(Number) as number,
-              minY: expect.any(Number) as number,
-              maxY: expect.any(Number) as number,
-            }) as object,
-          }),
-          expect.objectContaining({
-            limit: 25_000,
-            signal: expect.any(AbortSignal) as AbortSignal,
-          }),
-        )
-      })
-      await waitFor(() => {
-        expect(loadRoiGeneStats).toHaveBeenCalledWith(
-          DEMO_DATASET_URL,
-          [expect.objectContaining({ id: insideCellId })],
-          expect.objectContaining({
-            cellLimit: 25_000,
-            geneLimit: 10_000,
-            signal: expect.any(AbortSignal) as AbortSignal,
-          }),
-        )
-      })
+      await waitFor(
+        () => {
+          expect(loadRoiCells).toHaveBeenCalledWith(
+            DEMO_DATASET_URL,
+            expect.objectContaining({
+              kind: 'box',
+              bbox: expect.objectContaining({
+                minX: expect.any(Number) as number,
+                maxX: expect.any(Number) as number,
+                minY: expect.any(Number) as number,
+                maxY: expect.any(Number) as number,
+              }) as object,
+            }),
+            expect.objectContaining({
+              limit: 25_000,
+              signal: expect.any(AbortSignal) as AbortSignal,
+            }),
+          )
+        },
+        { timeout: 3_000 },
+      )
+      await waitFor(
+        () => {
+          expect(loadRoiGeneStats).toHaveBeenCalledWith(
+            DEMO_DATASET_URL,
+            [expect.objectContaining({ id: insideCellId })],
+            expect.objectContaining({
+              cellLimit: 25_000,
+              geneLimit: 10_000,
+              signal: expect.any(AbortSignal) as AbortSignal,
+            }),
+          )
+        },
+        { timeout: 3_000 },
+      )
       expect(loadRoiTranscripts).not.toHaveBeenCalled()
 
       const results = await screen.findByLabelText('Magic lens results')
@@ -3700,15 +3729,18 @@ describe('App', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Load exact viewport' }))
 
-      await waitFor(() => {
-        expect(loadTranscriptViewport).toHaveBeenCalledWith(
-          DEMO_DATASET_URL,
-          expect.any(Object),
-          expect.objectContaining({
-            pointLimit: 100_000,
-          }),
-        )
-      })
+      await waitFor(
+        () => {
+          expect(loadTranscriptViewport).toHaveBeenCalledWith(
+            DEMO_DATASET_URL,
+            expect.any(Object),
+            expect.objectContaining({
+              pointLimit: 100_000,
+            }),
+          )
+        },
+        { timeout: 3_000 },
+      )
     } finally {
       viewport.restore()
     }

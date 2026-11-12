@@ -17,6 +17,7 @@ function input(
     annotationPlacedCellIds: null,
     annotationState: { status: 'idle' },
     cellMetadataTracks: [],
+    geometricAnnotationImportError: null,
     geometricAnnotations: [],
     geometricAnnotationsEnabled: false,
     handleAnnotationColorChange: vi.fn(),
@@ -135,6 +136,16 @@ describe('useAnnotationsSectionModel', () => {
     expect(imageOnly.result.current.sets.canClear).toBe(false)
     expect(withTracks.result.current.sets.available).toBe(true)
     expect(withTracks.result.current.sets.canClear).toBe(true)
+  })
+
+  it('passes the GeoJSON import error to the shapes', () => {
+    const { result } = renderHook(() =>
+      useAnnotationsSectionModel(
+        input({ geometricAnnotationImportError: 'Could not import a.geojson.' }),
+      ),
+    )
+
+    expect(result.current.shapes.importError).toBe('Could not import a.geojson.')
   })
 
   it('passes file imports to the async handlers', () => {

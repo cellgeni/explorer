@@ -216,6 +216,10 @@ export function useAppDomainState({
   const [geometricAnnotations, setGeometricAnnotations] = useState<
     readonly GeometricAnnotationFeature[]
   >([])
+  // Why the last GeoJSON import added no shapes; cleared by the next import.
+  const [geometricAnnotationImportError, setGeometricAnnotationImportError] = useState<
+    string | null
+  >(null)
   const [selectedCellMetadataTrackId, setSelectedCellMetadataTrackId] = useState<
     string | null
   >(null)
@@ -506,6 +510,7 @@ export function useAppDomainState({
       annotationImportUrl,
       annotationState,
       cellMetadataTracks,
+      geometricAnnotationImportError,
       geometricAnnotations,
       hiddenAnnotationIds,
       hiddenAnnotationSetIds,
@@ -516,6 +521,7 @@ export function useAppDomainState({
       setAnnotationImportUrl,
       setAnnotationState,
       setCellMetadataTracks,
+      setGeometricAnnotationImportError,
       setGeometricAnnotations,
       setHiddenAnnotationIds,
       setHiddenAnnotationSetIds,

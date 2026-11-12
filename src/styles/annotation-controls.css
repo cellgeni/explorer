@@ -158,6 +158,18 @@
   padding-top: 2px;
 }
 
+/* Why the last GeoJSON import added no shapes. */
+.annotation-import-error {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-2);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--font-caption);
+  overflow-wrap: anywhere;
+}
+
 .annotation-size-heading {
   display: flex;
   gap: 8px;

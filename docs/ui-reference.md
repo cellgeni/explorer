@@ -380,6 +380,7 @@ GeoJSON shapes, on all platforms (`src/features/annotations/geometricAnnotationM
 | `Export GeoJSON` | Downloads `geometric-annotations.geojson` in micrometres                                                                                  |
 | `Clear GeoJSON`  | Removes all shapes                                                                                                                        |
 | Shape rows       | Colour, visible, label, polygon count, `x`                                                                                                |
+| Import message   | Shown when an import adds no shapes: the file name and the reason (not JSON, wrong geometry, no polygons)                                 |
 
 Import rules are in [Image-only and GeoJSON](./image-only-and-geojson.md).
 
@@ -782,7 +783,9 @@ deposit, followed by the licence and citation.
 ### Diagnostics
 
 `Diagnose Dataset` runs `runDatasetDiagnostics` for the URL; the download icon
-saves `xenium-diagnostics.json` (for every platform). Then
+saves `<platform>-diagnostics.json`, named after the loaded dataset's platform
+(`xenium`, `visium-hd`, `h5ad`, …), or after the platform diagnostics found
+when nothing is loaded (`dataset` if neither is known). Then
 (`src/components/AppStatusPanels.tsx`):
 
 | Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |

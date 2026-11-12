@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  geometricAnnotationsEmptyMessage,
+  geometricAnnotationsImportFailedMessage,
   geometricAnnotationsToGeoJson,
   parseGeometricAnnotationsGeoJson,
 } from './geometricAnnotationModel'
@@ -160,6 +162,36 @@ describe('geometricAnnotationModel', () => {
         },
       ),
     ).toThrow(/at least three distinct points/)
+  })
+
+  it('says why an import added no shapes', () => {
+    let syntaxError: unknown
+    try {
+      parseGeometricAnnotationsGeoJson('{not json', {
+        defaultCoordinateUnit: 'pixel',
+        micrometersPerPixel: 1,
+      })
+    } catch (error) {
+      syntaxError = error
+    }
+
+    expect(geometricAnnotationsImportFailedMessage('a.geojson', syntaxError)).toBe(
+      'Could not import a.geojson. The file is not valid JSON.',
+    )
+    expect(
+      geometricAnnotationsImportFailedMessage(
+        'b.geojson',
+        new Error('GeoJSON geometry must be Polygon or MultiPolygon.'),
+      ),
+    ).toBe(
+      'Could not import b.geojson. GeoJSON geometry must be Polygon or MultiPolygon.',
+    )
+    expect(geometricAnnotationsImportFailedMessage('c.geojson', 'oops')).toBe(
+      'Could not import c.geojson. The file could not be read.',
+    )
+    expect(geometricAnnotationsEmptyMessage('d.geojson')).toBe(
+      'd.geojson has no Polygon or MultiPolygon shapes.',
+    )
   })
 
   it('exports annotations as a micrometer FeatureCollection', () => {

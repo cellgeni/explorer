@@ -46,6 +46,8 @@ files. Parsing happens in the browser:
 | `tests/e2e/`                            | Playwright tests against hosted reference datasets                                                                                                                                       |
 
 Unit tests sit next to their modules as `*.test.ts(x)` and run with Vitest.
+`npm run test:coverage` adds V8 coverage over `src/` with minimum thresholds;
+CI runs it on every pull request and uploads the report.
 
 ## Load Pipeline
 
