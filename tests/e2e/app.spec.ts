@@ -29,6 +29,19 @@ const XENIUM_LOAD_TIMEOUT_MS = 120_000
 const XENIUM_TRANSCRIPT_TIMEOUT_MS = 120_000
 const XENIUM_ROI_TIMEOUT_MS = 120_000
 const VISIUM_HD_LOAD_TIMEOUT_MS = 90_000
+const VISIUM_HD_BIN_PROFILE_TIMEOUT_MS = 120_000
+// The cell assignment reads all of barcode_mappings.parquet (110 MB).
+const VISIUM_HD_BIN_ASSIGNMENT_TIMEOUT_MS = 180_000
+// Each boundary request streams the whole cell (68 MB) and nucleus (44 MB)
+// segmentation GeoJSON and keeps the polygons around the view.
+const VISIUM_HD_BOUNDARY_TIMEOUT_MS = 180_000
+// 3.4 million 2 µm bins from the 2 µm matrix barcodes: about 15 s and 2 GB
+// of JS heap locally.
+const VISIUM_HD_TWO_MICROMETER_TIMEOUT_MS = 300_000
+// The right-hand tissue section of the Visium HD reference at one screen
+// pixel per micrometre: about 2,400 16 µm bins in view, under the 50,000-bin
+// boundary limit, with a bin at the centre.
+const VISIUM_HD_TISSUE_VIEW = '5647,-4817.5,0,0'
 const H5AD_LOAD_TIMEOUT_MS = 60_000
 const H5AD_HOSTED_LOAD_TIMEOUT_MS = 120_000
 const HOSTED_FIXTURE_PREFLIGHT_TIMEOUT_MS = 10_000
@@ -81,6 +94,65 @@ async function expectVisiumHdBoundaryLayersOffByDefault(page: Page) {
   await expect(layersPanel.getByLabel('Cell boundaries')).not.toBeChecked()
   await expect(layersPanel.getByLabel('Nucleus boundaries')).toBeEnabled()
   await expect(layersPanel.getByLabel('Nucleus boundaries')).not.toBeChecked()
+}
+
+// Opens the Visium HD reference run from a link at VISIUM_HD_TISSUE_VIEW, with
+// 16 µm bins (the link does not keep the bin size).
+async function openVisiumHdReferenceTissueLink(page: Page) {
+  await page.goto(
+    `/#xv=2&dataset=${encodeURIComponent(VISIUM_HD_REFERENCE_URL)}&view=${encodeURIComponent(VISIUM_HD_TISSUE_VIEW)}`,
+  )
+
+  const visiumPanel = page.getByRole('region', { name: 'Visium HD dataset' })
+  await expect(visiumPanel).toContainText('54,504 at 16 µm', {
+    timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
+  })
+  await expect(
+    page.getByRole('img', { name: 'Spatial viewer canvas area' }),
+  ).toBeVisible()
+
+  return visiumPanel
+}
+
+// Enter opens the bin under the viewer's crosshair (15.5-D). A mouse click
+// does not select bins under headless Chromium's software WebGL, though it
+// does with a GPU.
+async function selectVisiumHdBinAtCentre(page: Page) {
+  await page.getByRole('img', { name: 'Spatial viewer canvas area' }).focus()
+  await page.keyboard.press('Enter')
+
+  const binCard = page.getByRole('region', { name: 'Bin', exact: true })
+  await expect(binCard).toContainText('Selected bin', { timeout: 30_000 })
+
+  return binCard
+}
+
+// The barcode, size, tissue flag, array position and image position the Bin
+// card lists for a Space Ranger bin barcode such as s_016um_00209_00095-1.
+async function expectVisiumHdBinDetails(binCard: Locator, barcode: string) {
+  const match = /^s_0*(\d+)um_(\d{5})_(\d{5})-1$/.exec(barcode)
+  expect(match).not.toBeNull()
+
+  const [, binSize = '', row = '', col = ''] = match ?? []
+  await expect(binCard).toContainText(`Barcode${barcode}`)
+  await expect(binCard).toContainText(`Bin Size${binSize} µm`)
+  await expect(binCard).toContainText('TissueIn tissue')
+  await expect(binCard).toContainText(
+    `Arrayrow ${Number(row).toLocaleString('en-US')}, col ${Number(col).toLocaleString('en-US')}`,
+  )
+  await expect(binCard).toContainText(/Image Pxrow [0-9][0-9,.]*, col [0-9][0-9,.]*/)
+}
+
+// The Bin card loads the bin's whole expression profile on its own.
+async function expectVisiumHdBinProfile(binCard: Locator) {
+  await expect(binCard).toContainText(/Bin GEX profile[1-9][0-9,]* counts/, {
+    timeout: VISIUM_HD_BIN_PROFILE_TIMEOUT_MS,
+  })
+
+  const topGenes = binCard.getByRole('list', { name: 'Top selected bin genes' })
+  await expect(topGenes.getByRole('listitem').first()).toContainText(
+    /^[A-Za-z0-9.-]+[1-9][0-9,]*[0-9.]+% total$/,
+  )
 }
 
 async function routeTinyH5adFixture(page: Page, path = '/h5ad-smoke.h5ad') {
@@ -1307,4 +1379,132 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
       'barcode,bin_size_um,array_row,array_col,fullres_row,fullres_col,in_tissue,x_centroid,y_centroid,expression_count,expression_genes',
     )
   }
+})
+
+test('opens a Visium HD bin card from the keyboard and again from its link @live', async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+
+  // The card's cell assignment reads barcode_mappings.parquet with thousands
+  // of parallel range requests, which Chromium rejects, and the rejections can
+  // take the card's other reads with them (see the cell assignment test
+  // below). Blocking the file keeps this test to the rest of the card.
+  await page.route('**/barcode_mappings.parquet', (route) => route.abort())
+
+  await openVisiumHdReferenceTissueLink(page)
+  const binCard = await selectVisiumHdBinAtCentre(page)
+  const barcode = await binCard.getByText(/^s_016um_\d{5}_\d{5}-1$/).innerText()
+
+  await expectVisiumHdBinDetails(binCard, barcode)
+  await expectVisiumHdBinProfile(binCard)
+  await expect(page).toHaveURL(new RegExp(`&card=bin%3A${barcode}(&|$)`))
+
+  // A fresh load of the link reopens the same bin.
+  const link = page.url()
+  await page.goto('about:blank')
+  await page.goto(link)
+  await expect(binCard).toContainText(`Barcode${barcode}`, {
+    timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
+  })
+  await expect(binCard).toContainText('Selected bin')
+  await expectVisiumHdBinDetails(binCard, barcode)
+  await expectVisiumHdBinProfile(binCard)
+})
+
+// Expected to fail: the card reads all of barcode_mappings.parquet (110 MB)
+// with about 6,700 parallel range requests, Chromium rejects most of them
+// (net::ERR_INSUFFICIENT_RESOURCES), and the card shows "Network request
+// failed: Failed to fetch". Remove test.fail() once the reads are limited.
+test('reads a Visium HD bin cell assignment from barcode_mappings.parquet @live', async ({
+  page,
+}) => {
+  test.fail()
+  test.setTimeout(300_000)
+
+  await openVisiumHdReferenceTissueLink(page)
+  const binCard = await selectVisiumHdBinAtCentre(page)
+
+  await expect(binCard.getByText('Reading all available mapping rows')).toHaveCount(0, {
+    timeout: VISIUM_HD_BIN_ASSIGNMENT_TIMEOUT_MS,
+  })
+  await expect(binCard).toContainText(/Cell assignment(Loaded|Not found)/)
+})
+
+test('draws Visium HD cell and nucleus segmentation boundaries around the view @live', async ({
+  page,
+}) => {
+  test.setTimeout(360_000)
+
+  const visiumPanel = await openVisiumHdReferenceTissueLink(page)
+  await expectVisiumHdBoundaryLayersOffByDefault(page)
+
+  const cellsPanel = await openControls(page, 'cell-appearance')
+  await cellsPanel.getByLabel('Cell boundaries').check()
+  await cellsPanel.getByLabel('Nucleus boundaries').check()
+  await expect(page).toHaveURL(/&cellBounds=1&nucleusBounds=1/)
+
+  // The view holds about 2,400 bins, under the 50,000 boundary limit, so the
+  // polygons load; the log counts those kept from each GeoJSON.
+  await expectLogEntry(
+    page,
+    /Boundaries ready: [1-9][0-9,]* cells in [0-9,]+ ms, [1-9][0-9,]* nuclei in [0-9,]+ ms/,
+    { timeout: VISIUM_HD_BOUNDARY_TIMEOUT_MS },
+  )
+  const log = page.getByRole('region', { name: 'Activity log' })
+  await expect(log.getByText('Boundary load failed')).toHaveCount(0)
+  await expect(log.getByText(/^Boundaries deferred/)).toHaveCount(0)
+  await expect(page.getByText('Loading boundaries')).toHaveCount(0)
+  await expect(page.locator('.viewport-message-error')).toHaveCount(0)
+  await expect(visiumPanel).toContainText('54,504 at 16 µm')
+})
+
+// 3.4 million 2 µm bins take 7-15 s and 2 GB of JS heap locally (42 s with
+// 150 ms latency and a 6x CPU slowdown emulated), so they get a test of their
+// own.
+test('switches Visium HD to 2 um bins, read exactly once zoomed in @live', async ({
+  page,
+}) => {
+  test.setTimeout(160_000)
+  test.slow()
+
+  // See the bin card test above.
+  await page.route('**/barcode_mappings.parquet', (route) => route.abort())
+
+  const visiumPanel = await openVisiumHdReferenceTissueLink(page)
+  const twoMicrometers = visiumPanel.getByRole('button', { name: '2 µm' })
+  await twoMicrometers.click()
+  await expect(twoMicrometers).toHaveAttribute('aria-pressed', 'true')
+
+  // Below zoom 3 the 16 µm bins stand in for the selected 2 µm ones.
+  await expect(visiumPanel).toContainText('54,504 at 16 µm view; 2 µm selected', {
+    timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
+  })
+
+  const zoomIn = page.getByRole('group', { name: 'Zoom' }).getByRole('button', {
+    name: /^Zoom in/,
+  })
+  for (let step = 0; step < 3; step += 1) {
+    await zoomIn.click()
+  }
+  await expect(visiumPanel).toContainText('3,443,936 at 2 µm', {
+    timeout: VISIUM_HD_TWO_MICROMETER_TIMEOUT_MS,
+  })
+  await expectLogEntry(
+    page,
+    /Visium HD 2 µm view ready for selected 2 µm bins: 3,443,936 in /,
+  )
+
+  const binCard = await selectVisiumHdBinAtCentre(page)
+  const barcode = await binCard.getByText(/^s_002um_\d{5}_\d{5}-1$/).innerText()
+  await expectVisiumHdBinDetails(binCard, barcode)
+  await expectVisiumHdBinProfile(binCard)
+
+  await page
+    .getByRole('group', { name: 'Zoom' })
+    .getByRole('button', { name: /^Zoom out/ })
+    .click()
+  await expect(visiumPanel).toContainText('54,504 at 16 µm view; 2 µm selected', {
+    timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
+  })
 })

@@ -3810,7 +3810,8 @@ From a run of `npm test` and the repository:
   tests and one `it.todo`, including fast-check property tests
   (`*.property.test.ts`). Under full-suite load a few `App.test.tsx` tests that load 50,000
   cells can time out; they pass when the file runs alone.
-- 25 Playwright tests: 12 smoke tests, offline, and 13 live ones.
+- 25 Playwright tests: 12 smoke tests, offline, and 13 live ones. Four live
+  Visium HD tests were added on 2026-11-12, making 29.
   - Smoke (`tests/e2e/app.spec.ts`): the shell; the start screen's examples
     and their offline fallback; a link that names a dataset; the axe walk;
     review tasks 1–5 by keyboard alone; transcript controls; an H5AD fixture
@@ -3851,8 +3852,9 @@ From a run of `npm test` and the repository:
 - [ ] Make the coverage job required once it has passed on the runner for a
       while; if another `App.test.tsx` check fails there, make it wait for the
       state it reads.
-- [ ] Deeper Visium HD browser coverage: segmentation controls, Bin Info
+- [x] Deeper Visium HD browser coverage: segmentation controls, Bin Info
       inspection, and loading the 2 µm tier when the environment allows.
+      Done 2026-11-12; see [Open Items](#12-open-items).
 - [x] Direct tests for small helpers and leaf components if they gain behaviour
       (assignment/status helpers, cell expression panels, worker messages).
       Done 2026-11-12 for 16 helpers and three cell panels, with property
@@ -4052,12 +4054,37 @@ Original-brief items with no outcome:
 
 - [ ] `nucleus_boundaries.parquet` overlay for Xenium (not read).
 - [ ] `metrics_summary.csv` QC display (not read; papaparse not adopted).
-- [ ] DuckDB ExternalFileCache evaluation. Checked 2026-11-12: the bundled
+- [x] DuckDB ExternalFileCache evaluation. Checked 2026-11-12: the bundled
       DuckDB (v1.5.1) has it on by default (`enable_external_file_cache = true`,
       `validate_external_file_cache = VALIDATE_ALL`), and the app does not
-      change it. Whether it saves requests in the browser on repeated Xenium
-      boundary or ROI queries is not measured. DuckDB still reads Xenium
-      boundaries, ROI cells, cell transcripts and gene expression.
+      change it. DuckDB still reads Xenium boundaries, ROI cells, cell
+      transcripts and gene expression. Measured the same day on the Xenium
+      demo in headed Chromium, counting the DuckDB workers' requests over CDP,
+      with the cache on and off:
+  - Returning to a boundary viewport: about 107 requests and 103 MB of
+    `cell_boundaries.parquet` (18–23 s) on every return with it off; 0–4
+    requests and 0–6 MB (1.5–2.8 s) with it on, 0 from the second return.
+  - Redrawing the same or an overlapping ROI box: 11 requests per query off,
+    0 on (0.13–0.16 s). Opening the same Cell card again: 101 requests and
+    95 MB off, 4 and 6 MB on.
+  - `VALIDATE_ALL` costs no requests (one `HEAD` per file per instance). The
+    app's IndexedDB cache is not in front of DuckDB, and Chrome's HTTP cache
+    did not hold the 1.5 MB boundary ranges. Keep the default; each instance
+    holds what it read (about 120 MB on the boundary instance) in its worker.
+    The boundary and ROI instances stay separate, because each runs one
+    query at a time and a cold boundary query takes about 20 s.
+- [ ] Xenium boundary queries read nearly all of `cell_boundaries.parquet`
+      (95–103 MB of 109 MB, even for one cell). `vertex_x`/`vertex_y` are
+      FLOAT and the `BETWEEN ? AND ?` parameters DOUBLE, so DuckDB prunes no
+      row groups (36 of 36 read where the statistics allow 13). Casting the
+      bounds (`BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)`) in
+      `readXeniumBoundaryElements` took a cold Cell-card query from 103
+      requests, 96 MB and 25 s to 38, 35 MB and 7 s, with the same 27,337
+      rows. Found 2026-11-12.
+- [ ] Every Xenium demo load downloads the whole 433 MB
+      `cell_feature_matrix.h5`: the ROI warm-up falls back from the
+      feature-major Zarr matrix to the H5 file, which h5wasm reads whole. Seen
+      on `main` (`f6dcb88`) on 2026-11-12; the cause is not yet traced.
 - [x] Property tests for coordinate round trips (2026-11-12, fast-check
       4.10.2): `coords.ts` (µm↔px, screen↔data, `viewportBbox`, tile cover),
       the SpatialData affines, and cell-ID integer pairs.
@@ -4081,10 +4108,40 @@ Testing:
       [Testing And CI](#9-testing-and-ci).
 - [ ] Make the coverage job required, once the timing-sensitive `App.test.tsx`
       checks pass under coverage on the runner.
-- [ ] Deeper Visium HD browser coverage. Partly done: the live test covers the
+- [x] Deeper Visium HD browser coverage. Partly done: the live test covers the
       8 and 16 µm tiers, a Feature Slice gene, Summarise View, a box ROI and
       barcode export. Segmentation boundaries, the Bin card and the 2 µm tier
-      are not covered.
+      are not covered. Since 2026-11-12 four more live tests (`@live`, run
+      nightly) open the reference at 1 px/µm on the right-hand section:
+  - The Bin card, opened with Enter at the crosshair: barcode, size, tissue
+    flag, array and image position, and the bin's expression profile; then the
+    same card from a fresh load of its `card=bin:` link.
+  - Cell and nucleus boundaries: 13,644 cells and 13,548 nuclei around that
+    view, about 25 s locally.
+  - The 2 µm tier (`test.slow()`): 3,443,936 bins in 7–15 s locally (42 s with
+    6× CPU and 150 ms latency emulated), about 2 GB of JS heap, then a 2 µm
+    Bin card.
+  - The Bin card's cell assignment, marked `test.fail()` until the bug below
+    is fixed.
+- [ ] The Bin card's cell assignment fails on the Visium HD reference with
+      "Network request failed: Failed to fetch". Reading the 110 MB
+      `barcode_mappings.parquet` (`readVisiumHdBarcodeMappings`, hyparquet
+      `parquetReadObjects` on a URL buffer) sends about 6,700 range requests
+      within a second, and Chromium rejects them with
+      `net::ERR_INSUFFICIENT_RESOURCES`; other reads in flight, such as
+      `feature_slice.h5`, can fail with them. Found by the live tests on
+      2026-11-12.
+- [ ] The Visium HD Bin card shows "Score 0" for a selected gene the bin
+      expresses unless cells are coloured by gene expression: bins only get
+      expression counts in that mode, and `activeSelectedGridCell`
+      (`App.tsx`) fills in 0. Found 2026-11-12.
+- [ ] While a Visium HD tier loads, `Active bins` shows the old count with the
+      new size ("54,504 at 2 µm"): `visiumHdControlLoading` keeps `binCount`
+      but drops `loadedBinSize`. Found 2026-11-12.
+- [ ] Clicking a Visium HD bin selects nothing under software WebGL (headless
+      Chromium), because bin picking relies on deck.gl's picking, and bins have
+      no coordinate fallback as cells do. Enter at the crosshair works. Not
+      root-caused; found 2026-11-12.
 - [ ] E2E for SpatialData, OME-Zarr, and image-only sources. Partly done: the
       nightly examples test loads an OME-Zarr and a QPTIFF. Nothing loads
       SpatialData in a browser, and no smoke test covers these sources.
