@@ -94,6 +94,46 @@ describe('selectionToSql', () => {
     expect(fragment.sql).toContain('ST_Within(ST_Point(x_centroid, y_centroid)')
     expect(fragment.params).toEqual([0, 10, 0, 15, 'POLYGON((0 0, 10 0, 10 15, 0 0))'])
   })
+
+  it('casts bbox bounds to FLOAT for FLOAT coordinate columns', () => {
+    const circle = selectionToSql(
+      {
+        kind: 'circle',
+        cx: micrometers(100),
+        cy: micrometers(200),
+        radius: micrometers(25),
+      },
+      'x_location',
+      'y_location',
+      'FLOAT',
+    )
+    const polygon = selectionToSql(
+      {
+        kind: 'polygon',
+        points: [
+          { x: micrometers(0), y: micrometers(0) },
+          { x: micrometers(10), y: micrometers(0) },
+          { x: micrometers(10), y: micrometers(15) },
+        ],
+      },
+      'x_location',
+      'y_location',
+      'FLOAT',
+    )
+
+    for (const fragment of [circle, polygon]) {
+      expect(fragment.sql).toContain(
+        'x_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+      )
+      expect(fragment.sql).toContain(
+        'y_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+      )
+    }
+    // Only the bbox bounds are cast; the exact predicates keep DOUBLE values.
+    expect(circle.sql).toContain('(x_location-?)*(x_location-?)')
+    expect(circle.params).toEqual([75, 125, 175, 225, 100, 100, 200, 200, 625])
+    expect(polygon.params).toEqual([0, 10, 0, 15, 'POLYGON((0 0, 10 0, 10 15, 0 0))'])
+  })
 })
 
 describe('transcripts parquet GEX', () => {
@@ -117,6 +157,9 @@ describe('transcripts parquet GEX', () => {
     )
 
     expect(conn.preparedSql).toContain('FROM read_parquet( ? )')
+    expect(conn.preparedSql).toContain(
+      'x_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
     expect(conn.preparedSql).not.toMatch(/ST_DWithin/i)
     expect(result.geneNames).toEqual(['Gad1', 'OutsideCell', 'Slc17a7'])
     expect(result.cells.get(cellId)).toEqual({

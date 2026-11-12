@@ -1,5 +1,6 @@
 import { asCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
+import { betweenSql } from '../data/gexSelection'
 import type { CellId } from '../data/cellid'
 import type { BBox, DataPoint } from '../data/coords'
 import type {
@@ -343,7 +344,11 @@ export function transcriptViewportFilterSql(
   bbox: BBox,
   options: TranscriptViewportQueryOptions,
 ): SqlFragment {
-  const clauses = ['x_location BETWEEN ? AND ?', 'y_location BETWEEN ? AND ?', 'qv >= ?']
+  const clauses = [
+    betweenSql('x_location', 'FLOAT'),
+    betweenSql('y_location', 'FLOAT'),
+    'qv >= ?',
+  ]
   const params: SqlParameter[] = [
     bbox.minX,
     bbox.maxX,

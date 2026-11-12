@@ -248,7 +248,7 @@ export async function gexFromTranscriptsParquet(
   const where =
     scope === 'cells-only'
       ? cellIdWhereClause(cellIds)
-      : selectionToSql(selection, 'x_location', 'y_location')
+      : selectionToSql(selection, 'x_location', 'y_location', 'FLOAT')
 
   const stmt = await conn.prepare(`
 SELECT cell_id,

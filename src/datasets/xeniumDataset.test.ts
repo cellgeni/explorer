@@ -149,7 +149,16 @@ describe('XeniumDataset', () => {
       micrometers(160),
     ])
     expect(conn.preparedSql[0]).toContain('ORDER BY b.cell_id, b.file_row_number')
-    expect(conn.preparedSql[0]).toContain('b.vertex_x BETWEEN')
+    // FLOAT vertex bounds are cast so DuckDB can prune row groups; DOUBLE
+    // centroid bounds are not.
+    expect(conn.preparedSql[0]).toContain(
+      'b.vertex_x BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
+    expect(conn.preparedSql[0]).toContain(
+      'b.vertex_y BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
+    expect(conn.preparedSql[0]).toContain('x_centroid BETWEEN ? AND ?')
+    expect(conn.preparedSql[0]).toContain('y_centroid BETWEEN ? AND ?')
   })
 
   it('delegates matrix, transcripts, and pyramid image loading', async () => {
@@ -319,7 +328,12 @@ describe('XeniumDataset', () => {
       },
     ])
     expect(conn.preparedSql[0]).toContain('FROM read_parquet( ? )')
-    expect(conn.preparedSql[0]).toContain('x_location BETWEEN ? AND ?')
+    expect(conn.preparedSql[0]).toContain(
+      'x_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
+    expect(conn.preparedSql[0]).toContain(
+      'y_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
     expect(conn.statements[0]?.params).toEqual([
       'https://example.test/xenium/transcripts.parquet',
       micrometers(0),
@@ -464,8 +478,12 @@ describe('XeniumDataset', () => {
     })
 
     expect(conn.preparedSql[0]).toContain('cell_id = ?')
-    expect(conn.preparedSql[0]).toContain('x_location BETWEEN ? AND ?')
-    expect(conn.preparedSql[0]).toContain('y_location BETWEEN ? AND ?')
+    expect(conn.preparedSql[0]).toContain(
+      'x_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
+    expect(conn.preparedSql[0]).toContain(
+      'y_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
     expect(conn.statements[0]?.params).toEqual([
       'https://example.test/xenium/transcripts.parquet',
       cellId,
@@ -519,7 +537,12 @@ describe('XeniumDataset', () => {
     ).resolves.toHaveLength(1)
 
     expect(conn.preparedSql[0]).toContain('ST_Within')
-    expect(conn.preparedSql[0]).toContain('x_location BETWEEN ? AND ?')
+    expect(conn.preparedSql[0]).toContain(
+      'x_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
+    expect(conn.preparedSql[0]).toContain(
+      'y_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
     expect(conn.statements[0]?.params).toEqual([
       'https://example.test/xenium/transcripts.parquet',
       micrometers(0),
@@ -607,6 +630,10 @@ describe('XeniumDataset', () => {
     expect(conn.preparedSql[0]).not.toContain('ORDER BY')
     expect(conn.preparedSql[0]).toContain('feature_name IN (?)')
     expect(conn.preparedSql[1]).toContain('GROUP BY feature_name, fov_name')
+    for (const sql of conn.preparedSql) {
+      expect(sql).toContain('x_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)')
+      expect(sql).toContain('y_location BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)')
+    }
     expect(conn.statements[0]?.params).toEqual([
       'https://example.test/xenium/transcripts.parquet',
       micrometers(0),
@@ -790,6 +817,7 @@ describe('XeniumDataset', () => {
 
     expect(conn.preparedSql[0]).toContain('ST_Within')
     expect(conn.preparedSql[0]).toContain('x_centroid BETWEEN ? AND ?')
+    expect(conn.preparedSql[0]).not.toContain('CAST(? AS FLOAT)')
     expect(conn.preparedSql[0]).toContain('ORDER BY file_row_number')
     expect(conn.statements[0]?.params).toEqual([
       'https://example.test/xenium/cells.parquet',
