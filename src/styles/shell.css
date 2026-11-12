@@ -275,6 +275,7 @@
 
 .shell-brand {
   flex: 0 0 auto;
+  margin: 0;
   padding-right: var(--space-3);
   border-right: 1px solid var(--border);
   color: var(--text-1);
@@ -385,8 +386,9 @@
   gap: var(--space-3);
 }
 
-.shell-shortcuts h3 {
+.shell-shortcuts h2 {
   margin: 0 0 var(--space-1);
+  line-height: inherit;
   color: var(--text-3);
   font-size: var(--font-caption);
   font-weight: 700;
@@ -422,8 +424,9 @@
   border-top: 1px solid var(--border);
 }
 
-.shell-help-links h3 {
+.shell-help-links h2 {
   margin: 0 0 var(--space-1);
+  line-height: inherit;
   color: var(--text-3);
   font-size: var(--font-caption);
   font-weight: 700;
@@ -831,11 +834,9 @@
     padding: 0 var(--space-2);
   }
 
-  .shell-brand {
-    display: none;
-  }
-
-  /* Still the status region screen readers and tests wait on. */
+  /* Still the page's heading and the status region screen readers and
+     tests wait on. */
+  .shell-brand,
   .shell-summary {
     position: absolute;
     width: 1px;

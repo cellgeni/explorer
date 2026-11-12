@@ -119,6 +119,16 @@ describe('CardStack', () => {
     )
     expect(within(region).getByRole('tab', { name: 'Cells' })).toHaveFocus()
     expect(within(region).getByLabelText('ROI summary')).toHaveTextContent('Cells2')
+    // Home and End go to the first and last tab (15.5-D).
+    fireEvent.keyDown(within(region).getByRole('tab', { name: 'Cells' }), { key: 'End' })
+    expect(within(region).getByRole('tab', { name: 'Transcripts' })).toHaveFocus()
+    fireEvent.keyDown(within(region).getByRole('tab', { name: 'Transcripts' }), {
+      key: 'Home',
+    })
+    expect(within(region).getByRole('tab', { name: 'Genes' })).toHaveFocus()
+    fireEvent.keyDown(within(region).getByRole('tab', { name: 'Genes' }), {
+      key: 'ArrowRight',
+    })
 
     fireEvent.click(within(region).getByRole('tab', { name: 'Transcripts' }))
     fireEvent.click(within(region).getByRole('button', { name: 'Summarise Transcripts' }))
@@ -207,6 +217,50 @@ describe('CardStack', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Clear selected cell' }))
     expect(onGoTo).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('hands focus to the next card, or the canvas, when a focused card closes (15.5-D)', async () => {
+    const canvas = document.createElement('div')
+    canvas.className = 'viewport-frame'
+    canvas.tabIndex = 0
+    document.body.append(canvas)
+    const cards = {
+      ...NO_CARDS,
+      selection: selection(),
+      cell: {
+        kind: 'cell' as const,
+        title: 'Cell',
+        status: 'Selected',
+        loading: false,
+        onGoTo: vi.fn(),
+        onClose: vi.fn(),
+        cell: {
+          id: 'cell-1',
+          position: [0, 0],
+          transcriptCount: 8,
+        } as unknown as OverviewCellDatum,
+        annotationLabels: [],
+        state: { status: 'idle' as const },
+        distributionState: { status: 'idle' as const },
+        distributionVisible: false,
+        variant: 'default' as const,
+      },
+    }
+    const { rerender } = render(<CardStack cards={cards} />)
+
+    screen.getByRole('button', { name: 'Close selection' }).focus()
+    rerender(<CardStack cards={{ ...cards, selection: null }} />)
+    await Promise.resolve()
+    expect(
+      within(screen.getByRole('region', { name: 'Cell' })).getByRole('button', {
+        name: 'Go To',
+      }),
+    ).toHaveFocus()
+
+    rerender(<CardStack cards={NO_CARDS} />)
+    await Promise.resolve()
+    expect(canvas).toHaveFocus()
+    canvas.remove()
   })
 
   it('shows the pinned transcript', () => {

@@ -25,6 +25,29 @@ describe('EmbeddingWindow', () => {
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 
+  it('takes focus when it opens and gives it back when it closes (15.5-D)', () => {
+    const embedding = testEmbeddingModel()
+    function Harness({ open }: { readonly open: boolean }) {
+      return (
+        <>
+          <button type="button" title="Show the embedding panel">
+            Show Embedding
+          </button>
+          <EmbeddingWindow embedding={embedding} open={open} onClose={vi.fn()} />
+        </>
+      )
+    }
+    const { rerender } = render(<Harness open={false} />)
+    const opener = screen.getByRole('button', { name: 'Show Embedding' })
+    opener.focus()
+
+    rerender(<Harness open />)
+    expect(screen.getByRole('button', { name: 'Close embedding' })).toHaveFocus()
+
+    rerender(<Harness open={false} />)
+    expect(opener).toHaveFocus()
+  })
+
   it('stays mounted, hidden, while closed', () => {
     render(
       <EmbeddingWindow embedding={testEmbeddingModel()} open={false} onClose={vi.fn()} />,
@@ -43,6 +66,8 @@ describe('EmbeddingWindow', () => {
     fireEvent.keyDown(grip, { key: 'ArrowDown' })
     expect(panelStyle().width).toBe('380px')
     expect(panelStyle().height).toBe('420px')
+    // The grip says its size (15.5-D).
+    expect(grip).toHaveAccessibleDescription('380 by 420 px')
 
     fireEvent.pointerDown(grip, { clientX: 100, clientY: 100, pointerId: 1 })
     fireEvent.pointerMove(grip, { clientX: 400, clientY: 40, pointerId: 1 })

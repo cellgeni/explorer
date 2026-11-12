@@ -166,7 +166,7 @@
   min-width: 0;
 }
 
-.annotation-size-heading h3 {
+.annotation-size-heading :is(h4, h5) {
   min-width: 0;
   margin: 0;
   overflow: hidden;
@@ -239,7 +239,7 @@
   accent-color: var(--accent);
 }
 
-.annotation-set-heading h4 {
+.annotation-set-heading h5 {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0;

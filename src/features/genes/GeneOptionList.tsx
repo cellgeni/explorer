@@ -28,7 +28,7 @@ export function GeneOptionList({
 
   if (genes.length === 0) {
     return (
-      <div className="gene-option-list" aria-label={ariaLabel}>
+      <div className="gene-option-list">
         <span className="option-empty">{emptyMessage}</span>
       </div>
     )
@@ -53,8 +53,11 @@ export function GeneOptionList({
   const visibleGenes = genes.slice(startIndex, endIndex)
 
   return (
+    // A list, so each option says where it is among all the genes, as
+    // only some rows are rendered (15.5-D: a button cannot carry that).
     <div
       className="gene-option-list is-virtualized"
+      role="list"
       aria-label={ariaLabel}
       onScroll={(event) => {
         setScrollState({ key: geneListKey, scrollTop: event.currentTarget.scrollTop })
@@ -67,20 +70,25 @@ export function GeneOptionList({
           const alias = aliases?.get(gene)
 
           return (
-            <button
+            <div
               key={gene}
-              type="button"
-              className={selectedGeneSet.has(gene) ? 'selected' : undefined}
-              title={alias === undefined ? gene : `${gene} (${alias})`}
+              role="listitem"
+              className="gene-option-item"
               aria-setsize={genes.length}
               aria-posinset={geneIndex + 1}
-              onClick={() => {
-                onToggleGene(gene)
-              }}
               style={{ top: `${geneIndex * GENE_OPTION_ROW_HEIGHT}px` }}
             >
-              {gene}
-            </button>
+              <button
+                type="button"
+                className={selectedGeneSet.has(gene) ? 'selected' : undefined}
+                title={alias === undefined ? gene : `${gene} (${alias})`}
+                onClick={() => {
+                  onToggleGene(gene)
+                }}
+              >
+                {gene}
+              </button>
+            </div>
           )
         })}
       </div>

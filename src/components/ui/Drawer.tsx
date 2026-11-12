@@ -1,8 +1,8 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useId, useRef, type ReactNode } from 'react'
 import { IconButton } from './Button'
 import { classNames } from './classNames'
 import { CloseIcon } from './icons'
-import { focusFirst } from './useDismiss'
+import { useFocusReturn } from './useFocusReturn'
 
 export interface DrawerProps {
   // The heading and the dialog's accessible name.
@@ -30,19 +30,7 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
 
-  useEffect(() => {
-    const panel = panelRef.current
-    if (panel === null) return
-
-    if (open) {
-      returnFocusRef.current =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null
-      focusFirst(panel)
-      return
-    }
-
-    if (panel.contains(document.activeElement)) returnFocusRef.current?.focus()
-  }, [open])
+  useFocusReturn(open, panelRef, returnFocusRef)
 
   return (
     <div

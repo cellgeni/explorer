@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 import {
   collectAxeFindings,
   expectAxeFindingsMatchBaseline,
@@ -450,6 +450,91 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
   await checkEachPlace('H5AD fixture with a gene selected')
 
   expectAxeFindingsMatchBaseline(findings)
+})
+
+// Presses Tab until the target has focus, as a keyboard user would, and
+// fails if it is not in the tab order.
+async function tabTo(page: Page, target: Locator, limit = 150): Promise<void> {
+  for (let presses = 0; presses < limit; presses += 1) {
+    if (await target.evaluate((element) => element === document.activeElement)) return
+    await page.keyboard.press('Tab')
+  }
+  throw new Error(`Tab never reached ${target.toString()}`)
+}
+
+// Review tasks 1-5 (UNIFIED_PLAN.md, 15.5-D) with the keyboard alone: open a
+// dataset, colour cells by a gene, show clusters and hide one, open a cell,
+// and select a region and read its genes.
+test('runs the first five review tasks with the keyboard alone @smoke', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await routeTinyH5adFixture(page)
+  await page.goto('/')
+
+  // 1. Open a dataset from the start screen.
+  const start = page.getByRole('region', { name: 'Open a dataset' })
+  await tabTo(page, start.getByLabel('Dataset or image URL'))
+  await page.keyboard.type(new URL('/h5ad-smoke.h5ad', page.url()).href)
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('status').filter({ hasText: '4 cells' })).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+
+  // 2. Colour cells by a gene, which the legend then names.
+  const cells = page
+    .getByRole('complementary', { name: 'Layers' })
+    .getByRole('region', { name: /^Cells/ })
+  await tabTo(page, cells.getByLabel('Gene selection'))
+  await page.keyboard.type('Gad')
+  await tabTo(page, cells.getByRole('button', { name: 'Gad1', exact: true }))
+  await page.keyboard.press('Enter')
+  const legend = page.getByRole('region', { name: 'Legend' })
+  await expect(legend).toContainText('Gad1', { timeout: H5AD_LOAD_TIMEOUT_MS })
+
+  // 3. Show the clusters, then hide one from the legend.
+  await tabTo(page, cells.getByLabel('Annotation set'))
+  await page.keyboard.type('cluster')
+  await tabTo(page, cells.getByRole('button', { name: 'Load Annotations' }))
+  await page.keyboard.press('Enter')
+  const clusterA = legend.getByRole('checkbox', { name: /^A, / })
+  await expect(clusterA).toBeChecked({ timeout: H5AD_LOAD_TIMEOUT_MS })
+  await tabTo(page, clusterA)
+  await page.keyboard.press('Space')
+  await expect(clusterA).not.toBeChecked()
+
+  // 4. Open a cell: Enter opens the one at the centre of the view. Zoom out
+  // until one is there.
+  const canvas = page.getByRole('img', { name: 'Spatial viewer canvas area' })
+  await tabTo(page, canvas)
+  const cellCard = page.getByRole('region', { name: 'Cell', exact: true })
+  for (let step = 0; step < 8 && !(await cellCard.isVisible()); step += 1) {
+    await page.keyboard.press('Enter')
+    if (!(await cellCard.isVisible())) await page.keyboard.press('-')
+  }
+  await expect(cellCard).toContainText('n_genes')
+
+  // 5. Select the view with the Box tool and read its genes.
+  await expect(canvas).toBeFocused()
+  await page.keyboard.press('r')
+  await expect(page.getByRole('button', { name: 'Box selection' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await page.keyboard.press('Enter')
+  const selection = page.getByRole('region', { name: 'ROI 1' })
+  await expect(selection.getByLabel('ROI gene distribution')).toContainText('Gad1', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(page.getByRole('button', { name: 'Pan' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  // The cards, too, have nothing for axe to find.
+  const findings: AxeFindings = new Map()
+  await collectAxeFindings(page, 'keyboard tasks, Cell and Selection cards', findings)
+  expect([...findings.keys()]).toEqual([])
 })
 
 test('shows transcript overlay controls in the browser shell @smoke', async ({

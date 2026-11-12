@@ -309,6 +309,29 @@ describe('UI primitives', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('returns focus to the trigger when a pick inside closes it (15.5-D)', () => {
+    function Menu() {
+      const [open, setOpen] = useState(false)
+      return (
+        <Popover title="Tools" trigger="Tools" open={open} onOpenChange={setOpen}>
+          <button type="button" title="Box selection" onClick={() => setOpen(false)}>
+            Box
+          </button>
+        </Popover>
+      )
+    }
+    render(<Menu />)
+
+    const trigger = screen.getByRole('button', { name: 'Tools' })
+    fireEvent.click(trigger)
+    const item = screen.getByRole('button', { name: 'Box' })
+    expect(item).toHaveFocus()
+    fireEvent.click(item)
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(trigger).toHaveFocus()
+  })
+
   it('describes its child with a tooltip shown on focus or after a hover', () => {
     vi.useFakeTimers()
     render(

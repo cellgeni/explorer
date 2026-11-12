@@ -3313,6 +3313,20 @@ A to C take the open items from the [review after M4](#review-after-m4-2026-11-1
 (user, 2026-11-12: "implement all of 15.5"); D to F are the close-out
 proper. The re-run (E) comes after the fixes, so it checks what ships.
 
+The review of 2026-11-10 walked through eight tasks, but this plan never
+listed them. Written down in 15.5 from the findings each one turned up:
+
+1. Open a dataset: from the start screen, an example or a typed address (F4,
+   F5, F15).
+2. Colour cells by a gene and read the legend (F1, F2, F9, F10).
+3. Show the clusters and hide one (F1, F14).
+4. Inspect one cell (F3).
+5. Select a region and read its genes (F12, F13).
+6. Show the transcripts of the selected genes (F11).
+7. Share the view, and reopen the link (F16).
+8. Recover: a bad address, a removal to undo, a long query to cancel (F4, F5,
+   F17).
+
 - [x] **A. Load and link state.** (S)
   - Done 2026-11-12.
   - A load's commit now invalidates Visium HD bin-size and LOD reads
@@ -3385,11 +3399,57 @@ proper. The re-run (E) comes after the fixes, so it checks what ships.
     `shell-card-delete` class had no CSS and is gone.
   - `tokens.css` says the role-on-tint contrast is 5.4:1 on surfaces 0–2 and
     4.7:1 on surface 3.
-- [ ] **D. Accessibility pass.** (M)
+- [x] **D. Accessibility pass.** (M)
   - the axe baseline from 15.0-F is empty;
   - a keyboard-only run of tasks 1–5;
   - focus order;
   - ARIA for the accordion, drawer and cards.
+  - Done 2026-11-12.
+  - **axe.** `tests/e2e/axe-baseline.json` is `{}`. The gene options are a
+    `list` whose items carry `aria-setsize` and `aria-posinset` (a button
+    cannot); the density scale preview is `role="img"`; the activity log and
+    diagnostic check lists, which scroll, take focus and have names. The walk
+    now also runs axe's best-practice rules, which found popover headings
+    that skipped from `h1` to `h3` and the dataset menu's Recent and Examples
+    regions named like the start screen's. A new smoke test checks the Cell
+    and Selection cards, where axe found the legend's eyes under the 24 px
+    target size of WCAG 2.5.8; legend rows are now 25 px apart.
+  - **Keyboard run of tasks 1–5.** It found two tasks that needed a pointer:
+    opening a cell (4) and selecting a region (5). While the spatial view has
+    keyboard focus a ring marks its centre, and `Enter` opens the bin, or the
+    cell or spot nearest the centre within 24 px, as a click would
+    (`viewerKeyboardPick.ts`). With Box selection on, `Enter` selects the whole
+    view, so a region is framed with the arrows and `+`/`-`. Lasso stays
+    pointer-only; a free path is exempt from WCAG 2.1.1. Help lists `Enter`.
+    The smoke test "runs the first five review tasks with the keyboard alone"
+    does all five on the H5AD fixture with Tab, typing, Enter, Space, arrows
+    and tool letters only, and fails if Tab cannot reach a control.
+  - **Focus order.** Tab runs: skip link, top bar, info drawer (when open),
+    the spatial view, cards, Embedding panel, layer panel, which follows the
+    screen from left to right. Focus no longer falls to the page when
+    something closes: a card that closes while focused hands focus to the
+    card in its place, or the spatial view; a popover closed from inside (a
+    tool picked from the narrow menu, a dataset opened from the menu) returns
+    it to its trigger; the Embedding panel takes focus when it opens and
+    gives it back to `Show Embedding`, as the drawer does (`useFocusReturn`,
+    shared with the drawer).
+  - **Headings.** The brand is the page's `h1` (read, not shown, under 860
+    px). In the layer panel: `h2` Layers, `h3` sections, `h4` sub-headings
+    (now also Selections and GeoJSON shapes, which were `h3`), and `h5` for
+    a cluster set's name and Metadata tracks (`h4` and `h3` before). The info
+    drawer's status panels are `h4` under its `h3` sections (they were `h2`).
+    Popovers start at `h2`.
+  - **ARIA.** The tool `toolbar` has one tab stop, on the active tool, and
+    the arrows, `Home` and `End` move along it. Card tabs take `Home` and
+    `End` too. The Embedding grip's description is its size, in a polite
+    live region, so it is read after each change; a 2-D grip has no single
+    `aria-valuenow`. Checked and unchanged: the layer sections are the APG
+    accordion (`h3` > `button[aria-expanded][aria-controls]` > `region`
+    labelled by the button); the drawer is a non-modal `dialog` labelled by
+    its heading that returns focus on close; each card is a `region` named
+    by its heading with a labelled close button; scrollable regions with
+    focusable content and focus rings on everything that takes focus
+    (`[tabindex='0']` and `summary` were missing one).
 - [ ] **E. Re-run the eight review tasks** on the Xenium demo and Census
       Visium at 1440, 1024 and 390 px, and record the results in the phase
       record. (S)

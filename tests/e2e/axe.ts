@@ -4,14 +4,17 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, type Page } from '@playwright/test'
 
 // Accessibility check for the E2E smoke tests (Phase 15.0-F). axe runs the
-// WCAG 2.2 A and AA rules on a page state, and each violation is keyed by rule
-// and target. Known violations are listed in axe-baseline.json; a violation
-// that is not listed fails the test, and so does a listed one that no state
-// shows any more, so the baseline can only shrink. To rewrite the baseline
-// after fixing violations, run with UPDATE_AXE_BASELINE=1.
+// WCAG 2.2 A and AA rules and its best practices on a page state, and each
+// violation is keyed by rule and target. Known violations are listed in
+// axe-baseline.json, which 15.5-D emptied; a violation that is not listed
+// fails the test, and so does a listed one that no state shows any more, so
+// the baseline can only shrink. To rewrite the baseline after fixing
+// violations, run with UPDATE_AXE_BASELINE=1.
 
 const BASELINE_PATH = join(process.cwd(), 'tests', 'e2e', 'axe-baseline.json')
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
+// WCAG 2.2 A and AA, and axe's best practices, such as heading order
+// (15.5-D).
+const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']
 
 type AxeBaseline = Record<string, readonly string[]>
 
@@ -32,7 +35,7 @@ export async function collectAxeFindings(
   state: string,
   findings: AxeFindings,
 ): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
+  const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze()
 
   for (const violation of results.violations) {
     for (const node of violation.nodes) {

@@ -200,7 +200,7 @@ export function MetadataTracksPanel({
   return (
     <section className="annotation-size-panel" aria-labelledby="metadata-track-heading">
       <div className="annotation-size-heading">
-        <h3 id="metadata-track-heading">Metadata tracks</h3>
+        <h5 id="metadata-track-heading">Metadata tracks</h5>
         <small>{tracks.length.toLocaleString()} loaded</small>
       </div>
       <MetadataTrackList tracks={tracks} onRemoveCellMetadataTrack={onRemove} />
@@ -222,7 +222,7 @@ export function GeometricShapesPanel({
       aria-labelledby="geometric-annotation-heading"
     >
       <div className="annotation-size-heading">
-        <h3 id="geometric-annotation-heading">GeoJSON shapes</h3>
+        <h4 id="geometric-annotation-heading">GeoJSON shapes</h4>
         <small>{shapes.length.toLocaleString()} loaded</small>
       </div>
       <div className="roi-action-row">
@@ -457,7 +457,7 @@ function AnnotationSetList({
             onAnnotationSetVisibilityChange(plot.id, event.currentTarget.checked)
           }}
         />
-        <h4>{plot.label}</h4>
+        <h5>{plot.label}</h5>
         <small>{plot.totalCellAssignments.toLocaleString()} cells</small>
       </div>
       <ol

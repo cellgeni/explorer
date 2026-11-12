@@ -121,7 +121,9 @@ describes its button (`About {term}`) for screen readers. The texts are in
 One tool is on at a time (`activeTool`, `src/features/app-shell/activeToolModel.ts`,
 D8). Turning one on turns the others off. While a tool other than Pan is on,
 the top of the canvas says what to do, such as "Drag to draw a box. Esc
-cancels." Esc, anywhere except a text field, returns to Pan and drops a
+cancels." The tools are one tab stop, on the active tool; the arrow keys,
+`Home` and `End` move between them (the ARIA toolbar pattern). Esc, anywhere
+except a text field, returns to Pan and drops a
 half-drawn shape; finishing a box or lasso also returns to Pan. An Esc that
 closes a popover, the info drawer, the Embedding panel or a shown tooltip
 does only that, and the tool stays.
@@ -387,7 +389,9 @@ Cards are 360 px wide and stack at the top left of the canvas in this order,
 scrolling when they outgrow it; a card that appears scrolls into view. While
 the info drawer is open they move to its right. Closing a card clears what it
 shows. Selection, Cell and Transcript cards have `Go To`, which shows what the
-card is about (`zoomToBbox`).
+card is about (`zoomToBbox`). A card that closes while it holds keyboard
+focus hands it to the card now in its place, or to the spatial view. In the
+Selection card's tabs, the arrow keys, `Home` and `End` move between tabs.
 
 | Card                     | Shown when                                                    | Close                                       |
 | ------------------------ | ------------------------------------------------------------- | ------------------------------------------- |
@@ -512,7 +516,10 @@ Cells › `Show Embedding` and closes with `Close embedding` or Esc
 (`src/features/shell/EmbeddingWindow.tsx`). It sits at the top right of the
 canvas, 360 × 400 px at first; the grip at its bottom left (`Resize the
 embedding panel`) resizes it by dragging or with the arrow keys, from 280 ×
-260 px up to the canvas, and the plot redraws at its new size.
+260 px up to the canvas, and the plot redraws at its new size. The grip's
+description is the size ("360 by 400 px"), announced again after each change.
+Opening the panel moves focus into it, and closing it returns focus to
+`Show Embedding`.
 
 | Control                                                   | Notes                                                                                                                                                            |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -565,11 +572,19 @@ except for `F`):
 | ------------------ | ----------------------------------------------- |
 | Arrow keys         | Pan 64 screen px                                |
 | Shift + arrow keys | Pan 256 screen px                               |
-| `+` or `=`         | Zoom in by 0.5                                  |
-| `-` or `_`         | Zoom out by 0.5                                 |
+| `+` or `=`         | Zoom in one level, as the button does           |
+| `-` or `_`         | Zoom out one level                              |
 | `F`                | Fit the data to the view, from anywhere         |
 | `Home`             | Return to the first view (the link's, or a fit) |
+| `Enter`            | Open what is at the centre; see below           |
 | `Esc`              | Clear the selected cell                         |
+
+While the spatial view has keyboard focus, a 48 px ring marks its centre.
+`Enter` opens the Visium HD bin at the centre, or else the cell or spot
+nearest it within 24 screen px (or inside its drawn size), as a click would
+(`src/components/viewerKeyboardPick.ts`, 15.5-D). With Box selection on,
+`Enter` selects the whole view instead, so a selection can be framed with the
+arrow keys and `+`/`-` and made without a pointer. Lasso stays pointer-only.
 
 ### Picking
 
@@ -579,6 +594,8 @@ Click (`ViewerCore.tsx`, `src/components/viewerPicking.ts`):
 - Visium HD bin: selects the bin (zoomed-out aggregate bins are not pickable).
 - Cell point or boundary: selects the cell.
 - Embedding point: selects the cell or bin and recentres the view.
+- `Enter` on the focused view: the bin or cell at its centre (see
+  [Navigation](#navigation)).
 
 ### Hover Tooltips
 
@@ -600,7 +617,8 @@ ignored. The label shows µm or px; pixel values use the image µm/px.
 
 ### ROI Drawing
 
-Box: drag a rectangle. Lasso: drag freehand (points at least 4 screen px
+Box: drag a rectangle, or press `Enter` on the focused view to select all of
+it. Lasso: drag freehand (points at least 4 screen px
 apart, at least 3 points). ROIs smaller than 1 µm × 1 µm are ignored. Each
 ROI drawn on cells, spots or bins is added to Annotations › Selections as
 "ROI n" and shown in the Selection card.
@@ -777,7 +795,8 @@ With debug info on, the deck.gl layer count and the
 Under 860 px wide (`useNarrowScreen`) the shell folds up:
 
 - The tools fold into a menu: its button shows the active tool ("Tools:
-  Pan"), and it lists each tool with its key and, when off, why. The brand is
+  Pan"), and it lists each tool with its key and, when off, why. Picking one
+  closes the menu and returns focus to its button. The brand is
   hidden, the summary chip is read out but not shown, and Share shows only its
   icon. The Magic Lens options appear only while the lens is on.
 - The layer panel becomes a bottom sheet whose 56 px handle says "Layers" and

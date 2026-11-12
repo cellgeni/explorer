@@ -82,7 +82,7 @@
   background: var(--danger-soft);
 }
 
-.error-summary h2 {
+.error-summary h4 {
   margin: 0;
   color: var(--danger);
   font-size: var(--font-control);
@@ -157,14 +157,14 @@
   background: var(--warning-soft);
 }
 
-.cell-feature-matrix-notice h2,
+.cell-feature-matrix-notice h4,
 .cell-feature-matrix-notice p {
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
 }
 
-.cell-feature-matrix-notice h2 {
+.cell-feature-matrix-notice h4 {
   color: var(--warning);
   font-size: var(--font-control);
   font-weight: 700;
@@ -191,7 +191,7 @@
   background: var(--accent-faint);
 }
 
-.fallback-summary h2 {
+.fallback-summary h4 {
   margin: 0;
   color: var(--accent);
   font-size: var(--font-control);
@@ -270,7 +270,7 @@
   min-width: 0;
 }
 
-.dataset-diagnostics-panel h2,
+.dataset-diagnostics-panel h4,
 .dataset-diagnostics-panel p,
 .dataset-diagnostics-panel span,
 .dataset-diagnostics-panel strong {
@@ -279,7 +279,7 @@
   overflow-wrap: anywhere;
 }
 
-.dataset-diagnostics-panel h2,
+.dataset-diagnostics-panel h4,
 .dataset-diagnostics-panel p {
   color: var(--text-3);
   font-size: var(--font-caption);
@@ -349,7 +349,7 @@
   min-width: 0;
 }
 
-.activity-log h2,
+.activity-log h4,
 .activity-log p {
   margin: 0;
   color: var(--accent);

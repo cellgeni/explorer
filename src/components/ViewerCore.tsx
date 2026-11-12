@@ -143,6 +143,11 @@ import {
   type ScaleBarModel,
   type ScreenPoint,
 } from './viewerMeasurements'
+import {
+  gridCellAtPoint,
+  KEYBOARD_PICK_RADIUS_PIXELS,
+  nearestOverviewCell,
+} from './viewerKeyboardPick'
 import type {
   InitialViewStateOverride,
   RoiDrawMode,
@@ -1338,6 +1343,39 @@ function ViewerSurface({
         return
       }
 
+      // Enter does what a click at the crosshair would (15.5-D): with Box
+      // selection it selects the view, otherwise it opens the bin or cell
+      // nearest the centre.
+      if (event.key === 'Enter') {
+        if (roiMode === 'box') {
+          if (viewportBbox !== null && onRoiComplete !== undefined) {
+            event.preventDefault()
+            onRoiComplete({ kind: 'box', bbox: viewportBbox })
+          }
+          return
+        }
+
+        if (activeToolHint !== null) return
+
+        const [x = 0, deckY = 0] = viewState.target
+        const reach = KEYBOARD_PICK_RADIUS_PIXELS / scaleFromZoom(viewState.zoom)
+        const bin = gridCellAtPoint(renderGridCells, x, -deckY)
+
+        if (bin !== null && onGridCellClick !== undefined) {
+          event.preventDefault()
+          onGridCellClick(bin)
+          return
+        }
+
+        const cell = nearestOverviewCell(overviewCellIndex, cells, x, -deckY, reach)
+
+        if (cell !== null && onCellClick !== undefined) {
+          event.preventDefault()
+          onCellClick(cell)
+        }
+        return
+      }
+
       const nextViewState = viewStateFromKeyboardEvent(event, viewState, initialViewState)
 
       if (nextViewState === null) {
@@ -1353,11 +1391,19 @@ function ViewerSurface({
     },
     [
       canTrackMouseCoordinates,
+      cells,
       initialViewState,
       activeToolHint,
+      onCellClick,
       onClearSelection,
+      onGridCellClick,
+      onRoiComplete,
+      overviewCellIndex,
+      renderGridCells,
+      roiMode,
       selectionHighlight,
       viewState,
+      viewportBbox,
     ],
   )
   const handleDeckClick = useCallback(
@@ -1936,7 +1982,7 @@ function ViewerSurface({
         role="img"
         aria-label="Spatial viewer canvas area"
         aria-describedby={keyboardHelpId}
-        aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - Home"
+        aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - Home Enter"
         tabIndex={0}
         onKeyDown={handleKeyboardNavigation}
         onPointerMove={handleMouseCoordinatePointerMove}
@@ -1944,10 +1990,12 @@ function ViewerSurface({
       >
         <p id={keyboardHelpId} className="visually-hidden">
           Use arrow keys to pan, plus or minus to zoom, and Home to reset the spatial
-          view. When measuring is enabled, drag across the spatial view to measure a
-          distance.
+          view. Enter opens the cell at the centre of the view, or with Box selection
+          selects the whole view. When measuring is enabled, drag across the spatial view
+          to measure a distance.
         </p>
         {!hasImage ? <div className="viewport-grid" aria-hidden="true" /> : null}
+        <span className="viewer-keyboard-crosshair" aria-hidden="true" />
         <MorphologyCanvas
           channels={imageChannels}
           flatImage={flatImage}
