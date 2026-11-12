@@ -293,6 +293,10 @@ TypeScript and modules are non-negotiable; React is the recommended default.
   queries, so a busy scan cannot block them.
 - Keep row groups reasonably sized in any data you control, so bounding-box
   pruning fetches few chunks.
+- Match the bounds to the column's Parquet type. DuckDB casts a FLOAT column
+  compared with DOUBLE parameters and then cannot prune by row-group
+  statistics, so FLOAT columns (Xenium boundary vertices and transcript
+  locations) take `CAST(? AS FLOAT)` bounds (`betweenSql`, 2026-11-12).
 - ExternalFileCache (checked 2026-11-12): on by default in the bundled DuckDB
   v1.5.1, and left on. Its effect in the browser is not measured; see
   [Open Items](#12-open-items).
@@ -4081,15 +4085,32 @@ Original-brief items with no outcome:
     did not hold the 1.5 MB boundary ranges. Keep the default; each instance
     holds what it read (about 120 MB on the boundary instance) in its worker.
     The boundary and ROI instances stay separate, because each runs one
-    query at a time and a cold boundary query takes about 20 s.
-- [ ] Xenium boundary queries read nearly all of `cell_boundaries.parquet`
-      (95–103 MB of 109 MB, even for one cell). `vertex_x`/`vertex_y` are
-      FLOAT and the `BETWEEN ? AND ?` parameters DOUBLE, so DuckDB prunes no
-      row groups (36 of 36 read where the statistics allow 13). Casting the
-      bounds (`BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)`) in
-      `readXeniumBoundaryElements` took a cold Cell-card query from 103
-      requests, 96 MB and 25 s to 38, 35 MB and 7 s, with the same 27,337
-      rows. Found 2026-11-12.
+    query at a time and a cold boundary query took about 20 s (about 7 s
+    since the FLOAT cast below).
+- [x] Xenium boundary queries read nearly all of `cell_boundaries.parquet`
+      (95–103 MB of 109 MB, even for one cell). Found and fixed 2026-11-12.
+      `vertex_x`/`vertex_y` are FLOAT and the `BETWEEN ? AND ?` parameters
+      DOUBLE, so DuckDB cast the column and pruned no row groups (36 of 36
+      read where the statistics allow 13). The bounds are now cast
+      (`BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)`, `betweenSql` in
+      `src/data/gexSelection.ts`).
+  - Measured on the Xenium demo in headed Chromium, counting the DuckDB
+    workers' requests over CDP with the external file cache off: a cold
+    Cell-card boundary query went from 103 requests, 96 MB and 25.1 s to 38
+    requests, 35 MB and 7.1 s, with the same 27,337 rows.
+  - The `transcripts.parquet` queries had the same mismatch (`x_location` and
+    `y_location` are FLOAT; 7.1 GB in 2,117 row groups on the demo) and cast
+    their bounds too: the ROI transcripts CSV, exact-point queries (cell IDs
+    for Zarr points, or the points without a Zarr), the Parquet
+    z-distribution fallback and `gexFromTranscriptsParquet`. The statistics
+    allow 11 of the 2,117 row groups for a 300 µm box at the slide centre.
+    The effect in the browser is not measured.
+  - `cells.parquet` centroids are DOUBLE and are not cast. The cast is
+    harmless on a DOUBLE column. In a DuckDB v1.5.1 test in Node, it still
+    pruned (3.3 of 32.5 MB read with or without it). The bounds move by
+    less than half a FLOAT step, under 1 nm below 32,768 µm. One of 17,843
+    test rows lay in that sliver. On a FLOAT test file the same query read
+    16.4 of 16.6 MB uncast and 1.7 MB cast, with the same rows.
 - [x] Every Xenium demo load downloads the whole 433 MB
       `cell_feature_matrix.h5`: the ROI warm-up falls back from the
       feature-major Zarr matrix to the H5 file, which h5wasm reads whole. Seen

@@ -97,7 +97,17 @@ polygons when zoom ≥ −0.25 or the visible overview cell count is below
 `Boundary limit` (1–100,000; default 2,500 on compact devices, 50,000
 otherwise). Requests are keyed by the bbox quantized to 50 µm. One DuckDB
 query selects cells whose centroid is within the bbox ± 75 µm and their
-vertices, then rings with fewer than 3 vertices are dropped.
+vertices within the bbox ± max(5% of its width, 150 µm), then rings with
+fewer than 3 vertices are dropped.
+
+`vertex_x` and `vertex_y` are FLOAT, so the vertex bounds are cast to FLOAT
+(`betweenSql`, `src/data/gexSelection.ts`). DuckDB casts a FLOAT column
+compared with DOUBLE parameters and then cannot skip row groups by their
+statistics. Measured on the demo on 2026-11-12 with DuckDB's file cache off,
+the cast took a cold Cell-card boundary query from 103 requests, 96 MB of the
+109 MB file and 25.1 s to 38 requests, 35 MB and 7.1 s. Queries on
+`transcripts.parquet` cast their `x_location` and `y_location` bounds the same
+way. `cells.parquet` centroids are DOUBLE and are compared as they are.
 
 ### Selected-Gene Expression
 
