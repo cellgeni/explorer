@@ -1355,7 +1355,9 @@ Known gaps (2026-11-08 review):
   only helps when the same box is requested again.
 - Barcode-mapping reads are not cached when an `AbortSignal` is passed, and the
   app always passes one, so each bin selection re-reads
-  `barcode_mappings.parquet`.
+  `barcode_mappings.parquet`. Fixed 2026-11-12: they are shared loads, and a
+  bin selection reads only the row groups that can hold the bin (see
+  [Open Items](#12-open-items)).
 - 16 µm first paint also reads the whole 8 µm positions file to derive the
   basis. The 2 µm positions file must exist for detection, though it is never
   read. With only a 2 µm tier, the default load fails.
@@ -3967,8 +3969,13 @@ Other gaps found in the review:
       accepted. When none of the imported cells are on the map, the import
       fails with "Imported cells not found"; when some are not, a notice under
       the import controls says how many.
-- [ ] Visium HD: cache barcode-mapping reads across bin selections, and avoid
-      re-streaming segmentation GeoJSON for every viewport.
+- [x] Visium HD: cache barcode-mapping reads across bin selections
+      (2026-11-12). Whole-file and per-cell reads are shared loads
+      (`waitForSharedLoad`) that callers' signals no longer bypass. A bin
+      selection reads only the row groups that can hold the bin, and the file's
+      size and footer are read once per dataset, so a later selection is one
+      range request (about 300 KB for a 16 µm bin on the reference).
+- [ ] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport.
 - [ ] Byte-range cache keys omit the `ETag`.
 - [ ] Main-thread exceptions to the worker convention: hyparquet, zarrita
       reads, h5wasm for H5AD and the Xenium H5 fallback, and auto-contrast.
@@ -4173,16 +4180,28 @@ Testing:
   - The 2 µm tier (`test.slow()`): 3,443,936 bins in 7–15 s locally (42 s with
     6× CPU and 150 ms latency emulated), about 2 GB of JS heap, then a 2 µm
     Bin card.
-  - The Bin card's cell assignment, marked `test.fail()` until the bug below
-    is fixed.
-- [ ] The Bin card's cell assignment fails on the Visium HD reference with
+  - The Bin card's cell assignment: "Loaded" in about 1.3 s locally after
+    Enter, from 4 requests (HEAD, two footer reads, one 300 KB range).
+- [x] The Bin card's cell assignment fails on the Visium HD reference with
       "Network request failed: Failed to fetch". Reading the 110 MB
       `barcode_mappings.parquet` (`readVisiumHdBarcodeMappings`, hyparquet
       `parquetReadObjects` on a URL buffer) sends about 6,700 range requests
       within a second, and Chromium rejects them with
       `net::ERR_INSUFFICIENT_RESOURCES`; other reads in flight, such as
       `feature_slice.h5`, can fail with them. Found by the live tests on
-      2026-11-12.
+      2026-11-12. Fixed 2026-11-12:
+  - Cause: given `columns`, hyparquet's `parquetPlan` makes one range per
+    column chunk without merging neighbours, and `prefetchAsyncBuffer` starts
+    them all at once: 1,123 row groups × 6 columns = 6,738 requests.
+  - The reader's URL buffer (`coalescingAsyncBuffer`) merges slices asked for
+    together into ranges of up to 8 MB and keeps at most 4 in flight. A
+    whole-file read is now 14 data requests (24 s in Node, 3.6 GB of heap).
+  - The card and expression projection read only the row groups whose
+    `square_0XXum` statistics can hold the bins: about 3 of 1,123 for one
+    16 µm bin. Bin reads decode at most 262,144 rows per hyparquet read, two
+    at a time.
+  - The live test passes without `test.fail()`, and the Bin card and 2 µm
+    live tests no longer block the file.
 - [ ] The Visium HD Bin card shows "Score 0" for a selected gene the bin
       expresses unless cells are coloured by gene expression: bins only get
       expression counts in that mode, and `activeSelectedGridCell`

@@ -18,6 +18,7 @@ import type {
   ReadVisiumHdBarcodeMappingsOptions,
   VisiumHdBarcodeMapping,
   VisiumHdBarcodeMappingCellAssignment,
+  VisiumHdBarcodeMappingsSourceCache,
 } from './visiumHdBarcodeMappings'
 import type {
   ReadVisiumHdFilteredMatrixBarcodesOptions,
@@ -71,6 +72,7 @@ import type {
   VisiumHdImageOptions,
 } from './visiumHdDataset'
 import { normalizeGeneList, normalizeSampleStride } from './xeniumDatasetRows'
+import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 
 export type VisiumHdTissuePositionsReader = (
   options: ReadVisiumHdTissuePositionsOptions,
@@ -259,14 +261,18 @@ export class VisiumHdDatasetReaderController {
     VisiumHdBinSizeMicrometers,
     Promise<readonly VisiumHdSquareBarcode[]>
   >()
-  private readonly barcodeMappingPromises = new Map<
+  // Barcode-mapping reads are shared by callers with their own signals (see
+  // waitForSharedLoad), so a bin selection's cancel does not drop the cache.
+  private readonly barcodeMappingLoads = new Map<
     number,
-    Promise<readonly VisiumHdBarcodeMapping[]>
+    SharedLoad<readonly VisiumHdBarcodeMapping[]>
   >()
-  private readonly barcodeMappingCellPromises = new Map<
+  private readonly barcodeMappingCellLoads = new Map<
     SpatialElementId,
-    Promise<readonly VisiumHdBarcodeMapping[]>
+    SharedLoad<readonly VisiumHdBarcodeMapping[]>
   >()
+  // barcode_mappings.parquet's size and footer, read once for all bin reads.
+  private readonly barcodeMappingSources: VisiumHdBarcodeMappingsSourceCache = new Map()
   private readonly segmentationPromises = new Map<
     string,
     Promise<readonly SpatialElement[]>
@@ -424,66 +430,34 @@ export class VisiumHdDatasetReaderController {
       options.maxRows === undefined
         ? undefined
         : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
-    const cacheKey = maxRows ?? Number.POSITIVE_INFINITY
-    const existing = this.barcodeMappingPromises.get(cacheKey)
 
-    if (existing !== undefined && options.signal === undefined) {
-      return existing
-    }
-
-    const promise = this.barcodeMappingsReader(this.baseUrl, {
-      ...(maxRows === undefined ? {} : { maxRows }),
-      fetcher: this.fetcher,
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-      ...(this.readObjects === undefined ? {} : { readObjects: this.readObjects }),
-      ...(this.loadCompressors === undefined
-        ? {}
-        : { loadCompressors: this.loadCompressors }),
-      ...(this.byteRangeCache === undefined
-        ? {}
-        : { byteRangeCache: this.byteRangeCache }),
-    }).catch((error: unknown) => {
-      if (this.barcodeMappingPromises.get(cacheKey) === promise) {
-        this.barcodeMappingPromises.delete(cacheKey)
-      }
-
-      throw error
-    })
-
-    if (options.signal === undefined) {
-      this.barcodeMappingPromises.set(cacheKey, promise)
-    }
-
-    return promise
+    return waitForSharedLoad(
+      this.barcodeMappingLoads,
+      maxRows ?? Number.POSITIVE_INFINITY,
+      (signal) =>
+        this.barcodeMappingsReader(this.baseUrl, {
+          ...(maxRows === undefined ? {} : { maxRows }),
+          ...this.barcodeMappingReadOptions(),
+          signal,
+        }),
+      options.signal,
+    )
   }
 
   barcodeMappingsForCell(
     cellId: SpatialElementId,
     options: VisiumHdBarcodeMappingCellQueryOptions = {},
   ): Promise<readonly VisiumHdBarcodeMapping[]> {
-    const existing = this.barcodeMappingCellPromises.get(cellId)
-
-    if (existing !== undefined && options.signal === undefined) {
-      return existing
-    }
-
-    const promise = this.barcodeMappingsForCellReader(this.baseUrl, cellId, {
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    }).catch((error: unknown) => {
-      if (this.barcodeMappingCellPromises.get(cellId) === promise) {
-        this.barcodeMappingCellPromises.delete(cellId)
-      }
-
-      throw error
-    })
-
-    if (options.signal === undefined) {
-      this.barcodeMappingCellPromises.set(cellId, promise)
-    }
-
-    return promise
+    return waitForSharedLoad(
+      this.barcodeMappingCellLoads,
+      cellId,
+      (signal) => this.barcodeMappingsForCellReader(this.baseUrl, cellId, { signal }),
+      options.signal,
+    )
   }
 
+  // Reads only the row groups that may hold `binIds`: for one bin, a few
+  // row groups in one range request, after the footer on the first read.
   async barcodeMappingAssignments(
     binSizeMicrometers: VisiumHdBinSizeMicrometers,
     binIds: readonly SpatialElementId[],
@@ -493,8 +467,18 @@ export class VisiumHdDatasetReaderController {
       return []
     }
 
+    const maxRows =
+      options.maxRows === undefined
+        ? undefined
+        : normalizeVisiumHdBarcodeMappingRowBudget(options.maxRows)
     const [mappings, barcodeMappingsModule] = await Promise.all([
-      this.barcodeMappings(options),
+      this.barcodeMappingsReader(this.baseUrl, {
+        ...(maxRows === undefined ? {} : { maxRows }),
+        bins: { binSizeMicrometers, binIds },
+        sourceCache: this.barcodeMappingSources,
+        ...this.barcodeMappingReadOptions(),
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      }),
       import('./visiumHdBarcodeMappings'),
     ])
 
@@ -503,6 +487,19 @@ export class VisiumHdDatasetReaderController {
       binSizeMicrometers,
       binIds,
     )
+  }
+
+  private barcodeMappingReadOptions(): ReadVisiumHdBarcodeMappingsOptions {
+    return {
+      fetcher: this.fetcher,
+      ...(this.readObjects === undefined ? {} : { readObjects: this.readObjects }),
+      ...(this.loadCompressors === undefined
+        ? {}
+        : { loadCompressors: this.loadCompressors }),
+      ...(this.byteRangeCache === undefined
+        ? {}
+        : { byteRangeCache: this.byteRangeCache }),
+    }
   }
 
   async segmentationElements(

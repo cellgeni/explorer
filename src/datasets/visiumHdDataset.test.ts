@@ -22,6 +22,7 @@ import type {
   VisiumHdParquetReadObjectsOptions,
   VisiumHdScalefactors,
 } from './visiumHdDataset'
+import type { VisiumHdBarcodeMapping } from './visiumHdBarcodeMappings'
 import type { ReadVisiumHdSegmentationElementsOptions } from './visiumHdSegmentations'
 
 const fakeFile: AsyncBuffer = {
@@ -216,7 +217,108 @@ describe('Visium HD dataset readers', () => {
     expect(barcodeMappingsReader).toHaveBeenCalledWith('https://example.test/visium', {
       maxRows: 25,
       fetcher,
+      signal: expect.any(AbortSignal),
     })
+  })
+
+  it('shares barcode mapping reads between callers that pass signals', async () => {
+    const barcodeMappings: readonly VisiumHdBarcodeMapping[] = []
+    let finishRead: (mappings: readonly VisiumHdBarcodeMapping[]) => void = () => {}
+    const readSignals: AbortSignal[] = []
+    const barcodeMappingsReader = vi.fn(
+      (_baseUrl: string, options: { readonly signal?: AbortSignal }) => {
+        readSignals.push(options.signal as AbortSignal)
+        return new Promise<readonly VisiumHdBarcodeMapping[]>((resolve) => {
+          finishRead = resolve
+        })
+      },
+    )
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      barcodeMappingsReader,
+    })
+    const first = new AbortController()
+    const second = new AbortController()
+
+    const firstRead = dataset.barcodeMappings({ signal: first.signal })
+    const secondRead = dataset.barcodeMappings({ signal: second.signal })
+    first.abort()
+
+    await expect(firstRead).rejects.toMatchObject({ name: 'AbortError' })
+    expect(readSignals[0]?.aborted).toBe(false)
+
+    finishRead(barcodeMappings)
+    await expect(secondRead).resolves.toBe(barcodeMappings)
+    await expect(
+      dataset.barcodeMappings({ signal: new AbortController().signal }),
+    ).resolves.toBe(barcodeMappings)
+    expect(barcodeMappingsReader).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels a barcode mapping read once every caller has, and reads again after', async () => {
+    const readSignals: AbortSignal[] = []
+    const barcodeMappingsReader = vi.fn(
+      (_baseUrl: string, options: { readonly signal?: AbortSignal }) => {
+        readSignals.push(options.signal as AbortSignal)
+        return new Promise<readonly VisiumHdBarcodeMapping[]>(() => {})
+      },
+    )
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      barcodeMappingsReader,
+    })
+    const controller = new AbortController()
+
+    const read = dataset.barcodeMappings({ maxRows: 10, signal: controller.signal })
+    controller.abort()
+
+    await expect(read).rejects.toMatchObject({ name: 'AbortError' })
+    expect(readSignals[0]?.aborted).toBe(true)
+
+    void dataset.barcodeMappings({ maxRows: 10 })
+    expect(barcodeMappingsReader).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads barcode mapping assignments for the requested bins, sharing the footer', async () => {
+    const barcodeMappingsReader = vi.fn(async () => [])
+    const fetcher = vi.fn(async () => new Response('unused'))
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      fetcher,
+      barcodeMappingsReader,
+    })
+    const signal = new AbortController().signal
+
+    await dataset.barcodeMappingAssignments(16, ['s_016um_00001_00002-1'], { signal })
+    await dataset.barcodeMappingAssignments(8, ['s_008um_00003_00004-1'], { maxRows: 9 })
+
+    expect(barcodeMappingsReader).toHaveBeenNthCalledWith(
+      1,
+      'https://example.test/visium',
+      {
+        bins: { binSizeMicrometers: 16, binIds: ['s_016um_00001_00002-1'] },
+        sourceCache: expect.any(Map),
+        fetcher,
+        signal,
+      },
+    )
+    expect(barcodeMappingsReader).toHaveBeenNthCalledWith(
+      2,
+      'https://example.test/visium',
+      {
+        maxRows: 9,
+        bins: { binSizeMicrometers: 8, binIds: ['s_008um_00003_00004-1'] },
+        sourceCache: expect.any(Map),
+        fetcher,
+      },
+    )
+    const sourceCaches = barcodeMappingsReader.mock.calls.map(
+      (call) => (call as unknown as [string, { sourceCache: unknown }])[1].sourceCache,
+    )
+    expect(sourceCaches[0]).toBe(sourceCaches[1])
   })
 
   it('loads and caches on-demand barcode mappings for one segmented cell', async () => {
@@ -243,8 +345,14 @@ describe('Visium HD dataset readers', () => {
     expect(barcodeMappingsForCellReader).toHaveBeenCalledWith(
       'https://example.test/visium',
       'cell-1',
-      {},
+      { signal: expect.any(AbortSignal) },
     )
+
+    // A caller's signal does not bypass the cache.
+    await expect(
+      dataset.barcodeMappingsForCell('cell-1', { signal: new AbortController().signal }),
+    ).resolves.toBe(barcodeMappings)
+    expect(barcodeMappingsForCellReader).toHaveBeenCalledTimes(1)
   })
 
   it('filters barcode mapping assignments by active bin IDs', async () => {
