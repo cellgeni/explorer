@@ -24,7 +24,8 @@ concurrency:
 jobs:
   dist:
     name: Build and attach the app zip
-    runs-on: ubuntu-latest
+    # Pinned like ci.yml: Playwright 1.60 cannot install Chromium on 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       TAG: ${{ inputs.tag || github.event.release.tag_name }}
