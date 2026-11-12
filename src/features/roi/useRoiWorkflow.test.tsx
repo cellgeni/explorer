@@ -8,6 +8,7 @@ import type {
 } from '../../components/ViewerCore'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
+import { RoiGeneStatsH5FallbackSkippedError } from '../../data/roiGeneStats'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { DatasetCell } from '../../datasets/xeniumDataset'
 import type { RoiCellsLoader, RoiGeneStatsLoader } from '../app-shell/appDependencies'
@@ -231,17 +232,21 @@ const movedViewportDetail: ViewerViewportDetail = {
 }
 
 function WarmupProbe({
+  appendDebugEvent = vi.fn(),
   currentViewportDetail,
   datasetUrl = 'https://example.test/output',
   loadRoiCells,
   loadRoiGeneStats,
+  onWarmupState,
   referenceCells,
   viewportGeneWarmupEnabled = true,
 }: {
+  readonly appendDebugEvent?: (message: string) => void
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly datasetUrl?: string
   readonly loadRoiCells: RoiCellsLoader
   readonly loadRoiGeneStats: RoiGeneStatsLoader
+  readonly onWarmupState?: (state: RoiGeneViewportWarmupState) => void
   readonly referenceCells?: readonly DatasetCell[]
   readonly viewportGeneWarmupEnabled?: boolean
 }) {
@@ -287,7 +292,7 @@ function WarmupProbe({
 
   useRoiWorkflow({
     callbacks: {
-      appendDebugEvent: vi.fn(),
+      appendDebugEvent,
       appendFallbackNotice,
     },
     controls: {
@@ -333,9 +338,12 @@ function WarmupProbe({
     },
   })
 
+  React.useEffect(() => {
+    onWarmupState?.(roiGeneViewportWarmupState)
+  }, [onWarmupState, roiGeneViewportWarmupState])
+
   void magicLensState
   void roiGeneStatsState
-  void roiGeneViewportWarmupState
   void roiMode
   void roiReferenceState
   void roiTranscriptExportState
@@ -586,6 +594,47 @@ describe('useRoiWorkflow', () => {
     expect(snapshot.roiReferenceState).toEqual({ status: 'idle' })
   })
 
+  it('lets a drawn ROI fall back to cell_feature_matrix.h5', async () => {
+    const loadRoiCells = vi.fn<RoiCellsLoader>(async () => [
+      { id: asCellId('aaaaaaaa-1'), position: { x: micrometers(1), y: micrometers(2) } },
+    ])
+    const loadRoiGeneStats = vi.fn<RoiGeneStatsLoader>(async (_url, cells) => ({
+      genes: [],
+      cellCount: cells.length,
+      sampledCellCount: cells.length,
+      totalCount: 0,
+      hitCellLimit: false,
+    }))
+
+    render(
+      <Probe
+        loadRoiCells={loadRoiCells}
+        loadRoiGeneStats={loadRoiGeneStats}
+        referenceCells={[
+          {
+            id: asCellId('cccccccc-1'),
+            position: { x: micrometers(50), y: micrometers(5) },
+          },
+        ]}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      api.handleRoiComplete(selection)
+    })
+
+    // The preview and the reference keep the H5 fallback.
+    expect(loadRoiGeneStats).toHaveBeenCalledTimes(2)
+    for (const [, , options] of loadRoiGeneStats.mock.calls) {
+      expect(options?.allowH5Fallback).toBeUndefined()
+      expect(options?.onFallback).toEqual(expect.any(Function))
+    }
+  })
+
   it('says the reference is unavailable when none of it is outside', async () => {
     const loadRoiCells = vi.fn<RoiCellsLoader>(async () => [
       { id: asCellId('aaaaaaaa-1'), position: { x: micrometers(1), y: micrometers(2) } },
@@ -693,6 +742,100 @@ describe('useRoiWorkflow', () => {
         'https://example.test/output',
         referenceCells,
         expect.objectContaining({ cellLimit: 1, geneLimit: ALL_GENES }),
+      )
+      view.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reads the warm-up sample and reference from the Zarr matrix only', async () => {
+    vi.useFakeTimers()
+    const loadRoiCells = roiCellsLoader()
+    const loadRoiGeneStats = roiGeneStatsLoader()
+    const referenceCells: readonly DatasetCell[] = [
+      { id: asCellId('cccccccc-1'), position: { x: micrometers(50), y: micrometers(5) } },
+    ]
+
+    try {
+      const view = render(
+        <WarmupProbe
+          currentViewportDetail={firstViewportDetail}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+          referenceCells={referenceCells}
+        />,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
+      })
+
+      // cell_feature_matrix.h5 is read whole, so the warm-up never asks for it.
+      expect(loadRoiGeneStats).toHaveBeenCalledTimes(2)
+      expect(loadRoiGeneStats).toHaveBeenNthCalledWith(
+        1,
+        'https://example.test/output',
+        warmupCells,
+        expect.objectContaining({ allowH5Fallback: false }),
+      )
+      expect(loadRoiGeneStats).toHaveBeenNthCalledWith(
+        2,
+        'https://example.test/output',
+        referenceCells,
+        expect.objectContaining({ allowH5Fallback: false }),
+      )
+      view.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('skips the matrix sample and reference when only the H5 matrix can serve cells', async () => {
+    vi.useFakeTimers()
+    const loadRoiCells = roiCellsLoader()
+    const loadRoiGeneStats = vi.fn<RoiGeneStatsLoader>(async () => {
+      throw new RoiGeneStatsH5FallbackSkippedError(
+        new Error('cell_feature_matrix.zarr.zip does not expose cell-major csc/indptr'),
+      )
+    })
+    const referenceCells: readonly DatasetCell[] = [
+      { id: asCellId('cccccccc-1'), position: { x: micrometers(50), y: micrometers(5) } },
+    ]
+    const debugMessages: string[] = []
+    const warmupStates: RoiGeneViewportWarmupState[] = []
+
+    try {
+      const view = render(
+        <WarmupProbe
+          appendDebugEvent={(message) => {
+            debugMessages.push(message)
+          }}
+          currentViewportDetail={firstViewportDetail}
+          loadRoiCells={loadRoiCells}
+          loadRoiGeneStats={loadRoiGeneStats}
+          onWarmupState={(state) => {
+            warmupStates.push(state)
+          }}
+          referenceCells={referenceCells}
+        />,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
+      })
+
+      expect(loadRoiCells).toHaveBeenCalledTimes(1)
+      expect(loadRoiGeneStats).toHaveBeenCalledTimes(1)
+      expect(warmupStates.at(-1)).toEqual({
+        status: 'ready',
+        key: 'https://example.test/output:roi-gene-warmup',
+      })
+      expect(debugMessages).toContainEqual(
+        expect.stringContaining('ROI gene warmup ready: no matrix sample'),
+      )
+      expect(debugMessages).not.toContainEqual(
+        expect.stringContaining('ROI gene warmup skipped'),
       )
       view.unmount()
     } finally {

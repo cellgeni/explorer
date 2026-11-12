@@ -4020,9 +4020,18 @@ Found by the [15.5-E](#155-close-out) re-run (2026-11-12):
 - [ ] A link with both `groups=` and `annotationUrl=` can lose the imported
       labels: loading a set replaces all labels, so an import that finishes
       first is dropped. Found by reading the code on 2026-11-12.
-- [ ] The Xenium viewport warm-up ("Preparing cell feature matrix") blocks the
-      main thread for up to 4 s at a time in the first 30 s after load; see the
-      main-thread exceptions above.
+- [ ] The Xenium demo blocks the main thread for up to 4 s at a time in the
+      first 30 s after load; see the main-thread exceptions above. 15.5-E put
+      this on the viewport warm-up ("Preparing cell feature matrix"). CPU
+      profiles over CDP on 2026-11-12 (headless Chromium with GPU, fresh and
+      warm profiles; stalls of up to 1.8 s here) put it on the load instead:
+      hyparquet decoding `cells.parquet` for the overview (0.4–0.6 s), the
+      first render with the overview layer build (2.3–3.0 s), and the first
+      JPEG 2000 morphology decode (0.6–0.7 s). The warm-up's cell query runs in
+      DuckDB's worker. The H5 download (above) was not part of these: its
+      1.3–1.7 s block came when the download ended, 63–70 s after load, and
+      would land in the first 30 s only above about 20 MB/s. That block is
+      gone with the fix.
 
 Features:
 
@@ -4102,10 +4111,32 @@ Original-brief items with no outcome:
     less than half a FLOAT step, under 1 nm below 32,768 µm. One of 17,843
     test rows lay in that sliver. On a FLOAT test file the same query read
     16.4 of 16.6 MB uncast and 1.7 MB cast, with the same rows.
-- [ ] Every Xenium demo load downloads the whole 433 MB
+- [x] Every Xenium demo load downloads the whole 433 MB
       `cell_feature_matrix.h5`: the ROI warm-up falls back from the
       feature-major Zarr matrix to the H5 file, which h5wasm reads whole. Seen
-      on `main` (`f6dcb88`) on 2026-11-12; the cause is not yet traced.
+      on `main` (`f6dcb88`) on 2026-11-12. Traced and fixed the same day:
+  - Cause: the viewport warm-up's 32-cell gene sample (`useRoiWorkflow`)
+    went through `loadDatasetRoiGeneStats`, whose Zarr read throws without
+    `csc/` arrays and then fell back to `gexFromCellFeatureMatrixH5`. The
+    request's CDP initiator stack: `loadH5MatrixUncached` ← `loadH5Matrix` ←
+    `loadRoiGeneStatsMatrix` ← `loadDatasetRoiGeneStats` ← the warm-up. The
+    bucket sends no `Cache-Control` and Chrome did not keep the file (a warm
+    profile downloaded it again), so every load paid the download (52–65 s
+    here), a 1.3–1.7 s main-thread block when it ended (h5wasm copying the
+    file into its file system and decoding 1.4 million barcodes), and the H5
+    notice under Data access notes.
+  - Fix: the warm-up's two reads pass `allowH5Fallback: false`. Where the Zarr
+    matrix cannot serve the cells, `loadDatasetRoiGeneStats` throws
+    `RoiGeneStatsH5FallbackSkippedError` instead of reading the H5, and the
+    warm-up ends without the gene sample or the enriched-genes reference (the
+    log says "no matrix sample"). Datasets with CSC arrays warm up as before.
+    A drawn ROI, a cell and the Magic Lens still fall back, with the notice.
+    On the demo the warm-up now takes 2.5 s with no H5 request; the first
+    ROI's genes take about 52 s, the download the warm-up used to hide from
+    an ROI drawn a minute or more after load.
+  - Not done: reading cell rows from the feature-major Zarr. A cell's counts
+    are spread over every gene's entries, so it means reading all of
+    `indices`.
 - [x] Property tests for coordinate round trips (2026-11-12, fast-check
       4.10.2): `coords.ts` (µm↔px, screen↔data, `viewportBbox`, tile cover),
       the SpatialData affines, and cell-ID integer pairs.

@@ -211,6 +211,11 @@ or exact points.
   10,000-cell refinement. Uses CSC Zarr rows from `file_row_number`, falling
   back to `cell_feature_matrix.h5`. Without either, ROI gene stats are
   unsupported.
+- Warm-up (`useRoiWorkflow`): after load, reads up to 5,000 cells in the view
+  and a 32-cell gene sample, then the enriched-genes reference sample, so the
+  first ROI is quicker. It reads genes only from CSC Zarr
+  (`allowH5Fallback: false`): the H5 fallback is a whole-file read (433 MB on
+  the demo), so without CSC arrays the first ROI reads it.
 - Exports: cells CSV (from memory), GeoJSON, and transcripts CSV (DuckDB on
   `transcripts.parquet`, up to 100,000 rows, QV ≥ 20).
 

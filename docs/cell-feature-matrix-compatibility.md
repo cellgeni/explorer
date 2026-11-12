@@ -82,7 +82,8 @@ Use the cell-feature matrix in this order:
 2. For older output where Zarr is feature-major only, use
    `cell_feature_matrix.h5` as the ROI gene-statistics fallback. This is slower
    because browser-side H5 currently requires a full-file fetch and parse before
-   any ROI result can be produced.
+   any ROI result can be produced. Only reads the user asks for (an ROI, a
+   cell, the Magic Lens) use it; the viewport warm-up does not.
 3. If both native CSC Zarr and readable H5 are unavailable, report ROI gene
    statistics as unsupported by default. Transcript aggregation can remain an
    explicit diagnostic or one-off fallback, but it is not the default
