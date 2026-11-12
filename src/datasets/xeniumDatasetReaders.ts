@@ -7,7 +7,12 @@ import type {
   GexResult,
   SelectedGeneMatrixRows,
 } from '../data/gex'
-import { selectionToSql, type Selection, type SqlParameter } from '../data/gexSelection'
+import {
+  betweenSql,
+  selectionToSql,
+  type Selection,
+  type SqlParameter,
+} from '../data/gexSelection'
 import {
   normalizeRoiSelection,
   roiSelectionToSpatialSelection,
@@ -90,6 +95,8 @@ export async function readXeniumBoundaryElements(
   const vertexX1 = bbox.maxX + margin
   const vertexY0 = bbox.minY - margin
   const vertexY1 = bbox.maxY + margin
+  // Vertices are FLOAT, so their bounds are cast for row-group pruning (see
+  // betweenSql). Centroids are DOUBLE.
   const stmt = await conn.prepare(`
 WITH viewport_cells AS (
   SELECT cell_id FROM read_parquet( ? )
@@ -98,8 +105,8 @@ WITH viewport_cells AS (
 )
 SELECT b.cell_id, b.vertex_x AS x, b.vertex_y AS y
 FROM read_parquet( ? ) AS b
-WHERE b.vertex_x BETWEEN ? AND ?
-  AND b.vertex_y BETWEEN ? AND ?
+WHERE ${betweenSql('b.vertex_x', 'FLOAT')}
+  AND ${betweenSql('b.vertex_y', 'FLOAT')}
   AND b.cell_id IN (SELECT cell_id FROM viewport_cells)
 ORDER BY b.cell_id, b.file_row_number
 `)
@@ -206,8 +213,8 @@ export async function readXeniumCellTranscriptZDistributionForCellId(
     options.bbox === undefined
       ? ''
       : `
-    AND x_location BETWEEN ? AND ?
-    AND y_location BETWEEN ? AND ?`
+    AND ${betweenSql('x_location', 'FLOAT')}
+    AND ${betweenSql('y_location', 'FLOAT')}`
   const bboxParams: SqlParameter[] =
     options.bbox === undefined
       ? []
@@ -311,8 +318,8 @@ SELECT cell_id,
        overlaps_nucleus,
        is_gene
 FROM read_parquet( ? )
-WHERE x_location BETWEEN ? AND ?
-  AND y_location BETWEEN ? AND ?
+WHERE ${betweenSql('x_location', 'FLOAT')}
+  AND ${betweenSql('y_location', 'FLOAT')}
   AND qv >= ?
 ORDER BY cell_id, feature_name
 LIMIT ?
@@ -343,7 +350,7 @@ export async function readXeniumTranscriptsForSelection(
     return readXeniumTranscriptsInBbox(conn, transcriptUrl, selection.bbox, options)
   }
 
-  const fragment = selectionToSql(spatialSelection, 'x_location', 'y_location')
+  const fragment = selectionToSql(spatialSelection, 'x_location', 'y_location', 'FLOAT')
   const stmt = await conn.prepare(`
 SELECT cell_id,
        feature_name,
