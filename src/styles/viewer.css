@@ -27,7 +27,6 @@
 }
 
 .morphology-canvas,
-.deck-layer-surface,
 .viewport-grid {
   position: absolute;
   inset: 0;

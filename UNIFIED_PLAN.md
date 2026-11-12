@@ -3298,7 +3298,7 @@ Open, for 15.5 or later:
   offered in Cell color with no genes. 15.1-I's Atera graphclust default never
   runs (Atera loads through the AnnData path). Esc in the drawer's address
   field closes the drawer.
-- **Cleanup.** Unused CSS from the HUD (`.magic-lens-scope-segmented`,
+- **Cleanup** (done in 15.5-C). Unused CSS from the HUD (`.magic-lens-scope-segmented`,
   `.measurement-control*`, `.section-heading-*`, `.status-chip`, `.eyebrow`,
   `.annotation-size-plot*`), the Magic Lens Min QV leftovers
   (`handleMagicLensMinQvChange`, `capabilities.magicLensMinQv`, `lensQv=`),
@@ -3364,7 +3364,27 @@ proper. The re-run (E) comes after the fixes, so it checks what ships.
   - Atera picks graphclust, or the first set, on the AnnData path too.
   - Esc in a drawer text field, such as the address, leaves the field; a
     second Esc closes the drawer.
-- [ ] **C. Cleanup.** (S)
+- [x] **C. Cleanup.** (S)
+  - Done 2026-11-12. Behaviour is unchanged apart from old links' `lensQv=`,
+    which had no effect and is now ignored.
+  - CSS with no user, found by checking every class in `src/styles` against
+    the sources: the HUD's `.magic-lens-scope*`, `.magic-lens-radius-control`,
+    `.measurement-control*`, `.section-heading-*`, `.status-chip`, `.eyebrow`
+    and `.annotation-size-plot*` rules, plus `.annotation-size-axis`, `-row`,
+    `-label`, `-list`, `.annotation-set-toggle` and `.deck-layer-surface`
+    (about 300 lines). `diagnostic-check-*` is built from a status and stays.
+  - The Magic Lens Min QV chain: `magicLensMinQv` state and its threading,
+    `handleMagicLensMinQvChange`, `normalizeMagicLensMinQv`, the query key's
+    QV part, `capabilities.magicLensMinQv` and `lensQv=` in links. The open
+    item in [§12](#12-open-items) is closed by its removal.
+  - The feature-circle transcript renderer (`createTranscriptFeatureCircleLayer`
+    and its branches): no reader made `feature-circle` bins since 15.1-J, so
+    `glyphType` is now only `density`.
+  - `createOverviewViewState`, which only tests used.
+  - The `danger` Button variant stays: 15.4-A's card `Delete` uses it. Its
+    `shell-card-delete` class had no CSS and is gone.
+  - `tokens.css` says the role-on-tint contrast is 5.4:1 on surfaces 0–2 and
+    4.7:1 on surface 3.
 - [ ] **D. Accessibility pass.** (M)
   - the axe baseline from 15.0-F is empty;
   - a keyboard-only run of tasks 1–5;
@@ -3696,8 +3716,8 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 - [x] H5AD and SpatialData: read boolean `obs` columns on the reference backend
       (0/1 tracks, 2026-11-09).
 - [ ] Visium HD: low-res tissue image fallback.
-- [ ] Magic Lens: make `Min QV` change results, or hide it. The new shell
-      hides it (15.2-D); the old Magic Lens tab goes in 15.2-J.
+- [x] Magic Lens: make `Min QV` change results, or hide it. The new shell
+      hid it (15.2-D); 15.5-C removed it.
 - [ ] Xenium diagnostics: check the image chosen from `experiment.xenium`
       instead of `morphology.ome.tif` (a dataset manifest's image is already
       checked), plus `analysis.zarr.zip`, `gene_panel.json`, the H5 matrix, and

@@ -126,7 +126,6 @@ describe('platformAdapter', () => {
     expect(adapter.capabilities).toMatchObject({
       annotations: false,
       geometricAnnotations: true,
-      magicLensMinQv: false,
       nucleusBoundaries: false,
       transcripts: false,
     })
@@ -201,7 +200,6 @@ describe('platformAdapter', () => {
     expect(adapter.labels.embeddingElementPlural).toBe('cells')
     expect(adapter.capabilities).toMatchObject({
       annotations: true,
-      magicLensMinQv: true,
       nucleusBoundaries: false,
       transcripts: true,
       cellTranscriptDistribution: true,
@@ -243,7 +241,6 @@ describe('platformAdapter', () => {
     expect(adapter.labels.embeddingElementPlural).toBe('bins')
     expect(adapter.capabilities).toMatchObject({
       annotations: false,
-      magicLensMinQv: false,
       nucleusBoundaries: true,
       transcripts: false,
     })

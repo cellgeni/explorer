@@ -204,12 +204,7 @@ function RegionSelectionCard({ card }: { readonly card: RegionSelectionCardModel
             {action.busy ? (action.busyLabel ?? action.label) : action.label}
           </Button>
         ))}
-        <Button
-          title="Delete selection"
-          variant="danger"
-          className="shell-card-delete"
-          onClick={card.onDelete}
-        >
+        <Button title="Delete selection" variant="danger" onClick={card.onDelete}>
           Delete
         </Button>
       </div>

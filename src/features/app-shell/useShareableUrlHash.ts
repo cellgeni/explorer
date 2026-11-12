@@ -75,7 +75,6 @@ interface ShareableTranscriptHashOptions {
 }
 
 interface ShareableMagicLensHashOptions {
-  readonly magicLensMinQv: number
   readonly magicLensRadiusMicrometers: number
   readonly magicLensScope: string
 }
@@ -167,7 +166,7 @@ export function useShareableUrlHash({
     transcriptPointColorMode,
     transcriptPointSize,
   } = transcripts
-  const { magicLensMinQv, magicLensRadiusMicrometers, magicLensScope } = magicLens
+  const { magicLensRadiusMicrometers, magicLensScope } = magicLens
   const datasetUrlRef = useRef(datasetUrl)
   // Set once Back or Forward is reloading the page, so no write lands on the
   // entry it moved to.
@@ -243,7 +242,6 @@ export function useShareableUrlHash({
           transcriptPointSize,
           magicLensScope,
           magicLensRadiusMicrometers,
-          magicLensMinQv,
           ...(spatialDataCoordinateSystem === undefined
             ? {}
             : { spatialDataCoordinateSystem }),
@@ -304,7 +302,6 @@ export function useShareableUrlHash({
     cellBoundaryOpacity,
     morphologyEnabledChannelIds,
     morphologyZPlane,
-    magicLensMinQv,
     magicLensRadiusMicrometers,
     magicLensScope,
     measurementUnit,

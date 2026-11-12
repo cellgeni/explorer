@@ -14,7 +14,6 @@ import {
   createCellBoundaryLayerStyle,
   createGeneExpressionElementStyleIndex,
   createOverviewLayers,
-  createOverviewViewState,
   geneExpressionElementsToLayerData,
   geneExpressionScoreDomainMax,
   gridCellBatchesToLayerData,
@@ -1196,7 +1195,6 @@ describe('deck layer factory', () => {
     expect(datum.fillColor).toEqual([72, 68, 58, 240])
     expect(datum.nucleusCount).toBe(2)
     expect(datum.segmentationMethod).toBe('nucleus_expansion')
-    expect(createOverviewViewState([datum]).target).toEqual([10, -20, 0])
   })
 
   it('converts expression cells into deck.gl overlay coordinates', () => {
@@ -1499,32 +1497,6 @@ describe('deck layer factory', () => {
     expect(globalBin?.fillColor).toEqual([255, 223, 91, 246])
   })
 
-  it('colors selected-gene feature circles by gene instead of density scale', () => {
-    const featureCircle = {
-      id: 'circle-1',
-      glyphType: 'feature-circle' as const,
-      level: 0,
-      binX: 3,
-      binY: 4,
-      position: { x: micrometers(10), y: micrometers(20) },
-      radiusMicrometers: 4,
-      count: 7,
-      binTotalCount: 19,
-      omittedFeatureCount: 1,
-      featureName: 'CD74',
-    }
-    const thermalBins = transcriptAggregateBinsToLayerData([featureCircle], 'thermal')
-    const viridisBins = transcriptAggregateBinsToLayerData([featureCircle], 'viridis')
-
-    expect(thermalBins[0]).toMatchObject({
-      glyphType: 'feature-circle',
-      featureName: 'CD74',
-      binTotalCount: 19,
-      omittedFeatureCount: 1,
-    })
-    expect(thermalBins[0]?.fillColor).toEqual(viridisBins[0]?.fillColor)
-  })
-
   it('can color exact transcript points by QV instead of feature', () => {
     const transcript = {
       id: 'tx-1',
@@ -1601,47 +1573,6 @@ describe('deck layer factory', () => {
     expect(featureData[0]?.fillColor).toEqual(featureData[2]?.fillColor)
     expect(featureData[0]?.fillColor).not.toEqual(featureData[1]?.fillColor)
     expect(qualityData[0]?.fillColor).not.toEqual(qualityData[2]?.fillColor)
-  })
-
-  it('renders selected-gene feature circles as a separate pickable circle layer', () => {
-    const bins = transcriptAggregateBinsToLayerData([
-      {
-        id: 'circle-1',
-        glyphType: 'feature-circle',
-        level: 0,
-        binX: 3,
-        binY: 4,
-        position: { x: micrometers(10), y: micrometers(20) },
-        radiusMicrometers: 4,
-        count: 7,
-        featureName: 'CD74',
-      },
-    ])
-    const layers = createOverviewLayers(fixtureCells, [], {
-      transcriptAggregateBins: bins,
-      transcriptOpacity: 0.5,
-    })
-    const featureCircleLayer = layers.find(
-      (layer) =>
-        layer instanceof ScatterplotLayer && layer.id === 'transcript-feature-circles',
-    )
-
-    expect(featureCircleLayer).toBeInstanceOf(ScatterplotLayer)
-
-    if (!(featureCircleLayer instanceof ScatterplotLayer)) {
-      throw new Error(
-        'Expected transcript feature circles to render as ScatterplotLayer.',
-      )
-    }
-
-    expect(featureCircleLayer.props.pickable).toBe(true)
-    expect(featureCircleLayer.props.radiusUnits).toBe('common')
-
-    const getRadius = featureCircleLayer.props.getRadius as (
-      bin: (typeof bins)[number],
-    ) => number
-
-    expect(getRadius(bins[0]!)).toBe(4)
   })
 
   it('scores multi-gene expression by mean count', () => {

@@ -29,7 +29,6 @@ import {
   magicLensLoadStarted,
   magicLensReady,
   magicLensScopeLabel,
-  normalizeMagicLensMinQv,
   normalizeMagicLensRadius,
   resolveMagicLensSelection,
   summarizeMagicLensCells,
@@ -51,7 +50,6 @@ interface MagicLensWorkflowCallbacks {
 
 interface MagicLensWorkflowControls {
   readonly magicLensActive: boolean
-  readonly magicLensMinQv: number
   readonly magicLensScope: MagicLensScope
 }
 
@@ -78,7 +76,6 @@ interface MagicLensWorkflowRefs {
 
 interface MagicLensWorkflowSetters {
   readonly setMagicLensActive: Dispatch<SetStateAction<boolean>>
-  readonly setMagicLensMinQv: Dispatch<SetStateAction<number>>
   readonly setMagicLensRadiusMicrometers: Dispatch<SetStateAction<number>>
   readonly setMagicLensScope: Dispatch<SetStateAction<MagicLensScope>>
   readonly setMagicLensState: Dispatch<
@@ -112,7 +109,6 @@ interface UseMagicLensWorkflowResult {
   readonly handleMagicLensClear: () => void
   readonly handleMagicLensCursorActiveChange: (active: boolean) => void
   readonly handleMagicLensLeave: () => void
-  readonly handleMagicLensMinQvChange: (value: number) => void
   readonly handleMagicLensMove: (detail: ViewerMagicLensDetail) => void
   readonly handleMagicLensRadiusChange: (value: number) => void
   readonly handleMagicLensScopeChange: (scope: MagicLensScope) => void
@@ -131,7 +127,7 @@ export function useMagicLensWorkflow({
   setters,
 }: UseMagicLensWorkflowOptions): UseMagicLensWorkflowResult {
   const { appendDebugEvent, appendFallbackNotice } = callbacks
-  const { magicLensActive, magicLensMinQv, magicLensScope } = controls
+  const { magicLensActive, magicLensScope } = controls
   const { activeRoiSelection, currentViewportDetail, loadState, selectedGenes } = data
   const { loadMagicLensSummary, loadRoiCells, loadRoiGeneStats } = loaders
   const {
@@ -143,7 +139,6 @@ export function useMagicLensWorkflow({
   } = refs
   const {
     setMagicLensActive,
-    setMagicLensMinQv,
     setMagicLensRadiusMicrometers,
     setMagicLensScope,
     setMagicLensState,
@@ -474,19 +469,6 @@ export function useMagicLensWorkflow({
     [appendDebugEvent, magicLensLastQueryKeyRef, setMagicLensRadiusMicrometers],
   )
 
-  const handleMagicLensMinQvChange = useCallback(
-    (value: number) => {
-      const nextMinQv = normalizeMagicLensMinQv(value)
-
-      setMagicLensMinQv(nextMinQv)
-      magicLensLastQueryKeyRef.current = null
-      appendDebugEvent(`Magic lens min QV: ${nextMinQv}`, {
-        coalesceKey: 'magic-lens-min-qv',
-      })
-    },
-    [appendDebugEvent, magicLensLastQueryKeyRef, setMagicLensMinQv],
-  )
-
   const handleMagicLensCursorActiveChange = useCallback(
     (nextActive: boolean) => {
       setMagicLensActive(nextActive)
@@ -522,7 +504,7 @@ export function useMagicLensWorkflow({
       }
 
       magicLensLastDetailRef.current = detail
-      const queryKey = magicLensDetailQueryKey(detail, magicLensMinQv, selectedGenes)
+      const queryKey = magicLensDetailQueryKey(detail, selectedGenes)
 
       if (magicLensLastQueryKeyRef.current === queryKey) {
         return
@@ -546,11 +528,7 @@ export function useMagicLensWorkflow({
           return
         }
 
-        const latestQueryKey = magicLensDetailQueryKey(
-          latestDetail,
-          magicLensMinQv,
-          selectedGenes,
-        )
+        const latestQueryKey = magicLensDetailQueryKey(latestDetail, selectedGenes)
         magicLensLastQueryKeyRef.current = latestQueryKey
         runMagicLensQuery(latestDetail.bbox, 'cursor', {
           center: latestDetail.center,
@@ -564,7 +542,6 @@ export function useMagicLensWorkflow({
       magicLensDebounceRef,
       magicLensLastDetailRef,
       magicLensLastQueryKeyRef,
-      magicLensMinQv,
       magicLensScope,
       runMagicLensQuery,
       selectedGenes,
@@ -576,7 +553,6 @@ export function useMagicLensWorkflow({
     handleMagicLensClear,
     handleMagicLensCursorActiveChange,
     handleMagicLensLeave,
-    handleMagicLensMinQvChange,
     handleMagicLensMove,
     handleMagicLensRadiusChange,
     handleMagicLensScopeChange,

@@ -110,50 +110,6 @@
   color: var(--accent-contrast);
 }
 
-.measurement-control {
-  display: grid;
-  gap: 5px;
-  padding: 6px 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-.measurement-control-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
-  align-items: center;
-}
-
-.measurement-control-header span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-2);
-  font-size: var(--font-control);
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.measurement-control-header button {
-  min-width: 44px;
-  min-height: 22px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--surface-2);
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: var(--font-caption);
-  font-weight: 800;
-}
-
-.measurement-control-header button[aria-pressed='true'] {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-contrast);
-}
-
 .measurement-clear-action {
   width: 100%;
 }

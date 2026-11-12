@@ -436,12 +436,10 @@ export function App({ dependencies }: AppProps = {}) {
     },
     magicLens: {
       magicLensActive,
-      magicLensMinQv,
       magicLensRadiusMicrometers,
       magicLensScope,
       magicLensState,
       setMagicLensActive,
-      setMagicLensMinQv,
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,
@@ -2655,7 +2653,6 @@ export function App({ dependencies }: AppProps = {}) {
     },
     controls: {
       magicLensActive,
-      magicLensMinQv,
       magicLensScope,
     },
     data: {
@@ -2680,7 +2677,6 @@ export function App({ dependencies }: AppProps = {}) {
     },
     setters: {
       setMagicLensActive,
-      setMagicLensMinQv,
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,
@@ -3253,7 +3249,6 @@ export function App({ dependencies }: AppProps = {}) {
       showHoverTooltips,
     },
     magicLens: {
-      magicLensMinQv,
       magicLensRadiusMicrometers,
       magicLensScope,
     },

@@ -3,7 +3,6 @@ import { micrometers } from '../data/coords'
 import type { OverviewCellDatum, OverviewViewState } from './deckLayerTypes'
 import {
   FIT_FALLBACK_VIEWPORT,
-  createOverviewViewState,
   extentKey,
   fitExtentViewState,
   overviewFitExtent,
@@ -18,13 +17,12 @@ describe('fit to view (F18)', () => {
   const cells = [cell(0, 0), cell(2000, -1000)]
 
   it('keeps the 720 px fit until the canvas is measured', () => {
-    expect(createOverviewViewState(cells)).toMatchObject({
+    expect(
+      fitExtentViewState(overviewFitExtent(cells), FIT_FALLBACK_VIEWPORT),
+    ).toMatchObject({
       target: [1000, -500, 0],
       zoom: Math.log2(720 / 2000),
     })
-    expect(fitExtentViewState(overviewFitExtent(cells), FIT_FALLBACK_VIEWPORT).zoom).toBe(
-      Math.log2(720 / 2000),
-    )
   })
 
   it('fills the real canvas, less the padding, on its tighter side', () => {

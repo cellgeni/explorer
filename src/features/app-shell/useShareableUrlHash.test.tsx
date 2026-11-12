@@ -46,7 +46,6 @@ function ShareableUrlHashProbe({
       showHoverTooltips: false,
     },
     magicLens: {
-      magicLensMinQv: 18,
       magicLensRadiusMicrometers: 120,
       magicLensScope: 'cursor',
     },

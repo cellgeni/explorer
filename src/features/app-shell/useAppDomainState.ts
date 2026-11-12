@@ -97,7 +97,6 @@ import { IDLE_CUSTOM_MORPHOLOGY_LAYER_LOAD_STATE } from '../morphology/customMor
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
 import {
   IDLE_MAGIC_LENS_STATE,
-  normalizeMagicLensMinQv,
   normalizeMagicLensRadius,
   parseMagicLensScope,
   type MagicLensScope,
@@ -283,11 +282,6 @@ export function useAppDomainState({
     normalizeMagicLensRadius(
       initialShareableState.magicLensRadiusMicrometers ??
         DEFAULT_SHAREABLE_STATE.magicLensRadiusMicrometers,
-    ),
-  )
-  const [magicLensMinQv, setMagicLensMinQv] = useState(() =>
-    normalizeMagicLensMinQv(
-      initialShareableState.magicLensMinQv ?? DEFAULT_SHAREABLE_STATE.magicLensMinQv,
     ),
   )
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(
@@ -614,12 +608,10 @@ export function useAppDomainState({
     },
     magicLens: {
       magicLensActive,
-      magicLensMinQv,
       magicLensRadiusMicrometers,
       magicLensScope,
       magicLensState,
       setMagicLensActive,
-      setMagicLensMinQv,
       setMagicLensRadiusMicrometers,
       setMagicLensScope,
       setMagicLensState,

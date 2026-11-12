@@ -57,7 +57,6 @@ export interface AppPlatformCapabilities {
   readonly magicLens: boolean
   readonly annotations: boolean
   readonly geometricAnnotations: boolean
-  readonly magicLensMinQv: boolean
   readonly nucleusBoundaries: boolean
   readonly transcripts: boolean
   // Selected-cell transcript z histogram, read from transcripts.parquet.
@@ -113,7 +112,6 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLens: true,
     annotations: true,
     geometricAnnotations: true,
-    magicLensMinQv: true,
     nucleusBoundaries: false,
     transcripts: true,
     cellTranscriptDistribution: true,
@@ -146,7 +144,6 @@ const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLens: true,
     annotations: true,
     geometricAnnotations: true,
-    magicLensMinQv: false,
     nucleusBoundaries: true,
     transcripts: true,
     cellTranscriptDistribution: false,
@@ -181,7 +178,6 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLens: true,
     annotations: false,
     geometricAnnotations: true,
-    magicLensMinQv: false,
     nucleusBoundaries: true,
     transcripts: false,
     cellTranscriptDistribution: false,
@@ -225,7 +221,6 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLens: true,
     annotations: true,
     geometricAnnotations: true,
-    magicLensMinQv: false,
     nucleusBoundaries: false,
     transcripts: false,
     cellTranscriptDistribution: false,
@@ -257,7 +252,6 @@ const VISIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLens: true,
     annotations: true,
     geometricAnnotations: true,
-    magicLensMinQv: false,
     nucleusBoundaries: false,
     transcripts: false,
     cellTranscriptDistribution: false,
@@ -287,7 +281,6 @@ const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLens: true,
     annotations: true,
     geometricAnnotations: true,
-    magicLensMinQv: false,
     nucleusBoundaries: false,
     transcripts: false,
     cellTranscriptDistribution: false,
@@ -317,7 +310,6 @@ const IMAGE_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLens: false,
     annotations: false,
     geometricAnnotations: true,
-    magicLensMinQv: false,
     nucleusBoundaries: false,
     transcripts: false,
     cellTranscriptDistribution: false,

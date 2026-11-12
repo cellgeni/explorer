@@ -46,7 +46,6 @@ function initialSettings(initialShareableState = {}) {
     magicLensScope: magicLens.magicLensScope,
     magicLensActive: magicLens.magicLensActive,
     magicLensRadiusMicrometers: magicLens.magicLensRadiusMicrometers,
-    magicLensMinQv: magicLens.magicLensMinQv,
   }
 }
 

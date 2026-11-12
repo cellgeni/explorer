@@ -135,7 +135,8 @@ does only that, and the tool stays.
   Magic Lens card summarises the transcripts (Xenium) or expression (Visium
   HD) under it; queries are debounced by 320 ms. It is not offered on images,
   and says "Unavailable" where the platform cannot scan (Atera, Visium, H5AD,
-  SpatialData). `Min QV` is hidden, because it changes nothing yet (F21).
+  SpatialData). It has no QV filter: the `Min QV` setting changed nothing
+  (F21) and was removed in 15.5-C.
 
 ### Settings
 
@@ -853,7 +854,7 @@ the page reloads that entry's link, with its view and settings.
 | `channels`                                                                                                | Enabled image channel IDs                                                                                                                                                                                                                                                                                                              |
 | `z`                                                                                                       | Zero-based z plane of an OME-TIFF z-stack dataset image                                                                                                                                                                                                                                                                                |
 | `tx`, `txDetail`, `txFilter`, `txGene`, `txBudget`, `txQv`, `txSize`, `txOpacity`, `txDensity`, `txColor` | Transcript controls. `txFilter` is the chosen `Feature filter`, not the All features shown while no gene is selected, so such a link leaves it out                                                                                                                                                                                     |
-| `lensScope`, `lensRadius`, `lensQv`                                                                       | Magic Lens controls (`lens=1` in older links turns the lens on)                                                                                                                                                                                                                                                                        |
+| `lensScope`, `lensRadius`                                                                                 | Magic Lens controls (`lens=1` in older links turns the lens on; their `lensQv` is ignored)                                                                                                                                                                                                                                             |
 | `sdCs`, `sdImage`, `sdUm`                                                                                 | SpatialData coordinate system, image, and µm-per-unit override                                                                                                                                                                                                                                                                         |
 | `vimg`, `vlib`, `voff`                                                                                    | Visium tissue image (`hires`, `lowres`, `none`), library (only with several), and `1` when off-tissue spots are shown                                                                                                                                                                                                                  |
 

@@ -43,7 +43,6 @@ export const DEFAULT_SHAREABLE_STATE = {
   magicLensScope: 'cursor',
   magicLensActive: false,
   magicLensRadiusMicrometers: 80,
-  magicLensMinQv: 20,
 } as const satisfies ShareableState
 
 // Written even at their default: a dataset load picks its own default for

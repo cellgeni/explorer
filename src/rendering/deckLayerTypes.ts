@@ -143,7 +143,7 @@ export interface TranscriptAggregateDatum {
   readonly id: string
   readonly position: Position
   readonly source?: 'cell-summary' | 'native-zarr'
-  readonly glyphType?: 'density' | 'feature-circle'
+  readonly glyphType?: 'density'
   readonly level: number
   readonly binX: number
   readonly binY: number

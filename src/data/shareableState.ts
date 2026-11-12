@@ -64,7 +64,6 @@ export interface ShareableState {
   readonly magicLensScope?: string
   readonly magicLensActive?: boolean
   readonly magicLensRadiusMicrometers?: number
-  readonly magicLensMinQv?: number
   readonly spatialDataCoordinateSystem?: string
   readonly spatialDataImage?: string
   readonly spatialDataMicrometersPerUnit?: number
@@ -133,7 +132,6 @@ export function parseShareableState(hash: string): ShareableState {
   const magicLensScope = readString(params, 'lensScope')
   const magicLensActive = parseBoolean(params.get('lens'))
   const magicLensRadiusMicrometers = parsePositiveInteger(params.get('lensRadius'))
-  const magicLensMinQv = parseNonNegativeInteger(params.get('lensQv'))
   const spatialDataCoordinateSystem = readString(params, 'sdCs')
   const spatialDataImage = readString(params, 'sdImage')
   const spatialDataMicrometersPerUnit = parsePositiveNumber(params.get('sdUm'))
@@ -315,10 +313,6 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (magicLensRadiusMicrometers !== undefined) {
     state.magicLensRadiusMicrometers = magicLensRadiusMicrometers
-  }
-
-  if (magicLensMinQv !== undefined) {
-    state.magicLensMinQv = magicLensMinQv
   }
 
   if (spatialDataCoordinateSystem !== undefined) {
@@ -510,10 +504,6 @@ export function formatShareableState(state: ShareableState): string {
       'lensRadius',
       Math.max(1, Math.floor(state.magicLensRadiusMicrometers)).toString(),
     )
-  }
-
-  if (state.magicLensMinQv !== undefined && Number.isFinite(state.magicLensMinQv)) {
-    params.set('lensQv', Math.max(0, Math.floor(state.magicLensMinQv)).toString())
   }
 
   setOptionalString(params, 'sdCs', state.spatialDataCoordinateSystem)
