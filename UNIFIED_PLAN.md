@@ -225,27 +225,27 @@ writing UI code.
 
 ## 3. Status At A Glance
 
-| Track                           | Scope                                                    | Status                                                           |
-| ------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
-| Phase 1                         | Foundation and migration                                 | Done                                                             |
-| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                           |
-| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09               |
-| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                             |
-| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                      |
-| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**          |
-| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                               |
-| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                |
-| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                             |
-| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**          |
-| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                         |
-| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                         |
-| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                |
-| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                                |
-| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                                |
-| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                |
-| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                |
-| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                |
-| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | In progress: M1–M5 done (2026-11-11); the 15.5 close-out remains |
+| Track                           | Scope                                                    | Status                                                       |
+| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
+| Phase 1                         | Foundation and migration                                 | Done                                                         |
+| Phase 2                         | Robust I/O, caching, S3 hardening                        | Done; image-path fallback **Reopened**                       |
+| Phase 3                         | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09           |
+| Analysis slice (before Phase 4) | Gene selection, expression highlighting, cell info       | Done                                                         |
+| Phase 4                         | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                  |
+| Phase 5                         | Production polish                                        | Done; Magic Lens QV and Xenium diagnostics **Reopened**      |
+| Feature-fix pass                | Correctness before optimization                          | Ongoing; individual fixes recorded                           |
+| Optimization pass               | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done            |
+| Phase 5.1                       | Transcript visualization with LOD                        | Done                                                         |
+| Phase 6                         | Visium HD                                                | MVP done; low-res fallback and diagnostics **Reopened**      |
+| Structural refactor             | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                     |
+| Phase 7                         | AnnData H5AD                                             | MVP done; hardening open                                     |
+| Phase 8                         | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                            |
+| Phase 9                         | OME-Zarr image pyramids                                  | Done (2026-07-10)                                            |
+| Phase 10                        | SpatialData stores                                       | Done (2026-11-06)                                            |
+| Phase 11                        | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                            |
+| Phase 12                        | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)            |
+| Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                            |
+| Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | Done: M1–M5 (2026-11-11) and the 15.5 close-out (2026-11-12) |
 
 ---
 
@@ -1914,7 +1914,8 @@ Planned 2026-11-11. Milestone M1 (15.0 and 15.1 A, B, C, D, E, G, H, K, M)
 and M2 (15.1 F, I, J, L) done 2026-11-11; M3, the new shell (15.2 A–J),
 done 2026-11-11: it is the only shell. M4 (15.3 A–D: start screen, Help,
 Undo, Cancel) done 2026-11-11. M5 (15.4 A–E: selections, enriched genes,
-transcript gene legend, minimap, axes) done 2026-11-11. The user asked for a
+transcript gene legend, minimap, axes) done 2026-11-11. The 15.5 close-out
+(A–F) done 2026-11-12, which completes the phase. The user asked for a
 usability review of the
 interface and then a plan for the changes. The plan rests on:
 
@@ -3518,8 +3519,24 @@ listed them. Written down in 15.5 from the findings each one turned up:
     - No link parameter carries hidden classes, so the reopened view shows
       Cluster 1 again.
 
-- [ ] **F. Record the outcome** in this phase, and update the out-of-date test
+- [x] **F. Record the outcome** in this phase, and update the out-of-date test
       inventory in [§9](#9-testing-and-ci). (S)
+  - Done 2026-11-12. Phase 15 is complete, measured against its
+    [goals](#goals-and-non-goals):
+    - Every High and Medium finding (F1–F18) has its fix. The re-run (E)
+      confirmed the ones the eight tasks reach; contrast and text size (F6,
+      F7) rest on 15.0-A and 15.1-K and the axe walk, now with an empty
+      baseline and best-practice rules (D).
+    - The layout is the 10x Explorer model (15.2), the only shell.
+    - Share links: version 1 links still open (15.1-L), and links leave out
+      the dataset manifest's defaults rather than the app's (15.5-A). One
+      meaning changed: `panel=info` from 15.2-H to 15.5 now opens with the
+      sections closed (15.5-B).
+    - Nothing is left from the [review after M4](#review-after-m4-2026-11-11).
+      The re-run's open items are in [§12](#12-open-items).
+  - [§9](#9-testing-and-ci) has a new inventory (2026-11-12) and its open list
+    is updated: CI runs on every PR; coverage, SpatialData E2E and a
+    Xenium-shaped golden bundle are still open.
 
 #### Testing
 
@@ -3746,20 +3763,36 @@ and has `Diagnose Dataset`.
 - Coverage was judged good enough to continue the feature-fix and optimization
   sequence.
 
-### Inventory (2026-11-08, Static Count)
+### Inventory (2026-11-12)
 
-Counted from the repository, not from a test run:
+From a run of `npm test` and the repository:
 
-- 149 colocated unit test files with about 821 `it`/`test` cases, against 209
-  non-test source files under `src/`.
-- 7 Playwright tests in `tests/e2e/app.spec.ts`: the viewer shell, transcript
-  controls, a local H5AD fixture, the hosted PBMC3K H5AD, the live Xenium
-  dataset (morphology, transcripts, ROI, Cell), the Visium HD reference (image
-  and 16 µm bins), and Visium HD tiers (16/8 µm switching, 2 µm enabled,
-  Feature Slice gene, Magic Lens, ROI).
-- Phase 8 test-plan items each have a matching unit or component test.
-- No E2E covers SpatialData, OME-Zarr, or image-only sources.
-- There is still no `.github/` workflow and no coverage configuration.
+- `npm test`: 211 Vitest files with 1,617 tests (1,516 `it`/`test` calls
+  before `.each` expands them), against 308 non-test source files under
+  `src/`. Under full-suite load a few `App.test.tsx` tests that load 50,000
+  cells can time out; they pass when the file runs alone.
+- 25 Playwright tests: 12 smoke tests, offline, and 13 live ones.
+  - Smoke (`tests/e2e/app.spec.ts`): the shell; the start screen's examples
+    and their offline fallback; a link that names a dataset; the axe walk;
+    review tasks 1–5 by keyboard alone; transcript controls; an H5AD fixture
+    with obs tracks and genes; a shared H5AD link coloured by a metadata
+    track; AnnData from Icechunk; Visium libraries and off-tissue spots; and
+    a Space Ranger Visium folder. Fixtures are built in the test or served
+    from `src/test/fixtures` through `page.route`, and the examples index
+    from `examples/index.json`.
+  - Live: a CELLxGENE Visium H5AD, PBMC3K, the Atera kidney run, the Xenium
+    demo (morphology, transcripts, ROI, Cell), and the Visium HD reference and
+    its tiers. `tests/e2e/examples.spec.ts` loads every example in
+    `examples/` (Xenium, QPTIFF, OME-Zarr and three H5AD) and the index from
+    GitHub.
+- CI (`.github/workflows`): `ci.yml` runs on every PR and push to `main`:
+  format check, lint, typecheck, unit tests and build, then the smoke tests in
+  Chromium. `e2e-live.yml` runs every Playwright test at 03:00 UTC on
+  weekdays and on demand. `release.yml` runs typecheck, unit tests and the
+  smoke tests before it attaches the app zip; `pages.yml` deploys GitHub
+  Pages.
+- The eight review tasks run live with `scripts/review-tasks.mjs` (15.5-E),
+  by hand against the dev server, not in CI.
 
 ### Open
 
@@ -3770,10 +3803,12 @@ Counted from the repository, not from a test run:
       inspection, and loading the 2 µm tier when the environment allows.
 - [ ] Direct tests for small helpers and leaf components if they gain behaviour
       (assignment/status helpers, cell expression panels, worker messages).
-- [ ] CI pipeline and the committed golden fixture bundle (no completion
-      recorded; no `.github/` directory).
-- [ ] E2E smoke tests for SpatialData (shapes and labels stores), OME-Zarr, and
-      image-only TIFF sources.
+- [x] CI pipeline: `ci.yml` gates every PR (see the inventory).
+- [ ] A committed Xenium-shaped golden fixture bundle. Unit tests build their
+      Xenium data in code, and the smoke tests have no Xenium dataset.
+- [ ] E2E for SpatialData (shapes and labels stores), and smoke tests for
+      OME-Zarr and image-only TIFF. Only the nightly examples load an OME-Zarr
+      and a QPTIFF image.
 
 ---
 
@@ -3827,11 +3862,12 @@ Sequencing:
       rendering cost, without behaviour changes.
 - [ ] Hosted Visium HD optimization: profiling, segmentation streaming, Feature
       Slice ranges, memory, and bundles.
-- [ ] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
+- [x] Interface redesign, [Phase 15](#phase-15--interface-redesign): 41 tasks
       in five milestones. Milestones M1 (15 tasks) and M2 (4 tasks) are done;
       M3, the new shell (15.2), is done; M4 (15.3: start screen, Help, Undo,
       Cancel) is done; M5 (15.4: selections, enriched genes, transcript gene
-      legend, minimap, axes) is done. The 15.5 close-out remains.
+      legend, minimap, axes) is done. The 15.5 close-out is done
+      (2026-11-12).
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
