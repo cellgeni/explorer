@@ -55,14 +55,21 @@ const PLATFORM_DEFAULT_KEYS: ReadonlySet<string> = new Set([
 ])
 
 // The state with every default value left out, for a version 2 link
-// (15.1-L). A measure unit is kept when it differs from the mouse coordinate
-// unit, because a link without one measures in that unit.
-export function withoutShareableDefaults(state: ShareableState): ShareableState {
+// (15.1-L). The dataset manifest's defaults replace the app's: a link leaves
+// out the manifest's value and keeps the app default, because a load fills
+// what the link leaves out from the manifest. A measure unit is kept when it
+// differs from the mouse coordinate unit, because a link without one
+// measures in that unit.
+export function withoutShareableDefaults(
+  state: ShareableState,
+  datasetDefaults: ShareableState = {},
+): ShareableState {
   const result: Record<string, unknown> = { ...state }
+  const manifest: Record<string, unknown> = { ...datasetDefaults }
 
-  for (const [key, defaultValue] of Object.entries(DEFAULT_SHAREABLE_STATE)) {
+  for (const [key, appDefault] of Object.entries(DEFAULT_SHAREABLE_STATE)) {
     if (key === 'measurementUnit' || PLATFORM_DEFAULT_KEYS.has(key)) continue
-    if (sameValue(result[key], defaultValue)) delete result[key]
+    if (sameValue(result[key], manifest[key] ?? appDefault)) delete result[key]
   }
 
   const coordinateUnit = state.coordinateUnit ?? DEFAULT_SHAREABLE_STATE.coordinateUnit

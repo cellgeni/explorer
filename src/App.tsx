@@ -57,7 +57,6 @@ import { useRecentDatasets } from './features/start/recentDatasets'
 import { useExamplesIndex } from './features/start/useExamplesIndex'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { isTextEntryTarget } from './features/app-shell/activeToolModel'
-import { ALL_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import {
   TRANSCRIPT_GENE_LEGEND_ID,
   viewerLegendSections,
@@ -168,6 +167,7 @@ import {
   annotationStatusCopy,
   filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
+  linkAnnotationGroupId,
   type AnnotationState,
 } from './features/annotations/annotationModel'
 import {
@@ -369,6 +369,7 @@ export function App({ dependencies }: AppProps = {}) {
       boundaryState,
       cellFeatureMatrixCapabilityState,
       datasetAbout,
+      datasetManifestDefaults,
       datasetPlatform,
       datasetWarmupState,
       diagnosticsState,
@@ -378,6 +379,7 @@ export function App({ dependencies }: AppProps = {}) {
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
       setDatasetAbout,
+      setDatasetManifestDefaults,
       setDatasetPlatform,
       setDatasetWarmupState,
       setDiagnosticsState,
@@ -2455,9 +2457,17 @@ export function App({ dependencies }: AppProps = {}) {
   useEffect(() => {
     const groupIds = initialAnnotationGroupIdsRef.current
 
+    if (groupIds === null || loadedDatasetUrl === null) {
+      return
+    }
+
+    // Only the link's own dataset takes its sets.
+    if (loadedDatasetUrl !== initialShareableState.datasetUrl?.trim()) {
+      initialAnnotationGroupIdsRef.current = null
+      return
+    }
+
     if (
-      groupIds === null ||
-      loadedDatasetUrl === null ||
       annotationGroupState.status !== 'ready' ||
       annotationGroupState.url !== loadedDatasetUrl
     ) {
@@ -2465,18 +2475,24 @@ export function App({ dependencies }: AppProps = {}) {
     }
 
     initialAnnotationGroupIdsRef.current = null
-    const groupId = groupIds.find(
-      (id) =>
-        id === ALL_ANNOTATION_GROUP_ID ||
-        annotationGroupState.groups.some((group) => group.id === id),
-    )
+    const groupId = linkAnnotationGroupId(groupIds, annotationGroupState.groups)
 
     if (groupId !== undefined) {
       setSelectedAnnotationGroupId(groupId)
-      loadAnnotationGroup(groupId)
+      // The commit already applied the link's colour mode; a version 2 link
+      // leaves out the default one. A hand-written link with no version and
+      // no cellColor= colours cells by the set, as choosing it would.
+      loadAnnotationGroup(groupId, {
+        switchColorMode:
+          initialShareableState.linkVersion === undefined &&
+          initialShareableState.observationColorMode === undefined,
+      })
     }
   }, [
     annotationGroupState,
+    initialShareableState.datasetUrl,
+    initialShareableState.linkVersion,
+    initialShareableState.observationColorMode,
     loadAnnotationGroup,
     loadedDatasetUrl,
     setSelectedAnnotationGroupId,
@@ -2842,10 +2858,6 @@ export function App({ dependencies }: AppProps = {}) {
     controls: {
       isDatasetLoaded: loadState.status === 'ready',
       isDatasetLoading: loadState.status === 'loading',
-      geneExpressionColorScale,
-      transcriptDensityColorScale,
-      transcriptExactPointLimit,
-      transcriptPointColorMode,
     },
     initialState: {
       initialShareableState,
@@ -2903,6 +2915,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptCapabilityRequestIdRef: transcriptCapabilityRequestId,
       transcriptRequestIdRef: transcriptRequestId,
       transcriptViewportKeyRef,
+      visiumHdBinRequestIdRef: visiumHdBinRequestId,
     },
     setters: {
       setAnalysisEmbeddingState,
@@ -2918,6 +2931,7 @@ export function App({ dependencies }: AppProps = {}) {
       setImageLayerOpacity,
       setShowTranscriptOverlay,
       setDatasetAbout,
+      setDatasetManifestDefaults,
       setAutoContrastChannelIds,
       setBoundaryElements,
       setBoundaryState,
@@ -3105,17 +3119,33 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
-  // The loaded annotation set for the link; until one loads, the link keeps
-  // the sets it was opened with. Memoised so the link is not rescheduled on
-  // every render.
+  // The loaded annotation set for the link. Until one loads, a link for its
+  // own dataset keeps the sets it was opened with; once the dataset's sets
+  // are listed and none of them matches, or another dataset loads, it drops
+  // them. Memoised so the link is not rescheduled on every render.
   const loadedAnnotationGroupId =
     annotationState.status === 'ready' ? annotationState.groupId : undefined
+  const [linkAnnotationGroupIds, setLinkAnnotationGroupIds] = useState(
+    initialShareableState.annotationGroupIds ?? null,
+  )
+  if (
+    linkAnnotationGroupIds !== null &&
+    loadedDatasetUrl !== null &&
+    (loadedDatasetUrl !== initialShareableState.datasetUrl?.trim() ||
+      (annotationState.status === 'ready' && annotationState.url === loadedDatasetUrl) ||
+      (annotationGroupState.status === 'ready' &&
+        annotationGroupState.url === loadedDatasetUrl &&
+        linkAnnotationGroupId(linkAnnotationGroupIds, annotationGroupState.groups) ===
+          undefined))
+  ) {
+    setLinkAnnotationGroupIds(null)
+  }
   const sharedAnnotationGroupIds = useMemo(
     () =>
       loadedAnnotationGroupId === undefined
-        ? (initialShareableState.annotationGroupIds ?? undefined)
+        ? (linkAnnotationGroupIds ?? undefined)
         : [loadedAnnotationGroupId],
-    [initialShareableState.annotationGroupIds, loadedAnnotationGroupId],
+    [linkAnnotationGroupIds, loadedAnnotationGroupId],
   )
   const sharedPanels = useMemo(() => panelsForLink(shellPanels), [shellPanels])
   const sharedHiddenLayers = useMemo(
@@ -3134,7 +3164,7 @@ export function App({ dependencies }: AppProps = {}) {
     const cell = overviewCells.find((candidate) => candidate.id === cellId)
     if (cell !== undefined) handleViewerCellClick(cell)
   }, [handleViewerCellClick, loadState.status, overviewCells])
-  useShareableUrlHash({
+  const currentShareUrl = useShareableUrlHash({
     dataset: {
       annotationUrl: annotationImportUrl,
       customImageOpacities,
@@ -3142,6 +3172,9 @@ export function App({ dependencies }: AppProps = {}) {
       // The loaded dataset, not the address box: until a load finishes the
       // link keeps the dataset it was opened with (15.1-L).
       datasetUrl: loadedDatasetUrl ?? initialShareableState.datasetUrl ?? '',
+      // A value equal to the manifest's default is left out; one the user set
+      // back to the app default is kept, so the manifest does not replace it.
+      datasetDefaults: datasetManifestDefaults,
       annotationGroupIds: sharedAnnotationGroupIds,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
@@ -3338,6 +3371,7 @@ export function App({ dependencies }: AppProps = {}) {
     setDatasetUrl,
     setDebugLog,
     setShouldLoadMorphology,
+    shareUrl: currentShareUrl,
     shouldLoadMorphology,
     spatialDataControlState,
     visiumControlState,

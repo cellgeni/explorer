@@ -149,6 +149,7 @@ import {
   type VisiumControlState,
 } from '../dataset/visiumModel'
 
+const NO_MANIFEST_DEFAULTS: ShareableState = {}
 export interface UseAppDomainStateOptions {
   readonly initialShareableState: ShareableState
   readonly performanceBudget: PerformanceBudget
@@ -486,6 +487,9 @@ export function useAppDomainState({
   const [, setViewportCellCount] = useState<number | null>(null)
   const [datasetPlatform, setDatasetPlatform] = useState<Platform | null>(null)
   const [datasetAbout, setDatasetAbout] = useState<DatasetManifestAbout | null>(null)
+  // The loaded dataset's manifest defaults, which its links leave out.
+  const [datasetManifestDefaults, setDatasetManifestDefaults] =
+    useState<ShareableState>(NO_MANIFEST_DEFAULTS)
   const [visiumHdControlState, setVisiumHdControlState] = useState<VisiumHdControlState>(
     IDLE_VISIUM_HD_CONTROL_STATE,
   )
@@ -540,6 +544,7 @@ export function useAppDomainState({
       boundaryState,
       cellFeatureMatrixCapabilityState,
       datasetAbout,
+      datasetManifestDefaults,
       datasetPlatform,
       datasetWarmupState,
       diagnosticsState,
@@ -549,6 +554,7 @@ export function useAppDomainState({
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
       setDatasetAbout,
+      setDatasetManifestDefaults,
       setDatasetPlatform,
       setDatasetWarmupState,
       setDiagnosticsState,

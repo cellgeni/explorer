@@ -3276,8 +3276,9 @@ Fixed in one PR after 15.3-D:
 
 Open, for 15.5 or later:
 
-- **Load and link state.** During a pending load, a Visium HD bin or LOD
-  request for the old dataset can still land after the new one commits
+- **Load and link state** (fixed in 15.5-A). During a pending load, a
+  Visium HD bin or LOD request for the old dataset can still land after the
+  new one commits
   (`visiumHdBinRequestId` is not moved on). The commit applies the gene
   scale, density scale, point colour and exact limit captured when the load
   started, undoing changes made meanwhile. `groups=` from the opening link
@@ -3303,19 +3304,50 @@ Open, for 15.5 or later:
   the feature-circle renderer (15.1-J), `createOverviewViewState`, and the
   `danger` Button variant. The tokens' "5.4:1 on its own tint" holds on
   surfaces 0–2 only (4.7:1 on surface 3, still AA). The 15.1-L
-  manifest-defaults gap is still open.
+  manifest-defaults gap is still open (fixed in 15.5-A).
 
 #### 15.5 Close-Out
 
-- [ ] Re-run the eight review tasks on the Xenium demo and Census Visium at
-      1440, 1024 and 390 px, and record the results in the phase record.
-- [ ] Accessibility pass:
+A to C take the open items from the [review after M4](#review-after-m4-2026-11-11)
+(user, 2026-11-12: "implement all of 15.5"); D to F are the close-out
+proper. The re-run (E) comes after the fixes, so it checks what ships.
+
+- [x] **A. Load and link state.** (S)
+  - Done 2026-11-12.
+  - A load's commit now invalidates Visium HD bin-size and LOD reads
+    (`visiumHdBinRequestIdRef`, which has no abort controller), so one for
+    the old dataset cannot land on the new one.
+  - The commit sets the gene scale, density scale, point colour and exact
+    limit from the link, or else keeps the current value through a
+    functional update. Before, it applied the values captured when the load
+    started, undoing changes made while it was pending. The four `controls`
+    inputs of `useDatasetLifecycle` are gone.
+  - `groups=` from the opening link is kept only for its own dataset, until
+    one of its sets loads or the dataset's sets are listed without a match.
+    The link's sets are also applied only to that dataset.
+  - A link's set loads under the link's own `cellColor`
+    (`loadAnnotationGroup(…, { switchColorMode: false })`). A hand-written
+    link with neither `xv` nor `cellColor` still colours by the set, as
+    choosing it would.
+  - `Copy Link` and `Share` copy the link for the current state:
+    `useShareableUrlHash` formats the hash at once, writes the address after
+    160 ms as before, and returns the current link.
+  - The 15.1-L manifest-defaults gap: links leave out values equal to the
+    loaded dataset's manifest defaults (kept as `datasetManifestDefaults`)
+    rather than the app's, so a value set back to the app default is written.
+    An empty `genes=` now means "no genes", for a manifest that sets genes.
+- [ ] **B. Shell and smaller fixes.** (M)
+- [ ] **C. Cleanup.** (S)
+- [ ] **D. Accessibility pass.** (M)
   - the axe baseline from 15.0-F is empty;
   - a keyboard-only run of tasks 1–5;
   - focus order;
   - ARIA for the accordion, drawer and cards.
-- [ ] Record the outcome in this phase, and update the out-of-date test
-      inventory in [§9](#9-testing-and-ci).
+- [ ] **E. Re-run the eight review tasks** on the Xenium demo and Census
+      Visium at 1440, 1024 and 390 px, and record the results in the phase
+      record. (S)
+- [ ] **F. Record the outcome** in this phase, and update the out-of-date test
+      inventory in [§9](#9-testing-and-ci). (S)
 
 #### Testing
 

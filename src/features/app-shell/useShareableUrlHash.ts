@@ -1,6 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { RoiSelection } from '../../data/roiSelection'
-import { formatShareableState, type ShareableViewState } from '../../data/shareableState'
+import {
+  formatShareableState,
+  type ShareableState,
+  type ShareableViewState,
+} from '../../data/shareableState'
 import { readShareableStateFromLocation } from './appShellModel'
 import { withoutShareableDefaults } from './shareableDefaults'
 
@@ -10,6 +14,8 @@ interface ShareableDatasetHashOptions {
   readonly customImageOpacities: readonly number[] | undefined
   readonly customImageUrls: readonly string[]
   readonly datasetUrl: string
+  // The loaded dataset's manifest defaults (15.1-L).
+  readonly datasetDefaults?: ShareableState | undefined
   readonly spatialDataSelection?: {
     readonly spatialDataCoordinateSystem?: string
     readonly spatialDataImage?: string
@@ -97,7 +103,9 @@ function linkedDatasetUrl(): string {
 
 // Writes the view to the address (15.1-L). Opening another dataset adds a
 // history entry, so Back returns to the previous dataset or to the start
-// screen (15.3-C); every other change replaces the current entry.
+// screen (15.3-C); every other change replaces the current entry. The write
+// waits 160 ms for changes to settle; the returned function gives the link
+// for the current state at once, for Copy Link.
 export function useShareableUrlHash({
   dataset,
   genes,
@@ -106,12 +114,13 @@ export function useShareableUrlHash({
   transcripts,
   view,
   onHistoryDatasetChange = reloadPage,
-}: UseShareableUrlHashOptions): void {
+}: UseShareableUrlHashOptions): () => string {
   const {
     annotationGroupIds,
     annotationUrl,
     customImageOpacities,
     customImageUrls,
+    datasetDefaults,
     datasetUrl,
   } = dataset
   const spatialDataCoordinateSystem =
@@ -163,6 +172,8 @@ export function useShareableUrlHash({
   // Set once Back or Forward is reloading the page, so no write lands on the
   // entry it moved to.
   const leavingRef = useRef(false)
+  // The hash for the current state, ahead of the address.
+  const hashRef = useRef<string | null>(null)
 
   useEffect(() => {
     datasetUrlRef.current = datasetUrl
@@ -186,11 +197,9 @@ export function useShareableUrlHash({
       return
     }
 
-    const timeout = window.setTimeout(() => {
-      if (leavingRef.current) return
-
-      const hash = formatShareableState(
-        withoutShareableDefaults({
+    const hash = formatShareableState(
+      withoutShareableDefaults(
+        {
           datasetUrl,
           annotationUrl,
           ...(annotationGroupIds === undefined ? {} : { annotationGroupIds }),
@@ -245,8 +254,14 @@ export function useShareableUrlHash({
           ...(visiumImage === undefined ? {} : { visiumImage }),
           ...(visiumLibrary === undefined ? {} : { visiumLibrary }),
           ...(visiumOffTissue === undefined ? {} : { visiumOffTissue }),
-        }),
-      )
+        },
+        datasetDefaults,
+      ),
+    )
+    hashRef.current = hash
+
+    const timeout = window.setTimeout(() => {
+      if (leavingRef.current) return
 
       if (window.location.hash !== hash) {
         const url = `${window.location.pathname}${window.location.search}${hash}`
@@ -276,6 +291,7 @@ export function useShareableUrlHash({
     coordinateUnit,
     customImageOpacities,
     customImageUrls,
+    datasetDefaults,
     datasetUrl,
     geneExpressionColorScale,
     geneExpressionDetailMode,
@@ -313,4 +329,11 @@ export function useShareableUrlHash({
     transcriptPointColorMode,
     transcriptPointSize,
   ])
+
+  return useCallback(() => {
+    const { origin, pathname, search, href } = window.location
+    return hashRef.current === null
+      ? href
+      : `${origin}${pathname}${search}${hashRef.current}`
+  }, [])
 }

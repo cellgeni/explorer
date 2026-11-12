@@ -813,10 +813,15 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 160 ms, with `xv=2`); query-string values are also read on startup, and hash
 values win. Numbers are rounded to three decimals. Version 2 links leave out
 every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a missing
-parameter means the default. `cellBounds` and `nucleusBounds` are always
-written, because a load picks their default by platform when a link is
-silent. Version 1 links, which wrote every value, still open as before. `Share` in the top bar copies the address and says "Link
-copied".
+parameter means the default. For a dataset with a
+[manifest](./dataset-manifest.md#defaults), the manifest's `defaults` take the
+place of the app's: a value equal to the manifest's is left out, and one set
+back to the app default is written, so the manifest does not bring its value
+back. `cellBounds` and `nucleusBounds` are always written, because a load
+picks their default by platform when a link is silent. Version 1 links, which
+wrote every value, still open as before. `Share` in the top bar and
+`Copy Link` copy the link for the current state, which the address shows up
+to 160 ms later, and say "Link copied".
 
 Opening another dataset adds a browser history entry; every other change
 replaces the current one (15.3-C). Back returns to the previous dataset, or to
@@ -827,9 +832,9 @@ the page reloads that entry's link, with its view and settings.
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                                                                                                                                                                 |
 | `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                                                                                                                                                                                                                                                                                         |
-| `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically)                                                                                                                                                                                                                                          |
+| `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically, keeping the link's `cellColor`; a hand-written link without `xv` or `cellColor` colours cells by it). Until it loads, a link for the same dataset keeps the opening link's `groups`; another dataset's link leaves it out                |
 | `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                                                                                                                                                                                                                                             |
-| `genes`                                                                                                   | Selected genes (comma-separated)                                                                                                                                                                                                                                                                                                       |
+| `genes`                                                                                                   | Selected genes (comma-separated). Empty (`genes=`) when the user removed a manifest's default genes                                                                                                                                                                                                                                    |
 | `view`                                                                                                    | Target x, y, z, zoom                                                                                                                                                                                                                                                                                                                   |
 | `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens` |

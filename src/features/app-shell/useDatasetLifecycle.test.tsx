@@ -131,10 +131,6 @@ function Probe({
     controls: {
       isDatasetLoaded,
       isDatasetLoading,
-      geneExpressionColorScale: 'plasma',
-      transcriptDensityColorScale: 'thermal',
-      transcriptExactPointLimit: 100_000,
-      transcriptPointColorMode: 'feature',
     },
     initialState: {
       initialShareableState,
@@ -192,6 +188,7 @@ function Probe({
       transcriptCapabilityRequestIdRef: numberRef(),
       transcriptRequestIdRef: numberRef(),
       transcriptViewportKeyRef: stringRef(),
+      visiumHdBinRequestIdRef: refs.visiumHdBinRequestIdRef,
     },
     setters: {
       setAnalysisEmbeddingState: noopSetter,
@@ -291,6 +288,7 @@ function createLifecycleRefs() {
     roiTranscriptExportAbortRef: abortRef(),
     transcriptAbortRef: abortRef(),
     transcriptCapabilityAbortRef: abortRef(),
+    visiumHdBinRequestIdRef: numberRef(),
   }
 }
 
@@ -532,6 +530,46 @@ describe('useDatasetLifecycle', () => {
         'cells',
         'load:ready',
       ])
+    })
+
+    it('keeps colours changed while loading, and drops old Visium HD reads', async () => {
+      const refs = createLifecycleRefs()
+      const startDatasetLoadRef = startLoad()
+      const setGeneExpressionColorScale = vi.fn()
+      const setTranscriptDensityColorScale = vi.fn()
+      const setTranscriptPointColorMode = vi.fn()
+      const setTranscriptExactPointLimit = vi.fn()
+
+      render(
+        <Probe
+          refs={refs}
+          isDatasetLoaded
+          loadDatasetOverview={vi.fn(async () => [])}
+          startDatasetLoadRef={startDatasetLoadRef}
+          extraSetters={{
+            setGeneExpressionColorScale,
+            setTranscriptDensityColorScale,
+            setTranscriptExactPointLimit,
+            setTranscriptPointColorMode,
+          }}
+        />,
+      )
+
+      await act(async () => {
+        await startDatasetLoadRef.current?.(NEXT_URL, false)
+      })
+
+      // A Visium HD bin or LOD read for the old dataset is now stale.
+      expect(refs.visiumHdBinRequestIdRef.current).toBe(1)
+      // Each is set from the current value, not the one when the load began.
+      function keeps(setter: ReturnType<typeof vi.fn>, current: unknown) {
+        const update = setter.mock.lastCall?.[0] as (value: unknown) => unknown
+        expect(update(current)).toBe(current)
+      }
+      keeps(setGeneExpressionColorScale, 'magma')
+      keeps(setTranscriptDensityColorScale, 'viridis')
+      keeps(setTranscriptPointColorMode, 'quality')
+      keeps(setTranscriptExactPointLimit, 42_000)
     })
 
     it('renders the cleared state before the new one, also for the same URL', async () => {
@@ -781,6 +819,7 @@ describe('useDatasetLifecycle', () => {
     const setShowNucleusBoundaries = vi.fn()
     const setLoadState = vi.fn()
     const setDatasetAbout = vi.fn()
+    const setDatasetManifestDefaults = vi.fn()
 
     // The shared link names the dataset, so the lifecycle loads it on mount.
     render(
@@ -790,6 +829,7 @@ describe('useDatasetLifecycle', () => {
         detectSpatialDataset={detectSpatialDataset}
         extraSetters={{
           setDatasetAbout,
+          setDatasetManifestDefaults,
           setGeneExpressionColorScale,
           setImageLayerOpacity,
           setObservationColorMode,
@@ -824,6 +864,10 @@ describe('useDatasetLifecycle', () => {
     expect(setShowNucleusBoundaries).toHaveBeenLastCalledWith(true)
     expect(setImageLayerOpacity).toHaveBeenCalledWith(0.4)
     expect(setObservationColorMode).toHaveBeenLastCalledWith('cell-area')
+    // The dataset's links leave the manifest's values out (15.5).
+    expect(setDatasetManifestDefaults).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selectedGenes: ['EPCAM'], imageOpacity: 0.4 }),
+    )
     // Unknown values are reported and leave the control alone.
     expect(setGeneExpressionColorScale).not.toHaveBeenCalledWith('rainbow')
     expect(appendFallbackNotice).toHaveBeenCalledWith(

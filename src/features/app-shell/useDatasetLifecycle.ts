@@ -266,10 +266,6 @@ interface UseDatasetLifecycleControls {
   readonly isDatasetLoaded: boolean
   // A load with nothing on screen is under way, for Cancel (15.3-D).
   readonly isDatasetLoading: boolean
-  readonly geneExpressionColorScale: GeneExpressionColorScale
-  readonly transcriptDensityColorScale: TranscriptDensityColorScale
-  readonly transcriptExactPointLimit: number
-  readonly transcriptPointColorMode: TranscriptPointColorMode
 }
 
 interface UseDatasetLifecycleInitialState {
@@ -332,6 +328,8 @@ interface UseDatasetLifecycleRefs {
   readonly transcriptCapabilityRequestIdRef: MutableRef<number>
   readonly transcriptRequestIdRef: MutableRef<number>
   readonly transcriptViewportKeyRef: MutableRef<string | null>
+  // Visium HD bin-size and LOD reads, which have no abort controller.
+  readonly visiumHdBinRequestIdRef: MutableRef<number>
 }
 
 interface UseDatasetLifecycleSetters {
@@ -350,6 +348,8 @@ interface UseDatasetLifecycleSetters {
   readonly setShowTranscriptOverlay?: Setter<boolean>
   // What the info drawer shows about a dataset with a manifest.
   readonly setDatasetAbout?: Setter<DatasetManifestAbout | null>
+  // The manifest's defaults, which the dataset's links leave out.
+  readonly setDatasetManifestDefaults?: Setter<ShareableState>
   readonly setAutoContrastChannelIds: Setter<readonly string[]>
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
   readonly setNucleusBoundaryElements?: Setter<readonly SpatialElement[]>
@@ -456,14 +456,7 @@ export function useDatasetLifecycle({
     queueAutoContrast,
     recordTelemetry,
   },
-  controls: {
-    isDatasetLoaded,
-    isDatasetLoading,
-    geneExpressionColorScale,
-    transcriptDensityColorScale,
-    transcriptExactPointLimit,
-    transcriptPointColorMode,
-  },
+  controls: { isDatasetLoaded, isDatasetLoading },
   initialState: { initialShareableState },
   loaders: {
     detectSpatialDataset,
@@ -518,6 +511,7 @@ export function useDatasetLifecycle({
     transcriptCapabilityRequestIdRef,
     transcriptRequestIdRef,
     transcriptViewportKeyRef,
+    visiumHdBinRequestIdRef,
   },
   setters: {
     setAnalysisEmbeddingState,
@@ -533,6 +527,7 @@ export function useDatasetLifecycle({
     setImageLayerOpacity,
     setShowTranscriptOverlay,
     setDatasetAbout,
+    setDatasetManifestDefaults,
     setAutoContrastChannelIds,
     setBoundaryElements,
     setNucleusBoundaryElements,
@@ -979,12 +974,15 @@ export function useDatasetLifecycle({
             abortRef: customMorphologyLayerAbortRef,
             requestIdRef: customMorphologyLayerRequestIdRef,
           })
+          // A bin or LOD read for the old dataset must not land on this one.
+          visiumHdBinRequestIdRef.current += 1
           clearTimeoutRef(magicLensDebounceRef)
           clearTimeoutRef(roiGeneViewportWarmupTimeoutRef)
           roiGeneViewportWarmupKeyRef.current = null
 
           setDatasetPlatform(null)
           setDatasetAbout?.(null)
+          setDatasetManifestDefaults?.({})
           setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
           setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
           setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
@@ -1040,33 +1038,33 @@ export function useDatasetLifecycle({
                   'auto')
               : 'auto',
           )
+          // A link's colours and limit win; otherwise the current ones stay,
+          // including any changed while this load was pending.
           setGeneExpressionColorScale(
-            shouldRestoreSharedState
-              ? (parseGeneExpressionColorScale(sharedState?.geneExpressionColorScale) ??
-                  geneExpressionColorScale)
-              : geneExpressionColorScale,
+            (current) =>
+              (shouldRestoreSharedState
+                ? parseGeneExpressionColorScale(sharedState?.geneExpressionColorScale)
+                : undefined) ?? current,
           )
           setTranscriptDensityColorScale(
-            shouldRestoreSharedState
-              ? (parseTranscriptDensityColorScale(
-                  sharedState?.transcriptDensityColorScale,
-                ) ?? transcriptDensityColorScale)
-              : transcriptDensityColorScale,
+            (current) =>
+              (shouldRestoreSharedState
+                ? parseTranscriptDensityColorScale(
+                    sharedState?.transcriptDensityColorScale,
+                  )
+                : undefined) ?? current,
           )
           setTranscriptPointColorMode(
-            shouldRestoreSharedState
-              ? (parseTranscriptPointColorMode(sharedState?.transcriptPointColorMode) ??
-                  transcriptPointColorMode)
-              : transcriptPointColorMode,
+            (current) =>
+              (shouldRestoreSharedState
+                ? parseTranscriptPointColorMode(sharedState?.transcriptPointColorMode)
+                : undefined) ?? current,
           )
-          setTranscriptExactPointLimit(
-            shouldRestoreSharedState
-              ? sharedState?.transcriptExactPointLimit === undefined
-                ? transcriptExactPointLimit
-                : normalizeTranscriptExactPointLimit(
-                    sharedState.transcriptExactPointLimit,
-                  )
-              : transcriptExactPointLimit,
+          setTranscriptExactPointLimit((current) =>
+            shouldRestoreSharedState &&
+            sharedState?.transcriptExactPointLimit !== undefined
+              ? normalizeTranscriptExactPointLimit(sharedState.transcriptExactPointLimit)
+              : current,
           )
           setSelectedGenes(sharedSelectedGenes)
           // A shared link's box, lasso or measure tool stays on (15.2-H).
@@ -1152,6 +1150,7 @@ export function useDatasetLifecycle({
         const manifestDefaults = manifestDefaultsToShareableState(manifest?.defaults)
         whenCommitted(() => {
           setDatasetAbout?.(datasetManifestAbout(manifest))
+          setDatasetManifestDefaults?.(manifestDefaults.state)
         })
         const restoreState: ShareableState = {
           ...manifestDefaults.state,
@@ -1936,6 +1935,7 @@ export function useDatasetLifecycle({
     abortActiveRequest(datasetAbortRef)
     clearUnreadyDataset(IDLE_DATASET_LOAD_STATE)
     setDatasetAbout?.(null)
+    setDatasetManifestDefaults?.({})
     appendDebugEvent(`Cancelled loading ${shortDatasetLabel(latest.url)}`)
   }
 

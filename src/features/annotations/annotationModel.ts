@@ -1,4 +1,7 @@
-import type { AnnotationGroupOption } from '../../data/datasetAnnotations'
+import {
+  ALL_ANNOTATION_GROUP_ID,
+  type AnnotationGroupOption,
+} from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
 import { slug } from '../../utils/slug'
@@ -390,4 +393,14 @@ export function defaultAnnotationGroupId(
   groups: readonly AnnotationGroupOption[],
 ): string | undefined {
   return (groups.find((group) => group.label === 'graphclust') ?? groups[0])?.id
+}
+
+// The first set a link's groups= names that the dataset lists (15.1-L).
+export function linkAnnotationGroupId(
+  groupIds: readonly string[],
+  groups: readonly AnnotationGroupOption[],
+): string | undefined {
+  return groupIds.find(
+    (id) => id === ALL_ANNOTATION_GROUP_ID || groups.some((group) => group.id === id),
+  )
 }

@@ -199,6 +199,9 @@ export interface DatasetInfoModelInput {
   readonly setDatasetUrl: (url: string) => void
   readonly setDebugLog: Dispatch<SetStateAction<readonly DebugLogEntry[]>>
   readonly setShouldLoadMorphology: Dispatch<SetStateAction<boolean>>
+  // The link for the current state, which the address shows up to 160 ms
+  // later (useShareableUrlHash).
+  readonly shareUrl: () => string
   readonly shouldLoadMorphology: boolean
   readonly spatialDataControlState: SpatialDataControlState
   readonly visiumControlState: VisiumControlState
@@ -232,6 +235,7 @@ export function useDatasetInfoModel({
   setDatasetUrl,
   setDebugLog,
   setShouldLoadMorphology,
+  shareUrl,
   shouldLoadMorphology,
   spatialDataControlState,
   visiumControlState,
@@ -270,7 +274,7 @@ export function useDatasetInfoModel({
       canCopyLink: isDatasetLoaded,
       onCopyLink: async () => {
         try {
-          await navigator.clipboard.writeText(window.location.href)
+          await navigator.clipboard.writeText(shareUrl())
           appendDebugEvent('Link copied')
           return true
         } catch {

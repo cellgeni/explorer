@@ -104,7 +104,12 @@ interface UseAnnotationWorkflowResult {
   readonly handleImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly handleLoadAnnotations: () => void
   // Loads one of the dataset's annotation sets, such as one named by a link.
-  readonly loadAnnotationGroup: (groupId: string) => void
+  // Loading a set colours cells by it, unless switchColorMode is false (a
+  // link's set, under the link's own colour mode).
+  readonly loadAnnotationGroup: (
+    groupId: string,
+    options?: { readonly switchColorMode?: boolean },
+  ) => void
   readonly handleRemoveCellMetadataTrack: (trackId: string) => void
   readonly handleRemoveAnnotation: (annotationId: string) => void
   readonly handleSaveRoiAnnotation: () => void
@@ -146,7 +151,10 @@ export function useAnnotationWorkflow({
   } = setters
 
   const loadAnnotationGroup = useCallback(
-    (selectedGroupId: string) => {
+    (
+      selectedGroupId: string,
+      { switchColorMode = true }: { readonly switchColorMode?: boolean } = {},
+    ) => {
       if (loadState.status !== 'ready' || annotationState.status === 'loading') {
         return
       }
@@ -178,7 +186,7 @@ export function useAnnotationWorkflow({
           )
           setAnnotationColors((current) => colorsForAnnotations(annotations, current))
           setHiddenAnnotationIds([])
-          if (annotations.length > 0) {
+          if (switchColorMode && annotations.length > 0) {
             setObservationColorMode('annotations')
           }
           appendDebugEvent(

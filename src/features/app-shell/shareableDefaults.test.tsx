@@ -92,4 +92,20 @@ describe('DEFAULT_SHAREABLE_STATE', () => {
       withoutShareableDefaults({ coordinateUnit: 'px', measurementUnit: 'px' }),
     ).toEqual({ coordinateUnit: 'px' })
   })
+
+  it('leaves out the manifest’s defaults and keeps an app default the user went back to', () => {
+    const manifest = { imageOpacity: 0.5, selectedGenes: ['Snap25'] }
+
+    // The user kept the manifest's image opacity and removed its gene.
+    expect(
+      withoutShareableDefaults(
+        { imageOpacity: 0.5, selectedGenes: [], cellFillOpacity: 0.7 },
+        manifest,
+      ),
+    ).toEqual({ selectedGenes: [], cellFillOpacity: 0.7 })
+    // Back at the app's opacity: written, or the manifest's 0.5 would return.
+    expect(withoutShareableDefaults({ imageOpacity: 1 }, manifest)).toEqual({
+      imageOpacity: 1,
+    })
+  })
 })

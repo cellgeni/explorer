@@ -94,7 +94,8 @@ export function parseShareableState(hash: string): ShareableState {
   const annotationGroupIds = readCsv(params, 'groups')
   const customImageUrls = readStrings(params, 'customImageUrl')
   const customImageOpacities = readUnitNumbers(params, 'customImageOpacity')
-  const selectedGenes = readCsv(params, 'genes')
+  // An empty genes= clears a dataset manifest's genes.
+  const selectedGenes = readCsvAllowEmpty(params, 'genes')
   const viewState = parseViewState(params.get('view'))
   const roiSelection = parseRoiSelection(params.get('roi'))
   const activeTab = readString(params, 'tab')
@@ -376,7 +377,9 @@ export function formatShareableState(state: ShareableState): string {
     }
   }
 
-  if (state.selectedGenes !== undefined && state.selectedGenes.length > 0) {
+  // Written even when empty, which a link does only to clear a manifest's
+  // genes (withoutShareableDefaults leaves out the usual empty list).
+  if (state.selectedGenes !== undefined) {
     params.set('genes', state.selectedGenes.join(','))
   }
 
