@@ -80,6 +80,8 @@ export interface MetadataTracksModel {
 export interface GeometricShapesModel {
   readonly enabled: boolean
   readonly shapes: readonly GeometricAnnotationFeature[]
+  // Why the last import added no shapes.
+  readonly importError: string | null
   readonly onImportFile: (file: File | null) => void
   readonly onExport: () => void
   readonly onClear: () => void
@@ -97,6 +99,7 @@ export interface AnnotationsSectionModelInput {
   readonly annotationPlacedCellIds: PlacedCellIds | null
   readonly annotationState: AnnotationState
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
+  readonly geometricAnnotationImportError: string | null
   readonly geometricAnnotations: readonly GeometricAnnotationFeature[]
   readonly geometricAnnotationsEnabled: boolean
   readonly handleAnnotationColorChange: (annotationId: string, color: string) => void
@@ -143,6 +146,7 @@ export function useAnnotationsSectionModel({
   annotationPlacedCellIds,
   annotationState,
   cellMetadataTracks,
+  geometricAnnotationImportError,
   geometricAnnotations,
   geometricAnnotationsEnabled,
   handleAnnotationColorChange,
@@ -239,6 +243,7 @@ export function useAnnotationsSectionModel({
     shapes: {
       enabled: geometricAnnotationsEnabled,
       shapes: geometricAnnotations,
+      importError: geometricAnnotationImportError,
       onImportFile: (file) => {
         void handleImportGeometricAnnotations(file)
       },

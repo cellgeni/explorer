@@ -131,6 +131,75 @@ describe('morphology image loader', () => {
     }
   })
 
+  it('opens the next image experiment.xenium names when the first fails to open', async () => {
+    const baseUrl = 'https://example.test/xenium'
+    const loader = {} as TiffPyramidLoader
+    const fetcher = vi.fn(async () =>
+      Response.json({
+        images: {
+          morphology_filepath: 'morphology.ome.tif',
+          morphology_focus_filepath: 'morphology_focus/morphology_focus_0000.ome.tif',
+        },
+      }),
+    )
+    const openImage = vi.fn(async (url: string) => {
+      if (url.includes('morphology_focus')) {
+        throw new Error('Unsupported TIFF compression 34712.')
+      }
+      return loader
+    })
+    const onFallback = vi.fn()
+
+    await expect(
+      loadMorphologyImage(baseUrl, { fetcher, openImage, onFallback }),
+    ).resolves.toMatchObject({ url: `${baseUrl}/morphology.ome.tif` })
+    expect(openImage).toHaveBeenCalledTimes(2)
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Morphology image',
+        message:
+          'morphology_focus/morphology_focus_0000.ome.tif could not be opened (Unsupported TIFF compression 34712.), so the app opened morphology.ome.tif, the next image named in experiment.xenium.',
+      }),
+    )
+  })
+
+  it('reports the preferred image error when every image fails to open', async () => {
+    const openImage = vi.fn(async (url: string) => {
+      throw new Error(`Cannot open ${url.split('/').at(-1)}.`)
+    })
+
+    await expect(
+      loadMorphologyImage('https://example.test/xenium/', {
+        candidates: [
+          'morphology_focus/morphology_focus_0000.ome.tif',
+          'morphology.ome.tif',
+        ],
+        openImage,
+      }),
+    ).rejects.toThrow('Cannot open morphology_focus_0000.ome.tif.')
+    expect(openImage).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not try the next image after the load is cancelled', async () => {
+    const controller = new AbortController()
+    const openImage = vi.fn(async () => {
+      controller.abort()
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    })
+
+    await expect(
+      loadMorphologyImage('https://example.test/xenium/', {
+        candidates: [
+          'morphology_focus/morphology_focus_0000.ome.tif',
+          'morphology.ome.tif',
+        ],
+        openImage,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(openImage).toHaveBeenCalledOnce()
+  })
+
   it('reports a failed image request as a likely missing file on hosts that hide error responses', async () => {
     const openImage = vi.fn(async () => {
       throw new TypeError('Failed to fetch')

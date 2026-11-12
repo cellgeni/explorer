@@ -174,6 +174,8 @@ import {
 } from './features/annotations/annotationModel'
 import {
   geometricAnnotationFromRoiSelection,
+  geometricAnnotationsEmptyMessage,
+  geometricAnnotationsImportFailedMessage,
   geometricAnnotationsToGeoJson,
   parseGeometricAnnotationsGeoJson,
   removeGeometricAnnotation,
@@ -335,6 +337,7 @@ export function App({ dependencies }: AppProps = {}) {
       annotationImportUrl,
       annotationState,
       cellMetadataTracks,
+      geometricAnnotationImportError,
       geometricAnnotations,
       hiddenAnnotationIds,
       hiddenAnnotationSetIds,
@@ -345,6 +348,7 @@ export function App({ dependencies }: AppProps = {}) {
       setAnnotationImportUrl,
       setAnnotationState,
       setCellMetadataTracks,
+      setGeometricAnnotationImportError,
       setGeometricAnnotations,
       setHiddenAnnotationIds,
       setHiddenAnnotationSetIds,
@@ -1560,6 +1564,7 @@ export function App({ dependencies }: AppProps = {}) {
       recordTelemetry,
     },
     controls: {
+      datasetPlatform,
       ...(diagnosticsVisiumHdBinSize === undefined
         ? {}
         : { visiumHdBinSizeMicrometers: diagnosticsVisiumHdBinSize }),
@@ -2273,11 +2278,13 @@ export function App({ dependencies }: AppProps = {}) {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
     setGeometricAnnotations([])
+    setGeometricAnnotationImportError(null)
     setFallbackNotices([])
   }, [
     clearVisiumHdExpressionProfileState,
     clearVisiumHdRoiState,
     setFallbackNotices,
+    setGeometricAnnotationImportError,
     setGeometricAnnotations,
   ])
   const handleBeforeVisiumHdBinSizeChange = useCallback(() => {
@@ -2348,21 +2355,27 @@ export function App({ dependencies }: AppProps = {}) {
         })
 
         if (imported.length === 0) {
+          setGeometricAnnotationImportError(geometricAnnotationsEmptyMessage(file.name))
           appendDebugEvent('GeoJSON annotations empty')
           return
         }
 
+        setGeometricAnnotationImportError(null)
         setGeometricAnnotations((current) => [...imported, ...current])
         appendDebugEvent(
           `GeoJSON annotations imported: ${imported.length.toLocaleString()} shapes`,
         )
-      } catch {
+      } catch (error) {
+        setGeometricAnnotationImportError(
+          geometricAnnotationsImportFailedMessage(file.name, error),
+        )
         appendDebugEvent('GeoJSON annotation import failed')
       }
     },
     [
       appendDebugEvent,
       platformAdapter.kind,
+      setGeometricAnnotationImportError,
       setGeometricAnnotations,
       viewerMicrometersPerPixel,
     ],
@@ -3574,6 +3587,7 @@ export function App({ dependencies }: AppProps = {}) {
     annotationPlacedCellIds,
     annotationState,
     cellMetadataTracks,
+    geometricAnnotationImportError,
     geometricAnnotations,
     geometricAnnotationsEnabled:
       platformAdapter.capabilities.geometricAnnotations && loadState.status === 'ready',

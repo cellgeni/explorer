@@ -73,8 +73,10 @@ importer accepts a GeoJSON `Feature` or `FeatureCollection` with Polygon or
 MultiPolygon geometry. Each imported feature becomes a geometric annotation
 with label, color, visibility, and remove controls. Features with `null`
 geometry are skipped; any other geometry type (Point, LineString, …) rejects
-the whole file. A failed import only adds "GeoJSON annotation import failed"
-to the info drawer's activity log; the reason is not shown.
+the whole file. When an import adds no shapes, a message under the buttons says
+why (for example "Could not import region.geojson. GeoJSON geometry must be
+Polygon or MultiPolygon.", or that the file is not valid JSON or has no
+polygons). The next import, or loading another dataset, clears it.
 
 The importer reads these optional properties:
 

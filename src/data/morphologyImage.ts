@@ -83,14 +83,38 @@ export async function loadMorphologyImage(
       ? await loadMorphologyImageCandidatesFromManifest(baseUrl, fetcher, options.signal)
       : [manifestImage.url])
 
-  const candidate = firstListedCandidate(baseUrl, candidates, options.onFallback)
+  const listed = candidates.filter(
+    (path) => !isListedAsMissing(datasetFileUrl(baseUrl, path)),
+  )
+  const failures: MorphologyImageCandidateFailure[] = []
 
-  if (candidate !== undefined) {
+  // Open the first image that works, so a broken first path does not hide the
+  // others experiment.xenium names.
+  for (const candidate of listed) {
     const url = datasetFileUrl(baseUrl, candidate)
-    const loader = await openMorphologyImageLoader(openImage, url, {
-      onFallback: options.onFallback,
-      signal: options.signal,
-      zchunkStoreUrl,
+    let loader: ImagePyramidLoader
+
+    try {
+      loader = await openMorphologyImageLoader(openImage, url, {
+        onFallback: options.onFallback,
+        signal: options.signal,
+        zchunkStoreUrl,
+      })
+    } catch (error) {
+      if (options.signal?.aborted === true || isAbortError(error)) {
+        throw error
+      }
+
+      failures.push({ path: candidate, error })
+      continue
+    }
+
+    notifyImageCandidateFallback(options.onFallback, baseUrl, {
+      opened: candidate,
+      skipped: candidates
+        .slice(0, candidates.indexOf(candidate))
+        .filter((path) => !listed.includes(path)),
+      failures,
     })
 
     return createMorphologyImage({
@@ -102,6 +126,11 @@ export async function loadMorphologyImage(
       ...(zchunkStoreUrl === undefined ? {} : { zchunkStoreUrl }),
       ...(options.zPlane === undefined ? {} : { zPlane: options.zPlane }),
     })
+  }
+
+  // Every listed image failed: report the preferred one.
+  if (failures[0] !== undefined) {
+    throw failures[0].error
   }
 
   if (candidates.length > 0) {
@@ -118,30 +147,65 @@ export async function loadMorphologyImage(
   throw new Error('No supported Xenium OME-TIFF image was found.')
 }
 
-// The first image path that the dataset folder's listing does not rule out.
-// Without a listing that is the first path, as before.
-function firstListedCandidate(
-  baseUrl: string,
-  candidates: readonly string[],
+interface MorphologyImageCandidateFailure {
+  readonly path: string
+  readonly error: unknown
+}
+
+// Says which earlier image paths were passed over: missing from the dataset
+// folder's listing, or failing to open.
+function notifyImageCandidateFallback(
   onFallback: FallbackNotifier | undefined,
-): string | undefined {
-  const index = candidates.findIndex(
-    (path) => !isListedAsMissing(datasetFileUrl(baseUrl, path)),
-  )
-  const candidate = candidates[index]
+  baseUrl: string,
+  {
+    opened,
+    skipped,
+    failures,
+  }: {
+    readonly opened: string
+    readonly skipped: readonly string[]
+    readonly failures: readonly MorphologyImageCandidateFailure[]
+  },
+): void {
+  const reasons: string[] = []
 
-  if (candidate !== undefined && index > 0) {
-    const skipped = candidates.slice(0, index)
-
-    notifyFallback(onFallback, {
-      source: 'Morphology image',
-      message: `${skipped.join(', ')} ${skipped.length === 1 ? 'is' : 'are'} not in the dataset folder listing, so the app opened ${candidate}, the next image named in experiment.xenium.`,
-      action: 'Add the missing image to the dataset folder to show it instead.',
-      coalesceKey: `morphology-image-candidate:${baseUrl}`,
-    })
+  if (skipped.length > 0) {
+    reasons.push(
+      `${skipped.join(', ')} ${skipped.length === 1 ? 'is' : 'are'} not in the dataset folder listing`,
+    )
   }
 
-  return candidate
+  const firstFailure = failures[0]
+
+  if (firstFailure !== undefined) {
+    reasons.push(
+      `${failures.map((failure) => failure.path).join(', ')} could not be opened (${errorMessage(firstFailure.error)})`,
+    )
+  }
+
+  if (reasons.length === 0) {
+    return
+  }
+
+  notifyFallback(onFallback, {
+    source: 'Morphology image',
+    message: `${reasons.join(', and ')}, so the app opened ${opened}, the next image named in experiment.xenium.`,
+    action:
+      failures.length > 0
+        ? 'Check that the image path is readable to show it instead.'
+        : 'Add the missing image to the dataset folder to show it instead.',
+    coalesceKey: `morphology-image-candidate:${baseUrl}`,
+  })
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error && error.message.length > 0
+    ? error.message
+    : String(error)
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 export async function loadCustomMorphologyLayer(

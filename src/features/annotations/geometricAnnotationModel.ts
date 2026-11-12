@@ -98,6 +98,25 @@ export function parseGeometricAnnotationsGeoJson(
   })
 }
 
+// Shown under Import GeoJSON when a file adds no shapes.
+export function geometricAnnotationsEmptyMessage(fileName: string): string {
+  return `${fileName} has no Polygon or MultiPolygon shapes.`
+}
+
+export function geometricAnnotationsImportFailedMessage(
+  fileName: string,
+  error: unknown,
+): string {
+  const reason =
+    error instanceof SyntaxError
+      ? 'The file is not valid JSON.'
+      : error instanceof Error && error.message.length > 0
+        ? error.message
+        : 'The file could not be read.'
+
+  return `Could not import ${fileName}. ${reason}`
+}
+
 export function geometricAnnotationFromRoiSelection(options: {
   readonly id: string
   readonly label: string

@@ -354,6 +354,7 @@ export function testAnnotationsSectionModel(
     shapes: {
       enabled: true,
       shapes: [],
+      importError: null,
       onImportFile: vi.fn(),
       onExport: vi.fn(),
       onClear: vi.fn(),

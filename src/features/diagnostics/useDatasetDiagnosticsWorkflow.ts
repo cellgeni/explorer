@@ -1,6 +1,7 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
 import { summarizeDatasetDiagnostics } from '../../data/datasetDiagnostics'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
+import type { Platform } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetDiagnosticsRunner } from '../app-shell/appDependencies'
 import {
@@ -24,7 +25,11 @@ import {
   readErrorMessage,
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
-import { createDiagnosticsDump, type DiagnosticsDumpOptions } from './diagnosticsDump'
+import {
+  createDiagnosticsDump,
+  diagnosticsDumpFileName,
+  type DiagnosticsDumpOptions,
+} from './diagnosticsDump'
 
 interface MutableRef<T> {
   current: T
@@ -36,6 +41,7 @@ interface DatasetDiagnosticsWorkflowCallbacks {
 }
 
 interface DatasetDiagnosticsWorkflowControls {
+  readonly datasetPlatform: Platform | null
   readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
 }
 
@@ -78,7 +84,7 @@ export function useDatasetDiagnosticsWorkflow({
   setters,
 }: UseDatasetDiagnosticsWorkflowOptions): UseDatasetDiagnosticsWorkflowResult {
   const { appendDebugEvent, recordTelemetry } = callbacks
-  const { visiumHdBinSizeMicrometers } = controls
+  const { datasetPlatform, visiumHdBinSizeMicrometers } = controls
   const { runDatasetDiagnostics } = loaders
   const { diagnosticsAbortRef } = refs
   const { setDiagnosticsState } = setters
@@ -203,7 +209,7 @@ export function useDatasetDiagnosticsWorkflow({
 
   const handleDownloadDiagnostics = useCallback(() => {
     downloadTextFile(
-      'xenium-diagnostics.json',
+      diagnosticsDumpFileName(datasetPlatform, diagnosticsState),
       JSON.stringify(
         createDiagnosticsDump({
           openPanels,
@@ -256,6 +262,7 @@ export function useDatasetDiagnosticsWorkflow({
     appendDebugEvent,
     boundaryCellLimit,
     coordinateUnit,
+    datasetPlatform,
     datasetUrl,
     debugLog,
     diagnosticsState,

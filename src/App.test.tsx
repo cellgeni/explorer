@@ -437,6 +437,28 @@ describe('App', () => {
       expect(screen.getByRole('heading', { name: 'GeoJSON shapes' })).toBeInTheDocument()
       expect(screen.queryByRole('combobox', { name: 'Annotation set' })).toBeNull()
 
+      // A failed import says why, and the next good import clears it.
+      fireEvent.change(screen.getByLabelText('Import GeoJSON'), {
+        target: {
+          files: [
+            new File(
+              [
+                JSON.stringify({
+                  type: 'Feature',
+                  properties: {},
+                  geometry: { type: 'LineString', coordinates: [] },
+                }),
+              ],
+              'line.geojson',
+              { type: 'application/geo+json' },
+            ),
+          ],
+        },
+      })
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Could not import line.geojson. GeoJSON geometry must be Polygon or MultiPolygon.',
+      )
+
       fireEvent.change(screen.getByLabelText('Import GeoJSON'), {
         target: {
           files: [
@@ -466,6 +488,7 @@ describe('App', () => {
       })
 
       expect(await screen.findByText('Image region')).toBeInTheDocument()
+      expect(screen.queryByText(/Could not import line\.geojson/)).toBeNull()
       expect(screen.getByRole('button', { name: 'Export GeoJSON' })).toBeEnabled()
       expect(screen.getByTestId('deck-layer-geometric-annotations')).toHaveAttribute(
         'data-count',

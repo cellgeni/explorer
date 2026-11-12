@@ -264,6 +264,11 @@ export function GeometricShapesPanel({
           Clear GeoJSON
         </button>
       </div>
+      {model.importError === null ? null : (
+        <p className="annotation-import-error" role="alert">
+          {model.importError}
+        </p>
+      )}
       {shapes.length > 0 ? (
         <GeometricAnnotationList
           annotations={shapes}

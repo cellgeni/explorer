@@ -2,6 +2,7 @@ import {
   summarizeDatasetDiagnostics,
   type DatasetDiagnosticsReport,
 } from '../../data/datasetDiagnostics'
+import type { Platform } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatchTiming } from '../../datasets/xeniumDataset'
 
 interface DatasetLoadDiagnosticState {
@@ -337,6 +338,21 @@ function summarizeDiagnosticsState(
   }
 
   return { status: state.status }
+}
+
+// Named after the loaded dataset's platform, or the platform diagnostics found
+// when nothing is loaded.
+export function diagnosticsDumpFileName(
+  datasetPlatform: Platform | null,
+  diagnosticsState: DatasetDiagnosticsDiagnosticState,
+): string {
+  const platform =
+    datasetPlatform ??
+    (diagnosticsState.status === 'ready' && diagnosticsState.report.platform !== 'unknown'
+      ? diagnosticsState.report.platform
+      : 'dataset')
+
+  return `${platform}-diagnostics.json`
 }
 
 function readCurrentLocation(): string | undefined {
