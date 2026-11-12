@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   testAnnotationsSectionModel,
@@ -79,13 +79,11 @@ describe('ShellLayout', () => {
     stubScreenWidth(true)
     renderShell()
 
-    expect(
-      screen.queryByRole('complementary', { name: 'Layers' }),
-    ).not.toBeInTheDocument()
     expect(screen.queryByRole('toolbar', { name: 'Tools' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Share' })).toHaveTextContent('')
 
-    const sheet = screen.getByRole('region', { name: 'Layers' })
+    const sheet = screen.getByRole('complementary', { name: 'Layers' })
+    expect(within(sheet).queryByRole('button', { name: /^Hide layers/ })).toBeNull()
     const handle = within(sheet).getByRole('button', { name: /^Layers/ })
     expect(handle).toHaveTextContent('Cells: graphclust')
     expect(handle).toHaveAttribute('aria-expanded', 'false')
@@ -93,6 +91,41 @@ describe('ShellLayout', () => {
     fireEvent.keyDown(document.body, { key: '\\' })
     expect(handle).toHaveAttribute('aria-expanded', 'true')
     expect(within(sheet).getByRole('button', { name: /^Cells/ })).toBeVisible()
+  })
+
+  it('keeps a gene search when the window crosses 860 px (15.5-B)', () => {
+    let narrow = false
+    const listeners = new Set<() => void>()
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        get matches() {
+          return narrow && query === NARROW_SCREEN_QUERY
+        },
+        media: query,
+        addEventListener: (_type: string, listener: () => void) => {
+          listeners.add(listener)
+        },
+        removeEventListener: (_type: string, listener: () => void) => {
+          listeners.delete(listener)
+        },
+      })),
+    )
+    renderShell()
+
+    fireEvent.change(screen.getByLabelText('Gene selection'), {
+      target: { value: 'SNAP' },
+    })
+    act(() => {
+      narrow = true
+      for (const listener of listeners) listener()
+    })
+
+    expect(screen.getByRole('button', { name: /^Layers/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(screen.getByLabelText('Gene selection')).toHaveValue('SNAP')
   })
 
   it('picks a tool from the menu, which then closes', () => {

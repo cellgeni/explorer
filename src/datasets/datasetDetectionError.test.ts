@@ -43,6 +43,24 @@ describe('dataset detection errors', () => {
     ).toBe('server-error')
   })
 
+  it('says refused for other client errors, which are not a CORS block (15.5-B)', () => {
+    const error = datasetDetectionError([
+      probe('experiment.xenium', { status: 429 }),
+      probe('cells.zarr.zip', { status: 400 }),
+      probe('cells.parquet', { status: 429 }),
+      probe('gene_panel.json', { error: 'Failed to fetch' }),
+    ])
+
+    expect(error.kind).toBe('refused')
+    expect(error.message).toBe(
+      'The host refused the requests for the expected files (HTTP 400 and 429).',
+    )
+    expect(classifyDatasetDetection([probe('a', { status: 405 })])).toBe('refused')
+    expect(datasetDetectionError([probe('a', { status: 405 })]).message).toContain(
+      '(HTTP 405)',
+    )
+  })
+
   it('lists what was found when the layout is unknown', () => {
     const error = datasetDetectionError([
       probe('a.csv', { ok: true, status: 200 }),

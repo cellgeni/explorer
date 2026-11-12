@@ -41,6 +41,7 @@ import {
   normaliseViewState,
   pointerEventToDataPoint,
   viewStateFromKeyboardEvent,
+  ZOOM_STEP,
   viewStateKey,
   type BoundaryStyleViewport,
   type MouseCoordinate,
@@ -2099,14 +2100,14 @@ function ViewerSurface({
             title="Zoom out (−)"
             icon={<MinusIcon />}
             onClick={() => {
-              zoomBy(-1)
+              zoomBy(-ZOOM_STEP)
             }}
           />
           <IconButton
             title="Zoom in (+)"
             icon={<PlusIcon />}
             onClick={() => {
-              zoomBy(1)
+              zoomBy(ZOOM_STEP)
             }}
           />
           <IconButton title="Fit to view (F)" icon={<FitIcon />} onClick={fitView} />

@@ -326,6 +326,13 @@ describe('loadErrorModel', () => {
     expect(
       createStructuredLoadError(
         'Dataset overview',
+        datasetDetectionError([{ path: 'a', url: 'u', ok: false, status: 429 }]),
+      ),
+    ).toMatchObject({ code: 'http', title: 'Request refused' })
+
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
         datasetDetectionError([{ path: 'a', url: 'u', ok: true, status: 200 }]),
       ),
     ).toMatchObject({ code: 'unsupported', title: 'Unsupported dataset layout' })

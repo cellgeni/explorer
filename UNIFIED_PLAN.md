@@ -3285,18 +3285,19 @@ Open, for 15.5 or later:
   is written for another dataset until its annotations load. A link with
   `groups=` ignores its own `cellColor` once the set loads. Copy Link copies
   `location.href`, which is up to 160 ms behind a change.
-- **Shell.** `panel=info` alone reopens with Cells expanded. Crossing 860 px
+- **Shell** (the first three fixed in 15.5-B, the rest in 15.5-D).
+  `panel=info` alone reopens with Cells expanded. Crossing 860 px
   remounts the layer sections, losing a gene search. `card=` keeps only
   overview cells, not bins or boundary picks. Focus is lost when a card,
   the Embedding panel or the narrow tool menu closes. The tool `toolbar`
   has no arrow-key movement, card tabs no Home and End, the resize grip no
   value, and two annotation headings are out of order.
-- **Smaller.** The `+` and `-` keys zoom half a level and the buttons a whole
-  one. Load errors where every probe answered a 4xx other than 401, 403 and
-  404 are reported as "blocked". "Gene expression" is offered in Cell color
-  with no genes. 15.1-I's Atera graphclust default never runs (Atera loads
-  through the AnnData path). Esc in the drawer's address field closes the
-  drawer.
+- **Smaller** (fixed in 15.5-B). The `+` and `-` keys zoom half a level and
+  the buttons a whole one. Load errors where every probe answered a 4xx other
+  than 401, 403 and 404 are reported as "blocked". "Gene expression" is
+  offered in Cell color with no genes. 15.1-I's Atera graphclust default never
+  runs (Atera loads through the AnnData path). Esc in the drawer's address
+  field closes the drawer.
 - **Cleanup.** Unused CSS from the HUD (`.magic-lens-scope-segmented`,
   `.measurement-control*`, `.section-heading-*`, `.status-chip`, `.eyebrow`,
   `.annotation-size-plot*`), the Magic Lens Min QV leftovers
@@ -3336,7 +3337,33 @@ proper. The re-run (E) comes after the fixes, so it checks what ships.
     loaded dataset's manifest defaults (kept as `datasetManifestDefaults`)
     rather than the app's, so a value set back to the app default is written.
     An empty `genes=` now means "no genes", for a manifest that sets genes.
-- [ ] **B. Shell and smaller fixes.** (M)
+- [x] **B. Shell and smaller fixes.** (M)
+  - Done 2026-11-12. The shell items of the open list that are not
+    accessibility (those are in D), and every "smaller" one.
+  - `panel=` lists exactly what is open: `panel=info` is the drawer with
+    every section closed. With the drawer or Embedding open and the sections
+    at their default, the link writes the default section out
+    (`defaultExpandedSections`: Cells, or Image without cells). Version 2
+    links from 15.2-H to 15.5 that wrote `panel=info` for "default sections
+    and the drawer" now open with the sections closed. An old link's
+    `tab=cell` maps to `panel=cells,embedding`.
+  - The layer panel and the narrow bottom sheet are one element tree
+    (`LayerPanel` with a `sheet` prop; only the header differs), so crossing
+    860 px keeps a gene search, a transcript search, a custom layer URL and a
+    rename in progress. The `Sheet` primitive had no other use and is gone.
+    The sheet's handle sits in an `h2`, like the docked panel's heading.
+  - `card=` also restores a Visium HD bin (`bin:<id>`) and an outline with no
+    cell (`boundary:<id>`), once loaded in the link's view, and only for the
+    link's dataset; another selection first cancels it.
+  - `+` and `-` zoom one level, as the buttons do (`ZOOM_STEP`).
+  - Detection answered only by other 4xx statuses (400, 405, 410, 429) is
+    "Request refused" (`refused`, code `http`) with the statuses, not
+    "Request blocked".
+  - `Cell color` offers Gene expression once a gene is picked (or while it is
+    the mode, as from a link).
+  - Atera picks graphclust, or the first set, on the AnnData path too.
+  - Esc in a drawer text field, such as the address, leaves the field; a
+    second Esc closes the drawer.
 - [ ] **C. Cleanup.** (S)
 - [ ] **D. Accessibility pass.** (M)
   - the axe baseline from 15.0-F is empty;

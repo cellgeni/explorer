@@ -732,6 +732,15 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.shell-layer-sheet-heading {
+  margin: 0;
+  font: inherit;
+}
+
+.shell-layer-sheet-heading .ui-sheet-handle {
+  width: 100%;
+}
+
 .shell-layer-sheet .ui-sheet-body {
   max-height: 65dvh;
   padding: 0;

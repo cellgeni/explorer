@@ -1275,7 +1275,15 @@ describe('useDatasetLifecycle', () => {
         },
       ]),
       genePanel: vi.fn(async () => ['UMOD']),
-      annotationGroups: vi.fn(async () => []),
+      annotationGroups: vi.fn(async () => [
+        { id: 'obs:azimuth', label: 'azimuth', groupingName: 'azimuth', groupCount: 4 },
+        {
+          id: 'obs:graphclust',
+          label: 'graphclust',
+          groupingName: 'graphclust',
+          groupCount: 9,
+        },
+      ]),
       embeddingOptions: vi.fn(async () => []),
       metadataTracks: vi.fn(async () => []),
       morphologyUrl: vi.fn(async () => morphologyUrl),
@@ -1291,6 +1299,7 @@ describe('useDatasetLifecycle', () => {
     const setLoadState = vi.fn()
     const setShowCellBoundaries = vi.fn()
     const setShowNucleusBoundaries = vi.fn()
+    const setSelectedAnnotationGroupId = vi.fn()
     const warmDatasetForRoi = vi.fn(async () => undefined)
 
     render(
@@ -1314,6 +1323,7 @@ describe('useDatasetLifecycle', () => {
         setShowNucleusBoundaries={setShowNucleusBoundaries}
         startDatasetLoadRef={startDatasetLoadRef}
         warmDatasetForRoi={warmDatasetForRoi}
+        extraSetters={{ setSelectedAnnotationGroupId }}
       />,
     )
 
@@ -1324,6 +1334,8 @@ describe('useDatasetLifecycle', () => {
     expect(setDatasetPlatform).toHaveBeenCalledWith('atera')
     expect(setShowCellBoundaries).toHaveBeenCalledWith(true)
     expect(setShowNucleusBoundaries).toHaveBeenCalledWith(false)
+    // graphclust, as on Xenium (15.1-I, run on the AnnData path in 15.5-B).
+    expect(setSelectedAnnotationGroupId).toHaveBeenLastCalledWith('obs:graphclust')
     expect(setLoadState).toHaveBeenLastCalledWith({
       status: 'ready',
       url: datasetUrl,

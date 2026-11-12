@@ -1,5 +1,4 @@
 import { useEffect, useEffectEvent, useState, type ReactNode } from 'react'
-import { Sheet } from '../../components/ui'
 import { isTextEntryTarget } from '../app-shell/activeToolModel'
 import { CardStack } from '../cards/CardStack'
 import type { CardStackModel } from '../cards/cardModels'
@@ -99,27 +98,34 @@ export function ShellLayout({
     }
   }, [])
 
-  function layerPanelContent(variant: 'docked' | 'sheet') {
-    return (
-      <LayerPanel
-        variant={variant}
-        panel={layerPanel}
-        collapsed={panelCollapsed}
-        onCollapsedChange={setPanelCollapsed}
-        image={image}
-        cells={cells}
-        transcripts={transcripts}
-        annotations={annotations}
-        viewOptions={info.viewOptions}
-        expanded={panels.expanded}
-        onExpandedChange={(expanded) => {
-          onPanelsChange({ ...panels, expanded })
-        }}
-        embeddingOpen={embeddingOpen}
-        onEmbeddingOpenChange={setEmbeddingOpen}
-      />
-    )
-  }
+  // The same element whatever the width, so the sections keep their state.
+  const layerPanelContent = (
+    <LayerPanel
+      panel={layerPanel}
+      collapsed={panelCollapsed}
+      onCollapsedChange={setPanelCollapsed}
+      image={image}
+      cells={cells}
+      transcripts={transcripts}
+      annotations={annotations}
+      viewOptions={info.viewOptions}
+      expanded={panels.expanded}
+      onExpandedChange={(expanded) => {
+        onPanelsChange({ ...panels, expanded })
+      }}
+      embeddingOpen={embeddingOpen}
+      onEmbeddingOpenChange={setEmbeddingOpen}
+      sheet={
+        narrow
+          ? {
+              expanded: sheetExpanded,
+              onExpandedChange: setSheetExpanded,
+              summary: sheetSummary(layerPanel),
+            }
+          : undefined
+      }
+    />
+  )
 
   return (
     <>
@@ -162,19 +168,7 @@ export function ShellLayout({
             />
           )}
         </div>
-        {narrow ? (
-          <Sheet
-            title="Layers"
-            summary={sheetSummary(layerPanel)}
-            expanded={sheetExpanded}
-            onExpandedChange={setSheetExpanded}
-            className="shell-layer-sheet"
-          >
-            {layerPanelContent('sheet')}
-          </Sheet>
-        ) : (
-          layerPanelContent('docked')
-        )}
+        {layerPanelContent}
       </div>
     </>
   )

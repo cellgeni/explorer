@@ -1222,7 +1222,13 @@ export function useDatasetLifecycle({
           setAnnotationGroupState(
             annotationGroupLoadReady(requestedUrl, annotationGroups),
           )
-          setSelectedAnnotationGroupId(NO_ANNOTATION_GROUP_ID)
+          // Atera picks graphclust, or the first set, as Xenium does
+          // (15.1-I); other AnnData datasets start with None.
+          setSelectedAnnotationGroupId(
+            label === 'Atera'
+              ? (defaultAnnotationGroupId(annotationGroups) ?? NO_ANNOTATION_GROUP_ID)
+              : NO_ANNOTATION_GROUP_ID,
+          )
           setCellMetadataTracks(metadataTracks)
           if (embeddingOptions.length > 0) {
             setAnalysisEmbeddingState(

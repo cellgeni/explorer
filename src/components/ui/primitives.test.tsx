@@ -15,7 +15,6 @@ import {
   Popover,
   Segmented,
   Select,
-  Sheet,
   Slider,
   Switch,
   Tooltip,
@@ -66,14 +65,10 @@ describe('UI primitives', () => {
         Body
       </Drawer>,
       // @ts-expect-error title is required
-      <Sheet expanded onExpandedChange={noop}>
-        Body
-      </Sheet>,
-      // @ts-expect-error title is required
       <InfoTip>Explanation</InfoTip>,
     ]
 
-    expect(elements).toHaveLength(17)
+    expect(elements).toHaveLength(16)
   })
 
   it('renders buttons with a native title, a type and an icon label', () => {
@@ -419,34 +414,15 @@ describe('UI primitives', () => {
     const drawer = screen.getByRole('dialog', { name: 'Dataset' })
     expect(within(drawer).getByRole('button', { name: 'Close Dataset' })).toHaveFocus()
 
+    // Esc in a field leaves the field first (15.5-B).
+    const field = within(drawer).getByLabelText('Dataset URL')
+    field.focus()
+    fireEvent.keyDown(field, { key: 'Escape' })
+    expect(drawer).toBeVisible()
+    expect(drawer).toHaveFocus()
+
     fireEvent.keyDown(drawer, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(opener).toHaveFocus()
-  })
-
-  it('expands a sheet from its handle and keeps its content mounted', () => {
-    function Harness() {
-      const [expanded, setExpanded] = useState(false)
-      return (
-        <Sheet
-          title="Layers"
-          summary="4 genes"
-          expanded={expanded}
-          onExpandedChange={setExpanded}
-        >
-          <p>Layer controls</p>
-        </Sheet>
-      )
-    }
-    render(<Harness />)
-
-    const handle = screen.getByRole('button', { name: /Layers/ })
-    expect(handle).toHaveAttribute('aria-expanded', 'false')
-    expect(handle).toHaveAttribute('title', 'Expand Layers')
-    expect(screen.getByText('Layer controls')).not.toBeVisible()
-
-    fireEvent.click(handle)
-    expect(handle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('Layer controls')).toBeVisible()
   })
 })

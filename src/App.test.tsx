@@ -644,6 +644,37 @@ describe('App', () => {
     }
   })
 
+  it('reopens a link’s Visium HD bin card (15.5-B)', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(visiumUrl)}&card=bin%3ABC-2`,
+    )
+    const viewport = installAppViewportFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
+    )
+    const visiumDataset = createVisiumHdDatasetMock({ overview: visiumOverviewFixture() })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+
+      const card = await screen.findByRole('region', { name: 'Bin' })
+      expect(card).toHaveTextContent('BC-2')
+      await waitFor(() => {
+        expect(window.location.hash).toContain('card=bin%3ABC-2')
+      })
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('scans Visium HD viewport bins with selected-gene magic lens expression', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)

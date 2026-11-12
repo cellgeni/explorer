@@ -57,6 +57,12 @@ export function Drawer({
         if (event.key !== 'Escape' || event.defaultPrevented) return
         // Handled, so the press does not also leave the active tool.
         event.preventDefault()
+        // Esc in a text field leaves the field, as it would dismiss the
+        // browser's suggestions there; a second Esc closes the drawer.
+        if (isTypingTarget(event.target)) {
+          panelRef.current?.focus()
+          return
+        }
         onClose()
       }}
     >
@@ -66,5 +72,16 @@ export function Drawer({
       </header>
       <div className="ui-drawer-body">{children}</div>
     </div>
+  )
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (target instanceof HTMLTextAreaElement) return true
+  if (target instanceof HTMLElement && target.isContentEditable) return true
+  return (
+    target instanceof HTMLInputElement &&
+    !['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'color'].includes(
+      target.type,
+    )
   )
 }

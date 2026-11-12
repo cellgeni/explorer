@@ -31,8 +31,9 @@ import { useCardStackModel } from './features/cards/cardModels'
 import { useEmbeddingModel } from './features/sections/embeddingModel'
 import {
   cardForLink,
-  cellIdFromLink,
+  cardFromLink,
   hiddenLayersForLink,
+  defaultExpandedSections,
   panelsForLink,
   panelsFromLink,
   withShellLink,
@@ -322,11 +323,7 @@ export function App({ dependencies }: AppProps = {}) {
   const [shellPanels, setShellPanels] = useState<ShellPanelState>(() =>
     panelsFromLink(initialShareableState),
   )
-  // Cells is the open section until someone changes it.
-  const openPanelIds = useMemo(
-    () => panelsForLink(shellPanels) ?? ['cells'],
-    [shellPanels],
-  )
+
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const appState = useAppDomainState({ initialShareableState, performanceBudget })
@@ -652,6 +649,15 @@ export function App({ dependencies }: AppProps = {}) {
     document.title = documentTitle(loadedDatasetName)
   }, [loadedDatasetName])
   const platformAdapter = appPlatformAdapterFor(loadState, datasetPlatform)
+  // The sections open until someone opens or closes one.
+  const defaultPanelIds = useMemo(
+    () => defaultExpandedSections(platformAdapter.capabilities.cells),
+    [platformAdapter.capabilities.cells],
+  )
+  const openPanelIds = useMemo(
+    () => panelsForLink(shellPanels, defaultPanelIds) ?? defaultPanelIds,
+    [defaultPanelIds, shellPanels],
+  )
   // The start screen (UNIFIED_PLAN.md, 15.3-A) shows until a load starts,
   // unless the link names a dataset, and again when a load fails with
   // nothing else open.
@@ -3147,23 +3153,65 @@ export function App({ dependencies }: AppProps = {}) {
         : [loadedAnnotationGroupId],
     [linkAnnotationGroupIds, loadedAnnotationGroupId],
   )
-  const sharedPanels = useMemo(() => panelsForLink(shellPanels), [shellPanels])
+  const sharedPanels = useMemo(
+    () => panelsForLink(shellPanels, defaultPanelIds),
+    [defaultPanelIds, shellPanels],
+  )
   const sharedHiddenLayers = useMemo(
     () => hiddenLayersForLink(layerVisibility),
     [layerVisibility],
   )
-  // A link's `card=cell:<id>` selects that cell once the cells load.
-  const linkedCellIdRef = useRef(cellIdFromLink(initialShareableState))
+  // A link's `card=` selects that cell, bin or boundary once it is loaded
+  // for the link's dataset. Another selection, or another dataset, drops it.
+  const linkedCardRef = useRef(cardFromLink(initialShareableState))
   useEffect(() => {
-    const cellId = linkedCellIdRef.current
-    if (cellId === null || loadState.status !== 'ready' || overviewCells.length === 0) {
+    const card = linkedCardRef.current
+    if (card === null || loadedDatasetUrl === null) return
+
+    if (
+      loadedDatasetUrl !== initialShareableState.datasetUrl?.trim() ||
+      selectedCell !== null ||
+      selectedGridCell !== null ||
+      selectedBoundaryCell !== null
+    ) {
+      linkedCardRef.current = null
       return
     }
 
-    linkedCellIdRef.current = null
-    const cell = overviewCells.find((candidate) => candidate.id === cellId)
-    if (cell !== undefined) handleViewerCellClick(cell)
-  }, [handleViewerCellClick, loadState.status, overviewCells])
+    if (card.kind === 'cell') {
+      if (overviewCells.length === 0) return
+      linkedCardRef.current = null
+      const cell = overviewCells.find((candidate) => candidate.id === card.id)
+      if (cell !== undefined) handleViewerCellClick(cell)
+      return
+    }
+
+    // Bins and boundaries load with the view, which the link also restores.
+    if (card.kind === 'bin') {
+      const bin = gridCellById.get(card.id)
+      if (bin === undefined) return
+      linkedCardRef.current = null
+      handleViewerGridCellClick(bin)
+      return
+    }
+
+    const boundary = drawnBoundaryById.get(card.id)
+    if (boundary === undefined) return
+    linkedCardRef.current = null
+    handleViewerCellBoundaryClick(boundary)
+  }, [
+    drawnBoundaryById,
+    gridCellById,
+    handleViewerCellBoundaryClick,
+    handleViewerCellClick,
+    handleViewerGridCellClick,
+    initialShareableState.datasetUrl,
+    loadedDatasetUrl,
+    overviewCells,
+    selectedBoundaryCell,
+    selectedCell,
+    selectedGridCell,
+  ])
   const currentShareUrl = useShareableUrlHash({
     dataset: {
       annotationUrl: annotationImportUrl,
@@ -3228,7 +3276,11 @@ export function App({ dependencies }: AppProps = {}) {
       activeRoiSelection,
       shareableViewState,
       panels: sharedPanels,
-      card: cardForLink(selectedCell?.id ?? null),
+      card: cardForLink({
+        cellId: selectedCell?.id,
+        binId: selectedGridCell?.id,
+        boundaryId: selectedBoundaryCell?.id,
+      }),
       tool: activeTool,
       hiddenLayers: sharedHiddenLayers,
     },

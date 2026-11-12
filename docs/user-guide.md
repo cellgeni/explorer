@@ -70,7 +70,7 @@ focusable:
 
 - Arrow keys pan the spatial view.
 - Shift plus an arrow key pans farther.
-- `+` and `-` zoom in and out.
+- `+` and `-` zoom in and out by one level, as the zoom buttons do.
 - `Home` resets to the fitted dataset view.
 
 `?` (or the Help button in the top bar) lists every keyboard shortcut and links
