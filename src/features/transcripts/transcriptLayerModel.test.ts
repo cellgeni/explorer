@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
-import type {
-  TranscriptAggregateBin,
-  TranscriptPoint,
+import {
+  planTranscriptLod,
+  type TranscriptAggregateBin,
+  type TranscriptCapabilities,
+  type TranscriptPoint,
 } from '../../data/transcriptOverlay'
+import type { TranscriptGridLevelMetadata } from '../../data/transcriptZarr'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import {
   IDLE_TRANSCRIPT_CAPABILITY_STATE,
   IDLE_TRANSCRIPT_LAYER_STATE,
   buildCellSummaryTranscriptBins,
+  estimateVisibleTranscripts,
   estimateVisibleTranscriptsFromCells,
   isTranscriptExactManualLoadRequired,
   maxTranscriptAggregateCount,
@@ -494,5 +498,84 @@ describe('transcriptLayerModel', () => {
     })
     expect(maxTranscriptAggregateCount([bin, { ...bin, id: 'bin-2', count: 3 }])).toBe(9)
     expect(maxTranscriptAggregateCount([])).toBe(1)
+  })
+
+  describe('visible transcript estimate', () => {
+    const url = 'https://example.test/output'
+    const bbox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(15),
+      maxY: micrometers(15),
+    }
+    // One 30 µm tile around both cells; the view is a quarter of it.
+    function gridCounts(count: number): TranscriptGridLevelMetadata {
+      return {
+        level: 0,
+        tileSizeMicrometers: 30,
+        gridKeys: ['0,0'],
+        transcriptCounts: [count],
+      }
+    }
+    function ready(capabilities: Partial<TranscriptCapabilities> = {}) {
+      return transcriptCapabilityReady(url, {
+        rawParquet: true,
+        nativeZarr: true,
+        ...capabilities,
+      })
+    }
+
+    it('counts the transcripts.zarr.zip grid tiles in view once they are read', () => {
+      expect(
+        estimateVisibleTranscripts(
+          ready({ nativeZarrGridCounts: gridCounts(400) }),
+          cells,
+          bbox,
+        ),
+      ).toBe(100)
+    })
+
+    it('sums the cells in view without grid counts or before the check ends', () => {
+      for (const capabilityState of [
+        IDLE_TRANSCRIPT_CAPABILITY_STATE,
+        transcriptCapabilityStarted(url),
+        ready({ nativeZarr: false }),
+        ready({ nativeZarrGridCountsError: 'no counts' }),
+        ready({ rawParquet: false, geneRanges: true }),
+      ]) {
+        expect(estimateVisibleTranscripts(capabilityState, cells, bbox)).toBe(10)
+      }
+    })
+
+    it('switches Auto between density and exact points on the Zarr estimate', () => {
+      function autoPlan(capabilityState: ReturnType<typeof ready>) {
+        return planTranscriptLod(
+          { viewState: { zoom: 0 } },
+          {
+            detailMode: 'auto',
+            visibleTranscriptEstimate: estimateVisibleTranscripts(
+              capabilityState,
+              cells,
+              bbox,
+            ),
+            exactLimit: 100_000,
+            hasRawParquet: true,
+            hasNativeZarr: true,
+          },
+        )
+      }
+
+      // The cells in view hold 10 transcripts, which fits the budget.
+      expect(autoPlan(ready())).toMatchObject({
+        kind: 'exact',
+        visibleTranscriptEstimate: 10,
+      })
+      expect(
+        autoPlan(ready({ nativeZarrGridCounts: gridCounts(800_000) })),
+      ).toMatchObject({ kind: 'native-zarr', visibleTranscriptEstimate: 200_000 })
+      expect(
+        autoPlan(ready({ nativeZarrGridCounts: gridCounts(360_000) })),
+      ).toMatchObject({ kind: 'exact', visibleTranscriptEstimate: 90_000 })
+    })
   })
 })

@@ -3,7 +3,9 @@ import { assertHttpRangeSupport } from './rangeSupport'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import {
   loadTranscriptZarrAggregates,
+  loadTranscriptZarrGridCounts,
   loadTranscriptZarrViewport,
+  type TranscriptGridLevelMetadata,
 } from './transcriptZarr'
 import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
 import type { CellId } from './cellid'
@@ -26,6 +28,10 @@ export interface TranscriptCapabilities {
   readonly nativeZarr: boolean
   readonly rawParquetError?: string
   readonly nativeZarrError?: string
+  // The level-0 transcript counts per tile of transcripts.zarr.zip, for the
+  // visible transcript estimate. Without them it sums the cells' counts.
+  readonly nativeZarrGridCounts?: TranscriptGridLevelMetadata
+  readonly nativeZarrGridCountsError?: string
   // Set for outputs read per selected gene (Atera): `nativeZarr` is per-gene
   // density, and `geneRanges` is exact points from each gene's rows.
   readonly geneRanges?: boolean
@@ -210,12 +216,18 @@ export async function loadDatasetTranscriptCapabilities(
     validateRangeSupport,
     options.signal,
   )
+  const zarrUrl = datasetFileUrlFor(baseUrl, 'transcriptsZarr')
   const nativeZarr = await probeTranscriptFile(
-    datasetFileUrlFor(baseUrl, 'transcriptsZarr'),
+    zarrUrl,
     datasetFileLabelFor(baseUrl, 'transcriptsZarr'),
     validateRangeSupport,
     options.signal,
   )
+  // The density and exact reads need the same metadata, which is cached, so
+  // reading it here makes them no slower.
+  const gridCounts = nativeZarr.ok
+    ? await probeTranscriptZarrGridCounts(zarrUrl, options.signal)
+    : {}
   throwIfAborted(options.signal)
 
   return {
@@ -223,6 +235,33 @@ export async function loadDatasetTranscriptCapabilities(
     nativeZarr: nativeZarr.ok,
     ...(rawParquet.ok ? {} : { rawParquetError: rawParquet.error }),
     ...(nativeZarr.ok ? {} : { nativeZarrError: nativeZarr.error }),
+    ...gridCounts,
+  }
+}
+
+async function probeTranscriptZarrGridCounts(
+  url: string,
+  signal: AbortSignal | undefined,
+): Promise<
+  Pick<TranscriptCapabilities, 'nativeZarrGridCounts' | 'nativeZarrGridCountsError'>
+> {
+  try {
+    const level = await loadTranscriptZarrGridCounts(
+      url,
+      signal === undefined ? {} : { signal },
+    )
+
+    return level === null
+      ? { nativeZarrGridCountsError: 'transcripts.zarr.zip has no level-0 grid counts.' }
+      : { nativeZarrGridCounts: level }
+  } catch (cause) {
+    if (isAbortError(cause)) {
+      throw cause
+    }
+
+    return {
+      nativeZarrGridCountsError: cause instanceof Error ? cause.message : String(cause),
+    }
   }
 }
 

@@ -70,6 +70,9 @@ async function assertHttpRangeSupportUncached(
   }
 
   noteReadableResponse(url, response.status)
+  // Only the status is read. A host that ignores Range answers 200 with the
+  // whole file, so stop that download here.
+  response.body?.cancel().catch(() => undefined)
 
   const failedResponse = failedResponseMessage(
     readTargetLabel(options.label),

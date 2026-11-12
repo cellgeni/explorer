@@ -1,4 +1,4 @@
-import { asCellId } from './cellid'
+import { asAnyCellId } from './cellid'
 import type { CellId } from './cellid'
 import type { Annotation } from '../datasets/spatialDataset'
 
@@ -29,6 +29,9 @@ export function parseCustomAnnotations(
   return parseCustomAnnotationImport(text, fileName).annotations
 }
 
+// Cell IDs are any non-empty text, as each platform names cells its own way
+// (src/data/cellid.ts, asAnyCellId); the caller checks them against the
+// loaded dataset.
 export function parseCustomAnnotationImport(
   text: string,
   fileName = 'annotations',
@@ -98,7 +101,7 @@ function annotationsFromJsonRows(
       )
     }
 
-    appendGroupedCell(grouped, label, asCellId(cellId))
+    appendGroupedCell(grouped, label, asAnyCellId(cellId))
   }
 
   return createCustomAnnotations(fileName, [
@@ -125,7 +128,7 @@ function annotationsFromJsonRecord(
           throw new Error('JSON annotation cell ids must be strings.')
         }
 
-        return asCellId(cellId)
+        return asAnyCellId(cellId)
       }),
     })
   }
@@ -188,7 +191,7 @@ function parseCsvSingleLabelAnnotations(
       continue
     }
 
-    appendGroupedCell(grouped, label, asCellId(cellId))
+    appendGroupedCell(grouped, label, asAnyCellId(cellId))
   }
 
   return createCustomAnnotations(fileName, annotationEntriesFromGroupedCells(grouped))
@@ -251,7 +254,7 @@ function parseCsvWideAnnotations(
         continue
       }
 
-      appendGroupedCell(grouped, label, asCellId(cellId))
+      appendGroupedCell(grouped, label, asAnyCellId(cellId))
     }
 
     annotations.push(
@@ -298,7 +301,7 @@ function createContinuousMetadataTrack(
       continue
     }
 
-    values.push({ cellId: asCellId(cellId), value })
+    values.push({ cellId: asAnyCellId(cellId), value })
     min = Math.min(min, value)
     max = Math.max(max, value)
   }
@@ -495,7 +498,7 @@ function readCellIdArrayField(
       throw new Error(`${key} must be an array of cell-id strings.`)
     }
 
-    return value.map((cellId) => asCellId(cellId))
+    return value.map((cellId) => asAnyCellId(cellId))
   }
 
   return undefined

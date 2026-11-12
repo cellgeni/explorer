@@ -3,6 +3,7 @@ import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import { micrometers } from '../../data/coords'
+import type { FallbackNotice } from '../../data/fallbackNotice'
 import type {
   TranscriptAggregateResult,
   TranscriptCapabilities,
@@ -34,6 +35,7 @@ const DATASET_URL = 'https://example.test/output'
 interface Snapshot {
   readonly capabilityState: TranscriptCapabilityState<StructuredLoadError>
   readonly debugMessages: readonly string[]
+  readonly fallbackNotices: readonly FallbackNotice[]
   readonly layerState: TranscriptLayerState<StructuredLoadError>
   readonly manualExactRequestKey: string | null
   readonly result: ReturnType<typeof useTranscriptWorkflow>
@@ -107,6 +109,7 @@ function Probe({
     string | null
   >(null)
   const debugMessagesRef = React.useRef<string[]>([])
+  const fallbackNoticesRef = React.useRef<FallbackNotice[]>([])
   const loadRequestIdRef = React.useRef(1)
   const transcriptAbortRef = React.useRef<AbortController | null>(null)
   const transcriptCapabilityAbortRef = React.useRef<AbortController | null>(null)
@@ -118,7 +121,9 @@ function Probe({
     url: DATASET_URL,
     cellCount: 1,
   })
-  const appendFallbackNotice = React.useCallback(() => undefined, [])
+  const appendFallbackNotice = React.useCallback((notice: FallbackNotice) => {
+    fallbackNoticesRef.current.push(notice)
+  }, [])
   const appendDebugEvent = React.useCallback((message: string) => {
     debugMessagesRef.current.push(message)
   }, [])
@@ -168,6 +173,7 @@ function Probe({
     onReady({
       capabilityState,
       debugMessages: debugMessagesRef.current,
+      fallbackNotices: fallbackNoticesRef.current,
       layerState,
       manualExactRequestKey,
       result,
@@ -246,7 +252,32 @@ describe('useTranscriptWorkflow', () => {
       capabilities: { rawParquet: true, nativeZarr: false },
     })
     expect(snapshot.debugMessages).toContain('Transcript output check started')
+    expect(snapshot.fallbackNotices).toEqual([])
     expect(snapshot.layerState.status).toBe('idle')
+  })
+
+  it('says when the estimate sums cells because Zarr grid counts are missing', async () => {
+    renderWorkflow({
+      loaders: {
+        loadTranscriptCapabilities: vi.fn(async () => ({
+          rawParquet: true,
+          nativeZarr: true,
+          nativeZarrGridCountsError: 'transcripts.zarr.zip has no level-0 grid counts.',
+        })),
+      },
+    })
+
+    await waitFor(() => expect(snapshot.capabilityState.status).toBe('ready'))
+    expect(snapshot.fallbackNotices).toEqual([
+      expect.objectContaining({
+        source: 'Transcripts',
+        message: expect.stringContaining(
+          'estimates visible transcripts from cell transcript counts',
+        ),
+        detail: 'transcripts.zarr.zip has no level-0 grid counts.',
+        coalesceKey: `transcript-estimate-cells:${DATASET_URL}`,
+      }),
+    ])
   })
 
   it('counts the selected genes in Xenium native density (15.1-J)', async () => {

@@ -60,6 +60,8 @@ export interface AnnotationSetsModel {
   readonly isImportingUrl: boolean
   // Keeps the address in the field when the labels were imported.
   readonly onImportUrl: (url: string) => Promise<void>
+  // How many imported cells are not on the map, if any.
+  readonly importNotice: string | null
   readonly colors: Readonly<Record<string, string>>
   readonly hiddenSetIds: readonly string[]
   readonly hiddenIds: readonly string[]
@@ -95,6 +97,7 @@ export interface AnnotationsSectionModelInput {
   readonly annotationGroupOptions: readonly AnnotationGroupOption[]
   readonly annotationGroupState: AnnotationGroupState
   readonly annotationHeaderCopy: string
+  readonly annotationImportNotice: string | null
   readonly annotationImportUrl: string
   readonly annotationPlacedCellIds: PlacedCellIds | null
   readonly annotationState: AnnotationState
@@ -142,6 +145,7 @@ export function useAnnotationsSectionModel({
   annotationGroupOptions,
   annotationGroupState,
   annotationHeaderCopy,
+  annotationImportNotice,
   annotationImportUrl,
   annotationPlacedCellIds,
   annotationState,
@@ -215,6 +219,7 @@ export function useAnnotationsSectionModel({
           setIsImportingUrl(false)
         }
       },
+      importNotice: annotationImportNotice,
       colors: annotationColors,
       hiddenSetIds: hiddenAnnotationSetIds,
       hiddenIds: hiddenAnnotationIds,

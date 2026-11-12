@@ -11,6 +11,8 @@ import { withoutShareableDefaults } from './shareableDefaults'
 interface ShareableDatasetHashOptions {
   readonly annotationUrl: string
   readonly annotationGroupIds?: readonly string[] | undefined
+  // Hidden annotation classes (hiddenClasses=).
+  readonly hiddenAnnotationIds?: readonly string[] | undefined
   readonly customImageOpacities: readonly number[] | undefined
   readonly customImageUrls: readonly string[]
   readonly datasetUrl: string
@@ -121,6 +123,7 @@ export function useShareableUrlHash({
     customImageUrls,
     datasetDefaults,
     datasetUrl,
+    hiddenAnnotationIds,
   } = dataset
   const spatialDataCoordinateSystem =
     dataset.spatialDataSelection?.spatialDataCoordinateSystem
@@ -211,6 +214,7 @@ export function useShareableUrlHash({
           ...(card === undefined ? {} : { card }),
           tool,
           hiddenLayers,
+          ...(hiddenAnnotationIds === undefined ? {} : { hiddenAnnotationIds }),
           geneExpressionColorScale,
           geneExpressionScoreMode,
           geneExpressionDetailMode,
@@ -280,6 +284,7 @@ export function useShareableUrlHash({
     activeRoiSelection,
     annotationGroupIds,
     card,
+    hiddenAnnotationIds,
     hiddenLayers,
     panels,
     tool,

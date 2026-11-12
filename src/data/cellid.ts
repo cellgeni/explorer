@@ -46,6 +46,20 @@ export function asCellId(value: string): CellId {
   return value as CellId
 }
 
+// A cell ID from any platform: a Xenium ID, an obs name such as a Visium
+// barcode (AAACAAGTATCTCCCA-1), or a SpatialData instance ID read as text.
+// Only Xenium IDs have a format to check, so this trims the ID and rejects
+// an empty one.
+export function asAnyCellId(value: string): CellId {
+  const trimmed = value.trim()
+
+  if (trimmed.length === 0) {
+    throw new Error('Cell ID is empty.')
+  }
+
+  return trimmed as CellId
+}
+
 export function cellIdFromIntPair(pair: CellIdIntPair): CellId {
   const hex = (pair.prefix >>> 0).toString(16).padStart(8, '0')
   const shifted = [...hex].map((digit) => {

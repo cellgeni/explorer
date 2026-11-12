@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import {
   customCellMetadataFilePrefix,
   parseCustomAnnotationImport,
@@ -52,9 +52,17 @@ interface AnnotationWorkflowCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
 }
 
+// The cells on the map, which imported cell IDs are checked against.
+interface DatasetCellIds {
+  has(cellId: string): boolean
+  readonly size: number
+}
+
 interface AnnotationWorkflowData {
   readonly annotationState: AnnotationState<StructuredLoadError>
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
+  // Empty until the dataset's cells are read, when imports are not checked.
+  readonly datasetCellIds: DatasetCellIds
   readonly datasetUrl: string
   readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly roiName: string
@@ -95,20 +103,32 @@ interface UseAnnotationWorkflowOptions {
   readonly setters: AnnotationWorkflowSetters
 }
 
+// Classes a link hides (hiddenClasses=). Those in the loaded labels stay
+// hidden once they load; the rest are dropped.
+interface LinkHiddenAnnotationOptions {
+  readonly hiddenAnnotationIds?: readonly string[] | undefined
+}
+
 interface UseAnnotationWorkflowResult {
+  // Imported cells that are not on the map, as "N of M imported cells are
+  // not on the map."; null when they all are.
+  readonly annotationImportNotice: string | null
   readonly handleAnnotationColorChange: (annotationId: string, color: string) => void
   readonly handleAnnotationGroupChange: (groupId: string) => void
   readonly handleClearAnnotations: () => void
   readonly handleExportAnnotations: () => void
   readonly handleImportAnnotations: (file: File | null) => Promise<void>
-  readonly handleImportAnnotationUrl: (url: string) => Promise<boolean>
+  readonly handleImportAnnotationUrl: (
+    url: string,
+    options?: LinkHiddenAnnotationOptions,
+  ) => Promise<boolean>
   readonly handleLoadAnnotations: () => void
   // Loads one of the dataset's annotation sets, such as one named by a link.
   // Loading a set colours cells by it, unless switchColorMode is false (a
   // link's set, under the link's own colour mode).
   readonly loadAnnotationGroup: (
     groupId: string,
-    options?: { readonly switchColorMode?: boolean },
+    options?: { readonly switchColorMode?: boolean } & LinkHiddenAnnotationOptions,
   ) => void
   readonly handleRemoveCellMetadataTrack: (trackId: string) => void
   readonly handleRemoveAnnotation: (annotationId: string) => void
@@ -131,6 +151,7 @@ export function useAnnotationWorkflow({
   const {
     annotationState,
     cellMetadataTracks,
+    datasetCellIds,
     datasetUrl,
     loadState,
     roiName,
@@ -149,11 +170,19 @@ export function useAnnotationWorkflow({
     setSelectedAnnotationGroupId,
     setSelectedCellMetadataTrackId,
   } = setters
+  // The last import's notice, for the dataset it was imported into.
+  const [importNotice, setImportNotice] = useState<{
+    readonly url: string
+    readonly message: string
+  } | null>(null)
 
   const loadAnnotationGroup = useCallback(
     (
       selectedGroupId: string,
-      { switchColorMode = true }: { readonly switchColorMode?: boolean } = {},
+      {
+        hiddenAnnotationIds = [],
+        switchColorMode = true,
+      }: { readonly switchColorMode?: boolean } & LinkHiddenAnnotationOptions = {},
     ) => {
       if (loadState.status !== 'ready' || annotationState.status === 'loading') {
         return
@@ -185,7 +214,9 @@ export function useAnnotationWorkflow({
             annotationLoadReady(loadState.url, annotations, selectedGroupId),
           )
           setAnnotationColors((current) => colorsForAnnotations(annotations, current))
-          setHiddenAnnotationIds([])
+          setHiddenAnnotationIds(loadedAnnotationIds(annotations, hiddenAnnotationIds))
+          // The set replaces the imported labels.
+          setImportNotice(null)
           if (switchColorMode && annotations.length > 0) {
             setObservationColorMode('annotations')
           }
@@ -233,9 +264,28 @@ export function useAnnotationWorkflow({
   )
 
   const importCustomAnnotationText = useCallback(
-    (text: string, sourceName: string, sourceLabel: string) => {
+    (
+      text: string,
+      sourceName: string,
+      sourceLabel: string,
+      linkHiddenAnnotationIds: readonly string[] = [],
+    ) => {
       const { annotations: importedAnnotations, metadataTracks: importedMetadataTracks } =
         parseCustomAnnotationImport(text, sourceName)
+      const cellCheck = checkImportedCellIds(
+        importedAnnotations,
+        importedMetadataTracks,
+        datasetCellIds,
+      )
+
+      if (cellCheck.total > 0 && cellCheck.missing === cellCheck.total) {
+        throw new ImportedCellsNotFoundError(
+          cellCheck.total === 1
+            ? 'The imported cell is not on the map.'
+            : `None of the ${cellCheck.total.toLocaleString()} imported cells are on the map.`,
+        )
+      }
+
       const importedPrefix = customAnnotationFilePrefix(sourceName)
       const importedMetadataPrefix = customCellMetadataFilePrefix(sourceName)
       const nextCellMetadataTracks = mergeImportedCellMetadataTracks(
@@ -261,8 +311,17 @@ export function useAnnotationWorkflow({
           removeAnnotationColorsByPrefix(current, importedPrefix),
         ),
       )
-      setHiddenAnnotationIds((current) =>
-        removeHiddenAnnotationIdsByPrefix(current, importedPrefix),
+      setHiddenAnnotationIds((current) => [
+        ...removeHiddenAnnotationIdsByPrefix(current, importedPrefix),
+        ...loadedAnnotationIds(importedAnnotations, linkHiddenAnnotationIds),
+      ])
+      setImportNotice(
+        cellCheck.missing === 0
+          ? null
+          : {
+              url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+              message: `${cellCheck.missing.toLocaleString()} of ${cellCheck.total.toLocaleString()} imported cells are not on the map.`,
+            },
       )
       setCellMetadataTracks(nextCellMetadataTracks)
       setSelectedCellMetadataTrackId((current) => {
@@ -293,6 +352,7 @@ export function useAnnotationWorkflow({
     [
       appendDebugEvent,
       cellMetadataTracks,
+      datasetCellIds,
       datasetUrl,
       loadState,
       setAnnotationColors,
@@ -313,10 +373,11 @@ export function useAnnotationWorkflow({
       try {
         importCustomAnnotationText(await file.text(), file.name, 'Imported annotations')
       } catch (error) {
+        setImportNotice(null)
         setAnnotationState(
           annotationLoadFailed(
             loadState.status === 'ready' ? loadState.url : datasetUrl,
-            createStructuredLoadError('Annotations', error),
+            annotationImportError(error),
           ),
         )
         appendDebugEvent('Annotation import failed')
@@ -332,7 +393,7 @@ export function useAnnotationWorkflow({
   )
 
   const handleImportAnnotationUrl = useCallback(
-    async (url: string) => {
+    async (url: string, { hiddenAnnotationIds }: LinkHiddenAnnotationOptions = {}) => {
       const requestId = loadRequestIdRef.current
 
       try {
@@ -354,17 +415,23 @@ export function useAnnotationWorkflow({
           return false
         }
 
-        importCustomAnnotationText(text, sourceName, 'Imported URL annotations')
+        importCustomAnnotationText(
+          text,
+          sourceName,
+          'Imported URL annotations',
+          hiddenAnnotationIds,
+        )
         return true
       } catch (error) {
         if (isAbortError(error) || loadRequestIdRef.current !== requestId) {
           return false
         }
 
+        setImportNotice(null)
         setAnnotationState(
           annotationLoadFailed(
             loadState.status === 'ready' ? loadState.url : datasetUrl,
-            createStructuredLoadError('Annotations', error),
+            annotationImportError(error),
           ),
         )
         appendDebugEvent('Annotation URL import failed')
@@ -496,6 +563,7 @@ export function useAnnotationWorkflow({
     setAnnotationColors({})
     setHiddenAnnotationIds([])
     setHiddenAnnotationSetIds([])
+    setImportNotice(null)
     setCellMetadataTracks([])
     setSelectedCellMetadataTrackId(null)
     setObservationColorMode((current) =>
@@ -561,7 +629,18 @@ export function useAnnotationWorkflow({
     setObservationColorMode,
   ])
 
+  // Shown while the dataset it was imported into is open and labels or
+  // tracks are loaded.
+  const annotationImportNotice =
+    importNotice !== null &&
+    loadState.status === 'ready' &&
+    importNotice.url === loadState.url &&
+    (annotationState.status === 'ready' || cellMetadataTracks.length > 0)
+      ? importNotice.message
+      : null
+
   return {
+    annotationImportNotice,
     handleAnnotationColorChange,
     handleAnnotationGroupChange,
     handleClearAnnotations,
@@ -574,6 +653,79 @@ export function useAnnotationWorkflow({
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
   }
+}
+
+// No imported cell is on the map, so the file is most likely for another
+// dataset.
+class ImportedCellsNotFoundError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ImportedCellsNotFoundError'
+  }
+}
+
+function annotationImportError(error: unknown): StructuredLoadError {
+  if (error instanceof ImportedCellsNotFoundError) {
+    return {
+      source: 'Annotations',
+      code: 'unknown',
+      title: 'Imported cells not found',
+      message: error.message,
+      action: "Check that the file's cell IDs come from this dataset.",
+    }
+  }
+
+  return createStructuredLoadError('Annotations', error)
+}
+
+// The imported cells, counted once each, and how many are not on the map.
+// Nothing is missing while the dataset's cells are not read.
+function checkImportedCellIds(
+  annotations: readonly Annotation[],
+  metadataTracks: readonly ContinuousCellMetadataTrack[],
+  datasetCellIds: DatasetCellIds,
+): { readonly total: number; readonly missing: number } {
+  const importedCellIds = new Set<string>()
+
+  for (const annotation of annotations) {
+    for (const cellId of annotation.cellIds) {
+      importedCellIds.add(cellId)
+    }
+  }
+
+  for (const track of metadataTracks) {
+    for (const { cellId } of track.values ?? []) {
+      importedCellIds.add(cellId)
+    }
+  }
+
+  if (datasetCellIds.size === 0) {
+    return { total: importedCellIds.size, missing: 0 }
+  }
+
+  let missing = 0
+
+  for (const cellId of importedCellIds) {
+    if (!datasetCellIds.has(cellId)) {
+      missing += 1
+    }
+  }
+
+  return { total: importedCellIds.size, missing }
+}
+
+// The IDs among the loaded labels, for the classes a link hides.
+function loadedAnnotationIds(
+  annotations: readonly Annotation[],
+  annotationIds: readonly string[],
+): readonly string[] {
+  if (annotationIds.length === 0) {
+    return []
+  }
+
+  const loadedIds = new Set(annotations.map((annotation) => annotation.id))
+
+  return annotationIds.filter((annotationId) => loadedIds.has(annotationId))
 }
 
 function mergeImportedCellMetadataTracks(

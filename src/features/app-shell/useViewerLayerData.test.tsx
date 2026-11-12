@@ -10,6 +10,8 @@ import { useViewerLayerData } from './useViewerLayerData'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
 import type { TiffPyramidLoader } from '../../tiff/loader'
+import type { StructuredLoadError } from '../errors/loadErrorModel'
+import type { TranscriptCapabilityState } from '../transcripts/transcriptLayerModel'
 
 const overviewCells: readonly OverviewCellDatum[] = [
   {
@@ -31,6 +33,21 @@ const expressionBatch: GeneExpressionBatch = {
   ],
   genes: ['Actb'],
   maxCount: 3,
+}
+
+const ZARR_GRID_CAPABILITY_STATE: TranscriptCapabilityState<StructuredLoadError> = {
+  status: 'ready',
+  url: 'https://example.test/output',
+  capabilities: {
+    rawParquet: true,
+    nativeZarr: true,
+    nativeZarrGridCounts: {
+      level: 0,
+      tileSizeMicrometers: 50,
+      gridKeys: ['0,0'],
+      transcriptCounts: [25_000],
+    },
+  },
 }
 
 type Result = ReturnType<typeof useViewerLayerData>
@@ -67,6 +84,37 @@ describe('useViewerLayerData', () => {
     expect(result.geneExpressionScaleMax).toBeGreaterThan(0)
     expect(result.overviewExtent).not.toBeNull()
     expect(result.visibleTranscriptEstimate).toBe(4)
+  })
+
+  it('estimates visible transcripts from transcripts.zarr.zip grid counts once read', () => {
+    function EstimateProbe({
+      onReady,
+    }: {
+      readonly onReady: (nextResult: Result) => void
+    }) {
+      const nextResult = useViewerLayerData(
+        viewerLayerOptions({
+          transcripts: { transcriptCapabilityState: ZARR_GRID_CAPABILITY_STATE },
+        }),
+      )
+
+      React.useEffect(() => {
+        onReady(nextResult)
+      })
+
+      return null
+    }
+
+    render(
+      <EstimateProbe
+        onReady={(nextResult) => {
+          result = nextResult
+        }}
+      />,
+    )
+
+    // The 10 µm view is 4% of the 50 µm tile; its cell holds 4 transcripts.
+    expect(result.visibleTranscriptEstimate).toBe(1_000)
   })
 
   it('activates metadata coloring when a selected metadata track exists', () => {
@@ -371,6 +419,7 @@ function viewerLayerOptions({
       ...morphology,
     },
     transcripts: {
+      transcriptCapabilityState: { status: 'idle' },
       transcriptDensityColorScale: 'thermal',
       transcriptLayerState: { status: 'idle' },
       transcriptPointColorMode: 'feature',

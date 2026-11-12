@@ -1267,19 +1267,125 @@ describe('Visium HD dataset readers', () => {
       visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
       visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
     ])
+    const fetcher = tissueImageFetcher({ hires: 200, lowres: 200 })
+    const onFallback = vi.fn()
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16],
+      fetcher,
       tissuePositionsReader: async () => positions,
       scalefactorsReader: async () => scalefactors,
     })
 
-    await expect(dataset.image()).resolves.toEqual({
+    await expect(dataset.image(undefined, { onFallback })).resolves.toEqual({
       kind: 'flat',
       url: 'https://example.test/visium/binned_outputs/square_016um/spatial/tissue_hires_image.png',
       scaleFactor: 0.25,
       size: [6000, 5143],
     })
+    // Only the high-res image is probed, with HEAD.
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/visium/binned_outputs/square_016um/spatial/tissue_hires_image.png',
+      { method: 'HEAD' },
+    )
+    expect(onFallback).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the low-res tissue PNG with its scale and size when the high-res one is missing', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const onFallback = vi.fn()
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      // Sanger S3 buckets answer 403 for a missing key.
+      fetcher: tissueImageFetcher({ hires: 403, lowres: 200 }),
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+    })
+
+    await expect(dataset.image(undefined, { onFallback })).resolves.toEqual({
+      kind: 'flat',
+      url: 'https://example.test/visium/binned_outputs/square_016um/spatial/tissue_lowres_image.png',
+      scaleFactor: 0.025,
+      size: [600, 514],
+    })
+    expect(onFallback).toHaveBeenCalledTimes(1)
+    expect(onFallback).toHaveBeenCalledWith({
+      source: 'Morphology image',
+      message:
+        'binned_outputs/square_016um/spatial/tissue_hires_image.png could not be read (HTTP 403), so the app shows binned_outputs/square_016um/spatial/tissue_lowres_image.png, the low-res tissue image, instead.',
+      action:
+        'Add the high-res tissue image to the dataset folder to show the tissue in more detail.',
+      coalesceKey: 'visium-hd-tissue-image:https://example.test/visium',
+    })
+  })
+
+  it('falls back to the low-res tissue PNG when the high-res request fails without a response', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const onFallback = vi.fn()
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin8],
+      // EBI FTP sends its 404s without CORS headers.
+      fetcher: tissueImageFetcher({ hires: 'network-error', lowres: 200 }),
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => ({
+        micronsPerPixel: scalefactors.micronsPerPixel,
+        tissueHiresScale: scalefactors.tissueHiresScale,
+        tissueLowresScale: scalefactors.tissueLowresScale,
+      }),
+    })
+
+    await expect(dataset.image(8, { onFallback })).resolves.toEqual({
+      kind: 'flat',
+      url: 'https://example.test/visium/binned_outputs/square_008um/spatial/tissue_lowres_image.png',
+      scaleFactor: 0.025,
+    })
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining(
+          'binned_outputs/square_008um/spatial/tissue_hires_image.png could not be read (Failed to fetch)',
+        ),
+      }),
+    )
+  })
+
+  it('returns the high-res tissue PNG as before when neither tissue image can be read', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
+    ])
+    const fetcher = tissueImageFetcher({ hires: 404, lowres: 404 })
+    const onFallback = vi.fn()
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      fetcher,
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+    })
+
+    await expect(dataset.image(undefined, { onFallback })).resolves.toEqual({
+      kind: 'flat',
+      url: 'https://example.test/visium/binned_outputs/square_016um/spatial/tissue_hires_image.png',
+      scaleFactor: 0.25,
+      size: [6000, 5143],
+    })
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://example.test/visium/binned_outputs/square_016um/spatial/tissue_lowres_image.png',
+      { method: 'HEAD' },
+    )
+    expect(onFallback).not.toHaveBeenCalled()
   })
 
   it('allows flat image dimensions to be resolved by the browser when scalefactors omit them', async () => {
@@ -1291,6 +1397,7 @@ describe('Visium HD dataset readers', () => {
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16],
+      fetcher: tissueImageFetcher({ hires: 200, lowres: 200 }),
       tissuePositionsReader: async () => positions,
       scalefactorsReader: async () => ({
         micronsPerPixel: scalefactors.micronsPerPixel,
@@ -1306,6 +1413,30 @@ describe('Visium HD dataset readers', () => {
     })
   })
 })
+
+// Answers HEAD requests for the tissue PNGs; 'network-error' rejects as a
+// browser does for a response without CORS headers.
+function tissueImageFetcher(statuses: {
+  readonly hires: number | 'network-error'
+  readonly lowres: number | 'network-error'
+}) {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    const status = url.endsWith('/tissue_hires_image.png')
+      ? statuses.hires
+      : url.endsWith('/tissue_lowres_image.png')
+        ? statuses.lowres
+        : 404
+
+    expect(init?.method).toBe('HEAD')
+
+    if (status === 'network-error') {
+      throw new TypeError('Failed to fetch')
+    }
+
+    return new Response(null, { status })
+  })
+}
 
 function visiumPositionRow(
   barcode: string,

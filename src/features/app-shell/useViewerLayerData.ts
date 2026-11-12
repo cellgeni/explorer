@@ -32,11 +32,12 @@ import {
   type GeneExpressionScaleDomain,
 } from '../genes/geneControlsModel'
 import {
-  estimateVisibleTranscriptsFromCells,
+  estimateVisibleTranscripts,
   transcriptAggregateBinsForRendering,
   transcriptAggregateScaleMaxForRendering,
   transcriptDensityScaleValueLabels,
   transcriptPointsForRendering,
+  type TranscriptCapabilityState,
   type TranscriptLayerState,
 } from '../transcripts/transcriptLayerModel'
 import {
@@ -75,6 +76,9 @@ interface ViewerLayerGeneExpressionOptions {
 }
 
 interface ViewerLayerTranscriptOptions {
+  // Its transcripts.zarr.zip grid counts, when read, give the visible
+  // transcript estimate.
+  readonly transcriptCapabilityState: TranscriptCapabilityState<StructuredLoadError>
   readonly transcriptLayerState: TranscriptLayerState<StructuredLoadError>
   readonly transcriptPointColorMode: TranscriptPointColorMode
   readonly transcriptDensityColorScale: TranscriptDensityColorScale
@@ -131,6 +135,7 @@ export function useViewerLayerData({
   } = geneExpression
   const {
     hiddenTranscriptGenes,
+    transcriptCapabilityState,
     transcriptDensityColorScale,
     transcriptGeneColor,
     transcriptLayerState,
@@ -284,8 +289,12 @@ export function useViewerLayerData({
     () =>
       currentViewportBbox === null
         ? 0
-        : estimateVisibleTranscriptsFromCells(overviewCells, currentViewportBbox),
-    [currentViewportBbox, overviewCells],
+        : estimateVisibleTranscripts(
+            transcriptCapabilityState,
+            overviewCells,
+            currentViewportBbox,
+          ),
+    [currentViewportBbox, overviewCells, transcriptCapabilityState],
   )
   const morphologyCanvasChannels = useMemo<readonly MorphologyCanvasChannel[]>(
     () =>

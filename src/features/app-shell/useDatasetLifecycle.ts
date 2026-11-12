@@ -1691,7 +1691,7 @@ export function useDatasetLifecycle({
 
           if (loadImage) {
             void dataset
-              .image()
+              .image(undefined, { onFallback: notifyFallbackWhenCommitted })
               .then((imageSource) => {
                 if (!isCurrentDatasetLoad()) {
                   return

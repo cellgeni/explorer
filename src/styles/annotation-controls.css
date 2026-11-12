@@ -170,6 +170,18 @@
   overflow-wrap: anywhere;
 }
 
+/* Imported cells that are not on the map. */
+.annotation-import-notice {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-2);
+  background: var(--warning-soft);
+  color: var(--text-1);
+  font-size: var(--font-caption);
+  overflow-wrap: anywhere;
+}
+
 .annotation-size-heading {
   display: flex;
   gap: 8px;

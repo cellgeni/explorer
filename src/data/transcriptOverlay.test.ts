@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   MAX_TRANSCRIPT_EXACT_RENDER_LIMIT,
   TRANSCRIPT_EXACT_RENDER_LIMIT,
+  loadDatasetTranscriptCapabilities,
   loadDatasetTranscriptViewport,
   mergeTranscriptPointMetadata,
   normalizeTranscriptExactPointLimit,
@@ -15,6 +16,7 @@ import type { XeniumDataset } from '../datasets/xeniumDataset'
 
 const transcriptZarrMock = vi.hoisted(() => ({
   loadTranscriptZarrAggregates: vi.fn(),
+  loadTranscriptZarrGridCounts: vi.fn(),
   loadTranscriptZarrViewport: vi.fn(),
 }))
 
@@ -22,6 +24,7 @@ vi.mock('./transcriptZarr', () => transcriptZarrMock)
 
 beforeEach(() => {
   transcriptZarrMock.loadTranscriptZarrAggregates.mockReset()
+  transcriptZarrMock.loadTranscriptZarrGridCounts.mockReset()
   transcriptZarrMock.loadTranscriptZarrViewport.mockReset()
 })
 
@@ -376,6 +379,94 @@ describe('transcriptOverlay', () => {
         coalesceKey: 'transcript-metadata-enrichment:https://example.test/xenium/',
       }),
     )
+  })
+
+  describe('transcript capabilities', () => {
+    const gridCounts = {
+      level: 0,
+      tileSizeMicrometers: 250,
+      gridKeys: ['0,0'],
+      transcriptCounts: [42],
+    }
+
+    it('reads the transcripts.zarr.zip grid counts for the visible estimate', async () => {
+      transcriptZarrMock.loadTranscriptZarrGridCounts.mockResolvedValue(gridCounts)
+
+      await expect(
+        loadDatasetTranscriptCapabilities('https://example.test/xenium/', {
+          validateRangeSupport: vi.fn(async () => undefined),
+        }),
+      ).resolves.toEqual({
+        rawParquet: true,
+        nativeZarr: true,
+        nativeZarrGridCounts: gridCounts,
+      })
+      expect(transcriptZarrMock.loadTranscriptZarrGridCounts).toHaveBeenCalledWith(
+        'https://example.test/xenium/transcripts.zarr.zip',
+        {},
+      )
+    })
+
+    it('keeps the native Zarr and says why when its grid counts cannot be read', async () => {
+      transcriptZarrMock.loadTranscriptZarrGridCounts.mockRejectedValueOnce(
+        new Error('transcripts.zarr.zip is missing grid_number_objects metadata.'),
+      )
+      transcriptZarrMock.loadTranscriptZarrGridCounts.mockResolvedValueOnce(null)
+      const validateRangeSupport = vi.fn(async () => undefined)
+
+      await expect(
+        loadDatasetTranscriptCapabilities('https://example.test/xenium/', {
+          validateRangeSupport,
+        }),
+      ).resolves.toEqual({
+        rawParquet: true,
+        nativeZarr: true,
+        nativeZarrGridCountsError:
+          'transcripts.zarr.zip is missing grid_number_objects metadata.',
+      })
+      await expect(
+        loadDatasetTranscriptCapabilities('https://example.test/xenium/', {
+          validateRangeSupport,
+        }),
+      ).resolves.toMatchObject({
+        nativeZarr: true,
+        nativeZarrGridCountsError: 'transcripts.zarr.zip has no level-0 grid counts.',
+      })
+    })
+
+    it('does not read grid counts without a range-readable transcripts.zarr.zip', async () => {
+      const validateRangeSupport = vi.fn(async (_url: string, options) => {
+        if (options.label === 'transcripts.zarr.zip') {
+          throw new Error('missing zarr')
+        }
+      })
+
+      await expect(
+        loadDatasetTranscriptCapabilities('https://example.test/xenium/', {
+          validateRangeSupport,
+        }),
+      ).resolves.toEqual({
+        rawParquet: true,
+        nativeZarr: false,
+        nativeZarrError: 'missing zarr',
+      })
+      expect(transcriptZarrMock.loadTranscriptZarrGridCounts).not.toHaveBeenCalled()
+    })
+
+    it('stops when the check is cancelled while the grid counts load', async () => {
+      const controller = new AbortController()
+      transcriptZarrMock.loadTranscriptZarrGridCounts.mockImplementation(async () => {
+        controller.abort()
+        return gridCounts
+      })
+
+      await expect(
+        loadDatasetTranscriptCapabilities('https://example.test/xenium/', {
+          validateRangeSupport: vi.fn(async () => undefined),
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' })
+    })
   })
 })
 

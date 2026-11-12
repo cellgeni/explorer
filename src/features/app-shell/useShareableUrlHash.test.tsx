@@ -6,11 +6,13 @@ import { useShareableUrlHash } from './useShareableUrlHash'
 
 function ShareableUrlHashProbe({
   datasetUrl = 'https://example.test/output',
+  hiddenAnnotationIds,
   selectedGenes = ['Actb', 'Gad1'],
   onHistoryDatasetChange,
   onShareUrl,
 }: {
   readonly datasetUrl?: string
+  readonly hiddenAnnotationIds?: readonly string[]
   readonly selectedGenes?: readonly string[]
   readonly onHistoryDatasetChange?: () => void
   readonly onShareUrl?: (shareUrl: () => string) => void
@@ -22,6 +24,7 @@ function ShareableUrlHashProbe({
       customImageOpacities: [0.35],
       customImageUrls: ['https://example.test/images/he.ome.tif'],
       datasetUrl,
+      hiddenAnnotationIds,
     },
     genes: {
       geneExpressionColorScale: 'plasma',
@@ -135,6 +138,24 @@ describe('useShareableUrlHash', () => {
     // Selected genes is the default transcript filter.
     expect(window.location.hash).not.toContain('txFilter')
     expect(window.location.hash).not.toContain('cellTrack')
+  })
+
+  it('writes hidden annotation classes while any are hidden', () => {
+    const { rerender } = render(
+      <ShareableUrlHashProbe hiddenAnnotationIds={['analysis:leiden:3']} />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.location.hash).toContain('hiddenClasses=analysis%3Aleiden%3A3')
+
+    rerender(<ShareableUrlHashProbe hiddenAnnotationIds={[]} />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.location.hash).not.toContain('hiddenClasses=')
   })
 
   it('gives the link for the current state before the address has it', () => {

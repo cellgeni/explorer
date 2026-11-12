@@ -129,8 +129,10 @@
 
 /* Toasts centre between the legend and loading list at the bottom left and
    the minimap at the bottom right, so they cover neither (ShellLayout
-   measures both; 15.5-E). Below 280 px of room they overlap rather than
-   shrink further. */
+   measures both; 15.5-E). They are at least 280 px wide; where the gap
+   cannot hold that and 12 px each side, ShellLayout marks the canvas
+   data-toast-raised and the toasts centre on the canvas above both corners,
+   at --toast-bottom. */
 .shell-body:not(.is-narrow) .viewer-toasts {
   --toast-room: calc(
     100% - var(--canvas-bottom-left-width, 0px) - var(--canvas-bottom-right-width, 0px)
@@ -138,6 +140,12 @@
 
   left: calc(var(--canvas-bottom-left-width, 0px) + var(--toast-room) / 2);
   width: min(440px, max(280px, calc(var(--toast-room) - 2 * var(--space-3))));
+}
+
+.shell-body:not(.is-narrow) .shell-canvas[data-toast-raised] .viewer-toasts {
+  bottom: max(16px, env(safe-area-inset-bottom), var(--toast-bottom, 0px));
+  left: 50%;
+  width: min(440px, calc(100% - 32px));
 }
 
 /* The info drawer opens over the left of the canvas, so the cards move to
@@ -783,6 +791,43 @@
   width: 100%;
   border-bottom: 0;
   border-radius: var(--radius-3) var(--radius-3) 0 0;
+}
+
+/* The docked cards cover the bottom of the canvas, so the zoom buttons, the
+   scale bar, the pointer readout and the legend and loading list rise above
+   them by --canvas-bottom-sheet-height (ShellLayout measures it; 0 with no
+   card open). The legend scrolls in the room left above the cards. */
+.shell-body.is-narrow .viewport-navigation {
+  bottom: calc(60px + var(--canvas-bottom-sheet-height, 0px));
+}
+
+.shell-body.is-narrow .viewport-scale-bar {
+  bottom: calc(12px + var(--canvas-bottom-sheet-height, 0px));
+}
+
+.shell-body.is-narrow .viewport-bottom-center-readout {
+  bottom: calc(10px + var(--canvas-bottom-sheet-height, 0px));
+}
+
+.shell-body.is-narrow .viewport-notification-stack {
+  --stack-bottom: calc(
+    max(8px, env(safe-area-inset-bottom)) + var(--canvas-bottom-sheet-height, 0px)
+  );
+
+  bottom: var(--stack-bottom);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - var(--stack-bottom) - 8px);
+}
+
+.shell-body.is-narrow .viewport-notification-stack > :not(.viewer-legend) {
+  flex: none;
+}
+
+.shell-body.is-narrow .viewer-legend {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .shell-embedding.is-full-width {

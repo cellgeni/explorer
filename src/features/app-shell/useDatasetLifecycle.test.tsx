@@ -1547,6 +1547,10 @@ describe('useDatasetLifecycle', () => {
       status: 'ready',
       url: `${datasetUrl}/binned_outputs/square_016um/spatial/tissue_hires_image.png`,
     })
+    // The dataset reports a low-res tissue image fallback through this.
+    expect(dataset.image).toHaveBeenCalledWith(undefined, {
+      onFallback: expect.any(Function),
+    })
   })
 
   it('enables the 2 µm Visium HD tier when the dataset exposes a filtered-barcode budget', async () => {

@@ -45,6 +45,21 @@ describe('HTTP Range support diagnostics', () => {
     )
   })
 
+  it('cancels the body of a response that ignored the Range request', async () => {
+    const cancel = vi.fn()
+    const body = new ReadableStream<Uint8Array>({ cancel })
+    const fetcher = vi.fn(async () => new Response(body, { status: 200 }))
+
+    await expect(
+      assertHttpRangeSupport('https://example.test/xenium/cells.parquet', {
+        fetcher,
+        label: 'cells.parquet',
+      }),
+    ).rejects.toThrow('Expected HTTP 206')
+
+    expect(cancel).toHaveBeenCalled()
+  })
+
   it('reports a 404 or 403 as a missing or unreadable file, not a Range problem', async () => {
     await expect(
       assertHttpRangeSupport('https://example.test/xenium/cells-renamed.parquet', {

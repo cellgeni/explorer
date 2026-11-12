@@ -519,6 +519,59 @@ export function transcriptZarrGridLevelBins(
   return bins
 }
 
+// The level-0 grid counts, for the visible transcript estimate, or null when
+// the output has none.
+export async function loadTranscriptZarrGridCounts(
+  url: string,
+  options: { readonly signal?: AbortSignal } = {},
+): Promise<TranscriptGridLevelMetadata | null> {
+  const metadata = await cachedTranscriptZarrMetadata(url)
+  throwIfAborted(options.signal)
+
+  return transcriptZarrExactGridLevel(metadata.gridLevels)
+}
+
+// Level 0 holds every transcript. Coarser levels hold a sample (on the demo,
+// level 1 holds 76% and level 7 1%), so only level 0 counts what an exact read
+// scans.
+export function transcriptZarrExactGridLevel(
+  levels: readonly TranscriptGridLevelMetadata[],
+): TranscriptGridLevelMetadata | null {
+  return levels.find((level) => level.level === TRANSCRIPT_ZARR_EXACT_LEVEL) ?? null
+}
+
+// The transcripts in a view from per-tile counts: each tile's count times the
+// share of its area inside the view, so edge tiles count as if their
+// transcripts were spread evenly. Tiles and the view are both in µm
+// (spatial_units is micron), as in the exact and density/gene reads.
+export function estimateTranscriptZarrViewportCount(
+  level: TranscriptGridLevelMetadata,
+  bbox: BBox,
+): number {
+  const size = level.tileSizeMicrometers
+  let total = 0
+
+  for (let index = 0; index < level.gridKeys.length; index += 1) {
+    const tile = parseGridKey(level.gridKeys[index])
+    const count = level.transcriptCounts[index] ?? 0
+
+    if (tile === null || count <= 0) {
+      continue
+    }
+
+    const width =
+      Math.min(bbox.maxX, (tile.x + 1) * size) - Math.max(bbox.minX, tile.x * size)
+    const height =
+      Math.min(bbox.maxY, (tile.y + 1) * size) - Math.max(bbox.minY, tile.y * size)
+
+    if (width > 0 && height > 0) {
+      total += (count * width * height) / (size * size)
+    }
+  }
+
+  return Math.round(total)
+}
+
 function countVisibleGridKeys(level: TranscriptGridLevelMetadata, bbox: BBox): number {
   let visibleCount = 0
 

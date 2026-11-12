@@ -890,6 +890,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     transcripts: {
       hiddenTranscriptGenes: transcriptGenes.hiddenGenes,
+      transcriptCapabilityState,
       transcriptDensityColorScale,
       transcriptGeneColor: transcriptGenes.featureColor,
       transcriptLayerState,
@@ -2293,6 +2294,7 @@ export function App({ dependencies }: AppProps = {}) {
   }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState])
 
   const {
+    annotationImportNotice,
     handleAnnotationColorChange,
     handleAnnotationGroupChange,
     handleClearAnnotations,
@@ -2309,6 +2311,7 @@ export function App({ dependencies }: AppProps = {}) {
     data: {
       annotationState,
       cellMetadataTracks,
+      datasetCellIds: overviewCellById,
       datasetUrl,
       loadState,
       roiName,
@@ -2472,12 +2475,19 @@ export function App({ dependencies }: AppProps = {}) {
     }
 
     initialAnnotationImportUrlRef.current = null
-    void handleImportAnnotationUrl(initialAnnotationUrl).then((imported) => {
+    void handleImportAnnotationUrl(initialAnnotationUrl, {
+      hiddenAnnotationIds: initialShareableState.hiddenAnnotationIds,
+    }).then((imported) => {
       if (imported) {
         setAnnotationImportUrl(initialAnnotationUrl)
       }
     })
-  }, [handleImportAnnotationUrl, loadedDatasetUrl, setAnnotationImportUrl])
+  }, [
+    handleImportAnnotationUrl,
+    initialShareableState.hiddenAnnotationIds,
+    loadedDatasetUrl,
+    setAnnotationImportUrl,
+  ])
   useEffect(() => {
     const groupIds = initialAnnotationGroupIdsRef.current
 
@@ -2506,15 +2516,18 @@ export function App({ dependencies }: AppProps = {}) {
       // The commit already applied the link's colour mode; a version 2 link
       // leaves out the default one. A hand-written link with no version and
       // no cellColor= colours cells by the set, as choosing it would.
+      // The classes the link hides stay hidden once the set loads.
       loadAnnotationGroup(groupId, {
         switchColorMode:
           initialShareableState.linkVersion === undefined &&
           initialShareableState.observationColorMode === undefined,
+        hiddenAnnotationIds: initialShareableState.hiddenAnnotationIds,
       })
     }
   }, [
     annotationGroupState,
     initialShareableState.datasetUrl,
+    initialShareableState.hiddenAnnotationIds,
     initialShareableState.linkVersion,
     initialShareableState.observationColorMode,
     loadAnnotationGroup,
@@ -3091,6 +3104,7 @@ export function App({ dependencies }: AppProps = {}) {
     callbacks: {
       appendDebugEvent,
       onBeforeBinSizeChange: handleBeforeVisiumHdBinSizeChange,
+      onFallback: appendFallbackNotice,
     },
     controls: {
       currentViewportDetail,
@@ -3169,6 +3183,12 @@ export function App({ dependencies }: AppProps = {}) {
         : [loadedAnnotationGroupId],
     [linkAnnotationGroupIds, loadedAnnotationGroupId],
   )
+  // Hidden classes: until the link's set loads, the link keeps the ones it
+  // was opened with, as it keeps its sets.
+  const sharedHiddenAnnotationIds =
+    linkAnnotationGroupIds === null
+      ? hiddenAnnotationIds
+      : (initialShareableState.hiddenAnnotationIds ?? hiddenAnnotationIds)
   const sharedPanels = useMemo(
     () => panelsForLink(shellPanels, defaultPanelIds),
     [defaultPanelIds, shellPanels],
@@ -3240,6 +3260,7 @@ export function App({ dependencies }: AppProps = {}) {
       // back to the app default is kept, so the manifest does not replace it.
       datasetDefaults: datasetManifestDefaults,
       annotationGroupIds: sharedAnnotationGroupIds,
+      hiddenAnnotationIds: sharedHiddenAnnotationIds,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
     },
@@ -3583,6 +3604,7 @@ export function App({ dependencies }: AppProps = {}) {
     annotationGroupOptions,
     annotationGroupState,
     annotationHeaderCopy,
+    annotationImportNotice,
     annotationImportUrl,
     annotationPlacedCellIds,
     annotationState,
