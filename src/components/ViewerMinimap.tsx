@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, type PointerEvent } from 'react'
+import { memo, useEffect, useMemo, useRef, type PointerEvent } from 'react'
 import type { BBox } from '../data/coords'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 import {
@@ -9,12 +9,11 @@ import {
 import {
   minimapDeckTarget,
   minimapDrawsImage,
+  minimapTileCacheTiles,
   minimapViewRect,
   type MinimapLayout,
 } from './viewerMinimapModel'
 
-// Tiles for the whole image at its coarsest level: a few per channel.
-const MINIMAP_TILE_CACHE_TILES = 24
 const MINIMAP_TILE_REQUESTS = 2
 
 interface ViewerMinimapProps {
@@ -44,6 +43,10 @@ export const ViewerMinimap = memo(function ViewerMinimap({
 }: ViewerMinimapProps) {
   const draggingRef = useRef(false)
   const hasImage = minimapDrawsImage(imageLoader, imageChannels, flatImage)
+  const tileCacheMaxTiles = useMemo(
+    () => minimapTileCacheTiles(imageLoader, imageChannels.length),
+    [imageLoader, imageChannels.length],
+  )
   const viewRect = viewBbox === null ? null : minimapViewRect(viewBbox, layout)
 
   function navigate(event: PointerEvent<HTMLDivElement>) {
@@ -87,7 +90,7 @@ export const ViewerMinimap = memo(function ViewerMinimap({
           flatImage={flatImage}
           viewState={layout.viewState}
           maxConcurrentTileRequests={MINIMAP_TILE_REQUESTS}
-          tileCacheMaxTiles={MINIMAP_TILE_CACHE_TILES}
+          tileCacheMaxTiles={tileCacheMaxTiles}
         />
       ) : (
         <MinimapDots layout={layout} points={points} />

@@ -445,7 +445,7 @@ function prepareChannelRequest(options: {
   if (record === undefined) {
     const normalMaxTiles = Math.max(
       24,
-      Math.floor(options.maxCacheTiles / Math.max(1, options.cacheRecords.size + 1)),
+      Math.floor(scheduling.maxCacheTiles / Math.max(1, options.cacheRecords.size + 1)),
     )
     const maxTiles = Math.min(scheduling.maxCacheTiles, normalMaxTiles)
     const cache = new TileCache({

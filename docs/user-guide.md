@@ -17,7 +17,7 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 - Direct AnnData `.h5ad` file URLs, including Visium files from scanpy,
   squidpy, or CELLxGENE.
 - SpatialData Zarr store URLs, such as `sample.sdata.zarr`.
-- Direct OME-TIFF, TIFF, QPTIFF, OME-Zarr, or validated NDPI image URLs.
+- Direct OME-TIFF, TIFF, QPTIFF, SVS, OME-Zarr, or validated NDPI image URLs.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
 
 Loading another dataset keeps the current one open until the new one is
@@ -317,8 +317,9 @@ coordinate system, table, shapes, labels, and image are chosen.
 
 Image-only sources render the image pyramid without requiring transcriptomics
 files. Supported URL forms include `.ome.tif`, `.ome.tiff`, `.tif`, `.tiff`,
-`.qptiff`, `.ome.zarr`, `.zarr`, `zarr.json`, `.zattrs`, and `.ndpi`. TIFFs
-must be tiled with `SubIFD` pyramid levels (QPTIFF uses its own layout); see
+`.qptiff`, `.svs`, `.ome.zarr`, `.zarr`, `zarr.json`, `.zattrs`, and `.ndpi`.
+TIFFs must be tiled with `SubIFD` pyramid levels (QPTIFF and SVS use their own
+layouts); see
 [Image-only and GeoJSON](./image-only-and-geojson.md#supported-image-urls).
 
 For image-only sources, use the Image section for image channels and custom

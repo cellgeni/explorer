@@ -1,4 +1,5 @@
 import type { BBox } from '../data/coords'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 import type { OverviewViewState } from '../rendering/deckLayerTypes'
 import { fitExtentViewState, type DeckExtent } from '../rendering/overviewViewState'
 import { rawDataPointToScreen, type ScreenPoint } from './viewerMeasurements'
@@ -15,6 +16,11 @@ const MINIMAP_PADDING = 6
 const MINIMAP_MIN_VIEW_BOX = 6
 // Without an image, up to this many cells (or bins) are drawn as dots.
 export const MINIMAP_POINT_LIMIT = 6_000
+// Tiles for the whole image at its coarsest level: usually a few per
+// channel, but a slide whose coarsest level is a few thousand pixels in small
+// tiles (SVS) needs over a hundred.
+const MINIMAP_MIN_TILE_CACHE_TILES = 24
+const MINIMAP_MAX_TILE_CACHE_TILES = 512
 
 export interface MinimapLayout {
   readonly width: number
@@ -130,4 +136,20 @@ export function minimapPoints<Element>(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+export function minimapTileCacheTiles(
+  loader: Pick<ImagePyramidLoader, 'numLevels' | 'tilesForLevel'> | null,
+  channelCount: number,
+): number {
+  if (loader === null || !(loader.numLevels >= 1)) {
+    return MINIMAP_MIN_TILE_CACHE_TILES
+  }
+
+  const coarsestTiles = loader.tilesForLevel(loader.numLevels - 1).length
+
+  return Math.max(
+    MINIMAP_MIN_TILE_CACHE_TILES,
+    Math.min(MINIMAP_MAX_TILE_CACHE_TILES, coarsestTiles * Math.max(1, channelCount)),
+  )
 }

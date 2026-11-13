@@ -6124,6 +6124,7 @@ function imageOnlyTiffLoaderFixture(url: string): TiffPyramidLoader {
     tileWidth: imagePixels(256),
     tileHeight: imagePixels(256),
     numLevels: 1,
+    tilesForLevel: () => [{ col: 0, row: 0 }],
     units: {
       dataUnit: 'micrometer',
       imageUnit: 'pixel',

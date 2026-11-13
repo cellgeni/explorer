@@ -6,6 +6,7 @@ import {
   minimapDrawsImage,
   minimapLayout,
   minimapPoints,
+  minimapTileCacheTiles,
   minimapViewRect,
 } from './viewerMinimapModel'
 
@@ -107,5 +108,18 @@ describe('viewerMinimapModel', () => {
     expect(minimapDrawsImage(loader, [], null)).toBe(true)
     expect(minimapDrawsImage(null, [], null)).toBe(false)
     expect(minimapDrawsImage(null, [{ enabled: false }], {})).toBe(true)
+  })
+
+  it('caches the whole coarsest level, a few tiles or a slide’s hundred', () => {
+    const loader = (tiles: number) => ({
+      numLevels: 2,
+      tilesForLevel: (level: number) =>
+        Array.from({ length: level === 1 ? tiles : 10_000 }, () => ({ col: 0, row: 0 })),
+    })
+
+    expect(minimapTileCacheTiles(null, 1)).toBe(24)
+    expect(minimapTileCacheTiles(loader(4), 3)).toBe(24)
+    expect(minimapTileCacheTiles(loader(130), 1)).toBe(130)
+    expect(minimapTileCacheTiles(loader(240), 4)).toBe(512)
   })
 })

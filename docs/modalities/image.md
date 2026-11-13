@@ -2,7 +2,7 @@
 
 This page covers two things:
 
-- The **image-only** modality: a direct OME-TIFF, TIFF, QPTIFF, NDPI, or
+- The **image-only** modality: a direct OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or
   OME-Zarr URL loaded without any omics tables.
 - The shared **image pyramid pipeline** used by every platform for morphology
   images (Xenium), SpatialData images, and custom image layers.
@@ -15,12 +15,12 @@ For usage of image-only sources and GeoJSON shapes see
 `detectSpatialDataset` (`src/datasets/datasetFactory.ts`) recognizes images by
 URL shape before any Xenium probe:
 
-| URL pattern                                                                                            | Check                                                                        | Result                                                                                |
-| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, or `/.zattrs` (`isOmeZarrImageUrl`)                   | `HEAD` on the root's `zarr.json` and/or `.zattrs`                            | SpatialData if the root has `spatialdata_attrs`, else image (`imageKind: 'ome-zarr'`) |
-| Ends in `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, `.qptiff`, `.qptif`, or `.ndpi` (query/hash allowed) | One `HEAD` on the URL                                                        | Image (`imageKind: 'tiff'`, `'qptiff'`, or `'ndpi'`)                                  |
-| Any other folder URL                                                                                   | After the `experiment.xenium` probe fails, `HEAD` on `zarr.json` / `.zattrs` | SpatialData, or image pointing at that metadata file                                  |
-| Path ends in `.icechunk` (an [Icechunk](https://icechunk.io/) repository)                              | Opens the repository's `repo` file and snapshot                              | AnnData, SpatialData, or, with root `multiscales`, image (`imageKind: 'ome-zarr'`)    |
+| URL pattern                                                                                                    | Check                                                                        | Result                                                                                |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, or `/.zattrs` (`isOmeZarrImageUrl`)                           | `HEAD` on the root's `zarr.json` and/or `.zattrs`                            | SpatialData if the root has `spatialdata_attrs`, else image (`imageKind: 'ome-zarr'`) |
+| Ends in `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, `.qptiff`, `.qptif`, `.svs`, or `.ndpi` (query/hash allowed) | One `HEAD` on the URL                                                        | Image (`imageKind: 'tiff'`, `'qptiff'`, `'svs'`, or `'ndpi'`)                         |
+| Any other folder URL                                                                                           | After the `experiment.xenium` probe fails, `HEAD` on `zarr.json` / `.zattrs` | SpatialData, or image pointing at that metadata file                                  |
+| Path ends in `.icechunk` (an [Icechunk](https://icechunk.io/) repository)                                      | Opens the repository's `repo` file and snapshot                              | AnnData, SpatialData, or, with root `multiscales`, image (`imageKind: 'ome-zarr'`)    |
 
 `omeZarrImageRootUrl` strips a trailing `/zarr.json` or `/.zattrs` to find the
 store root. `createSpatialDataset` builds an `ImageOnlyDataset`
@@ -63,10 +63,12 @@ Zarr loaders add `loadTile`/`loadTilePixels`.
 
 1. Opens the file with `geotiff` `fromUrl(url, { allowFullFile: false })`. A
    `#ifd=N` hash selects the base IFD. `.qptiff` and `.qptif` URLs go to the
-   [QPTIFF](#qptiff) reader instead.
+   [QPTIFF](#qptiff) reader instead, and `.svs` URLs to the [SVS](#svs)
+   reader.
 2. Reads OME-XML from IFD 0's `ImageDescription` (`parseOmeTiffMetadata`,
    `src/tiff/omeMetadata.ts`). A `PerkinElmer-QPI-ImageDescription` there
-   sends the file to the QPTIFF reader.
+   sends the file to the QPTIFF reader, and a description starting with
+   `Aperio` to the SVS reader.
 3. Tries a `.zchunkstore` sidecar (`src/tiff/zchunkStore.ts`) for precomputed
    tile offsets. A sidecar named by the dataset manifest
    (`files.morphologyZchunkstore`, or `files.zchunkstore` for `image`) is the
@@ -117,8 +119,8 @@ stack lists planes on its channel axis.
 ### Requirements
 
 - **Tiled, with SubIFD pyramids.** Pyramids stored as additional top-level
-  IFDs are not read (QPTIFF excepted), so such files render at full resolution
-  only. Stripped TIFFs (`StripOffsets`) are not indexed: the file opens but no
+  IFDs are not read (QPTIFF and SVS excepted), so such files render at full
+  resolution only. Stripped TIFFs (`StripOffsets`) are not indexed: the file opens but no
   tiles load. Most NDPI files fall in one of these cases; convert them to
   pyramidal OME-TIFF.
 - **8- or 16-bit samples**, 1, 3, or 4 samples per pixel. Float images fail.
@@ -174,23 +176,103 @@ Checked against
 (PhenoCycler-Fusion 2.3.1; 61 channels of 24,960 × 48,960 16-bit LZW, 512 px
 tiles, five levels shown, 0.505 µm/px).
 
+### SVS
+
+Aperio and Leica scanners, and others that copy the format (Grundium), write
+SVS: a TIFF or BigTIFF whose pyramid levels are top-level IFDs. IFD 0 is the
+full-resolution image, then come a stripped thumbnail, the reduced levels
+(4× steps on Aperio AT2 and ScanScope, 2× on GT450), the label, and the macro
+(slide overview). `openTiff` sends `.svs` URLs, and TIFFs whose first
+`ImageDescription` starts with `Aperio`, to the SVS reader, which shares the
+top-level IFD code with QPTIFF (`src/tiff/loader.ts`, layout and metadata in
+`src/tiff/svs.ts`):
+
+- **IFD walk.** Aperio writes each IFD after its image data, so the IFDs are
+  spread through the file. The walk reads through a geotiff block cache of
+  64 KiB blocks, which fetches each IFD together with its `JPEGTables` and
+  tile offsets, and stops at the label (the first stripped IFD with
+  `NewSubfileType` bit 0 set), so the macro IFD is not read. The slide below
+  opens in 5 range requests (320 KB); reading exact ranges took 10.
+- **Layout.** Every tiled IFD is a level, as OpenSlide reads SVS. A tiled IFD
+  with another tile size or sample count than IFD 0, or no smaller than the
+  level before it, is left out. The thumbnail, label, and macro are not shown.
+- **Metadata.** The pixel size is `MPP` from the description (`|`-separated
+  `key = value` fields, any spacing around `=`), else `XResolution` in
+  `ResolutionUnit`, else 0.2125 µm. The slide is one channel, `RGB`, drawn as
+  stored; a single-sample slide is one greyscale channel.
+- **Per-level tags.** Each level is decoded with its own IFD's tags: Aperio
+  writes different JPEG quantization tables for each level.
+- **Tile offsets** of a level are read when its first tile is fetched, so
+  level 0's offsets, the largest arrays, wait until the view zooms in.
+- **Adjacent reads.** SVS tiles are small (240 or 256 px, a few KB) and stored
+  back to back, row by row or in scan stripes. A tile fetch reads, in one
+  request, the run of tiles stored next to it in the file that lie within 4
+  tiles of it in the image (at most 16 tiles and 1 MiB). The others wait in
+  memory, at most 512 of them, for their own fetch. A run is not cancelled
+  when its tile leaves the view, since other tiles may be waiting on it.
+- **Missing tiles.** A zero-length tile is drawn transparent without a
+  request.
+- `.zchunkstore` sidecars are not used. A sidecar named by the dataset
+  manifest for an SVS adds a fallback notice.
+
+Tiles are JPEG with RGB components (Aperio `JPEG/RGB`) or YCbCr components
+(GT450 `JPEG/YCC`, Grundium), or JPEG 2000 with YCbCr (33003) or RGB (33005)
+components; see [Codecs](#codecs).
+
+Checked against:
+
+| File                                                                                                                | Scanner                       | Tiles                                         | Levels                                     |
+| ------------------------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------- | ------------------------------------------ |
+| BioImage Archive S-BSST129 `HR10036-BL117659-94605_N2.svs` (24 MB)                                                  | Aperio AT2                    | JPEG 2000 RGB, 240 px                         | 11,952 × 8,842 and 2,988 × 2,210; 0.503 µm |
+| OpenSlide test data `CMU-1.svs` and `CMU-1-Small-Region.svs`                                                        | Aperio ScanScope              | JPEG RGB, `JPEGTables` per level, 256 px      | 46,000 × 32,914, three levels; 0.499 µm    |
+| BioImage Archive S-BIAD2323 `component_C_leica_svs/c003_leica.svs` and `component_A_grundium_svs/c004_grundium.svs` | Leica GT450 DX, Grundium Ocus | JPEG YCbCr, BigTIFF, 256 px and 512 px        | five and four levels; 0.264 and 0.251 µm   |
+| OpenSlide test data `JP2K-33003-1.svs`                                                                              | Aperio                        | JPEG 2000 YCbCr, chroma at half width, 256 px | 15,374 × 17,497, three levels              |
+
+All but the last were opened in the app (the BioImage Archive ones directly
+from EBI); for `JP2K-33003-1.svs`, tiles decoded by the app were compared with
+tifffile (`imagecodecs`) decodes.
+
 ### Codecs
 
 `decodeTiffTilePixels` (`src/codecs/tiffTile.ts`):
 
-| Compression                                                           | Decoder                                                                   |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| 33003/33004/33005/34712 (JPEG 2000), or no Compression tag            | OpenJPEG WASM (`@cornerstonejs/codec-openjpeg`, `src/codecs/jpeg2000.ts`) |
-| 1 (none)                                                              | Copy                                                                      |
-| 5 (LZW, predictor 1)                                                  | Built-in decoder                                                          |
-| Other (LZW with predictor, JPEG, Deflate, PackBits, LERC, Zstd, WebP) | `geotiff` `getDecoder`                                                    |
+| Compression                                                           | Decoder                                                                                                   |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 33003/33004/33005/34712 (JPEG 2000), or no Compression tag            | OpenJPEG WASM (`@cornerstonejs/codec-openjpeg`, `src/codecs/jpeg2000.ts`)                                 |
+| 1 (none)                                                              | Copy                                                                                                      |
+| 5 (LZW, predictor 1)                                                  | Built-in decoder                                                                                          |
+| 7 (JPEG), 8-bit RGB                                                   | The browser's decoder (`createImageBitmap`) in the decode worker (`src/codecs/jpeg.ts`); `geotiff` if not |
+| Other (LZW with predictor, JPEG, Deflate, PackBits, LERC, Zstd, WebP) | `geotiff` `getDecoder`                                                                                    |
 
 JPEG-XR is not supported.
+
+**JPEG colour.** A three-component JPEG tile holds RGB or YCbCr. An Adobe or
+JFIF marker in the tile or `JPEGTables` decides; otherwise `Photometric`
+does (2 RGB, 6 YCbCr), as tifffile reads Aperio SVS; otherwise the component
+IDs do, as libjpeg guesses (`R`, `G`, `B` is RGB, anything else YCbCr).
+Aperio's RGB tiles have IDs 0, 1, 2 and no marker, which browsers decode as
+YCbCr (white background turns magenta), so the worker merges the tables into
+the tile and adds an Adobe marker (transform 0) before decoding. The browser
+decodes a 256-pixel tile in about 1 ms, against about 15 ms in JavaScript,
+and the result is the bitmap the canvas draws, with no window or colour step.
+`geotiff`'s decoder returns the components unconverted, so YCbCr tiles
+decoded there are converted to RGB after it (JFIF coefficients).
+
+**JPEG 2000 colour.** Aperio 33003 tiles hold YCbCr with chroma at half
+width and no colour transform in the codestream; OpenJPEG converts such
+subsampled images to RGB itself. 33005 tiles use the codestream's colour
+transform.
 
 ### Fetching And Decoding
 
 - Tile bytes go through the IndexedDB byte-range cache (namespace `tiff-tile`,
   `src/data/persistentByteRangeCache.ts`).
+- Tile `Range` requests are sent with `cache: 'no-store'`. Chromium lets one
+  request at a time use a URL's HTTP cache entry, so `Range` requests to one
+  file waited for each other: four concurrent 1 s requests took 4.05 s, and
+  1.02 s with `no-store`.
+- A zero-length tile (one the file leaves out) is drawn transparent and
+  skipped by auto-contrast.
 - Decoding runs in `TileDecodeWorkerPool` (`src/workers/tileDecodePool.ts`,
   up to `min(4, hardwareConcurrency)` workers). The worker decodes, applies the
   channel window and colour (`normaliseToRgba`), and returns an `ImageBitmap`.
@@ -242,10 +324,16 @@ JPEG-XR is not supported.
   plus a 256-screen-pixel margin are requested nearest-centre first
   (`selectCenteredTiles`, `src/rendering/morphologyCanvas.ts`). Concurrency is
   `maxConcurrentTileRequests` from the performance budget divided across
-  channels. Large uncompressed or LZW tiles (≥ 512 × 512) use a reduced "heavy"
-  schedule (`src/rendering/morphologyTileScheduling.ts`).
+  channels. The initial request count (96), the tile cache, and the
+  concurrency are sized for 512-pixel tiles; smaller tiles get
+  proportionally more, up to 4× (an SVS slide in 240-pixel tiles with 4×
+  level steps needs 130 tiles for the overview of the slide above, and up to
+  300 when zoomed). Large uncompressed or LZW tiles (≥ 512 × 512) use a
+  reduced "heavy" schedule (`src/rendering/morphologyTileScheduling.ts`).
 - **Drawing.** While tiles load, the nearest ready level fills in. Multiple
   channels are composited additively (`lighter`) with per-channel alpha.
+  Tile edges are snapped to whole pixels, so neighbouring tiles meet without
+  a seam of background between them.
 - **Contrast.** Changing a channel's window or colour starts a new tile cache,
   so tiles are decoded again.
 
@@ -254,8 +342,10 @@ JPEG-XR is not supported.
 `computeChannelAutoContrast` (`src/data/morphologyContrast.ts`) samples up to
 250,000 values from the coarsest level and sets the window to the 0.5 and
 99.8 percentiles, with a 32-bin histogram for the Image section. It runs after
-an image loads and when a channel's `Auto` button is pressed. SpatialData
-native RGB images skip it.
+an image loads and when a channel's `Auto` button is pressed. Native RGB
+channels (H&E slides, RGB OME-TIFF and SpatialData images) are not
+auto-contrasted when the image loads: they are drawn without a window, and
+the coarsest level of an SVS slide can be over a hundred tiles.
 
 An image with more than six channels auto-contrasts only the channels that are
 on when it loads. Any other channel is auto-contrasted when it is first turned
@@ -267,8 +357,8 @@ RGB channels are left alone.
 `Custom image URL` → `Load Layer` in the Image section
 (`useCustomMorphologyLayerWorkflow`, `src/features/morphology/`):
 
-- Accepts `http`/`https` OME-TIFF, TIFF, or OME-Zarr URLs; http URLs that fail
-  are retried over https.
+- Accepts `http`/`https` OME-TIFF, TIFF, QPTIFF, SVS, or OME-Zarr URLs; http
+  URLs that fail are retried over https.
 - Channels are prefixed with the layer name (the file name). A layer without
   channel metadata gets one white channel.
 - Layers are saved in the share URL as repeated `customImageUrl` and
@@ -276,36 +366,37 @@ RGB channels are left alone.
 
 ## Constants
 
-| Constant                   | Value                                              | File                                     |
-| -------------------------- | -------------------------------------------------- | ---------------------------------------- |
-| Default µm/px              | 0.2125 (TIFF), 1 (Zarr)                            | `omeMetadata.ts`, `omeZarrLoader.ts`     |
-| Default tile size          | 256                                                | `loader.ts`, `omeZarrLoader.ts`          |
-| Level threshold            | 1.5 screen px per source px                        | `loader.ts`, `omeZarrLoader.ts`          |
-| Decode workers             | TIFF ≤ 4; OME-Zarr ≤ 3                             | `tileDecodePool.ts`, `zarrDecodePool.ts` |
-| Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6 | `src/data/performanceBudget.ts`          |
-| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples, 32 bins   | `morphologyContrast.ts`                  |
-| IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry           | `persistentByteRangeCache.ts`            |
+| Constant                   | Value                                                                               | File                                                           |
+| -------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Default µm/px              | 0.2125 (TIFF), 1 (Zarr)                                                             | `omeMetadata.ts`, `omeZarrLoader.ts`                           |
+| Default tile size          | 256                                                                                 | `loader.ts`, `omeZarrLoader.ts`                                |
+| Level threshold            | 1.5 screen px per source px                                                         | `loader.ts`, `omeZarrLoader.ts`                                |
+| Decode workers             | TIFF ≤ 4; OME-Zarr ≤ 3                                                              | `tileDecodePool.ts`, `zarrDecodePool.ts`                       |
+| Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6; up to 4× for tiles under 512 px | `src/data/performanceBudget.ts`, `morphologyTileScheduling.ts` |
+| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples, 32 bins                                    | `morphologyContrast.ts`                                        |
+| IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry                                            | `persistentByteRangeCache.ts`                                  |
 
 ## Source Files
 
-| File                                                                                                      | Role                                                                   |
-| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `src/datasets/imageOnlyDataset.ts`                                                                        | Image-only `SpatialDataset`                                            |
-| `src/data/imagePyramid.ts`                                                                                | `ImagePyramidLoader` interface                                         |
-| `src/data/morphologyImage.ts`                                                                             | Image opening, per-channel loaders, custom layers, Xenium image choice |
-| `src/data/morphologyContrast.ts`                                                                          | Auto-contrast                                                          |
-| `src/tiff/loader.ts`, `omeMetadata.ts`, `qptiff.ts`, `zchunkStore.ts`, `tileCache.ts`, `chunkKeys.ts`     | TIFF and QPTIFF loading                                                |
-| `src/codecs/tiffTile.ts`, `jpeg2000.ts`                                                                   | Tile decoding                                                          |
-| `src/workers/tileDecode.worker.ts`, `tileDecodePool.ts`, `tileDecodeMessages.ts`                          | Decode workers                                                         |
-| `src/zarr/omeZarrLoader.ts`, `zarrStores.ts`                                                              | OME-Zarr loading                                                       |
-| `src/workers/zarrDecode.worker.ts`, `zarrDecodePool.ts`, `zarrDecodeCore.ts`                              | OME-Zarr chunk decoding and label tracing                              |
-| `src/components/MorphologyCanvas.tsx`, `src/rendering/morphologyCanvas.ts`, `morphologyTileScheduling.ts` | Drawing and scheduling                                                 |
-| `src/features/morphology/*`                                                                               | Channel controls and custom layers                                     |
-| `src/features/annotations/geometricAnnotationModel.ts`                                                    | GeoJSON shapes (image-only ROI output)                                 |
+| File                                                                                                            | Role                                                                   |
+| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `src/datasets/imageOnlyDataset.ts`                                                                              | Image-only `SpatialDataset`                                            |
+| `src/data/imagePyramid.ts`                                                                                      | `ImagePyramidLoader` interface                                         |
+| `src/data/morphologyImage.ts`                                                                                   | Image opening, per-channel loaders, custom layers, Xenium image choice |
+| `src/data/morphologyContrast.ts`                                                                                | Auto-contrast                                                          |
+| `src/tiff/loader.ts`, `omeMetadata.ts`, `qptiff.ts`, `svs.ts`, `zchunkStore.ts`, `tileCache.ts`, `chunkKeys.ts` | TIFF, QPTIFF, and SVS loading                                          |
+| `src/codecs/tiffTile.ts`, `jpeg.ts`, `jpeg2000.ts`                                                              | Tile decoding                                                          |
+| `src/workers/tileDecode.worker.ts`, `tileDecodePool.ts`, `tileDecodeMessages.ts`                                | Decode workers                                                         |
+| `src/zarr/omeZarrLoader.ts`, `zarrStores.ts`                                                                    | OME-Zarr loading                                                       |
+| `src/workers/zarrDecode.worker.ts`, `zarrDecodePool.ts`, `zarrDecodeCore.ts`                                    | OME-Zarr chunk decoding and label tracing                              |
+| `src/components/MorphologyCanvas.tsx`, `src/rendering/morphologyCanvas.ts`, `morphologyTileScheduling.ts`       | Drawing and scheduling                                                 |
+| `src/features/morphology/*`                                                                                     | Channel controls and custom layers                                     |
+| `src/features/annotations/geometricAnnotationModel.ts`                                                          | GeoJSON shapes (image-only ROI output)                                 |
 
 ## Known Limitations
 
-- Top-level-IFD pyramids and stripped TIFFs are not supported.
+- Top-level-IFD pyramids (other than QPTIFF and SVS) and stripped TIFFs are
+  not supported.
 - TIFFs without a `.zchunkstore` make one extra request per candidate sidecar
   URL before reading the TIFF's own offsets.
 - A `.zchunkstore` is checked only against the TIFF's level 0 width, height,
@@ -322,3 +413,10 @@ RGB channels are left alone.
   IFDs are spread through the file, rather than together at the start, costs
   one 1 MiB block per IFD to open. Float (unmixed component) QPTIFFs fail like
   other float images.
+- SVS: the thumbnail, label, and macro images are not shown, and the minimap
+  draws the coarsest level from its own tiles rather than the thumbnail, so
+  it decodes that level a second time. Aperio's 4× level steps mean a view
+  just past a level switch draws about 7 source pixels per screen pixel.
+  Aperio fluorescence SVS files (one pyramid per channel) have not been
+  tried. A JPEG 2000 33003 tile with full-width chroma would be shown as
+  YCbCr; no such file has been seen.

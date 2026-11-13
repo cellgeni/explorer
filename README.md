@@ -4,7 +4,7 @@ Browser-based explorer for hosted spatial-omics and image data. The app loads
 10x Xenium and Atera output folders, standard Visium (55 µm spots) and Visium
 HD Space Ranger output folders, direct AnnData `.h5ad` files (including Visium
 AnnData with `uns/spatial`), SpatialData Zarr stores, and image-only
-OME-TIFF/TIFF/QPTIFF/OME-Zarr URLs from object storage.
+OME-TIFF/TIFF/QPTIFF/SVS/OME-Zarr URLs from object storage.
 It renders spatial cells, spots, bins, image pyramids, morphology channels, expression
 overlays, transcript density/exact overlays, annotations, ROI queries,
 shareable view state, and dataset diagnostics without a server-side data
@@ -120,7 +120,8 @@ Enter a source in the `Dataset or image URL` field:
   or `.h5ad.icechunk` repository next to them.
 - SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
   table annotating a shapes or labels element, and optionally image elements.
-- Image-only: direct OME-TIFF, TIFF, QPTIFF, OME-Zarr, or validated NDPI URL.
+- Image-only: direct OME-TIFF, TIFF, QPTIFF, SVS (Aperio H&E), OME-Zarr, or
+  validated NDPI URL.
 - Icechunk: a `.icechunk` repository URL holding AnnData, SpatialData (images,
   labels, and tables), or an OME-Zarr image.
 

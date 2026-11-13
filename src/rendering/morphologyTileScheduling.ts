@@ -7,6 +7,11 @@ const MAX_HEAVY_TILE_CACHE_TILES = 18
 const MAX_HEAVY_CONCURRENT_TILE_REQUESTS = 1
 const PREFETCH_SCREEN_MARGIN_PIXELS = 256
 const LARGE_TILE_PIXEL_COUNT = 512 * 512
+// The tile budgets are sized for 512-pixel tiles. Smaller tiles get
+// proportionally more tiles, cache slots, and concurrent loads, up to 4x: an
+// SVS slide in 240-pixel tiles with 4x pyramid steps needs 100-300 tiles to
+// fill one view.
+const MAX_SMALL_TILE_BUDGET_SCALE = 4
 
 export interface TileSchedulingOptions {
   readonly baseMaxCacheTiles: number
@@ -35,10 +40,18 @@ export function tileSchedulingForLoader(
       decodeOptions.compression === TIFF_COMPRESSION_NONE)
 
   if (!isLargeRawTile) {
+    const budgetScale =
+      tilePixelCount > 0
+        ? Math.min(
+            MAX_SMALL_TILE_BUDGET_SCALE,
+            Math.max(1, LARGE_TILE_PIXEL_COUNT / tilePixelCount),
+          )
+        : 1
+
     return {
-      maxCacheTiles: options.baseMaxCacheTiles,
-      maxConcurrentRequests: options.baseMaxConcurrentRequests,
-      maxInitialTileRequests: MAX_INITIAL_TILE_REQUESTS,
+      maxCacheTiles: Math.round(options.baseMaxCacheTiles * budgetScale),
+      maxConcurrentRequests: Math.round(options.baseMaxConcurrentRequests * budgetScale),
+      maxInitialTileRequests: Math.round(MAX_INITIAL_TILE_REQUESTS * budgetScale),
       prefetchScreenMarginPixels: PREFETCH_SCREEN_MARGIN_PIXELS,
     }
   }

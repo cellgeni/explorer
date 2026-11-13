@@ -52,6 +52,39 @@ describe('morphology canvas projection', () => {
     expect(drawImage).toHaveBeenCalledWith(image, 0, 0, 40, 40, 80, 30, 40, 40)
   })
 
+  it('snaps tile edges to whole pixels so neighbouring tiles meet', () => {
+    const drawImage = vi.fn()
+    const context = {
+      clearRect: vi.fn(),
+      drawImage,
+    } as unknown as CanvasRenderingContext2D
+    const tile = (col: number): ReadyTile => ({
+      id: `0:${col}:0`,
+      level: 0,
+      image: {} as ImageBitmap,
+      bounds: {
+        minX: micrometers(col * 10),
+        maxX: micrometers((col + 1) * 10),
+        minY: micrometers(0),
+        maxY: micrometers(10),
+      },
+      sourceWidth: imagePixels(10),
+      sourceHeight: imagePixels(10),
+    })
+
+    drawMorphologyTiles(
+      context,
+      [tile(0), tile(1)],
+      { target: [10.3, -5, 0], zoom: Math.log2(1.37), minZoom: -10, maxZoom: 10 },
+      { width: 100, height: 100 },
+    )
+
+    const [first, second] = drawImage.mock.calls.map((call) => call.slice(5) as number[])
+    expect(first?.every(Number.isInteger)).toBe(true)
+    expect(second?.every(Number.isInteger)).toBe(true)
+    expect((first?.[0] ?? 0) + (first?.[2] ?? 0)).toBe(second?.[0])
+  })
+
   it('crops padded partial tiles to their real source dimensions', () => {
     const image = {} as ImageBitmap
     const drawImage = vi.fn()

@@ -55,7 +55,9 @@ export function createMorphologyChannelSettingsFromChannels(
 // Multiplexed images (QPTIFF, CODEX OME-TIFF) can have dozens of channels.
 // Blending them all is unreadable and fetches tiles for every one, so an image
 // with more channels than this opens with only the first few on, and only the
-// channels that are on are auto-contrasted when it loads.
+// channels that are on are auto-contrasted when it loads. Native RGB (H&E
+// slides) is drawn without a window, so it is never auto-contrasted; doing so
+// would decode every tile of the coarsest level on the main thread.
 export const MAX_DEFAULT_ENABLED_CHANNELS = 6
 
 export function defaultEnabledChannelIds(
@@ -68,15 +70,21 @@ export function channelsToAutoContrastOnLoad(
   channels: readonly MorphologyImageChannel[],
   settings: readonly MorphologyChannelSetting[],
 ): readonly MorphologyImageChannel[] {
+  const windowed = channels.filter((channel) => !isTrueColorChannel(channel))
+
   if (channels.length <= MAX_DEFAULT_ENABLED_CHANNELS) {
-    return channels
+    return windowed
   }
 
   const enabledIds = new Set(
     settings.filter((setting) => setting.enabled).map((setting) => setting.id),
   )
 
-  return channels.filter((channel) => enabledIds.has(channel.info.id))
+  return windowed.filter((channel) => enabledIds.has(channel.info.id))
+}
+
+function isTrueColorChannel(channel: MorphologyImageChannel): boolean {
+  return (channel.info.samplesPerPixel ?? 1) > 1
 }
 
 // A channel that was off when the image loaded still has the default window

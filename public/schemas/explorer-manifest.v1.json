@@ -120,7 +120,7 @@
             "properties": {
               "image": {
                 "$ref": "#/$defs/path",
-                "description": "OME-TIFF, TIFF, NDPI, or OME-Zarr image."
+                "description": "OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr image."
               },
               "zchunkstore": {
                 "$ref": "#/$defs/path",

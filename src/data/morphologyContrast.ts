@@ -134,6 +134,11 @@ async function decodeByteTile(options: {
     options.signal,
   )
 
+  // A tile the file leaves out has no pixels to sample.
+  if (bytes.byteLength === 0) {
+    return { pixels: new Uint8Array(0), width: 0, height: 0 }
+  }
+
   return options.decodeTile === undefined
     ? await decodeTiffTilePixels(
         bytes,
