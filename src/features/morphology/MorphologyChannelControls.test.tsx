@@ -1,7 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
-import { MorphologyChannelControls } from './MorphologyChannelControls'
+import type { MorphologyChannelSetting } from './morphologyChannels'
+import {
+  CHANNEL_FILTER_MIN_COUNT,
+  MorphologyChannelControls,
+} from './MorphologyChannelControls'
 
 const channel: MorphologyImageChannel = {
   info: {
@@ -142,5 +146,113 @@ describe('MorphologyChannelControls', () => {
 
     expect(screen.queryByLabelText('RGB color')).not.toBeInTheDocument()
     expect(screen.getByLabelText('RGB histogram')).toBeInTheDocument()
+  })
+
+  describe('with many channels', () => {
+    const names = ['DAPI', 'CD3', 'CD4', 'CD8', 'CD20', 'Keratin 14', 'Ki67', 'PanCK']
+    const manyChannels: MorphologyImageChannel[] = names.map((name, index) => ({
+      info: { ...channel.info, id: `c${index}`, index, name },
+      loader: channel.loader,
+    }))
+    const manySettings: MorphologyChannelSetting[] = manyChannels.map((item) => ({
+      id: item.info.id,
+      enabled: ['DAPI', 'CD8', 'Ki67'].includes(item.info.name),
+      color: [255, 255, 255],
+      contrastMin: 0,
+      contrastMax: 255,
+    }))
+
+    function renderMany(settings = manySettings) {
+      return render(
+        <MorphologyChannelControls
+          channels={manyChannels}
+          settings={settings}
+          autoContrastChannelIds={[]}
+          onAutoContrast={vi.fn()}
+          onUpdate={vi.fn()}
+        />,
+      )
+    }
+
+    function shownChannelNames(): string[] {
+      return screen
+        .getAllByTitle(/^Toggle .* channel$/)
+        .map(
+          (input) =>
+            input.getAttribute('title')?.replace(/^Toggle (.*) channel$/, '$1') ?? '',
+        )
+    }
+
+    it('hides the filter for short channel lists', () => {
+      render(
+        <MorphologyChannelControls
+          channels={manyChannels.slice(0, CHANNEL_FILTER_MIN_COUNT - 1)}
+          settings={manySettings}
+          autoContrastChannelIds={[]}
+          onAutoContrast={vi.fn()}
+          onUpdate={vi.fn()}
+        />,
+      )
+
+      expect(screen.queryByLabelText('Search channels')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/^Active only/)).not.toBeInTheDocument()
+    })
+
+    it('searches channels by name, ignoring case', () => {
+      renderMany()
+
+      expect(manyChannels).toHaveLength(CHANNEL_FILTER_MIN_COUNT)
+      expect(screen.getByText('8 channels')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByLabelText('Search channels'), {
+        target: { value: ' cd ' },
+      })
+
+      expect(shownChannelNames()).toEqual(['CD3', 'CD4', 'CD8', 'CD20'])
+      expect(screen.getByText('4 of 8')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByLabelText('Search channels'), {
+        target: { value: 'vimentin' },
+      })
+
+      expect(screen.queryAllByTitle(/^Toggle .* channel$/)).toEqual([])
+      expect(screen.getByText('No channels match "vimentin"')).toBeInTheDocument()
+    })
+
+    it('shows only active channels, combined with the search', () => {
+      const { rerender } = renderMany()
+
+      fireEvent.click(screen.getByLabelText('Active only (3)'))
+
+      expect(shownChannelNames()).toEqual(['DAPI', 'CD8', 'Ki67'])
+
+      fireEvent.change(screen.getByLabelText('Search channels'), {
+        target: { value: 'cd' },
+      })
+
+      expect(shownChannelNames()).toEqual(['CD8'])
+
+      fireEvent.change(screen.getByLabelText('Search channels'), {
+        target: { value: 'CD4' },
+      })
+
+      expect(screen.getByText('No active channels match "CD4"')).toBeInTheDocument()
+
+      rerender(
+        <MorphologyChannelControls
+          channels={manyChannels}
+          settings={manySettings.map((setting) => ({ ...setting, enabled: false }))}
+          autoContrastChannelIds={[]}
+          onAutoContrast={vi.fn()}
+          onUpdate={vi.fn()}
+        />,
+      )
+      fireEvent.change(screen.getByLabelText('Search channels'), {
+        target: { value: '' },
+      })
+
+      expect(screen.getByLabelText('Active only (0)')).toBeChecked()
+      expect(screen.getByText('No channels are on')).toBeInTheDocument()
+    })
   })
 })

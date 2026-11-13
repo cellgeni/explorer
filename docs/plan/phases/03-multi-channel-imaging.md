@@ -8,6 +8,8 @@
 - [x] Z-stack plane selector for OME-TIFF z-stacks such as `morphology.ome.tif`
       (`Layers` → `Z plane`, share link `z`; deferred, then done 2026-11-09).
 - [x] Per-channel histogram and auto-contrast.
+- [x] Channel search and an `Active only` filter for lists of 8 or more
+      channels, such as the 61-channel QPTIFF (2026-11-13).
 
 Notes:
 

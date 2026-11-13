@@ -1,9 +1,14 @@
+import { useState } from 'react'
+import { Checkbox } from '../../components/ui'
 import { needsAutoContrastOnEnable } from './morphologyChannels'
 import type { ChannelHistogram } from '../../data/morphologyContrast'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { MorphologyChannelSetting } from './morphologyChannels'
 
 const EMPTY_HISTOGRAM_BINS = Array.from({ length: 32 }, () => 0)
+
+// Lists this long get a name search and an active-only filter.
+export const CHANNEL_FILTER_MIN_COUNT = 8
 
 interface MorphologyChannelControlsProps {
   readonly autoContrastChannelIds: readonly string[]
@@ -23,14 +28,65 @@ export function MorphologyChannelControls({
   settings,
   onUpdate,
 }: MorphologyChannelControlsProps) {
+  const [search, setSearch] = useState('')
+  const [activeOnly, setActiveOnly] = useState(false)
+
   if (channels.length === 0) {
     return null
   }
 
+  const settingsById = new Map(settings.map((setting) => [setting.id, setting]))
+  const isFilterable = channels.length >= CHANNEL_FILTER_MIN_COUNT
+  const query = search.trim().toLowerCase()
+  const visibleChannels = isFilterable
+    ? channels.filter(
+        (channel) =>
+          (!activeOnly || settingsById.get(channel.info.id)?.enabled === true) &&
+          channel.info.name.toLowerCase().includes(query),
+      )
+    : channels
+  const activeCount = channels.filter(
+    (channel) => settingsById.get(channel.info.id)?.enabled === true,
+  ).length
+
   return (
     <div className="channel-controls" aria-label="Image channels">
-      {channels.map((channel) => {
-        const setting = settings.find((candidate) => candidate.id === channel.info.id)
+      {isFilterable ? (
+        <div className="channel-filter">
+          <input
+            type="search"
+            aria-label="Search channels"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Search channels"
+            title="Search channels by name"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.currentTarget.value)
+            }}
+          />
+          <div className="channel-filter-row">
+            <Checkbox
+              title="Show only the channels that are on"
+              label={`Active only (${activeCount.toLocaleString()})`}
+              checked={activeOnly}
+              onChange={setActiveOnly}
+            />
+            <span className="channel-filter-count" aria-live="polite">
+              {visibleChannels.length === channels.length
+                ? `${channels.length.toLocaleString()} channels`
+                : `${visibleChannels.length.toLocaleString()} of ${channels.length.toLocaleString()}`}
+            </span>
+          </div>
+        </div>
+      ) : null}
+      {visibleChannels.length === 0 ? (
+        <span className="option-empty">
+          {channelFilterEmptyMessage(search.trim(), activeOnly)}
+        </span>
+      ) : null}
+      {visibleChannels.map((channel) => {
+        const setting = settingsById.get(channel.info.id)
         const color = setting?.color ?? channel.info.color
         const contrastMin = setting?.contrastMin ?? channel.info.contrast.min
         const contrastMax = setting?.contrastMax ?? channel.info.contrast.max
@@ -118,6 +174,16 @@ export function MorphologyChannelControls({
       })}
     </div>
   )
+}
+
+function channelFilterEmptyMessage(search: string, activeOnly: boolean): string {
+  if (search === '') {
+    return 'No channels are on'
+  }
+
+  return activeOnly
+    ? `No active channels match "${search}"`
+    : `No channels match "${search}"`
 }
 
 function ChannelHistogramView({
