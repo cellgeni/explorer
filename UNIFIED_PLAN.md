@@ -256,6 +256,7 @@ writing UI code.
 | Phase 14                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                            |
 | Phase 15                        | Interface redesign: layout, dark theme, legend, colours  | Done: M1–M5 (2026-11-11) and the 15.5 close-out (2026-11-12) |
 | Phase 16                        | SVS (Aperio) images                                      | Done (2026-11-13)                                            |
+| Phase 17                        | Private datasets on S3 and S3-compatible stores          | Planned 2026-11-13; not started                              |
 
 ---
 
@@ -3781,6 +3782,456 @@ EBI FTP server.
       runs are in flight at once. On a host as slow as EBI was that day, more
       concurrency for SVS would shorten the overview.
 
+### Phase 17 — Private Datasets On S3 And S3-Compatible Stores
+
+Planned 2026-11-13. Requested so that a dataset in a bucket that is not public
+can be opened the same way a public one is: the user supplies AWS-style
+credentials once per page session, and the browser signs every object request
+itself. No Explorer backend and no proxy is introduced, so the architecture in
+[§1](#1-purpose-and-scope) is unchanged — the app still reads the instrument
+output directly from object storage.
+
+Sizes are for one developer, as in Phase 15: **S** ≤ 1 day, **M** 2–4 days,
+**L** 1–2 weeks.
+
+#### Goals And Non-Goals
+
+Goals:
+
+- Open a dataset on AWS S3 or an S3-compatible endpoint (Ceph RGW, MinIO) that
+  denies anonymous reads, with credentials entered once per page session.
+- Sign **every** byte the app reads for that dataset: Parquet through DuckDB and
+  hyparquet, Zarr, zipped Zarr, Icechunk, HDF5, OME-TIFF, QPTIFF, flat PNGs,
+  manifests, gene panels, embeddings and GeoJSON annotations. A dataset that
+  loads but whose morphology silently fails is not done.
+- Read-only, and no bucket-wide listing. Detection already probes known keys
+  with `HEAD` ([§4.6](#46-data-source-abstraction--capability-based)), so a
+  prefix-scoped `s3:GetObject` grant is enough.
+- Public datasets unchanged: no signing, no extra request, no new failure mode.
+- Credentials never leave the page: not to a server, not into any URL, not onto
+  disk, not into a share link.
+
+Non-goals for this phase:
+
+- Writing to a bucket, or any mutation.
+- Listing or browsing a bucket to discover datasets (`ListObjectsV2`). See
+  [Known Gaps](#known-gaps-7).
+- Anything but SigV4 over the S3 API. Azure Blob SAS and the native GCS API are
+  out of scope. GCS's S3-compatible XML endpoint may work with HMAC keys but is
+  untested, so it is not claimed.
+- Browser federated login (OIDC → `AssumeRoleWithWebIdentity`), which would
+  remove manual key handling altogether. See [Known Gaps](#known-gaps-7).
+- Persisting a connection across page loads.
+
+#### Product Decisions
+
+- **DECISION: Sign with headers, not with presigned URLs.** A presigned URL
+  carries a credential-derived signature in the URL itself, and this app puts
+  dataset URLs into the location hash, `localStorage` recents, the diagnostics
+  dump, error messages and the DuckDB logger. Headers keep every one of those
+  paths safe by construction. The three sinks that cannot take a header each
+  have a header-compatible route (see
+  [What Must Be Signed](#what-must-be-signed)), so no part of the app needs a
+  minted URL. The cost is a CORS preflight per distinct URL; see
+  [17.1-F](#171-tier-a--readers-that-already-take-a-fetcher) and
+  [Risks](#risks-1).
+- **DECISION: One choke point.** `src/data/datasetFetch.ts` exports
+  `datasetFetch`, a `typeof fetch` that looks up a connection for the request
+  URL, signs when one matches, and otherwise delegates to `globalThis.fetch`.
+  The 20 modules that today default to `options.fetcher ?? globalThis.fetch`
+  default to `datasetFetch` instead. Nothing else in the data layer learns about
+  credentials, and every test that injects a fetcher keeps working unchanged.
+- **DECISION: Several connections, matched by endpoint, bucket and prefix.** A
+  dataset can pull a custom image layer, an annotation file or a manifest-named
+  file from a second bucket, so a single active connection is not enough.
+  Matching is most-specific-first on `origin + path prefix`; a URL that matches
+  no connection is fetched unsigned, which is what keeps public datasets
+  unchanged.
+- **DECISION: Credentials live in one module's closure.** Not in the Zustand
+  store (it is serialised into the share hash and visible to devtools), not in
+  React state, not in any object that is logged, structured-cloned to a worker,
+  or put in an error. The store holds only a connection _descriptor_: id, label,
+  endpoint, bucket, prefix, region, addressing style, and expiry.
+- **DECISION: Signed responses are never written to the IndexedDB byte-range
+  cache, nor to the browser's HTTP cache.** Credentials are session-scoped by
+  the brief, so private bytes must not outlive the session on disk.
+  `fetchByteRangeWithCache` skips both read and write when the URL matches a
+  connection, and `datasetFetch` sends `cache: 'no-store'` on a signed request,
+  so S3 responses without `Cache-Control` are not heuristically cached either.
+  TIFF tile reads already set `no-store` for an unrelated reason
+  (`tiff/loader.ts:1206`, Phase 16), so the two agree. Reconnecting therefore
+  refetches; that is the accepted cost.
+- **DECISION: DuckDB signs for itself.** duckdb-wasm ships a SigV4 signer
+  (`addS3Headers` in `src/utils/s3_helper.ts` of the bundle) driven by
+  `SET s3_access_key_id`, `s3_secret_access_key`, `s3_session_token`,
+  `s3_region`, `s3_endpoint`, `s3_url_style` and `s3_use_ssl` — all present in
+  the bundled v1.33.1-dev45 WASM. Its signer only fires for `s3://` URLs, so the
+  readers hand DuckDB an `s3://bucket/key` URL for signed connections and the
+  existing `https://` URL otherwise. We do not reimplement signing inside SQL.
+- **DECISION: A pasted presigned URL is a separate, credential-free path.** It
+  covers single-object datasets (`.h5ad`, one OME-TIFF) with no connection at
+  all. The app never mints one; it only uses what the user pasted, and it is
+  excluded from recents and share links for the same reason a credential is.
+- **DECISION: Disconnect clears connection-scoped state.** Not only the
+  credential: the 20 module-level URL-keyed caches, the open TIFF and Zarr
+  handles, the DuckDB clients and the worker pools all hold data read with that
+  credential. See [17.4](#174-disconnect-expiry-and-state-hygiene).
+- **DECISION: A `403` on a signed request is not "missing".** The rule in
+  [§4.10](#410-zarr-store-access-phases-910) that treats a metadata `403` as a
+  missing key exists because buckets that deny listing answer `403` for absent
+  objects. On a signed request a `403` is more often `SignatureDoesNotMatch`,
+  `InvalidAccessKeyId`, `ExpiredToken` or `AccessDenied`, so signed requests
+  parse the S3 error XML and report the credential problem instead of silently
+  treating the store as unconsolidated.
+- **DECISION: Support is claimed per row of the
+  [support matrix](#support-matrix), only when that row's live test passes.**
+  Until then the row says Unverified, in this plan and in the docs.
+
+#### What Must Be Signed
+
+Every place the app reaches the network, from a read of the tree at `3791302`.
+The first group is the bulk of the work and is nearly free, because the fetcher
+seam already exists.
+
+| Sink                                                                                                             | Reads                                                             | Header hook                                          | Work                                                            |
+| ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------- |
+| 20 modules defaulting to `options.fetcher ?? globalThis.fetch`                                                   | Range probes, manifests, gene panels, embeddings, folder listings | Already there                                        | Change the default to `datasetFetch`                            |
+| `createZarrFetchStore` (`src/zarr/zarrStores.ts:46`)                                                             | OME-Zarr, SpatialData, consolidated metadata                      | Its own `fetch` hook                                 | Pass `datasetFetch` as the inner fetcher                        |
+| hyparquet `asyncBufferFromUrl`                                                                                   | `cells.parquet`, SpatialData shapes, barcode mappings, warm-up    | `fetch` option                                       | Pass it everywhere; `datasetWarmup.ts:128` has no fetcher today |
+| `ZipFileStore.fromUrl` (`analysisAnnotations.ts:171`, `:190`, `transcriptZarr.ts:300`, `:1278`)                  | `analysis.zarr.zip`, matrix zip, transcript LOD zip               | None — zarrita's own reader                          | Move to `CachedHttpRangeReader`, which takes a fetcher          |
+| `zarrZipStore.ts`, `cachedZipStore.ts`, `icechunkStore.ts`                                                       | Zipped SpatialData, Icechunk                                      | Already take a fetcher                               | Default it                                                      |
+| geotiff `fromUrl` (`tiff/loader.ts:122`, `:524`, `:565`, `visiumHdSegmentations.ts:514`)                         | OME-TIFF, QPTIFF, SVS, segmentation TIFF                          | `fromCustomClient` → `BaseClient.request({headers})` | Small `SignedTiffClient`; keep the block/cache options          |
+| DuckDB-WASM                                                                                                      | Xenium, Atera, Visium HD Parquet                                  | Its own signer, via `SET s3_*`                       | Configure per client; hand it `s3://` URLs                      |
+| `new Image().src` (`components/MorphologyCanvas.tsx:152`)                                                        | Flat Visium and Visium HD tissue PNGs                             | None                                                 | Signed `fetch` → `Blob` → `createObjectURL`; revoke on unload   |
+| h5wasm `createLazyFile` (`workers/featureBarcodeMatrix.worker.ts:44`, `workers/visiumFeatureSlice.worker.ts:45`) | `cell_feature_matrix.h5`, Visium HD matrix, direct `.h5ad`        | Emscripten's synchronous XHR, no hook                | Patch `XMLHttpRequest` in those two workers (Tier C)            |
+
+Two consequences are worth stating plainly:
+
+- The decode worker pools (`tileDecodePool`, `zarrDecodePool`) do **not** fetch;
+  the main thread fetches and transfers bytes
+  ([§4.5](#45-rendering--decision-two-canvases-decode-off-the-main-thread)). No
+  credential crosses into them. Only the two h5wasm workers fetch, and only in
+  Tier C.
+- SigV4 needs HMAC-SHA256 **synchronously** inside a synchronous XHR, and
+  WebCrypto is async-only. Tier A and B therefore sign with async WebCrypto
+  (`crypto.subtle`, no dependency). Tier C needs a small synchronous SHA-256,
+  which is why it is a separate tier and a separate decision.
+
+#### Connection Model
+
+A connection is what the user fills in once:
+
+| Field             | Notes                                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| Endpoint          | An AWS region preset, or a full endpoint URL for RGW/MinIO (may include a path prefix)          |
+| Bucket            | Required; the signer needs it for both addressing styles                                        |
+| Prefix            | Optional; narrows which URLs this connection claims, and is the default dataset location        |
+| Region            | Required by SigV4; AWS presets fill it, S3-compatible stores usually accept `us-east-1`         |
+| Addressing        | Path-style or virtual-hosted; defaulted from the endpoint, overridable, because gateways differ |
+| Access key ID     | Held in the module closure                                                                      |
+| Secret access key | Held in the module closure, entered in a password field, never read back out                    |
+| Session token     | Optional; sent as `x-amz-security-token` and added to `SignedHeaders`                           |
+| Expires at        | Optional; shown as a countdown, warned on at 5 minutes, enforced before each new load           |
+
+Resolution rules:
+
+- The dataset can be entered as the usual `https://` URL, or as
+  `s3://bucket/prefix`, which the connection resolves to an endpoint URL.
+- Virtual-hosted signs `host = bucket.endpointHost` and canonical path `/key`.
+  Path-style signs `host = endpointHost` and canonical path
+  `/{endpointPath}/{bucket}/{key}`. This mirrors what duckdb-wasm's
+  `getS3Params` does, so both signers agree on one connection.
+- Canonical URI encodes each segment but keeps `/`, and S3 does not
+  double-encode. The payload hash for `GET`/`HEAD` is the SHA-256 of the empty
+  string. `Range` is deliberately **not** in `SignedHeaders`, so a cached
+  preflight covers every range of a file.
+- Clock skew breaks SigV4 beyond 15 minutes. The first signed response's `Date`
+  header sets a per-connection offset, and `RequestTimeTooSkewed` is reported as
+  a clock problem, not a credential problem.
+
+#### Credential Safety
+
+The brief is explicit that page JavaScript can reach an in-memory credential, so
+the plan reduces what is exposed and how long it lasts rather than pretending
+otherwise.
+
+- **Recommend short-lived, prefix-scoped, read-only credentials.** The
+  connection dialog links to a documented `aws sts get-session-token` /
+  `AssumeRole` recipe with a sample policy limited to `s3:GetObject` on one
+  prefix, and the docs say to prefer it.
+- **No third-party script at runtime.** `index.html` loads only
+  `/src/main.tsx`; the bundle pins every dependency and uses no CDN tag
+  ([§2](#conventions-for-every-task)). `docs/deploy-to-s3.md` gains a
+  `script-src 'self'` CSP recommendation. `connect-src` cannot be narrowed,
+  because dataset hosts are arbitrary.
+- **Leak points, each with a test.** The share hash, `localStorage` recents, the
+  diagnostics dump, structured load errors, the DuckDB logger (today a
+  `ConsoleLogger`, to be replaced with a redacting logger), `console` output,
+  IndexedDB keys and values, and `performance` resource entries. A unit test
+  serialises each of these from a connected state and asserts that neither the
+  secret, the session token nor an `Authorization` value appears.
+- **Tier C sends a derived signing key to the worker, not the secret.** The
+  SigV4 signing key is `HMAC(HMAC(HMAC(HMAC("AWS4"+secret, date), region),
+"s3"), "aws4_request")` and is valid only for that date, region and service,
+  so the worker can sign without ever holding the secret access key.
+- **Disconnect is a real teardown**, not a flag; see
+  [17.4](#174-disconnect-expiry-and-state-hygiene).
+
+#### Support Matrix
+
+Every row starts Unverified. A row moves to Done only when its live test in
+[Testing](#testing-1) passes against a real private bucket, and the docs copy
+the same status.
+
+| Store                   | Xenium / Atera | Visium HD  | SpatialData | OME-Zarr   | H5AD (reference) | H5AD (direct) | OME-TIFF / QPTIFF |
+| ----------------------- | -------------- | ---------- | ----------- | ---------- | ---------------- | ------------- | ----------------- |
+| AWS S3 (virtual-hosted) | Unverified     | Unverified | Unverified  | Unverified | Unverified       | Tier C        | Unverified        |
+| AWS S3 (path-style)     | Unverified     | Unverified | Unverified  | Unverified | Unverified       | Tier C        | Unverified        |
+| Ceph RGW (Sanger)       | Unverified     | Unverified | Unverified  | Unverified | Unverified       | Tier C        | Unverified        |
+| MinIO                   | Unverified     | Unverified | Unverified  | Unverified | Unverified       | Tier C        | Unverified        |
+
+#### 17.0 Foundations
+
+- [ ] **A. SigV4 signer** in `src/data/awsSigV4.ts`: canonical request, string to
+      sign, signing-key derivation over `crypto.subtle`, session token, clock
+      offset. Pure, no app types. (M)
+  - Tested against the published AWS `aws-sig-v4-test-suite` vectors plus a
+    path-style and a session-token case.
+  - A `signedHeaders(request, connection, now)` function, so the same code
+    serves `fetch`, the geotiff client and (later) the XHR patch.
+- [ ] **B. Connection registry** in `src/data/s3Connections.ts`: add, match,
+      list, remove. Descriptors are returned by value; the secret stays in a
+      closure and has no getter. (S)
+  - `matchConnection(url)` is most-specific-first on origin and path prefix.
+  - A `connectionForDuckDb(url)` helper returns the `s3://` form and the `SET`
+    statements, so DuckDB and `datasetFetch` cannot disagree.
+- [ ] **C. `datasetFetch`** in `src/data/datasetFetch.ts`: sign when a connection
+      matches, otherwise delegate. Accepts `Request` as well as a URL, because
+      zarrita's `FetchStore` passes one. Never sets `credentials: 'include'`, so
+      no cookie is ever attached. (S)
+- [ ] **D. Default it** in the 20 modules that read
+      `options.fetcher ?? globalThis.fetch`, and in `datasetWarmup.ts` and the
+      four `ZipFileStore.fromUrl` sites, which have no fetcher today. Pure
+      refactor, no behaviour change for public datasets. (M)
+- [ ] **E. Byte-range cache bypass**: `fetchByteRangeWithCache` skips read and
+      write when `matchConnection(url)` is non-null. (S)
+
+#### 17.1 Tier A — Readers That Already Take A Fetcher
+
+- [ ] **A. Zarr and zipped Zarr**: `createZarrFetchStore`, `zarrZipStore`,
+      `cachedZipStore`, `icechunkStore`. (S)
+- [ ] **B. hyparquet**: pass the fetcher at all five `asyncBufferFromUrl` sites.
+      (S)
+- [ ] **C. geotiff**: a `SignedTiffClient extends BaseClient` and a switch from
+      `fromUrl` to `fromCustomClient` at the four sites, keeping
+      `allowFullFile: false` and the QPTIFF block options. (M)
+- [ ] **D. Flat images**: signed `fetch` → `Blob` → object URL in
+      `MorphologyCanvas`, with `revokeObjectURL` on teardown and on dataset
+      change. (S)
+- [ ] **E. Detection and probes**: `rangeSupport`, `folderListing`,
+      `datasetFactory`'s `HEAD` probes and `datasetDiagnostics` sign too, or the
+      dataset is undetectable before any reader runs. (S)
+- [ ] **F. Measure the preflight cost.** Load the SpatialData labels store and
+      the Xenium demo from a private bucket under the live-runner profile
+      (CPU 6×, 150 ms latency) and compare request counts and wall-clock against
+      the same data public. If signed Zarr chunk reads are materially slower,
+      record the number here and open a follow-up for presigned chunk `GET`s —
+      the one place where a minted URL would be justified. (S)
+
+#### 17.2 Tier B — DuckDB
+
+- [ ] **A. Configure the client**: after `LOAD httpfs`, run the `SET s3_*`
+      statements for each connection on every DuckDB connection, including the
+      separate transcript and interactive clients
+      ([§4.3](#43-parquet-engine--decision-duckdb-wasm-primary-hyparquet-for-first-paint)).
+      (M)
+- [ ] **B. `s3://` URLs for signed connections** in the readers that build
+      `read_parquet(?)` arguments (`xeniumDatasetReaders.ts`, `duckdbCells.ts`,
+      `gex.ts`, `visiumHdBarcodeMappingDuckDb.ts`), through one helper so the
+      choice is made in a single place. (M)
+- [ ] **C. Redacting logger**: replace `new duckdb.ConsoleLogger()` with one
+      that drops anything matching a credential or an `Authorization` value, and
+      keep it when `createDuckDbClient` is called without a logger. (S)
+- [ ] **D. Re-apply on change**: when a connection is replaced or its
+      credentials rotate, re-run the `SET` statements on every live client, and
+      drop `enable_http_metadata_cache` state for that host if the settings
+      changed. (S)
+
+#### 17.3 Connection UI
+
+- [ ] **A. Connect dialog** from the start screen and the top bar: endpoint
+      preset or custom, bucket, prefix, region, addressing, keys, token, expiry.
+      Secret and token in password fields, never read back. (M)
+- [ ] **B. Open a private dataset**: the existing URL field accepts the `s3://`
+      form and plain `https://` URLs that a connection claims; the start screen
+      shows which connection a URL will use before loading. (S)
+- [ ] **C. Connection status** in the top bar: label, bucket, expiry countdown,
+      a warning at 5 minutes, and Disconnect. (S)
+- [ ] **D. Pasted presigned URL**: accepted in the URL field, detected by its
+      `X-Amz-Signature` query parameter, excluded from recents and share links,
+      with a one-line note saying why. (S)
+- [ ] **E. Reconnect on reload**: a share link to a private dataset loads to a
+      prompt that names the bucket and prefix and asks for credentials, instead
+      of a load error. (S)
+
+#### 17.4 Disconnect, Expiry And State Hygiene
+
+- [ ] **A. `clearConnectionScopedState()`**, called on disconnect, on expiry and
+      on connection replacement. Today each of these caches is module-level and
+      URL-keyed, and only four have a clear function, none of which the app
+      calls: (M)
+  - `datasetFactory` `spatialDatasetCache`; `xeniumDatasetCache` `datasetCache`
+    and `transcriptDatasetCache`.
+  - `gex` `zarrMatrixCache`, `zarrMatrixCellIdCache`,
+    `zarrMatrixCellIdDataCache`, `h5MatrixCache`.
+  - `tiff/loader` `openTiffFiles`, `qptiffFiles`; `tiff/zchunkStore`
+    `sidecarCache`.
+  - `zarrZipStore` `openedStores`; `icechunkStore` `openedRepositories`;
+    `omeZarrLoader` `decodedChunks`; `zarrStores` `arrayMetadataCache`.
+  - `transcriptZarr` `transcriptZarrMetadataCache`; `visiumFeatureSlice`
+    `featureSliceCache`; `rangeSupport` `rangeSupportCache`; `folderListing`
+    `folderListings`; `hostResponses` `originResponses`.
+  - DuckDB clients closed, worker pools terminated, object URLs revoked, and
+    the in-worker chunk cache in `zarrDecode.worker.ts` dropped.
+- [ ] **B. Expiry enforcement**: no new load starts with an expired credential,
+      and an in-flight load that fails with `ExpiredToken` reports it as expiry
+      with a Reconnect action rather than a read error. (S)
+- [ ] **C. Leak test**: one test that connects, loads a fixture, then asserts the
+      secret, the token and `Authorization` appear in none of the share hash,
+      recents, diagnostics dump, structured errors or IndexedDB. (S)
+
+#### 17.5 Errors And Diagnostics
+
+- [ ] **A. Classify S3 errors** from the response body on signed requests:
+      `InvalidAccessKeyId`, `SignatureDoesNotMatch`, `ExpiredToken`,
+      `AccessDenied`, `RequestTimeTooSkewed`, each with its own title and
+      action, and none of them repeating the credential. (M)
+- [ ] **B. Refine the `403`-as-missing rule** in
+      [§4.10](#410-zarr-store-access-phases-910) so it applies to unsigned
+      requests, and signed metadata `403`s are reported from the parsed error
+      instead. (S)
+- [ ] **C. Preflight failures are their own message.** A bucket whose CORS does
+      not allow `Authorization` fails the `OPTIONS`, which in the browser looks
+      like a network error; `Diagnose Dataset` names the missing
+      `AllowedHeader` and links the playbook. (S)
+- [ ] **D. Diagnose Dataset for connections**: endpoint reachable, clock skew,
+      credential valid, prefix readable, CORS headers allowed — without ever
+      listing the bucket. (M)
+
+#### 17.6 Tier C — Synchronous XHR Sinks (Deferred)
+
+Deferred out of v1 by the scope decision; direct `.h5ad`, the Xenium H5 matrix
+fallback and the Visium HD matrix stay public-only until this ships.
+
+- [ ] **A. Synchronous SHA-256/HMAC.** Decide between a pinned ~3 KB MIT
+      dependency (`js-sha256`, which duckdb-wasm already vendors internally) and
+      a vendored implementation with the AWS vectors as tests. (S)
+- [ ] **B. `XMLHttpRequest` patch** in `featureBarcodeMatrix.worker.ts` and
+      `visiumFeatureSlice.worker.ts`: a subclass that records method and URL in
+      `open()` and adds the signed headers in `send()`, installed only when the
+      request carries a signing key. (M)
+- [ ] **C. Signing key in the worker message**, never the secret, with the date
+      it is valid for. (S)
+- [ ] **D. Live tests** for a private `.h5ad` and a private Xenium H5 fallback,
+      then move those support-matrix rows off Tier C. (S)
+
+#### Testing
+
+- **Unit.** The signer against the AWS SigV4 test-suite vectors, plus
+  path-style, virtual-hosted, session-token, prefix-matching, clock-offset and
+  URL-form cases. The connection registry's most-specific-first matching as a
+  property test, alongside the existing `*.property.test.ts` files.
+- **Integration.** A Vitest fake S3: a fetcher that verifies the `Authorization`
+  header by recomputing the signature from a known secret, and serves fixture
+  bytes only when it matches. Every Tier A reader is run against it, so a reader
+  that quietly drops the fetcher fails the suite. This is the test that proves
+  "every byte is signed", and it needs no network.
+- **E2E (CI-safe).** A Playwright smoke test that routes a private-looking
+  origin, rejects unsigned requests with `403` and a real S3 error body, and
+  checks that the app connects, loads the H5AD fixture, and reports a wrong
+  secret as a credential error rather than a missing file.
+- **E2E (live, nightly).** A private bucket with temporary credentials, in
+  `e2e-live.yml` only, with the credentials as repository secrets and a session
+  token minted per run. One test per support-matrix row that is claimed. A row
+  without a passing live test keeps saying Unverified.
+- **Manual, once per store.** The platform checklist from Phase 15 against AWS
+  (both addressing styles), the Sanger RGW and MinIO, including the preflight
+  measurement in [17.1-F](#171-tier-a--readers-that-already-take-a-fetcher).
+- **Leak test** as in [17.4-C](#174-disconnect-expiry-and-state-hygiene).
+
+#### Docs To Update
+
+- `docs/private-datasets.md` (new): what a connection is, how to mint
+  short-lived prefix-scoped read-only credentials
+  (`aws sts get-session-token`, `AssumeRole`, a sample `s3:GetObject` policy),
+  the security properties and their limits, the support matrix, and the pasted
+  presigned-URL path.
+- `docs/s3-cors-playbook.md`: the private-bucket CORS policy. `AllowedHeaders`
+  must include `Authorization`, `x-amz-date`, `x-amz-content-sha256` and
+  `x-amz-security-token` alongside `Range`, with `MaxAgeSeconds` set so
+  preflights are cached, and a note that the policy is per-bucket and that
+  `AllowedOrigin` should name the app origin exactly.
+- `docs/host-your-own-data.md`: a private-bucket section next to the public one.
+- `docs/architecture.md`: the `datasetFetch` choke point and the signing seam.
+- `docs/deploy-to-s3.md`: the `script-src 'self'` CSP recommendation and why
+  `connect-src` cannot be narrowed.
+- `docs/ui-reference.md` and `docs/user-guide.md`: the Connect dialog, the
+  status chip, Disconnect, and reconnecting after a reload.
+- `UNIFIED_PLAN.md` [§8](#8-dataset-hosting-requirements): private buckets as a
+  supported hosting mode, with the listing-free requirement stated.
+- `README.md`: one line, pointing at `docs/private-datasets.md`.
+
+#### Risks
+
+| Risk                                                                | Effect                                                                   | Mitigation                                                                                                                   |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| CORS preflight per distinct URL                                     | Zarr chunk reads roughly double their request count                      | Measure in 17.1-F before claiming support; `MaxAgeSeconds`; presigned chunk `GET`s as a scoped fallback if the number is bad |
+| A reader silently drops the fetcher                                 | Part of a private dataset fails, or worse, loads unsigned from elsewhere | The fake-S3 integration suite rejects unsigned requests, so a dropped fetcher fails a test rather than a user                |
+| duckdb-wasm's signer disagrees with ours on path-style or endpoints | Parquet fails while Zarr works, on RGW/MinIO only                        | One helper derives both; a unit test asserts the two produce the same canonical host and path for every endpoint shape       |
+| Credential reaches a log, a URL or disk                             | Secret leaks past the page session                                       | Closure-only storage, redacting DuckDB logger, cache bypass, and the 17.4-C leak test                                        |
+| Browser clock skew                                                  | Every request fails with an opaque `403`                                 | Offset from the response `Date`, and `RequestTimeTooSkewed` reported as a clock problem                                      |
+| Short-lived credentials expire mid-session                          | A long load dies halfway with a confusing error                          | Countdown, 5-minute warning, expiry-aware errors with a Reconnect action                                                     |
+| Tier C's XHR patch breaks h5wasm on public datasets                 | A regression in the most-used fallback path                              | The patch installs only when a signing key is present; existing public H5 tests stay as the guard                            |
+| S3-compatible gateways differ (RGW, MinIO, GCS XML)                 | "S3-compatible" is claimed and then fails for a user                     | The support matrix starts Unverified and only a passing live test moves a row                                                |
+
+#### Order And Size
+
+| Milestone                | Contents           | Size            | Gives                                                 |
+| ------------------------ | ------------------ | --------------- | ----------------------------------------------------- |
+| N1 — Signing seam        | 17.0 A–E           | about 1.5 weeks | Signed reads, no UI; provable by the fake-S3 suite    |
+| N2 — Tier A readers      | 17.1 A–F           | about 1.5 weeks | SpatialData, OME-Zarr, images, reference H5AD         |
+| N3 — DuckDB              | 17.2 A–D           | about 1 week    | Xenium, Atera, Visium HD                              |
+| N4 — UI and teardown     | 17.3 A–E, 17.4 A–C | about 2 weeks   | A usable feature, and a disconnect that really clears |
+| N5 — Errors, diagnostics | 17.5 A–D           | about 1 week    | Credential failures that explain themselves           |
+| N6 — Tier C (deferred)   | 17.6 A–D           | about 1 week    | Direct `.h5ad` and the H5 matrix fallbacks            |
+
+- **Critical path:** 17.0-A → 17.0-C → 17.0-D → 17.1 → 17.2.
+- **In parallel:** 17.3 (UI) can be built against a stubbed registry as soon as
+  17.0-B lands; 17.5-A can be written alongside 17.1.
+- **Do not ship N1–N3 to users without N4.** Without
+  `clearConnectionScopedState()`, a Disconnect leaves private data in a dozen
+  caches, which is worse than not offering Disconnect.
+- **Effort:** about 7 weeks for one developer for N1–N5, plus 1 for N6.
+
+#### Known Gaps
+
+- [ ] Bucket browsing. Opening a known dataset needs no listing, by design, but
+      a user who does not know the prefix has no way to look. `ListObjectsV2`
+      against a prefix would be a small, separate feature.
+- [ ] Federated login (OIDC → `AssumeRoleWithWebIdentity`), which would remove
+      manual key handling and give naturally short-lived credentials. It needs
+      an identity provider the institute controls, not an Explorer backend, so
+      it stays compatible with [§1](#1-purpose-and-scope).
+- [ ] Azure Blob (SAS) and the native GCS API. Only the S3 API is in scope.
+- [ ] Writing, including saving annotations back to a private bucket.
+- [ ] Tier C ([17.6](#176-tier-c--synchronous-xhr-sinks-deferred)): direct
+      `.h5ad`, the Xenium `cell_feature_matrix.h5` fallback and the Visium HD
+      matrix stay public-only until it ships.
+- [ ] Credentials are not persisted, by decision, so every reload needs a
+      reconnect. If that proves painful, the next option to weigh is a
+      `sessionStorage` handoff for the current tab only, which trades a real
+      security property for convenience and should not be taken lightly.
+
 ---
 
 ## 7. Application Structure And Refactor Record
@@ -3881,6 +4332,13 @@ and has `Diagnose Dataset`.
 - **Replacing files in place:** the IndexedDB byte-range cache is keyed by URL
   and range without the `ETag`, so a file replaced at the same URL can serve
   stale bytes until site data is cleared. Keep dataset paths immutable.
+- **Private buckets (planned,
+  [Phase 17](#phase-17--private-datasets-on-s3-and-s3-compatible-stores)):** a
+  bucket that denies anonymous reads needs the CORS policy above plus
+  `Authorization`, `x-amz-date`, `x-amz-content-sha256` and
+  `x-amz-security-token` in `AllowedHeaders`, and a `MaxAgeSeconds` so
+  preflights are cached. A prefix-scoped `s3:GetObject` grant is enough;
+  opening a known dataset never lists the bucket.
 
 ---
 
@@ -4050,6 +4508,11 @@ Sequencing:
       Cancel) is done; M5 (15.4: selections, enriched genes, transcript gene
       legend, minimap, axes) is done. The 15.5 close-out is done
       (2026-11-12).
+- [ ] Private datasets,
+      [Phase 17](#phase-17--private-datasets-on-s3-and-s3-compatible-stores):
+      31 tasks in six milestones (N1–N5 about 7 weeks, N6 deferred). Nothing
+      started. Every row of its support matrix is Unverified until a live test
+      passes.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
