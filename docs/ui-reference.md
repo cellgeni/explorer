@@ -187,7 +187,18 @@ are kept as `hiddenClasses=`.
 #### Image Channel Controls
 
 `src/features/morphology/MorphologyChannelControls.tsx`, one row per channel
-(custom layer channels are named "Layer / Channel"):
+(custom layer channels are named "Layer / Channel").
+
+With 8 or more channels (`CHANNEL_FILTER_MIN_COUNT`), a filter sits above the
+rows and stays at the top of the panel while they scroll:
+
+| Control           | Notes                                                                        |
+| ----------------- | ---------------------------------------------------------------------------- |
+| `Search channels` | Case-insensitive match on any part of the channel name                       |
+| `Active only (N)` | Shows only the channels that are on; N counts them. Combines with the search |
+| Count             | "61 channels", or "3 of 61" while a filter hides some                        |
+
+The filter is not saved in the share link. Each row has:
 
 | Control                            | Notes                                                                                                                                                 |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |

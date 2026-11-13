@@ -121,6 +121,44 @@
   border-top: 1px solid var(--border);
 }
 
+/* Shown for long channel lists. It sticks to the top of the layer panel's
+   scroll area while its list is in view. */
+.channel-filter {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: grid;
+  gap: 4px;
+  padding: 2px 0 4px;
+  background: var(--surface-1);
+}
+
+.channel-filter input[type='search'] {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: var(--font-control);
+}
+
+.channel-filter-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.channel-filter-count {
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .custom-layer-form {
   display: grid;
   gap: 4px;
