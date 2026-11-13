@@ -162,6 +162,185 @@ describe('TiffPyramidLoader', () => {
     expect(readChunks).toHaveBeenCalledTimes(2)
   })
 
+  it('reads each level of a lazy tile index when that level is first fetched', async () => {
+    const readLevel = vi.fn(
+      async (level: number): Promise<ReadonlyMap<string, TiffChunk>> =>
+        new Map([[`${level}/0/0`, { offset: 10 * (level + 1), length: 2 }]]),
+    )
+    const ranges: string[] = []
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/slide.svs',
+      chunkIndex: readLevel,
+      levelMeta: new Map([
+        [0, { width: imagePixels(200), height: imagePixels(100), nCols: 2, nRows: 1 }],
+        [1, { width: imagePixels(100), height: imagePixels(50), nCols: 1, nRows: 1 }],
+      ]),
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 2,
+      imageWidth: imagePixels(200),
+      imageHeight: imagePixels(100),
+      fetcher: async (_input, init) => {
+        ranges.push(new Headers(init?.headers).get('Range') ?? '')
+        return new Response(new Uint8Array([1, 2]), { status: 206 })
+      },
+      byteRangeCache: null,
+    })
+
+    await loader.fetchTileBytes(1, 0, 0)
+    expect(readLevel.mock.calls).toEqual([[1]])
+
+    await Promise.all([loader.fetchTileBytes(0, 0, 0), loader.fetchTileBytes(0, 0, 0)])
+    await loader.fetchTileBytes(1, 0, 0)
+    expect(readLevel.mock.calls).toEqual([[1], [0]])
+    expect(ranges).toEqual(['bytes=20-21', 'bytes=10-11', 'bytes=10-11', 'bytes=20-21'])
+  })
+
+  it('reads tiles stored next to each other in one request when asked to', async () => {
+    // A 6 x 2 level written row by row, 10 bytes per tile, plus one tile
+    // stored elsewhere in the file.
+    const chunks = new Map<string, TiffChunk>()
+
+    for (let row = 0; row < 2; row += 1) {
+      for (let col = 0; col < 6; col += 1) {
+        chunks.set(`0/${row}/${col}`, { offset: 1000 + (row * 6 + col) * 10, length: 10 })
+      }
+    }
+
+    chunks.set('0/1/5', { offset: 50_000, length: 10 })
+    const ranges: string[] = []
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/slide.svs',
+      chunkIndex: chunks,
+      levelMeta: new Map([
+        [0, { width: imagePixels(600), height: imagePixels(200), nCols: 6, nRows: 2 }],
+      ]),
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 1,
+      imageWidth: imagePixels(600),
+      imageHeight: imagePixels(200),
+      readAdjacentTiles: true,
+      fetcher: async (_input, init) => {
+        const range = new Headers(init?.headers).get('Range') ?? ''
+        const [start = 0, end = 0] = range.slice(6).split('-').map(Number)
+        ranges.push(range)
+        return new Response(
+          Uint8Array.from(
+            { length: end - start + 1 },
+            (_unused, index) => (start + index) % 256,
+          ),
+          { status: 206 },
+        )
+      },
+      byteRangeCache: null,
+    })
+    const firstByte = async (col: number, row: number) =>
+      (await loader.fetchTileBytes(0, col, row))[0]
+
+    // Tile (2, 0) and its file neighbours within four tiles: the first row
+    // and the second row up to the tile stored elsewhere.
+    await expect(firstByte(2, 0)).resolves.toBe(1020 % 256)
+    expect(ranges).toEqual(['bytes=1000-1109'])
+    await expect(firstByte(0, 0)).resolves.toBe(1000 % 256)
+    await expect(firstByte(4, 1)).resolves.toBe(1100 % 256)
+    expect(ranges).toHaveLength(1)
+
+    await expect(firstByte(5, 1)).resolves.toBe(50_000 % 256)
+    expect(ranges).toEqual(['bytes=1000-1109', 'bytes=50000-50009'])
+
+    // A tile read ahead is used once; fetched again, it starts a new run.
+    await loader.fetchTileBytes(0, 0, 0)
+    expect(ranges).toHaveLength(3)
+  })
+
+  it('lets a caller stop waiting without cancelling a run other tiles share', async () => {
+    const chunks = new Map<string, TiffChunk>([
+      ['0/0/0', { offset: 0, length: 4 }],
+      ['0/0/1', { offset: 4, length: 4 }],
+    ])
+    let respond: (response: Response) => void = () => {}
+    const signals: (AbortSignal | null | undefined)[] = []
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/slide.svs',
+      chunkIndex: chunks,
+      levelMeta: new Map([
+        [0, { width: imagePixels(200), height: imagePixels(100), nCols: 2, nRows: 1 }],
+      ]),
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 1,
+      imageWidth: imagePixels(200),
+      imageHeight: imagePixels(100),
+      readAdjacentTiles: true,
+      fetcher: (_input, init) => {
+        signals.push(init?.signal)
+        return new Promise<Response>((resolve) => {
+          respond = resolve
+        })
+      },
+      byteRangeCache: null,
+    })
+    const controller = new AbortController()
+    const first = loader.fetchTileBytes(0, 0, 0, controller.signal)
+    const second = loader.fetchTileBytes(0, 1, 0)
+
+    await vi.waitFor(() => {
+      expect(signals).toHaveLength(1)
+    })
+    controller.abort()
+    respond(new Response(Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]), { status: 206 }))
+
+    await expect(first).rejects.toThrow()
+    await expect(second).resolves.toEqual(Uint8Array.from([5, 6, 7, 8]))
+    expect(signals[0]).toBeUndefined()
+  })
+
+  it('decodes each level with its own tags when the levels have them', () => {
+    const levelZeroTables = Uint8Array.from([1])
+    const levelOneTables = Uint8Array.from([2])
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/slide.svs',
+      chunkIndex: new Map<string, TiffChunk>(),
+      levelMeta: new Map([
+        [0, { width: imagePixels(200), height: imagePixels(100), nCols: 2, nRows: 1 }],
+        [1, { width: imagePixels(100), height: imagePixels(50), nCols: 1, nRows: 1 }],
+      ]),
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 2,
+      imageWidth: imagePixels(200),
+      imageHeight: imagePixels(100),
+      compression: 7,
+      photometric: 2,
+      jpegTables: levelZeroTables,
+      levelDecodeMetadata: [levelZeroTables, levelOneTables].map((jpegTables) => ({
+        compression: 7,
+        photometric: 2,
+        jpegTables,
+      })),
+    })
+
+    expect(loader.tileDecodeOptions()).toEqual({
+      compression: 7,
+      photometric: 2,
+      jpegTables: levelZeroTables,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+    })
+    expect(loader.tileDecodeOptions(1, 0, 0)).toEqual({
+      compression: 7,
+      photometric: 2,
+      jpegTables: levelOneTables,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+    })
+  })
+
   it('uses the source TIFF URL for range fetches from selected IFD loaders', async () => {
     const chunks = new Map<string, TiffChunk>([['0/0/0', { offset: 20, length: 3 }]])
     const levels = new Map<number, TiffLevelMeta>([

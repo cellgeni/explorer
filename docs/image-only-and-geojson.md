@@ -12,6 +12,7 @@ Use `Dataset or image URL` with one of these direct URL forms:
 - `.ome.tif`, `.ome.tiff`, `.tif`, or `.tiff`
 - `.qptiff` or `.qptif` (Akoya PhenoCycler, PhenoImager, and Vectra), see
   below
+- `.svs` (Aperio and Leica brightfield slides, usually H&E), see below
 - `.ome.zarr`, `.zarr`, `zarr.json`, or `.zattrs`
 - `.ndpi`, read with the same TIFF loader (see the requirements below)
 - A folder URL whose `zarr.json` or `.zattrs` holds OME multiscales metadata
@@ -42,6 +43,13 @@ as top-level IFDs are used, each channel is named by its biomarker and drawn in
 its scanner colour, and the pixel size comes from the TIFF resolution tags.
 A QPTIFF saved under a `.tif` name is recognized from its image description.
 See [QPTIFF](./modalities/image.md#qptiff).
+
+SVS slides are also read as they come from the scanner, JPEG or JPEG 2000:
+every tiled IFD is a pyramid level, the slide is shown in its own colours,
+and the pixel size comes from `MPP` in the image description. An SVS saved
+under a `.tif` name is recognized from its `Aperio` image description. The
+thumbnail, label, and macro images are not shown. See
+[SVS](./modalities/image.md#svs).
 
 An image with more than six channels, such as a multiplexed QPTIFF, opens with
 the first six channels on; turn others on in the Image section. Each is

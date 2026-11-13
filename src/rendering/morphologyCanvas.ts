@@ -224,19 +224,19 @@ function tileTargetRect(
     viewState,
     viewport,
   )
-  const width = bottomRight.x - topLeft.x
-  const height = bottomRight.y - topLeft.y
+  // Edges snap to whole pixels, so neighbouring tiles meet exactly instead
+  // of leaving an anti-aliased seam of background between them (visible on
+  // the white of brightfield slides).
+  const x = Math.round(topLeft.x)
+  const y = Math.round(topLeft.y)
+  const width = Math.round(bottomRight.x) - x
+  const height = Math.round(bottomRight.y) - y
 
   if (width <= 0 || height <= 0) {
     return null
   }
 
-  return {
-    x: topLeft.x,
-    y: topLeft.y,
-    width,
-    height,
-  }
+  return { x, y, width, height }
 }
 
 function flatImageTargetRect(

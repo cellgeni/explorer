@@ -1,4 +1,5 @@
 import { getDecoder } from 'geotiff'
+import { convertYCbCrToRgb, jpegTileColorSpace } from './jpeg'
 import { decodeJpeg2000 } from './jpeg2000'
 import type { DecodedJpeg2000, Jpeg2000Pixels } from './jpeg2000'
 
@@ -30,6 +31,8 @@ export interface TiffTileDecodeMetadata {
   readonly predictor?: number
   readonly planarConfiguration?: number
   readonly planarSampleByteLengths?: readonly number[]
+  // TIFF PhotometricInterpretation: 2 RGB, 6 YCbCr.
+  readonly photometric?: number
   readonly littleEndian?: boolean
   readonly jpegTables?: Uint8Array
 }
@@ -103,14 +106,31 @@ async function decodeGeotiffCompressedTile(
             tileWidth,
           })
 
+  const pixels = pixelsFromDecodedBuffer(decodedBuffer, {
+    bitsPerSample,
+    littleEndian: metadata.littleEndian ?? true,
+    samplesPerPixel,
+    tileHeight,
+    tileWidth,
+  })
+
+  // geotiff's JPEG decoder returns the stream's components unconverted.
+  if (
+    compression === TIFF_COMPRESSION_JPEG &&
+    pixels instanceof Uint8Array &&
+    jpegTileColorSpace({
+      bytes,
+      ...(metadata.jpegTables === undefined ? {} : { tables: metadata.jpegTables }),
+      ...(metadata.photometric === undefined
+        ? {}
+        : { photometric: metadata.photometric }),
+    }) === 'ycbcr'
+  ) {
+    convertYCbCrToRgb(pixels)
+  }
+
   return {
-    pixels: pixelsFromDecodedBuffer(decodedBuffer, {
-      bitsPerSample,
-      littleEndian: metadata.littleEndian ?? true,
-      samplesPerPixel,
-      tileHeight,
-      tileWidth,
-    }),
+    pixels,
     width: tileWidth,
     height: tileHeight,
     samplesPerPixel,

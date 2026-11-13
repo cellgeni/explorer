@@ -15,6 +15,7 @@ import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import { isZarrZipUrl } from '../zarr/zarrZipUrl'
 import { isQptiffUrl } from '../tiff/qptiff'
+import { isSvsUrl } from '../tiff/svs'
 import {
   DATASET_MANIFEST_FILE,
   DatasetManifestError,
@@ -81,7 +82,7 @@ export type SpatialDatasetDetection =
       readonly platform: 'image'
       readonly baseUrl: string
       readonly imageUrl: string
-      readonly imageKind?: 'tiff' | 'qptiff' | 'ndpi' | 'ome-zarr'
+      readonly imageKind?: 'tiff' | 'qptiff' | 'svs' | 'ndpi' | 'ome-zarr'
       readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
@@ -1426,12 +1427,16 @@ export function isImageOnlyUrl(url: string): boolean {
 }
 
 function isTiffOrNdpiUrl(url: string): boolean {
-  return /\.(?:(?:ome\.)?tiff?|qptiff?|ndpi)(?:$|[?#])/i.test(url)
+  return /\.(?:(?:ome\.)?tiff?|qptiff?|svs|ndpi)(?:$|[?#])/i.test(url)
 }
 
-function tiffImageKind(url: string): 'tiff' | 'qptiff' | 'ndpi' {
+function tiffImageKind(url: string): 'tiff' | 'qptiff' | 'svs' | 'ndpi' {
   if (isQptiffUrl(url)) {
     return 'qptiff'
+  }
+
+  if (isSvsUrl(url)) {
+    return 'svs'
   }
 
   return /\.ndpi(?:$|[?#])/i.test(url) ? 'ndpi' : 'tiff'

@@ -46,8 +46,32 @@ describe('tileSchedulingForLoader', () => {
         },
       ),
     ).toMatchObject({
-      maxInitialTileRequests: 96,
+      maxInitialTileRequests: 384,
       prefetchScreenMarginPixels: 256,
+    })
+  })
+
+  it('gives small tiles the budget of 512-pixel tiles in pixels, up to four times the tiles', () => {
+    const schedule = (tileSize: number) =>
+      tileSchedulingForLoader(
+        fakeLoader({ compression: 7, tileHeight: tileSize, tileWidth: tileSize }),
+        { baseMaxCacheTiles: 120, baseMaxConcurrentRequests: 4 },
+      )
+
+    expect(schedule(512)).toMatchObject({
+      maxCacheTiles: 120,
+      maxConcurrentRequests: 4,
+      maxInitialTileRequests: 96,
+    })
+    expect(schedule(362)).toMatchObject({
+      maxCacheTiles: 240,
+      maxConcurrentRequests: 8,
+      maxInitialTileRequests: 192,
+    })
+    expect(schedule(240)).toMatchObject({
+      maxCacheTiles: 480,
+      maxConcurrentRequests: 16,
+      maxInitialTileRequests: 384,
     })
   })
 })

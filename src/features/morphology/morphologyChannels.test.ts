@@ -105,12 +105,30 @@ describe('morphologyChannels', () => {
           channelLoaders: small,
         } as unknown as MorphologyImage),
       ),
-    ).toBe(small)
+    ).toEqual(small)
     expect(
       channelsToAutoContrastOnLoad(large, largeSettings).map(
         (channel) => channel.info.id,
       ),
     ).toEqual(['c0', 'c7'])
+  })
+
+  it('never auto-contrasts native RGB, which is drawn without a window', () => {
+    const [grey] = testChannels(1) as [MorphologyImageChannel]
+    const rgb: MorphologyImageChannel = {
+      ...grey,
+      info: { ...grey.info, id: 'rgb', samplesPerPixel: 3, alphaFromIntensity: false },
+    }
+    const channels = [rgb, grey]
+
+    expect(
+      channelsToAutoContrastOnLoad(
+        channels,
+        createMorphologyChannelSettings({
+          channelLoaders: channels,
+        } as unknown as MorphologyImage),
+      ).map((channel) => channel.info.id),
+    ).toEqual(['c0'])
   })
 
   it('auto-contrasts a channel turned on with its default window', () => {
